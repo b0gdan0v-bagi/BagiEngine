@@ -61,7 +61,7 @@ namespace BECore::Stress {
      * | --stress-count= | 1..kMaxCount |
      * | --stress-frames= | 1..kMaxFrames |
      * | --stress-warmup= | 0..kMaxFrames |
-     * | --stress-ramp | bare flag |
+     * | --stress-ramp | bare flag (the ramp starts at kRampStart: StressGame ignores --stress-count then; it wins over --stress-frames) |
      * | --stress-measure= | work, cpu |
      * | --stress-interleave | bare flag |
      * | --stress-atlases= | kMinAtlases..kMaxAtlases |

@@ -3,6 +3,7 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <Games/GameManager.h>
 #include <Generated/StressGame.gen.hpp>
+#include <Stress/RampController.h>
 
 namespace BECore::Stress {
 
@@ -27,6 +28,9 @@ namespace BECore::Stress {
             if (!settings) {
                 LOG_WARNING(Format("Stress: {}; starting with the defaults", settings.error()));
                 return StressSettings{};
+            }
+            if (settings->ramp) {
+                settings->count = kRampStart;  // the ramp starts at its own count, so a big --stress-count is never built first
             }
             return *settings;
         }

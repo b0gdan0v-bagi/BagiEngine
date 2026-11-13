@@ -3,6 +3,7 @@
 #include <BECore/Control/Json.h>
 #include <Events/ApplicationEvents.h>
 #include <Stress/Components/StressRunComponent.h>
+#include <Stress/RampController.h>
 #include <gtest/gtest.h>
 
 /**
@@ -80,6 +81,25 @@ namespace BECore::Stress::Tests {
             stats.EndStage(FrameStage::Present);
             g_fakeNow += static_cast<uint64_t>((cpuMs - presentMs) * kNanosecondsPerMs);
             stats.EndFrame({}, {});
+        }
+
+        /// Frames of a cost that grows with the count on show (@p msPerObject for each object, @p presentMs of it in the present) until the run is done
+        uint32_t RampFramesUntilDone(double msPerObject, double presentMs = 0.0, uint32_t limit = 5000) {
+            uint32_t frames = 0;
+            while (!Run().IsDone() && frames < limit) {
+                const double cpuMs = msPerObject * StressGame::GetActive()->GetState().GetCount() + presentMs;
+                Frame(cpuMs, presentMs);
+                ++frames;
+            }
+            return frames;
+        }
+
+        /// A ramp run of the entities scene with @p extra flags
+        void StartRamp(const eastl::vector<eastl::string>& extra = {}) {
+            eastl::vector<eastl::string> arguments = {"--stress-scene=entities", "--stress-ramp"};
+            arguments.insert(arguments.end(), extra.begin(), extra.end());
+            StartGame(arguments);
+            Run().SetLineSink([this](const eastl::string& line) { _lines.push_back(line); });
         }
 
         /// Frames of the same cost until the run is done or @p limit frames went
@@ -265,6 +285,79 @@ namespace BECore::Stress::Tests {
 
         EXPECT_EQ(Run().GetRecordedCount(), 0u);
         EXPECT_TRUE(_lines.empty());
+    }
+
+    TEST_F(StressRunTest, TheRampStartsAtItsOwnCountWhateverTheCountFlagSays) {
+        StartRamp({"--stress-count=5000"});
+
+        EXPECT_EQ(StressGame::GetActive()->GetState().GetCount(), kRampStart);
+        Update();
+        EXPECT_EQ(Field("StressEntities").GetChildren().size(), size_t{kRampStart}) << "the big count is never built first";
+    }
+
+    TEST_F(StressRunTest, TheRampFindsTheLimitPrintsOneLineAndQuitsOnce) {
+        constexpr double kMsPerObject = 0.055;  // 16.6 / 0.055 = 301
+        StartRamp();
+
+        const uint32_t frames = RampFramesUntilDone(kMsPerObject);
+
+        EXPECT_LT(frames, 5000u) << "the ramp ended";
+        ASSERT_EQ(_lines.size(), 1u);
+        EXPECT_EQ(_quit.count, 1);
+        const auto parsed = ParseJson(_lines[0]);
+        ASSERT_TRUE(parsed.has_value()) << _lines[0].c_str();
+        EXPECT_EQ(GetJsonString(*parsed, "mode").value_or(""), "ramp");
+        EXPECT_EQ(GetJsonString(*parsed, "scene").value_or(""), "entities");
+        EXPECT_EQ(GetJsonBool(*parsed, "capped"), std::optional(false));
+        EXPECT_EQ(GetJsonBool(*parsed, "aborted"), std::optional(false));
+        EXPECT_EQ(GetJsonBool(*parsed, "verified"), std::optional(true));
+        const int64_t found = GetJsonInt(*parsed, "objectsAt60fps").value_or(0);
+        EXPECT_LE(found, 301);
+        EXPECT_GE(found, 290);
+
+        Frame(kFastMs);
+        Frame(kFastMs);
+        EXPECT_EQ(_lines.size(), 1u);
+        EXPECT_EQ(_quit.count, 1);
+    }
+
+    TEST_F(StressRunTest, TheRampHoldsToTheWorkTimeUnlessTheCpuTimeIsAsked) {
+        // A frame whose present alone is over the budget: the work time (cpu without the present) is what the ramp judges by default
+        StartRamp();
+        RampFramesUntilDone(0.001, 50.0);
+        ASSERT_EQ(_lines.size(), 1u);
+        auto parsed = ParseJson(_lines[0]);
+        ASSERT_TRUE(parsed.has_value());
+        EXPECT_GT(GetJsonInt(*parsed, "objectsAt60fps").value_or(0), int64_t{kRampStart}) << "the present does not count";
+        EXPECT_EQ(GetJsonString(*parsed, "measure").value_or(""), "work");
+    }
+
+    TEST_F(StressRunTest, TheCpuMeasureCountsThePresentToo) {
+        StartRamp({"--stress-measure=cpu"});
+        RampFramesUntilDone(0.001, 50.0);
+        ASSERT_EQ(_lines.size(), 1u);
+        const auto parsed = ParseJson(_lines[0]);
+        ASSERT_TRUE(parsed.has_value());
+        EXPECT_EQ(GetJsonInt(*parsed, "objectsAt60fps").value_or(-1), 0) << "a present of 50 ms is over the budget at any count";
+        EXPECT_EQ(GetJsonString(*parsed, "measure").value_or(""), "cpu");
+    }
+
+    TEST_F(StressRunTest, TheRampWinsOverTheFramesFlag) {
+        StartRamp({"--stress-frames=5", "--stress-warmup=0"});
+        RampFramesUntilDone(0.055);
+
+        ASSERT_EQ(_lines.size(), 1u);
+        EXPECT_NE(_lines[0].find("\"mode\":\"ramp\""), eastl::string::npos);
+        EXPECT_EQ(_quit.count, 1);
+    }
+
+    TEST_F(StressRunTest, AHeldFrameDoesNotFeedTheRamp) {
+        StartRamp();
+        for (uint32_t i = 0; i < 100; ++i) {
+            Frame(kSlowMs, 0.0, true);  // the game stood still: nothing of it is a measure
+        }
+        EXPECT_FALSE(Run().IsDone());
+        EXPECT_EQ(StressGame::GetActive()->GetState().GetCount(), kRampStart);
     }
 
 }  // namespace BECore::Stress::Tests

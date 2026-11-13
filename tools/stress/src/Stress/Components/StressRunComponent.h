@@ -1,8 +1,10 @@
 #pragma once
 
 #include <BECore/Scene/IComponent.h>
+#include <Stress/RampController.h>
 #include <Stress/StressRecorder.h>
 #include <functional>
+#include <optional>
 
 namespace BECore::SceneEvents {
     struct SceneUpdateEvent;
@@ -24,6 +26,10 @@ namespace BECore::Stress {
      * `StressState::Version()` moves, the frame that notices it is the frame that builds the new nodes, textures and glyphs, so it and the next
      * `warmup` frames are skipped: the warm-up restarts with every change of the scene, the count or the language. After `frames` samples the line
      * (`FormatJsonLine`) goes to the sink and `ApplicationEvents::QuitEvent` is emitted, once. The recorder's samples are reserved when the run starts.
+     *
+     * **Ramp mode** (`--stress-ramp`, which wins over `--stress-frames`). Each new frame's measure (`workMs` or `cpuMs` by `--stress-measure`) goes
+     * to the `RampController`, and the count it answers is set into the state; its settle frames cover the frame that builds the new count, so no
+     * warm-up logic is needed here. When it is done (or aborted) the line (`FormatRampLine`) goes out and the application is asked to quit, once.
      */
     class StressRunComponent : public IComponent {
         BE_CLASS(StressRunComponent)
@@ -54,14 +60,19 @@ namespace BECore::Stress {
     private:
         void OnUpdate(const SceneEvents::SceneUpdateEvent& event);
 
-        /// Takes the sample of the last finished frame when it is a new frame of the measured part of the run
-        void TakeSample();
-        /// Prints the line of the fixed run and asks the application to quit
-        void Finish(const StressGame& game);
+        /// The last finished frame when it is one this component has not looked at yet and the game did advance in it, else null
+        const FrameStats* TakeNewFrame();
+        void UpdateFixed(const StressGame& game);
+        void UpdateRamp(StressGame& game);
+        /// Prints the line of the run and asks the application to quit
+        void FinishFixed(const StressGame& game);
+        void FinishRamp(const StressGame& game);
         void Print(const eastl::string& line) const;
+        static bool IsManualClock();
 
         PoolString _counterName = "Stress objects"_intern;
         StressRecorder _recorder;
+        std::optional<RampController> _ramp;  // made at the first update of a ramp run
         LineSink _sink;
         uint64_t _seenVersion = 0;    // the StressState version of the last update; 0 is never a version
         uint64_t _firstMeasured = 0;  // the first frame id a sample is taken of
