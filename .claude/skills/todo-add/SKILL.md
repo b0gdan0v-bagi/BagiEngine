@@ -17,8 +17,8 @@ description: Quickly records a new idea or known problem as an entry in the todo
    - `**What is missing:**` (required: the dashboard and Vikunja take the summary from it);
    - `**A fix has to cover:**` if the idea gives something to list.
 
-   Status `open`, no stage. Add `--stage N` only when the stages of the area (`todo area list --json`) make it obvious; otherwise leave it out and say so in the reply.
-5. **Add.** `todo add <id> --area <area> --title "<title>" [--stage N] --body-file -` with the body on stdin. The service puts it into Vikunja by itself.
+   Status `open`, no stage. Add `--stage N` only when the stages of the area (`todo area list --json`) make it obvious; otherwise leave it out and say so in the reply. The same for `--priority now|high|normal|low`: only when the text makes it obvious (the owner says it is urgent or can wait), else unset, and say so.
+5. **Add.** `todo add <id> --area <area> --title "<title>" [--stage N] [--priority P] --body-file -` with the body on stdin. The service puts it into Vikunja by itself.
 6. **Links.** When the idea says it waits for another entry (or another entry waits for it), and the whole entry waits, not one part of it: `todo dep add <id> <blocker>` (`<engine>/tools/todo/CLAUDE.md`, "Dependency"). A part that can be done before is a note in the body, not a link.
 7. **Reply** in a few lines: the id, the area, the title, and `todo dashboard` for the page. Nothing is committed: the entry lives only in the store. Do not close entries or edit other people's entries.
 

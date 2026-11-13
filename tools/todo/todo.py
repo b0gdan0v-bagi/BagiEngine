@@ -9,6 +9,9 @@ takes back what a person changes there), so there is no push and no pull.
 Settings: TODO_API_URL and TODO_API_TOKEN from the environment, then from --env-file, then from the
 first `.env` found from the current folder upwards. The token is never printed.
 
+An entry may carry the owner's priority (now, high, normal, low; unset counts as normal): `list` shows it and
+puts the higher levels first inside each area (`--json` keeps the server's order), `--priority` filters.
+
 Every write that the store accepts also rewrites a small signal file, TODO_CHANGED_FILE (default
 ~/.claude/todo/changed.json: the time, the actor, the method and the path), so a tool that shows the
 store (tools/vscode/todo-workers) reads it again at once instead of on a timer.
@@ -194,6 +197,21 @@ def read_text(source: str) -> str:
 # --- output ------------------------------------------------------------------------------------
 
 
+# The order of `list`: the owner's four levels, the entries nobody has rated count as `normal`. The same map is
+# PRIORITY_RANK of worker.py (separate stdlib files); the service validates the levels (store.PRIORITIES).
+PRIORITIES = ("now", "high", "normal", "low")
+PRIORITY_RANK = {"now": 0, "high": 1, "normal": 2, None: 2, "low": 3}
+
+
+def priority_filter(text: str) -> str:
+    """`list --priority`: levels and `none` (unset), comma separated; checked before the request."""
+    levels = [level.strip() for level in text.split(",") if level.strip()]
+    unknown = [level for level in levels if level not in (*PRIORITIES, "none")]
+    if not levels or unknown:
+        raise argparse.ArgumentTypeError(f"unknown priority {', '.join(unknown) or text!r}: use {', '.join((*PRIORITIES, 'none'))}")
+    return ",".join(levels)
+
+
 def progress_text(entry: dict) -> str:
     progress = entry.get("planProgress")
     if not entry.get("planShown"):
@@ -209,6 +227,8 @@ def print_entry(entry: dict, out=None) -> None:
     facts = [f"id: {entry['id']}", f"area: {entry['area']}", f"status: {entry['statusLine']}"]
     if entry["stage"] is not None:
         facts.append(f"stage: {entry['stage']}")
+    if entry.get("priority"):
+        facts.append(f"priority: {entry['priority']}")
     if progress_text(entry):
         facts.append(progress_text(entry))
     if entry.get("slicing"):
@@ -241,9 +261,10 @@ def print_table(entries: list[dict], out=None) -> None:
         out.write("no entries\n")
         return
     width = max(len(entry["id"]) for entry in entries)
-    for entry in entries:
+    # Stable: inside an area the server's order (stage, id) breaks the ties of one priority.
+    for entry in sorted(entries, key=lambda e: (e["area"], PRIORITY_RANK.get(e.get("priority"), PRIORITY_RANK[None]))):
         stage = f"stage {entry['stage']}" if entry["stage"] is not None else "-"
-        line = f"{entry['id']:<{width}}  {entry['area']:<7} {entry['status']:<11} {stage:<8} {entry['title']}"
+        line = f"{entry['id']:<{width}}  {entry['area']:<7} {entry['status']:<11} {entry.get('priority') or '-':<6} {stage:<8} {entry['title']}"
         extra = [text for text in (progress_text(entry), "blocked by " + ", ".join(open_blockers(entry)) if open_blockers(entry) else "") if text]
         out.write(line + "".join(f"  [{text}]" for text in extra) + "\n")
 
@@ -269,7 +290,7 @@ def cmd_ping(api: Api, args) -> None:
 def cmd_list(api: Api, args) -> None:
     statuses = args.status or ("open,in progress,review,deferred" if not args.all else None)
     blocked = "true" if args.blocked else "false" if args.ready else None
-    entries = api.get("/entries", area=args.area, status=statuses, body="true" if args.body else None, blocked=blocked)
+    entries = api.get("/entries", area=args.area, status=statuses, body="true" if args.body else None, blocked=blocked, priority=args.priority)
     emit(entries, args.json, print_table)
 
 
@@ -288,9 +309,8 @@ def cmd_history(api: Api, args) -> None:
 
 def cmd_add(api: Api, args) -> None:
     body = read_text(args.body_file) if args.body_file else ""
-    entry = api.call(
-        "POST", "/entries", {"id": args.id, "area": args.area, "title": args.title, "body": body, "stage": args.stage, "status": args.status}
-    )
+    fields = {"id": args.id, "area": args.area, "title": args.title, "body": body, "stage": args.stage, "status": args.status, "priority": args.priority}
+    entry = api.call("POST", "/entries", fields)
     emit(entry, args.json, lambda e: print(f"added {e['id']} ({e['area']}): {e['title']}"))
 
 
@@ -311,7 +331,9 @@ def cmd_edit(api: Api, args) -> None:
     if args.area:
         patch["area"] = args.area
     cost_cap = None if args.cost_cap is None else "none" if args.cost_cap == "none" else float(args.cost_cap)
-    for name, value in (("stage", _optional_int(args.stage)), ("plan", args.plan), ("slicing", args.slicing), ("costCap", cost_cap)):
+    for name, value in (
+        ("stage", _optional_int(args.stage)), ("plan", args.plan), ("slicing", args.slicing), ("costCap", cost_cap), ("priority", args.priority)
+    ):
         if value == "none":
             patch["clear"].append(name)
         elif value is not None:
@@ -576,6 +598,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--status", help="comma separated: open,in progress,review,deferred,closed")
     p.add_argument("--all", action="store_true", help="closed ones too")
     p.add_argument("--body", action="store_true", help="with the body (JSON)")
+    p.add_argument("--priority", type=priority_filter, help="only these levels, comma separated: now,high,normal,low,none (none: unset)")
     group = p.add_mutually_exclusive_group()
     group.add_argument("--ready", action="store_true", help="only entries whose blockers are all closed")
     group.add_argument("--blocked", action="store_true", help="only entries with a blocker that is not closed")
@@ -591,6 +614,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--area", required=True)
     p.add_argument("--title", required=True)
     p.add_argument("--stage", type=int)
+    p.add_argument("--priority", choices=PRIORITIES, help="the owner's priority; leave it unset unless the owner or the text states it")
     p.add_argument("--status", default="open", choices=["open", "deferred"])
     p.add_argument("--body-file", help="markdown file of the body, '-' for stdin")
 
@@ -599,6 +623,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--title")
     p.add_argument("--body-file", help="markdown file of the new body, '-' for stdin")
     p.add_argument("--stage", help="a number or 'none'")
+    p.add_argument("--priority", choices=(*PRIORITIES, "none"), help="now, high, normal, low or 'none' (unset)")
     p.add_argument("--plan", help="the owner's plan name or 'none'")
     p.add_argument("--status", choices=["open", "deferred", "in progress", "closed"])
     p.add_argument("--area")

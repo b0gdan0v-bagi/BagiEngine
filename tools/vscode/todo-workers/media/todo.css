@@ -39,3 +39,8 @@ button.link { background: none; border: none; padding: 0 4px; color: var(--vscod
 .queues { display: flex; flex-direction: column; gap: 4px; }
 .queue-line { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .badge.drag { cursor: grab; margin-left: 0; }
+.todo-entry .badge.prio { margin-left: 0; }
+.badge.prio-now { color: var(--vscode-errorForeground, #f14c4c); font-weight: 600; }
+.badge.prio-high { color: var(--vscode-charts-orange, #d18616); }
+.badge.prio-normal { opacity: 0.55; }
+.badge.prio-low { color: var(--vscode-descriptionForeground); }

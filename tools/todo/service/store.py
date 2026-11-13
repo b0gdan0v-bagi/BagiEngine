@@ -14,8 +14,10 @@ from todo_markdown import ID_RE, PLAN_NAME_RE, STATUSES, checklist_progress, ext
 
 PLAN_KINDS = ("owner", "slice", "review", "stages", "remarks")
 SLICINGS = ("through",)
-ENTRY_FIELDS = ("title", "body", "status", "status_date", "status_note", "branch", "base", "origin", "stage", "plan", "slicing", "cost_cap")
-MIRRORED_FIELDS = ("title", "body", "status", "status_date", "status_note", "branch", "stage", "plan")
+PRIORITIES = ("now", "high", "normal", "low")
+UNSET_FILTER = "none"  # in a priority filter: the entries without a priority
+ENTRY_FIELDS = ("title", "body", "status", "status_date", "status_note", "branch", "base", "origin", "stage", "plan", "slicing", "cost_cap", "priority")
+MIRRORED_FIELDS = ("title", "body", "status", "status_date", "status_note", "branch", "stage", "plan", "priority")
 
 
 class StoreError(Exception):
@@ -158,6 +160,7 @@ def to_json(entry: dict, plan: dict | None = None, with_body: bool = True, links
         "slices": plan.get("slices") if plan else None,
         "stagesPlan": plan.get("stages") if plan else None,
         "slicing": entry["slicing"],
+        "priority": entry["priority"],
         "costCap": float(entry["cost_cap"]) if entry["cost_cap"] is not None else None,
         "summary": extract_summary(entry["body"]),
         "version": entry["version"],
@@ -192,7 +195,24 @@ def require_entry(conn: Connection, entry_id: str, lock: bool = False) -> dict:
     return entry
 
 
-def list_entries(conn: Connection, area: str | None = None, statuses: list[str] | None = None) -> list[dict]:
+def parse_priority_filter(text: str) -> list[str | None]:
+    """A comma list of levels, `none` for unset -> the levels with None for unset; 422 on an unknown one."""
+    levels: list[str | None] = []
+    for part in (part.strip() for part in text.split(",")):
+        if part == UNSET_FILTER:
+            levels.append(None)
+        elif part in PRIORITIES:
+            levels.append(part)
+        else:
+            raise StoreError(422, f"priority must be a list of {', '.join(PRIORITIES)}, {UNSET_FILTER}")
+    return levels
+
+
+def list_entries(
+    conn: Connection, area: str | None = None, statuses: list[str] | None = None, priorities: list[str | None] | None = None
+) -> list[dict]:
+    """`priorities`: only entries at one of these levels, None meaning no priority. The order stays area, stage, id: sorting
+    by priority is the clients' job."""
     clauses, params = [], []
     if area:
         clauses.append("area = %s")
@@ -200,6 +220,11 @@ def list_entries(conn: Connection, area: str | None = None, statuses: list[str] 
     if statuses:
         clauses.append("status = ANY(%s)")
         params.append(statuses)
+    if priorities is not None:
+        levels = [level for level in priorities if level is not None]
+        unset = " OR priority IS NULL" if None in priorities else ""
+        clauses.append(f"(priority = ANY(%s){unset})")
+        params.append(levels)
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     return conn.execute(f"SELECT * FROM entries {where} ORDER BY area, stage NULLS FIRST, id", params).fetchall()
 
@@ -225,6 +250,8 @@ def _check_fields(changes: dict) -> None:
         raise StoreError(422, "stage must be a number")
     if changes.get("slicing") is not None and changes["slicing"] not in SLICINGS:
         raise StoreError(422, f"slicing must be one of {', '.join(SLICINGS)} (or cleared)")
+    if changes.get("priority") is not None and changes["priority"] not in PRIORITIES:
+        raise StoreError(422, f"priority must be one of {', '.join(PRIORITIES)} (or cleared)")
     if changes.get("cost_cap") is not None and not (isinstance(changes["cost_cap"], (int, float)) and changes["cost_cap"] > 0):
         raise StoreError(422, "costCap must be a positive number of dollars (or cleared)")
 

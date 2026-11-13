@@ -80,6 +80,7 @@ class EntryIn(BaseModel):
     stage: int | None = None
     plan: str | None = None
     slicing: str | None = None
+    priority: str | None = None
     costCap: float | None = None
     aliases: list[str] = []
 
@@ -95,9 +96,10 @@ class EntryPatch(BaseModel):
     stage: int | None = None
     plan: str | None = None
     slicing: str | None = None
+    priority: str | None = None
     costCap: float | None = None
     expectedVersion: int | None = None
-    clear: list[str] = []  # fields to set to null: "stage", "plan", "branch", "slicing", "costCap"
+    clear: list[str] = []  # fields to set to null: "stage", "plan", "branch", "slicing", "priority", "costCap"
 
 
 class ClaimIn(BaseModel):
@@ -140,9 +142,10 @@ _PATCH_COLUMNS = {
     "stage": "stage",
     "plan": "plan",
     "slicing": "slicing",
+    "priority": "priority",
     "costCap": "cost_cap",
 }
-_CLEARABLE = {"stage", "plan", "branch", "slicing", "costCap"}
+_CLEARABLE = {"stage", "plan", "branch", "slicing", "priority", "costCap"}
 
 
 # --- the app -----------------------------------------------------------------------------------
@@ -246,11 +249,22 @@ def create_app(settings: Settings, start_mirror: bool = True) -> FastAPI:
 
     @app.get(f"{API}/entries")
     def get_entries(
-        area: str | None = None, status: str | None = None, body: bool = False, blocked: bool | None = None, actor: str = Depends(check_token)
+        area: str | None = None,
+        status: str | None = None,
+        body: bool = False,
+        blocked: bool | None = None,
+        priority: str | None = None,
+        actor: str = Depends(check_token),
     ):
-        """`blocked=true`: only entries with a blocker that is not closed; `blocked=false`: only the others (ready)."""
+        """`blocked=true`: only entries with a blocker that is not closed; `blocked=false`: only the others (ready).
+        `priority=now,high`: only those levels (`none` = no priority; an unknown level is 422)."""
         statuses = [part.strip() for part in status.split(",")] if status else None
-        entries = read(lambda conn: store.entries_json(conn, store.list_entries(conn, area, statuses), with_body=body))
+
+        def run(conn):
+            priorities = store.parse_priority_filter(priority) if priority is not None else None
+            return store.entries_json(conn, store.list_entries(conn, area, statuses, priorities), with_body=body)
+
+        entries = read(run)
         return entries if blocked is None else [entry for entry in entries if entry["blocked"] == blocked]
 
     @app.get(f"{API}/entries/{{entry_id}}")
@@ -390,13 +404,20 @@ def create_app(settings: Settings, start_mirror: bool = True) -> FastAPI:
         return RedirectResponse("/dashboard/")
 
     @app.get("/dashboard/", response_class=HTMLResponse)
-    def dashboard_page(area: str | None = None, _: None = Depends(check_page)):
+    def dashboard_page(area: str | None = None, priority: str | None = None, _: None = Depends(check_page)):
+        """`priority=now,high` shows only those levels (`none` = unset); an unknown level is 422, as in the API."""
+
         def run(conn):
+            priorities = store.parse_priority_filter(priority) if priority else None
             areas = store.list_areas(conn)
             current = area or (areas[0]["id"] if areas else None)
             stages = next((a["stages"] for a in areas if a["id"] == current), [])
-            entries = store.entries_json(conn, store.list_entries(conn, current, ["open", "in progress", "review", "deferred"]))
-            return dashboard.render_dashboard({"areas": areas, "area": current, "stages": stages, "entries": entries}, date.today())
+            statuses = ["open", "in progress", "review", "deferred"]
+            rows = store.list_entries(conn, current, statuses, priorities)
+            hidden = len(store.list_entries(conn, current, statuses)) - len(rows) if priorities is not None else 0
+            data = {"areas": areas, "area": current, "stages": stages, "entries": store.entries_json(conn, rows),
+                    "priority": ",".join(level or "none" for level in priorities) if priorities else None, "hidden": hidden}
+            return dashboard.render_dashboard(data, date.today())
 
         return read(run)
 

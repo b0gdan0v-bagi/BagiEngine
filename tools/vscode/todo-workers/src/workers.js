@@ -246,8 +246,25 @@ function attach(ctx) {
             .sort((a, b) => (a.entry ? 1 : 0) - (b.entry ? 1 : 0) || a.k - b.k);
     }
 
-    // Attach to free worker: `/todo-loop 1 <id>` (with the loop arguments and the report session of the
-    // settings) as the background session of a free worker, after the owner picks the worker.
+    // The start dialog's modes: how far the loop goes from the entry. `slices` is the N of `/todo-loop N`.
+    function startModes(through, startSlices) {
+        const modes = [{ key: "one", label: "This entry only", description: through ? "/todo-loop 1; a through entry still runs to the end, this limits nothing" : "/todo-loop 1", slices: 1, note: "this entry only" }];
+        if (startSlices > 1) modes.push({ key: "list", label: "This entry, then on through the list", description: `/todo-loop ${startSlices} (todoWorkers.startSlices)`, slices: startSlices, note: "then on through the list" });
+        modes.push({
+            key: "through",
+            label: "Through to the end",
+            description: through ? "/todo-loop 1; slicing is through already" : "sets slicing through (no cost cap), then /todo-loop 1",
+            slices: 1,
+            note: "through to the end",
+            setThrough: !through,
+        });
+        return modes;
+    }
+
+    // Attach to free worker: first the mode (this entry only, then on through the list, through to the end), then
+    // `/todo-loop N <id>` (with the loop arguments and the report session of the settings) as the background
+    // session of a free worker, after the owner picks the worker. Each slice of a through entry restarts the worker
+    // by itself (tools/todo/CLAUDE.md, "Workers"), so the third mode starts with `/todo-loop 1`.
     async function startEntryInWorker(id) {
         const tool = findTool();
         if (!tool || !id || !/^[A-Za-z0-9_-]+$/.test(id)) return;
@@ -276,22 +293,45 @@ function attach(ctx) {
             return;
         }
         const c = config();
+        let slicing;
+        try {
+            slicing = await ctx.entrySlicing(id);
+        } catch (error) {
+            vscode.window.showErrorMessage(`todo.py show ${id}: ${error.message}`);
+            return;
+        }
+        const through = slicing === "through";
+        const modePick = await vscode.window.showQuickPick(
+            startModes(through, c.startSlices).map((m) => ({ label: m.label, description: m.description, mode: m })),
+            { title: `${id} is ${through ? "already" : "not"} through`, placeHolder: "how far the loop goes from this entry" }
+        );
+        if (!modePick) return;
+        const mode = modePick.mode;
         const loopArgs = [id, c.loopArgs].filter(Boolean).join(" ");
         const label = (w) => (w.entry && w.entry.id !== id ? `${w.name} (leaves ${w.entry.id})` : w.entry ? `${w.name} (holds its branch)` : w.name);
         const overlaps = await overlapWarning(id);
         const detail = ["It runs as the background session todo-w<k> of that worker, which worker.py start first moves to the tips of the bases. Attach opens it when it asks for a permission."];
         if (overlaps.length) detail.push("", "Busy entries name the same files (merging both later may conflict):", ...overlaps.map((o) => `  ${o}`));
-        const picked = await vscode.window.showInformationMessage(`Start /todo-loop 1 ${loopArgs} in a free worker?`, { modal: true, detail: detail.join("\n") }, ...free.map(label));
+        const picked = await vscode.window.showInformationMessage(`Start /todo-loop ${mode.slices} ${loopArgs} (${mode.note}) in a free worker?`, { modal: true, detail: detail.join("\n") }, ...free.map(label));
         const worker = free.find((w) => label(w) === picked);
         if (!worker || busy.has(worker.k)) return;
-        const args = ["start", String(worker.k), "--delay", "0", "--slices", "1", "--loop-args", loopArgs, "--claude", c.claude];
+        const args = ["start", String(worker.k), "--delay", "0", "--slices", String(mode.slices), "--loop-args", loopArgs, "--claude", c.claude];
         if (c.reportTo) args.push("--report-to", c.reportTo);
         busy.add(worker.k);
         ctx.postWorkersToList();
         try {
+            if (mode.setThrough) {
+                try {
+                    await ctx.setSlicingThrough(id);
+                } catch (error) {
+                    vscode.window.showErrorMessage(`${id}: slicing through was not set, nothing started: ${error.message}`);
+                    return;
+                }
+            }
             const out = await runTool(tool, args, 90000);
             const line = out.split("\n").map((l) => l.trim()).find((l) => l.startsWith("backgrounded") || l.includes("left alone")) || `${worker.name} started`;
-            vscode.window.showInformationMessage(`${worker.name} · ${id}: ${line}`);
+            vscode.window.showInformationMessage(`${worker.name} · ${id} (${mode.note}): ${line}`);
+            ctx.addFeed("started", `${worker.name} started ${id} (${mode.note})`, { entry: id });
         } catch (error) {
             vscode.window.showErrorMessage(`${worker.name} · ${id}: ${error.message}`);
         } finally {

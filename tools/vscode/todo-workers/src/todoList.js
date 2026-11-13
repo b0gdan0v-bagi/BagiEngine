@@ -1,5 +1,5 @@
 // The Todo list tab: the entries of the store (todo.py list --all --json --body), read again on Refresh and on every
-// write signal, and the owner's writes from it: a new entry, status, stage, body, through and its cost cap,
+// write signal, and the owner's writes from it: a new entry, status, stage, priority, body, through and its cost cap,
 // dependencies, the order of a worker's queue. Every write is todo.py with the actor `owner-panel`.
 "use strict";
 
@@ -175,6 +175,19 @@ function attach(ctx) {
         if (pick) await write(`todo.py edit ${id}`, ["edit", id, "--stage", pick.value]);
     }
 
+    async function setPriority(id) {
+        const current = (entries.find((e) => e.id === id) || {}).priority || "none";
+        const levels = [
+            { label: "now", description: "the loop takes it first" },
+            { label: "high" },
+            { label: "normal", description: "the same as none for the order" },
+            { label: "low", description: "after every other entry" },
+            { label: "none", description: "no priority set" },
+        ].map((l) => ({ ...l, description: [l.description, l.label === current ? "current" : ""].filter(Boolean).join(" · ") }));
+        const pick = await vscode.window.showQuickPick(levels, { placeHolder: `the priority of ${id} (now ${current})` });
+        if (pick && pick.label !== current) await write(`todo.py edit ${id}`, ["edit", id, "--priority", pick.label]);
+    }
+
     async function editBody(id) {
         let entry;
         try {
@@ -197,6 +210,19 @@ function attach(ctx) {
         });
         if (cap === undefined) return;
         await write(`todo.py edit ${id}`, ["edit", id, "--slicing", "through", "--cost-cap", cap.trim() ? String(Number(cap)) : "none"]);
+    }
+
+    // The slicing of an entry for the start dialog: from the list held, else from the store.
+    async function entrySlicing(id) {
+        const held = entries.find((e) => e.id === id);
+        if (held && held.slicing !== undefined) return held.slicing;
+        return JSON.parse(await todo(["show", id, "--json"])).slicing || null;
+    }
+
+    // Through without a cost cap question (the start dialog's third mode); the caller handles the error.
+    async function setSlicingThrough(id) {
+        await todo(["edit", id, "--slicing", "through"]);
+        loadTodoList();
     }
 
     async function depAdd(id) {
@@ -236,6 +262,7 @@ function attach(ctx) {
                 case "newEntry": return newEntry();
                 case "setStatus": return setStatus(message.entry, message.status);
                 case "setStage": return setStage(message.entry, message.area);
+                case "setPriority": return setPriority(message.entry);
                 case "editBody": return editBody(message.entry);
                 case "setThrough": return setThrough(message.entry, Boolean(message.on));
                 case "depAdd": return depAdd(message.entry);
@@ -250,7 +277,7 @@ function attach(ctx) {
         });
     }
 
-    Object.assign(ctx, { openTodoList, loadTodoList, postWorkersToList, openTodoPlan, setThrough });
+    Object.assign(ctx, { openTodoList, loadTodoList, postWorkersToList, openTodoPlan, setThrough, entrySlicing, setSlicingThrough });
 }
 
 module.exports = { attach };

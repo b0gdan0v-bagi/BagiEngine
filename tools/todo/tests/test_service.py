@@ -130,7 +130,7 @@ def test_an_entry_from_before_migration_003_survives_it_with_no_base(clean_datab
         conn.execute("INSERT INTO areas (id, title) VALUES ('engine', 'Engine')")
         conn.execute("INSERT INTO entries (id, area, title, status, branch) VALUES ('old', 'engine', 'Old', 'in progress', 'todo/old')")
         conn.commit()
-        assert db.migrate(conn) == ["003_branch_origin.sql", "004_dependencies.sql", "005_slicing.sql"]
+        assert db.migrate(conn) == ["003_branch_origin.sql", "004_dependencies.sql", "005_slicing.sql", "006_priority.sql"]
         row = conn.execute("SELECT branch, base, origin FROM entries WHERE id = 'old'").fetchone()
     assert row == {"branch": "todo/old", "base": None, "origin": None}
 
@@ -203,6 +203,52 @@ def test_slicing_and_the_cost_cap_are_set_cleared_and_checked(api):
     assert created["slicing"] == "through" and created["costCap"] == 3
 
 
+def test_the_priority_is_set_on_create_and_by_patch_cleared_and_checked(api):
+    assert add(api)["priority"] is None
+    high = api.patch("/api/v1/entries/no-ci", json={"priority": "high"}, headers={"X-Todo-Actor": "owner"}).json()
+    assert high["priority"] == "high" and high["version"] == 2
+    assert api.patch("/api/v1/entries/no-ci", json={"priority": "high"}).json()["version"] == 2  # the same level is no change
+    for bad in ("urgent", "none", ""):
+        assert api.patch("/api/v1/entries/no-ci", json={"priority": bad}).status_code == 422
+    assert api.post("/api/v1/entries", json={**ENTRY, "id": "bad", "priority": "urgent"}).status_code == 422
+    assert add(api, id="first", priority="now")["priority"] == "now"
+    cleared = api.patch("/api/v1/entries/no-ci", json={"clear": ["priority"]}).json()
+    assert cleared["priority"] is None and api.get("/api/v1/entries/no-ci").json()["priority"] is None
+
+    events = api.get("/api/v1/entries/no-ci/events").json()
+    by_change = [(event["actor"], event["data"]["old"], event["data"]["new"]) for event in events if event["kind"] == "update"]
+    assert by_change == [("test", {"priority": "high"}, {"priority": None}), ("owner", {"priority": None}, {"priority": "high"})]
+
+
+def test_the_priority_filter_takes_levels_and_none(api):
+    for name, level in (("a-now", "now"), ("b-high", "high"), ("c-normal", "normal"), ("d-low", "low"), ("e-unset", None)):
+        add(api, id=name, **({"priority": level} if level else {}))
+
+    def ids(value):
+        response = api.get("/api/v1/entries", params={"priority": value})
+        assert response.status_code == 200, response.text
+        return [entry["id"] for entry in response.json()]
+
+    assert ids("now,high") == ["a-now", "b-high"]
+    assert ids("low") == ["d-low"]
+    assert ids("none") == ["e-unset"]
+    assert ids("none, low") == ["d-low", "e-unset"]
+    assert len(api.get("/api/v1/entries").json()) == 5
+    assert api.get("/api/v1/entries", params={"priority": "now,urgent"}).status_code == 422
+    assert api.get("/api/v1/entries", params={"priority": ""}).status_code == 422
+
+
+def test_a_priority_change_bumps_the_version_and_queues_the_mirror(api, clean_database):
+    add(api)
+    with psycopg.connect(clean_database) as conn:
+        conn.execute("DELETE FROM vikunja_outbox")
+        conn.commit()
+    api.patch("/api/v1/entries/no-ci", json={"priority": "low"}).raise_for_status()
+    with psycopg.connect(clean_database) as conn:
+        assert conn.execute("SELECT entry_id FROM vikunja_outbox").fetchall() == [("no-ci",)]
+        assert conn.execute("SELECT version, priority FROM entries WHERE id = 'no-ci'").fetchone() == (2, "low")
+
+
 def test_an_entry_sums_its_slice_plans_and_names_its_stage_plan(api):
     add(api)
     assert api.get("/api/v1/entries/no-ci").json()["slices"] is None
@@ -230,5 +276,24 @@ def test_the_migrations_run_once(clean_database):
 
     with psycopg.connect(clean_database) as conn:
         conn.row_factory = psycopg.rows.dict_row
-        assert db.migrate(conn) == ["001_init.sql", "002_aliases.sql", "003_branch_origin.sql", "004_dependencies.sql", "005_slicing.sql"]
+        assert db.migrate(conn) == ["001_init.sql", "002_aliases.sql", "003_branch_origin.sql", "004_dependencies.sql", "005_slicing.sql", "006_priority.sql"]
         assert db.migrate(conn) == []
+
+
+def test_the_dashboard_shows_orders_and_filters_by_priority(api):
+    add(api, id="plain", title="Plain one")
+    add(api, id="urgent", title="Urgent one", priority="now")
+    add(api, id="slow", title="Slow one", priority="low")
+    page = lambda **params: api.get("/dashboard/", params=params, headers={"Authorization": ""}, auth=("x", TOKEN))  # noqa: E731
+    text = page().text
+    assert 'class="badge p-now"' in text and 'class="badge p-low"' in text and text.count('title="priority"') == 2
+    assert text.index("Urgent one") < text.index("Plain one") < text.index("Slow one")
+    only = page(priority="now").text
+    assert "Urgent one" in only and "Plain one" not in only and "Slow one" not in only
+    assert "Filter: priority now; 2 entries hidden." in only
+    unset = page(priority="none,low").text
+    assert "Plain one" in unset and "Slow one" in unset and "Urgent one" not in unset
+    assert "?area=engine&amp;priority=high" in page(area="engine", priority="now").text
+    assert page(priority="urgent").status_code == 422
+    entry_text = api.get("/dashboard/entry/urgent", headers={"Authorization": ""}, auth=("x", TOKEN)).text
+    assert "<strong>Priority:</strong> now" in entry_text

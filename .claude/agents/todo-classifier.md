@@ -12,7 +12,7 @@ You choose which entries of the todo store an unattended loop may take. Read `.c
 
 ## Input
 
-The conductor gives you a list of candidate entries, each with `area`, `id`, `title`, `stage` and `summary`, in the order the loop prefers, and `<engine>` (the folder of `tools/todo`). Every candidate is `open` in the store and has no unmerged branch `todo/<id>*` in its repository; the conductor already checked that. A candidate with `stackedOn: <parent id>` is blocked only by that parent, which is done and waits in `review` for the owner's merge: its branch will be cut from the parent's branch (`todo-loop/SKILL.md`, "Stacked branches"), so the parent's code counts as there.
+The conductor gives you a list of candidate entries, each with `area`, `id`, `title`, `stage`, `priority` (the owner's level or null) and `summary`, in the caller's order, and `<engine>` (the folder of `tools/todo`). Every candidate is `open` in the store and has no unmerged branch `todo/<id>*` in its repository; the conductor already checked that. A candidate with `stackedOn: <parent id>` is blocked only by that parent, which is done and waits in `review` for the owner's merge: its branch will be cut from the parent's branch (`todo-loop/SKILL.md`, "Stacked branches"), so the parent's code counts as there.
 
 It also gives you the **busy entries**: the ones other loops (or this one) have taken, `in progress` or `review`, each with `area`, `id`, `title` and its **busy files** (what its branch has changed and what its slice plan lists under `## Files`). Several loops can run at once, each in its own worker folder (`todo-loop/SKILL.md`, "Parallel workers"), and two branches that change the same file conflict when they are merged.
 
@@ -57,4 +57,4 @@ Only a JSON object, no text around it:
 }
 ```
 
-`next` is the first `eligible` entry in the order you were given (a candidate is named by `area` and `id`). List every candidate. `touches` and `level` are there for every `eligible` entry (and only for those).
+`next` is the first `eligible` entry in the order you were given (never reorder by priority, and a verdict does not depend on it) (a candidate is named by `area` and `id`). List every candidate. `touches` and `level` are there for every `eligible` entry (and only for those).

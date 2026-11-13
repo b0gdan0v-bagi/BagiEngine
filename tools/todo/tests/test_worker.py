@@ -408,7 +408,7 @@ def test_list_json_store_keeps_only_the_areas_of_the_rules_file(game: Path, fake
     rules.parent.mkdir(parents=True)
     rules.write_text(RULES)
     store = [
-        {"id": "mahjong-x", "area": "mahjong", "status": "review", "branch": "todo/mahjong-x"},
+        {"id": "mahjong-x", "area": "mahjong", "status": "review", "branch": "todo/mahjong-x", "priority": "high"},
         {"id": "eng-y", "area": "engine", "status": "review", "branch": "todo/eng-y"},
         {"id": "chess-z", "area": "chess", "status": "review", "branch": "todo/chess-z"},
         {"id": "chess-w", "area": "chess", "status": "in progress", "branch": "todo/chess-w"},
@@ -426,6 +426,7 @@ def test_list_json_store_keeps_only_the_areas_of_the_rules_file(game: Path, fake
     data = json.loads(capsys.readouterr().out)
     assert data["areas"] == ["mahjong", "engine"]
     assert [entry["id"] for entry in data["review"]] == ["mahjong-x", "eng-y"]
+    assert [entry["priority"] for entry in data["review"]] == ["high", None]  # the panel's data carries the level
 
 
 # --- merge: the quick merge, against a fake todo.py ------------------------------------------------
@@ -1016,6 +1017,49 @@ def test_dispatch_orders_by_preference_and_asks_only_for_the_missing_verdicts(ga
     assert state["candidates"][1]["verdict"]["verdict"] == "eligible"
     assert state["skipped"]["avoided"] == ["editor-x"] and state["skipped"]["blocked"] == [{"id": "held", "by": ["z"]}]
     assert state["slots"] == 1 and state["classify"] == ["ui-one"]  # one cached eligible + one to classify fill 2 x 1 slot
+
+
+def test_dispatch_orders_continue_run_prefer_priority_saved_prefs_unblocks_then_the_loop(game: Path, tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude-config"))
+    worker.main(["create", "1", "--no-configure"])
+
+    def entry(entry_id, priority=None, unblocks=0, stage=None, **more):
+        return {"id": entry_id, "area": "game", "title": entry_id, "status": "open", "version": 1, "priority": priority, "stage": stage,
+                "blocks": [{"id": f"{entry_id}-b{i}", "status": "open"} for i in range(unblocks)], "blockedBy": [], **more}
+
+    entries = [
+        entry("plain-low", "low"), entry("plain-unset"), entry("saved-low", "low"), entry("saved-high", "high"),
+        entry("tie-a", "high"), entry("tie-b", "high", unblocks=2), entry("urgent", "now"), entry("run-low", "low"),
+        entry("stopped", "low", status="in progress", branch="todo/stopped"), entry("normal-one", "normal"),
+    ]
+
+    def fake_cli(_layout, *args):
+        if args[0] == "list":
+            return json.dumps(entries)
+        raise worker.WorkerError("no plan")
+
+    monkeypatch.setattr(worker, "todo_cli", fake_cli)
+    monkeypatch.setattr(worker, "list_sessions", lambda _claude: [])
+    assert worker.main(["prefs", "--prefer", "saved-low,saved-high"]) == 0
+    capsys.readouterr()
+    assert worker.main(["dispatch", "--json"]) == 0
+    state = json.loads(capsys.readouterr().out)
+    # a stopped entry first; then the priority (unset = normal, the saved prefs inside a level, unblocks most, the id); low last
+    assert [c["id"] for c in state["candidates"]] == [
+        "stopped", "urgent", "saved-high", "tie-b", "tie-a", "normal-one", "plain-unset", "saved-low", "plain-low", "run-low"]
+    by_id = {c["id"]: c for c in state["candidates"]}
+    assert by_id["saved-high"]["priority"] == "high" and by_id["saved-high"]["saved"] == 1 and by_id["saved-high"]["prefer"] is None
+    assert by_id["plain-unset"]["priority"] is None and state["prefs"]["prefer"] == [] and state["prefs"]["saved_prefer"] == ["saved-low", "saved-high"]
+
+    capsys.readouterr()
+    assert worker.main(["dispatch", "--json", "--prefer", "run-low"]) == 0
+    state = json.loads(capsys.readouterr().out)
+    # the run's prefer goes before a `now` entry, the saved ones still count after the priority
+    assert [c["id"] for c in state["candidates"]][:3] == ["stopped", "run-low", "urgent"]
+    assert state["candidates"][1]["prefer"] == 0 and state["candidates"][2]["prefer"] is None
+    capsys.readouterr()
+    assert worker.main(["dispatch"]) == 0
+    assert "priority=now" in capsys.readouterr().out
 
 
 def test_configure_shares_ccache_between_the_workers(game: Path, monkeypatch):

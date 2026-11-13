@@ -288,3 +288,46 @@ def test_a_signal_that_cannot_be_written_does_not_fail_the_write(stub_api, chang
     blocker.parent.mkdir(parents=True, exist_ok=True)
     blocker.write_text("a file where the folder should be")
     assert stub_api.call("PATCH", "/entries/x", {"title": "t"}) == {}
+
+
+def test_priority_is_set_cleared_shown_and_sorted(cli):
+    cli("add", "plain", "--area", "engine", "--title", "Unrated")
+    cli("add", "slow", "--area", "engine", "--title", "Later", "--priority", "low")
+    cli("add", "urgent", "--area", "engine", "--title", "Now", "--priority", "now", "--stage", "3")
+    cli("add", "soon", "--area", "engine", "--title", "Soon")
+    cli("edit", "soon", "--priority", "high")
+    out, _ = cli("show", "soon")
+    assert "priority: high" in out
+    out, _ = cli("show", "plain")
+    assert "priority:" not in out
+    out, _ = cli("list")
+    assert [line.split()[0] for line in out.splitlines()] == ["urgent", "soon", "plain", "slow"]
+    assert out.splitlines()[1].split()[3] == "high" and out.splitlines()[2].split()[3] == "-"
+    out, _ = cli("list", "--json")
+    assert [entry["id"] for entry in json.loads(out)] == ["plain", "slow", "soon", "urgent"]
+    cli("edit", "soon", "--priority", "none")
+    out, _ = cli("show", "soon", "--json")
+    assert json.loads(out)["priority"] is None
+
+
+def test_list_filters_on_priority(cli):
+    cli("add", "a", "--area", "engine", "--title", "A", "--priority", "now")
+    cli("add", "b", "--area", "engine", "--title", "B", "--priority", "high")
+    cli("add", "c", "--area", "engine", "--title", "C")
+    cli("add", "d", "--area", "engine", "--title", "D", "--priority", "low")
+    out, _ = cli("list", "--priority", "now,high")
+    assert [line.split()[0] for line in out.splitlines()] == ["a", "b"]
+    out, _ = cli("list", "--priority", "none,low")
+    assert [line.split()[0] for line in out.splitlines()] == ["c", "d"]
+
+
+def test_a_bad_priority_is_refused_before_the_request(cli, capsys):
+    cli("add", "a", "--area", "engine", "--title", "A")
+    for argv in (("add", "b", "--area", "engine", "--title", "B", "--priority", "none"),
+                 ("edit", "a", "--priority", "urgent"), ("list", "--priority", "now,soon")):
+        with pytest.raises(SystemExit) as stop:
+            cli(*argv)
+        assert stop.value.code == 2
+        assert "priority" in capsys.readouterr().err
+    out, _ = cli("list")
+    assert [line.split()[0] for line in out.splitlines()] == ["a"]
