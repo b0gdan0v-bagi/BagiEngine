@@ -85,7 +85,7 @@ namespace BECore::Tests {
             DrawCall call;
             call.kind = DrawKind::Rect;
             call.rect = GetViewTransform().ToOutput(x, y, w, h);
-            call.color = color;
+            call.color = ApplyOpacity(color);
             call.clip = GetClipRect();
             call.blend = GetBlendMode();
             calls.push_back(call);
@@ -100,7 +100,7 @@ namespace BECore::Tests {
             DrawCall call;
             call.kind = DrawKind::Texture;
             call.rect = GetViewTransform().ToOutput(dstX, dstY, dstW, dstH);
-            call.color = tint;
+            call.color = ApplyOpacity(tint);
             call.texture = &texture;
             if (srcRect) {
                 call.source = *srcRect;
@@ -118,7 +118,7 @@ namespace BECore::Tests {
             DrawCall call;
             call.kind = DrawKind::Geometry;
             call.texture = texture;
-            call.color = vertices[0].color;
+            call.color = ApplyOpacity(vertices[0].color);
             call.clip = GetClipRect();
             call.blend = GetBlendMode();
             const ViewTransform& view = GetViewTransform();
@@ -128,6 +128,7 @@ namespace BECore::Tests {
             float bottom = 0.0f;
             for (const GeometryVertex& vertex : vertices) {
                 GeometryVertex mapped = vertex;
+                mapped.color = ApplyOpacity(vertex.color);
                 mapped.x = (vertex.x + translateX) * view.scale + view.offsetX;
                 mapped.y = (vertex.y + translateY) * view.scale + view.offsetY;
                 const bool first = call.vertices.empty();

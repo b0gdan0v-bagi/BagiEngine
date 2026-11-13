@@ -3,6 +3,7 @@
 #include <BECore/Scene/SceneManager.h>
 #include <Common/RecordingRenderer.h>
 #include <gtest/gtest.h>
+#include <limits>
 
 namespace BECore::Tests {
 
@@ -444,6 +445,162 @@ namespace BECore::Tests {
         _manager->DrawAll();
 
         EXPECT_EQ(_renderer->texturesCreated, 1u);
+    }
+
+    namespace {
+
+        constexpr uint8_t kHalfAlpha = 128;  // 255 * 0.5 rounded
+        constexpr uint8_t kQuarterAlpha = 64;
+        constexpr float kHalf = 0.5f;
+        constexpr float kNaN = std::numeric_limits<float>::quiet_NaN();
+        const eastl::vector<GeometryVertex> kFadingQuad = {
+            {0.0f, 0.0f, Color{255, 0, 0, 200}, 0.0f, 0.0f},
+            {10.0f, 0.0f, Color{255, 0, 0, 100}, 1.0f, 0.0f},
+            {10.0f, 20.0f, Color{255, 0, 0, 255}, 1.0f, 1.0f},
+            {0.0f, 20.0f, Color{255, 0, 0, 0}, 0.0f, 1.0f},
+        };
+
+    }  // namespace
+
+    TEST(RendererOpacityTest, TheDefaultIsOneAndChangesNothing) {
+        RecordingRenderer renderer;
+        EXPECT_FLOAT_EQ(renderer.GetOpacity(), 1.0f);
+
+        renderer.DrawFilledRect(0.0f, 0.0f, 10.0f, 10.0f, Color{1, 2, 3, 77});
+
+        ASSERT_EQ(renderer.calls.size(), 1u);
+        EXPECT_EQ(renderer.calls[0].color.r, 1);
+        EXPECT_EQ(renderer.calls[0].color.g, 2);
+        EXPECT_EQ(renderer.calls[0].color.b, 3);
+        EXPECT_EQ(renderer.calls[0].color.a, 77);
+    }
+
+    TEST(RendererOpacityTest, HalfOpacityHalvesTheAlphaOfARect) {
+        RecordingRenderer renderer;
+        renderer.SetOpacity(kHalf);
+
+        renderer.DrawFilledRect(0.0f, 0.0f, 10.0f, 10.0f, kRed);
+
+        ASSERT_EQ(renderer.calls.size(), 1u);
+        EXPECT_EQ(renderer.calls[0].color.a, kHalfAlpha);
+        EXPECT_EQ(renderer.calls[0].color.r, kOpaque);  // only the alpha moves
+    }
+
+    TEST(RendererOpacityTest, HalfOpacityHalvesTheAlphaOfATintedTexture) {
+        RecordingRenderer renderer;
+        auto texture = MakeTexture(renderer, 4, 4);
+        ASSERT_TRUE(texture);
+        renderer.SetOpacity(kHalf);
+
+        renderer.DrawTexture(*texture, nullptr, 0.0f, 0.0f, 4.0f, 4.0f, Color{kOpaque, kOpaque, kOpaque, 200});
+        IRenderer& base = renderer;
+        base.DrawTexture(*texture, nullptr, 0.0f, 0.0f, 4.0f, 4.0f);
+
+        ASSERT_EQ(renderer.calls.size(), 2u);
+        EXPECT_EQ(renderer.calls[0].color.a, 100);
+        EXPECT_EQ(renderer.calls[1].color.a, kHalfAlpha);  // the white of the untinted overload fades too
+    }
+
+    TEST(RendererOpacityTest, HalfOpacityHalvesTheAlphaOfEveryVertex) {
+        RecordingRenderer renderer;
+        renderer.SetOpacity(kHalf);
+
+        renderer.DrawGeometry(nullptr, {kFadingQuad.data(), kFadingQuad.size()}, {kQuadIndices.data(), kQuadIndices.size()}, 0.0f, 0.0f);
+
+        ASSERT_EQ(renderer.calls.size(), 1u);
+        const DrawCall& call = renderer.calls[0];
+        ASSERT_EQ(call.vertices.size(), 4u);
+        EXPECT_EQ(call.vertices[0].color.a, 100);
+        EXPECT_EQ(call.vertices[1].color.a, 50);
+        EXPECT_EQ(call.vertices[2].color.a, kHalfAlpha);
+        EXPECT_EQ(call.vertices[3].color.a, 0);
+        EXPECT_EQ(call.color.a, 100);            // the color of the first vertex
+        EXPECT_EQ(kFadingQuad[0].color.a, 200);  // the caller's vertices are not touched
+    }
+
+    TEST(RendererOpacityTest, ATransformedDrawIsFadedOnce) {
+        RecordingRenderer renderer;
+        auto texture = MakeTexture(renderer, 4, 4);
+        ASSERT_TRUE(texture);
+        renderer.SetOpacity(kHalf);
+        const DrawTransform turned{30.0f, 5.0f, 5.0f};
+
+        renderer.DrawTransformedRect(0.0f, 0.0f, 10.0f, 10.0f, kRed, turned);
+        renderer.DrawTransformedTexture(*texture, nullptr, 0.0f, 0.0f, 10.0f, 10.0f, kWhite, turned);
+        renderer.DrawTransformedRect(0.0f, 0.0f, 10.0f, 10.0f, kRed, DrawTransform{});  // the identity is a plain rect
+
+        ASSERT_EQ(renderer.calls.size(), 3u);
+        EXPECT_EQ(renderer.calls[0].kind, DrawKind::Geometry);
+        EXPECT_EQ(renderer.calls[0].vertices[0].color.a, kHalfAlpha);
+        EXPECT_EQ(renderer.calls[1].kind, DrawKind::Geometry);
+        EXPECT_EQ(renderer.calls[1].vertices[0].color.a, kHalfAlpha);
+        EXPECT_EQ(renderer.calls[2].kind, DrawKind::Rect);
+        EXPECT_EQ(renderer.calls[2].color.a, kHalfAlpha);
+    }
+
+    TEST(RendererOpacityTest, ScopedOpacityMultipliesWhenNestedAndRestores) {
+        RecordingRenderer renderer;
+        {
+            ScopedOpacity outer(renderer, kHalf);
+            EXPECT_FLOAT_EQ(renderer.GetOpacity(), kHalf);
+            {
+                ScopedOpacity inner(renderer, kHalf);
+                EXPECT_FLOAT_EQ(renderer.GetOpacity(), kHalf * kHalf);
+                renderer.DrawFilledRect(0.0f, 0.0f, 10.0f, 10.0f, kRed);
+            }
+            EXPECT_FLOAT_EQ(renderer.GetOpacity(), kHalf);
+        }
+        EXPECT_FLOAT_EQ(renderer.GetOpacity(), 1.0f);
+
+        ASSERT_EQ(renderer.calls.size(), 1u);
+        EXPECT_EQ(renderer.calls[0].color.a, kQuarterAlpha);
+    }
+
+    TEST(RendererOpacityTest, ScopedOpacityOfOneChangesNothing) {
+        RecordingRenderer renderer;
+        renderer.SetOpacity(kHalf);
+        {
+            ScopedOpacity scope(renderer, 1.0f);
+            EXPECT_FLOAT_EQ(renderer.GetOpacity(), kHalf);
+        }
+        EXPECT_FLOAT_EQ(renderer.GetOpacity(), kHalf);
+    }
+
+    TEST(RendererOpacityTest, ANanIsOneAndTheRangeIsCut) {
+        RecordingRenderer renderer;
+
+        renderer.SetOpacity(kHalf);
+        renderer.SetOpacity(kNaN);
+        EXPECT_FLOAT_EQ(renderer.GetOpacity(), 1.0f);
+        renderer.SetOpacity(3.0f);
+        EXPECT_FLOAT_EQ(renderer.GetOpacity(), 1.0f);
+        renderer.SetOpacity(-2.0f);
+        EXPECT_FLOAT_EQ(renderer.GetOpacity(), 0.0f);
+
+        renderer.SetOpacity(kHalf);
+        {
+            ScopedOpacity scope(renderer, kNaN);
+            EXPECT_FLOAT_EQ(renderer.GetOpacity(), kHalf);
+        }
+        {
+            ScopedOpacity scope(renderer, 5.0f);
+            EXPECT_FLOAT_EQ(renderer.GetOpacity(), kHalf);
+        }
+        {
+            ScopedOpacity scope(renderer, -1.0f);
+            EXPECT_FLOAT_EQ(renderer.GetOpacity(), 0.0f);
+        }
+        EXPECT_FLOAT_EQ(renderer.GetOpacity(), kHalf);
+    }
+
+    TEST(RendererOpacityTest, ZeroOpacityDrawsTransparentAndStillCounts) {
+        RecordingRenderer renderer;
+        renderer.SetOpacity(0.0f);
+
+        renderer.DrawFilledRect(0.0f, 0.0f, 10.0f, 10.0f, kRed);
+
+        ASSERT_EQ(renderer.calls.size(), 1u);
+        EXPECT_EQ(renderer.calls[0].color.a, 0);
     }
 
 }  // namespace BECore::Tests
