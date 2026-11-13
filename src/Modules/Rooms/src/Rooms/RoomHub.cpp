@@ -221,7 +221,11 @@ namespace BECore {
                     HandleAction(id, connection, typed, now);
                 } else if constexpr (std::is_same_v<T, LeaveMessage>) {
                     HandleLeave(id, connection, now);
+                } else if constexpr (std::is_same_v<T, ListRoomsMessage>) {
+                    // WP 2 of rooms-public-list replaces this answer
+                    SendError(id, RoomErrors::kBadMessage, "list_rooms is not supported yet", RoomMessageTypes::kListRooms);
                 } else {
+                    static_assert(std::is_same_v<T, PingMessage>, "a new client message needs its handler");
                     SendText(id, MakePongMessage());
                 }
             },

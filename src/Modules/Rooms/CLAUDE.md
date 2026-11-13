@@ -13,7 +13,7 @@ Built: the protocol, codes and tokens, the limits, `Room` and `RoomHub`, the ser
 | `RoomTypes.h/.cpp` | `ConnectionId`, `PlayerId`, `RoomTime` (`steady_clock::time_point`, always passed in), `RandomFn` (`uint64_t()`, injected), `MakeSecureRandom()` (`std::random_device`), `RoomPhase` (`Lobby`, `Playing`, `Finished`), `SeatKind` (`Human`, `Computer`, `Empty`) and their wire names |
 | `RoomLimits.h` | `RoomLimits::k*` (the constants of the table below), `RoomTimings` (grace, abandoned timeout, computer delay) and `RoomHubSettings` (the same values as defaults, so a test overrides them; the three times are its member `timings`, handed to every room) |
 | `RoomErrors.h` | `RoomErrors::k*`, the stable error codes |
-| `RoomProtocol.h/.cpp` | `ClientMessage` (a `std::variant` of the seven client messages), `ParseClientMessage`, `SerializeClientMessage`, `SanitizePlayerName`, the builders of the server messages, `LobbySnapshot`, `ParseServerMessage` (the inverse of the builders, for clients: `ServerMessage` variant, an unknown `type` is ignorable) |
+| `RoomProtocol.h/.cpp` | `ClientMessage` (a `std::variant` of the eight client messages), `ParseClientMessage`, `SerializeClientMessage`, `SanitizePlayerName`, the builders of the server messages, `LobbySnapshot`, `ParseServerMessage` (the inverse of the builders, for clients: `ServerMessage` variant, an unknown `type` is ignorable) |
 | `RoomCode.h/.cpp` | `GenerateRoomCode`, `NormalizeRoomCode`, `GenerateToken`, `IsWellFormedToken` |
 | `RateLimiter.h/.cpp` | a token bucket over `RoomTime` |
 | `Room.h/.cpp` | `Room`: members, seats, host, lobby snapshot and revision, phase, the game (start, actions, views, computers), absence and return (see "Room lifecycle") |
@@ -27,13 +27,14 @@ JSON text, one message per WebSocket text message, `{"v":1,"type":"...", ...}` (
 
 | `type` | Members | Notes |
 |--------|---------|-------|
-| `create_room` | `game` (1 to 64 bytes), `name`, `options?` | `options` is an object or absent; anything else is `bad_message`. It is handed to `ISeatedGame::Start` as it is: untrusted |
+| `create_room` | `game` (1 to 64 bytes), `name`, `options?`, `public?` | `options` is an object or absent; anything else is `bad_message`. It is handed to `ISeatedGame::Start` as it is: untrusted. `public` is a boolean or absent (false; another type is `bad_message`): it is the server's business, not a game option, so it works for every game; an old server ignores it and the room stays private |
 | `join_room` | `code`, and **exactly one** of `name` (a new member) or `token` (a member returns) | the code is normalised to upper case; the token is 32 lower-case hex characters |
 | `choose_seat` | `seat` (any integer) | the range is the room's to check (`invalid_seat`) |
 | `start` | | the host only |
 | `action` | `version` (integer, 0 or more), `action` (object) | `version` is the game version the client saw (`stale_action` when it moved) |
 | `leave` | | |
 | `ping` | | |
+| `list_rooms` | `game` (1 to 64 bytes, as in `create_room`) | for a connection in no room: the public rooms of that game; see "RoomHub" |
 
 **Server to client** (the builders `Make*Message`):
 
@@ -45,6 +46,7 @@ JSON text, one message per WebSocket text message, `{"v":1,"type":"...", ...}` (
 | `error` | `code`, `message`, `ref?` | `ref` is the type of the message it answers |
 | `left` | `reason` | the receiver is no longer in the room |
 | `pong` | | answer to `ping` |
+| `rooms` | `game`, `rooms: [{room, host, taken, seats, started, options?}]`, `more` | answer to `list_rooms`. `room` is the code (public by the host's choice), `host` the host's name, `taken` the humans, `seats` the game's seat count, `options` as in `lobby`. At most 20 entries, oldest room first; `more` says it was cut. A reader refuses more entries, a code `NormalizeRoomCode` would change, `seats` outside 1..64, `taken` outside 0..`seats`, and options that are not booleans and integers (the `lobby` reader drops those instead) |
 
 `ParseClientMessage(text, maxBytes)` never throws, aborts or asserts, whatever the bytes. It checks in this order: the size (`message_too_large`), no raw NUL byte (the JSON lexer takes NUL for the end of the text and would ignore what follows), a JSON object, `v`, `type`, then the fields of that type. It uses only the checked helpers of `BECore/Control/Json.h` (nlohmann aborts on a bad access in this build) and never interns a client string into `PoolString`.
 
@@ -65,7 +67,7 @@ JSON text, one message per WebSocket text message, `{"v":1,"type":"...", ...}` (
 | `too_many_rooms` | the room limit (hub) |
 | `internal_error` | a bug on the server's side, never a client's fault |
 
-`SanitizePlayerName`: valid UTF-8 (no overlong forms, surrogates or values above U+10FFFF), no control character (C0, DEL, C1, the line and paragraph separators, zero-width and direction-control characters, the byte order mark), then spaces at both ends removed, 1 to 24 bytes left. Names may repeat; the seat tells people apart. A name of only non-ASCII spaces (for example U+00A0 or U+3000) is not trimmed, so it is a valid name, not `bad_name`.
+`SanitizePlayerName` (rules in its header comment): strict UTF-8, no control or invisible character, ASCII spaces trimmed, 1 to 24 bytes left. Names may repeat; the seat tells people apart. A name of only non-ASCII spaces (U+00A0, U+3000) is not trimmed, so it is valid.
 
 ## Room lifecycle
 
@@ -88,14 +90,14 @@ JSON text, one message per WebSocket text message, `{"v":1,"type":"...", ...}` (
 | `MarkReturned(player, token)` | the right token takes control back **at once** (a computer move is atomic, so there is no half-made move); `bad_token` otherwise, `not_in_room` for a player that left |
 | `Leave(player)` | in a game the member is erased: the seat has no human and a computer plays it for good, the token no longer works, the host passes to the connected human of the lowest seat |
 | empty seats | computer-controlled from the start |
-| `StepComputers(now)` | at most one move per call: the first computer-controlled seat for which the game gives a `ChooseComputerAction`, sent through `PerformSeatAction`. Waits `computerDelay` (800 ms) from the start and from the last computer move; a time that goes back acts on nothing. A move the game refuses is logged (`LOG_ERROR`: seat and error code, never the room code) and not retried (returns false, no other seat is tried in that call) |
+| `StepComputers(now)` | at most one move per call: the first computer-controlled seat for which the game gives a `ChooseComputerAction`. Waits `computerDelay` (800 ms) from the start and from the last computer move. A move the game refuses is logged (seat and code, never the room code) and not retried (returns false) |
 | `ShouldClose(now)` | a lobby with no member; after the start no member left, or every member away for `abandonedTimeout` (10 min) or longer; one connected human keeps it open. A finished game with people present is not closed by the room (the hub decides) |
 
-`AddMember` draws a new token while one is taken, at most 16 times, then `internal_error` (a broken `RandomFn` cannot hang the server); the hub does the same for room codes.
+`AddMember` draws a new token while one is taken, at most 16 times, then `internal_error`; the hub does the same for room codes.
 
-The host matters in the lobby (only the host starts). After the start it is only shown: `MarkAway` does not move it, `Leave` passes it to the connected human of the lowest seat, and when none is connected the host is empty until a member returns, who then becomes the host (`MarkReturned`).
+The host matters in the lobby (only the host starts). After the start it is only shown: `MarkAway` does not move it, `Leave` passes it to the connected human of the lowest seat; when none is connected it is empty until a member returns and becomes the host.
 
-`FindByToken(token)` compares every member's token over the whole length with no early exit (the time does not tell how much is right). `GetLobbyRevision()` grows on every change `GetLobbySnapshot()` shows (join, removal, seat change, host change, the phase, an away or a return) and on nothing else, so the hub sends a `lobby` message exactly when it moved. Strings from a client are checked again in the room.
+`FindByToken(token)` compares every member's token over the whole length with no early exit. `GetLobbyRevision()` grows on every change `GetLobbySnapshot()` shows (join, removal, seat, host, phase, an away or a return) and on nothing else, so the hub sends `lobby` exactly when it moved.
 
 ## RoomHub
 
@@ -111,9 +113,9 @@ The host matters in the lobby (only the host starts). After the start it is only
 
 - **Flush.** After every handled message, disconnect and `Tick`, the hub compares for each connection of the affected room the lobby revision and the game version (and seat) with what that connection was last sent and sends `lobby` and/or `view` only when they moved. So a no-op changes nothing on the wire and the room logic never names who gets what. **The order a client sees:** `joined` (to its owner only; it is the only message that carries the token), then `lobby`, then `view` (only after the start); `left` is last. At the start every member gets `lobby` (phase `playing`) then `view`. The outcome of an `action` is not sent: the clients learn the result from the next `view`.
 - **Disconnect.** In a lobby the member is removed (the host passes on, the lobby message goes to the rest); in a game it is marked away (`connected: false` in the lobby) and keeps the seat for the grace. A room is closed (and its code free again) when `Room::ShouldClose` says so: checked after every leave and disconnect and in `Tick`.
-- **Tick.** Closes connections that are in no room and have sent nothing for the idle timeout (`idle`; a `ping` does not count as activity for this), lets each room's computers make at most one move (`computerDelay` is the room's), closes rooms that are abandoned, closes a lobby with no message but `ping` for `lobbyTimeout` (`left {lobby_timeout}`; the sockets stay and fall under the idle rule; any other message counts, a started room is not touched), and closes a finished room (members get `left {room_finished}`, stay connected, in no room) once it has been finished for `abandonedTimeout`. A finished room with people in it is not closed sooner, so they can read the end.
+- **Tick.** Closes connections in no room that sent nothing for the idle timeout (`idle`; a `ping` is no activity), lets each room's computers make at most one move, closes abandoned rooms, closes a lobby with no message but `ping` for `lobbyTimeout` (`left {lobby_timeout}`; the sockets stay and fall under the idle rule; a started room is not touched), and closes a finished room (members get `left {room_finished}`, stay connected, in no room) after `abandonedTimeout`; people in it can read the end until then.
 - **Limits** (`RoomHubSettings`): `rate_limited` is the answer to a message over the token bucket of the connection, and after `maxRateLimitedInRow` in a row the connection is closed (`rate_limited`); a code or token that cannot exist counts as a failed join like an unknown code or a wrong token and also takes a token from the failed-join buckets of its address and of the server (an empty bucket answers `rate_limited` before the room is looked up, so it says nothing about which codes exist; a member's own valid token passes it), `maxFailedJoinsInRow` in a row close the connection (`too_many_failed_joins`; a successful join, and a `create_room` that succeeds, resets the count; any other message does not); a connection over `maxConnections` is closed on arrival (`server_full`); the size limit is checked by the parser first. A close is reported through `sink.close` and the connection is forgotten at once, so the later `OnDisconnected` is ignored.
-- **When a computer takes over an absent seat:** the lobby revision does not move on time alone and the hub sends nothing extra at the end of the grace. Clients know the player is gone (`connected: false` since the drop) and learn that a computer plays the seat from the next `view`, which its move produces. A message of its own would need a new protocol field.
+- **When a computer takes over an absent seat:** the hub sends nothing at the end of the grace (the lobby revision does not move on time alone). Clients know the player is gone (`connected: false`) and learn that a computer plays from the next `view`, which its move produces.
 
 The protocol and the hub are fuzzed (`tests/Fuzz/CLAUDE.md`: `FuzzRoomProtocol`, `FuzzRoomHub`).
 
@@ -134,6 +136,7 @@ Constants in `RoomLimits.h`; `RoomHubSettings` repeats them as defaults for the 
 | game name | 1 to 64 bytes |
 | rooms, connections | 64, 512 |
 | per-connection rate | burst 20, then 10 per second (`RateLimiter`); the connection is closed after 5 `rate_limited` in a row |
+| `rooms` answer, `list_rooms` | 20 entries (`kMaxListedRooms`); a bucket per connection, burst 5 then one per 2 s |
 | failed `join_room` in a row | 5, then the connection is closed (guessing a code or token) |
 | failed joins of an address, of the server | bucket 10 then 1 per 30 s; 100 then 1 per 6 s (reconnecting resets the per-connection count, not these) |
 | rooms of one address | 4 at once (`too_many_rooms`; follows the room's life, 0 is off) |
@@ -143,8 +146,8 @@ Constants in `RoomLimits.h`; `RoomHubSettings` repeats them as defaults for the 
 | abandoned room | 10 min |
 | computer move delay | 800 ms (0 in tests) |
 
-`RateLimiter(burst, perSecond)`: a bucket that starts full at its first call, `TryTake(now)` takes one token. A burst below 1 is 1; a rate that is zero, negative or not a number adds nothing; a time that goes back counts as no time passing.
+`RateLimiter(burst, perSecond)`: a bucket that starts full at its first call, `TryTake(now)` takes one token. A burst below 1 is 1; a rate of zero, below zero or NaN adds nothing; a time that goes back is no time.
 
 ## Tests
 
-`tests/BECore/Rooms/`: a test file per source file (`Room` has `RoomLobbyTest` and `RoomPlayTest`) plus `RoomsScenarioTest.cpp` (the whole hub in memory: play, drops and returns, two rooms, hostile and random input) and `RoomHostileTest.cpp` (tokens across rooms and nothing after leaving, the wire judge, out-of-turn replays). `TestClient.h` has `HubHarness`: fake clients that record every text, an injected clock, and the leak check done **inside the send callback against the live game of the client's room**, so a hidden hand is judged while it is still hidden (an `error` that only quotes what the client itself sent is not a leak); `SetFailOnLeak(false)` only counts, for the negative control with a leaky game. `TestRandom.h` has the shared deterministic `RandomFn`; `FakeSeatedGame.*` names the demo game of `RoomServer/DemoCardGame.h` for the tests (it moved there so that `BagiRoomServer` can play it) and keeps the gtest leak check; `SeatedGameTest.cpp` tests it (`Games/CLAUDE.md`). Time and randomness are injected, so no test of the hub sleeps. The same scenarios over real sockets are `RoomServerScenarioTest.cpp` (`RoomServer/CLAUDE.md`, "Tests").
+`tests/BECore/Rooms/`: a test file per source file (`Room` has `RoomLobbyTest` and `RoomPlayTest`) plus `RoomsScenarioTest.cpp` (the whole hub in memory: play, drops and returns, two rooms, hostile and random input) and `RoomHostileTest.cpp` (tokens across rooms and nothing after leaving, the wire judge, out-of-turn replays). `TestClient.h` has `HubHarness`: fake clients that record every text, an injected clock, and the leak check done **inside the send callback against the live game of the client's room**, so a hidden hand is judged while it is still hidden (an `error` quoting what the client itself sent is no leak); `SetFailOnLeak(false)` only counts, for the negative control. `TestRandom.h` has the shared deterministic `RandomFn`; `FakeSeatedGame.*` names the demo game of `RoomServer/DemoCardGame.h` for the tests (it moved there so that `BagiRoomServer` can play it) and keeps the gtest leak check; `SeatedGameTest.cpp` tests it (`Games/CLAUDE.md`). Time and randomness are injected, so no test of the hub sleeps. The same scenarios over real sockets are `RoomServerScenarioTest.cpp` (`RoomServer/CLAUDE.md`, "Tests").

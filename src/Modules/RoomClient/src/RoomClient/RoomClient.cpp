@@ -279,6 +279,8 @@ namespace BECore {
                        [&](ErrorMessage& message) { OnError(std::move(message)); },
                        [&](LeftMessage& message) { OnLeft(std::move(message)); },
                        [](const PongMessage&) {},
+                       // The browse of the open rooms comes with RoomClient::ListRooms
+                       [](const RoomListMessage&) {},
                        // A newer server may send messages this client does not know
                        [](const UnknownServerMessage&) {},
                    },

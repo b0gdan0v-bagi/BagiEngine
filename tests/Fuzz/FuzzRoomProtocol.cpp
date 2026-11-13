@@ -75,7 +75,7 @@ namespace BECore::Fuzz {
         // ---- Client messages ------------------------------------------------------------------------------------------------------------
 
         bool Same(const CreateRoomMessage& a, const CreateRoomMessage& b) {
-            return a.game == b.game && a.name == b.name && a.options == b.options;
+            return a.game == b.game && a.name == b.name && a.options == b.options && a.isPublic == b.isPublic;
         }
         bool Same(const JoinRoomMessage& a, const JoinRoomMessage& b) {
             return a.code == b.code && a.name == b.name && a.token == b.token;
@@ -94,6 +94,9 @@ namespace BECore::Fuzz {
         }
         bool Same(const PingMessage&, const PingMessage&) {
             return true;
+        }
+        bool Same(const ListRoomsMessage& a, const ListRoomsMessage& b) {
+            return a.game == b.game;
         }
 
         bool SameClientMessage(const ClientMessage& a, const ClientMessage& b) {
@@ -158,6 +161,9 @@ namespace BECore::Fuzz {
             }
             if (std::holds_alternative<PongMessage>(message)) {
                 return MakePongMessage();
+            }
+            if (const auto* rooms = std::get_if<RoomListMessage>(&message)) {
+                return MakeRoomListMessage(*rooms);
             }
             return {};
         }
