@@ -229,8 +229,8 @@
         before the one below, so it exists whatever the WebGL test says, and it runs on the main thread (the game calls it from
         there: a Worker has no window). start(path, body, contentType) returns a positive id, or 0 when it refuses; poll(id) returns -1
         while the answer is pending, 0 for a network failure or an unknown id, otherwise the HTTP status (and forgets the id). The game
-        polls instead of being called back, so no C function has to be exported. The path is a path of this origin and the page's Basic
-        credentials ride along. keepalive lets a post outlive a closing tab, but Chromium refuses a keepalive body above 64 KiB, so it
+        polls instead of being called back, so no C function has to be exported. The path is a path of this origin and the page's
+        credentials (Basic or the session cookie of tools/web/ACCESS.md) ride along. keepalive lets a post outlive a closing tab, but Chromium refuses a keepalive body above 64 KiB, so it
         is used up to 60000 bytes only. The rules for the path and the size are the same as in CoreSDL/SDLWebPost.cpp. The script knows
         no game and logs neither paths nor bodies.
     -->
