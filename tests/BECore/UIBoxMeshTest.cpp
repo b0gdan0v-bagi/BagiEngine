@@ -623,8 +623,8 @@ namespace BECore::Tests {
     }
 
     TEST(UIBoxMeshTest, TheRasterCostOfABoxIsNearItsAreaTimesTheLayers) {
-        // The sample panel and button of UIBoxCaptureTest. A triangle is at best half its bounding box, so a layer that covers the box costs about 2 times its area (the
-        // old fan from one point cost 13 to 21 times); the ring strips of a shadow add a little
+        // The sample panel and button of UIBoxCaptureTest. A triangle is at best half its bounding box, so a layer that covers the box costs about 2 times its area (a fan
+        // from one point would cost the ring points times the area); the ring strips of a shadow add a little
         constexpr double kFillCostLimit = 3.2;
         constexpr double kBorderCostLimit = 1.2;
         constexpr double kShadowCostLimit = 4.5;
@@ -836,7 +836,7 @@ namespace BECore::Tests {
         ASSERT_EQ(viaDefault.indices.size(), full.indices.size());
         EXPECT_EQ(viaDefault.indices, full.indices);
 
-        // The Full mesh of the sample panel's shadow is what it was when the core stopped being a fan: 1230 triangles, 652 vertices
+        // The Full mesh of the sample panel's shadow is pinned: 1230 triangles, 652 vertices (the Vulkan path draws it)
         const Mesh panel = Shadow({40.0f, 40.0f, 160.0f, 100.0f}, UICorners::Uniform(16.0f), {0.0f, 12.0f, 6.0f, 0.0f, Color{0, 0, 0, 200}}, 1.0f);
         EXPECT_EQ(panel.TriangleCount(), 1230u);
         EXPECT_EQ(panel.vertices.size(), 652u);

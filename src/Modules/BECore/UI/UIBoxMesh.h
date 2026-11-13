@@ -129,7 +129,7 @@ namespace BECore {
          * the fill is drawn over it.
          *
          * @p detail is what the renderer asks for (`IRenderer::GetGeometryDetail()`): Full is the mesh above, Reduced has kReducedBlurRings steps and corners within
-         * kReducedCornerSagittaPixels, a quarter of the triangles, for a renderer that pays for each one. The bounds of a call hold for both.
+         * kReducedCornerSagittaPixels, about a third of the triangles, for a renderer that pays for each one. The bounds of a call hold for both.
          */
         static void AppendShadow(eastl::vector<GeometryVertex>& vertices, eastl::vector<int>& indices, const Rect& rect, const UICorners& corners, const UIShadowSpec& shadow, float pixelsPerUnit,
                                  GeometryDetail detail = GeometryDetail::Full);
