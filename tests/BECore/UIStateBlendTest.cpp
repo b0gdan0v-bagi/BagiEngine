@@ -263,4 +263,25 @@ namespace BECore::Tests {
         EXPECT_TRUE(SameLook(blend.Update(without, 21.0, kSecond, kLinear), without));
     }
 
+    TEST(UIStateBlendTest, FollowWithNoDurationReturnsTheTargetItself) {
+        UIBlend<Color> blend;
+        const Color target{10, 20, 30, 40};
+        EXPECT_EQ(&blend.Follow(target, 0.0, 0.0f, kLinear), &target) << "the caller's own colour, not a copy";
+        EXPECT_EQ(&blend.Follow(target, 1.0, -1.0f, kLinear), &target);
+        EXPECT_EQ(&blend.Follow(target, 1.0, std::numeric_limits<float>::quiet_NaN(), kLinear), &target);
+    }
+
+    TEST(UIStateBlendTest, FollowWithADurationBlendsAndAZeroForgetsTheBlend) {
+        UIBlend<Color> blend;
+        const Color from{0, 0, 0, 255};
+        const Color to{200, 100, 50, 255};
+        ExpectColor(blend.Follow(from, 0.0, kSecond, kLinear), from);
+        (void)blend.Follow(to, 10.0, kSecond, kLinear);
+        ExpectColor(blend.Follow(to, 10.5, kSecond, kLinear), Color{100, 50, 25, 255});
+        // A frame with no duration forgets the blend, so a later one does not replay it: the next call snaps to its target
+        ExpectColor(blend.Follow(from, 11.0, 0.0f, kLinear), from);
+        ExpectColor(blend.Follow(to, 20.0, kSecond, kLinear), to);
+        EXPECT_FALSE(blend.IsRunning());
+    }
+
 }  // namespace BECore::Tests

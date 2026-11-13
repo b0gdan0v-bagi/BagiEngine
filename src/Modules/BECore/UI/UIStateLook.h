@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Animation/Easing.h>
 #include <BECore/UI/UIBoxStyle.h>
 #include <BECore/UI/UIColor.h>
 
@@ -48,6 +49,9 @@ namespace BECore {
             Color fill;         ///< the fill, the start of the gradient
             Color gradientEnd;  ///< the far end of the gradient
         };
+
+        /// The ease of the smooth change between two states (`UIBlend`, `UISettings::stateTransition`)
+        static constexpr EaseType kTransitionEase = EaseType::QuadOut;
 
         /// The height of the bar at the foot of a selected control, in canvas units
         static constexpr float kSelectedBarHeight = 4.0f;

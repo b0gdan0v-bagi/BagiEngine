@@ -23,6 +23,16 @@ namespace BECore {
         /// The value to draw at @p now for @p target. The reference stays valid until the next call
         const T& Update(const T& target, double now, float duration, EaseType ease);
 
+        /// `Update` when @p duration is above 0, else @p target itself, untouched, and the blend forgets what it showed, so the next change of the duration starts from the target and does not
+        /// replay an old one. What a draw calls: a control with no transition costs one compare. The reference is @p target or the blend's own value
+        const T& Follow(const T& target, double now, float duration, EaseType ease);
+
+        /// Forgets the value and the blend on its way: the next `Update` snaps
+        void Reset() {
+            _started = false;
+            _running = false;
+        }
+
         /// What the last `Update` returned (a default value before the first call)
         [[nodiscard]] const T& Shown() const {
             return _shown;

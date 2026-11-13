@@ -1,7 +1,9 @@
 #include "UIElement.h"
 
+#include <BECore/GameManager/CoreManager.h>
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/UI/UIInputClicker.h>
+#include <BECore/UI/UISettings.h>
 #include <BECore/UI/UITextComponent.h>
 #include <BECore/UI/UIThemes.h>
 #include <BECore/UI/UITooltipComponent.h>
@@ -59,11 +61,24 @@ namespace BECore {
         return GetComponent<UIInputClicker>() != nullptr;
     }
 
-    void UIElement::SetInheritedState(const UIStateLook::State* state) {
+    void UIElement::SetInheritedState(const UIStateLook::State* state, float duration) {
         _hasInheritedState = state != nullptr;
         if (state) {
             _inheritedState = *state;
+            _inheritedDuration = duration;
         }
+    }
+
+    float UIElement::GetStateDuration() const {
+        if (_hasInheritedState && !OwnsState()) {
+            return _inheritedDuration;
+        }
+        // A negative number (and a NaN) is "the setting"
+        return stateDuration >= 0.0f ? UISettings::ClampStateTransition(stateDuration) : CoreManager::GetUIEnvironment().GetSettings().stateTransition;
+    }
+
+    const UIStateLook::Look& UIElement::ShownLook(const UIStateLook::Look& target) {
+        return _lookBlend.Follow(target, CoreManager::GetTime().GetTotalTime(), GetStateDuration(), UIStateLook::kTransitionEase);
     }
 
     UIStateLook::State UIElement::GetVisualState() const {
@@ -110,7 +125,8 @@ namespace BECore {
     }
 
     void UIElement::DrawStateBox(IRenderer& renderer) {
-        const UIStateLook::Look look = GetStateLook();
+        const UIStateLook::Look target = GetStateLook();
+        const UIStateLook::Look& look = ShownLook(target);
         DrawBox(renderer, look.box, look.fill, look.gradientEnd);
         if (!selected) {
             return;

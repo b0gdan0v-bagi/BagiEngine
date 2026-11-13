@@ -3,6 +3,7 @@
 #include <BECore/UI/UIColor.h>
 #include <BECore/UI/UIComponent.h>
 #include <BECore/UI/UISprite.h>
+#include <BECore/UI/UIStateBlend.h>
 #include <BECore/UI/UIStateLook.h>
 
 namespace BECore {
@@ -48,6 +49,7 @@ namespace BECore {
 
     private:
         UISprite _sprite;
+        UIBlend<Color> _tintBlend;  ///< runtime: the tint as it is shown while a state change eases (`UIElement::GetStateDuration`)
     };
 
 }  // namespace BECore

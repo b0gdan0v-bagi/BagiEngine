@@ -54,6 +54,15 @@ namespace BECore {
         return _shown;
     }
 
+    template <typename T>
+    const T& UIBlend<T>::Follow(const T& target, double now, float duration, EaseType ease) {
+        if (!(duration > 0.0f)) {
+            Reset();
+            return target;
+        }
+        return Update(target, now, duration, ease);
+    }
+
     template class UIBlend<Color>;
     template class UIBlend<UIStateLook::Look>;
 

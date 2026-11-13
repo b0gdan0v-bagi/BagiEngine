@@ -1,5 +1,6 @@
 #include "UIImageComponent.h"
 
+#include <BECore/GameManager/CoreManager.h>
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/UI/UIElement.h>
 #include <BECore/UI/UIThemes.h>
@@ -26,7 +27,8 @@ namespace BECore {
         if (!texture) {
             return;
         }
-        const Color stateTint = GetStateTint(owner.GetVisualState());
+        const Color targetTint = GetStateTint(owner.GetVisualState());
+        const Color& stateTint = _tintBlend.Follow(targetTint, CoreManager::GetTime().GetTotalTime(), owner.GetStateDuration(), UIStateLook::kTransitionEase);
         if (stateTint.a == 0) {
             return;
         }

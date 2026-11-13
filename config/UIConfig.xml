@@ -2,4 +2,5 @@
 <UIConfig
   userScale="1.0"
   minTouchSize="32"
-  hotReloadInterval="0.5" />
+  hotReloadInterval="0.5"
+  stateTransition="0" />
