@@ -10,12 +10,15 @@ It copies the behaviour seen on Vikunja 2.7.1 that the adapter depends on:
     DELETE /tasks/{id}/relations/{kind}/{other} removes both sides; GET /tasks/{id} shows them in
     `related_tasks`; the listing here leaves them out, so the mirror must read a task before changing them.
 `fail_next` makes the next N requests answer 500 (the retries of the outbox).
+`delay` (seconds) is slept by every request before it answers, outside any lock, so the server threads stay parallel
+(a slow Vikunja: the mirror holds its rows for long).
 Every request is logged so that a test can assert "no writes".
 """
 
 import json
 import re
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -33,6 +36,7 @@ class FakeVikunja:
         self.webhooks: dict[int, list[dict]] = {}
         self.relations: set[tuple[int, str, int]] = set()  # (task, kind, other task)
         self.fail_next = 0
+        self.delay = 0.0
         self.requests: list[tuple[str, str]] = []
         self._next_id = 1
         fake = self
@@ -111,6 +115,8 @@ class FakeVikunja:
         self.requests.append((method, parsed.path))
         length = int(handler.headers.get("Content-Length") or 0)
         body = json.loads(handler.rfile.read(length)) if length else None
+        if self.delay > 0:
+            time.sleep(self.delay)
         if handler.headers.get("Authorization") != f"Bearer {self.token}":
             return self._reply(handler, 401, {"code": 11, "message": "missing or invalid token"})
         if self.fail_next > 0:
