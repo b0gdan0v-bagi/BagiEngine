@@ -25,7 +25,7 @@ The conductor gives you: the area of the entry (`<area>`, `<R>` the repository, 
 
 A slice is what goes into one branch and one review. **By default the slice is all the rest of the entry**: every open stage of the owner's plan, or the whole entry body. The owner does not check a branch more closely because it is small, and every extra slice waits for a merge and for another architect, so size alone is no reason to cut.
 
-Cut only at a **gate**: a point after which the work depends on something only the owner can give (a decision between approaches, a hands-on check on a device or a backend this machine lacks, a look at a spike's result). The slice then ends at the gate, and you say how many slices you see (`slice K of M`) so the conductor can write it into the status. The one other reason is a branch too large to review in one pass (more than about 12 WPs): cut where the first part is useful alone.
+Cut only at a **gate**: a point after which the work depends on something only the owner can give (a decision between approaches, a hands-on check on a device or a backend this machine lacks, a look at a spike's result). The slice then ends at the gate, and you say how many slices you see (`slice K of M`) so the conductor can write it into the status, and the plan gets a section `## Left for slice K+1` (the bullets of what the next slices still have to cover, each with its files and tests): the conductor turns it into the entry's new body (`todo-loop/SKILL.md`, step 6), so write it as the next architect has to read it. The one other reason is a branch too large to review in one pass (more than about 12 WPs): cut where the first part is useful alone.
 
 **Through** (`todo-loop/SKILL.md`, "Through"): the owner merges once, so the size cut costs no merge; it still keeps every review to about 12 WPs. For slice 1, first write the **stage plan** of the whole entry: `# <entry title>: stages`, the `## Files` of every stage together, then one `## Stage k/M: <name>` per slice (what it delivers, `**Ends at:** size | gate | end`, one box `- [ ] stage k approved`). A stage ends at `gate` only for a real gate (above); every other cut is `size`, and the last stage is `end`. Then plan slice 1 = stage 1. For slice K ≥ 2, read the stage plan (`todo.py plan get <name> --stdout`) and the earlier slice plans, check stage K against the code as it is now on the branch, and plan it; change a later stage in the stage plan when the work showed it wrong (and say so). You do not tick stage boxes: the conductor does after each `APPROVE`.
 
@@ -97,6 +97,9 @@ Area `<area>` (repository `<R>`, base `<base>`), branch `todo/<branch-id>`, entr
 
 ## Left for the owner
 ...
+
+## Left for slice K+1
+(only when the slice does not finish the entry)
 
 ## Review notes
 (the conductor appends non-blocking findings here)
