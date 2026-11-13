@@ -5,6 +5,8 @@ Run: `uvicorn --factory service.app:create_app_from_env` from tools/todo (the Do
 Every /api/v1 route needs `Authorization: Bearer <TODO_API_TOKEN>`; the pages take the same token
 as the password of HTTP Basic auth (any user name). The webhook of Vikunja is checked by its signature.
 `X-Todo-Actor` names who writes (the events table keeps it).
+A write that Postgres aborts (deadlock, serialization failure) is run again a few times, then answers 503;
+any other error that is not a StoreError is logged with its traceback and answers 500 with its class name.
 """
 
 import base64
@@ -12,10 +14,13 @@ import hmac
 import json
 import logging
 import os
+import random
+import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import date
 
+import psycopg.errors
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
@@ -29,6 +34,10 @@ log = logging.getLogger("todo.app")
 
 API = "/api/v1"
 DEFAULT_ACTOR = "api"
+WRITE_ATTEMPTS = 4  # runs of a write that Postgres aborts (deadlock, serialization failure) before the client gets 503
+RETRIED_ERRORS = (psycopg.errors.DeadlockDetected, psycopg.errors.SerializationFailure)
+RETRY_PAUSE = 0.05  # seconds before the second run; grows with the attempt
+RETRY_JITTER = 0.5  # up to this fraction of the pause is added at random, so two losers do not collide again
 
 
 @dataclass
@@ -199,15 +208,34 @@ def create_app(settings: Settings, start_mirror: bool = True) -> FastAPI:
         if not token or not hmac.compare_digest(token, settings.api_token):
             raise HTTPException(401, "log in with the API token as the password", headers={"WWW-Authenticate": 'Basic realm="todo"'})
 
+    def unexpected(error: Exception) -> HTTPException:
+        """The answer for an error that is not a StoreError: the class only (no SQL, no row data), the traceback in the log."""
+        log.exception("store error: %s", type(error).__name__)
+        return HTTPException(500, f"{type(error).__name__}: store error, see the service log")
+
     def write(fn):
-        """Run fn(conn) in one transaction; StoreError becomes its HTTP status; the mirror is woken after."""
-        try:
-            with state["pool"].connection() as conn, conn.transaction():
-                result = fn(conn)
-        except store.StoreError as error:
-            raise HTTPException(error.code, str(error)) from None
-        state["mirror"].wake()
-        return result
+        """Run fn(conn) in one transaction; StoreError becomes its HTTP status; the mirror is woken after.
+
+        A transaction that Postgres aborts is rolled back whole, so fn is run again in a new one."""
+        for attempt in range(1, WRITE_ATTEMPTS + 1):
+            try:
+                with state["pool"].connection() as conn, conn.transaction():
+                    result = fn(conn)
+            except store.StoreError as error:
+                raise HTTPException(error.code, str(error)) from None
+            except HTTPException:
+                raise
+            except RETRIED_ERRORS as error:
+                if attempt == WRITE_ATTEMPTS:
+                    log.error("giving up after %d attempts: %s", attempt, type(error).__name__)
+                    raise HTTPException(503, "the store was busy, repeat the request") from None
+                log.warning("retrying a write after %s, attempt %d of %d", type(error).__name__, attempt, WRITE_ATTEMPTS)
+                time.sleep(RETRY_PAUSE * attempt * (1 + RETRY_JITTER * random.random()))
+            except Exception as error:
+                raise unexpected(error) from None
+            else:
+                state["mirror"].wake()
+                return result
 
     def read(fn):
         try:
@@ -215,6 +243,10 @@ def create_app(settings: Settings, start_mirror: bool = True) -> FastAPI:
                 return fn(conn)
         except store.StoreError as error:
             raise HTTPException(error.code, str(error)) from None
+        except HTTPException:
+            raise
+        except Exception as error:
+            raise unexpected(error) from None
 
     # --- health ---
 

@@ -3,6 +3,9 @@
 import hashlib
 import hmac
 import json
+import logging
+import threading
+import time
 
 import pytest
 
@@ -302,6 +305,112 @@ def test_an_edit_made_before_a_pending_write_is_not_overwritten(linked):
     mirror.process_outbox()
     assert api.get("/api/v1/entries/no-ci").json()["title"] == "Renamed in Vikunja"
     assert task_of(api, fake)["title"] == "Renamed in Vikunja"
+
+
+def wait_for_a_lock_wait(api, timeout=10.0):
+    """True once a backend of the database waits for a lock (polled, with a time limit)."""
+    deadline = time.monotonic() + timeout
+    with psycopg_connect(api) as conn:
+        while time.monotonic() < deadline:
+            waiting = conn.execute(
+                "SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND datname = current_database()"
+            ).fetchone()[0]
+            if waiting:
+                return True
+            time.sleep(0.02)
+    return False
+
+
+def test_a_write_holding_the_entry_does_not_deadlock_with_the_mirror(mirrored):
+    """What `add_dependency` does (the entry row, then the outbox row) while the mirror writes the same entry's task."""
+    import psycopg
+
+    from service import store
+
+    api, mirror, fake = mirrored
+    add(api)  # no mirror thread runs: its outbox row waits
+    outcome = {}
+
+    def run_mirror():
+        try:
+            outcome["written"] = mirror.process_outbox()
+        except Exception as error:  # reported by the assertion below
+            outcome["error"] = error
+
+    with psycopg.connect(api.app.state.todo["pool"].conninfo) as writer:
+        writer.execute("SELECT * FROM entries WHERE id = 'no-ci' FOR UPDATE")  # step 1 of a writer
+        thread = threading.Thread(target=run_mirror)
+        thread.start()
+        try:
+            assert wait_for_a_lock_wait(api), "the mirror never waited for a lock"
+            store.enqueue(writer, "no-ci")  # step 3 of a writer: must not wait for the mirror
+            writer.commit()
+        finally:
+            thread.join(timeout=30)
+    assert not thread.is_alive()
+    assert "error" not in outcome, outcome.get("error")
+    assert outcome["written"] == 1
+    with psycopg_connect(api) as conn:
+        assert conn.execute("SELECT count(*) FROM vikunja_outbox").fetchone()[0] == 0
+    assert task_of(api, fake)["title"] == "No CI"
+
+
+SLOW_VIKUNJA_SECONDS = 0.2
+SLOW_ROUNDS = 8
+DRAIN_SECONDS = 120.0
+
+
+def wait_for_an_empty_outbox(api, timeout=DRAIN_SECONDS):
+    deadline = time.monotonic() + timeout
+    with psycopg_connect(api) as conn:
+        while time.monotonic() < deadline:
+            if conn.execute("SELECT count(*) FROM vikunja_outbox").fetchone()[0] == 0:
+                return True
+            time.sleep(0.05)
+    return False
+
+
+def test_an_entry_linked_and_edited_at_once_while_the_mirror_writes_its_task_slowly(mirrored, caplog):
+    """`add`, then at once `dep add` and `edit`, and another client editing the blocker: no 500, no 503, nothing lost."""
+    api, mirror, fake = mirrored
+    fake.delay = SLOW_VIKUNJA_SECONDS
+    add(api, id="older", title="Older")
+    statuses = []
+    failures = []
+
+    def request(method, url, **kwargs):
+        response = api.request(method, url, **kwargs)
+        statuses.append(response.status_code)
+        if response.status_code >= 400:
+            failures.append((method, url, response.status_code, response.text))
+
+    def edit_the_blocker():
+        for round_number in range(SLOW_ROUNDS):
+            request("PATCH", "/api/v1/entries/older", json={"title": f"Older {round_number}"})
+
+    mirror.start()
+    try:
+        with caplog.at_level(logging.ERROR, logger="todo.mirror"):
+            editor = threading.Thread(target=edit_the_blocker)
+            editor.start()
+            for round_number in range(SLOW_ROUNDS):
+                entry_id = f"round-{round_number}"
+                request("POST", "/api/v1/entries", json={**ENTRY, "id": entry_id, "title": f"Round {round_number}"})
+                request("PUT", f"/api/v1/entries/{entry_id}/blockers/older", json={"note": "waits"})
+                request("PATCH", f"/api/v1/entries/{entry_id}", json={"title": f"Round {round_number} last"})
+            editor.join(timeout=60)
+            assert not editor.is_alive()
+            assert wait_for_an_empty_outbox(api), "the outbox did not drain"
+    finally:
+        mirror.stop()
+    assert failures == []
+    assert len(statuses) == SLOW_ROUNDS * 4
+    assert [record.getMessage() for record in caplog.records if record.name == "todo.mirror"] == []
+    assert task_of(api, fake, "older")["title"] == f"Older {SLOW_ROUNDS - 1}"
+    for round_number in range(SLOW_ROUNDS):
+        assert task_of(api, fake, f"round-{round_number}")["title"] == f"Round {round_number} last"
+    with psycopg_connect(api) as conn:
+        assert conn.execute("SELECT count(*) FROM dependencies").fetchone()[0] == SLOW_ROUNDS
 
 
 def test_a_task_made_in_vikunja_becomes_an_entry(mirrored):
