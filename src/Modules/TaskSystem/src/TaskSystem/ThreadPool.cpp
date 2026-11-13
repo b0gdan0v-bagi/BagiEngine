@@ -13,7 +13,7 @@ namespace BECore {
 
     ThreadPool::ThreadPool(size_t numThreads) {
         if (numThreads == 0) {
-            numThreads = std::thread::hardware_concurrency();
+            numThreads = Thread::HardwareConcurrency();
             if (numThreads < 2) {
                 numThreads = 2;
             }
@@ -30,13 +30,13 @@ namespace BECore {
         // Запускаем рабочие потоки
         _threads.reserve(numThreads);
         for (size_t i = 0; i < numThreads; ++i) {
-            _threads.emplace_back(&ThreadPool::WorkerLoop, this, i);
+            _threads.emplace_back(Format("Worker {}", i).c_str(), kWorkerSortBase + static_cast<uint32_t>(i), [this, i] { WorkerLoop(i); });
         }
 
         LOG_INFO("[ThreadPool] Created with {} threads"_format(numThreads));
     }
 
-    ThreadPool::ThreadPool(InlineTag) : _isInline(true), _inlineThread(std::this_thread::get_id()) {
+    ThreadPool::ThreadPool(InlineTag) : _isInline(true), _inlineThread(Thread::CurrentId()) {
         LOG_INFO("[ThreadPool] Created inline (no worker threads)");
     }
 
@@ -79,7 +79,7 @@ namespace BECore {
     }
 
     void ThreadPool::RunInline(TaskQueue::TaskFunc task) {
-        ASSERT(std::this_thread::get_id() == _inlineThread, "The inline ThreadPool is used from the thread that created it only");
+        ASSERT(Thread::CurrentId() == _inlineThread, "The inline ThreadPool is used from the thread that created it only");
 
         if (_drainingInline) {
             // A job is running on this stack: the outer call runs this one after it.
@@ -150,7 +150,7 @@ namespace BECore {
         if (Profiler::GetBackend() != nullptr) {
             // One lock around the flag and the points it moves, so the graphs get their values in the order they were true: two workers
             // that change at the same moment must not leave `Pool: busy workers` at the older value. Taken only while a backend records
-            std::lock_guard lock(_busyReportMutex);
+            LockGuard lock(_busyReportMutex);
             _workerBusy[threadIndex].store(busy, std::memory_order_relaxed);
             if (threadIndex < kMaxGraphedWorkers) {
                 BE_PROFILE_COUNTER(kWorkerBusyCounters[threadIndex], busy ? 1 : 0);
@@ -163,7 +163,6 @@ namespace BECore {
     }
 
     void ThreadPool::WorkerLoop(size_t threadIndex) {
-        BE_PROFILE_THREAD_ORDER(Format("Worker {}", threadIndex).c_str(), kWorkerSortBase + threadIndex);
         SetWorkerBusy(threadIndex, false);  // the first point of the graph of this worker
         TaskQueue::TaskFunc task;
         const auto run = [this, threadIndex, &task] {

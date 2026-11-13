@@ -17,7 +17,7 @@ namespace BECore {
             return;
         }
 
-        _mainThreadId = std::this_thread::get_id();
+        _mainThreadId = Thread::CurrentId();
 
 #if BE_SINGLE_THREAD
         // No thread at all (the single-thread build, BE_SINGLE_THREAD): background jobs run on the calling thread at submit time,
@@ -29,7 +29,7 @@ namespace BECore {
         LOG_INFO("[TaskManager] Initialized in single-thread mode (inline pool, no worker threads)");
 #else
         // Создаем пул потоков
-        size_t numThreads = std::min<size_t>(std::thread::hardware_concurrency(), kMaxWorkerThreads);
+        size_t numThreads = std::min<size_t>(Thread::HardwareConcurrency(), kMaxWorkerThreads);
         if (numThreads < 2) {
             numThreads = 2;
         }
@@ -97,7 +97,7 @@ namespace BECore {
     }
 
     bool TaskManager::IsMainThread() const {
-        return std::this_thread::get_id() == _mainThreadId;
+        return Thread::CurrentId() == _mainThreadId;
     }
 
     size_t TaskManager::GetWorkerCount() const {

@@ -7,7 +7,6 @@
 #include <TaskSystem/TaskScheduler.h>
 #include <TaskSystem/ThreadPool.h>
 #include <chrono>
-#include <thread>
 
 namespace BECore {
 
@@ -211,7 +210,7 @@ namespace BECore {
         }
 
         bool _isInitialized = false;
-        std::thread::id _mainThreadId;
+        Thread::Id _mainThreadId;
         Duration _frameBudget = kDefaultFrameBudget;
 
         eastl::unique_ptr<ThreadPool> _threadPool;
