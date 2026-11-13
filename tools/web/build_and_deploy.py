@@ -111,15 +111,26 @@ def check_environment(args: argparse.Namespace, emsdk_dir: Path, which) -> None:
         raise DeployError("--deploy needs the Railway CLI (`railway`) on PATH: https://docs.railway.com/guides/cli")
 
 
-def stage(dist: Path, stage_dir: Path) -> None:
-    """Puts what the Dockerfile copies into one folder: the files of tools/web and a fresh copy of dist/."""
+def empty_stage(stage_dir: Path, source_dir: Path) -> None:
+    """Starts the staging from an empty folder, so a file of an earlier run does not travel with this one.
+
+    Only a folder inside <source>/build is emptied; any other folder must be absent or empty already, so a wrong --stage-dir
+    (the source root, a parent of it, the home folder) never loses a file."""
+    stage_dir, build_dir = stage_dir.resolve(), (source_dir / "build").resolve()
+    if stage_dir.is_relative_to(build_dir) and stage_dir != build_dir:
+        if stage_dir.exists():
+            shutil.rmtree(stage_dir)
+    elif stage_dir.exists() and (not stage_dir.is_dir() or any(stage_dir.iterdir())):
+        raise DeployError(f"will not empty {stage_dir}: it is not a folder inside {build_dir} (use an empty or new folder for --stage-dir)")
     stage_dir.mkdir(parents=True, exist_ok=True)
+
+
+def stage(dist: Path, stage_dir: Path, source_dir: Path) -> None:
+    """Puts what the Dockerfile copies into one folder: the files of tools/web and a fresh copy of dist/, nothing else."""
+    empty_stage(stage_dir, source_dir)
     for name in STAGED_FILES:
         shutil.copyfile(TOOLS_DIR / name, stage_dir / name)
-    staged_dist = stage_dir / "dist"
-    if staged_dist.exists():
-        shutil.rmtree(staged_dist)
-    shutil.copytree(dist, staged_dist)
+    shutil.copytree(dist, stage_dir / "dist")
 
 
 def run(argv: list[str] | None = None, emsdk_dir: Path = EMSDK_DIR, which=shutil.which, runner=subprocess.run) -> int:
@@ -152,8 +163,8 @@ def run(argv: list[str] | None = None, emsdk_dir: Path = EMSDK_DIR, which=shutil
             print(f"stage {dist} and {', '.join(STAGED_FILES)} into {stage_dir}", flush=True)
             if not args.dry_run:
                 try:
-                    stage(dist, stage_dir)
-                except OSError as error:
+                    stage(dist, stage_dir, source_dir)
+                except (DeployError, OSError) as error:
                     print(f"build_and_deploy.py: cannot stage {dist} into {stage_dir}: {error}", file=sys.stderr)
                     return 2
         print(f"+ ({step.cwd}) {format_command(step.command)}", flush=True)

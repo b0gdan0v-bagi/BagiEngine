@@ -197,6 +197,24 @@ class RunTest(DeployTestCase):
         self.assertEqual(code, 0, err)
         self.assertEqual(sorted(path.name for path in (self.stage / "app").iterdir()), ["libextra.so.1", "room-server"])
 
+    def test_a_file_beside_app_from_an_earlier_run_is_gone(self):
+        self.stage.mkdir(parents=True)
+        (self.stage / "railway.json").write_text("{}", encoding="utf-8")
+        code, _, err, _ = self.run_script()
+        self.assertEqual(code, 0, err)
+        self.assertEqual(sorted(path.name for path in self.stage.iterdir()), ["Dockerfile", "app"])
+
+    def test_a_stage_folder_outside_build_that_holds_files_is_refused_and_kept(self):
+        for chosen in (self.source, self.source / "other"):
+            with self.subTest(chosen=chosen.name):
+                chosen.mkdir(exist_ok=True)
+                keep = chosen / "keep.txt"
+                keep.write_text("mine", encoding="utf-8")
+                code, _, err, _ = self.run_script("--stage-dir", str(chosen))
+                self.assertEqual(code, 2)
+                self.assertIn("will not empty", err)
+                self.assertEqual(keep.read_text(encoding="utf-8"), "mine")
+
     def test_a_second_run_leaves_no_file_of_the_first_one(self):
         self.run_script(runner=FakeRunner(out_files={"room-server": b"1", "old.so": b"old"}))
         self.run_script()

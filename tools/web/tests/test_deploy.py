@@ -260,6 +260,37 @@ class RunTest(DeployTestCase):
         staged = self.source / "build" / "web-deploy" / "dist"
         self.assertEqual(sorted(path.name for path in staged.iterdir()), ["new.js"])
 
+    def test_a_file_of_an_earlier_run_is_gone_after_the_next_staging(self):
+        self.make_dist()
+        staged = self.source / "build" / "web-deploy"
+        (staged / "dist" / "sub").mkdir(parents=True)
+        (staged / "railway.json").write_text("{}", encoding="utf-8")
+        (staged / "dist" / "sub" / "old.js").write_text("old", encoding="utf-8")
+        code, _, err, _ = self.run_script("--deploy", which=have_railway)
+        self.assertEqual(code, 0, err)
+        self.assertEqual(sorted(path.name for path in staged.iterdir()), sorted([*build_and_deploy.STAGED_FILES, "dist"]))
+        self.assertEqual([path.name for path in (staged / "dist").iterdir()], ["index.html"])
+
+    def test_a_stage_folder_outside_build_that_holds_files_is_refused_and_kept(self):
+        self.make_dist()
+        for chosen in (self.source, self.source / "build", self.source / "other"):
+            with self.subTest(chosen=chosen.name):
+                chosen.mkdir(exist_ok=True)
+                keep = chosen / "keep.txt"
+                keep.write_text("mine", encoding="utf-8")
+                code, _, err, runner = self.run_script("--deploy", "--stage-dir", str(chosen), which=have_railway)
+                self.assertEqual(code, 2)
+                self.assertIn("will not empty", err)
+                self.assertEqual(keep.read_text(encoding="utf-8"), "mine")
+                self.assertNotIn(RAILWAY_PATH, [call[0][0] for call in runner.calls])
+
+    def test_a_new_stage_folder_outside_build_is_accepted(self):
+        self.make_dist()
+        chosen = self.source / "fresh"
+        code, _, err, _ = self.run_script("--deploy", "--stage-dir", str(chosen), which=have_railway)
+        self.assertEqual(code, 0, err)
+        self.assertTrue((chosen / "Dockerfile").is_file())
+
     def test_the_program_found_on_the_path_is_the_one_that_runs(self):
         # Windows: CreateProcess does not apply PATHEXT, so a bare `railway` would not find railway.cmd
         self.make_dist()

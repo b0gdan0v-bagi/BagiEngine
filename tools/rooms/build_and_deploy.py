@@ -85,12 +85,24 @@ def check_environment(args: argparse.Namespace, which) -> None:
         raise DeployError("--deploy needs the Railway CLI (`railway`) on PATH: https://docs.railway.com/guides/cli")
 
 
-def prepare_stage(stage_dir: Path) -> None:
-    """An empty stage/app, so a file of an older build does not travel with this one."""
-    app = stage_dir / APP_FOLDER
-    if app.exists():
-        shutil.rmtree(app)
-    app.mkdir(parents=True)
+def empty_stage(stage_dir: Path, source_dir: Path) -> None:
+    """Starts the staging from an empty folder, so a file of an earlier run does not travel with this one.
+
+    Only a folder inside <source>/build is emptied; any other folder must be absent or empty already, so a wrong --stage-dir
+    (the source root, a parent of it, the home folder) never loses a file."""
+    stage_dir, build_dir = stage_dir.resolve(), (source_dir / "build").resolve()
+    if stage_dir.is_relative_to(build_dir) and stage_dir != build_dir:
+        if stage_dir.exists():
+            shutil.rmtree(stage_dir)
+    elif stage_dir.exists() and (not stage_dir.is_dir() or any(stage_dir.iterdir())):
+        raise DeployError(f"will not empty {stage_dir}: it is not a folder inside {build_dir} (use an empty or new folder for --stage-dir)")
+    stage_dir.mkdir(parents=True, exist_ok=True)
+
+
+def prepare_stage(stage_dir: Path, source_dir: Path) -> None:
+    """An empty stage with an empty app/, so a file of an older run does not travel with this one."""
+    empty_stage(stage_dir, source_dir)
+    (stage_dir / APP_FOLDER).mkdir()
 
 
 def stage_runtime(stage_dir: Path) -> None:
@@ -146,13 +158,13 @@ def run(argv: list[str] | None = None, which=shutil.which, runner=subprocess.run
     for step in (build, create):
         if code := run_step(step, args.dry_run, which, runner):
             return code
-    print(f"empty {stage_dir / APP_FOLDER}", flush=True)
+    print(f"empty {stage_dir}, then {stage_dir / APP_FOLDER}", flush=True)
     code = 0
     try:
         if not args.dry_run:
-            prepare_stage(stage_dir)
+            prepare_stage(stage_dir, source_dir)
         code = run_step(copy, args.dry_run, which, runner)
-    except OSError as error:
+    except (DeployError, OSError) as error:
         print(f"build_and_deploy.py: cannot prepare {stage_dir}: {error}", file=sys.stderr)
         code = 2
     # The container exists once `docker create` succeeded: it is removed whatever the copy did, and a failure of the removal is only reported
