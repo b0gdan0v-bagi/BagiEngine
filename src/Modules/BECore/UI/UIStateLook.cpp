@@ -1,5 +1,7 @@
 #include "UIStateLook.h"
 
+#include <BECore/Animation/Lerp.h>
+
 namespace BECore {
 
     namespace {
@@ -8,7 +10,49 @@ namespace BECore {
             return static_cast<unsigned char>(std::clamp(static_cast<int>(channel) + delta, 0, 255));
         }
 
+        // A colour with no alpha has channels nobody sees; the blend takes them from the other end so the visible colour does not drift through them
+        Color LerpColor(const Color& from, const Color& to, float t) {
+            if (from.a == 0 && to.a != 0) {
+                return BECore::Lerp(Color{to.r, to.g, to.b, 0}, to, t);
+            }
+            if (to.a == 0 && from.a != 0) {
+                return BECore::Lerp(from, Color{from.r, from.g, from.b, 0}, t);
+            }
+            return BECore::Lerp(from, to, t);
+        }
+
+        UIColor LerpUIColor(const UIColor& from, const UIColor& to, float t) {
+            UIColor result = LerpColor(from, to, t);
+            result.token = to.token;
+            return result;
+        }
+
+        UIShadowSpec LerpShadow(const UIShadowSpec& from, const UIShadowSpec& to, float t) {
+            return {BECore::Lerp(from.offsetX, to.offsetX, t), BECore::Lerp(from.offsetY, to.offsetY, t), BECore::Lerp(from.blur, to.blur, t), BECore::Lerp(from.spread, to.spread, t),
+                    LerpColor(from.color, to.color, t)};
+        }
+
     }  // namespace
+
+    UIStateLook::Look UIStateLook::Lerp(const Look& from, const Look& to, float t) {
+        // The ends are exact, and a NaN stays at the start
+        if (t == 0.0f || t != t) {
+            return from;
+        }
+        if (t == 1.0f) {
+            return to;
+        }
+        Look look = to;
+        look.fill = LerpColor(from.fill, to.fill, t);
+        look.gradientEnd = LerpColor(from.gradientEnd, to.gradientEnd, t);
+        look.box.borderWidth = BECore::Lerp(from.box.borderWidth, to.box.borderWidth, t);
+        look.box.borderColor = LerpUIColor(from.box.borderColor, to.box.borderColor, t);
+        look.box.gradientColor = LerpUIColor(from.box.gradientColor, to.box.gradientColor, t);
+        look.box.highlight = LerpUIColor(from.box.highlight, to.box.highlight, t);
+        look.box.shadow = LerpShadow(from.box.shadow, to.box.shadow, t);
+        look.box.glow = LerpShadow(from.box.glow, to.box.glow, t);
+        return look;
+    }
 
     UIStateLook::Look UIStateLook::ResolveBox(const UIBoxStyle& box, const Color& color, const Colors& stateColors, const State& state, const Color& accent) {
         Look look{box, color, box.gradientColor};

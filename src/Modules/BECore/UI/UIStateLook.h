@@ -68,6 +68,14 @@ namespace BECore {
          */
         [[nodiscard]] static Look ResolveBox(const UIBoxStyle& box, const Color& color, const Colors& stateColors, const State& state, const Color& accent);
 
+        /**
+         * The look @p t of the way from @p from to @p to (not clamped, like `BECore::Lerp`, so an overshooting ease reaches its bulge; 0 gives @p from and 1 @p to exactly, NaN gives @p from). The
+         * numbers and colours blend: the fill, the gradient end, the box's border (width and colour), the gradient colour, the highlight, and the offset, blur, spread and colour of the shadow and the
+         * glow. What cannot be between two values comes from @p to: the corner radii, the gradient direction and the theme token names. A colour that has no alpha at one end takes the channels of the
+         * other end, so a shadow that appears fades in as itself and does not pass through black.
+         */
+        [[nodiscard]] static Look Lerp(const Look& from, const Look& to, float t);
+
         /// @p base in @p state: the explicit tint of the state, else the derived one. Disabled wins over pressed, pressed over hovered
         [[nodiscard]] static Color ResolveTint(const Color& base, const Tints& tints, const State& state);
 
