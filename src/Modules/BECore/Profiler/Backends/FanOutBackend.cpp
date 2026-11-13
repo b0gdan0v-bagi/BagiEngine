@@ -13,6 +13,11 @@ namespace BECore {
         _secondary.EndZone(0, site, allocs);
     }
 
+    void FanOutBackend::RecordZone(const ProfileSite& site, uint64_t beginTicks, uint64_t endTicks) {
+        _primary.RecordZone(site, beginTicks, endTicks);
+        _secondary.RecordZone(site, beginTicks, endTicks);
+    }
+
     void FanOutBackend::FrameMark() {
         _primary.FrameMark();
         _secondary.FrameMark();

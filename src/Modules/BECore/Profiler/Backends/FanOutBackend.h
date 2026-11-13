@@ -19,6 +19,7 @@ namespace BECore {
 
         uint64_t BeginZone(const ProfileSite& site) override;
         void EndZone(uint64_t token, const ProfileSite& site, const ZoneAllocs& allocs) override;
+        void RecordZone(const ProfileSite& site, uint64_t beginTicks, uint64_t endTicks) override;
         void FrameMark() override;
         void Counter(const char* name, double value) override;
         void SetThreadName(const char* name) override;

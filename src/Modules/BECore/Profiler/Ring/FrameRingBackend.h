@@ -47,6 +47,7 @@ namespace BECore {
 
         uint64_t BeginZone(const ProfileSite& site) override;
         void EndZone(uint64_t token, const ProfileSite& site, const ZoneAllocs& allocs) override;
+        void RecordZone(const ProfileSite& site, uint64_t beginTicks, uint64_t endTicks) override;
         void FrameMark() override;
         void Counter(const char* /*name*/, double /*value*/) override {}
         void SetThreadName(const char* /*name*/) override {}
@@ -61,12 +62,17 @@ namespace BECore {
         struct ThreadBuffer;
 
         ThreadBuffer* GetThreadBuffer();
+        /// The two halves of writing one finished zone into @p buffer (the owner thread only): announce the slot about to be overwritten,
+        /// then fill it and publish it
+        static uint64_t ClaimSlot(ThreadBuffer& buffer);
+        static void PublishZone(ThreadBuffer& buffer, uint64_t index, const ProfileSite& site, uint64_t beginTicks, uint64_t endTicks, uint32_t depth, const ZoneAllocs& allocs);
 
         const Options _options;
         const uint64_t _id;  // tells the thread-local cache which ring its buffer belongs to
         std::atomic<uint64_t> _generation{1};
         std::atomic<uint64_t> _dropped{0};
 
+        // raw: the profiler cannot profile itself (Threading/CLAUDE.md); so are _markMutex and _epochMutex
         mutable std::mutex _registryMutex;
         ThreadBuffer* _buffers[kMaxThreadBuffers]{};
         std::atomic<uint32_t> _bufferCount{0};

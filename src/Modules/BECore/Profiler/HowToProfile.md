@@ -74,6 +74,10 @@ void SearchPlayer::Decide() {
 
 Mark coarse work: a stage, a system, one rollout. A zone that runs millions of times a second distorts what it measures; leave such functions to the sampling profiler.
 
+## A thread that waits for a lock
+
+A `Mutex` or `SharedMutex` of `BECore/Threading/` (every engine lock) that makes a thread wait at least 50 microseconds shows as a zone `lock wait: <the lock's name>` on that thread, inside the zones the thread has open, in the Chrome trace and in the editor's ring. So a stage that is long because it waits shows the lock and for how long; a lock nobody waits for shows nothing. The wait is timed only after a failed `try_lock`, so an uncontended lock reads no clock. `Profiler::SetLockWaitThresholdUs(n)` changes the threshold (a test or an investigation: 0 records every contended wait); with no backend installed nothing is read or recorded.
+
 ## What a zone costs
 
 Measured on an Apple M-series machine with `macos-profile` (`BagiEngineTests --gtest_also_run_disabled_tests --gtest_filter='ProfilerCost*'`):

@@ -29,6 +29,7 @@ namespace BECore {
 
         uint64_t BeginZone(const ProfileSite& site) override;
         void EndZone(uint64_t token, const ProfileSite& site, const ZoneAllocs& allocs) override;
+        void RecordZone(const ProfileSite& site, uint64_t beginTicks, uint64_t endTicks) override;
         void FrameMark() override;
         void Counter(const char* name, double value) override;
         void SetThreadName(const char* name) override;
@@ -49,11 +50,12 @@ namespace BECore {
         struct ThreadBuffer;
 
         ThreadBuffer* GetThreadBuffer();
-        void Record(uint8_t type, const void* data, uint64_t a, uint64_t b);
+        void Record(uint8_t type, const void* data, uint64_t a, uint64_t b, uint64_t ticks);
 
         const uint64_t _id;  // tells the thread-local cache which recorder its buffer belongs to
         std::atomic<uint64_t> _startTicks;
         std::atomic<uint64_t> _dropped{0};
+        // raw: the profiler cannot profile itself (Threading/CLAUDE.md)
         mutable std::mutex _registryMutex;
         ThreadBuffer* _buffers[kMaxThreadBuffers]{};
         std::atomic<uint32_t> _bufferCount{0};

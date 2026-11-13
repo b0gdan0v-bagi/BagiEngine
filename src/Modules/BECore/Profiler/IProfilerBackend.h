@@ -29,6 +29,10 @@ namespace BECore {
         virtual uint64_t BeginZone(const ProfileSite& site) = 0;
         /// The zone that BeginZone returned @p token for ends; @p allocs are the allocations it made
         virtual void EndZone(uint64_t token, const ProfileSite& site, const ZoneAllocs& allocs) = 0;
+        /// A finished zone of the calling thread whose begin and end the caller timed (ProfilerClock ticks): a long wait on a lock, which
+        /// is known only after it ended. It nests inside the zones the thread has open, as the thread was blocked in the call. Never a
+        /// BeginZone / EndZone pair, so no token. Default: nothing
+        virtual void RecordZone(const ProfileSite& /*site*/, uint64_t /*beginTicks*/, uint64_t /*endTicks*/) {}
         /// The end of a frame (main thread)
         virtual void FrameMark() = 0;
         /// A named value at this moment; @p name has static storage (a literal)
