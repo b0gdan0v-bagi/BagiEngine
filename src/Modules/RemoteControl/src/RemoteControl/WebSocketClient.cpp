@@ -49,7 +49,7 @@ namespace BECore {
 
         if (_reader.joinable()) {
             {
-                std::lock_guard<std::mutex> lock(_mutex);
+                LockGuard lock(_mutex);
                 if (_state != WebSocketClientState::Ended) {
                     return std::unexpected(eastl::string("the previous connection has not ended yet"));
                 }
@@ -63,7 +63,7 @@ namespace BECore {
         _cancel = false;
         _bytesReceived = 0;
         {
-            std::lock_guard<std::mutex> lock(_mutex);
+            LockGuard lock(_mutex);
             _state = WebSocketClientState::Connecting;
             _aborted = false;
             _readerDone = false;
@@ -76,7 +76,7 @@ namespace BECore {
             _endCode = WebSocketCloseCode::kAbnormalClosure;
             _endReason.clear();
         }
-        _reader = std::thread([this] { ReaderMain(); });
+        _reader = Thread(Format("{} reader", _settings.threadName).c_str(), _settings.threadOrder, [this] { ReaderMain(); });
         return {};
     }
 
@@ -88,7 +88,7 @@ namespace BECore {
     void WebSocketClient::Close(uint16_t code, eastl::string_view reason) {
         bool connecting = false;
         {
-            std::lock_guard<std::mutex> lock(_mutex);
+            LockGuard lock(_mutex);
             connecting = _state == WebSocketClientState::Connecting;
         }
         if (connecting) {
@@ -104,7 +104,7 @@ namespace BECore {
 
     bool WebSocketClient::PollEvent(WebSocketClientEvent& event) {
         {
-            std::lock_guard<std::mutex> lock(_mutex);
+            LockGuard lock(_mutex);
             if (_inbox.empty()) {
                 return false;
             }
@@ -117,7 +117,7 @@ namespace BECore {
     }
 
     bool WebSocketClient::IsOpen() const {
-        std::lock_guard<std::mutex> lock(_mutex);
+        LockGuard lock(_mutex);
         return _state == WebSocketClientState::Open && !_aborted;
     }
 
@@ -125,7 +125,7 @@ namespace BECore {
         enum class Outcome : uint8_t { Refused, Queued, Overflow };
         Outcome outcome = Outcome::Refused;
         {
-            std::lock_guard<std::mutex> lock(_mutex);
+            LockGuard lock(_mutex);
             if (_state != WebSocketClientState::Open || _aborted) {
                 return false;
             }
@@ -153,7 +153,7 @@ namespace BECore {
 
     void WebSocketClient::AbortConnection(uint16_t code, eastl::string_view reason) {
         {
-            std::lock_guard<std::mutex> lock(_mutex);
+            LockGuard lock(_mutex);
             SetEndLocked(code, reason);
             _aborted = true;
             _outbox.clear();
@@ -181,19 +181,17 @@ namespace BECore {
     }
 
     void WebSocketClient::SetEnd(uint16_t code, eastl::string_view reason) {
-        std::lock_guard<std::mutex> lock(_mutex);
+        LockGuard lock(_mutex);
         SetEndLocked(code, reason);
     }
 
     void WebSocketClient::PushEvent(WebSocketClientEvent event) {
-        std::lock_guard<std::mutex> lock(_mutex);
+        LockGuard lock(_mutex);
         _inboxBytes += EventBytes(event);
         _inbox.push_back(std::move(event));
     }
 
     void WebSocketClient::ReaderMain() {
-        BE_PROFILE_THREAD_ORDER(Format("{} reader", _settings.threadName).c_str(), _settings.threadOrder);
-
         eastl::vector<uint8_t> pendingBytes;
         if (Connect() && Handshake(pendingBytes)) {
             ReadMessages(std::move(pendingBytes));
@@ -203,7 +201,7 @@ namespace BECore {
         bool closing = false;
         bool timedOut = false;
         {
-            std::unique_lock<std::mutex> lock(_mutex);
+            UniqueLock lock(_mutex);
             _readerDone = true;
             closing = _state == WebSocketClientState::Closing && !_aborted && _writer.joinable();
             if (closing) {
@@ -221,7 +219,7 @@ namespace BECore {
         WebSocketClientEvent closed;
         closed.kind = WebSocketClientEventKind::Closed;
         {
-            std::lock_guard<std::mutex> lock(_mutex);
+            LockGuard lock(_mutex);
             closed.closeCode = _endSet ? _endCode : WebSocketCloseCode::kAbnormalClosure;
             closed.reason = _endSet ? _endReason : eastl::string("the connection ended");
             _inboxBytes += EventBytes(closed);
@@ -244,7 +242,7 @@ namespace BECore {
         if (!_url.secure) {
             _handshakeDeadline = std::chrono::steady_clock::now() + _settings.handshakeTimeout;
         }
-        std::lock_guard<std::mutex> lock(_mutex);
+        LockGuard lock(_mutex);
         _stream = std::move(*connected);
         if (_aborted) {
             _stream.ShutdownBoth();  // Abort() came while connecting: the handshake then ends at once
@@ -315,14 +313,14 @@ namespace BECore {
         pendingBytes.assign(received.begin() + static_cast<ptrdiff_t>(headSize), received.end());
 
         {
-            std::lock_guard<std::mutex> lock(_mutex);
+            LockGuard lock(_mutex);
             if (_aborted) {
                 return false;
             }
             _state = WebSocketClientState::Open;
         }
         LOG_INFO("{}: connected to {}:{}"_format(_settings.logName, _url.host, _url.port));
-        _writer = std::thread([this] { WriterMain(); });
+        _writer = Thread(Format("{} writer", _settings.threadName).c_str(), _settings.threadOrder + 1, [this] { WriterMain(); });
         WebSocketClientEvent opened;
         opened.kind = WebSocketClientEventKind::Opened;
         PushEvent(std::move(opened));
@@ -392,7 +390,7 @@ namespace BECore {
         event.kind = WebSocketClientEventKind::Text;
         event.text.assign(message.GetText().data(), message.GetText().size());
 
-        std::unique_lock<std::mutex> lock(_mutex);
+        UniqueLock lock(_mutex);
         // A full inbox stops the reader, so the server's queue fills and TCP slows it; an empty one takes any message, whatever the limits say
         _inboxSpace.wait(lock, [&] { return _aborted || _inbox.empty() || (_inbox.size() < _settings.maxInboxEvents && _inboxBytes + EventBytes(event) <= _settings.maxInboxBytes); });
         if (_aborted) {
@@ -404,12 +402,10 @@ namespace BECore {
     }
 
     void WebSocketClient::WriterMain() {
-        BE_PROFILE_THREAD_ORDER(Format("{} writer", _settings.threadName).c_str(), _settings.threadOrder + 1);
-
         for (;;) {
             OutgoingFrame frame;
             {
-                std::unique_lock<std::mutex> lock(_mutex);
+                UniqueLock lock(_mutex);
                 _wake.wait(lock, [this] { return _aborted || !_outbox.empty(); });
                 if (_aborted) {
                     break;
@@ -434,7 +430,7 @@ namespace BECore {
                 // Our side of the closing handshake is sent; the answer (or the reader ending) completes it
                 bool answered = false;
                 {
-                    std::unique_lock<std::mutex> lock(_mutex);
+                    UniqueLock lock(_mutex);
                     answered = _wake.wait_for(lock, _settings.closeTimeout, [this] { return _aborted || _readerDone; });
                 }
                 if (!answered) {
@@ -446,7 +442,7 @@ namespace BECore {
         }
 
         {
-            std::lock_guard<std::mutex> lock(_mutex);
+            LockGuard lock(_mutex);
             _writerDone = true;
         }
         _wake.notify_all();

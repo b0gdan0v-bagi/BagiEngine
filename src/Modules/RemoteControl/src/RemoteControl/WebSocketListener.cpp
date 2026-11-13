@@ -45,10 +45,7 @@ namespace BECore {
         _port = _listener.GetLocalPort();
         _stopping = false;
 
-        _acceptThread = std::thread([this] {
-            BE_PROFILE_THREAD_ORDER(MakeThreadName(_settings, "accept").c_str(), _settings.threadOrder);
-            AcceptLoop();
-        });
+        _acceptThread = Thread(MakeThreadName(_settings, "accept").c_str(), _settings.threadOrder, [this] { AcceptLoop(); });
         return _port;
     }
 
@@ -65,7 +62,7 @@ namespace BECore {
 
         eastl::vector<ConnectionPtr> connections;
         {
-            std::lock_guard<std::mutex> lock(_connectionsMutex);
+            LockGuard lock(_connectionsMutex);
             connections.swap(_connections);
         }
         for (const auto& connection : connections) {
@@ -80,7 +77,7 @@ namespace BECore {
     void WebSocketListener::ForEachOpenConnection(const std::function<void(WebSocketConnection&)>& visit) {
         eastl::vector<ConnectionPtr> targets;
         {
-            std::lock_guard<std::mutex> lock(_connectionsMutex);
+            LockGuard lock(_connectionsMutex);
             targets = _connections;
         }
         for (const auto& connection : targets) {
@@ -109,7 +106,7 @@ namespace BECore {
     void WebSocketListener::AddConnection(Socket socket, eastl::string peerAddress) {
         bool perAddressLimit = false;
         {
-            std::lock_guard<std::mutex> lock(_connectionsMutex);
+            LockGuard lock(_connectionsMutex);
             size_t open = 0;
             size_t fromAddress = 0;
             for (const auto& other : _connections) {
@@ -130,10 +127,7 @@ namespace BECore {
 
                 auto connection = eastl::make_shared<WebSocketConnection>(_nextId++, std::move(socket), std::move(peerAddress), std::move(connectionSettings));
                 _connections.push_back(connection);
-                connection->StartReader(std::thread([this, connection] {
-                    BE_PROFILE_THREAD_ORDER(MakeThreadName(_settings, "reader").c_str(), _settings.threadOrder + 1);
-                    RunConnection(connection);
-                }));
+                connection->StartReader(Thread(MakeThreadName(_settings, "reader").c_str(), _settings.threadOrder + 1, [this, connection] { RunConnection(connection); }));
                 return;
             }
         }
@@ -149,7 +143,7 @@ namespace BECore {
         // Counting the others and setting the address are one step under the lock, so two clients of one address that shake hands at
         // the same moment cannot both pass a limit of one. A connection that has not been admitted yet (still shaking hands, or just
         // refused) has no client address and counts for nobody
-        std::lock_guard<std::mutex> lock(_connectionsMutex);
+        LockGuard lock(_connectionsMutex);
         size_t fromAddress = 0;
         for (const auto& other : _connections) {
             if (other.get() != &connection && !other->IsFinished() && other->HasClientAddress() && other->GetClientAddress() == clientAddress) {
@@ -167,7 +161,7 @@ namespace BECore {
     void WebSocketListener::ReapFinishedConnections() {
         eastl::vector<ConnectionPtr> finished;
         {
-            std::lock_guard<std::mutex> lock(_connectionsMutex);
+            LockGuard lock(_connectionsMutex);
             for (auto it = _connections.begin(); it != _connections.end();) {
                 if ((*it)->IsFinished()) {
                     finished.push_back(*it);

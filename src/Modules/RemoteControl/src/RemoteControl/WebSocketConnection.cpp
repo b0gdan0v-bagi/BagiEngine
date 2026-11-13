@@ -14,22 +14,22 @@ namespace BECore {
         : _id(id), _peerAddress(std::move(peerAddress)), _settings(std::move(settings)), _socket(std::move(socket)) {}
 
     bool WebSocketConnection::IsOpen() const {
-        std::lock_guard<std::mutex> lock(_mutex);
+        LockGuard lock(_mutex);
         return _open && !_closing && !_aborted;
     }
 
     eastl::string WebSocketConnection::GetClientAddress() const {
-        std::lock_guard<std::mutex> lock(_mutex);
+        LockGuard lock(_mutex);
         return _clientAddress.empty() ? _peerAddress : _clientAddress;
     }
 
     bool WebSocketConnection::HasClientAddress() const {
-        std::lock_guard<std::mutex> lock(_mutex);
+        LockGuard lock(_mutex);
         return !_clientAddress.empty();
     }
 
     void WebSocketConnection::SetClientAddress(eastl::string address) {
-        std::lock_guard<std::mutex> lock(_mutex);
+        LockGuard lock(_mutex);
         _clientAddress = std::move(address);
     }
 
@@ -114,19 +114,16 @@ namespace BECore {
 
     void WebSocketConnection::StartWriter() {
         {
-            std::lock_guard<std::mutex> lock(_mutex);
+            LockGuard lock(_mutex);
             _open = true;
         }
-        _writer = std::thread([this] {
-            BE_PROFILE_THREAD_ORDER(_settings.writerThreadName.c_str(), _settings.writerThreadOrder);
-            WriterLoop();
-        });
+        _writer = Thread(_settings.writerThreadName.c_str(), _settings.writerThreadOrder, [this] { WriterLoop(); });
     }
 
     void WebSocketConnection::EndReading() {
         bool closing = false;
         {
-            std::lock_guard<std::mutex> lock(_mutex);
+            LockGuard lock(_mutex);
             closing = _closing;
         }
         if (!closing) {
@@ -139,7 +136,7 @@ namespace BECore {
 
     void WebSocketConnection::Abort() {
         {
-            std::lock_guard<std::mutex> lock(_mutex);
+            LockGuard lock(_mutex);
             _aborted = true;
             _outbox.clear();
             _outboxBytes = 0;
@@ -151,7 +148,7 @@ namespace BECore {
     bool WebSocketConnection::QueueFrame(eastl::vector<uint8_t> bytes, bool isClose) {
         bool overflow = false;
         {
-            std::lock_guard<std::mutex> lock(_mutex);
+            LockGuard lock(_mutex);
             if (!_open || _closing || _aborted) {
                 return false;
             }
@@ -176,7 +173,7 @@ namespace BECore {
         for (;;) {
             OutgoingFrame frame;
             {
-                std::unique_lock<std::mutex> lock(_mutex);
+                UniqueLock lock(_mutex);
                 _wake.wait(lock, [this] { return _aborted || !_outbox.empty(); });
                 if (_aborted) {
                     return;

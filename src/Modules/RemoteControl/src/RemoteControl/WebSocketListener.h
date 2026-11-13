@@ -119,10 +119,10 @@ namespace BECore {
         Socket _listener;
         uint16_t _port = 0;
         std::atomic<bool> _stopping{false};
-        std::thread _acceptThread;
+        Thread _acceptThread;
         WebSocketConnectionId _nextId = 1;  // accept thread only; not reset by Stop(), so an id is never reused
 
-        std::mutex _connectionsMutex;
+        Mutex _connectionsMutex{BE_LOCK_SITE("WebSocket connections")};
         eastl::vector<ConnectionPtr> _connections;  // guarded by _connectionsMutex
     };
 
