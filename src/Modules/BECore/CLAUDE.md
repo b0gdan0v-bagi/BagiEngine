@@ -2,7 +2,7 @@
 
 ## CoreManager
 
-Central service locator (`GameManager/CoreManager.h`): one static getter per subsystem (`GetFileSystem()`, `GetConfigManager()`, `GetLoggerManager()`, `GetResourceManager()`, `GetTaskManager()`, `GetSceneManager()`, `GetWidgetManager()`, `GetRenderer()`, `GetTextureLibrary()`, `GetTime()`, `GetTweens()`, `GetFrameStats()`, ...). A new global service goes here, not into another `Singleton`.
+Central service locator (`GameManager/CoreManager.h`): one static getter per subsystem (`GetFileSystem()`, `GetConfigManager()`, `GetLoggerManager()`, `GetResourceManager()`, `GetTaskManager()`, `GetSceneManager()`, `GetWidgetManager()`, `GetRenderer()`, `GetTextureLibrary()`, `GetTime()`, `GetTweens()`, `GetFrameStats()`, ...). A new global service goes here, not into another `Singleton`. `GetCommandLine()` is the program's arguments (`Application/CommandLine.h`: `FindValue("--name")`, `HasFlag`), filled by `Application::SetArguments`: a game reads its flags there, never from `Application`, so a test can set them.
 
 **Lifecycle** (called from `Application`, each takes `PassKey<Application>`):
 
