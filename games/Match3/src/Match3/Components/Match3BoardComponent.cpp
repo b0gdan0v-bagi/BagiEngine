@@ -76,8 +76,37 @@ namespace BECore::Match3 {
     void Match3BoardComponent::OnAttached() {
         s_active = this;
         _model.Reset(_seed);
+        _animation.SetClearedSink([this](Cell cell, GemType gem) { OnGemCleared(cell, gem); });
         SubscribeInScene<SDLEvents::MouseButtonDownEvent, &Match3BoardComponent::OnMouseDown>(this);
         SubscribeInScene<InputEvents::ActionEvent, &Match3BoardComponent::OnAction>(this);
+    }
+
+    ParticleEmitterComponent* Match3BoardComponent::FindBurstEmitter() {
+        if (!_burstLooked || _burstLookedFor != _burstNode) {
+            _burstLooked = true;
+            _burstLookedFor = _burstNode;
+            _burstEmitter = {};
+            if (!_burstNode.Empty()) {
+                for (const auto& node : GetScene().GetRootNode().GetChildren()) {
+                    if (node->GetName() == _burstNode) {
+                        _burstEmitter = node->GetComponent<ParticleEmitterComponent>();
+                        break;
+                    }
+                }
+                if (!_burstEmitter) {
+                    LOG_WARNING("Match3: no node '{}' with a ParticleEmitterComponent in the scene; gems clear without a burst"_format(_burstNode.ToStringView()));
+                }
+            }
+        }
+        return _burstEmitter.Get();
+    }
+
+    void Match3BoardComponent::OnGemCleared(Cell cell, GemType gem) {
+        if (ParticleEmitterComponent* emitter = FindBurstEmitter()) {
+            const float x = _originX + (static_cast<float>(cell.col) + 0.5f) * _cellSize;
+            const float y = _originY + (static_cast<float>(cell.row) + 0.5f) * _cellSize;
+            emitter->Burst(x, y, ParticleEmitterComponent::kEffectBurstCount, GemColor(gem));
+        }
     }
 
     void Match3BoardComponent::PublishUiVars() {

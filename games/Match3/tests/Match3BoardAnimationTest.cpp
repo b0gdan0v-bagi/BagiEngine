@@ -373,4 +373,162 @@ namespace BECore::Match3::Tests {
         EXPECT_FALSE(ClipToBoard(Rect{164.0f, 144.0f, 0.0f, 0.0f}, board).has_value());
     }
 
+    // ---- the sink of the cleared gems ---------------------------------------------------------------------------------------
+
+    namespace {
+
+        using Cleared = eastl::vector<eastl::pair<Cell, GemType>>;
+
+        /// A swap that clears in two rounds or more: the board before it and the model after it
+        Swapped FindCascade() {
+            for (uint32_t seed = 0; seed < 500; ++seed) {
+                Match3GameModel model;
+                model.Reset(seed);
+                const Match3Board before = model.GetBoard();
+                const auto swaps = model.GetLegalSwaps();
+                for (size_t i = 0; i < swaps.size(); ++i) {
+                    Match3GameModel played;
+                    played.Reset(seed);
+                    EXPECT_TRUE(played.TrySwap(swaps[i].first, swaps[i].second));
+                    if (played.GetLastSwap()->steps.size() >= 2) {
+                        return Swapped{before, played};
+                    }
+                }
+            }
+            ADD_FAILURE() << "no seed below 500 has a swap with a cascade";
+            return {};
+        }
+
+        void RecordCleared(BoardAnimation& animation, Cleared& cleared) {
+            animation.SetClearedSink([&cleared](Cell cell, GemType gem) { cleared.emplace_back(cell, gem); });
+        }
+
+    }  // namespace
+
+    TEST(Match3BoardAnimationTest, TheSinkGetsEveryClearedGemOnceWhenItsClearStarts) {
+        for (const uint32_t seed : kSeeds) {
+            const Swapped swapped = MakeSwapped(seed);
+            const SwapTrace& trace = *swapped.model.GetLastSwap();
+            TweenManager tweens;
+            BoardAnimation animation;
+            Cleared cleared;
+            RecordCleared(animation, cleared);
+            animation.Start(tweens, swapped.before, trace);
+
+            const int swapFrames = static_cast<int>(animation.GetSettings().swapDuration / kFrame);
+            for (int frame = 1; frame < swapFrames; ++frame) {
+                tweens.Advance(kFrame);
+            }
+            EXPECT_TRUE(cleared.empty()) << "the gems are still sliding, seed " << seed;
+            tweens.Advance(kFrame);
+            ASSERT_EQ(cleared.size(), trace.steps[0].removed.size()) << "the clear starts where the swap ends, seed " << seed;
+            for (size_t i = 0; i < cleared.size(); ++i) {
+                EXPECT_EQ(cleared[i].first, trace.steps[0].removed[i]);
+            }
+
+            RunToTheEnd(tweens, animation);
+            EXPECT_EQ(static_cast<int>(cleared.size()), RemovedCount(trace)) << "each cleared cell once, seed " << seed;
+        }
+    }
+
+    TEST(Match3BoardAnimationTest, TheSinkGetsTheGemTheClearedCellHeld) {
+        // The first round clears gems of the board before the swap, with the two swapped gems on each other's cell
+        const Swapped swapped = MakeSwapped(1);
+        const SwapTrace& trace = *swapped.model.GetLastSwap();
+        Match3Board afterSwap = swapped.before;
+        const GemType gemA = afterSwap.Get(trace.a);
+        afterSwap.Set(trace.a, afterSwap.Get(trace.b));
+        afterSwap.Set(trace.b, gemA);
+        TweenManager tweens;
+        BoardAnimation animation;
+        Cleared cleared;
+        RecordCleared(animation, cleared);
+        animation.Start(tweens, swapped.before, trace);
+        RunToTheEnd(tweens, animation);
+
+        ASSERT_GE(cleared.size(), trace.steps[0].removed.size());
+        for (size_t i = 0; i < trace.steps[0].removed.size(); ++i) {
+            EXPECT_EQ(cleared[i].second, afterSwap.Get(cleared[i].first)) << "cell " << static_cast<int>(cleared[i].first.col) << "," << static_cast<int>(cleared[i].first.row);
+            EXPECT_NE(cleared[i].second, GemType::None);
+        }
+    }
+
+    TEST(Match3BoardAnimationTest, ACascadeCallsTheSinkAgainWhenItsNextRoundStartsToClear) {
+        const Swapped swapped = FindCascade();
+        const SwapTrace& trace = *swapped.model.GetLastSwap();
+        ASSERT_GE(trace.steps.size(), 2u);
+        TweenManager tweens;
+        BoardAnimation animation;
+        Cleared cleared;
+        RecordCleared(animation, cleared);
+        animation.Start(tweens, swapped.before, trace);
+
+        // The second round starts after the swap, the shrink and the falls of the first
+        SwapTrace firstRound;
+        firstRound.steps.push_back(trace.steps[0]);
+        const int secondStart = static_cast<int>(ExpectedDuration(firstRound, animation.GetSettings()) / kFrame);
+        const size_t firstCount = trace.steps[0].removed.size();
+        for (int frame = 1; frame < secondStart; ++frame) {
+            tweens.Advance(kFrame);
+            EXPECT_LE(cleared.size(), firstCount) << "frame " << frame;
+        }
+        EXPECT_EQ(cleared.size(), firstCount);
+        tweens.Advance(kFrame);
+        EXPECT_EQ(cleared.size(), firstCount + trace.steps[1].removed.size());
+
+        RunToTheEnd(tweens, animation);
+        EXPECT_EQ(static_cast<int>(cleared.size()), RemovedCount(trace));
+    }
+
+    TEST(Match3BoardAnimationTest, ARejectedSwapCallsNoSink) {
+        const Match3GameModel model = [] {
+            Match3GameModel m;
+            m.Reset(1);
+            return m;
+        }();
+        Cell a;
+        Cell b;
+        ASSERT_TRUE(FindRejectedSwap(model, a, b));
+        TweenManager tweens;
+        BoardAnimation animation;
+        Cleared cleared;
+        RecordCleared(animation, cleared);
+
+        animation.StartRejected(tweens, model.GetBoard(), a, b);
+        RunToTheEnd(tweens, animation);
+
+        EXPECT_TRUE(cleared.empty());
+    }
+
+    TEST(Match3BoardAnimationTest, FinishAndASecondStartBeforeTheClearCallNoSinkOfTheCancelledRun) {
+        const Swapped swapped = MakeSwapped(1);
+        TweenManager tweens;
+        BoardAnimation animation;
+        Cleared cleared;
+        RecordCleared(animation, cleared);
+
+        animation.Start(tweens, swapped.before, *swapped.model.GetLastSwap());
+        tweens.Advance(kFrame);
+        animation.Finish();
+        tweens.Advance(kHugeStep);
+        EXPECT_TRUE(cleared.empty());
+
+        animation.Start(tweens, swapped.before, *swapped.model.GetLastSwap());
+        tweens.Advance(kFrame);
+        animation.Start(tweens, swapped.before, *swapped.model.GetLastSwap());
+        RunToTheEnd(tweens, animation);
+        EXPECT_EQ(static_cast<int>(cleared.size()), RemovedCount(*swapped.model.GetLastSwap())) << "only the second run reports";
+    }
+
+    TEST(Match3BoardAnimationTest, ARunWithoutASinkPlaysAsBefore) {
+        const Swapped swapped = MakeSwapped(1);
+        TweenManager tweens;
+        BoardAnimation animation;
+        animation.Start(tweens, swapped.before, *swapped.model.GetLastSwap());
+
+        RunToTheEnd(tweens, animation);
+
+        EXPECT_FALSE(animation.IsRunning());
+    }
+
 }  // namespace BECore::Match3::Tests

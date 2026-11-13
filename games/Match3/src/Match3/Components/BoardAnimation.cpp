@@ -80,14 +80,30 @@ namespace BECore::Match3 {
     }
 
     void BoardAnimation::AddCascadeStep(Timeline& timeline, SpriteGrid& grid, const CascadeStep& step) {
-        const TweenSettings clear{.duration = _settings.clearDuration, .ease = EaseType::QuadIn};
-        bool first = true;
+        eastl::vector<int> clearedSprites;
+        eastl::vector<eastl::pair<Cell, GemType>> cleared;
         for (const Cell c : step.removed) {
             const int sprite = grid[c.Index()];
             grid[c.Index()] = kNoSprite;
             if (sprite != kNoSprite) {
-                AddToGroup<float>(timeline, first, 1.0f, 0.0f, clear, [this, sprite](const float& scale) { _sprites[sprite].scale = scale; });
+                clearedSprites.push_back(sprite);
+                cleared.emplace_back(c, _sprites[sprite].gem);
             }
+        }
+        if (!cleared.empty()) {
+            // Before the shrink tweens: it fires when the round before has ended, at the moment these gems start to shrink
+            timeline.AppendCallback([this, cleared = std::move(cleared)]() {
+                if (_clearedSink) {
+                    for (const auto& [cell, gem] : cleared) {
+                        _clearedSink(cell, gem);
+                    }
+                }
+            });
+        }
+        const TweenSettings clear{.duration = _settings.clearDuration, .ease = EaseType::QuadIn};
+        bool first = true;
+        for (const int sprite : clearedSprites) {
+            AddToGroup<float>(timeline, first, 1.0f, 0.0f, clear, [this, sprite](const float& scale) { _sprites[sprite].scale = scale; });
         }
 
         // One group: the gems that kept their place and the refilled ones all start together, each lasts as long as its distance asks

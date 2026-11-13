@@ -56,6 +56,7 @@ namespace BECore {
             {"shield-check", ICON_LC_SHIELD_CHECK},
             {"sliders-horizontal", ICON_LC_SLIDERS_HORIZONTAL},
             {"smartphone", ICON_LC_SMARTPHONE},
+            {"sparkles", ICON_LC_SPARKLES},
             {"square", ICON_LC_SQUARE},
             {"step-forward", ICON_LC_STEP_FORWARD},
             {"tablet", ICON_LC_TABLET},

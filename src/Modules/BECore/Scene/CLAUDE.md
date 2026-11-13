@@ -85,11 +85,9 @@ Drawing is not an event. `Scene::Draw()` hands the pass to `SceneDrawSystem`: a 
 - `Scene::GetDrawRank(node)` is a node's position in this order without a draw (input handlers use it to ask the topmost first).
 - **Editor flags** (`SceneNode::GetEditorFlags()`: `Hidden`, `Locked`) are a plain member: no file, `Serialize` or `DuplicateNode` sees it, `Scene::ClearEditorFlags()` resets a tree, `SceneManager::ClearEditorFlags()` every loaded scene (the scene editor calls it when it dies). A hidden node and its subtree draw nothing (quad, sprite, `OnDraw()`) but keep item and rank and still update.
 
-**Rotation, flip and blend** (renderer side: `.claude/rules/rendering-module.md`): `TransformComponent::_rotation` (degrees, clockwise) about `_pivotX` / `_pivotY`, **normalized in the node's rect** (0.5 = center), also for a `Contain` sprite; `_flipX` / `_flipY` mirror the UVs. `_blend` (`Alpha`, `Add`, `Multiply`) is scoped to that one draw (Vulkan: non-`Alpha` draws as `Alpha`, one warning). Not rotated: `ClickableComponent`'s hit rect, `TextComponent`, UI canvases.
+**Rotation, flip and blend** (renderer side: `.claude/rules/rendering-module.md`): `TransformComponent::_rotation` (degrees, clockwise) about `_pivotX` / `_pivotY`, **normalized in the node's rect** (0.5 = center), also for a `Contain` sprite; `_flipX` / `_flipY` mirror the UVs. `_blend` (`Alpha`, `Add`, `Multiply`) is scoped to that one draw. Not rotated: `ClickableComponent`'s hit rect, `TextComponent`, UI canvases.
 
 **The mirror** (`SceneRenderData.h`, written only by the system): `TransformData`, `QuadDrawData`, `SpriteDrawData` on the node's entity, copied from the components at the start of every `Draw()`; game code does not read it. At most one quad and one sprite per node count; without a `TransformData` (or a texture) nothing draws.
-
-Tests: `SceneDrawSystemTest`, `SceneRenderDataTest` (the mirror).
 
 ## Why EnTT
 
@@ -121,8 +119,6 @@ A scene says how big its picture is in scene units: `<scene type="Scene" name="G
 - Both are saved by `Scene::Serialize` (`viewWidth` / `viewHeight` always, `0` / `0` loads as no view; an empty variant list writes nothing), also through the scene editor. The control API and the editor viewport draw through `Scene::Draw`, so they follow the view of their own output size.
 - **A tool's override.** `GetViewVariants()` lists the variants (read only). `SetViewOverride(optional<int32_t>)` replaces the pick: -1 the default view, `i` variant `i`, nullopt or out of range the normal pick. Not saved; the next `Draw()` picks (same version bump and event). A tool sets it right before its own pass and clears it right after (`UI/CLAUDE.md`, "Editor preview").
 
-Tests: `ViewTransformTest`, `SceneViewTest`, `SceneViewSelectorTest`.
-
 ## Built-in components (`Components/`)
 
 | Component | Fields | Behavior |
@@ -133,6 +129,7 @@ Tests: `ViewTransformTest`, `SceneViewTest`, `SceneViewSelectorTest`.
 | `ClickableComponent` | `_actionName` | On mouse-down inside the transform rect, emits `InputEvents::ActionEvent` |
 | `TextComponent` | `_text`, `_fontPath`, `_fontSize`, `_color`, `_align`, `_overflow`, `_wrap`, `_lineSpacing`, `_minFontSize` | Draws text in the node's transform box in `OnDraw()` (`Text/CLAUDE.md`) |
 | `UICanvasComponent` | `_space`, `_scaleMode`, `_referenceWidth`, `_referenceHeight`, `_match`, `_minScale`, `_maxScale`, `_useSafeArea`, `_modal`, `_visible`, `_inputEnabled`, `_elements`, `_variants` | A canvas of in-game UI: owns an element tree, lays it out for the output, draws it with its own view transform and takes mouse input through `UIInput` (`UI/CLAUDE.md`) |
+| `ParticleEmitterComponent` | `_effect`, `_playOnStart`, `_burstAction` | Plays a `ParticleEffect` at the node, one `DrawGeometry` batch (`Particles/CLAUDE.md`) |
 | `RenderProbeComponent` | none | Debug: a row of cells that show the renderer primitives, to look at both backends |
 | `ChangeToRandomColorDebugComponent` | `_actionFilter` | Debug: recolors the node's quad on a matching action |
 

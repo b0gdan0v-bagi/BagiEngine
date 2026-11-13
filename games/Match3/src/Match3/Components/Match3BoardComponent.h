@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Scene/Components/ParticleEmitterComponent.h>
 #include <BECore/Scene/IComponent.h>
 #include <Match3/Components/BoardAnimation.h>
 #include <Match3/Game/Match3GameModel.h>
@@ -33,7 +34,8 @@ namespace BECore::Match3 {
      *
      * A swap that a person makes with the mouse (`ClickCell`) is animated by a `BoardAnimation` on `CoreManager::GetTweens()`: the model is already at
      * the final board while the sprites play, and any change of the model that no click started (a test's `TrySwap`, the control API, a reset) is
-     * drawn at once. See "Animation" in `games/Match3/CLAUDE.md`.
+     * drawn at once. Each cleared gem of such a swap throws a burst in its color from the `ParticleEmitterComponent` of the scene's node `_burstNode`,
+     * when the gem starts to shrink. See "Animation" in `games/Match3/CLAUDE.md`.
      */
     class Match3BoardComponent : public IComponent {
         BE_CLASS(Match3BoardComponent, ICON = grid - 3x3)
@@ -45,8 +47,9 @@ namespace BECore::Match3 {
         BE_REFLECT_FIELD float _originY = 80.0f;
         BE_REFLECT_FIELD float _cellSize = 64.0f;
         BE_REFLECT_FIELD uint32_t _seed = 1337;
-        BE_REFLECT_FIELD PoolString _menuScene;  ///< the scene that the `Match3Menu` action switches to; empty makes the action do nothing
-        BE_REFLECT_FIELD bool _animate = true;   ///< false: a swap by mouse shows its result at once, as the other changes of the model do
+        BE_REFLECT_FIELD PoolString _menuScene;                                     ///< the scene that the `Match3Menu` action switches to; empty makes the action do nothing
+        BE_REFLECT_FIELD bool _animate = true;                                      ///< false: a swap by mouse shows its result at once, as the other changes of the model do
+        BE_REFLECT_FIELD PoolString _burstNode = PoolString::Intern("ClearBurst");  ///< the node of this scene whose emitter bursts at a cleared gem; empty or unknown is no effect
 
         void OnAttached() override;
         void OnDraw() override;
@@ -83,11 +86,19 @@ namespace BECore::Match3 {
         void OnMouseDown(const SDLEvents::MouseButtonDownEvent&);
         void OnAction(const InputEvents::ActionEvent&);
 
+        /// The burst of a cleared gem at its cell: the sink of `_animation`
+        void OnGemCleared(Cell cell, GemType gem);
+        /// The emitter of `_burstNode`, found on the first use (the node may come after the board in the file) and again when `_burstNode` changed; null when there is none
+        ParticleEmitterComponent* FindBurstEmitter();
+
         /// Gives the UI labels the score and the seed; only when the model changed, since a label checks the version of the variables every frame
         void PublishUiVars();
 
         Match3GameModel _model;
         BoardAnimation _animation;
+        IntrusivePtr<ParticleEmitterComponent> _burstEmitter;
+        PoolString _burstLookedFor;  // the `_burstNode` the lookup ran for (and logged when it found nothing); an edit of the field looks again
+        bool _burstLooked = false;
         uint64_t _animatedVersion = 0;   // the model version the running animation belongs to; a draw that finds another one snaps (the change was not animated)
         uint64_t _publishedVersion = 0;  // the model version PublishUiVars() last published; 0 is never a model version
         static Match3BoardComponent* s_active;
