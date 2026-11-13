@@ -387,6 +387,33 @@ class SettingsTest(unittest.TestCase):
         self.assertEqual(self.parse({**self.GOOD, "PUBLIC_URL": "http://localhost:8080"}).sign_in["public_url"], "http://localhost:8080")
 
 
+class PrivacyTest(SignInTestCase):
+    def server_options(self, root: Path) -> dict:
+        options = super().server_options(root)
+        options["privacy_contact"] = "owner<x>@example.com"
+        return options
+
+    def test_the_privacy_page_is_open_and_names_the_contact_and_what_is_kept(self):
+        page = self.request("/privacy")
+        self.assertEqual(page.status, 200)
+        text = page.body.decode()
+        self.assertIn("owner&lt;x&gt;@example.com", text)
+        self.assertIn("90", text)
+        self.assertIn("30 days", text)
+        self.assertNotIn("<script", text)
+        self.assertIn("default-src 'none'", page.headers["content-security-policy"])
+
+    def test_the_sign_in_page_links_it(self):
+        self.assertIn('href="/privacy"', self.request("/signin").body.decode())
+
+
+class PrivacyBehindBasicTest(ServerTestCase):
+    basic_auth = ("user", "password")
+
+    def test_the_privacy_page_needs_no_password(self):
+        self.assertEqual(self.request("/privacy").status, 200)
+
+
 class ClaimsTest(unittest.TestCase):
     def test_decode_refuses_what_is_not_a_jwt(self):
         for token in (None, "", "a.b", "a.!!!.c", f"a.{base64.urlsafe_b64encode(b'[1]').decode()}.c"):

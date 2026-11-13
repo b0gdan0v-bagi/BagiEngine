@@ -18,6 +18,10 @@ Basic and sign-in exclude each other (the server does not start with both). Sign
 - **Without a session** a page (`/`, `*.html`) answers 303 to `/signin` and anything else 401 (no Basic challenge); `/healthz` stays open. The isolation headers are on every answer, the sign-in page included (it has no script and no resource of another origin; its `Content-Security-Policy` says so).
 - **Limits:** 30 sign-in requests (start, callback, guest) an hour per client address (the address rule of the match store, `MATCH_FORWARDED_FOR`). The access log skips every `/auth/` line (code, state) and every `/matches/` line.
 
+## The privacy page
+
+`GET /privacy` is open behind every door (no session, no password): the OAuth consent screen of a provider must link a privacy policy before the app can be published, and the provider checks the link. It says, in both languages, what the server keeps (the email in the session cookie and with the matches a visitor agreed to send, nothing about a guest, 90 days at most, used only for the computer players, shared with nobody) and whom to write to: `PRIVACY_CONTACT` (an email address), else "the operator of this service". `/signin` links it. The text is in `serve.py` (`PRIVACY_TEXT`): change it there when the server starts keeping anything else.
+
 ## Matches with sign-in
 
 - **The stamp.** The first piece a signed-in visitor posts to a match writes `<store>/<id>/tester.json` = `{"provider", "email"}` before the piece; a later piece from another account (or a guest) is **403**, so nobody can add to someone else's match. A guest's match has no stamp. `GET /matches/` lists `"tester"` for a stamped match. The email comes from the provider's checked token, never from the page.
@@ -29,10 +33,10 @@ Basic and sign-in exclude each other (the server does not start with both). Sign
 
 ## The owner's checklist (Google, once)
 
-1. [Google Cloud console](https://console.cloud.google.com/): a project; **APIs & Services → OAuth consent screen**: External, app name, support email, scopes `openid` and `email` only.
+1. [Google Cloud console](https://console.cloud.google.com/): a project; **APIs & Services → OAuth consent screen**: External, app name, support email, scopes `openid` and `email` only; **Branding**: home page `https://<service domain>/`, privacy policy `https://<service domain>/privacy`, authorized domain `<service domain>` (publishing refuses without them).
 2. **Publish the app** (consent screen → Publish app). In "Testing" only the listed test users (at most 100) can sign in; `openid email` are not sensitive scopes, so publishing needs no verification review.
 3. **Credentials → Create credentials → OAuth client ID**, type Web application, **Authorized redirect URI** `https://<service domain>/auth/google/callback` exactly (no JavaScript origin is needed). Copy the client id and the secret.
-4. `railway variables --service <name> --set GOOGLE_CLIENT_ID=... --set GOOGLE_CLIENT_SECRET=... --set PUBLIC_URL=https://<service domain> --set SESSION_SECRET=<python -c "import secrets; print(secrets.token_urlsafe(48))"> --set MATCH_COLLECT_TOKEN=<another one>`; remove `BASIC_AUTH_USER` and `BASIC_AUTH_PASSWORD` (`railway variables --service <name> --remove ...` or the dashboard); redeploy.
+4. `railway variables --service <name> --set GOOGLE_CLIENT_ID=... --set GOOGLE_CLIENT_SECRET=... --set PUBLIC_URL=https://<service domain> --set SESSION_SECRET=<python -c "import secrets; print(secrets.token_urlsafe(48))"> --set MATCH_COLLECT_TOKEN=<another one> --set PRIVACY_CONTACT=<your email>`; remove `BASIC_AUTH_USER` and `BASIC_AUTH_PASSWORD` (`railway variables --service <name> --remove ...` or the dashboard); redeploy.
 5. Check: the start line says `access: sign-in with google or as a guest (https://...)`; a private window lands on `/signin`; sign in, play, then `curl -H "Authorization: Bearer $MATCH_COLLECT_TOKEN" https://<domain>/matches/` lists the match with your email.
 
 Another provider later: its client in its own console with the redirect `https://<domain>/auth/<id>/callback`, its two variables, redeploy.
