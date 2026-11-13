@@ -1,9 +1,13 @@
 """The API of the service over a real Postgres, no mirror."""
 
+import logging
 import threading
 from datetime import date
 
 import psycopg
+import pytest
+
+from service import app as app_module, store
 
 from conftest import TOKEN
 
@@ -297,3 +301,85 @@ def test_the_dashboard_shows_orders_and_filters_by_priority(api):
     assert page(priority="urgent").status_code == 422
     entry_text = api.get("/dashboard/entry/urgent", headers={"Authorization": ""}, auth=("x", TOKEN)).text
     assert "<strong>Priority:</strong> now" in entry_text
+
+
+# --- a transaction Postgres aborts is run again; any other error has a clear answer -----------------
+
+
+def link(api):
+    return api.put("/api/v1/entries/b/blockers/a", json={"note": "first"})
+
+
+@pytest.fixture
+def two_entries(api, monkeypatch):
+    monkeypatch.setattr(app_module, "RETRY_PAUSE", 0)
+    add(api, id="a", title="A")
+    add(api, id="b", title="B")
+    return api
+
+
+def failing_add_dependency(monkeypatch, error_type, failures):
+    """store.add_dependency runs for real, then raises error_type the first `failures` times (a half-written transaction)."""
+    calls = []
+    real = store.add_dependency
+
+    def wrapper(*args, **kwargs):
+        calls.append(1)
+        real(*args, **kwargs)
+        if len(calls) <= failures:
+            raise error_type("simulated")
+
+    monkeypatch.setattr(store, "add_dependency", wrapper)
+    return calls
+
+
+@pytest.mark.parametrize("error_type", [psycopg.errors.DeadlockDetected, psycopg.errors.SerializationFailure])
+def test_a_write_that_postgres_aborts_is_run_again(two_entries, monkeypatch, caplog, error_type):
+    calls = failing_add_dependency(monkeypatch, error_type, failures=2)
+    with caplog.at_level(logging.WARNING, logger="todo.app"):
+        response = link(two_entries)
+    assert response.status_code == 200, response.text
+    assert len(calls) == 3
+    assert response.json()["blockedBy"][0]["id"] == "a"
+    assert [record.message for record in caplog.records].count(f"retrying a write after {error_type.__name__}, attempt 1 of {app_module.WRITE_ATTEMPTS}") == 1
+    kinds = [event["kind"] for event in two_entries.get("/api/v1/entries/b/events").json()]
+    assert kinds.count("blocked by") == 1  # the aborted runs left nothing behind
+
+
+def test_a_write_that_keeps_being_aborted_answers_503(two_entries, monkeypatch):
+    calls = failing_add_dependency(monkeypatch, psycopg.errors.DeadlockDetected, failures=1000)
+    response = link(two_entries)
+    assert response.status_code == 503
+    assert response.json()["detail"] == "the store was busy, repeat the request"
+    assert len(calls) == app_module.WRITE_ATTEMPTS
+    assert two_entries.get("/api/v1/dependencies").json() == []
+
+
+def test_an_unexpected_error_answers_500_with_its_class_and_is_logged(two_entries, monkeypatch, caplog):
+    failing_add_dependency(monkeypatch, RuntimeError, failures=1000)
+    with caplog.at_level(logging.ERROR, logger="todo.app"):
+        response = link(two_entries)
+    assert response.status_code == 500
+    assert response.json() == {"detail": "RuntimeError: store error, see the service log"}
+    assert any("RuntimeError" in record.getMessage() and record.exc_info for record in caplog.records)
+    assert two_entries.get("/api/v1/dependencies").json() == []
+
+
+def test_a_read_that_fails_unexpectedly_answers_500_with_its_class(api, monkeypatch):
+    def broken(conn, entry_id):
+        raise psycopg.errors.UndefinedTable("no such table")
+
+    monkeypatch.setattr(store, "require_entry", broken)
+    response = api.get("/api/v1/entries/a")
+    assert response.status_code == 500
+    assert response.json() == {"detail": "UndefinedTable: store error, see the service log"}
+
+
+def test_the_store_errors_keep_their_status_through_write_and_read(two_entries):
+    assert two_entries.put("/api/v1/entries/b/blockers/missing", json={}).status_code == 404
+    assert two_entries.put("/api/v1/entries/b/blockers/b", json={}).status_code == 422
+    assert two_entries.get("/api/v1/entries/missing").status_code == 404
+    assert two_entries.post("/api/v1/entries", json={**ENTRY, "id": "a"}).status_code == 409
+    assert two_entries.post("/api/v1/entries", json={**ENTRY, "id": "c d"}).status_code == 422
+    assert link(two_entries).status_code == 200
+    assert two_entries.put("/api/v1/entries/a/blockers/b", json={}).status_code == 409  # a cycle
