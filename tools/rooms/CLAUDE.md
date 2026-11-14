@@ -46,6 +46,7 @@ python3 tools/rooms/docker_check.py                       # from the engine root
 python3 tools/rooms/docker_check.py --image bagi-room-server   # an image that exists: no build
 python3 tools/rooms/docker_check.py --context . --dockerfile engine/tools/rooms/Dockerfile   # from a game's root
 python3 -m unittest discover tools/rooms/tests            # the unit test: a fake runner, no docker
+python -m pytest tools/web/tests tools/rooms/tests    # both folders in one run (each has a build_and_deploy.py; the tests load their own by path)
 ```
 
 It runs the container with `PORT=9090`, `BAGI_ROOMS_TEST_GAMES=1`, `BAGI_ROOMS_ORIGINS` and `BAGI_ROOMS_SHUTDOWN_GRACE_MS`, publishes the port on a free one of 127.0.0.1, and checks: the listening line for `PORT` and the settings line in `docker logs`; `/healthz`; the Origin rules; a `cards` room (`joined`); `docker stop` ends with exit code 0 and the connected client is closed with 1001. Exit codes as `smoke.py` (77: no `docker` or no daemon). The container is always removed, the image stays. It reuses `Human` and `http_get` of `smoke.py`; every `docker` call goes through `run_docker`, which the unit test replaces.
