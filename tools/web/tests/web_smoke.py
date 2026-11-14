@@ -63,7 +63,7 @@ with an idle animation, a fade-in that is not over by then or a cursor that blin
 0.5 s apart, so a blink short enough to fall between two shots is not seen, and a change slower than the whole window is not seen
 and can pass for the click's; raise --settle for a start that is slow). The screenshots are decoded by
 tools/control/tests/png_reader.py (imported from there, not copied), in plain Python: keep the viewport small.
-Run against a real Chromium and Edge with --selftest and every --selftest-fault, and against the page of BagiMatch3 (tools/web/CLAUDE.md).
+Run against a real Chromium and Edge with --selftest and every --selftest-fault, and against the page of a game (tools/web/CLAUDE.md).
 """
 
 import argparse

@@ -5,7 +5,7 @@ others of tools/web: the Docker image copies only it.
     python serve.py --root dist --port 9000 --no-cross-origin-isolation
 
 It serves the folder made by package.py. For a file `x` it answers with `x.br` or `x.gz` when one exists and the request accepts that
-encoding (Content-Encoding, Vary: Accept-Encoding, the Content-Length of the encoded body). The names are not hashed (BagiMatch3.wasm
+encoding (Content-Encoding, Vary: Accept-Encoding, the Content-Length of the encoded body). The names are not hashed (<Game>.wasm
 is the same name in every build), so nothing is `immutable` and nothing is reused without asking: every file is `no-cache` (the browser
 asks every time, and an ETag makes the answer a 304), so a new deploy reaches the next load, page, .js, .wasm and .data together.
 GET /healthz answers 200 `ok` for the health check of the platform.
