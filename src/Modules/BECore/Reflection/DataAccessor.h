@@ -6,6 +6,7 @@
 #include <BECore/Reflection/ISerializer.h>
 #include <BECore/Reflection/SerializationTraits.h>
 #include <EASTL/array.h>
+#include <EASTL/fixed_hash_map.h>
 #include <EASTL/map.h>
 #include <EASTL/optional.h>
 #include <EASTL/sort.h>
@@ -64,14 +65,19 @@ namespace BECore {
     }  // namespace Detail
 
     // =========================================================================
-    // DataAccessor<T> -- primary template (static_assert for unhandled types)
+    // DataAccessor<T> -- primary template (declared only: a type without a specialization is not reflected)
     // =========================================================================
 
     namespace Ser {
 
+        /// A type with no specialization is not reflected: using it is a compile error ("implicit instantiation of undefined template
+        /// DataAccessor<T>"), and HasDataAccessor<T> is false (it is declared and never defined, so asking for its size is no error).
         template <typename T, typename = void>
-        struct DataAccessor {
-            static_assert(sizeof(T) != sizeof(T), "No DataAccessor specialization for this type");
+        struct DataAccessor;
+
+        template <typename T>
+        concept HasDataAccessor = requires {
+            sizeof(DataAccessor<T>);
         };
 
         // =================================================================
@@ -301,17 +307,53 @@ namespace BECore {
         };
 
         // =================================================================
-        // eastl::string
+        // Strings: String, a string of any allocator, FixedString
         // =================================================================
 
-        template <>
-        struct DataAccessor<eastl::string> {
-            static void Save(ISerializer& s, const eastl::string& value, eastl::string_view key) {
-                s.WriteAttribute(key, eastl::string_view(value.data(), value.size()));
+        namespace Detail {
+
+            template <typename Text>
+            void SaveText(ISerializer& s, const Text& value, StringView key) {
+                s.WriteAttribute(key, StringView(value.data(), value.size()));
             }
 
-            static bool Load(IDeserializer& d, eastl::string& value, eastl::string_view key) {
-                return d.ReadAttribute(key, value);
+            /// The reader fills a String; any other string takes the text only when it was read (a missing attribute leaves the field)
+            template <typename Text>
+            bool LoadText(IDeserializer& d, Text& value, StringView key) {
+                if constexpr (std::is_same_v<Text, String>) {
+                    return d.ReadAttribute(key, value);
+                } else {
+                    String text;
+                    if (!d.ReadAttribute(key, text)) {
+                        return false;
+                    }
+                    ::BECore::Detail::AssignText(value, StringView(text.data(), text.size()));
+                    return true;
+                }
+            }
+
+        }  // namespace Detail
+
+        template <typename Alloc>
+        struct DataAccessor<eastl::basic_string<char, Alloc>> {
+            static void Save(ISerializer& s, const eastl::basic_string<char, Alloc>& value, StringView key) {
+                Detail::SaveText(s, value, key);
+            }
+
+            static bool Load(IDeserializer& d, eastl::basic_string<char, Alloc>& value, StringView key) {
+                return Detail::LoadText(d, value, key);
+            }
+        };
+
+        // FixedString derives from a basic_string of another allocator, and a partial specialization does not match a derived class
+        template <int N, bool Overflow, typename OverflowAlloc>
+        struct DataAccessor<eastl::fixed_string<char, N, Overflow, OverflowAlloc>> {
+            static void Save(ISerializer& s, const eastl::fixed_string<char, N, Overflow, OverflowAlloc>& value, StringView key) {
+                Detail::SaveText(s, value, key);
+            }
+
+            static bool Load(IDeserializer& d, eastl::fixed_string<char, N, Overflow, OverflowAlloc>& value, StringView key) {
+                return Detail::LoadText(d, value, key);
             }
         };
 
@@ -647,19 +689,18 @@ namespace BECore {
         };
 
         // =================================================================
-        // eastl::unordered_map -- with sorted-key Save
+        // eastl::unordered_map (HashMap) and eastl::fixed_hash_map (FixedHashMap) -- with sorted-key Save
         // =================================================================
 
-        template <typename K, typename V, typename Hash, typename Pred, typename Alloc>
-        struct DataAccessor<eastl::unordered_map<K, V, Hash, Pred, Alloc>> {
-            static void Save(ISerializer& s, const eastl::unordered_map<K, V, Hash, Pred, Alloc>& map, eastl::string_view key) {
+        namespace Detail {
+
+            template <typename HashMapType>
+            void SaveHashMapLike(ISerializer& s, const HashMapType& map, StringView key) {
+                using K = typename HashMapType::key_type;
+                using V = typename HashMapType::mapped_type;
                 size_t count = map.size();
                 if (s.BeginArray(key, "entry", count)) {
-                    if constexpr (requires(const K& a, const K& b) {
-                                      {
-                                          a < b
-                                      } -> std::convertible_to<bool>;
-                                  }) {
+                    if constexpr (requires(const K& a, const K& b) { {a < b}->std::convertible_to<bool>; }) {
                         eastl::vector<eastl::pair<const K*, const V*>> sorted;
                         sorted.reserve(map.size());
                         for (const auto& [k, v] : map)
@@ -685,16 +726,29 @@ namespace BECore {
                 }
             }
 
-            static bool Load(IDeserializer& d, eastl::unordered_map<K, V, Hash, Pred, Alloc>& map, eastl::string_view key) {
+            /// @p FixedStorage: the nodes are in the map's own block, so nothing is reserved, and a map that may not overflow keeps what fits
+            template <bool FixedStorage, typename HashMapType>
+            bool LoadHashMapLike(IDeserializer& d, HashMapType& map, StringView key) {
+                using K = typename HashMapType::key_type;
+                using V = typename HashMapType::mapped_type;
                 size_t count = 0;
                 if (d.BeginArray(key, "entry", count)) {
                     map.clear();
-                    map.reserve(count);
+                    if constexpr (!FixedStorage) {
+                        map.reserve(count);
+                    }
                     for (size_t i = 0; i < count; ++i) {
                         if (d.BeginArrayElement()) {
                             K k{};
                             d.ReadAttribute("key", k);
-                            map.emplace(eastl::move(k), Detail::MakeElement<V>(d));
+                            V element = MakeElement<V>(d);
+                            if constexpr (FixedStorage) {
+                                if (!HashMapType::can_overflow() && map.size() >= map.max_size()) {
+                                    d.EndArrayElement();
+                                    continue;
+                                }
+                            }
+                            map.emplace(eastl::move(k), eastl::move(element));
                             d.EndArrayElement();
                         }
                     }
@@ -702,6 +756,32 @@ namespace BECore {
                     return true;
                 }
                 return false;
+            }
+
+        }  // namespace Detail
+
+        template <typename K, typename V, typename Hash, typename Pred, typename Alloc>
+        struct DataAccessor<eastl::unordered_map<K, V, Hash, Pred, Alloc>> {
+            static void Save(ISerializer& s, const eastl::unordered_map<K, V, Hash, Pred, Alloc>& map, StringView key) {
+                Detail::SaveHashMapLike(s, map, key);
+            }
+
+            static bool Load(IDeserializer& d, eastl::unordered_map<K, V, Hash, Pred, Alloc>& map, StringView key) {
+                return Detail::LoadHashMapLike<false>(d, map, key);
+            }
+        };
+
+        // FixedHashMap derives from a hash_map of another allocator: its own specialization
+        template <typename K, typename V, size_t NodeCount, size_t BucketCount, bool Overflow, typename Hash, typename Pred, bool CacheHashCode, typename OverflowAlloc>
+        struct DataAccessor<eastl::fixed_hash_map<K, V, NodeCount, BucketCount, Overflow, Hash, Pred, CacheHashCode, OverflowAlloc>> {
+            using Map = eastl::fixed_hash_map<K, V, NodeCount, BucketCount, Overflow, Hash, Pred, CacheHashCode, OverflowAlloc>;
+
+            static void Save(ISerializer& s, const Map& map, StringView key) {
+                Detail::SaveHashMapLike(s, map, key);
+            }
+
+            static bool Load(IDeserializer& d, Map& map, StringView key) {
+                return Detail::LoadHashMapLike<true>(d, map, key);
             }
         };
 

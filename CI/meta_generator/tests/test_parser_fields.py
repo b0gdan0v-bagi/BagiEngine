@@ -33,6 +33,39 @@ def test_type_and_name(parse, declaration, expected):
     assert warnings == []
 
 
+# The aliases of BECore/Types: spelled by the alias the parser sees the same shapes as for the eastl:: names
+@pytest.mark.parametrize("declaration, expected, primitive", [
+    ("BE_REFLECT_FIELD String s;", ("s", "String"), True),
+    ("BE_REFLECT_FIELD BECore::String s;", ("s", "BECore::String"), True),
+    ("BE_REFLECT_FIELD FixedString<32> s;", ("s", "FixedString<32>"), True),
+    ("BE_REFLECT_FIELD FixedString<32, false> s;", ("s", "FixedString<32, false>"), True),
+    ("BE_REFLECT_FIELD Vector<int32_t> v;", ("v", "Vector<int32_t>"), False),
+    ("BE_REFLECT_FIELD SmallVector<Vector<int32_t>, 4> v;", ("v", "SmallVector<Vector<int32_t>, 4>"), False),
+    ("BE_REFLECT_FIELD FixedVector<int32_t, 4> v;", ("v", "FixedVector<int32_t, 4>"), False),
+    ("BE_REFLECT_FIELD Array<int32_t, 3> a;", ("a", "Array<int32_t, 3>"), False),
+    ("BE_REFLECT_FIELD HashMap<String, int32_t> m;", ("m", "HashMap<String, int32_t>"), False),
+    ("BE_REFLECT_FIELD Map<String, Vector<int32_t>> m;", ("m", "Map<String, Vector<int32_t>>"), False),
+    ("BE_REFLECT_FIELD FixedHashMap<String, int32_t, 8> m;", ("m", "FixedHashMap<String, int32_t, 8>"), False),
+    ("BE_REFLECT_FIELD Optional<int32_t> o;", ("o", "Optional<int32_t>"), False),
+])
+def test_alias_type_and_name(parse, declaration, expected, primitive):
+    classes, warnings = parse("struct Foo {\n    BE_CLASS(Foo)\n    " + declaration + "\n};\n")
+    assert warnings == []
+    assert [(f.name, f.type_name, f.is_primitive) for f in classes[0].fields] == [(*expected, primitive)]
+
+
+@pytest.mark.parametrize("type_name, inner", [
+    ("eastl::vector<IntrusivePtrAtomic<ILogSink>>", "ILogSink"),
+    ("Vector<IntrusivePtrAtomic<ILogSink>>", "ILogSink"),
+    ("SmallVector<IntrusivePtrNonAtomic<Tests::ITest>, 4>", "Tests::ITest"),
+    ("Optional<IntrusivePtrNonAtomic<Tests::ITest>>", "Tests::ITest"),
+    ("Vector<int32_t>", None),
+])
+def test_factory_base_is_found_in_a_container_of_pointers(type_name, inner):
+    from core.generator import extract_intrusive_inner_type
+    assert extract_intrusive_inner_type(type_name) == inner
+
+
 # ---------------------------------------------------------------------------
 # initializers
 # ---------------------------------------------------------------------------

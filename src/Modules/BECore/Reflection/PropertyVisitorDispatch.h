@@ -2,6 +2,7 @@
 
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/Reflection/IPropertyVisitor.h>
+#include <BECore/Reflection/SerializationTraits.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <EASTL/vector.h>
 #include <cstdio>
@@ -14,7 +15,7 @@ namespace BECore {
      * PropVisit::Visit(visitor, field, key) selects the right overload based on the
      * field type:
      *   - Arithmetic types              → visitor.Visit(key, field) directly
-     *   - PoolString / eastl::string    → visitor.Visit(key, field) directly
+     *   - PoolString / String (and any string type) → visitor.Visit(key, field) directly
      *   - CORE_ENUM (IsReflectedEnum)   → visitor.VisitEnum(key, names, count, index)
      *   - Types with VisitProperties()  → BeginCompound + VisitProperties + EndCompound
      *   - BE_CLASS T by value           → BeginCompound + AcceptPropertyVisitor + EndCompound
@@ -69,11 +70,37 @@ namespace BECore {
         }
 
         // =====================================================================
-        // eastl::string
+        // Strings: String, a string of any allocator, FixedString
         // =====================================================================
 
-        inline bool Visit(IPropertyVisitor& v, eastl::string& value, eastl::string_view key) {
-            return v.Visit(key, value);
+        namespace Detail {
+
+            template <typename Text>
+            bool VisitText(IPropertyVisitor& v, Text& value, eastl::string_view key) {
+                if constexpr (std::is_same_v<Text, String>) {
+                    return v.Visit(key, value);
+                } else {
+                    // The visitor edits a String: edit a copy and take it back when it changed
+                    String text(value.data(), value.size());
+                    if (!v.Visit(key, text)) {
+                        return false;
+                    }
+                    ::BECore::Detail::AssignText(value, StringView(text.data(), text.size()));
+                    return true;
+                }
+            }
+
+        }  // namespace Detail
+
+        template <typename Alloc>
+        bool Visit(IPropertyVisitor& v, eastl::basic_string<char, Alloc>& value, eastl::string_view key) {
+            return Detail::VisitText(v, value, key);
+        }
+
+        // Its own overload: through the base above, the type would be a basic_string and the length limit of the FixedString lost
+        template <int N, bool Overflow, typename OverflowAlloc>
+        bool Visit(IPropertyVisitor& v, eastl::fixed_string<char, N, Overflow, OverflowAlloc>& value, eastl::string_view key) {
+            return Detail::VisitText(v, value, key);
         }
 
         // =====================================================================

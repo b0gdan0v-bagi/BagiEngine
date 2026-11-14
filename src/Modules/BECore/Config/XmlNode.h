@@ -151,7 +151,7 @@ namespace BECore {
                     return true;
                 if (s == "false" || s == "0")
                     return false;
-            } else if constexpr (std::is_same_v<T, eastl::string_view>) {
+            } else if constexpr (std::is_same_v<T, StringView>) {
                 return s;
             } else if constexpr (std::is_enum_v<T>) {
                 return EnumUtils<T>::Cast(s);

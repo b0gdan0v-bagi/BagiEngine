@@ -5,6 +5,21 @@
 
 namespace BECore {
 
+    namespace Detail {
+
+        /// Puts @p text into any string type; a FixedString that cannot overflow keeps what fits (a longer text from a file is no assertion)
+        template <typename Text>
+        void AssignText(Text& value, StringView text) {
+            if constexpr (requires { Text::can_overflow(); }) {
+                if (!Text::can_overflow() && text.size() > static_cast<size_t>(value.max_size())) {
+                    text = text.substr(0, static_cast<size_t>(value.max_size()));
+                }
+            }
+            value.assign(text.data(), text.size());
+        }
+
+    }  // namespace Detail
+
     // =========================================================================
     // DefaultChecker<T> -- determines whether a value is "default" (skippable)
     // =========================================================================

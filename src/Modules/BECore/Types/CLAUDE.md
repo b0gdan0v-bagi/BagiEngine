@@ -9,5 +9,6 @@ The engine's names for the types it uses (`Types.h`, in the PCH): `String`, `Str
 - **`FlatMap` / `FlatSet`** (a sorted vector) are for new code where the map is small, rarely changed and iterated often; the default container for a lookup stays `HashMap`.
 - **Text:** `ToString(number)` (an integer's digits, a floating-point value as `std::to_string`; no overload for `bool` and characters) and `Format` / `AppendFormat` (`Format/Format.h`) make strings; do not build one through `std::to_string`.
 - **The `std::` boundary:** `ToStd(StringView)` / `FromStd(std::string_view)` copy nothing; `ToStdString` / `FromStdString` make a copy and are named so. Use them at the call that meets `std::filesystem`, `nlohmann` or the like.
+- **Reflection:** `String` (a string of any allocator), `FixedString`, `Vector`, `SmallVector`, `FixedVector`, `Array`, `HashMap`, `Map`, `FixedHashMap` and `Optional` are reflected as their `eastl::` forms were, with the same saved text. `FlatMap`, `FlatSet`, `Span` and `UniquePtr` are not: a field of one does not compile, and a test pins that (`.claude/rules/reflection-module.md`).
 
-Tests: `tests/BECore/TypesTest.cpp`.
+Tests: `tests/BECore/TypesTest.cpp`, `tests/BECore/ReflectionAliasesTest.cpp`.
