@@ -1,5 +1,7 @@
 #include "ReflectionAliasesTest.h"
 
+#include "FactoryInitializeTest.h"
+
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/BinarySerializer.h>
 #include <BECore/Reflection/DataAccessor.h>
@@ -424,6 +426,31 @@ namespace BECore::Tests {
         LoadXmlField(deserializer, "<root><State><value><item value=\"1\"/><item value=\"2\"/></value></State></root>", list);
         EXPECT_EQ(list.size(), 2u);
         EXPECT_FALSE(deserializer.HasErrors());
+    }
+
+    TEST(ReflectionAliasesTest, MoreFactoryItemsThanAFixedVectorHoldsAreCutAndReportedFromXml) {
+        FixedVector<IntrusivePtrNonAtomic<InitProbe>, 2> probes;
+        XmlDeserializer deserializer;
+        LoadXmlField(deserializer,
+                     "<root><State><value><probe type=\"InitProbePlain\" id=\"1\"/><probe type=\"InitProbePlain\" id=\"2\"/>"
+                     "<probe type=\"InitProbePlain\" id=\"3\"/><probe type=\"InitProbePlain\" id=\"4\"/></value></State></root>",
+                     probes);
+        ASSERT_EQ(probes.size(), 2u);
+        EXPECT_TRUE(probes[0]->Is<InitProbePlain>());
+        ExpectOneDropReport(deserializer, "State.value", kDroppedItems);
+    }
+
+    TEST(ReflectionAliasesTest, MoreFactoryItemsThanAFixedVectorHoldsAreCutAndReportedFromBinary) {
+        Vector<IntrusivePtrNonAtomic<InitProbe>> roomy;
+        for (int32_t i = 0; i < 4; ++i) {
+            roomy.push_back(New<InitProbePlain>());
+        }
+        FixedVector<IntrusivePtrNonAtomic<InitProbe>, 2> probes;
+        BinaryDeserializer deserializer;
+        LoadBinaryField(deserializer, SaveBinaryField(roomy), probes);
+        ASSERT_EQ(probes.size(), 2u);
+        EXPECT_TRUE(probes[1]->Is<InitProbePlain>());
+        ExpectOneDropReport(deserializer, "State.value", kDroppedItems);
     }
 
     namespace {
