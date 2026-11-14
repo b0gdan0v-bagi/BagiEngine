@@ -246,6 +246,19 @@ def test_icon_reaches_the_generated_class_meta(run_cli, tmp_path, source):
     assert 'eastl::string_view{"Plain"},\n        eastl::string_view{""}' in generated
 
 
+def test_generated_header_has_no_quoted_include(run_cli, tmp_path, source):
+    (source / "Pic.h").write_text(textwrap.dedent("""\
+        struct Pic {
+            BE_CLASS(Pic)
+        };
+    """), encoding="utf-8")
+    code, _, err = run_cli(source, "--warnings-as-errors")
+    assert (code, warning_lines(err)) == (0, [])
+    generated = (tmp_path / "out" / "Pic.gen.hpp").read_text(encoding="utf-8")
+    assert "#include <" in generated
+    assert '#include "' not in generated
+
+
 # ---------------------------------------------------------------------------
 # a FACTORY_BASE whose enum name is already taken
 # ---------------------------------------------------------------------------
