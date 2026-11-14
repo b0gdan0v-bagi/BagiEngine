@@ -20,6 +20,10 @@ namespace BECore {
      *   - IntrusivePtr<BE_CLASS T>      → BeginCompound + ptr->AcceptPropertyVisitor + EndCompound
      *   - vector<IntrusivePtr<T>>       → BeginCompound + iterate elements + EndCompound
      *
+     * PropVisit::VisitField(visitor, attributes, visit) wraps the visit of one field of a reflected class in
+     * BeginField / EndField and leaves out a `hidden` field; the generated AcceptPropertyVisitor calls it with a
+     * lambda that calls PropVisit::Visit.
+     *
      * Generated AcceptPropertyVisitor implementations call these helpers.
      */
     namespace PropVisit {
@@ -175,6 +179,32 @@ namespace BECore {
                 return changed;
             }
             return false;
+        }
+
+        // =====================================================================
+        // One field of a reflected class
+        // =====================================================================
+
+        /**
+         * @brief Visit one reflected field between BeginField and EndField
+         * @param v The visitor
+         * @param attributes The attributes of the field (`ReflectionTraits<T>::fields`)
+         * @param visit Callable that visits the field and returns whether it changed, `[&] { return PropVisit::Visit(v, field, key); }`
+         * @return true when the visit changed the value; false for a field left out
+         *
+         * A `hidden` field is not visited unless the visitor's `ShowsHidden()` is true: it gets no `BeginField` either.
+         * The visit is a callable, not the field, because the overloads of `Visit` are found where the generated code is
+         * written: a type that has its own `PropVisit::Visit` overload declared next to its class is found there and not here.
+         */
+        template <typename Fn>
+        bool VisitField(IPropertyVisitor& v, const FieldAttributes& attributes, Fn&& visit) {
+            if (attributes.hidden && !v.ShowsHidden()) {
+                return false;
+            }
+            v.BeginField(attributes);
+            const bool changed = visit();
+            v.EndField();
+            return changed;
         }
 
         // =====================================================================

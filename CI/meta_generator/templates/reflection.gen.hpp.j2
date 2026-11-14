@@ -258,7 +258,8 @@ bool {{ cls.full_qualified_name }}::AcceptPropertyVisitor(::BECore::IPropertyVis
     bool changed = false;
 {% for field in cls.fields %}
 {% set xml_name = field.name[1:] if field.name.startswith('_') else field.name %}
-    changed |= ::BECore::PropVisit::Visit(v, {{ field.name }}, "{{ xml_name }}");
+    changed |= ::BECore::PropVisit::VisitField(v, std::get<{{ loop.index0 }}>(::BECore::ReflectionTraits<{{ cls.qualified_name }}>::fields).attributes,
+        [&] { return ::BECore::PropVisit::Visit(v, {{ field.name }}, "{{ xml_name }}"); });
 {% endfor %}
     return changed;
 }

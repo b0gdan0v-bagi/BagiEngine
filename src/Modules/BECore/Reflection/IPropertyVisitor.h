@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/PoolString/PoolString.h>
+#include <BECore/Reflection/FieldAttributes.h>
 #include <BECore/Types/Types.h>
 
 namespace BECore {
@@ -13,6 +14,11 @@ namespace BECore {
      *
      * Compound types (Color, Rect, ...) use BeginCompound/EndCompound to group
      * their sub-fields, analogous to BeginObject/EndObject in IArchiveBase.
+     *
+     * Every reflected field is visited between `BeginField(attributes)` and `EndField()` (see `PropVisit::VisitField`): the
+     * brackets nest around a compound's `BeginCompound` / `EndCompound` and the visits of its children, and `EndField`
+     * always follows its `BeginField`. All three field hooks have a default, so a visitor that overrides none of them
+     * edits every field as before, except the ones marked `hidden` (see `ShowsHidden`).
      */
     class IPropertyVisitor {
     public:
@@ -61,6 +67,28 @@ namespace BECore {
          * Only called when BeginCompound returned true.
          */
         virtual void EndCompound() {}
+
+        /**
+         * @brief A reflected field is about to be visited
+         * @param attributes What `BE_FIELD_ATTRS(...)` says about the field (`FieldAttributes{}` when it has none); valid until `EndField`
+         *
+         * A visitor that draws or checks the field reads them here and applies them to the `Visit` / `VisitEnum` /
+         * `BeginCompound` calls that follow.
+         */
+        virtual void BeginField(const FieldAttributes& attributes) {}
+
+        /// @brief The field opened by `BeginField` has been visited (after its compound's `EndCompound`, when it is one)
+        virtual void EndField() {}
+
+        /**
+         * @brief Whether the visitor wants the fields marked `hidden` too
+         *
+         * `false` by default: a `hidden` field gets no `BeginField`, no `Visit` and no `EndField`. A visitor that lists
+         * every field (a dump, a diff) returns true.
+         */
+        virtual bool ShowsHidden() const {
+            return false;
+        }
 
     protected:
         IPropertyVisitor() = default;

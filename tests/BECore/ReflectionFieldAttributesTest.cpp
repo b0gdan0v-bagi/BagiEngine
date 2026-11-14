@@ -1,5 +1,7 @@
 #include "ReflectionFieldAttributesTest.h"
 
+#include <BECore/Reflection/IPropertyVisitor.h>
+#include <BECore/Reflection/PropertyVisitorDispatch.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
 #include <Generated/ReflectionFieldAttributesTest.gen.hpp>
@@ -30,6 +32,142 @@ namespace BECore::Tests {
             }
             return serializer.SaveToString();
         }
+
+        /// Every Visit does nothing; a test visitor overrides what it looks at
+        class NullVisitor : public IPropertyVisitor {
+        public:
+            bool Visit(StringView, bool&) override {
+                return false;
+            }
+            bool Visit(StringView, int8_t&) override {
+                return false;
+            }
+            bool Visit(StringView, uint8_t&) override {
+                return false;
+            }
+            bool Visit(StringView, int16_t&) override {
+                return false;
+            }
+            bool Visit(StringView, uint16_t&) override {
+                return false;
+            }
+            bool Visit(StringView, int32_t&) override {
+                return false;
+            }
+            bool Visit(StringView, uint32_t&) override {
+                return false;
+            }
+            bool Visit(StringView, int64_t&) override {
+                return false;
+            }
+            bool Visit(StringView, uint64_t&) override {
+                return false;
+            }
+            bool Visit(StringView, float&) override {
+                return false;
+            }
+            bool Visit(StringView, double&) override {
+                return false;
+            }
+            bool Visit(StringView, PoolString&) override {
+                return false;
+            }
+            bool Visit(StringView, String&) override {
+                return false;
+            }
+        };
+
+        /// Overrides no field hook: a visitor written before BeginField existed
+        class IncrementingVisitor final : public NullVisitor {
+        public:
+            using NullVisitor::Visit;
+            bool Visit(StringView, int32_t& value) override {
+                ++value;
+                return true;
+            }
+        };
+
+        enum class EventKind { Begin, Visit, BeginCompound, EndCompound, End };
+
+        struct Event {
+            EventKind kind;
+            String name;
+            FieldAttributes attributes;
+        };
+
+        class RecordingVisitor final : public NullVisitor {
+        public:
+            using NullVisitor::Visit;
+
+            bool showsHidden = false;
+            Vector<Event> events;
+
+            void BeginField(const FieldAttributes& attributes) override {
+                events.push_back({EventKind::Begin, String{}, attributes});
+            }
+            void EndField() override {
+                events.push_back({EventKind::End, String{}, FieldAttributes{}});
+            }
+            bool ShowsHidden() const override {
+                return showsHidden;
+            }
+            bool Visit(StringView name, int32_t&) override {
+                Record(EventKind::Visit, name);
+                return false;
+            }
+            bool Visit(StringView name, float&) override {
+                Record(EventKind::Visit, name);
+                return false;
+            }
+            bool Visit(StringView name, bool&) override {
+                Record(EventKind::Visit, name);
+                return false;
+            }
+            bool Visit(StringView name, String&) override {
+                Record(EventKind::Visit, name);
+                return false;
+            }
+            bool BeginCompound(StringView name) override {
+                Record(EventKind::BeginCompound, name);
+                return true;
+            }
+            void EndCompound() override {
+                Record(EventKind::EndCompound, StringView{});
+            }
+
+            /// The visits of the log as `name` and `{`, `}` around a field: `{ opacity } { count } ...`
+            String Trace() const {
+                String text;
+                for (const Event& event : events) {
+                    switch (event.kind) {
+                        case EventKind::Begin:
+                            text += "{ ";
+                            break;
+                        case EventKind::End:
+                            text += "} ";
+                            break;
+                        case EventKind::BeginCompound:
+                            text += "<";
+                            text.append(event.name.data(), event.name.size());
+                            text += "> ";
+                            break;
+                        case EventKind::EndCompound:
+                            text += "</> ";
+                            break;
+                        case EventKind::Visit:
+                            text.append(event.name.data(), event.name.size());
+                            text += " ";
+                            break;
+                    }
+                }
+                return text;
+            }
+
+        private:
+            void Record(EventKind kind, StringView name) {
+                events.push_back({kind, String(name.data(), name.size()), FieldAttributes{}});
+            }
+        };
 
     }  // namespace
 
@@ -114,6 +252,77 @@ namespace BECore::Tests {
         EXPECT_FALSE(loaded._flags);
         EXPECT_EQ(loaded._quoted, "caf\xC3\xA9");
         EXPECT_EQ(loaded.plain, 99);
+    }
+
+    TEST(ReflectionFieldAttributesTest, VisitorHearsBeginVisitEndPerFieldInOrder) {
+        Annotated state;
+        RecordingVisitor visitor;
+        EXPECT_FALSE(state.AcceptPropertyVisitor(visitor));
+        // _flags is hidden: no bracket, no visit
+        EXPECT_EQ(visitor.Trace(), "{ opacity } { count } { quoted } { plain } ");
+
+        ASSERT_EQ(visitor.events.size(), 12u);
+        EXPECT_EQ(visitor.events[0].attributes, std::get<0>(AnnotatedFields).attributes);
+        EXPECT_EQ(visitor.events[3].attributes, std::get<1>(AnnotatedFields).attributes);
+        EXPECT_EQ(visitor.events[6].attributes, std::get<3>(AnnotatedFields).attributes);
+        EXPECT_EQ(visitor.events[9].attributes, FieldAttributes{});
+    }
+
+    TEST(ReflectionFieldAttributesTest, HiddenFieldIsVisitedWhenTheVisitorAsks) {
+        Annotated state;
+        RecordingVisitor visitor;
+        visitor.showsHidden = true;
+        state.AcceptPropertyVisitor(visitor);
+        EXPECT_EQ(visitor.Trace(), "{ opacity } { count } { flags } { quoted } { plain } ");
+        EXPECT_TRUE(visitor.events[6].attributes.hidden);
+    }
+
+    TEST(ReflectionFieldAttributesTest, InheritedFieldsAreBracketedToo) {
+        Derived state;
+        RecordingVisitor visitor;
+        state.AcceptPropertyVisitor(visitor);
+        // baseValue is hidden in the base class
+        EXPECT_EQ(visitor.Trace(), "{ ownValue } ");
+        visitor.events.clear();
+        visitor.showsHidden = true;
+        state.AcceptPropertyVisitor(visitor);
+        EXPECT_EQ(visitor.Trace(), "{ baseValue } { ownValue } ");
+    }
+
+    TEST(ReflectionFieldAttributesTest, NestedCompoundGivesMatchedBrackets) {
+        Outer state;
+        RecordingVisitor visitor;
+        state.AcceptPropertyVisitor(visitor);
+        EXPECT_EQ(visitor.Trace(), "{ <inner> { innerValue } </> } { after } ");
+        // the attributes of the outer field come before its compound, the inner field's inside
+        ASSERT_GE(visitor.events.size(), 3u);
+        EXPECT_TRUE(visitor.events[0].attributes.readOnly);
+        EXPECT_EQ(visitor.events[2].attributes.tooltip, "inner field");
+    }
+
+    TEST(ReflectionFieldAttributesTest, VisitorWithoutFieldHooksStillEdits) {
+        Annotated state;
+        IncrementingVisitor visitor;
+        EXPECT_TRUE(state.AcceptPropertyVisitor(visitor));
+        EXPECT_EQ(state.count, 4);
+        EXPECT_EQ(state.plain, 8);
+    }
+
+    TEST(ReflectionFieldAttributesTest, ChangedIsTrueOnlyWhenAVisitChangedAValue) {
+        Annotated state;
+        NullVisitor nothing;
+        EXPECT_FALSE(state.AcceptPropertyVisitor(nothing));
+
+        Outer outer;
+        IncrementingVisitor increment;
+        EXPECT_TRUE(outer.AcceptPropertyVisitor(increment));
+        EXPECT_EQ(outer.inner.innerValue, 2);
+        EXPECT_EQ(outer.after, 3);
+
+        // a changed value of a hidden field does not count: the field is not visited
+        Base base;
+        EXPECT_FALSE(base.AcceptPropertyVisitor(increment));
+        EXPECT_EQ(base.baseValue, 1);
     }
 
 }  // namespace BECore::Tests

@@ -45,6 +45,20 @@ namespace BECore {
             BE_REFLECT_FIELD BE_FIELD_ATTRS(range(1, 5)) int32_t ownValue = 2;
         };
 
+        /// A reflected object held by value in `Outer`: its fields are visited between the brackets of the field `inner`
+        struct Inner {
+            BE_CLASS(Inner)
+
+            BE_REFLECT_FIELD BE_FIELD_ATTRS(tooltip("inner field")) int32_t innerValue = 1;
+        };
+
+        struct Outer {
+            BE_CLASS(Outer)
+
+            BE_REFLECT_FIELD BE_FIELD_ATTRS(readonly) Inner inner;
+            BE_REFLECT_FIELD int32_t after = 2;
+        };
+
     }  // namespace FieldAttributesTestData
 
 }  // namespace BECore
