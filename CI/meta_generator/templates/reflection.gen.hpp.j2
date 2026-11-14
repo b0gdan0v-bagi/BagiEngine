@@ -93,7 +93,7 @@ struct ReflectionTraits<{{ cls.qualified_name }}> {
     
     static constexpr auto fields = std::make_tuple(
 {% for field in cls.fields %}
-        FieldInfo{ eastl::string_view{"{{ field.name }}"}, &{{ cls.qualified_name }}::{{ field.name }} }{{ "," if not loop.last else "" }}
+        FieldInfo{ eastl::string_view{"{{ field.name }}"}, &{{ cls.qualified_name }}::{{ field.name }}{% if field.attributes_init %}, {{ field.attributes_init }}{% endif %} }{{ "," if not loop.last else "" }}
 {% endfor %}
     );
     

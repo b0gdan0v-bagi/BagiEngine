@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Reflection/FieldAttributes.h>
 #include <BECore/Reflection/MethodInfo.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Types/Types.h>
@@ -15,7 +16,8 @@ namespace BECore {
     /**
      * @brief Information about a reflected field
      *
-     * Contains the field name and a pointer-to-member for accessing the field.
+     * Contains the field name, a pointer-to-member for accessing the field and the attributes of
+     * `BE_FIELD_ATTRS(...)` (`FieldAttributes{}` when the field has none).
      *
      * @tparam Class The class containing the field
      * @tparam T The type of the field
@@ -24,8 +26,9 @@ namespace BECore {
     struct FieldInfo {
         StringView name;
         T Class::* ptr;
+        FieldAttributes attributes;
 
-        constexpr FieldInfo(StringView n, T Class::* p) noexcept : name(n), ptr(p) {}
+        constexpr FieldInfo(StringView n, T Class::* p, const FieldAttributes& a = {}) noexcept : name(n), ptr(p), attributes(a) {}
     };
 
     /**
@@ -33,6 +36,9 @@ namespace BECore {
      */
     template <typename Class, typename T>
     FieldInfo(StringView, T Class::*) -> FieldInfo<Class, T>;
+
+    template <typename Class, typename T>
+    FieldInfo(StringView, T Class::*, FieldAttributes) -> FieldInfo<Class, T>;
 
     /**
      * @brief Primary template for reflection traits (empty by default)

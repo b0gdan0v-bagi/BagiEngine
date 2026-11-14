@@ -12,7 +12,7 @@ from typing import List, Optional, Set
 
 from jinja2 import Environment, FileSystemLoader
 
-from .models import ClassData, EnumData, FactoryBaseData, DerivedClassData
+from .models import ClassData, EnumData, FactoryBaseData, DerivedClassData, FieldAttrs
 
 
 # Default templates directory (relative to this file)
@@ -36,6 +36,28 @@ def extract_intrusive_inner_type(type_name: str) -> Optional[str]:
     m = _INTRUSIVE_PTR_PATTERN.search(type_name)
     return m.group(1) if m else None
 
+
+
+def format_field_attributes(attrs: FieldAttrs) -> str:
+    """The C++ initializer of a FieldAttributes for one field, or '' when the field has no attributes.
+
+    Designated initializers in the declaration order of FieldAttributes (Reflection/FieldAttributes.h). A double is written with
+    repr(), the shortest text that reads back as the same value. The tooltip is the body of the literal as the source had it
+    (escapes included), so it goes between quotes unchanged.
+    """
+    if attrs.is_empty():
+        return ''
+    parts = []
+    if attrs.has_range:
+        parts.append(f'.hasRange = true, .rangeMin = {attrs.range_min!r}, .rangeMax = {attrs.range_max!r}')
+    if attrs.step:
+        parts.append(f'.step = {attrs.step!r}')
+    if attrs.tooltip:
+        parts.append(f'.tooltip = ::BECore::StringView{{"{attrs.tooltip}"}}')
+    for flag, member in (('readonly', 'readOnly'), ('hidden', 'hidden'), ('required', 'required')):
+        if getattr(attrs, flag):
+            parts.append(f'.{member} = true')
+    return '::BECore::FieldAttributes{ ' + ', '.join(parts) + ' }'
 
 
 def find_factory_ancestor(parent_class: Optional[str], classes_by_name: dict, factory_base_names: set) -> str:
@@ -283,6 +305,7 @@ class CodeGenerator:
                         'type_name': f.type_name,
                         'is_primitive': f.is_primitive,
                         'is_enum': f.is_enum,
+                        'attributes_init': format_field_attributes(f.attributes),
                     }
                     for f in cls.fields
                 ],
