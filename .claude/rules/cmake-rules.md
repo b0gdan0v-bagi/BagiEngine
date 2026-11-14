@@ -191,4 +191,4 @@ build/<preset>/
 └── lib/                 # Static libraries
 ```
 
-Example: `build/macos-debug/bin/BagiEngineTests`. A build without a preset (`-B dir`) writes `dir/bin` and `dir/lib`. Multi-config generators (Visual Studio) append the configuration, `bin/<Config>/`. `ctest` runs the gtests from the binary dir of their directory (`build/<preset>/tests`), not from `bin/`.
+Example: `build/macos-debug/bin/BagiEngineTests`. A build without a preset (`-B dir`) writes `dir/bin` and `dir/lib`. Multi-config generators (Visual Studio) append the configuration, `bin/<Config>/`. `ctest` runs the gtests from the build folder (`build/<preset>`, `WORKING_DIRECTORY ${CMAKE_BINARY_DIR}`), not from `bin/`.

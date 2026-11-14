@@ -33,7 +33,7 @@ tools/stress/tests/     # StressTests (be_add_game_tests in tools/stress/CMakeLi
 cmake --build --preset macos-debug --target BagiEngineTests StressTests
 ctest --preset macos-debug                                       # one process per test, 8 at a time
 ctest --preset macos-debug -j1                                   # one at a time
-build/macos-debug/bin/BagiEngineTests --gtest_filter='Reflection*'    # cwd must be inside the repository (config/ is found by walking up)
+(cd build/macos-debug && bin/BagiEngineTests --gtest_filter='Reflection*')    # cwd = the build folder: __FILE__ is relative to it with a ccache base_dir; config/ is found by walking up
 ```
 
 ### Adding a test

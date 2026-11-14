@@ -32,7 +32,7 @@
 # the input files of a PCH), so ccache would hash a different file in each checkout and miss in every object that uses it.
 # cmake/BagiCcacheLauncher.sh is the launcher of such a build: it compiles a PCH without ccache and writes <pch>.sum beside it (a
 # constant), and ccache (pch_external_checksum) hashes that file instead of the PCH; the headers are in the manifest of every
-# object anyway, so a changed header is a miss. Two more things make the PCH's own inputs path-free: the PCH header is given as
+# object anyway, so a changed header is a miss (the residual risk: a definition or include path private to the PCH's own compile that no header shows changes nothing in the constant; clean the cache entry or change a header after such an edit). Two more things make the PCH's own inputs path-free: the PCH header is given as
 # <BECore/pch.h> (CMake writes the argument into cmake_pch.hxx, which ccache hashes: a path there differs per checkout) and the
 # vendored SDL, whose own PCH is an absolute path in CMake's cmake_pch.h that we cannot change, is built without its PCH
 # (BagiEngine.cmake). A PCH is never taken from the cache: it names the files of the checkout that made it and Clang refuses it
