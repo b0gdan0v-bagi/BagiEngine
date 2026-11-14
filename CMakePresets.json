@@ -101,9 +101,13 @@
         {
             "name": "asan-windows-crt",
             "hidden": true,
-            "description": "ASan's Windows runtime is built against the release C runtime, so the Debug build type links /MD (asserts and expects stay ON, no NDEBUG). With a runtime that supports the debug C runtime, MultiThreadedDebugDLL is the one-line change",
+            "description": "No DLL in the build, one static release C runtime (/MT, asserts and expects stay ON, no NDEBUG): the ASan runtime for /MD is a DLL thunk set that defines malloc, so every DLL of the build fails to link with 'duplicate symbol: malloc' against the UCRT import, and the static ASan runtime (asan_cxx is /MT) is refused by an /MD object (/failifmismatch RuntimeLibrary). So SDL, SDL_image and its codecs are static too (the engine's executables then need no SDL DLL); the debug C runtime is not supported by the ASan runtime",
             "cacheVariables": {
-                "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreadedDLL"
+                "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded",
+                "ENGINE_STATIC_SDL": "ON",
+                "SDLIMAGE_DEPS_SHARED": "OFF",
+                "SDLIMAGE_WEBP_SHARED": "OFF",
+                "SDLIMAGE_TIF_SHARED": "OFF"
             }
         },
         {
@@ -689,8 +693,9 @@
             "displayName": "Windows Clang Ninja Debug with AddressSanitizer + UBSan",
             "inherits": "test-windows",
             "configurePreset": "windows-clang-asan",
+            "description": "No detect_stack_use_after_return here: a test that starts 20000 threads one after the other (TaskSystemTest.ConcurrentStartAndCancelKeepStatusConsistent) stops with 'failed to allocate FakeStack (error code: 1455)' (out of commit memory, one fake stack of 11 MB per thread), and passes without the option",
             "environment": {
-                "ASAN_OPTIONS": "detect_stack_use_after_return=1:strict_string_checks=1",
+                "ASAN_OPTIONS": "strict_string_checks=1",
                 "UBSAN_OPTIONS": "print_stacktrace=1"
             }
         },
