@@ -21,9 +21,12 @@ from typing import Any
 
 import scenario
 from bagi_control_client import ControlError
+from bagi_reference import check_reference, default_failures_dir
 from bagi_session import GameSession, SessionError
 from game_process import DEFAULT_STARTUP_TIMEOUT, PORT_TAKEN_MARKER, preset_executable
 from scenario_shrink import shrink
+
+import png_ops  # noqa: E402  (after bagi_reference, which puts tools/shots on sys.path)
 
 EXIT_PASSED = 0
 EXIT_FAILED = 1
@@ -52,6 +55,7 @@ class PlayResult:
     error_step: int | None = None
     steps: list[scenario.Step] = field(default_factory=list)
     changed: list[int] = field(default_factory=list)
+    reference_notes: list[str] = field(default_factory=list)  # what an update run did to the reference pictures
 
     @property
     def passed(self) -> bool:
@@ -86,8 +90,13 @@ def play(
     lenient: bool = False,
     strict_step: int | None = None,
     startup_timeout: float = DEFAULT_STARTUP_TIMEOUT,
+    base: Path = Path("."),
+    failures_dir: Path | None = None,
 ) -> PlayResult:
     """Starts the game, plays `steps` and stops it. Stops at the first line that fails, unless `update`, which plays all and rewrites the expectations.
+
+    `base` is the folder of the scenario file, which the `reference` pictures are relative to; `failures_dir` is where the pictures of a failed
+    comparison go (default: `default_failures_dir` of a file named `scenario`). An update run also rewrites the reference pictures.
 
     `lenient` tolerates an error a line did not expect (the shrinker's probes), except at `strict_step`, the line the probe is about. `logClean` is judged after the game has quit: the game's stdout is
     block-buffered into its log, so a Warning may not be in the file while the game runs; the failure still names the line that asked for it.
@@ -104,7 +113,7 @@ def play(
             result.failed_step = HEADER_STEP
             result.failure = scenario.Failure("game", header.game, str(description.get("activeGame")))
             return result
-        if not _play_steps(session, steps, result, update, lenient, strict_step):
+        if not _play_steps(session, steps, result, update, lenient, strict_step, base, failures_dir or default_failures_dir(Path("scenario"))):
             return result
         try:
             quit_answer = session.quit()
@@ -123,7 +132,9 @@ def play(
     return result
 
 
-def _play_steps(session: GameSession, steps: list[scenario.Step], result: PlayResult, update: bool, lenient: bool, strict_step: int | None) -> bool:
+def _play_steps(
+    session: GameSession, steps: list[scenario.Step], result: PlayResult, update: bool, lenient: bool, strict_step: int | None, base: Path, failures_dir: Path
+) -> bool:
     """Sends the calls in order; False when the run has to stop (`result` says why)."""
     versions = scenario.VersionTracker()
     for index, step in enumerate(steps):
@@ -133,6 +144,15 @@ def _play_steps(session: GameSession, steps: list[scenario.Step], result: PlayRe
                 answer = session.call(step.method, step.params)
                 outcome.result = answer
                 outcome.version_step = versions.step_of(answer)
+                if "reference" in step.expect:
+                    spec = scenario.ReferenceSpec.from_expect(step.expect["reference"])
+                    outcome.reference = check_reference(spec, answer, base, update, failures_dir, Path(spec.png).stem)
+                    if outcome.reference.note:
+                        result.reference_notes.append(outcome.reference.note)
+                    if update and not outcome.reference.ok:  # no picture to keep or no place to write it: the update did not happen
+                        result.failed_step = index
+                        result.failure = scenario.Failure("reference", outcome.reference.expected, outcome.reference.actual)
+                        return False
             except ControlError as error:
                 outcome.error_code, outcome.error_message = error.code, error.message
             wanted = step.expect.get("event")
@@ -197,7 +217,8 @@ def parse_arguments(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--preset", help="the CMake preset that built the game: the executable is build/<preset>/bin/<game>")
     parser.add_argument("--game", help="the executable name for --preset, e.g. BagiStress")
     parser.add_argument("--root", type=Path, help="the repository whose build/ folder --preset means (default: the one holding these tools)")
-    parser.add_argument("--update", action="store_true", help="play every call without checking and rewrite the expectations of the file from the run")
+    parser.add_argument("--update", action="store_true", help="play every call without checking and rewrite the expectations of the file and its reference pictures from the run")
+    parser.add_argument("--failures", type=Path, metavar="DIR", help="where the picture and the difference map of a failed reference go (default: <temp>/bagi-reference/<scenario name>)")
     parser.add_argument("--shrink", type=Path, metavar="OUT", help="write to OUT the fewest calls of the scenario that still fail the same way (the scenario has to fail)")
     parser.add_argument("--max-probes", type=int, default=DEFAULT_MAX_PROBES, help="game launches --shrink may spend (default %(default)s)")
     parser.add_argument("--timeout", type=float, default=DEFAULT_STARTUP_TIMEOUT, help="seconds to wait for the control API after the start")
@@ -232,10 +253,16 @@ def main(argv: list[str] | None = None) -> int:
         print(f"SKIPPED: {args.exe} does not exist")
         return EXIT_SKIPPED
 
+    failures_dir = args.failures if args.failures is not None else default_failures_dir(args.scenario)
+    if args.failures is not None and png_ops.inside_git_work_tree(failures_dir):
+        print(f"ERROR --failures {failures_dir} is inside a git work tree: pictures must stay outside every repository")
+        return EXIT_USAGE
+    play_arguments = {"base": args.scenario.resolve().parent, "failures_dir": failures_dir, "startup_timeout": args.timeout}
+
     exe = args.exe.resolve()  # the game runs in its own folder
     if args.shrink is not None:
-        return _shrink(args, exe, header, steps, step_lines(text))
-    result = play(exe, header, steps, update=args.update, startup_timeout=args.timeout)
+        return _shrink(args, exe, header, steps, step_lines(text), play_arguments)
+    result = play(exe, header, steps, update=args.update, **play_arguments)
     if not result.passed:
         report(args.scenario, steps, step_lines(text), result)
         return EXIT_FAILED
@@ -245,9 +272,9 @@ def main(argv: list[str] | None = None) -> int:
     return _write_update(args.scenario, header, steps, step_lines(text), result)
 
 
-def _shrink(args: argparse.Namespace, exe: Path, header: scenario.Header, steps: list[scenario.Step], lines: list[int]) -> int:
+def _shrink(args: argparse.Namespace, exe: Path, header: scenario.Header, steps: list[scenario.Step], lines: list[int], play_arguments: dict[str, Any]) -> int:
     """Plays the file, which has to fail, then looks for the fewest calls that fail the same way and writes them to --shrink."""
-    full = play(exe, header, steps, startup_timeout=args.timeout)
+    full = play(exe, header, steps, **play_arguments)
     if full.passed:
         print(f"{args.scenario} passes, nothing to shrink")
         return EXIT_USAGE
@@ -273,7 +300,7 @@ def _shrink(args: argparse.Namespace, exe: Path, header: scenario.Header, steps:
         if key not in cache:
             launches += 1
             position = candidate.index(target)
-            probe = play(exe, header, [stripped[index] for index in candidate], lenient=True, strict_step=position, startup_timeout=args.timeout)
+            probe = play(exe, header, [stripped[index] for index in candidate], lenient=True, strict_step=position, **play_arguments)
             cache[key] = probe.failure is not None and probe.failed_step == position and probe.failure.expectation == expectation
         return cache[key]
 
@@ -296,6 +323,8 @@ def _write_update(path: Path, header: scenario.Header, steps: list[scenario.Step
     for index in result.changed:
         old, new = steps[index].expect, result.steps[index].expect
         print(f"line {lines[index]}  {describe_call(steps[index])}: {json.dumps(old)} -> {json.dumps(new)}")
+    for note in result.reference_notes:
+        print(note)
     try:
         scenario.dump(path, header, result.steps)
     except OSError as error:

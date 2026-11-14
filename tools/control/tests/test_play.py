@@ -1,12 +1,16 @@
 """The scenario player (bagi_play.py) through its command line, against the fake game executable (tests/fake_game.py)."""
 
 import json
+import tempfile
 from pathlib import Path
 
 import pytest
 
 import scenario
-from bagi_play import EXIT_FAILED, EXIT_PASSED, EXIT_SKIPPED, EXIT_USAGE, main
+from bagi_play import EXIT_FAILED, EXIT_PASSED, EXIT_SKIPPED, EXIT_USAGE, main  # first: bagi_play puts tools/shots on sys.path for png_ops
+from png_reader import PngImage, read_png
+
+import png_ops  # noqa: E402
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 HEADER = {"scenario": 1, "game": "Fake", "flags": ["--headless", "--manual-clock"]}
@@ -191,3 +195,136 @@ def test_every_shipped_scenario_loads():
         pytest.skip("no scenario file is shipped yet")
     for path in shipped:
         scenario.load(path)
+
+
+# --- reference pictures ---
+
+SHOT = {"method": "screenshot", "params": {"maxSize": 400}}
+
+
+def reference_line(png="references/x.png", **members):
+    return {**SHOT, "expect": {"reference": {"png": png, **members}}}
+
+
+def serve(monkeypatch, tmp_path, image):
+    """Makes the fake game's screenshot `image` (a PngImage) for the games started from now on."""
+    path = tmp_path / "served.png"
+    path.write_bytes(png_ops.encode_png(image))
+    monkeypatch.setenv("FAKE_GAME_PICTURE", str(path))
+
+
+def two_by_one(left, right):
+    return PngImage(2, 1, 3, [bytes(left + right)])
+
+
+@pytest.fixture
+def scenario_folder(tmp_path):
+    folder = tmp_path / "scenarios"
+    folder.mkdir()
+    return folder
+
+
+def test_a_reference_is_made_by_update_and_then_passes(fake_game_exe, scenario_folder, tmp_path, capsys):
+    path = write(scenario_folder, reference_line())
+    assert play(fake_game_exe, path, "--update") == EXIT_PASSED
+    reference = scenario_folder / "references" / "x.png"
+    assert f"created reference {reference}" in capsys.readouterr().out
+    assert read_png(reference.read_bytes()).pixel(1, 0) == (0, 0, 255)  # the 2x1 picture of the fake game
+    assert scenario.load(path)[1][0].expect == {"reference": {"png": "references/x.png"}}  # the line stays as written
+    assert play(fake_game_exe, path, "--failures", str(tmp_path / "failures")) == EXIT_PASSED
+
+
+def test_update_fails_when_the_reference_cannot_be_written(fake_game_exe, scenario_folder, capsys):
+    (scenario_folder / "references").write_text("a file where the folder should be")
+    path = write(scenario_folder, reference_line())
+    before = path.read_text()
+    assert play(fake_game_exe, path, "--update") == EXIT_FAILED
+    output = capsys.readouterr().out
+    assert f"FAILED {path}:2  screenshot" in output and "expected reference: a writable reference" in output and "UPDATED" not in output
+    assert path.read_text() == before
+
+
+def test_update_fails_when_the_screenshot_answers_without_a_picture(fake_game_exe, scenario_folder, monkeypatch, capsys):
+    monkeypatch.setenv("FAKE_GAME_NO_PICTURE", "1")
+    path = write(scenario_folder, reference_line())
+    before = path.read_text()
+    assert play(fake_game_exe, path, "--update") == EXIT_FAILED
+    output = capsys.readouterr().out
+    assert f"FAILED {path}:2  screenshot" in output and "no usable picture" in output and "UPDATED" not in output
+    assert path.read_text() == before
+    assert not (scenario_folder / "references").exists()
+
+
+def test_a_second_update_of_an_equal_picture_says_nothing_and_writes_nothing(fake_game_exe, scenario_folder, capsys):
+    path = write(scenario_folder, reference_line())
+    play(fake_game_exe, path, "--update")
+    reference = scenario_folder / "references" / "x.png"
+    stamp = reference.stat().st_mtime_ns
+    capsys.readouterr()
+    assert play(fake_game_exe, path, "--update") == EXIT_PASSED
+    output = capsys.readouterr().out
+    assert "created reference" not in output and "updated reference" not in output and reference.stat().st_mtime_ns == stamp
+
+
+def test_a_changed_picture_fails_names_the_two_files_and_update_accepts_it(fake_game_exe, scenario_folder, tmp_path, monkeypatch, capsys):
+    path = write(scenario_folder, reference_line(maxShare=0.25))
+    play(fake_game_exe, path, "--update")
+    serve(monkeypatch, tmp_path, two_by_one((255, 0, 0), (0, 255, 0)))
+    failures = tmp_path / "failures"
+    capsys.readouterr()
+    assert play(fake_game_exe, path, "--failures", str(failures)) == EXIT_FAILED
+    output = capsys.readouterr().out
+    assert f"FAILED {path}:2  screenshot" in output and "expected reference:" in output and "50% changed" in output
+    assert str(failures / "x.actual.png") in output and str(failures / "x.diff.png") in output
+    assert (failures / "x.actual.png").is_file() and (failures / "x.diff.png").is_file()
+    assert not list(scenario_folder.rglob("*.diff.png"))  # nothing is written into the scenario's folder
+
+    assert play(fake_game_exe, path, "--update") == EXIT_PASSED
+    assert "updated reference" in capsys.readouterr().out
+    assert play(fake_game_exe, path, "--failures", str(failures)) == EXIT_PASSED
+
+
+def test_the_threshold_and_the_region_of_a_line_decide(fake_game_exe, scenario_folder, tmp_path, monkeypatch):
+    path = write(scenario_folder, reference_line(threshold=10, region=[0, 0, 0, 0]))
+    play(fake_game_exe, path, "--update")
+    serve(monkeypatch, tmp_path, two_by_one((255, 5, 0), (0, 0, 0)))  # the first pixel within the threshold, the second far off but outside the region
+    assert play(fake_game_exe, path, "--failures", str(tmp_path / "failures")) == EXIT_PASSED
+
+
+def test_a_missing_reference_fails_and_says_how_to_make_it(fake_game_exe, scenario_folder, tmp_path, capsys):
+    path = write(scenario_folder, reference_line())
+    assert play(fake_game_exe, path, "--failures", str(tmp_path / "failures")) == EXIT_FAILED
+    output = capsys.readouterr().out
+    assert "does not exist" in output and "--update" in output
+
+
+def test_the_default_failure_pictures_go_to_the_temp_folder(fake_game_exe, scenario_folder, tmp_path, monkeypatch):
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path / "temp"))
+    path = write(scenario_folder, reference_line(), name="shot_case.jsonl")
+    (tmp_path / "temp").mkdir()
+    play(fake_game_exe, path, "--update")
+    serve(monkeypatch, tmp_path, two_by_one((1, 2, 3), (4, 5, 6)))
+    assert play(fake_game_exe, path) == EXIT_FAILED
+    assert (tmp_path / "temp" / "bagi-reference" / "shot_case" / "x.actual.png").is_file()
+
+
+def test_a_reference_on_a_call_that_is_not_a_screenshot_exits_two(fake_game_exe, scenario_folder, capsys):
+    path = write(scenario_folder, {"method": "get_state", "expect": {"reference": {"png": "x.png"}}})
+    assert play(fake_game_exe, path) == EXIT_USAGE
+    assert ":2" in capsys.readouterr().out
+
+
+def test_a_failures_folder_inside_a_work_tree_exits_two(fake_game_exe, scenario_folder, capsys):
+    path = write(scenario_folder, reference_line())
+    assert play(fake_game_exe, path, "--failures", str(REPOSITORY_ROOT / "tools" / "shots")) == EXIT_USAGE
+    assert "git work tree" in capsys.readouterr().out
+
+
+def test_the_shrinker_keeps_a_failing_reference(fake_game_exe, scenario_folder, tmp_path, monkeypatch):
+    path = write(scenario_folder, {"method": "get_state"}, {"method": "step", "params": {"frames": 1}}, reference_line())
+    play(fake_game_exe, path, "--update")
+    serve(monkeypatch, tmp_path, two_by_one((9, 9, 9), (9, 9, 9)))
+    shrunk = tmp_path / "short.jsonl"
+    assert play(fake_game_exe, path, "--shrink", str(shrunk), "--failures", str(tmp_path / "failures")) == EXIT_PASSED
+    _header, steps = scenario.load(shrunk)
+    assert [step.method for step in steps] == ["screenshot"] and "reference" in steps[0].expect

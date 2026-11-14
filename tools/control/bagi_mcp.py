@@ -10,12 +10,14 @@ bagi_session.py. The engine has no MCP dependency: this is a separate process th
 
 import atexit
 import functools
+import json
 from typing import Any, Callable
 
 from mcp.server.mcpserver import Image, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
 from bagi_control_client import ControlError
+from bagi_image import ImageError, run_image_diff
 from bagi_session import GameSession, SessionError
 
 INSTRUCTIONS = """\
@@ -28,6 +30,9 @@ follow only after a step, so call step before screenshot when the picture should
 
 Every action comes from list_actions: pass one of them to perform_action as it is. A refused action is an error with a
 code (illegal_action, game_over, ...), the state stays as it was. Call quit when done.
+
+To compare two pictures (a before and an after, a render and its mockup, two backends) call image_diff: a and b are PNG files or "screen" (the connected game's
+picture now); it answers the numbers and a map of the difference, with no game needed for two files.
 
 To keep a bug as a test, call record_start right after launch_game (or pass record= to launch_game) and record_stop when done: the file is
 a scenario that replays from a fresh start of the game, and its calls become the test.
@@ -48,7 +53,7 @@ def reports_errors(tool: Callable[..., Any]) -> Callable[..., Any]:
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         try:
             return tool(*args, **kwargs)
-        except (ControlError, SessionError) as error:
+        except (ControlError, SessionError, ImageError) as error:
             raise ToolError(str(error)) from error
 
     return wrapper
@@ -151,6 +156,26 @@ def screenshot(max_size: int | None = None) -> Image:
     """
     png, _size = session.screenshot(max_size)
     return Image(data=png, format="png")
+
+
+@server.tool()
+@reports_errors
+def image_diff(a: str, b: str, out: str = "", threshold: int = 0, region: list[int] | None = None) -> list[str | Image]:
+    """Compares picture b with picture a (the reference) and answers the numbers as JSON and a map of the difference as an image: a is dimmed to grey, red is changed.
+
+    a, b: a PNG file (a path, `~` allowed, relative to where this server runs) or the word `screen`, the picture of the connected game now at full size
+    (step first so it shows the last action). Two files need no game. Use it for a before and an after of a change, a render against its mockup (the
+    mockup as b), or the same scene on two backends.
+    threshold: a pixel is changed when any channel differs by more than this (0 to 255, default 0: any difference). Use a few units to ignore anti-aliasing.
+    region: [x0, y0, x1, y1] in pixels of a, corners inclusive, to compare only that box; a box found in an earlier answer (`boundingBox`, `regions`) can be given back as it is.
+    out: a file to write the full-size map to (the folder must exist, outside every git repository); the answer then has `out`. The image in the answer is the map
+    shrunk to at most 1024 pixels.
+    A b of another size is scaled to the size of a (`scaled`; `aspectDiffers` when its shape differs, so it was stretched); a 3 channel picture beside a 4 channel one is compared on RGB.
+    Answers `equal`, `changed` and `compared` pixels, `share` (0 to 1), `boundingBox` of all changes (null when none), the biggest `regions` ({box, changed, shareOfPicture}),
+    and what was done to the pictures. An unreadable file or a bad region is an error that says so.
+    """
+    stats, preview = run_image_diff(session, a, b, out, threshold, region)
+    return [json.dumps(stats), Image(data=preview, format="png")]
 
 
 @server.tool()

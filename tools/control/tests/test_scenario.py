@@ -356,3 +356,89 @@ def test_what_updated_expect_writes_holds_for_a_refused_call():
     outcome = refused("not_found")
     for expect in ({"versionStep": 1}, {"equal": {"a": 1}}, {"result": {"x": 1}, "logClean": True}, {"error": "illegal_action"}, {"pointers": {"/a": 1}}):
         assert evaluate(scenario.updated_expect(expect, outcome), outcome) is None, expect
+
+
+# --- reference ---
+
+REFERENCE = {"png": "references/x.png", "threshold": 2, "maxShare": 0.0005, "region": [0, 0, 9, 9]}
+
+
+def screenshot_line(**members) -> str:
+    return HEADER_LINE + "\n" + json.dumps({"method": "screenshot", **members})
+
+
+def test_a_reference_is_read_with_its_defaults():
+    _header, steps = scenario.parse(screenshot_line(expect={"reference": REFERENCE}))
+    assert steps[0].expect == {"reference": REFERENCE}
+    spec = scenario.ReferenceSpec.from_expect(REFERENCE)
+    assert spec == scenario.ReferenceSpec("references/x.png", 2, 0.0005, [0, 0, 9, 9])
+    assert scenario.ReferenceSpec.from_expect({"png": "a.png"}) == scenario.ReferenceSpec("a.png", 0, 0.0, None)
+
+
+@pytest.mark.parametrize(
+    "reference, text",
+    [
+        ("x.png", "expect.reference has to be an object"),
+        ({}, "needs \"png\""),
+        ({"png": ""}, "needs \"png\""),
+        ({"png": 3}, "needs \"png\""),
+        ({"png": "/abs/x.png"}, "relative to the scenario file"),
+        ({"png": "C:\\x.png"}, "relative to the scenario file"),
+        ({"png": "x.png", "threshold": 256}, "threshold"),
+        ({"png": "x.png", "threshold": -1}, "threshold"),
+        ({"png": "x.png", "threshold": 1.5}, "threshold"),
+        ({"png": "x.png", "threshold": True}, "threshold"),
+        ({"png": "x.png", "maxShare": 1.5}, "maxShare"),
+        ({"png": "x.png", "maxShare": -0.1}, "maxShare"),
+        ({"png": "x.png", "maxShare": "0"}, "maxShare"),
+        ({"png": "x.png", "region": [0, 0, 1]}, "region"),
+        ({"png": "x.png", "region": [0, 0, 1, 1.5]}, "region"),
+        ({"png": "x.png", "region": "all"}, "region"),
+        ({"png": "x.png", "extra": 1}, "unknown member \"extra\""),
+    ],
+)
+def test_a_bad_reference_is_refused_with_its_line(reference, text):
+    error = parse_error(screenshot_line(expect={"reference": reference}))
+    assert text in str(error) and error.line == 2
+
+
+def test_a_reference_on_another_call_names_the_line():
+    error = parse_error(step_line(expect={"reference": {"png": "x.png"}}))
+    assert error.line == 2 and "screenshot" in str(error) and "get_state" in str(error)
+
+
+def test_a_reference_that_is_not_ok_is_a_failure_with_its_texts():
+    outcome = Outcome(result={}, reference=scenario.ReferenceCheck(False, "at most 0%", "3% changed"))
+    failure = evaluate({"reference": REFERENCE}, outcome)
+    assert failure == scenario.Failure("reference", "at most 0%", "3% changed")
+    assert evaluate({"reference": REFERENCE}, Outcome(result={}, reference=scenario.ReferenceCheck(True))) is None
+    assert evaluate({"reference": REFERENCE}, Outcome(result={})) is None  # the call failed or nothing was compared
+    assert evaluate({}, outcome) is None  # a line that asks for no reference does not fail on one
+
+
+def test_the_error_of_a_screenshot_is_judged_before_its_reference():
+    outcome = Outcome(error_code="no_scene", reference=scenario.ReferenceCheck(False, "a", "b"))
+    assert evaluate({"reference": REFERENCE}, outcome).expectation == "error"
+
+
+def test_a_recording_never_writes_a_reference():
+    outcome = Outcome(result={"width": 4, "height": 2, "png_base64": "AAAA"}, version_step=1, reference=scenario.ReferenceCheck(True))
+    assert "reference" not in scenario.minimal_expect(outcome)
+    assert "reference" not in scenario.full_expect(outcome)
+
+
+def test_update_keeps_the_reference_as_written():
+    outcome = Outcome(result={"width": 4, "height": 2, "png_base64": "AAAA"})
+    kept = scenario.updated_expect({"reference": REFERENCE, "equal": {"width": 1}}, outcome)
+    assert kept == {"equal": {"width": 4}, "reference": REFERENCE}
+    assert scenario.updated_expect({"reference": REFERENCE}, outcome) == {"reference": REFERENCE}
+
+
+def test_a_reference_survives_a_dump_and_a_load(tmp_path):
+    path = tmp_path / "play.jsonl"
+    header = Header(1, "Sample")
+    steps = [Step("screenshot", {"maxSize": 400}, {"reference": REFERENCE, "versionStep": 0, "equal": {"width": 4}})]
+    scenario.dump(path, header, steps)
+    line = path.read_text(encoding="utf-8").splitlines()[1]
+    assert line.index('"equal"') < line.index('"reference"') < line.index('"versionStep"')
+    assert scenario.load(path) == (header, steps)
