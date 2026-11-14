@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/PoolString/PoolString.h>
+#include <BECore/PoolString/PoolStringMap.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/Resource/IResource.h>
 #include <BECore/Threading/SharedMutex.h>

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
+
 namespace BECore::Utf8 {
 
     /// What an invalid byte sequence decodes to

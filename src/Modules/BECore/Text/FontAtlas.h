@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Math/Rect.h>
 #include <BECore/Text/Font.h>
 #include <BECore/Text/TextSettings.h>
 

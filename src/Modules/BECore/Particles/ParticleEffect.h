@@ -1,6 +1,8 @@
 #pragma once
 
 #include <BECore/Animation/Easing.h>
+#include <BECore/Math/Color.h>
+#include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Renderer/BlendMode.h>
 
 namespace BECore {
