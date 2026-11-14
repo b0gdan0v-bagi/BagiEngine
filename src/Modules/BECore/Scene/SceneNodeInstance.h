@@ -1,7 +1,9 @@
 #pragma once
 
+#include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/Scene/SceneNode.h>
 #include <BECore/Scene/SceneNodeFiles.h>
+#include <BECore/Types/Types.h>
 
 namespace BECore {
 

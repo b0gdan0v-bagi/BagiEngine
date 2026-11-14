@@ -1,19 +1,6 @@
 # Headers that do not compile alone (CI/scripts/check_headers.py). A fix removes lines, nothing is added.
 # Regenerate: python3 CI/scripts/check_headers.py --root . --build build/macos-debug --baseline CI/scripts/header_baseline.txt --update-baseline
 src/Application/Application.h
-src/Modules/BECore/Scene/Components/ChangeToRandomColorDebugComponent.h
-src/Modules/BECore/Scene/Components/ClickableComponent.h
-src/Modules/BECore/Scene/Components/QuadRendererComponent.h
-src/Modules/BECore/Scene/Components/RenderProbeComponent.h
-src/Modules/BECore/Scene/Scene.h
-src/Modules/BECore/Scene/SceneDrawSystem.h
-src/Modules/BECore/Scene/SceneLoader.h
-src/Modules/BECore/Scene/SceneManager.h
-src/Modules/BECore/Scene/SceneNode.h
-src/Modules/BECore/Scene/SceneNodeFiles.h
-src/Modules/BECore/Scene/SceneNodeInstance.h
-src/Modules/BECore/Scene/SceneRenderData.h
-src/Modules/BECore/Scene/SceneView.h
 src/Modules/BECore/UI/UIAnchorPresets.h
 src/Modules/BECore/UI/UICanvasComponent.h
 src/Modules/BECore/UI/UICanvasLayout.h
@@ -38,17 +25,13 @@ src/Modules/BECore/UI/UIThemes.h
 src/Modules/BECore/UI/UITidyMessage.h
 src/Modules/BECore/UI/UIToggleComponent.h
 src/Modules/BECore/UI/UITooltip.h
-src/Modules/BECore/UI/UIVariantCondition.h
 src/Modules/BECore/UI/UIVars.h
 src/Modules/BECore/UI/UIWebCompiler.h
 src/Modules/BECore/UI/UIWebReport.h
-src/Modules/BECore/Widgets/WidgetList.h
-src/Modules/BECore/Widgets/WidgetManager.h
 src/Modules/Events/src/Events/EventsProviderManager.h
 src/Modules/Events/src/Events/IEventsProvider.h
 src/Modules/Events/src/Events/InputEvents.h
 src/Modules/Events/src/Events/RenderEvents.h
-src/Modules/Events/src/Events/SceneEvents.h
 src/Modules/Games/src/Games/GameManager.h
 src/Modules/Games/src/Games/GamesConfig.h
 src/Modules/Games/src/Games/IControllableGame.h
@@ -117,12 +100,7 @@ src/Widgets/EditorLayout/PreferencesWindow.h
 src/Widgets/EditorLayout/UserFileIo.h
 src/Widgets/ImGuiFonts.h
 src/Widgets/Profiler/ProfilerWidget.h
-src/Widgets/SceneEditor/HierarchyModel.h
-src/Widgets/SceneEditor/HierarchyPanel.h
-src/Widgets/SceneEditor/SceneConfigWriter.h
 src/Widgets/SceneEditor/SceneEditorWidget.h
-src/Widgets/SceneEditor/ScenePick.h
-src/Widgets/SceneEditor/SceneSelection.h
 src/Widgets/SceneEditor/UIRectInspector.h
 src/Widgets/TextureEditor/TextureEditorWidget.h
 src/Widgets/Viewport/GizmoDrag.h
@@ -146,7 +124,6 @@ tests/BECore/Rooms/RoomTableDriver.h
 tests/BECore/Rooms/TestClient.h
 tests/BECore/Rooms/TestRandom.h
 tests/BECore/Save/SaveGameTest.h
-tests/BECore/SceneViewTest.h
 tests/BECore/Tls/FakeTlsStream.h
 tests/BECore/WebSocketTestClient.h
 tests/Common/AssertBridge.h
@@ -157,7 +134,6 @@ tests/Common/Printers.h
 tests/Common/RecordingGpuDevice.h
 tests/Common/RecordingRenderer.h
 tests/Common/TempPath.h
-tests/Common/UILayoutMatrix.h
 tests/Common/UIPartShapeChecks.h
 tests/Common/UIThemeTestSupport.h
 tests/Fuzz/FuzzMutator.h
