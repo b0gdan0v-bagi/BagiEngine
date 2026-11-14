@@ -10,16 +10,3 @@ tests/BECore/Rooms/RoomTableDriver.h
 tests/BECore/Rooms/TestClient.h
 tests/BECore/Save/SaveGameTest.h
 tests/BECore/Tls/FakeTlsStream.h
-tests/Common/AssertBridge.h
-tests/Common/ContentFilesCheck.h
-tests/Common/EngineEnvironment.h
-tests/Common/MigrationTwin.h
-tests/Common/Printers.h
-tests/Common/RecordingGpuDevice.h
-tests/Common/RecordingRenderer.h
-tests/Common/TempPath.h
-tests/Common/UIPartShapeChecks.h
-tests/Fuzz/FuzzMutator.h
-tests/Fuzz/FuzzProbeAccess.h
-tests/Fuzz/FuzzSeeds.h
-tests/Fuzz/FuzzTargets.h

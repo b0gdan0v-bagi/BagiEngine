@@ -1,8 +1,20 @@
 #pragma once
 
+#include <BECore/Format/Format.h>
+#include <BECore/Math/Rect.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
+#include <BECore/RefCounted/New.h>
 #include <BECore/Renderer/Gpu/GpuValidation.h>
 #include <BECore/Renderer/Gpu/IGpuDevice.h>
 #include <BECore/Renderer/ITexture.h>
+#include <BECore/Types/Types.h>
+#include <BECore/Utils/EnumUtils.h>
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <expected>
+#include <utility>
 
 namespace BECore::Tests {
 

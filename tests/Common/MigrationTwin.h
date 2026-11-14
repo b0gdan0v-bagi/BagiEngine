@@ -3,10 +3,15 @@
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Math/Rect.h>
+#include <BECore/Math/Vec2.h>
+#include <BECore/PoolString/PoolString.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
+#include <BECore/Types/Types.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIControl.h>
 #include <BECore/UI/UIImageComponent.h>
@@ -15,10 +20,19 @@
 #include <Common/RecordingRenderer.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
+#include <Events/SubscriptionHolder.h>
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <fstream>
+#include <functional>
 #include <gtest/gtest.h>
 #include <map>
 #include <regex>
 #include <set>
+#include <sstream>
+#include <utility>
 
 namespace BECore::Tests::MigrationTwin {
 

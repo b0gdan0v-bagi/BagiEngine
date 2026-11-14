@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/Time/GamePause.h>
 #include <Common/AssertBridge.h>
 #include <gtest/gtest.h>

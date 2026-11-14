@@ -1,5 +1,8 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
+#include <cstddef>
+#include <cstdint>
 #include <span>
 
 namespace BECore::Fuzz {

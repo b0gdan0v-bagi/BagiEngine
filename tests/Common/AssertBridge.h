@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Events/SubscriptionHolder.h>
+
 namespace BECore {
     struct AssertEvent;
 }  // namespace BECore

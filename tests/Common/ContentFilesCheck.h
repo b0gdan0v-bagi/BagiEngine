@@ -1,7 +1,10 @@
 #pragma once
 
 #include <BECore/Config/ContentVersion.h>
+#include <BECore/Types/Types.h>
 #include <Common/Printers.h>
+#include <algorithm>
+#include <filesystem>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
