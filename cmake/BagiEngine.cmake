@@ -366,6 +366,15 @@ endif()
 # Build helpers shared by the engine modules, games and tests
 # =============================================================================
 
+# The PCH instantiates the templates it only declares (Clang's -fpch-instantiate-templates), once, when it is built; without the
+# option every TU that loads the PCH instantiates them again (the EnTT dispatcher, fmt and std::format rows of time_trace_report.py).
+# CMake adds the option to the PCH compile itself (property PCH_INSTANTIATE_TEMPLATES, ON by default) for Clang >= 11, Emscripten
+# included, and not for AppleClang, which its Modules/Compiler/Clang.cmake leaves out although AppleClang 17 has the option. MSVC
+# and GCC have no such option and get nothing.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+    set(CMAKE_CXX_COMPILE_OPTIONS_INSTANTIATE_TEMPLATES_PCH -fpch-instantiate-templates)
+endif()
+
 # be_force_include_pch(<target>)
 # Force-includes BECore/pch.h so sources can rely on it without including it themselves. The target
 # must also reuse the PCH: target_precompile_headers(<target> REUSE_FROM BECoreModule).
