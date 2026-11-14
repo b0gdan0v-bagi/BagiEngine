@@ -7,6 +7,7 @@
 #include <BECore/Scene/IComponent.h>
 #include <BECore/Types/Types.h>
 #include <cstdint>
+#include <entt/entt.hpp>
 
 namespace BECore {
 

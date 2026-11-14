@@ -56,15 +56,14 @@ namespace BECore {
     /**
      * @brief The listeners of one event type, type-erased: an ordered list of (instance, invoker) pairs.
      *
-     * It replaces the signal of an entt dispatcher with the same observable behavior:
      * - `Publish` calls the listeners from the last connected to the first, over the count read at its start, so a
      *   listener connected by a handler is not called in that dispatch.
      * - (instance, invoker) is the identity of a listener: connecting a pair again removes the old entry and appends.
-     * - A disconnect moves the last entry into the freed slot instead of shifting the tail, as entt does; the
-     *   order of the others changes.
+     * - A disconnect moves the last entry into the freed slot instead of shifting the tail, so the order of the
+     *   others changes; the order of subscribers after a re-subscribe is part of the contract.
      *
-     * A disconnect inside `Publish` (undefined in entt) is tolerated: the entry is marked, skipped if it has not
-     * run yet, and the list is compacted (order kept) when the outermost `Publish` ends. A connect appends.
+     * A disconnect inside `Publish` is tolerated: the entry is marked, skipped if it has not run yet, and the list
+     * is compacted (order kept) when the outermost `Publish` ends. A connect appends.
      * One thread only; a channel is never moved or destroyed while a connection to it lives (the channel of an
      * event type is a static that is never freed).
      *

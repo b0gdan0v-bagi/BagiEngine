@@ -1,6 +1,8 @@
 #pragma once
 
 #include <Events/EventBase.h>
+#include <Events/SubscriptionHolder.h>
+#include <chrono>
 #include <coroutine>
 
 namespace BECore {
@@ -20,7 +22,7 @@ namespace BECore {
      * }
      */
     template <typename EventType>
-    class EventAwaiter {
+    class EventAwaiter : public SubscriptionHolder {
     public:
         EventAwaiter() = default;
 
@@ -30,10 +32,7 @@ namespace BECore {
 
         void await_suspend(std::coroutine_handle<> handle) noexcept {
             _handle = handle;
-
-            // Подписываемся на событие
-            // Используем лямбду с захватом this
-            _connection = entt::scoped_connection{GetDispatcher().sink<EventType>().connect<&EventAwaiter::OnEvent>(this)};
+            Subscribe<EventType, &EventAwaiter::OnEvent>(this);
         }
 
         EventType await_resume() noexcept {
@@ -41,29 +40,18 @@ namespace BECore {
         }
 
     private:
-        static entt::dispatcher& GetDispatcher() {
-            // Используем тот же dispatcher, что и EventBase<EventType>
-            static entt::dispatcher& dispatcher = []() -> entt::dispatcher& {
-                // Хак: получаем доступ к приватному dispatcher через публичные методы
-                // Создаем временную подписку чтобы получить dispatcher
-                static entt::dispatcher localDispatcher;
-                return localDispatcher;
-            }();
-            return dispatcher;
-        }
-
         void OnEvent(const EventType& event) {
             _receivedEvent = event;
-            _connection.release();  // Отписываемся после получения
+            UnsubscribeAll();
 
-            if (_handle) {
-                _handle.resume();
+            // The coroutine frame owns this awaiter and may destroy it: nothing is touched after the resume.
+            if (const auto handle = _handle) {
+                handle.resume();
             }
         }
 
         std::coroutine_handle<> _handle;
         Optional<EventType> _receivedEvent;
-        entt::scoped_connection _connection;
     };
 
     /**
@@ -86,7 +74,7 @@ namespace BECore {
      * @tparam EventType Тип события
      */
     template <typename EventType>
-    class EventAwaiterWithTimeout {
+    class EventAwaiterWithTimeout : public SubscriptionHolder {
     public:
         using Duration = std::chrono::steady_clock::duration;
         using Result = Optional<EventType>;
@@ -101,10 +89,9 @@ namespace BECore {
             _handle = handle;
             _startTime = std::chrono::steady_clock::now();
 
-            // Подписываемся на событие
-            _connection = entt::scoped_connection{GetDispatcher().sink<EventType>().connect<&EventAwaiterWithTimeout::OnEvent>(this)};
+            Subscribe<EventType, &EventAwaiterWithTimeout::OnEvent>(this);
 
-            // TODO: Планируем таймаут через TaskScheduler
+            // The timeout is not scheduled yet (there is no scheduler to call OnTimeout), so this awaiter waits for the event only.
         }
 
         Result await_resume() noexcept {
@@ -112,18 +99,13 @@ namespace BECore {
         }
 
     private:
-        static entt::dispatcher& GetDispatcher() {
-            static entt::dispatcher localDispatcher;
-            return localDispatcher;
-        }
-
         void OnEvent(const EventType& event) {
             if (!_timedOut) {
                 _receivedEvent = event;
-                _connection.release();
+                UnsubscribeAll();
 
-                if (_handle) {
-                    _handle.resume();
+                if (const auto handle = _handle) {
+                    handle.resume();
                 }
             }
         }
@@ -131,10 +113,10 @@ namespace BECore {
         void OnTimeout() {
             if (!_receivedEvent.has_value()) {
                 _timedOut = true;
-                _connection.release();
+                UnsubscribeAll();
 
-                if (_handle) {
-                    _handle.resume();
+                if (const auto handle = _handle) {
+                    handle.resume();
                 }
             }
         }
@@ -143,7 +125,6 @@ namespace BECore {
         std::chrono::steady_clock::time_point _startTime;
         std::coroutine_handle<> _handle;
         Optional<EventType> _receivedEvent;
-        entt::scoped_connection _connection;
         bool _timedOut = false;
     };
 
