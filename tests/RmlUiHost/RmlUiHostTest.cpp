@@ -515,7 +515,7 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
 
     TEST_F(RmlUiHostTest, AClickOnAButtonEmitsItsAction) {
         auto doc = Doc("Main");
-        ASSERT_TRUE(doc->SetMarkup(Document(R"(<button id="play" data-action="Match3Play">Play</button>)",
+        ASSERT_TRUE(doc->SetMarkup(Document(R"(<button id="play" data-action="GamePlay">Play</button>)",
                                             "#play { position: absolute; left: 100dp; top: 100dp; width: 120dp; height: 40dp; background-color: #285a3c; pointer-events: auto; }")));
         Draw("Main");
         Recorder recorder;
@@ -527,13 +527,13 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
         EXPECT_TRUE(down);
         EXPECT_TRUE(up);
         ASSERT_EQ(recorder.actions.size(), 1u);
-        EXPECT_EQ(recorder.actions[0], "Match3Play"_intern);
+        EXPECT_EQ(recorder.actions[0], "GamePlay"_intern);
         EXPECT_EQ(recorder.gameDowns, 0) << "the click did not reach the game";
     }
 
     TEST_F(RmlUiHostTest, AReleaseElsewhereCancelsTheClick) {
         auto doc = Doc("Main");
-        ASSERT_TRUE(doc->SetMarkup(Document(R"(<button id="play" data-action="Match3Play">Play</button>)",
+        ASSERT_TRUE(doc->SetMarkup(Document(R"(<button id="play" data-action="GamePlay">Play</button>)",
                                             "#play { position: absolute; left: 100dp; top: 100dp; width: 120dp; height: 40dp; background-color: #285a3c; pointer-events: auto; }")));
         Draw("Main");
         Recorder recorder;
@@ -548,7 +548,7 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
 
     TEST_F(RmlUiHostTest, AClickOutsideTheElementsGoesToTheGame) {
         auto doc = Doc("Main");
-        ASSERT_TRUE(doc->SetMarkup(Document(R"(<button id="play" data-action="Match3Play">Play</button>)",
+        ASSERT_TRUE(doc->SetMarkup(Document(R"(<button id="play" data-action="GamePlay">Play</button>)",
                                             "#play { position: absolute; left: 100dp; top: 100dp; width: 120dp; height: 40dp; background-color: #285a3c; pointer-events: auto; }")));
         Draw("Main");
         Recorder recorder;
@@ -561,7 +561,7 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
 
     TEST_F(RmlUiHostTest, ADisabledButtonEmitsNothing) {
         auto doc = Doc("Main");
-        ASSERT_TRUE(doc->SetMarkup(Document(R"(<button id="play" data-action="Match3Play" disabled>Play</button>)",
+        ASSERT_TRUE(doc->SetMarkup(Document(R"(<button id="play" data-action="GamePlay" disabled>Play</button>)",
                                             "#play { position: absolute; left: 100dp; top: 100dp; width: 120dp; height: 40dp; background-color: #285a3c; pointer-events: auto; }")));
         Draw("Main");
         Recorder recorder;
@@ -796,7 +796,7 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
         const auto directory = MakeDirectory();
         constexpr const char* markup = R"(<rml><head><style>body {{ width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color: white; pointer-events: none; }}
 #play {{ position: absolute; left: {}dp; top: 100dp; width: 120dp; height: 40dp; background-color: #285a3c; pointer-events: auto; }}</style></head>
-<body data-model="vars"><button id="play" data-action="Match3Play">Score {{{{vars.score}}}}</button></body></rml>)";
+<body data-model="vars"><button id="play" data-action="GamePlay">Score {{{{vars.score}}}}</button></body></rml>)";
         Write(directory / "menu.rml", Format(markup, 100).c_str());
         auto doc = OpenFile(directory / "menu.rml");
         CoreManager::GetUIVars().Set("score"_intern, 7);
@@ -817,7 +817,7 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
         EXPECT_TRUE(input.DispatchMouseButtonDown(Button(350.0f, 120.0f, true)));
         input.DispatchMouseButtonUp(Button(350.0f, 120.0f, false));
         ASSERT_EQ(recorder.actions.size(), 1u);
-        EXPECT_EQ(recorder.actions[0], "Match3Play"_intern);
+        EXPECT_EQ(recorder.actions[0], "GamePlay"_intern);
     }
 
     TEST_F(RmlUiHostTest, MarkupFromCodeIsNotReplacedByTheFiles) {

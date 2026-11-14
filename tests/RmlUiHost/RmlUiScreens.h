@@ -22,13 +22,13 @@ namespace BECore::Tests::RmlUiScreens {
       <element type="UIElement" name="Play" height="56" fontSize="28" color="40,90,60,255">
         <components>
           <component type="UITextComponent" text="Play" align="Center" verticalAlign="Center" wrap="false"/>
-          <component type="UIInputClicker" action="Match3Play"/>
+          <component type="UIInputClicker" action="GamePlay"/>
         </components>
       </element>
       <element type="UIElement" name="Quit" height="56" fontSize="28" color="90,50,50,255">
         <components>
           <component type="UITextComponent" text="Quit" align="Center" verticalAlign="Center" wrap="false"/>
-          <component type="UIInputClicker" action="Match3Quit"/>
+          <component type="UIInputClicker" action="GameQuit"/>
         </components>
       </element>
     </children>
@@ -47,12 +47,12 @@ button { height: 56dp; font-size: 28dp; line-height: 56dp; text-align: center; p
 <body>
   <div id="Column">
     <div id="Title">Match 3</div>
-    <button id="Play" data-action="Match3Play">Play</button>
-    <button id="Quit" data-action="Match3Quit">Quit</button>
+    <button id="Play" data-action="GamePlay">Play</button>
+    <button id="Quit" data-action="GameQuit">Quit</button>
   </div>
 </body></rml>)";
 
-    inline constexpr const char* kMatch3HudXml = R"(<ui><elements>
+    inline constexpr const char* kGameHudXml = R"(<ui><elements>
   <element type="UIElement" name="Score" x="96" y="12" width="250" height="40" fontSize="28">
     <components>
       <component type="UITextComponent" text="Score: {score}" verticalAlign="Center"/>
@@ -63,13 +63,13 @@ button { height: 56dp; font-size: 28dp; line-height: 56dp; text-align: center; p
       <element type="UIElement" name="Reset" width="124" height="48" fontSize="24" color="40,90,60,255">
         <components>
           <component type="UITextComponent" text="Reset" align="Center" verticalAlign="Center" wrap="false"/>
-          <component type="UIInputClicker" action="Match3Reset"/>
+          <component type="UIInputClicker" action="GameReset"/>
         </components>
       </element>
       <element type="UIElement" name="Menu" width="124" height="48" fontSize="24" color="70,70,100,255">
         <components>
           <component type="UITextComponent" text="Menu" align="Center" verticalAlign="Center" wrap="false"/>
-          <component type="UIInputClicker" action="Match3Menu"/>
+          <component type="UIInputClicker" action="GameMenu"/>
         </components>
       </element>
     </children>
@@ -81,7 +81,7 @@ button { height: 56dp; font-size: 28dp; line-height: 56dp; text-align: center; p
   </element>
 </elements></ui>)";
 
-    inline constexpr const char* kMatch3HudRml = R"(<rml>
+    inline constexpr const char* kGameHudRml = R"(<rml>
 <head><style>
 body { width: 100%; height: 100%; font-family: "PT Sans"; color: white; pointer-events: none; }
 #Score { position: absolute; left: 96dp; top: 12dp; width: 250dp; height: 40dp; font-size: 28dp; line-height: 40dp; }
@@ -94,8 +94,8 @@ button { width: 124dp; height: 48dp; font-size: 24dp; line-height: 48dp; text-al
 <body data-model="vars">
   <div id="Score">Score: {{vars.score}}</div>
   <div id="Buttons">
-    <button id="Reset" data-action="Match3Reset">Reset</button>
-    <button id="Menu" data-action="Match3Menu">Menu</button>
+    <button id="Reset" data-action="GameReset">Reset</button>
+    <button id="Menu" data-action="GameMenu">Menu</button>
   </div>
   <div id="Seed">seed {{vars.seed}}</div>
 </body></rml>)";
@@ -113,8 +113,8 @@ button { width: 124dp; height: 48dp; font-size: 24dp; line-height: 48dp; text-al
     };
 
     inline const Screen kScreens[] = {
-        {"Match3 menu", kMenuXml, kMenuRml, CanvasSpace::Screen, 0.0f, 0.0f, 0.7f, {"Column", "Title", "Play", "Quit"}, {"Play", "Quit"}},
-        {"Match3 HUD", kMatch3HudXml, kMatch3HudRml, CanvasSpace::SceneView, 712.0f, 672.0f, 0.25f, {"Score", "Buttons", "Reset", "Menu", "Seed"}, {"Reset", "Menu"}},
+        {"Game menu", kMenuXml, kMenuRml, CanvasSpace::Screen, 0.0f, 0.0f, 0.7f, {"Column", "Title", "Play", "Quit"}, {"Play", "Quit"}},
+        {"Game HUD", kGameHudXml, kGameHudRml, CanvasSpace::SceneView, 712.0f, 672.0f, 0.25f, {"Score", "Buttons", "Reset", "Menu", "Seed"}, {"Reset", "Menu"}},
     };
 
     inline constexpr float kRectTolerance = 1.5f;  // the context is a whole number of pixels

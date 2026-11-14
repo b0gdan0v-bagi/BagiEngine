@@ -191,7 +191,7 @@ namespace BECore::Tests {
         constexpr const char* kHudHtml = R"(
 <div id="Hud" class="hud">
   <span id="Score">Score: {score}</span>
-  <button id="Reset" data-action="Match3Reset">Reset</button>
+  <button id="Reset" data-action="GameReset">Reset</button>
 </div>)";
 
         constexpr const char* kHudCss = R"(
@@ -215,7 +215,7 @@ button:hover { background: #3a6; }
         <element type="UIElement" name="Reset" anchor="BottomRight" x="-12" y="-10" width="96" height="48" fontSize="24" color="40,90,60,255" hoverColor="51,170,102,255">
           <components>
             <component type="UITextComponent" text="Reset" align="Center" verticalAlign="Center" wrap="false"/>
-            <component type="UIInputClicker" action="Match3Reset"/>
+            <component type="UIInputClicker" action="GameReset"/>
           </components>
         </element>
       </children>
@@ -228,7 +228,7 @@ button:hover { background: #3a6; }
   </variants>
 </ui>)";
 
-        // The main menu of Match3 as the game shipped it before its buttons became composed (games/Match3/config/SceneConfig.xml; the HTML compiler writes the composed form, whose layout is the
+        // A game's main menu as it shipped before its buttons became composed (the HTML compiler writes the composed form, whose layout is the
         // same), and the same menu in HTML + CSS
         constexpr const char* kMenuXml = R"(<ui><elements>
   <element type="UIStack" name="Column" anchor="Center" width="90%" maxWidth="320" height="232" direction="Vertical" spacing="16" crossAlign="Stretch">
@@ -241,13 +241,13 @@ button:hover { background: #3a6; }
       <element type="UIElement" name="Play" height="56" fontSize="28" color="40,90,60,255">
         <components>
           <component type="UITextComponent" text="Play" align="Center" verticalAlign="Center" wrap="false"/>
-          <component type="UIInputClicker" action="Match3Play"/>
+          <component type="UIInputClicker" action="GamePlay"/>
         </components>
       </element>
       <element type="UIElement" name="Quit" height="56" fontSize="28" color="90,50,50,255">
         <components>
           <component type="UITextComponent" text="Quit" align="Center" verticalAlign="Center" wrap="false"/>
-          <component type="UIInputClicker" action="Match3Quit"/>
+          <component type="UIInputClicker" action="GameQuit"/>
         </components>
       </element>
     </children>
@@ -257,8 +257,8 @@ button:hover { background: #3a6; }
         constexpr const char* kMenuHtml = R"(
 <div id="Column">
   <h1 id="Title">Match 3</h1>
-  <button id="Play" data-action="Match3Play">Play</button>
-  <button id="Quit" data-action="Match3Quit">Quit</button>
+  <button id="Play" data-action="GamePlay">Play</button>
+  <button id="Quit" data-action="GameQuit">Quit</button>
 </div>)";
 
         constexpr const char* kMenuCss = R"(
@@ -269,8 +269,8 @@ button  { height: 56px; font-size: 28px; }
 #Quit   { background: rgb(90, 50, 50); }
 )";
 
-        // The HUD of Match3 as the game shipped it before its buttons became composed (same note as the menu), and the same HUD in HTML + CSS
-        constexpr const char* kMatch3HudXml = R"(<ui><elements>
+        // A game's HUD as it shipped before its buttons became composed (same note as the menu), and the same HUD in HTML + CSS
+        constexpr const char* kGameHudXml = R"(<ui><elements>
   <element type="UIElement" name="Score" x="96" y="12" width="250" height="40" fontSize="28">
     <components>
       <component type="UITextComponent" text="Score: {score}" verticalAlign="Center"/>
@@ -281,13 +281,13 @@ button  { height: 56px; font-size: 28px; }
       <element type="UIElement" name="Reset" width="124" height="48" fontSize="24" color="40,90,60,255">
         <components>
           <component type="UITextComponent" text="Reset" align="Center" verticalAlign="Center" wrap="false"/>
-          <component type="UIInputClicker" action="Match3Reset"/>
+          <component type="UIInputClicker" action="GameReset"/>
         </components>
       </element>
       <element type="UIElement" name="Menu" width="124" height="48" fontSize="24" color="70,70,100,255">
         <components>
           <component type="UITextComponent" text="Menu" align="Center" verticalAlign="Center" wrap="false"/>
-          <component type="UIInputClicker" action="Match3Menu"/>
+          <component type="UIInputClicker" action="GameMenu"/>
         </components>
       </element>
     </children>
@@ -299,15 +299,15 @@ button  { height: 56px; font-size: 28px; }
   </element>
 </elements></ui>)";
 
-        constexpr const char* kMatch3HudHtml = R"(
+        constexpr const char* kGameHudHtml = R"(
 <span id="Score">Score: {score}</span>
 <div id="Buttons">
-  <button id="Reset" data-action="Match3Reset">Reset</button>
-  <button id="Menu" data-action="Match3Menu">Menu</button>
+  <button id="Reset" data-action="GameReset">Reset</button>
+  <button id="Menu" data-action="GameMenu">Menu</button>
 </div>
 <span id="Seed">seed {seed}</span>)";
 
-        constexpr const char* kMatch3HudCss = R"(
+        constexpr const char* kGameHudCss = R"(
 #Score   { left: 96px; top: 12px; width: 250px; height: 40px; font-size: 28px; vertical-align: middle; }
 #Buttons { anchor: top-right; right: 96px; top: 12px; width: 260px; height: 48px; display: flex; gap: 12px; align-items: stretch; }
 button   { width: 124px; height: 48px; font-size: 24px; }
@@ -1116,7 +1116,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         ASSERT_NE(reset->GetComponent<UITextComponent>(), nullptr);
         ASSERT_NE(reset->GetComponent<UIInputClicker>(), nullptr);
         EXPECT_EQ(reset->GetComponent<UITextComponent>()->text, "Reset");
-        EXPECT_EQ(reset->GetComponent<UIInputClicker>()->action.ToStringView(), "Match3Reset");
+        EXPECT_EQ(reset->GetComponent<UIInputClicker>()->action.ToStringView(), "GameReset");
         EXPECT_EQ(reset->hoverColor.r, 51);
         EXPECT_EQ(reset->hoverColor.g, 170);
         EXPECT_EQ(compiled->report.elements, 3u);
@@ -1171,12 +1171,12 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_TRUE(failures.empty()) << DescribeMatrixFailures(failures).c_str();
     }
 
-    TEST_F(UIWebTest, TheMatch3HudInHtmlLaysOutLikeTheShippedXml) {
-        const auto compiled = Compile(kMatch3HudHtml, kMatch3HudCss);
+    TEST_F(UIWebTest, TheGameHudInHtmlLaysOutLikeTheShippedXml) {
+        const auto compiled = Compile(kGameHudHtml, kGameHudCss);
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
         EXPECT_FALSE(compiled->report.HasIssues()) << compiled->report.issues[0].message.c_str() << " / " << compiled->xml.c_str();
 
-        const UIScreenContent shipped = ReadXml(kMatch3HudXml);
+        const UIScreenContent shipped = ReadXml(kGameHudXml);
         LaidOut web(compiled->content);
         LaidOut xml(shipped);
         web.InSceneView(712.0f, 672.0f);
@@ -1192,10 +1192,10 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->Element("Seed")->GetComponent<UITextComponent>()->textColor.r, 190);
     }
 
-    TEST_F(UIWebTest, TheMatch3HudInHtmlPassesTheSizeMatrixInTheMarginsOfItsView) {
+    TEST_F(UIWebTest, TheGameHudInHtmlPassesTheSizeMatrixInTheMarginsOfItsView) {
         constexpr float kViewWidth = 712.0f;
         constexpr float kViewHeight = 672.0f;
-        const auto compiled = Compile(kMatch3HudHtml, kMatch3HudCss);
+        const auto compiled = Compile(kGameHudHtml, kGameHudCss);
         LaidOut web(compiled->content);
         web.InSceneView(kViewWidth, kViewHeight);
         // The longest words the game can show
@@ -2744,10 +2744,10 @@ button  { height: 56px; font-size: 28px; }
         </components>
       </element>
       <element type="UIElement" name="Play" height="56" fontSize="28" color="@play">
-        <components><component type="UITextComponent" text="Play" align="Center" verticalAlign="Center" wrap="false"/><component type="UIInputClicker" action="Match3Play"/></components>
+        <components><component type="UITextComponent" text="Play" align="Center" verticalAlign="Center" wrap="false"/><component type="UIInputClicker" action="GamePlay"/></components>
       </element>
       <element type="UIElement" name="Quit" height="56" fontSize="28" color="@quit">
-        <components><component type="UITextComponent" text="Quit" align="Center" verticalAlign="Center" wrap="false"/><component type="UIInputClicker" action="Match3Quit"/></components>
+        <components><component type="UITextComponent" text="Quit" align="Center" verticalAlign="Center" wrap="false"/><component type="UIInputClicker" action="GameQuit"/></components>
       </element>
     </children>
   </element>

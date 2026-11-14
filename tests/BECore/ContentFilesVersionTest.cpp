@@ -22,10 +22,6 @@ namespace BECore::Tests {
         ExpectContentFilesAtCurrentVersion(EngineRoot() / "config");
     }
 
-    TEST(ContentFilesVersionTest, Match3ConfigIsCurrent) {
-        ExpectContentFilesAtCurrentVersion(EngineRoot() / "games" / "Match3" / "config");
-    }
-
     TEST(ContentFilesVersionTest, StressConfigIsCurrent) {
         ExpectContentFilesAtCurrentVersion(EngineRoot() / "tools" / "stress" / "config");
     }
