@@ -62,6 +62,27 @@ def test_a_comment_sign_inside_a_literal_is_code(code):
     assert not same(code, changed)
 
 
+@pytest.mark.parametrize(
+    "old, new",
+    [
+        ('const char* a = "x  y";', 'const char* a = "x y";'),
+        ('const char* a = "x\ty";', 'const char* a = "x y";'),
+        ('const char* a = R"(x\n  y)";', 'const char* a = R"(x\ny)";'),
+        ('const char* a = R"(x\ny)";', 'const char* a = R"(x y)";'),
+        ("char a = ' ';", "char a = '\t';"),
+    ],
+)
+def test_whitespace_inside_a_literal_is_compared(old, new):
+    assert not same(old, new)
+
+
+def test_a_literal_with_spaces_is_one_token_and_reads_back_in_a_finding():
+    assert same('f("a  b");\n', 'f("a  b"); // c\n')
+    found = comment_only.first_difference('f("a  b");\n', 'f("a b");\n')
+    assert found is not None
+    assert '`f("a  b");`' in found[1] and '`f("a b");`' in found[1]
+
+
 def test_a_comment_after_a_quote_character_is_cut():
     assert same("char a = '\"'; // a \" quote in a comment\nint b;", "char a = '\"';\nint b;")
 
@@ -223,6 +244,20 @@ def test_a_root_below_the_repository_reads_its_own_paths(repo, capsys):
     code, out = run_check(repo / "src", capsys=capsys)
     assert code == 1
     assert out.startswith("Foo.cpp:1: code differs")
+
+
+def test_a_base_that_moved_on_is_not_a_difference(repo, capsys):
+    run_git(repo, "switch", "-q", "-c", "work")
+    write(repo, "src/Foo.h", "// the header, reworded\nint Foo();\n")
+    run_git(repo, "commit", "-q", "-am", "comments")
+    run_git(repo, "switch", "-q", "main")
+    write(repo, "src/Foo.cpp", "int Foo() { return 2; }\n")
+    run_git(repo, "commit", "-q", "-am", "code on the base")
+    run_git(repo, "switch", "-q", "work")
+    code = comment_only.main(["--base", "main", "--root", str(repo)])
+    out = capsys.readouterr().out
+    assert code == 0, out
+    assert "checked 1 files" in out
 
 
 def test_an_unknown_revision_is_an_error(repo, capsys):

@@ -10,10 +10,11 @@ namespace BECore {
     /**
      * @brief The format version of the content files, and the check a loader makes
      *
-     * A content file is a file of a `config/` folder whose root element is one of kContentRoots: `SceneManager` (a
-     * `SceneConfig.xml`) or `node` (a node file). Its root may carry `contentVersion="N"`; no attribute is version 1, the
-     * format before versions. The engine reads exactly kContentVersion: an older file is rewritten by
-     * `tools/migrate/migrate.py` (`tools/migrate/CLAUDE.md`), a newer one needs a newer engine.
+     * A content file is a file of a `config/` folder whose root element is kSceneConfigRootName (`SceneManager`, a
+     * `SceneConfig.xml`) or kNodeFileRootName (`node`, a node file), as IsContentRoot says. Its root may carry
+     * `contentVersion="N"`; no attribute is version 1, the format before versions. The engine reads exactly
+     * kContentVersion: an older file is rewritten by `tools/migrate/migrate.py` (`tools/migrate/CLAUDE.md`), a newer one
+     * needs a newer engine.
      *
      * Pure pugixml, no engine services. The highest `to_version` of the engine track of `tools/migrate/steps/` must equal
      * kContentVersion (a pytest compares them).

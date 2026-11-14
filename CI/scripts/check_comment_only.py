@@ -4,12 +4,13 @@
     python3 CI/scripts/check_comment_only.py --base <rev> --root <R> [paths...]
     python3 engine/CI/scripts/check_comment_only.py --base games/mahjong --root engine       (from a game checkout)
 
-Compared: every file of `.h .hpp .inl .cpp .mm .c` that differs between the revision `<rev>` (read with `git show <rev>:<path>`, git runs in
-`--root`) and the working tree, committed or not, untracked files included; with `paths` (files or folders relative to `--root`) only
+Compared: every file of `.h .hpp .inl .cpp .mm .c` that differs between the merge-base of `<rev>` and `HEAD` (so a base branch that moved on
+after the work branch was cut does not count; read with `git show`, git runs in `--root`) and the working tree, committed or not, untracked
+files included; with `paths` (files or folders relative to `--root`) only
 those, otherwise all. Each side is read with the comments (`//`, `/* */`, a `\\` continuation extends a `//` comment) removed and the
 whitespace collapsed to tokens, so `clang-format` re-wrapping and the removal of whole comments pass; a changed token, a renamed
-identifier, a removed line of code or an added or deleted file fail. A comment inside a string, a character or a raw string literal is
-code. These markers are code too and stay in the compared text, so they cannot be cut or edited by a comment cleanup: `//-NoStd:`,
+identifier, a removed line of code or an added or deleted file fail. A string, a character or a raw string literal is code, comment signs and
+whitespace inside it included (`"x  y"` and `"x y"` differ). These markers are code too and stay in the compared text, so they cannot be cut or edited by a comment cleanup: `//-NoStd:`,
 `NOLINT` (also `NOLINTNEXTLINE`, `NOLINTBEGIN`), `clang-format off` / `on`. A preprocessor line ends at its own line end, so `#define X 1`
 and `#define X` / `1` differ.
 Not compared: Python, CMake, Markdown and every other file; a file that changed in a way no comment explains is a finding all the same.
@@ -38,6 +39,9 @@ SUFFIXES = (".h", ".hpp", ".inl", ".cpp", ".mm", ".c")
 # A comment that holds one of these is read by a tool (`check_types.py`, clang-tidy, clang-format) and is code to this check
 MARKER = re.compile(r"//-NoStd:|NOLINT|clang-format\s+(?:off|on)")
 TOKEN = re.compile(r"\S+")
+LITERAL_KINDS = ("raw", "str", "chr")
+# The whitespace of a literal is shifted into this block; no source holds it, and `str.isspace` is false there
+PRIVATE_USE = 0xF0000
 # A logical line ends at a newline that no backslash continues
 LOGICAL_LINE_END = re.compile(r"(?<!\\)\n|\Z")
 DIRECTIVE_END = "\n"
@@ -57,12 +61,15 @@ class Difference:
 
 def strip_comments(source: str) -> str:
     """The source with every comment that is no marker replaced by blanks (same length, newlines of a block comment included, so a
-    preprocessor line that holds one stays one logical line). Literals are left as they are."""
+    preprocessor line that holds one stays one logical line). The whitespace inside a string, a character or a raw string literal is
+    swapped for a private-use character of the same length, so that the literal stays one token and its spaces are compared."""
 
     def replace(m: re.Match) -> str:
         text = m.group(0)
-        if m.lastgroup in ("line", "block") and MARKER.search(text) is None:
-            return " " * len(text)
+        if m.lastgroup in ("line", "block"):
+            return " " * len(text) if MARKER.search(text) is None else text
+        if m.lastgroup in LITERAL_KINDS:
+            return "".join(chr(PRIVATE_USE + ord(ch)) if ch.isspace() else ch for ch in text)
         return text
 
     # `nostd._MASK` is the scanner of `nostd.mask`: one alternative per kind (comments, raw and plain strings, characters, numbers),
@@ -102,11 +109,21 @@ def first_difference(old: str, new: str) -> Optional[Tuple[int, str]]:
 
 
 def show(token: str) -> str:
-    return "end of the preprocessor line" if token == DIRECTIVE_END else token
+    if token == DIRECTIVE_END:
+        return "end of the preprocessor line"
+    return "".join(chr(ord(ch) - PRIVATE_USE) if ord(ch) >= PRIVATE_USE else ch for ch in token)
 
 
 def git(root: Path, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run(["git", "-C", str(root), *args], capture_output=True, check=False)
+
+
+def merge_base(root: Path, base: str) -> str:
+    """The commit where the work branch left `base`: the files the branch changed are compared with that, not with a base that moved on."""
+    done = git(root, "merge-base", base, "HEAD")
+    if done.returncode != 0:
+        raise RuntimeError(done.stderr.decode(errors="replace").strip() or f"git merge-base {base} HEAD failed")
+    return done.stdout.decode(errors="replace").strip()
 
 
 def changed_files(root: Path, base: str, paths: Sequence[str]) -> List[str]:
@@ -123,6 +140,7 @@ def changed_files(root: Path, base: str, paths: Sequence[str]) -> List[str]:
 
 def check(root: Path, base: str, paths: Sequence[str] = ()) -> Tuple[List[Difference], int]:
     """The differences that are more than comments, and the number of files looked at."""
+    base = merge_base(root, base)
     files = changed_files(root, base, paths)
     differences: List[Difference] = []
     for name in files:
