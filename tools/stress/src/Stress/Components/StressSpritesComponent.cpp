@@ -2,6 +2,7 @@
 
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Renderer/IRenderer.h>
+#include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneNode.h>
 #include <Events/ApplicationEvents.h>
 #include <Events/SceneEvents.h>

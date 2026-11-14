@@ -1,5 +1,9 @@
 #pragma once
 
+#include <BECore/Format/Format.h>
+#include <BECore/Logger/Logger.h>
+#include <BECore/PoolString/PoolString.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/Reflection/OpenDeserializer.h>
 #include <BECore/Reflection/TypeTraits.h>
 #include <BECore/Resource/IResource.h>
@@ -8,8 +12,10 @@
 #include <BECore/Resource/ResourceHandle.h>
 #include <BECore/Resource/SerializedResource.h>
 #include <BECore/Resource/XmlResource.h>
+#include <BECore/Types/Types.h>
 #include <TaskSystem/Awaitables.h>
 #include <TaskSystem/Task.h>
+#include <concepts>
 
 namespace BECore {
 

@@ -1,10 +1,16 @@
 #pragma once
 
+#include <BECore/Math/Rect.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
+#include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Renderer/ITexture.h>
 #include <BECore/Scene/Components/SpriteRendererComponent.h>
 #include <BECore/Scene/Components/TransformComponent.h>
 #include <BECore/Scene/IComponent.h>
+#include <BECore/Types/Types.h>
 #include <Stress/StressSettings.h>
+#include <cstddef>
+#include <cstdint>
 
 namespace BECore::SceneEvents {
     struct SceneUpdateEvent;

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <BECore/Math/Color.h>
+#include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Widgets/IWidget.h>
 
 namespace BECore {

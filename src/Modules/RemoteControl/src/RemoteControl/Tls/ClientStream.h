@@ -1,7 +1,13 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
 #include <RemoteControl/Tls/TlsStream.h>
 #include <RemoteControl/WebSocketUrl.h>
+#include <atomic>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <expected>
 
 namespace BECore {
 

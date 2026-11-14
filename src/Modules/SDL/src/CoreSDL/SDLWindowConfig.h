@@ -1,5 +1,8 @@
 #pragma once
 
+#include <BECore/Reflection/ReflectionMarkers.h>
+#include <BECore/Types/Types.h>
+
 namespace BECore {
 
     /**

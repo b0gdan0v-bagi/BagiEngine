@@ -1,5 +1,7 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
+
 namespace BECore {
 
     class ControlService;

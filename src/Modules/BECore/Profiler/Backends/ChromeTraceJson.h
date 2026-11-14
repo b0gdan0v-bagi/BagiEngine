@@ -1,5 +1,8 @@
 #pragma once
 
+#include <BECore/Format/Format.h>
+#include <BECore/Types/Types.h>
+
 namespace BECore {
 
     /// Appends @p text to @p out as a JSON string literal with its quotes (nullptr is an empty string): the one escaper of every Chrome trace the profiler writes

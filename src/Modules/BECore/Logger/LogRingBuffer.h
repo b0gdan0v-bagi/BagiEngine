@@ -1,6 +1,13 @@
 #pragma once
 
+#include <BECore/Logger/LogLevel.h>
+#include <BECore/Types/Types.h>
+#include <algorithm>
+#include <atomic>
 #include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <utility>
 
 namespace BECore {
 

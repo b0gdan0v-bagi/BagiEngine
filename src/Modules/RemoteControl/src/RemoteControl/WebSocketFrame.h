@@ -1,6 +1,12 @@
 #pragma once
 
 #include <BECore/Control/ControlService.h>
+#include <BECore/Types/Types.h>
+#include <BECore/Utils/EnumUtils.h>
+#include <cstddef>
+#include <cstdint>
+#include <expected>
+#include <optional>
 
 namespace BECore {
 

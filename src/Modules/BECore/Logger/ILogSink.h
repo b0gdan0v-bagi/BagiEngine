@@ -1,5 +1,11 @@
 #pragma once
 
+#include <BECore/Logger/LogLevel.h>
+#include <BECore/RefCounted/RefCounted.h>
+#include <BECore/Reflection/ReflectionMarkers.h>
+#include <BECore/Types/Types.h>
+#include <Events/SubscriptionHolder.h>
+
 namespace BECore {
 
     class ILogSink : public RefCountedAtomic, public SubscriptionHolder {

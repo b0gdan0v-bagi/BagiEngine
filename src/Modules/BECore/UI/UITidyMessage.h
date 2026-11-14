@@ -1,5 +1,8 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
+#include <cstddef>
+
 namespace BECore::UIText {
 
     /// The most bytes of a message that repeats text of a content file (a key, a selector, a value): the game logs it, and a file can make that text as long as it likes

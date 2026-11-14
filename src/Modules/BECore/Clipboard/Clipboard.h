@@ -1,6 +1,8 @@
 #pragma once
 
 #include <BECore/Clipboard/IClipboardBackend.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
+#include <BECore/Types/Types.h>
 
 namespace BECore {
 

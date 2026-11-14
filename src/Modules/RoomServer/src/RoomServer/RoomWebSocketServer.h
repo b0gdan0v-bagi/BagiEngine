@@ -1,9 +1,18 @@
 #pragma once
 
 #include <BECore/Control/ControlTypes.h>
+#include <BECore/Threading/ConditionVariable.h>
+#include <BECore/Threading/Mutex.h>
+#include <BECore/Threading/Thread.h>
+#include <BECore/Types/Types.h>
 #include <RemoteControl/WebSocketListener.h>
 #include <RoomServer/RoomServerSettings.h>
 #include <Rooms/RoomHub.h>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <expected>
+#include <functional>
 
 namespace BECore {
 

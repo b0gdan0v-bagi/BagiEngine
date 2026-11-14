@@ -1,6 +1,8 @@
 #pragma once
 
+#include <BECore/Utils/EnumUtils.h>
 #include <Widgets/Viewport/ViewportEvents.h>
+#include <cstdint>
 
 namespace BECore {
 

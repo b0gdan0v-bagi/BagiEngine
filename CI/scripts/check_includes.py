@@ -117,9 +117,13 @@ def vendored_modules(root: Path) -> set[Path]:
     return {m for m in modules.iterdir() if m.is_dir() and not (m / "CLAUDE.md").exists()}
 
 
-def check(root: Path, excludes: list[str]) -> list[str]:
+def iter_files(root: Path, excludes: list[str], suffixes: set[str]):
+    """The files of `root` with one of `suffixes` that the checks of this folder look at, sorted folder by folder.
+
+    Skips the folders of SKIP_DIRS, a folder with a `.git` entry below `root`, a vendored module, a file with `Vendored` in its first
+    lines and every `excludes` entry (a path relative to `root`, a folder or a file). check_headers.py walks the same way.
+    """
     skipped = {(root / e).resolve() for e in excludes} | {m.resolve() for m in vendored_modules(root)}
-    problems = []
     for folder, dirs, files in os.walk(root):
         here = Path(folder)
         dirs[:] = sorted(
@@ -129,11 +133,16 @@ def check(root: Path, excludes: list[str]) -> list[str]:
         )
         for name in sorted(files):
             path = here / name
-            if path.suffix not in SCAN_SUFFIXES or path.resolve() in skipped or is_vendored_file(path):
-                continue
-            relative = path.relative_to(root).as_posix()
-            for number, quoted in scan_file(path):
-                problems.append(f'{relative}:{number}: #include "{quoted}": use <...> from an include root')
+            if path.suffix in suffixes and path.resolve() not in skipped and not is_vendored_file(path):
+                yield path
+
+
+def check(root: Path, excludes: list[str]) -> list[str]:
+    problems = []
+    for path in iter_files(root, excludes, SCAN_SUFFIXES):
+        relative = path.relative_to(root).as_posix()
+        for number, quoted in scan_file(path):
+            problems.append(f'{relative}:{number}: #include "{quoted}": use <...> from an include root')
     return problems
 
 

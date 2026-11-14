@@ -1,5 +1,8 @@
 #pragma once
 
+#include <BECore/Threading/Mutex.h>
+#include <BECore/Types/Types.h>
+#include <BECore/Utils/Singleton.h>
 #include <EASTL/hash_set.h>
 
 namespace BECore {

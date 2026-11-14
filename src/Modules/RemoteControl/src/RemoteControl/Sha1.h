@@ -1,5 +1,8 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
+#include <cstdint>
+
 namespace BECore {
 
     using Sha1Digest = Array<uint8_t, 20>;

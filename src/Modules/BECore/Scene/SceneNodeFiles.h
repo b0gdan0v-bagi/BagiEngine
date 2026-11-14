@@ -1,6 +1,10 @@
 #pragma once
 
 #include <BECore/FileSystem/FileSystem.h>
+#include <BECore/Types/Types.h>
+#include <cstddef>
+#include <filesystem>
+#include <pugixml.hpp>
 
 namespace BECore {
 

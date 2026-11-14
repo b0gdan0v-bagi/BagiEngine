@@ -1,6 +1,12 @@
 #pragma once
 
+#include <BECore/Threading/Mutex.h>
+#include <BECore/Threading/Thread.h>
+#include <BECore/Types/Types.h>
 #include <TaskSystem/TaskQueue.h>
+#include <atomic>
+#include <cstddef>
+#include <cstdint>
 
 namespace BECore {
 

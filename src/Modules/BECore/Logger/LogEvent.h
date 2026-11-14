@@ -1,5 +1,7 @@
 #pragma once
 
+#include <BECore/Logger/LogLevel.h>
+#include <BECore/Types/Types.h>
 #include <Events/EventBase.h>
 
 namespace BECore {

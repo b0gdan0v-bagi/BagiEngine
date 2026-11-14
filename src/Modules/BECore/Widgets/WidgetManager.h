@@ -1,7 +1,10 @@
 #pragma once
 
 #include <BECore/Application/RunMode.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
+#include <BECore/Types/Types.h>
 #include <BECore/Widgets/IWidget.h>
+#include <utility>
 
 namespace BECore {
 

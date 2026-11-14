@@ -1,6 +1,14 @@
 #pragma once
 
+#include <BECore/Format/Format.h>
+#include <BECore/Threading/LockGuards.h>
+#include <BECore/Threading/Mutex.h>
+#include <BECore/Types/Types.h>
+#include <atomic>
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <limits>
 
 namespace BECore {
 

@@ -3,6 +3,9 @@
 #include <BECore/Profiler/IProfilerBackend.h>
 #include <BECore/Profiler/ProfilerClock.h>
 #include <BECore/Profiler/Ring/RingSnapshot.h>
+#include <atomic>
+#include <cstdint>
+#include <mutex>
 
 namespace BECore {
 

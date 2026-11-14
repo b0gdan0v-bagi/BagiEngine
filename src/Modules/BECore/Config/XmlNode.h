@@ -1,5 +1,15 @@
 #pragma once
 
+#include <BECore/Math/Color.h>
+#include <BECore/Types/Types.h>
+#include <BECore/Utils/EnumUtils.h>
+#include <charconv>
+#include <cstddef>
+#include <iterator>
+#include <optional>
+#include <pugixml.hpp>
+#include <type_traits>
+
 namespace BECore {
 
     /**

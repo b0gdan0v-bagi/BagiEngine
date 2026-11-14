@@ -1,7 +1,17 @@
 #pragma once
 
+#include <EASTL/fixed_string.h>
+#include <EASTL/functional.h>
+#include <EASTL/iterator.h>
+#include <EASTL/string.h>
+#include <EASTL/string_view.h>
+#include <charconv>
 #include <cmath>
+#include <cstddef>
 #include <fmt/format.h>
+#include <string>
+#include <string_view>
+#include <type_traits>
 
 // The string types of the engine. Code names these, not eastl:: / std: (Types/CLAUDE.md): the implementation is chosen here, once.
 namespace BECore {

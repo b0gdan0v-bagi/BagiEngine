@@ -3,6 +3,8 @@
 #include <BECore/Math/Vec2.h>
 #include <BECore/Math/Vec3.h>
 #include <BECore/Renderer/Gpu/GpuTypes.h>
+#include <cstdint>
+#include <type_traits>
 
 namespace BECore {
 

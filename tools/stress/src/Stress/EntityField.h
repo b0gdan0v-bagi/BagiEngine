@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Stress/SpriteField.h>
+#include <cstdint>
 
 namespace BECore::Stress {
 

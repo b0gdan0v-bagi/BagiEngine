@@ -1,8 +1,12 @@
 #pragma once
 
 #include <BECore/Format/Formatter.h>
+#include <BECore/Types/Types.h>
+#include <cstddef>
 #include <cstdio>
 #include <fmt/format.h>
+#include <iterator>
+#include <string_view>
 
 /**
  * @brief Специализации fmt::formatter для строк EASTL (String и StringView из BECore/Types/Strings.h).

@@ -1,6 +1,8 @@
 #pragma once
 
+#include <BECore/Threading/LockGuards.h>
 #include <BECore/Threading/Mutex.h>
+#include <atomic>
 
 namespace BECore {
     template <typename T>

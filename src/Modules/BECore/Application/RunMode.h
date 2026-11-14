@@ -1,6 +1,9 @@
 #pragma once
 
+#include <BECore/PoolString/PoolString.h>
+#include <BECore/Utils/EnumUtils.h>
 #include <SDL3/SDL_keycode.h>
+#include <cstdint>
 
 #if !defined(BE_WITH_EDITOR)
 #error "BE_WITH_EDITOR is defined by cmake/BagiEngine.cmake (add_compile_definitions); build through CMake"

@@ -1,7 +1,14 @@
 #pragma once
 #include <BECore/FileSystem/FileSystem.h>
+#include <BECore/PoolString/PoolString.h>
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Reflection/ISerializer.h>
+#include <BECore/Types/Types.h>
+#include <BECore/Utils/EnumUtils.h>
+#include <cstddef>
+#include <cstdint>
+#include <expected>
+#include <filesystem>
 
 namespace BECore {
 

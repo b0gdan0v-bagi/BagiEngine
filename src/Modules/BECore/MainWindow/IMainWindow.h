@@ -1,5 +1,9 @@
 #pragma once
 
+#include <BECore/Math/Rect.h>
+#include <BECore/RefCounted/RefCounted.h>
+#include <BECore/Types/Types.h>
+
 namespace BECore {
     class IRendererHolder;
 

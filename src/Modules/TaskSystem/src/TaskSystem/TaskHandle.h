@@ -1,8 +1,14 @@
 #pragma once
 
+#include <BECore/RefCounted/IntrusivePtr.h>
+#include <BECore/RefCounted/RefCounted.h>
 #include <TaskSystem/LiveTasks.h>
 #include <TaskSystem/Task.h>
 #include <TaskSystem/TaskPriority.h>
+#include <atomic>
+#include <expected>
+#include <type_traits>
+#include <utility>
 
 namespace BECore {
 

@@ -1,6 +1,9 @@
 #pragma once
 
+#include <BECore/RefCounted/IntrusivePtr.h>
+#include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Scene/SceneNode.h>
+#include <BECore/Types/Types.h>
 #include <BECore/UI/UIElement.h>
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/EditorLayout/EditorCommands.h>

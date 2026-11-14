@@ -27,7 +27,7 @@ python3 engine/tools/codemod/codemod.py --root src --family optionals|views|stri
 
 A rewritten `fmt::format` now returns a `String`: the compile errors at a `std::string` boundary are the next step, as for `strings`. A game runs `--family fmt` on its `src` and `tests` after `Update engine`.
 
-An `#include <EASTL/...>` the file no longer needs stays: `strip_pch_includes.py` removes the PCH ones.
+An `#include <EASTL/...>` the file no longer needs stays: `strip_pch_includes.py` removes the PCH ones (in `.cpp` files; a header keeps it).
 
 ## After a run
 

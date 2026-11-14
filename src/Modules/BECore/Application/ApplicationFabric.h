@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Application/ApplicationOptions.h>
+#include <BECore/Utils/Singleton.h>
 
 namespace BECore {
 

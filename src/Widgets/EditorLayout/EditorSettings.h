@@ -1,9 +1,12 @@
 #pragma once
 
 #include <BECore/Control/Json.h>
+#include <BECore/Types/Types.h>
 #include <BECore/UI/UIPreview.h>
 #include <Widgets/EditorLayout/HotkeyMap.h>
 #include <Widgets/Viewport/ViewportInput.h>
+#include <cstdint>
+#include <filesystem>
 
 namespace BECore {
 

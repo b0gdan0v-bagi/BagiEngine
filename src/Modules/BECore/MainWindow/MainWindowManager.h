@@ -2,6 +2,8 @@
 
 #include <BECore/MainWindow/IMainWindow.h>
 #include <BECore/MainWindow/MainWindowAccessor.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
+#include <utility>
 
 namespace BECore {
 

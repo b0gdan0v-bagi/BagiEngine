@@ -1,11 +1,17 @@
 #pragma once
 
 #include <BECore/Input/UIInput.h>
+#include <BECore/Math/Rect.h>
+#include <BECore/PoolString/PoolString.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
+#include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Scene/IComponent.h>
+#include <BECore/Types/Types.h>
 #include <BECore/UI/UICanvasLayout.h>
 #include <BECore/UI/UIElement.h>
 #include <BECore/UI/UITooltip.h>
 #include <BECore/UI/UITransition.h>
+#include <cstdint>
 
 namespace BECore {
 

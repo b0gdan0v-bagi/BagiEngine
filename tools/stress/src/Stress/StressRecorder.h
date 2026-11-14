@@ -1,7 +1,10 @@
 #pragma once
 
 #include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
+#include <BECore/Types/Types.h>
 #include <Stress/StressSettings.h>
+#include <cstddef>
+#include <cstdint>
 
 namespace BECore::Stress {
 

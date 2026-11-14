@@ -1,5 +1,10 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
+#include <cstddef>
+#include <cstdint>
+#include <expected>
+
 namespace BECore {
 
     /// A `ws://` or `wss://` address split into what a client needs to connect

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
 #include <Rooms/RoomTypes.h>
 
 namespace BECore {

@@ -1,5 +1,11 @@
 #pragma once
 
+#include <BECore/PoolString/PoolString.h>
+#include <BECore/PoolString/PoolStringMap.h>
+#include <BECore/Types/Types.h>
+#include <cstdint>
+#include <type_traits>
+
 namespace BECore {
 
     /**

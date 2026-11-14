@@ -31,6 +31,8 @@ include(${CMAKE_CURRENT_LIST_DIR}/BagiWeb.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/BagiPlatformOptions.cmake)
 # ccache in front of the compiler when it is installed (before the first target, so every target gets the launcher)
 include(${CMAKE_CURRENT_LIST_DIR}/BagiCompilerCache.cmake)
+# clang -ftime-trace on every compile when ENGINE_TIME_TRACE is ON (the preset macos-time-trace; before the first target)
+include(${CMAKE_CURRENT_LIST_DIR}/BagiTimeTrace.cmake)
 # Sanitizers on every target and the libFuzzer executables (ENGINE_SANITIZE, ENGINE_FUZZ, ENGINE_FUZZ_LIBFUZZER; before the first target, like the cache)
 include(${CMAKE_CURRENT_LIST_DIR}/BagiFuzz.cmake)
 
@@ -364,9 +366,20 @@ endif()
 # Build helpers shared by the engine modules, games and tests
 # =============================================================================
 
+# The PCH instantiates the templates it only declares (Clang's -fpch-instantiate-templates), once, when it is built; without the
+# option every TU that loads the PCH instantiates them again (the EnTT dispatcher, fmt and std::format rows of time_trace_report.py).
+# CMake adds the option to the PCH compile itself (property PCH_INSTANTIATE_TEMPLATES, ON by default) for Clang >= 11, Emscripten
+# included, and not for AppleClang, which its Modules/Compiler/Clang.cmake leaves out although AppleClang 17 has the option. MSVC
+# and GCC have no such option and get nothing. The variable is internal to CMake's compiler modules (checked with CMake 4.2.1);
+# if a newer CMake renames it, the only symptom is the compile times coming back.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+    set(CMAKE_CXX_COMPILE_OPTIONS_INSTANTIATE_TEMPLATES_PCH -fpch-instantiate-templates)
+endif()
+
 # be_force_include_pch(<target>)
 # Force-includes BECore/pch.h so sources can rely on it without including it themselves. The target
-# must also reuse the PCH: target_precompile_headers(<target> REUSE_FROM BECoreModule).
+# must also reuse a PCH that starts with it: target_precompile_headers(<target> REUSE_FROM BECoreModule), or
+# BagiTestPch (BECore/pch.h and gtest) for a gtest target.
 function(be_force_include_pch TARGET_NAME)
     if(MSVC)
         target_compile_options(${TARGET_NAME} PRIVATE /FI"BECore/pch.h")
@@ -789,8 +802,8 @@ if(ENGINE_BUILD_TESTS)
         source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" PREFIX "Tests" FILES ${ARG_SOURCES})
         set_target_properties(${NAME} PROPERTIES FOLDER "Tests")
 
-        # Reuse the PCH of BECoreModule; test sources include engine headers that rely on it
-        target_precompile_headers(${NAME} REUSE_FROM BECoreModule)
+        # Reuse the PCH of BagiTestPch (tests/Common/CMakeLists.txt): the engine's PCH and gtest; test sources include engine headers that rely on it
+        target_precompile_headers(${NAME} REUSE_FROM BagiTestPch)
         be_force_include_pch(${NAME})
 
         # IMGUI_VULKAN_AVAILABLE must match BECoreModule, otherwise the reused PCH is rejected.

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Types/Strings.h>
 #include <fmt/format.h>
 
 // The part of the format layer that a type teaches how to be formatted (Format/CLAUDE.md). It is a header of its own because

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/PoolString/PoolString.h>
 #include <gtest/gtest.h>
 #include <ostream>
 

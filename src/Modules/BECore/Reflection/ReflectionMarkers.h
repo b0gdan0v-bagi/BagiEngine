@@ -1,5 +1,7 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
+
 /**
  * @file ReflectionMarkers.h
  * @brief Macros for marking classes, fields, and enums for reflection

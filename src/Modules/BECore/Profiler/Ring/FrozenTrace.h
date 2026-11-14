@@ -1,6 +1,8 @@
 #pragma once
 
 #include <BECore/Profiler/Ring/SpikeCapture.h>
+#include <BECore/Types/Types.h>
+#include <expected>
 
 namespace BECore {
 

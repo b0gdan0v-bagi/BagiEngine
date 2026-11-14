@@ -1,10 +1,19 @@
 #pragma once
 
+#include <BECore/Math/Color.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
+#include <BECore/RefCounted/RefCounted.h>
+#include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Renderer/BlendMode.h>
 #include <BECore/Renderer/DrawTransform.h>
 #include <BECore/Renderer/GeometryDetail.h>
 #include <BECore/Renderer/RenderCounters.h>
 #include <BECore/Renderer/ViewTransform.h>
+#include <BECore/Types/Types.h>
+#include <Events/SubscriptionHolder.h>
+#include <cstdint>
+#include <expected>
+#include <functional>
 
 namespace BECore {
 

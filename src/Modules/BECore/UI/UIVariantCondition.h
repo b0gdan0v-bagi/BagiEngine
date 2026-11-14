@@ -1,5 +1,11 @@
 #pragma once
 
+#include <BECore/Math/Rect.h>
+#include <BECore/Types/Types.h>
+#include <BECore/Utils/EnumUtils.h>
+#include <cstdint>
+#include <expected>
+
 namespace BECore {
 
     /// Portrait is a canvas at least as tall as it is wide (a square is portrait, like CSS), landscape is wider than tall

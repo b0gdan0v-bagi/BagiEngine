@@ -1,5 +1,8 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
+#include <utility>
+
 namespace BECore {
 
     /**

@@ -1,6 +1,8 @@
 #pragma once
 
+#include <BECore/Math/Color.h>
 #include <BECore/Math/Vec2.h>
+#include <algorithm>
 #include <cmath>
 #include <concepts>
 

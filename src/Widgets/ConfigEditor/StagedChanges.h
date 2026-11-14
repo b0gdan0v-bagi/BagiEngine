@@ -1,6 +1,8 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
 #include <EASTL/unordered_map.h>
+#include <pugixml.hpp>
 
 namespace BECore {
 

@@ -2,6 +2,8 @@
 
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/OpenDeserializer.h>
+#include <BECore/Types/Types.h>
+#include <utility>
 
 namespace BECore {
 

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 namespace BECore::Stress {
 
     /// Streams of the hash are told apart by a salt, so the properties of one object do not follow each other.

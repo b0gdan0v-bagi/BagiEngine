@@ -1,6 +1,9 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
 #include <BECore/UI/UIWebReport.h>
+#include <cstddef>
+#include <cstdint>
 
 namespace BECore {
 

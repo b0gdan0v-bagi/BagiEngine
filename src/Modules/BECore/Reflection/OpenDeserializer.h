@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Reflection/IDeserializer.h>
+#include <expected>
 
 namespace BECore {
 

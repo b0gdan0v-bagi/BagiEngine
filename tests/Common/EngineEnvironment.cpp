@@ -1,6 +1,7 @@
 #include "EngineEnvironment.h"
 
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Scene/SceneManager.h>
 
 namespace BECore::Tests {
 

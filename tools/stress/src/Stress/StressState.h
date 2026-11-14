@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Stress/StressSettings.h>
+#include <cstdint>
 
 namespace BECore::Stress {
 

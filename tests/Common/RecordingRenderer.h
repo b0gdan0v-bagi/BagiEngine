@@ -1,9 +1,21 @@
 #pragma once
 
+#include <BECore/Math/Color.h>
+#include <BECore/Math/Rect.h>
+#include <BECore/PoolString/PoolString.h>
+#include <BECore/PoolString/StaticPoolString.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
+#include <BECore/RefCounted/New.h>
 #include <BECore/Renderer/Gpu/IGpuDevice.h>
 #include <BECore/Renderer/IRenderTarget.h>
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Renderer/ITexture.h>
+#include <BECore/Types/Types.h>
+#include <BECore/Utils/EnumUtils.h>
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <utility>
 
 namespace BECore::Tests {
 

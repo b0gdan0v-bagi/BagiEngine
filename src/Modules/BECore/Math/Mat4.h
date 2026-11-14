@@ -2,6 +2,7 @@
 
 #include <BECore/Math/Vec3.h>
 #include <BECore/Math/Vec4.h>
+#include <BECore/Types/Types.h>
 #include <cmath>
 #include <cstddef>
 

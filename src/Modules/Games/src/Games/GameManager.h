@@ -1,5 +1,9 @@
 #pragma once
 
+#include <BECore/PoolString/PoolString.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
+#include <BECore/Types/Types.h>
+#include <BECore/Utils/Singleton.h>
 #include <Games/IGame.h>
 
 namespace BECore {

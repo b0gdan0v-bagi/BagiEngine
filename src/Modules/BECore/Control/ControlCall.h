@@ -1,6 +1,9 @@
 #pragma once
 
 #include <BECore/Control/Json.h>
+#include <BECore/Types/Types.h>
+#include <BECore/Utils/PassKey.h>
+#include <functional>
 
 namespace BECore {
 

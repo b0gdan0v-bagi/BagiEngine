@@ -3,12 +3,25 @@
 #include <BECore/Types/Strings.h>
 #include <EASTL/array.h>
 #include <EASTL/fixed_hash_map.h>
+#include <EASTL/fixed_vector.h>
+#include <EASTL/functional.h>
+#include <EASTL/hash_map.h>
 #include <EASTL/hash_set.h>
 #include <EASTL/map.h>
 #include <EASTL/memory.h>
 #include <EASTL/set.h>
+#include <EASTL/shared_ptr.h>
+#include <EASTL/span.h>
+#include <EASTL/unique_ptr.h>
+#include <EASTL/utility.h>
+#include <EASTL/vector.h>
 #include <EASTL/vector_map.h>
 #include <EASTL/vector_set.h>
+#include <cstddef>
+#include <optional>
+#include <tuple>
+#include <type_traits>
+#include <variant>
 
 // The container types of the engine: names for what the code uses, so the implementation is chosen here, once. All but the
 // maps keyed by String are plain `using`: the same type as the eastl:: name.

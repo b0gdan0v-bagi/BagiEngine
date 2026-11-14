@@ -27,13 +27,7 @@ set_target_properties(VulkanModule PROPERTIES FOLDER "Modules")
 
 target_precompile_headers(VulkanModule REUSE_FROM BECoreModule)
 
-if(MSVC)
-    target_compile_options(VulkanModule PRIVATE /FI"BECore/pch.h")
-elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    target_compile_options(VulkanModule PRIVATE -include "BECore/pch.h")
-elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    target_compile_options(VulkanModule PRIVATE -include "BECore/pch.h")
-endif()
+be_force_include_pch(VulkanModule)
 
 target_include_directories(VulkanModule PUBLIC
     ${PROJECT_ROOT}/src

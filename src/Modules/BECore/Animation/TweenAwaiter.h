@@ -1,7 +1,9 @@
 #pragma once
 
 #include <BECore/Animation/Tween.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
 #include <coroutine>
+#include <utility>
 
 namespace BECore {
 

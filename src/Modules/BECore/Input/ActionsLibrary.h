@@ -1,5 +1,9 @@
 #pragma once
 
+#include <BECore/PoolString/PoolString.h>
+#include <BECore/PoolString/PoolStringMap.h>
+#include <BECore/Types/Types.h>
+#include <BECore/Utils/Singleton.h>
 #include <EASTL/unordered_set.h>
 
 namespace BECore {

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <BECore/Utils/EnumUtils.h>
+#include <cstdint>
 #include <numbers>
 
 namespace BECore {

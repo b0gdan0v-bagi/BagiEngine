@@ -1,8 +1,15 @@
 #pragma once
 
+#include <BECore/Math/Rect.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
+#include <BECore/RefCounted/RefCounted.h>
 #include <BECore/Renderer/Gpu/IGpuBuffer.h>
 #include <BECore/Renderer/Gpu/IGpuDepthTexture.h>
 #include <BECore/Renderer/Gpu/IGpuPipeline.h>
+#include <BECore/Types/Types.h>
+#include <cstddef>
+#include <cstdint>
+#include <expected>
 
 namespace BECore {
 

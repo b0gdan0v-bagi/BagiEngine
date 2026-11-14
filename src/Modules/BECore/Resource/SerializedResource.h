@@ -1,7 +1,10 @@
 #pragma once
 
+#include <BECore/PoolString/PoolString.h>
 #include <BECore/Reflection/TypeTraits.h>
 #include <BECore/Resource/IResource.h>
+#include <cstdint>
+#include <utility>
 
 namespace BECore {
 

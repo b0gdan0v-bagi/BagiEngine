@@ -1,5 +1,8 @@
 #pragma once
 
+#include <BECore/PoolString/PoolString.h>
+#include <BECore/PoolString/StaticPoolString.h>
+
 namespace BECore {
 
     class XmlNode;

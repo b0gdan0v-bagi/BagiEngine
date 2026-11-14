@@ -1,6 +1,13 @@
 #pragma once
 
+#include <BECore/Threading/ConditionVariable.h>
+#include <BECore/Threading/LockGuards.h>
+#include <BECore/Threading/Mutex.h>
 #include <EASTL/deque.h>
+#include <atomic>
+#include <cstddef>
+#include <functional>
+#include <utility>
 
 namespace BECore {
 

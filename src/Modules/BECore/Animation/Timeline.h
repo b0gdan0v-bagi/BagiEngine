@@ -2,6 +2,9 @@
 
 #include <BECore/Animation/Lerp.h>
 #include <BECore/Animation/Tween.h>
+#include <BECore/Types/Types.h>
+#include <cstddef>
+#include <utility>
 
 namespace BECore {
 

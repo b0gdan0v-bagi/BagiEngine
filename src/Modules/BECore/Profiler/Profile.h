@@ -18,6 +18,7 @@
 
 #include <BECore/Profiler/Alloc/NoAllocScope.h>
 #include <BECore/Profiler/ProfileZone.h>
+#include <cstdint>
 
 #define BE_PROFILE_CONCAT_INNER(a, b) a##b
 #define BE_PROFILE_CONCAT(a, b) BE_PROFILE_CONCAT_INNER(a, b)

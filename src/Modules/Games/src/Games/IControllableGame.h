@@ -2,6 +2,9 @@
 
 #include <BECore/Control/ControlTypes.h>
 #include <BECore/Control/JsonFwd.h>
+#include <BECore/Types/Types.h>
+#include <cstdint>
+#include <expected>
 
 namespace BECore {
 

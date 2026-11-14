@@ -4,6 +4,10 @@
 #include <BECore/Animation/Timeline.h>
 #include <BECore/Animation/Tween.h>
 #include <BECore/Animation/TweenAwaiter.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
+#include <BECore/Types/Types.h>
+#include <cstddef>
+#include <utility>
 
 namespace BECore {
 

@@ -1,9 +1,14 @@
 #pragma once
 
 #include <BECore/Animation/ScopedTween.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
+#include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Scene/Components/TransformComponent.h>
 #include <BECore/Scene/IComponent.h>
+#include <BECore/Types/Types.h>
 #include <Stress/EntityField.h>
+#include <cstddef>
+#include <cstdint>
 
 namespace BECore::SceneEvents {
     struct SceneUpdateEvent;

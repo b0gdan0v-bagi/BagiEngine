@@ -1,8 +1,16 @@
 #pragma once
 
+#include <BECore/PoolString/PoolString.h>
+#include <BECore/PoolString/StaticPoolString.h>
+#include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Scene/IComponent.h>
+#include <BECore/Types/Types.h>
 #include <Stress/RampController.h>
 #include <Stress/StressRecorder.h>
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <utility>
 
 namespace BECore::SceneEvents {
     struct SceneUpdateEvent;

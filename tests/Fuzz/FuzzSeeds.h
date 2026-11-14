@@ -1,6 +1,8 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
 #include <Fuzz/FuzzMutator.h>
+#include <filesystem>
 
 namespace BECore::Fuzz {
 

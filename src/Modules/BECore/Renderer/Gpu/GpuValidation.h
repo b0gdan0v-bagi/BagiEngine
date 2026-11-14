@@ -1,6 +1,9 @@
 #pragma once
 
 #include <BECore/Renderer/Gpu/GpuTypes.h>
+#include <BECore/Types/Types.h>
+#include <cstddef>
+#include <expected>
 
 namespace BECore {
 

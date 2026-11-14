@@ -1,6 +1,10 @@
 #pragma once
 
+#include <BECore/PoolString/PoolString.h>
+#include <BECore/RefCounted/New.h>
 #include <BECore/Reflection/ClassMeta.h>
+#include <BECore/Types/Types.h>
+#include <cstdint>
 
 namespace BECore {
 
