@@ -168,7 +168,7 @@ namespace BECore::Fuzz {
 
                 // A card the connection may not know: the judge of the socket scenarios, on the text alone
                 const int seat = connection.viewSeat >= 0 ? connection.viewSeat : connection.joinedSeat;
-                const auto leaked = Tests::FindLeakedCardIds(ToStd(text), seat);
+                const auto leaked = Tests::FindLeakedCardIds(text, seat);
                 for (const auto& card : leaked) {
                     // An error that quotes the card the client itself sent tells it nothing
                     FUZZ_CHECK(*type == RoomMessageTypes::kError && connection.lastSent.find(card.c_str()) != String::npos);

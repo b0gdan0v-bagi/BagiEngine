@@ -45,9 +45,9 @@ namespace BECore::Tests {
             return static_cast<FuzzMutation>(index);
         }
 
-        std::string Name(FuzzMutation kind) {
+        String Name(FuzzMutation kind) {
             const StringView name = MutationUtils::ToString(kind);
-            return std::string(name.data(), name.size());
+            return String(name.data(), name.size());
         }
 
     }  // namespace

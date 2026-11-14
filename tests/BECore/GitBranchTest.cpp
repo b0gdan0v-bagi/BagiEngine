@@ -23,7 +23,7 @@ namespace BECore::Tests {
                 std::filesystem::remove_all(_root, ec);
             }
 
-            static void WriteFile(const std::filesystem::path& path, const std::string& text) {
+            static void WriteFile(const std::filesystem::path& path, const String& text) {
                 std::error_code ec;
                 std::filesystem::create_directories(path.parent_path(), ec);
                 std::ofstream(path, std::ios::binary) << text;
@@ -47,7 +47,7 @@ namespace BECore::Tests {
         EXPECT_EQ(ParseGitHead("ref: refs/heads/main\n"), "main");
         EXPECT_EQ(ParseGitHead("ref: refs/heads/main\r\n"), "main");
         EXPECT_EQ(ParseGitHead("  ref: refs/heads/main \n\n"), "main");
-        EXPECT_EQ(ParseGitHead((std::string(kSha1) + "\r\n").c_str()), "0123456");
+        EXPECT_EQ(ParseGitHead((String(kSha1) + "\r\n").c_str()), "0123456");
     }
 
     TEST_F(GitBranchTest, ParseADetachedHead) {
@@ -82,13 +82,13 @@ namespace BECore::Tests {
     }
 
     TEST_F(GitBranchTest, ReadFromADetachedHead) {
-        WriteFile(_root / ".git" / "HEAD", std::string(kSha1) + "\n");
+        WriteFile(_root / ".git" / "HEAD", String(kSha1) + "\n");
         EXPECT_EQ(ReadGitBranch(_root), "0123456");
     }
 
     TEST_F(GitBranchTest, ReadFollowsAnAbsoluteGitdirFile) {
         WriteFile(_root / "elsewhere" / "HEAD", "ref: refs/heads/games/mahjong\n");
-        WriteFile(_root / "project" / ".git", "gitdir: " + (_root / "elsewhere").string() + "\n");
+        WriteFile(_root / "project" / ".git", "gitdir: " + FromStdString((_root / "elsewhere").string()) + "\n");
         EXPECT_EQ(ReadGitBranch(_root / "project"), "games/mahjong");
     }
 

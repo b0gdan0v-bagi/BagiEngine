@@ -224,15 +224,15 @@ namespace BECore::Tests {
         // Every control of the panel that shows a text of the table
         constexpr const char* kTextControlNames[] = {"Title", "SoundCaption", "MusicCaption", "DownloadCaption", "Percent", "LanguageCaption", "LanguageEn", "LanguageRu", "LanguageDe", "Ok"};
 
-        std::string SceneXml(float viewWidth, float viewHeight, const std::function<void(std::string&)>& edit = {}) {
-            std::string xml = kSettingsXml;
-            const auto replace = [&xml](const std::string& what, const std::string& with) {
-                for (size_t at = xml.find(what); at != std::string::npos; at = xml.find(what, at + with.size())) {
+        String SceneXml(float viewWidth, float viewHeight, const std::function<void(String&)>& edit = {}) {
+            String xml = kSettingsXml;
+            const auto replace = [&xml](const String& what, const String& with) {
+                for (size_t at = xml.find(what); at != String::npos; at = xml.find(what, at + with.size())) {
                     xml.replace(at, what.size(), with);
                 }
             };
-            replace("@VIEW_W@", std::to_string(static_cast<int>(viewWidth)));
-            replace("@VIEW_H@", std::to_string(static_cast<int>(viewHeight)));
+            replace("@VIEW_W@", ToString(static_cast<int>(viewWidth)));
+            replace("@VIEW_H@", ToString(static_cast<int>(viewHeight)));
             if (edit) {
                 edit(xml);
             }
@@ -240,9 +240,9 @@ namespace BECore::Tests {
         }
 
         /// Replaces the first @p what in @p xml, and fails the test when it is not there (a broken copy that changed nothing would prove nothing)
-        void Replace(std::string& xml, const std::string& what, const std::string& with) {
+        void Replace(String& xml, const String& what, const String& with) {
             const size_t at = xml.find(what);
-            ASSERT_NE(at, std::string::npos) << what;
+            ASSERT_NE(at, String::npos) << what;
             xml.replace(at, what.size(), with);
         }
 
@@ -462,13 +462,13 @@ namespace BECore::Tests {
         }
 
         /// The scene of the panel with a view of this size; the output has the same size, so a point of the view is a pixel
-        void LoadScene(float viewWidth = kViewWidth, float viewHeight = kViewHeight, const std::function<void(std::string&)>& edit = {}) {
+        void LoadScene(float viewWidth = kViewWidth, float viewHeight = kViewHeight, const std::function<void(String&)>& edit = {}) {
             _game.reset();
             _hud.Reset();
             _settings.Reset();
             XmlDeserializer deserializer;
-            const std::string xml = SceneXml(viewWidth, viewHeight, edit);
-            ASSERT_TRUE(deserializer.LoadFromString(FromStd(xml)));
+            const String xml = SceneXml(viewWidth, viewHeight, edit);
+            ASSERT_TRUE(deserializer.LoadFromString(xml));
             _manager = New<SceneManager>();
             _manager->Deserialize(deserializer);
             ASSERT_FALSE(deserializer.HasErrors());
@@ -956,7 +956,7 @@ namespace BECore::Tests {
         for (const char* value : {"0", "75", "100", "250", "abc"}) {
             CoreManager::GetUIVars().Set("progress"_intern, value);
             Draw();
-            const float expected = std::string(value) == "75" ? 0.75f : (std::string(value) == "100" || std::string(value) == "250") ? 1.0f : 0.0f;
+            const float expected = String(value) == "75" ? 0.75f : (String(value) == "100" || String(value) == "250") ? 1.0f : 0.0f;
             EXPECT_NEAR(bar.GetFraction(), expected, 1e-4f) << value;
             EXPECT_EQ(ShownText(El("Percent")), Format("{}%", value).c_str()) << value;
         }
@@ -1014,10 +1014,10 @@ namespace BECore::Tests {
     // ---- a missing translation ---------------------------------------------------------------------------------------------
 
     TEST_F(UISettingsScreenTest, AKeyMissingInTheLongLanguageFallsBackToEnglishAndStillFits) {
-        std::string table = kStringsXml;
+        String table = kStringsXml;
         const size_t at = table.find(R"(<string key="settings.ok" text="Übernehmen"/>)");
-        ASSERT_NE(at, std::string::npos);
-        table.erase(at, std::string(R"(<string key="settings.ok" text="Übernehmen"/>)").size());
+        ASSERT_NE(at, String::npos);
+        table.erase(at, String(R"(<string key="settings.ok" text="Übernehmen"/>)").size());
         ASSERT_NO_FATAL_FAILURE(LoadStrings(table.c_str()));
         ASSERT_NO_FATAL_FAILURE(LoadScene());
         ASSERT_TRUE(CoreManager::GetUIStrings().SetLanguage("de"_intern));
@@ -1033,7 +1033,7 @@ namespace BECore::Tests {
     // ---- a deliberately broken copy must be caught ------------------------------------------------------------------------
 
     TEST_F(UISettingsScreenTest, ASliderUnderTheTouchSizeIsCaughtByTheValidator) {
-        ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](std::string& xml) { Replace(xml, R"(name="Volume" flex="1" height="56")", R"(name="Volume" flex="1" height="30")"); }));
+        ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](String& xml) { Replace(xml, R"(name="Volume" flex="1" height="56")", R"(name="Volume" flex="1" height="30")"); }));
         EXPECT_NEAR(El("Volume").rect.h, 30.0f, 0.01f);
         const auto failures = ValidatePanel(*_settings);
         EXPECT_TRUE(HasIssue(failures, UILayoutIssueKind::TouchTargetTooSmall)) << DescribeMatrixFailures(failures).c_str();
@@ -1041,7 +1041,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UISettingsScreenTest, ASliderWithoutAnExplicitHeightHasNoRectAndIsCaughtHere) {
-        ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](std::string& xml) { Replace(xml, R"(name="Volume" flex="1" height="56")", R"(name="Volume" flex="1")"); }));
+        ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](String& xml) { Replace(xml, R"(name="Volume" flex="1" height="56")", R"(name="Volume" flex="1")"); }));
         ASSERT_NO_FATAL_FAILURE(Show());
         EXPECT_NEAR(El("Volume").rect.h, 0.0f, 0.01f);
         UICanvasLayout& layout = _settings->GetLayout();
@@ -1050,7 +1050,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UISettingsScreenTest, AToggleCaptionTooLongForItsAreaIsCaughtByTheFitCheckAndNotByTheValidator) {
-        const auto lengthen = [](std::string& xml) { Replace(xml, R"(text="{#settings.sound}")", R"(text="Sound effects, music and every other noise of the game")"); };
+        const auto lengthen = [](String& xml) { Replace(xml, R"(text="{#settings.sound}")", R"(text="Sound effects, music and every other noise of the game")"); };
         ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, lengthen));
         EXPECT_FALSE(HasIssue(ValidatePanel(*_settings), UILayoutIssueKind::TextDoesNotFit)) << "an ellipsis label can shrink: the validator does not report it";
         const String matrix = ProblemsOnMatrix(*_settings);
@@ -1064,10 +1064,10 @@ namespace BECore::Tests {
 
     TEST_F(UISettingsScreenTest, AWordTooLongInTheLongLanguageIsCaughtInTheNarrowestWindowAlone) {
         // A German caption made too long for the area left of the switch; the narrowest window (about 689 units of safe width) finds it, and the failure names the language
-        std::string table = kStringsXml;
-        const std::string original = R"(text="Geräuscheffekte")";
+        String table = kStringsXml;
+        const String original = R"(text="Geräuscheffekte")";
         const size_t at = table.find(original);
-        ASSERT_NE(at, std::string::npos);
+        ASSERT_NE(at, String::npos);
         table.replace(at, original.size(), R"(text="Geräuscheffekte und Klangeinstellungen des Spiels")");
         ASSERT_NO_FATAL_FAILURE(LoadStrings(table.c_str()));
         ASSERT_NO_FATAL_FAILURE(LoadScene());
@@ -1078,8 +1078,8 @@ namespace BECore::Tests {
     }
 
     TEST_F(UISettingsScreenTest, AKeyMissingEverywhereShowsTheKeyInTheLongLanguageAndTheFitCheckStillMeasuresIt) {
-        ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight,
-                                          [](std::string& xml) { Replace(xml, R"(text="{#settings.sound}")", R"(text="{#settings.sound.effects.volume.and.noise.of.the.game.and.of.the.menu}")"); }));
+        ASSERT_NO_FATAL_FAILURE(
+            LoadScene(kViewWidth, kViewHeight, [](String& xml) { Replace(xml, R"(text="{#settings.sound}")", R"(text="{#settings.sound.effects.volume.and.noise.of.the.game.and.of.the.menu}")"); }));
         ASSERT_TRUE(CoreManager::GetUIStrings().SetLanguage("de"_intern));
         Draw();
         EXPECT_EQ(ShownText(El("SoundCaption")), "settings.sound.effects.volume.and.noise.of.the.game.and.of.the.menu") << "the key itself, without the braces: never an empty label";

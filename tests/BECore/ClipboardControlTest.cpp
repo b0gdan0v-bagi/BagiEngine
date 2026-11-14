@@ -11,30 +11,28 @@ namespace BECore::Tests {
 
     namespace {
 
-        // std: meets std::string until the std::string of this file moves to String
-        String MakeRequest(int64_t id, std::string_view method, const Json& params = Json()) {
+        String MakeRequest(int64_t id, StringView method, const Json& params = Json()) {
             Json request = Json::object();
             request["id"] = id;
-            request["method"] = std::string(method);
+            request["method"] = ToStdString(method);
             if (!params.is_null()) {
                 request["params"] = params;
             }
             return DumpJson(request);
         }
 
-        // std: meets std::string until the std::string of this file moves to String
-        Json TextParams(std::string_view text) {
+        Json TextParams(StringView text) {
             Json params = Json::object();
-            params["text"] = std::string(text);
+            params["text"] = ToStdString(text);
             return params;
         }
 
-        std::string StringOf(const Json* object, StringView key) {
+        String StringOf(const Json* object, StringView key) {
             if (object == nullptr) {
                 return {};
             }
             const auto value = GetJsonString(*object, key);
-            return value ? std::string(value->c_str(), value->size()) : std::string();
+            return value ? String(value->c_str(), value->size()) : String();
         }
 
         constexpr int kFrameGuard = 1000;  // a loop that does not end would hang the test run
@@ -81,7 +79,7 @@ namespace BECore::Tests {
             return index < responses.size() ? FindJsonMember(responses[index], "result") : nullptr;
         }
 
-        std::string ErrorCode(size_t index) const {
+        String ErrorCode(size_t index) const {
             if (index >= responses.size()) {
                 return {};
             }

@@ -20,7 +20,7 @@ namespace BECore::Tests {
                 std::filesystem::remove_all(_directory, ec);
             }
 
-            void WriteFile(const std::filesystem::path& path, const std::string& text) const {
+            void WriteFile(const std::filesystem::path& path, const String& text) const {
                 std::filesystem::create_directories(path.parent_path());
                 std::ofstream(path, std::ios::binary) << text;
             }

@@ -1,3 +1,4 @@
+#include <Common/Printers.h>
 #include <RoomServer/RoomServerArgs.h>
 #include <gtest/gtest.h>
 
@@ -14,12 +15,12 @@ namespace BECore::Tests {
         }
 
         /// The message of a failed parse (empty when it succeeded)
-        std::string ErrorOf(std::initializer_list<const char*> arguments) {
+        String ErrorOf(std::initializer_list<const char*> arguments) {
             const auto parsed = Parse(arguments);
-            return parsed ? std::string() : std::string(parsed.error().c_str());
+            return parsed ? String() : parsed.error();
         }
 
-        using Environment = Map<std::string, std::string>;
+        using Environment = Map<String, String>;
 
         std::expected<RoomServerArgs, String> ReadEnvironment(const Environment& environment) {
             return ReadRoomServerEnvironment([&environment](const char* name) -> const char* {
@@ -29,9 +30,9 @@ namespace BECore::Tests {
         }
 
         /// The message of an environment that was refused (empty when it was taken)
-        std::string EnvironmentErrorOf(const Environment& environment) {
+        String EnvironmentErrorOf(const Environment& environment) {
             const auto read = ReadEnvironment(environment);
-            return read ? std::string() : std::string(read.error().c_str());
+            return read ? String() : read.error();
         }
 
         /// The environment first, the command line over it (what LoadRoomServerArgs() does with the real one)
@@ -106,8 +107,8 @@ namespace BECore::Tests {
         ASSERT_TRUE(args.has_value());
         EXPECT_EQ(args->statsInterval, 0ms);
         EXPECT_EQ(ToSettings(*args).statsLogInterval, 0ms);
-        EXPECT_NE(ErrorOf({"--stats-interval-ms", "-5"}).find("--stats-interval-ms"), std::string::npos);
-        EXPECT_NE(ErrorOf({"--stats-interval-ms", "often"}).find("often"), std::string::npos);
+        EXPECT_NE(ErrorOf({"--stats-interval-ms", "-5"}).find("--stats-interval-ms"), String::npos);
+        EXPECT_NE(ErrorOf({"--stats-interval-ms", "often"}).find("often"), String::npos);
     }
 
     TEST(RoomServerArgsTest, ShutdownGraceIsZeroToAMinuteAndGoesToTheSettings) {
@@ -122,7 +123,7 @@ namespace BECore::Tests {
         EXPECT_EQ(ToSettings(*longest).shutdownGrace, 60s);
 
         for (const char* bad : {"60001", "-1", "soon"}) {
-            EXPECT_NE(ErrorOf({"--shutdown-grace-ms", bad}).find("--shutdown-grace-ms"), std::string::npos) << bad;
+            EXPECT_NE(ErrorOf({"--shutdown-grace-ms", bad}).find("--shutdown-grace-ms"), String::npos) << bad;
         }
     }
 
@@ -154,9 +155,9 @@ namespace BECore::Tests {
 
     TEST(RoomServerArgsTest, OriginThatCouldMatchNothingIsAnError) {
         for (const char* origin : {"", "example.com", "https://a.example/path", "https://", "https://a.example:0", "https://a.example:99999", "https://user@a.example", "https://a b.example"}) {
-            const std::string error = ErrorOf({"--origin", origin});
-            EXPECT_NE(error.find("--origin"), std::string::npos) << origin;
-            EXPECT_NE(error.find(origin), std::string::npos) << origin;
+            const String error = ErrorOf({"--origin", origin});
+            EXPECT_NE(error.find("--origin"), String::npos) << origin;
+            EXPECT_NE(error.find(origin), String::npos) << origin;
         }
         EXPECT_TRUE(ErrorOf({"--origin", "https://a.example:8443"}).empty());
         EXPECT_TRUE(ErrorOf({"--origin", "http://localhost:5173"}).empty());
@@ -169,24 +170,24 @@ namespace BECore::Tests {
         ASSERT_TRUE(args.has_value());
         EXPECT_TRUE(args->help);
 
-        const std::string usage = GetRoomServerUsage().c_str();
+        const String usage = GetRoomServerUsage().c_str();
         for (const char* flag : {"--port", "--bind", "--origin", "--max-connections", "--max-per-address", "--computer-delay-ms", "--reconnect-grace-ms", "--ping-interval-ms", "--stats-interval-ms",
                                  "--shutdown-grace-ms", "--test-games", "--help"}) {
-            EXPECT_NE(usage.find(flag), std::string::npos) << flag;
+            EXPECT_NE(usage.find(flag), String::npos) << flag;
         }
     }
 
     TEST(RoomServerArgsTest, UnknownFlagAndStrayWordAreErrors) {
-        EXPECT_NE(ErrorOf({"--nope"}).find("--nope"), std::string::npos);
-        EXPECT_NE(ErrorOf({"extra"}).find("extra"), std::string::npos);
-        EXPECT_NE(ErrorOf({"--port=80"}).find("--port=80"), std::string::npos);
+        EXPECT_NE(ErrorOf({"--nope"}).find("--nope"), String::npos);
+        EXPECT_NE(ErrorOf({"extra"}).find("extra"), String::npos);
+        EXPECT_NE(ErrorOf({"--port=80"}).find("--port=80"), String::npos);
     }
 
     TEST(RoomServerArgsTest, MissingValueIsAnError) {
         for (const char* flag : {"--port", "--bind", "--origin", "--max-connections", "--max-per-address", "--computer-delay-ms", "--reconnect-grace-ms", "--ping-interval-ms", "--stats-interval-ms",
                                  "--shutdown-grace-ms"}) {
-            const std::string error = ErrorOf({flag});
-            EXPECT_NE(error.find("needs a value"), std::string::npos) << flag << ": " << error;
+            const String error = ErrorOf({flag});
+            EXPECT_NE(error.find("needs a value"), String::npos) << flag << ": " << error;
         }
     }
 
@@ -205,14 +206,14 @@ namespace BECore::Tests {
         EXPECT_FALSE(ErrorOf({"--computer-delay-ms", "-1"}).empty());
         EXPECT_FALSE(ErrorOf({"--reconnect-grace-ms", "999999999999"}).empty());
         EXPECT_FALSE(ErrorOf({"--ping-interval-ms", "soon"}).empty());
-        EXPECT_NE(ErrorOf({"--port", "70000"}).find("70000"), std::string::npos) << "the message names the value";
+        EXPECT_NE(ErrorOf({"--port", "70000"}).find("70000"), String::npos) << "the message names the value";
     }
 
     TEST(RoomServerArgsTest, BadBindAndBadOriginAreErrors) {
-        EXPECT_NE(ErrorOf({"--bind", "everywhere"}).find("everywhere"), std::string::npos);
+        EXPECT_NE(ErrorOf({"--bind", "everywhere"}).find("everywhere"), String::npos);
         EXPECT_FALSE(ErrorOf({"--origin", ""}).empty());
         EXPECT_FALSE(ErrorOf({"--origin", "https://a b"}).empty());
-        EXPECT_FALSE(ErrorOf({"--origin", std::string(500, 'a').c_str()}).empty());
+        EXPECT_FALSE(ErrorOf({"--origin", String(500, 'a').c_str()}).empty());
     }
 
     TEST(RoomServerArgsTest, ToSettingsMapsTheValuesAndAlwaysUsesThePublicPolicy) {
@@ -270,23 +271,23 @@ namespace BECore::Tests {
             EXPECT_TRUE(Parse({"--max-rooms-per-address", ok}).has_value()) << ok;
         }
         for (const char* bad : {"-1", "65", "many"}) {
-            EXPECT_NE(ErrorOf({"--max-rooms-per-address", bad}).find("--max-rooms-per-address"), std::string::npos) << bad;
+            EXPECT_NE(ErrorOf({"--max-rooms-per-address", bad}).find("--max-rooms-per-address"), String::npos) << bad;
         }
         for (const char* ok : {"0", "86400000"}) {
             EXPECT_TRUE(Parse({"--lobby-timeout-ms", ok}).has_value()) << ok;
         }
         for (const char* bad : {"-1", "86400001", "soon"}) {
-            EXPECT_NE(ErrorOf({"--lobby-timeout-ms", bad}).find("--lobby-timeout-ms"), std::string::npos) << bad;
+            EXPECT_NE(ErrorOf({"--lobby-timeout-ms", bad}).find("--lobby-timeout-ms"), String::npos) << bad;
         }
         for (const char* ok : {"0", "4"}) {
             EXPECT_TRUE(Parse({"--trusted-proxy-hops", ok}).has_value()) << ok;
         }
         for (const char* bad : {"-1", "5", "one"}) {
-            EXPECT_NE(ErrorOf({"--trusted-proxy-hops", bad}).find("--trusted-proxy-hops"), std::string::npos) << bad;
+            EXPECT_NE(ErrorOf({"--trusted-proxy-hops", bad}).find("--trusted-proxy-hops"), String::npos) << bad;
         }
         const auto bad = ReadEnvironment({{"BAGI_ROOMS_TRUSTED_PROXY_HOPS", "9"}});
         ASSERT_FALSE(bad.has_value());
-        EXPECT_NE(std::string(bad.error().c_str()).find("BAGI_ROOMS_TRUSTED_PROXY_HOPS"), std::string::npos);
+        EXPECT_NE(bad.error().find("BAGI_ROOMS_TRUSTED_PROXY_HOPS"), String::npos);
         EXPECT_FALSE(ErrorOf({"--lobby-timeout-ms"}).empty()) << "a flag without its value";
     }
 
@@ -380,16 +381,16 @@ namespace BECore::Tests {
             {"BAGI_ROOMS_TEST_GAMES", "yes"},
         };
         for (const auto& [name, value] : bad) {
-            const std::string error = EnvironmentErrorOf({{name, value}});
-            EXPECT_NE(error.find(name), std::string::npos) << name << "=" << value << ": " << error;
-            EXPECT_NE(error.find(value), std::string::npos) << name << "=" << value << ": " << error;
+            const String error = EnvironmentErrorOf({{name, value}});
+            EXPECT_NE(error.find(name), String::npos) << name << "=" << value << ": " << error;
+            EXPECT_NE(error.find(value), String::npos) << name << "=" << value << ": " << error;
         }
     }
 
     TEST(RoomServerArgsTest, OneBadItemOfTheOriginsListIsAnError) {
-        const std::string error = EnvironmentErrorOf({{"BAGI_ROOMS_ORIGINS", "https://a.example,example.com"}});
-        EXPECT_NE(error.find("BAGI_ROOMS_ORIGINS"), std::string::npos) << error;
-        EXPECT_NE(error.find("example.com"), std::string::npos) << error;
+        const String error = EnvironmentErrorOf({{"BAGI_ROOMS_ORIGINS", "https://a.example,example.com"}});
+        EXPECT_NE(error.find("BAGI_ROOMS_ORIGINS"), String::npos) << error;
+        EXPECT_NE(error.find("example.com"), String::npos) << error;
     }
 
     TEST(RoomServerArgsTest, TestGamesVariableTakesOneZeroTrueFalse) {
@@ -433,16 +434,16 @@ namespace BECore::Tests {
     TEST(RoomServerArgsTest, ABadFlagStillFailsOverAGoodEnvironment) {
         const auto args = ParseOver({{"PORT", "9001"}}, {"--port", "abc"});
         ASSERT_FALSE(args.has_value());
-        EXPECT_NE(std::string(args.error().c_str()).find("--port"), std::string::npos);
+        EXPECT_NE(args.error().find("--port"), String::npos);
     }
 
     TEST(RoomServerArgsTest, UsageNamesTheVariablesAndTheHealthPath) {
-        const std::string usage = GetRoomServerUsage().c_str();
+        const String usage = GetRoomServerUsage().c_str();
         for (const char* name :
              {"PORT", "BAGI_ROOMS_BIND", "BAGI_ROOMS_ORIGINS", "BAGI_ROOMS_MAX_CONNECTIONS", "BAGI_ROOMS_MAX_PER_ADDRESS", "BAGI_ROOMS_COMPUTER_DELAY_MS", "BAGI_ROOMS_RECONNECT_GRACE_MS",
               "BAGI_ROOMS_PING_INTERVAL_MS", "BAGI_ROOMS_STATS_INTERVAL_MS", "BAGI_ROOMS_SHUTDOWN_GRACE_MS", "BAGI_ROOMS_TEST_GAMES", "/healthz", "--max-rooms-per-address", "--lobby-timeout-ms",
               "--trusted-proxy-hops", "BAGI_ROOMS_MAX_ROOMS_PER_ADDRESS", "BAGI_ROOMS_LOBBY_TIMEOUT_MS", "BAGI_ROOMS_TRUSTED_PROXY_HOPS"}) {
-            EXPECT_NE(usage.find(name), std::string::npos) << name;
+            EXPECT_NE(usage.find(name), String::npos) << name;
         }
     }
 

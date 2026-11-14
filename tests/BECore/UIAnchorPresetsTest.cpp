@@ -53,7 +53,7 @@ namespace BECore::Tests {
             EXPECT_EQ(all[i].row, i / 4);
             EXPECT_EQ(all[i].column, i % 4);
             EXPECT_EQ(all[i], UIAnchorPresets::At(i / 4, i % 4));
-            EXPECT_NE(std::string(UIAnchorPresets::Name(all[i])), "");
+            EXPECT_NE(String(UIAnchorPresets::Name(all[i])), "");
         }
         EXPECT_EQ(UIAnchorPresets::At(0, 0).anchorMin, (Vec2{0.0f, 0.0f}));  // top left
         EXPECT_EQ(UIAnchorPresets::At(2, 2).anchorMax, (Vec2{1.0f, 1.0f}));  // bottom right

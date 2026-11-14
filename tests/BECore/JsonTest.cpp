@@ -5,9 +5,8 @@ namespace BECore::Tests {
 
     namespace {
 
-        // std: meets std::string until the std::string of this file moves to String
-        StringView View(std::string_view text) {
-            return FromStd(text);
+        StringView View(StringView text) {
+            return text;
         }
 
         Json SampleObject() {
@@ -35,10 +34,10 @@ namespace BECore::Tests {
     }
 
     TEST(JsonTest, BadTextIsAParseErrorNotACrash) {
-        const std::string deepOpen(1 << 20, '[');
-        const Vector<std::string> bad = {"", " ", "{", "}", "not json", "{\"a\":}", "[1,2", "\xff\xfe", "{\"a\":\"\xff\"}", "nul", "[1,]", deepOpen};
+        const String deepOpen(1 << 20, '[');
+        const Vector<String> bad = {"", " ", "{", "}", "not json", "{\"a\":}", "[1,2", "\xff\xfe", "{\"a\":\"\xff\"}", "nul", "[1,]", deepOpen};
 
-        for (const std::string& text : bad) {
+        for (const String& text : bad) {
             const auto parsed = ParseJson(View(text));
             ASSERT_FALSE(parsed.has_value()) << "input of " << text.size() << " bytes";
             EXPECT_EQ(parsed.error().code, String(ControlErrors::kParseError));
@@ -47,7 +46,7 @@ namespace BECore::Tests {
     }
 
     TEST(JsonTest, VeryDeepNestingIsParsedAndFreedWithoutOverflowingTheStack) {
-        std::string deep(1 << 20, '[');
+        String deep(1 << 20, '[');
         deep.append(1 << 20, ']');
 
         const auto parsed = ParseJson(View(deep));
@@ -66,7 +65,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(IsJsonNestedDeeperThan(View("[[],[],[],[[]]]"), 3));
         // Closers with nothing open are ignored, not counted below zero
         EXPECT_FALSE(IsJsonNestedDeeperThan(View("]]]]][[["), 3));
-        EXPECT_TRUE(IsJsonNestedDeeperThan(View(std::string(1 << 20, '[')), 128));
+        EXPECT_TRUE(IsJsonNestedDeeperThan(View(String(1 << 20, '[')), 128));
     }
 
     TEST(JsonTest, FindsMembersOfObjectsOnly) {
@@ -84,7 +83,7 @@ namespace BECore::Tests {
     TEST(JsonTest, TypedGettersCheckTheType) {
         const Json object = SampleObject();
 
-        EXPECT_EQ(GetJsonString(object, "s").value_or("").c_str(), std::string("x"));
+        EXPECT_EQ(GetJsonString(object, "s").value_or("").c_str(), String("x"));
         EXPECT_FALSE(GetJsonString(object, "i"));
         EXPECT_FALSE(GetJsonString(object, "n"));
         EXPECT_FALSE(GetJsonString(object, "missing"));
@@ -129,8 +128,8 @@ namespace BECore::Tests {
         object["a"] = 1;
         object["b"] = Json::array({true, nullptr});
 
-        EXPECT_EQ(std::string(DumpJson(object).c_str()), R"({"a":1,"b":[true,null]})");
-        EXPECT_EQ(std::string(DumpJson(Json::object()).c_str()), "{}");
+        EXPECT_EQ(DumpJson(object), R"({"a":1,"b":[true,null]})");
+        EXPECT_EQ(DumpJson(Json::object()), "{}");
     }
 
     TEST(JsonTest, DumpReplacesInvalidUtf8InsteadOfAborting) {
@@ -138,22 +137,23 @@ namespace BECore::Tests {
 
         const String dumped = DumpJson(text);
 
-        EXPECT_NE(std::string(dumped.c_str()).find("\xef\xbf\xbd"), std::string::npos);  // U+FFFD
+        EXPECT_NE(dumped.find("\xef\xbf\xbd"), String::npos);  // U+FFFD
     }
 
     TEST(JsonTest, StringsRoundTripThroughDumpAndParse) {
-        const std::string original = "quote \" backslash \\ newline \n tab \t unicode \xc3\xa9 \xe2\x82\xac";
+        const String original = "quote \" backslash \\ newline \n tab \t unicode \xc3\xa9 \xe2\x82\xac";
 
         const String dumped = DumpJson(MakeJsonString(View(original)));
         const auto parsed = ParseJson(dumped);
 
         ASSERT_TRUE(parsed.has_value());
         ASSERT_TRUE(parsed->is_string());
-        EXPECT_EQ(parsed->get_ref<const std::string&>(), original);
+        // std: nlohmann holds its strings as std::string
+        EXPECT_EQ(FromStdString(parsed->get_ref<const std::string&>()), original);
     }
 
     TEST(JsonTest, StringMembersMayHoldNulCharacters) {
-        const std::string withNul("a\0b", 3);
+        const String withNul("a\0b", 3);
         Json object = Json::object();
         object["s"] = MakeJsonString(View(withNul));
 

@@ -33,7 +33,7 @@ namespace BECore::Tests {
         return false;
     }
 
-    inline Span<const uint8_t> AsBytes(const std::string& text) {
+    inline Span<const uint8_t> AsBytes(const String& text) {
         return Span<const uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), text.size());
     }
 
@@ -42,16 +42,16 @@ namespace BECore::Tests {
     }
 
     /// The opening handshake of the RFC for a server on @p port; @p host replaces the `Host` header value when it is not empty
-    inline std::string HandshakeRequest(uint16_t port, const std::string& extraHeaders = "", const std::string& host = "") {
-        const std::string hostValue = host.empty() ? "127.0.0.1:" + std::to_string(port) : host;
-        return "GET /control HTTP/1.1\r\nHost: " + hostValue + "\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: " + std::string(kClientKey) + "\r\nSec-WebSocket-Version: 13\r\n" +
+    inline String HandshakeRequest(uint16_t port, const String& extraHeaders = "", const String& host = "") {
+        const String hostValue = host.empty() ? "127.0.0.1:" + ToString(port) : host;
+        return "GET /control HTTP/1.1\r\nHost: " + hostValue + "\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: " + String(kClientKey) + "\r\nSec-WebSocket-Version: 13\r\n" +
                extraHeaders + "\r\n";
     }
 
     /// A frame of the server (not masked)
     struct ServerFrame {
         uint8_t opcode = 0;
-        std::string payload;
+        String payload;
         /// The mask bit of the header: a server must never set it (RFC 6455, 5.1)
         bool masked = false;
     };
@@ -61,8 +61,8 @@ namespace BECore::Tests {
     }
 
     /// The reason of a close frame (after the two bytes of the code)
-    inline std::string CloseReasonOf(const ServerFrame& frame) {
-        return frame.payload.size() > 2 ? frame.payload.substr(2) : std::string();
+    inline String CloseReasonOf(const ServerFrame& frame) {
+        return frame.payload.size() > 2 ? frame.payload.substr(2) : String();
     }
 
     class WebSocketTestClient {
@@ -85,7 +85,7 @@ namespace BECore::Tests {
             EXPECT_TRUE(_socket.SendAll(bytes));
         }
 
-        void Send(const std::string& text) {
+        void Send(const String& text) {
             Send(AsBytes(text));
         }
 
@@ -94,25 +94,24 @@ namespace BECore::Tests {
             return _socket.SendAll(bytes);
         }
 
-        void SendText(const std::string& text) {
-            Send(AsBytes(EncodeTextFrame(FromStd(text), kClientMask)));
+        void SendText(const String& text) {
+            Send(AsBytes(EncodeTextFrame(text, kClientMask)));
         }
 
         /// The response head of the handshake, and the body when it says Content-Length. Empty when nothing came in time
-        std::string ReadHttpResponse() {
-            // std: meets std::string until the std::string of this file moves to String
-            constexpr std::string_view kHeadEnd = "\r\n\r\n";
-            std::string response;
+        String ReadHttpResponse() {
+            constexpr StringView kHeadEnd = "\r\n\r\n";
+            String response;
             size_t bodyExpected = 0;
             const bool complete = WaitUntil(_pump, [&] {
                 FillBuffer();
-                const std::string text(reinterpret_cast<const char*>(_buffer.data()), _buffer.size());
-                const size_t headEnd = text.find(kHeadEnd);
-                if (headEnd == std::string::npos) {
+                const String text(reinterpret_cast<const char*>(_buffer.data()), _buffer.size());
+                const size_t headEnd = text.find(kHeadEnd.data(), 0, kHeadEnd.size());
+                if (headEnd == String::npos) {
                     return false;
                 }
                 const size_t lengthAt = text.find("Content-Length: ");
-                bodyExpected = (lengthAt == std::string::npos || lengthAt > headEnd) ? 0 : static_cast<size_t>(std::stoul(text.substr(lengthAt + 16)));
+                bodyExpected = (lengthAt == String::npos || lengthAt > headEnd) ? 0 : static_cast<size_t>(std::stoul(text.substr(lengthAt + 16).c_str()));
                 if (text.size() < headEnd + kHeadEnd.size() + bodyExpected) {
                     return false;
                 }
@@ -120,13 +119,13 @@ namespace BECore::Tests {
                 _buffer.erase(_buffer.begin(), _buffer.begin() + static_cast<ptrdiff_t>(response.size()));
                 return true;
             });
-            return complete ? response : std::string();
+            return complete ? response : String();
         }
 
         /// Performs the handshake of the RFC and returns whether the server switched protocols
-        bool Handshake(uint16_t port, const std::string& extraHeaders = "") {
+        bool Handshake(uint16_t port, const String& extraHeaders = "") {
             Send(HandshakeRequest(port, extraHeaders));
-            return ReadHttpResponse().starts_with("HTTP/1.1 101 ");
+            return StringView(ReadHttpResponse()).starts_with("HTTP/1.1 101 ");
         }
 
         /// The next complete frame of the server, nullopt when none came yet

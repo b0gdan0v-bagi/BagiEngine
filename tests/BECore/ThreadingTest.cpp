@@ -474,7 +474,7 @@ namespace BECore::Tests {
         constexpr uint32_t kTestSortIndex = 321;
 
         /// The name the profiler has for the calling thread, "" when it has none (and always "" with the profiler off)
-        std::string CurrentThreadNameInProfiler() {
+        String CurrentThreadNameInProfiler() {
 #if BE_PROFILER
             const char* name = Profiler::GetThreadName(Profiler::CurrentThreadId());
             return name != nullptr ? name : "";
@@ -497,7 +497,7 @@ namespace BECore::Tests {
     }
 
     TEST(ThreadingTest, ThreadIsNamedBeforeItsBodyRuns) {
-        std::string seen;
+        String seen;
         uint32_t seenSortIndex = 0;
         Thread thread("Test named", [&] {
             seen = CurrentThreadNameInProfiler();
@@ -516,7 +516,7 @@ namespace BECore::Tests {
     }
 
     TEST(ThreadingTest, ThreadKeepsItsSortIndex) {
-        std::string seen;
+        String seen;
         uint32_t seenSortIndex = 0;
         Thread thread("Test sorted", kTestSortIndex, [&] {
             seen = CurrentThreadNameInProfiler();
@@ -536,8 +536,8 @@ namespace BECore::Tests {
 
     TEST(ThreadingTest, ThreadCopiesARunTimeName) {
         std::atomic<bool> nameGone{false};
-        std::string seen;
-        auto name = MakeUnique<std::string>("Test run-time name 7");
+        String seen;
+        auto name = MakeUnique<String>("Test run-time name 7");
         Thread thread(name->c_str(), [&] {
             while (!nameGone.load()) {
                 std::this_thread::yield();

@@ -14,7 +14,7 @@ namespace BECore::Tests {
     class RoomSocketClient {
     public:
         /// Opens a connection and performs the handshake; nullopt (and a test failure) when the server does not switch protocols
-        static Optional<RoomSocketClient> Connect(uint16_t port, const std::string& extraHeaders = "") {
+        static Optional<RoomSocketClient> Connect(uint16_t port, const String& extraHeaders = "") {
             auto raw = WebSocketTestClient::Open(port);
             if (!raw) {
                 return std::nullopt;
@@ -30,13 +30,13 @@ namespace BECore::Tests {
             return _raw;
         }
 
-        void SendText(const std::string& text) {
+        void SendText(const String& text) {
             _raw.SendText(text);
         }
 
         void Send(const ClientMessage& message) {
             const String text = SerializeClientMessage(message);
-            _raw.SendText(std::string(text.c_str(), text.size()));
+            _raw.SendText(String(text.c_str(), text.size()));
         }
 
         void Create(StringView name, StringView game = "fake") {
@@ -145,10 +145,10 @@ namespace BECore::Tests {
         }
 
         /// Types of the messages received so far, in order ("joined,lobby")
-        [[nodiscard]] std::string Types() const {
-            std::string result;
+        [[nodiscard]] String Types() const {
+            String result;
             for (const ReceivedMessage& message : _received) {
-                result += (result.empty() ? "" : ",") + std::string(message.type.c_str(), message.type.size());
+                result += (result.empty() ? "" : ",") + String(message.type.c_str(), message.type.size());
             }
             return result;
         }

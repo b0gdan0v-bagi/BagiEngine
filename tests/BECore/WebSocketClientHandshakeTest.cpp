@@ -13,40 +13,37 @@ namespace BECore::Tests {
         /// A server answer that passes until a test changes it
         class Response {
         public:
-            std::string statusLine = "HTTP/1.1 101 Switching Protocols";
-            Vector<std::string> headers = {"Upgrade: websocket", "Connection: Upgrade", std::string("Sec-WebSocket-Accept: ") + kRfcAccept};
+            String statusLine = "HTTP/1.1 101 Switching Protocols";
+            Vector<String> headers = {"Upgrade: websocket", "Connection: Upgrade", String("Sec-WebSocket-Accept: ") + kRfcAccept};
 
-            // std: meets std::string until the std::string of this file moves to String
-            Response& Add(std::string_view line) {
+            Response& Add(StringView line) {
                 headers.emplace_back(line);
                 return *this;
             }
 
-            // std: meets std::string until the std::string of this file moves to String
-            Response& Remove(std::string_view name) {
-                eastl::erase_if(headers, [&](const std::string& line) { return line.starts_with(name); });
+            Response& Remove(StringView name) {
+                eastl::erase_if(headers, [&](const String& line) { return StringView(line).starts_with(name); });
                 return *this;
             }
 
-            [[nodiscard]] std::string Text() const {
-                std::string text = statusLine + "\r\n";
-                for (const std::string& line : headers) {
+            [[nodiscard]] String Text() const {
+                String text = statusLine + "\r\n";
+                for (const String& line : headers) {
                     text += line + "\r\n";
                 }
                 return text + "\r\n";
             }
 
             [[nodiscard]] std::expected<void, String> Check() const {
-                const std::string text = Text();
-                return CheckServerHandshakeResponse(FromStd(text), kRfcKey);
+                const String text = Text();
+                return CheckServerHandshakeResponse(text, kRfcKey);
             }
         };
 
-        // std: meets std::string until the std::string of this file moves to String
-        void ExpectRefused(const Response& response, std::string_view messagePart) {
+        void ExpectRefused(const Response& response, StringView messagePart) {
             const auto result = response.Check();
             ASSERT_FALSE(result.has_value()) << response.Text();
-            EXPECT_NE(std::string(result.error().c_str()).find(messagePart), std::string::npos) << result.error().c_str();
+            EXPECT_NE(StringView(result.error().c_str()).find(messagePart), StringView::npos) << result.error().c_str();
         }
 
         WebSocketUrl Url(StringView text) {
@@ -117,14 +114,14 @@ namespace BECore::Tests {
 
     TEST(WebSocketClientHandshakeTest, HeaderNamesAndTheConnectionTokenListAreRead) {
         Response response;
-        response.headers = {"UPGRADE: WebSocket", "connection: keep-alive, Upgrade", std::string("sec-websocket-accept:  ") + kRfcAccept + "  "};
+        response.headers = {"UPGRADE: WebSocket", "connection: keep-alive, Upgrade", String("sec-websocket-accept:  ") + kRfcAccept + "  "};
         const auto result = response.Check();
         EXPECT_TRUE(result.has_value()) << result.error().c_str();
     }
 
     TEST(WebSocketClientHandshakeTest, AnswerWithoutTheTrailingEmptyLineIsRead) {
-        const std::string text = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " + std::string(kRfcAccept);
-        EXPECT_TRUE(CheckServerHandshakeResponse(FromStd(text), kRfcKey).has_value());
+        const String text = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " + String(kRfcAccept);
+        EXPECT_TRUE(CheckServerHandshakeResponse(text, kRfcKey).has_value());
     }
 
     TEST(WebSocketClientHandshakeTest, EachCheckFailsOnItsOwn) {
@@ -190,7 +187,7 @@ namespace BECore::Tests {
         }
         {
             Response response;
-            response.Add(std::string("Sec-WebSocket-Accept: ") + kRfcAccept);
+            response.Add(String("Sec-WebSocket-Accept: ") + kRfcAccept);
             ExpectRefused(response, "repeats");
         }
     }
@@ -218,16 +215,16 @@ namespace BECore::Tests {
 
     TEST(WebSocketClientHandshakeTest, AHeadOverTheLimitIsRefused) {
         Response response;
-        response.Add("X-Padding: " + std::string(kMaxHandshakeBytes, 'a'));
+        response.Add("X-Padding: " + String(kMaxHandshakeBytes, 'a'));
         ExpectRefused(response, "too long");
     }
 
     TEST(WebSocketClientHandshakeTest, ARefusalRepeatsTheStatusLineCutAndAsPrintableText) {
         Response response;
-        response.statusLine = "HTTP/1.1 503 " + std::string(500, 'x') + "\x1B[2J\x01";
+        response.statusLine = "HTTP/1.1 503 " + String(500, 'x') + "\x1B[2J\x01";
         const auto result = response.Check();
         ASSERT_FALSE(result.has_value());
-        EXPECT_NE(std::string(result.error().c_str()).find("HTTP/1.1 503"), std::string::npos);
+        EXPECT_NE(result.error().find("HTTP/1.1 503"), String::npos);
         EXPECT_LT(result.error().size(), 200u) << "the line of a hostile server is not echoed whole";
 
         Response escapes;
@@ -241,16 +238,16 @@ namespace BECore::Tests {
 
     TEST(WebSocketClientHandshakeTest, AFullHeadOfRepeatedTokensIsCheapToRead) {
         constexpr double kLimitMilliseconds = 250.0;  // a linear scan needs a few; the limit is for a Debug build on a loaded machine
-        for (const std::string line : {std::string("Upgrade: a\r\n"), std::string("Connection: ,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,\r\n"), std::string("a:\r\n")}) {
+        for (const String line : {String("Upgrade: a\r\n"), String("Connection: ,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,\r\n"), String("a:\r\n")}) {
             Response response;
-            std::string head = response.Text();
+            String head = response.Text();
             head.erase(head.size() - 2);
             while (head.size() + line.size() + 2 <= kMaxHandshakeBytes) {
                 head += line;
             }
             head += "\r\n";
             const auto begin = std::chrono::steady_clock::now();
-            (void)CheckServerHandshakeResponse(FromStd(head), kRfcKey);
+            (void)CheckServerHandshakeResponse(head, kRfcKey);
             const double elapsed = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - begin).count();
             EXPECT_LT(elapsed, kLimitMilliseconds) << line;
         }

@@ -49,8 +49,8 @@ namespace BECore::Tests {
 
         using Pixel = Array<int, 3>;
 
-        std::string SceneXml() {
-            return std::string(R"(<SceneManager><scenes><scene type="Scene" name="Sparks"><nodes>
+        String SceneXml() {
+            return String(R"(<SceneManager><scenes><scene type="Scene" name="Sparks"><nodes>
   <node name="Emitter"><components>
     <component type="TransformComponent" x="0" y="0" width="0" height="0"/>
     <component type="ParticleEmitterComponent" playOnStart="false">)") +
@@ -211,7 +211,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(!path.empty() && file.good()) << kParticlesDoc;
         std::stringstream text;
         text << file.rdbuf();
-        EXPECT_NE(text.str().find(kExampleEffect), std::string::npos) << "Particles/CLAUDE.md must quote the example effect of ParticleCaptureTest verbatim";
+        EXPECT_NE(text.str().find(kExampleEffect), String::npos) << "Particles/CLAUDE.md must quote the example effect of ParticleCaptureTest verbatim";
     }
 
     TEST_F(ParticleCaptureTest, TheBackgroundIsAloneBeforeAnythingIsEmitted) {

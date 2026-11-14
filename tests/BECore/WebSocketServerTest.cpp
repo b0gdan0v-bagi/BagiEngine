@@ -24,9 +24,8 @@ namespace BECore::Tests {
         using TestClient = WebSocketTestClient;
         constexpr WebSocketMask kMask = kClientMask;
 
-        // std: meets std::string until the std::string of this file moves to String
-        std::string Request(int64_t id, std::string_view method, std::string_view paramsJson = "{}") {
-            return "{\"id\":" + std::to_string(id) + ",\"method\":\"" + std::string(method) + "\",\"params\":" + std::string(paramsJson) + "}";
+        String Request(int64_t id, StringView method, StringView paramsJson = "{}") {
+            return "{\"id\":" + ToString(id) + ",\"method\":\"" + String(method) + "\",\"params\":" + String(paramsJson) + "}";
         }
 
         /// The members of a response, read through the checked helpers
@@ -37,9 +36,9 @@ namespace BECore::Tests {
             Json json;
         };
 
-        Response ParseResponse(const std::string& text) {
+        Response ParseResponse(const String& text) {
             Response response;
-            auto parsed = ParseJson(FromStd(text));
+            auto parsed = ParseJson(text);
             if (!parsed) {
                 ADD_FAILURE() << "the response is not JSON: " << text;
                 return response;
@@ -92,7 +91,7 @@ namespace BECore::Tests {
                 return client;
             }
 
-            Response Call(TestClient& client, const std::string& request) {
+            Response Call(TestClient& client, const String& request) {
                 client.SendText(request);
                 const auto frame = client.WaitForFrame();
                 if (!frame) {
@@ -164,9 +163,9 @@ namespace BECore::Tests {
         ASSERT_TRUE(client.has_value());
 
         client->Send(HandshakeRequest(port));
-        const std::string response = client->ReadHttpResponse();
-        EXPECT_TRUE(response.starts_with("HTTP/1.1 101 Switching Protocols\r\n")) << response;
-        EXPECT_NE(response.find("Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n"), std::string::npos) << response;
+        const String response = client->ReadHttpResponse();
+        EXPECT_TRUE(StringView(response).starts_with("HTTP/1.1 101 Switching Protocols\r\n")) << response;
+        EXPECT_NE(response.find("Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n"), String::npos) << response;
     }
 
     TEST_F(WebSocketServerTest, HandshakeMayArriveInPieces) {
@@ -174,11 +173,11 @@ namespace BECore::Tests {
         auto client = OpenClient(port);
         ASSERT_TRUE(client.has_value());
 
-        const std::string request = HandshakeRequest(port);
+        const String request = HandshakeRequest(port);
         client->Send(request.substr(0, 20));
         std::this_thread::sleep_for(20ms);
         client->Send(request.substr(20));
-        EXPECT_TRUE(client->ReadHttpResponse().starts_with("HTTP/1.1 101 "));
+        EXPECT_TRUE(StringView(client->ReadHttpResponse()).starts_with("HTTP/1.1 101 "));
     }
 
     TEST_F(WebSocketServerTest, RequestGetsItsResponse) {
@@ -213,8 +212,8 @@ namespace BECore::Tests {
         constexpr int kRequests = 50;
         Vector<uint8_t> batch;
         for (int id = 1; id <= kRequests; ++id) {
-            const std::string text = Request(id, "echo", "{\"n\":" + std::to_string(id) + "}");
-            const auto frame = EncodeTextFrame(FromStd(text), kMask);
+            const String text = Request(id, "echo", "{\"n\":" + ToString(id) + "}");
+            const auto frame = EncodeTextFrame(text, kMask);
             batch.insert(batch.end(), frame.begin(), frame.end());
         }
         client->Send(AsBytes(batch));
@@ -234,9 +233,9 @@ namespace BECore::Tests {
         auto client = Connect(port);
         ASSERT_TRUE(client.has_value());
 
-        const std::string text = Request(3, "ping");
-        const std::string first = text.substr(0, 10);
-        const std::string second = text.substr(10);
+        const String text = Request(3, "ping");
+        const String first = text.substr(0, 10);
+        const String second = text.substr(10);
         client->Send(AsBytes(EncodeFrame(WebSocketOpcode::kText, AsBytes(first), kMask, /*fin=*/false)));
         client->Send(AsBytes(EncodeFrame(WebSocketOpcode::kContinuation, AsBytes(second), kMask, /*fin=*/true)));
 
@@ -265,7 +264,7 @@ namespace BECore::Tests {
         auto client = Connect(port);
         ASSERT_TRUE(client.has_value());
 
-        const std::string payload = "are you there";
+        const String payload = "are you there";
         client->Send(AsBytes(EncodeFrame(WebSocketOpcode::kPing, AsBytes(payload), kMask)));
         const auto frame = client->WaitForFrame();
         ASSERT_TRUE(frame.has_value());
@@ -291,7 +290,7 @@ namespace BECore::Tests {
         auto client = Connect(port);
         ASSERT_TRUE(client.has_value());
 
-        client->Send(AsBytes(EncodeFrame(WebSocketOpcode::kBinary, AsBytes(std::string("\x01\x02")), kMask)));
+        client->Send(AsBytes(EncodeFrame(WebSocketOpcode::kBinary, AsBytes(String("\x01\x02")), kMask)));
         const auto frame = client->WaitForFrame();
         ASSERT_TRUE(frame.has_value());
         EXPECT_EQ(frame->opcode, WebSocketOpcode::kClose);
@@ -338,9 +337,9 @@ namespace BECore::Tests {
         ASSERT_TRUE(client.has_value());
 
         // A request that is exactly at the limit is passed on; the answer to it is not a transport matter
-        const std::string prefix = "{\"id\":1,\"method\":\"echo\",\"params\":{\"pad\":\"";
-        const std::string suffix = "\"}}";
-        const std::string request = prefix + std::string(ControlService::kMaxRequestBytes - prefix.size() - suffix.size(), 'x') + suffix;
+        const String prefix = "{\"id\":1,\"method\":\"echo\",\"params\":{\"pad\":\"";
+        const String suffix = "\"}}";
+        const String request = prefix + String(ControlService::kMaxRequestBytes - prefix.size() - suffix.size(), 'x') + suffix;
         ASSERT_EQ(request.size(), ControlService::kMaxRequestBytes);
 
         const Response response = Call(*client, request);
@@ -354,8 +353,8 @@ namespace BECore::Tests {
         ASSERT_TRUE(client.has_value());
 
         client->Send(HandshakeRequest(port, "Origin: http://evil.example\r\n"));
-        const std::string response = client->ReadHttpResponse();
-        EXPECT_TRUE(response.starts_with("HTTP/1.1 403 Forbidden\r\n")) << response;
+        const String response = client->ReadHttpResponse();
+        EXPECT_TRUE(StringView(response).starts_with("HTTP/1.1 403 Forbidden\r\n")) << response;
 
         // A request in the same breath is not read: the connection is over
         client->SendText(Request(1, "echo"));
@@ -369,7 +368,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(client.has_value());
 
         client->Send(HandshakeRequest(port, "Origin: http://localhost:3000\r\n"));
-        EXPECT_TRUE(client->ReadHttpResponse().starts_with("HTTP/1.1 101 "));
+        EXPECT_TRUE(StringView(client->ReadHttpResponse()).starts_with("HTTP/1.1 101 "));
     }
 
     TEST_F(WebSocketServerTest, ForeignHostIsRefused) {
@@ -377,8 +376,8 @@ namespace BECore::Tests {
         auto client = OpenClient(port);
         ASSERT_TRUE(client.has_value());
 
-        client->Send(HandshakeRequest(port, "", "rebound.example.com:" + std::to_string(port)));
-        EXPECT_TRUE(client->ReadHttpResponse().starts_with("HTTP/1.1 403 Forbidden\r\n"));
+        client->Send(HandshakeRequest(port, "", "rebound.example.com:" + ToString(port)));
+        EXPECT_TRUE(StringView(client->ReadHttpResponse()).starts_with("HTTP/1.1 403 Forbidden\r\n"));
     }
 
     TEST_F(WebSocketServerTest, PlainHttpRequestIsAnsweredWithAnError) {
@@ -386,8 +385,8 @@ namespace BECore::Tests {
         auto client = OpenClient(port);
         ASSERT_TRUE(client.has_value());
 
-        client->Send(std::string("GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"));
-        EXPECT_TRUE(client->ReadHttpResponse().starts_with("HTTP/1.1 400 Bad Request\r\n"));
+        client->Send(String("GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"));
+        EXPECT_TRUE(StringView(client->ReadHttpResponse()).starts_with("HTTP/1.1 400 Bad Request\r\n"));
     }
 
     TEST_F(WebSocketServerTest, WrongVersionIsAskedToUseThirteen) {
@@ -395,12 +394,12 @@ namespace BECore::Tests {
         auto client = OpenClient(port);
         ASSERT_TRUE(client.has_value());
 
-        std::string request = HandshakeRequest(port);
+        String request = HandshakeRequest(port);
         request.replace(request.find("Version: 13"), 11, "Version: 8");
         client->Send(request);
-        const std::string response = client->ReadHttpResponse();
-        EXPECT_TRUE(response.starts_with("HTTP/1.1 426 Upgrade Required\r\n")) << response;
-        EXPECT_NE(response.find("Sec-WebSocket-Version: 13\r\n"), std::string::npos);
+        const String response = client->ReadHttpResponse();
+        EXPECT_TRUE(StringView(response).starts_with("HTTP/1.1 426 Upgrade Required\r\n")) << response;
+        EXPECT_NE(response.find("Sec-WebSocket-Version: 13\r\n"), String::npos);
     }
 
     TEST_F(WebSocketServerTest, FifthConnectionIsRefusedAsBusy) {
@@ -416,8 +415,8 @@ namespace BECore::Tests {
         auto fifth = OpenClient(port);
         ASSERT_TRUE(fifth.has_value());
         fifth->Send(HandshakeRequest(port));
-        const std::string response = fifth->ReadHttpResponse();
-        EXPECT_TRUE(response.starts_with("HTTP/1.1 503 Service Unavailable\r\n")) << response;
+        const String response = fifth->ReadHttpResponse();
+        EXPECT_TRUE(StringView(response).starts_with("HTTP/1.1 503 Service Unavailable\r\n")) << response;
 
         // The four are not affected
         for (TestClient& client : clients) {
@@ -435,8 +434,8 @@ namespace BECore::Tests {
                 auto client = OpenClient(port);
                 ASSERT_TRUE(client.has_value());
                 client->Send(HandshakeRequest(port));
-                const std::string response = client->ReadHttpResponse();
-                if (response.starts_with("HTTP/1.1 101 ")) {
+                const String response = client->ReadHttpResponse();
+                if (StringView(response).starts_with("HTTP/1.1 101 ")) {
                     connected = true;
                 } else {
                     std::this_thread::sleep_for(10ms);  // the accept thread reaps finished connections every 50 ms
@@ -461,7 +460,7 @@ namespace BECore::Tests {
             const auto frame = client->WaitForFrame();
             ASSERT_TRUE(frame.has_value());
             EXPECT_EQ(frame->opcode, WebSocketOpcode::kText);
-            const auto event = ParseJson(FromStd(frame->payload));
+            const auto event = ParseJson(frame->payload);
             ASSERT_TRUE(event.has_value());
             EXPECT_EQ(GetJsonString(*event, "event").value_or(""), "state_changed");
             const Json* eventData = FindJsonMember(*event, "data");
@@ -490,7 +489,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(silent.has_value());
         auto halfway = OpenClient(port);
         ASSERT_TRUE(halfway.has_value());
-        halfway->Send(std::string("GET / HTT"));
+        halfway->Send(String("GET / HTT"));
         std::this_thread::sleep_for(50ms);
 
         const auto before = std::chrono::steady_clock::now();

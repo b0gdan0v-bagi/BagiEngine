@@ -9,7 +9,7 @@ namespace BECore::Tests {
 
     namespace {
 
-        pugi::xml_document Parse(const std::string& text) {
+        pugi::xml_document Parse(const String& text) {
             pugi::xml_document doc;
             const pugi::xml_parse_result result = doc.load_string(text.c_str());
             EXPECT_TRUE(result) << result.description();
@@ -17,16 +17,16 @@ namespace BECore::Tests {
         }
 
         /// A `<node ... contentVersion=V/>` root, the attribute left out when @p version is empty
-        pugi::xml_document NodeWith(const std::string& version) {
+        pugi::xml_document NodeWith(const String& version) {
             return Parse(version.empty() ? "<node name=\"A\"/>" : "<node name=\"A\" contentVersion=\"" + version + "\"/>");
         }
 
-        std::string Message(const pugi::xml_document& doc) {
+        String Message(const pugi::xml_document& doc) {
             const auto result = CheckContentVersion(doc.document_element(), "config/nodes/A.xml");
-            return result ? std::string{} : std::string{result.error().c_str()};
+            return result ? String{} : String{result.error().c_str()};
         }
 
-        std::string SceneConfigText(const std::string& attribute) {
+        String SceneConfigText(const String& attribute) {
             return "<SceneManager" + attribute + "><scenes><scene type=\"Scene\" name=\"Main\"><nodes/></scene></scenes></SceneManager>";
         }
 
@@ -56,21 +56,21 @@ namespace BECore::Tests {
         const pugi::xml_document doc = NodeWith("0");
         ASSERT_TRUE(GetContentVersion(doc.document_element()));
         EXPECT_EQ(*GetContentVersion(doc.document_element()), 0u);
-        EXPECT_NE(Message(doc).find("content version 0"), std::string::npos);
+        EXPECT_NE(Message(doc).find("content version 0"), String::npos);
     }
 
     TEST(ContentVersionTest, MalformedValueIsAnErrorOfTheFile) {
         for (const char* value : {"", "x", "2x", "-1", "1.5", " 2", "99999999999"}) {
-            const pugi::xml_document doc = Parse(std::string("<node name=\"A\" contentVersion=\"") + value + "\"/>");
+            const pugi::xml_document doc = Parse(String("<node name=\"A\" contentVersion=\"") + value + "\"/>");
             EXPECT_FALSE(GetContentVersion(doc.document_element())) << "'" << value << "'";
-            const std::string message = Message(doc);
-            EXPECT_TRUE(message.starts_with("config/nodes/A.xml: contentVersion '")) << message;
-            EXPECT_NE(message.find("is not a whole number"), std::string::npos) << message;
+            const String message = Message(doc);
+            EXPECT_TRUE(StringView(message).starts_with("config/nodes/A.xml: contentVersion '")) << message;
+            EXPECT_NE(message.find("is not a whole number"), String::npos) << message;
         }
     }
 
     TEST(ContentVersionTest, CurrentVersionPasses) {
-        const pugi::xml_document stamped = NodeWith(std::to_string(kContentVersion));
+        const pugi::xml_document stamped = NodeWith(ToString(kContentVersion));
         EXPECT_TRUE(CheckContentVersion(stamped.document_element(), "x"));
         const pugi::xml_document bare = NodeWith("");
         EXPECT_EQ(CheckContentVersion(bare.document_element(), "x").has_value(), kContentVersion == kUnversionedContentVersion);
@@ -78,14 +78,14 @@ namespace BECore::Tests {
 
     TEST(ContentVersionTest, OlderFileSaysTheVersionsAndTheCommand) {
         ASSERT_GT(kContentVersion, 0u);
-        const pugi::xml_document doc = NodeWith(std::to_string(kContentVersion - 1));
+        const pugi::xml_document doc = NodeWith(ToString(kContentVersion - 1));
         EXPECT_EQ(
             Message(doc),
             Format("config/nodes/A.xml: content version {}, this engine reads {}. Run: python3 engine/tools/migrate/migrate.py <your game folder>", kContentVersion - 1, kContentVersion).c_str());
     }
 
     TEST(ContentVersionTest, NewerFileSaysToUpdateTheEngine) {
-        const pugi::xml_document doc = NodeWith(std::to_string(kContentVersion + 1));
+        const pugi::xml_document doc = NodeWith(ToString(kContentVersion + 1));
         EXPECT_EQ(Message(doc), Format("config/nodes/A.xml: content version {} is newer than this engine reads ({}): update the engine", kContentVersion + 1, kContentVersion).c_str());
     }
 
@@ -104,7 +104,7 @@ namespace BECore::Tests {
             EngineEnvironment::EnsureCoreServices();
         }
 
-        static bool HasMain(const std::string& text, bool checked) {
+        static bool HasMain(const String& text, bool checked) {
             pugi::xml_document doc = Parse(text);
             const XmlNode root{doc.document_element()};
             auto manager = checked ? LoadCheckedSceneManager(root, NoNodeFiles()) : LoadSceneManager(root, NoNodeFiles());
@@ -113,7 +113,7 @@ namespace BECore::Tests {
     };
 
     TEST_F(ContentVersionSceneTest, AStampedSceneConfigLoadsLikeAnUnstampedOne) {
-        const std::string stamp = " contentVersion=\"" + std::to_string(kContentVersion) + "\"";
+        const String stamp = " contentVersion=\"" + ToString(kContentVersion) + "\"";
         EXPECT_TRUE(HasMain(SceneConfigText(stamp), false));
         EXPECT_TRUE(HasMain(SceneConfigText(stamp), true));
         EXPECT_TRUE(HasMain(SceneConfigText(""), false));
@@ -121,8 +121,8 @@ namespace BECore::Tests {
 
     TEST_F(ContentVersionSceneTest, TheCheckedLoaderRefusesAnOlderAndANewerSceneConfig) {
         ASSERT_GT(kContentVersion, 0u);
-        EXPECT_FALSE(HasMain(SceneConfigText(" contentVersion=\"" + std::to_string(kContentVersion - 1) + "\""), true));
-        EXPECT_FALSE(HasMain(SceneConfigText(" contentVersion=\"" + std::to_string(kContentVersion + 1) + "\""), true));
+        EXPECT_FALSE(HasMain(SceneConfigText(" contentVersion=\"" + ToString(kContentVersion - 1) + "\""), true));
+        EXPECT_FALSE(HasMain(SceneConfigText(" contentVersion=\"" + ToString(kContentVersion + 1) + "\""), true));
         EXPECT_FALSE(HasMain(SceneConfigText(" contentVersion=\"x\""), true));
     }
 

@@ -62,35 +62,36 @@ namespace BECore::Tests {
             return (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_';
         }
 
-        bool ReadWholeFile(const std::filesystem::path& path, std::string& text) {
+        bool ReadWholeFile(const std::filesystem::path& path, String& text) {
             std::ifstream file(path, std::ios::binary);
             if (path.empty() || !file) {
                 return false;
             }
             std::ostringstream content;
             content << file.rdbuf();
-            text = content.str();
+            text = FromStdString(content.str());
             return true;
         }
 
         /// `#define ICON_LC_NAME "<bytes>"  // U+xxxx` of the vendored header: name to codepoint
-        Map<std::string, unsigned int> ReadHeaderCodepoints() {
-            Map<std::string, unsigned int> codepoints;
-            std::string text;
+        Map<String, unsigned int> ReadHeaderCodepoints() {
+            Map<String, unsigned int> codepoints;
+            String text;
             if (!ReadWholeFile(CoreManager::GetFileSystem().ResolvePath(kIconHeaderPath), text)) {
                 return codepoints;
             }
-            const std::string definePrefix = std::string("#define ") + kIconTokenPrefix;
-            std::istringstream lines(text);
-            std::string line;
-            while (std::getline(lines, line)) {
+            const String definePrefix = String("#define ") + kIconTokenPrefix;
+            std::istringstream lines(ToStdString(text));
+            std::string stdLine;  // std: std::getline fills a std::string
+            while (std::getline(lines, stdLine)) {
+                const String line = FromStdString(stdLine);
                 if (line.rfind(definePrefix, 0) != 0) {
                     continue;
                 }
                 const size_t nameStart = std::strlen("#define ");
                 const size_t nameEnd = line.find(' ', nameStart);
                 const size_t comment = line.find("// U+");
-                if (nameEnd == std::string::npos || comment == std::string::npos) {
+                if (nameEnd == String::npos || comment == String::npos) {
                     continue;
                 }
                 const unsigned long value = std::strtoul(line.c_str() + comment + std::strlen("// U+"), nullptr, 16);
@@ -100,7 +101,7 @@ namespace BECore::Tests {
         }
 
         /// Every distinct `ICON_LC_*` token of the widget sources that is not in a `//` comment (the vendored header folder is skipped); false when a file cannot be read
-        bool CollectWidgetIconTokens(Set<std::string>& tokens) {
+        bool CollectWidgetIconTokens(Set<String>& tokens) {
             const std::filesystem::path root = CoreManager::GetFileSystem().ResolvePath(kWidgetsPath);
             if (root.empty()) {
                 return false;
@@ -112,15 +113,15 @@ namespace BECore::Tests {
                 if (entry.path().parent_path().filename() == "Icons") {
                     continue;
                 }
-                std::string text;
+                String text;
                 if (!ReadWholeFile(entry.path(), text)) {
                     return false;
                 }
-                for (size_t at = text.find(kIconTokenPrefix); at != std::string::npos; at = text.find(kIconTokenPrefix, at + 1)) {
+                for (size_t at = text.find(kIconTokenPrefix); at != String::npos; at = text.find(kIconTokenPrefix, at + 1)) {
                     // A name in a comment ("`{"name", ICON_LC_NAME}`") is not a use
                     const size_t lineStart = text.rfind('\n', at);
-                    const size_t comment = text.find("//", lineStart == std::string::npos ? 0 : lineStart);
-                    if (comment != std::string::npos && comment < at) {
+                    const size_t comment = text.find("//", lineStart == String::npos ? 0 : lineStart);
+                    if (comment != String::npos && comment < at) {
                         continue;
                     }
                     size_t end = at + std::strlen(kIconTokenPrefix);
@@ -207,12 +208,12 @@ namespace BECore::Tests {
     }
 
     TEST_F(IconTableFontTest, EveryIconMacroTheWidgetsUseIsDrawnFromTheIconSource) {
-        const Map<std::string, unsigned int> header = ReadHeaderCodepoints();
+        const Map<String, unsigned int> header = ReadHeaderCodepoints();
         ASSERT_FALSE(header.empty()) << "cannot read " << kIconHeaderPath;
-        Set<std::string> tokens;
+        Set<String> tokens;
         ASSERT_TRUE(CollectWidgetIconTokens(tokens)) << "cannot read a source under " << kWidgetsPath;
         ASSERT_GE(tokens.size(), kMinWidgetIconTokens) << "the scan of " << kWidgetsPath << " found too few ICON_LC_* tokens";
-        for (const std::string& token : tokens) {
+        for (const String& token : tokens) {
             const auto found = header.find(token);
             ASSERT_NE(found, header.end()) << token << " is not defined in " << kIconHeaderPath;
             ASSERT_NO_FATAL_FAILURE(ExpectDrawnFromLucide(found->second, token.c_str()));

@@ -186,10 +186,10 @@ namespace BECore::Tests {
 
         constexpr int kBlendTolerance = 4;
 
-        std::string ErrorCode(const Json& response) {
+        String ErrorCode(const Json& response) {
             const Json* error = FindJsonMember(response, "error");
             const auto code = error != nullptr ? GetJsonString(*error, "code") : std::nullopt;
-            return code ? std::string(code->c_str(), code->size()) : std::string();
+            return code ? String(code->c_str(), code->size()) : String();
         }
 
         /// A ControlService of its own with the `screenshot` method, answering from the window and renderer of SDLCaptureTest
@@ -237,7 +237,7 @@ namespace BECore::Tests {
 
     TEST_F(SDLCaptureTest, TheWindowIsHeadlessAndHasNoGpuSurface) {
         EXPECT_TRUE(window->IsHeadless());
-        EXPECT_EQ(std::string(SDL_GetCurrentVideoDriver()), "dummy");
+        EXPECT_EQ(String(SDL_GetCurrentVideoDriver()), "dummy");
         EXPECT_GT(renderer->GetOutputWidth(), 0.0f);
         EXPECT_GT(renderer->GetOutputHeight(), 0.0f);
     }

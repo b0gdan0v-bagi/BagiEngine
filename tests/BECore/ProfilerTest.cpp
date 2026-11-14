@@ -3,6 +3,7 @@
 #include <BECore/Profiler/ProfilerClock.h>
 #include <BECore/Profiler/ProfilerSettings.h>
 #include <BECore/Profiler/ScopedTrace.h>
+#include <Common/Printers.h>
 #include <Common/TempPath.h>
 #include <chrono>
 #include <cstdio>
@@ -23,13 +24,13 @@ namespace BECore::Tests {
         constexpr ProfileSite kOuterSite{"Outer", "Test", "ProfilerTest.cpp", 1, 0};
         constexpr ProfileSite kInnerSite{"Inner \"quoted\"\\", "Test", "C:\\dir\\ProfilerTest.cpp", 2, 0};
 
-        std::string Text(const String& text) {
-            return std::string(text.data(), text.size());
+        String Text(const String& text) {
+            return String(text.data(), text.size());
         }
 
-        std::string Member(const Json& event, const char* key) {
+        String Member(const Json& event, const char* key) {
             const auto value = GetJsonString(event, key);
-            return value ? Text(*value) : std::string();
+            return value ? Text(*value) : String();
         }
 
         /// The events of a trace, parsed back (fails the test when the JSON is not valid)
@@ -59,7 +60,7 @@ namespace BECore::Tests {
             Map<int64_t, int> depth;
             Map<int64_t, double> lastTs;
             for (const Json& event : events) {
-                const std::string phase = Member(event, "ph");
+                const String phase = Member(event, "ph");
                 if (phase != "B" && phase != "E") {
                     continue;
                 }
@@ -160,9 +161,9 @@ namespace BECore::Tests {
         EXPECT_EQ(CountPhase(events, "C"), 1u);
         EXPECT_EQ(CountPhase(events, "i"), 1u);
 
-        Vector<std::string> begun;
+        Vector<String> begun;
         for (const Json& event : events) {
-            const std::string phase = Member(event, "ph");
+            const String phase = Member(event, "ph");
             if (phase == "B") {
                 begun.push_back(Member(event, "name"));
             } else if (phase == "C") {
@@ -172,7 +173,7 @@ namespace BECore::Tests {
                 EXPECT_EQ(Member(*FindJsonMember(event, "args"), "name"), "Test main");
             }
         }
-        EXPECT_EQ(begun, (Vector<std::string>{"Outer", "Inner \"quoted\"\\"}));
+        EXPECT_EQ(begun, (Vector<String>{"Outer", "Inner \"quoted\"\\"}));
         EXPECT_EQ(CountPhase(events, "M"), 1u);
     }
 
@@ -332,7 +333,7 @@ namespace BECore::Tests {
         }
         EXPECT_EQ(Profiler::GetBackend(), nullptr);
         std::ifstream stream(file);
-        const std::string text((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
+        const String text((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
         const Json events = ParseEvents(String(text.c_str()));
         EXPECT_EQ(CountPhase(events, "B"), 2u);
         ExpectBalanced(events);

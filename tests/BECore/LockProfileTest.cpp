@@ -148,7 +148,7 @@ namespace BECore::Tests {
             size_t count = 0;
             for (const RingThread& thread : ring.Snapshot().threads) {
                 for (const ZoneRecord& zone : thread.zones) {
-                    if (thread.threadId == threadId && std::string(zone.site->name) == name) {
+                    if (thread.threadId == threadId && String(zone.site->name) == name) {
                         ++count;
                         if (depth != nullptr) {
                             *depth = zone.depth;
@@ -220,7 +220,7 @@ namespace BECore::Tests {
             std::atomic<int> readerUnlock{0};
             std::atomic<int> tryAcquired{0};
             std::atomic<int> tryFailed{0};
-            std::string lastName;
+            String lastName;
             LockKind lastAnnounceKind = LockKind::Mutex;
         };
 

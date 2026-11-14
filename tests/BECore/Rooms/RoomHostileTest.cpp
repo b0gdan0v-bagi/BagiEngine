@@ -67,11 +67,10 @@ namespace BECore::Tests {
         }
 
         /// The cards a client was sent that the wire judge finds hidden from its seat
-        Vector<std::string> LeaksSeenBy(const TestClient& client) {
-            Vector<std::string> leaks;
+        Vector<String> LeaksSeenBy(const TestClient& client) {
+            Vector<String> leaks;
             for (const ReceivedMessage& message : client.received) {
-                // std: meets std::string until the std::string of this file moves to String
-                for (std::string& id : FindLeakedCardIds(std::string_view(message.text.c_str(), message.text.size()), client.seat)) {
+                for (String& id : FindLeakedCardIds(StringView(message.text.c_str(), message.text.size()), client.seat)) {
                     leaks.push_back(std::move(id));
                 }
             }

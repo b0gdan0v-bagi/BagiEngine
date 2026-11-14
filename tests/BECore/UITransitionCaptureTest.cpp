@@ -4,6 +4,7 @@
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <Common/EngineEnvironment.h>
+#include <Common/Printers.h>
 #include <Common/TempPath.h>
 #include <CoreSDL/SDLMainWindow.h>
 #include <CoreSDL/SDLRendererBackend.h>
@@ -76,8 +77,8 @@ namespace BECore::Tests {
             return result;
         }
 
-        std::string Describe(const Pixel& pixel) {
-            return "(" + std::to_string(pixel[0]) + ", " + std::to_string(pixel[1]) + ", " + std::to_string(pixel[2]) + ")";
+        String Describe(const Pixel& pixel) {
+            return "(" + ToString(pixel[0]) + ", " + ToString(pixel[1]) + ", " + ToString(pixel[2]) + ")";
         }
 
     }  // namespace

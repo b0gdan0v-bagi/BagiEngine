@@ -14,7 +14,7 @@ namespace BECore::Tests {
         /// The seat the texts so far named (`joined`, `view`); -1 before the first and after `left`
         int seat = -1;
         /// Card ids a text named that its receiver may not know, with the text
-        Vector<std::string> leaks;
+        Vector<String> leaks;
     };
 
     /// Wraps a transport and runs the wire judge (WireJudge.h) on every text it delivers, before the client sees it
@@ -56,8 +56,8 @@ namespace BECore::Tests {
             if (parsed && (type == RoomMessageTypes::kJoined || type == RoomMessageTypes::kView)) {
                 _log->seat = static_cast<int>(GetJsonInt(*parsed, "seat").value_or(-1));
             }
-            for (const std::string& id : FindLeakedCardIds(ToStd(text), _log->seat)) {
-                _log->leaks.push_back(id + " in " + std::string(text.c_str()));
+            for (const String& id : FindLeakedCardIds(text, _log->seat)) {
+                _log->leaks.push_back(id + " in " + text);
             }
             if (parsed && type == RoomMessageTypes::kLeft) {
                 _log->seat = -1;

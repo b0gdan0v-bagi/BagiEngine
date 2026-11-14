@@ -81,26 +81,26 @@ namespace BECore::Tests {
     // ---- the judge itself --------------------------------------------------------------------------------------------------------
 
     TEST_F(RoomServerScenarioTest, TheJudgeFindsWholeCardIdsOnly) {
-        EXPECT_EQ(FindCardIds("[\"c1_2\",\"c3_0\"]"), (Vector<std::string>{"c1_2", "c3_0"}));
+        EXPECT_EQ(FindCardIds("[\"c1_2\",\"c3_0\"]"), (Vector<String>{"c1_2", "c3_0"}));
         EXPECT_TRUE(FindCardIds("c1_20 xc1_2 c1_2x c12 c_1 C1_2").empty());
-        EXPECT_EQ(FindCardIds("c1_2"), (Vector<std::string>{"c1_2"}));
+        EXPECT_EQ(FindCardIds("c1_2"), (Vector<String>{"c1_2"}));
         EXPECT_TRUE(FindCardIds("c1_").empty());
     }
 
     TEST_F(RoomServerScenarioTest, TheJudgeLetsASeatKnowItsHandAndTheTableAndNothingElse) {
-        const std::string honest = R"({"type":"view","room":"ABCD","seat":0,"view":{"hand":["c0_1","c0_2"],"table":[{"seat":2,"card":"c2_0"}]},"actions":[{"type":"play","card":"c0_1"}]})";
+        const String honest = R"({"type":"view","room":"ABCD","seat":0,"view":{"hand":["c0_1","c0_2"],"table":[{"seat":2,"card":"c2_0"}]},"actions":[{"type":"play","card":"c0_1"}]})";
         EXPECT_TRUE(FindLeakedCardIds(honest, 0).empty());
         // The same text for another seat: its hand is somebody else's
-        EXPECT_EQ(FindLeakedCardIds(honest, 1), (Vector<std::string>{"c0_1", "c0_2", "c0_1"}));
+        EXPECT_EQ(FindLeakedCardIds(honest, 1), (Vector<String>{"c0_1", "c0_2", "c0_1"}));
 
-        const std::string leaky = R"({"type":"view","seat":0,"view":{"hand":["c0_1"],"table":[],"allHands":[["c0_1"],["c1_0"],["c2_2"]]}})";
-        EXPECT_EQ(FindLeakedCardIds(leaky, 0), (Vector<std::string>{"c1_0", "c2_2"}));
+        const String leaky = R"({"type":"view","seat":0,"view":{"hand":["c0_1"],"table":[],"allHands":[["c0_1"],["c1_0"],["c2_2"]]}})";
+        EXPECT_EQ(FindLeakedCardIds(leaky, 0), (Vector<String>{"c1_0", "c2_2"}));
 
         // Not JSON, or a client with no seat: only what is on the table (nothing) is allowed
-        EXPECT_EQ(FindLeakedCardIds("the card c0_1", 0), Vector<std::string>{});
-        EXPECT_EQ(FindLeakedCardIds("the card c0_1", -1), (Vector<std::string>{"c0_1"}));
+        EXPECT_EQ(FindLeakedCardIds("the card c0_1", 0), Vector<String>{});
+        EXPECT_EQ(FindLeakedCardIds("the card c0_1", -1), (Vector<String>{"c0_1"}));
         // A card on the table of another message is not on the table of this one
-        EXPECT_EQ(FindLeakedCardIds(R"({"type":"error","message":"c2_0"})", 0), (Vector<std::string>{"c2_0"}));
+        EXPECT_EQ(FindLeakedCardIds(R"({"type":"error","message":"c2_0"})", 0), (Vector<String>{"c2_0"}));
     }
 
     // ---- the scenarios over real sockets -----------------------------------------------------------------------------------------
@@ -302,14 +302,14 @@ namespace BECore::Tests {
         // A handshake that never ends: held until the server's handshake timeout cuts it
         auto halfOpen = WebSocketTestClient::Open(port, pumpTheHand);
         ASSERT_TRUE(halfOpen.has_value());
-        halfOpen->Send(std::string("GET /control HTTP/1.1\r\nHost: 127.0.0.1\r\nUpgrade: websocket\r\n"));
+        halfOpen->Send(String("GET /control HTTP/1.1\r\nHost: 127.0.0.1\r\nUpgrade: websocket\r\n"));
 
         // Bytes that are not a frame: a protocol error
         {
             auto garbage = WebSocketTestClient::Open(port, pumpTheHand);
             ASSERT_TRUE(garbage.has_value());
             ASSERT_TRUE(garbage->Handshake(port));
-            garbage->Send(AsBytes(std::string("\xFF\xFF\xFF\xFF\xFF\xFF", 6)));
+            garbage->Send(AsBytes(String("\xFF\xFF\xFF\xFF\xFF\xFF", 6)));
             const auto close = ReadUntilClose(*garbage);
             ASSERT_TRUE(close.has_value());
             EXPECT_EQ(CloseCodeOf(*close), WebSocketCloseCode::kProtocolError);
@@ -326,7 +326,7 @@ namespace BECore::Tests {
                 const auto reply = junk->WaitForFrame();
                 ASSERT_TRUE(reply.has_value()) << text;
                 EXPECT_EQ(reply->opcode, WebSocketOpcode::kText);
-                EXPECT_NE(reply->payload.find("\"error\""), std::string::npos) << reply->payload;
+                EXPECT_NE(reply->payload.find("\"error\""), String::npos) << reply->payload;
             }
         }
 

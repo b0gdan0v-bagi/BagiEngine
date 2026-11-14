@@ -39,9 +39,9 @@ namespace BECore::Tests {
                 _counters.clear();
             }
 
-            [[nodiscard]] bool HasZone(const std::string& name) const {
+            [[nodiscard]] bool HasZone(const String& name) const {
                 std::lock_guard lock(_mutex);
-                for (const std::string& zone : _zones) {
+                for (const String& zone : _zones) {
                     if (zone == name) {
                         return true;
                     }
@@ -49,12 +49,12 @@ namespace BECore::Tests {
                 return false;
             }
 
-            [[nodiscard]] bool HasCounter(const std::string& name) const {
+            [[nodiscard]] bool HasCounter(const String& name) const {
                 return !Values(name).empty();
             }
 
             /// Every value the counter @p name took, in order
-            [[nodiscard]] Vector<double> Values(const std::string& name) const {
+            [[nodiscard]] Vector<double> Values(const String& name) const {
                 std::lock_guard lock(_mutex);
                 Vector<double> values;
                 for (const auto& [counter, value] : _counters) {
@@ -67,8 +67,8 @@ namespace BECore::Tests {
 
         private:
             mutable std::mutex _mutex;
-            Vector<std::string> _zones;
-            Vector<Pair<std::string, double>> _counters;
+            Vector<String> _zones;
+            Vector<Pair<String, double>> _counters;
         };
 
         /// The one backend of these tests, emptied. It is never destroyed: a worker of the TaskManager's pool may sit in a zone that began on
@@ -113,8 +113,8 @@ namespace BECore::Tests {
             co_return;
         }
 
-        std::string Text(const String& text) {
-            return std::string(text.data(), text.size());
+        String Text(const String& text) {
+            return String(text.data(), text.size());
         }
 
     }  // namespace
@@ -214,9 +214,9 @@ namespace BECore::Tests {
         const Json* events = FindJsonMember(*parsed, "traceEvents");
         ASSERT_NE(events, nullptr);
 
-        Vector<Pair<std::string, int64_t>> names;    // thread name, tid
+        Vector<Pair<String, int64_t>> names;         // thread name, tid
         Vector<Pair<int64_t, int64_t>> sortIndexes;  // tid, sort index
-        Vector<std::string> counters;
+        Vector<String> counters;
         for (const Json& event : *events) {
             const auto name = GetJsonString(event, "name");
             const auto phase = GetJsonString(event, "ph");

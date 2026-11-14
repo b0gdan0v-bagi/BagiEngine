@@ -139,22 +139,22 @@ namespace BECore::Tests {
             return (std::max(first, second) + 0.05f) / (std::min(first, second) + 0.05f);
         }
 
-        std::string Spliced(const std::string& note) {
-            std::string xml = kThemeSceneXml;
-            const std::string marker = "@NOTE@";
+        String Spliced(const String& note) {
+            String xml = kThemeSceneXml;
+            const String marker = "@NOTE@";
             xml.replace(xml.find(marker), marker.size(), note);
             return xml;
         }
 
         /// The elements of a compiled `<ui><elements>...</elements></ui>`, as text to put into another file
-        std::string CompiledElements(const String& xml) {
-            const std::string text(xml.c_str(), xml.size());
+        String CompiledElements(const String& xml) {
+            const String text(xml.c_str(), xml.size());
             const size_t begin = text.find("<elements>");
             const size_t end = text.rfind("</elements>");
-            if (begin == std::string::npos || end == std::string::npos) {
+            if (begin == String::npos || end == String::npos) {
                 return {};
             }
-            return text.substr(begin + std::string("<elements>").size(), end - begin - std::string("<elements>").size());
+            return text.substr(begin + String("<elements>").size(), end - begin - String("<elements>").size());
         }
 
     }  // namespace
@@ -188,15 +188,15 @@ namespace BECore::Tests {
             _canvas.Reset();
             _manager.Reset();
             UIWebReport report;
-            const std::string source = std::string("<style>") + css + "</style>" + kNoteHtml;
-            const String compiled = UIWebCompiler::Compile(FromStd(source), {}, report);
+            const String source = String("<style>") + css + "</style>" + kNoteHtml;
+            const String compiled = UIWebCompiler::Compile(source, {}, report);
             ASSERT_FALSE(report.HasIssues()) << report.issues[0].message.c_str() << " / " << compiled.c_str();
-            const std::string note = CompiledElements(compiled);
+            const String note = CompiledElements(compiled);
             ASSERT_FALSE(note.empty()) << compiled.c_str();
 
             XmlDeserializer deserializer;
-            const std::string xml = Spliced(note);
-            ASSERT_TRUE(deserializer.LoadFromString(FromStd(xml)));
+            const String xml = Spliced(note);
+            ASSERT_TRUE(deserializer.LoadFromString(xml));
             _manager = New<SceneManager>();
             _manager->Deserialize(deserializer);
             ASSERT_FALSE(deserializer.HasErrors());

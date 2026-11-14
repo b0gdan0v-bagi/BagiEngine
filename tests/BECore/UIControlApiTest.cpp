@@ -537,8 +537,8 @@ namespace BECore::Tests {
                 return _actions.size();
             }
             /// The value of the last action ("<none>" when there was none)
-            std::string LastValue() const {
-                return _values.empty() ? std::string("<none>") : std::string(_values.back().ToStringView().data(), _values.back().ToStringView().size());
+            String LastValue() const {
+                return _values.empty() ? String("<none>") : String(_values.back().ToStringView().data(), _values.back().ToStringView().size());
             }
 
             int downs = 0;
@@ -560,13 +560,13 @@ namespace BECore::Tests {
             Vector<PoolString> _values;
         };
 
-        std::string Text(const String& text) {
-            return std::string(text.c_str(), text.size());
+        String Text(const String& text) {
+            return String(text.c_str(), text.size());
         }
 
-        std::string StringMember(const Json& object, StringView key) {
+        String StringMember(const Json& object, StringView key) {
             const auto value = GetJsonString(object, key);
-            return value ? Text(*value) : std::string("<missing>");
+            return value ? Text(*value) : String("<missing>");
         }
 
         double NumberMember(const Json& object, StringView key) {
@@ -641,11 +641,10 @@ namespace BECore::Tests {
         }
 
         /// Sends a request, runs the frame stage that answers it and returns the whole response
-        // std: meets std::string until the std::string of this file moves to String
-        Json Call(std::string_view method, const Json& params = Json()) {
+        Json Call(StringView method, const Json& params = Json()) {
             Json request = Json::object();
             request["id"] = ++_nextId;
-            request["method"] = std::string(method);
+            request["method"] = ToStdString(method);
             if (!params.is_null()) {
                 request["params"] = params;
             }
@@ -660,7 +659,7 @@ namespace BECore::Tests {
 
         static Json Click(const char* name) {
             Json params = Json::object();
-            params["name"] = std::string(name);
+            params["name"] = ToStdString(name);
             return params;
         }
 
@@ -668,19 +667,18 @@ namespace BECore::Tests {
             return BoolMember(response, "ok");
         }
 
-        static std::string ErrorCode(const Json& response) {
+        static String ErrorCode(const Json& response) {
             const Json* error = Member(response, "error");
-            return error != nullptr ? StringMember(*error, "code") : std::string("<no error>");
+            return error != nullptr ? StringMember(*error, "code") : String("<no error>");
         }
 
-        static std::string ErrorMessage(const Json& response) {
+        static String ErrorMessage(const Json& response) {
             const Json* error = Member(response, "error");
-            return error != nullptr ? StringMember(*error, "message") : std::string("<no error>");
+            return error != nullptr ? StringMember(*error, "message") : String("<no error>");
         }
 
         /// The canvas of the result named after a scene node
-        // std: meets std::string until the std::string of this file moves to String
-        static const Json* FindCanvas(const Json& result, std::string_view node) {
+        static const Json* FindCanvas(const Json& result, StringView node) {
             const Json* canvases = Member(result, "canvases");
             if (canvases == nullptr || !canvases->is_array()) {
                 return nullptr;
@@ -694,8 +692,7 @@ namespace BECore::Tests {
         }
 
         /// The element of a canvas, searched through the whole tree
-        // std: meets std::string until the std::string of this file moves to String
-        static const Json* FindElement(const Json& parent, std::string_view name) {
+        static const Json* FindElement(const Json& parent, StringView name) {
             const Json* list = Member(parent, parent.contains("elements") ? "elements" : "children");
             if (list == nullptr || !list->is_array()) {
                 return nullptr;
@@ -847,7 +844,7 @@ namespace BECore::Tests {
         // Every element of the other scenes has the default style too
         Show("Main");
         const Json main = Call("ui_tree");
-        EXPECT_EQ(Text(DumpJson(main)).find("\"box\""), std::string::npos);
+        EXPECT_EQ(Text(DumpJson(main)).find("\"box\""), String::npos);
     }
 
     TEST_F(UIControlApiTest, AnElementWithEveryBoxFieldReportsThemAll) {
@@ -941,7 +938,7 @@ namespace BECore::Tests {
             EXPECT_TRUE(IsOk(response)) << ErrorMessage(response);
             const Json* hud = FindCanvas(*Member(response, "result"), "Hud");
             const Json* label = hud ? FindElement(*hud, "Title") : nullptr;
-            return label ? StringMember(*label, "text") : std::string("<no such element>");
+            return label ? StringMember(*label, "text") : String("<no such element>");
         };
 
         EXPECT_EQ(shownText(), "Score: 42");
@@ -1396,7 +1393,7 @@ namespace BECore::Tests {
 
         EXPECT_FALSE(IsOk(response));
         EXPECT_EQ(ErrorCode(response), "not_clickable");
-        EXPECT_NE(ErrorMessage(response).find("hidden"), std::string::npos) << ErrorMessage(response);
+        EXPECT_NE(ErrorMessage(response).find("hidden"), String::npos) << ErrorMessage(response);
     }
 
     TEST_F(UIControlApiTest, ADisabledOptionTakesTheClickAndTheListStaysOpen) {
@@ -1557,7 +1554,7 @@ namespace BECore::Tests {
 
             EXPECT_FALSE(IsOk(response)) << json;
             EXPECT_EQ(ErrorCode(response), "invalid_params") << json;
-            EXPECT_NE(ErrorMessage(response).find("'at'"), std::string::npos) << json << ": " << ErrorMessage(response);
+            EXPECT_NE(ErrorMessage(response).find("'at'"), String::npos) << json << ": " << ErrorMessage(response);
         }
         // Checked before the scene and the element are looked at
         Json missing = Click("NoSuchElementAtAll");
@@ -1576,7 +1573,7 @@ namespace BECore::Tests {
         for (double at : {0.0, 1.0}) {
             Json params = Click("Ok");
             params["at"] = at;
-            params["canvas"] = std::string("Hud");
+            params["canvas"] = "Hud";
             const Json response = Call("ui_click", params);
             ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
             EXPECT_TRUE(BoolMember(*Member(response, "result"), "consumed"));
@@ -1770,7 +1767,7 @@ namespace BECore::Tests {
         const Json response = Call("ui_click", Click("Loading"));
 
         EXPECT_EQ(ErrorCode(response), "not_clickable");
-        EXPECT_NE(ErrorMessage(response).find("not interactive"), std::string::npos) << ErrorMessage(response);
+        EXPECT_NE(ErrorMessage(response).find("not interactive"), String::npos) << ErrorMessage(response);
         EXPECT_EQ(recorder.Total(), 0u);
     }
 
@@ -1921,7 +1918,7 @@ namespace BECore::Tests {
         Show("Main");
         Recorder recorder;
         Json params = Click("Ok");
-        params["canvas"] = std::string("Debug");
+        params["canvas"] = "Debug";
 
         const Json response = Call("ui_click", params);
 
@@ -1972,7 +1969,7 @@ namespace BECore::Tests {
     TEST_F(UIControlApiTest, ACanvasNameThatNoNodeHasIsNotFound) {
         Show("Main");
         Json params = Click("Ok");
-        params["canvas"] = std::string("ui_click_no_such_node_5a90e2");
+        params["canvas"] = "ui_click_no_such_node_5a90e2";
 
         const Json response = Call("ui_click", params);
 
@@ -1987,7 +1984,7 @@ namespace BECore::Tests {
         const Json response = Call("ui_click", Click("Note"));
 
         EXPECT_EQ(ErrorCode(response), "not_clickable");
-        EXPECT_NE(ErrorMessage(response).find("not interactive"), std::string::npos) << ErrorMessage(response);
+        EXPECT_NE(ErrorMessage(response).find("not interactive"), String::npos) << ErrorMessage(response);
         EXPECT_EQ(recorder.Total(), 0u);
     }
 
@@ -1999,7 +1996,7 @@ namespace BECore::Tests {
         const Json response = Call("ui_click", Click("Off"));
 
         EXPECT_EQ(ErrorCode(response), "not_clickable");
-        EXPECT_NE(ErrorMessage(response).find("hidden"), std::string::npos) << ErrorMessage(response);
+        EXPECT_NE(ErrorMessage(response).find("hidden"), String::npos) << ErrorMessage(response);
     }
 
     TEST_F(UIControlApiTest, AButtonCoveredByAnotherElementCannotBeClicked) {
@@ -2009,7 +2006,7 @@ namespace BECore::Tests {
         const Json response = Call("ui_click", Click("Under"));
 
         EXPECT_EQ(ErrorCode(response), "not_clickable");
-        EXPECT_NE(ErrorMessage(response).find("covered by 'Cover'"), std::string::npos) << ErrorMessage(response);
+        EXPECT_NE(ErrorMessage(response).find("covered by 'Cover'"), String::npos) << ErrorMessage(response);
         EXPECT_EQ(recorder.Total(), 0u);
     }
 
@@ -2021,7 +2018,7 @@ namespace BECore::Tests {
         const Json response = Call("ui_click", Click("Off"));
 
         EXPECT_EQ(ErrorCode(response), "not_clickable");
-        EXPECT_NE(ErrorMessage(response).find("canvas 'Hud'"), std::string::npos) << ErrorMessage(response);
+        EXPECT_NE(ErrorMessage(response).find("canvas 'Hud'"), String::npos) << ErrorMessage(response);
     }
 
     TEST_F(UIControlApiTest, AButtonBeforeTheFirstDrawAsksForAFrame) {
@@ -2030,7 +2027,7 @@ namespace BECore::Tests {
         const Json response = Call("ui_click", Click("Ok"));
 
         EXPECT_EQ(ErrorCode(response), "not_clickable");
-        EXPECT_NE(ErrorMessage(response).find("step a frame"), std::string::npos) << ErrorMessage(response);
+        EXPECT_NE(ErrorMessage(response).find("step a frame"), String::npos) << ErrorMessage(response);
     }
 
     TEST_F(UIControlApiTest, TheClickHasToNameAnElement) {
@@ -2040,7 +2037,7 @@ namespace BECore::Tests {
         EXPECT_EQ(ErrorCode(Call("ui_click", noName)), "invalid_params");
 
         Json emptyName = Json::object();
-        emptyName["name"] = std::string();
+        emptyName["name"] = "";
         EXPECT_EQ(ErrorCode(Call("ui_click", emptyName)), "invalid_params");
 
         Json numberName = Json::object();
@@ -2257,7 +2254,7 @@ namespace BECore::Tests {
         const Json response = Call("ui_click", Click("Shade"));
 
         EXPECT_EQ(ErrorCode(response), "not_clickable");
-        EXPECT_NE(ErrorMessage(response).find("Cover"), std::string::npos) << ErrorMessage(response);
+        EXPECT_NE(ErrorMessage(response).find("Cover"), String::npos) << ErrorMessage(response);
         EXPECT_EQ(recorder.Total(), 0u);
     }
 
@@ -2267,7 +2264,7 @@ namespace BECore::Tests {
         const Json response = Call("ui_click", Click("Badge"));
 
         EXPECT_EQ(ErrorCode(response), "not_clickable");
-        EXPECT_NE(ErrorMessage(response).find("not interactive"), std::string::npos) << ErrorMessage(response);
+        EXPECT_NE(ErrorMessage(response).find("not interactive"), String::npos) << ErrorMessage(response);
     }
 
     TEST_F(UIControlApiTest, AtPicksTheHorizontalPointOfAComposedButton) {
@@ -2467,7 +2464,7 @@ namespace BECore::Tests {
         const Json response = Call("ui_click", Click("CEasy"));
 
         EXPECT_EQ(ErrorCode(response), "not_clickable");
-        EXPECT_NE(ErrorMessage(response).find("hidden"), std::string::npos) << ErrorMessage(response);
+        EXPECT_NE(ErrorMessage(response).find("hidden"), String::npos) << ErrorMessage(response);
     }
 
     TEST_F(UIControlApiTest, ADisabledComposedOptionTakesTheClickAndTheListStaysOpen) {

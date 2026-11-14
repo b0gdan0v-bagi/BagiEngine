@@ -23,8 +23,8 @@ namespace BECore::Tests {
         }
 
         template <typename T>
-        std::string ErrorCode(const std::expected<T, ControlError>& value) {
-            return value ? std::string() : std::string(value.error().code.c_str());
+        String ErrorCode(const std::expected<T, ControlError>& value) {
+            return value ? String() : value.error().code;
         }
 
         /// A started game whose first seat is 0

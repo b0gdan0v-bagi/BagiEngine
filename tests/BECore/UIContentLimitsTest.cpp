@@ -18,7 +18,7 @@ namespace BECore::Tests {
 
         /// The problems a table gives for the text of a file, each of which must be one short line
         template <typename Table>
-        Vector<String> Load(Table& table, const std::string& xml) {
+        Vector<String> Load(Table& table, const String& xml) {
             pugi::xml_document document;
             EXPECT_TRUE(document.load_buffer(xml.data(), xml.size()));
             return table.LoadFromXml(XmlNode{document.document_element()});
@@ -36,24 +36,24 @@ namespace BECore::Tests {
     }  // namespace
 
     TEST(UIContentLimitsTest, TheProblemsOfAStringTableAreShortLinesWhateverTheFileSays) {
-        const std::string longKey = std::string(5000, 'k') + "}";
-        const std::string xml = "<UIStrings default=\"" + std::string(2000, 'd') +
-                                "\">"
-                                "<language id=\"en\"><string key=\"" +
-                                longKey + "\" text=\"x\"/><string key=\"a&#10;b\"/><other-" + std::string(3000, 'o') +
-                                "/></language>"
-                                "<language id=\"" +
-                                std::string(1000, 'l') + "\"/><weird/></UIStrings>";
+        const String longKey = String(5000, 'k') + "}";
+        const String xml = "<UIStrings default=\"" + String(2000, 'd') +
+                           "\">"
+                           "<language id=\"en\"><string key=\"" +
+                           longKey + "\" text=\"x\"/><string key=\"a&#10;b\"/><other-" + String(3000, 'o') +
+                           "/></language>"
+                           "<language id=\"" +
+                           String(1000, 'l') + "\"/><weird/></UIStrings>";
         UIStrings strings;
         ExpectOneShortLine(Load(strings, xml));
     }
 
     TEST(UIContentLimitsTest, TheProblemsOfAThemeTableAreShortLinesWhateverTheFileSays) {
-        const std::string xml = "<UIThemes default=\"" + std::string(2000, 'd') +
-                                "\">"
-                                "<theme id=\"t\"><color name=\"" +
-                                std::string(5000, 'n') + "\" value=\"#fff\"/><color name=\"a\" value=\"" + std::string(4000, 'v') + "&#10;\"/><color name=\"b&#9;c\" value=\"#fff\"/><x-" +
-                                std::string(3000, 'x') + "/></theme><theme id=\"" + std::string(1000, 't') + "\"/></UIThemes>";
+        const String xml = "<UIThemes default=\"" + String(2000, 'd') +
+                           "\">"
+                           "<theme id=\"t\"><color name=\"" +
+                           String(5000, 'n') + "\" value=\"#fff\"/><color name=\"a\" value=\"" + String(4000, 'v') + "&#10;\"/><color name=\"b&#9;c\" value=\"#fff\"/><x-" + String(3000, 'x') +
+                           "/></theme><theme id=\"" + String(1000, 't') + "\"/></UIThemes>";
         UIThemes themes;
         ExpectOneShortLine(Load(themes, xml));
     }
@@ -61,13 +61,13 @@ namespace BECore::Tests {
     TEST(UIContentLimitsTest, AShortCleanMessageIsLeftAsItIs) {
         EXPECT_EQ(UIText::TidyMessage("a plain message"), "a plain message");
         EXPECT_EQ(UIText::TidyMessage("tab\tand\nline"), "tab and line");
-        const std::string exact(UIText::kMaxMessageBytes, 'e');
-        EXPECT_EQ(UIText::TidyMessage(FromStd(exact)).size(), UIText::kMaxMessageBytes);
-        const std::string over(UIText::kMaxMessageBytes + 1, 'e');
-        const String cut = UIText::TidyMessage(FromStd(over));
+        const String exact(UIText::kMaxMessageBytes, 'e');
+        EXPECT_EQ(UIText::TidyMessage(exact).size(), UIText::kMaxMessageBytes);
+        const String over(UIText::kMaxMessageBytes + 1, 'e');
+        const String cut = UIText::TidyMessage(over);
         EXPECT_EQ(cut.size(), UIText::kMaxMessageBytes);
         EXPECT_EQ(cut.substr(cut.size() - 3), "...");
-        EXPECT_EQ(UIText::Excerpt(FromStd(over)).size(), UIText::kMaxExcerptBytes);
+        EXPECT_EQ(UIText::Excerpt(over).size(), UIText::kMaxExcerptBytes);
     }
 
     // =========================================================================

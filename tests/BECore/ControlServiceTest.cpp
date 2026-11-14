@@ -23,27 +23,26 @@ namespace BECore::Tests {
             }
         };
 
-        // std: meets std::string until the std::string of this file moves to String
-        StringView View(std::string_view text) {
-            return FromStd(text);
+        StringView View(StringView text) {
+            return text;
         }
 
-        std::string ErrorCode(const Json& response) {
+        String ErrorCode(const Json& response) {
             const Json* error = FindJsonMember(response, "error");
             if (error == nullptr) {
                 return {};
             }
             const auto code = GetJsonString(*error, "code");
-            return code ? std::string(code->c_str(), code->size()) : std::string();
+            return code ? String(code->c_str(), code->size()) : String();
         }
 
-        std::string ErrorMessage(const Json& response) {
+        String ErrorMessage(const Json& response) {
             const Json* error = FindJsonMember(response, "error");
             if (error == nullptr) {
                 return {};
             }
             const auto message = GetJsonString(*error, "message");
-            return message ? std::string(message->c_str(), message->size()) : std::string();
+            return message ? String(message->c_str(), message->size()) : String();
         }
 
         bool IsOk(const Json& response) {
@@ -55,11 +54,10 @@ namespace BECore::Tests {
         }
 
         /// A request text built through Json, so that the test data is always valid
-        // std: meets std::string until the std::string of this file moves to String
-        String MakeRequest(int64_t id, std::string_view method, const Json& params = Json()) {
+        String MakeRequest(int64_t id, StringView method, const Json& params = Json()) {
             Json request = Json::object();
             request["id"] = id;
-            request["method"] = std::string(method);
+            request["method"] = ToStdString(method);
             if (!params.is_null()) {
                 request["params"] = params;
             }
@@ -87,9 +85,8 @@ namespace BECore::Tests {
             }
 
             /// Registers a method that records its name in `order` and answers with an empty result
-            // std: meets std::string until the std::string of this file moves to String
-            void RegisterRecording(std::string_view method, bool bypassBarrier = false) {
-                const std::string name(method);
+            void RegisterRecording(StringView method, bool bypassBarrier = false) {
+                const String name(method);
                 service.RegisterHandler(
                     View(method),
                     [this, name](ControlCall& call) {
@@ -100,9 +97,8 @@ namespace BECore::Tests {
             }
 
             /// Registers a method that defers its answer by `frames` frames, then records `name-done`
-            // std: meets std::string until the std::string of this file moves to String
-            void RegisterDeferring(std::string_view method, uint32_t frames, bool bypassBarrier = false) {
-                const std::string name(method);
+            void RegisterDeferring(StringView method, uint32_t frames, bool bypassBarrier = false) {
+                const String name(method);
                 service.RegisterHandler(
                     View(method),
                     [this, name, frames](ControlCall& call) {
@@ -165,7 +161,7 @@ namespace BECore::Tests {
 
             ControlService service;
             Vector<Json> responses;
-            Vector<std::string> order;
+            Vector<String> order;
         };
 
         static_assert(ControlService::kMaxRequestBytes >= 1024);
@@ -226,7 +222,7 @@ namespace BECore::Tests {
         const Json* result = FindJsonMember(responses[0], "result");
         ASSERT_NE(result, nullptr);
         EXPECT_EQ(GetJsonInt(*result, "value").value_or(0), 42);
-        EXPECT_EQ(GetJsonString(responses[1], "id").value_or("").c_str(), std::string("req-1"));
+        EXPECT_EQ(GetJsonString(responses[1], "id").value_or("").c_str(), String("req-1"));
     }
 
     TEST_F(ControlServiceTest, UnknownMethodIsAnError) {
@@ -249,7 +245,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(ControlServiceTest, LongMethodNameIsCutInTheMessage) {
-        Post(MakeRequest(1, std::string(5000, 'm')));
+        Post(MakeRequest(1, String(5000, 'm')));
         service.Drain();
 
         ASSERT_EQ(responses.size(), 1u);
@@ -352,18 +348,18 @@ namespace BECore::Tests {
 
     TEST_F(ControlServiceTest, GarbageGetsAnAnswerAndNeverAbortsTheProcess) {
         RegisterRecording("ping");
-        const std::string deepArray(200000, '[');
-        std::string allBytes;
+        const String deepArray(200000, '[');
+        String allBytes;
         for (int byte = 0; byte < 256; ++byte) {
             allBytes.push_back(static_cast<char>(byte));
         }
-        const Vector<std::string> garbage = {
+        const Vector<String> garbage = {
             allBytes,
             "\xff\xfe\xfd",
             deepArray,
-            deepArray + std::string(200000, ']'),
+            deepArray + String(200000, ']'),
             R"({"id":1,"method":"ping","params":)" + deepArray,
-            std::string(100000, '"'),
+            String(100000, '"'),
             R"({"id":1,"method":"ping","params":{"a":[[[[[[[[]]]]]]]]}})",
             R"({"id":18446744073709551615,"method":"ping"})",
             R"({"id":-9223372036854775808,"method":"ping"})",
@@ -372,7 +368,7 @@ namespace BECore::Tests {
             R"({"id":1,"method":"ping","method":"ping"})",
         };
 
-        for (const std::string& text : garbage) {
+        for (const String& text : garbage) {
             service.Post(View(text), Collect());
         }
         service.Drain();
@@ -427,7 +423,7 @@ namespace BECore::Tests {
         Post(MakeRequest(4, "a"));
         service.Drain();
 
-        EXPECT_EQ(order, (Vector<std::string>{"b", "a", "c", "a"}));
+        EXPECT_EQ(order, (Vector<String>{"b", "a", "c", "a"}));
         ASSERT_EQ(responses.size(), 4u);
         for (size_t i = 0; i < responses.size(); ++i) {
             EXPECT_EQ(IdOf(responses[i]), static_cast<int64_t>(i + 1));
@@ -480,21 +476,21 @@ namespace BECore::Tests {
         Post(MakeRequest(1, "slow"));
         Post(MakeRequest(2, "fast"));
         service.Drain();
-        EXPECT_EQ(order, (Vector<std::string>{"slow"}));
+        EXPECT_EQ(order, (Vector<String>{"slow"}));
         EXPECT_TRUE(responses.empty());
 
         service.EndFrame();  // one frame left
         service.Drain();
-        EXPECT_EQ(order, (Vector<std::string>{"slow"}));
+        EXPECT_EQ(order, (Vector<String>{"slow"}));
         EXPECT_TRUE(responses.empty());
 
         service.EndFrame();  // done
-        EXPECT_EQ(order, (Vector<std::string>{"slow", "slow-done"}));
+        EXPECT_EQ(order, (Vector<String>{"slow", "slow-done"}));
         ASSERT_EQ(responses.size(), 1u);
         EXPECT_EQ(IdOf(responses[0]), 1);
 
         service.Drain();
-        EXPECT_EQ(order, (Vector<std::string>{"slow", "slow-done", "fast"}));
+        EXPECT_EQ(order, (Vector<String>{"slow", "slow-done", "fast"}));
         ASSERT_EQ(responses.size(), 2u);
         EXPECT_EQ(IdOf(responses[1]), 2);
     }
@@ -537,11 +533,11 @@ namespace BECore::Tests {
         Post(MakeRequest(1, "twice"));
         service.Drain();
         service.EndFrame();
-        EXPECT_EQ(order, (Vector<std::string>{"first"}));
+        EXPECT_EQ(order, (Vector<String>{"first"}));
         EXPECT_TRUE(responses.empty());
 
         service.EndFrame();
-        EXPECT_EQ(order, (Vector<std::string>{"first", "second"}));
+        EXPECT_EQ(order, (Vector<String>{"first", "second"}));
         EXPECT_EQ(responses.size(), 1u);
     }
 
@@ -566,7 +562,7 @@ namespace BECore::Tests {
         Post(MakeRequest(3, "urgent"));
         service.Drain();
 
-        EXPECT_EQ(order, (Vector<std::string>{"hold", "urgent"}));
+        EXPECT_EQ(order, (Vector<String>{"hold", "urgent"}));
         ASSERT_EQ(responses.size(), 1u);
         EXPECT_EQ(IdOf(responses[0]), 3);
 
@@ -575,7 +571,7 @@ namespace BECore::Tests {
         service.EndFrame();
         service.Drain();
 
-        EXPECT_EQ(order, (Vector<std::string>{"hold", "urgent", "hold-done", "normal"}));
+        EXPECT_EQ(order, (Vector<String>{"hold", "urgent", "hold-done", "normal"}));
         ASSERT_EQ(responses.size(), 3u);
         EXPECT_EQ(IdOf(responses[1]), 1);
         EXPECT_EQ(IdOf(responses[2]), 2);
@@ -623,13 +619,13 @@ namespace BECore::Tests {
         service.Drain();
         service.EndFrame();
 
-        EXPECT_EQ(order, (Vector<std::string>{"hold", "hook", "hold-done"}));
+        EXPECT_EQ(order, (Vector<String>{"hold", "hook", "hold-done"}));
     }
 
     TEST_F(ControlServiceTest, HandlerMayRegisterHandlers) {
         service.RegisterHandler("register", [this](ControlCall& call) {
             for (int index = 0; index < 200; ++index) {  // enough to rehash the handler table
-                service.RegisterHandler(View("extra" + std::to_string(index)), [](ControlCall& extra) { extra.Reply(Json::object()); });
+                service.RegisterHandler(View("extra" + ToString(index)), [](ControlCall& extra) { extra.Reply(Json::object()); });
             }
             call.Reply(Json::object());
         });
@@ -656,7 +652,7 @@ namespace BECore::Tests {
         Post(MakeRequest(1, "m"));
         service.Drain();
 
-        EXPECT_EQ(order, (Vector<std::string>{"new"}));
+        EXPECT_EQ(order, (Vector<String>{"new"}));
     }
 
     TEST_F(ControlServiceTest, ShutdownAnswersEverythingWithShuttingDown) {
@@ -676,7 +672,7 @@ namespace BECore::Tests {
             EXPECT_FALSE(IsOk(response));
             EXPECT_EQ(ErrorCode(response), "shutting_down");
         }
-        EXPECT_EQ(order, (Vector<std::string>{"hold"}));
+        EXPECT_EQ(order, (Vector<String>{"hold"}));
     }
 
     TEST_F(ControlServiceTest, RequestPostedAfterShutdownIsAnsweredAtOnce) {
@@ -692,7 +688,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(ControlServiceTest, PublishSendsAnEventToTheSink) {
-        Vector<std::string> pushed;
+        Vector<String> pushed;
         service.SetEventSink([&](const String& text) { pushed.emplace_back(text.c_str(), text.size()); });
 
         Json data = Json::object();
@@ -702,7 +698,7 @@ namespace BECore::Tests {
         ASSERT_EQ(pushed.size(), 1u);
         const auto parsed = ParseJson(View(pushed[0]));
         ASSERT_TRUE(parsed.has_value());
-        EXPECT_EQ(GetJsonString(*parsed, "event").value_or("").c_str(), std::string("state_changed"));
+        EXPECT_EQ(GetJsonString(*parsed, "event").value_or("").c_str(), String("state_changed"));
         const Json* eventData = FindJsonMember(*parsed, "data");
         ASSERT_NE(eventData, nullptr);
         EXPECT_EQ(GetJsonInt(*eventData, "version").value_or(0), 3);
@@ -821,7 +817,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(service.IsStepDue());
         ASSERT_EQ(responses.size(), 1u);
         EXPECT_TRUE(IsOk(responses[0]));
-        EXPECT_EQ(order, (Vector<std::string>{"wait", "wait-done"}));
+        EXPECT_EQ(order, (Vector<String>{"wait", "wait-done"}));
     }
 
     TEST_F(ControlServiceTest, ManualClockAnswersOnlyAfterTheLastFrame) {
@@ -848,13 +844,13 @@ namespace BECore::Tests {
         Post(MakeRequest(1, "wait"));
         Post(MakeRequest(2, "after"));
         service.Drain();
-        EXPECT_EQ(order, (Vector<std::string>{"wait"}));
+        EXPECT_EQ(order, (Vector<String>{"wait"}));
 
         EXPECT_EQ(RunDueFrames(), 2);  // each frame drains: "after" stays behind the barrier until the second one ends
-        EXPECT_EQ(order, (Vector<std::string>{"wait", "wait-done"}));
+        EXPECT_EQ(order, (Vector<String>{"wait", "wait-done"}));
 
         service.Drain();  // the idle cycle
-        EXPECT_EQ(order, (Vector<std::string>{"wait", "wait-done", "after"}));
+        EXPECT_EQ(order, (Vector<String>{"wait", "wait-done", "after"}));
         EXPECT_EQ(IdOf(responses.back()), 2);
     }
 
@@ -947,7 +943,7 @@ namespace BECore::Tests {
 
         EXPECT_LT(waited, std::chrono::seconds(10));
         service.Drain();
-        EXPECT_EQ(order, (Vector<std::string>{"hello"}));
+        EXPECT_EQ(order, (Vector<String>{"hello"}));
     }
 
     TEST_F(ControlServiceTest, FrameEndHookOfTheSameNameIsReplaced) {
@@ -956,7 +952,7 @@ namespace BECore::Tests {
 
         service.EndFrame();
 
-        EXPECT_EQ(order, (Vector<std::string>{"second"}));
+        EXPECT_EQ(order, (Vector<String>{"second"}));
     }
 
     TEST_F(ControlServiceTest, FrameEndHooksOfDifferentNamesRunInTheOrderTheyWereSet) {
@@ -966,7 +962,7 @@ namespace BECore::Tests {
 
         service.EndFrame();
 
-        EXPECT_EQ(order, (Vector<std::string>{"a2", "b"}));
+        EXPECT_EQ(order, (Vector<String>{"a2", "b"}));
     }
 
     TEST_F(ControlServiceTest, AFrameEndHookMayAddAnotherHookWhichRunsInTheSameFrame) {
@@ -976,9 +972,9 @@ namespace BECore::Tests {
         });
 
         service.EndFrame();
-        EXPECT_EQ(order, (Vector<std::string>{"outer", "inner"}));
+        EXPECT_EQ(order, (Vector<String>{"outer", "inner"}));
         service.EndFrame();  // "inner" is set again, not added a second time
-        EXPECT_EQ(order, (Vector<std::string>{"outer", "inner", "outer", "inner"}));
+        EXPECT_EQ(order, (Vector<String>{"outer", "inner", "outer", "inner"}));
     }
 
     TEST_F(ControlServiceTest, StepAdvancesTheClockByTheFramesAskedFor) {

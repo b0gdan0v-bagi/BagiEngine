@@ -117,13 +117,13 @@ namespace BECore::Tests {
             }
         };
 
-        std::string ErrorCode(const Json& response) {
+        String ErrorCode(const Json& response) {
             const Json* error = FindJsonMember(response, "error");
             if (error == nullptr) {
                 return {};
             }
             const auto code = GetJsonString(*error, "code");
-            return code ? std::string(code->c_str(), code->size()) : std::string();
+            return code ? String(code->c_str(), code->size()) : String();
         }
 
         class GameControlTest : public ::testing::Test {
@@ -142,12 +142,11 @@ namespace BECore::Tests {
             }
 
             /// Posts one request, runs the queue and returns the response ({} when nothing was answered)
-            // std: meets std::string until the std::string of this file moves to String
-            Json Call(std::string_view method, const Json& params = Json()) {
+            Json Call(StringView method, const Json& params = Json()) {
                 ControlService& service = CoreManager::GetControlService();
                 Json request = Json::object();
                 request["id"] = ++_lastId;
-                request["method"] = std::string(method);
+                request["method"] = ToStdString(method);
                 if (!params.is_null()) {
                     request["params"] = params;
                 }
@@ -219,7 +218,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(Succeeded(response));
         const Json* result = Result(response);
         ASSERT_NE(result, nullptr);
-        EXPECT_EQ(GetJsonString(*result, "active").value_or("").c_str(), std::string("FakeControllable"));
+        EXPECT_EQ(GetJsonString(*result, "active").value_or("").c_str(), String("FakeControllable"));
 
         const Json* games = FindJsonMember(*result, "games");
         ASSERT_NE(games, nullptr);
@@ -228,8 +227,8 @@ namespace BECore::Tests {
         int controllable = 0;
         int plain = 0;
         for (const Json& game : *games) {
-            const std::string name = GetJsonString(game, "name").value_or("").c_str();
-            EXPECT_EQ(GetJsonString(game, "scene").value_or("x").c_str(), std::string());
+            const String name = GetJsonString(game, "name").value_or("").c_str();
+            EXPECT_EQ(GetJsonString(game, "scene").value_or("x").c_str(), String());
             if (name == "FakeControllable") {
                 EXPECT_EQ(GetJsonBool(game, "controllable"), true);
                 ++controllable;
@@ -260,7 +259,7 @@ namespace BECore::Tests {
         const Json response = Call("switch_game", params);
 
         ASSERT_TRUE(Succeeded(response));
-        EXPECT_EQ(GetJsonString(*Result(response), "active").value_or("").c_str(), std::string("FakePlain"));
+        EXPECT_EQ(GetJsonString(*Result(response), "active").value_or("").c_str(), String("FakePlain"));
         ASSERT_NE(GameManager::GetInstance().GetActive(), nullptr);
         EXPECT_EQ(GameManager::GetInstance().GetActive()->GetName(), "FakePlain"_intern);
     }
@@ -294,7 +293,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(Succeeded(response));
         const Json* result = Result(response);
         ASSERT_NE(result, nullptr);
-        EXPECT_EQ(GetJsonString(*result, "game").value_or("").c_str(), std::string("FakeControllable"));
+        EXPECT_EQ(GetJsonString(*result, "game").value_or("").c_str(), String("FakeControllable"));
         EXPECT_EQ(GetJsonInt(*result, "version"), 9);
         const Json* state = FindJsonMember(*result, "state");
         ASSERT_NE(state, nullptr);
@@ -309,7 +308,7 @@ namespace BECore::Tests {
         ASSERT_NE(actions, nullptr);
         ASSERT_TRUE(actions->is_array());
         ASSERT_EQ(actions->size(), 1u);
-        EXPECT_EQ(GetJsonString((*actions)[0], "type").value_or("").c_str(), std::string("inc"));
+        EXPECT_EQ(GetJsonString((*actions)[0], "type").value_or("").c_str(), String("inc"));
     }
 
     TEST_F(GameControlTest, PerformActionTakesTheActionAsTheParamsAndAnswersWithTheNewVersion) {
@@ -406,7 +405,7 @@ namespace BECore::Tests {
 
         ASSERT_TRUE(Succeeded(response));
         EXPECT_EQ(Plain()->resetCalls, 1);
-        EXPECT_EQ(GetJsonString(*Result(response), "game").value_or("").c_str(), std::string("FakePlain"));
+        EXPECT_EQ(GetJsonString(*Result(response), "game").value_or("").c_str(), String("FakePlain"));
         EXPECT_EQ(FindJsonMember(*Result(response), "version"), nullptr);  // it has no version to report
     }
 
@@ -460,9 +459,9 @@ namespace BECore::Tests {
             Vector<Json> events;
         };
 
-        std::string EventName(const Json& event) {
+        String EventName(const Json& event) {
             const auto name = GetJsonString(event, "event");
-            return name ? std::string(name->c_str(), name->size()) : std::string();
+            return name ? String(name->c_str(), name->size()) : String();
         }
 
         const Json* EventData(const Json& event) {
@@ -489,7 +488,7 @@ namespace BECore::Tests {
         EXPECT_EQ(EventName(collector.events[0]), "state_changed");
         const Json* data = EventData(collector.events[0]);
         ASSERT_NE(data, nullptr);
-        EXPECT_EQ(GetJsonString(*data, "game").value_or("").c_str(), std::string("FakeControllable"));
+        EXPECT_EQ(GetJsonString(*data, "game").value_or("").c_str(), String("FakeControllable"));
         EXPECT_EQ(GetJsonInt(*data, "version").value_or(-1), 1);
         const Json* state = FindJsonMember(*data, "state");
         ASSERT_NE(state, nullptr);

@@ -29,11 +29,10 @@ namespace BECore::Tests {
     }  // namespace WireJudgeDetail
 
     /// Every card id (`c<digit>_<digit>`, a whole token: "c1_20" and "xc1_2" are not ids) that @p text mentions, in order
-    // std: meets std::string until the std::string of this file moves to String
-    inline Vector<std::string> FindCardIds(std::string_view text) {
+    inline Vector<String> FindCardIds(StringView text) {
         using namespace WireJudgeDetail;
         constexpr size_t kIdLength = 4;
-        Vector<std::string> ids;
+        Vector<String> ids;
         for (size_t at = 0; at + kIdLength <= text.size(); ++at) {
             if (text[at] != 'c' || !IsDigit(text[at + 1]) || text[at + 2] != '_' || !IsDigit(text[at + 3])) {
                 continue;
@@ -48,20 +47,19 @@ namespace BECore::Tests {
     }
 
     /// The card ids @p text names that the client of @p seat (-1: a client that has no seat yet) may not know, in order
-    // std: meets std::string until the std::string of this file moves to String
-    inline Vector<std::string> FindLeakedCardIds(std::string_view text, int seat) {
-        Vector<std::string> allowedTable;
-        if (const auto parsed = ParseJson(FromStd(text)); parsed && parsed->is_object()) {
+    inline Vector<String> FindLeakedCardIds(StringView text, int seat) {
+        Vector<String> allowedTable;
+        if (const auto parsed = ParseJson(text); parsed && parsed->is_object()) {
             const Json* view = FindJsonMember(*parsed, "view");
             const Json* table = view && view->is_object() ? FindJsonMember(*view, "table") : nullptr;
             if (table) {
-                allowedTable = FindCardIds(table->dump());
+                allowedTable = FindCardIds(FromStd(table->dump()));
             }
         }
-        const std::string ownPrefix = seat >= 0 ? "c" + std::to_string(seat) + "_" : std::string();
-        Vector<std::string> leaked;
-        for (const std::string& id : FindCardIds(text)) {
-            const bool own = !ownPrefix.empty() && id.starts_with(ownPrefix);
+        const String ownPrefix = seat >= 0 ? "c" + ToString(seat) + "_" : String();
+        Vector<String> leaked;
+        for (const String& id : FindCardIds(text)) {
+            const bool own = !ownPrefix.empty() && StringView(id).starts_with(ownPrefix);
             const bool played = std::find(allowedTable.begin(), allowedTable.end(), id) != allowedTable.end();
             if (!own && !played) {
                 leaked.push_back(id);

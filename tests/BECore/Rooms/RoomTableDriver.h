@@ -116,11 +116,10 @@ namespace BECore::Tests {
     }
 
     /// What the judge says of every text the client received: the ids of the cards it must not have seen
-    inline Vector<std::string> LeaksOf(const RoomSocketClient& client) {
-        Vector<std::string> leaks;
+    inline Vector<String> LeaksOf(const RoomSocketClient& client) {
+        Vector<String> leaks;
         for (const ReceivedMessage& message : client.Received()) {
-            // std: meets std::string until the std::string of this file moves to String
-            for (std::string& id : FindLeakedCardIds(std::string_view(message.text.c_str(), message.text.size()), client.seat)) {
+            for (String& id : FindLeakedCardIds(StringView(message.text.c_str(), message.text.size()), client.seat)) {
                 leaks.push_back(std::move(id));
             }
         }
@@ -137,7 +136,7 @@ namespace BECore::Tests {
 
     inline void ExpectCleanWire(const Clients& clients) {
         for (size_t i = 0; i < clients.size(); ++i) {
-            ExpectCleanWire(*clients[i], ("client " + std::to_string(i)).c_str());
+            ExpectCleanWire(*clients[i], ("client " + ToString(i)).c_str());
         }
     }
 
@@ -146,14 +145,14 @@ namespace BECore::Tests {
         ASSERT_TRUE(SeesTheEnd(client));
         const Json* table = LastTable(client);
         ASSERT_NE(table, nullptr);
-        const Vector<std::string> ids = FindCardIds(table->dump());
+        const Vector<String> ids = FindCardIds(FromStd(table->dump()));
         EXPECT_EQ(ids.size(), static_cast<size_t>(DemoCardGame::kTotalPlays));
-        EXPECT_EQ(Set<std::string>(ids.begin(), ids.end()).size(), static_cast<size_t>(DemoCardGame::kTotalPlays));
+        EXPECT_EQ(Set<String>(ids.begin(), ids.end()).size(), static_cast<size_t>(DemoCardGame::kTotalPlays));
     }
 
     /// Frames of @p count identical text messages in one buffer
-    inline Vector<uint8_t> RepeatText(const std::string& text, int count) {
-        const auto frame = EncodeTextFrame(FromStd(text), kClientMask);
+    inline Vector<uint8_t> RepeatText(const String& text, int count) {
+        const auto frame = EncodeTextFrame(text, kClientMask);
         Vector<uint8_t> batch;
         for (int i = 0; i < count; ++i) {
             batch.insert(batch.end(), frame.data(), frame.data() + frame.size());

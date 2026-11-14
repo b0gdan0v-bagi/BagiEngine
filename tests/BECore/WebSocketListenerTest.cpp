@@ -1,5 +1,6 @@
 #include "WebSocketTestClient.h"
 
+#include <Common/Printers.h>
 #include <RemoteControl/WebSocketFrame.h>
 #include <RemoteControl/WebSocketListener.h>
 #include <gtest/gtest.h>
@@ -17,7 +18,7 @@ namespace BECore::Tests {
         /// Everything the handler of the test saw, in the order it happened, safe to read from the test thread
         class Recorder {
         public:
-            void Add(std::string event) {
+            void Add(String event) {
                 std::lock_guard<std::mutex> lock(_mutex);
                 _events.push_back(std::move(event));
             }
@@ -27,16 +28,16 @@ namespace BECore::Tests {
                 _connections.push_back(connection);
             }
 
-            [[nodiscard]] Vector<std::string> Events() const {
+            [[nodiscard]] Vector<String> Events() const {
                 std::lock_guard<std::mutex> lock(_mutex);
                 return _events;
             }
 
-            [[nodiscard]] size_t CountPrefix(const std::string& prefix) const {
+            [[nodiscard]] size_t CountPrefix(const String& prefix) const {
                 std::lock_guard<std::mutex> lock(_mutex);
                 size_t count = 0;
-                for (const std::string& event : _events) {
-                    count += event.starts_with(prefix) ? 1 : 0;
+                for (const String& event : _events) {
+                    count += StringView(event).starts_with(prefix) ? 1 : 0;
                 }
                 return count;
             }
@@ -59,7 +60,7 @@ namespace BECore::Tests {
 
         private:
             mutable std::mutex _mutex;
-            Vector<std::string> _events;
+            Vector<String> _events;
             Vector<WebSocketHandler::ConnectionPtr> _connections;
         };
 
@@ -76,18 +77,18 @@ namespace BECore::Tests {
                 WebSocketHandler handler;
                 handler.onOpen = [this](const WebSocketHandler::ConnectionPtr& connection) {
                     recorder.AddConnection(connection);
-                    recorder.Add("open:" + std::to_string(connection->GetId()));
+                    recorder.Add("open:" + ToString(connection->GetId()));
                 };
                 handler.onMessage = [this](const WebSocketHandler::ConnectionPtr& connection, WebSocketMessage message) {
-                    const std::string text(message.GetText().data(), message.GetText().size());
-                    recorder.Add("text:" + std::to_string(connection->GetId()) + ":" + text);
+                    const String text(message.GetText().data(), message.GetText().size());
+                    recorder.Add("text:" + ToString(connection->GetId()) + ":" + text);
                     if (text == "quit") {
                         return false;
                     }
                     connection->QueueText(message.GetText());
                     return true;
                 };
-                handler.onClosed = [this](const WebSocketHandler::ConnectionPtr& connection) { recorder.Add("closed:" + std::to_string(connection->GetId())); };
+                handler.onClosed = [this](const WebSocketHandler::ConnectionPtr& connection) { recorder.Add("closed:" + ToString(connection->GetId())); };
 
                 listener = MakeUnique<WebSocketListener>(std::move(settings), std::move(handler));
                 const auto port = listener->Start(0);
@@ -96,7 +97,7 @@ namespace BECore::Tests {
             }
 
             /// A client that finished the handshake
-            Optional<WebSocketTestClient> Connect(uint16_t port, const std::string& extraHeaders = "") {
+            Optional<WebSocketTestClient> Connect(uint16_t port, const String& extraHeaders = "") {
                 auto client = WebSocketTestClient::Open(port);
                 if (client && !client->Handshake(port, extraHeaders)) {
                     ADD_FAILURE() << "the handshake was not accepted";
@@ -106,7 +107,7 @@ namespace BECore::Tests {
             }
 
             /// The answer to a handshake request of a new client ("" when none came)
-            std::string TryHandshake(uint16_t port, const std::string& extraHeaders = "", const std::string& host = "") {
+            String TryHandshake(uint16_t port, const String& extraHeaders = "", const String& host = "") {
                 auto client = WebSocketTestClient::Open(port);
                 if (!client) {
                     return {};
@@ -115,7 +116,7 @@ namespace BECore::Tests {
                 return client->ReadHttpResponse();
             }
 
-            bool WaitForEvents(const std::string& prefix, size_t count) {
+            bool WaitForEvents(const String& prefix, size_t count) {
                 return WaitUntil({}, [&] { return recorder.CountPrefix(prefix) >= count; });
             }
 
@@ -171,7 +172,7 @@ namespace BECore::Tests {
         client->Send(AsBytes(EncodeCloseFrame(WebSocketCloseCode::kNormal, "bye", kClientMask)));
         ASSERT_TRUE(client->WaitForEndOfStream());
         ASSERT_TRUE(WaitForEvents("closed:", 1));
-        EXPECT_EQ(recorder.Events(), (Vector<std::string>{"open:1", "text:1:one", "text:1:two", "closed:1"}));
+        EXPECT_EQ(recorder.Events(), (Vector<String>{"open:1", "text:1:one", "text:1:two", "closed:1"}));
     }
 
     TEST_F(WebSocketListenerTest, ClosedRunsOncePerConnectionHoweverItEnds) {
@@ -200,9 +201,9 @@ namespace BECore::Tests {
         std::this_thread::sleep_for(kShortWait);
         EXPECT_EQ(recorder.CountPrefix("closed:"), 5u) << "a callback ran after Stop() returned";
 
-        Map<std::string, int> perConnection;
-        for (const std::string& event : recorder.Events()) {
-            if (event.starts_with("closed:")) {
+        Map<String, int> perConnection;
+        for (const String& event : recorder.Events()) {
+            if (StringView(event).starts_with("closed:")) {
                 ++perConnection[event];
             }
         }
@@ -217,7 +218,7 @@ namespace BECore::Tests {
         auto silent = WebSocketTestClient::Open(port);
         auto halfway = WebSocketTestClient::Open(port);
         ASSERT_TRUE(silent && halfway);
-        halfway->Send(std::string("GET / HTT"));
+        halfway->Send(String("GET / HTT"));
         std::this_thread::sleep_for(50ms);
 
         listener->Stop();
@@ -238,11 +239,11 @@ namespace BECore::Tests {
         constexpr std::chrono::milliseconds kDripInterval{50};
         const auto start = std::chrono::steady_clock::now();
         const auto giveUp = start + 5 * settings.handshakeTimeout;
-        dripper->Send(std::string("GET / HTTP/1.1\r\nX-Slow: "));
+        dripper->Send(String("GET / HTTP/1.1\r\nX-Slow: "));
         bool hungUp = false;
         while (!hungUp && std::chrono::steady_clock::now() < giveUp) {
             std::this_thread::sleep_for(kDripInterval);
-            hungUp = !dripper->TrySend(AsBytes(std::string("a")));
+            hungUp = !dripper->TrySend(AsBytes(String("a")));
         }
         EXPECT_TRUE(hungUp) << "a client that sends a byte every " << kDripInterval.count() << " ms held its slot past the handshake timeout";
         EXPECT_TRUE(dripper->WaitForEndOfStream());
@@ -269,16 +270,16 @@ namespace BECore::Tests {
         auto second = Connect(port);
         ASSERT_TRUE(first && second);
 
-        const std::string refused = TryHandshake(port);
-        EXPECT_TRUE(refused.starts_with("HTTP/1.1 503 Service Unavailable\r\n")) << refused;
-        EXPECT_NE(refused.find("too many from you"), std::string::npos);
+        const String refused = TryHandshake(port);
+        EXPECT_TRUE(StringView(refused).starts_with("HTTP/1.1 503 Service Unavailable\r\n")) << refused;
+        EXPECT_NE(refused.find("too many from you"), String::npos);
 
         // The two are not affected, and when one leaves the slot is free again
         second->Send(AsBytes(EncodeCloseFrame(WebSocketCloseCode::kNormal, {}, kClientMask)));
         ASSERT_TRUE(second->WaitForEndOfStream());
         bool connected = false;
         for (int attempt = 0; attempt < 200 && !connected; ++attempt) {
-            connected = TryHandshake(port).starts_with("HTTP/1.1 101 ");
+            connected = StringView(TryHandshake(port)).starts_with("HTTP/1.1 101 ");
             if (!connected) {
                 std::this_thread::sleep_for(10ms);  // the accept thread reaps finished connections every 50 ms
             }
@@ -306,9 +307,9 @@ namespace BECore::Tests {
         auto first = Connect(port);
         auto second = Connect(port);
         ASSERT_TRUE(first && second);
-        const std::string refused = TryHandshake(port);
-        EXPECT_TRUE(refused.starts_with("HTTP/1.1 503 Service Unavailable\r\n")) << refused;
-        EXPECT_EQ(refused.find("control"), std::string::npos) << "the default text names no product";
+        const String refused = TryHandshake(port);
+        EXPECT_TRUE(StringView(refused).starts_with("HTTP/1.1 503 Service Unavailable\r\n")) << refused;
+        EXPECT_EQ(refused.find("control"), String::npos) << "the default text names no product";
     }
 
     TEST_F(WebSocketListenerTest, MessageOverTheLimitClosesWithTooBigAndOneAtTheLimitPasses) {
@@ -318,7 +319,7 @@ namespace BECore::Tests {
         auto client = Connect(port);
         ASSERT_TRUE(client.has_value());
 
-        client->SendText(std::string(64, 'x'));
+        client->SendText(String(64, 'x'));
         const auto echoed = client->WaitForFrame();
         ASSERT_TRUE(echoed.has_value());
         EXPECT_EQ(echoed->payload.size(), 64u);
@@ -339,14 +340,14 @@ namespace BECore::Tests {
         auto client = Connect(port);
         ASSERT_TRUE(client.has_value());
 
-        const std::string payload = "are you there";
+        const String payload = "are you there";
         client->Send(AsBytes(EncodeFrame(WebSocketOpcode::kPing, AsBytes(payload), kClientMask)));
         const auto pong = client->WaitForFrame();
         ASSERT_TRUE(pong.has_value());
         EXPECT_EQ(pong->opcode, WebSocketOpcode::kPong);
         EXPECT_EQ(pong->payload, payload);
 
-        client->Send(AsBytes(EncodeFrame(WebSocketOpcode::kBinary, AsBytes(std::string("\x01")), kClientMask)));
+        client->Send(AsBytes(EncodeFrame(WebSocketOpcode::kBinary, AsBytes(String("\x01")), kClientMask)));
         const auto close = client->WaitForFrame();
         ASSERT_TRUE(close.has_value());
         EXPECT_EQ(CloseCodeOf(*close), WebSocketCloseCode::kUnsupportedData);
@@ -360,14 +361,14 @@ namespace BECore::Tests {
         settings.policy.allowedOrigins = {"https://good.example"};
         const uint16_t port = Start(settings);
 
-        EXPECT_TRUE(TryHandshake(port, "Origin: https://good.example\r\n", "game.example.net").starts_with("HTTP/1.1 101 "));
-        EXPECT_TRUE(TryHandshake(port, "Origin: https://evil.example\r\n", "game.example.net").starts_with("HTTP/1.1 403 Forbidden\r\n"));
-        EXPECT_TRUE(TryHandshake(port, "", "game.example.net").starts_with("HTTP/1.1 101 ")) << "a program sends no Origin";
+        EXPECT_TRUE(StringView(TryHandshake(port, "Origin: https://good.example\r\n", "game.example.net")).starts_with("HTTP/1.1 101 "));
+        EXPECT_TRUE(StringView(TryHandshake(port, "Origin: https://evil.example\r\n", "game.example.net")).starts_with("HTTP/1.1 403 Forbidden\r\n"));
+        EXPECT_TRUE(StringView(TryHandshake(port, "", "game.example.net")).starts_with("HTTP/1.1 101 ")) << "a program sends no Origin";
     }
 
     TEST_F(WebSocketListenerTest, LoopbackPolicyStillRefusesAForeignHost) {
         const uint16_t port = Start();
-        EXPECT_TRUE(TryHandshake(port, "", "game.example.net").starts_with("HTTP/1.1 403 Forbidden\r\n"));
+        EXPECT_TRUE(StringView(TryHandshake(port, "", "game.example.net")).starts_with("HTTP/1.1 403 Forbidden\r\n"));
     }
 
     TEST_F(WebSocketListenerTest, PublicListenerAnswersTheHealthCheckAndFreesTheSlot) {
@@ -381,10 +382,10 @@ namespace BECore::Tests {
         for (int probe = 0; probe < 3; ++probe) {
             auto client = WebSocketTestClient::Open(port);
             ASSERT_TRUE(client.has_value());
-            client->Send(std::string("GET /healthz HTTP/1.1\r\nHost: game.example.net\r\n\r\n"));
-            const std::string response = client->ReadHttpResponse();
-            EXPECT_TRUE(response.starts_with("HTTP/1.1 200 OK\r\n")) << response;
-            EXPECT_TRUE(response.ends_with("\r\n\r\nok")) << response;
+            client->Send(String("GET /healthz HTTP/1.1\r\nHost: game.example.net\r\n\r\n"));
+            const String response = client->ReadHttpResponse();
+            EXPECT_TRUE(StringView(response).starts_with("HTTP/1.1 200 OK\r\n")) << response;
+            EXPECT_TRUE(StringView(response).ends_with("\r\n\r\nok")) << response;
             EXPECT_TRUE(client->WaitForEndOfStream());
         }
         EXPECT_TRUE(recorder.Events().empty()) << "the handler must never hear of a health check";
@@ -392,7 +393,7 @@ namespace BECore::Tests {
         // Each probe freed its slot (one connection per address is allowed): a client can still connect
         bool connected = false;
         for (int attempt = 0; attempt < 200 && !connected; ++attempt) {
-            connected = TryHandshake(port, "", "game.example.net").starts_with("HTTP/1.1 101 ");
+            connected = StringView(TryHandshake(port, "", "game.example.net")).starts_with("HTTP/1.1 101 ");
             if (!connected) {
                 std::this_thread::sleep_for(10ms);  // the accept thread reaps finished connections every 50 ms
             }
@@ -409,12 +410,12 @@ namespace BECore::Tests {
 
         auto other = WebSocketTestClient::Open(port);
         ASSERT_TRUE(other.has_value());
-        other->Send(std::string("GET /other HTTP/1.1\r\nHost: game.example.net\r\n\r\n"));
-        const std::string refused = other->ReadHttpResponse();
-        EXPECT_TRUE(refused.starts_with("HTTP/1.1 400 Bad Request\r\n")) << refused;
-        EXPECT_NE(refused.find("expected 'Upgrade: websocket'"), std::string::npos);
+        other->Send(String("GET /other HTTP/1.1\r\nHost: game.example.net\r\n\r\n"));
+        const String refused = other->ReadHttpResponse();
+        EXPECT_TRUE(StringView(refused).starts_with("HTTP/1.1 400 Bad Request\r\n")) << refused;
+        EXPECT_NE(refused.find("expected 'Upgrade: websocket'"), String::npos);
 
-        EXPECT_TRUE(TryHandshake(port, "", "game.example.net").starts_with("HTTP/1.1 101 ")) << "a handshake on any path still opens";
+        EXPECT_TRUE(StringView(TryHandshake(port, "", "game.example.net")).starts_with("HTTP/1.1 101 ")) << "a handshake on any path still opens";
     }
 
     TEST_F(WebSocketListenerTest, LoopbackListenerDoesNotAnswerTheHealthCheck) {
@@ -424,9 +425,9 @@ namespace BECore::Tests {
 
         auto client = WebSocketTestClient::Open(port);
         ASSERT_TRUE(client.has_value());
-        client->Send(std::string("GET /healthz HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"));
-        const std::string response = client->ReadHttpResponse();
-        EXPECT_TRUE(response.starts_with("HTTP/1.1 400 Bad Request\r\n")) << response;
+        client->Send(String("GET /healthz HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"));
+        const String response = client->ReadHttpResponse();
+        EXPECT_TRUE(StringView(response).starts_with("HTTP/1.1 400 Bad Request\r\n")) << response;
     }
 
     TEST_F(WebSocketListenerTest, ForEachOpenConnectionVisitsOnlyConnectionsWithADoneHandshake) {
@@ -435,7 +436,7 @@ namespace BECore::Tests {
         auto second = Connect(port);
         auto unfinished = WebSocketTestClient::Open(port);
         ASSERT_TRUE(first && second && unfinished);
-        unfinished->Send(std::string("GET / HTT"));
+        unfinished->Send(String("GET / HTT"));
         ASSERT_TRUE(WaitForEvents("open:", 2));
 
         int visited = 0;
@@ -465,7 +466,7 @@ namespace BECore::Tests {
         auto silent = WebSocketTestClient::Open(port);
         auto halfway = WebSocketTestClient::Open(port);
         ASSERT_TRUE(open && silent && halfway);
-        halfway->Send(std::string("GET / HTT"));
+        halfway->Send(String("GET / HTT"));
         std::this_thread::sleep_for(50ms);
 
         const auto before = std::chrono::steady_clock::now();
@@ -492,9 +493,9 @@ namespace BECore::Tests {
         ASSERT_TRUE(WaitForEvents("open:", 4));
 
         Vector<uint64_t> ids;
-        for (const std::string& event : recorder.Events()) {
-            if (event.starts_with("open:")) {
-                ids.push_back(std::stoull(event.substr(5)));
+        for (const String& event : recorder.Events()) {
+            if (StringView(event).starts_with("open:")) {
+                ids.push_back(std::stoull(event.substr(5).c_str()));
             }
         }
         ASSERT_EQ(ids.size(), 4u);
@@ -552,21 +553,21 @@ namespace BECore::Tests {
         EXPECT_NE(recorder.ConnectionWithClientAddress("203.0.113.2"), nullptr);
 
         // The same forwarded address again is refused after its handshake, before the handler hears of it
-        const std::string refused = TryHandshake(port, "X-Forwarded-For: 203.0.113.1\r\n");
-        EXPECT_TRUE(refused.starts_with("HTTP/1.1 503 Service Unavailable\r\n")) << refused;
-        EXPECT_NE(refused.find("too many from you"), std::string::npos);
+        const String refused = TryHandshake(port, "X-Forwarded-For: 203.0.113.1\r\n");
+        EXPECT_TRUE(StringView(refused).starts_with("HTTP/1.1 503 Service Unavailable\r\n")) << refused;
+        EXPECT_NE(refused.find("too many from you"), String::npos);
         EXPECT_EQ(recorder.CountPrefix("open:"), 2u);
 
         // A forged left entry changes nothing: the rightmost one is the client
-        const std::string forged = TryHandshake(port, "X-Forwarded-For: 203.0.113.2, 203.0.113.1\r\n");
-        EXPECT_TRUE(forged.starts_with("HTTP/1.1 503 ")) << forged;
+        const String forged = TryHandshake(port, "X-Forwarded-For: 203.0.113.2, 203.0.113.1\r\n");
+        EXPECT_TRUE(StringView(forged).starts_with("HTTP/1.1 503 ")) << forged;
 
         // The slot of a client that leaves is free again
         first->Send(AsBytes(EncodeCloseFrame(WebSocketCloseCode::kNormal, {}, kClientMask)));
         ASSERT_TRUE(first->WaitForEndOfStream());
         bool connected = false;
         for (int attempt = 0; attempt < 200 && !connected; ++attempt) {
-            connected = TryHandshake(port, "X-Forwarded-For: 203.0.113.1\r\n").starts_with("HTTP/1.1 101 ");
+            connected = StringView(TryHandshake(port, "X-Forwarded-For: 203.0.113.1\r\n")).starts_with("HTTP/1.1 101 ");
             if (!connected) {
                 std::this_thread::sleep_for(10ms);
             }
@@ -584,9 +585,9 @@ namespace BECore::Tests {
         ASSERT_TRUE(first.has_value());
         ASSERT_TRUE(WaitForEvents("open:", 1));
         EXPECT_EQ(recorder.ConnectionAt(0)->GetClientAddress(), "127.0.0.1");
-        EXPECT_TRUE(TryHandshake(port, "X-Forwarded-For: not an address, 203.0.113.9\r\n").starts_with("HTTP/1.1 503 ")) << "the peer address is now in use";
-        EXPECT_TRUE(TryHandshake(port).starts_with("HTTP/1.1 503 "));
-        EXPECT_TRUE(TryHandshake(port, "X-Forwarded-For: 203.0.113.5, 203.0.113.9\r\n").starts_with("HTTP/1.1 101 ")) << "a client with two entries is the first of them";
+        EXPECT_TRUE(StringView(TryHandshake(port, "X-Forwarded-For: not an address, 203.0.113.9\r\n")).starts_with("HTTP/1.1 503 ")) << "the peer address is now in use";
+        EXPECT_TRUE(StringView(TryHandshake(port)).starts_with("HTTP/1.1 503 "));
+        EXPECT_TRUE(StringView(TryHandshake(port, "X-Forwarded-For: 203.0.113.5, 203.0.113.9\r\n")).starts_with("HTTP/1.1 101 ")) << "a client with two entries is the first of them";
     }
 
     TEST_F(WebSocketListenerTest, TrustedProxyHopsWithoutALimitStillTellsTheClientAddress) {
@@ -606,8 +607,8 @@ namespace BECore::Tests {
         const uint16_t port = Start(settings);
         auto first = Connect(port, "X-Forwarded-For: 203.0.113.1\r\n");
         ASSERT_TRUE(first.has_value());
-        const std::string refused = TryHandshake(port, "X-Forwarded-For: 203.0.113.2\r\n");
-        EXPECT_TRUE(refused.starts_with("HTTP/1.1 503 ")) << refused;
+        const String refused = TryHandshake(port, "X-Forwarded-For: 203.0.113.2\r\n");
+        EXPECT_TRUE(StringView(refused).starts_with("HTTP/1.1 503 ")) << refused;
     }
 
 }  // namespace BECore::Tests
