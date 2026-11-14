@@ -28,6 +28,7 @@ namespace BECore::Tests {
         }
 
         std::ifstream stream(file);
+        //-NoStd: std::getline reads into std::string
         std::string line;
         std::getline(stream, line);
         std::error_code ec;

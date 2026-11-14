@@ -89,7 +89,7 @@ def test_view_shapes(before: str, after: str) -> None:
 
 def test_a_family_moves_only_its_own_names() -> None:
     source = in_namespace("eastl::string a; eastl::string_view b; eastl::vector<int> c; eastl::optional<int> d; eastl::hash_map<int, int> e;")
-    assert convert(in_namespace('auto s = fmt::format("{}", 1); eastl::string t;'), ALL[:-1]) == in_namespace('auto s = fmt::format("{}", 1); String t;')
+    assert convert(in_namespace('auto s = fmt::format("{}", 1); eastl::string t;'), [f for f in ALL if f != "fmt"]) == in_namespace('auto s = fmt::format("{}", 1); String t;')
     assert convert(in_namespace('auto s = fmt::format("{}", 1); eastl::string t;'), ["fmt"]) == in_namespace('auto s = Format("{}", 1); eastl::string t;')
     assert convert(source, ["strings"]) == in_namespace("String a; eastl::string_view b; eastl::vector<int> c; eastl::optional<int> d; eastl::hash_map<int, int> e;")
     assert convert(source, ["maps", "optionals"]) == in_namespace("eastl::string a; eastl::string_view b; eastl::vector<int> c; Optional<int> d; HashMap<int, int> e;")

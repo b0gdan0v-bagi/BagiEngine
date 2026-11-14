@@ -97,9 +97,7 @@ namespace BECore::Tests {
     TEST(FormatTest, FormatToNCutsAtTheBufferAndAllocatesNothing) {
         constexpr size_t kCapacity = 16;
         char buffer[kCapacity];
-        char guard[kCapacity];
         std::fill(std::begin(buffer), std::end(buffer), '#');
-        std::fill(std::begin(guard), std::end(guard), '#');
 
         const AllocTracker::ThreadCounters before = AllocTracker::GetThreadCounters();
         const FormatResult fits = FormatToN(buffer, kCapacity, "{}-{}", 12, 34);

@@ -65,7 +65,8 @@ namespace BECore {
             }
             // std::to_string widens a float to double and writes %f; {:f} writes the same text, into the string's own buffer
             String text;
-            fmt::format_to(eastl::back_inserter(text), "{:f}", std::conditional_t<std::is_same_v<T, long double>, long double, double>{value});
+            using Widened = std::conditional_t<std::is_same_v<T, long double>, long double, double>;
+            fmt::format_to(eastl::back_inserter(text), "{:f}", Widened{value});
             return text;
         }
     }
