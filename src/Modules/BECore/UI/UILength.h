@@ -1,5 +1,8 @@
 #pragma once
 
+#include <BECore/Utils/EnumUtils.h>
+#include <cstdint>
+
 namespace BECore {
 
     CORE_ENUM(UIUnit, uint8_t, Pixels, Percent)

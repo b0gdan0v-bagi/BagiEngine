@@ -1,5 +1,8 @@
 #pragma once
 
+#include <BECore/RefCounted/RefCounted.h>
+#include <BECore/Reflection/ReflectionMarkers.h>
+
 namespace BECore {
 
     class IRenderer;

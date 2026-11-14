@@ -1,5 +1,10 @@
 #pragma once
 
+#include <BECore/RefCounted/RefCounted.h>
+#include <BECore/Types/Types.h>
+#include <filesystem>
+#include <pugixml.hpp>
+
 namespace BECore {
 
     class XmlNode;

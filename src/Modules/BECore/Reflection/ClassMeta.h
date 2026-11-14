@@ -1,5 +1,8 @@
 #pragma once
 
+#include <BECore/Utils/StringUtils.h>
+#include <BECore/Types/Types.h>
+#include <cstdint>
 #include <BECore/Reflection/TypeTraits.h>
 
 namespace BECore {

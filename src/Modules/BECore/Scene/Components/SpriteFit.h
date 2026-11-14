@@ -1,5 +1,9 @@
 #pragma once
 
+#include <BECore/Math/Rect.h>
+#include <BECore/Utils/EnumUtils.h>
+#include <cstdint>
+
 namespace BECore {
 
     /// How a sprite fills the rect of its node.
