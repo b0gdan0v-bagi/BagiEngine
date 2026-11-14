@@ -56,8 +56,8 @@ namespace BECore::Tests {
 
         /// Every thread's B and E events nest, in the order of their time stamps
         void ExpectBalanced(const Json& events) {
-            std::map<int64_t, int> depth;
-            std::map<int64_t, double> lastTs;
+            Map<int64_t, int> depth;
+            Map<int64_t, double> lastTs;
             for (const Json& event : events) {
                 const std::string phase = Member(event, "ph");
                 if (phase != "B" && phase != "E") {

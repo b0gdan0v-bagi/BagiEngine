@@ -15,14 +15,9 @@
 #include <Widgets/EditorLayout/IconTable.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/ImGuiFonts.h>
-#include <cstring>
-#include <filesystem>
-#include <fstream>
 #include <imgui.h>
 #include <map>
 #include <set>
-#include <sstream>
-#include <string>
 
 namespace BECore::Tests {
 
@@ -79,8 +74,8 @@ namespace BECore::Tests {
         }
 
         /// `#define ICON_LC_NAME "<bytes>"  // U+xxxx` of the vendored header: name to codepoint
-        std::map<std::string, unsigned int> ReadHeaderCodepoints() {
-            std::map<std::string, unsigned int> codepoints;
+        Map<std::string, unsigned int> ReadHeaderCodepoints() {
+            Map<std::string, unsigned int> codepoints;
             std::string text;
             if (!ReadWholeFile(CoreManager::GetFileSystem().ResolvePath(kIconHeaderPath), text)) {
                 return codepoints;
@@ -105,7 +100,7 @@ namespace BECore::Tests {
         }
 
         /// Every distinct `ICON_LC_*` token of the widget sources that is not in a `//` comment (the vendored header folder is skipped); false when a file cannot be read
-        bool CollectWidgetIconTokens(std::set<std::string>& tokens) {
+        bool CollectWidgetIconTokens(Set<std::string>& tokens) {
             const std::filesystem::path root = CoreManager::GetFileSystem().ResolvePath(kWidgetsPath);
             if (root.empty()) {
                 return false;
@@ -212,9 +207,9 @@ namespace BECore::Tests {
     }
 
     TEST_F(IconTableFontTest, EveryIconMacroTheWidgetsUseIsDrawnFromTheIconSource) {
-        const std::map<std::string, unsigned int> header = ReadHeaderCodepoints();
+        const Map<std::string, unsigned int> header = ReadHeaderCodepoints();
         ASSERT_FALSE(header.empty()) << "cannot read " << kIconHeaderPath;
-        std::set<std::string> tokens;
+        Set<std::string> tokens;
         ASSERT_TRUE(CollectWidgetIconTokens(tokens)) << "cannot read a source under " << kWidgetsPath;
         ASSERT_GE(tokens.size(), kMinWidgetIconTokens) << "the scan of " << kWidgetsPath << " found too few ICON_LC_* tokens";
         for (const std::string& token : tokens) {

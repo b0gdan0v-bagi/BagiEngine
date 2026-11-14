@@ -286,7 +286,7 @@ namespace BECore::Tests {
 
         const Json trace = ParseTrace(WriteFrozenTraceJson(capture.GetSpikes()));
         const Json events = EventsOf(trace);
-        std::map<int64_t, int> depth;
+        Map<int64_t, int> depth;
         size_t begins = 0;
         size_t ends = 0;
         size_t threadNames = 0;

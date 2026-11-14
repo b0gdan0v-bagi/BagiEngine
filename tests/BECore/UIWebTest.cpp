@@ -3202,7 +3202,7 @@ button:checked { background: var(--panel); }
         const Stopwatch watch;
         const auto compiled = Compile("<div id=\"div-2\"></div>" + Repeat("<div class=\"x\"></div>", 2000), "@media (min-width: 1px) { .x { width: 5px; } }");
         EXPECT_LT(watch.Seconds(), kLimitTestBudgetSeconds);
-        std::set<std::string> names;
+        Set<std::string> names;
         for (const pugi::xpath_node node : compiled->document.select_nodes("//element")) {
             names.insert(node.node().attribute("name").as_string());
         }

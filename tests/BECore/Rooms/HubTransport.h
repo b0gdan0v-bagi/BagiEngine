@@ -156,7 +156,7 @@ namespace BECore::Tests {
         SeatedGameRegistry _registry;
         ManualClock _clock;
         RoomHub _hub;
-        std::map<ConnectionId, std::shared_ptr<HubLink>> _byId;
+        Map<ConnectionId, std::shared_ptr<HubLink>> _byId;
         ConnectionId _nextId = 1;
         bool _refusing = false;
     };

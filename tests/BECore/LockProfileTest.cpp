@@ -105,7 +105,7 @@ namespace BECore::Tests {
                 bool wanted;
                 double begin;
             };
-            std::map<int64_t, std::vector<Open>> open;
+            Map<int64_t, std::vector<Open>> open;
             for (const Json& event : *events) {
                 const auto phase = GetJsonString(event, "ph");
                 if (!phase || (*phase != "B" && *phase != "E")) {

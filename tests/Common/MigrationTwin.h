@@ -156,8 +156,7 @@ namespace BECore::Tests::MigrationTwin {
     }
 
     /// The named elements of a `ui_tree` canvas (or of an element below it) as "canvasKey|name" -> @p fieldsOf of its entry; the first element of a name wins
-    inline void CollectTree(const Json& parent, const std::string& canvasKey, std::set<std::string>& seen, std::map<std::string, std::string>& out,
-                            const std::function<std::string(const Json&)>& fieldsOf) {
+    inline void CollectTree(const Json& parent, const std::string& canvasKey, Set<std::string>& seen, Map<std::string, std::string>& out, const std::function<std::string(const Json&)>& fieldsOf) {
         const Json* list = FindJsonMember(parent, parent.contains("elements") ? "elements" : "children");
         if (list == nullptr || !list->is_array()) {
             return;

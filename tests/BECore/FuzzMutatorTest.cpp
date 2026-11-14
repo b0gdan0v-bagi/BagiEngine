@@ -98,7 +98,7 @@ namespace BECore::Tests {
     TEST(FuzzMutatorTest, EveryKindIsReachable) {
         const std::vector<FuzzBytes> others = {OtherSeed()};
         FuzzRandom random(99);
-        std::set<uint8_t> seen;
+        Set<uint8_t> seen;
         for (int i = 0; i < 400; ++i) {
             FuzzBytes bytes = PlainInput();
             seen.insert(static_cast<uint8_t>(Mutate(bytes, random, others)));
@@ -140,7 +140,7 @@ namespace BECore::Tests {
 
     TEST(FuzzMutatorTest, SetWordWritesALengthLikeValue) {
         FuzzRandom random(11);
-        std::set<uint32_t> seen;
+        Set<uint32_t> seen;
         for (int i = 0; i < 200; ++i) {
             FuzzBytes bytes(8, 0x55);
             ApplyMutation(FuzzMutation::SetWord, bytes, random, {});

@@ -147,7 +147,7 @@ namespace BECore::Tests {
         ASSERT_NE(table, nullptr);
         const std::vector<std::string> ids = FindCardIds(table->dump());
         EXPECT_EQ(ids.size(), static_cast<size_t>(DemoCardGame::kTotalPlays));
-        EXPECT_EQ(std::set<std::string>(ids.begin(), ids.end()).size(), static_cast<size_t>(DemoCardGame::kTotalPlays));
+        EXPECT_EQ(Set<std::string>(ids.begin(), ids.end()).size(), static_cast<size_t>(DemoCardGame::kTotalPlays));
     }
 
     /// Frames of @p count identical text messages in one buffer

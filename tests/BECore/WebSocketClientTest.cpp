@@ -456,7 +456,7 @@ namespace BECore::Tests {
         for (int i = 0; i < kCount; ++i) {
             ASSERT_TRUE(session.client.SendText("hello"));
         }
-        std::set<uint32_t> keys;
+        Set<uint32_t> keys;
         for (int i = 0; i < kCount; ++i) {
             const auto frame = server.ReadFrame();
             ASSERT_TRUE(frame.has_value());

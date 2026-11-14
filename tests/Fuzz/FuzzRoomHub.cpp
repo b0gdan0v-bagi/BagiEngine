@@ -215,7 +215,7 @@ namespace BECore::Fuzz {
                 FUZZ_CHECK(GetJsonString(message, "game") == Optional<String>("demo"));
                 const Json* rooms = FindJsonMember(message, "rooms");
                 FUZZ_CHECK(rooms != nullptr && rooms->is_array() && rooms->size() <= RoomLimits::kMaxListedRooms);
-                eastl::hash_set<String> seen;
+                HashSet<String> seen;
                 for (const Json& entry : *rooms) {
                     const auto code = GetJsonString(entry, "room");
                     const auto taken = GetJsonInt(entry, "taken");
@@ -262,7 +262,7 @@ namespace BECore::Fuzz {
             SeatedGameRegistry _registry;
             Map<ConnectionId, ConnectionModel> _connections;
             HashMap<String, String> _tokenOwners;
-            eastl::hash_set<String> _publicRooms;  ///< The codes that were answered to a create_room with "public":true
+            HashSet<String> _publicRooms;  ///< The codes that were answered to a create_room with "public":true
             RoomTime _now = kStart;
             RoomHub _hub;
         };

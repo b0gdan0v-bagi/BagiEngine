@@ -6,7 +6,6 @@
 #include <BECore/UI/UIToggleComponent.h>
 #include <Common/MigrationTwin.h>
 #include <Common/UILayoutMatrix.h>
-#include <algorithm>
 #include <cstdio>
 #include <gtest/gtest.h>
 #include <map>
@@ -143,7 +142,7 @@ namespace BECore::Tests {
         /// The findings of the layout validator on the size matrix that a loaded case is meant to have, as "folder/case | kind | element | other": the fixture puts a control where
         /// a narrow output scales it off the canvas. The touch size is not checked (`minTouchSize` is 0 below): the fixtures are 56 unit controls on `Screen` canvases that scale
         /// below the minimum in a small window, and the minimum of real screens is held by the tests of those screens
-        const std::set<std::string> kExpectedIssues = {
+        const Set<std::string> kExpectedIssues = {
             "ui_group/segmented_icon | OutsideCanvas | Mode | ",
             "ui_group/segmented_icon | OutsideCanvas |  | ",
             "ui_text/nested | OutsideCanvas | Badge | ",
@@ -225,8 +224,8 @@ namespace BECore::Tests {
         }
 
         /// What the layout validator finds on the size matrix, as "kind | element | other" (the case of the matrix is dropped: a finding is named by what it is about)
-        std::set<std::string> ValidatorFindings() {
-            std::set<std::string> findings;
+        Set<std::string> ValidatorFindings() {
+            Set<std::string> findings;
             UILayoutValidatorOptions options;
             options.minTouchSize = 0.0f;
             UILayoutContext context;
@@ -243,13 +242,13 @@ namespace BECore::Tests {
         }
 
         /// The tree answer of every named element, by name (the first of a name wins)
-        std::map<std::string, std::string> Tree() {
-            std::map<std::string, std::string> lines;
+        Map<std::string, std::string> Tree() {
+            Map<std::string, std::string> lines;
             for (const Json& canvas : CallTree(kNodeSceneName)) {
-                std::set<std::string> seen;
+                Set<std::string> seen;
                 CollectTree(canvas, "", seen, lines, TreeLineOf);
             }
-            std::map<std::string, std::string> byName;
+            Map<std::string, std::string> byName;
             for (const auto& [key, line] : lines) {
                 byName.emplace(key.substr(key.find('|') + 1), line);
             }
@@ -264,7 +263,7 @@ namespace BECore::Tests {
             return emitted;
         }
 
-        void CheckControl(const std::string& label, const Control& control, const std::map<std::string, std::string>& tree) {
+        void CheckControl(const std::string& label, const Control& control, const Map<std::string, std::string>& tree) {
             const UICanvasComponent* canvas = nullptr;
             UIElement* element = Find(control.name, &canvas);
             ASSERT_NE(element, nullptr) << label << ": no element " << control.name;
@@ -301,7 +300,7 @@ namespace BECore::Tests {
             if (control.kind == Kind::Toggle) {
                 CoreManager::GetUIVars().Set(PoolString::Intern(control.bind), control.on);
                 Draw(kLargeWidth, kLargeHeight);
-                const std::map<std::string, std::string> on = Tree();
+                const Map<std::string, std::string> on = Tree();
                 const auto onLine = on.find(control.name);
                 ASSERT_NE(onLine, on.end());
                 EXPECT_EQ(onLine->second, TreeLine("UIElement", control, true)) << label << " " << control.name << " in ui_tree with the variable on";
@@ -315,7 +314,7 @@ namespace BECore::Tests {
         /// Every control that is not a member of a group is disabled by its group (the way a `UISegmented` or a form disables what it holds): a click on it, or on a part of it,
         /// emits nothing. A member of a group takes its flags from the group at every draw, so it is not set by hand
         void CheckGroupDisabled(const std::string& label, const Expectation& expectation) {
-            std::set<const UIElement*> members;
+            Set<const UIElement*> members;
             std::vector<UIElement*> clickers;
             for (const CanvasRef& ref : _canvases) {
                 WalkElements(ref.canvas->GetRoot(), [&](UIElement& element) {
@@ -349,14 +348,14 @@ namespace BECore::Tests {
     };
 
     TEST(ContentMigrationAfterFixtures, EveryFixtureIsLoadedOrSkippedWithAReason) {
-        std::set<std::string> found;
+        Set<std::string> found;
         for (const char* folder : {"ui_button", "ui_group", "ui_value", "ui_text"}) {
             ASSERT_TRUE(std::filesystem::is_directory(FixtureFolder(folder))) << FixtureFolder(folder).string();
             for (const std::string& name : CaseNames(FixtureFolder(folder))) {
                 found.insert(Key(folder, name.c_str()));
             }
         }
-        std::set<std::string> known;
+        Set<std::string> known;
         for (const Expectation& expectation : Expectations()) {
             known.insert(Key(expectation.folder, expectation.name));
         }
@@ -407,7 +406,7 @@ namespace BECore::Tests {
         }
         Draw(kLargeWidth, kLargeHeight);
 
-        const std::map<std::string, std::string> tree = Tree();
+        const Map<std::string, std::string> tree = Tree();
         for (const Control& control : expectation.controls) {
             CheckControl(label, control, tree);
         }

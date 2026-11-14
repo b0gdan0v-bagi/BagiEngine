@@ -123,7 +123,7 @@ namespace BECore::Tests {
         const uint16_t port = StartServer();
         Clients clients;
         ASSERT_NO_FATAL_FAILURE(OpenTable(port, "cards", kHumansAtFullTable, clients));
-        std::set<int> seats;
+        Set<int> seats;
         for (const auto& client : clients) {
             seats.insert(client->seat);
         }

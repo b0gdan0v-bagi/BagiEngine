@@ -19,7 +19,7 @@ namespace BECore::Tests {
             return parsed ? std::string() : std::string(parsed.error().c_str());
         }
 
-        using Environment = std::map<std::string, std::string>;
+        using Environment = Map<std::string, std::string>;
 
         std::expected<RoomServerArgs, String> ReadEnvironment(const Environment& environment) {
             return ReadRoomServerEnvironment([&environment](const char* name) -> const char* {

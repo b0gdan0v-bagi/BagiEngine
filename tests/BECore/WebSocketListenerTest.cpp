@@ -200,7 +200,7 @@ namespace BECore::Tests {
         std::this_thread::sleep_for(kShortWait);
         EXPECT_EQ(recorder.CountPrefix("closed:"), 5u) << "a callback ran after Stop() returned";
 
-        std::map<std::string, int> perConnection;
+        Map<std::string, int> perConnection;
         for (const std::string& event : recorder.Events()) {
             if (event.starts_with("closed:")) {
                 ++perConnection[event];
