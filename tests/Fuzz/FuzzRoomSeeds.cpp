@@ -390,7 +390,7 @@ namespace BECore::Fuzz {
             add("resume.bin", Request(6, "resume"));
             add("quit.bin", Request("quit-1", "quit"));
             add("list-games.bin", Request(7, "list_games"));
-            add("switch-game.bin", Request(8, "switch_game", Params({{"name", "Match3"}})));
+            add("switch-game.bin", Request(8, "switch_game", Params({{"name", "Stress"}})));
             add("reset.bin", Request(9, "reset", Params({{"seed", 42}})));
             add("get-state.bin", Request(10, "get_state"));
             add("list-actions.bin", Request(11, "list_actions"));

@@ -155,7 +155,7 @@ namespace BECore::Tests {
     }
 
     /// The widget classes live in RuntimeModule (not registered in this executable) and the Editor ones build ImGui,
-    /// so the types of the files are compared. BagiMatch3ControlSmoke runs the Game set for real.
+    /// so the types of the files are compared. BagiStressControlSmoke runs the Game set for real.
     TEST_F(WidgetListTest, GameModeConfigListsTheClearScreenSceneRenderAndOverlayWidgetsInOrder) {
         const auto types = WidgetTypes(GetWidgetsConfigName(RunMode::Game));
 

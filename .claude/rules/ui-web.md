@@ -16,7 +16,7 @@ A source-to-source compiler: `UIWebCompiler::Compile(html, loadStylesheet, repor
 <link rel="stylesheet" href="hud.css">
 <div id="Hud" class="hud">
   <span id="Score">Score: {score}</span>
-  <button id="Reset" data-action="Match3Reset">Reset</button>
+  <button id="Reset" data-action="GameReset">Reset</button>
 </div>
 ```
 ```css
@@ -88,4 +88,4 @@ A file can be made as large, as deep and as odd as one likes, so the readers kee
 
 ## Checking
 
-The compile is pure, so a test gives it strings. `tests/BECore/UIWebTest.cpp` compares the Match3 menu, the choice panel (`kPanelHtml` / `kPanelCss`) and the settings panel (`kSettingsPanelHtml` / `kSettingsPanelCss`) with their XML at five sizes and runs `ValidateOnMatrix`. When a screen does not look as written, read the report.
+The compile is pure, so a test gives it strings. `tests/BECore/UIWebTest.cpp` compares the game menu, the choice panel (`kPanelHtml` / `kPanelCss`) and the settings panel (`kSettingsPanelHtml` / `kSettingsPanelCss`) with their XML at five sizes and runs `ValidateOnMatrix`. When a screen does not look as written, read the report.

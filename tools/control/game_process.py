@@ -2,7 +2,7 @@
 
     from game_process import GameProcess, build_game_command, free_port, preset_executable
 
-    exe = preset_executable("macos-debug", "BagiMatch3")  # build/macos-debug/bin/BagiMatch3, or any path of a built game
+    exe = preset_executable("macos-debug", "BagiStress")  # build/macos-debug/bin/BagiStress, or any path of a built game
     port = free_port()
     with GameProcess(build_game_command(exe, port), cwd=exe.parent) as game:
         client = game.connect()

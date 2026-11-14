@@ -2,7 +2,7 @@
 
 ## Overview
 
-The contract between the engine and a game. `Games` provides `IGame` and `GameManager`; each concrete game (`Match3` here, `Chess` in the repository BagiEngine-Chess) lives outside the engine, in `games/<Name>/` or in a repository of its own,, derives from `IGame` and registers itself in `AbstractFactory<IGame>` through `BE_CLASS` reflection. There is no hand-written registrar. One executable links one game; `GameManager` still handles several registered games (switching, `GetAll()`), but no widget exposes it.
+The contract between the engine and a game. `Games` provides `IGame` and `GameManager`; each concrete game (`Chess` in the repository BagiEngine-Chess) lives outside the engine, in a repository of its own, derives from `IGame` and registers itself in `AbstractFactory<IGame>` through `BE_CLASS` reflection. There is no hand-written registrar. One executable links one game; `GameManager` still handles several registered games (switching, `GetAll()`), but no widget exposes it.
 
 ## IGame
 
@@ -23,7 +23,7 @@ A program or a model plays a game through `IControllableGame` (`Games/IControlla
 |--------|--------|--------|
 | `list_games` | none | `{"active": name or null, "games": [{"name", "scene", "controllable"}]}` |
 | `switch_game` | `{"name"}` | `{"active"}` |
-| `reset` | the game's options (Match3: `{"seed"}`) | `{"game", "version"}`; a game that is not controllable gets a plain `IGame::Reset()` and no version |
+| `reset` | the game's options (e.g. a seed) | `{"game", "version"}`; a game that is not controllable gets a plain `IGame::Reset()` and no version |
 | `get_state` | none | `{"game", "version", "state"}` |
 | `list_actions` | none | `{"game", "version", "actions": [..]}` |
 | `perform_action` | the action object itself, one of `actions` | `{"game", "version", "outcome"}` (`version` is the one after the action) |
@@ -33,7 +33,7 @@ A program or a model plays a game through `IControllableGame` (`Games/IControlla
 
 Writing the adapter of a game:
 
-- Keep the rules free of JSON: the adapter is a small class next to the game (`Match3GameControl`) that the `IGame` owns and returns from `AsControllable()`. It may reach a model that lives in a scene component through a provider function (Match3), which is also what lets a test drive it without a scene; a model that the game owns itself is handed over by reference (Chess, BagiEngine-Chess).
+- Keep the rules free of JSON: the adapter is a small class next to the game (a control adapter) that the `IGame` owns and returns from `AsControllable()`. It may reach a model that lives in a scene component through a provider function, which is also what lets a test drive it without a scene; a model that the game owns itself is handed over by reference (Chess, BagiEngine-Chess).
 - `GetStateVersion()` must grow on every change a controller has to see (a new game, every committed action) and never go back; it is how a client knows the state moved, and `GameControl` compares it at the end of every frame to publish `state_changed`.
 - The parameters of `PerformAction`, `Reset` and `SetState` come from a client. Read them with the checked helpers of `BECore/Control/Json.h` (nlohmann aborts the process on a bad access in this build) and range-check numbers as `int64_t` before narrowing. A bad value is an error, not an assert. `illegal_action` means the action is well-formed but not legal now.
 - The state and the actions are for a model to read: short, self-explanatory names, a board as strings, no internal ids.
@@ -67,16 +67,16 @@ Rules of the adapter:
 
 `Singleton<GameManager>`, driven by `Application`: `Initialize()` runs in `Application::Initialize()`, `Shutdown()` on exit.
 
-- `Initialize()` creates one instance of every registered `IGame`, reads an optional `GamesConfig.xml` (`<defaultGame name="Match3"/>`) through the reflected `GamesConfig` (`Games/GamesConfig.h`; errors of the file are logged as `Config 'GamesConfig': ...`) and activates the default, or the first registered game when none is configured. A game executable has exactly one registered game, so no `GamesConfig.xml` is needed.
+- `Initialize()` creates one instance of every registered `IGame`, reads an optional `GamesConfig.xml` (`<defaultGame name="Chess"/>`) through the reflected `GamesConfig` (`Games/GamesConfig.h`; errors of the file are logged as `Config 'GamesConfig': ...`) and activates the default, or the first registered game when none is configured. A game executable has exactly one registered game, so no `GamesConfig.xml` is needed.
 - `SwitchTo(name)`: `Stop()` on the old game → `SceneManager::SetActiveScene(GetSceneName())` → `Start()` on the new one. Unknown or already-active names are a no-op.
 - `ResetActive()` calls `IGame::Reset()`; `GetActive()` / `GetAll()` for lookups.
 
 ## Adding a game
 
-A game is a directory `games/<Name>/` that works both inside this repository and as the root of its own repository (the engine then sits next to it as the git submodule `engine/`). Model it on `games/Match3/`, or on the repository BagiEngine-Chess (the engine as the submodule `engine/`, `CMakePresets.json` that includes the engine's). The repository around a game of its own (the git identity of the commits, the submodule on `games/<area>`, the linked skills, the rules files, the todo area) is set up by [NEW_GAME.md](../../../NEW_GAME.md) in the engine root:
+A game is a repository of its own with the engine as the git submodule `engine/`; model it on BagiEngine-Chess (`CMakePresets.json` that includes the engine's). The repository around a game (the git identity of the commits, the submodule on `games/<area>`, the linked skills, the rules files, the todo area) is set up by [NEW_GAME.md](../../../NEW_GAME.md) in the engine root:
 
 ```
-games/<Name>/
+<repo>/
 ├── CMakeLists.txt   # be_add_module + be_add_game_reflection + be_add_game_executable + be_add_game_tests
 ├── CLAUDE.md
 ├── src/<Name>/      # Game/ (plain C++ rules), Components/ (scene glue), <Name>Game.{h,cpp}
@@ -86,18 +86,17 @@ games/<Name>/
 ```
 
 1. `CMakeLists.txt`: start with the standalone block (`if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR) ... include(engine/cmake/BagiEngine.cmake)`), then `be_add_module(<Name> LINK BECoreModule EventsModule GamesModule SDLModule)`, `be_add_game_reflection(<Name>Module)`, `be_add_game_executable(Bagi<Name> GAME_ROOT ${CMAKE_CURRENT_SOURCE_DIR} MODULES <Name>Module)` and, under `ENGINE_BUILD_TESTS`, `be_add_game_tests(<Name>Tests SOURCES ... LINK <Name>Module)`. The functions are documented in `cmake/BagiEngine.cmake`.
-2. Add `add_subdirectory(<Name>)` to `games/CMakeLists.txt`.
-3. Derive `IGame` with `BE_CLASS(<Name>Game)`, include `<Generated/<Name>Game.gen.hpp>` in the `.cpp`. The game's reflection needs no entry in `reflection_targets.json` (that file lists engine directories only): `be_add_game_reflection` scans the game's own `src/` and treats the engine's reflected headers as reference.
-4. Put a `Scene` with the name returned by `GetSceneName()` into `games/<Name>/config/SceneConfig.xml`. It replaces the engine's `SceneConfig.xml`, so it must contain every scene the game uses.
-5. Copy the engine's `config/ApplicationConfig.xml` into `games/<Name>/config/` and set `mode="Game"`: the executable then starts without the editor (see "Run mode" in `BECore/CLAUDE.md`). Without the file the game starts in Editor mode. The game's file replaces the engine's, so it keeps `type`, `renderer` and `path`.
-6. Re-run `cmake --preset ...`, add `Bagi<Name>` to the `targets` of the build presets in `CMakePresets.json`.
-7. Keep the rules in a plain-C++ `Game/` folder, scene glue in `Components/`, tests in `tests/` (see `games/Match3/CLAUDE.md`).
+2. Derive `IGame` with `BE_CLASS(<Name>Game)`, include `<Generated/<Name>Game.gen.hpp>` in the `.cpp`. The game's reflection needs no entry in `reflection_targets.json` (that file lists engine directories only): `be_add_game_reflection` scans the game's own `src/` and treats the engine's reflected headers as reference.
+3. Put a `Scene` with the name returned by `GetSceneName()` into `config/SceneConfig.xml`. It replaces the engine's `SceneConfig.xml`, so it must contain every scene the game uses.
+4. Copy the engine's `config/ApplicationConfig.xml` into the game's `config/` and set `mode="Game"`: the executable then starts without the editor (see "Run mode" in `BECore/CLAUDE.md`). Without the file the game starts in Editor mode. The game's file replaces the engine's, so it keeps `type`, `renderer` and `path`.
+5. Re-run `cmake --preset ...`.
+6. Keep the rules in a plain-C++ `Game/` folder, scene glue in `Components/`, tests in `tests/` (the layout of BagiEngine-Chess).
 
-The engine must stay free of game names: no engine code, CMake or config outside `games/` refers to a concrete game.
+The engine must stay free of game names: no engine code, CMake or config refers to a concrete game.
 
 ## Gotchas
 
 - Scene and input events are global (see `BECore/Scene/CLAUDE.md`): a game's components subscribe with `SubscribeInScene`, so they react only while their scene is active. A component that reads the game's shared model must still check that the game is the active one. A game that keeps its model in the `IGame` (Chess does) does it with `GameManager::GetInstance().GetActive()->Cast<TheGame>()`.
 - `IGame` has no per-frame hook: per-frame work belongs in a component on the game's scene.
-- In Game mode there is no ImGui context. A game component must not call `ImGui::` without checking `ImGui::GetCurrentContext()`. A game's HUD and menus are UI canvases of the engine (`BECore/UI/CLAUDE.md`, an example in `games/Match3/`): they draw in both run modes, take input through `UIInput` and emit `InputEvents::ActionEvent`s that a component of the game answers with `SubscribeInScene`.
-- A game can open on a menu scene: `GetSceneName()` is the scene the game wants active when it starts, and a button of the menu switches scenes through `CoreManager::GetSceneManager().SetActiveScene()` (Match3's `Match3MenuComponent`).
+- In Game mode there is no ImGui context. A game component must not call `ImGui::` without checking `ImGui::GetCurrentContext()`. A game's HUD and menus are UI canvases of the engine (`BECore/UI/CLAUDE.md`): they draw in both run modes, take input through `UIInput` and emit `InputEvents::ActionEvent`s that a component of the game answers with `SubscribeInScene`.
+- A game can open on a menu scene: `GetSceneName()` is the scene the game wants active when it starts, and a button of the menu switches scenes through `CoreManager::GetSceneManager().SetActiveScene()` (a component of the menu scene).

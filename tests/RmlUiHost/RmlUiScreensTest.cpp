@@ -172,7 +172,7 @@ namespace BECore::Tests {
         IntrusivePtrAtomic<SceneManager> _manager;
     };
 
-    TEST_F(RmlUiScreensTest, TheMatch3MenuLaysOutLikeTheShippedXmlOnTheMatrix) {
+    TEST_F(RmlUiScreensTest, TheGameMenuLaysOutLikeTheShippedXmlOnTheMatrix) {
         const Screen& screen = kScreens[0];
         auto doc = Load(screen);
         SetVars();
@@ -183,7 +183,7 @@ namespace BECore::Tests {
         EXPECT_GE(report.cases, 100u);
     }
 
-    TEST_F(RmlUiScreensTest, TheMatch3HudLaysOutLikeTheShippedXmlOnTheMatrix) {
+    TEST_F(RmlUiScreensTest, TheGameHudLaysOutLikeTheShippedXmlOnTheMatrix) {
         const Screen& screen = kScreens[1];
         auto doc = Load(screen);
         SetVars();
@@ -238,7 +238,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(input.DispatchMouseButtonDown(event));
         EXPECT_TRUE(input.DispatchMouseButtonUp(event));
         ASSERT_EQ(actions.seen.size(), 1u);
-        EXPECT_EQ(actions.seen[0], "Match3Play"_intern);
+        EXPECT_EQ(actions.seen[0], "GamePlay"_intern);
 
         // The title is text, not a control; the empty corner of the screen belongs to the game
         event.x = title.x + 4.0f;

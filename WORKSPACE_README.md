@@ -186,7 +186,7 @@ BagiEngine/
 ```bash
 cmake --list-presets=build            # пресеты, доступные на этой ОС
 cmake --preset macos-debug            # configure (заодно генерирует reflection-код)
-cmake --build --preset macos-debug    # сборка игры (BagiMatch3)
+cmake --build --preset macos-debug    # сборка BagiStress и тестов
 ```
 
 | ОС | Пресеты |
@@ -195,7 +195,7 @@ cmake --build --preset macos-debug    # сборка игры (BagiMatch3)
 | Windows | `windows-clang-{debug,release}` (Clang + Ninja, по умолчанию; configure и сборка через `python CI/scripts/vs_env.py cmake ...`, он поднимает окружение Visual Studio), `windows-msvc-{debug,release}`, `windows-msvc-release-editor` (MSVC + Ninja, то же правило окружения), `windows-vs2022-{debug,release}`, `windows-vs2022-clangcl-{debug,release}` (Visual Studio 2022). MSVC — запасной вариант: его PDB время от времени ломают параллельную сборку (`LNK1103`, `C1090`) |
 
 Настройки конкретной машины (например `VULKAN_SDK`, ccache) кладите в `CMakeUserPresets.json` — он в `.gitignore`.
-Исполняемые файлы лежат в `build/<preset>/bin` (например `build/macos-debug/bin/BagiMatch3`), статические библиотеки — в `build/<preset>/lib`, поэтому Debug и Release не затирают друг друга и ничего удалять при переключении пресетов не нужно (пресеты Visual Studio добавляют `bin/<Config>/`). Старые папки `build/{Compiler}{Platform}/` сборка больше не пишет и не удаляет — их можно удалить вручную. Переключение `BE_WITH_EDITOR` внутри одного пресета по-прежнему требует пересборки (см. `.claude/rules/build-project.md`).
+Исполняемые файлы лежат в `build/<preset>/bin` (например `build/macos-debug/bin/BagiStress`), статические библиотеки — в `build/<preset>/lib`, поэтому Debug и Release не затирают друг друга и ничего удалять при переключении пресетов не нужно (пресеты Visual Studio добавляют `bin/<Config>/`). Старые папки `build/{Compiler}{Platform}/` сборка больше не пишет и не удаляет — их можно удалить вручную. Переключение `BE_WITH_EDITOR` внутри одного пресета по-прежнему требует пересборки (см. `.claude/rules/build-project.md`).
 Reflection-код генерируется на этапе configure: после правок `BE_CLASS` / `BE_REFLECT_FIELD` повторите `cmake --preset ...`.
 
 #### Редактор в сборке

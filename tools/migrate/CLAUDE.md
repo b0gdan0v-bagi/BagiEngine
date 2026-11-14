@@ -58,7 +58,7 @@ A change that renames or removes a reflected class or field a content file can n
 2. A fixture pair `tests/fixtures/<name>/<case>.before.xml` / `.after.xml` per shape (a whole real file where one exists, plus a case per rule and per refusal) and a pytest that checks the output equals the `after` exactly and that the `after` migrates to itself. A failure case has a `before` and no `after`.
 3. A C++ test of the `after` fixtures on its own: `tests/BECore/ContentMigrationAfterTest.cpp` (built on `tests/Common/MigrationTwin.h`) loads the final `after` fixtures of steps 1 to 4 (the ones that hold no class of a later step; a case with no control to click is loaded for the validator and the draw) and checks the composed form (validator, `ui_tree`, clicks; a picture under a clicker keeps its colour in every state). A twin that compares with the class's draw exists only for as long as the class does; steps 1 to 3 had one and lost it when the classes were removed (step 4, 4 to 5, never had one: the text and the picture draw through the same painter as their component).
 4. `kContentVersion` becomes N+1.
-5. `python3 tools/migrate/migrate.py --root .` in the engine repository for its own content (`config/`, `games/Match3/config/`); the diff goes in the commit. The games are migrated by their owners after the engine is updated.
+5. `python3 tools/migrate/migrate.py --root .` in the engine repository for its own content (`config/`, `tools/stress/config/`); the diff goes in the commit. The games are migrated by their owners after the engine is updated.
 
 ## The text model
 

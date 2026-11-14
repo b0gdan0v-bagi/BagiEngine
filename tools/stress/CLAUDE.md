@@ -2,7 +2,7 @@
 
 ## Overview
 
-`BagiStress` is an executable of the engine repository with an `IGame` of its own (`StressGame`, name `Stress`, namespace `BECore::Stress`) and no game rules: three scenes that load the engine in different ways, chosen by argument. It is the target of the engine's benchmarks (`tools/perf`) and of a control smoke, so a change to the 2D renderer, the scene or the UI is measured without Match3. It lives in `tools/`, not in `games/`: `games/` goes away when Match3 leaves. How a game plugs into the engine: `src/Modules/Games/CLAUDE.md`.
+`BagiStress` is an executable of the engine repository with an `IGame` of its own (`StressGame`, name `Stress`, namespace `BECore::Stress`) and no game rules: three scenes that load the engine in different ways, chosen by argument. It is the target of the engine's benchmarks (`tools/perf`), of a control smoke and of a recorded control scenario; it is the engine's own runnable program, so a change to the 2D renderer, the scene or the UI is measured and tried without a game. How a game plugs into the engine: `src/Modules/Games/CLAUDE.md`.
 
 | Scene (`SceneConfig.xml`) | Flag value | Loads |
 |---------------------------|------------|-------|
@@ -20,6 +20,7 @@ config/               ApplicationConfig.xml (Game mode), SceneConfig.xml: kept a
 src/Stress/           StressSettings (the flags), StressState (what is shown now), StressGame (the IGame), StressGameControl (the control adapter), SpriteField and EntityField and UiField (pure placement of the sprites, the orbits and the labels, and the texts of the labels), StressHash (the integer hash they share), StressRecorder (the samples, the percentiles and the JSON line of a run), RampController (the pure search of the ramp and its line)
 src/Stress/Components/ the component of each scene (StressSpritesComponent, StressEntitiesComponent, StressUiComponent, StressRunComponent: the measurement, fixed and ramp)
 tests/                gtest sources of StressTests; StressSceneFixture.h is the shipped scene file on a RecordingRenderer with the StressGame active (the setup of every scene component's test)
+tests/stress_smoke.py the control smoke (BagiStressControlSmoke); tests/scenarios/ the recorded control sessions (BagiStressScenario.<file>, `be_add_game_scenario_tests`, `tools/control/CLAUDE.md`)
 ```
 
 ## The arguments and the state

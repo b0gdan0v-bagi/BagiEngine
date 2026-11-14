@@ -52,7 +52,7 @@ if(ENGINE_TARGET_WEB)
     # ones are not meant for wasm. The name is a label only: nothing in the engine reads EA_PLATFORM_*
     # A trap for threads: not all of EASTL's ARM code is builtins. eastl::cpu_pause() is asm("yield") and the memory barrier of
     # eastl::atomic (EASTL_ARCH_ATOMIC_CPU_MB) is asm("dmb ish"), which wasm cannot assemble. The engine uses std::atomic and
-    # std::mutex everywhere (no eastl::atomic, no cpu_pause: grep src games) and so the threaded build compiles; keep it so, or
+    # std::mutex everywhere (no eastl::atomic, no cpu_pause: grep src tools) and so the threaded build compiles; keep it so, or
     # that code fails to compile on the web with "invalid instruction"
     add_compile_definitions(EA_PLATFORM_SAMSUNG_TV)
     # EASTL's debug break for ARM is inline assembly ("BKPT 10") that wasm cannot assemble (assert.cpp: "invalid instruction"); a trap is

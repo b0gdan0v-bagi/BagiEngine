@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Smoke test of the control API: starts a game executable with --control and plays a few moves over WebSocket.
+"""Smoke test of the control API: starts a game executable with --control and checks what every game answers, over WebSocket.
 
-    python tools/control/tests/smoke.py --exe <path of the built BagiMatch3>
-    python tools/control/tests/smoke.py --preset macos-debug --game BagiMatch3     # build/macos-debug/bin/BagiMatch3
+    python tools/control/tests/smoke.py --exe <path of a built game, e.g. BagiStress>
+    python tools/control/tests/smoke.py --preset macos-debug --game BagiStress     # build/macos-debug/bin/BagiStress
 
-The game is started twice, once on the real clock and once with --manual-clock (game time moves only on `step`). The
-scenario is the one of Match3 (a swap on a seeded board); another game brings its own script that calls run_smoke() with its
-scenarios (BagiEngine-Chess has one: tests/control_smoke.py). The game runs --headless (no window, drawn in memory), which also
-lets the test look at screenshots; --window runs it in a real window instead (it needs a display, and a screenshot is not
-possible on the Vulkan backend, so those checks are left out).
+The game is started twice, once on the real clock and once with --manual-clock (game time moves only on `step`). The default
+scenario is game-neutral: it uses no game rules (the methods `ping`, `list_games`, `status`, `step`, `frame_stats`, `zone_allocs`,
+the answer to garbage and to an unknown method, a screenshot, the UI tree), so it fits any game that implements the control API.
+A game with rules brings its own script that imports the helpers of this file and calls run_smoke() with its scenarios
+(BagiEngine-Chess has one: tests/control_smoke.py; `be_add_game_control_tests(<exe> SCRIPT <file>)` runs it). The game runs
+--headless (no window, drawn in memory), which also lets the test look at screenshots; --window runs it in a real window instead
+(it needs a display, and a screenshot is not possible on the Vulkan backend, so those checks are left out).
 Exit code: 0 passed, 1 failed, 77 skipped (the executable does not exist; ctest reads 77 as "skipped").
 """
 
@@ -33,13 +35,13 @@ EXIT_FAILED = 1
 EXIT_SKIPPED = 77
 
 CONNECT_RETRY_SECONDS = 0.1
-BOARD_SIZE = 8
 EVENT_TIMEOUT_SECONDS = 5.0
 IDLE_CHECK_SECONDS = 0.3  # how long the manual clock is watched not moving
 DEFAULT_STEP_SECONDS = 1.0 / 60.0
 DEFAULT_SCREENSHOT_SIZE = 1024
 SMALL_SCREENSHOT_SIZE = 200
-BOARD_COLORS = 5  # a Match3 board shows at least this many different colours (tiles, background, frame)
+MIN_SCREENSHOT_COLORS = 3  # a picture of a game is not flat: a background and at least two more colours
+BOARD_COLORS = 5  # for the script of a game that draws a board (tiles, background, frame): at least this many colours
 CLOCK_TOLERANCE = 1e-6
 
 
@@ -115,37 +117,14 @@ def receive_response(client: BagiControlClient) -> dict:
         return message
 
 
-def play_match3(client: BagiControlClient) -> None:
-    """The part of the scenario that does not depend on the clock: the game methods and the garbage handling."""
+def play_basics(client: BagiControlClient) -> None:
+    """The part of the scenario that does not depend on the clock or on the game's rules: the common methods and the garbage handling."""
     pong = client.call("ping")
     check(pong.get("pong") is True and isinstance(pong.get("protocol"), int), f"ping answered {pong}")
 
     games = client.call("list_games")
     check(games["active"] is not None, "no game is active")
-    check(any(game["controllable"] for game in games["games"]), f"no controllable game in {games}")
-
-    # The same seed has to give the same board
-    client.call("reset", {"seed": 1})
-    first_board = client.call("get_state")["state"]["board"]
-    client.call("reset", {"seed": 1})
-    snapshot = client.call("get_state")
-    check(snapshot["state"]["board"] == first_board, "the same seed gave two different boards")
-    check(len(first_board) == BOARD_SIZE and all(len(row) == BOARD_SIZE for row in first_board), f"unexpected board {first_board}")
-    version = snapshot["version"]
-
-    actions = client.call("list_actions")["actions"]
-    check(len(actions) > 0, "a fresh board has no legal action")
-
-    outcome = client.call("perform_action", actions[0])
-    check(outcome["outcome"]["scoreGained"] > 0, f"a legal swap scored nothing: {outcome}")
-    check(outcome["version"] > version, "the state version did not grow after an action")
-    check(client.call("get_state")["version"] == outcome["version"], "get_state disagrees with perform_action about the version")
-
-    # An action that is not legal changes nothing
-    version = client.call("get_state")["version"]
-    not_neighbours = {"type": "swap", "from": {"col": 0, "row": 0}, "to": {"col": 5, "row": 5}}
-    expect_error("illegal_action", lambda: client.call("perform_action", not_neighbours), "a swap of cells that are not neighbours")
-    check(client.call("get_state")["version"] == version, "a refused action changed the state")
+    check(any(game["name"] == games["active"] for game in games["games"]), f"the active game is not in the list: {games}")
 
     expect_error("unknown_method", lambda: client.call("no_such_method"), "an unknown method")
 
@@ -177,47 +156,23 @@ def take_screenshot(client: BagiControlClient, params: dict | None = None) -> Pn
 
 
 def check_screenshot_basics(client: BagiControlClient) -> None:
-    """What a screenshot has to be on either clock: a picture of the board, not larger than asked."""
-    client.call("reset", {"seed": 1})
+    """What a screenshot has to be on either clock: a picture of the game that is not flat, and not larger than asked."""
     image = take_screenshot(client)
     check(max(image.width, image.height) == DEFAULT_SCREENSHOT_SIZE, f"the default screenshot is {image.width}x{image.height}, its longer side should be {DEFAULT_SCREENSHOT_SIZE}")
-    check(len(image.colors()) >= BOARD_COLORS, f"the screenshot has {len(image.colors())} colours, it does not look like a board")
+    check(len(image.colors()) >= MIN_SCREENSHOT_COLORS, f"the screenshot has {len(image.colors())} colours, it is flat")
 
     small = take_screenshot(client, {"maxSize": SMALL_SCREENSHOT_SIZE})
     check(max(small.width, small.height) == SMALL_SCREENSHOT_SIZE, f"maxSize {SMALL_SCREENSHOT_SIZE} gave {small.width}x{small.height}")
     expect_error("invalid_params", lambda: client.call("screenshot", {"maxSize": 5}), "a screenshot of 5 pixels")
 
 
-def check_screenshots_on_the_manual_clock(client: BagiControlClient) -> None:
-    """On the manual clock a screenshot is one frame in which nothing moves, and it shows what the game state says."""
+def check_screenshot_takes_one_frame(client: BagiControlClient) -> None:
+    """On the manual clock a screenshot is one frame in which game time does not move."""
     before = client.call("status")
-
-    client.call("reset", {"seed": 1})
-    first = take_screenshot(client)
+    take_screenshot(client)
     after = client.call("status")
     check(after["frame"] == before["frame"] + 1, f"a screenshot took {after['frame'] - before['frame']} frames, not one")
     check(approx(after["totalTime"], before["totalTime"]), "a screenshot moved the game time")
-
-    client.call("reset", {"seed": 1})
-    again = take_screenshot(client)
-    check(again.rows == first.rows, "the same seed looked different in two screenshots")
-
-    client.call("reset", {"seed": 2})
-    other = take_screenshot(client)
-    check(other.rows != first.rows, "another seed looked the same: the screenshot does not follow the game")
-
-
-def check_control_changes_are_shown_at_once(client: BagiControlClient) -> None:
-    """A move made through the control API is in the very next screenshot, and nothing moves afterwards: only a click animates the board."""
-    client.call("reset", {"seed": 1})
-    start = take_screenshot(client)
-    client.call("perform_action", client.call("list_actions")["actions"][0])
-    played = take_screenshot(client)
-    check(played.rows != start.rows, "the screenshot after perform_action still shows the old board")
-
-    client.call("step", {"frames": 30, "dt": 0.1})
-    later = take_screenshot(client)
-    check(later.rows == played.rows, "the board moved after a move made through the control API: it animated, and the picture lagged behind the game state")
 
 
 def find_ui_element(tree: dict, name: str) -> dict | None:
@@ -239,41 +194,14 @@ def find_ui_element(tree: dict, name: str) -> dict | None:
     return None
 
 
-def check_ui_methods(client: BagiControlClient) -> None:
-    """The in-game UI over the control API: the tree has rects, and a click acts like a user's (Match3: from the menu into the game and back)."""
+def check_ui_tree(client: BagiControlClient) -> None:
+    """The in-game UI over the control API: the canvases of the active scene (a game may have none) are laid out and the validator finds nothing."""
     client.call("step", {"frames": 2})
     tree = client.call("ui_tree")
-    if tree["scene"] != "MainMenu":  # the earlier checks of this scenario may have switched to the game; go back by its Menu button
-        client.call("ui_click", {"name": "Menu"})
-        client.call("step", {"frames": 2})
-        tree = client.call("ui_tree")
-    check(tree["scene"] == "MainMenu", f"the Menu button did not lead to the menu: {tree['scene']}")
-    play = find_ui_element(tree, "Play")
-    check(play is not None and play["action"] == "Match3Play" and play["visible"], f"the menu has no visible Play button: {play}")
-    check(play["outputRect"]["w"] > 0 and play["outputRect"]["h"] > 0, f"the Play button has no size: {play['outputRect']}")
-    check(all(canvas["laidOut"] and not canvas["issues"] for canvas in tree["canvases"]), f"the menu has layout issues: {tree}")
-
+    check(isinstance(tree.get("scene"), str) and isinstance(tree.get("canvases"), list), f"ui_tree has no scene and canvases: {tree}")
+    check(all(canvas["laidOut"] and not canvas["issues"] for canvas in tree["canvases"]), f"a canvas has layout issues: {tree}")
     expect_error("not_found", lambda: client.call("ui_click", {"name": "NoSuchElement"}), "a click on an element that does not exist")
-    expect_error("not_clickable", lambda: client.call("ui_click", {"name": "Title"}), "a click on a label")
     expect_error("invalid_params", lambda: client.call("ui_click", {}), "a click without a name")
-
-    clicked = client.call("ui_click", {"name": "Play"})
-    check(clicked["consumed"] and clicked["action"] == "Match3Play", f"the click on Play was not taken: {clicked}")
-    client.call("step", {"frames": 2})
-    tree = client.call("ui_tree")
-    check(tree["scene"] != "MainMenu", f"Play did not leave the menu: {tree['scene']}")
-    check(find_ui_element(tree, "Reset") is not None and find_ui_element(tree, "Score") is not None, "the game scene has no Reset button or Score label")
-
-    client.call("reset", {"seed": 2})
-    client.call("perform_action", client.call("list_actions")["actions"][0])
-    check(client.call("get_state")["state"]["score"] > 0, "the first move scored nothing")
-    client.call("ui_click", {"name": "Reset"})
-    client.call("step", {"frames": 2})
-    check(client.call("get_state")["state"]["score"] == 0, "the click on Reset did not reset the game")
-
-    client.call("ui_click", {"name": "Menu"})
-    client.call("step", {"frames": 2})
-    check(client.call("ui_tree")["scene"] == "MainMenu", "the click on Menu did not go back to the menu")
 
 
 def run_real_clock_scenario(client: BagiControlClient, headless: bool) -> None:
@@ -281,12 +209,7 @@ def run_real_clock_scenario(client: BagiControlClient, headless: bool) -> None:
     check(status["frame"] >= 1, f"status reports frame {status['frame']}")
     check(status["manualClock"] is False, "the manual clock is on without --manual-clock")
 
-    play_match3(client)
-
-    # A state change is pushed by itself, at the end of the frame that saw it
-    client.call("reset", {"seed": 2})
-    outcome = client.call("perform_action", client.call("list_actions")["actions"][0])
-    check_state_push(client, outcome)
+    play_basics(client)
 
     # On the real clock a step is a wait for frames that run anyway
     before = client.call("status")["frame"]
@@ -302,7 +225,7 @@ def check_frame_stats(client: BagiControlClient) -> None:
     frames = client.call("frame_stats", {"frames": 3})["frames"]
     check(len(frames) == 3, f"frame_stats of 3 frames answered {len(frames)}")
     check(frames[-1]["frame"] == frames[0]["frame"] + 2, f"frame_stats is not the last frames in order: {[f['frame'] for f in frames]}")
-    check(all(frame["drawCalls"] > 0 for frame in frames), f"a frame of Match3 drew nothing: {[f['drawCalls'] for f in frames]}")
+    check(all(frame["drawCalls"] > 0 for frame in frames), f"a frame drew nothing: {[f['drawCalls'] for f in frames]}")
     check(all(frame["cpuMs"] >= 0 and "Update" in frame["stagesMs"] for frame in frames), f"frame_stats has no stage times: {frames[-1]}")
     expect_error("invalid_params", lambda: client.call("frame_stats", {"frames": 0}), "frame_stats of no frames")
     check("totals" in client.call("zone_allocs"), "zone_allocs has no totals")
@@ -317,7 +240,7 @@ def run_manual_clock_scenario(client: BagiControlClient, headless: bool) -> None
     time.sleep(IDLE_CHECK_SECONDS)
     check(client.call("status")["frame"] == 0, "the manual clock ticked without a step")
 
-    play_match3(client)
+    play_basics(client)
     check(client.call("status")["frame"] == 0, "a frame ran without a step")
 
     stepped = client.call("step", {"frames": 3, "dt": 0.1})
@@ -346,22 +269,13 @@ def run_manual_clock_scenario(client: BagiControlClient, headless: bool) -> None
 
     check_frame_stats(client)
 
-    # The push of a state change comes at the end of the next frame, before the answer of the step that ran it
-    client.call("reset", {"seed": 2})
-    outcome = client.call("perform_action", client.call("list_actions")["actions"][0])
-    client.events.clear()
-    client.call("step")
-    check_state_push(client, outcome)
-    check(not client.events or all(event["data"].get("version") != outcome["version"] for event in client.events), "the same change was pushed twice")
-
     if headless:
         check_screenshot_basics(client)
-        check_screenshots_on_the_manual_clock(client)
-        check_control_changes_are_shown_at_once(client)
+        check_screenshot_takes_one_frame(client)
     else:
         expect_error("capture_failed", lambda: client.call("screenshot"), "a screenshot on a backend that cannot capture")
 
-    check_ui_methods(client)
+    check_ui_tree(client)
 
 
 SCENARIOS = [
@@ -425,7 +339,7 @@ def run_smoke(description: str, scenarios: list[tuple[str, list[str], Callable[[
     parser = argparse.ArgumentParser(description=description, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--exe", type=Path, help="the game executable (or --preset and --game)")
     parser.add_argument("--preset", help="the CMake preset that built the game: the executable is build/<preset>/bin/<game>")
-    parser.add_argument("--game", help="the executable name for --preset, e.g. BagiMatch3")
+    parser.add_argument("--game", help="the executable name for --preset, e.g. BagiStress")
     parser.add_argument("--root", type=Path, help="the repository whose build/ folder --preset means (default: the one holding these tools)")
     parser.add_argument("--port", type=int, default=0, help="control port (default: a free one for every run)")
     parser.add_argument("--window", action="store_true", help="run the game in a real window instead of --headless (needs a display; no screenshot checks)")

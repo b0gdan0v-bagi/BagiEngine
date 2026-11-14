@@ -5,7 +5,7 @@
 # tools/web/tests/check_bagi_web.cmake includes this file alone), so the pure ones can be checked on a desktop without an
 # Emscripten SDK. Only be_web_configure_target() touches a target.
 #
-# The settings below were checked against settings.js of emsdk 4.0.23 and linked with it (BagiMatch3 links, packages, the module
+# The settings below were checked against settings.js of emsdk 4.0.23 and linked with it (the first game links, packages, the module
 # instantiates under node, and the page ran in headless Chromium and Edge: tools/web/web_smoke.py, tools/web/CLAUDE.md).
 #
 #   be_web_preload_args(OUT <var> ENGINE_ROOT <dir> GAME_ROOT <dir> WEB_ROOT <dir>)
@@ -160,7 +160,7 @@ function(be_web_link_options)
         -sMIN_WEBGL_VERSION=1
         -sMAX_WEBGL_VERSION=2
         # main() never returns while the frame loop runs (src/main.cpp, emscripten_set_main_loop_arg with simulate_infinite_loop); when
-        # the loop is cancelled the runtime exits and the static destructors run. Run in Chromium: the Quit button of BagiMatch3 ends
+        # the loop is cancelled the runtime exits and the static destructors run. Run in Chromium: the Quit button of the first game ends
         # the loop, Module.onExit is called (with no status in 4.0.23) and the page stays blank with no error
         -sEXIT_RUNTIME=1
         # The page around the wasm (web/shell.html); SHELL: keeps the flag and its value together, the quotes keep a path with a space in one piece
@@ -261,6 +261,6 @@ if(EMSCRIPTEN)
 
     # The toolchain file defines the WHOLE_ARCHIVE link feature without attributes (desktop CMake does define them). Without
     # OVERRIDE=DEFAULT a module that is linked whole by an executable and also reached as a plain dependency of a game module
-    # (Match3Module links BECoreModule) is "Impossible to link target ... already occurred with the feature 'WHOLE_ARCHIVE'"
+    # (a game module links BECoreModule) is "Impossible to link target ... already occurred with the feature 'WHOLE_ARCHIVE'"
     set(CMAKE_LINK_LIBRARY_WHOLE_ARCHIVE_ATTRIBUTES LIBRARY_TYPE=STATIC DEDUPLICATION=YES OVERRIDE=DEFAULT)
 endif()

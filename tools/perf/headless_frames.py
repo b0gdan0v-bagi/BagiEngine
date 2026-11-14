@@ -1,7 +1,7 @@
 """Frames of a game without a window: a benchmark command of the perf runner. Standard library only.
 
-    python3 tools/perf/headless_frames.py --exe build/macos-release/bin/BagiMatch3 --frames 600
-    python3 tools/perf/headless_frames.py --exe ... --call perform_action '{"action": "new_match"}' --frames 600 --trace trace.json
+    python3 tools/perf/headless_frames.py --exe build/macos-release/bin/BagiStress --frames 600
+    python3 tools/perf/headless_frames.py --exe ... --call perform_action '{"type": "set_count", "count": 1000}' --frames 600 --trace trace.json
 
 Starts the game `--headless --manual-clock` on a free port, runs the `--call`s (method and JSON params, in order; a `step` follows each so
 the scene reacts), steps `--warmup` frames, then `--frames` frames in steps of at most `--chunk`, and prints **one JSON line**: the wall

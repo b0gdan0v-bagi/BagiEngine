@@ -1,7 +1,7 @@
 """Turns the output of an Emscripten build into a folder a static server can serve. Standard library only (brotli optional).
 
     python tools/web/package.py build/web-release/bin dist
-    python tools/web/package.py build/web-release/bin dist --game BagiMatch3
+    python tools/web/package.py build/web-release/bin dist --game BagiStress
     python tools/web/package.py build/web-release-single-thread/bin dist-single --single-thread
     python tools/web/package.py build/web-release/bin dist --app web/app.json
 
@@ -325,7 +325,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Package the output of a web build into a folder for serve.py.")
     parser.add_argument("build_dir", type=Path, help="folder with <game>.html, .js, .wasm and .data (build/web-release/bin)")
     parser.add_argument("out_dir", type=Path, help="folder to write (dist)")
-    parser.add_argument("--game", help="name of the game (BagiMatch3); needed only when the build folder holds several pages")
+    parser.add_argument("--game", help="name of the game (e.g. BagiStress); needed only when the build folder holds several pages")
     parser.add_argument("--single-thread", action="store_true",
                         help="the build is the single-thread page (web-*-single-thread): the manifest says threads: false and serve.py sends no COOP / COEP for it")
     parser.add_argument("--app", type=Path, metavar="FILE",

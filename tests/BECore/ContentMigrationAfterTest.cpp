@@ -127,7 +127,7 @@ namespace BECore::Tests {
         /// The cases that are not loaded, with the reason: each has an element of a type that a later step (step 4, 4 to 5) rewrites
         constexpr const char* kSkipped[] = {
             "ui_button/already_composed",            // a UISegmented with UIButton segments beside a composed button
-            "ui_button/match3_menu_hud",             // a UILabel
+            "ui_button/game_menu_hud",               // a UILabel
             "ui_button/mahjong_setup",               // UIButton and the old header of a UIDropdown
             "ui_button/with_children",               // a UILabel child
             "ui_group/already_composed",             // a UIDropdown with its old header

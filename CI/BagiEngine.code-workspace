@@ -261,7 +261,7 @@
 				"label": "CMake: build",
 				"command": "build",
 				"targets": [
-					"BagiMatch3"
+					"BagiStress"
 				],
 				"problemMatcher": "$gcc",
 				"group": {
@@ -274,7 +274,7 @@
 				"label": "CMake: clean rebuild",
 				"command": "cleanRebuild",
 				"targets": [
-					"BagiMatch3"
+					"BagiStress"
 				],
 				"problemMatcher": "$gcc",
 				"group": "build"

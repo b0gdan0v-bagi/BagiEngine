@@ -1,6 +1,6 @@
 # BagiStress
 # The engine's own 2D stress app: an IGame with no rules and three scenes (sprites, entities, ui) chosen by argument (CLAUDE.md).
-# It lives in tools/, not in games/: games/ goes away when Match3 leaves the repository. Not a game of its own repository, so there is no standalone block.
+# The engine's own runnable program, in tools/. Not a game of its own repository, so there is no standalone block.
 
 be_add_module(Stress LINK
     BECoreModule
@@ -24,4 +24,6 @@ if(ENGINE_BUILD_TESTS)
     )
     # the control smoke of the app: its own script (a fresh game per scene, the check of the game's log)
     be_add_game_control_tests(BagiStress SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/tests/stress_smoke.py)
+    # the recorded control sessions of the app (tests/scenarios/*.jsonl), played by tools/control/bagi_play.py
+    be_add_game_scenario_tests(BagiStress DIR tests/scenarios)
 endif()

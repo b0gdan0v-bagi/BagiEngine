@@ -19,7 +19,7 @@ from bagi_control_client import ControlError
 from bagi_session import GameSession, SessionError
 
 INSTRUCTIONS = """\
-Plays and tests a BagiEngine game (Match3, and any game that implements the control API) through its control API.
+Plays and tests a BagiEngine game (any game that implements the control API, e.g. the engine's BagiStress) through its control API.
 
 Start with launch_game (the path of a built game executable, or a preset and a game name: build/<preset>/bin/<game>); it runs the game headless,
 with no window, on the manual clock. Then get_state, list_actions and perform_action. On the manual clock game time stands
@@ -91,7 +91,7 @@ def status() -> dict[str, Any]:
 def get_state() -> dict[str, Any]:
     """The state of the active game: {game, version, state}. `version` grows with every change of the state.
 
-    Match3: state has the board, the score, the seed and the status. Every game documents its own state in its control adapter.
+    The shape of `state` is the game's own: every game documents it in its control adapter (BagiStress: scene, count, language).
     """
     return session.call("get_state")
 
@@ -101,8 +101,7 @@ def get_state() -> dict[str, Any]:
 def list_actions() -> dict[str, Any]:
     """The actions the game takes right now: {game, version, actions}. Pass one of them to perform_action unchanged.
 
-    Match3: {"type": "swap", "from": {"col", "row"}, "to": {"col", "row"}} for every swap that makes a match.
-    Other games list their own action types the same way.
+    Each game lists its own action types (BagiStress: {"type": "set_count", "count": N}, {"type": "set_scene", "scene": "ui"}).
     """
     return session.call("list_actions")
 
@@ -110,7 +109,7 @@ def list_actions() -> dict[str, Any]:
 @server.tool()
 @reports_errors
 def perform_action(action: dict[str, Any]) -> dict[str, Any]:
-    """Plays one action from list_actions, e.g. a Match3 swap. Answers the outcome of the action.
+    """Plays one action from list_actions, e.g. BagiStress's {"type": "set_count", "count": 1000}. Answers the outcome of the action.
 
     A refused action is an error and changes nothing: illegal_action (not legal now), game_over, invalid_params (malformed);
     a game may add its own codes.
@@ -128,7 +127,7 @@ def set_state(state: dict[str, Any]) -> dict[str, Any]:
 @server.tool()
 @reports_errors
 def reset(options: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Starts the game over. Match3 takes {"seed": N} for a repeatable board; options are the game's own."""
+    """Starts the game over. A game may take options (a seed for a repeatable start, BagiStress: {"scene", "count"}); they are the game's own."""
     return session.call("reset", options)
 
 

@@ -1,0 +1,12 @@
+{"scenario": 1, "game": "Stress", "flags": ["--headless", "--manual-clock"], "title": "BagiStress: get_state, set_count (a change and a no-op), a bad count, set_scene, step, ui_tree"}
+{"method": "step", "params": {"frames": 2}}
+{"method": "get_state", "expect": {"pointers": {"/state/scene": "sprites"}}}
+{"method": "perform_action", "params": {"type": "set_count", "count": 40}, "expect": {"versionStep": 1}}
+{"method": "perform_action", "params": {"type": "set_count", "count": 40}, "expect": {"versionStep": 0}}
+{"method": "perform_action", "params": {"type": "set_count", "count": 0}, "expect": {"error": "invalid_params"}}
+{"method": "perform_action", "params": {"type": "no_such_action"}, "expect": {"error": "illegal_action"}}
+{"method": "get_state", "expect": {"pointers": {"/state/count": 40}, "versionStep": 0}}
+{"method": "perform_action", "params": {"type": "set_scene", "scene": "ui"}, "expect": {"versionStep": 1}}
+{"method": "step", "params": {"frames": 3}}
+{"method": "ui_tree", "expect": {"pointers": {"/scene": "StressUi"}}}
+{"method": "get_state", "expect": {"pointers": {"/state/scene": "ui", "/state/count": 40}, "versionStep": 0, "logClean": true}}

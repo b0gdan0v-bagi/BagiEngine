@@ -8,7 +8,7 @@ Numbers come from the `macos-profile` preset (RelWithDebInfo, asserts and expect
 
 ```bash
 cmake --preset macos-profile
-cmake --build --preset macos-profile --target BagiMatch3 BagiEngineTests
+cmake --build --preset macos-profile --target BagiStress BagiEngineTests
 ```
 
 `macos-release` keeps the profiler off: the baselines of a performance check are measured without any overhead.
@@ -18,7 +18,7 @@ cmake --build --preset macos-profile --target BagiMatch3 BagiEngineTests
 ## A Chrome trace of a game run
 
 ```bash
-build/macos-profile/bin/BagiMatch3 --trace=trace.json
+build/macos-profile/bin/BagiStress --trace=trace.json
 ```
 
 The file is written when the game ends (relative to the working folder). Open it in https://ui.perfetto.dev (drag the file in) or `chrome://tracing`. Each thread is a track; frame marks are the vertical lines; counters are graphs; a zone's `args` hold its file, line and (with allocation tracking) the allocations it made.
@@ -53,8 +53,8 @@ For a live view (zones, frames, plots, allocations with call stacks, while the g
 
 ```bash
 cmake --preset macos-profile-tracy
-cmake --build --preset macos-profile-tracy --target BagiMatch3
-build/macos-profile-tracy/bin/BagiMatch3        # Tracy is the default backend of this build
+cmake --build --preset macos-profile-tracy --target BagiStress
+build/macos-profile-tracy/bin/BagiStress        # Tracy is the default backend of this build
 ```
 
 Then open the Tracy viewer of the **same version** as the vendored client (v0.15.0; `src/Modules/tracy/README.md` says where to get it) and connect to `127.0.0.1`. Nothing is sent until a viewer connects. `--trace=<file>` in this build records the Chrome trace instead.
@@ -98,5 +98,5 @@ Counting allocations costs nothing measurable on one thread (the replacement cal
 
 Use them on a `macos-profile` or Release build when the zones show a slow stage but not why, or for code without zones.
 
-- **macOS, Instruments Time Profiler:** `xcrun xctrace record --template 'Time Profiler' --launch -- build/macos-profile/bin/BagiMatch3`, then open the `.trace` in Instruments. Allocations: the `Allocations` template. An `os_signpost` backend that would show the zones inside Instruments is not built (a later entry may add it).
+- **macOS, Instruments Time Profiler:** `xcrun xctrace record --template 'Time Profiler' --launch -- build/macos-profile/bin/BagiStress`, then open the `.trace` in Instruments. Allocations: the `Allocations` template. An `os_signpost` backend that would show the zones inside Instruments is not built (a later entry may add it).
 - **Windows, Visual Studio:** Debug > Performance Profiler > CPU Usage on a Release build (or ETW with Windows Performance Recorder / WPA for whole-system views).

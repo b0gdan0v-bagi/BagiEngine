@@ -29,12 +29,12 @@ namespace BECore::Fuzz {
             return bytes;
         }
 
-        // The screens of tests/BECore/UIWebTest.cpp (the HUD of the plan's sketch, the Match3 menu and HUD, the settings panel), as a game writes them
+        // The screens of tests/BECore/UIWebTest.cpp (the HUD of the plan's sketch, a game's menu and HUD, the settings panel), as a game writes them
 
         constexpr StringView kHudHtml = R"xml(<link rel="stylesheet" href="hud.css">
 <div id="Hud" class="hud">
   <span id="Score">Score: {score}</span>
-  <button id="Reset" data-action="Match3Reset">Reset</button>
+  <button id="Reset" data-action="GameReset">Reset</button>
 </div>)xml";
 
         constexpr StringView kHudCss = R"xml(.hud    { anchor: top-left; left: 16px; top: 16px; width: 220px; height: 96px; background: #000000A0; }
@@ -47,8 +47,8 @@ button:hover { background: #3a6; }
 
         constexpr StringView kMenuHtml = R"xml(<div id="Column">
   <h1 id="Title">Match 3</h1>
-  <button id="Play" data-action="Match3Play">Play</button>
-  <button id="Quit" data-action="Match3Quit">Quit</button>
+  <button id="Play" data-action="GamePlay">Play</button>
+  <button id="Quit" data-action="GameQuit">Quit</button>
 </div>)xml";
 
         constexpr StringView kMenuCss = R"xml(#Column { anchor: center; display: flex; flex-direction: column; align-items: stretch; gap: 16px; width: 90%; max-width: 320px; height: 232px; }
@@ -58,14 +58,14 @@ button  { height: 56px; font-size: 28px; }
 #Quit   { background: rgb(90, 50, 50); }
 )xml";
 
-        constexpr StringView kMatch3HudHtml = R"xml(<span id="Score">Score: {score}</span>
+        constexpr StringView kGameHudHtml = R"xml(<span id="Score">Score: {score}</span>
 <div id="Buttons">
-  <button id="Reset" data-action="Match3Reset">Reset</button>
-  <button id="Menu" data-action="Match3Menu">Menu</button>
+  <button id="Reset" data-action="GameReset">Reset</button>
+  <button id="Menu" data-action="GameMenu">Menu</button>
 </div>
 <span id="Seed">seed {seed}</span>)xml";
 
-        constexpr StringView kMatch3HudCss = R"xml(#Score   { left: 96px; top: 12px; width: 250px; height: 40px; font-size: 28px; vertical-align: middle; }
+        constexpr StringView kGameHudCss = R"xml(#Score   { left: 96px; top: 12px; width: 250px; height: 40px; font-size: 28px; vertical-align: middle; }
 #Buttons { anchor: top-right; right: 96px; top: 12px; width: 260px; height: 48px; display: flex; gap: 12px; align-items: stretch; }
 button   { width: 124px; height: 48px; font-size: 24px; }
 #Reset   { background: rgb(40, 90, 60); }
@@ -440,7 +440,7 @@ div { margin: 1em; width: calc(100% - 4px); opacity: .5; transform: rotate(3deg)
     void AddUiSeeds(Vector<FuzzSeedFile>& seeds) {
         seeds.push_back({kWebUiFolder, "hud-with-link.bin", HtmlAndCss(kHudHtml, kHudCss)});
         seeds.push_back({kWebUiFolder, "menu.bin", HtmlAndCss(kMenuHtml, kMenuCss)});
-        seeds.push_back({kWebUiFolder, "match3-hud.bin", HtmlAndCss(kMatch3HudHtml, kMatch3HudCss)});
+        seeds.push_back({kWebUiFolder, "game-hud.bin", HtmlAndCss(kGameHudHtml, kGameHudCss)});
         seeds.push_back({kWebUiFolder, "settings-widgets.bin", HtmlAndCss(kSettingsHtml, kSettingsCss)});
         seeds.push_back({kWebUiFolder, "style-block.bin", HtmlAndCss(kStyleBlockHtml, {})});
         seeds.push_back({kWebUiFolder, "style-attributes.bin", HtmlAndCss(kStyleAttributesHtml, {})});

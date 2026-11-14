@@ -89,6 +89,6 @@ Nested `CLAUDE.md` files in `BECore/`: `Animation/` (easing, `Lerp`, `TweenManag
 ## File Organization
 
 - One class per file: `ClassName.h` + `ClassName.cpp`.
-- GoogleTest tests live in `tests/<Module>/` (a game's in `games/<Name>/tests/`); only runtime `ITest`s live in `BECore/Tests/`.
+- GoogleTest tests live in `tests/<Module>/` (a game's in the `tests/` of its repository); only runtime `ITest`s live in `BECore/Tests/`.
 - Reflected engine classes (`BE_CLASS`, `BE_EVENT`) need their directory in `source_dirs` / `scan_dirs` of `CI/meta_generator/reflection_targets.json`, then re-run `cmake --preset ...`. A game's reflected classes are covered by its own `be_add_game_reflection`.
 - Document the public API with Doxygen comments.

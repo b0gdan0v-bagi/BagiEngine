@@ -2,7 +2,7 @@
 
 ## Overview
 
-Python tools that drive a game through the control API (`src/Modules/RemoteControl/CLAUDE.md`, protocol in `src/Modules/BECore/Control/CLAUDE.md`). They are separate processes: the engine has no MCP or Python dependency. Python 3.10+. Nothing here names a concrete game apart from Match3 in examples; a game with its own tools (the Stockfish bridge of BagiEngine-Chess) keeps them in its own repository and imports the client from here.
+Python tools that drive a game through the control API (`src/Modules/RemoteControl/CLAUDE.md`, protocol in `src/Modules/BECore/Control/CLAUDE.md`). They are separate processes: the engine has no MCP or Python dependency. Python 3.10+. Nothing here names a game apart from the engine's `BagiStress` in examples; a game with its own tools (the Stockfish bridge of BagiEngine-Chess) keeps them in its own repository and imports the client from here.
 
 | File | Purpose |
 |------|---------|
@@ -14,7 +14,7 @@ Python tools that drive a game through the control API (`src/Modules/RemoteContr
 | `bagi_play.py` | The scenario player ("Playing a scenario"): `play(exe, header, steps, update, lenient)` and the command line |
 | `bagi_mcp.py` | The MCP server (stdio). Each tool is one line over `GameSession`; the only file that needs `mcp` |
 | `requirements.txt` | `mcp` (2.x) and `pytest`; nothing else is needed |
-| `tests/` | pytest, plus `smoke.py` (the ctest entries `Bagi<Game>ControlSmoke`, `.claude/rules/cmake-rules.md`). The engine's smoke has two targets: `BagiMatch3` (`smoke.py`) and `BagiStress` (`tools/stress/tests/stress_smoke.py`, which imports the helpers of `smoke.py` and drives the game through `GameProcess` to check its log) |
+| `tests/` | pytest, plus `smoke.py` (the ctest entries `Bagi<Game>ControlSmoke`, `.claude/rules/cmake-rules.md`). `smoke.py` is a game-neutral default (the common methods, a screenshot, the UI tree: no game rules), so any game that implements the control API gets a smoke test from `be_add_game_control_tests` alone; a game with rules brings its own `SCRIPT` that imports the helpers and calls `run_smoke()` (BagiEngine-Chess `tests/control_smoke.py`). `BagiStress` has one (`tools/stress/tests/stress_smoke.py`: it imports the helpers of `smoke.py` and drives the game through `GameProcess` to check its log) |
 
 ## Running
 
@@ -28,7 +28,7 @@ Use the repository venv (`CI/setup_venv.*` makes `.venv`; on Windows `.venv\Scri
 
 A session recorded as JSON lines (UTF-8, one object per line, no comments, blank lines skipped) that a player replays as a test. `scenario.py` holds the format; a file that breaks it is a `ScenarioError` naming file and line.
 
-- **Line 1, the header:** `{"scenario": 1, "game": "Match3", "flags": ["--headless", "--manual-clock"], "title": "..."}`. `scenario` is the format version (a tool refuses a number it does not know and says so); `game` is the active game's name (`list_games.active`, checked after the start); `flags` are the start flags besides `--control` / `--control-port` (`--headless` and `--manual-clock` map onto the launch options, any other goes to the game as it is, so a flag of a later entry fits); `title` is free text.
+- **Line 1, the header:** `{"scenario": 1, "game": "Stress", "flags": ["--headless", "--manual-clock"], "title": "..."}`. `scenario` is the format version (a tool refuses a number it does not know and says so); `game` is the active game's name (`list_games.active`, checked after the start); `flags` are the start flags besides `--control` / `--control-port` (`--headless` and `--manual-clock` map onto the launch options, any other goes to the game as it is, so a flag of a later entry fits); `title` is free text.
 - **Every other line is one control call:** `{"method": "perform_action", "params": {...}, "expect": {...}}`, sent in order on one connection. `params` and `expect` are optional, `note` (free text) is ignored.
 - **`expect`**, every member optional, all must hold, checked in this order:
   - `error`: the error code the call must answer. An error without this member fails the line (the shrinker's `lenient` mode tolerates it); an `error` that does not happen fails too.
@@ -49,7 +49,7 @@ A session recorded as JSON lines (UTF-8, one object per line, no comments, blank
 - **`logClean` is judged after `quit`**, not at its line: the game's stdout is block-buffered into the log file when redirected (only Error and Fatal go to the unbuffered stderr), so a Warning logged before the line may not be in the file yet. The failure is still reported at the line that asked for it, and what the game logs while shutting down counts too; put it on the last line. `GameSession.log_problems()` reads the log of a game that has quit.
 - **`--update`** plays every call without stopping at an expectation, rewrites the expectations with `scenario.updated_expect` and writes the file only when the run completed (a lost connection or a bad exit writes nothing); it prints the lines that changed. `event` is not waited for in this mode.
 
-`be_add_game_scenario_tests(<ExeTarget> DIR <folder>)` (`cmake/BagiEngine.cmake`) turns every `*.jsonl` of a folder into the ctest entry `<ExeTarget>Scenario.<file>`, which runs this player on the built executable (`games/Match3/tests/scenarios/`). A game in another repository adds its own folder and the call in its CMakeLists; a new file needs no CMake edit.
+`be_add_game_scenario_tests(<ExeTarget> DIR <folder>)` (`cmake/BagiEngine.cmake`) turns every `*.jsonl` of a folder into the ctest entry `<ExeTarget>Scenario.<file>`, which runs this player on the built executable (the engine's own: `tools/stress/tests/scenarios/`). A game in its own repository adds its folder and the call in its CMakeLists; a new file needs no CMake edit.
 
 ### Shrinking
 

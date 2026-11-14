@@ -7,7 +7,7 @@ The benchmark runner of the skills `perf` and `perf-investigate` (`.claude/skill
 | `perf.py` | the runner: builds, runs the set N times, compares with the baseline, `--update-baseline`, `--trace NAME` |
 | `perf_stats.py` | mean, t interval, Welch comparison, the verdicts |
 | `perf_baseline.py` | the machine fingerprint, the baseline plan (read, merge, append), the todo store through `tools/todo/todo.py` |
-| `headless_frames.py` | a benchmark command: a game `--headless --manual-clock`, N frames stepped over the control API, one JSON line of `frame_stats` means |
+| `headless_frames.py` | a game's benchmark command (the engine's own set uses `stress_frames.py`): a game `--headless --manual-clock`, N frames stepped over the control API, one JSON line of `frame_stats` means |
 | `stress_frames.py` | a benchmark command: `BagiStress` `--headless --control --manual-clock` with the `--stress-*` flags, stepped in chunks until the game quits by itself, then the game's own JSON line (fixed run or `--ramp`) printed unchanged; no line, a non-zero exit code, the step bound or the time limit is an error with the game's log tail |
 | `trace_summary.py` | a Chrome trace of the profiler: zones by self / total time and allocations, the frame-time distribution, the counters |
 | `tests/` | pytest of all of it (a whole run over a fake benchmark; no build, no store) |
