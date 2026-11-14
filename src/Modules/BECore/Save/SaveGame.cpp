@@ -59,10 +59,6 @@ namespace BECore {
             return info;
         }
 
-        std::string ToStdString(eastl::string_view text) {
-            return std::string(text.data(), text.size());
-        }
-
     }  // namespace
 
     SaveGameService::SaveGameService(FileSystem& fileSystem) : _fileSystem(fileSystem) {}

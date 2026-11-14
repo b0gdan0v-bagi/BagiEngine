@@ -44,6 +44,9 @@
 #include <array>
 #include <limits>
 
+// Types: String, Vector, HashMap, Optional, ... (the engine's names for the eastl:: / std:: types), before everything that uses them
+#include <BECore/Types/Types.h>
+
 // Math
 #include <BECore/Math/Color.h>
 #include <BECore/Math/Rect.h>

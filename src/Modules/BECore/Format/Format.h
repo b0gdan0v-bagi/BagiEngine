@@ -3,20 +3,20 @@
 #include <fmt/format.h>
 
 /**
- * @brief Специализации fmt::formatter для типов EASTL.
- * Это позволяет использовать eastl::string и eastl::string_view напрямую в функциях форматирования.
+ * @brief Специализации fmt::formatter для строк EASTL (String и StringView из BECore/Types/Strings.h).
+ * Это позволяет использовать их напрямую в функциях форматирования. Строка с любым аллокатором форматируется так же.
  */
-template <>
-struct fmt::formatter<eastl::string> : formatter<std::string_view> {
-    auto format(const eastl::string& s, format_context& ctx) const {
-        return formatter<std::string_view>::format(std::string_view(s.data(), s.size()), ctx);
+template <typename Allocator>
+struct fmt::formatter<eastl::basic_string<char, Allocator>> : formatter<std::string_view> {
+    auto format(const eastl::basic_string<char, Allocator>& s, format_context& ctx) const {
+        return formatter<std::string_view>::format(BECore::ToStd(BECore::StringView{s}), ctx);
     }
 };
 
 template <>
 struct fmt::formatter<eastl::string_view> : formatter<std::string_view> {
     auto format(eastl::string_view s, format_context& ctx) const {
-        return formatter<std::string_view>::format(std::string_view(s.data(), s.size()), ctx);
+        return formatter<std::string_view>::format(BECore::ToStd(s), ctx);
     }
 };
 
@@ -32,12 +32,21 @@ namespace BECore {
         using format_string = fmt::format_string<Args...>;
 
         /**
-         * @brief Форматирует строку и возвращает eastl::string.
+         * @brief Форматирует строку и возвращает String. Короткий результат не выделяет память, кроме самой строки.
          */
         template <typename... Args>
-        [[nodiscard]] inline eastl::string Format(format_string<Args...> fmt, Args&&... args) {
-            std::string result = fmt::format(fmt, std::forward<Args>(args)...);
-            return eastl::string(result.c_str(), result.size());
+        [[nodiscard]] inline String Format(format_string<Args...> fmt, Args&&... args) {
+            fmt::basic_memory_buffer<char, 256> buffer;
+            fmt::format_to(std::back_inserter(buffer), fmt, std::forward<Args>(args)...);
+            return String{buffer.data(), buffer.size()};
+        }
+
+        /**
+         * @brief Дописывает отформатированный текст в конец существующей строки (одно место для формата в строку).
+         */
+        template <typename... Args>
+        inline void AppendFormat(String& out, format_string<Args...> fmt, Args&&... args) {
+            fmt::format_to(eastl::back_inserter(out), fmt, std::forward<Args>(args)...);
         }
 
         /**
@@ -68,6 +77,7 @@ namespace BECore {
     }  // namespace Details::Format
 
     // Алиасы для удобства в пространстве имен Core
+    using Details::Format::AppendFormat;
     using Details::Format::Format;
     using Details::Format::FormatTo;
     using Details::Format::Print;
@@ -79,20 +89,19 @@ namespace BECore {
      */
     class FormatLiteral {
     public:
-        constexpr FormatLiteral(eastl::string_view format) : _format(format) {}
+        constexpr FormatLiteral(StringView format) : _format(format) {}
 
         /**
          * @brief Оператор вызова для форматирования с аргументами.
          */
         template <typename... Args>
-        [[nodiscard]] eastl::string operator()(Args&&... args) const {
-            // Конвертируем eastl::string_view в std::string_view для fmt::runtime
-            std::string_view fmtView(_format.data(), _format.size());
-            return Details::Format::Format(fmt::runtime(fmtView), std::forward<Args>(args)...);
+        [[nodiscard]] String operator()(Args&&... args) const {
+            // fmt::runtime принимает std::string_view
+            return Details::Format::Format(fmt::runtime(ToStd(_format)), std::forward<Args>(args)...);
         }
 
     private:
-        eastl::string_view _format;
+        StringView _format;
     };
 
     /**
@@ -105,7 +114,7 @@ namespace BECore {
      */
     inline namespace Literals {
         [[nodiscard]] constexpr FormatLiteral operator""_format(const char* str, size_t len) {
-            return FormatLiteral(eastl::string_view(str, len));
+            return FormatLiteral(StringView(str, len));
         }
     }  // namespace Literals
 

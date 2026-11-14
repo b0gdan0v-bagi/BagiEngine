@@ -37,10 +37,6 @@ namespace BECore {
         constexpr eastl::string_view kOverlayTouchTargetsKey = "overlayTouchTargets";
         constexpr eastl::string_view kOverlayRegionsKey = "overlayRegions";
 
-        std::string ToStdString(eastl::string_view text) {
-            return std::string(text.data(), text.size());
-        }
-
         // Reads the file at @p path into @p content. Missing file: false, no warning. A file that cannot be read or
         // parsed, or whose root is not an object: false, one warning, @p unreadable set.
         bool ReadJsonObject(const std::filesystem::path& path, Json& content, bool& unreadable) {
