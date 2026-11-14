@@ -3,7 +3,8 @@
 
     fake_game.py --control --control-port=N [--headless] [--manual-clock] [--exit-immediately]
 
-The environment variable FAKE_GAME_EXIT makes it exit at once (code 3) like --exit-immediately.
+The environment variable FAKE_GAME_EXIT makes it exit at once (code 3) like --exit-immediately. FAKE_GAME_PICTURE names a PNG file that `screenshot` serves instead of
+the 2x1 one (a test makes the picture of the game change this way).
 
 Methods: ping, status, list_games, get_state (echoes the flags), list_actions, perform_action (a refusal for {"type": "bad"}, and for
 {"type": "needs_noop"} until some action has run; it raises the state version by one and pushes state_changed behind its answer), step, screenshot (a 2x1 PNG; one frame on the manual
@@ -26,6 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))  # fake_control_server
 from fake_control_server import FakeControlServer, FakeError, QuitServer  # noqa: E402
 
 WATCHDOG_SECONDS = 60.0
+PNG_SIZE_OFFSET = 16  # the signature (8 bytes), the IHDR length and name (8 bytes), then width and height
 
 
 def png_2x1() -> bytes:
@@ -38,6 +40,14 @@ def png_2x1() -> bytes:
     header = struct.pack("!IIBBBBB", 2, 1, 8, 2, 0, 0, 0)
     pixels = b"\x00" + bytes([255, 0, 0, 0, 0, 255])
     return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", zlib.compress(pixels)) + chunk(b"IEND", b"")
+
+
+def served_picture() -> tuple[int, int, bytes]:
+    """The width, height and bytes of the picture `screenshot` answers: the file FAKE_GAME_PICTURE names, else the 2x1 one."""
+    named = os.environ.get("FAKE_GAME_PICTURE")
+    data = Path(named).read_bytes() if named else png_2x1()
+    width, height = struct.unpack("!II", data[PNG_SIZE_OFFSET : PNG_SIZE_OFFSET + 8])  # the first fields of IHDR
+    return width, height, data
 
 
 def main() -> int:
@@ -80,7 +90,8 @@ def main() -> int:
         if method == "screenshot":
             if manual_clock:
                 frame["count"] += 1
-            return {"width": 2, "height": 1, "png_base64": base64.b64encode(png_2x1()).decode("ascii")}
+            width, height, data = served_picture()
+            return {"width": width, "height": height, "png_base64": base64.b64encode(data).decode("ascii")}
         if method == "quit":
             raise QuitServer({"quitting": True})
         raise FakeError("unknown_method", method)

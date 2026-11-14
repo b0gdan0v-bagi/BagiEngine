@@ -11,7 +11,7 @@ Standard library only; the only I/O is load() and dump().
 
 import json
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 SCENARIO_VERSION = 1
@@ -19,9 +19,13 @@ SCENARIO_VERSION = 1
 HEADER_MEMBERS = ("scenario", "game", "flags", "title")
 STEP_MEMBERS = ("method", "params", "expect", "note")
 # The order in which an expect is checked, reported and written
-EXPECT_MEMBERS = ("error", "result", "equal", "pointers", "versionStep", "event", "logClean")
+EXPECT_MEMBERS = ("error", "result", "equal", "pointers", "reference", "versionStep", "event", "logClean")
 UPDATED_MEMBERS = ("error", "result", "equal", "pointers", "versionStep")  # what --update rewrites; event and logClean stay as written
 EVENT_MEMBERS = ("name", "equal", "timeout")
+REFERENCE_MEMBERS = ("png", "threshold", "maxShare", "region")
+REFERENCE_METHOD = "screenshot"  # the only call whose answer is a picture to compare
+MAX_THRESHOLD = 255  # a channel value
+REGION_CORNERS = 4
 DEFAULT_EVENT_TIMEOUT_SECONDS = 5.0
 RECORD_MINIMAL = "minimal"
 RECORD_FULL = "full"
@@ -82,6 +86,7 @@ class Outcome:
 
     `version_step` is the answer's version minus the one seen before (None: no version, or none before). `events` are the
     pushes the player took for this line. `log_problems` are the Warning, Error and Fatal lines of the game's log.
+    `reference` is what the player made of a `reference` expectation (None: none asked, or the call failed).
     """
 
     result: Any = None
@@ -90,6 +95,35 @@ class Outcome:
     version_step: int | None = None
     events: list[dict[str, Any]] = field(default_factory=list)
     log_problems: list[str] = field(default_factory=list)
+    reference: "ReferenceCheck | None" = None
+
+
+@dataclass
+class ReferenceCheck:
+    """The result of comparing a screenshot with its reference file (bagi_reference.py does it); `expected` and `actual` are the texts of a failure.
+
+    `note` is what an update run did to the reference file ("created reference ...", "updated reference ..."), empty when it did nothing.
+    """
+
+    ok: bool
+    expected: str = ""
+    actual: str = ""
+    note: str = ""
+
+
+@dataclass
+class ReferenceSpec:
+    """The `reference` expectation of a screenshot line: the PNG next to the scenario and how far the picture may differ from it."""
+
+    png: str
+    threshold: int = 0
+    max_share: float = 0.0
+    region: list[int] | None = None  # [x0, y0, x1, y1], corners inclusive
+
+    @staticmethod
+    def from_expect(value: dict[str, Any]) -> "ReferenceSpec":
+        """The spec of a checked `reference` member (`check_expect`); what it leaves out has its default."""
+        return ReferenceSpec(value["png"], value.get("threshold", 0), float(value.get("maxShare", 0.0)), value.get("region"))
 
 
 @dataclass
@@ -201,6 +235,8 @@ def evaluate(expect: dict[str, Any], outcome: Outcome, lenient: bool = False) ->
         actual = json_pointer(answer, pointer)
         if not same(actual, wanted):
             return Failure("pointers", f"{pointer} = {_text(wanted)}", f"{pointer} = {_answer_text(outcome, actual)}")
+    if "reference" in expect and outcome.reference is not None and not outcome.reference.ok:
+        return Failure("reference", outcome.reference.expected, outcome.reference.actual)
     if "versionStep" in expect:
         if outcome.version_step is None and version_of(answer) is None:
             return Failure("versionStep", str(expect["versionStep"]), _error_text(outcome) if outcome.error_code is not None else "no version in the answer")
@@ -390,6 +426,8 @@ def _parse_step(value: dict[str, Any]) -> Step:
     if note is not None and not isinstance(note, str):
         raise ScenarioError("\"note\" has to be a string")
     check_expect(expect)
+    if "reference" in expect and method != REFERENCE_METHOD:
+        raise ScenarioError(f"expect.reference belongs to a \"{REFERENCE_METHOD}\" call, not to \"{method}\"")
     return Step(method, params, expect, note)
 
 
@@ -408,12 +446,33 @@ def check_expect(expect: dict[str, Any]) -> None:
                 check_pointer(pointer)
             except ValueError as error:
                 raise ScenarioError(f"expect.pointers: {error}") from error
+    if "reference" in expect:
+        _check_reference(expect["reference"])
     if "versionStep" in expect and not _is_int(expect["versionStep"]):
         raise ScenarioError("expect.versionStep has to be an integer")
     if "logClean" in expect and not isinstance(expect["logClean"], bool):
         raise ScenarioError("expect.logClean has to be true or false")
     if "event" in expect:
         _check_event(expect["event"])
+
+
+def _check_reference(reference: Any) -> None:
+    if not isinstance(reference, dict):
+        raise ScenarioError("expect.reference has to be an object")
+    _only_members(reference, REFERENCE_MEMBERS, "expect.reference")
+    png = reference.get("png")
+    if not isinstance(png, str) or not png:
+        raise ScenarioError("expect.reference needs \"png\", the reference picture as a path relative to the scenario file")
+    if PurePosixPath(png).is_absolute() or PureWindowsPath(png).anchor:
+        raise ScenarioError(f"expect.reference.png has to be relative to the scenario file, not {png!r}")
+    if "threshold" in reference and (not _is_int(reference["threshold"]) or not 0 <= reference["threshold"] <= MAX_THRESHOLD):
+        raise ScenarioError(f"expect.reference.threshold has to be a whole number from 0 to {MAX_THRESHOLD}")
+    max_share = reference.get("maxShare", 0)
+    if isinstance(max_share, bool) or not isinstance(max_share, (int, float)) or not 0 <= max_share <= 1:
+        raise ScenarioError("expect.reference.maxShare has to be a number from 0 to 1 (the share of changed pixels)")
+    region = reference.get("region")
+    if "region" in reference and (not isinstance(region, list) or len(region) != REGION_CORNERS or not all(_is_int(corner) for corner in region)):
+        raise ScenarioError("expect.reference.region has to be four whole numbers [x0, y0, x1, y1]")
 
 
 def _check_event(event: Any) -> None:
