@@ -79,6 +79,11 @@ def test_a_comment_opener_in_a_string_does_not_open_a_comment(tmp_path):
     assert len(found(tmp_path)) == 1
 
 
+def test_a_quote_character_literal_does_not_open_a_string(tmp_path):
+    write(tmp_path, "src/Foo.cpp", "char a = '\"'; /*\n#include \"x.h\"\n*/\n#include \"y.h\"\n")
+    assert [p.split(":")[1] for p in found(tmp_path)] == ["4"]
+
+
 def test_files_of_other_suffixes_are_not_scanned(tmp_path):
     write(tmp_path, "src/notes.md", '#include "x.h"\n')
     write(tmp_path, "src/Foo.txt", '#include "x.h"\n')

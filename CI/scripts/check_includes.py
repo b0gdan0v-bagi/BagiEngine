@@ -13,7 +13,7 @@ Scanned: `.h .hpp .hh .hxx .inl .c .cc .cpp .cxx .m .mm`. Skipped: the folders `
 folder with a `.git` entry below the root (a submodule checks itself), a vendored module (`src/Modules/<m>` with no CLAUDE.md, as in
 check_third_party_notices.py), a file with `Vendored` in its first lines, and every `--exclude <path relative to root>` (repeatable; a
 folder or a file, for a game's own vendored code). Comments are skipped; a raw string holding an include at the start of a line is a
-known blind spot (it is reported).
+known blind spot (reported as a false finding).
 
 Exit code 0 when no finding, 1 with one line per finding and a last line with the count, 2 on a bad argument. Standard library only.
 """
@@ -40,6 +40,7 @@ def strip_comments(line: str, in_block: bool) -> tuple[str, bool]:
     out = []
     i = 0
     in_string = False
+    in_char = False
     while i < len(line):
         two = line[i : i + 2]
         if in_block:
@@ -57,6 +58,13 @@ def strip_comments(line: str, in_block: bool) -> tuple[str, bool]:
                 i += 1
             elif char == '"':
                 in_string = False
+        elif in_char:
+            out.append(char)
+            if char == "\\" and i + 1 < len(line):
+                out.append(line[i + 1])
+                i += 1
+            elif char == "'":
+                in_char = False
         elif two == "/*":
             in_block = True
             i += 1
@@ -65,6 +73,7 @@ def strip_comments(line: str, in_block: bool) -> tuple[str, bool]:
         else:
             out.append(char)
             in_string = char == '"'
+            in_char = char == "'"
         i += 1
     return "".join(out), in_block
 

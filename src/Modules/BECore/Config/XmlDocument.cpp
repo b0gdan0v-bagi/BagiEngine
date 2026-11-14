@@ -1,6 +1,5 @@
 #include "XmlDocument.h"
 
-
 namespace BECore {
 
     bool XmlDocument::LoadFromFile(const std::filesystem::path& filepath) {
