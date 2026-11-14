@@ -1,5 +1,10 @@
 #pragma once
 
+#include <BECore/RefCounted/IntrusivePtr.h>
+#include <BECore/Threading/Thread.h>
+#include <BECore/Types/Types.h>
+#include <BECore/Utils/PassKey.h>
+#include <BECore/Utils/Singleton.h>
 #include <TaskSystem/Task.h>
 #include <TaskSystem/TaskHandle.h>
 #include <TaskSystem/TaskLabel.h>
@@ -7,6 +12,8 @@
 #include <TaskSystem/TaskScheduler.h>
 #include <TaskSystem/ThreadPool.h>
 #include <chrono>
+#include <cstddef>
+#include <utility>
 
 namespace BECore {
 

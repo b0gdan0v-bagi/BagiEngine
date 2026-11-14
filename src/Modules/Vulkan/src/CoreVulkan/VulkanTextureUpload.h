@@ -1,5 +1,8 @@
 #pragma once
 
+#include <BECore/PoolString/PoolString.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
+#include <cstdint>
 #include <vulkan/vulkan.h>
 
 namespace BECore {

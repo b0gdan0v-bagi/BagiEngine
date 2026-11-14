@@ -1,5 +1,8 @@
 #pragma once
 
+#include <BECore/PoolString/PoolString.h>
+#include <BECore/Reflection/ReflectionMarkers.h>
+
 namespace BECore {
 
     /// `<defaultGame name="..."/>` of config/GamesConfig.xml: the game GameManager::Initialize() activates.

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Math/Color.h>
 #include <Events/EventBase.h>
 
 namespace BECore {

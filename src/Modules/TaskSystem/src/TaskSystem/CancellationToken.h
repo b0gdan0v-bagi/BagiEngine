@@ -1,6 +1,10 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
 #include <TaskSystem/TaskPriority.h>
+#include <atomic>
+#include <expected>
+#include <utility>
 
 namespace BECore {
 

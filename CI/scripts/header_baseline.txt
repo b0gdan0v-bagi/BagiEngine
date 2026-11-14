@@ -1,14 +1,5 @@
 # Headers that do not compile alone (CI/scripts/check_headers.py). A fix removes lines, nothing is added.
 # Regenerate: python3 CI/scripts/check_headers.py --root . --build build/macos-debug --baseline CI/scripts/header_baseline.txt --update-baseline
-src/Application/Application.h
-src/Modules/Events/src/Events/EventsProviderManager.h
-src/Modules/Events/src/Events/IEventsProvider.h
-src/Modules/Events/src/Events/InputEvents.h
-src/Modules/Events/src/Events/RenderEvents.h
-src/Modules/Games/src/Games/GameManager.h
-src/Modules/Games/src/Games/GamesConfig.h
-src/Modules/Games/src/Games/IControllableGame.h
-src/Modules/Games/src/Games/IGame.h
 src/Modules/RemoteControl/src/RemoteControl/Sha1.h
 src/Modules/RemoteControl/src/RemoteControl/Socket.h
 src/Modules/RemoteControl/src/RemoteControl/Tls/ClientStream.h
@@ -35,23 +26,6 @@ src/Modules/Rooms/src/Rooms/RoomCode.h
 src/Modules/Rooms/src/Rooms/RoomHub.h
 src/Modules/Rooms/src/Rooms/RoomLimits.h
 src/Modules/Rooms/src/Rooms/RoomTypes.h
-src/Modules/SDL/src/CoreSDL/SDLClipboard.h
-src/Modules/SDL/src/CoreSDL/SDLEventsProvider.h
-src/Modules/SDL/src/CoreSDL/SDLMainWindow.h
-src/Modules/SDL/src/CoreSDL/SDLUtils.h
-src/Modules/SDL/src/CoreSDL/SDLWebPost.h
-src/Modules/SDL/src/CoreSDL/SDLWindowConfig.h
-src/Modules/TaskSystem/src/TaskSystem/CancellationToken.h
-src/Modules/TaskSystem/src/TaskSystem/LiveTasks.h
-src/Modules/TaskSystem/src/TaskSystem/TaskGroup.h
-src/Modules/TaskSystem/src/TaskSystem/TaskHandle.h
-src/Modules/TaskSystem/src/TaskSystem/TaskManager.h
-src/Modules/TaskSystem/src/TaskSystem/TaskQueue.h
-src/Modules/TaskSystem/src/TaskSystem/TaskScheduler.h
-src/Modules/TaskSystem/src/TaskSystem/TaskStatistics.h
-src/Modules/TaskSystem/src/TaskSystem/ThreadPool.h
-src/Modules/Vulkan/src/CoreVulkan/VulkanGeometryBuffer.h
-src/Modules/Vulkan/src/CoreVulkan/VulkanTextureUpload.h
 src/Widgets/ClearScreenWidget.h
 src/Widgets/ConfigEditor/ConfigEditorWidget.h
 src/Widgets/ConfigEditor/ConfigFieldSchema.h

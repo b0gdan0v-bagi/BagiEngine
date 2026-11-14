@@ -1,5 +1,9 @@
 #pragma once
 
+#include <BECore/PoolString/PoolString.h>
+#include <BECore/RefCounted/RefCounted.h>
+#include <BECore/Reflection/ReflectionMarkers.h>
+
 namespace BECore {
 
     class IControllableGame;

@@ -1,7 +1,13 @@
 #pragma once
 
+#include <BECore/RefCounted/IntrusivePtr.h>
+#include <BECore/Threading/LockGuards.h>
+#include <BECore/Threading/Mutex.h>
+#include <BECore/Types/Types.h>
 #include <TaskSystem/CancellationToken.h>
 #include <TaskSystem/TaskHandle.h>
+#include <cstddef>
+#include <utility>
 
 namespace BECore {
 
