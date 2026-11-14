@@ -62,6 +62,8 @@ Steps of slice 4 (CPU total of the build after the step; "kept" rows are commits
 | `TweenManager` and `UIThemes` as `UniquePtr` in `CoreManager` (WP 4b, twice, load 11 and 18) | 357.6, 362.4 | 221.5, 222.7 | 27.0, 27.2 | dropped: mean 360.0 is 10.5 s below A4a, the rule needs 11.8; not worth an ownership change |
 | `entt.hpp` out of `Scene.h` (WP 4) | | | | not done: `entt.hpp` is in the PCH (through `SubscriptionHolder.h`), so the include costs no parse |
 | `CoreManager.h`, the by-value managers (WP 4) | | | | not done: the game takes their headers through `CoreManager.h` in about 78 places; needs a game entry, then a `CoreServices` holder |
+| json in the tests (WP 5: the `PrintTo` for `nlohmann::json`, `ExpectJsonEq`) | | | | not done: all of `PrintToString<json>` is 0.74 s in 9 TUs (A4a trace); the rest of the json rows (`json.hpp`, `parse<const char*>` from the inline `operator""_json`) comes with the include itself in 60 TUs, and the printer is not in it |
+| `Control/Json.h` to `JsonFwd.h` in `ISeatedGame.h` (WP 5c, once, load 6.7) | 359.7 | 223.3 | 27.2 | dropped: 10.8 s below A4a (the rule needs 11.8) and `json.hpp` 60 -> 58 TUs (the plan needs a third): the TUs that include it use `Json` themselves; the other three headers hold `Json` by value |
 
 ## Sanitizers and fuzzing
 
