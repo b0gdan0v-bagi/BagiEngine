@@ -2,20 +2,17 @@
 
 #include <BECore/Animation/TweenManager.h>
 #include <BECore/Application/CommandLine.h>
-#include <BECore/Assert/AssertHandlers.h>
 #include <BECore/Clipboard/Clipboard.h>
 #include <BECore/Config/ConfigManager.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/Input/UIInput.h>
-#include <BECore/Logger/LoggerManager.h>
 #include <BECore/MainWindow/MainWindowManager.h>
 #include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/Renderer/RendererManager.h>
 #include <BECore/Resource/ResourceManager.h>
 #include <BECore/Resource/TextureLibrary.h>
-#include <BECore/Scene/SceneManager.h>
 #include <BECore/Tests/TestManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/Time/GamePause.h>
@@ -33,6 +30,9 @@ namespace BECore {
 
     // Forward declarations
     class Application;
+    class AssertHandlerManager;
+    class LoggerManager;
+    class SceneManager;
     class TaskManager;
 
     namespace Tests {
@@ -41,8 +41,9 @@ namespace BECore {
 
     class CoreManager : public Singleton<CoreManager> {
     public:
-        CoreManager() = default;
-        ~CoreManager() override = default;
+        // Out of line: the pointers to the logger, assert handler and scene managers need their complete types to be made and dropped
+        CoreManager();
+        ~CoreManager() override;
 
         static WidgetManager& GetWidgetManager() {
             return GetInstance()._widgetManager;

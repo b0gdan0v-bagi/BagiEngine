@@ -58,6 +58,10 @@ Steps of slice 4 (CPU total of the build after the step; "kept" rows are commits
 | `Logger::Fatal` out of line (A1, twice) | 507.6, 532.3 (B0 mean 526.8) | 292.8, 310.9 (B0 298.9) | 37.0, 38.5 | dropped: mean 520.0 is 6.8 s (1.3 %) below B0, the rule needs 25.2 |
 | next hub by the numbers (WP 3) | | | | not done: every row of 100+ TUs and 5.3+ s is replayed from the PCH, not from a header (below) |
 | PCH instantiates its templates once (WP 3b, B1a and B1b; the new last kept state) | 389.8, 383.9 (mean 386.9; B0 mean 526.8) | 238.3, 235.9 (mean 237.1; B0 298.9) | 28.6, 29.1 | kept: 139.9 s (26.6 %) below B0, the rule needed 25.2. N of B1 = 5.9, so the next steps need max(1 % of B0, 2N) = 11.8 s against 386.9 (B1 builds ran at load 3 to 21: wide noise remains) |
+| `CoreManager.h` forward-declares the scene, logger and assert managers (WP 4a, once, load 11.8) | 370.5 | 227.6 | 27.8 | kept: 16.4 s below B1 mean 386.9, the rule needs 11.8; `SceneManager.h` / `Scene.h` fall from 174 to 91 TUs; five engine files got an include, no game file |
+| `TweenManager` and `UIThemes` as `UniquePtr` in `CoreManager` (WP 4b, twice, load 11 and 18) | 357.6, 362.4 | 221.5, 222.7 | 27.0, 27.2 | dropped: mean 360.0 is 10.5 s below A4a, the rule needs 11.8; not worth an ownership change |
+| `entt.hpp` out of `Scene.h` (WP 4) | | | | not done: `entt.hpp` is in the PCH (through `SubscriptionHolder.h`), so the include costs no parse |
+| `CoreManager.h`, the by-value managers (WP 4) | | | | not done: the game takes their headers through `CoreManager.h` in about 78 places; needs a game entry, then a `CoreServices` holder |
 
 ## Sanitizers and fuzzing
 
