@@ -60,7 +60,7 @@ In a game (the engine area is a row of its rules file) work often comes as a pai
 
 ## Through: slices that do not wait for the merge
 
-An entry with `slicing: through` in the store (the owner sets it: `todo edit <id> --slicing through`, or the panel's toggle; it is read at every slice, since each slice may be a new session that knows only the id) keeps the slice as the unit of review, not of merge: all its slices go on one branch, each is reviewed on its own range, and the owner merges once. Every other rule of the loop stays.
+An entry with `slicing: through` in the store (the default: `todo add` sets it, owner 2026-11-14; `todo edit <id> --slicing none` or the panel's toggle makes each slice wait for its merge; it is read at every slice, since each slice may be a new session that knows only the id) keeps the slice as the unit of review, not of merge: all its slices go on one branch, each is reviewed on its own range, and the owner merges once. Every other rule of the loop stays.
 
 - **Stage plan.** The architect of the first slice also writes the stage plan of the whole entry, `todo-loop-<branch-id>-stages.md` (`todo-architect.md`, "Through"); store it with `todo plan put ... --kind stages`. Each stage is one slice and says where it ends: `size` (more stages follow, none needs the owner), `gate` (the next one needs the owner) or `end`.
 - **Names.** The **plan id** of slice 1 is `<branch-id>`, of slice K ≥ 2 `<branch-id>-s<K>`; its plan is `todo-loop-<plan id>.md` and its reviews `todo-loop-<plan id>-review-<name>.md`. Wherever this skill names `todo-loop-<branch-id>` for a slice's plan or reviews, a through slice uses its plan id.

@@ -101,6 +101,10 @@ def test_ping_list_show_and_the_loop_commands(cli):
     assert "sample" in out and "stage 2" in out and "A sample" in out
     out, _ = cli("show", "sample")
     assert out.startswith("# A sample\n\nid: sample · area: engine · status: open · stage: 2")
+    assert "slicing: through" in out
+    cli("add", "gated", "--area", "engine", "--title", "Each slice waits", "--slicing", "none")
+    out, _ = cli("show", "gated")
+    assert "slicing:" not in out
 
     out, _ = cli("claim", "sample", "--branch", "todo/sample")
     assert "in progress" in out and "branch todo/sample" in out
