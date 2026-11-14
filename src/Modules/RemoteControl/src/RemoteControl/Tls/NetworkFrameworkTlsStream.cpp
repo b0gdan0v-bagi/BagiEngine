@@ -27,7 +27,7 @@ namespace BECore {
         };
 
         template <typename T>
-        using OsOwned = std::unique_ptr<std::remove_pointer_t<T>, OsObjectReleaser>;
+        using OsOwned = UniquePtr<std::remove_pointer_t<T>, OsObjectReleaser>;
 
         struct CfReleaser {
             void operator()(CFTypeRef object) const {
@@ -38,7 +38,7 @@ namespace BECore {
         };
 
         template <typename T>
-        using CfOwned = std::unique_ptr<std::remove_pointer_t<T>, CfReleaser>;
+        using CfOwned = UniquePtr<std::remove_pointer_t<T>, CfReleaser>;
 
         StringView TlsVersionName(tls_protocol_version_t version) {
             switch (version) {

@@ -32,7 +32,7 @@ namespace BECore {
 
     /// Attributes of a reference that replace the same attribute of the node file's `<node>`: the reflected fields of
     /// SceneNode (`_name`, `_layer`). When SceneNode gets a field, extend this list.
-    inline constexpr std::array<StringView, 2> kNodeOverrideAttributes = {"name", "layer"};
+    inline constexpr Array<StringView, 2> kNodeOverrideAttributes = {"name", "layer"};
 
     /// Attribute that the expansion may set on the copy of a node file's `<node>`: the reference it came from. The live
     /// SceneNode keeps it (`GetSourceRef`) so the scene editor can write the node back as a reference

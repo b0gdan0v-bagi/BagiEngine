@@ -32,7 +32,7 @@ namespace BECore {
 
     private:
         Vector<PoolString> _entries;
-        eastl::unordered_set<PoolString> _index;
+        HashSet<PoolString> _index;
     };
 
 }  // namespace BECore

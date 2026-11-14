@@ -25,7 +25,7 @@ namespace BECore {
             constexpr auto last = sv.find_last_of("]");
 #endif
             constexpr size_t first = sv.find_last_of(':', last) + 1;
-            std::array<char, last - first + 1> buf{};                                      // +1 '\0' terminated c_str
+            Array<char, last - first + 1> buf{};                                           // +1 '\0' terminated c_str
             ranges::copy(std::string_view{sv.data() + first, last - first}, buf.begin());  // std: as above
             return buf;
         }

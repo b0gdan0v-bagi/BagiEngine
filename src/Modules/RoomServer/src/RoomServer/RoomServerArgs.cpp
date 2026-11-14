@@ -35,7 +35,7 @@ namespace BECore {
             const char* variable;
         };
 
-        constexpr std::array kOptions{
+        constexpr Array<OptionInfo, 13> kOptions{
             OptionInfo{Option::Port, "--port", "PORT"},
             OptionInfo{Option::Bind, "--bind", "BAGI_ROOMS_BIND"},
             OptionInfo{Option::Origin, "--origin", "BAGI_ROOMS_ORIGINS"},

@@ -15,7 +15,7 @@ namespace BECore {
             Vec3 v;
         };
 
-        constexpr std::array<CubeFace, kCubeFaceCount> kCubeFaces = {{
+        constexpr Array<CubeFace, kCubeFaceCount> kCubeFaces = {{
             {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}},
             {{-1, 0, 0}, {0, 0, 1}, {0, 1, 0}},
             {{0, 1, 0}, {0, 0, 1}, {1, 0, 0}},
@@ -31,14 +31,14 @@ namespace BECore {
         };
 
         /// v up in the face is the top of the texture
-        constexpr std::array<CubeCorner, kFaceCorners> kCubeCorners = {{
+        constexpr Array<CubeCorner, kFaceCorners> kCubeCorners = {{
             {-kHalfSide, -kHalfSide, {0.0f, 1.0f}},
             {kHalfSide, -kHalfSide, {1.0f, 1.0f}},
             {kHalfSide, kHalfSide, {1.0f, 0.0f}},
             {-kHalfSide, kHalfSide, {0.0f, 0.0f}},
         }};
 
-        constexpr std::array<uint32_t, 6> kFaceTriangleCorners = {0, 1, 2, 0, 2, 3};
+        constexpr Array<uint32_t, 6> kFaceTriangleCorners = {0, 1, 2, 0, 2, 3};
 
     }  // namespace
 

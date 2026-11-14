@@ -2667,7 +2667,7 @@ namespace BECore {
             Vector<Vector<UICssDeclaration>> _inlineStyles;
             Vector<WebNode> _nodes;
             Vector<Attrs> _baseAttrs;
-            eastl::hash_set<String> _usedNames;
+            HashSet<String> _usedNames;
             HashMap<String, int> _nextNameSuffix;  ///< per tag, where UniqueName goes on counting
             size_t _cascadeWork = 0;
         };

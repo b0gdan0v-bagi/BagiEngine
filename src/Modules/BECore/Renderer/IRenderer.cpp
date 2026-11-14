@@ -42,7 +42,7 @@ namespace BECore {
 
     namespace {
         // Two triangles over the corners in the order of MakeTransformedQuad(): top-left, top-right, bottom-left, bottom-right
-        constexpr std::array<int, 6> kQuadIndices = {0, 1, 2, 2, 1, 3};
+        constexpr Array<int, 6> kQuadIndices = {0, 1, 2, 2, 1, 3};
     }  // namespace
 
     void IRenderer::DrawTransformedRect(float x, float y, float w, float h, const Color& color, const DrawTransform& transform) {
@@ -50,8 +50,8 @@ namespace BECore {
             DrawFilledRect(x, y, w, h, color);
             return;
         }
-        const std::array<Vec2, 4> corners = MakeTransformedQuad(Rect{x, y, w, h}, transform);
-        const std::array<GeometryVertex, 4> vertices = {
+        const auto corners = MakeTransformedQuad(Rect{x, y, w, h}, transform);
+        const Array<GeometryVertex, 4> vertices = {
             GeometryVertex{corners[0].x, corners[0].y, color, 0.0f, 0.0f},
             GeometryVertex{corners[1].x, corners[1].y, color, 1.0f, 0.0f},
             GeometryVertex{corners[2].x, corners[2].y, color, 0.0f, 1.0f},
@@ -88,8 +88,8 @@ namespace BECore {
             std::swap(v0, v1);
         }
 
-        const std::array<Vec2, 4> corners = MakeTransformedQuad(Rect{dstX, dstY, dstW, dstH}, transform);
-        const std::array<GeometryVertex, 4> vertices = {
+        const auto corners = MakeTransformedQuad(Rect{dstX, dstY, dstW, dstH}, transform);
+        const Array<GeometryVertex, 4> vertices = {
             GeometryVertex{corners[0].x, corners[0].y, tint, u0, v0},
             GeometryVertex{corners[1].x, corners[1].y, tint, u1, v0},
             GeometryVertex{corners[2].x, corners[2].y, tint, u0, v1},

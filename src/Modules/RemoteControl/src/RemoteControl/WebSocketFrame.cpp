@@ -65,7 +65,7 @@ namespace BECore {
         }
 
         if (mask) {
-            // Pointers, not std::array iterators: EASTL's insert does not take MSVC's class iterator
+            // Plain pointers: an Array iterator is a pointer in EASTL, and its insert does not take MSVC's class iterator of a std:: container
             frame.insert(frame.end(), mask->data(), mask->data() + mask->size());
         }
         for (size_t i = 0; i < payload.size(); ++i) {

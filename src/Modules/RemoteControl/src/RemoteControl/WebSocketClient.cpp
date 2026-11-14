@@ -263,7 +263,7 @@ namespace BECore {
         // With TLS it is the deadline of the TLS handshake as well
         const auto deadline = _handshakeDeadline;
         Vector<uint8_t> received;
-        std::array<uint8_t, kHandshakeChunkSize> chunk;
+        Array<uint8_t, kHandshakeChunkSize> chunk;
         size_t headSize = 0;
         for (;;) {
             // Zero would mean "wait for ever" to the socket, so a deadline that is (nearly) reached ends the handshake
@@ -289,7 +289,7 @@ namespace BECore {
                 return false;
             }
             _bytesReceived.fetch_add(*count, std::memory_order_relaxed);
-            // Pointers, not std::array iterators: EASTL's insert does not take MSVC's class iterator
+            // Plain pointers: an Array iterator is a pointer in EASTL, and its insert does not take MSVC's class iterator of a std:: container
             received.insert(received.end(), chunk.data(), chunk.data() + *count);
 
             const StringView text(reinterpret_cast<const char*>(received.data()), received.size());
@@ -331,7 +331,7 @@ namespace BECore {
         WebSocketFrameParser parser(_settings.maxMessageBytes, WebSocketPeer::Server);
         parser.Feed(Span<const uint8_t>(pendingBytes.data(), pendingBytes.size()));
 
-        std::array<uint8_t, kReadChunkSize> chunk;
+        Array<uint8_t, kReadChunkSize> chunk;
         for (;;) {
             for (;;) {
                 auto popped = parser.Pop();
