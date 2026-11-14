@@ -305,7 +305,7 @@
         {
             "name": "windows-clang-asan",
             "displayName": "Windows Clang Ninja Debug with AddressSanitizer + UBSan",
-            "description": "Configured and built through CI/scripts/vs_env.py like windows-clang-debug; LLVM must be on PATH (its ASan runtime DLL is copied at configure)",
+            "description": "Configured and built through CI/scripts/vs_env.py like windows-clang-debug; LLVM must be on PATH. A static build (static CRT and static SDL, mixin asan-windows-crt): no ASan runtime DLL is needed",
             "inherits": ["ninja", "host-windows", "vs-env", "clang", "no-module-scan", "debug", "asan", "asan-windows-crt"]
         },
         {

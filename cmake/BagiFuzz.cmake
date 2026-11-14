@@ -63,8 +63,8 @@ if(BE_SANITIZERS)
 
     # The Windows ASan runtime is linked statically with the static C runtime (preset mixin asan-windows-crt: CMAKE_MSVC_RUNTIME_LIBRARY=
     # MultiThreaded, no DLL in the build); with /MD the DLL thunks of the runtime fail to link (duplicate symbol: malloc)
-    if(WIN32 AND "address" IN_LIST BE_SANITIZERS AND NOT CMAKE_MSVC_RUNTIME_LIBRARY STREQUAL "MultiThreaded")
-        message(WARNING "Sanitizers: ASan on Windows needs CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded and a static SDL (the preset windows-clang-asan); '${CMAKE_MSVC_RUNTIME_LIBRARY}' does not link")
+    if(WIN32 AND "address" IN_LIST BE_SANITIZERS AND (NOT CMAKE_MSVC_RUNTIME_LIBRARY STREQUAL "MultiThreaded" OR NOT ENGINE_STATIC_SDL))
+        message(WARNING "Sanitizers: ASan on Windows needs CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded and ENGINE_STATIC_SDL=ON (the preset windows-clang-asan); this build has runtime '${CMAKE_MSVC_RUNTIME_LIBRARY}', ENGINE_STATIC_SDL=${ENGINE_STATIC_SDL} and does not link")
     endif()
 
     if(ENGINE_FUZZ_LIBFUZZER)
