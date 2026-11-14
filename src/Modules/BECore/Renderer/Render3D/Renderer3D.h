@@ -1,9 +1,14 @@
 #pragma once
 
+#include <BECore/Math/Mat4.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/Renderer/Gpu/IGpuDevice.h>
 #include <BECore/Renderer/ITexture.h>
 #include <BECore/Renderer/Render3D/Renderer3DConstants.h>
 #include <BECore/Renderer/Render3D/Scene3D.h>
+#include <BECore/Types/Types.h>
+#include <cstdint>
+#include <expected>
 
 namespace BECore {
 

@@ -1,7 +1,15 @@
 #pragma once
 
+#include <BECore/PoolString/PoolString.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
+#include <BECore/RefCounted/New.h>
+#include <BECore/RefCounted/RefCounted.h>
 #include <BECore/Renderer/Gpu/IGpuDevice.h>
 #include <BECore/Renderer/Render3D/MeshData.h>
+#include <BECore/Types/Types.h>
+#include <cstddef>
+#include <cstdint>
+#include <utility>
 
 namespace BECore {
 

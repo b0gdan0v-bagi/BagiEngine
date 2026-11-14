@@ -1,5 +1,7 @@
 #pragma once
 
+#include <BECore/Math/Color.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/Renderer/ITexture.h>
 
 namespace BECore {

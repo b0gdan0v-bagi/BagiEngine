@@ -1,22 +1,6 @@
 # Headers that do not compile alone (CI/scripts/check_headers.py). A fix removes lines, nothing is added.
 # Regenerate: python3 CI/scripts/check_headers.py --root . --build build/macos-debug --baseline CI/scripts/header_baseline.txt --update-baseline
 src/Application/Application.h
-src/Modules/BECore/Renderer/DrawTransform.h
-src/Modules/BECore/Renderer/Gpu/GpuTypes.h
-src/Modules/BECore/Renderer/Gpu/GpuValidation.h
-src/Modules/BECore/Renderer/Gpu/IGpuBuffer.h
-src/Modules/BECore/Renderer/Gpu/IGpuDepthTexture.h
-src/Modules/BECore/Renderer/Gpu/IGpuDevice.h
-src/Modules/BECore/Renderer/Gpu/IGpuPipeline.h
-src/Modules/BECore/Renderer/Render3D/Lighting.h
-src/Modules/BECore/Renderer/Render3D/Material.h
-src/Modules/BECore/Renderer/Render3D/Mesh.h
-src/Modules/BECore/Renderer/Render3D/MeshData.h
-src/Modules/BECore/Renderer/Render3D/Renderer3D.h
-src/Modules/BECore/Renderer/Render3D/Renderer3DConstants.h
-src/Modules/BECore/Renderer/Render3D/Scene3D.h
-src/Modules/BECore/Renderer/Render3D/Vertex3D.h
-src/Modules/BECore/Renderer/RenderCounters.h
 src/Modules/BECore/Scene/Components/ChangeToRandomColorDebugComponent.h
 src/Modules/BECore/Scene/Components/ClickableComponent.h
 src/Modules/BECore/Scene/Components/QuadRendererComponent.h

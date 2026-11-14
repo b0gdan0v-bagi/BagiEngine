@@ -1,9 +1,11 @@
 #pragma once
 
+#include <BECore/Math/Mat4.h>
 #include <BECore/Renderer/Render3D/Camera3D.h>
 #include <BECore/Renderer/Render3D/Lighting.h>
 #include <BECore/Renderer/Render3D/Material.h>
 #include <BECore/Renderer/Render3D/Mesh.h>
+#include <BECore/Types/Types.h>
 
 namespace BECore {
 
