@@ -1,5 +1,3 @@
-#include "RmlUiScreens.h"
-
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Scene/Scene.h>
@@ -9,6 +7,7 @@
 #include <CoreSDL/SDLRendererBackend.h>
 #include <RmlUi/Core.h>
 #include <RmlUiHost/RmlUiDocumentComponent.h>
+#include <RmlUiHost/RmlUiScreens.h>
 #include <SDL3_image/SDL_image.h>
 #include <gtest/gtest.h>
 

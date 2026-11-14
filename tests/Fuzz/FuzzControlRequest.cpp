@@ -1,8 +1,7 @@
-#include "FuzzTargets.h"
-
 #include <BECore/Control/ControlBuiltins.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
+#include <Fuzz/FuzzTargets.h>
 #include <Games/GameControl.h>
 
 namespace BECore::Fuzz {

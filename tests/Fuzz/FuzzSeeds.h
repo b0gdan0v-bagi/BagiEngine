@@ -1,6 +1,6 @@
 #pragma once
 
-#include "FuzzMutator.h"
+#include <Fuzz/FuzzMutator.h>
 
 namespace BECore::Fuzz {
 

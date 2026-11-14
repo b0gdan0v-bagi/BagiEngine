@@ -1,8 +1,7 @@
-#include "TimeTest.h"
-
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Time/GamePause.h>
+#include <BECore/TimeTest.h>
 #include <Common/EngineEnvironment.h>
 #include <TaskSystem/Awaitables.h>
 #include <TaskSystem/Task.h>

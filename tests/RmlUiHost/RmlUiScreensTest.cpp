@@ -1,5 +1,3 @@
-#include "RmlUiScreens.h"
-
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Scene/Scene.h>
@@ -13,6 +11,7 @@
 #include <Events/InputEvents.h>
 #include <RmlUi/Core.h>
 #include <RmlUiHost/RmlUiDocumentComponent.h>
+#include <RmlUiHost/RmlUiScreens.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {

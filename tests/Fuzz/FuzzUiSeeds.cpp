@@ -1,5 +1,5 @@
-#include "FuzzSeeds.h"
-#include "FuzzUiGeometryInput.h"
+#include <Fuzz/FuzzSeeds.h>
+#include <Fuzz/FuzzUiGeometryInput.h>
 
 namespace BECore::Fuzz {
 

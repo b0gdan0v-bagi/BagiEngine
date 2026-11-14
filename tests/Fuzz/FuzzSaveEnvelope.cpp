@@ -1,7 +1,6 @@
-#include "FuzzProbeAccess.h"
-#include "FuzzTargets.h"
-
 #include <BECore/Save/SaveGame.h>
+#include <Fuzz/FuzzProbeAccess.h>
+#include <Fuzz/FuzzTargets.h>
 #include <random>
 
 namespace BECore::Fuzz {
