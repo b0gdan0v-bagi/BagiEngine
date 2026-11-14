@@ -1,7 +1,10 @@
 #pragma once
 
 #include <BECore/Assert/AssertEvent.h>
+#include <BECore/RefCounted/RefCounted.h>
 #include <BECore/Reflection/IDeserializer.h>
+#include <BECore/Reflection/ReflectionMarkers.h>
+#include <Events/SubscriptionHolder.h>
 
 namespace BECore {
 

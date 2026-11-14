@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
 #include <entt/entt.hpp>
 
 namespace BECore {

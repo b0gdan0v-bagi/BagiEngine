@@ -1,7 +1,11 @@
 #pragma once
 
+#include <BECore/PoolString/PoolString.h>
+#include <BECore/PoolString/StaticPoolString.h>
+#include <BECore/Types/Types.h>
 #include <EASTL/map.h>
 #include <EASTL/unordered_map.h>
+#include <cstddef>
 
 // Специализация eastl::hash для StaticPoolString
 namespace eastl {

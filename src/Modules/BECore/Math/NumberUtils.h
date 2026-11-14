@@ -1,5 +1,8 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
+#include <cstddef>
+
 namespace BECore {
 
     // Подсчитывает количество цифр в числе (включая знак минус для отрицательных чисел)

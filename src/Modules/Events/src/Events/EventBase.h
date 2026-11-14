@@ -1,6 +1,8 @@
 #pragma once
 
+#include <BECore/Utils/PassKey.h>
 #include <Events/EventsQueueRegistry.h>
+#include <Events/SubscriptionHolder.h>
 #include <entt/entt.hpp>
 
 namespace BECore {

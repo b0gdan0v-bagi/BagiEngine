@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Assert/IAssertHandler.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
 
 namespace BECore {
 

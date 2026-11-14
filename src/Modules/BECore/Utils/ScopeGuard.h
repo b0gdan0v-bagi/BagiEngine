@@ -1,5 +1,8 @@
 #pragma once
 
+#include <functional>
+#include <utility>
+
 namespace BECore {
     class ScopeGuard {
     public:

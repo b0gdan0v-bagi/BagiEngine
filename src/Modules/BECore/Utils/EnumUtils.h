@@ -1,7 +1,14 @@
 #pragma once
 
 #include <BECore/Format/Formatter.h>
+#include <BECore/PoolString/PoolString.h>
+#include <BECore/Types/Types.h>
 #include <EASTL/array.h>
+#include <algorithm>
+#include <cstddef>
+#include <limits>
+#include <mutex>
+#include <type_traits>
 
 namespace BECore {
 

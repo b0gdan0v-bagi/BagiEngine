@@ -1,5 +1,8 @@
 #pragma once
 
+#include <atomic>
+#include <cstdint>
+
 namespace BECore {
 
     class RefCountedNonAtomic {
