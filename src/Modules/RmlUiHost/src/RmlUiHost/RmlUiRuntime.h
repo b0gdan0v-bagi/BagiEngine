@@ -1,5 +1,7 @@
 #pragma once
 
+#include <BECore/Utils/Singleton.h>
+#include <Events/SubscriptionHolder.h>
 #include <RmlUiHost/RmlUiFileInterface.h>
 #include <RmlUiHost/RmlUiFontEngine.h>
 #include <RmlUiHost/RmlUiRenderInterface.h>

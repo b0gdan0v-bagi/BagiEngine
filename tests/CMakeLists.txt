@@ -41,12 +41,16 @@ if(Python3_FOUND)
     add_test(NAME BagiIncludeStyle
         COMMAND ${Python3_EXECUTABLE} ${BAGI_ENGINE_DIR}/CI/scripts/check_includes.py --root ${BAGI_ENGINE_DIR})
     # every header compiles alone (no PCH): the baseline lists the headers still to fix and only shrinks (CI/scripts/check_headers.py).
-    # RmlUiHost is excluded in every build and is not checked yet: it is compiled only with ENGINE_UI_RMLUI, so a default build has no flags for it.
-    # A later slice checks it in a build with the option (the exclude only without it, or an add_test of its own).
+    # RmlUiHost is compiled only with ENGINE_UI_RMLUI, so a build without it has no flags for its headers and the check leaves them out;
+    # with the option (macos-rmlui-debug) the same test checks them.
     # 4 compiles at once, so no RUN_SERIAL (it would stop the other slots while it waits and runs).
+    set(HEADERS_STANDALONE_EXCLUDE)
+    if(NOT ENGINE_UI_RMLUI)
+        set(HEADERS_STANDALONE_EXCLUDE --exclude src/Modules/RmlUiHost)
+    endif()
     add_test(NAME BagiHeadersStandalone
         COMMAND ${Python3_EXECUTABLE} ${BAGI_ENGINE_DIR}/CI/scripts/check_headers.py --root ${BAGI_ENGINE_DIR} --build ${CMAKE_BINARY_DIR}
-            --baseline ${BAGI_ENGINE_DIR}/CI/scripts/header_baseline.txt --exclude src/Modules/RmlUiHost --jobs 4)
+            --baseline ${BAGI_ENGINE_DIR}/CI/scripts/header_baseline.txt ${HEADERS_STANDALONE_EXCLUDE} --jobs 4)
     set_tests_properties(BagiHeadersStandalone PROPERTIES
         SKIP_RETURN_CODE 77
         TIMEOUT 300)
