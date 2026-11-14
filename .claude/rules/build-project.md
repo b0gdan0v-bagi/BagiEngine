@@ -117,7 +117,7 @@ ctest --preset windows-clang-asan
 
 On the first run look at: a link error on `__ubsan_handle_*` (link the `clang_rt.ubsan_standalone` library of the compiler's resource dir); the configure message that the ASan DLL is not found; a `pointer-overflow` report in `miniz.h` (the ignore list's glob did not match the Windows path); a start failure if the mixin `asan-windows-crt` is switched to the debug CRT. A CI job takes these commands with the other sanitizer commands when the entry `no-ci` is done.
 
-Timings, `ctest --preset macos-debug` on a warm Debug build, Mahjong row 2026-11-08, Apple M4 Pro (14 cores), **shared with other todo-loop workers** (load average about 5 to 12 before each run, so the numbers move by a few seconds between runs; read them as a factor, not as a benchmark). Wall time of three runs, interleaved (the engine row: one run per column, taken after Match3 left the engine):
+Timings, `ctest --preset macos-debug` on a warm Debug build, Mahjong row 2026-11-08, Apple M4 Pro (14 cores), **shared with other todo-loop workers** (load average about 5 to 12 before each run, so the numbers move by a few seconds between runs; read them as a factor, not as a benchmark). Wall time of three runs, interleaved (the engine row: one run per column, taken after the games left the engine):
 
 | Set | `-j1` | `-j4` | `-j8` (preset) | `-j14` |
 |-----|-------|-------|----------------|--------|
