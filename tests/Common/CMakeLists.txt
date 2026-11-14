@@ -39,8 +39,10 @@ be_force_include_pch(BagiEngineTestSupport)
 target_compile_definitions(BagiEngineTestSupport PRIVATE
     IMGUI_VULKAN_AVAILABLE=1
     REFLECTION_GENERATED=1
-    "BAGI_ENGINE_ROOT=\"${BAGI_ENGINE_DIR}\""
 )
+
+# The engine's config/ and assets/ are pinned by EngineEnvironment: the working directory is inside whichever repository builds the tests
+be_link_content_roots(BagiEngineTestSupport ENGINE "${BAGI_ENGINE_DIR}")
 
 # The directory above Common/ is public so tests can include <Common/EngineEnvironment.h>.
 get_filename_component(TESTS_DIR "${CMAKE_CURRENT_SOURCE_DIR}" DIRECTORY)
