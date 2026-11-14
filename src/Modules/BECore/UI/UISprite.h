@@ -1,5 +1,8 @@
 #pragma once
 
+#include <BECore/Math/Rect.h>
+#include <BECore/PoolString/PoolString.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/Renderer/ITexture.h>
 
 namespace BECore {

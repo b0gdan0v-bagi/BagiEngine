@@ -1,17 +1,6 @@
 # Headers that do not compile alone (CI/scripts/check_headers.py). A fix removes lines, nothing is added.
 # Regenerate: python3 CI/scripts/check_headers.py --root . --build build/macos-debug --baseline CI/scripts/header_baseline.txt --update-baseline
 src/Application/Application.h
-src/Modules/BECore/UI/UIRectEdit.h
-src/Modules/BECore/UI/UIRegions.h
-src/Modules/BECore/UI/UISprite.h
-src/Modules/BECore/UI/UIStrings.h
-src/Modules/BECore/UI/UIThemes.h
-src/Modules/BECore/UI/UITidyMessage.h
-src/Modules/BECore/UI/UIToggleComponent.h
-src/Modules/BECore/UI/UITooltip.h
-src/Modules/BECore/UI/UIVars.h
-src/Modules/BECore/UI/UIWebCompiler.h
-src/Modules/BECore/UI/UIWebReport.h
 src/Modules/Events/src/Events/EventsProviderManager.h
 src/Modules/Events/src/Events/IEventsProvider.h
 src/Modules/Events/src/Events/InputEvents.h
@@ -85,7 +74,6 @@ src/Widgets/EditorLayout/UserFileIo.h
 src/Widgets/ImGuiFonts.h
 src/Widgets/Profiler/ProfilerWidget.h
 src/Widgets/SceneEditor/SceneEditorWidget.h
-src/Widgets/SceneEditor/UIRectInspector.h
 src/Widgets/TextureEditor/TextureEditorWidget.h
 src/Widgets/Viewport/GizmoDrag.h
 src/Widgets/Viewport/GizmoGeometry.h
@@ -119,18 +107,15 @@ tests/Common/RecordingGpuDevice.h
 tests/Common/RecordingRenderer.h
 tests/Common/TempPath.h
 tests/Common/UIPartShapeChecks.h
-tests/Common/UIThemeTestSupport.h
 tests/Fuzz/FuzzMutator.h
 tests/Fuzz/FuzzProbeAccess.h
 tests/Fuzz/FuzzRoomInput.h
 tests/Fuzz/FuzzSeeds.h
 tests/Fuzz/FuzzTargets.h
 tests/Fuzz/FuzzWebSocketInput.h
-tests/RmlUiHost/RmlUiScreens.h
 tools/stress/src/Stress/Components/StressEntitiesComponent.h
 tools/stress/src/Stress/Components/StressRunComponent.h
 tools/stress/src/Stress/Components/StressSpritesComponent.h
-tools/stress/src/Stress/Components/StressUiComponent.h
 tools/stress/src/Stress/EntityField.h
 tools/stress/src/Stress/RampController.h
 tools/stress/src/Stress/SpriteField.h

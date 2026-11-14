@@ -1,6 +1,10 @@
 #pragma once
 
+#include <BECore/Format/Format.h>
+#include <BECore/Types/Types.h>
 #include <BECore/UI/UITidyMessage.h>
+#include <cstddef>
+#include <cstdint>
 
 namespace BECore {
 
