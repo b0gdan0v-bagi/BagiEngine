@@ -1,7 +1,7 @@
 #pragma once
 
+#include <BECore/Format/Formatter.h>
 #include <EASTL/array.h>
-#include <fmt/format.h>
 
 namespace BECore {
 
@@ -231,7 +231,7 @@ namespace BECore {
 
 }  // namespace BECore
 
-// fmt support for EnumUtils-enabled enums
+// Formatting support for EnumUtils-enabled enums
 
 namespace BECore::Detail {
     // Helper trait to check if EnumUtils is available for a type
@@ -242,22 +242,22 @@ namespace BECore::Detail {
     struct HasEnumUtils<T, std::enable_if_t<std::is_enum_v<T>>> : std::true_type {};
 }  // namespace BECore::Detail
 
-/**
- * @brief fmt::formatter specialization for enums with EnumUtils support
- *
- * Enables fmt formatting for any enum type that supports EnumUtils.
- * Uses EnumUtils::ToString() to convert enum to string representation.
- *
- * Uses enable_if in the CharT template parameter to enable the specialization
- * only for enum types that support EnumUtils::ToString().
- */
-template <typename Enum>
-struct fmt::formatter<Enum, std::enable_if_t<BECore::Detail::HasEnumUtils<Enum>::value, char>> : fmt::formatter<std::string_view> {  //-NoStd: fmt formats std::string_view
-    auto format(Enum e, fmt::format_context& ctx) const -> decltype(ctx.out()) {
-        auto sv = BECore::EnumUtils<Enum>::ToString(e);
-        return fmt::formatter<std::string_view>::format(BECore::ToStd(sv), ctx);  //-NoStd: fmt
-    }
-};
+namespace BECore {
+
+    /**
+     * @brief Formatter specialization for enums with EnumUtils support (Format/CLAUDE.md)
+     *
+     * Enables formatting for any enum type that supports EnumUtils::ToString(): the text is the name of the value,
+     * and a string spec works (`{:>8}`, `{:<7}|`).
+     */
+    template <typename Enum>
+    struct Formatter<Enum, std::enable_if_t<Detail::HasEnumUtils<Enum>::value>> : TextFormatter {
+        FormatContext::iterator Format(Enum e, FormatContext& ctx) const {
+            return FormatText(EnumUtils<Enum>::ToString(e), ctx);
+        }
+    };
+
+}  // namespace BECore
 
 /**
  * @brief Macro to define an enum with reflection support

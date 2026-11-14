@@ -30,6 +30,7 @@ struct BECore::Formatter<Point> : TextFormatter {
 
 - `Parse(FormatParseContext&)` reads the spec (`{:>8}`) and must be `constexpr`; `Format(const T&, FormatContext&) const` writes the value. A specialization names no `fmt::`.
 - A type written as text derives from `TextFormatter`: it parses the usual string spec (`{:>8}`, `{:<6}`, `{:.3}`) and `FormatText(StringView, ctx)` writes the text with that spec. Only a type with its own spec writes `Parse` itself.
+- Every `CORE_ENUM` type is formattable through a `Formatter` of `Utils/EnumUtils.h` (the name of the value, a string spec works); do not specialize one for it.
 - One bridge, `fmt::formatter<T, char>` constrained by `HasFormatter<T>`, hands every such type to fmt. Do not add a second `fmt::formatter` for a type that has a `Formatter`: the two are ambiguous.
 - `String` and `StringView` are formattable through `fmt::formatter` specializations in `Format.h`: a layer file may name `fmt::`; nothing else may (the vendored `src/Modules/fmt/` is never edited).
 
