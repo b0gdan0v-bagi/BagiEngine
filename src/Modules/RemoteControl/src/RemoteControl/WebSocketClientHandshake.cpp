@@ -1,8 +1,7 @@
 #include "WebSocketClientHandshake.h"
 
-#include "WebSocketHandshake.h"
-
 #include <BECore/Utils/Base64.h>
+#include <RemoteControl/WebSocketHandshake.h>
 
 namespace BECore {
 

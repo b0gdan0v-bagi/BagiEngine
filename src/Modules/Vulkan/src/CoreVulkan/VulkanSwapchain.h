@@ -1,6 +1,6 @@
 #pragma once
 
-#include "VulkanSwapchainPolicy.h"
+#include <CoreVulkan/VulkanSwapchainPolicy.h>
 
 #include <vulkan/vulkan.h>
 #include <EASTL/vector.h>

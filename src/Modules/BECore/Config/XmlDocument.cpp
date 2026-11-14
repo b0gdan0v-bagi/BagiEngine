@@ -1,6 +1,5 @@
 #include "XmlDocument.h"
 
-#include "XmlNode.h"
 
 namespace BECore {
 

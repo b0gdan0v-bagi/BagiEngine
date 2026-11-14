@@ -1,8 +1,5 @@
 #pragma once
 
-#include "PoolString.h"
-#include "StaticPoolString.h"
-
 #include <BECore/Math/NumberUtils.h>
 #include <EASTL/array.h>
 #include <initializer_list>

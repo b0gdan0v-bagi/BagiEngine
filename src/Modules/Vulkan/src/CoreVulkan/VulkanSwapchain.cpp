@@ -1,5 +1,5 @@
 #include "VulkanSwapchain.h"
-#include "VulkanDevice.h"
+#include <CoreVulkan/VulkanDevice.h>
 
 #include <BECore/Logger/LogEvent.h>
 
