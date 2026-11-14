@@ -67,8 +67,8 @@ namespace BECore::Tests {
         }
 
         /// The cards a client was sent that the wire judge finds hidden from its seat
-        std::vector<std::string> LeaksSeenBy(const TestClient& client) {
-            std::vector<std::string> leaks;
+        Vector<std::string> LeaksSeenBy(const TestClient& client) {
+            Vector<std::string> leaks;
             for (const ReceivedMessage& message : client.received) {
                 for (std::string& id : FindLeakedCardIds(std::string_view(message.text.c_str(), message.text.size()), client.seat)) {
                     leaks.push_back(std::move(id));

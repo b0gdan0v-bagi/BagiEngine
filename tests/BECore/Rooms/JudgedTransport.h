@@ -14,7 +14,7 @@ namespace BECore::Tests {
         /// The seat the texts so far named (`joined`, `view`); -1 before the first and after `left`
         int seat = -1;
         /// Card ids a text named that its receiver may not know, with the text
-        std::vector<std::string> leaks;
+        Vector<std::string> leaks;
     };
 
     /// Wraps a transport and runs the wire judge (WireJudge.h) on every text it delivers, before the client sees it

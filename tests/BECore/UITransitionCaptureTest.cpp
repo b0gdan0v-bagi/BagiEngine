@@ -26,7 +26,7 @@ namespace BECore::Tests {
         constexpr double kHalf = 0.5;
         constexpr double kStep = 0.125;  // exact in binary and inside the longest frame the clock reports
 
-        using Pixel = std::array<int, 3>;
+        using Pixel = Array<int, 3>;
 
         const Color kBackground{10, 20, 30, 255};
         const Pixel kBackgroundPixel{10, 20, 30};

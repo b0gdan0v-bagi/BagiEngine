@@ -345,7 +345,7 @@ namespace BECore::Tests {
 
     TEST_F(GameControlTest, PipelinedActionsRunInOrderBeforeTheStateIsRead) {
         ControlService& service = CoreManager::GetControlService();
-        std::vector<Json> responses;
+        Vector<Json> responses;
         auto collect = [&responses](String text) {
             auto parsed = ParseJson(text);
             responses.push_back(parsed ? std::move(*parsed) : Json());
@@ -456,7 +456,7 @@ namespace BECore::Tests {
             EventCollector(const EventCollector&) = delete;
             EventCollector& operator=(const EventCollector&) = delete;
 
-            std::vector<Json> events;
+            Vector<Json> events;
         };
 
         std::string EventName(const Json& event) {

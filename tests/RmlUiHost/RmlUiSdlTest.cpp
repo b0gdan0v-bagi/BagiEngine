@@ -21,7 +21,7 @@ namespace BECore::Tests {
         const Color kBackground{20, 20, 30, 255};
         constexpr int kBlendTolerance = 4;
 
-        using Pixel = std::array<uint8_t, 4>;
+        using Pixel = Array<uint8_t, 4>;
 
         Pixel PixelAt(const PixelBuffer& image, int x, int y) {
             if (x < 0 || y < 0 || x >= static_cast<int>(image.width) || y >= static_cast<int>(image.height)) {

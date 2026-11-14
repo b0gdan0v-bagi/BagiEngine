@@ -209,8 +209,8 @@ namespace BECore::Tests {
             EXPECT_EQ(DrawRanks(expected), DrawRanks(actual));
         }
 
-        std::vector<std::string> NodeNamesOf(BECore::Scene& scene) {
-            std::vector<std::string> names;
+        Vector<std::string> NodeNamesOf(BECore::Scene& scene) {
+            Vector<std::string> names;
             for (const auto& node : scene.GetRootNode().GetChildren()) {
                 names.emplace_back(node->GetName().CStr());
             }
@@ -304,7 +304,7 @@ namespace BECore::Tests {
         const auto inlined = Load(InlineScene({0, 1, 2}), inlineDoc);
         const auto split = Load(SplitScene({0, 1, 2}), splitDoc);
 
-        EXPECT_EQ(NodeNamesOf(Main(split)), (std::vector<std::string>{"Board", "Hud", "Menu"}));
+        EXPECT_EQ(NodeNamesOf(Main(split)), (Vector<std::string>{"Board", "Hud", "Menu"}));
         ExpectSameScene(Main(inlined), Main(split));
         // The draw order is by layer, then scene order: Board (0) first, Menu (5), Hud (10) last; the ranks count the root node too
         EXPECT_EQ(DrawRanks(Main(split)), (Vector<int32_t>{1, 3, 2}));
@@ -365,7 +365,7 @@ namespace BECore::Tests {
         const auto inlined = Load(InlineScene({2, 0, 1}), inlineDoc);
         const auto split = Load(SplitScene({2, 0, 1}), splitDoc);
 
-        EXPECT_EQ(NodeNamesOf(Main(split)), (std::vector<std::string>{"Menu", "Board", "Hud"}));
+        EXPECT_EQ(NodeNamesOf(Main(split)), (Vector<std::string>{"Menu", "Board", "Hud"}));
         ExpectSameScene(Main(inlined), Main(split));
     }
 
@@ -375,7 +375,7 @@ namespace BECore::Tests {
         const auto inlined = Load(Scene(std::string(kBoardNode) + kHudNode + "<node name=\"Tail\"/>"), inlineDoc);
         const auto split = Load(Scene("<node ref=\"nodes/Board\"/>" + std::string(kHudNode) + "<node name=\"Tail\"/>"), splitDoc);
 
-        EXPECT_EQ(NodeNamesOf(Main(split)), (std::vector<std::string>{"Board", "Hud", "Tail"}));
+        EXPECT_EQ(NodeNamesOf(Main(split)), (Vector<std::string>{"Board", "Hud", "Tail"}));
         ExpectSameScene(Main(inlined), Main(split));
     }
 
@@ -383,7 +383,7 @@ namespace BECore::Tests {
         pugi::xml_document doc;
         const auto manager = Load(Scene(std::string("<node ref=\"nodes/Board\"/><node ref=\"nodes/Nowhere\"/>") + "<node ref=\"nodes/Menu\"/>"), doc);
 
-        EXPECT_EQ(NodeNamesOf(Main(manager)), (std::vector<std::string>{"Board", "Menu"}));
+        EXPECT_EQ(NodeNamesOf(Main(manager)), (Vector<std::string>{"Board", "Menu"}));
     }
 
     TEST_F(SceneSplitTest, LoadSceneManagerLeavesTheGivenNodeAsItWas) {
@@ -393,7 +393,7 @@ namespace BECore::Tests {
 
         const auto manager = LoadSceneManager(XmlNode{doc.document_element()}, MakeDirectoryNodeLoader(_dir));
 
-        EXPECT_EQ(NodeNamesOf(Main(manager)), (std::vector<std::string>{"Board", "Hud", "Menu"}));
+        EXPECT_EQ(NodeNamesOf(Main(manager)), (Vector<std::string>{"Board", "Hud", "Menu"}));
         EXPECT_EQ(Printed(doc.document_element()), before);
         EXPECT_NE(before.find("ref=\"nodes/Hud\""), std::string::npos);
     }
@@ -453,7 +453,7 @@ namespace BECore::Tests {
         const auto split = Load(Scene(kPanelRefA + kPanelRefB + kPanelRefC), splitDoc);
 
         ExpectSameScene(Main(inlined), Main(split));
-        EXPECT_EQ(NodeNamesOf(Main(split)), (std::vector<std::string>{"PanelA", "PanelB", "PanelC"}));
+        EXPECT_EQ(NodeNamesOf(Main(split)), (Vector<std::string>{"PanelA", "PanelB", "PanelC"}));
         // The layers decide the draw order: PanelC (1), PanelB (2), PanelA (7); the ranks count the root node too
         EXPECT_EQ(DrawRanks(Main(split)), (Vector<int32_t>{3, 2, 1}));
 
@@ -518,7 +518,7 @@ namespace BECore::Tests {
         pugi::xml_document doc;
         const auto manager = Load(Scene("<node ref=\"nodes/Panel\" name=\"Second\" layer=\"9\"/><node ref=\"nodes/Panel\" name=\"First\" layer=\"4\"/>"), doc);
 
-        EXPECT_EQ(NodeNamesOf(Main(manager)), (std::vector<std::string>{"Second", "First"}));
+        EXPECT_EQ(NodeNamesOf(Main(manager)), (Vector<std::string>{"Second", "First"}));
         const auto& nodes = Main(manager).GetRootNode().GetChildren();
         ASSERT_EQ(nodes.size(), 2u);
         EXPECT_EQ(nodes[0]->GetLayer(), 9);
@@ -538,7 +538,7 @@ namespace BECore::Tests {
         const auto withBad = Load(Scene(kPanelRefA + bad + kPanelRefC), withBadDoc);
         const auto without = Load(Scene(kPanelRefA + kPanelRefC), withoutDoc);
 
-        EXPECT_EQ(NodeNamesOf(Main(withBad)), (std::vector<std::string>{"PanelA", "PanelC"}));
+        EXPECT_EQ(NodeNamesOf(Main(withBad)), (Vector<std::string>{"PanelA", "PanelC"}));
         ExpectSameScene(Main(without), Main(withBad));
         EXPECT_EQ(UiTree(without), UiTree(withBad));
     }
@@ -550,7 +550,7 @@ namespace BECore::Tests {
 
         const auto manager = LoadSceneManager(XmlNode{doc.document_element()}, MakeDirectoryNodeLoader(_dir));
 
-        EXPECT_EQ(NodeNamesOf(Main(manager)), (std::vector<std::string>{"PanelA", "PanelB", "PanelC"}));
+        EXPECT_EQ(NodeNamesOf(Main(manager)), (Vector<std::string>{"PanelA", "PanelB", "PanelC"}));
         EXPECT_EQ(Printed(doc.document_element()), before);
         EXPECT_NE(before.find("name=\"PanelA\""), std::string::npos);
         EXPECT_NE(before.find("ref=\"nodes/Panel\""), std::string::npos);

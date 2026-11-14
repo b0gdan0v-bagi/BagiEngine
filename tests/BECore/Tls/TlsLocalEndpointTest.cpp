@@ -32,6 +32,7 @@ namespace BECore::Tests {
 
         [[nodiscard]] Vector<uint8_t> ReadFile(const std::string& path) {
             std::ifstream file(path, std::ios::binary);
+            // std: the bytes arrive through a std::istreambuf_iterator, an input iterator that eastl::vector does not take
             const std::vector<char> bytes((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
             return Vector<uint8_t>(reinterpret_cast<const uint8_t*>(bytes.data()), reinterpret_cast<const uint8_t*>(bytes.data()) + bytes.size());
         }
@@ -96,7 +97,7 @@ namespace BECore::Tests {
             }
 
             WebSocketClient client;
-            std::vector<WebSocketClientEvent> events;
+            Vector<WebSocketClientEvent> events;
         };
 
     }  // namespace
@@ -169,7 +170,7 @@ namespace BECore::Tests {
         std::atomic<bool> returned{false};
         std::expected<size_t, SocketError> result = 0;
         std::thread reader([&] {
-            std::array<uint8_t, 16> buffer{};
+            Array<uint8_t, 16> buffer{};
             result = stream->Receive(buffer);  // the server says nothing: this waits
             returned = true;
         });
@@ -195,7 +196,7 @@ namespace BECore::Tests {
         params.additionalTrustAnchorsDer = Span<const Vector<uint8_t>>(&trusted, 1);
         ASSERT_TRUE(stream->Connect(params).has_value()) << stream->GetLastError().c_str();
         ASSERT_TRUE(stream->SetReceiveTimeout(kShortPause));
-        std::array<uint8_t, 16> buffer{};
+        Array<uint8_t, 16> buffer{};
         for (int attempt = 0; attempt < 2; ++attempt) {
             const auto result = stream->Receive(buffer);
             ASSERT_FALSE(result.has_value());

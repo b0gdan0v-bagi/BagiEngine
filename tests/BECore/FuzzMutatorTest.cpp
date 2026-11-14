@@ -77,7 +77,7 @@ namespace BECore::Tests {
     }
 
     TEST(FuzzMutatorTest, SameSeedGivesTheSameBytes) {
-        const std::vector<FuzzBytes> others = {OtherSeed()};
+        const Vector<FuzzBytes> others = {OtherSeed()};
 
         const auto run = [&] {
             FuzzRandom random(2024);
@@ -96,7 +96,7 @@ namespace BECore::Tests {
     }
 
     TEST(FuzzMutatorTest, EveryKindIsReachable) {
-        const std::vector<FuzzBytes> others = {OtherSeed()};
+        const Vector<FuzzBytes> others = {OtherSeed()};
         FuzzRandom random(99);
         Set<uint8_t> seen;
         for (int i = 0; i < 400; ++i) {
@@ -109,7 +109,7 @@ namespace BECore::Tests {
     }
 
     TEST(FuzzMutatorTest, EachKindDoesWhatItsNameSays) {
-        const std::vector<FuzzBytes> others = {OtherSeed()};
+        const Vector<FuzzBytes> others = {OtherSeed()};
         for (size_t index = 0; index < MutationUtils::Count(); ++index) {
             const FuzzMutation kind = KindAt(index);
             FuzzRandom random(5);
@@ -173,12 +173,12 @@ namespace BECore::Tests {
         FuzzBytes input = PlainInput();
         EXPECT_EQ(ApplyMutation(FuzzMutation::Splice, input, random, {}), FuzzMutation::DuplicateBlock);
 
-        const std::vector<FuzzBytes> emptySeed = {FuzzBytes()};
+        const Vector<FuzzBytes> emptySeed = {FuzzBytes()};
         EXPECT_EQ(ApplyMutation(FuzzMutation::Splice, input, random, emptySeed), FuzzMutation::DuplicateBlock);
     }
 
     TEST(FuzzMutatorTest, ResultNeverPassesTheCap) {
-        const std::vector<FuzzBytes> others = {PlainInput(Fuzz::kMaxFuzzInputSize)};
+        const Vector<FuzzBytes> others = {PlainInput(Fuzz::kMaxFuzzInputSize)};
         FuzzRandom random(17);
         FuzzBytes bytes = PlainInput(Fuzz::kMaxFuzzInputSize);
         for (int i = 0; i < 2000; ++i) {

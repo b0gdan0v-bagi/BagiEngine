@@ -35,8 +35,8 @@ namespace BECore::Tests {
         }
 
         /// The names of the `<node>` elements of the scene `sceneName`, in order
-        std::vector<std::string> NodeNames(pugi::xml_node root, const char* sceneName) {
-            std::vector<std::string> names;
+        Vector<std::string> NodeNames(pugi::xml_node root, const char* sceneName) {
+            Vector<std::string> names;
             for (pugi::xml_node scene : root.child("scenes").children("scene")) {
                 if (std::string_view{scene.attribute("name").as_string()} != sceneName) {
                     continue;
@@ -157,7 +157,7 @@ namespace BECore::Tests {
 
         EXPECT_TRUE(result.Ok());
         EXPECT_EQ(result.expanded, 1u);
-        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (std::vector<std::string>{"A", "Hud", "C"}));
+        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (Vector<std::string>{"A", "Hud", "C"}));
 
         pugi::xml_node hud = doc.document_element().child("scenes").child("scene").child("nodes").child("node").next_sibling("node");
         EXPECT_STREQ(hud.attribute("layer").as_string(), "10");
@@ -175,7 +175,7 @@ namespace BECore::Tests {
 
         EXPECT_TRUE(result.Ok());
         EXPECT_EQ(result.expanded, 3u);
-        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (std::vector<std::string>{"B", "A", "Hud", "B"}));
+        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (Vector<std::string>{"B", "A", "Hud", "B"}));
     }
 
     TEST_F(SceneNodeFilesTest, ReferencesInTwoScenes) {
@@ -189,8 +189,8 @@ namespace BECore::Tests {
 
         EXPECT_TRUE(result.Ok());
         EXPECT_EQ(result.expanded, 2u);
-        EXPECT_EQ(NodeNames(doc.document_element(), "One"), (std::vector<std::string>{"Hud", "X"}));
-        EXPECT_EQ(NodeNames(doc.document_element(), "Two"), (std::vector<std::string>{"Y", "B"}));
+        EXPECT_EQ(NodeNames(doc.document_element(), "One"), (Vector<std::string>{"Hud", "X"}));
+        EXPECT_EQ(NodeNames(doc.document_element(), "Two"), (Vector<std::string>{"Y", "B"}));
     }
 
     TEST_F(SceneNodeFilesTest, DocumentWithoutReferencesIsUnchanged) {
@@ -227,7 +227,7 @@ namespace BECore::Tests {
         const auto result = Expand(SceneConfigWith(R"(<node name="A"/><node ref="nodes/Nothing"/><node name="C"/>)"), doc);
 
         ExpectOneError(result, "nodes/Nothing");
-        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (std::vector<std::string>{"A", "C"}));
+        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (Vector<std::string>{"A", "C"}));
     }
 
     TEST_F(SceneNodeFilesTest, DocumentElementThatIsNotANodeIsAnError) {
@@ -236,7 +236,7 @@ namespace BECore::Tests {
         const auto result = Expand(SceneConfigWith(R"(<node name="A"/><node ref="nodes/NotNode"/><node name="C"/>)"), doc);
 
         ExpectOneError(result, "nodes/NotNode");
-        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (std::vector<std::string>{"A", "C"}));
+        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (Vector<std::string>{"A", "C"}));
     }
 
     TEST_F(SceneNodeFilesTest, NodeThatIsAReferenceItselfIsAnError) {
@@ -245,7 +245,7 @@ namespace BECore::Tests {
         const auto result = Expand(SceneConfigWith(R"(<node name="A"/><node ref="nodes/Nested"/><node name="C"/>)"), doc);
 
         ExpectOneError(result, "nodes/Nested");
-        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (std::vector<std::string>{"A", "C"}));
+        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (Vector<std::string>{"A", "C"}));
     }
 
     TEST_F(SceneNodeFilesTest, SelfReferenceCannotLoop) {
@@ -263,7 +263,7 @@ namespace BECore::Tests {
         const auto result = Expand(SceneConfigWith(R"(<node name="A"/><node ref="nodes/Broken"/><node name="C"/>)"), doc);
 
         ExpectOneError(result, "nodes/Broken");
-        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (std::vector<std::string>{"A", "C"}));
+        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (Vector<std::string>{"A", "C"}));
     }
 
     TEST_F(SceneNodeFilesTest, InvalidReferenceIsAnError) {
@@ -271,7 +271,7 @@ namespace BECore::Tests {
         const auto result = Expand(SceneConfigWith(R"(<node name="A"/><node ref="../nodes/B"/><node name="C"/>)"), doc);
 
         ExpectOneError(result, "../nodes/B");
-        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (std::vector<std::string>{"A", "C"}));
+        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (Vector<std::string>{"A", "C"}));
     }
 
     TEST_F(SceneNodeFilesTest, ReferenceWithAnUnsupportedAttributeIsAnError) {
@@ -280,7 +280,7 @@ namespace BECore::Tests {
 
         ExpectOneError(result, "nodes/B");
         EXPECT_TRUE(Mentions(result.errors[0], "'foo'")) << result.errors[0].c_str();
-        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (std::vector<std::string>{"A", "C"}));
+        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (Vector<std::string>{"A", "C"}));
     }
 
     TEST_F(SceneNodeFilesTest, ReferenceWithAChildThatIsNotComponentsIsAnError) {
@@ -289,7 +289,7 @@ namespace BECore::Tests {
 
         ExpectOneError(result, "nodes/B");
         EXPECT_TRUE(Mentions(result.errors[0], "'children'")) << result.errors[0].c_str();
-        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (std::vector<std::string>{"A", "C"}));
+        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (Vector<std::string>{"A", "C"}));
     }
 
     TEST_F(SceneNodeFilesTest, ErrorsAndExpansionsAreCountedTogether) {
@@ -299,7 +299,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(result.Ok());
         EXPECT_EQ(result.expanded, 2u);
         EXPECT_EQ(result.errors.size(), 2u);
-        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (std::vector<std::string>{"Hud", "B"}));
+        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (Vector<std::string>{"Hud", "B"}));
     }
 
     TEST_F(SceneNodeFilesTest, CustomLoaderIsAsked) {
@@ -320,7 +320,7 @@ namespace BECore::Tests {
         EXPECT_EQ(result.expanded, 1u);
         ASSERT_EQ(result.errors.size(), 1u);
         EXPECT_TRUE(Mentions(result.errors[0], "unknown"));
-        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (std::vector<std::string>{"Known"}));
+        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (Vector<std::string>{"Known"}));
     }
 
     TEST_F(SceneNodeFilesTest, DirectoryLoaderResolvesASubFolder) {
@@ -377,7 +377,7 @@ namespace BECore::Tests {
 
         EXPECT_TRUE(result.Ok());
         EXPECT_EQ(result.expanded, 2u);
-        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (std::vector<std::string>{"A", "Hud", "B"}));
+        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (Vector<std::string>{"A", "Hud", "B"}));
     }
 
     TEST_F(SceneNodeFilesTest, LoadSceneDocumentReportsABadReferenceAndKeepsTheScene) {
@@ -387,7 +387,7 @@ namespace BECore::Tests {
         const auto result = LoadSceneDocument(_dir / "SceneConfig.xml", doc);
 
         ExpectOneError(result, "nodes/Nothing");
-        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (std::vector<std::string>{"A"}));
+        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (Vector<std::string>{"A"}));
     }
 
     TEST_F(SceneNodeFilesTest, LoadSceneDocumentOfAMissingFileIsAnError) {
@@ -458,7 +458,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(Mentions(result.errors[0], "'Main'")) << result.errors[0].c_str();
         EXPECT_TRUE(Mentions(result.errors[0], "nodes/Old")) << result.errors[0].c_str();
         EXPECT_TRUE(Mentions(result.errors[0], "content version")) << result.errors[0].c_str();
-        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (std::vector<std::string>{"Now", "Inline"}));
+        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (Vector<std::string>{"Now", "Inline"}));
     }
 
     TEST_F(SceneNodeFilesTest, DirectoryLoaderReadsAnyVersion) {
@@ -468,7 +468,7 @@ namespace BECore::Tests {
         const auto result = Expand(SceneConfigWith(R"(<node ref="nodes/Zero"/><node ref="nodes/Far"/>)"), doc);
 
         EXPECT_TRUE(result.Ok());
-        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (std::vector<std::string>{"Zero", "Far"}));
+        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (Vector<std::string>{"Zero", "Far"}));
     }
 
     TEST_F(SceneNodeFilesTest, TheExpandedCopyHasNoContentVersion) {
@@ -635,7 +635,7 @@ namespace BECore::Tests {
                            doc)
                         .Ok());
 
-        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (std::vector<std::string>{"A", "H", "C"}));
+        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (Vector<std::string>{"A", "H", "C"}));
         const pugi::xml_node hud = FirstNode(doc).next_sibling("node");
         EXPECT_STREQ(ComponentOf(hud, "TransformComponent").attribute("width").as_string(), "30");
         EXPECT_STREQ(ComponentOf(hud, "QuadRendererComponent").child("color").attribute("a").as_string(), "4");
@@ -671,7 +671,7 @@ namespace BECore::Tests {
             const auto result = Expand(SceneConfigWith(std::string(R"(<node name="A"/>)") + reference + R"(<node name="C"/>)"), doc);
 
             ExpectOneError(result, "nodes/Hud");
-            EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (std::vector<std::string>{"A", "C"}));
+            EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (Vector<std::string>{"A", "C"}));
         }
     }
 
@@ -867,7 +867,7 @@ namespace BECore::Tests {
 
         EXPECT_TRUE(result.Ok());
         EXPECT_EQ(result.expanded, 2u);
-        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (std::vector<std::string>{"A", "Left", "Right"}));
+        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (Vector<std::string>{"A", "Left", "Right"}));
         const pugi::xml_node left = FirstNode(doc).next_sibling("node");
         EXPECT_STREQ(left.attribute("layer").as_string(), "1");
         EXPECT_STREQ(ComponentOf(left, "TransformComponent").attribute("x").as_string(), "40");

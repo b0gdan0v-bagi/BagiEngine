@@ -87,7 +87,7 @@ namespace BECore::Tests {
         }
 
         ControlService service;
-        std::vector<Json> responses;
+        Vector<Json> responses;
 
     private:
         IntrusivePtr<FakeClipboard> _fake;

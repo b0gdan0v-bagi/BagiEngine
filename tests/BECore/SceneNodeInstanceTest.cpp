@@ -71,8 +71,8 @@ namespace BECore::Tests {
         }
 
         /// The components of @p node as text: type and serialized fields, in order
-        std::vector<std::string> ComponentTexts(const SceneNode& node) {
-            std::vector<std::string> texts;
+        Vector<std::string> ComponentTexts(const SceneNode& node) {
+            Vector<std::string> texts;
             for (const auto& component : node.GetComponents()) {
                 XmlSerializer serializer;
                 component->Serialize(serializer);

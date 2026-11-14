@@ -12,8 +12,8 @@ namespace BECore::Match3::Tests {
 
     namespace {
 
-        std::vector<std::string> BoardRows(const Match3GameModel& model) {
-            std::vector<std::string> rows;
+        Vector<std::string> BoardRows(const Match3GameModel& model) {
+            Vector<std::string> rows;
             for (int8_t row = 0; row < kBoardSize; ++row) {
                 std::string line;
                 for (int8_t col = 0; col < kBoardSize; ++col) {
@@ -25,8 +25,8 @@ namespace BECore::Match3::Tests {
         }
 
         /// Every 4-neighbour pair of the board once: a cell with its right and its lower neighbour
-        std::vector<Pair<Cell, Cell>> AllNeighbourPairs() {
-            std::vector<Pair<Cell, Cell>> pairs;
+        Vector<Pair<Cell, Cell>> AllNeighbourPairs() {
+            Vector<Pair<Cell, Cell>> pairs;
             for (int8_t row = 0; row < kBoardSize; ++row) {
                 for (int8_t col = 0; col < kBoardSize; ++col) {
                     if (col + 1 < kBoardSize) {
@@ -67,7 +67,7 @@ namespace BECore::Match3::Tests {
             model.Reset(seed);
 
             // The brute force: try every neighbour pair on a copy of the model
-            std::vector<Pair<Cell, Cell>> expected;
+            Vector<Pair<Cell, Cell>> expected;
             for (const auto& [a, b] : AllNeighbourPairs()) {
                 Match3GameModel copy = model;
                 if (copy.TrySwap(a, b)) {
@@ -208,7 +208,7 @@ namespace BECore::Match3::Tests {
     TEST(Match3LegalSwapsTest, SeedGivesTheSameBoardOnEveryPlatform) {
         struct Golden {
             uint32_t seed;
-            std::vector<std::string> rows;
+            Vector<std::string> rows;
         };
         const Golden goldens[] = {
             {1337, {"OOYBPOPY", "RYYRGBRB", "PBGOPRYR", "RGRGPYPG", "RPGPOOGY", "BRGGRPGR", "PPYYRBBG", "RBROPBYR"}},

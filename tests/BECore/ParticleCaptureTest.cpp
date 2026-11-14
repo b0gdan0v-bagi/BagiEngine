@@ -47,7 +47,7 @@ namespace BECore::Tests {
 
         const Color kBackground{10, 20, 30, 255};
 
-        using Pixel = std::array<int, 3>;
+        using Pixel = Array<int, 3>;
 
         std::string SceneXml() {
             return std::string(R"(<SceneManager><scenes><scene type="Scene" name="Sparks"><nodes>

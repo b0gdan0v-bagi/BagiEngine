@@ -35,7 +35,7 @@ namespace BECore::Tests {
 
     TEST(JsonTest, BadTextIsAParseErrorNotACrash) {
         const std::string deepOpen(1 << 20, '[');
-        const std::vector<std::string> bad = {"", " ", "{", "}", "not json", "{\"a\":}", "[1,2", "\xff\xfe", "{\"a\":\"\xff\"}", "nul", "[1,]", deepOpen};
+        const Vector<std::string> bad = {"", " ", "{", "}", "not json", "{\"a\":}", "[1,2", "\xff\xfe", "{\"a\":\"\xff\"}", "nul", "[1,]", deepOpen};
 
         for (const std::string& text : bad) {
             const auto parsed = ParseJson(View(text));

@@ -181,7 +181,7 @@ button { width: 56dp; height: 24dp; font-size: 14dp; background-color: rgb(40, 9
         const std::string web = WebScreen();
         const std::string rml = RmlScreen();
 
-        std::vector<Row> rows;
+        Vector<Row> rows;
         rows.push_back({"source bytes", static_cast<double>(xml.size()), static_cast<double>(web.size()), static_cast<double>(rml.size())});
 
         // ---- A: the engine's XML ----

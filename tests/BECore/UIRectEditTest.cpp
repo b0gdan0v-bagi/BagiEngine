@@ -26,8 +26,8 @@ namespace BECore::Tests {
             Optional<Vec2> pivot;
         };
 
-        std::vector<AnchorCase> AnchorCases() {
-            std::vector<AnchorCase> cases;
+        Vector<AnchorCase> AnchorCases() {
+            Vector<AnchorCase> cases;
             for (const UIAnchor anchor : {UIAnchor::TopLeft, UIAnchor::Top, UIAnchor::TopRight, UIAnchor::Left, UIAnchor::Center, UIAnchor::Right, UIAnchor::BottomLeft, UIAnchor::Bottom,
                                           UIAnchor::BottomRight, UIAnchor::Stretch}) {
                 cases.push_back({anchor, {}, {}, {}});
@@ -55,8 +55,8 @@ namespace BECore::Tests {
             return spec;
         }
 
-        std::vector<Rect> WantedRects(const Rect& parent) {
-            std::vector<Rect> rects;
+        Vector<Rect> WantedRects(const Rect& parent) {
+            Vector<Rect> rects;
             for (const float fx : {0.0f, 0.13f, 0.5f, 0.9f}) {
                 for (const float fy : {0.0f, 0.4f, 0.75f}) {
                     for (const float fw : {0.05f, 0.3f, 0.6f}) {

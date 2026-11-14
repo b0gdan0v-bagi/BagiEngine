@@ -160,7 +160,7 @@ namespace BECore::Tests {
         EXPECT_EQ(CountPhase(events, "C"), 1u);
         EXPECT_EQ(CountPhase(events, "i"), 1u);
 
-        std::vector<std::string> begun;
+        Vector<std::string> begun;
         for (const Json& event : events) {
             const std::string phase = Member(event, "ph");
             if (phase == "B") {
@@ -172,7 +172,7 @@ namespace BECore::Tests {
                 EXPECT_EQ(Member(*FindJsonMember(event, "args"), "name"), "Test main");
             }
         }
-        EXPECT_EQ(begun, (std::vector<std::string>{"Outer", "Inner \"quoted\"\\"}));
+        EXPECT_EQ(begun, (Vector<std::string>{"Outer", "Inner \"quoted\"\\"}));
         EXPECT_EQ(CountPhase(events, "M"), 1u);
     }
 
@@ -207,7 +207,7 @@ namespace BECore::Tests {
         constexpr int kZonesPerThread = 1000;
         ChromeTraceBackend recorder;
         std::atomic<int> started{0};
-        std::vector<std::thread> threads;
+        Vector<std::thread> threads;
         for (int t = 0; t < kThreads; ++t) {
             threads.emplace_back([&recorder, &started] {
                 started.fetch_add(1);

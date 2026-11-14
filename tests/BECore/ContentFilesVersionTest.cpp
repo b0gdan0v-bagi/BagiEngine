@@ -42,7 +42,7 @@ namespace BECore::Tests {
         WriteFile(dir / "UIConfig.xml", "<UIConfig contentVersion=\"0\"/>");
         WriteFile(dir / "notes.txt", "<node/>");
 
-        const std::vector<std::string> stale = FindStaleContentFiles(dir);
+        const Vector<std::string> stale = FindStaleContentFiles(dir);
         std::error_code ignored;
         std::filesystem::remove_all(dir, ignored);
 

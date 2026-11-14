@@ -172,7 +172,7 @@ namespace BECore::Tests {
         /// Reads everything that has arrived (up to kMaxChunksPerFill chunks); a loop, because WaitUntil sleeps 1 ms
         /// between its calls, which is 15 ms on Windows, and a megabyte in chunks of 4 KiB would take seconds
         void FillBuffer() {
-            std::array<uint8_t, 4096> chunk;
+            Array<uint8_t, 4096> chunk;
             for (int i = 0; i < kMaxChunksPerFill; ++i) {
                 const auto received = _socket.Receive(Span<uint8_t>(chunk.data(), chunk.size()));
                 if (!received) {

@@ -37,7 +37,7 @@ namespace BECore::Tests {
         Mutex mutex{BE_LOCK_SITE("Test counter")};
         int counter = 0;  // not atomic: only the mutex keeps it right
 
-        std::vector<std::thread> threads;
+        Vector<std::thread> threads;
         for (int i = 0; i < kContendingThreads; ++i) {
             threads.emplace_back([&] {
                 for (int n = 0; n < kIncrementsPerThread; ++n) {
@@ -112,7 +112,7 @@ namespace BECore::Tests {
         std::atomic<int> readersInside{0};
         std::atomic<bool> release{false};
 
-        std::vector<std::thread> readers;
+        Vector<std::thread> readers;
         for (int i = 0; i < kContendingThreads; ++i) {
             readers.emplace_back([&] {
                 std::shared_lock<SharedMutex> lock(mutex);
@@ -141,7 +141,7 @@ namespace BECore::Tests {
         SharedMutex mutex{BE_LOCK_SITE("Test writer")};
         int counter = 0;
 
-        std::vector<std::thread> threads;
+        Vector<std::thread> threads;
         for (int i = 0; i < kContendingThreads; ++i) {
             threads.emplace_back([&] {
                 for (int n = 0; n < kIncrementsPerThread; ++n) {

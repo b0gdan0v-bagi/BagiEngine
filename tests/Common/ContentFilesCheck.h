@@ -11,8 +11,8 @@ namespace BECore::Tests {
      * message per file: the path, then what CheckContentVersion says. A file that does not parse, or whose root is
      * not a content root, is not a content file and is skipped. Sorted by path.
      */
-    inline std::vector<std::string> FindStaleContentFiles(const std::filesystem::path& folder) {
-        std::vector<std::string> stale;
+    inline Vector<std::string> FindStaleContentFiles(const std::filesystem::path& folder) {
+        Vector<std::string> stale;
         std::error_code ec;
         for (std::filesystem::recursive_directory_iterator it(folder, ec), end; !ec && it != end; it.increment(ec)) {
             if (!it->is_regular_file(ec) || it->path().extension() != ".xml") {

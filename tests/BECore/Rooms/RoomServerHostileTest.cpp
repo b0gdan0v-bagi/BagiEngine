@@ -96,7 +96,7 @@ namespace BECore::Tests {
 
             SeatedGameRegistry registry;
             UniquePtr<RoomWebSocketServer> server;
-            std::vector<HandPlayer> players;
+            Vector<HandPlayer> players;
         };
 
     }  // namespace
@@ -198,7 +198,7 @@ namespace BECore::Tests {
         table[0]->Start();
         const WaitPump pumpTheHand = PumpTheTable(table);
 
-        std::vector<WebSocketTestClient> silent;
+        Vector<WebSocketTestClient> silent;
         for (int i = 0; i < kSilentSockets; ++i) {
             auto client = WebSocketTestClient::Open(port, pumpTheHand);
             ASSERT_TRUE(client.has_value());

@@ -48,7 +48,7 @@ namespace BECore::Tests {
 
     /// The connections one client made, in order (a reconnect makes a new one)
     struct HubClientLinks {
-        std::vector<SharedPtr<HubLink>> links;
+        Vector<SharedPtr<HubLink>> links;
 
         [[nodiscard]] HubLink& Last() {
             return *links.back();

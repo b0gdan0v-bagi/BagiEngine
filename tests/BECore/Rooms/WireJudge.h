@@ -1,8 +1,6 @@
 #pragma once
 
 #include <BECore/Control/Json.h>
-#include <string>
-#include <string_view>
 #include <vector>
 
 namespace BECore::Tests {
@@ -31,10 +29,10 @@ namespace BECore::Tests {
     }  // namespace WireJudgeDetail
 
     /// Every card id (`c<digit>_<digit>`, a whole token: "c1_20" and "xc1_2" are not ids) that @p text mentions, in order
-    inline std::vector<std::string> FindCardIds(std::string_view text) {
+    inline Vector<std::string> FindCardIds(std::string_view text) {
         using namespace WireJudgeDetail;
         constexpr size_t kIdLength = 4;
-        std::vector<std::string> ids;
+        Vector<std::string> ids;
         for (size_t at = 0; at + kIdLength <= text.size(); ++at) {
             if (text[at] != 'c' || !IsDigit(text[at + 1]) || text[at + 2] != '_' || !IsDigit(text[at + 3])) {
                 continue;
@@ -49,8 +47,8 @@ namespace BECore::Tests {
     }
 
     /// The card ids @p text names that the client of @p seat (-1: a client that has no seat yet) may not know, in order
-    inline std::vector<std::string> FindLeakedCardIds(std::string_view text, int seat) {
-        std::vector<std::string> allowedTable;
+    inline Vector<std::string> FindLeakedCardIds(std::string_view text, int seat) {
+        Vector<std::string> allowedTable;
         if (const auto parsed = ParseJson(FromStd(text)); parsed && parsed->is_object()) {
             const Json* view = FindJsonMember(*parsed, "view");
             const Json* table = view && view->is_object() ? FindJsonMember(*view, "table") : nullptr;
@@ -59,7 +57,7 @@ namespace BECore::Tests {
             }
         }
         const std::string ownPrefix = seat >= 0 ? "c" + std::to_string(seat) + "_" : std::string();
-        std::vector<std::string> leaked;
+        Vector<std::string> leaked;
         for (const std::string& id : FindCardIds(text)) {
             const bool own = !ownPrefix.empty() && id.starts_with(ownPrefix);
             const bool played = std::find(allowedTable.begin(), allowedTable.end(), id) != allowedTable.end();

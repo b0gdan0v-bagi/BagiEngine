@@ -14,7 +14,7 @@ namespace BECore::Tests {
         class Response {
         public:
             std::string statusLine = "HTTP/1.1 101 Switching Protocols";
-            std::vector<std::string> headers = {"Upgrade: websocket", "Connection: Upgrade", std::string("Sec-WebSocket-Accept: ") + kRfcAccept};
+            Vector<std::string> headers = {"Upgrade: websocket", "Connection: Upgrade", std::string("Sec-WebSocket-Accept: ") + kRfcAccept};
 
             Response& Add(std::string_view line) {
                 headers.emplace_back(line);
@@ -22,7 +22,7 @@ namespace BECore::Tests {
             }
 
             Response& Remove(std::string_view name) {
-                std::erase_if(headers, [&](const std::string& line) { return line.starts_with(name); });
+                eastl::erase_if(headers, [&](const std::string& line) { return line.starts_with(name); });
                 return *this;
             }
 

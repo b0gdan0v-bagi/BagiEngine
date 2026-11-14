@@ -31,7 +31,7 @@ namespace BECore::Tests {
             /// How many connections the client made
             size_t connections = 0;
             /// The `type` of every text the client received, in order
-            std::vector<std::string> types;
+            Vector<std::string> types;
 
             [[nodiscard]] size_t CountType(std::string_view type) const {
                 return static_cast<size_t>(std::count(types.begin(), types.end(), type));
@@ -250,7 +250,7 @@ namespace BECore::Tests {
             UniquePtr<RoomWebSocketServer> server;
             uint16_t port = 0;
             String url;
-            std::vector<UniquePtr<Player>> players;
+            Vector<UniquePtr<Player>> players;
         };
 
     }  // namespace

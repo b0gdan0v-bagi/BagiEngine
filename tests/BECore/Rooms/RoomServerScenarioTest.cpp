@@ -81,9 +81,9 @@ namespace BECore::Tests {
     // ---- the judge itself --------------------------------------------------------------------------------------------------------
 
     TEST_F(RoomServerScenarioTest, TheJudgeFindsWholeCardIdsOnly) {
-        EXPECT_EQ(FindCardIds("[\"c1_2\",\"c3_0\"]"), (std::vector<std::string>{"c1_2", "c3_0"}));
+        EXPECT_EQ(FindCardIds("[\"c1_2\",\"c3_0\"]"), (Vector<std::string>{"c1_2", "c3_0"}));
         EXPECT_TRUE(FindCardIds("c1_20 xc1_2 c1_2x c12 c_1 C1_2").empty());
-        EXPECT_EQ(FindCardIds("c1_2"), (std::vector<std::string>{"c1_2"}));
+        EXPECT_EQ(FindCardIds("c1_2"), (Vector<std::string>{"c1_2"}));
         EXPECT_TRUE(FindCardIds("c1_").empty());
     }
 
@@ -91,16 +91,16 @@ namespace BECore::Tests {
         const std::string honest = R"({"type":"view","room":"ABCD","seat":0,"view":{"hand":["c0_1","c0_2"],"table":[{"seat":2,"card":"c2_0"}]},"actions":[{"type":"play","card":"c0_1"}]})";
         EXPECT_TRUE(FindLeakedCardIds(honest, 0).empty());
         // The same text for another seat: its hand is somebody else's
-        EXPECT_EQ(FindLeakedCardIds(honest, 1), (std::vector<std::string>{"c0_1", "c0_2", "c0_1"}));
+        EXPECT_EQ(FindLeakedCardIds(honest, 1), (Vector<std::string>{"c0_1", "c0_2", "c0_1"}));
 
         const std::string leaky = R"({"type":"view","seat":0,"view":{"hand":["c0_1"],"table":[],"allHands":[["c0_1"],["c1_0"],["c2_2"]]}})";
-        EXPECT_EQ(FindLeakedCardIds(leaky, 0), (std::vector<std::string>{"c1_0", "c2_2"}));
+        EXPECT_EQ(FindLeakedCardIds(leaky, 0), (Vector<std::string>{"c1_0", "c2_2"}));
 
         // Not JSON, or a client with no seat: only what is on the table (nothing) is allowed
-        EXPECT_EQ(FindLeakedCardIds("the card c0_1", 0), std::vector<std::string>{});
-        EXPECT_EQ(FindLeakedCardIds("the card c0_1", -1), (std::vector<std::string>{"c0_1"}));
+        EXPECT_EQ(FindLeakedCardIds("the card c0_1", 0), Vector<std::string>{});
+        EXPECT_EQ(FindLeakedCardIds("the card c0_1", -1), (Vector<std::string>{"c0_1"}));
         // A card on the table of another message is not on the table of this one
-        EXPECT_EQ(FindLeakedCardIds(R"({"type":"error","message":"c2_0"})", 0), (std::vector<std::string>{"c2_0"}));
+        EXPECT_EQ(FindLeakedCardIds(R"({"type":"error","message":"c2_0"})", 0), (Vector<std::string>{"c2_0"}));
     }
 
     // ---- the scenarios over real sockets -----------------------------------------------------------------------------------------
@@ -289,7 +289,7 @@ namespace BECore::Tests {
         table[0]->Start();
 
         // The good hand is played from every wait of the hostile clients, so it is under way the whole time
-        std::vector<HandPlayer> players;
+        Vector<HandPlayer> players;
         for (const auto& client : table) {
             players.emplace_back(*client);
         }

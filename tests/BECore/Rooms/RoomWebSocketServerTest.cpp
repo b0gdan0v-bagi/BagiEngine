@@ -172,7 +172,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(client.has_value());
 
         // A ping answers pong, garbage answers error: sent in a row, answered in a row
-        const std::vector<Pair<std::string, std::string>> script = {
+        const Vector<Pair<std::string, std::string>> script = {
             {"{\"v\":1,\"type\":\"ping\"}", "pong"}, {"not json", "error"}, {"{\"v\":1,\"type\":\"ping\"}", "pong"}, {"{\"v\":1,\"type\":\"no_such\"}", "error"},
             {"{\"v\":1,\"type\":\"ping\"}", "pong"},
         };
@@ -777,7 +777,7 @@ namespace BECore::Tests {
             }
 
             /// Delivers the pending log entries, then the lines so far
-            [[nodiscard]] const std::vector<std::string>& Lines() {
+            [[nodiscard]] const Vector<std::string>& Lines() {
                 LogEvent::Flush();
                 return _lines;
             }
@@ -799,7 +799,7 @@ namespace BECore::Tests {
                 }
             }
 
-            std::vector<std::string> _lines;
+            Vector<std::string> _lines;
         };
 
         RoomServerSettings MakeStatsSettings(ManualClock& clock, std::chrono::milliseconds interval = kStatsInterval) {
@@ -880,7 +880,7 @@ namespace BECore::Tests {
         settings.hub.maxRoomsPerAddress = 4;
         const uint16_t port = StartServer(settings);
 
-        std::vector<RoomSocketClient> hosts;
+        Vector<RoomSocketClient> hosts;
         for (int i = 0; i < 4; ++i) {
             auto host = MakeHost(port);
             ASSERT_TRUE(host.has_value());
@@ -907,7 +907,7 @@ namespace BECore::Tests {
         settings.maxConnectionsPerAddress = 0;
         settings.hub.maxRoomsPerAddress = 1;
         const uint16_t port = StartServer(settings);
-        std::vector<RoomSocketClient> hosts;
+        Vector<RoomSocketClient> hosts;
         for (int i = 0; i < 3; ++i) {
             auto host = MakeHost(port);
             ASSERT_TRUE(host.has_value()) << "the image's --max-per-address 0 keeps every per-address rule off";
@@ -950,7 +950,7 @@ namespace BECore::Tests {
         settings.hub.maxRoomsPerAddress = 4;
         const uint16_t port = StartServer(settings);
 
-        std::vector<RoomSocketClient> hosts;
+        Vector<RoomSocketClient> hosts;
         for (const char* header : {"X-Forwarded-For: 203.0.113.1\r\n", "X-Forwarded-For: 203.0.113.2\r\n"}) {
             for (int i = 0; i < 4; ++i) {
                 auto client = RoomSocketClient::Connect(port, header);

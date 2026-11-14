@@ -470,7 +470,9 @@ namespace BECore::Tests {
         }
         {
             SCOPED_TRACE("std::array");
+            // std: twin case: the reflection reads std::array as well as eastl::array
             const std::array<float, 3> original = {4.0f, 5.5f, 6.25f};
+            // std: twin case: the reflection reads std::array as well as eastl::array
             ExpectBinaryRoundTrip(original, std::array<float, 3>{});
         }
         {
@@ -1325,9 +1327,11 @@ namespace BECore::Tests {
         // std::array
         {
             SCOPED_TRACE("std::array");
+            // std: twin case: the reflection reads std::array as well as eastl::array
             const std::array<float, 3> original = {4.0f, 5.5f, 6.25f};
             const String xml = SaveToXml("StdArrTest", "values", original);
 
+            // std: twin case: the reflection reads std::array as well as eastl::array
             std::array<float, 3> loaded = {};
             ASSERT_NO_FATAL_FAILURE(LoadFromXml(xml, "StdArrTest", "values", loaded));
 

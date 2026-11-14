@@ -20,7 +20,7 @@ namespace BECore::Tests {
         constexpr const char* kWindowConfig = "config/SDLWindowConfig.xml";
         constexpr StringView kPngBase64Prefix = "iVBORw0KGgo";  // the 8 bytes of a PNG signature in base64
 
-        using Pixel = std::array<uint8_t, 4>;
+        using Pixel = Array<uint8_t, 4>;
 
         const Color kBackground{10, 20, 30, 255};
         const Color kRed{255, 0, 0, 255};
@@ -53,7 +53,7 @@ namespace BECore::Tests {
         constexpr size_t kChannelCount = 4;
 
         /// A texture image of four blocks of 4 by 4 texels, one color each: top-left, top-right, bottom-left, bottom-right. Asymmetric on both axes, so a turn and a flip show.
-        PixelBuffer MakeQuadrants(const std::array<Color, 4>& colors) {
+        PixelBuffer MakeQuadrants(const Array<Color, 4>& colors) {
             PixelBuffer image;
             image.width = kQuadrantTextureSize;
             image.height = kQuadrantTextureSize;
@@ -228,7 +228,7 @@ namespace BECore::Tests {
             }
 
             ControlService service;
-            std::vector<Json> responses;
+            Vector<Json> responses;
             IntrusivePtr<IRenderer> previousRenderer;
             int64_t lastId = 0;
         };
@@ -674,7 +674,7 @@ namespace BECore::Tests {
         // The samples lie well inside the blocks. On the software triangle path (DrawGeometry) the UVs 0 to 1 are spread over the texels 0 to n-1 and rounded down
         // (SDL_triangle.c), so a block edge moves and a 2 by 2 texture shows one texel; a transformed texture goes through SDL_RenderTextureRotated and has no such shift.
         const Color white{255, 255, 255, 255};
-        const std::array<Color, 4> texels = {kRed, Color{0, 255, 0, 255}, Color{0, 0, 255, 255}, white};
+        const Array<Color, 4> texels = {kRed, Color{0, 255, 0, 255}, Color{0, 0, 255, 255}, white};
         auto texture = MakeTexture(MakeQuadrants(texels));
         ASSERT_TRUE(texture);
 
@@ -903,7 +903,7 @@ namespace BECore::Tests {
         EXPECT_EQ(png->width, 64u);
         EXPECT_EQ(png->height, 32u);
         ASSERT_GT(png->bytes.size(), 24u);
-        const std::array<uint8_t, 8> signature{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
+        const Array<uint8_t, 8> signature{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
         EXPECT_TRUE(std::equal(signature.begin(), signature.end(), png->bytes.begin()));
         EXPECT_EQ(PngSize(png->bytes), (Pair<uint32_t, uint32_t>{64, 32}));
     }

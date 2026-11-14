@@ -44,8 +44,8 @@ namespace BECore::Tests::MigrationTwin {
     }
 
     /// The names of the cases of a fixture folder: every `<case>.before.xml` that has an `<case>.after.xml`
-    inline std::vector<std::string> CaseNames(const std::filesystem::path& folder) {
-        std::vector<std::string> names;
+    inline Vector<std::string> CaseNames(const std::filesystem::path& folder) {
+        Vector<std::string> names;
         const std::string suffix = ".before.xml";
         std::error_code error;
         for (const auto& entry : std::filesystem::directory_iterator(folder, error)) {
@@ -94,8 +94,8 @@ namespace BECore::Tests::MigrationTwin {
         return text;
     }
 
-    inline std::vector<std::string> SceneNames(const std::string& xml) {
-        std::vector<std::string> names;
+    inline Vector<std::string> SceneNames(const std::string& xml) {
+        Vector<std::string> names;
         static const std::regex scene(R"re(<scene\b[^>]*?\bname="([^"]*)")re");
         for (std::sregex_iterator it(xml.begin(), xml.end(), scene), end; it != end; ++it) {
             names.push_back((*it)[1]);
@@ -127,7 +127,7 @@ namespace BECore::Tests::MigrationTwin {
         ActionRecorder() {
             Subscribe<InputEvents::ActionEvent, &ActionRecorder::OnAction>(this);
         }
-        std::vector<std::string> emitted;
+        Vector<std::string> emitted;
 
     private:
         void OnAction(const InputEvents::ActionEvent& event) {
@@ -249,8 +249,8 @@ namespace BECore::Tests::MigrationTwin {
             IntrusivePtr<UICanvasComponent> canvas;
         };
 
-        static std::vector<CanvasRef> CanvasesOf(Scene& scene) {
-            std::vector<CanvasRef> canvases;
+        static Vector<CanvasRef> CanvasesOf(Scene& scene) {
+            Vector<CanvasRef> canvases;
             for (const auto& node : scene.GetRootNode().GetChildren()) {
                 if (auto canvas = node->GetComponent<UICanvasComponent>()) {
                     canvases.push_back({std::string(node->GetName().CStr()), canvas});
@@ -260,7 +260,7 @@ namespace BECore::Tests::MigrationTwin {
         }
 
         /// Everything is shown: a hidden canvas or element has no rect and nothing to compare
-        static void ShowEverything(Scene& scene, const std::vector<CanvasRef>& canvases) {
+        static void ShowEverything(Scene& scene, const Vector<CanvasRef>& canvases) {
             for (const CanvasRef& ref : canvases) {
                 UICanvasComponent::SetVisibleByName(scene, PoolString::Intern(ref.node.c_str()), true);
                 WalkElements(ref.canvas->GetRoot(), [&](UIElement& element) {
@@ -289,7 +289,7 @@ namespace BECore::Tests::MigrationTwin {
         }
 
         /// A press and a release at @p at; the actions that went out
-        static std::vector<std::string> Click(const Vec2& at) {
+        static Vector<std::string> Click(const Vec2& at) {
             ActionRecorder recorder;
             CoreManager::GetUIInput().DispatchMouseMotion(Motion(at.x, at.y));
             CoreManager::GetUIInput().DispatchMouseButtonDown(Button(at.x, at.y, true));

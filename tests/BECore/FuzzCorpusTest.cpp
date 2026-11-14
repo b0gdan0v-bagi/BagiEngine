@@ -53,8 +53,8 @@ namespace BECore::Tests {
         }
 
         /// The files of a corpus folder in the order of their names (the order of a directory listing is not defined)
-        std::vector<CorpusFile> LoadCorpus(const std::filesystem::path& folder) {
-            std::vector<CorpusFile> files;
+        Vector<CorpusFile> LoadCorpus(const std::filesystem::path& folder) {
+            Vector<CorpusFile> files;
             std::error_code error;
             for (const auto& entry : std::filesystem::directory_iterator(folder, error)) {
                 if (!entry.is_regular_file()) {
@@ -90,8 +90,8 @@ namespace BECore::Tests {
 
     namespace {
 
-        std::vector<FuzzCase> AllCases() {
-            std::vector<FuzzCase> cases;
+        Vector<FuzzCase> AllCases() {
+            Vector<FuzzCase> cases;
             for (const FuzzTarget& target : Fuzz::FuzzTargetList()) {
                 cases.push_back({target.name});
             }
@@ -106,10 +106,10 @@ namespace BECore::Tests {
         const FuzzTarget& target = FindTarget(GetParam().name);
         const std::filesystem::path folder = std::filesystem::path(BAGI_FUZZ_CORPUS_DIR) / target.corpusFolder;
 
-        const std::vector<CorpusFile> files = LoadCorpus(folder);
+        const Vector<CorpusFile> files = LoadCorpus(folder);
         ASSERT_FALSE(files.empty()) << "no seeds in " << folder.string();
 
-        std::vector<FuzzBytes> seeds;
+        Vector<FuzzBytes> seeds;
         for (const CorpusFile& file : files) {
             EXPECT_LE(file.bytes.size(), Fuzz::kMaxFuzzInputSize) << file.name << " is larger than the inputs the fuzzers make";
             seeds.push_back(file.bytes);
@@ -142,7 +142,7 @@ namespace BECore::Tests {
 
     TEST(FuzzCorpusTest, GeneratedSeedsAreTheCommittedFiles) {
         for (const Fuzz::FuzzSeedFile& seed : Fuzz::MakeGeneratedSeeds()) {
-            const std::vector<CorpusFile> files = LoadCorpus(std::filesystem::path(BAGI_FUZZ_CORPUS_DIR) / seed.folder);
+            const Vector<CorpusFile> files = LoadCorpus(std::filesystem::path(BAGI_FUZZ_CORPUS_DIR) / seed.folder);
             const auto found = std::find_if(files.begin(), files.end(), [&](const CorpusFile& file) { return file.name == seed.name; });
             ASSERT_NE(found, files.end()) << seed.name << " is not in the corpus: run WriteSeeds";
             EXPECT_TRUE(std::equal(found->bytes.begin(), found->bytes.end(), seed.bytes.begin(), seed.bytes.end())) << seed.name << " differs from what the writers make now: run WriteSeeds";

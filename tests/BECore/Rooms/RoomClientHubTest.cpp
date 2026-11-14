@@ -122,7 +122,7 @@ namespace BECore::Tests {
             }
 
             UniquePtr<HubWorld> _world = MakeUnique<HubWorld>(HubWorld::MakeSettings(milliseconds(200)));
-            std::vector<UniquePtr<Player>> _players;
+            Vector<UniquePtr<Player>> _players;
         };
 
         using Kind = RoomClientEventKind;

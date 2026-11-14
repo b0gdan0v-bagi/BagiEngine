@@ -28,7 +28,7 @@ namespace BECore::Tests {
         class Request {
         public:
             std::string requestLine = "GET /control HTTP/1.1";
-            std::vector<std::string> headers = {
+            Vector<std::string> headers = {
                 "Host: 127.0.0.1:8765", "Upgrade: websocket", "Connection: Upgrade", std::string("Sec-WebSocket-Key: ") + kRfcKey, "Sec-WebSocket-Version: 13",
             };
 
@@ -46,7 +46,7 @@ namespace BECore::Tests {
             }
 
             Request& Remove(std::string_view name) {
-                std::erase_if(headers, [&](const std::string& line) { return NameIs(line, name); });
+                eastl::erase_if(headers, [&](const std::string& line) { return NameIs(line, name); });
                 return *this;
             }
 
@@ -576,7 +576,7 @@ namespace BECore::Tests {
     }  // namespace
 
     TEST(WebSocketHandshakeTest, AFullHeadOfRepeatedTokensIsCheapToRead) {
-        const std::vector<std::string> heads = {
+        const Vector<std::string> heads = {
             FullHead("X-A: b\r\n"),                                        // as many header lines as fit
             FullHead("Upgrade: a\r\n"),                                    // a list header joined over and over
             FullHead("Connection: ,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,\r\n"),  // long lists of empty tokens

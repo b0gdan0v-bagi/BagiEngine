@@ -126,7 +126,7 @@ namespace BECore::Tests {
         }
 
         /// Every message received so far, in order
-        [[nodiscard]] const std::vector<ReceivedMessage>& Received() const {
+        [[nodiscard]] const Vector<ReceivedMessage>& Received() const {
             return _received;
         }
 
@@ -162,7 +162,7 @@ namespace BECore::Tests {
         explicit RoomSocketClient(WebSocketTestClient raw) : _raw(std::move(raw)) {}
 
         WebSocketTestClient _raw;
-        std::vector<ReceivedMessage> _received;
+        Vector<ReceivedMessage> _received;
         size_t _cursor = 0;
         Optional<ServerFrame> _closeFrame;
         size_t _maskedFrames = 0;

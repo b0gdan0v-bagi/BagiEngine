@@ -18,8 +18,8 @@ namespace BECore::Tests {
 
         const Rect kParents[] = {{100.0f, 50.0f, 400.0f, 200.0f}, {0.0f, 0.0f, 1280.0f, 720.0f}, {37.5f, 12.25f, 333.0f, 111.0f}};
 
-        std::vector<UIRectSpec> Specs() {
-            std::vector<UIRectSpec> specs;
+        Vector<UIRectSpec> Specs() {
+            Vector<UIRectSpec> specs;
             for (const UIAnchor anchor : {UIAnchor::TopLeft, UIAnchor::Center, UIAnchor::BottomRight, UIAnchor::Stretch, UIAnchor::Top}) {
                 for (const UIUnit unit : {UIUnit::Pixels, UIUnit::Percent}) {
                     UIRectSpec spec;

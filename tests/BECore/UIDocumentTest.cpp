@@ -68,8 +68,8 @@ namespace BECore::Tests {
         struct BagElement {
             const char* type;
             const char* name;
-            std::vector<Pair<const char*, const char*>> declarations;
-            std::vector<BagElement> children;
+            Vector<Pair<const char*, const char*>> declarations;
+            Vector<BagElement> children;
         };
 
         void AddBagElement(pugi::xml_node parent, const BagElement& bag) {

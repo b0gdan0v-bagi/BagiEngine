@@ -27,7 +27,7 @@ namespace BECore::Tests {
                 _connections.push_back(connection);
             }
 
-            [[nodiscard]] std::vector<std::string> Events() const {
+            [[nodiscard]] Vector<std::string> Events() const {
                 std::lock_guard<std::mutex> lock(_mutex);
                 return _events;
             }
@@ -59,8 +59,8 @@ namespace BECore::Tests {
 
         private:
             mutable std::mutex _mutex;
-            std::vector<std::string> _events;
-            std::vector<WebSocketHandler::ConnectionPtr> _connections;
+            Vector<std::string> _events;
+            Vector<WebSocketHandler::ConnectionPtr> _connections;
         };
 
         class WebSocketListenerTest : public ::testing::Test {
@@ -171,7 +171,7 @@ namespace BECore::Tests {
         client->Send(AsBytes(EncodeCloseFrame(WebSocketCloseCode::kNormal, "bye", kClientMask)));
         ASSERT_TRUE(client->WaitForEndOfStream());
         ASSERT_TRUE(WaitForEvents("closed:", 1));
-        EXPECT_EQ(recorder.Events(), (std::vector<std::string>{"open:1", "text:1:one", "text:1:two", "closed:1"}));
+        EXPECT_EQ(recorder.Events(), (Vector<std::string>{"open:1", "text:1:one", "text:1:two", "closed:1"}));
     }
 
     TEST_F(WebSocketListenerTest, ClosedRunsOncePerConnectionHoweverItEnds) {
@@ -491,7 +491,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(client.has_value());
         ASSERT_TRUE(WaitForEvents("open:", 4));
 
-        std::vector<uint64_t> ids;
+        Vector<uint64_t> ids;
         for (const std::string& event : recorder.Events()) {
             if (event.starts_with("open:")) {
                 ids.push_back(std::stoull(event.substr(5)));

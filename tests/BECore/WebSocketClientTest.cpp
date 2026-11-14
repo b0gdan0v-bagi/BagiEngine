@@ -25,7 +25,7 @@ namespace BECore::Tests {
         /// A client and the events it produced, polled the way a game does it
         struct Session {
             WebSocketClient client;
-            std::vector<WebSocketClientEvent> events;
+            Vector<WebSocketClientEvent> events;
 
             void Pump() {
                 WebSocketClientEvent event;
@@ -61,8 +61,8 @@ namespace BECore::Tests {
                 return none;
             }
 
-            [[nodiscard]] std::vector<std::string> Texts() const {
-                std::vector<std::string> texts;
+            [[nodiscard]] Vector<std::string> Texts() const {
+                Vector<std::string> texts;
                 for (const WebSocketClientEvent& event : events) {
                     if (event.kind == WebSocketClientEventKind::Text) {
                         texts.push_back(ToStd(event.text));
@@ -239,7 +239,7 @@ namespace BECore::Tests {
             }
 
             void Fill() {
-                std::array<uint8_t, 4096> chunk;
+                Array<uint8_t, 4096> chunk;
                 for (int i = 0; i < 1024; ++i) {
                     const auto received = _peer.Receive(Span<uint8_t>(chunk.data(), chunk.size()));
                     if (!received) {
@@ -372,7 +372,7 @@ namespace BECore::Tests {
             mutable std::mutex _mutex;
             int _opened = 0;
             int _closed = 0;
-            std::vector<WebSocketHandler::ConnectionPtr> _connections;
+            Vector<WebSocketHandler::ConnectionPtr> _connections;
         };
 
         [[nodiscard]] WebSocketClientSettings QuickSettings() {
@@ -411,7 +411,7 @@ namespace BECore::Tests {
         }
         ASSERT_TRUE(session.WaitForCount(WebSocketClientEventKind::Text, kCount));
 
-        const std::vector<std::string> texts = session.Texts();
+        const Vector<std::string> texts = session.Texts();
         ASSERT_EQ(texts.size(), static_cast<size_t>(kCount));
         for (int i = 0; i < kCount; ++i) {
             EXPECT_EQ(texts[static_cast<size_t>(i)], "message " + std::to_string(i));
@@ -504,7 +504,7 @@ namespace BECore::Tests {
         session.ExpectSingleClosed();
         EXPECT_EQ(session.Closed().closeCode, WebSocketCloseCode::kGoingAway);
         EXPECT_EQ(ToStd(session.Closed().reason), "restarting");
-        EXPECT_EQ(session.Texts(), std::vector<std::string>{"last words"}) << "a message that arrived before the close is delivered before Closed";
+        EXPECT_EQ(session.Texts(), Vector<std::string>{"last words"}) << "a message that arrived before the close is delivered before Closed";
         EXPECT_FALSE(session.client.IsOpen());
         EXPECT_TRUE(server.WaitForEndOfStream());
     }
@@ -524,7 +524,7 @@ namespace BECore::Tests {
         EXPECT_EQ(session.Closed().closeCode, WebSocketCloseCode::kNormal);
         EXPECT_EQ(ToStd(session.Closed().reason), "done");
         EXPECT_TRUE(WaitUntil({}, [&] { return server.Closed() == 1; })) << "the server saw the connection end";
-        EXPECT_EQ(session.Texts(), std::vector<std::string>{"one"}) << "what was sent before the close is delivered and answered";
+        EXPECT_EQ(session.Texts(), Vector<std::string>{"one"}) << "what was sent before the close is delivered and answered";
     }
 
     TEST(WebSocketClientTest, CloseSendsTheCodeAndWaitsOnlyCloseTimeoutForAnAnswer) {
@@ -614,7 +614,7 @@ namespace BECore::Tests {
             std::function<std::string(const ScriptedServer&)> response;
             const char* expectedInReason;
         };
-        const std::vector<Case> cases = {
+        const Vector<Case> cases = {
             {"wrong accept", [](const ScriptedServer& server) { return server.AcceptResponse("AAAAAAAAAAAAAAAAAAAAAAAAAAA="); }, "Accept"},
             {"not 101", [](const ScriptedServer&) { return std::string("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n"); }, "403"},
             {"not http", [](const ScriptedServer&) { return std::string("SSH-2.0-OpenSSH_9.0\r\n\r\n"); }, "HTTP"},
@@ -756,7 +756,7 @@ namespace BECore::Tests {
 
         // Taking the events lets it go on: every message arrives, in order
         ASSERT_TRUE(session.WaitForCount(WebSocketClientEventKind::Text, kMessages));
-        const std::vector<std::string> texts = session.Texts();
+        const Vector<std::string> texts = session.Texts();
         for (int i = 0; i < kMessages; ++i) {
             EXPECT_TRUE(texts[static_cast<size_t>(i)].starts_with(std::to_string(i) + ":")) << "message " << i;
         }
@@ -1041,7 +1041,7 @@ namespace BECore::Tests {
         server.SendText("to the client");
         server.SendText("and again");
         ASSERT_TRUE(session.WaitForCount(WebSocketClientEventKind::Text, 2));
-        EXPECT_EQ(session.Texts(), (std::vector<std::string>{"to the client", "and again"}));
+        EXPECT_EQ(session.Texts(), (Vector<std::string>{"to the client", "and again"}));
     }
 
     TEST(WebSocketClientTest, PingPongAndTheCloseHandshakeWorkOverTheFakeBackend) {

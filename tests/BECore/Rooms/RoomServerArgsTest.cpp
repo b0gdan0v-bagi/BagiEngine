@@ -8,7 +8,7 @@ namespace BECore::Tests {
         using namespace std::chrono_literals;
 
         std::expected<RoomServerArgs, String> Parse(std::initializer_list<const char*> arguments) {
-            std::vector<const char*> argv = {"BagiRoomServer"};
+            Vector<const char*> argv = {"BagiRoomServer"};
             argv.insert(argv.end(), arguments.begin(), arguments.end());
             return ParseRoomServerArgs(static_cast<int>(argv.size()), argv.data());
         }
@@ -40,7 +40,7 @@ namespace BECore::Tests {
             if (!base) {
                 return base;
             }
-            std::vector<const char*> argv = {"BagiRoomServer"};
+            Vector<const char*> argv = {"BagiRoomServer"};
             argv.insert(argv.end(), arguments.begin(), arguments.end());
             return ParseRoomServerArgs(static_cast<int>(argv.size()), argv.data(), std::move(*base));
         }

@@ -73,12 +73,12 @@ namespace BECore::Tests {
         struct Expectation {
             const char* folder;
             const char* name;
-            std::vector<Control> controls;
+            Vector<Control> controls;
         };
 
         /// The controls of every fixture that is loaded. An element without a name (some cases have one on purpose) cannot be told from another in `ui_tree` and is not listed
-        const std::vector<Expectation>& Expectations() {
-            static const std::vector<Expectation> all = {
+        const Vector<Expectation>& Expectations() {
+            static const Vector<Expectation> all = {
                 {"ui_button", "blocker", {Button("Shield", ""), Button("Corner", "")}},
                 {"ui_button", "disabled_tooltip", {Button("Buy", "Buy", "sword", "Buy ", "", "{#shop.tip}: {price} & more", true)}},
                 {"ui_button", "icon_attributes_without_icon", {Button("Empty", "Go", "", "Go"), Button("Stray", "Stop", "", "Stop")}},
@@ -194,7 +194,7 @@ namespace BECore::Tests {
     protected:
         void LoadCase(const std::string& xml) {
             ASSERT_TRUE(Load(xml));
-            const std::vector<std::string> sceneNames = SceneNames(xml);  // a node file is put into a scene of its own, a SceneConfig names its scenes
+            const Vector<std::string> sceneNames = SceneNames(xml);  // a node file is put into a scene of its own, a SceneConfig names its scenes
             ASSERT_FALSE(sceneNames.empty());
             _scene = _manager->GetSceneByName(PoolString::Intern(sceneNames.front().c_str()));
             ASSERT_NE(_scene, nullptr);
@@ -256,8 +256,8 @@ namespace BECore::Tests {
         }
 
         /// A click at the centre of @p element, then the pointer is parked; the actions that went out
-        std::vector<std::string> ClickOn(const UICanvasComponent& canvas, const UIElement& element) {
-            const std::vector<std::string> emitted = Click(OutputCenter(canvas, element));
+        Vector<std::string> ClickOn(const UICanvasComponent& canvas, const UIElement& element) {
+            const Vector<std::string> emitted = Click(OutputCenter(canvas, element));
             Park();
             Draw(kLargeWidth, kLargeHeight);
             return emitted;
@@ -279,9 +279,9 @@ namespace BECore::Tests {
                                                                                   (control.kind == Kind::Toggle   ? control.on
                                                                                    : control.kind == Kind::Slider ? control.middle
                                                                                                                   : control.value);
-            const auto emitted = [&](const std::vector<std::string>& actions) { return actions.empty() ? std::string() : actions.front(); };
+            const auto emitted = [&](const Vector<std::string>& actions) { return actions.empty() ? std::string() : actions.front(); };
 
-            std::vector<const UIElement*> targets{element};
+            Vector<const UIElement*> targets{element};
             if (control.kind == Kind::Toggle) {
                 for (const char* suffix : {"Caption", "Switch"}) {
                     if (const UIElement* part = Find(std::string(control.name) + suffix); part != nullptr && !part->rect.IsEmpty()) {
@@ -290,7 +290,7 @@ namespace BECore::Tests {
                 }
             }
             for (const UIElement* target : targets) {
-                const std::vector<std::string> actions = ClickOn(*canvas, *target);
+                const Vector<std::string> actions = ClickOn(*canvas, *target);
                 EXPECT_LE(actions.size(), 1u) << label << " a click on " << target->name.CStr() << " emitted more than one action";
                 EXPECT_EQ(emitted(actions), expected) << label << " a click on " << target->name.CStr();
             }
@@ -315,7 +315,7 @@ namespace BECore::Tests {
         /// emits nothing. A member of a group takes its flags from the group at every draw, so it is not set by hand
         void CheckGroupDisabled(const std::string& label, const Expectation& expectation) {
             Set<const UIElement*> members;
-            std::vector<UIElement*> clickers;
+            Vector<UIElement*> clickers;
             for (const CanvasRef& ref : _canvases) {
                 WalkElements(ref.canvas->GetRoot(), [&](UIElement& element) {
                     if (element.Cast<UISegmented>() != nullptr) {
@@ -344,7 +344,7 @@ namespace BECore::Tests {
         }
 
         Scene* _scene = nullptr;
-        std::vector<CanvasRef> _canvases;
+        Vector<CanvasRef> _canvases;
     };
 
     TEST(ContentMigrationAfterFixtures, EveryFixtureIsLoadedOrSkippedWithAReason) {
@@ -418,8 +418,8 @@ namespace BECore::Tests {
     class ContentMigrationPictureTest : public ContentMigrationAfterTest {
     protected:
         /// The tints of the pictures drawn in the last frame (the test gives every sprite the same texture), in draw order
-        std::vector<uint32_t> PictureTints() const {
-            std::vector<uint32_t> tints;
+        Vector<uint32_t> PictureTints() const {
+            Vector<uint32_t> tints;
             for (const DrawCall& call : _renderer->calls) {
                 if (call.kind == DrawKind::Texture && call.texture == _icon.Get()) {
                     tints.push_back((static_cast<uint32_t>(call.color.r) << 24) | (static_cast<uint32_t>(call.color.g) << 16) | (static_cast<uint32_t>(call.color.b) << 8) | call.color.a);
@@ -433,7 +433,7 @@ namespace BECore::Tests {
         LoadCase(SceneManagerXml(ReadFile(FixtureFolder("ui_text") / "picture_under_clicker.after.xml")));
         ASSERT_NE(_scene, nullptr);
         Draw(kLargeWidth, kLargeHeight);
-        const std::vector<uint32_t> atRest = PictureTints();
+        const Vector<uint32_t> atRest = PictureTints();
         ASSERT_EQ(atRest.size(), 4u) << "three tiles on two buttons and one picture beside them";
 
         for (const char* name : {"Pung", "Chow0"}) {
@@ -467,7 +467,7 @@ namespace BECore::Tests {
     INSTANTIATE_TEST_SUITE_P(Fixtures, ContentMigrationPictureTest, ::testing::Values(std::string("picture_under_clicker")));
 
     INSTANTIATE_TEST_SUITE_P(Fixtures, ContentMigrationAfterTest, ::testing::ValuesIn([] {
-                                 std::vector<std::string> indices;
+                                 Vector<std::string> indices;
                                  for (size_t i = 0; i < Expectations().size(); ++i) {
                                      indices.push_back(std::to_string(i));
                                  }

@@ -81,8 +81,8 @@ namespace BECore::Tests {
         const IGpuBuffer* vertexBuffer = nullptr;
         const IGpuBuffer* indexBuffer = nullptr;
         IndexType indexType = IndexType::Uint32;
-        std::array<Vector<std::byte>, kConstantsSlotCount> constants;  ///< by ConstantsSlot, the last block set (empty when none)
-        std::array<const ITexture*, kMaxTextureSlots> textures{};
+        Array<Vector<std::byte>, kConstantsSlotCount> constants;  ///< by ConstantsSlot, the last block set (empty when none)
+        Array<const ITexture*, kMaxTextureSlots> textures{};
         Rect viewport;  ///< as set in the pass; empty when none was (the whole target)
         Rect scissor;
         uint32_t indexCount = 0;
@@ -346,9 +346,9 @@ namespace BECore::Tests {
             const IGpuBuffer* vertexBuffer = nullptr;
             const IGpuBuffer* indexBuffer = nullptr;
             IndexType indexType = IndexType::Uint32;
-            std::array<Vector<std::byte>, kConstantsSlotCount> constants;
-            std::array<bool, kConstantsSlotCount> constantsSet{};
-            std::array<const ITexture*, kMaxTextureSlots> textures{};
+            Array<Vector<std::byte>, kConstantsSlotCount> constants;
+            Array<bool, kConstantsSlotCount> constantsSet{};
+            Array<const ITexture*, kMaxTextureSlots> textures{};
             Rect viewport;
             Rect scissor;
         };

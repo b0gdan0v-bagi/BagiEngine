@@ -17,7 +17,7 @@ namespace BECore::Tests {
     inline constexpr int kHumansAtFullTable = 4;
     inline constexpr int kHumansOfAPair = 2;
 
-    using Clients = std::vector<UniquePtr<RoomSocketClient>>;
+    using Clients = Vector<UniquePtr<RoomSocketClient>>;
 
     /// The last message of @p type the client received, or null
     inline const ReceivedMessage* LastOf(const RoomSocketClient& client, StringView type) {
@@ -99,7 +99,7 @@ namespace BECore::Tests {
 
     /// Plays the hands of @p clients until each has seen the end of its game; @p alsoPump runs on every round (other sockets to serve)
     inline bool PlayToTheEnd(const Clients& clients, const WaitPump& alsoPump = {}) {
-        std::vector<HandPlayer> players;
+        Vector<HandPlayer> players;
         for (const auto& client : clients) {
             players.emplace_back(*client);
         }
@@ -116,8 +116,8 @@ namespace BECore::Tests {
     }
 
     /// What the judge says of every text the client received: the ids of the cards it must not have seen
-    inline std::vector<std::string> LeaksOf(const RoomSocketClient& client) {
-        std::vector<std::string> leaks;
+    inline Vector<std::string> LeaksOf(const RoomSocketClient& client) {
+        Vector<std::string> leaks;
         for (const ReceivedMessage& message : client.Received()) {
             for (std::string& id : FindLeakedCardIds(std::string_view(message.text.c_str(), message.text.size()), client.seat)) {
                 leaks.push_back(std::move(id));
@@ -145,7 +145,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(SeesTheEnd(client));
         const Json* table = LastTable(client);
         ASSERT_NE(table, nullptr);
-        const std::vector<std::string> ids = FindCardIds(table->dump());
+        const Vector<std::string> ids = FindCardIds(table->dump());
         EXPECT_EQ(ids.size(), static_cast<size_t>(DemoCardGame::kTotalPlays));
         EXPECT_EQ(Set<std::string>(ids.begin(), ids.end()).size(), static_cast<size_t>(DemoCardGame::kTotalPlays));
     }

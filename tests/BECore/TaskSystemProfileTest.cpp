@@ -54,9 +54,9 @@ namespace BECore::Tests {
             }
 
             /// Every value the counter @p name took, in order
-            [[nodiscard]] std::vector<double> Values(const std::string& name) const {
+            [[nodiscard]] Vector<double> Values(const std::string& name) const {
                 std::lock_guard lock(_mutex);
-                std::vector<double> values;
+                Vector<double> values;
                 for (const auto& [counter, value] : _counters) {
                     if (counter == name) {
                         values.push_back(value);
@@ -67,8 +67,8 @@ namespace BECore::Tests {
 
         private:
             mutable std::mutex _mutex;
-            std::vector<std::string> _zones;
-            std::vector<Pair<std::string, double>> _counters;
+            Vector<std::string> _zones;
+            Vector<Pair<std::string, double>> _counters;
         };
 
         /// The one backend of these tests, emptied. It is never destroyed: a worker of the TaskManager's pool may sit in a zone that began on
@@ -166,7 +166,7 @@ namespace BECore::Tests {
         EXPECT_EQ(backend.Values("Pool: busy workers").back(), 0.0);
 
         // The graph of the worker that ran the job went 0 (start), 1 (the job), 0 (done)
-        const std::vector<double> values = backend.Values(lastOfFirst == 1.0 ? "Worker 0: busy" : "Worker 1: busy");
+        const Vector<double> values = backend.Values(lastOfFirst == 1.0 ? "Worker 0: busy" : "Worker 1: busy");
         ASSERT_GE(values.size(), 3u);
         EXPECT_EQ(values.front(), 0.0);
         EXPECT_EQ(values[values.size() - 2], 1.0);
@@ -214,9 +214,9 @@ namespace BECore::Tests {
         const Json* events = FindJsonMember(*parsed, "traceEvents");
         ASSERT_NE(events, nullptr);
 
-        std::vector<Pair<std::string, int64_t>> names;    // thread name, tid
-        std::vector<Pair<int64_t, int64_t>> sortIndexes;  // tid, sort index
-        std::vector<std::string> counters;
+        Vector<Pair<std::string, int64_t>> names;    // thread name, tid
+        Vector<Pair<int64_t, int64_t>> sortIndexes;  // tid, sort index
+        Vector<std::string> counters;
         for (const Json& event : *events) {
             const auto name = GetJsonString(event, "name");
             const auto phase = GetJsonString(event, "ph");
