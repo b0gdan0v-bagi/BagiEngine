@@ -1,13 +1,13 @@
 #pragma once
 
-#include <BECore/Types/Types.h>
 #include <RoomClient/RoomTransport.h>
-#include <cstdint>
-#include <expected>
 
 #if BE_WITH_REMOTE_CONTROL
 
+#include <BECore/Types/Types.h>
 #include <RemoteControl/WebSocketClient.h>
+#include <cstdint>
+#include <expected>
 
 namespace BECore {
 
