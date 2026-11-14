@@ -101,55 +101,55 @@ namespace BECore::Tests {
 </scenes></SceneManager>)";
 
         // Two buttons written in HTML + CSS: an icon-only one and an icon-left one
-        std::string HtmlBarXml(float side) {
-            const std::string sideUnits = std::to_string(static_cast<int>(side));
-            const std::string sidePx = sideUnits + "px";
-            const std::string source = "<style>#Icon { left: 10px; top: 10px; width: " + sidePx + "; height: " + sidePx +
-                                       "; background: #283c5a } #Left { left: 70px; top: 10px; width: 200px; height: " + sidePx + "; background: #283c5a }</style>" +
-                                       R"(<button id="Icon" data-icon="BarIcon" data-action="IconBar"></button><button id="Left" data-icon="BarIcon" data-action="LeftBar">Go</button>)";
+        String HtmlBarXml(float side) {
+            const String sideUnits = ToString(static_cast<int>(side));
+            const String sidePx = sideUnits + "px";
+            const String source = "<style>#Icon { left: 10px; top: 10px; width: " + sidePx + "; height: " + sidePx +
+                                  "; background: #283c5a } #Left { left: 70px; top: 10px; width: 200px; height: " + sidePx + "; background: #283c5a }</style>" +
+                                  R"(<button id="Icon" data-icon="BarIcon" data-action="IconBar"></button><button id="Left" data-icon="BarIcon" data-action="LeftBar">Go</button>)";
             UIWebReport report;
-            const String compiled = UIWebCompiler::Compile(FromStd(source), {}, report);
+            const String compiled = UIWebCompiler::Compile(source, {}, report);
             EXPECT_TRUE(report.issues.empty());
-            const std::string xml(compiled.c_str());
-            const size_t begin = xml.find("<elements>") + std::string("<elements>").size();
+            const String xml(compiled.c_str());
+            const size_t begin = xml.find("<elements>") + String("<elements>").size();
             const size_t end = xml.find("</elements>");
             return kSceneHead + xml.substr(begin, end - begin) + kSceneTail;
         }
 
         // A segmented group written in HTML + CSS: an icon-only segment, an icon-left one and a plain one, in a row (the segments are composed like any button)
-        std::string HtmlGroupXml(float side) {
-            const std::string sidePx = std::to_string(static_cast<int>(side)) + "px";
-            const std::string source =
+        String HtmlGroupXml(float side) {
+            const String sidePx = ToString(static_cast<int>(side)) + "px";
+            const String source =
                 "<style>#Seg { display: flex; gap: 4px; left: 10px; top: 10px; width: 400px; height: " + sidePx + "; background: #1e1e1e } #Seg button { flex: 1; height: " + sidePx +
                 "; background: #283c5a }</style>" +
                 R"(<div id="Seg" data-widget="segmented" data-bind="seg"><button id="SegA" data-value="a" data-icon="BarIcon"></button><button id="SegB" data-value="b" data-icon="BarIcon">Go</button><button id="SegC" data-value="c">Plain</button></div>)";
             UIWebReport report;
-            const String compiled = UIWebCompiler::Compile(FromStd(source), {}, report);
+            const String compiled = UIWebCompiler::Compile(source, {}, report);
             EXPECT_TRUE(report.issues.empty());
-            const std::string xml(compiled.c_str());
-            const size_t begin = xml.find("<elements>") + std::string("<elements>").size();
+            const String xml(compiled.c_str());
+            const size_t begin = xml.find("<elements>") + String("<elements>").size();
             const size_t end = xml.find("</elements>");
             return kSceneHead + xml.substr(begin, end - begin) + kSceneTail;
         }
 
-        void ReplaceAll(std::string& text, const std::string& what, const std::string& with) {
-            for (size_t at = text.find(what); at != std::string::npos; at = text.find(what, at + with.size())) {
+        void ReplaceAll(String& text, const String& what, const String& with) {
+            for (size_t at = text.find(what); at != String::npos; at = text.find(what, at + with.size())) {
                 text.replace(at, what.size(), with);
             }
         }
 
-        std::string BarXml(float side, bool narrow) {
-            std::string xml = kBarXml;
-            ReplaceAll(xml, "@SIDE@", std::to_string(static_cast<int>(side)));
+        String BarXml(float side, bool narrow) {
+            String xml = kBarXml;
+            ReplaceAll(xml, "@SIDE@", ToString(static_cast<int>(side)));
             ReplaceAll(xml, "@EXTRA@", narrow ? kNarrowXml : "");
             return xml;
         }
 
         // The button an element name belongs to: "Left/Text" is a part of "Left"
-        std::string ButtonOf(const PoolString& element) {
-            std::string name(element.CStr());
+        String ButtonOf(const PoolString& element) {
+            String name(element.CStr());
             const size_t part = name.find('/');
-            if (part != std::string::npos) {
+            if (part != String::npos) {
                 name.resize(part);
             }
             return name;
@@ -192,9 +192,9 @@ namespace BECore::Tests {
             LoadXml(BarXml(side, narrow));
         }
 
-        void LoadXml(const std::string& xml) {
+        void LoadXml(const String& xml) {
             XmlDeserializer deserializer;
-            ASSERT_TRUE(deserializer.LoadFromString(FromStd(xml)));
+            ASSERT_TRUE(deserializer.LoadFromString(xml));
             _manager = New<SceneManager>();
             _manager->Deserialize(deserializer);
             ASSERT_FALSE(deserializer.HasErrors());

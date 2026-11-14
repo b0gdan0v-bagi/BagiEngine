@@ -50,7 +50,7 @@ namespace BECore::Tests {
             /// A new client over the fake transports; @p settings has the numbers a test wants to change (its factory is replaced)
             void MakeClient(RoomClientSettings settings) {
                 settings.transportFactory = _transports.Factory();
-                _client = std::make_unique<RoomClient>(std::move(settings));
+                _client = MakeUnique<RoomClient>(std::move(settings));
             }
 
             /// Polls once and takes the events
@@ -115,7 +115,7 @@ namespace BECore::Tests {
 
             ManualClock _clock;
             FakeTransports _transports;
-            std::unique_ptr<RoomClient> _client;
+            UniquePtr<RoomClient> _client;
             Vector<RoomClientEvent> _events;
         };
 
@@ -569,7 +569,7 @@ namespace BECore::Tests {
             FakeTransports transports;
             RoomClientSettings settings;
             settings.transportFactory = transports.Factory();
-            auto client = std::make_unique<RoomClient>(settings);
+            auto client = MakeUnique<RoomClient>(settings);
             ASSERT_TRUE(client->Host(kUrl, "cards", "Ann").has_value());
             client.reset();
             EXPECT_TRUE(transports.Last().destroyed);
@@ -578,7 +578,7 @@ namespace BECore::Tests {
             FakeTransports transports;
             RoomClientSettings settings;
             settings.transportFactory = transports.Factory();
-            auto client = std::make_unique<RoomClient>(settings);
+            auto client = MakeUnique<RoomClient>(settings);
             ASSERT_TRUE(client->Host(kUrl, "cards", "Ann").has_value());
             transports.Last().PushOpened();
             transports.Last().PushText(MakeJoinedMessage(kRoom, 1, kToken, 0, true));
@@ -591,7 +591,7 @@ namespace BECore::Tests {
             FakeTransports transports;
             RoomClientSettings settings;
             settings.transportFactory = transports.Factory();
-            auto client = std::make_unique<RoomClient>(settings);
+            auto client = MakeUnique<RoomClient>(settings);
             ASSERT_TRUE(client->Host(kUrl, "cards", "Ann").has_value());
             transports.Last().closeAnswers = false;
             client->Disconnect();

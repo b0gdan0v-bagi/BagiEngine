@@ -78,7 +78,7 @@ namespace BECore {
             }
         }
         if (!_white) {
-            const std::array<uint8_t, kWhitePixelBytes> pixel = {kWhiteByte, kWhiteByte, kWhiteByte, kWhiteByte};
+            const Array<uint8_t, kWhitePixelBytes> pixel = {kWhiteByte, kWhiteByte, kWhiteByte, kWhiteByte};
             _white = renderer.CreateTexture(pixel.data(), 1, 1);
             if (!_white) {
                 return std::unexpected(String("Renderer3D: no white texture"));

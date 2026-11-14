@@ -9,7 +9,7 @@ namespace BECore {
         };
 
         template <size_t N>
-        consteval std::array<FlagEntry, N> SortFlagEntryFlags(std::array<FlagEntry, N> data) {
+        consteval Array<FlagEntry, N> SortFlagEntryFlags(Array<FlagEntry, N> data) {
             std::sort(data.begin(), data.end(), [](const FlagEntry& a, const FlagEntry& b) { return a.name < b.name; });
             return data;
         }
@@ -34,7 +34,7 @@ namespace BECore {
 
     SDL_WindowFlags SDLUtils::GetWindowFlagValue(StringView flagName) {
         // Маппинг имен флагов на их значения
-        static constexpr auto flagTable = SortFlagEntryFlags(std::array<FlagEntry, 25>{{
+        static constexpr auto flagTable = SortFlagEntryFlags(Array<FlagEntry, 25>{{
             {.name = "SDL_WINDOW_FULLSCREEN", .value = SDL_WINDOW_FULLSCREEN},
             {.name = "SDL_WINDOW_OPENGL", .value = SDL_WINDOW_OPENGL},
             {.name = "SDL_WINDOW_OCCLUDED", .value = SDL_WINDOW_OCCLUDED},

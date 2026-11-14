@@ -18,7 +18,7 @@ namespace BECore {
             uint32_t waitedFrames = 0;
         };
 
-        void Await(ControlCall& call, eastl::shared_ptr<Waiting> waiting) {
+        void Await(ControlCall& call, SharedPtr<Waiting> waiting) {
             // Frames of zero seconds: on the manual clock nothing moves while the clipboard answers
             call.DeferFrames(1, 0.0, [waiting](ControlCall& done) {
                 if (waiting->isDone()) {
@@ -49,12 +49,12 @@ namespace BECore {
                 bool arrived = false;
                 ClipboardText text;
             };
-            auto answer = eastl::make_shared<Answer>();
+            auto answer = MakeShared<Answer>();
             CoreManager::GetClipboard().RequestText([answer](const ClipboardText& read) {
                 answer->text = read;
                 answer->arrived = true;
             });
-            auto waiting = eastl::make_shared<Waiting>();
+            auto waiting = MakeShared<Waiting>();
             waiting->isDone = [answer]() { return answer->arrived; };
             waiting->finish = [answer](ControlCall& done) {
                 Json result = Json::object();
@@ -67,7 +67,7 @@ namespace BECore {
 
         void HandlePaste(ControlCall& call) {
             CoreManager::GetClipboard().RequestPaste();
-            auto waiting = eastl::make_shared<Waiting>();
+            auto waiting = MakeShared<Waiting>();
             waiting->isDone = []() { return !CoreManager::GetClipboard().HasPending(); };
             waiting->finish = [](ControlCall& done) { done.Reply(Json::object()); };
             Await(call, std::move(waiting));

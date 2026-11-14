@@ -30,6 +30,8 @@ namespace BECore {
         inline constexpr bool kContainerField<eastl::fixed_hash_map<K, V, N, B, Overflow, H, E, Cache, Alloc>> = true;
         template <typename K, typename V, typename C, typename Alloc>
         inline constexpr bool kContainerField<eastl::map<K, V, C, Alloc>> = true;
+        template <typename A, typename B>
+        inline constexpr bool kContainerField<eastl::pair<A, B>> = true;
         template <typename T>
         inline constexpr bool kContainerField<std::optional<T>> = true;
         template <typename T>
@@ -64,6 +66,7 @@ namespace BECore {
             BE_REFLECT_FIELD FixedHashMap<String, int32_t, 8> fixedHashed;
             BE_REFLECT_FIELD Optional<int32_t> present;
             BE_REFLECT_FIELD Optional<int32_t> absent;
+            BE_REFLECT_FIELD Pair<int32_t, String> entry;
         };
 
         /// The same fields spelled the way the engine wrote them before the aliases
@@ -82,6 +85,7 @@ namespace BECore {
             BE_REFLECT_FIELD eastl::fixed_hash_map<eastl::string, int32_t, 8> fixedHashed;
             BE_REFLECT_FIELD eastl::optional<int32_t> present;
             BE_REFLECT_FIELD eastl::optional<int32_t> absent;
+            BE_REFLECT_FIELD eastl::pair<int32_t, eastl::string> entry;
         };
 
     }  // namespace AliasTestData

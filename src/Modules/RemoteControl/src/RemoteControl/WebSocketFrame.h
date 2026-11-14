@@ -31,7 +31,7 @@ namespace BECore {
     inline constexpr size_t kMaxControlPayload = 125;
 
     /// Masking key of a client frame
-    using WebSocketMask = std::array<uint8_t, 4>;
+    using WebSocketMask = Array<uint8_t, 4>;
 
     /**
      * @brief Encodes one frame.

@@ -4,6 +4,7 @@
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <Common/EngineEnvironment.h>
+#include <Common/Printers.h>
 #include <Common/TempPath.h>
 #include <CoreSDL/SDLMainWindow.h>
 #include <CoreSDL/SDLRendererBackend.h>
@@ -26,7 +27,7 @@ namespace BECore::Tests {
         constexpr double kHalf = 0.5;
         constexpr double kStep = 0.125;  // exact in binary and inside the longest frame the clock reports
 
-        using Pixel = std::array<int, 3>;
+        using Pixel = Array<int, 3>;
 
         const Color kBackground{10, 20, 30, 255};
         const Pixel kBackgroundPixel{10, 20, 30};
@@ -76,8 +77,8 @@ namespace BECore::Tests {
             return result;
         }
 
-        std::string Describe(const Pixel& pixel) {
-            return "(" + std::to_string(pixel[0]) + ", " + std::to_string(pixel[1]) + ", " + std::to_string(pixel[2]) + ")";
+        String Describe(const Pixel& pixel) {
+            return "(" + ToString(pixel[0]) + ", " + ToString(pixel[1]) + ", " + ToString(pixel[2]) + ")";
         }
 
     }  // namespace

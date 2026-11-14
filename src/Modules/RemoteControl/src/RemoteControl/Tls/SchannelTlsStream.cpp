@@ -48,7 +48,7 @@ namespace BECore {
             }
         };
 
-        using ContextBufferOwned = std::unique_ptr<void, ContextBufferFreer>;
+        using ContextBufferOwned = std::unique_ptr<void, ContextBufferFreer>;  //-NoStd: Windows only, not built on this machine
 
         struct CertificateFreer {
             void operator()(const CERT_CONTEXT* certificate) const {
@@ -82,10 +82,10 @@ namespace BECore {
             }
         };
 
-        using CertificateOwned = std::unique_ptr<const CERT_CONTEXT, CertificateFreer>;
-        using StoreOwned = std::unique_ptr<void, StoreCloser>;
-        using ChainEngineOwned = std::unique_ptr<void, ChainEngineFreer>;
-        using ChainOwned = std::unique_ptr<const CERT_CHAIN_CONTEXT, ChainFreer>;
+        using CertificateOwned = std::unique_ptr<const CERT_CONTEXT, CertificateFreer>;  //-NoStd: Windows only, not built on this machine
+        using StoreOwned = std::unique_ptr<void, StoreCloser>;                           //-NoStd: Windows only, not built on this machine
+        using ChainEngineOwned = std::unique_ptr<void, ChainEngineFreer>;                //-NoStd: Windows only, not built on this machine
+        using ChainOwned = std::unique_ptr<const CERT_CHAIN_CONTEXT, ChainFreer>;        //-NoStd: Windows only, not built on this machine
 
         /// The words for the person for an SSPI status or a certificate chain policy error; the number goes only to the log.
         /// Pure (mirrors DescribeNetworkFailure of the macOS backend). The result is a string literal
@@ -747,7 +747,7 @@ namespace BECore {
     }
 
     UniquePtr<ITlsStream> MakeTlsStream() {
-        return eastl::make_unique<SchannelTlsStream>();
+        return MakeUnique<SchannelTlsStream>();
     }
 
 }  // namespace BECore

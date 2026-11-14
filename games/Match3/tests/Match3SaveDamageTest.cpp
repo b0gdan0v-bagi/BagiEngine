@@ -139,7 +139,7 @@ namespace BECore::Match3::Tests {
             _base = BECore::Tests::TestTempDirectory("BagiMatch3SaveDamage");
             std::filesystem::remove_all(_base);
             std::filesystem::create_directories(_base);
-            _service = std::make_unique<SaveGameService>(_fileSystem);
+            _service = MakeUnique<SaveGameService>(_fileSystem);
             ASSERT_TRUE(_service->Initialize(_base / "saves"));
 
             // The game on the screen when the damaged file is loaded: played, with a selection and a last swap, so that a changed field shows
@@ -179,7 +179,7 @@ namespace BECore::Match3::Tests {
 
         std::filesystem::path _base;
         FileSystem _fileSystem;
-        std::unique_ptr<SaveGameService> _service;
+        UniquePtr<SaveGameService> _service;
         Match3GameModel _model;
     };
 

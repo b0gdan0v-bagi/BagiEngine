@@ -215,7 +215,8 @@ namespace BECore::Match3::Tests {
         const float boardTop = 80.0f - 4.0f;  // the frame of the board, in view units
         const float boardBottom = 80.0f + 512.0f + 4.0f;
 
-        for (const auto& size : {std::pair{1280.0f, 720.0f}, std::pair{720.0f, 1280.0f}, std::pair{1024.0f, 768.0f}, std::pair{800.0f, 800.0f}, std::pair{2560.0f, 1080.0f}}) {
+        for (const auto& size : {Pair<float, float>{1280.0f, 720.0f}, Pair<float, float>{720.0f, 1280.0f}, Pair<float, float>{1024.0f, 768.0f}, Pair<float, float>{800.0f, 800.0f},
+                                 Pair<float, float>{2560.0f, 1080.0f}}) {
             _renderer->width = size.first;
             _renderer->height = size.second;
             Draw();
@@ -368,7 +369,7 @@ namespace BECore::Match3::Tests {
         }
 
         /// The click of a person on both cells of a swap that scores
-        eastl::pair<Cell, Cell> ClickALegalSwap() {
+        Pair<Cell, Cell> ClickALegalSwap() {
             const auto swaps = Board().GetModel().GetLegalSwaps();
             EXPECT_FALSE(swaps.empty());
             Board().ClickCell(swaps.front().first);
@@ -377,13 +378,13 @@ namespace BECore::Match3::Tests {
         }
 
         /// The centre of @p cell in the units of the scene, from the geometry of the board component
-        eastl::pair<float, float> CellCentre(Cell cell) const {
+        Pair<float, float> CellCentre(Cell cell) const {
             const Match3BoardComponent& board = Board();
             return {board._originX + (static_cast<float>(cell.col) + 0.5f) * board._cellSize, board._originY + (static_cast<float>(cell.row) + 0.5f) * board._cellSize};
         }
 
         /// A neighbour pair whose swap makes no match
-        eastl::pair<Cell, Cell> FindRejectedSwap() const {
+        Pair<Cell, Cell> FindRejectedSwap() const {
             const Match3GameModel& model = Board().GetModel();
             for (int8_t row = 0; row < kBoardSize; ++row) {
                 for (int8_t col = 0; col + 1 < kBoardSize; ++col) {
@@ -425,7 +426,7 @@ namespace BECore::Match3::Tests {
         }
 
         /// The output pixel at which the scene coordinate is: the fit of the view is linear, so it is inverted from its values at 0 and 1
-        eastl::pair<float, float> PixelOfScene(float sceneX, float sceneY) {
+        Pair<float, float> PixelOfScene(float sceneX, float sceneY) {
             const Scene& scene = GetScene("Match3Scene");
             const float x0 = scene.ScreenToSceneX(0.0f);
             const float y0 = scene.ScreenToSceneY(0.0f);
@@ -433,7 +434,7 @@ namespace BECore::Match3::Tests {
         }
 
         /// The same swap on a model of its own, to compare the final state with
-        static Match3GameModel PlayedElsewhere(uint32_t seed, eastl::pair<Cell, Cell> swap) {
+        static Match3GameModel PlayedElsewhere(uint32_t seed, Pair<Cell, Cell> swap) {
             Match3GameModel model;
             model.Reset(seed);
             EXPECT_TRUE(model.TrySwap(swap.first, swap.second));

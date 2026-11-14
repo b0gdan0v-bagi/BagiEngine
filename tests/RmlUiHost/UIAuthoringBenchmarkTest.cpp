@@ -48,8 +48,8 @@ namespace BECore::Tests {
             return {(index % kColumns) * (kCardWidth + kGap), (index / kColumns) * (kCardHeight + kGap)};
         }
 
-        std::string XmlScreen() {
-            std::string text = "<ui><elements>\n";
+        String XmlScreen() {
+            String text = "<ui><elements>\n";
             for (int i = 0; i < kCards; ++i) {
                 const auto [x, y] = CardPlace(i);
                 text += Format("<element type=\"UIPanel\" name=\"c{0}\" x=\"{1}\" y=\"{2}\" width=\"140\" height=\"80\" color=\"30,30,40,255\"/>\n"
@@ -67,8 +67,8 @@ namespace BECore::Tests {
             return text;
         }
 
-        std::string HtmlBody(const char* unit) {
-            std::string text;
+        String HtmlBody(const char* unit) {
+            String text;
             for (int i = 0; i < kCards; ++i) {
                 const auto [x, y] = CardPlace(i);
                 text += Format("<div id=\"c{0}\" class=\"card\" style=\"left: {1}{7}; top: {2}{7}\"></div>\n"
@@ -98,12 +98,12 @@ div, span, button { position: absolute; }
 button { width: 56dp; height: 24dp; font-size: 14dp; background-color: rgb(40, 90, 60); pointer-events: auto; }
 )";
 
-        std::string WebScreen() {
-            return std::string("<style>") + kWebCss + "</style>\n" + HtmlBody("px");
+        String WebScreen() {
+            return String("<style>") + kWebCss + "</style>\n" + HtmlBody("px");
         }
 
-        std::string RmlScreen() {
-            return std::string("<rml><head><style>") + kRmlCss + "</style></head><body>\n" + HtmlBody("dp") + "</body></rml>";
+        String RmlScreen() {
+            return String("<rml><head><style>") + kRmlCss + "</style></head><body>\n" + HtmlBody("dp") + "</body></rml>";
         }
 
         using Clock = std::chrono::steady_clock;
@@ -177,11 +177,11 @@ button { width: 56dp; height: 24dp; font-size: 14dp; background-color: rgb(40, 9
         // Same fonts for all three: warm the default font before anything is timed, so the first draw of each does not pay for RmlUi's start-up or the file read twice
         EngineEnvironment::EnsureCoreServices();
 
-        const std::string xml = XmlScreen();
-        const std::string web = WebScreen();
-        const std::string rml = RmlScreen();
+        const String xml = XmlScreen();
+        const String web = WebScreen();
+        const String rml = RmlScreen();
 
-        std::vector<Row> rows;
+        Vector<Row> rows;
         rows.push_back({"source bytes", static_cast<double>(xml.size()), static_cast<double>(web.size()), static_cast<double>(rml.size())});
 
         // ---- A: the engine's XML ----
@@ -191,7 +191,7 @@ button { width: 56dp; height: 24dp; font-size: 14dp; background-color: rgb(40, 9
         const auto startA = Clock::now();
         {
             XmlDeserializer deserializer;
-            ASSERT_TRUE(deserializer.LoadFromString(FromStd(xml)));
+            ASSERT_TRUE(deserializer.LoadFromString(xml));
             contentA.Deserialize(deserializer);
             ASSERT_FALSE(deserializer.HasErrors());
         }
@@ -205,7 +205,7 @@ button { width: 56dp; height: 24dp; font-size: 14dp; background-color: rgb(40, 9
         // ---- B: HTML + CSS compiled to the XML ----
         UIWebReport report;
         const auto startB = Clock::now();
-        const String compiled = UIWebCompiler::Compile(FromStd(web), {}, report);
+        const String compiled = UIWebCompiler::Compile(web, {}, report);
         const double compileB = MillisecondsSince(startB);
         UIScreenContent contentB;
         const auto startBLoad = Clock::now();

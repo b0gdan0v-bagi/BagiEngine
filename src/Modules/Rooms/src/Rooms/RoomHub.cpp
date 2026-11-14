@@ -269,8 +269,8 @@ namespace BECore {
 
         const SeatedGameRegistry* registry = &_registry;
         const String gameName = info->name;
-        auto entry = eastl::make_unique<RoomEntry>();
-        entry->room = eastl::make_unique<Room>(code, *info, _random, [registry, gameName]() { return registry->Create(gameName); }, _settings.timings);
+        auto entry = MakeUnique<RoomEntry>();
+        entry->room = MakeUnique<Room>(code, *info, _random, [registry, gameName]() { return registry->Create(gameName); }, _settings.timings);
         entry->creation = ++_roomsCreated;
         entry->options = message.options;
         entry->room->SetLobbyOptions(message.options);

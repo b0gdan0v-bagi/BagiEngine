@@ -52,7 +52,7 @@ namespace BECore::Match3 {
 
         Json board = Json::array();
         for (int8_t row = 0; row < kBoardSize; ++row) {
-            // std: pushed into nlohmann's Json
+            //-NoStd: pushed into nlohmann's Json
             std::string line;
             for (int8_t col = 0; col < kBoardSize; ++col) {
                 line.push_back(kGemLetters[static_cast<size_t>(model.GetCellAt(Cell{col, row}))]);

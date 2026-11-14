@@ -18,8 +18,8 @@ namespace BECore::Fuzz {
         class SlotWorkspace {
         public:
             SlotWorkspace() : _service(_fileSystem) {
-                const std::string tag = Format("{:08x}", std::random_device{}()).c_str();
-                _directory = std::filesystem::temp_directory_path() / ("BagiFuzzSave_" + tag);
+                const String tag = Format("{:08x}", std::random_device{}());
+                _directory = std::filesystem::temp_directory_path() / ToStd("BagiFuzzSave_" + tag);
                 std::error_code ignored;
                 std::filesystem::remove_all(_directory, ignored);
                 FUZZ_CHECK(_service.Initialize(_directory));
@@ -121,8 +121,8 @@ namespace BECore::Fuzz {
     }
 
     Vector<uint8_t> MakeSaveFileBytes(StringView game, uint32_t version) {
-        const std::string tag = Format("{:08x}", std::random_device{}()).c_str();
-        const std::filesystem::path directory = std::filesystem::temp_directory_path() / ("BagiFuzzSeed_" + tag);
+        const String tag = Format("{:08x}", std::random_device{}());
+        const std::filesystem::path directory = std::filesystem::temp_directory_path() / ToStd("BagiFuzzSeed_" + tag);
         Vector<uint8_t> bytes;
         {
             FileSystem fileSystem;

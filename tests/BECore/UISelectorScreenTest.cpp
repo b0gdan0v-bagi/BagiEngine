@@ -215,7 +215,7 @@ namespace BECore::Tests {
         struct Group {
             const char* name;
             const char* variable;
-            Vector<eastl::pair<const char*, const char*>> segments;  // the name of the button, its value
+            Vector<Pair<const char*, const char*>> segments;  // the name of the button, its value
         };
 
         /// The four groups of the panel with the words they show (the text is in the XML above; the values are what the game publishes)
@@ -229,15 +229,15 @@ namespace BECore::Tests {
             return groups;
         }
 
-        std::string SceneXml(float viewWidth, float viewHeight, const std::function<void(std::string&)>& edit = {}) {
-            std::string xml = kSelectorXml;
-            const auto replace = [&xml](const std::string& what, const std::string& with) {
-                for (size_t at = xml.find(what); at != std::string::npos; at = xml.find(what, at + with.size())) {
+        String SceneXml(float viewWidth, float viewHeight, const std::function<void(String&)>& edit = {}) {
+            String xml = kSelectorXml;
+            const auto replace = [&xml](const String& what, const String& with) {
+                for (size_t at = xml.find(what); at != String::npos; at = xml.find(what, at + with.size())) {
                     xml.replace(at, what.size(), with);
                 }
             };
-            replace("@VIEW_W@", std::to_string(static_cast<int>(viewWidth)));
-            replace("@VIEW_H@", std::to_string(static_cast<int>(viewHeight)));
+            replace("@VIEW_W@", ToString(static_cast<int>(viewWidth)));
+            replace("@VIEW_H@", ToString(static_cast<int>(viewHeight)));
             if (edit) {
                 edit(xml);
             }
@@ -245,9 +245,9 @@ namespace BECore::Tests {
         }
 
         /// Replaces the first @p what in @p xml, and fails the test when it is not there (a broken copy that changed nothing would prove nothing)
-        void Replace(std::string& xml, const std::string& what, const std::string& with) {
+        void Replace(String& xml, const String& what, const String& with) {
             const size_t at = xml.find(what);
-            ASSERT_NE(at, std::string::npos) << what;
+            ASSERT_NE(at, String::npos) << what;
             xml.replace(at, what.size(), with);
         }
 
@@ -408,13 +408,13 @@ namespace BECore::Tests {
         }
 
         /// The scene of the panel with a view of this size; the output has the same size, so a point of the view is a pixel
-        void LoadScene(float viewWidth = kViewWidth, float viewHeight = kViewHeight, const std::function<void(std::string&)>& edit = {}) {
+        void LoadScene(float viewWidth = kViewWidth, float viewHeight = kViewHeight, const std::function<void(String&)>& edit = {}) {
             _game.reset();
             _hud.Reset();
             _selector.Reset();
             XmlDeserializer deserializer;
-            const std::string xml = SceneXml(viewWidth, viewHeight, edit);
-            ASSERT_TRUE(deserializer.LoadFromString(FromStd(xml)));
+            const String xml = SceneXml(viewWidth, viewHeight, edit);
+            ASSERT_TRUE(deserializer.LoadFromString(xml));
             _manager = New<SceneManager>();
             _manager->Deserialize(deserializer);
             ASSERT_FALSE(deserializer.HasErrors());
@@ -473,18 +473,18 @@ namespace BECore::Tests {
             return *typed;
         }
 
-        static std::pair<float, float> CenterOf(const UIElement& element) {
+        static Pair<float, float> CenterOf(const UIElement& element) {
             return {element.rect.x + element.rect.w * 0.5f, element.rect.y + element.rect.h * 0.5f};
         }
 
         /// A press and its release at the center of @p element as it was laid out in the last draw; returns what the two events were taken for
-        std::pair<bool, bool> ClickAt(float x, float y) {
+        Pair<bool, bool> ClickAt(float x, float y) {
             const bool pressed = CoreManager::GetUIInput().DispatchMouseButtonDown(Button(x, y, true));
             const bool released = CoreManager::GetUIInput().DispatchMouseButtonUp(Button(x, y, false));
             return {pressed, released};
         }
 
-        std::pair<bool, bool> Click(const UIElement& element) {
+        Pair<bool, bool> Click(const UIElement& element) {
             const auto [x, y] = CenterOf(element);
             return ClickAt(x, y);
         }
@@ -607,7 +607,7 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(LoadScene());
         Draw();
         for (const char* row : {"Mode", "Color", "Engine", "Level"}) {
-            const UIElement& caption = El((std::string(row) + "Caption").c_str());
+            const UIElement& caption = El((String(row) + "Caption").c_str());
             const UIElement& group = Get<UISegmented>(row);
             EXPECT_LT(caption.rect.x + caption.rect.w, group.rect.x + 0.01f) << row;
             EXPECT_NEAR(caption.rect.y, group.rect.y, 0.01f) << row;
@@ -622,7 +622,7 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(LoadScene(kPortraitWidth, kPortraitHeight));
         Draw();
         for (const char* row : {"Mode", "Color", "Engine", "Level"}) {
-            const UIElement& caption = El((std::string(row) + "Caption").c_str());
+            const UIElement& caption = El((String(row) + "Caption").c_str());
             const UIElement& group = Get<UISegmented>(row);
             EXPECT_LT(caption.rect.y + caption.rect.h, group.rect.y + 0.01f) << row;
             EXPECT_NEAR(caption.rect.x, group.rect.x, 0.01f) << row;
@@ -664,7 +664,7 @@ namespace BECore::Tests {
         size_t selected = 0;
         for (const Group& group : Groups()) {
             for (const auto& [name, value] : group.segments) {
-                const bool expected = std::any_of(std::begin(chosen), std::end(chosen), [&](const char* c) { return std::string(c) == name; });
+                const bool expected = std::any_of(std::begin(chosen), std::end(chosen), [&](const char* c) { return String(c) == name; });
                 EXPECT_EQ(El(name).selected, expected) << name;
                 selected += El(name).selected ? 1u : 0u;
             }
@@ -721,7 +721,7 @@ namespace BECore::Tests {
 
         // On a segment, on the plate between two controls and on the dim far from the plate: all are the panel's
         const UIElement& plate = Get<UIStack>("Plate");
-        const std::pair<float, float> points[] = {CenterOf(El("LevelHard")), {plate.rect.x + 4.0f, plate.rect.y + 4.0f}, {5.0f, 5.0f}, {kViewWidth - 5.0f, kViewHeight - 5.0f}};
+        const Pair<float, float> points[] = {CenterOf(El("LevelHard")), {plate.rect.x + 4.0f, plate.rect.y + 4.0f}, {5.0f, 5.0f}, {kViewWidth - 5.0f, kViewHeight - 5.0f}};
         for (const auto& [x, y] : points) {
             const auto [pressed, released] = ClickAt(x, y);
             EXPECT_TRUE(pressed) << x << "," << y;
@@ -785,7 +785,7 @@ namespace BECore::Tests {
                 Draw();  // the game answered with the variable; the next draw moves the selection
                 EXPECT_TRUE(El(name).selected) << name;
                 for (const auto& [other, otherValue] : group.segments) {
-                    if (std::string(other) != name) {
+                    if (String(other) != name) {
                         EXPECT_FALSE(El(other).selected) << other << " after " << name;
                     }
                 }
@@ -813,7 +813,7 @@ namespace BECore::Tests {
 
     TEST_F(UISelectorScreenTest, ASegmentTooNarrowForItsWordIsCaughtByTheValidatorAndByTheFitCheck) {
         // "Own engine" at font 44 cannot fit its half of a row on any case: with `overflow="Clip"` the validator reports TextDoesNotFit
-        ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](std::string& xml) {
+        ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](String& xml) {
             Replace(xml, R"(name="EngineOwn" flex="1" height="56" fontSize="24")", R"(name="EngineOwn" flex="1" height="56" fontSize="44")");
             Replace(xml, R"(text="Own engine")", R"(text="Own engine" overflow="Clip")");
         }));
@@ -822,8 +822,8 @@ namespace BECore::Tests {
         EXPECT_TRUE(HasIssue(failures, UILayoutIssueKind::TextDoesNotFit)) << DescribeMatrixFailures(failures).c_str();
 
         // With the default ellipsis the validator is silent ("can shrink"), and the fit check of this file is what catches it
-        ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight,
-                                          [](std::string& xml) { Replace(xml, R"(name="EngineOwn" flex="1" height="56" fontSize="24")", R"(name="EngineOwn" flex="1" height="56" fontSize="44")"); }));
+        ASSERT_NO_FATAL_FAILURE(
+            LoadScene(kViewWidth, kViewHeight, [](String& xml) { Replace(xml, R"(name="EngineOwn" flex="1" height="56" fontSize="24")", R"(name="EngineOwn" flex="1" height="56" fontSize="44")"); }));
         EXPECT_FALSE(HasIssue(ValidatePanel(*_selector), UILayoutIssueKind::TextDoesNotFit)) << "an ellipsis label can shrink: the validator does not report it";
         const String problems = ProblemsOnMatrix(*_selector);
         EXPECT_NE(problems.find("EngineOwn cuts 'Own engine'"), String::npos) << problems.c_str();
@@ -831,7 +831,7 @@ namespace BECore::Tests {
 
     TEST_F(UISelectorScreenTest, ALongerWordInTheNarrowestWindowIsCaught) {
         // A word that fits at 689 units wide but not in a quarter of the Level row: the narrowest window alone shows it
-        ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](std::string& xml) { Replace(xml, R"(text="Medium")", R"(text="Intermediate")"); }));
+        ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](String& xml) { Replace(xml, R"(text="Medium")", R"(text="Intermediate")"); }));
         UICanvasLayout& layout = _selector->GetLayout();
         LayOutInTheNarrowestWindow(layout);
         const String problems = Problems(layout);
@@ -840,7 +840,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UISelectorScreenTest, ASegmentUnderTheTouchSizeIsCaughtByTheValidator) {
-        ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](std::string& xml) { Replace(xml, R"(name="LevelMax" flex="1" height="56")", R"(name="LevelMax" flex="1" height="40")"); }));
+        ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](String& xml) { Replace(xml, R"(name="LevelMax" flex="1" height="56")", R"(name="LevelMax" flex="1" height="40")"); }));
         const auto failures = ValidatePanel(*_selector);
         EXPECT_TRUE(HasIssue(failures, UILayoutIssueKind::TouchTargetTooSmall)) << DescribeMatrixFailures(failures).c_str();
         EXPECT_NE(ProblemsOnMatrix(*_selector).find("LevelMax is 40.0 units high"), String::npos);
@@ -849,7 +849,7 @@ namespace BECore::Tests {
     TEST_F(UISelectorScreenTest, ASegmentWithoutAnExplicitHeightHasNoRectAndIsCaughtHere) {
         // The gotcha of the widget: flex shares the width, not the height, so a segment without `height` gets a rect of height 0. It is not drawn, a click cannot find it
         // (`ui_click` answers "hidden") and the validator skips an empty rect, so only Problems() sees it
-        ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](std::string& xml) { Replace(xml, R"(name="LevelHard" flex="1" height="56")", R"(name="LevelHard" flex="1")"); }));
+        ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](String& xml) { Replace(xml, R"(name="LevelHard" flex="1" height="56")", R"(name="LevelHard" flex="1")"); }));
         ASSERT_TRUE(UICanvasComponent::SetVisibleByName(GetScene(), "Selector"_intern, true));
         Draw();
         EXPECT_NEAR(El("LevelHard").rect.h, 0.0f, 0.01f);

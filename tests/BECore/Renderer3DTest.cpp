@@ -180,8 +180,8 @@ namespace BECore::Tests {
             Renderer3D renderer3D;
         };
 
-        std::array<float, Mat4::kElementCount> ElementsOf(const Mat4& matrix) {
-            std::array<float, Mat4::kElementCount> elements{};
+        Array<float, Mat4::kElementCount> ElementsOf(const Mat4& matrix) {
+            Array<float, Mat4::kElementCount> elements{};
             std::copy(matrix.Data(), matrix.Data() + Mat4::kElementCount, elements.begin());
             return elements;
         }
@@ -328,7 +328,7 @@ namespace BECore::Tests {
 
     TEST(Renderer3DRenderTest, AnInstanceWithoutATextureGetsOneSharedWhiteTexture) {
         Renderer3DFixture f;
-        const std::array<uint8_t, 4> pixel = {1, 2, 3, 4};
+        const Array<uint8_t, 4> pixel = {1, 2, 3, 4};
         IntrusivePtr<ITexture> own = f.renderer.CreateTexture(pixel.data(), 1, 1);
         f.scene.instances.push_back(MeshInstance{f.cube.Get(), Material{own, Color{255, 255, 255, 255}}, Mat4::Identity()});
         f.scene.instances.push_back(MeshInstance{f.cube.Get(), Material{}, Mat4::Identity()});

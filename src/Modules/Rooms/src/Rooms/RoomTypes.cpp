@@ -6,7 +6,7 @@ namespace BECore {
 
     RandomFn MakeSecureRandom() {
         // std::function needs a copyable callable and std::random_device is not
-        auto device = eastl::make_shared<std::random_device>();
+        auto device = MakeShared<std::random_device>();
         return [device]() -> uint64_t {
             const uint64_t high = (*device)();
             const uint64_t low = (*device)();

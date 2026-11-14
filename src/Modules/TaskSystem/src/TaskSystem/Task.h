@@ -151,7 +151,7 @@ namespace BECore {
          */
         template <typename T>
         struct TaskPromise : TaskPromiseBase<T> {
-            std::variant<std::monostate, T> _result;
+            Variant<std::monostate, T> _result;
 
             Task<T> get_return_object() noexcept;
 

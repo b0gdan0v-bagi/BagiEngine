@@ -220,7 +220,7 @@ namespace BECore {
             Optional<float> opacity;
             Optional<TransitionValue> transition;
             Optional<float> transitionScale;
-            Optional<std::pair<float, float>> transitionSlide;
+            Optional<Pair<float, float>> transitionSlide;
             Optional<bool> transitionInput;
             /// Set by a handler that applied a value with a caveat (a blurred shadow drawn hard): the check of the declarations reports it, the value still counts
             String note;
@@ -248,7 +248,7 @@ namespace BECore {
 
         /// The CSS easings the engine has a curve for: `ease` is the quadratic in-out, the others the quadratic or the line
         Optional<EaseType> ParseEase(StringView word) {
-            static const std::pair<StringView, EaseType> Names[] = {
+            static const Pair<StringView, EaseType> Names[] = {
                 {"linear", EaseType::Linear}, {"ease", EaseType::QuadInOut}, {"ease-in", EaseType::QuadIn}, {"ease-out", EaseType::QuadOut}, {"ease-in-out", EaseType::QuadInOut}};
             for (const auto& [name, ease] : Names) {
                 if (word == name) {
@@ -409,7 +409,7 @@ namespace BECore {
 
         /// "top-left" to "TopLeft"; empty when it is not an anchor name
         String AnchorName(StringView value) {
-            static const std::pair<StringView, const char*> Names[] = {
+            static const Pair<StringView, const char*> Names[] = {
                 {"top-left", "TopLeft"},       {"top", "Top"},       {"top-right", "TopRight"},       {"left", "Left"},      {"center", "Center"}, {"right", "Right"},
                 {"bottom-left", "BottomLeft"}, {"bottom", "Bottom"}, {"bottom-right", "BottomRight"}, {"stretch", "Stretch"}};
             const String lower = UIWebText::ToLower(value);
@@ -818,7 +818,7 @@ namespace BECore {
                  if (!x || !y) {
                      return false;
                  }
-                 r.transitionSlide = std::make_pair(*x, *y);
+                 r.transitionSlide = MakePair(*x, *y);
                  return true;
              }},
             {"-be-transition-input",
@@ -1129,12 +1129,12 @@ namespace BECore {
                 return nullptr;
             }
 
-            [[nodiscard]] const Vector<std::pair<String, String>>& Entries() const {
+            [[nodiscard]] const Vector<Pair<String, String>>& Entries() const {
                 return _entries;
             }
 
         private:
-            Vector<std::pair<String, String>> _entries;
+            Vector<Pair<String, String>> _entries;
         };
 
         String Number(float value) {
@@ -1215,7 +1215,7 @@ namespace BECore {
         private:
             struct Override {
                 int node = -1;
-                Vector<std::pair<String, String>> values;
+                Vector<Pair<String, String>> values;
             };
 
             struct VariantOutput {
@@ -1301,8 +1301,8 @@ namespace BECore {
                 }
                 const bool hasVar = UIWebText::ToLower(declaration.value).find("var(") != String::npos;
                 const String message = result == ApplyResult::UnknownProperty ? Format("property '{}' is not supported", UIText::Excerpt(declaration.property).c_str())
-                                       : hasVar                               ? Format("'{}: {}': var() is read only as var(--name) of a theme token, with no fallback value, where a color is read",
-                                                                                       UIText::Excerpt(declaration.property).c_str(), UIText::Excerpt(declaration.value).c_str())
+                                       : hasVar ? Format("'{}: {}': var() is read only as var(--name) of a theme token, with no fallback value, where a color is read",
+                                                         UIText::Excerpt(declaration.property).c_str(), UIText::Excerpt(declaration.value).c_str())
                                                 : Format("'{}: {}' is not understood or not supported", UIText::Excerpt(declaration.property).c_str(), UIText::Excerpt(declaration.value).c_str());
                 if (_report.AddOnce(SourceOf(declaration), declaration.line, message)) {
                     ++_report.declarationsUnsupported;
@@ -2247,7 +2247,7 @@ namespace BECore {
 
             /// `:hover`, `:active`, `:disabled` and `:checked` of a button become its hoverColor, pressedColor, disabledColor and selectedColor
             void ApplyStates() {
-                static const std::pair<CascadeState, const char*> States[] = {
+                static const Pair<CascadeState, const char*> States[] = {
                     {CascadeState::Hover, "hoverColor"}, {CascadeState::Active, "pressedColor"}, {CascadeState::Disabled, "disabledColor"}, {CascadeState::Checked, "selectedColor"}};
                 for (const auto& [state, colorKey] : States) {
                     const UICssPseudo pseudo = ToPseudo(state);
@@ -2667,7 +2667,7 @@ namespace BECore {
             Vector<Vector<UICssDeclaration>> _inlineStyles;
             Vector<WebNode> _nodes;
             Vector<Attrs> _baseAttrs;
-            eastl::hash_set<String> _usedNames;
+            HashSet<String> _usedNames;
             HashMap<String, int> _nextNameSuffix;  ///< per tag, where UniqueName goes on counting
             size_t _cascadeWork = 0;
         };

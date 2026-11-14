@@ -378,7 +378,7 @@ namespace BECore {
         constexpr float kDefaultAt = 0.5f;
 
         /// The point of a press: @p at (0..1) along the width, the middle of the height
-        std::pair<float, float> PointAt(const Rect& rect, float at) {
+        Pair<float, float> PointAt(const Rect& rect, float at) {
             const float travel = std::max(rect.w - 2.0f * kEdgeInset, 0.0f);
             return {rect.x + (rect.w - travel) * kHalf + travel * at, rect.y + rect.h * kHalf};
         }

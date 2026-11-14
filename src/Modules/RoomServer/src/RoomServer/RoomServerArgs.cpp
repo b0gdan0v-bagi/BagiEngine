@@ -35,7 +35,9 @@ namespace BECore {
             const char* variable;
         };
 
-        constexpr std::array kOptions{
+        constexpr size_t kOptionCount = static_cast<size_t>(Option::ShutdownGrace) + 1;  // ShutdownGrace stays the last Option
+
+        constexpr Array<OptionInfo, kOptionCount> kOptions{
             OptionInfo{Option::Port, "--port", "PORT"},
             OptionInfo{Option::Bind, "--bind", "BAGI_ROOMS_BIND"},
             OptionInfo{Option::Origin, "--origin", "BAGI_ROOMS_ORIGINS"},
@@ -50,6 +52,9 @@ namespace BECore {
             OptionInfo{Option::StatsInterval, "--stats-interval-ms", "BAGI_ROOMS_STATS_INTERVAL_MS"},
             OptionInfo{Option::ShutdownGrace, "--shutdown-grace-ms", "BAGI_ROOMS_SHUTDOWN_GRACE_MS"},
         };
+
+        // an Option without its entry above leaves a value-initialized one (a null flag) at the end
+        static_assert(kOptions[kOptionCount - 1].flag != nullptr, "every Option needs an entry in kOptions");
 
         const OptionInfo* FindOptionByFlag(StringView flag) {
             for (const OptionInfo& info : kOptions) {

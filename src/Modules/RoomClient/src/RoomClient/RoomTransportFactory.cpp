@@ -12,9 +12,9 @@ namespace BECore {
 
     UniquePtr<IRoomTransport> MakeDefaultRoomTransport() {
 #if PLATFORM_WEB
-        return eastl::make_unique<EmscriptenRoomTransport>();
+        return MakeUnique<EmscriptenRoomTransport>();
 #elif BE_WITH_REMOTE_CONTROL
-        return eastl::make_unique<NativeRoomTransport>();
+        return MakeUnique<NativeRoomTransport>();
 #else
         // A build without sockets that is not the browser has no transport
         return nullptr;

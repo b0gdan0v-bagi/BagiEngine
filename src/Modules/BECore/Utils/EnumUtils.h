@@ -13,20 +13,20 @@ namespace BECore {
         static consteval auto enumName() {
 #if defined(__clang__)
             // Clang (including ClangCL on Windows): auto Impl::enumName() [EnumVal = align::CM]
-            constexpr std::string_view sv{__PRETTY_FUNCTION__};  // std: eastl::string_view::find_last_of is not constexpr
+            constexpr std::string_view sv{__PRETTY_FUNCTION__};  //-NoStd: eastl::string_view::find_last_of is not constexpr
             constexpr auto last = sv.find_last_of("]");
 #elif defined(_MSC_VER)
             // MSVC: auto __cdecl Impl::enumName<align::CM>(void)
-            constexpr std::string_view sv{__FUNCSIG__};  // std: as above  // NOLINT(clang-diagnostic-language-extension-token)
+            constexpr std::string_view sv{__FUNCSIG__};  //-NoStd: as above  // NOLINT(clang-diagnostic-language-extension-token)
             constexpr size_t last = sv.find_last_of(">");
 #else
             // GCC: consteval auto Impl::enumName() [with auto EnumVal = align::CM]
-            constexpr std::string_view sv{__PRETTY_FUNCTION__};  // std: eastl::string_view::find_last_of is not constexpr
+            constexpr std::string_view sv{__PRETTY_FUNCTION__};  //-NoStd: eastl::string_view::find_last_of is not constexpr
             constexpr auto last = sv.find_last_of("]");
 #endif
             constexpr size_t first = sv.find_last_of(':', last) + 1;
-            std::array<char, last - first + 1> buf{};                                      // +1 '\0' terminated c_str
-            ranges::copy(std::string_view{sv.data() + first, last - first}, buf.begin());  // std: as above
+            Array<char, last - first + 1> buf{};                                           // +1 '\0' terminated c_str
+            ranges::copy(std::string_view{sv.data() + first, last - first}, buf.begin());  //-NoStd: as above
             return buf;
         }
 
@@ -172,7 +172,7 @@ namespace BECore {
         }
 
         /// Parse std::string_view to enum
-        static constexpr Enum FromString(std::string_view str) noexcept {  // std: the callers that hold a std view
+        static constexpr Enum FromString(std::string_view str) noexcept {  //-NoStd: the callers that hold a std view
             return Tok().ToEnum(FromStd(str));
         }
 
@@ -196,7 +196,7 @@ namespace BECore {
         }
 
         /// Safe cast from std::string_view to enum (returns nullopt on failure)
-        static constexpr Optional<Enum> Cast(std::string_view str) noexcept {  // std: the callers that hold a std view
+        static constexpr Optional<Enum> Cast(std::string_view str) noexcept {  //-NoStd: the callers that hold a std view
             return Cast(FromStd(str));
         }
 
@@ -252,10 +252,10 @@ namespace BECore::Detail {
  * only for enum types that support EnumUtils::ToString().
  */
 template <typename Enum>
-struct fmt::formatter<Enum, std::enable_if_t<BECore::Detail::HasEnumUtils<Enum>::value, char>> : fmt::formatter<std::string_view> {  // std: fmt formats std::string_view
+struct fmt::formatter<Enum, std::enable_if_t<BECore::Detail::HasEnumUtils<Enum>::value, char>> : fmt::formatter<std::string_view> {  //-NoStd: fmt formats std::string_view
     auto format(Enum e, fmt::format_context& ctx) const -> decltype(ctx.out()) {
         auto sv = BECore::EnumUtils<Enum>::ToString(e);
-        return fmt::formatter<std::string_view>::format(BECore::ToStd(sv), ctx);  // std: fmt
+        return fmt::formatter<std::string_view>::format(BECore::ToStd(sv), ctx);  //-NoStd: fmt
     }
 };
 

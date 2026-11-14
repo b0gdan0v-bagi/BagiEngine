@@ -7,7 +7,7 @@ namespace BECore::Tests {
 
         constexpr float kTolerance = 1e-3f;
 
-        float RatioOf(const std::pair<uint32_t, uint32_t>& size) {
+        float RatioOf(const Pair<uint32_t, uint32_t>& size) {
             return static_cast<float>(size.first) / static_cast<float>(size.second);
         }
 
@@ -49,8 +49,8 @@ namespace BECore::Tests {
     }
 
     TEST(UIPreviewTest, AnAreaWithNoSizeGivesNoImageAndATinyOneIsAtLeastOnePixel) {
-        EXPECT_EQ(UIPreview::FitSize(ViewportAspect::Free, 0.0f, 600.0f), (std::pair<uint32_t, uint32_t>{0, 0}));
-        EXPECT_EQ(UIPreview::FitSize(ViewportAspect::Wide16x9, 600.0f, 0.5f), (std::pair<uint32_t, uint32_t>{0, 0}));
+        EXPECT_EQ(UIPreview::FitSize(ViewportAspect::Free, 0.0f, 600.0f), (Pair<uint32_t, uint32_t>{0, 0}));
+        EXPECT_EQ(UIPreview::FitSize(ViewportAspect::Wide16x9, 600.0f, 0.5f), (Pair<uint32_t, uint32_t>{0, 0}));
 
         const auto tiny = UIPreview::FitSize(ViewportAspect::UltraWide21x9, 1.0f, 100.0f);
         EXPECT_GE(tiny.first, 1u);
@@ -225,7 +225,7 @@ namespace BECore::Tests {
         PreviewShape custom;
         custom.custom = true;
         for (const PreviewShape& shape : {PreviewShape{}, device, custom}) {
-            for (const auto& area : {std::pair<float, float>{0.0f, 600.0f}, std::pair<float, float>{800.0f, 0.5f}}) {
+            for (const auto& area : {Pair<float, float>{0.0f, 600.0f}, Pair<float, float>{800.0f, 0.5f}}) {
                 const PreviewTarget target = UIPreview::TargetFor(shape, area.first, area.second);
                 EXPECT_EQ(target.width, 0u);
                 EXPECT_EQ(target.height, 0u);
@@ -289,7 +289,7 @@ namespace BECore::Tests {
             devices.push_back(&device);
         }
         for (const PreviewDevice* device : devices) {
-            for (const auto& size : {std::pair<float, float>{device->width, device->height}, std::pair<float, float>{device->height, device->width}, std::pair<float, float>{64.0f, 64.0f}}) {
+            for (const auto& size : {Pair<float, float>{device->width, device->height}, Pair<float, float>{device->height, device->width}, Pair<float, float>{64.0f, 64.0f}}) {
                 const Rect safe = UIPreview::SimulatedSafeArea(SafeAreaSimulation::Device, device, size.first, size.second);
                 SCOPED_TRACE(Format("{} {}x{}", device->name, size.first, size.second).c_str());
                 EXPECT_GE(safe.x, 0.0f);

@@ -1,5 +1,7 @@
 #include "ReflectionAliasesTest.h"
 
+#include "FactoryInitializeTest.h"
+
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/BinarySerializer.h>
 #include <BECore/Reflection/DataAccessor.h>
@@ -28,6 +30,7 @@ namespace BECore::Tests {
     static_assert(Ser::HasDataAccessor<Map<String, int32_t>>);
     static_assert(Ser::HasDataAccessor<FixedHashMap<String, int32_t, 8>>);
     static_assert(Ser::HasDataAccessor<Optional<int32_t>>);
+    static_assert(Ser::HasDataAccessor<Pair<int32_t, String>>);
 
     // The aliases that are not reflected today: a field of one of them does not compile. Adding support is a decision to make
     // on purpose (the serialized form of a sorted vector, of a view and of a pointer to one object has to be chosen), and this
@@ -36,6 +39,11 @@ namespace BECore::Tests {
     static_assert(!Ser::HasDataAccessor<FlatSet<int32_t>>);
     static_assert(!Ser::HasDataAccessor<Span<int32_t>>);
     static_assert(!Ser::HasDataAccessor<UniquePtr<int32_t>>);
+    static_assert(!Ser::HasDataAccessor<SharedPtr<int32_t>>);
+    static_assert(!Ser::HasDataAccessor<HashSet<int32_t>>);
+    static_assert(!Ser::HasDataAccessor<Set<int32_t>>);
+    static_assert(!Ser::HasDataAccessor<Variant<int32_t, float>>);
+    static_assert(!Ser::HasDataAccessor<Tuple<int32_t, float>>);
 
     TEST(ReflectionAliasesTest, CompileTimeChecks) {
         SUCCEED() << "The static_asserts at the top of this file are the check";
@@ -61,6 +69,7 @@ namespace BECore::Tests {
             }
             state.present = 42;
             state.absent.reset();
+            state.entry = {11, "eleven"};
         }
 
         template <typename State>
@@ -117,6 +126,7 @@ namespace BECore::Tests {
             state.fixedHashed["stale"] = 1;
             state.present.reset();
             state.absent = 5;
+            state.entry = {0, "stale"};
         }
 
         void ExpectFilled(const AliasState& state) {
@@ -143,6 +153,8 @@ namespace BECore::Tests {
             EXPECT_TRUE(state.present.has_value());
             EXPECT_EQ(state.present.value_or(0), 42);
             EXPECT_FALSE(state.absent.has_value());
+            EXPECT_EQ(state.entry.first, 11);
+            EXPECT_EQ(state.entry.second, "eleven");
         }
 
     }  // namespace
@@ -188,6 +200,29 @@ namespace BECore::Tests {
         AliasState loaded;
         ASSERT_NO_FATAL_FAILURE(LoadXml(SaveXml(before), loaded));
         ExpectFilled(loaded);
+    }
+
+    TEST(ReflectionAliasesTest, ThePairIsSavedAsTheEastlPairIs) {
+        const Pair<int32_t, String> aliased{4, "four"};
+        const eastl::pair<int32_t, eastl::string> reference{4, "four"};
+        const auto save = [](const auto& pair) {
+            XmlSerializer serializer;
+            if (serializer.BeginObject("State")) {
+                Ser::Save(serializer, pair, "pair");
+                serializer.EndObject();
+            }
+            return serializer.SaveToString();
+        };
+        const eastl::string xml = save(aliased);
+        EXPECT_EQ(xml, save(reference));
+
+        Pair<int32_t, String> loaded{0, "stale"};
+        XmlDeserializer deserializer;
+        ASSERT_TRUE(deserializer.LoadFromString(xml));
+        ASSERT_TRUE(deserializer.BeginObject("State"));
+        EXPECT_TRUE(Ser::Load(deserializer, loaded, "pair"));
+        deserializer.EndObject();
+        EXPECT_EQ(loaded, aliased);
     }
 
     TEST(ReflectionAliasesTest, SkippedDefaultsOmitEmptyAliasFields) {
@@ -244,6 +279,178 @@ namespace BECore::Tests {
         deserializer.EndObject();
         EXPECT_EQ(source.size(), 2u);
         EXPECT_TRUE(source.contains("a"));
+    }
+
+    namespace {
+
+        /// What a fixed container that cannot overflow reports when the file has more than it holds: one error, under the field
+        void ExpectOneDropReport(const IDeserializer& deserializer, StringView field, StringView message) {
+            ASSERT_TRUE(deserializer.HasErrors());
+            ASSERT_EQ(deserializer.GetErrors().size(), 1u);
+            EXPECT_EQ(deserializer.GetErrors()[0].path.ToStringView(), field);
+            EXPECT_EQ(deserializer.GetErrors()[0].errorMessage.ToStringView(), message);
+        }
+
+        template <typename Value>
+        ByteBuffer SaveBinaryField(const Value& value) {
+            BinarySerializer serializer;
+            if (serializer.BeginObject("State")) {
+                Ser::Save(serializer, value, "value");
+                serializer.EndObject();
+            }
+            return serializer.GetData();
+        }
+
+        /// Loads @p value from XML text `<root><State>...</State></root>` and leaves the errors in @p deserializer
+        template <typename Value>
+        void LoadXmlField(XmlDeserializer& deserializer, const eastl::string& xml, Value& value) {
+            ASSERT_TRUE(deserializer.LoadFromString(xml));
+            ASSERT_TRUE(deserializer.BeginObject("State"));
+            Ser::Load(deserializer, value, "value");
+            deserializer.EndObject();
+        }
+
+        template <typename Value>
+        void LoadBinaryField(BinaryDeserializer& deserializer, const ByteBuffer& data, Value& value) {
+            ASSERT_TRUE(deserializer.LoadFromBuffer(data));
+            ASSERT_TRUE(deserializer.BeginObject("State"));
+            Ser::Load(deserializer, value, "value");
+            deserializer.EndObject();
+        }
+
+        constexpr StringView kDroppedText = "Data lost, the fixed container is full: kept 7 of 10 bytes";
+        constexpr StringView kDroppedEntries = "Data lost, the fixed container is full: kept 2 of 3 entries";
+        constexpr StringView kDroppedItems = "Data lost, the fixed container is full: kept 2 of 4 items";
+
+    }  // namespace
+
+    TEST(ReflectionAliasesTest, ATextTooLongForAFixedStringThatCannotOverflowReportsTheDroppedTextFromXml) {
+        FixedString<8, false> text;
+        XmlDeserializer deserializer;
+        LoadXmlField(deserializer, "<root><State value=\"0123456789\"/></root>", text);
+        EXPECT_EQ(text, "0123456");
+        ExpectOneDropReport(deserializer, "State.value", kDroppedText);
+    }
+
+    TEST(ReflectionAliasesTest, ATextTooLongForAFixedStringThatCannotOverflowReportsTheDroppedTextFromBinary) {
+        FixedString<64> roomy = "0123456789";
+        FixedString<8, false> text;
+        BinaryDeserializer deserializer;
+        LoadBinaryField(deserializer, SaveBinaryField(roomy), text);
+        EXPECT_EQ(text, "0123456");
+        ExpectOneDropReport(deserializer, "State.value", kDroppedText);
+    }
+
+    TEST(ReflectionAliasesTest, ATextThatFitsReportsNothing) {
+        FixedString<8, false> text;
+        FixedString<8, false> exact;
+        XmlDeserializer xml;
+        LoadXmlField(xml, "<root><State value=\"0123456\"/></root>", text);
+        EXPECT_EQ(text, "0123456");
+        EXPECT_FALSE(xml.HasErrors());
+
+        BinaryDeserializer binary;
+        LoadBinaryField(binary, SaveBinaryField(FixedString<64>("0123456")), exact);
+        EXPECT_EQ(exact, "0123456");
+        EXPECT_FALSE(binary.HasErrors());
+
+        FixedString<4> roomy;
+        XmlDeserializer overflowing;
+        LoadXmlField(overflowing, "<root><State value=\"0123456789\"/></root>", roomy);
+        EXPECT_EQ(roomy, "0123456789");
+        EXPECT_FALSE(overflowing.HasErrors());
+    }
+
+    TEST(ReflectionAliasesTest, MoreEntriesThanAFixedHashMapThatCannotOverflowHoldsAreReportedFromXml) {
+        FixedHashMap<String, int32_t, 2, 3, false> map;
+        XmlDeserializer deserializer;
+        LoadXmlField(deserializer, "<root><State><value><entry key=\"a\" value=\"1\"/><entry key=\"b\" value=\"2\"/><entry key=\"c\" value=\"3\"/></value></State></root>", map);
+        EXPECT_EQ(map.size(), 2u);
+        EXPECT_TRUE(map.contains("a"));
+        EXPECT_TRUE(map.contains("b"));
+        ExpectOneDropReport(deserializer, "State.value", kDroppedEntries);
+    }
+
+    TEST(ReflectionAliasesTest, MoreEntriesThanAFixedHashMapThatCannotOverflowHoldsAreReportedFromBinary) {
+        FixedHashMap<String, int32_t, 8> roomy;
+        roomy["a"] = 1;
+        roomy["b"] = 2;
+        roomy["c"] = 3;
+        FixedHashMap<String, int32_t, 2, 3, false> map;
+        BinaryDeserializer deserializer;
+        LoadBinaryField(deserializer, SaveBinaryField(roomy), map);
+        EXPECT_EQ(map.size(), 2u);
+        EXPECT_TRUE(map.contains("a"));
+        EXPECT_TRUE(map.contains("b"));
+        ExpectOneDropReport(deserializer, "State.value", kDroppedEntries);
+    }
+
+    TEST(ReflectionAliasesTest, EntriesThatFitAFixedHashMapReportNothing) {
+        FixedHashMap<String, int32_t, 2, 3, false> map;
+        XmlDeserializer xml;
+        LoadXmlField(xml, "<root><State><value><entry key=\"a\" value=\"1\"/><entry key=\"b\" value=\"2\"/></value></State></root>", map);
+        EXPECT_EQ(map.size(), 2u);
+        EXPECT_FALSE(xml.HasErrors());
+
+        FixedHashMap<String, int32_t, 2, 3> overflowing;
+        XmlDeserializer roomy;
+        LoadXmlField(roomy, "<root><State><value><entry key=\"a\" value=\"1\"/><entry key=\"b\" value=\"2\"/><entry key=\"c\" value=\"3\"/></value></State></root>", overflowing);
+        EXPECT_EQ(overflowing.size(), 3u);
+        EXPECT_FALSE(roomy.HasErrors());
+    }
+
+    TEST(ReflectionAliasesTest, MoreItemsThanAFixedVectorHoldsAreCutAndReportedFromXml) {
+        FixedVector<int32_t, 2> list;
+        XmlDeserializer deserializer;
+        LoadXmlField(deserializer, "<root><State><value><item value=\"1\"/><item value=\"2\"/><item value=\"3\"/><item value=\"4\"/></value></State></root>", list);
+        ASSERT_EQ(list.size(), 2u);
+        EXPECT_EQ(list[0], 1);
+        EXPECT_EQ(list[1], 2);
+        ExpectOneDropReport(deserializer, "State.value", kDroppedItems);
+    }
+
+    TEST(ReflectionAliasesTest, MoreItemsThanAFixedVectorHoldsAreCutAndReportedFromBinary) {
+        FixedVector<int32_t, 8> roomy;
+        roomy = {1, 2, 3, 4};
+        FixedVector<int32_t, 2> list;
+        BinaryDeserializer deserializer;
+        LoadBinaryField(deserializer, SaveBinaryField(roomy), list);
+        ASSERT_EQ(list.size(), 2u);
+        EXPECT_EQ(list[1], 2);
+        ExpectOneDropReport(deserializer, "State.value", kDroppedItems);
+    }
+
+    TEST(ReflectionAliasesTest, ItemsThatFitAFixedVectorReportNothing) {
+        FixedVector<int32_t, 2> list;
+        XmlDeserializer deserializer;
+        LoadXmlField(deserializer, "<root><State><value><item value=\"1\"/><item value=\"2\"/></value></State></root>", list);
+        EXPECT_EQ(list.size(), 2u);
+        EXPECT_FALSE(deserializer.HasErrors());
+    }
+
+    TEST(ReflectionAliasesTest, MoreFactoryItemsThanAFixedVectorHoldsAreCutAndReportedFromXml) {
+        FixedVector<IntrusivePtrNonAtomic<InitProbe>, 2> probes;
+        XmlDeserializer deserializer;
+        LoadXmlField(deserializer,
+                     "<root><State><value><probe type=\"InitProbePlain\" id=\"1\"/><probe type=\"InitProbePlain\" id=\"2\"/>"
+                     "<probe type=\"InitProbePlain\" id=\"3\"/><probe type=\"InitProbePlain\" id=\"4\"/></value></State></root>",
+                     probes);
+        ASSERT_EQ(probes.size(), 2u);
+        EXPECT_TRUE(probes[0]->Is<InitProbePlain>());
+        ExpectOneDropReport(deserializer, "State.value", kDroppedItems);
+    }
+
+    TEST(ReflectionAliasesTest, MoreFactoryItemsThanAFixedVectorHoldsAreCutAndReportedFromBinary) {
+        Vector<IntrusivePtrNonAtomic<InitProbe>> roomy;
+        for (int32_t i = 0; i < 4; ++i) {
+            roomy.push_back(New<InitProbePlain>());
+        }
+        FixedVector<IntrusivePtrNonAtomic<InitProbe>, 2> probes;
+        BinaryDeserializer deserializer;
+        LoadBinaryField(deserializer, SaveBinaryField(roomy), probes);
+        ASSERT_EQ(probes.size(), 2u);
+        EXPECT_TRUE(probes[1]->Is<InitProbePlain>());
+        ExpectOneDropReport(deserializer, "State.value", kDroppedItems);
     }
 
     namespace {

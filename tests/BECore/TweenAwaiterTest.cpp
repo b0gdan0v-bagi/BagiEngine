@@ -48,7 +48,7 @@ namespace BECore::Tests {
         }
 
         /// The coroutine frame holds @p guard: a use count of 1 on the test side means the frame is gone
-        Task<void> AwaitHandleWithGuard([[maybe_unused]] eastl::shared_ptr<int> guard, IntrusivePtr<TweenHandle> handle, Log& log, int id) {
+        Task<void> AwaitHandleWithGuard([[maybe_unused]] SharedPtr<int> guard, IntrusivePtr<TweenHandle> handle, Log& log, int id) {
             const TweenResult result = co_await AwaitTween(std::move(handle));
             log.order.push_back(id);
             log.results.push_back(result);
@@ -285,7 +285,7 @@ namespace BECore::Tests {
     TEST(TweenAwaiterTest, ClearNeverResumesAWaiterAndTheFrameIsFreedByDroppingTheTask) {
         TweenManager tweens;
         Log log;
-        auto guard = eastl::make_shared<int>(0);
+        auto guard = MakeShared<int>(0);
         {
             Task<void> task = AwaitHandleWithGuard(guard, StartSilent(tweens, kOneSecond), log, 1);
             task.Resume();
@@ -304,7 +304,7 @@ namespace BECore::Tests {
 
     TEST(TweenAwaiterTest, TheDestructorOfTheManagerNeverResumesAWaiter) {
         Log log;
-        auto guard = eastl::make_shared<int>(0);
+        auto guard = MakeShared<int>(0);
         IntrusivePtr<TweenHandle> handle;
         Task<void> task;
         {
@@ -325,7 +325,7 @@ namespace BECore::Tests {
     TEST(TweenAwaiterTest, ATaskDroppedWhileItWaitsIsNeverResumed) {
         TweenManager tweens;
         Log log;
-        auto guard = eastl::make_shared<int>(0);
+        auto guard = MakeShared<int>(0);
         const auto handle = StartSilent(tweens, kOneSecond);
         {
             Task<void> task = AwaitHandleWithGuard(guard, handle, log, 1);

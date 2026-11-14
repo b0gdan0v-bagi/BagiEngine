@@ -141,7 +141,7 @@ namespace BECore::Stress::Tests {
         SetCount(20);
         Update();  // builds the nodes and turns them for the first time
         auto transform = [&](size_t i) { return Field().GetChildren()[i]->GetComponent<TransformComponent>(); };
-        std::vector<float> before;
+        Vector<float> before;
         for (size_t i = 0; i < 20; ++i) {
             before.push_back(transform(i)->_rotation);
         }

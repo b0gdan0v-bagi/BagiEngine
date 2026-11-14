@@ -38,8 +38,8 @@ namespace BECore::Tests {
         }
 
         /// Frames of @p count identical text messages in one buffer
-        Vector<uint8_t> RepeatText(const std::string& text, int count) {
-            const auto frame = EncodeTextFrame(FromStd(text), kClientMask);
+        Vector<uint8_t> RepeatText(const String& text, int count) {
+            const auto frame = EncodeTextFrame(text, kClientMask);
             Vector<uint8_t> batch;
             batch.reserve(frame.size() * static_cast<size_t>(count));
             for (int i = 0; i < count; ++i) {
@@ -56,7 +56,7 @@ namespace BECore::Tests {
         class RoomWebSocketServerTest : public ::testing::Test {
         protected:
             void SetUp() override {
-                ASSERT_TRUE(registry.Register(SeatedGameInfo{"fake", FakeSeatedGame::kSeatCount}, [] { return eastl::make_unique<FakeSeatedGame>(); }));
+                ASSERT_TRUE(registry.Register(SeatedGameInfo{"fake", FakeSeatedGame::kSeatCount}, [] { return MakeUnique<FakeSeatedGame>(); }));
             }
 
             void TearDown() override {
@@ -66,7 +66,7 @@ namespace BECore::Tests {
             }
 
             uint16_t StartServer(RoomServerSettings settings = MakeSettings()) {
-                server = std::make_unique<RoomWebSocketServer>(registry, std::move(settings));
+                server = MakeUnique<RoomWebSocketServer>(registry, std::move(settings));
                 const auto port = server->Start();
                 EXPECT_TRUE(port.has_value()) << (port.has_value() ? "" : port.error().message.c_str());
                 return port.value_or(0);
@@ -85,7 +85,7 @@ namespace BECore::Tests {
             }
 
             SeatedGameRegistry registry;
-            std::unique_ptr<RoomWebSocketServer> server;
+            UniquePtr<RoomWebSocketServer> server;
         };
 
     }  // namespace
@@ -172,13 +172,13 @@ namespace BECore::Tests {
         ASSERT_TRUE(client.has_value());
 
         // A ping answers pong, garbage answers error: sent in a row, answered in a row
-        const std::vector<std::pair<std::string, std::string>> script = {
+        const Vector<Pair<String, String>> script = {
             {"{\"v\":1,\"type\":\"ping\"}", "pong"}, {"not json", "error"}, {"{\"v\":1,\"type\":\"ping\"}", "pong"}, {"{\"v\":1,\"type\":\"no_such\"}", "error"},
             {"{\"v\":1,\"type\":\"ping\"}", "pong"},
         };
         Vector<uint8_t> batch;
         for (const auto& [text, reply] : script) {
-            const auto frame = EncodeTextFrame(FromStd(text), kClientMask);
+            const auto frame = EncodeTextFrame(text, kClientMask);
             batch.insert(batch.end(), frame.data(), frame.data() + frame.size());
         }
         client->Raw().Send(AsBytes(batch));
@@ -264,7 +264,7 @@ namespace BECore::Tests {
         auto client = RoomSocketClient::Connect(port);
         ASSERT_TRUE(client.has_value());
 
-        client->Raw().Send(AsBytes(EncodeFrame(WebSocketOpcode::kBinary, AsBytes(std::string("\x01\x02")), kClientMask)));
+        client->Raw().Send(AsBytes(EncodeFrame(WebSocketOpcode::kBinary, AsBytes(String("\x01\x02")), kClientMask)));
         const auto close = client->WaitForClose();
         ASSERT_TRUE(close.has_value());
         EXPECT_EQ(CloseCodeOf(*close), WebSocketCloseCode::kUnsupportedData);
@@ -298,12 +298,12 @@ namespace BECore::Tests {
         auto good = WebSocketTestClient::Open(port);
         ASSERT_TRUE(good.has_value());
         good->Send(HandshakeRequest(port, "Origin: https://good.example\r\n", "rooms.example.net"));
-        EXPECT_TRUE(good->ReadHttpResponse().starts_with("HTTP/1.1 101 "));
+        EXPECT_TRUE(StringView(good->ReadHttpResponse()).starts_with("HTTP/1.1 101 "));
 
         auto evil = WebSocketTestClient::Open(port);
         ASSERT_TRUE(evil.has_value());
         evil->Send(HandshakeRequest(port, "Origin: https://evil.example\r\n", "rooms.example.net"));
-        EXPECT_TRUE(evil->ReadHttpResponse().starts_with("HTTP/1.1 403 Forbidden\r\n"));
+        EXPECT_TRUE(StringView(evil->ReadHttpResponse()).starts_with("HTTP/1.1 403 Forbidden\r\n"));
     }
 
     TEST_F(RoomWebSocketServerTest, PerAddressLimitRefusesTheNextConnection) {
@@ -318,7 +318,7 @@ namespace BECore::Tests {
         auto third = WebSocketTestClient::Open(port);
         ASSERT_TRUE(third.has_value());
         third->Send(HandshakeRequest(port));
-        EXPECT_TRUE(third->ReadHttpResponse().starts_with("HTTP/1.1 503 Service Unavailable\r\n"));
+        EXPECT_TRUE(StringView(third->ReadHttpResponse()).starts_with("HTTP/1.1 503 Service Unavailable\r\n"));
 
         first->Send(PingMessage{});
         EXPECT_TRUE(first->WaitFor(RoomMessageTypes::kPong).has_value());
@@ -777,7 +777,7 @@ namespace BECore::Tests {
             }
 
             /// Delivers the pending log entries, then the lines so far
-            [[nodiscard]] const std::vector<std::string>& Lines() {
+            [[nodiscard]] const Vector<String>& Lines() {
                 LogEvent::Flush();
                 return _lines;
             }
@@ -793,13 +793,13 @@ namespace BECore::Tests {
 
         private:
             void OnLog(const LogEvent& event) {
-                const std::string message(event.message.data(), event.message.size());
-                if (message.find("Room server: ") != std::string::npos && message.find(" connections, ") != std::string::npos && message.find(" rooms") != std::string::npos) {
+                const String message(event.message.data(), event.message.size());
+                if (message.find("Room server: ") != String::npos && message.find(" connections, ") != String::npos && message.find(" rooms") != String::npos) {
                     _lines.push_back(message);
                 }
             }
 
-            std::vector<std::string> _lines;
+            Vector<String> _lines;
         };
 
         RoomServerSettings MakeStatsSettings(ManualClock& clock, std::chrono::milliseconds interval = kStatsInterval) {
@@ -834,7 +834,7 @@ namespace BECore::Tests {
 
         clock.Advance(kStatsInterval + 100ms);
         ASSERT_TRUE(lines.WaitForCount(1));
-        EXPECT_NE(lines.Lines()[0].find("1 connections, 1 rooms"), std::string::npos) << lines.Lines()[0];
+        EXPECT_NE(lines.Lines()[0].find("1 connections, 1 rooms"), String::npos) << lines.Lines()[0];
 
         clock.Advance(5 * kStatsInterval);
         LetTicksPass();
@@ -845,7 +845,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(second.has_value());
         RoundTrip(*second);
         ASSERT_TRUE(lines.WaitForCount(2));
-        EXPECT_NE(lines.Lines()[1].find("2 connections, 1 rooms"), std::string::npos) << lines.Lines()[1];
+        EXPECT_NE(lines.Lines()[1].find("2 connections, 1 rooms"), String::npos) << lines.Lines()[1];
 
         auto third = RoomSocketClient::Connect(port);
         ASSERT_TRUE(third.has_value());
@@ -854,10 +854,10 @@ namespace BECore::Tests {
         EXPECT_EQ(lines.Lines().size(), 2u) << "a change inside the interval waits for it";
         clock.Advance(kStatsInterval + 100ms);
         ASSERT_TRUE(lines.WaitForCount(3));
-        EXPECT_NE(lines.Lines()[2].find("3 connections, 1 rooms"), std::string::npos) << lines.Lines()[2];
+        EXPECT_NE(lines.Lines()[2].find("3 connections, 1 rooms"), String::npos) << lines.Lines()[2];
 
-        for (const std::string& line : lines.Lines()) {
-            EXPECT_EQ(line.find("Host"), std::string::npos) << "no name in a log line: " << line;
+        for (const String& line : lines.Lines()) {
+            EXPECT_EQ(line.find("Host"), String::npos) << "no name in a log line: " << line;
         }
     }
 
@@ -880,7 +880,7 @@ namespace BECore::Tests {
         settings.hub.maxRoomsPerAddress = 4;
         const uint16_t port = StartServer(settings);
 
-        std::vector<RoomSocketClient> hosts;
+        Vector<RoomSocketClient> hosts;
         for (int i = 0; i < 4; ++i) {
             auto host = MakeHost(port);
             ASSERT_TRUE(host.has_value());
@@ -907,7 +907,7 @@ namespace BECore::Tests {
         settings.maxConnectionsPerAddress = 0;
         settings.hub.maxRoomsPerAddress = 1;
         const uint16_t port = StartServer(settings);
-        std::vector<RoomSocketClient> hosts;
+        Vector<RoomSocketClient> hosts;
         for (int i = 0; i < 3; ++i) {
             auto host = MakeHost(port);
             ASSERT_TRUE(host.has_value()) << "the image's --max-per-address 0 keeps every per-address rule off";
@@ -950,7 +950,7 @@ namespace BECore::Tests {
         settings.hub.maxRoomsPerAddress = 4;
         const uint16_t port = StartServer(settings);
 
-        std::vector<RoomSocketClient> hosts;
+        Vector<RoomSocketClient> hosts;
         for (const char* header : {"X-Forwarded-For: 203.0.113.1\r\n", "X-Forwarded-For: 203.0.113.2\r\n"}) {
             for (int i = 0; i < 4; ++i) {
                 auto client = RoomSocketClient::Connect(port, header);
@@ -971,7 +971,7 @@ namespace BECore::Tests {
 
     // ASan is the assertion: a function that held the clock itself would read freed memory
     TEST(ManualClockTest, AFunctionMadeFromTheClockOutlivesIt) {
-        auto clock = std::make_unique<ManualClock>();
+        auto clock = MakeUnique<ManualClock>();
         const RoomTime before = clock->Now();
         const std::function<RoomTime()> now = clock->AsFunction();
         clock->Advance(5s);

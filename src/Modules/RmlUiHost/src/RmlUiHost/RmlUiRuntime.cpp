@@ -30,7 +30,7 @@ namespace BECore {
     }
 
     Rml::String RmlUiRuntime::NextContextName() {
-        // std: Rml::String is a std::string
+        //-NoStd: Rml::String is a std::string
         return Rml::String("RmlUiDocument") + std::to_string(_nextContext++);
     }
 

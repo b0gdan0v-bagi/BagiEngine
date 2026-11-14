@@ -33,8 +33,8 @@ namespace BECore::Tests {
             return ZoneRecord{.site = &site, .beginTicks = begin, .endTicks = end, .depth = depth};
         }
 
-        std::vector<uint32_t> ThreadIds(const RingSnapshot& snapshot, const Vector<TimelineLane>& lanes) {
-            std::vector<uint32_t> ids;
+        Vector<uint32_t> ThreadIds(const RingSnapshot& snapshot, const Vector<TimelineLane>& lanes) {
+            Vector<uint32_t> ids;
             for (const TimelineLane& lane : lanes) {
                 ids.push_back(snapshot.threads[lane.threadIndex].threadId);
             }
@@ -112,7 +112,7 @@ namespace BECore::Tests {
         AddThread(snapshot, 9, 100).zones = {Zone(kOuterSite, 0, 10, 0)};
         AddThread(snapshot, 4, 0).zones = {Zone(kOuterSite, 0, 10, 0)};
         const auto lanes = LayoutLanes(snapshot, 0.0, 100.0);
-        EXPECT_EQ(ThreadIds(snapshot, lanes), (std::vector<uint32_t>{4, 9, 3, 7}));
+        EXPECT_EQ(ThreadIds(snapshot, lanes), (Vector<uint32_t>{4, 9, 3, 7}));
     }
 
     TEST(TimelineViewTest, LanesWithoutZonesInTheRangeAreHiddenAndRowsFollowTheDepth) {

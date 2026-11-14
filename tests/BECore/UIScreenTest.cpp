@@ -52,16 +52,16 @@ namespace BECore::Tests {
 
         constexpr const char* kHudAttributes = R"(space="Screen" scaleMode="ScaleWithScreen" referenceWidth="1280" referenceHeight="720" match="0.5" minScale="0.7" useSafeArea="true")";
 
-        std::string HudScenesXml() {
-            return std::string("<SceneManager><scenes><scene type=\"Scene\" name=\"Main\"><nodes><node name=\"Hud\" layer=\"10\"><components><component type=\"UICanvasComponent\" ") + kHudAttributes +
+        String HudScenesXml() {
+            return String("<SceneManager><scenes><scene type=\"Scene\" name=\"Main\"><nodes><node name=\"Hud\" layer=\"10\"><components><component type=\"UICanvasComponent\" ") + kHudAttributes +
                    ">" + kHudBody + "</component></components></node></nodes></scene></scenes></SceneManager>";
         }
 
         /// A pure canvas layout with the HUD, built through the same reflected path as a scene file
         void BuildHudLayout(UICanvasLayout& layout) {
-            const std::string xml = std::string("<root>") + kHudBody + "</root>";
+            const String xml = String("<root>") + kHudBody + "</root>";
             XmlDeserializer deserializer;
-            ASSERT_TRUE(deserializer.LoadFromString(FromStd(xml)));
+            ASSERT_TRUE(deserializer.LoadFromString(xml));
             UIScreenContent content;
             content.Deserialize(deserializer);  // positioned at the document's root element already
             ASSERT_FALSE(deserializer.HasErrors());
@@ -103,8 +103,8 @@ namespace BECore::Tests {
 
         void LoadScene() {
             XmlDeserializer deserializer;
-            const std::string xml = HudScenesXml();
-            ASSERT_TRUE(deserializer.LoadFromString(FromStd(xml)));
+            const String xml = HudScenesXml();
+            ASSERT_TRUE(deserializer.LoadFromString(xml));
             _manager = New<SceneManager>();
             _manager->Deserialize(deserializer);
             ASSERT_FALSE(deserializer.HasErrors());

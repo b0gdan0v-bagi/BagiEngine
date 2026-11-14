@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Moves the `eastl::` and `std::` type names of C++ sources to the BECore type layer (`BECore/Types/`).
 
-    python3 tools/codemod/codemod.py --root <folder> --family <optionals|views|strings|containers|maps|all>
+    python3 tools/codemod/codemod.py --root <folder> --family <optionals|views|strings|containers|maps|utility|all>
                                      [--dry-run] [--fail-on-change] [--report]
 
 It walks `*.h *.hpp *.inl *.cpp` under `--root`, skips the vendored zones, the type layer and the reflection traits, and works on code
 only: comments and string literals are blanked for matching and kept as they were. A line that must keep a `std::` type carries
-`// std: <why>` on it or on the line before; the tool never touches such a line. A second run changes nothing. Standard library only.
+`//-NoStd: <why>` on it or on the line before; the tool never touches such a line. A second run changes nothing. Standard library only.
 `CLAUDE.md` has the contract and the rules of each family.
 
 Exit code: 0 ok, 1 `--fail-on-change` found something to change, 2 an error (a bad root, a file that is not UTF-8).
@@ -26,7 +26,7 @@ from typing import Dict, Iterator, List, Optional, Sequence, Set, Tuple
 EXIT_OK, EXIT_CHANGES, EXIT_ERROR = 0, 1, 2
 
 SOURCE_SUFFIXES = {".h", ".hpp", ".inl", ".cpp"}
-FAMILIES = ("optionals", "views", "strings", "containers", "maps")
+FAMILIES = ("optionals", "views", "strings", "containers", "maps", "utility")
 # Folders never walked, at any depth (the vendored zones of the engine and the build and tool folders)
 SKIPPED_FOLDERS = {"EABase", "EnTT", "fmt", "imgui", "nlohmann", "pugixml", "RmlUi", "stb", "tracy", "external", ".venv", ".git", "node_modules", "__pycache__"}
 SKIPPED_FOLDER_PREFIXES = ("build",)
@@ -43,11 +43,10 @@ SKIPPED_FILES = (
     "tests/BECore/ReflectionAliasesTest.cpp",
     "tests/BECore/ReflectionAliasesTest.h",
 )
-# A path with one of these folders is test code: `std::string` and `std::vector` stay there
-TEST_FOLDERS = {"tests", "test"}
 EASTL_OPTIONAL_HEADER = re.compile(r"^[ \t]*#[ \t]*include[ \t]*<EASTL/optional\.h>[ \t]*\r?\n", re.MULTILINE)
 EASTL_OPTIONAL_LEFT = re.compile(r"(?<![\w:])(?:::)?eastl::(?:optional|nullopt|nullopt_t|make_optional|in_place|in_place_t|in_place_type|in_place_index|bad_optional_access)\b")
-STD_MARKER = re.compile(r"//\s*std:")
+# `//-NoStd: reason` exactly (no space after `//`): the old `// std: reason` and an ordinary comment that starts with a `std::` name are no markers
+STD_MARKER = re.compile(r"//-NoStd:")
 MAX_PASSES = 8
 
 # ---- blanking comments and literals ------------------------------------------------------------------------------------------
@@ -198,7 +197,7 @@ class Name:
     source: str
     alias: str
     max_args: Optional[int] = None  # more template arguments than this (an allocator, ...): reported, left
-    keep_in_tests: bool = False  # test code keeps it (std::string, std::string_view, std::vector)
+    template: bool = True  # a class template: a name with no `<` before `{`, `(` or a variable is CTAD (reported, left)
     pattern: "re.Pattern[str]" = field(init=False, compare=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -212,20 +211,41 @@ def qualified(name: str) -> "re.Pattern[str]":
 NAMES: Tuple[Name, ...] = (
     Name("optionals", "eastl::optional", "Optional", max_args=1),
     Name("optionals", "std::optional", "Optional", max_args=1),
-    Name("views", "eastl::string_view", "StringView"),
-    Name("views", "std::string_view", "StringView", keep_in_tests=True),
-    Name("strings", "eastl::string", "String"),
-    Name("strings", "std::string", "String", keep_in_tests=True),
+    Name("views", "eastl::string_view", "StringView", template=False),
+    Name("views", "std::string_view", "StringView", template=False),
+    Name("strings", "eastl::string", "String", template=False),
+    Name("strings", "std::string", "String", template=False),
     Name("containers", "eastl::vector", "Vector", max_args=1),
-    Name("containers", "std::vector", "Vector", max_args=1, keep_in_tests=True),
+    Name("containers", "std::vector", "Vector", max_args=1),
     Name("containers", "eastl::array", "Array", max_args=2),
+    Name("containers", "std::array", "Array", max_args=2),
     Name("containers", "eastl::span", "Span", max_args=2),
     Name("containers", "eastl::unique_ptr", "UniquePtr", max_args=2),
+    Name("containers", "std::unique_ptr", "UniquePtr", max_args=2),
     Name("maps", "eastl::hash_map", "HashMap", max_args=4),
     Name("maps", "eastl::unordered_map", "HashMap", max_args=4),
     Name("maps", "std::unordered_map", "HashMap", max_args=4),
     Name("maps", "eastl::map", "Map", max_args=3),
+    Name("maps", "std::map", "Map", max_args=3),
     Name("maps", "eastl::fixed_hash_map", "FixedHashMap", max_args=7),
+    Name("maps", "eastl::set", "Set", max_args=2),
+    Name("maps", "std::set", "Set", max_args=2),
+    Name("maps", "eastl::hash_set", "HashSet", max_args=3),
+    Name("maps", "eastl::unordered_set", "HashSet", max_args=3),
+    Name("maps", "std::unordered_set", "HashSet", max_args=3),
+    Name("utility", "eastl::pair", "Pair", max_args=2),
+    Name("utility", "std::pair", "Pair", max_args=2),
+    Name("utility", "eastl::make_pair", "MakePair", template=False),
+    Name("utility", "std::make_pair", "MakePair", template=False),
+    Name("utility", "eastl::variant", "Variant"),
+    Name("utility", "std::variant", "Variant"),
+    Name("utility", "std::tuple", "Tuple"),
+    Name("utility", "eastl::shared_ptr", "SharedPtr", max_args=1),
+    Name("utility", "std::shared_ptr", "SharedPtr", max_args=1),
+    Name("utility", "eastl::make_shared", "MakeShared", template=False),
+    Name("utility", "std::make_shared", "MakeShared", template=False),
+    Name("utility", "eastl::make_unique", "MakeUnique", template=False),
+    Name("utility", "std::make_unique", "MakeUnique", template=False),
 )
 
 # `eastl::nullopt` and friends: the optional is `std::optional`, so its companions are the standard ones.
@@ -237,6 +257,11 @@ OPTIONAL_COMPANIONS = (
     ("eastl::in_place", "std::in_place"),
 )
 
+# The `std::` companions of an `eastl::variant`: `Variant` is `std::variant`, so a file that had one moves these by hand
+EASTL_VARIANT = qualified("eastl::variant")
+EASTL_VARIANT_COMPANIONS = re.compile(r"(?<![\w:])(?:::)?eastl::(?:get|get_if|visit|holds_alternative|monostate|variant_size|variant_alternative|bad_variant_access)(?!\w)")
+# What follows a class template name written without arguments in a declaration or a call: `{`, `(`, or a variable and one of those or `=`
+CTAD_AFTER = re.compile(r"\s*(?:[{(]|\w+\s*[{(=](?!=))")
 FIXED_VECTOR = qualified("eastl::fixed_vector")
 FIXED_STRING = qualified("eastl::fixed_string")
 TO_STRING_EASTL = qualified("eastl::to_string")
@@ -266,11 +291,11 @@ class Note:
 class Pass:
     """One look at one file: the edits and notes its rules find in the current text."""
 
-    def __init__(self, source: str, families: Set[str], is_test: bool) -> None:
+    def __init__(self, source: str, families: Set[str], had_eastl_variant: bool = False) -> None:
         self.source = source
         self.masked = mask(source)
         self.families = families
-        self.is_test = is_test
+        self.had_eastl_variant = had_eastl_variant
         self.edits: List[Edit] = []
         self.notes: List[Note] = []
         self._line_starts = [0] + [m.end() for m in re.finditer(r"\n", source)]
@@ -288,7 +313,8 @@ class Pass:
         for index, line in enumerate(self.source.split("\n"), start=1):
             if STD_MARKER.search(line):
                 exempt.add(index)
-                exempt.add(index + 1)
+                if line.lstrip().startswith("//"):  # a marker line of its own covers the next line; one after code covers its own line only
+                    exempt.add(index + 1)
         return exempt
 
     def exempt(self, pos: int) -> bool:
@@ -344,8 +370,10 @@ class Pass:
             self._fixed_vector()
         if "maps" in self.families:
             self._lookup_temporaries()
+        if "utility" in self.families and self.had_eastl_variant:
+            self._variant_companions()
         for name in NAMES:
-            if name.family in self.families and not (name.keep_in_tests and self.is_test):
+            if name.family in self.families:
                 self._simple(name)
 
     def _simple(self, name: Name) -> None:
@@ -354,6 +382,9 @@ class Pass:
                 continue
             rule = f"{name.source} -> {name.alias}"
             found = self.arguments_after(m.end())
+            if found is None and name.template and CTAD_AFTER.match(self.masked, m.end()):
+                self.note(m.start(), rule, f"{name.source} without template arguments (CTAD): left, write the arguments")
+                continue
             if found is not None and name.max_args is not None:
                 ranges = found[0]
                 if len(ranges) > name.max_args:
@@ -363,6 +394,11 @@ class Pass:
                     self.note(m.start(), rule, f"{name.source} of a reference: left")
                     continue
             self.replace(m, self.alias(name.alias, m.start()), rule)
+
+    def _variant_companions(self) -> None:
+        for m in EASTL_VARIANT_COMPANIONS.finditer(self.masked):
+            if not self.exempt(m.start()):
+                self.note(m.start(), "eastl::variant companion", f"{m.group(0).strip(':')} of an eastl::variant (now std::variant): the std:: one, by hand")
 
     def _optional_companions(self) -> None:
         for source, target in OPTIONAL_COMPANIONS:
@@ -391,8 +427,6 @@ class Pass:
             second = re.fullmatch(r"(.+)\.size\(\)", self.text(ranges[1]), re.DOTALL)
             if not first or not second or first.group(1).strip() != second.group(1).strip():
                 continue
-            if m.group(1) == "std" and self.is_test:
-                continue
             function = "ToStd" if m.group(1) == "std" else "FromStd"
             source = f"{m.group(1)}::string_view(X.data(), X.size()) -> {function}(X)"
             self.edits.append(Edit(m.start(), close + 1, f"{self.alias(function, m.start())}({first.group(1).strip()})", source))
@@ -418,8 +452,6 @@ class Pass:
         for m in TO_STRING_EASTL.finditer(self.masked):
             if not self.exempt(m.start()):
                 self.replace(m, self.alias("ToString", m.start()), "eastl::to_string -> ToString")
-        if self.is_test:
-            return
         shapes = [(e.start, e.end) for e in self.edits if e.rule.startswith("eastl::string(std::to_string")]
         for m in STD_TO_STRING.finditer(self.masked):
             if self.exempt(m.start()) or any(a <= m.start() < b for a, b in shapes):
@@ -491,11 +523,12 @@ def apply(source: str, edits: Sequence[Edit]) -> str:
     return "".join(out)
 
 
-def transform(source: str, families: Set[str], is_test: bool) -> Tuple[str, List[str], List[Note]]:
+def transform(source: str, families: Set[str]) -> Tuple[str, List[str], List[Note]]:
     """The source with the families applied until nothing is left to change, the rule of each replacement, the notes of the result."""
     applied: List[str] = []
+    had_eastl_variant = "utility" in families and EASTL_VARIANT.search(mask(source)) is not None
     for _ in range(MAX_PASSES):
-        current = Pass(source, families, is_test)
+        current = Pass(source, families, had_eastl_variant)
         current.collect()
         edits = resolve(current.edits)
         if not edits:
@@ -508,27 +541,40 @@ def transform(source: str, families: Set[str], is_test: bool) -> Tuple[str, List
 # ---- the walk -----------------------------------------------------------------------------------------------------------------
 
 
+def repository_of(root: Path) -> Path:
+    """The nearest folder at or above `root` with a `.git` (a folder, or a file in a submodule); `root` itself when there is none."""
+    resolved = root.resolve()
+    for folder in (resolved, *resolved.parents):
+        if (folder / ".git").exists():
+            return folder
+    return resolved
+
+
 def is_skipped_file(relative: str) -> bool:
-    padded = "/" + relative
+    """`relative` is the path of the file from its repository: `--root tests` must skip the twin tests too, and a folder above the
+    checkout must not skip anything."""
+    padded = "/" + relative.lstrip("/")
     if any(padded.endswith("/" + name) for name in SKIPPED_FILES):
         return True
     return any(("/" + run + "/") in padded or padded.endswith("/" + run) for run in SKIPPED_PATH_RUNS)
 
 
+def path_in_repository(path: Path, repository: Path) -> str:
+    """The path of `path` from `repository`, symlinks resolved; a link that leaves the repository keeps the path it was found under."""
+    try:
+        return path.resolve().relative_to(repository).as_posix()
+    except ValueError:
+        return Path(os.path.abspath(path)).relative_to(repository).as_posix()
+
+
 def walk(root: Path) -> Iterator[Path]:
+    repository = repository_of(root)
     for folder, dirs, files in os.walk(root):
         dirs[:] = sorted(d for d in dirs if d not in SKIPPED_FOLDERS and not d.startswith(SKIPPED_FOLDER_PREFIXES))
         for name in sorted(files):
             path = Path(folder) / name
-            if path.suffix in SOURCE_SUFFIXES:
-                relative = path.relative_to(root).as_posix()
-                if not is_skipped_file(relative):
-                    yield path
-
-
-def is_test_path(root: Path, path: Path) -> bool:
-    parts = list(path.relative_to(root).parts[:-1]) + [root.resolve().name]
-    return any(part in TEST_FOLDERS for part in parts)
+            if path.suffix in SOURCE_SUFFIXES and not is_skipped_file(path_in_repository(path, repository)):
+                yield path
 
 
 @dataclass
@@ -560,7 +606,7 @@ def run(root: Path, families: Sequence[str], write: bool) -> Result:
         except (UnicodeDecodeError, OSError) as error:
             result.errors.append(f"{relative}: {error}")
             continue
-        updated, applied, notes = transform(source, chosen, is_test_path(root, path))
+        updated, applied, notes = transform(source, chosen)
         for rule in applied:
             stats = result.rules.setdefault(rule, RuleStats())
             stats.files.add(relative)
@@ -600,7 +646,7 @@ def parse_families(text: str) -> List[str]:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Moves eastl:: and std:: type names to the BECore type layer.")
     parser.add_argument("--root", default=".", help="the folder to walk (the engine: .; a game: its src and its tests)")
-    parser.add_argument("--family", required=True, type=parse_families, help="optionals, views, strings, containers, maps, all (or a comma list)")
+    parser.add_argument("--family", required=True, type=parse_families, help="optionals, views, strings, containers, maps, utility, all (or a comma list)")
     parser.add_argument("--dry-run", action="store_true", help="write nothing, print what would change")
     parser.add_argument("--fail-on-change", action="store_true", help="write nothing; exit 1 when anything would change (the check that a family is done)")
     parser.add_argument("--report", action="store_true", help="list the notes: what the tool found and left")

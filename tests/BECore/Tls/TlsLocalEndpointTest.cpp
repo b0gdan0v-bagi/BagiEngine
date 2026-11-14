@@ -25,13 +25,14 @@ namespace BECore::Tests {
         constexpr std::chrono::milliseconds kHandshakeSlack{3000};
         constexpr std::chrono::milliseconds kShortPause{300};
 
-        [[nodiscard]] std::string Env(const char* name) {
+        [[nodiscard]] String Env(const char* name) {
             const char* value = std::getenv(name);
             return value != nullptr ? value : "";
         }
 
-        [[nodiscard]] Vector<uint8_t> ReadFile(const std::string& path) {
-            std::ifstream file(path, std::ios::binary);
+        [[nodiscard]] Vector<uint8_t> ReadFile(const String& path) {
+            std::ifstream file(path.c_str(), std::ios::binary);
+            //-NoStd: the bytes arrive through a std::istreambuf_iterator, an input iterator that eastl::vector does not take
             const std::vector<char> bytes((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
             return Vector<uint8_t>(reinterpret_cast<const uint8_t*>(bytes.data()), reinterpret_cast<const uint8_t*>(bytes.data()) + bytes.size());
         }
@@ -96,7 +97,7 @@ namespace BECore::Tests {
             }
 
             WebSocketClient client;
-            std::vector<WebSocketClientEvent> events;
+            Vector<WebSocketClientEvent> events;
         };
 
     }  // namespace
@@ -106,8 +107,8 @@ namespace BECore::Tests {
         ASSERT_TRUE(WaitFor(WebSocketClientEventKind::Opened)) << (Find(WebSocketClientEventKind::Closed) != nullptr ? Find(WebSocketClientEventKind::Closed)->reason.c_str() : "no event");
 
         ASSERT_TRUE(client.SendText("hello over tls"));
-        const std::string large(kLargeMessageBytes, 'x');
-        ASSERT_TRUE(client.SendText(String(large.c_str(), large.size())));
+        const String large(kLargeMessageBytes, 'x');
+        ASSERT_TRUE(client.SendText(large));
         ASSERT_TRUE(WaitUntil([this] { Pump(); }, [&] { return events.size() >= 3; }));
         EXPECT_EQ(events[1].kind, WebSocketClientEventKind::Text);
         EXPECT_EQ(events[1].text, "hello over tls");
@@ -159,7 +160,7 @@ namespace BECore::Tests {
         auto stream = MakeTlsStream();
         TlsConnectParams params;
         params.host = "localhost";
-        params.port = static_cast<uint16_t>(std::stoi(Env(kEnvPort)));
+        params.port = static_cast<uint16_t>(std::stoi(Env(kEnvPort).c_str()));
         params.handshakeDeadline = std::chrono::steady_clock::now() + kClientWaitLimit;
         const auto trusted = ReadFile(Env(kEnvCaFile));
         params.additionalTrustAnchorsDer = Span<const Vector<uint8_t>>(&trusted, 1);
@@ -169,7 +170,7 @@ namespace BECore::Tests {
         std::atomic<bool> returned{false};
         std::expected<size_t, SocketError> result = 0;
         std::thread reader([&] {
-            std::array<uint8_t, 16> buffer{};
+            Array<uint8_t, 16> buffer{};
             result = stream->Receive(buffer);  // the server says nothing: this waits
             returned = true;
         });
@@ -180,7 +181,7 @@ namespace BECore::Tests {
         reader.join();
         ASSERT_FALSE(result.has_value());
         EXPECT_EQ(result.error(), SocketError::Closed);
-        EXPECT_FALSE(stream->SendAll(AsBytes(std::string("x"))));
+        EXPECT_FALSE(stream->SendAll(AsBytes(String("x"))));
         stream->Close();
         EXPECT_FALSE(stream->IsValid());
     }
@@ -189,13 +190,13 @@ namespace BECore::Tests {
         auto stream = MakeTlsStream();
         TlsConnectParams params;
         params.host = "localhost";
-        params.port = static_cast<uint16_t>(std::stoi(Env(kEnvPort)));
+        params.port = static_cast<uint16_t>(std::stoi(Env(kEnvPort).c_str()));
         params.handshakeDeadline = std::chrono::steady_clock::now() + kClientWaitLimit;
         const auto trusted = ReadFile(Env(kEnvCaFile));
         params.additionalTrustAnchorsDer = Span<const Vector<uint8_t>>(&trusted, 1);
         ASSERT_TRUE(stream->Connect(params).has_value()) << stream->GetLastError().c_str();
         ASSERT_TRUE(stream->SetReceiveTimeout(kShortPause));
-        std::array<uint8_t, 16> buffer{};
+        Array<uint8_t, 16> buffer{};
         for (int attempt = 0; attempt < 2; ++attempt) {
             const auto result = stream->Receive(buffer);
             ASSERT_FALSE(result.has_value());
@@ -211,7 +212,7 @@ namespace BECore::Tests {
         auto stream = MakeTlsStream();
         TlsConnectParams params;
         params.host = "127.0.0.1";
-        params.port = static_cast<uint16_t>(std::stoi(Env(kEnvPlainPort)));
+        params.port = static_cast<uint16_t>(std::stoi(Env(kEnvPlainPort).c_str()));
         params.handshakeDeadline = std::chrono::steady_clock::now() + kClientWaitLimit;  // the server never answers: only Close() can end it in time
         std::atomic<bool> returned{false};
         std::expected<void, String> result;
@@ -238,7 +239,7 @@ namespace BECore::Tests {
             auto stream = MakeTlsStream();
             TlsConnectParams params;
             params.host = "localhost";
-            params.port = static_cast<uint16_t>(std::stoi(Env(kEnvPort)));
+            params.port = static_cast<uint16_t>(std::stoi(Env(kEnvPort).c_str()));
             params.handshakeDeadline = std::chrono::steady_clock::now() + kClientWaitLimit;
             params.additionalTrustAnchorsDer = Span<const Vector<uint8_t>>(&trusted, 1);
             std::atomic<bool> started{false};

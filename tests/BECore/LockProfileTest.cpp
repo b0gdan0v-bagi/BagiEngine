@@ -93,8 +93,8 @@ namespace BECore::Tests {
         };
 
         /// The zones named @p name of a Chrome trace, matched B to E per thread; also fails the test when a thread's B and E do not nest
-        std::vector<WaitZone> FindZones(const String& trace, const char* name) {
-            std::vector<WaitZone> found;
+        Vector<WaitZone> FindZones(const String& trace, const char* name) {
+            Vector<WaitZone> found;
             auto parsed = ParseJson(trace);
             EXPECT_TRUE(parsed.has_value());
             const Json* events = parsed ? FindJsonMember(*parsed, "traceEvents") : nullptr;
@@ -105,7 +105,7 @@ namespace BECore::Tests {
                 bool wanted;
                 double begin;
             };
-            std::map<int64_t, std::vector<Open>> open;
+            Map<int64_t, Vector<Open>> open;
             for (const Json& event : *events) {
                 const auto phase = GetJsonString(event, "ph");
                 if (!phase || (*phase != "B" && *phase != "E")) {
@@ -113,7 +113,7 @@ namespace BECore::Tests {
                 }
                 const int64_t tid = GetJsonInt(event, "tid").value_or(-1);
                 const double ts = GetJsonNumber(event, "ts").value_or(-1.0);
-                std::vector<Open>& stack = open[tid];
+                Vector<Open>& stack = open[tid];
                 if (*phase == "B") {
                     const auto eventName = GetJsonString(event, "name");
                     stack.push_back({eventName && *eventName == name, ts});
@@ -135,7 +135,7 @@ namespace BECore::Tests {
             return found;
         }
 
-        const WaitZone* FindOnThread(const std::vector<WaitZone>& zones, uint32_t threadId) {
+        const WaitZone* FindOnThread(const Vector<WaitZone>& zones, uint32_t threadId) {
             for (const WaitZone& zone : zones) {
                 if (zone.tid == static_cast<int64_t>(threadId)) {
                     return &zone;
@@ -148,7 +148,7 @@ namespace BECore::Tests {
             size_t count = 0;
             for (const RingThread& thread : ring.Snapshot().threads) {
                 for (const ZoneRecord& zone : thread.zones) {
-                    if (thread.threadId == threadId && std::string(zone.site->name) == name) {
+                    if (thread.threadId == threadId && String(zone.site->name) == name) {
                         ++count;
                         if (depth != nullptr) {
                             *depth = zone.depth;
@@ -220,7 +220,7 @@ namespace BECore::Tests {
             std::atomic<int> readerUnlock{0};
             std::atomic<int> tryAcquired{0};
             std::atomic<int> tryFailed{0};
-            std::string lastName;
+            String lastName;
             LockKind lastAnnounceKind = LockKind::Mutex;
         };
 
@@ -250,7 +250,7 @@ namespace BECore::Tests {
         Mutex mutex{BE_LOCK_SITE("Test lock")};
         const uint32_t waiterId = RunContended([&] { return std::unique_lock<Mutex>(mutex); }, [&] { std::lock_guard<Mutex> lock(mutex); });
 
-        const std::vector<WaitZone> zones = FindZones(recorder.WriteJson(), kWaitZoneName);
+        const Vector<WaitZone> zones = FindZones(recorder.WriteJson(), kWaitZoneName);
         ASSERT_EQ(zones.size(), 1u);
         const WaitZone* zone = FindOnThread(zones, waiterId);
         ASSERT_NE(zone, nullptr);
@@ -272,11 +272,11 @@ namespace BECore::Tests {
                                                    std::lock_guard<Mutex> lock(mutex);
                                                });
 
-        const std::vector<WaitZone> zones = FindZones(recorder.WriteJson(), kWaitZoneName);
+        const Vector<WaitZone> zones = FindZones(recorder.WriteJson(), kWaitZoneName);
         ASSERT_EQ(zones.size(), 1u);
         EXPECT_EQ(zones[0].tid, static_cast<int64_t>(waiterId));
         EXPECT_EQ(zones[0].depth, 1u);
-        const std::vector<WaitZone> outer = FindZones(recorder.WriteJson(), "Outer work");
+        const Vector<WaitZone> outer = FindZones(recorder.WriteJson(), "Outer work");
         ASSERT_EQ(outer.size(), 1u);
         EXPECT_GE(outer[0].durationUs, zones[0].durationUs);
     }
@@ -339,7 +339,7 @@ namespace BECore::Tests {
         RunContended([&] { return std::unique_lock<SharedMutex>(mutex); }, [&] { std::shared_lock<SharedMutex> lock(mutex); });
 
         // Not matched to thread ids: the recorder finds a thread's buffer by std::thread::id, which a later thread may reuse
-        const std::vector<WaitZone> zones = FindZones(recorder.WriteJson(), kWaitZoneName);
+        const Vector<WaitZone> zones = FindZones(recorder.WriteJson(), kWaitZoneName);
         ASSERT_EQ(zones.size(), 2u);
         for (const WaitZone& zone : zones) {
             EXPECT_GE(zone.durationUs, kMinWaitUs);
@@ -420,7 +420,7 @@ namespace BECore::Tests {
         int counter = 0;
         constexpr int kThreads = 4;
         constexpr int kRounds = 2000;
-        std::vector<std::thread> threads;
+        Vector<std::thread> threads;
         for (int i = 0; i < kThreads; ++i) {
             threads.emplace_back([&] {
                 for (int n = 0; n < kRounds; ++n) {
@@ -536,7 +536,7 @@ namespace BECore::Tests {
 
                 Mutex raced{BE_LOCK_SITE("Test lock")};
                 std::atomic<bool> go{false};
-                std::vector<std::thread> threads;
+                Vector<std::thread> threads;
                 for (int i = 0; i < kThreads; ++i) {
                     threads.emplace_back([&] {
                         WaitUntil(go);

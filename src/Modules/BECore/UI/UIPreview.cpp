@@ -18,11 +18,11 @@ namespace BECore {
         return 0.0f;
     }
 
-    std::pair<uint32_t, uint32_t> UIPreview::FitSize(ViewportAspect aspect, float availableWidth, float availableHeight) {
+    Pair<uint32_t, uint32_t> UIPreview::FitSize(ViewportAspect aspect, float availableWidth, float availableHeight) {
         return FitRatio(AspectOf(aspect), availableWidth, availableHeight);
     }
 
-    std::pair<uint32_t, uint32_t> UIPreview::FitRatio(float ratio, float availableWidth, float availableHeight) {
+    Pair<uint32_t, uint32_t> UIPreview::FitRatio(float ratio, float availableWidth, float availableHeight) {
         if (availableWidth < 1.0f || availableHeight < 1.0f) {
             return {0, 0};
         }

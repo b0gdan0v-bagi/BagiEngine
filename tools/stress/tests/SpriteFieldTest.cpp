@@ -150,7 +150,7 @@ namespace BECore::Stress::Tests {
             const uint32_t x = (cell % kAtlasCellsPerSide) * kAtlasCellSize + 8;
             const uint32_t y = (cell / kAtlasCellsPerSide) * kAtlasCellSize + 8;
             const size_t offset = (static_cast<size_t>(y) * side + x) * 4;
-            return std::array<uint8_t, 4>{atlasPixels[offset], atlasPixels[offset + 1], atlasPixels[offset + 2], atlasPixels[offset + 3]};
+            return Array<uint8_t, 4>{atlasPixels[offset], atlasPixels[offset + 1], atlasPixels[offset + 2], atlasPixels[offset + 3]};
         };
         for (uint32_t a = 0; a < kAtlasCellsPerSide * kAtlasCellsPerSide; ++a) {
             for (uint32_t b = a + 1; b < kAtlasCellsPerSide * kAtlasCellsPerSide; ++b) {

@@ -191,7 +191,7 @@ namespace BECore {
             const auto devices = UIPreview::GetDevices();
             const bool hasDevice = shape.device >= 0 && static_cast<size_t>(shape.device) < devices.size();
             object[ToStdString(kPreviewAspectKey)] = ToStdString(EnumUtils<ViewportAspect>::ToString(shape.aspect));
-            // std: a JSON string of nlohmann
+            //-NoStd: a JSON string of nlohmann
             object[ToStdString(kPreviewDeviceKey)] = hasDevice ? ToStdString(devices[static_cast<size_t>(shape.device)].name) : std::string();
             object[ToStdString(kPreviewCustomKey)] = shape.custom;
             object[ToStdString(kPreviewCustomWidthKey)] = shape.customWidth;
@@ -322,7 +322,7 @@ namespace BECore {
                 LOG_WARNING(Format("Editor settings: the hotkey of '{}' is not a text; dropped", id));
                 continue;
             }
-            // std: nlohmann's string
+            //-NoStd: nlohmann's string
             const std::string& text = value.get_ref<const std::string&>();
             const EditorCommand* command = FindEditorCommand(commandId);
             if (command == nullptr) {
@@ -390,7 +390,7 @@ namespace BECore {
             unreadable = false;
         }
 
-        // std: nlohmann's dump
+        //-NoStd: nlohmann's dump
         const std::string text = content.dump(kJsonIndent, ' ', false, Json::error_handler_t::replace) + "\n";
         const std::expected<void, String> written = WriteTextFileAtomically(path, FromStd(text));
         if (!written) {

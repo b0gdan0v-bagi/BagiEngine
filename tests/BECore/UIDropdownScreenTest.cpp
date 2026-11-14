@@ -154,15 +154,15 @@ namespace BECore::Tests {
         constexpr const char* kOptionKeys[] = {"level.novice", "level.easy", "level.normal", "level.hard", "level.master"};
         constexpr const char* kOptionNames[] = {"LevelNovice", "LevelEasy", "LevelNormal", "LevelHard", "LevelMaster"};
 
-        std::string SceneXml(float viewWidth, float viewHeight, const std::function<void(std::string&)>& edit = {}) {
-            std::string xml = kLevelsXml;
-            const auto replace = [&xml](const std::string& what, const std::string& with) {
-                for (size_t at = xml.find(what); at != std::string::npos; at = xml.find(what, at + with.size())) {
+        String SceneXml(float viewWidth, float viewHeight, const std::function<void(String&)>& edit = {}) {
+            String xml = kLevelsXml;
+            const auto replace = [&xml](const String& what, const String& with) {
+                for (size_t at = xml.find(what); at != String::npos; at = xml.find(what, at + with.size())) {
                     xml.replace(at, what.size(), with);
                 }
             };
-            replace("@VIEW_W@", std::to_string(static_cast<int>(viewWidth)));
-            replace("@VIEW_H@", std::to_string(static_cast<int>(viewHeight)));
+            replace("@VIEW_W@", ToString(static_cast<int>(viewWidth)));
+            replace("@VIEW_H@", ToString(static_cast<int>(viewHeight)));
             if (edit) {
                 edit(xml);
             }
@@ -170,25 +170,25 @@ namespace BECore::Tests {
         }
 
         /// Replaces the first @p what in @p xml, and fails the test when it is not there (a broken copy that changed nothing would prove nothing)
-        void Replace(std::string& xml, const std::string& what, const std::string& with) {
+        void Replace(String& xml, const String& what, const String& with) {
             const size_t at = xml.find(what);
-            ASSERT_NE(at, std::string::npos) << what;
+            ASSERT_NE(at, String::npos) << what;
             xml.replace(at, what.size(), with);
         }
 
         /// The second option with an icon on its left: an image child and a caption child under the clicker (the other four are a caption on the element and a clicker)
-        void GiveEasyAnIcon(std::string& xml) {
+        void GiveEasyAnIcon(String& xml) {
             const size_t begin = xml.find("<element type=\"UIElement\" name=\"LevelEasy\"");
             const size_t endTag = xml.find("</element>", begin);
-            ASSERT_NE(begin, std::string::npos);
-            ASSERT_NE(endTag, std::string::npos);
-            const std::string icon =
+            ASSERT_NE(begin, String::npos);
+            ASSERT_NE(endTag, String::npos);
+            const String icon =
                 "<element type=\"UIElement\" name=\"LevelEasy\" fontSize=\"24\" color=\"70,70,100,255\" layout=\"Stack\" direction=\"Horizontal\" padding=\"8,0,0,0\" spacing=\"6\" "
                 "crossAlign=\"Center\"><components><component type=\"UIInputClicker\" value=\"easy\"/></components><children>"
                 "<element type=\"UIElement\" name=\"LevelEasyIcon\" height=\"50%\" aspectRatio=\"1\"><components><component type=\"UIImageComponent\"/></components></element>"
                 "<element type=\"UIElement\" name=\"LevelEasyCaption\" flex=\"1\" height=\"100%\"><components><component type=\"UITextComponent\" text=\"{#level.easy}\" align=\"Center\" "
                 "verticalAlign=\"Center\" overflow=\"Ellipsis\" wrap=\"false\"/></components></element></children></element>";
-            xml.replace(begin, endTag + std::string("</element>").size() - begin, icon);
+            xml.replace(begin, endTag + String("</element>").size() - begin, icon);
         }
 
         SDL_MouseButtonEvent Button(float x, float y, bool down) {
@@ -345,23 +345,23 @@ namespace BECore::Tests {
         }
 
         /// The table of the screen, through the reader of the file; the first language is the default one and the current one
-        static void LoadStrings(const std::string& xml) {
+        static void LoadStrings(const String& xml) {
             UIStrings& strings = CoreManager::GetUIStrings();
             strings.Clear();
             auto config = XmlConfig::Create();
-            ASSERT_TRUE(config.LoadFromString(FromStd(xml)));
+            ASSERT_TRUE(config.LoadFromString(xml));
             const Vector<String> problems = strings.LoadFromXml(config.GetRoot());
             EXPECT_TRUE(problems.empty()) << (problems.empty() ? "" : problems[0].c_str());
             ASSERT_EQ(strings.GetLanguages().size(), 3u);
         }
 
-        void LoadScene(float viewWidth = kViewWidth, float viewHeight = kViewHeight, const std::function<void(std::string&)>& edit = {}) {
+        void LoadScene(float viewWidth = kViewWidth, float viewHeight = kViewHeight, const std::function<void(String&)>& edit = {}) {
             _game.reset();
             _hud.Reset();
             _levels.Reset();
             XmlDeserializer deserializer;
-            const std::string xml = SceneXml(viewWidth, viewHeight, edit);
-            ASSERT_TRUE(deserializer.LoadFromString(FromStd(xml)));
+            const String xml = SceneXml(viewWidth, viewHeight, edit);
+            ASSERT_TRUE(deserializer.LoadFromString(xml));
             _manager = New<SceneManager>();
             _manager->Deserialize(deserializer);
             ASSERT_FALSE(deserializer.HasErrors());
@@ -426,7 +426,7 @@ namespace BECore::Tests {
             return *element;
         }
 
-        static std::pair<float, float> CenterOf(const UIElement& element) {
+        static Pair<float, float> CenterOf(const UIElement& element) {
             return {element.rect.x + element.rect.w * 0.5f, element.rect.y + element.rect.h * 0.5f};
         }
 
@@ -502,7 +502,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIDropdownScreenTest, TheOpenPanelPassesTheSizeMatrixInEveryLanguageInALandscapeAndAPortraitView) {
-        for (const auto [width, height] : {std::pair{kViewWidth, kViewHeight}, std::pair{kPortraitWidth, kPortraitHeight}}) {
+        for (const auto [width, height] : {Pair<float, float>{kViewWidth, kViewHeight}, Pair<float, float>{kPortraitWidth, kPortraitHeight}}) {
             ASSERT_NO_FATAL_FAILURE(LoadScene(width, height));
             ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
             const auto failures = ValidatePanel(*_levels);
@@ -511,7 +511,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIDropdownScreenTest, NoWordIsCutClosedOrOpenOnAnyCaseOfTheMatrixInAnyLanguage) {
-        for (const auto [width, height] : {std::pair{kViewWidth, kViewHeight}, std::pair{kPortraitWidth, kPortraitHeight}}) {
+        for (const auto [width, height] : {Pair<float, float>{kViewWidth, kViewHeight}, Pair<float, float>{kPortraitWidth, kPortraitHeight}}) {
             ASSERT_NO_FATAL_FAILURE(LoadScene(width, height));
             ASSERT_NO_FATAL_FAILURE(Show());
             const String closed = ProblemsOnMatrix(*_levels);
@@ -573,7 +573,7 @@ namespace BECore::Tests {
 
     TEST_F(UIDropdownScreenTest, TheListStaysInsideTheSafeAreaAndAFullListFlipsAboveAHeaderNearTheBottom) {
         // The plate at the bottom edge: the five options do not fit under the header, they fit above it
-        ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](std::string& xml) { Replace(xml, "name=\"Plate\" anchor=\"Center\"", "name=\"Plate\" anchor=\"Bottom\""); }));
+        ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](String& xml) { Replace(xml, "name=\"Plate\" anchor=\"Center\"", "name=\"Plate\" anchor=\"Bottom\""); }));
         ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
         const UIDropdown& header = Get<UIDropdown>("Level");
         for (const char* name : kOptionNames) {
@@ -624,14 +624,14 @@ namespace BECore::Tests {
     // ---- broken copies: each check must be able to fail ----------------------------------------------------------------------
 
     TEST_F(UIDropdownScreenTest, AnOptionOfThirtyUnitsIsReportedByTheValidatorAndByProblems) {
-        ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](std::string& xml) { Replace(xml, "name=\"LevelEasy\"", "name=\"LevelEasy\" height=\"30\""); }));
+        ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](String& xml) { Replace(xml, "name=\"LevelEasy\"", "name=\"LevelEasy\" height=\"30\""); }));
         ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
         EXPECT_FALSE(ValidatePanel(*_levels).empty());
         EXPECT_NE(Problems(_levels->GetLayout()).find("LevelEasy is 30.0 units high"), String::npos);
     }
 
     TEST_F(UIDropdownScreenTest, AWordThatIsTooLongIsReportedByProblemsAndNotByTheValidator) {
-        std::string xml = kStringsXml;
+        String xml = kStringsXml;
         Replace(xml, "text=\"Grandmaster\"", "text=\"Grandmaster of the Eastern Wind Tournament Circuit, the Final Round, with Every Rule Enabled\"");
         ASSERT_NO_FATAL_FAILURE(LoadStrings(xml));
         ASSERT_NO_FATAL_FAILURE(LoadScene());
@@ -642,7 +642,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIDropdownScreenTest, AListThatCannotFitIsReportedByTheValidator) {
-        ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](std::string& xml) { Replace(xml, "optionHeight=\"56\"", "optionHeight=\"200\""); }));
+        ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](String& xml) { Replace(xml, "optionHeight=\"56\"", "optionHeight=\"200\""); }));
         ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
         const auto failures = ValidatePanel(*_levels);
         ASSERT_FALSE(failures.empty());
@@ -656,7 +656,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIDropdownScreenTest, AHeaderWithNoHeightIsReportedByProblems) {
-        ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](std::string& xml) { Replace(xml, "height=\"56\" optionHeight=\"56\"", "optionHeight=\"56\""); }));
+        ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](String& xml) { Replace(xml, "height=\"56\" optionHeight=\"56\"", "optionHeight=\"56\""); }));
         ASSERT_NO_FATAL_FAILURE(Show());
         const String problems = Problems(_levels->GetLayout());
         EXPECT_NE(problems.find("Level 'Grandmaster' has an empty rect"), String::npos) << problems.c_str();
@@ -665,7 +665,7 @@ namespace BECore::Tests {
     // ---- an option with an icon: the same panel, the same findings ------------------------------------------------
 
     TEST_F(UIDropdownScreenTest, AnIconOptionPassesTheSizeMatrixClosedAndOpenInEveryLanguageInBothViews) {
-        for (const auto [width, height] : {std::pair{kViewWidth, kViewHeight}, std::pair{kPortraitWidth, kPortraitHeight}}) {
+        for (const auto [width, height] : {Pair<float, float>{kViewWidth, kViewHeight}, Pair<float, float>{kPortraitWidth, kPortraitHeight}}) {
             ASSERT_NO_FATAL_FAILURE(LoadScene(width, height, GiveEasyAnIcon));
             ASSERT_NO_FATAL_FAILURE(Show());
             const auto closed = ValidatePanel(*_levels);
@@ -678,7 +678,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIDropdownScreenTest, NoWordOfAnIconOptionIsCutOnAnyCaseOfTheMatrixInAnyLanguage) {
-        for (const auto [width, height] : {std::pair{kViewWidth, kViewHeight}, std::pair{kPortraitWidth, kPortraitHeight}}) {
+        for (const auto [width, height] : {Pair<float, float>{kViewWidth, kViewHeight}, Pair<float, float>{kPortraitWidth, kPortraitHeight}}) {
             ASSERT_NO_FATAL_FAILURE(LoadScene(width, height, GiveEasyAnIcon));
             ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
             const String open = ProblemsOnMatrix(*_levels);
@@ -687,7 +687,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIDropdownScreenTest, TheProblemsCheckSeesAComposedOptionAndItsCaptionChild) {
-        ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](std::string& xml) {
+        ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](String& xml) {
             GiveEasyAnIcon(xml);
             Replace(xml, "name=\"LevelNovice\" fontSize=\"24\"", "name=\"LevelNovice\" height=\"30\" fontSize=\"24\"");
         }));
@@ -702,7 +702,7 @@ namespace BECore::Tests {
 
     TEST_F(UIDropdownScreenTest, AnIconOptionHasTheRectOfAPlainOne) {
         // The same list twice, once with the plain options and once with an icon on the second: every option in the same place, in both views
-        for (const auto [width, height] : {std::pair{kViewWidth, kViewHeight}, std::pair{kPortraitWidth, kPortraitHeight}}) {
+        for (const auto [width, height] : {Pair<float, float>{kViewWidth, kViewHeight}, Pair<float, float>{kPortraitWidth, kPortraitHeight}}) {
             ASSERT_NO_FATAL_FAILURE(LoadScene(width, height));
             ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
             Vector<Rect> buttons;

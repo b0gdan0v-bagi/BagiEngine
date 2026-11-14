@@ -64,7 +64,7 @@ namespace BECore {
     Timeline& Timeline::AddSub(float at, Timeline&& timeline) {
         Clip clip;
         clip.length = timeline.GetDuration();
-        clip.sub = eastl::make_unique<Timeline>(std::move(timeline));
+        clip.sub = MakeUnique<Timeline>(std::move(timeline));
         return AddClip(at, std::move(clip));
     }
 

@@ -105,7 +105,7 @@ namespace BECore::Stress::Tests {
         StartEntities(50);
         Update();
         Tweens().Advance(kStep);  // the first step writes the positions
-        Vector<std::pair<float, float>> before;
+        Vector<Pair<float, float>> before;
         for (size_t i = 0; i < 50; ++i) {
             before.emplace_back(Transform(i)._x, Transform(i)._y);
         }

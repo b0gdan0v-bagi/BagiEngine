@@ -119,7 +119,7 @@ namespace BECore {
             LOG_ERROR("RmlUiFontEngine: the font has no family name, so a document cannot name it; pass one to LoadFontFace");
             return false;
         }
-        auto face = eastl::make_unique<Face>();
+        auto face = MakeUnique<Face>();
         face->family = ToLower(std::move(family));
         face->style = style;
         face->weight = ToWeight(weight);
@@ -176,7 +176,7 @@ namespace BECore {
                 return reinterpret_cast<Rml::FontFaceHandle>(handle.get());
             }
         }
-        auto handle = eastl::make_unique<Handle>();
+        auto handle = MakeUnique<Handle>();
         handle->face = face;
         handle->size = size;
         handle->metrics = MakeMetrics(*face->font, size);
@@ -303,7 +303,7 @@ namespace BECore {
         if (width > kPageSize || height > kPageSize) {
             return -1;
         }
-        auto page = eastl::make_unique<Page>(kPageSize);
+        auto page = MakeUnique<Page>(kPageSize);
         Page* raw = page.get();
         // The texture is made when RmlUi first draws with it, for each of its contexts; the pixels are final from then on
         raw->source = Rml::CallbackTextureSource([raw](const Rml::CallbackTextureInterface& textureInterface) {

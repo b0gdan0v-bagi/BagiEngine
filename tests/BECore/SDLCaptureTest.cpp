@@ -20,7 +20,7 @@ namespace BECore::Tests {
         constexpr const char* kWindowConfig = "config/SDLWindowConfig.xml";
         constexpr StringView kPngBase64Prefix = "iVBORw0KGgo";  // the 8 bytes of a PNG signature in base64
 
-        using Pixel = std::array<uint8_t, 4>;
+        using Pixel = Array<uint8_t, 4>;
 
         const Color kBackground{10, 20, 30, 255};
         const Color kRed{255, 0, 0, 255};
@@ -53,7 +53,7 @@ namespace BECore::Tests {
         constexpr size_t kChannelCount = 4;
 
         /// A texture image of four blocks of 4 by 4 texels, one color each: top-left, top-right, bottom-left, bottom-right. Asymmetric on both axes, so a turn and a flip show.
-        PixelBuffer MakeQuadrants(const std::array<Color, 4>& colors) {
+        PixelBuffer MakeQuadrants(const Array<Color, 4>& colors) {
             PixelBuffer image;
             image.width = kQuadrantTextureSize;
             image.height = kQuadrantTextureSize;
@@ -72,7 +72,7 @@ namespace BECore::Tests {
         }
 
         /// The size that the IHDR chunk of a PNG file gives (big-endian, at bytes 16 to 23)
-        std::pair<uint32_t, uint32_t> PngSize(const Vector<uint8_t>& png) {
+        Pair<uint32_t, uint32_t> PngSize(const Vector<uint8_t>& png) {
             const auto read = [&png](size_t at) {
                 return (static_cast<uint32_t>(png[at]) << 24) | (static_cast<uint32_t>(png[at + 1]) << 16) | (static_cast<uint32_t>(png[at + 2]) << 8) | png[at + 3];
             };
@@ -186,10 +186,10 @@ namespace BECore::Tests {
 
         constexpr int kBlendTolerance = 4;
 
-        std::string ErrorCode(const Json& response) {
+        String ErrorCode(const Json& response) {
             const Json* error = FindJsonMember(response, "error");
             const auto code = error != nullptr ? GetJsonString(*error, "code") : std::nullopt;
-            return code ? std::string(code->c_str(), code->size()) : std::string();
+            return code ? String(code->c_str(), code->size()) : String();
         }
 
         /// A ControlService of its own with the `screenshot` method, answering from the window and renderer of SDLCaptureTest
@@ -228,7 +228,7 @@ namespace BECore::Tests {
             }
 
             ControlService service;
-            std::vector<Json> responses;
+            Vector<Json> responses;
             IntrusivePtr<IRenderer> previousRenderer;
             int64_t lastId = 0;
         };
@@ -237,7 +237,7 @@ namespace BECore::Tests {
 
     TEST_F(SDLCaptureTest, TheWindowIsHeadlessAndHasNoGpuSurface) {
         EXPECT_TRUE(window->IsHeadless());
-        EXPECT_EQ(std::string(SDL_GetCurrentVideoDriver()), "dummy");
+        EXPECT_EQ(String(SDL_GetCurrentVideoDriver()), "dummy");
         EXPECT_GT(renderer->GetOutputWidth(), 0.0f);
         EXPECT_GT(renderer->GetOutputHeight(), 0.0f);
     }
@@ -674,7 +674,7 @@ namespace BECore::Tests {
         // The samples lie well inside the blocks. On the software triangle path (DrawGeometry) the UVs 0 to 1 are spread over the texels 0 to n-1 and rounded down
         // (SDL_triangle.c), so a block edge moves and a 2 by 2 texture shows one texel; a transformed texture goes through SDL_RenderTextureRotated and has no such shift.
         const Color white{255, 255, 255, 255};
-        const std::array<Color, 4> texels = {kRed, Color{0, 255, 0, 255}, Color{0, 0, 255, 255}, white};
+        const Array<Color, 4> texels = {kRed, Color{0, 255, 0, 255}, Color{0, 0, 255, 255}, white};
         auto texture = MakeTexture(MakeQuadrants(texels));
         ASSERT_TRUE(texture);
 
@@ -903,9 +903,9 @@ namespace BECore::Tests {
         EXPECT_EQ(png->width, 64u);
         EXPECT_EQ(png->height, 32u);
         ASSERT_GT(png->bytes.size(), 24u);
-        const std::array<uint8_t, 8> signature{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
+        const Array<uint8_t, 8> signature{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
         EXPECT_TRUE(std::equal(signature.begin(), signature.end(), png->bytes.begin()));
-        EXPECT_EQ(PngSize(png->bytes), (std::pair<uint32_t, uint32_t>{64, 32}));
+        EXPECT_EQ(PngSize(png->bytes), (Pair<uint32_t, uint32_t>{64, 32}));
     }
 
     TEST(EncodePngTest, PixelsSurviveTheRoundTrip) {
@@ -932,7 +932,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(wide.has_value()) << wide.error().c_str();
         EXPECT_EQ(wide->width, 1024u);
         EXPECT_EQ(wide->height, 576u);
-        EXPECT_EQ(PngSize(wide->bytes), (std::pair<uint32_t, uint32_t>{1024, 576}));
+        EXPECT_EQ(PngSize(wide->bytes), (Pair<uint32_t, uint32_t>{1024, 576}));
 
         const auto tall = EncodePng(MakeImage(100, 400, kBackground), 200);
         ASSERT_TRUE(tall.has_value()) << tall.error().c_str();

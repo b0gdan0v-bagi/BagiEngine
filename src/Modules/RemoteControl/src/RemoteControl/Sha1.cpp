@@ -10,12 +10,12 @@ namespace BECore {
         constexpr size_t kScheduleSize = 80;
         constexpr uint8_t kPaddingMarker = 0x80;
 
-        using State = std::array<uint32_t, 5>;
+        using State = Array<uint32_t, 5>;
 
         constexpr State kInitialState = {0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0};
 
         // Round constants of the four groups of 20 rounds
-        constexpr std::array<uint32_t, 4> kRoundConstants = {0x5A827999, 0x6ED9EBA1, 0x8F1BBCDC, 0xCA62C1D6};
+        constexpr Array<uint32_t, 4> kRoundConstants = {0x5A827999, 0x6ED9EBA1, 0x8F1BBCDC, 0xCA62C1D6};
         constexpr size_t kRoundsPerGroup = 20;
 
         constexpr uint32_t RotateLeft(uint32_t value, int bits) {
@@ -23,7 +23,7 @@ namespace BECore {
         }
 
         void ProcessBlock(State& state, const uint8_t* block) {
-            std::array<uint32_t, kScheduleSize> schedule{};
+            Array<uint32_t, kScheduleSize> schedule{};
             for (size_t i = 0; i < kWordsPerBlock; ++i) {
                 const uint8_t* word = block + i * 4;
                 schedule[i] = (static_cast<uint32_t>(word[0]) << 24) | (static_cast<uint32_t>(word[1]) << 16) | (static_cast<uint32_t>(word[2]) << 8) | static_cast<uint32_t>(word[3]);
@@ -75,7 +75,7 @@ namespace BECore {
         }
 
         // The rest, the 0x80 marker and the length take one block, or two when the length does not fit after the marker
-        std::array<uint8_t, kBlockSize * 2> tail{};
+        Array<uint8_t, kBlockSize * 2> tail{};
         const size_t remainder = data.size() - fullBlocks * kBlockSize;
         if (remainder > 0) {
             std::memcpy(tail.data(), data.data() + fullBlocks * kBlockSize, remainder);

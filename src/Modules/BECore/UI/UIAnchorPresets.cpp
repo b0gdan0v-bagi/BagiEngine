@@ -9,9 +9,9 @@ namespace BECore {
         constexpr float kAnchorTolerance = 1e-5f;  // a typed 50% may not be exactly 0.5
 
         /// The anchors of one axis for each index of the grid: left / top, center / middle, right / bottom, stretch
-        constexpr std::array<float, UIAnchorPresets::kRows> kMin = {0.0f, 0.5f, 1.0f, 0.0f};
-        constexpr std::array<float, UIAnchorPresets::kRows> kMax = {0.0f, 0.5f, 1.0f, 1.0f};
-        constexpr std::array<float, UIAnchorPresets::kRows> kPivot = {0.0f, 0.5f, 1.0f, 0.5f};
+        constexpr Array<float, UIAnchorPresets::kRows> kMin = {0.0f, 0.5f, 1.0f, 0.0f};
+        constexpr Array<float, UIAnchorPresets::kRows> kMax = {0.0f, 0.5f, 1.0f, 1.0f};
+        constexpr Array<float, UIAnchorPresets::kRows> kPivot = {0.0f, 0.5f, 1.0f, 0.5f};
 
         constexpr UIAnchorPreset MakePreset(size_t row, size_t column) {
             UIAnchorPreset preset;
@@ -23,8 +23,8 @@ namespace BECore {
             return preset;
         }
 
-        constexpr std::array<UIAnchorPreset, UIAnchorPresets::kRows * UIAnchorPresets::kColumns> MakeGrid() {
-            std::array<UIAnchorPreset, UIAnchorPresets::kRows * UIAnchorPresets::kColumns> grid;
+        constexpr Array<UIAnchorPreset, UIAnchorPresets::kRows * UIAnchorPresets::kColumns> MakeGrid() {
+            Array<UIAnchorPreset, UIAnchorPresets::kRows * UIAnchorPresets::kColumns> grid;
             for (size_t row = 0; row < UIAnchorPresets::kRows; ++row) {
                 for (size_t column = 0; column < UIAnchorPresets::kColumns; ++column) {
                     grid[row * UIAnchorPresets::kColumns + column] = MakePreset(row, column);
@@ -35,10 +35,10 @@ namespace BECore {
 
         constexpr auto kGrid = MakeGrid();
 
-        constexpr std::array<const char*, UIAnchorPresets::kRows * UIAnchorPresets::kColumns> kNames = {"Top Left",     "Top Center",     "Top Right",     "Stretch Top",     //
-                                                                                                        "Middle Left",  "Middle Center",  "Middle Right",  "Stretch Middle",  //
-                                                                                                        "Bottom Left",  "Bottom Center",  "Bottom Right",  "Stretch Bottom",  //
-                                                                                                        "Stretch Left", "Stretch Center", "Stretch Right", "Stretch All"};
+        constexpr Array<const char*, UIAnchorPresets::kRows * UIAnchorPresets::kColumns> kNames = {"Top Left",     "Top Center",     "Top Right",     "Stretch Top",     //
+                                                                                                   "Middle Left",  "Middle Center",  "Middle Right",  "Stretch Middle",  //
+                                                                                                   "Bottom Left",  "Bottom Center",  "Bottom Right",  "Stretch Bottom",  //
+                                                                                                   "Stretch Left", "Stretch Center", "Stretch Right", "Stretch All"};
 
         constexpr UIAnchor kShorthands[] = {UIAnchor::TopLeft, UIAnchor::Top,        UIAnchor::TopRight, UIAnchor::Left,        UIAnchor::Center,
                                             UIAnchor::Right,   UIAnchor::BottomLeft, UIAnchor::Bottom,   UIAnchor::BottomRight, UIAnchor::Stretch};

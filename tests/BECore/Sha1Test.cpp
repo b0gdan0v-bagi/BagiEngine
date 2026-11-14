@@ -5,9 +5,9 @@ namespace BECore::Tests {
 
     namespace {
 
-        std::string Hex(const Sha1Digest& digest) {
-            constexpr std::string_view kDigits = "0123456789abcdef";
-            std::string text;
+        String Hex(const Sha1Digest& digest) {
+            constexpr StringView kDigits = "0123456789abcdef";
+            String text;
             for (const uint8_t byte : digest) {
                 text.push_back(kDigits[byte >> 4]);
                 text.push_back(kDigits[byte & 0x0F]);
@@ -15,13 +15,13 @@ namespace BECore::Tests {
             return text;
         }
 
-        std::string Sha1Hex(std::string_view text) {
+        String Sha1Hex(StringView text) {
             const auto* bytes = reinterpret_cast<const uint8_t*>(text.data());
             return Hex(Sha1(Span<const uint8_t>(bytes, text.size())));
         }
 
-        std::string Sha1OfRepeated(char letter, size_t count) {
-            return Sha1Hex(std::string(count, letter));
+        String Sha1OfRepeated(char letter, size_t count) {
+            return Sha1Hex(String(count, letter));
         }
 
     }  // namespace

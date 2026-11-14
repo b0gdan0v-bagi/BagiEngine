@@ -55,7 +55,7 @@ namespace BECore::Tests {
             }
             _initialised = true;
             const char* driver = SDL_GetCurrentVideoDriver();
-            if (driver == nullptr || std::string_view(driver) != "dummy") {
+            if (driver == nullptr || StringView(driver) != "dummy") {
                 GTEST_SKIP() << "the video driver is not dummy, the system clipboard would be touched";
             }
         }

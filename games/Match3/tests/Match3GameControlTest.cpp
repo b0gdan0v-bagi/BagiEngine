@@ -13,8 +13,8 @@ namespace BECore::Match3::Tests {
         constexpr uint32_t kDefaultSeed = 99;
         constexpr char kValidLetters[] = ".ROYGBP";
 
-        std::string ErrorCodeOf(const ControlError& error) {
-            return std::string(error.code.c_str(), error.code.size());
+        String ErrorCodeOf(const ControlError& error) {
+            return error.code;
         }
 
         Json SwapAction(int64_t fromCol, int64_t fromRow, int64_t toCol, int64_t toRow) {
@@ -104,7 +104,7 @@ namespace BECore::Match3::Tests {
         EXPECT_EQ(GetJsonInt(state, "size"), 8);
         EXPECT_EQ(GetJsonInt(state, "score"), 0);
         EXPECT_EQ(GetJsonInt(state, "seed"), 42);
-        EXPECT_EQ(GetJsonString(state, "status").value_or("").c_str(), std::string("playing"));
+        EXPECT_EQ(GetJsonString(state, "status").value_or("").c_str(), String("playing"));
 
         const Json* board = FindJsonMember(state, "board");
         ASSERT_NE(board, nullptr);
@@ -112,11 +112,11 @@ namespace BECore::Match3::Tests {
         ASSERT_EQ(board->size(), 8u);
         for (size_t row = 0; row < board->size(); ++row) {
             ASSERT_TRUE((*board)[row].is_string());
-            const std::string& line = (*board)[row].get_ref<const std::string&>();
+            const std::string& line = (*board)[row].get_ref<const std::string&>();  //-NoStd: nlohmann holds its strings as std::string
             ASSERT_EQ(line.size(), 8u) << "row " << row;
             for (size_t col = 0; col < line.size(); ++col) {
                 const char letter = line[col];
-                EXPECT_NE(std::string(kValidLetters).find(letter), std::string::npos) << "row " << row << " col " << col;
+                EXPECT_NE(String(kValidLetters).find(letter), String::npos) << "row " << row << " col " << col;
                 // Row 0 is the top and column 0 the left, the order of the model
                 const GemType gem = model.GetCellAt(Cell{static_cast<int8_t>(col), static_cast<int8_t>(row)});
                 EXPECT_EQ(letter, kValidLetters[static_cast<size_t>(gem)]);
@@ -139,7 +139,7 @@ namespace BECore::Match3::Tests {
         ASSERT_EQ(actions.size(), legal.size());
         for (size_t index = 0; index < legal.size(); ++index) {
             const Json& action = actions[index];
-            EXPECT_EQ(GetJsonString(action, "type").value_or("").c_str(), std::string("swap"));
+            EXPECT_EQ(GetJsonString(action, "type").value_or("").c_str(), String("swap"));
             const Json* from = FindJsonMember(action, "from");
             const Json* to = FindJsonMember(action, "to");
             ASSERT_TRUE(from != nullptr && to != nullptr);
@@ -362,7 +362,7 @@ namespace BECore::Match3::Tests {
 
         const Json state = State();
 
-        EXPECT_EQ(GetJsonString(state, "status").value_or("").c_str(), std::string("no_moves"));
+        EXPECT_EQ(GetJsonString(state, "status").value_or("").c_str(), String("no_moves"));
         EXPECT_EQ(GetJsonInt(state, "legalSwapCount"), 0);
         EXPECT_TRUE(Actions().empty());
         EXPECT_EQ(ErrorCodeOf(control.PerformAction(SwapAction(0, 0, 1, 0)).error()), "illegal_action");

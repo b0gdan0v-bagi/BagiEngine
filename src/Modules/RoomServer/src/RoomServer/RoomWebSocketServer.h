@@ -110,7 +110,7 @@ namespace BECore {
         void SendTo(ConnectionId connection, String text);
         void CloseConnection(ConnectionId connection, const String& reason);
 
-        [[nodiscard]] eastl::shared_ptr<WebSocketConnection> FindConnection(ConnectionId connection);
+        [[nodiscard]] SharedPtr<WebSocketConnection> FindConnection(ConnectionId connection);
         [[nodiscard]] RoomTime Now() const;
 
         const SeatedGameRegistry& _registry;
@@ -120,9 +120,9 @@ namespace BECore {
         const RandomFn _random;
 
         Mutex _connectionsMutex{BE_LOCK_SITE("Room connections")};
-        HashMap<ConnectionId, eastl::shared_ptr<WebSocketConnection>> _connections;  // open connections by id; guarded by _connectionsMutex
-        bool _draining = false;                                                      // Stop() is telling the clients; guarded by _connectionsMutex
-        ConditionVariable _connectionsChanged;                                       // a connection ended (with _connectionsMutex); Stop() waits here during the drain
+        HashMap<ConnectionId, SharedPtr<WebSocketConnection>> _connections;  // open connections by id; guarded by _connectionsMutex
+        bool _draining = false;                                              // Stop() is telling the clients; guarded by _connectionsMutex
+        ConditionVariable _connectionsChanged;                               // a connection ended (with _connectionsMutex); Stop() waits here during the drain
 
         Mutex _queueMutex{BE_LOCK_SITE("Room event queue")};  // guards the queue, its byte count and _stopping
         ConditionVariable _hubWake;                           // the hub thread waits here for an event, the tick or the stop

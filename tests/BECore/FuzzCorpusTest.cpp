@@ -27,7 +27,7 @@ namespace BECore::Tests {
         constexpr uint32_t kMaxStackedMutations = 3;
 
         struct CorpusFile {
-            std::string name;
+            String name;
             FuzzBytes bytes;
         };
 
@@ -44,7 +44,7 @@ namespace BECore::Tests {
             return (result.ec == std::errc() && result.ptr == end) ? value : byDefault;
         }
 
-        uint64_t HashName(std::string_view name) {
+        uint64_t HashName(StringView name) {
             uint64_t value = kFnvOffset;
             for (const char symbol : name) {
                 value = (value ^ static_cast<uint8_t>(symbol)) * kFnvPrime;
@@ -53,17 +53,17 @@ namespace BECore::Tests {
         }
 
         /// The files of a corpus folder in the order of their names (the order of a directory listing is not defined)
-        std::vector<CorpusFile> LoadCorpus(const std::filesystem::path& folder) {
-            std::vector<CorpusFile> files;
+        Vector<CorpusFile> LoadCorpus(const std::filesystem::path& folder) {
+            Vector<CorpusFile> files;
             std::error_code error;
             for (const auto& entry : std::filesystem::directory_iterator(folder, error)) {
                 if (!entry.is_regular_file()) {
                     continue;
                 }
                 std::ifstream stream(entry.path(), std::ios::binary);
-                std::string content((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
+                std::string content((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());  //-NoStd: an eastl::string cannot be built from an istreambuf_iterator
                 CorpusFile file;
-                file.name = entry.path().filename().string();
+                file.name = FromStdString(entry.path().filename().string());
                 file.bytes.assign(reinterpret_cast<const uint8_t*>(content.data()), reinterpret_cast<const uint8_t*>(content.data()) + content.size());
                 files.push_back(std::move(file));
             }
@@ -71,7 +71,7 @@ namespace BECore::Tests {
             return files;
         }
 
-        const FuzzTarget& FindTarget(const std::string& name) {
+        const FuzzTarget& FindTarget(const String& name) {
             const std::span<const FuzzTarget> targets = Fuzz::FuzzTargetList();
             const auto found = std::find_if(targets.begin(), targets.end(), [&](const FuzzTarget& target) { return name == target.name; });
             return *found;
@@ -81,7 +81,7 @@ namespace BECore::Tests {
 
     /// The parameter of a case is the name of its target. It prints bare, because ctest names the case after what gtest prints for it
     struct FuzzCase {
-        std::string name;
+        String name;
     };
 
     void PrintTo(const FuzzCase& fuzzCase, std::ostream* stream) {
@@ -90,8 +90,8 @@ namespace BECore::Tests {
 
     namespace {
 
-        std::vector<FuzzCase> AllCases() {
-            std::vector<FuzzCase> cases;
+        Vector<FuzzCase> AllCases() {
+            Vector<FuzzCase> cases;
             for (const FuzzTarget& target : Fuzz::FuzzTargetList()) {
                 cases.push_back({target.name});
             }
@@ -106,10 +106,10 @@ namespace BECore::Tests {
         const FuzzTarget& target = FindTarget(GetParam().name);
         const std::filesystem::path folder = std::filesystem::path(BAGI_FUZZ_CORPUS_DIR) / target.corpusFolder;
 
-        const std::vector<CorpusFile> files = LoadCorpus(folder);
+        const Vector<CorpusFile> files = LoadCorpus(folder);
         ASSERT_FALSE(files.empty()) << "no seeds in " << folder.string();
 
-        std::vector<FuzzBytes> seeds;
+        Vector<FuzzBytes> seeds;
         for (const CorpusFile& file : files) {
             EXPECT_LE(file.bytes.size(), Fuzz::kMaxFuzzInputSize) << file.name << " is larger than the inputs the fuzzers make";
             seeds.push_back(file.bytes);
@@ -142,7 +142,7 @@ namespace BECore::Tests {
 
     TEST(FuzzCorpusTest, GeneratedSeedsAreTheCommittedFiles) {
         for (const Fuzz::FuzzSeedFile& seed : Fuzz::MakeGeneratedSeeds()) {
-            const std::vector<CorpusFile> files = LoadCorpus(std::filesystem::path(BAGI_FUZZ_CORPUS_DIR) / seed.folder);
+            const Vector<CorpusFile> files = LoadCorpus(std::filesystem::path(BAGI_FUZZ_CORPUS_DIR) / seed.folder);
             const auto found = std::find_if(files.begin(), files.end(), [&](const CorpusFile& file) { return file.name == seed.name; });
             ASSERT_NE(found, files.end()) << seed.name << " is not in the corpus: run WriteSeeds";
             EXPECT_TRUE(std::equal(found->bytes.begin(), found->bytes.end(), seed.bytes.begin(), seed.bytes.end())) << seed.name << " differs from what the writers make now: run WriteSeeds";

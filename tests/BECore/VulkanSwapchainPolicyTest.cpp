@@ -1,7 +1,5 @@
 #include <CoreVulkan/VulkanSwapchainPolicy.h>
-#include <array>
 #include <gtest/gtest.h>
-#include <limits>
 
 namespace BECore::Tests {
 
@@ -118,7 +116,7 @@ namespace BECore::Tests {
     }
 
     TEST(VulkanSwapchainPolicyTest, ChooseSurfaceFormatPrefersTheKeptFormat) {
-        const std::array formats{Format(VK_FORMAT_B8G8R8A8_SRGB), Format(VK_FORMAT_R8G8B8A8_SRGB), Format(VK_FORMAT_B8G8R8A8_UNORM)};
+        const Array<VkSurfaceFormatKHR, 3> formats{Format(VK_FORMAT_B8G8R8A8_SRGB), Format(VK_FORMAT_R8G8B8A8_SRGB), Format(VK_FORMAT_B8G8R8A8_UNORM)};
 
         const auto kept = ChooseSurfaceFormat(formats, VK_FORMAT_R8G8B8A8_SRGB);
         ASSERT_TRUE(kept.has_value());
@@ -130,7 +128,7 @@ namespace BECore::Tests {
     }
 
     TEST(VulkanSwapchainPolicyTest, ChooseSurfaceFormatIgnoresAKeptFormatWithAnotherColorSpace) {
-        const std::array formats{Format(VK_FORMAT_R8G8B8A8_SRGB, VK_COLOR_SPACE_DISPLAY_P3_NONLINEAR_EXT), Format(VK_FORMAT_B8G8R8A8_SRGB)};
+        const Array<VkSurfaceFormatKHR, 2> formats{Format(VK_FORMAT_R8G8B8A8_SRGB, VK_COLOR_SPACE_DISPLAY_P3_NONLINEAR_EXT), Format(VK_FORMAT_B8G8R8A8_SRGB)};
 
         const auto chosen = ChooseSurfaceFormat(formats, VK_FORMAT_R8G8B8A8_SRGB);
         ASSERT_TRUE(chosen.has_value());
@@ -139,7 +137,7 @@ namespace BECore::Tests {
     }
 
     TEST(VulkanSwapchainPolicyTest, ChooseSurfaceFormatFallsBackToTheFirst) {
-        const std::array formats{Format(VK_FORMAT_R8G8B8A8_UNORM), Format(VK_FORMAT_B8G8R8A8_UNORM)};
+        const Array<VkSurfaceFormatKHR, 2> formats{Format(VK_FORMAT_R8G8B8A8_UNORM), Format(VK_FORMAT_B8G8R8A8_UNORM)};
 
         const auto chosen = ChooseSurfaceFormat(formats);
         ASSERT_TRUE(chosen.has_value());
@@ -177,7 +175,7 @@ namespace BECore::Tests {
     }
 
     TEST(VulkanSwapchainPolicyTest, TheFormatTheSwapchainPrefersLinearizes) {
-        const std::array formats{Format(VK_FORMAT_R8G8B8A8_UNORM), Format(VK_FORMAT_B8G8R8A8_SRGB)};
+        const Array<VkSurfaceFormatKHR, 2> formats{Format(VK_FORMAT_R8G8B8A8_UNORM), Format(VK_FORMAT_B8G8R8A8_SRGB)};
         const auto chosen = ChooseSurfaceFormat(formats);
         ASSERT_TRUE(chosen.has_value());
         EXPECT_EQ(ChooseImGuiColorMode(chosen->format), ImGuiColorMode::Linearize);

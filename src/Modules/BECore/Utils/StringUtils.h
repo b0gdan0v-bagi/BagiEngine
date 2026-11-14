@@ -21,7 +21,7 @@ namespace BECore {
             return hash;
         }
 
-        static constexpr uint64_t GetHash(std::string_view sv) noexcept {  // std: the callers that hold a std view
+        static constexpr uint64_t GetHash(std::string_view sv) noexcept {  //-NoStd: the callers that hold a std view
             return GetHash(FromStd(sv));
         }
 

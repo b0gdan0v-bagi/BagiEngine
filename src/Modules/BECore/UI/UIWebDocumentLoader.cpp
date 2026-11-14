@@ -24,7 +24,7 @@ namespace BECore {
             }
             std::ostringstream buffer;
             buffer << stream.rdbuf();
-            // std: the text of an std::ostringstream
+            //-NoStd: the text of an std::ostringstream
             const std::string text = buffer.str();
             return String(text.data(), text.size());
         }

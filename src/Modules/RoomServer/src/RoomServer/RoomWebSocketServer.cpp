@@ -140,7 +140,7 @@ namespace BECore {
     }
 
     void RoomWebSocketServer::DrainConnections() {
-        Vector<eastl::shared_ptr<WebSocketConnection>> open;
+        Vector<SharedPtr<WebSocketConnection>> open;
         {
             LockGuard lock(_connectionsMutex);
             _draining = true;
@@ -297,7 +297,7 @@ namespace BECore {
         }
     }
 
-    eastl::shared_ptr<WebSocketConnection> RoomWebSocketServer::FindConnection(ConnectionId connection) {
+    SharedPtr<WebSocketConnection> RoomWebSocketServer::FindConnection(ConnectionId connection) {
         LockGuard lock(_connectionsMutex);
         const auto found = _connections.find(connection);
         return found == _connections.end() ? nullptr : found->second;

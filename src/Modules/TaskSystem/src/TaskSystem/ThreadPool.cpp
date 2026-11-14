@@ -19,12 +19,12 @@ namespace BECore {
             }
         }
 
-        _workerBusy = eastl::make_unique<std::atomic<bool>[]>(numThreads);
+        _workerBusy = MakeUnique<std::atomic<bool>[]>(numThreads);
 
         // Создаем очереди для каждого потока
         _queues.reserve(numThreads);
         for (size_t i = 0; i < numThreads; ++i) {
-            _queues.push_back(eastl::make_unique<TaskQueue>());
+            _queues.push_back(MakeUnique<TaskQueue>());
         }
 
         // Запускаем рабочие потоки

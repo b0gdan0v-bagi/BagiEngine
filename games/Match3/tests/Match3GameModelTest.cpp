@@ -34,7 +34,7 @@ namespace BECore::Match3::Tests {
         /// Wipe the model's board and set only the cells provided. Helper used by
         /// tests to construct deterministic positions without fighting the random
         /// initial generator.
-        void SetupBoard(Match3GameModel& model, std::initializer_list<eastl::pair<Cell, GemType>> cells) {
+        void SetupBoard(Match3GameModel& model, std::initializer_list<Pair<Cell, GemType>> cells) {
             for (int8_t row = 0; row < kBoardSize; ++row) {
                 for (int8_t col = 0; col < kBoardSize; ++col) {
                     model.SetCellForTest(Cell{col, row}, GemType::None);

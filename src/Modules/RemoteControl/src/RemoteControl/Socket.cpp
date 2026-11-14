@@ -149,7 +149,7 @@ namespace BECore {
 
         /// The dotted text of the IPv4 address of @p address
         String FormatIPv4(const sockaddr_in& address) {
-            std::array<char, INET_ADDRSTRLEN> text{};
+            Array<char, INET_ADDRSTRLEN> text{};
             if (inet_ntop(AF_INET, &address.sin_addr, text.data(), static_cast<socklen_t>(text.size())) == nullptr) {
                 return kUnknownPeerAddress;
             }
@@ -214,7 +214,7 @@ namespace BECore {
             hints.ai_socktype = SOCK_STREAM;
             addrinfo* found = nullptr;
             const int status = getaddrinfo(host.c_str(), nullptr, &hints, &found);
-            std::unique_ptr<addrinfo, AddrInfoDeleter> list(found);
+            UniquePtr<addrinfo, AddrInfoDeleter> list(found);
             if (status != 0 || list == nullptr) {
                 return std::unexpected(Format("cannot resolve host \"{}\" ({})", host, DescribeResolveError(status != 0 ? status : EAI_NONAME)));
             }

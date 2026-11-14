@@ -36,26 +36,26 @@ namespace BECore::Tests {
             return settings;
         }
 
-        std::string PingText() {
+        String PingText() {
             return R"({"v":1,"type":"ping"})";
         }
 
         /// A ping padded with blanks inside the braces to @p bytes: still one valid message, as long as the pieces say so
-        std::string PaddedPing(size_t bytes) {
-            std::string text = R"({"v":1,"type":"ping")";
+        String PaddedPing(size_t bytes) {
+            String text = R"({"v":1,"type":"ping")";
             text.append(bytes - text.size() - 1, ' ');
             text += '}';
             return text;
         }
 
-        Vector<uint8_t> Fragment(uint8_t opcode, const std::string& payload, bool fin) {
+        Vector<uint8_t> Fragment(uint8_t opcode, const String& payload, bool fin) {
             return EncodeFrame(opcode, Span<const uint8_t>(reinterpret_cast<const uint8_t*>(payload.data()), payload.size()), kClientMask, fin);
         }
 
         class RoomServerHostileTest : public ::testing::Test {
         protected:
             void SetUp() override {
-                ASSERT_TRUE(registry.Register(SeatedGameInfo{"cards", DemoCardGame::kSeatCount}, [] { return eastl::make_unique<DemoCardGame>(); }));
+                ASSERT_TRUE(registry.Register(SeatedGameInfo{"cards", DemoCardGame::kSeatCount}, [] { return MakeUnique<DemoCardGame>(); }));
             }
 
             void TearDown() override {
@@ -65,7 +65,7 @@ namespace BECore::Tests {
             }
 
             uint16_t StartServer(RoomServerSettings settings = MakeSettings()) {
-                server = std::make_unique<RoomWebSocketServer>(registry, std::move(settings));
+                server = MakeUnique<RoomWebSocketServer>(registry, std::move(settings));
                 const auto port = server->Start();
                 EXPECT_TRUE(port.has_value()) << (port.has_value() ? "" : port.error().message.c_str());
                 return port.value_or(0);
@@ -95,8 +95,8 @@ namespace BECore::Tests {
             }
 
             SeatedGameRegistry registry;
-            std::unique_ptr<RoomWebSocketServer> server;
-            std::vector<HandPlayer> players;
+            UniquePtr<RoomWebSocketServer> server;
+            Vector<HandPlayer> players;
         };
 
     }  // namespace
@@ -110,7 +110,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(client->Handshake(port));
 
         // Two whole fragments are fine so far; the third announces 6000 more and only its header arrives
-        const std::string piece(kFragmentBytes, ' ');
+        const String piece(kFragmentBytes, ' ');
         ASSERT_GT(3 * kFragmentBytes, kLimit);
         ASSERT_LE(2 * kFragmentBytes, kLimit);
         client->Send(AsBytes(Fragment(WebSocketOpcode::kText, piece, false)));
@@ -130,7 +130,7 @@ namespace BECore::Tests {
         auto client = RoomSocketClient::Connect(port);
         ASSERT_TRUE(client.has_value());
         // Exactly the limit, in three pieces: the boundary is on the allowed side
-        const std::string message = PaddedPing(kLimit);
+        const String message = PaddedPing(kLimit);
         const size_t cut = message.size() / 3;
         client->Raw().Send(AsBytes(Fragment(WebSocketOpcode::kText, message.substr(0, cut), false)));
         client->Raw().Send(AsBytes(Fragment(WebSocketOpcode::kContinuation, message.substr(cut, cut), false)));
@@ -144,8 +144,8 @@ namespace BECore::Tests {
         const uint16_t port = StartServer();
         auto client = RoomSocketClient::Connect(port);
         ASSERT_TRUE(client.has_value());
-        const std::string text = PingText();
-        const auto frame = EncodeTextFrame(FromStd(text), kClientMask);
+        const String text = PingText();
+        const auto frame = EncodeTextFrame(text, kClientMask);
         for (size_t i = 0; i < frame.size(); ++i) {
             client->Raw().Send(Span<const uint8_t>(frame.data() + i, 1));
         }
@@ -159,7 +159,7 @@ namespace BECore::Tests {
         auto client = WebSocketTestClient::Open(port);
         ASSERT_TRUE(client.has_value());
         ASSERT_TRUE(client->Handshake(port));
-        const std::string text = PingText();
+        const String text = PingText();
         const size_t cut = text.size() / 2;
         client->Send(AsBytes(Fragment(WebSocketOpcode::kText, text.substr(0, cut), false)));
         client->Send(AsBytes(Fragment(WebSocketOpcode::kPing, "are you there", true)));
@@ -171,7 +171,7 @@ namespace BECore::Tests {
         const auto reply = client->WaitForFrame();
         ASSERT_TRUE(reply.has_value());
         EXPECT_EQ(reply->opcode, WebSocketOpcode::kText);
-        EXPECT_NE(reply->payload.find("\"pong\""), std::string::npos) << reply->payload;
+        EXPECT_NE(reply->payload.find("\"pong\""), String::npos) << reply->payload;
     }
 
     TEST_F(RoomServerHostileTest, AnUnmaskedClientFrameIsClosedWith1002) {
@@ -179,8 +179,8 @@ namespace BECore::Tests {
         auto client = WebSocketTestClient::Open(port);
         ASSERT_TRUE(client.has_value());
         ASSERT_TRUE(client->Handshake(port));
-        const std::string text = PingText();
-        client->Send(AsBytes(EncodeTextFrame(FromStd(text))));
+        const String text = PingText();
+        client->Send(AsBytes(EncodeTextFrame(text)));
         const auto close = ReadUntilClose(*client);
         ASSERT_TRUE(close.has_value());
         EXPECT_EQ(CloseCodeOf(*close), WebSocketCloseCode::kProtocolError);
@@ -198,7 +198,7 @@ namespace BECore::Tests {
         table[0]->Start();
         const WaitPump pumpTheHand = PumpTheTable(table);
 
-        std::vector<WebSocketTestClient> silent;
+        Vector<WebSocketTestClient> silent;
         for (int i = 0; i < kSilentSockets; ++i) {
             auto client = WebSocketTestClient::Open(port, pumpTheHand);
             ASSERT_TRUE(client.has_value());
@@ -226,7 +226,7 @@ namespace BECore::Tests {
         for (int i = 0; i < kFloodSockets; ++i) {
             auto client = RoomSocketClient::Connect(port);
             ASSERT_TRUE(client.has_value());
-            flooders.push_back(std::make_unique<RoomSocketClient>(std::move(*client)));
+            flooders.push_back(MakeUnique<RoomSocketClient>(std::move(*client)));
         }
         for (int round = 0; round < kFloodRounds; ++round) {
             for (int i = 0; i < kFloodSockets; ++i) {

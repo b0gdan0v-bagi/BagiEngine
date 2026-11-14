@@ -13,7 +13,7 @@ namespace BECore {
         /// makes the system reset the connection, and the client could lose the answer
         void RejectBusy(Socket socket, const String& message) {
             socket.SetReceiveTimeout(kBusyDrainTimeout);
-            std::array<uint8_t, kMaxHandshakeBytes> discarded;
+            Array<uint8_t, kMaxHandshakeBytes> discarded;
             (void)socket.Receive(Span<uint8_t>(discarded.data(), discarded.size()));
             const String response = BuildRejectResponse(HandshakeError{kServiceUnavailable, message});
             (void)socket.SendAll(AsBytes(response));
@@ -125,7 +125,7 @@ namespace BECore {
                 connectionSettings.writerThreadName = MakeThreadName(_settings, "writer");
                 connectionSettings.writerThreadOrder = _settings.threadOrder + 2;
 
-                auto connection = eastl::make_shared<WebSocketConnection>(_nextId++, std::move(socket), std::move(peerAddress), std::move(connectionSettings));
+                auto connection = MakeShared<WebSocketConnection>(_nextId++, std::move(socket), std::move(peerAddress), std::move(connectionSettings));
                 _connections.push_back(connection);
                 connection->StartReader(Thread(MakeThreadName(_settings, "reader").c_str(), _settings.threadOrder + 1, [this, connection] { RunConnection(connection); }));
                 return;
@@ -204,7 +204,7 @@ namespace BECore {
         WebSocketFrameParser parser(_settings.maxMessageBytes);
         parser.Feed(Span<const uint8_t>(pendingBytes.data(), pendingBytes.size()));
 
-        std::array<uint8_t, kReadChunkSize> chunk;
+        Array<uint8_t, kReadChunkSize> chunk;
         for (;;) {
             for (;;) {
                 auto popped = parser.Pop();

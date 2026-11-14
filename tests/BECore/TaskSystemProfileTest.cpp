@@ -39,9 +39,9 @@ namespace BECore::Tests {
                 _counters.clear();
             }
 
-            [[nodiscard]] bool HasZone(const std::string& name) const {
+            [[nodiscard]] bool HasZone(const String& name) const {
                 std::lock_guard lock(_mutex);
-                for (const std::string& zone : _zones) {
+                for (const String& zone : _zones) {
                     if (zone == name) {
                         return true;
                     }
@@ -49,14 +49,14 @@ namespace BECore::Tests {
                 return false;
             }
 
-            [[nodiscard]] bool HasCounter(const std::string& name) const {
+            [[nodiscard]] bool HasCounter(const String& name) const {
                 return !Values(name).empty();
             }
 
             /// Every value the counter @p name took, in order
-            [[nodiscard]] std::vector<double> Values(const std::string& name) const {
+            [[nodiscard]] Vector<double> Values(const String& name) const {
                 std::lock_guard lock(_mutex);
-                std::vector<double> values;
+                Vector<double> values;
                 for (const auto& [counter, value] : _counters) {
                     if (counter == name) {
                         values.push_back(value);
@@ -67,8 +67,8 @@ namespace BECore::Tests {
 
         private:
             mutable std::mutex _mutex;
-            std::vector<std::string> _zones;
-            std::vector<std::pair<std::string, double>> _counters;
+            Vector<String> _zones;
+            Vector<Pair<String, double>> _counters;
         };
 
         /// The one backend of these tests, emptied. It is never destroyed: a worker of the TaskManager's pool may sit in a zone that began on
@@ -111,10 +111,6 @@ namespace BECore::Tests {
         Task<void> HoppingTask() {
             co_await SwitchToBackground(TaskPriority::Normal, BE_TASK_LABEL("Hop label"));
             co_return;
-        }
-
-        std::string Text(const String& text) {
-            return std::string(text.data(), text.size());
         }
 
     }  // namespace
@@ -166,7 +162,7 @@ namespace BECore::Tests {
         EXPECT_EQ(backend.Values("Pool: busy workers").back(), 0.0);
 
         // The graph of the worker that ran the job went 0 (start), 1 (the job), 0 (done)
-        const std::vector<double> values = backend.Values(lastOfFirst == 1.0 ? "Worker 0: busy" : "Worker 1: busy");
+        const Vector<double> values = backend.Values(lastOfFirst == 1.0 ? "Worker 0: busy" : "Worker 1: busy");
         ASSERT_GE(values.size(), 3u);
         EXPECT_EQ(values.front(), 0.0);
         EXPECT_EQ(values[values.size() - 2], 1.0);
@@ -214,9 +210,9 @@ namespace BECore::Tests {
         const Json* events = FindJsonMember(*parsed, "traceEvents");
         ASSERT_NE(events, nullptr);
 
-        std::vector<std::pair<std::string, int64_t>> names;    // thread name, tid
-        std::vector<std::pair<int64_t, int64_t>> sortIndexes;  // tid, sort index
-        std::vector<std::string> counters;
+        Vector<Pair<String, int64_t>> names;         // thread name, tid
+        Vector<Pair<int64_t, int64_t>> sortIndexes;  // tid, sort index
+        Vector<String> counters;
         for (const Json& event : *events) {
             const auto name = GetJsonString(event, "name");
             const auto phase = GetJsonString(event, "ph");
@@ -224,20 +220,20 @@ namespace BECore::Tests {
                 continue;
             }
             if (*phase == "C") {
-                counters.push_back(Text(*name));
+                counters.push_back(*name);
             }
             const Json* args = FindJsonMember(event, "args");
             if (args == nullptr) {
                 continue;
             }
             if (*name == "thread_name") {
-                names.emplace_back(Text(*GetJsonString(*args, "name")), GetJsonInt(event, "tid").value_or(-1));
+                names.emplace_back(*GetJsonString(*args, "name"), GetJsonInt(event, "tid").value_or(-1));
             } else if (*name == "thread_sort_index") {
                 sortIndexes.emplace_back(GetJsonInt(event, "tid").value_or(-1), GetJsonInt(*args, "sort_index").value_or(-1));
             }
         }
 
-        for (const auto& [workerName, expectedIndex] : {std::pair<const char*, int64_t>{"Worker 0", 100}, {"Worker 1", 101}}) {
+        for (const auto& [workerName, expectedIndex] : {Pair<const char*, int64_t>{"Worker 0", 100}, {"Worker 1", 101}}) {
             int64_t tid = -1;
             for (const auto& [name, id] : names) {
                 if (name == workerName) {

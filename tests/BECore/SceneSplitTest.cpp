@@ -78,13 +78,13 @@ namespace BECore::Tests {
         const char* const kNodeNames[] = {"Board", "Hud", "Menu"};
         const char* const kNodeTexts[] = {kBoardNode, kHudNode, kMenuNode};
 
-        std::string Scene(const std::string& nodesXml) {
+        String Scene(const String& nodesXml) {
             return "<SceneManager><scenes><scene type=\"Scene\" name=\"Main\" viewWidth=\"800\" viewHeight=\"600\"><nodes>" + nodesXml + "</nodes></scene></scenes></SceneManager>";
         }
 
         /// The inline scene: the nodes in the order of @p order (indices into kNodeTexts)
-        std::string InlineScene(std::initializer_list<int> order) {
-            std::string nodes;
+        String InlineScene(std::initializer_list<int> order) {
+            String nodes;
             for (int index : order) {
                 nodes += kNodeTexts[index];
             }
@@ -92,17 +92,17 @@ namespace BECore::Tests {
         }
 
         /// The same scene as references
-        std::string SplitScene(std::initializer_list<int> order) {
-            std::string nodes;
+        String SplitScene(std::initializer_list<int> order) {
+            String nodes;
             for (int index : order) {
-                nodes += std::string("<node ref=\"nodes/") + kNodeNames[index] + "\"/>";
+                nodes += String("<node ref=\"nodes/") + kNodeNames[index] + "\"/>";
             }
             return Scene(nodes);
         }
 
         // A node with a transform and a screen canvas, written inline for the overrides: the name, the layer, the origin and the elements are the parts an instance changes. The
         // button of 20 units is under the touch size, so the validator has something to find on every instance.
-        std::string PanelElements(const std::string& title) {
+        String PanelElements(const String& title) {
             return "<elements>"
                    "<element type=\"UIElement\" name=\"Title\" x=\"8\" y=\"8\" width=\"184\" height=\"30\" fontSize=\"24\"><components>"
                    "<component type=\"UITextComponent\" text=\"" +
@@ -114,53 +114,48 @@ namespace BECore::Tests {
                    "</elements>";
         }
 
-        std::string PanelNode(const std::string& name, int layer, int x, int y, const std::string& elements) {
-            return "<node name=\"" + name + "\" layer=\"" + std::to_string(layer) +
+        String PanelNode(const String& name, int layer, int x, int y, const String& elements) {
+            return "<node name=\"" + name + "\" layer=\"" + ToString(layer) +
                    "\"><components>"
                    "<component type=\"TransformComponent\" x=\"" +
-                   std::to_string(x) + "\" y=\"" + std::to_string(y) +
+                   ToString(x) + "\" y=\"" + ToString(y) +
                    "\" width=\"200\" height=\"100\"/>"
                    "<component type=\"UICanvasComponent\" space=\"Screen\" scaleMode=\"ConstantPixelSize\">" +
                    elements + "</component></components></node>";
         }
 
         /// The node file of every instance: Panel, layer 2, at (10, 20), the title "Base"
-        std::string PanelFile() {
+        String PanelFile() {
             return PanelNode("Panel", 2, 10, 20, PanelElements("Base"));
         }
 
         // Three instances of the one node file, each overriding some of the values; PanelInline() below is the same three nodes written out
-        const std::string kPanelRefA = "<node ref=\"nodes/Panel\" name=\"PanelA\" layer=\"7\"><components>"
-                                       "<component type=\"TransformComponent\" x=\"100\"/>"
-                                       "<component type=\"UICanvasComponent\">" +
-                                       PanelElements("A") + "</component></components></node>";
-        const std::string kPanelRefB = "<node ref=\"nodes/Panel\" name=\"PanelB\"><components><component type=\"TransformComponent\" y=\"55\"/></components></node>";
-        const std::string kPanelRefC =
-            "<node ref=\"nodes/Panel\" name=\"PanelC\" layer=\"1\"><components><component type=\"UICanvasComponent\">" + PanelElements("C") + "</component></components></node>";
+        const String kPanelRefA = "<node ref=\"nodes/Panel\" name=\"PanelA\" layer=\"7\"><components>"
+                                  "<component type=\"TransformComponent\" x=\"100\"/>"
+                                  "<component type=\"UICanvasComponent\">" +
+                                  PanelElements("A") + "</component></components></node>";
+        const String kPanelRefB = "<node ref=\"nodes/Panel\" name=\"PanelB\"><components><component type=\"TransformComponent\" y=\"55\"/></components></node>";
+        const String kPanelRefC = "<node ref=\"nodes/Panel\" name=\"PanelC\" layer=\"1\"><components><component type=\"UICanvasComponent\">" + PanelElements("C") + "</component></components></node>";
 
-        std::string PanelInlineA() {
+        String PanelInlineA() {
             return PanelNode("PanelA", 7, 100, 20, PanelElements("A"));
         }
-        std::string PanelInlineB() {
+        String PanelInlineB() {
             return PanelNode("PanelB", 2, 10, 55, PanelElements("Base"));
         }
-        std::string PanelInlineC() {
+        String PanelInlineC() {
             return PanelNode("PanelC", 1, 10, 20, PanelElements("C"));
         }
 
-        void WriteFile(const std::filesystem::path& path, const std::string& text) {
+        void WriteFile(const std::filesystem::path& path, const String& text) {
             std::filesystem::create_directories(path.parent_path());
             std::ofstream(path) << text;
         }
 
-        std::string Printed(const pugi::xml_node& node) {
+        String Printed(const pugi::xml_node& node) {
             std::ostringstream out;
             node.print(out, "", pugi::format_raw);
-            return out.str();
-        }
-
-        std::string Text(const String& text) {
-            return std::string(text.c_str(), text.size());
+            return FromStdString(out.str());
         }
 
         const Json* Member(const Json& object, StringView key) {
@@ -209,8 +204,8 @@ namespace BECore::Tests {
             EXPECT_EQ(DrawRanks(expected), DrawRanks(actual));
         }
 
-        std::vector<std::string> NodeNamesOf(BECore::Scene& scene) {
-            std::vector<std::string> names;
+        Vector<String> NodeNamesOf(BECore::Scene& scene) {
+            Vector<String> names;
             for (const auto& node : scene.GetRootNode().GetChildren()) {
                 names.emplace_back(node->GetName().CStr());
             }
@@ -231,7 +226,7 @@ namespace BECore::Tests {
             std::filesystem::remove_all(_dir);
             std::filesystem::create_directories(_dir);
             for (int i = 0; i < 3; ++i) {
-                WriteFile(_dir / "nodes" / (std::string(kNodeNames[i]) + ".xml"), kNodeTexts[i]);
+                WriteFile(_dir / "nodes" / ToStd(String(kNodeNames[i]) + ".xml"), kNodeTexts[i]);
             }
             _renderer = New<RecordingRenderer>();
             _renderer->width = 800.0f;
@@ -249,7 +244,7 @@ namespace BECore::Tests {
         }
 
         /// Loads a SceneConfig text through LoadSceneManager with the node files of the temp folder; the document is kept alive in @p doc
-        IntrusivePtrAtomic<SceneManager> Load(const std::string& text, pugi::xml_document& doc) {
+        IntrusivePtrAtomic<SceneManager> Load(const String& text, pugi::xml_document& doc) {
             const pugi::xml_parse_result parsed = doc.load_string(text.c_str());
             EXPECT_TRUE(parsed) << parsed.description();
             auto manager = LoadSceneManager(XmlNode{doc.document_element()}, MakeDirectoryNodeLoader(_dir));
@@ -264,7 +259,7 @@ namespace BECore::Tests {
         }
 
         /// The `ui_tree` answer of the active scene "Main" after a draw, as text
-        std::string UiTree(const IntrusivePtrAtomic<SceneManager>& manager) {
+        String UiTree(const IntrusivePtrAtomic<SceneManager>& manager) {
             EngineEnvironment::UseSceneManager(manager);
             manager->SetActiveScene(PoolString::Intern("Main"));
             _renderer->ClearCalls();
@@ -273,21 +268,21 @@ namespace BECore::Tests {
             Json request = Json::object();
             request["id"] = 1;
             request["method"] = "ui_tree";
-            std::string answer;
-            _service.Post(DumpJson(request), [&answer](String text) { answer = Text(text); });
+            String answer;
+            _service.Post(DumpJson(request), [&answer](String text) { answer = text; });
             _service.Drain();
             EngineEnvironment::UseSceneManager({});
             return answer;
         }
 
         /// What the validator finds on the matrix for every canvas of "Main", as one text
-        static std::string ValidatorFindings(const IntrusivePtrAtomic<SceneManager>& manager) {
-            std::string all;
+        static String ValidatorFindings(const IntrusivePtrAtomic<SceneManager>& manager) {
+            String all;
             UILayoutValidatorOptions options;
             options.minTouchSize = CoreManager::GetUIEnvironment().GetSettings().minTouchSize;
             for (const auto& node : Main(manager).GetRootNode().GetChildren()) {
                 if (const auto canvas = node->GetComponent<UICanvasComponent>()) {
-                    all += std::string(node->GetName().CStr()) + ":" + Text(DescribeMatrixFailures(ValidateOnMatrix(canvas->GetLayout(), options), 100)) + "\n";
+                    all += String(node->GetName().CStr()) + ":" + DescribeMatrixFailures(ValidateOnMatrix(canvas->GetLayout(), options), 100) + "\n";
                 }
             }
             return all;
@@ -304,7 +299,7 @@ namespace BECore::Tests {
         const auto inlined = Load(InlineScene({0, 1, 2}), inlineDoc);
         const auto split = Load(SplitScene({0, 1, 2}), splitDoc);
 
-        EXPECT_EQ(NodeNamesOf(Main(split)), (std::vector<std::string>{"Board", "Hud", "Menu"}));
+        EXPECT_EQ(NodeNamesOf(Main(split)), (Vector<String>{"Board", "Hud", "Menu"}));
         ExpectSameScene(Main(inlined), Main(split));
         // The draw order is by layer, then scene order: Board (0) first, Menu (5), Hud (10) last; the ranks count the root node too
         EXPECT_EQ(DrawRanks(Main(split)), (Vector<int32_t>{1, 3, 2}));
@@ -337,11 +332,11 @@ namespace BECore::Tests {
         const auto inlined = Load(InlineScene({0, 1, 2}), inlineDoc);
         const auto split = Load(SplitScene({0, 1, 2}), splitDoc);
 
-        const std::string expected = UiTree(inlined);
-        const std::string actual = UiTree(split);
+        const String expected = UiTree(inlined);
+        const String actual = UiTree(split);
 
-        EXPECT_NE(expected.find("\"Plate\""), std::string::npos) << expected;
-        EXPECT_NE(expected.find("\"Tiny\""), std::string::npos) << expected;
+        EXPECT_NE(expected.find("\"Plate\""), String::npos) << expected;
+        EXPECT_NE(expected.find("\"Tiny\""), String::npos) << expected;
         EXPECT_EQ(expected, actual);
     }
 
@@ -351,11 +346,11 @@ namespace BECore::Tests {
         const auto inlined = Load(InlineScene({0, 1, 2}), inlineDoc);
         const auto split = Load(SplitScene({0, 1, 2}), splitDoc);
 
-        const std::string expected = ValidatorFindings(inlined);
-        const std::string actual = ValidatorFindings(split);
+        const String expected = ValidatorFindings(inlined);
+        const String actual = ValidatorFindings(split);
 
         // Not vacuous: the 20 unit button of Menu is under the touch size somewhere on the matrix
-        EXPECT_NE(expected.find("Tiny"), std::string::npos) << expected;
+        EXPECT_NE(expected.find("Tiny"), String::npos) << expected;
         EXPECT_EQ(expected, actual);
     }
 
@@ -365,37 +360,37 @@ namespace BECore::Tests {
         const auto inlined = Load(InlineScene({2, 0, 1}), inlineDoc);
         const auto split = Load(SplitScene({2, 0, 1}), splitDoc);
 
-        EXPECT_EQ(NodeNamesOf(Main(split)), (std::vector<std::string>{"Menu", "Board", "Hud"}));
+        EXPECT_EQ(NodeNamesOf(Main(split)), (Vector<String>{"Menu", "Board", "Hud"}));
         ExpectSameScene(Main(inlined), Main(split));
     }
 
     TEST_F(SceneSplitTest, ReferencesMixedWithInlineNodesKeepTheirPlace) {
         pugi::xml_document inlineDoc;
         pugi::xml_document splitDoc;
-        const auto inlined = Load(Scene(std::string(kBoardNode) + kHudNode + "<node name=\"Tail\"/>"), inlineDoc);
-        const auto split = Load(Scene("<node ref=\"nodes/Board\"/>" + std::string(kHudNode) + "<node name=\"Tail\"/>"), splitDoc);
+        const auto inlined = Load(Scene(String(kBoardNode) + kHudNode + "<node name=\"Tail\"/>"), inlineDoc);
+        const auto split = Load(Scene("<node ref=\"nodes/Board\"/>" + String(kHudNode) + "<node name=\"Tail\"/>"), splitDoc);
 
-        EXPECT_EQ(NodeNamesOf(Main(split)), (std::vector<std::string>{"Board", "Hud", "Tail"}));
+        EXPECT_EQ(NodeNamesOf(Main(split)), (Vector<String>{"Board", "Hud", "Tail"}));
         ExpectSameScene(Main(inlined), Main(split));
     }
 
     TEST_F(SceneSplitTest, AMissingReferenceLeavesTheOtherNodesInOrder) {
         pugi::xml_document doc;
-        const auto manager = Load(Scene(std::string("<node ref=\"nodes/Board\"/><node ref=\"nodes/Nowhere\"/>") + "<node ref=\"nodes/Menu\"/>"), doc);
+        const auto manager = Load(Scene(String("<node ref=\"nodes/Board\"/><node ref=\"nodes/Nowhere\"/>") + "<node ref=\"nodes/Menu\"/>"), doc);
 
-        EXPECT_EQ(NodeNamesOf(Main(manager)), (std::vector<std::string>{"Board", "Menu"}));
+        EXPECT_EQ(NodeNamesOf(Main(manager)), (Vector<String>{"Board", "Menu"}));
     }
 
     TEST_F(SceneSplitTest, LoadSceneManagerLeavesTheGivenNodeAsItWas) {
         pugi::xml_document doc;
         ASSERT_TRUE(doc.load_string(SplitScene({0, 1, 2}).c_str()));
-        const std::string before = Printed(doc.document_element());
+        const String before = Printed(doc.document_element());
 
         const auto manager = LoadSceneManager(XmlNode{doc.document_element()}, MakeDirectoryNodeLoader(_dir));
 
-        EXPECT_EQ(NodeNamesOf(Main(manager)), (std::vector<std::string>{"Board", "Hud", "Menu"}));
+        EXPECT_EQ(NodeNamesOf(Main(manager)), (Vector<String>{"Board", "Hud", "Menu"}));
         EXPECT_EQ(Printed(doc.document_element()), before);
-        EXPECT_NE(before.find("ref=\"nodes/Hud\""), std::string::npos);
+        EXPECT_NE(before.find("ref=\"nodes/Hud\""), String::npos);
     }
 
     TEST_F(SceneSplitTest, ADocumentWithoutReferencesIsADeserializeAway) {
@@ -453,7 +448,7 @@ namespace BECore::Tests {
         const auto split = Load(Scene(kPanelRefA + kPanelRefB + kPanelRefC), splitDoc);
 
         ExpectSameScene(Main(inlined), Main(split));
-        EXPECT_EQ(NodeNamesOf(Main(split)), (std::vector<std::string>{"PanelA", "PanelB", "PanelC"}));
+        EXPECT_EQ(NodeNamesOf(Main(split)), (Vector<String>{"PanelA", "PanelB", "PanelC"}));
         // The layers decide the draw order: PanelC (1), PanelB (2), PanelA (7); the ranks count the root node too
         EXPECT_EQ(DrawRanks(Main(split)), (Vector<int32_t>{3, 2, 1}));
 
@@ -485,11 +480,11 @@ namespace BECore::Tests {
         WriteFile(_dir / "SceneConfig.xml", Scene(kPanelRefA + kPanelRefB));
         pugi::xml_document split;
         ASSERT_TRUE(LoadSceneDocument(_dir / "SceneConfig.xml", split).Ok());
-        EXPECT_EQ(Printed(split.document_element()).find("sourceRef"), std::string::npos);
+        EXPECT_EQ(Printed(split.document_element()).find("sourceRef"), String::npos);
 
         pugi::xml_document doc;
         ASSERT_TRUE(doc.load_string(Scene(kPanelRefA).c_str()));
-        const std::string before = Printed(doc.document_element());
+        const String before = Printed(doc.document_element());
         LoadSceneManager(XmlNode{doc.document_element()}, MakeDirectoryNodeLoader(_dir));
         EXPECT_EQ(Printed(doc.document_element()), before);
     }
@@ -502,23 +497,23 @@ namespace BECore::Tests {
         const auto split = Load(Scene(kPanelRefA + kPanelRefB + kPanelRefC), splitDoc);
         const auto plain = Load(Scene("<node ref=\"nodes/Panel\"/>"), plainDoc);
 
-        const std::string expectedTree = UiTree(inlined);
-        const std::string expectedFindings = ValidatorFindings(inlined);
+        const String expectedTree = UiTree(inlined);
+        const String expectedFindings = ValidatorFindings(inlined);
 
         EXPECT_EQ(expectedTree, UiTree(split));
         EXPECT_EQ(expectedFindings, ValidatorFindings(split));
         // Not vacuous: the overridden titles are in the tree, the instances differ from the file, and the small button is found on all three
-        EXPECT_NE(expectedTree.find("\"Tiny\""), std::string::npos) << expectedTree;
+        EXPECT_NE(expectedTree.find("\"Tiny\""), String::npos) << expectedTree;
         EXPECT_NE(expectedTree, UiTree(plain));
-        EXPECT_NE(expectedFindings.find("PanelA:"), std::string::npos) << expectedFindings;
-        EXPECT_NE(expectedFindings.find("Tiny"), std::string::npos) << expectedFindings;
+        EXPECT_NE(expectedFindings.find("PanelA:"), String::npos) << expectedFindings;
+        EXPECT_NE(expectedFindings.find("Tiny"), String::npos) << expectedFindings;
     }
 
     TEST_F(SceneSplitOverrideTest, TwoInstancesWithDifferentNamesAndLayersAreTwoNodesInTheOrderOfTheReferences) {
         pugi::xml_document doc;
         const auto manager = Load(Scene("<node ref=\"nodes/Panel\" name=\"Second\" layer=\"9\"/><node ref=\"nodes/Panel\" name=\"First\" layer=\"4\"/>"), doc);
 
-        EXPECT_EQ(NodeNamesOf(Main(manager)), (std::vector<std::string>{"Second", "First"}));
+        EXPECT_EQ(NodeNamesOf(Main(manager)), (Vector<String>{"Second", "First"}));
         const auto& nodes = Main(manager).GetRootNode().GetChildren();
         ASSERT_EQ(nodes.size(), 2u);
         EXPECT_EQ(nodes[0]->GetLayer(), 9);
@@ -532,13 +527,13 @@ namespace BECore::Tests {
 
     TEST_F(SceneSplitOverrideTest, AnOverrideThatErrorsDropsThatInstanceOnly) {
         // The Panel file has no QuadRendererComponent to override
-        const std::string bad = "<node ref=\"nodes/Panel\" name=\"Broken\"><components><component type=\"QuadRendererComponent\"/></components></node>";
+        const String bad = "<node ref=\"nodes/Panel\" name=\"Broken\"><components><component type=\"QuadRendererComponent\"/></components></node>";
         pugi::xml_document withBadDoc;
         pugi::xml_document withoutDoc;
         const auto withBad = Load(Scene(kPanelRefA + bad + kPanelRefC), withBadDoc);
         const auto without = Load(Scene(kPanelRefA + kPanelRefC), withoutDoc);
 
-        EXPECT_EQ(NodeNamesOf(Main(withBad)), (std::vector<std::string>{"PanelA", "PanelC"}));
+        EXPECT_EQ(NodeNamesOf(Main(withBad)), (Vector<String>{"PanelA", "PanelC"}));
         ExpectSameScene(Main(without), Main(withBad));
         EXPECT_EQ(UiTree(without), UiTree(withBad));
     }
@@ -546,16 +541,16 @@ namespace BECore::Tests {
     TEST_F(SceneSplitOverrideTest, LoadSceneManagerLeavesTheGivenNodeWithItsReferencesAndOverrides) {
         pugi::xml_document doc;
         ASSERT_TRUE(doc.load_string(Scene(kPanelRefA + kPanelRefB + kPanelRefC).c_str()));
-        const std::string before = Printed(doc.document_element());
+        const String before = Printed(doc.document_element());
 
         const auto manager = LoadSceneManager(XmlNode{doc.document_element()}, MakeDirectoryNodeLoader(_dir));
 
-        EXPECT_EQ(NodeNamesOf(Main(manager)), (std::vector<std::string>{"PanelA", "PanelB", "PanelC"}));
+        EXPECT_EQ(NodeNamesOf(Main(manager)), (Vector<String>{"PanelA", "PanelB", "PanelC"}));
         EXPECT_EQ(Printed(doc.document_element()), before);
-        EXPECT_NE(before.find("name=\"PanelA\""), std::string::npos);
-        EXPECT_NE(before.find("ref=\"nodes/Panel\""), std::string::npos);
+        EXPECT_NE(before.find("name=\"PanelA\""), String::npos);
+        EXPECT_NE(before.find("ref=\"nodes/Panel\""), String::npos);
         // Nothing of the node file leaked into the given document
-        EXPECT_EQ(before.find("Base"), std::string::npos);
+        EXPECT_EQ(before.find("Base"), String::npos);
     }
 
     TEST_F(SceneSplitOverrideTest, LoadSceneDocumentWithOverridesEqualsTheInlineDocument) {
