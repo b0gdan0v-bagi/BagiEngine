@@ -128,7 +128,7 @@ namespace BECore {
             if (!entry.is_regular_file(entryError) || entry.path().extension() != ToStdString(kLayoutExtension)) {
                 continue;
             }
-            // std: the text of a std::filesystem::path
+            //-NoStd: the text of a std::filesystem::path
             const std::string stem = entry.path().stem().string();
             if (IsValidLayoutName(FromStd(stem))) {
                 names.push_back(String(stem.c_str(), stem.size()));

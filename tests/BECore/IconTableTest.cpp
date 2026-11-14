@@ -82,7 +82,7 @@ namespace BECore::Tests {
             }
             const String definePrefix = String("#define ") + kIconTokenPrefix;
             std::istringstream lines(ToStdString(text));
-            std::string stdLine;  // std: std::getline fills a std::string
+            std::string stdLine;  //-NoStd: std::getline fills a std::string
             while (std::getline(lines, stdLine)) {
                 const String line = FromStdString(stdLine);
                 if (line.rfind(definePrefix, 0) != 0) {

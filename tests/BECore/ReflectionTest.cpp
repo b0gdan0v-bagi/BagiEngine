@@ -470,9 +470,9 @@ namespace BECore::Tests {
         }
         {
             SCOPED_TRACE("std::array");
-            // std: twin case: the reflection reads std::array as well as eastl::array
+            //-NoStd: twin case: the reflection reads std::array as well as eastl::array
             const std::array<float, 3> original = {4.0f, 5.5f, 6.25f};
-            // std: twin case: the reflection reads std::array as well as eastl::array
+            //-NoStd: twin case: the reflection reads std::array as well as eastl::array
             ExpectBinaryRoundTrip(original, std::array<float, 3>{});
         }
         {
@@ -482,9 +482,9 @@ namespace BECore::Tests {
         }
         {
             SCOPED_TRACE("std::pair");
-            // std: twin case: the reflection reads std::pair as well as eastl::pair
+            //-NoStd: twin case: the reflection reads std::pair as well as eastl::pair
             const std::pair<int32_t, String> original = {99, String("world")};
-            // std: twin case: the reflection reads std::pair as well as eastl::pair
+            //-NoStd: twin case: the reflection reads std::pair as well as eastl::pair
             ExpectBinaryRoundTrip(original, std::pair<int32_t, String>{0, String{}});
         }
         {
@@ -1327,11 +1327,11 @@ namespace BECore::Tests {
         // std::array
         {
             SCOPED_TRACE("std::array");
-            // std: twin case: the reflection reads std::array as well as eastl::array
+            //-NoStd: twin case: the reflection reads std::array as well as eastl::array
             const std::array<float, 3> original = {4.0f, 5.5f, 6.25f};
             const String xml = SaveToXml("StdArrTest", "values", original);
 
-            // std: twin case: the reflection reads std::array as well as eastl::array
+            //-NoStd: twin case: the reflection reads std::array as well as eastl::array
             std::array<float, 3> loaded = {};
             ASSERT_NO_FATAL_FAILURE(LoadFromXml(xml, "StdArrTest", "values", loaded));
 
@@ -1373,11 +1373,11 @@ namespace BECore::Tests {
         // std::pair
         {
             SCOPED_TRACE("std::pair");
-            // std: twin case: the reflection reads std::pair as well as eastl::pair
+            //-NoStd: twin case: the reflection reads std::pair as well as eastl::pair
             const std::pair<int32_t, String> original = {99, String("world")};
             const String xml = SaveToXml("StdPairTest", "entry", original);
 
-            // std: twin case: the reflection reads std::pair as well as eastl::pair
+            //-NoStd: twin case: the reflection reads std::pair as well as eastl::pair
             std::pair<int32_t, String> loaded = {0, String{}};
             ASSERT_NO_FATAL_FAILURE(LoadFromXml(xml, "StdPairTest", "entry", loaded));
 

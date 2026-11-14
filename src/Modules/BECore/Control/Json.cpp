@@ -36,7 +36,7 @@ namespace BECore {
     }
 
     String DumpJson(const Json& value) {
-        // std: nlohmann's dump
+        //-NoStd: nlohmann's dump
         const std::string text = value.dump(-1, ' ', false, Json::error_handler_t::replace);
         return String(text.c_str(), text.size());
     }
@@ -58,7 +58,7 @@ namespace BECore {
         if (member == nullptr || !member->is_string()) {
             return std::nullopt;
         }
-        // std: nlohmann's string
+        //-NoStd: nlohmann's string
         const std::string& text = member->get_ref<const std::string&>();
         return String(text.c_str(), text.size());
     }

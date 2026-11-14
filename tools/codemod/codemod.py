@@ -6,7 +6,7 @@
 
 It walks `*.h *.hpp *.inl *.cpp` under `--root`, skips the vendored zones, the type layer and the reflection traits, and works on code
 only: comments and string literals are blanked for matching and kept as they were. A line that must keep a `std::` type carries
-`// std: <why>` on it or on the line before; the tool never touches such a line. A second run changes nothing. Standard library only.
+`//-NoStd: <why>` on it or on the line before; the tool never touches such a line. A second run changes nothing. Standard library only.
 `CLAUDE.md` has the contract and the rules of each family.
 
 Exit code: 0 ok, 1 `--fail-on-change` found something to change, 2 an error (a bad root, a file that is not UTF-8).
@@ -45,8 +45,8 @@ SKIPPED_FILES = (
 )
 EASTL_OPTIONAL_HEADER = re.compile(r"^[ \t]*#[ \t]*include[ \t]*<EASTL/optional\.h>[ \t]*\r?\n", re.MULTILINE)
 EASTL_OPTIONAL_LEFT = re.compile(r"(?<![\w:])(?:::)?eastl::(?:optional|nullopt|nullopt_t|make_optional|in_place|in_place_t|in_place_type|in_place_index|bad_optional_access)\b")
-# `// std: reason`, not an ordinary comment that starts with a `std::` name
-STD_MARKER = re.compile(r"//\s*std:(?!:)")
+# `//-NoStd: reason` exactly (no space after `//`): the old `// std: reason` and an ordinary comment that starts with a `std::` name are no markers
+STD_MARKER = re.compile(r"//-NoStd:")
 MAX_PASSES = 8
 
 # ---- blanking comments and literals ------------------------------------------------------------------------------------------

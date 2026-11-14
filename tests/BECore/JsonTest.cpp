@@ -148,7 +148,7 @@ namespace BECore::Tests {
 
         ASSERT_TRUE(parsed.has_value());
         ASSERT_TRUE(parsed->is_string());
-        // std: nlohmann holds its strings as std::string
+        //-NoStd: nlohmann holds its strings as std::string
         EXPECT_EQ(FromStdString(parsed->get_ref<const std::string&>()), original);
     }
 

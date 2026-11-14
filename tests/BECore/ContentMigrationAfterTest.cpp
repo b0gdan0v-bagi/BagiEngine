@@ -475,7 +475,7 @@ namespace BECore::Tests {
                              }()),
                              [](const ::testing::TestParamInfo<String>& info) {
                                  const Expectation& expectation = Expectations()[static_cast<size_t>(std::stoi(info.param.c_str()))];
-                                 return std::string(expectation.folder) + "_" + expectation.name;  // std: gtest takes the test name from a std::string
+                                 return std::string(expectation.folder) + "_" + expectation.name;  //-NoStd: gtest takes the test name from a std::string
                              });
 
 }  // namespace BECore::Tests

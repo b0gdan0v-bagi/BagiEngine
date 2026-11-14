@@ -32,7 +32,7 @@ namespace BECore::Tests {
 
         [[nodiscard]] Vector<uint8_t> ReadFile(const String& path) {
             std::ifstream file(path.c_str(), std::ios::binary);
-            // std: the bytes arrive through a std::istreambuf_iterator, an input iterator that eastl::vector does not take
+            //-NoStd: the bytes arrive through a std::istreambuf_iterator, an input iterator that eastl::vector does not take
             const std::vector<char> bytes((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
             return Vector<uint8_t>(reinterpret_cast<const uint8_t*>(bytes.data()), reinterpret_cast<const uint8_t*>(bytes.data()) + bytes.size());
         }

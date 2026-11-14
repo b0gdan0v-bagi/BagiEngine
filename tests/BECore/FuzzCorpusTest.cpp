@@ -61,7 +61,7 @@ namespace BECore::Tests {
                     continue;
                 }
                 std::ifstream stream(entry.path(), std::ios::binary);
-                std::string content((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());  // std: an eastl::string cannot be built from an istreambuf_iterator
+                std::string content((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());  //-NoStd: an eastl::string cannot be built from an istreambuf_iterator
                 CorpusFile file;
                 file.name = FromStdString(entry.path().filename().string());
                 file.bytes.assign(reinterpret_cast<const uint8_t*>(content.data()), reinterpret_cast<const uint8_t*>(content.data()) + content.size());

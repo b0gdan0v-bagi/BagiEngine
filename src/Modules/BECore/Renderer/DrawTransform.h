@@ -21,7 +21,7 @@ namespace BECore {
 
     /// The four corners of a rect turned about the pivot of @p transform, in the order top-left, top-right, bottom-left, bottom-right
     /// of the unrotated rect (the order of the two triangles {0, 1, 2} and {2, 1, 3}). Flips are not part of the corners: they are the UVs.
-    // std: the games' tests take the result as std::array until core-type-aliases-cleanup
+    //-NoStd: the games' tests take the result as std::array until core-type-aliases-cleanup
     [[nodiscard]] std::array<Vec2, 4> MakeTransformedQuad(const Rect& rect, const DrawTransform& transform);
 
 }  // namespace BECore

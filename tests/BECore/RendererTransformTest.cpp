@@ -44,7 +44,7 @@ namespace BECore::Tests {
     }  // namespace
 
     TEST(RendererTransformTest, TheIdentityKeepsTheRect) {
-        // std: MakeTransformedQuad returns std::array until core-type-aliases-cleanup
+        //-NoStd: MakeTransformedQuad returns std::array until core-type-aliases-cleanup
         const std::array<Vec2, 4> corners = MakeTransformedQuad(Rect{10.0f, 20.0f, 100.0f, 50.0f}, DrawTransform{});
 
         ExpectPoint(corners[0], 10.0f, 20.0f);
@@ -55,7 +55,7 @@ namespace BECore::Tests {
 
     TEST(RendererTransformTest, ANinetyDegreeTurnAboutTheCenterIsClockwiseOnTheScreen) {
         const DrawTransform transform{90.0f, 50.0f, 25.0f};
-        // std: MakeTransformedQuad returns std::array until core-type-aliases-cleanup
+        //-NoStd: MakeTransformedQuad returns std::array until core-type-aliases-cleanup
         const std::array<Vec2, 4> corners = MakeTransformedQuad(Rect{0.0f, 0.0f, 100.0f, 50.0f}, transform);
 
         ExpectPoint(corners[0], 75.0f, -25.0f);  // the top-left corner goes to the top-right
@@ -66,7 +66,7 @@ namespace BECore::Tests {
 
     TEST(RendererTransformTest, AHalfTurnSwapsOppositeCorners) {
         const DrawTransform transform{180.0f, 50.0f, 25.0f};
-        // std: MakeTransformedQuad returns std::array until core-type-aliases-cleanup
+        //-NoStd: MakeTransformedQuad returns std::array until core-type-aliases-cleanup
         const std::array<Vec2, 4> corners = MakeTransformedQuad(Rect{0.0f, 0.0f, 100.0f, 50.0f}, transform);
 
         ExpectPoint(corners[0], 100.0f, 50.0f);
@@ -77,7 +77,7 @@ namespace BECore::Tests {
 
     TEST(RendererTransformTest, ThePivotMayBeACorner) {
         const DrawTransform transform{90.0f, 0.0f, 0.0f};
-        // std: MakeTransformedQuad returns std::array until core-type-aliases-cleanup
+        //-NoStd: MakeTransformedQuad returns std::array until core-type-aliases-cleanup
         const std::array<Vec2, 4> corners = MakeTransformedQuad(Rect{0.0f, 0.0f, 100.0f, 50.0f}, transform);
 
         ExpectPoint(corners[0], 0.0f, 0.0f);  // the pivot stays where it is
@@ -88,7 +88,7 @@ namespace BECore::Tests {
 
     TEST(RendererTransformTest, ThePivotIsAnAbsolutePointNotRelativeToTheRect) {
         const DrawTransform transform{90.0f, 0.0f, 0.0f};
-        // std: MakeTransformedQuad returns std::array until core-type-aliases-cleanup
+        //-NoStd: MakeTransformedQuad returns std::array until core-type-aliases-cleanup
         const std::array<Vec2, 4> corners = MakeTransformedQuad(Rect{100.0f, 100.0f, 10.0f, 10.0f}, transform);
 
         ExpectPoint(corners[0], -100.0f, 100.0f);

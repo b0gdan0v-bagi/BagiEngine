@@ -129,7 +129,7 @@ namespace BECore::Match3 {
 
         std::ostringstream rng;
         rng << _rng;
-        // std: the text of an std::ostringstream
+        //-NoStd: the text of an std::ostringstream
         const std::string text = rng.str();
         state.rng.assign(text.data(), text.size());
         return state;
@@ -159,7 +159,7 @@ namespace BECore::Match3 {
         if (!LooksLikeGeneratorText(StringView(state.rng))) {
             return std::unexpected(String("the random generator text is not the text of a std::mt19937"));
         }
-        // std: an std::istringstream reads it
+        //-NoStd: an std::istringstream reads it
         const std::string rngText(state.rng.data(), state.rng.size());
         std::istringstream in(rngText);
         std::mt19937 rng;

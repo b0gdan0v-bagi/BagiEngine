@@ -112,7 +112,7 @@ namespace BECore::Match3::Tests {
         ASSERT_EQ(board->size(), 8u);
         for (size_t row = 0; row < board->size(); ++row) {
             ASSERT_TRUE((*board)[row].is_string());
-            const std::string& line = (*board)[row].get_ref<const std::string&>();  // std: nlohmann holds its strings as std::string
+            const std::string& line = (*board)[row].get_ref<const std::string&>();  //-NoStd: nlohmann holds its strings as std::string
             ASSERT_EQ(line.size(), 8u) << "row " << row;
             for (size_t col = 0; col < line.size(); ++col) {
                 const char letter = line[col];

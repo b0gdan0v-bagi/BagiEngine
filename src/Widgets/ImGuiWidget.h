@@ -35,7 +35,7 @@ namespace BECore {
         void OnSDLEvent(const SDLEvents::SDLEventWrapper& event) const;
 
         bool _isInitialized = false;
-        // std: a std::filesystem path's text, ImGui reads it by c_str()
+        //-NoStd: a std::filesystem path's text, ImGui reads it by c_str()
         std::string _iniFilePath;
         /// ImGui reads these bytes while its atlas lives: they are released after the context
         ImGuiFontBuffers _fontBuffers;

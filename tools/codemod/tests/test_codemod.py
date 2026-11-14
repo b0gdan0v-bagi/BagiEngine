@@ -109,22 +109,27 @@ def test_comments_and_literals_are_kept() -> None:
 
 
 def test_the_std_marker_keeps_its_line_and_the_next() -> None:
-    source = in_namespace("std::string a;  // std: file path\n// std: the api takes it\nstd::string b;\nstd::string c;\neastl::string d;  // std: kept\n")
-    assert convert(source) == in_namespace("std::string a;  // std: file path\n// std: the api takes it\nstd::string b;\nString c;\neastl::string d;  // std: kept\n")
+    source = in_namespace("std::string a;  //-NoStd: file path\n//-NoStd: the api takes it\nstd::string b;\nstd::string c;\neastl::string d;  //-NoStd: kept\n")
+    assert convert(source) == in_namespace("std::string a;  //-NoStd: file path\n//-NoStd: the api takes it\nstd::string b;\nString c;\neastl::string d;  //-NoStd: kept\n")
 
 
 def test_a_comment_that_starts_with_a_std_name_is_no_marker() -> None:
-    source = in_namespace("// std::function needs a copyable callable and std::random_device is not\nstd::string a;\nstd::string b;  // std: api\n")
-    assert convert(source) == in_namespace("// std::function needs a copyable callable and std::random_device is not\nString a;\nstd::string b;  // std: api\n")
+    source = in_namespace("// std::function needs a copyable callable and std::random_device is not\nstd::string a;\nstd::string b;  //-NoStd: api\n")
+    assert convert(source) == in_namespace("// std::function needs a copyable callable and std::random_device is not\nString a;\nstd::string b;  //-NoStd: api\n")
+
+
+def test_the_old_std_comment_form_is_no_marker() -> None:
+    source = in_namespace("std::string a;  // std: file path\n// std: the api takes it\nstd::string b;\nstd::string c;  //NoStd: x\n")
+    assert convert(source) == in_namespace("String a;  // std: file path\n// std: the api takes it\nString b;\nString c;  //NoStd: x\n")
 
 
 def test_a_trailing_marker_after_code_covers_its_own_line_only() -> None:
-    source = in_namespace("std::string a;  // std: file path\nstd::string b;\n  // std: the next line\nstd::string c;\nstd::string d;\n")
-    assert convert(source) == in_namespace("std::string a;  // std: file path\nString b;\n  // std: the next line\nstd::string c;\nString d;\n")
+    source = in_namespace("std::string a;  //-NoStd: file path\nstd::string b;\n  //-NoStd: the next line\nstd::string c;\nstd::string d;\n")
+    assert convert(source) == in_namespace("std::string a;  //-NoStd: file path\nString b;\n  //-NoStd: the next line\nstd::string c;\nString d;\n")
 
 
 def test_the_marker_keeps_the_new_families_too() -> None:
-    source = in_namespace("std::pair<int, int> a;  // std: api\n// std: api\nstd::set<int> b;\nstd::make_shared<X>();  // std: api\n")
+    source = in_namespace("std::pair<int, int> a;  //-NoStd: api\n//-NoStd: api\nstd::set<int> b;\nstd::make_shared<X>();  //-NoStd: api\n")
     assert convert(source) == source
 
 
@@ -250,7 +255,7 @@ def test_the_optional_header_goes_when_no_eastl_optional_is_left() -> None:
 
 
 def test_the_optional_header_stays_while_something_needs_it() -> None:
-    source = "#include <EASTL/optional.h>\n" + in_namespace("eastl::optional<int> a;  // std: x\nOptional<int> b;")
+    source = "#include <EASTL/optional.h>\n" + in_namespace("eastl::optional<int> a;  //-NoStd: x\nOptional<int> b;")
     assert convert(source, ["optionals"]).startswith("#include <EASTL/optional.h>\n")
 
 
