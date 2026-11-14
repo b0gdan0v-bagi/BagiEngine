@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ConfigFieldSchema.h"
+#include <Widgets/ConfigEditor/ConfigFieldSchema.h>
 
 namespace BECore {
 

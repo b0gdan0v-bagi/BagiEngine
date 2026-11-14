@@ -1,11 +1,5 @@
 #include "SceneEditorWidget.h"
 
-#include "ComponentInspectors.h"
-#include "HierarchyPanel.h"
-#include "SceneConfigWriter.h"
-#include "ScenePick.h"
-#include "UIRectInspector.h"
-
 #include <BECore/Config/ConfigManager.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/AbstractFactory.h>
@@ -21,6 +15,11 @@
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/ImGuiFonts.h>
 #include <Widgets/ImGuiTheme.h>
+#include <Widgets/SceneEditor/ComponentInspectors.h>
+#include <Widgets/SceneEditor/HierarchyPanel.h>
+#include <Widgets/SceneEditor/SceneConfigWriter.h>
+#include <Widgets/SceneEditor/ScenePick.h>
+#include <Widgets/SceneEditor/UIRectInspector.h>
 #include <imgui.h>
 
 namespace BECore {

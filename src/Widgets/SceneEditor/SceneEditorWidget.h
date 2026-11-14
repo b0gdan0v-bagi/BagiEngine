@@ -1,13 +1,12 @@
 #pragma once
 
-#include "HierarchyPanel.h"
-#include "SceneSelection.h"
-#include "SceneSelectionEvents.h"
-
 #include <BECore/Scene/SceneNode.h>
 #include <BECore/UI/UIElement.h>
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
+#include <Widgets/SceneEditor/HierarchyPanel.h>
+#include <Widgets/SceneEditor/SceneSelection.h>
+#include <Widgets/SceneEditor/SceneSelectionEvents.h>
 #include <Widgets/Viewport/ViewportEvents.h>
 
 namespace pugi {
