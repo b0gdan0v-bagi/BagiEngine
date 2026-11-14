@@ -2,7 +2,7 @@
 
 ## Overview
 
-Loading, caching and lifetime of game assets. Sync and async loading (`Task<T>`), a reference-counted cache and pluggable loaders. The Doxygen on `ResourceManager.h`, `IResourceLoader.h` and `IResource.h` has usage examples; this file only records the rules and the non-obvious parts.
+Loading, caching and lifetime of game assets. Sync and async loading (`Task<T>`), a reference-counted cache and pluggable loaders. The headers carry one or two sentences of contract per call; the usage example is under "ResourceManager API" and `XmlResource` with `XmlResourceLoader` is the reference pair; this file records the rules and the non-obvious parts.
 
 ## Architecture
 
