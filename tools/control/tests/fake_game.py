@@ -5,7 +5,7 @@
 
 The environment variable FAKE_GAME_EXIT makes it exit at once (code 3) like --exit-immediately. FAKE_GAME_PICTURE names a PNG file that `screenshot` serves instead of
 the 2x1 one (a test makes the picture of the game change this way); FAKE_GAME_WINDOW_PICTURE does the same for a start without `--headless` (a window), and
-FAKE_GAME_NO_WINDOW makes such a start exit at once (no display).
+FAKE_GAME_NO_WINDOW makes such a start exit at once (no display). FAKE_GAME_NO_PICTURE makes `screenshot` answer without a picture.
 
 Methods: ping, status, list_games, get_state (echoes the flags), list_actions, perform_action (a refusal for {"type": "bad"}, and for
 {"type": "needs_noop"} until some action has run; it raises the state version by one and pushes state_changed behind its answer), step, screenshot (a 2x1 PNG; one frame on the manual
@@ -95,6 +95,8 @@ def main() -> int:
             if manual_clock:
                 frame["count"] += 1
             width, height, data = served_picture("--headless" in args)
+            if os.environ.get("FAKE_GAME_NO_PICTURE"):
+                return {"width": width, "height": height}
             return {"width": width, "height": height, "png_base64": base64.b64encode(data).decode("ascii")}
         if method == "quit":
             raise QuitServer({"quitting": True})

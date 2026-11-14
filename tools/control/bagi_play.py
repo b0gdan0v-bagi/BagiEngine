@@ -149,6 +149,10 @@ def _play_steps(
                     outcome.reference = check_reference(spec, answer, base, update, failures_dir, Path(spec.png).stem)
                     if outcome.reference.note:
                         result.reference_notes.append(outcome.reference.note)
+                    if update and not outcome.reference.ok:  # no picture to keep or no place to write it: the update did not happen
+                        result.failed_step = index
+                        result.failure = scenario.Failure("reference", outcome.reference.expected, outcome.reference.actual)
+                        return False
             except ControlError as error:
                 outcome.error_code, outcome.error_message = error.code, error.message
             wanted = step.expect.get("event")

@@ -91,7 +91,11 @@ def capture_profile(profile: Profile, exe: Path, header: scenario.Header, steps:
                 result.unavailable = f"lost the game: {error}"
                 return result
             if step.method == SCREENSHOT_METHOD:
-                result.pictures.append(base64.b64decode(answer[scenario.SCREENSHOT_PICTURE_KEY]))
+                try:
+                    result.pictures.append(base64.b64decode(answer[scenario.SCREENSHOT_PICTURE_KEY]))
+                except (KeyError, TypeError, ValueError):
+                    result.unavailable = "screenshot answered without a usable picture"
+                    return result
         try:
             session.quit()
         except SessionError:
@@ -189,6 +193,8 @@ def _compare(args: argparse.Namespace, available: list[Capture]) -> int:
     largest: tuple[float, str] = (0.0, "")
     for other in available[1:]:
         print(f"{reference.profile} (A) vs {other.profile} (B):")
+        if len(reference.pictures) != len(other.pictures):
+            print(f"  the profiles took {len(reference.pictures)} and {len(other.pictures)} pictures: only the first {min(len(reference.pictures), len(other.pictures))} are compared")
         for number, (first, second) in enumerate(zip(reference.pictures, other.pictures), start=1):
             try:
                 found = png_diff.image_diff(read_png(first), read_png(second), args.threshold)

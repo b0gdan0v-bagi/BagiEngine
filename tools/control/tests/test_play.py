@@ -234,6 +234,27 @@ def test_a_reference_is_made_by_update_and_then_passes(fake_game_exe, scenario_f
     assert play(fake_game_exe, path, "--failures", str(tmp_path / "failures")) == EXIT_PASSED
 
 
+def test_update_fails_when_the_reference_cannot_be_written(fake_game_exe, scenario_folder, capsys):
+    (scenario_folder / "references").write_text("a file where the folder should be")
+    path = write(scenario_folder, reference_line())
+    before = path.read_text()
+    assert play(fake_game_exe, path, "--update") == EXIT_FAILED
+    output = capsys.readouterr().out
+    assert f"FAILED {path}:2  screenshot" in output and "expected reference: a writable reference" in output and "UPDATED" not in output
+    assert path.read_text() == before
+
+
+def test_update_fails_when_the_screenshot_answers_without_a_picture(fake_game_exe, scenario_folder, monkeypatch, capsys):
+    monkeypatch.setenv("FAKE_GAME_NO_PICTURE", "1")
+    path = write(scenario_folder, reference_line())
+    before = path.read_text()
+    assert play(fake_game_exe, path, "--update") == EXIT_FAILED
+    output = capsys.readouterr().out
+    assert f"FAILED {path}:2  screenshot" in output and "no usable picture" in output and "UPDATED" not in output
+    assert path.read_text() == before
+    assert not (scenario_folder / "references").exists()
+
+
 def test_a_second_update_of_an_equal_picture_says_nothing_and_writes_nothing(fake_game_exe, scenario_folder, capsys):
     path = write(scenario_folder, reference_line())
     play(fake_game_exe, path, "--update")

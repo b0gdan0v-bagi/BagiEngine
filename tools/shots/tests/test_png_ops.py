@@ -1,7 +1,7 @@
 import time
 
 import pytest
-from conftest import COLOR_TYPE_RGB, write_png
+from conftest import COLOR_TYPE_RGB, COLOR_TYPE_RGBA, write_png
 
 import png_ops
 from png_reader import PngImage, read_png
@@ -83,7 +83,7 @@ def test_a_640_picture_scales_in_a_second_or_two():
     assert time.monotonic() - started < 10.0
 
 
-@pytest.mark.parametrize("color_type", [COLOR_TYPE_RGB, 6])
+@pytest.mark.parametrize("color_type", [COLOR_TYPE_RGB, COLOR_TYPE_RGBA])
 def test_encode_png_round_trips(color_type):
     image = gradient(7, 5, color_type)
     decoded = read_png(png_ops.encode_png(image))

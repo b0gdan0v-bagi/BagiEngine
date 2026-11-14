@@ -80,6 +80,13 @@ def test_a_profile_that_does_not_start_is_named_and_skipped(fake_game_exe, tmp_p
     assert (tmp_path / "out" / "software" / "1-pair.png").is_file()
 
 
+def test_an_answer_without_a_picture_makes_the_profile_not_available(fake_game_exe, tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("FAKE_GAME_NO_PICTURE", "1")
+    assert run(fake_game_exe, write(tmp_path, SHOT), tmp_path / "out") == EXIT_PASSED
+    output = capsys.readouterr().out
+    assert "software: not available: screenshot answered without a usable picture" in output and "0 backend available" in output
+
+
 def test_only_one_requested_profile_says_so_and_exits_zero(fake_game_exe, tmp_path, capsys):
     assert run(fake_game_exe, write(tmp_path, SHOT), tmp_path / "out", "--backends", "software") == EXIT_PASSED
     assert "nothing to compare" in capsys.readouterr().out
