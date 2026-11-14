@@ -1,2 +1,0 @@
-# Headers that do not compile alone (CI/scripts/check_headers.py). A fix removes lines, nothing is added.
-# Regenerate: python3 CI/scripts/check_headers.py --root . --build build/macos-debug --baseline CI/scripts/header_baseline.txt --update-baseline

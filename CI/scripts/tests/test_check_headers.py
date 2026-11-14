@@ -136,6 +136,7 @@ def test_update_baseline_writes_the_sorted_failures(tmp_path, capsys):
     assert headers.read_baseline(baseline) == {"src/A/Alpha.h", "src/A/Zed.h"}
     lines = [line for line in baseline.read_text().splitlines() if not line.startswith("#")]
     assert lines == ["src/A/Alpha.h", "src/A/Zed.h"]
+    assert f"--baseline {baseline} --update-baseline" in baseline.read_text()
     code, _ = run(tmp_path, ["--build", str(build), "--baseline", str(baseline)], failing_by_name("Zed.h", "Alpha.h"), capsys)
     assert code == 0
 

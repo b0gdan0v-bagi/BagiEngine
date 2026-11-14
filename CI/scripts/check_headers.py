@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Checks that every header compiles alone: it includes what it uses and does not rely on the precompiled header (PCH).
 
-    python3 CI/scripts/check_headers.py --root . --build build/macos-debug [--baseline CI/scripts/header_baseline.txt]
-                                        [--exclude <path>]... [--jobs N] [--update-baseline]          (the engine)
-    python3 engine/CI/scripts/check_headers.py --root . --build build/macos-debug --exclude engine      (a game)
+    python3 CI/scripts/check_headers.py --root . --build build/macos-debug [--exclude <path>]... [--jobs N]              (the engine)
+    python3 engine/CI/scripts/check_headers.py --root . --build build/macos-debug --exclude engine [--baseline <file>]  (a game)
+    ... --baseline <file> --update-baseline                                  (a game: rewrite its baseline with the current failures)
 
 Each header of `--root` is compiled as `<compiler> -fsyntax-only -x c++-header <flags> <header>` with no `-include` and no
 `-include-pch` (the `-Xclang -include ...` pairs of CMake's force-include and PCH go too). The compiler and the flags (`-D -I -isystem
@@ -17,11 +17,12 @@ node_modules __pycache__`, a submodule, a vendored module, a file with `Vendored
 a fragment by design (included inside another file, an X-macro list, a generated one) goes to `--exclude`, with the reason in the build
 file that passes it; the baseline is for headers that are to be fixed.
 
-The baseline (`--baseline`, one path relative to `--root` per line, `#` starts a comment) is a ratchet: the headers known to fail. Exit
-code 0 when the failing set equals it; 1 when a header fails that is not in it (line `new: <path>: <error>`) or a listed one passes
-(line `fixed: <path>`: remove it from the baseline, or run `--update-baseline`), so the list only shrinks; 2 on a bad argument; 77 (skip)
-when `<build>/compile_commands.json` is missing or the compiler is MSVC `cl` (the check is for clang and gcc). `--update-baseline`
-rewrites the baseline file (sorted) with the current failures and exits 0. Without `--baseline` every failing header is `new`. The last
+Every failing header fails the check: the engine has no baseline. A game may keep one while it fixes its headers (`--baseline`, one
+path relative to `--root` per line, `#` starts a comment): it is a ratchet, the headers known to fail. Exit code 0 when the failing set
+equals it; 1 when a header fails that is not in it (line `new: <path>: <error>`) or a listed one passes (line `fixed: <path>`: remove it
+from the baseline, or run `--update-baseline`), so the list only shrinks; 2 on a bad argument; 77 (skip) when
+`<build>/compile_commands.json` is missing or the compiler is MSVC `cl` (the check is for clang and gcc). `--update-baseline` rewrites
+the baseline file (sorted) with the current failures and exits 0. Without `--baseline` every failing header is `new`. The last
 line holds the counts: checked, failing, new, fixed. Standard library only.
 """
 
@@ -160,9 +161,8 @@ def read_baseline(path: Path | None) -> set[str]:
 
 def write_baseline(path: Path, failing: set[str]) -> None:
     header = (
-        "# Headers that do not compile alone (CI/scripts/check_headers.py). A fix removes lines, nothing is added.\n"
-        "# Regenerate: python3 CI/scripts/check_headers.py --root . --build build/macos-debug --baseline CI/scripts/header_baseline.txt"
-        " --update-baseline\n"
+        "# Headers that do not compile alone (check_headers.py). A fix removes lines, nothing is added.\n"
+        f"# Regenerate: python3 <engine>/CI/scripts/check_headers.py --root . --build build/<p> --baseline {path} --update-baseline\n"
     )
     path.write_text(header + "".join(f"{entry}\n" for entry in sorted(failing)), encoding="utf-8")
 
