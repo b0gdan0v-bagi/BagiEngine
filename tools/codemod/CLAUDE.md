@@ -27,4 +27,4 @@ An `#include <EASTL/...>` the file no longer needs stays: `strip_pch_includes.py
 
 ## After a run
 
-Build; the compile errors are the boundaries (`std::string` that meets a `std::` API, `FromStd` of an `eastl::string`, a `std::hash` key without an `eastl::hash`). Then `format_sources.py --changed` and `strip_pch_includes.py`. Tests: `.venv/bin/python -m pytest tools/codemod/tests`.
+Build; the compile errors are the boundaries (`std::string` that meets a `std::` API, `FromStd` of an `eastl::string`, a `std::hash` key without an `eastl::hash`). A function or variable named like an alias (`Span`, `Map`) is a compile error too: rename it. A `[map lookup]` note can be a `String::find(String(x))` and no map: only a `HashMap<String, V>` / `Map<String, V>` receiver takes the view. Then `format_sources.py --changed` and `strip_pch_includes.py`. Tests: `.venv/bin/python -m pytest tools/codemod/tests`.

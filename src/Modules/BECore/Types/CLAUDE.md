@@ -11,4 +11,6 @@ The engine's names for the types it uses (`Types.h`, in the PCH): `String`, `Str
 - **The `std::` boundary:** `ToStd(StringView)` / `FromStd(std::string_view)` copy nothing; `ToStdString` / `FromStdString` make a copy and are named so. Use them at the call that meets `std::filesystem`, `nlohmann` or the like.
 - **Reflection:** `String` (a string of any allocator), `FixedString`, `Vector`, `SmallVector`, `FixedVector`, `Array`, `HashMap`, `Map`, `FixedHashMap` and `Optional` are reflected as their `eastl::` forms were, with the same saved text. `FlatMap`, `FlatSet`, `Span` and `UniquePtr` are not: a field of one does not compile, and a test pins that (`.claude/rules/reflection-module.md`).
 
+- **Names:** a function, variable or member called `Span`, `Map`, `Vector` ... hides the alias in its scope (seen: a test helper `Span()`); name it `AsSpan`, `MapOf`. Test code keeps `std::string` and `std::vector` (data at the gtest, JSON and file boundaries); the codemod leaves it.
+
 Tests: `tests/BECore/TypesTest.cpp`, `tests/BECore/ReflectionAliasesTest.cpp`.
