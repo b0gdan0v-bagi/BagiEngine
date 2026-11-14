@@ -1090,12 +1090,26 @@ def test_dispatch_orders_continue_run_prefer_priority_saved_prefs_unblocks_then_
     assert "priority=now" in capsys.readouterr().out
 
 
-def test_configure_shares_ccache_between_the_workers(game: Path, monkeypatch):
+def test_configure_shares_ccache_between_the_checkouts(game: Path, monkeypatch):
+    monkeypatch.delenv("ENGINE_CCACHE_BASE_DIR", raising=False)
     layout = worker.find_layout(game)
     calls = []
     monkeypatch.setattr(worker.subprocess, "run", lambda command, **kw: calls.append(command) or subprocess.CompletedProcess(command, 0, "", ""))
     worker.configure(layout, layout.worker(1), "macos-debug")
-    assert calls == [["cmake", "--preset", "macos-debug", f"-DENGINE_CCACHE_BASE_DIR={layout.root}"]]
+    # the parent of the main checkout holds the main checkout, the workers' folder and the sibling games
+    assert calls == [["cmake", "--preset", "macos-debug", f"-DENGINE_CCACHE_BASE_DIR={game.parent}"]]
+
+
+def test_build_env_exports_the_ccache_base_dir_and_keeps_the_owners(game: Path, monkeypatch):
+    layout = worker.find_layout(game)
+    monkeypatch.delenv("ENGINE_CCACHE_BASE_DIR", raising=False)
+    assert worker.build_env(layout)["ENGINE_CCACHE_BASE_DIR"] == str(game.parent)
+    monkeypatch.setenv("ENGINE_CCACHE_BASE_DIR", "/owner/choice")
+    assert worker.build_env(layout)["ENGINE_CCACHE_BASE_DIR"] == "/owner/choice"
+    calls = []
+    monkeypatch.setattr(worker.subprocess, "run", lambda command, **kw: calls.append(command) or subprocess.CompletedProcess(command, 0, "", ""))
+    worker.configure(layout, layout.worker(1), "macos-debug")
+    assert calls == [["cmake", "--preset", "macos-debug", "-DENGINE_CCACHE_BASE_DIR=/owner/choice"]]
 
 
 def test_start_queued_only_takes_the_head_of_each_queue_and_skips_an_empty_one(game: Path, fake_claude, capsys):

@@ -260,17 +260,26 @@ def fix_worker_links(path: Path) -> list[str]:
     return remade
 
 
+CCACHE_BASE_DIR_ENV = "ENGINE_CCACHE_BASE_DIR"
+
+
+def ccache_base_dir(layout: Layout) -> str:
+    """The folder ccache hashes paths relative to the build folder under (cmake/BagiCompilerCache.cmake):
+    the parent of the main checkout, which holds the main checkout, the folder of the workers and the
+    sibling games, so every checkout of the machine shares cache hits. The owner's value wins."""
+    return os.environ.get(CCACHE_BASE_DIR_ENV) or str(layout.main.parent)
+
+
 def configure(layout: Layout, worker: Path, preset: str) -> None:
     """The first configure of the worker's own build/, so its first build needs none. ENGINE_CCACHE_BASE_DIR
-    is the folder of the workers: ccache hashes the paths under it relative to the build folder, so the
-    workers share cache hits (cmake/BagiCompilerCache.cmake; __FILE__ and debug paths are relative there,
-    the main checkout keeps absolute ones and shares nothing with them)."""
+    is `ccache_base_dir`; the session environment has it too (`build_env`), so a preset configured later
+    gets it with no -D (__FILE__ and debug paths are relative to the build folder then)."""
     env = dict(os.environ)
     for venv in (layout.main / SHARED_SUBMODULE / ".venv" / "bin", layout.main / ".venv" / "bin"):
         if venv.is_dir():
             env["PATH"] = f"{venv}{os.pathsep}{env.get('PATH', '')}"
             break
-    command = ["cmake", "--preset", preset, f"-DENGINE_CCACHE_BASE_DIR={layout.root}"]
+    command = ["cmake", "--preset", preset, f"-D{CCACHE_BASE_DIR_ENV}={ccache_base_dir(layout)}"]
     print(f"  configure: {' '.join(command)}")
     result = subprocess.run(command, cwd=worker, env=env, capture_output=True, text=True)
     if result.returncode != 0:
@@ -342,9 +351,11 @@ def check_shared_config(layout: Layout, fix: bool) -> list[str]:
 
 def build_env(layout: Layout) -> dict[str, str]:
     """The environment of a worker's session: a share of the cores for each build, so the builds of
-    all the workers at once do not fight for the machine."""
+    all the workers at once do not fight for the machine, and the ccache base_dir for every preset
+    the session configures."""
     count = max(1, len(layout.workers()))
     env = dict(os.environ)
+    env.setdefault(CCACHE_BASE_DIR_ENV, ccache_base_dir(layout))
     env.setdefault("CMAKE_BUILD_PARALLEL_LEVEL", str(max(2, (os.cpu_count() or 4) // count)))
     return env
 
