@@ -89,8 +89,94 @@ def test_view_shapes(before: str, after: str) -> None:
 
 def test_a_family_moves_only_its_own_names() -> None:
     source = in_namespace("eastl::string a; eastl::string_view b; eastl::vector<int> c; eastl::optional<int> d; eastl::hash_map<int, int> e;")
+    assert convert(in_namespace('auto s = fmt::format("{}", 1); eastl::string t;'), ALL[:-1]) == in_namespace('auto s = fmt::format("{}", 1); String t;')
+    assert convert(in_namespace('auto s = fmt::format("{}", 1); eastl::string t;'), ["fmt"]) == in_namespace('auto s = Format("{}", 1); eastl::string t;')
     assert convert(source, ["strings"]) == in_namespace("String a; eastl::string_view b; eastl::vector<int> c; eastl::optional<int> d; eastl::hash_map<int, int> e;")
     assert convert(source, ["maps", "optionals"]) == in_namespace("eastl::string a; eastl::string_view b; eastl::vector<int> c; Optional<int> d; HashMap<int, int> e;")
+
+
+@pytest.mark.parametrize(
+    "before, after",
+    [
+        ('auto s = fmt::format("{}", x);', 'auto s = Format("{}", x);'),
+        ("auto it = fmt::format_to(out, f, x);", "auto it = FormatTo(out, f, x);"),
+        ("auto r = fmt::format_to_n(buf, 8, f, x);", "auto r = FormatToN(buf, 8, f, x);"),
+        ('auto s = fmt::format("{a}", fmt::arg("a", 1));', 'auto s = Format("{a}", FormatArg("a", 1));'),
+        ("auto s = Format(fmt::runtime(text), x);", "auto s = Format(RuntimeFormat(text), x);"),
+        ('fmt::print("{}", x); fmt::print(stderr, "{}", y);', 'Print("{}", x); Print(stderr, "{}", y);'),
+        ("static_assert(fmt::is_formattable<Foo>::value);", "static_assert(Formattable<Foo>);"),
+        ("constexpr bool b = fmt::is_formattable<Vector<int>>::value && fmt::is_formattable<int> ::value;", "constexpr bool b = Formattable<Vector<int>> && Formattable<int>;"),
+        ("auto s = ::fmt::format(f, x);", "auto s = Format(f, x);"),
+        ("auto s = fmt::format(f, fmt::format(g, x));", "auto s = Format(f, Format(g, x));"),
+    ],
+)
+def test_fmt_rule(before: str, after: str) -> None:
+    assert convert(in_namespace(before), ["fmt"]) == in_namespace(after)
+
+
+def test_fmt_names_are_qualified_outside_becore() -> None:
+    assert convert('auto s = fmt::format("{}", fmt::arg("a", 1));', ["fmt"]) == 'auto s = BECore::Format("{}", BECore::FormatArg("a", 1));'
+    assert convert("static_assert(fmt::is_formattable<X>::value);", ["fmt"]) == "static_assert(BECore::Formattable<X>);"
+    assert convert("using namespace BECore;\nauto s = fmt::format(f);", ["fmt"]) == "using namespace BECore;\nauto s = Format(f);"
+
+
+def test_fmt_format_to_is_not_taken_for_fmt_format() -> None:
+    assert convert(in_namespace("fmt::format_to(o, f); fmt::format_to_n(b, 4, f); fmt::format(f);"), ["fmt"]) == in_namespace("FormatTo(o, f); FormatToN(b, 4, f); Format(f);")
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "template <> struct fmt::formatter<Foo> : fmt::formatter<int> {};",
+        "auto f(fmt::format_context& ctx);",
+        "fmt::memory_buffer buffer;",
+        "auto j = fmt::join(v, \", \");",
+        "fmt::println(\"{}\", x);",
+        "auto s = fmt::to_string(3);",
+        "fmt::format_string<int> f;",
+        "bool b = fmt::is_formattable<Foo>{};",
+        "using namespace fmt;",
+        "#include <fmt/format.h>",
+    ],
+)
+def test_other_fmt_names_are_reported_and_left(line: str) -> None:
+    source = in_namespace(line)
+    out, applied, notes = codemod.transform(source, {"fmt"})
+    assert out == source and applied == []
+    assert notes and all("//-NoStd:" in n.message for n in notes)
+
+
+def test_fmt_notes_name_the_line_and_the_name() -> None:
+    _, _, notes = codemod.transform(in_namespace("int a;\nfmt::memory_buffer b;\nfmt::println(x);"), {"fmt"})
+    assert [(n.line, n.rule) for n in notes] == [(3, "fmt::memory_buffer"), (4, "fmt::println")]
+
+
+def test_fmt_marker_keeps_its_line_and_the_line_after_a_marker_only_line() -> None:
+    source = in_namespace('auto a = fmt::format(f);  //-NoStd: boundary\n//-NoStd: boundary\nauto b = fmt::format(g);\nauto c = fmt::format(h);\nfmt::memory_buffer d;  //-NoStd: x\n#include <fmt/core.h>  //-NoStd: x\n')
+    out, _, notes = codemod.transform(source, {"fmt"})
+    assert out == in_namespace('auto a = fmt::format(f);  //-NoStd: boundary\n//-NoStd: boundary\nauto b = fmt::format(g);\nauto c = Format(h);\nfmt::memory_buffer d;  //-NoStd: x\n#include <fmt/core.h>  //-NoStd: x\n')
+    assert notes == []
+
+
+def test_fmt_in_a_comment_and_in_a_literal_is_not_touched() -> None:
+    source = in_namespace('// fmt::format(x) and fmt::memory_buffer\n/* fmt::print(y) */\nconst char* a = "fmt::format";\nconst char* b = R"x(fmt::arg)x";\n// #include <fmt/format.h>\n')
+    out, applied, notes = codemod.transform(source, {"fmt"})
+    assert out == source and applied == [] and notes == []
+
+
+def test_fmt_is_idempotent() -> None:
+    once = convert('auto s = fmt::format("{}", fmt::arg("a", 1)); fmt::print(f); static_assert(fmt::is_formattable<X>::value);', ["fmt"])
+    assert convert(once, ["fmt"]) == once
+
+
+def test_fmt_family_is_in_all_and_listed() -> None:
+    assert "fmt" in codemod.FAMILIES
+    assert codemod.parse_families("all") == list(codemod.FAMILIES)
+    assert codemod.parse_families("fmt, strings") == ["fmt", "strings"]
+
+
+def test_fmt_and_strings_settle_together() -> None:
+    assert convert('std::string s = fmt::format("{}", 1);', ["strings", "fmt"]) == 'BECore::String s = BECore::Format("{}", 1);'
 
 
 # ---- what it leaves -------------------------------------------------------------------------------------------------------------
@@ -289,7 +375,7 @@ def test_line_endings_are_kept() -> None:
 
 
 def test_the_zones_the_layer_and_the_traits_are_skipped(tmp_path: Path) -> None:
-    text = "eastl::string a;\n"
+    text = "eastl::string a;\nauto s = fmt::format(f);\n"
     names = [
         "src/Modules/EABase/a.h",
         "src/Modules/fmt/a.h",
@@ -299,6 +385,7 @@ def test_the_zones_the_layer_and_the_traits_are_skipped(tmp_path: Path) -> None:
         "build-debug/a.h",
         "src/Widgets/Icons/a.h",
         "src/Modules/BECore/Types/Strings.h",
+        "src/Modules/BECore/Format/Format.h",
         "src/Modules/BECore/pch.h",
         "src/Modules/BECore/Reflection/DataAccessor.h",
         "src/Modules/BECore/Reflection/SerializationTraits.h",
@@ -308,10 +395,16 @@ def test_the_zones_the_layer_and_the_traits_are_skipped(tmp_path: Path) -> None:
     ]
     make_tree(tmp_path, {name: text for name in names})
     make_tree(tmp_path, {"src/Modules/BECore/Own.h": text, "src/Modules/RmlUiHost/a.h": text})
-    result = codemod.run(tmp_path, ["strings"], write=True)
+    result = codemod.run(tmp_path, ["strings", "fmt"], write=True)
     assert sorted(result.changed_files) == ["src/Modules/BECore/Own.h", "src/Modules/RmlUiHost/a.h"]
     for name in names:
         assert (tmp_path / name).read_text() == text
+
+
+def test_the_format_test_is_walked_though_the_format_layer_is_skipped(tmp_path: Path) -> None:
+    make_tree(tmp_path, {".git": "gitdir: elsewhere\n", "tests/BECore/FormatTest.cpp": "auto s = fmt::format(f);\n", "src/Modules/BECore/Format/Format.h": "auto s = fmt::format(f);\n"})
+    for root in (tmp_path, tmp_path / "tests"):
+        assert codemod.run(root, ["fmt"], write=False).changed_files == ["tests/BECore/FormatTest.cpp" if root == tmp_path else "BECore/FormatTest.cpp"]
 
 
 def test_a_tests_folder_is_walked_like_any_other(tmp_path: Path) -> None:
