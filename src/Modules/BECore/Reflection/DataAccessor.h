@@ -214,6 +214,8 @@ namespace BECore {
                             if (!IsFull(vec)) {
                                 using Elem = typename Container::value_type;
                                 vec.push_back(MakeElement<Elem>(d));
+                            } else {
+                                d.SkipScope();
                             }
                             d.EndArrayElement();
                         }
@@ -264,7 +266,9 @@ namespace BECore {
                             if (enabled) {
                                 Ptr item;
                                 LoadElement(d, item);
-                                if (item) {
+                                if (!item) {
+                                    d.SkipScope();
+                                } else {
                                     ++offered;
                                     if (IsFull(vec)) {
                                         ++dropped;
@@ -272,6 +276,8 @@ namespace BECore {
                                         vec.push_back(eastl::move(item));
                                     }
                                 }
+                            } else {
+                                d.SkipScope();
                             }
                             d.EndArrayElement();
                         }
@@ -320,8 +326,10 @@ namespace BECore {
                         DefaultMaker<Elem>::MakeDefault(arr[i]);
                     // Drain any extra elements from the XML
                     for (size_t i = loadCount; i < count; ++i) {
-                        if (d.BeginArrayElement())
+                        if (d.BeginArrayElement()) {
+                            d.SkipScope();
                             d.EndArrayElement();
+                        }
                     }
                     d.EndArray();
                     return true;

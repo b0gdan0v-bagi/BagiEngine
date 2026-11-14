@@ -293,11 +293,24 @@ namespace BECore::Fuzz {
             return buffer;
         }
 
-        uint64_t ReadProbeDigest(XmlDeserializer& reader) {
+        /// What a read of the probe type gave: the state it reached and how many errors it reported
+        struct ProbeRead {
+            uint64_t digest = 0;
+            size_t errors = 0;
+        };
+
+        ProbeRead ReadProbe(XmlDeserializer& reader) {
             ProbeState state;
             state.Deserialize(reader);
+            ProbeRead read;
+            read.errors = reader.GetErrors().size();
             reader.ClearErrors();
-            return DigestProbe(state);
+            read.digest = DigestProbe(state);
+            return read;
+        }
+
+        uint64_t ReadProbeDigest(XmlDeserializer& reader) {
+            return ReadProbe(reader).digest;
         }
 
         void CheckDocument(const uint8_t* data, size_t size, bool strict) {
@@ -321,7 +334,9 @@ namespace BECore::Fuzz {
             reader.ClearErrors();
 
             // A reflected type read from whatever the document holds: the same document gives the same state from a fresh reader and from this one again
-            const uint64_t first = ReadProbeDigest(reader);
+            const ProbeRead firstRead = ReadProbe(reader);
+            const uint64_t first = firstRead.digest;
+            const size_t firstErrors = firstRead.errors;
             XmlDeserializer fresh;
             fresh.SetStrictValues(strict);
             FUZZ_CHECK(fresh.LoadFromString(text));
@@ -334,6 +349,21 @@ namespace BECore::Fuzz {
             unaligned.SetStrictValues(strict);
             FUZZ_CHECK(unaligned.LoadFromString(StringView(reinterpret_cast<const char*>(shifted.data()) + kShift, size)));
             FUZZ_CHECK(ReadProbeDigest(unaligned) == first);
+
+            // The same walk and the same type read with the diagnostics on: findings are warnings and nothing else changes
+            XmlDeserializer diagnosed;
+            diagnosed.SetStrictValues(strict);
+            diagnosed.SetDiagnostics(DiagnosticsMode::Warn);
+            FUZZ_CHECK(diagnosed.LoadFromString(text));
+            DocumentWalker diagnosedWalker(diagnosed, strict);
+            diagnosedWalker.WalkScope(reference.document_element(), 0);
+            diagnosed.ClearErrors();
+            const ProbeRead diagnosedRead = ReadProbe(diagnosed);
+            FUZZ_CHECK(diagnosedRead.digest == first);
+            FUZZ_CHECK(diagnosedRead.errors == firstErrors);
+            diagnosed.FinishLoad();
+            FUZZ_CHECK(!diagnosed.HasErrors());
+            FUZZ_CHECK(diagnosed.GetWarnings().size() <= ReaderLimits::kMaxRecordedErrors);
 
             // Loading something that does not parse on top of a good document drops it
             FUZZ_CHECK(!reader.LoadFromString("<"));

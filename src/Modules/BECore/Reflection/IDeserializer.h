@@ -177,6 +177,14 @@ namespace BECore {
         virtual void FinishLoad() {}
 
         /**
+         * @brief Tell the reader that the caller leaves the rest of the current scope unread on purpose
+         *
+         * For an element a loader drops without reading it (a disabled element, one past the capacity of a fixed container): its keys are
+         * not unknown keys. The default does nothing.
+         */
+        virtual void SkipScope() {}
+
+        /**
          * @brief Report content that loaded but looks wrong, at the current path + key; the field keeps what was read
          *
          * Off does nothing, Warn stores a warning, Error stores an error (HasErrors() becomes true).

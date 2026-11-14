@@ -1,5 +1,8 @@
 #pragma once
 
+#include <BECore/RefCounted/IntrusivePtr.h>
+#include <BECore/RefCounted/RefCounted.h>
+#include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Reflection/IPropertyVisitor.h>
 #include <BECore/Reflection/TypeTraits.h>
 #include <BECore/Utils/EnumUtils.h>
@@ -49,9 +52,59 @@ namespace BECore {
             BE_REFLECT_FIELD BE_FIELD_ATTRS(range(0, 3)) int32_t own = 0;
         };
 
+        /// Two names a typo can be mistaken for each other
+        struct TileConfig {
+            BE_CLASS(TileConfig)
+
+            BE_REFLECT_FIELD int32_t tileSize = 0;
+            BE_REFLECT_FIELD int32_t tileCount = 0;
+        };
+
+        /// Factory base whose element is `probe`
+        class DiagProbe : public RefCounted {
+            BE_CLASS(DiagProbe, FACTORY_BASE, ELEMENT = probe)
+        public:
+            DiagProbe() = default;
+            ~DiagProbe() override = default;
+
+            virtual bool Initialize(IDeserializer& /*deserializer*/) {
+                return true;
+            }
+        };
+
+        /// Reads one more attribute of its own element in Initialize(IDeserializer&)
+        class DiagProbeReads : public DiagProbe {
+            BE_CLASS(DiagProbeReads)
+        public:
+            DiagProbeReads() = default;
+            ~DiagProbeReads() override = default;
+
+            bool Initialize(IDeserializer& deserializer) override {
+                deserializer.ReadAttribute("extra", extra);
+                return true;
+            }
+
+            BE_REFLECT_FIELD int32_t id = 0;
+            int32_t extra = 0;
+        };
+
+        /// One field of each shape that opens a scope: an object, a list of objects, a map, a factory list
+        struct Holder {
+            BE_CLASS(Holder)
+
+            BE_REFLECT_FIELD Leaf leaf;
+            BE_REFLECT_FIELD Vector<Leaf> leaves;
+            BE_REFLECT_FIELD HashMap<int32_t, Leaf> table;
+            BE_REFLECT_FIELD Vector<IntrusivePtrNonAtomic<DiagProbe>> probes;
+        };
+
     }  // namespace XmlDiagnosticsTestData
 
     namespace PropVisit {
+
+        inline bool Visit(IPropertyVisitor& /*v*/, HashMap<int32_t, XmlDiagnosticsTestData::Leaf>& /*value*/, StringView /*key*/) {
+            return false;
+        }
 
         /// The visitor edits no list of objects; the generated `AcceptPropertyVisitor` of `Constrained` needs something to call
         inline bool Visit(IPropertyVisitor& /*v*/, Vector<XmlDiagnosticsTestData::Leaf>& /*value*/, StringView /*key*/) {

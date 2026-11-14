@@ -306,4 +306,195 @@ namespace BECore::Tests {
                                                      "requiredLeaf: Required field is missing", "requiredLeaves: Required field is missing", "own: Value 4 is outside the range [0, 3]"}));
     }
 
+    // =========================================================================
+    // Unknown keys
+    // =========================================================================
+
+    TEST(XmlDiagnosticsTest, ATypoGivesTheFindingWithThePathAndTheSuggestion) {
+        LoadedDocument<TileConfig> loaded(DiagnosticsMode::Warn, "<TileConfig tileSise=\"3\" tileCount=\"2\"/>");
+        EXPECT_EQ(loaded.Findings(), Vector<String>{"tileSise: Unknown attribute 'tileSise', did you mean 'tileSize'?"});
+        EXPECT_FALSE(loaded.reader.HasErrors());
+        EXPECT_EQ(loaded.value.tileCount, 2);
+    }
+
+    TEST(XmlDiagnosticsTest, ACaseDifferenceAloneGetsTheSuggestion) {
+        LoadedDocument<TileConfig> loaded(DiagnosticsMode::Warn, "<TileConfig TILESIZE=\"3\"/>");
+        EXPECT_EQ(loaded.Findings(), Vector<String>{"TILESIZE: Unknown attribute 'TILESIZE', did you mean 'tileSize'?"});
+    }
+
+    TEST(XmlDiagnosticsTest, AnUnknownKeyWithNoNearNameHasNoSuggestion) {
+        LoadedDocument<TileConfig> loaded(DiagnosticsMode::Warn, "<TileConfig tileSize=\"1\" zzzzzz=\"1\"><wibble/></TileConfig>");
+        EXPECT_EQ(loaded.Findings(), (Vector<String>{"zzzzzz: Unknown attribute 'zzzzzz'", "wibble: Unknown element 'wibble'"}));
+    }
+
+    TEST(XmlDiagnosticsTest, ANameFarFromEveryAskedNameGetsNoSuggestion) {
+        LoadedDocument<TileConfig> loaded(DiagnosticsMode::Warn, "<TileConfig tile=\"1\"/>");
+        EXPECT_EQ(loaded.Findings(), Vector<String>{"tile: Unknown attribute 'tile'"});
+    }
+
+    TEST(XmlDiagnosticsTest, AnUnknownKeyIsAnErrorUnderErrorAndNothingUnderOff) {
+        constexpr StringView kTypo = "<TileConfig tileSise=\"3\"/>";
+        LoadedDocument<TileConfig> failed(DiagnosticsMode::Error, kTypo);
+        EXPECT_EQ(failed.Findings().size(), 1u);
+        EXPECT_TRUE(failed.reader.HasErrors());
+        EXPECT_TRUE(failed.reader.GetWarnings().empty());
+
+        LoadedDocument<TileConfig> off(DiagnosticsMode::Off, kTypo);
+        EXPECT_TRUE(off.reader.GetWarnings().empty());
+        EXPECT_FALSE(off.reader.HasErrors());
+    }
+
+    TEST(XmlDiagnosticsTest, OffTracksNothing) {
+        XmlDeserializer d;
+        ASSERT_TRUE(d.LoadFromString("<TileConfig tileSise=\"3\"><wibble/></TileConfig>"));
+        TileConfig value;
+        value.Deserialize(d);
+        d.FinishLoad();
+        EXPECT_TRUE(d.GetWarnings().empty());
+        EXPECT_FALSE(d.HasErrors());
+
+        // The mode switched on afterwards does not see what Off passed: a second load starts clean
+        d.SetDiagnostics(DiagnosticsMode::Warn);
+        ASSERT_TRUE(d.LoadFromString("<TileConfig tileSize=\"3\" tileCount=\"1\"/>"));
+        value.Deserialize(d);
+        d.FinishLoad();
+        EXPECT_TRUE(d.GetWarnings().empty());
+    }
+
+    TEST(XmlDiagnosticsTest, TheModeSwitchedOnAfterTheLoadIsHonoured) {
+        XmlDeserializer d;
+        ASSERT_TRUE(d.LoadFromString("<TileConfig tileSise=\"3\"/>"));
+        d.SetDiagnostics(DiagnosticsMode::Warn);
+        TileConfig value;
+        value.Deserialize(d);
+        d.FinishLoad();
+        ASSERT_EQ(d.GetWarnings().size(), 1u);
+        EXPECT_EQ(d.GetWarnings()[0].path.ToStringView(), "tileSise");
+    }
+
+    TEST(XmlDiagnosticsTest, TheRootIsCheckedByFinishLoadOnceAndOnlyThen) {
+        XmlDeserializer d;
+        d.SetDiagnostics(DiagnosticsMode::Warn);
+        ASSERT_TRUE(d.LoadFromString("<TileConfig tileSise=\"3\"/>"));
+        TileConfig value;
+        value.Deserialize(d);
+        EXPECT_TRUE(d.GetWarnings().empty());
+        d.FinishLoad();
+        EXPECT_EQ(d.GetWarnings().size(), 1u);
+        d.FinishLoad();
+        EXPECT_EQ(d.GetWarnings().size(), 1u);
+
+        // Reading after FinishLoad is allowed and unchecked
+        value.Deserialize(d);
+        d.FinishLoad();
+        EXPECT_EQ(d.GetWarnings().size(), 1u);
+
+        // A new load starts over
+        ASSERT_TRUE(d.LoadFromString("<TileConfig tileSise=\"3\"/>"));
+        value.Deserialize(d);
+        d.FinishLoad();
+        EXPECT_EQ(d.GetWarnings().size(), 2u);
+    }
+
+    TEST(XmlDiagnosticsTest, NoteKnownKeyRemovesAKeyReadByHand) {
+        constexpr StringView kDocument = "<TileConfig contentVersion=\"3\" tileSize=\"1\" tileCount=\"2\"><extra/></TileConfig>";
+        LoadedDocument<TileConfig> unknown(DiagnosticsMode::Warn, kDocument);
+        EXPECT_EQ(unknown.Findings(), (Vector<String>{"contentVersion: Unknown attribute 'contentVersion'", "extra: Unknown element 'extra'"}));
+
+        XmlDeserializer d;
+        d.SetDiagnostics(DiagnosticsMode::Warn);
+        ASSERT_TRUE(d.LoadFromString(kDocument));
+        d.NoteKnownKey("contentVersion");
+        d.NoteKnownKey("extra");
+        TileConfig value;
+        value.Deserialize(d);
+        d.FinishLoad();
+        EXPECT_TRUE(d.GetWarnings().empty());
+    }
+
+    TEST(XmlDiagnosticsTest, AValueThatFailsToParseIsNoUnknownKey) {
+        XmlDeserializer d;
+        d.SetDiagnostics(DiagnosticsMode::Warn);
+        d.SetStrictValues(true);
+        ASSERT_TRUE(d.LoadFromString("<TileConfig tileSize=\"abc\" tileCount=\"2\"/>"));
+        TileConfig value;
+        value.Deserialize(d);
+        d.FinishLoad();
+        EXPECT_TRUE(d.GetWarnings().empty());
+        EXPECT_EQ(d.GetErrors().size(), 1u);
+    }
+
+    TEST(XmlDiagnosticsTest, ADocumentReadCompletelyIsClean) {
+        constexpr StringView kDocument = "<Holder>"
+                                         "<leaf leafValue=\"1\"/>"
+                                         "<leaves><item leafValue=\"2\"/><item leafValue=\"3\"/></leaves>"
+                                         "<table><entry key=\"7\" leafValue=\"4\"/></table>"
+                                         "<probes><probe type=\"DiagProbeReads\" enabled=\"true\" id=\"1\" extra=\"5\"/></probes>"
+                                         "</Holder>";
+        LoadedDocument<Holder> loaded(DiagnosticsMode::Error, kDocument);
+        EXPECT_TRUE(loaded.Findings().empty());
+        EXPECT_FALSE(loaded.reader.HasErrors());
+        ASSERT_EQ(loaded.value.probes.size(), 1u);
+        EXPECT_EQ(loaded.value.probes[0]->Cast<DiagProbeReads>()->extra, 5);
+        EXPECT_EQ(loaded.value.table.size(), 1u);
+    }
+
+    TEST(XmlDiagnosticsTest, UnknownKeysOfNestedScopesCarryTheFullPath) {
+        constexpr StringView kDocument = "<Holder>"
+                                         "<leaf leafValue=\"1\" oops=\"1\"/>"
+                                         "<leaves stray=\"1\"><item leafValue=\"2\"/><item leafValue=\"3\" oops=\"1\"><deeper/></item></leaves>"
+                                         "<table><entry key=\"7\" leafValue=\"4\" oops=\"1\"/></table>"
+                                         "</Holder>";
+        LoadedDocument<Holder> loaded(DiagnosticsMode::Warn, kDocument);
+        EXPECT_EQ(loaded.Findings(), (Vector<String>{"leaf.oops: Unknown attribute 'oops'", "leaves[1].oops: Unknown attribute 'oops'", "leaves[1].deeper: Unknown element 'deeper'",
+                                                     "leaves.stray: Unknown attribute 'stray'", "table[0].oops: Unknown attribute 'oops'"}));
+    }
+
+    TEST(XmlDiagnosticsTest, AnArrayChecksItsOwnAttributesAndItsChildrenAreTheElements) {
+        LoadedDocument<Holder> loaded(DiagnosticsMode::Warn, "<Holder><leaves><item leafValue=\"2\"/><whatever leafValue=\"3\"/></leaves></Holder>");
+        EXPECT_TRUE(loaded.Findings().empty());
+        EXPECT_EQ(loaded.value.leaves.size(), 2u);
+    }
+
+    TEST(XmlDiagnosticsTest, ADisabledFactoryElementIsNotReadAndHasNoUnknownKeys) {
+        LoadedDocument<Holder> loaded(DiagnosticsMode::Warn, "<Holder><probes><probe type=\"DiagProbeReads\" enabled=\"false\" id=\"2\" bogus=\"x\"/>"
+                                                             "<probe type=\"DiagProbeReads\" id=\"3\" bogus=\"x\"/></probes></Holder>");
+        EXPECT_EQ(loaded.Findings(), Vector<String>{"probes[1].bogus: Unknown attribute 'bogus'"});
+        EXPECT_EQ(loaded.value.probes.size(), 1u);
+    }
+
+    TEST(XmlDiagnosticsTest, ChildrenOfOneNameAreOneUnknownName) {
+        LoadedDocument<TileConfig> loaded(DiagnosticsMode::Warn, "<TileConfig><zzzzzz/><zzzzzz/><zzzzzz/></TileConfig>");
+        EXPECT_EQ(loaded.Findings(), Vector<String>{"zzzzzz: Unknown element 'zzzzzz'"});
+    }
+
+    TEST(XmlDiagnosticsTest, TheTextOfAnElementIsNotAnUnknownKey) {
+        LoadedDocument<TileConfig> loaded(DiagnosticsMode::Warn, "<TileConfig tileSize=\"1\">some text<!-- a comment --></TileConfig>");
+        EXPECT_TRUE(loaded.Findings().empty());
+    }
+
+    TEST(XmlDiagnosticsTest, ManyUnknownKeysStopAtTheLimit) {
+        String attributes;
+        String elements;
+        for (size_t i = 0; i < 10000; ++i) {
+            attributes += Format(" k{}=\"1\"", i);
+            elements += Format("<e{}/>", i);
+        }
+        LoadedDocument<TileConfig> byAttribute(DiagnosticsMode::Warn, Format("<TileConfig{}/>", attributes));
+        EXPECT_EQ(byAttribute.reader.GetWarnings().size(), ReaderLimits::kMaxRecordedErrors);
+
+        LoadedDocument<TileConfig> byElement(DiagnosticsMode::Error, Format("<TileConfig>{}</TileConfig>", elements));
+        EXPECT_EQ(byElement.reader.GetErrors().size(), ReaderLimits::kMaxRecordedErrors);
+    }
+
+    TEST(XmlDiagnosticsTest, AVeryLongNameIsCutAndGetsNoSuggestion) {
+        const String longName(100 * 1024, 't');
+        LoadedDocument<TileConfig> loaded(DiagnosticsMode::Warn, Format("<TileConfig {}=\"1\"/>", longName));
+        ASSERT_EQ(loaded.reader.GetWarnings().size(), 1u);
+        const DeserializeError& warning = loaded.reader.GetWarnings()[0];
+        EXPECT_LE(warning.path.ToStringView().size(), ReaderLimits::kMaxErrorTextBytes);
+        EXPECT_LE(warning.errorMessage.ToStringView().size(), ReaderLimits::kMaxQuotedValueBytes + 64);
+        EXPECT_EQ(warning.errorMessage.ToStringView().find("did you mean"), StringView::npos);
+    }
+
 }  // namespace BECore::Tests
