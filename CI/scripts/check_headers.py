@@ -56,9 +56,50 @@ OUTPUT_LINES = 3
 Compile = Callable[[str, list[str], Path, Path], "str | None"]
 
 
-def split_command(entry: dict) -> list[str]:
+def split_windows_command(command: str) -> list[str]:
+    """Splits a command line as the C runtime of Windows does (CommandLineToArgvW): a backslash is literal unless it comes before a
+    quote, so C:\\PROGRA~2\\LLVM\\bin\\clang++.exe stays whole, which POSIX shlex would eat as escapes."""
+    arguments: list[str] = []
+    current: list[str] = []
+    in_token = in_quotes = False
+    i = 0
+    while i < len(command):
+        char = command[i]
+        if char == "\\":
+            run = 0
+            while i < len(command) and command[i] == "\\":
+                run += 1
+                i += 1
+            if i < len(command) and command[i] == '"':
+                current.append("\\" * (run // 2))
+                if run % 2:
+                    current.append('"')
+                    i += 1
+            else:
+                current.append("\\" * run)
+            in_token = True
+            continue
+        if char == '"':
+            in_quotes = not in_quotes
+            in_token = True
+        elif char in " \t" and not in_quotes:
+            if in_token:
+                arguments.append("".join(current))
+                current, in_token = [], False
+        else:
+            current.append(char)
+            in_token = True
+        i += 1
+    if in_token:
+        arguments.append("".join(current))
+    return arguments
+
+
+def split_command(entry: dict, windows: bool = os.name == "nt") -> list[str]:
     if "arguments" in entry:
         return list(entry["arguments"])
+    if windows:
+        return split_windows_command(entry["command"])
     return shlex.split(entry["command"])
 
 
