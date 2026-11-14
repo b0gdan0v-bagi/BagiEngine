@@ -1,12 +1,15 @@
 #include "CoreManager.h"
 
+#include <BECore/Assert/AssertHandlers.h>
 #include <BECore/Assert/CRTDebugHook.h>
 #include <BECore/Clipboard/ClipboardControl.h>
 #include <BECore/Config/ConfigFactory.h>
 #include <BECore/Control/ControlBuiltins.h>
+#include <BECore/Logger/LoggerManager.h>
 #include <BECore/Logger/OutputSink.h>
 #include <BECore/Profiler/ProfilerControl.h>
 #include <BECore/Scene/SceneLoader.h>
+#include <BECore/Scene/SceneManager.h>
 #include <BECore/UI/UIControl.h>
 #include <Events/EventsQueueRegistry.h>
 #include <TaskSystem/TaskManager.h>
@@ -19,6 +22,10 @@ namespace BECore {
         constexpr std::chrono::milliseconds kIdleWait{8};
 
     }  // namespace
+
+    CoreManager::CoreManager() = default;
+
+    CoreManager::~CoreManager() = default;
 
     const IntrusivePtr<IMainWindow>& CoreManager::GetMainWindow() {
         return GetInstance()._mainWindowManager.GetMainWindow();

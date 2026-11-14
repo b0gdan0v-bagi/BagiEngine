@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
 #include <SDL3/SDL_events.h>
 
 namespace BECore {

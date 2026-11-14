@@ -72,7 +72,7 @@ namespace BECore::Tests {
         }
 
         const FuzzTarget& FindTarget(const String& name) {
-            const std::span<const FuzzTarget> targets = Fuzz::FuzzTargetList();
+            const Span<const FuzzTarget> targets = Fuzz::FuzzTargetList();
             const auto found = std::find_if(targets.begin(), targets.end(), [&](const FuzzTarget& target) { return name == target.name; });
             return *found;
         }

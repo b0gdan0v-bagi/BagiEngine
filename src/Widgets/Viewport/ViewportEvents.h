@@ -1,8 +1,11 @@
 #pragma once
 
-#include "GizmoGeometry.h"
-
+#include <BECore/Reflection/ReflectionMarkers.h>
+#include <BECore/Types/Types.h>
+#include <BECore/Utils/EnumUtils.h>
 #include <Events/EventBase.h>
+#include <Widgets/Viewport/GizmoGeometry.h>
+#include <cstdint>
 
 namespace BECore {
 

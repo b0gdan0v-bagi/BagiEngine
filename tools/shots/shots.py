@@ -19,6 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import png_diff  # noqa: E402  (also puts the PNG reader on sys.path)
+from png_ops import inside_git_work_tree  # noqa: E402
 from png_reader import PngError, read_png  # noqa: E402
 
 RULES_FILE = Path(".claude/rules/qa-project.md")
@@ -83,18 +84,6 @@ def parse_scenes(spec: str, shots_set: dict) -> dict[str, list[str]]:
     if not groups:
         raise ShotsError("no scenes requested")
     return groups
-
-
-def inside_git_work_tree(folder: Path) -> bool:
-    """Whether `folder` (which may not exist yet) lies in a git work tree: pictures must never end up in a repository."""
-    probe = folder.resolve()
-    while not probe.exists():
-        probe = probe.parent
-    try:
-        done = subprocess.run(["git", "-C", str(probe), "rev-parse", "--is-inside-work-tree"], capture_output=True, text=True)
-    except OSError:
-        return False  # no git: nothing it could be a work tree of
-    return done.stdout.strip() == "true"
 
 
 def expand(command: list[str], values: dict[str, str]) -> list[str]:

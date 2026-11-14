@@ -1,5 +1,8 @@
 #pragma once
 
+#include <BECore/Math/Rect.h>
+#include <BECore/Math/Vec2.h>
+#include <BECore/Types/Types.h>
 #include <BECore/UI/UIRectSpec.h>
 
 namespace BECore {

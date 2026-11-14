@@ -1,12 +1,11 @@
 #include "SDLMainWindow.h"
 
-#include "BECore/Utils/ScopeGuard.h"
-#include "SDLWebCanvas.h"
-#include "SDLWindowConfig.h"
-
 #include <BECore/MainWindow/WindowTitle.h>
 #include <BECore/Reflection/OpenDeserializer.h>
+#include <BECore/Utils/ScopeGuard.h>
 #include <CoreSDL/SDLUtils.h>
+#include <CoreSDL/SDLWebCanvas.h>
+#include <CoreSDL/SDLWindowConfig.h>
 #include <Events/ApplicationEvents.h>
 #include <Generated/SDLWindowConfig.gen.hpp>
 

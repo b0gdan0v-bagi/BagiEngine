@@ -73,7 +73,7 @@ Rules of the adapter:
 
 ## Adding a game
 
-A game is a repository of its own with the engine as the git submodule `engine/`; model it on BagiEngine-Chess (`CMakePresets.json` that includes the engine's). The repository around a game (the git identity of the commits, the submodule on `games/<area>`, the linked skills, the rules files, the todo area) is set up by [NEW_GAME.md](../../../NEW_GAME.md) in the engine root:
+A game is a repository of its own with the engine as the git submodule `engine/`; model it on BagiEngine-Chess (`CMakePresets.json` that includes the engine's). The repository around a game (the git identity of the commits, the submodule on `games/<area>`, the linked skills, the rules files, the todo area) is set up by [NEW_GAME.md](../../../NEW_GAME.md) in the engine root (the engine branch is `games/<area>`; `main` is the showcase that only `games/*` reach, and the owner syncs them with `/sync-engine`):
 
 ```
 <repo>/

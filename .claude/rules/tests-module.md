@@ -42,7 +42,7 @@ build/macos-debug/bin/BagiEngineTests --gtest_filter='Reflection*'    # cwd must
 2. Write `TEST(<Name>Test, <Case>)` inside `namespace BECore::Tests`. One case per behavior, not one big `Run()`.
 3. Compile-time checks are `static_assert` at file scope, plus an empty `TEST(<Name>Test, CompileTimeChecks)` so they show up in the report.
 4. Include `<Common/Printers.h>` when comparing EASTL strings or `PoolString` with `EXPECT_EQ`; it makes failures readable.
-5. Test data with `BE_CLASS` / `BE_EVENT` goes into a header next to the test (see `tests/BECore/ReflectionTest.h`). For engine tests its directory must be in `source_dirs` and `scan_dirs` of `CI/meta_generator/reflection_targets.json`; include the `.gen.hpp` from the `.cpp` only. Reflected test data in a game's tests would need `SOURCE_DIRS` on that game's `be_add_game_reflection` call.
+5. Test data with `BE_CLASS` / `BE_EVENT` goes into a header next to the test (see `tests/BECore/ReflectionTest.h`). A helper header next to a test is included as `<Folder/Helper.h>` from the test root (`tests/BECore/Rooms/TestClient.h` is `<BECore/Rooms/TestClient.h>`), never by a quoted or `../` path, and its path under the root must not repeat a path of an engine header (the roots are searched in order). For engine tests its directory must be in `source_dirs` and `scan_dirs` of `CI/meta_generator/reflection_targets.json`; include the `.gen.hpp` from the `.cpp` only. Reflected test data in a game's tests would need `SOURCE_DIRS` on that game's `be_add_game_reflection` call.
 
 ### Rules
 

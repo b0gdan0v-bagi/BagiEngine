@@ -1,5 +1,9 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
+#include <cstddef>
+#include <filesystem>
+
 namespace BECore {
 
     /// Length of the short form of a commit id shown for a detached HEAD

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <BECore/RefCounted/RefCounted.h>
+
 namespace BECore {
 
     class IEventsProvider : public RefCounted {

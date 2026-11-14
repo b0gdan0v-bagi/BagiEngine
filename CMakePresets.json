@@ -74,6 +74,15 @@
             }
         },
         {
+            "name": "time-trace",
+            "hidden": true,
+            "description": "clang -ftime-trace on every compile (ENGINE_TIME_TRACE, cmake/BagiTimeTrace.cmake; read with CI/scripts/time_trace_report.py); ccache off, because a hit writes no trace",
+            "cacheVariables": {
+                "ENGINE_TIME_TRACE": "ON",
+                "ENGINE_CCACHE": "OFF"
+            }
+        },
+        {
             "name": "fuzz",
             "hidden": true,
             "description": "Fuzzing (tests/Fuzz/CLAUDE.md): ASan + UBSan on all code and libFuzzer executables, asserts and expects ON in macos-fuzz (an assertion that input reaches is a finding; macos-fuzz-shipped turns them OFF, as in a shipped build). Homebrew LLVM, because Apple clang has no libFuzzer runtime; it has no default SDK (CMAKE_OSX_SYSROOT), links the system libc++ only with the -L / rpath below and does not search /usr/local/lib, where the Vulkan SDK puts libvulkan.dylib. Intel Homebrew is /usr/local/opt/llvm: change the paths in a CMakeUserPresets.json",
@@ -248,6 +257,11 @@
             "name": "macos-asan",
             "displayName": "macOS Clang Debug with AddressSanitizer + UBSan",
             "inherits": ["ninja", "host-macos", "clang", "debug", "asan"]
+        },
+        {
+            "name": "macos-time-trace",
+            "displayName": "macOS Clang Debug with -ftime-trace (compile-time measurement, no ccache)",
+            "inherits": ["ninja", "host-macos", "clang", "debug", "time-trace"]
         },
         {
             "name": "macos-fuzz",
@@ -430,6 +444,12 @@
             "displayName": "macOS Clang Debug with AddressSanitizer + UBSan",
             "inherits": "build-macos",
             "configurePreset": "macos-asan"
+        },
+        {
+            "name": "macos-time-trace",
+            "displayName": "macOS Clang Debug with -ftime-trace",
+            "inherits": "build-macos",
+            "configurePreset": "macos-time-trace"
         },
         {
             "name": "macos-fuzz",
@@ -615,6 +635,12 @@
                 "ASAN_OPTIONS": "detect_stack_use_after_return=1:strict_string_checks=1",
                 "UBSAN_OPTIONS": "print_stacktrace=1"
             }
+        },
+        {
+            "name": "macos-time-trace",
+            "displayName": "macOS Clang Debug with -ftime-trace",
+            "inherits": "test-macos",
+            "configurePreset": "macos-time-trace"
         },
         {
             "name": "macos-fuzz",

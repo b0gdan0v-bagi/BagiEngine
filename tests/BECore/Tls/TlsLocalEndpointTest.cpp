@@ -1,5 +1,4 @@
-#include "../WebSocketTestClient.h"
-
+#include <BECore/WebSocketTestClient.h>
 #include <RemoteControl/Tls/TlsStream.h>
 #include <RemoteControl/WebSocketClient.h>
 #include <gtest/gtest.h>

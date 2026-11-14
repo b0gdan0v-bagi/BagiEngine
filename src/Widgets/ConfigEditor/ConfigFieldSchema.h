@@ -1,8 +1,14 @@
 #pragma once
 
+#include <BECore/PoolString/PoolString.h>
 #include <BECore/Reflection/AbstractFactory.h>
+#include <BECore/Types/Types.h>
+#include <BECore/Utils/EnumUtils.h>
+#include <BECore/Utils/Singleton.h>
 #include <EASTL/sort.h>
 #include <EASTL/unordered_map.h>
+#include <cstdint>
+#include <utility>
 
 namespace BECore {
 

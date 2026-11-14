@@ -1,6 +1,9 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
+#include <BECore/Utils/EnumUtils.h>
 #include <Stress/SpriteField.h>
+#include <cstdint>
 
 namespace BECore::Stress {
 

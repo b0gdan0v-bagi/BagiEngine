@@ -3,6 +3,7 @@
 #include <BECore/Threading/Mutex.h>
 #include <chrono>
 #include <condition_variable>
+#include <mutex>
 
 namespace BECore {
 

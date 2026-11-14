@@ -1,5 +1,10 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
+#include <BECore/Utils/EnumUtils.h>
+#include <cstdint>
+#include <expected>
+
 namespace BECore {
 
     /// The backend the BE_PROFILE_* macros send to: none, the Chrome trace recorder of the engine, or the vendored Tracy client

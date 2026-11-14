@@ -3,6 +3,8 @@
 #include <BECore/Application/ApplicationMainAccess.h>
 #include <BECore/Application/ApplicationOptions.h>
 #include <BECore/MainWindow/MainWindowAccessor.h>
+#include <BECore/RefCounted/RefCounted.h>
+#include <BECore/Reflection/ReflectionMarkers.h>
 
 namespace BECore {
 

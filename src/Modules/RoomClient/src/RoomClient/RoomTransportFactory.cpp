@@ -1,11 +1,11 @@
-#include "RoomTransport.h"
+#include <RoomClient/RoomTransport.h>
 
 #if BE_WITH_REMOTE_CONTROL
-#include "NativeRoomTransport.h"
+#include <RoomClient/NativeRoomTransport.h>
 #endif
 
 #if PLATFORM_WEB
-#include "EmscriptenRoomTransport.h"
+#include <RoomClient/EmscriptenRoomTransport.h>
 #endif
 
 namespace BECore {

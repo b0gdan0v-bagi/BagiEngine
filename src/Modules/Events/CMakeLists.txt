@@ -26,18 +26,8 @@ set_target_properties(EventsModule PROPERTIES FOLDER "Modules")
 # Это критически ускоряет сборку, так как PCH компилируется только один раз
 target_precompile_headers(EventsModule REUSE_FROM BECoreModule)
 
-# Автоматическое включение PCH через Force Include
-# Это позволяет использовать PCH без явного #include в каждом файле
-if(MSVC)
-    # MSVC: Force Include через /FI
-    target_compile_options(EventsModule PRIVATE /FI"BECore/pch.h")
-elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    # Clang: Force Include через -include
-    target_compile_options(EventsModule PRIVATE -include "BECore/pch.h")
-elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    # GCC: Force Include через -include
-    target_compile_options(EventsModule PRIVATE -include "BECore/pch.h")
-endif()
+# The sources rely on the PCH of BECoreModule without including it
+be_force_include_pch(EventsModule)
 
 # Подключаем директории с заголовками
 # Чтобы файлы из src/Modules/Events/src/Events/ были доступны через <Events/EventsProviderManager.h>,

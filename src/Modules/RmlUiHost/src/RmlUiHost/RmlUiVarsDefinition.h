@@ -1,5 +1,7 @@
 #pragma once
 
+#include <BECore/PoolString/PoolString.h>
+#include <BECore/Types/Types.h>
 #include <RmlUi/Core/DataVariable.h>
 
 namespace BECore {

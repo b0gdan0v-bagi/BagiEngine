@@ -1,10 +1,12 @@
 #pragma once
 
+#include <BECore/Format/Format.h>
 #include <BECore/Reflection/AbstractFactory.h>
 #include <BECore/Reflection/FactoryTraits.h>
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Reflection/ISerializer.h>
 #include <BECore/Reflection/SerializationTraits.h>
+#include <BECore/Utils/EnumUtils.h>
 #include <EASTL/array.h>
 #include <EASTL/fixed_hash_map.h>
 #include <EASTL/map.h>

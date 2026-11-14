@@ -1,10 +1,9 @@
-#include "StressSceneFixture.h"
-
 #include <BECore/Control/Json.h>
 #include <Events/ApplicationEvents.h>
 #include <Stress/Components/StressRunComponent.h>
 #include <Stress/RampController.h>
 #include <gtest/gtest.h>
+#include <tests/StressSceneFixture.h>
 
 /**
  * Coverage of StressRunComponent's fixed mode on the shipped scene file with a clock the test moves: which frames are recorded (warm-up and

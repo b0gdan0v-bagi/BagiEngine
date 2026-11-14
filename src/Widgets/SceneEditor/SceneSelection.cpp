@@ -1,6 +1,6 @@
 #include "SceneSelection.h"
 
-#include "HierarchyModel.h"
+#include <Widgets/SceneEditor/HierarchyModel.h>
 
 namespace BECore {
 

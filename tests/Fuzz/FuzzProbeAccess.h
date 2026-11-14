@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/FuzzProbe.h>
+#include <cstdint>
 
 namespace BECore::Fuzz {
 

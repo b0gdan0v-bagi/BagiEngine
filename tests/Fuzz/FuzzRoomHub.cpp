@@ -1,8 +1,7 @@
-#include "FuzzRoomInput.h"
-#include "FuzzTargets.h"
-
 #include <BECore/Rooms/WireJudge.h>
 #include <EASTL/hash_set.h>
+#include <Fuzz/FuzzRoomInput.h>
+#include <Fuzz/FuzzTargets.h>
 #include <RoomServer/DemoCardGame.h>
 #include <Rooms/RoomCode.h>
 #include <Rooms/RoomHub.h>

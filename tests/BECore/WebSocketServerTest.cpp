@@ -1,7 +1,6 @@
-#include "WebSocketTestClient.h"
-
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
+#include <BECore/WebSocketTestClient.h>
 #include <Common/Printers.h>
 #include <RemoteControl/WebSocketFrame.h>
 #include <RemoteControl/WebSocketHandshake.h>

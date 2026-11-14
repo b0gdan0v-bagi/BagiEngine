@@ -1,5 +1,8 @@
 #pragma once
 
+#include <BECore/Format/Format.h>
+#include <BECore/Types/Types.h>
+#include <filesystem>
 #include <gtest/gtest.h>
 #include <random>
 

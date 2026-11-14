@@ -1,6 +1,8 @@
 #pragma once
 
-#include <span>
+#include <BECore/Types/Types.h>
+#include <cstddef>
+#include <cstdint>
 
 namespace BECore::Fuzz {
 
@@ -15,7 +17,7 @@ namespace BECore::Fuzz {
     };
 
     /// Every target, in a fixed order; the corpus test and the libFuzzer wrappers (cmake/BagiFuzz.cmake) use the same functions
-    std::span<const FuzzTarget> FuzzTargetList();
+    Span<const FuzzTarget> FuzzTargetList();
 
     /// Prints the failed condition and aborts the process: the corpus test and a libFuzzer run both see a crash
     [[noreturn]] void FuzzCheckFailed(const char* condition, const char* file, int line);

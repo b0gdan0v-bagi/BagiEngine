@@ -1,12 +1,19 @@
 #pragma once
 
+#include <BECore/Math/Color.h>
+#include <BECore/Math/Rect.h>
+#include <BECore/PoolString/PoolString.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
+#include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Renderer/IRenderTarget.h>
+#include <BECore/Types/Types.h>
 #include <BECore/UI/UIPreview.h>
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/SceneEditor/SceneSelectionEvents.h>
 #include <Widgets/Viewport/ViewportGizmos.h>
 #include <Widgets/Viewport/ViewportInput.h>
+#include <cstdint>
 
 namespace BECore {
 

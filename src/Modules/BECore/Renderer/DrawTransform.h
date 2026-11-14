@@ -1,6 +1,8 @@
 #pragma once
 
+#include <BECore/Math/Rect.h>
 #include <BECore/Math/Vec2.h>
+#include <array>
 
 namespace BECore {
 

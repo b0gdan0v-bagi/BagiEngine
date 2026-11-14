@@ -2,6 +2,7 @@
 
 #include <BECore/Reflection/BinaryFormat.h>
 #include <BECore/Reflection/IDeserializer.h>
+#include <filesystem>
 
 namespace BECore {
 

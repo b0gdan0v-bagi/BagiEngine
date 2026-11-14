@@ -1,5 +1,7 @@
 #pragma once
 
+#include <BECore/Math/Color.h>
+
 namespace BECore {
 
     /**

@@ -208,6 +208,25 @@ python3 CI/scripts/strip_pch_includes.py --all --root . --dir src/Widgets
 
 The order stays: dry run, a bounded folder, the build and the tests, then a wider scope.
 
+The script strips **source files only** (`.cpp .cc .cxx .c .mm`); a header is skipped and counted in the output. A header has to include what it uses and compile alone ("Includes", `check_headers.py`), and stripping the PCH's includes from it would undo that.
+
+The decision (`include-hygiene`, slice 4): the script stays, for `.cpp` only, and is no guard of correctness (`check_headers.py` is). The PCH is the implicit set a `.cpp` may use (`BECore/pch.h`; test targets reuse `BagiTestPch`, the same plus `gtest/gtest.h`), and the script keeps a `.cpp` from repeating it; the PCH stays (figures: `cmake/CLAUDE.md`, "Compile-time measurement"). A game's own `.cpp` files may keep relying on it and keep running the script (`<R>` = the game).
+
+## Includes
+
+`#include "..."` only for a `.cpp` / `.mm` / `.c` including its own header (`Foo.cpp` -> `"Foo.h"`, no folder in the quotes); every other include is `<...>` from an include root. A quoted include is looked up first in the folder of the including file, so one header gets two spellings and the include roots are bypassed.
+
+| Field | Engine value |
+|-------|--------------|
+| Include roots | `src`, `src/Modules`, the `src/` of a module (`<RemoteControl/WebSocketUrl.h>`); a test helper through the `tests/` root (`<BECore/Rooms/TestClient.h>`); a game adds its own `src/` |
+| Check | `python3 CI/scripts/check_includes.py --root .` (in a game: `python3 engine/CI/scripts/check_includes.py --root .`, with `--exclude <path>` for the game's own vendored code); ctest `BagiIncludeStyle` in the engine |
+| Types check | `python3 CI/scripts/check_types.py --root . --baseline CI/types_baseline.txt` (in a game: `python3 engine/CI/scripts/check_types.py --root . --exclude <own vendored> [--baseline <file>]`); ctest `BagiTypesCheck` in the engine. Raw `std::` / `eastl::` types and allocating calls (the rule table is at the head of the script); a real boundary says `//-NoStd: <why>`. The baseline file lists the hits other entries own and only shrinks: a new hit is fixed or marked, never added with `--update-baseline`; `--allow <folder>:<rule>[,<rule>]` allows rules in a folder (`tests` allows regex and string streams, and their includes, by default) |
+| Standalone headers | `python3 CI/scripts/check_headers.py --root . --build build/<p> --exclude src/Modules/RmlUiHost` (in a game: `python3 engine/CI/scripts/check_headers.py --root . --build build/<p> --exclude engine`, with `--baseline <file>` of its own while it has failing headers; a submodule is skipped by its `.git` too); ctest `BagiHeadersStandalone` in the engine |
+
+**A header includes what it uses and compiles alone; the PCH is for `.cpp` files** (`strip_pch_includes.py` leaves headers alone). `check_headers.py` compiles every header by itself (`-fsyntax-only -x c++-header`, no `-include`, no PCH) with the flags of the nearest translation unit in `<build>/compile_commands.json`. Every failing header fails the check (the engine has no baseline file). A game may keep a baseline of its own while it fixes its headers (`--baseline <file>`): a header that fails and is not listed is `new:`, a listed one that passes is `fixed:` and fails the run until its line is deleted, so the list only shrinks (`--update-baseline` rewrites it; the diff is deleted lines only). A fragment by design (included inside another file, an X-macro list, a generated one) is an `--exclude` with its reason, never a baseline line. The check runs on the compiler of the build (clang or gcc; exit 77 and a skip for MSVC `cl` or without `compile_commands.json`); a module that the build does not compile has no flags there and is excluded (RmlUiHost: excluded without `ENGINE_UI_RMLUI`, checked by the same ctest in `macos-rmlui-debug`). The check runs on `macos-debug`; another platform can show other failures.
+
+`clang-format` leaves the own header first and sorts the rest as one block.
+
 ## Launcher
 
 Engine only. A game has no launcher: it fills the heading with "none".

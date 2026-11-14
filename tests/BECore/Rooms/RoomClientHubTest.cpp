@@ -1,6 +1,5 @@
-#include "HubTransport.h"
-#include "JudgedTransport.h"
-
+#include <BECore/Rooms/HubTransport.h>
+#include <BECore/Rooms/JudgedTransport.h>
 #include <Common/Printers.h>
 #include <RoomClient/RoomClient.h>
 #include <Rooms/RoomErrors.h>

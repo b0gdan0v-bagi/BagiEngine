@@ -1,5 +1,11 @@
 #pragma once
 
+#include <BECore/RefCounted/IntrusivePtr.h>
+#include <BECore/RefCounted/RefCounted.h>
+#include <concepts>
+#include <type_traits>
+#include <utility>
+
 namespace BECore {
     // Вспомогательная функция для определения типа указателя
     template <typename T>

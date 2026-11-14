@@ -1,7 +1,12 @@
 #pragma once
 
+#include <BECore/Config/XmlConfig.h>
+#include <BECore/PoolString/PoolString.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
+#include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Resource/IResource.h>
 #include <BECore/UI/UIScreenContent.h>
+#include <cstdint>
 
 namespace BECore {
 

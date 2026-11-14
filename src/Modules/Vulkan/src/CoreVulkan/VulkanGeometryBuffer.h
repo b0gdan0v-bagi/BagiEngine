@@ -1,6 +1,9 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
 #include <EASTL/vector.h>
+#include <cstddef>
+#include <cstdint>
 #include <vulkan/vulkan.h>
 
 namespace BECore {

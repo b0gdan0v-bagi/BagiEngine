@@ -1,11 +1,18 @@
 #pragma once
 
-#include "RoomSocketClient.h"
-#include "WireJudge.h"
-
+#include <BECore/Format/Format.h>
+#include <BECore/Rooms/RoomSocketClient.h>
+#include <BECore/Rooms/WireJudge.h>
+#include <BECore/Types/Types.h>
 #include <RoomServer/DemoCardGame.h>
+#include <algorithm>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <memory>
+#include <optional>
 #include <set>
+#include <utility>
 #include <vector>
 
 namespace BECore::Tests {

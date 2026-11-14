@@ -1,6 +1,8 @@
 #pragma once
 
 #include <BECore/Profiler/ProfileSite.h>
+#include <BECore/Types/Types.h>
+#include <cstdint>
 
 namespace BECore {
 

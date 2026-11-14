@@ -2,6 +2,7 @@
 
 import asyncio
 import base64
+import json
 import os
 import sys
 import time
@@ -13,6 +14,7 @@ import scenario
 from bagi_control_client import ControlError
 from bagi_session import CALL_TIMEOUT_SECONDS, STEP_SECONDS_PER_FRAME, GameSession, SessionError
 from fake_control_server import FakeControlServer, FakeError, QuitServer
+from fake_game import png_2x1
 from game_process import free_port
 
 TESTS_DIR = Path(__file__).resolve().parent
@@ -235,7 +237,7 @@ def test_launch_of_a_missing_executable_names_the_path(session, tmp_path):
 
 EXPECTED_TOOLS = {
     "launch_game", "connect", "status", "get_state", "list_actions", "perform_action", "set_state", "reset", "step", "screenshot", "ui_tree", "ui_click", "game_log", "quit",
-    "frame_stats", "profiler_dump", "zone_allocs", "record_start", "record_stop",
+    "frame_stats", "profiler_dump", "zone_allocs", "record_start", "record_stop", "image_diff",
 }
 
 
@@ -297,6 +299,52 @@ def test_the_mcp_server_serves_the_tools_over_stdio(server):
     assert requests_of(server, "profiler_dump")[-1] == {"path": "trace.json"}
     assert requests_of(server, "zone_allocs")[-1] == {"top": 5, "reset": True}
     assert requests_of(server, "ui_click")[:3] == [{"name": "Ok"}, {"name": "Ok", "canvas": "Debug"}, {"name": "Volume", "at": 0.25}]
+
+
+def test_the_mcp_image_diff_answers_stats_and_an_image_and_errors_as_text(tmp_path):
+    mcp = pytest.importorskip("mcp")
+    reference = tmp_path / "reference.png"
+    reference.write_bytes(png_2x1())
+    other = tmp_path / "other.png"
+    other.write_bytes(png_2x1())
+
+    def game(method: str, params: dict | None):
+        if method == "status":
+            return {"frame": 1, "manualClock": True}
+        if method == "list_games":
+            return {"active": "Fake", "games": [{"name": "Fake", "controllable": True}]}
+        if method == "screenshot":
+            return {"width": 2, "height": 1, "png_base64": base64.b64encode(png_2x1()).decode("ascii")}
+        raise FakeError("unknown_method", method)
+
+    fake = FakeControlServer(game)
+    port = fake.start()
+
+    async def run() -> None:
+        parameters = mcp.StdioServerParameters(command=sys.executable, args=[str(TOOL_DIR / "bagi_mcp.py")])
+        async with mcp.Client(parameters) as client:
+            files = await client.call_tool("image_diff", {"a": str(reference), "b": str(other)})  # no game connected: two files need none
+            assert not files.is_error
+            assert [part.type for part in files.content] == ["text", "image"]
+            assert json.loads(files.content[0].text)["equal"] is True
+            assert files.content[1].mime_type == "image/png"
+
+            assert not (await client.call_tool("connect", {"port": port})).is_error
+            screen = await client.call_tool("image_diff", {"a": str(reference), "b": "screen", "region": [0, 0, 1, 0], "threshold": 3})
+            assert not screen.is_error
+            stats = json.loads(screen.content[0].text)
+            assert stats["equal"] is True and stats["region"] == [0, 0, 1, 0] and stats["threshold"] == 3
+
+            missing = await client.call_tool("image_diff", {"a": str(reference), "b": str(tmp_path / "nothing.png")})
+            assert missing.is_error and "nothing.png" in missing.content[0].text
+            bad = await client.call_tool("image_diff", {"a": str(reference), "b": str(other), "region": [0, 0, 9, 9]})
+            assert bad.is_error and "region" in bad.content[0].text
+
+    try:
+        asyncio.run(run())
+    finally:
+        fake.stop()
+    assert [params for name, params in fake.requests if name == "screenshot"] == [{"maxSize": 4096}]
 
 
 def test_every_mcp_tool_is_wrapped_in_reports_errors():

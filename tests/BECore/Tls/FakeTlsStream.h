@@ -1,8 +1,17 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
 #include <Common/Printers.h>
 #include <RemoteControl/Tls/TlsStream.h>
+#include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <expected>
 #include <gtest/gtest.h>
+#include <mutex>
+#include <utility>
 
 namespace BECore::Tests {
 

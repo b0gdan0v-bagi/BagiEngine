@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Profiler/ProfileSite.h>
+#include <cstdint>
 
 /**
  * @file LockSite.h

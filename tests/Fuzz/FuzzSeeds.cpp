@@ -1,12 +1,11 @@
 #include "FuzzSeeds.h"
 
-#include "FuzzProbeAccess.h"
-#include "FuzzTargets.h"
-#include "FuzzWebSocketInput.h"
-
 #include <BECore/Reflection/BinaryFormat.h>
 #include <BECore/Reflection/BinarySerializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
+#include <Fuzz/FuzzProbeAccess.h>
+#include <Fuzz/FuzzTargets.h>
+#include <Fuzz/FuzzWebSocketInput.h>
 #include <RemoteControl/WebSocketClientHandshake.h>
 
 namespace BECore::Fuzz {

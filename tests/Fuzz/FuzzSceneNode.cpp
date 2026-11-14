@@ -1,7 +1,6 @@
-#include "FuzzTargets.h"
-
 #include <BECore/Scene/SceneLoader.h>
 #include <BECore/Scene/SceneNodeInstance.h>
+#include <Fuzz/FuzzTargets.h>
 
 namespace BECore::Fuzz {
 

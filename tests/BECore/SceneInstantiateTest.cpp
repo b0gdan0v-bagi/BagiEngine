@@ -1,5 +1,3 @@
-#include "SceneEventsTest.h"
-
 #include <BECore/Config/ContentVersion.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/LogEvent.h>
@@ -8,6 +6,7 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneLoader.h>
 #include <BECore/Scene/SceneManager.h>
+#include <BECore/SceneEventsTest.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>

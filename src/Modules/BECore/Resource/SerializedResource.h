@@ -1,7 +1,10 @@
 #pragma once
 
+#include <BECore/PoolString/PoolString.h>
 #include <BECore/Reflection/TypeTraits.h>
 #include <BECore/Resource/IResource.h>
+#include <cstdint>
+#include <utility>
 
 namespace BECore {
 
@@ -49,7 +52,7 @@ namespace BECore {
         }
 
         PoolString GetTypeName() const override {
-            static PoolString typeName = PoolString::Intern(fmt::format("SerializedResource<{}>", ReflectionTraits<T>::name));
+            static PoolString typeName = PoolString::Intern(Format("SerializedResource<{}>", ReflectionTraits<T>::name));
             return typeName;
         }
 

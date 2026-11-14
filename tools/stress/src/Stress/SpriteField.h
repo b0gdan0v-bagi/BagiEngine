@@ -1,7 +1,10 @@
 #pragma once
 
+#include <BECore/Math/Rect.h>
 #include <BECore/Renderer/BlendMode.h>
+#include <BECore/Types/Types.h>
 #include <Stress/StressSettings.h>
+#include <cstdint>
 
 namespace BECore::Stress {
 

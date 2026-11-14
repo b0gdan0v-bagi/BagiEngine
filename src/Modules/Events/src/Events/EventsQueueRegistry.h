@@ -1,5 +1,10 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
+#include <BECore/Utils/PassKey.h>
+#include <functional>
+#include <utility>
+
 namespace BECore {
     struct BaseEvent;
 

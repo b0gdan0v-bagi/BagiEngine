@@ -1,6 +1,10 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
+#include <cstdint>
 #include <thread>
+#include <type_traits>
+#include <utility>
 
 namespace BECore {
 

@@ -1,11 +1,15 @@
 #pragma once
 
+#include <BECore/Math/Rect.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
+#include <BECore/Types/Types.h>
 #include <BECore/UI/UICanvasScaler.h>
 #include <BECore/UI/UIElement.h>
 #include <BECore/UI/UILayoutValidator.h>
 #include <BECore/UI/UIRegions.h>
 #include <BECore/UI/UITransitionComponent.h>
 #include <BECore/UI/UIVariant.h>
+#include <cstdint>
 
 namespace BECore {
 

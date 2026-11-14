@@ -1,6 +1,9 @@
 #pragma once
 
 #include <BECore/MainWindow/IMainWindow.h>
+#include <BECore/Math/Rect.h>
+#include <BECore/Types/Types.h>
+#include <Events/SubscriptionHolder.h>
 #include <SDL3/SDL.h>
 
 namespace BECore {

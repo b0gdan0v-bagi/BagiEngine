@@ -1,6 +1,8 @@
 #pragma once
 
 #include <BECore/Reflection/ISerializer.h>
+#include <filesystem>
+#include <pugixml.hpp>
 
 namespace BECore {
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Math/Color.h>
 #include <BECore/Math/Vec3.h>
 
 namespace BECore {

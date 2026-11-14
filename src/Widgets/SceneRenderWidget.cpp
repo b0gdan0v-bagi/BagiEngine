@@ -1,6 +1,7 @@
 #include "SceneRenderWidget.h"
 
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Scene/SceneManager.h>
 #include <Generated/SceneRenderWidget.gen.hpp>
 
 namespace BECore {

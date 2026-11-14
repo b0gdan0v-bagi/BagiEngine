@@ -1,7 +1,8 @@
 #pragma once
 
-#include "WebSocketUrl.h"
-
+#include <BECore/Types/Types.h>
+#include <RemoteControl/WebSocketUrl.h>
+#include <expected>
 #include <random>
 
 namespace BECore {

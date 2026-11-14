@@ -1,7 +1,13 @@
 #pragma once
 
-#include "../WebSocketTestClient.h"
-#include "TestClient.h"
+#include <BECore/Rooms/TestClient.h>
+#include <BECore/Types/Types.h>
+#include <BECore/WebSocketTestClient.h>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <optional>
+#include <utility>
 
 namespace BECore::Tests {
 

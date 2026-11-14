@@ -1,5 +1,7 @@
 #pragma once
 
+#include <BECore/PoolString/PoolString.h>
+#include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Scene/IComponent.h>
 
 namespace BECore {

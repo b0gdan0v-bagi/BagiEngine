@@ -1,6 +1,5 @@
-#include "FuzzTargets.h"
-
 #include <BECore/Reflection/BinaryDeserializer.h>
+#include <Fuzz/FuzzTargets.h>
 
 namespace BECore::Fuzz {
 

@@ -1,5 +1,11 @@
 #pragma once
 
+#include <BECore/RefCounted/RefCounted.h>
+#include <BECore/Reflection/ReflectionMarkers.h>
+#include <BECore/Types/Types.h>
+#include <concepts>
+#include <type_traits>
+
 namespace BECore::Tests {
 
     class ITest : public RefCountedAtomic {

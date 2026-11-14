@@ -1,8 +1,14 @@
 #pragma once
 
+#include <BECore/Math/Color.h>
 #include <BECore/Math/Mat4.h>
+#include <BECore/Math/Vec3.h>
 #include <BECore/Math/Vec4.h>
 #include <BECore/Renderer/Gpu/GpuTypes.h>
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <type_traits>
 
 namespace BECore {
 

@@ -1,6 +1,5 @@
-#include "FuzzRoomInput.h"
-#include "FuzzTargets.h"
-
+#include <Fuzz/FuzzRoomInput.h>
+#include <Fuzz/FuzzTargets.h>
 #include <Rooms/RoomCode.h>
 #include <Rooms/RoomErrors.h>
 #include <Rooms/RoomProtocol.h>

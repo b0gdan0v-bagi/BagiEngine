@@ -1,6 +1,7 @@
 #include "StressGame.h"
 
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Scene/SceneManager.h>
 #include <Games/GameManager.h>
 #include <Generated/StressGame.gen.hpp>
 #include <Stress/RampController.h>

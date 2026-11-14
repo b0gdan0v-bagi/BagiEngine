@@ -1,7 +1,6 @@
 #include "SDLEventsProvider.h"
 
-#include "Application/Application.h"
-
+#include <Application/Application.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/MainWindow/IMainWindow.h>
 #include <CoreSDL/SDLClipboard.h>

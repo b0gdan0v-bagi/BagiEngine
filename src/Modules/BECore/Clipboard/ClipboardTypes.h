@@ -1,5 +1,10 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
+#include <BECore/Utils/EnumUtils.h>
+#include <cstddef>
+#include <cstdint>
+
 namespace BECore {
 
     /// The longest text the clipboard service moves in either direction: a longer one is Refused, so a hostile clipboard cannot make the game copy megabytes

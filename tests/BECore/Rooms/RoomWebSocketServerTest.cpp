@@ -1,9 +1,8 @@
-#include "FakeSeatedGame.h"
-#include "ManualClock.h"
-#include "RoomSocketClient.h"
-#include "TestRandom.h"
-
 #include <BECore/Logger/LogEvent.h>
+#include <BECore/Rooms/FakeSeatedGame.h>
+#include <BECore/Rooms/ManualClock.h>
+#include <BECore/Rooms/RoomSocketClient.h>
+#include <BECore/Rooms/TestRandom.h>
 #include <RoomServer/RoomWebSocketServer.h>
 #include <Rooms/RoomErrors.h>
 #include <gtest/gtest.h>

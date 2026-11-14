@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/Resource/IResource.h>
 
 namespace BECore {

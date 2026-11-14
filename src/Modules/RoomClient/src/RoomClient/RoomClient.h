@@ -1,7 +1,13 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
+#include <BECore/Utils/EnumUtils.h>
 #include <RoomClient/RoomTransport.h>
 #include <Rooms/RoomProtocol.h>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <expected>
 
 namespace BECore {
 

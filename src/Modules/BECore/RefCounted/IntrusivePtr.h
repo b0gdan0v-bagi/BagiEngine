@@ -1,5 +1,13 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
+#include <tuple>
+#include <type_traits>
+#include <utility>
+
 namespace BECore {
 
     template <typename T>

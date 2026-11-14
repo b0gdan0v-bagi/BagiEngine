@@ -1,5 +1,7 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
+#include <cstdint>
 #include <imgui.h>
 
 namespace BECore {

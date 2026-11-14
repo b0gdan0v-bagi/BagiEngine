@@ -2,18 +2,20 @@
 (--dry-run) or handed to a fake runner. Run: python3 -m unittest discover tools/rooms/tests"""
 
 import contextlib
+import importlib.util
 import io
 import re
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-# tools/rooms, where build_and_deploy.py is (the tests run from a start folder of their own)
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-import build_and_deploy
+# tools/web has a build_and_deploy.py too: a plain import would take whichever of the two a pytest run imported first, so load this one by
+# path under a name of its own
+_SCRIPT = Path(__file__).resolve().parents[1] / "build_and_deploy.py"
+_SPEC = importlib.util.spec_from_file_location("rooms_build_and_deploy", _SCRIPT)
+build_and_deploy = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(build_and_deploy)
 
 TOOLS_ROOMS = Path(build_and_deploy.__file__).resolve().parent
 DOCKER_PATH = "/usr/bin/docker"

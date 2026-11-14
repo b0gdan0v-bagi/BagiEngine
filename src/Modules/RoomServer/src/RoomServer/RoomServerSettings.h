@@ -3,6 +3,10 @@
 #include <RemoteControl/Socket.h>
 #include <RemoteControl/WebSocketHandshake.h>
 #include <Rooms/RoomLimits.h>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <functional>
 
 namespace BECore {
 

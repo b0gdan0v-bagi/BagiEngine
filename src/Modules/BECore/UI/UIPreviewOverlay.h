@@ -1,5 +1,8 @@
 #pragma once
 
+#include <BECore/Math/Rect.h>
+#include <BECore/PoolString/PoolString.h>
+#include <BECore/Types/Types.h>
 #include <BECore/UI/UICanvasLayout.h>
 
 namespace BECore {

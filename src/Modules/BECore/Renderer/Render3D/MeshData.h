@@ -1,6 +1,8 @@
 #pragma once
 
 #include <BECore/Renderer/Render3D/Vertex3D.h>
+#include <BECore/Types/Types.h>
+#include <cstdint>
 
 namespace BECore {
 

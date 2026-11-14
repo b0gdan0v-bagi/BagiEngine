@@ -1,0 +1,5 @@
+{"scenario": 1, "game": "Stress", "flags": ["--headless", "--manual-clock"], "title": "BagiStress: the ui scene with a few labels is the reference picture stress_ui.png"}
+{"method": "perform_action", "params": {"type": "set_scene", "scene": "ui"}}
+{"method": "perform_action", "params": {"type": "set_count", "count": 24}, "expect": {"versionStep": 1}}
+{"method": "step", "params": {"frames": 3}}
+{"method": "screenshot", "params": {"maxSize": 400}, "expect": {"reference": {"png": "references/stress_ui.png"}}}

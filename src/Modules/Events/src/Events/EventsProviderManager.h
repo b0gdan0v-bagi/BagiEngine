@@ -1,5 +1,7 @@
 #pragma once
 
+#include <BECore/RefCounted/IntrusivePtr.h>
+#include <BECore/Types/Types.h>
 #include <Events/IEventsProvider.h>
 
 namespace BECore {

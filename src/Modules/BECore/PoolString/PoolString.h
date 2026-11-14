@@ -1,5 +1,9 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
+#include <BECore/Utils/StringUtils.h>
+#include <cstddef>
+#include <cstdint>
 #include <shared_mutex>
 
 namespace BECore {

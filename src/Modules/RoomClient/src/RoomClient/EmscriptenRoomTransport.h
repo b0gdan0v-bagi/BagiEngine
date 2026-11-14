@@ -4,7 +4,12 @@
 
 #if PLATFORM_WEB
 
+#include <BECore/Threading/Thread.h>
+#include <BECore/Types/Types.h>
+#include <cstddef>
+#include <cstdint>
 #include <emscripten/websocket.h>
+#include <expected>
 
 namespace BECore {
 

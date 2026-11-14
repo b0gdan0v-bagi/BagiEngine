@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Math/Color.h>
 #include <BECore/Resource/ResourceHandle.h>
 #include <BECore/Scene/IComponent.h>
 #include <BECore/Text/Font.h>

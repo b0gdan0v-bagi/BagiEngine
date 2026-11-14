@@ -1,7 +1,11 @@
 #pragma once
 
+#include <BECore/PoolString/PoolString.h>
 #include <BECore/Reflection/ClassMeta.h>
+#include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Reflection/TypeTraits.h>
+#include <cstdint>
+#include <utility>
 
 namespace BECore::Tests {
 

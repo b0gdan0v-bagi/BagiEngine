@@ -1,5 +1,8 @@
 #pragma once
 
+#include <BECore/Utils/EnumUtils.h>
+#include <cstdint>
+
 namespace BECore {
 
     /// Frame time of one step when nothing says how long it lasts: one frame at 60 fps

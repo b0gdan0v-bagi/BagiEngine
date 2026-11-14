@@ -1,7 +1,15 @@
 #pragma once
 
+#include <BECore/Assert/AssertMacros.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
+#include <BECore/RefCounted/RefCounted.h>
+#include <BECore/Threading/ConditionVariable.h>
+#include <BECore/Threading/LockGuards.h>
+#include <BECore/Threading/LockSite.h>
+#include <BECore/Threading/Mutex.h>
 #include <TaskSystem/TaskPriority.h>
 #include <coroutine>
+#include <expected>
 
 namespace BECore {
 

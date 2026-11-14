@@ -1,6 +1,10 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
 #include <bit>
+#include <cstddef>
+#include <cstring>
+#include <type_traits>
 
 namespace BECore::BinaryFormat {
 

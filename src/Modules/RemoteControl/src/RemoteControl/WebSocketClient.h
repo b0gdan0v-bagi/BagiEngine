@@ -1,9 +1,19 @@
 #pragma once
 
+#include <BECore/Threading/ConditionVariable.h>
+#include <BECore/Threading/Mutex.h>
+#include <BECore/Threading/Thread.h>
+#include <BECore/Types/Types.h>
+#include <BECore/Utils/EnumUtils.h>
 #include <RemoteControl/Socket.h>
 #include <RemoteControl/Tls/ClientStream.h>
 #include <RemoteControl/WebSocketClientHandshake.h>
 #include <RemoteControl/WebSocketFrame.h>
+#include <atomic>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <expected>
 #include <random>
 
 namespace BECore {

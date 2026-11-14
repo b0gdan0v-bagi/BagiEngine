@@ -1,5 +1,3 @@
-#include "UIComponentTest.h"
-
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
@@ -20,6 +18,7 @@
 #include <BECore/UI/UITextComponent.h>
 #include <BECore/UI/UIToggleComponent.h>
 #include <BECore/UI/UITooltipComponent.h>
+#include <BECore/UIComponentTest.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>

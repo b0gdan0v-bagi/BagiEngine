@@ -1,13 +1,18 @@
 #pragma once
 
-#include "FakeSeatedGame.h"
-#include "TestRandom.h"
-
+#include <BECore/Format/Format.h>
+#include <BECore/Rooms/FakeSeatedGame.h>
+#include <BECore/Rooms/TestRandom.h>
+#include <BECore/Types/Types.h>
 #include <Common/Printers.h>
 #include <Rooms/RoomErrors.h>
 #include <Rooms/RoomHub.h>
 #include <Rooms/RoomProtocol.h>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <gtest/gtest.h>
+#include <utility>
 
 namespace BECore::Tests {
 

@@ -1,9 +1,8 @@
-#include "StressSceneFixture.h"
-
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <Stress/Components/StressUiComponent.h>
 #include <gtest/gtest.h>
+#include <tests/StressSceneFixture.h>
 
 /**
  * Coverage of StressUiComponent on the shipped scene file and the shipped string table, drawn on a RecordingRenderer: a label per count on one

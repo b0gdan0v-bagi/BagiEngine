@@ -1,6 +1,9 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
 #include <RmlUi/Core/FileInterface.h>
+#include <cstdint>
+#include <filesystem>
 
 namespace BECore {
 

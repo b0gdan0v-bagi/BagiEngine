@@ -2,6 +2,7 @@
 
 #include <BECore/Control/ControlTypes.h>
 #include <BECore/Control/JsonFwd.h>
+#include <expected>
 #include <nlohmann/json.hpp>
 
 namespace BECore {

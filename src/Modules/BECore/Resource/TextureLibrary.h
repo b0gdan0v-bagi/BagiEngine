@@ -1,5 +1,12 @@
 #pragma once
 
+#include <BECore/Math/Rect.h>
+#include <BECore/PoolString/PoolString.h>
+#include <BECore/PoolString/PoolStringMap.h>
+#include <BECore/Reflection/ReflectionMarkers.h>
+#include <BECore/Types/Types.h>
+#include <cstddef>
+
 namespace BECore {
 
     class IDeserializer;

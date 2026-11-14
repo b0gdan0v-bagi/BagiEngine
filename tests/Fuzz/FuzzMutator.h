@@ -1,6 +1,9 @@
 #pragma once
 
-#include <span>
+#include <BECore/Types/Types.h>
+#include <BECore/Utils/EnumUtils.h>
+#include <cstddef>
+#include <cstdint>
 
 namespace BECore::Fuzz {
 
@@ -38,9 +41,9 @@ namespace BECore::Fuzz {
      * a splice with no other seed) does the nearest kind that fits instead; the kind that was done is returned.
      * The result is never longer than kMaxFuzzInputSize.
      */
-    FuzzMutation ApplyMutation(FuzzMutation kind, FuzzBytes& bytes, FuzzRandom& random, std::span<const FuzzBytes> otherSeeds);
+    FuzzMutation ApplyMutation(FuzzMutation kind, FuzzBytes& bytes, FuzzRandom& random, Span<const FuzzBytes> otherSeeds);
 
     /// One mutation of a kind drawn from @p random
-    FuzzMutation Mutate(FuzzBytes& bytes, FuzzRandom& random, std::span<const FuzzBytes> otherSeeds);
+    FuzzMutation Mutate(FuzzBytes& bytes, FuzzRandom& random, Span<const FuzzBytes> otherSeeds);
 
 }  // namespace BECore::Fuzz

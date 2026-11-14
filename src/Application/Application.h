@@ -1,5 +1,14 @@
 #pragma once
 
+#include <BECore/PoolString/PoolString.h>
+#include <BECore/Types/Types.h>
+#include <BECore/Utils/Singleton.h>
+#include <Events/SubscriptionHolder.h>
+
+#if BE_WITH_REMOTE_CONTROL
+#include <cstdint>
+#endif
+
 namespace BECore {
 
     namespace SDLEvents {

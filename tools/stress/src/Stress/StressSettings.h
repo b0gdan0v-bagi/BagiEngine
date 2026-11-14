@@ -1,6 +1,10 @@
 #pragma once
 
 #include <BECore/Application/CommandLine.h>
+#include <BECore/Types/Types.h>
+#include <BECore/Utils/EnumUtils.h>
+#include <cstdint>
+#include <expected>
 
 namespace BECore::Stress {
 

@@ -1,9 +1,8 @@
-#include "SceneEventsTest.h"
-
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneLoader.h>
 #include <BECore/Scene/SceneManager.h>
+#include <BECore/SceneEventsTest.h>
 #include <Common/EngineEnvironment.h>
 #include <Events/SceneEvents.h>
 #include <gtest/gtest.h>

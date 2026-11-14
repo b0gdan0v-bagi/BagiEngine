@@ -1,5 +1,11 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
+#include <BECore/Utils/EnumUtils.h>
+#include <cstddef>
+#include <cstdint>
+#include <expected>
+
 namespace BECore {
 
     /// Where a post stands. Done means the server answered, with whatever HTTP status: the caller judges the status.

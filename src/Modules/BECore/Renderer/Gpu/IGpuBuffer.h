@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/RefCounted/RefCounted.h>
 #include <BECore/Renderer/Gpu/GpuTypes.h>
 
 namespace BECore {

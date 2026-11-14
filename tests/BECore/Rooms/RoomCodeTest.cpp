@@ -1,5 +1,4 @@
-#include "TestRandom.h"
-
+#include <BECore/Rooms/TestRandom.h>
 #include <Common/Printers.h>
 #include <Rooms/RoomCode.h>
 #include <Rooms/RoomLimits.h>

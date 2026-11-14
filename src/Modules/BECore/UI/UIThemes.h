@@ -1,6 +1,11 @@
 #pragma once
 
+#include <BECore/Math/Color.h>
+#include <BECore/PoolString/PoolString.h>
+#include <BECore/PoolString/PoolStringMap.h>
+#include <BECore/Types/Types.h>
 #include <BECore/UI/UIColor.h>
+#include <cstdint>
 
 namespace BECore {
 

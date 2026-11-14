@@ -1,5 +1,7 @@
 #pragma once
 
+#include <BECore/RefCounted/RefCounted.h>
+#include <cstdint>
 
 namespace BECore {
 

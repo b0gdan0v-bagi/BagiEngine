@@ -1,6 +1,10 @@
 #pragma once
 
+#include <BECore/PoolString/PoolString.h>
+#include <BECore/Types/Types.h>
+#include <BECore/Utils/EnumUtils.h>
 #include <Widgets/EditorLayout/EditorSettings.h>
+#include <cstdint>
 
 namespace BECore {
 

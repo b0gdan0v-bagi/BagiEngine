@@ -1,6 +1,8 @@
 #pragma once
 
 #include <BECore/Time/GamePause.h>  // kDefaultStepSeconds: the frame time of a deferred call that does not say how long its frame is
+#include <BECore/Types/Types.h>
+#include <functional>
 
 namespace BECore {
 

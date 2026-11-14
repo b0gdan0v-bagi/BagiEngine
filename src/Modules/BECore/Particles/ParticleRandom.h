@@ -1,5 +1,8 @@
 #pragma once
 
+#include <BECore/Utils/EnumUtils.h>
+#include <cstdint>
+
 namespace BECore {
 
     /// The independent streams of numbers one particle draws at birth: the same particle asks each stream for its own number

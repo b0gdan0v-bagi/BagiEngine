@@ -1,6 +1,12 @@
 #pragma once
 
+#include <BECore/Math/Color.h>
+#include <BECore/PoolString/PoolString.h>
 #include <BECore/Renderer/BlendMode.h>
+#include <BECore/Types/Types.h>
+#include <BECore/Utils/EnumUtils.h>
+#include <cstddef>
+#include <cstdint>
 
 namespace BECore {
 
