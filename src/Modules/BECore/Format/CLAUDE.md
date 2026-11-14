@@ -34,6 +34,6 @@ struct BECore::Formatter<Point> : TextFormatter {
 - One bridge, `fmt::formatter<T, char>` constrained by `HasFormatter<T>`, hands every such type to fmt. Do not add a second `fmt::formatter` for a type that has a `Formatter`: the two are ambiguous.
 - `String` and `StringView` are formattable through `fmt::formatter` specializations in `Format.h`: a layer file may name `fmt::`; nothing else may (the vendored `src/Modules/fmt/` is never edited).
 
-The codemod family `fmt` (`tools/codemod/CLAUDE.md`) moves plain `fmt::` calls of other code to these names.
+The codemod family `fmt` (`tools/codemod/CLAUDE.md`) moves plain `fmt::` calls of other code to these names; a game runs `codemod.py --family fmt` on its `src` and `tests` after `Update engine`, and a `fmt::` it reports is marked `//-NoStd: <why>` or given a layer name.
 
 Tests: `tests/BECore/FormatTest.cpp`, `tests/BECore/EnumUtilsTest.cpp`.
