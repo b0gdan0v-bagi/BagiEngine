@@ -93,7 +93,7 @@ namespace BECore {
     }
 
     std::filesystem::path SaveGameService::MakePath(StringView slot, StringView suffix) const {
-        // std: a std::filesystem path is built from it
+        //-NoStd: a std::filesystem path is built from it
         std::string name = ToStdString(slot);
         name.append(suffix.data(), suffix.size());
         return _directory / name;

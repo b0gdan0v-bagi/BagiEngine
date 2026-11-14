@@ -124,7 +124,7 @@ namespace BECore {
                     if (!item) {
                         eastl::string typeStr;
                         if (d.ReadAttribute("type", typeStr)) {
-                            item = AbstractFactory<Pointee>::GetInstance().Create(eastl::string_view(typeStr.data(), typeStr.size()));
+                            item = AbstractFactory<Pointee>::GetInstance().Create(StringView(typeStr));
                             if (!item && HasFactory<Pointee>)
                                 d.ReportError("type", eastl::string_view(Format("Unknown factory type: '{}'", typeStr).c_str()));
                         }
@@ -163,6 +163,25 @@ namespace BECore {
             }
 
             // -----------------------------------------------------------------
+            // Fixed containers that may not overflow: what does not fit is dropped and reported
+            // -----------------------------------------------------------------
+
+            /// A fixed container that cannot overflow and has no room for one more element
+            template <typename Container>
+            bool IsFull(const Container& container) {
+                if constexpr (requires { Container::can_overflow(); }) {
+                    return !Container::can_overflow() && container.size() >= container.max_size();
+                } else {
+                    return false;
+                }
+            }
+
+            /// The data a fixed container had no room for is an error of the field like any bad input (the sizes, not the content)
+            inline void ReportDropped(IDeserializer& d, StringView key, size_t kept, size_t offered, StringView unit) {
+                d.ReportError(key, Format("Data lost, the fixed container is full: kept {} of {} {}", kept, offered, unit));
+            }
+
+            // -----------------------------------------------------------------
             // Vector-like helpers: resizable containers (vector, fixed_vector)
             // -----------------------------------------------------------------
 
@@ -185,14 +204,21 @@ namespace BECore {
                 size_t count = 0;
                 if (d.BeginArray(key, "item", count)) {
                     vec.clear();
+                    size_t offered = 0;
                     for (size_t i = 0; i < count; ++i) {
                         if (d.BeginArrayElement()) {
-                            using Elem = typename Container::value_type;
-                            vec.push_back(MakeElement<Elem>(d));
+                            ++offered;
+                            if (!IsFull(vec)) {
+                                using Elem = typename Container::value_type;
+                                vec.push_back(MakeElement<Elem>(d));
+                            }
                             d.EndArrayElement();
                         }
                     }
                     d.EndArray();
+                    if (vec.size() < offered) {
+                        ReportDropped(d, key, vec.size(), offered, "items");
+                    }
                     return true;
                 }
                 return false;
@@ -226,6 +252,8 @@ namespace BECore {
                 size_t count = 0;
                 if (d.BeginArray(key, Traits::elementName, count)) {
                     vec.clear();
+                    size_t offered = 0;
+                    size_t dropped = 0;
                     for (size_t i = 0; i < count; ++i) {
                         if (d.BeginArrayElement()) {
                             bool enabled = true;
@@ -233,13 +261,22 @@ namespace BECore {
                             if (enabled) {
                                 Ptr item;
                                 LoadElement(d, item);
-                                if (item)
-                                    vec.push_back(eastl::move(item));
+                                if (item) {
+                                    ++offered;
+                                    if (IsFull(vec)) {
+                                        ++dropped;
+                                    } else {
+                                        vec.push_back(eastl::move(item));
+                                    }
+                                }
                             }
                             d.EndArrayElement();
                         }
                     }
                     d.EndArray();
+                    if (dropped > 0) {
+                        ReportDropped(d, key, offered - dropped, offered, "items");
+                    }
                     return true;
                 }
                 return false;
@@ -327,7 +364,10 @@ namespace BECore {
                     if (!d.ReadAttribute(key, text)) {
                         return false;
                     }
-                    ::BECore::Detail::AssignText(value, StringView(text.data(), text.size()));
+                    const size_t dropped = ::BECore::Detail::AssignText(value, StringView(text));
+                    if (dropped > 0) {
+                        ReportDropped(d, key, text.size() - dropped, text.size(), "bytes");
+                    }
                     return true;
                 }
             }
@@ -386,7 +426,7 @@ namespace BECore {
             static bool Load(IDeserializer& d, T& value, eastl::string_view key) {
                 eastl::string str;
                 if (d.ReadAttribute(key, str)) {
-                    auto result = EnumUtils<T>::Cast(eastl::string_view(str.data(), str.size()));
+                    auto result = EnumUtils<T>::Cast(StringView(str));
                     if (result) {
                         value = *result;
                         return true;
@@ -479,7 +519,7 @@ namespace BECore {
                     if (!ptr) {
                         eastl::string typeStr;
                         if (d.ReadAttribute("type", typeStr)) {
-                            ptr = AbstractFactory<T>::GetInstance().Create(eastl::string_view(typeStr.data(), typeStr.size()));
+                            ptr = AbstractFactory<T>::GetInstance().Create(StringView(typeStr));
                             if (!ptr)
                                 d.ReportError(key, eastl::string_view(Format("Unknown factory type: '{}'", typeStr).c_str()));
                         }
@@ -703,8 +743,9 @@ namespace BECore {
                     if constexpr (requires(const K& a, const K& b) { {a < b}->std::convertible_to<bool>; }) {
                         eastl::vector<eastl::pair<const K*, const V*>> sorted;
                         sorted.reserve(map.size());
-                        for (const auto& [k, v] : map)
+                        for (const auto& [k, v] : map) {
                             sorted.push_back({&k, &v});
+                        }
                         eastl::sort(sorted.begin(), sorted.end(), [](const eastl::pair<const K*, const V*>& a, const eastl::pair<const K*, const V*>& b) { return *a.first < *b.first; });
                         for (const auto& [kPtr, vPtr] : sorted) {
                             if (s.BeginArrayElement()) {
@@ -726,7 +767,8 @@ namespace BECore {
                 }
             }
 
-            /// @p FixedStorage: the nodes are in the map's own block, so nothing is reserved, and a map that may not overflow keeps what fits
+            /// @p FixedStorage: the nodes are in the map's own block, so nothing is reserved, and a map that may not overflow keeps what fits and
+            /// reports the rest
             template <bool FixedStorage, typename HashMapType>
             bool LoadHashMapLike(IDeserializer& d, HashMapType& map, StringView key) {
                 using K = typename HashMapType::key_type;
@@ -737,22 +779,26 @@ namespace BECore {
                     if constexpr (!FixedStorage) {
                         map.reserve(count);
                     }
+                    size_t offered = 0;
+                    size_t dropped = 0;
                     for (size_t i = 0; i < count; ++i) {
                         if (d.BeginArrayElement()) {
+                            ++offered;
                             K k{};
                             d.ReadAttribute("key", k);
                             V element = MakeElement<V>(d);
-                            if constexpr (FixedStorage) {
-                                if (!HashMapType::can_overflow() && map.size() >= map.max_size()) {
-                                    d.EndArrayElement();
-                                    continue;
-                                }
+                            if (IsFull(map)) {
+                                ++dropped;
+                            } else {
+                                map.emplace(eastl::move(k), eastl::move(element));
                             }
-                            map.emplace(eastl::move(k), eastl::move(element));
                             d.EndArrayElement();
                         }
                     }
                     d.EndArray();
+                    if (dropped > 0) {
+                        ReportDropped(d, key, offered - dropped, offered, "entries");
+                    }
                     return true;
                 }
                 return false;
@@ -830,6 +876,7 @@ namespace BECore {
 
         template <typename T>
         void Save(ISerializer& s, const T& value, eastl::string_view key) {
+            static_assert(HasDataAccessor<T>, "The type has no Ser::DataAccessor: it is not a reflected type (see Reflection/DataAccessor.h)");
             if (s.IsSkipDefaults() && !DefaultChecker<T>::AlwaysFalse && DefaultChecker<T>::IsDefault(value))
                 return;
             DataAccessor<T>::Save(s, value, key);
@@ -837,6 +884,7 @@ namespace BECore {
 
         template <typename T>
         bool Load(IDeserializer& d, T& value, eastl::string_view key) {
+            static_assert(HasDataAccessor<T>, "The type has no Ser::DataAccessor: it is not a reflected type (see Reflection/DataAccessor.h)");
             return DataAccessor<T>::Load(d, value, key);
         }
 

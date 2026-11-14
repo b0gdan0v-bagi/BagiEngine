@@ -1,9 +1,9 @@
 """One command from the sources to the Railway service: configure and build the game for the web, package the output, deploy it.
 
-    python tools/web/build_and_deploy.py --game BagiMatch3 --dry-run             # print the commands, run nothing
-    python tools/web/build_and_deploy.py --game BagiMatch3                       # build and package into dist/
-    python tools/web/build_and_deploy.py --game BagiMatch3 --single-thread       # the page without threads (no COOP / COEP needed)
-    python tools/web/build_and_deploy.py --game BagiMatch3 --deploy --service bagi-web
+    python tools/web/build_and_deploy.py --game BagiStress --dry-run             # print the commands, run nothing
+    python tools/web/build_and_deploy.py --game BagiStress                       # build and package into dist/
+    python tools/web/build_and_deploy.py --game BagiStress --single-thread       # the page without threads (no COOP / COEP needed)
+    python tools/web/build_and_deploy.py --game BagiStress --deploy --service bagi-web
 
 Run it from the root of the project that has the web presets (the engine, or a game that carries it); `--source-dir` names another.
 The steps, in order:
@@ -30,7 +30,7 @@ from typing import NamedTuple
 TOOLS_DIR = Path(__file__).resolve().parent
 PACKAGE_SCRIPT = TOOLS_DIR / "package.py"
 STAGED_FILES = ("Dockerfile", "serve.py")
-DEFAULT_GAME = "BagiMatch3"
+DEFAULT_GAME = "BagiStress"
 DEFAULT_PRESET = "web-release"
 DEFAULT_SERVICE = "bagi-web"
 # The Emscripten SDK is the submodule external/emsdk of the engine (CI/scripts/setup_emsdk.py installs it). The presets read the toolchain

@@ -102,10 +102,10 @@ def test_log_clean_passes_on_a_clean_log(fake_game_exe, tmp_path):
 
 
 def test_a_game_that_is_not_the_one_of_the_header_fails_line_one(fake_game_exe, tmp_path, capsys):
-    path = write(tmp_path, {"method": "get_state"}, header={**HEADER, "game": "Match3"})
+    path = write(tmp_path, {"method": "get_state"}, header={**HEADER, "game": "Sample"})
     assert play(fake_game_exe, path) == EXIT_FAILED
     output = capsys.readouterr().out
-    assert f"FAILED {path}:1" in output and "expected game: Match3" in output and "actual: Fake" in output
+    assert f"FAILED {path}:1" in output and "expected game: Sample" in output and "actual: Fake" in output
 
 
 def test_the_flags_of_the_header_start_the_game(fake_game_exe, tmp_path):

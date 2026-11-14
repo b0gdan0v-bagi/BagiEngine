@@ -8,11 +8,11 @@ namespace BECore::Tests {
 
         constexpr const char* kRfcKey = "dGhlIHNhbXBsZSBub25jZQ==";
 
-        StringView View(const std::string& text) {
-            return FromStd(text);
+        StringView View(const String& text) {
+            return text;
         }
 
-        bool NameIs(const std::string& line, std::string_view name) {
+        bool NameIs(const String& line, StringView name) {
             if (line.size() <= name.size() || line[name.size()] != ':') {
                 return false;
             }
@@ -27,15 +27,15 @@ namespace BECore::Tests {
         /// A handshake request that is valid until a test changes it
         class Request {
         public:
-            std::string requestLine = "GET /control HTTP/1.1";
-            std::vector<std::string> headers = {
-                "Host: 127.0.0.1:8765", "Upgrade: websocket", "Connection: Upgrade", std::string("Sec-WebSocket-Key: ") + kRfcKey, "Sec-WebSocket-Version: 13",
+            String requestLine = "GET /control HTTP/1.1";
+            Vector<String> headers = {
+                "Host: 127.0.0.1:8765", "Upgrade: websocket", "Connection: Upgrade", String("Sec-WebSocket-Key: ") + kRfcKey, "Sec-WebSocket-Version: 13",
             };
 
             /// Replaces the header @p name (any case) or adds it
-            Request& Set(std::string_view name, std::string_view value) {
-                const std::string line = std::string(name) + ": " + std::string(value);
-                for (std::string& existing : headers) {
+            Request& Set(StringView name, StringView value) {
+                const String line = String(name) + ": " + String(value);
+                for (String& existing : headers) {
                     if (NameIs(existing, name)) {
                         existing = line;
                         return *this;
@@ -45,19 +45,19 @@ namespace BECore::Tests {
                 return *this;
             }
 
-            Request& Remove(std::string_view name) {
-                std::erase_if(headers, [&](const std::string& line) { return NameIs(line, name); });
+            Request& Remove(StringView name) {
+                eastl::erase_if(headers, [&](const String& line) { return NameIs(line, name); });
                 return *this;
             }
 
-            Request& Add(std::string_view line) {
+            Request& Add(StringView line) {
                 headers.emplace_back(line);
                 return *this;
             }
 
-            [[nodiscard]] std::string Text() const {
-                std::string text = requestLine + "\r\n";
-                for (const std::string& line : headers) {
+            [[nodiscard]] String Text() const {
+                String text = requestLine + "\r\n";
+                for (const String& line : headers) {
                     text += line + "\r\n";
                 }
                 return text + "\r\n";
@@ -65,7 +65,7 @@ namespace BECore::Tests {
         };
 
         std::expected<String, HandshakeError> Parse(const Request& request) {
-            const std::string text = request.Text();
+            const String text = request.Text();
             return ParseHandshakeRequest(View(text));
         }
 
@@ -79,7 +79,7 @@ namespace BECore::Tests {
         }
 
         std::expected<String, HandshakeError> Parse(const Request& request, const HandshakePolicy& policy) {
-            const std::string text = request.Text();
+            const String text = request.Text();
             return ParseHandshakeRequest(View(text), policy);
         }
 
@@ -99,14 +99,14 @@ namespace BECore::Tests {
             return policy;
         }
 
-        bool IsHealth(const std::string& text, const HandshakePolicy& policy) {
+        bool IsHealth(const String& text, const HandshakePolicy& policy) {
             return IsHealthCheckRequest(View(text), policy);
         }
 
-        std::string Forwarded(const Request& request, size_t hops) {
-            const std::string text = request.Text();
+        String Forwarded(const Request& request, size_t hops) {
+            const String text = request.Text();
             const String address = ParseForwardedClientAddress(View(text), hops);
-            return std::string(address.data(), address.size());
+            return String(address.data(), address.size());
         }
 
     }  // namespace
@@ -129,7 +129,7 @@ namespace BECore::Tests {
     }
 
     TEST(WebSocketHandshakeTest, BareNewlinesEndTheLinesToo) {
-        const std::string text = "GET / HTTP/1.1\nHost: localhost\nUpgrade: websocket\nConnection: Upgrade\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\nSec-WebSocket-Version: 13\n\n";
+        const String text = "GET / HTTP/1.1\nHost: localhost\nUpgrade: websocket\nConnection: Upgrade\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\nSec-WebSocket-Version: 13\n\n";
         EXPECT_TRUE(ParseHandshakeRequest(View(text)).has_value());
     }
 
@@ -226,7 +226,7 @@ namespace BECore::Tests {
     }
 
     TEST(WebSocketHandshakeTest, HeadOverTheLimitIsRefused) {
-        const std::string text = Request().Add("X-Padding: " + std::string(kMaxHandshakeBytes, 'x')).Text();
+        const String text = Request().Add("X-Padding: " + String(kMaxHandshakeBytes, 'x')).Text();
         ExpectRefused(ParseHandshakeRequest(View(text)), 431);
     }
 
@@ -422,12 +422,12 @@ namespace BECore::Tests {
         ExpectRefused(refused, 403);
         EXPECT_NE(refused.error().message.find("https://evil.example"), String::npos);
 
-        const std::string huge = "https://" + std::string(6000, 'a') + ".example";
+        const String huge = "https://" + String(6000, 'a') + ".example";
         const auto cut = Parse(Request().Set("Origin", huge), policy);
         ExpectRefused(cut, 403);
         EXPECT_LT(cut.error().message.size(), 200u);
-        EXPECT_NE(cut.error().message.find(std::string(90, 'a').c_str()), String::npos);
-        EXPECT_EQ(cut.error().message.find(std::string(150, 'a').c_str()), String::npos);
+        EXPECT_NE(cut.error().message.find(String(90, 'a').c_str()), String::npos);
+        EXPECT_EQ(cut.error().message.find(String(150, 'a').c_str()), String::npos);
 
         // Bytes that are not printable ASCII never reach the response
         const auto odd = Parse(Request().Set("Origin", "https://\x01\xC3\xA9.example"), policy);
@@ -439,9 +439,9 @@ namespace BECore::Tests {
 
     TEST(WebSocketHandshakeTest, AnOriginThatFillsTheWholeHeadIsRefusedAndOneOverTheLimitIs431) {
         const HandshakePolicy policy = PublicPolicy({"https://good.example"});
-        const std::string almost = "https://" + std::string(kMaxHandshakeBytes - 400, 'a');
+        const String almost = "https://" + String(kMaxHandshakeBytes - 400, 'a');
         ExpectRefused(Parse(Request().Set("Origin", almost), policy), 403);
-        const std::string tooMuch = "https://" + std::string(kMaxHandshakeBytes, 'a');
+        const String tooMuch = "https://" + String(kMaxHandshakeBytes, 'a');
         ExpectRefused(Parse(Request().Set("Origin", tooMuch), policy), 431);
     }
 
@@ -455,38 +455,38 @@ namespace BECore::Tests {
         Request post;
         post.requestLine = "POST /x HTTP/1.1";
         ExpectRefused(Parse(post, policy), 400);
-        const std::string text = Request().Add("X-Padding: " + std::string(kMaxHandshakeBytes, 'x')).Text();
+        const String text = Request().Add("X-Padding: " + String(kMaxHandshakeBytes, 'x')).Text();
         ExpectRefused(ParseHandshakeRequest(View(text), policy), 431);
     }
 
     TEST(WebSocketHandshakeTest, AcceptResponseCompletesTheHandshake) {
-        const std::string response = BuildAcceptResponse(kRfcKey).c_str();
-        EXPECT_TRUE(response.starts_with("HTTP/1.1 101 Switching Protocols\r\n"));
-        EXPECT_NE(response.find("Upgrade: websocket\r\n"), std::string::npos);
-        EXPECT_NE(response.find("Connection: Upgrade\r\n"), std::string::npos);
-        EXPECT_NE(response.find("Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n"), std::string::npos);
-        EXPECT_TRUE(response.ends_with("\r\n\r\n"));
+        const String response = BuildAcceptResponse(kRfcKey).c_str();
+        EXPECT_TRUE(StringView(response).starts_with("HTTP/1.1 101 Switching Protocols\r\n"));
+        EXPECT_NE(response.find("Upgrade: websocket\r\n"), String::npos);
+        EXPECT_NE(response.find("Connection: Upgrade\r\n"), String::npos);
+        EXPECT_NE(response.find("Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n"), String::npos);
+        EXPECT_TRUE(StringView(response).ends_with("\r\n\r\n"));
     }
 
     TEST(WebSocketHandshakeTest, RejectResponseCarriesTheStatusAndTheMessage) {
-        const std::string response = BuildRejectResponse(HandshakeError{403, "no way"}).c_str();
-        EXPECT_TRUE(response.starts_with("HTTP/1.1 403 Forbidden\r\n"));
-        EXPECT_NE(response.find("Connection: close\r\n"), std::string::npos);
-        EXPECT_NE(response.find("Content-Length: 6\r\n"), std::string::npos);
-        EXPECT_TRUE(response.ends_with("\r\n\r\nno way"));
-        EXPECT_EQ(response.find("Sec-WebSocket-Version"), std::string::npos);
+        const String response = BuildRejectResponse(HandshakeError{403, "no way"}).c_str();
+        EXPECT_TRUE(StringView(response).starts_with("HTTP/1.1 403 Forbidden\r\n"));
+        EXPECT_NE(response.find("Connection: close\r\n"), String::npos);
+        EXPECT_NE(response.find("Content-Length: 6\r\n"), String::npos);
+        EXPECT_TRUE(StringView(response).ends_with("\r\n\r\nno way"));
+        EXPECT_EQ(response.find("Sec-WebSocket-Version"), String::npos);
     }
 
     TEST(WebSocketHandshakeTest, UpgradeRequiredNamesTheVersion) {
-        const std::string response = BuildRejectResponse(HandshakeError{426, "use 13"}).c_str();
-        EXPECT_TRUE(response.starts_with("HTTP/1.1 426 Upgrade Required\r\n"));
-        EXPECT_NE(response.find("Sec-WebSocket-Version: 13\r\n"), std::string::npos);
+        const String response = BuildRejectResponse(HandshakeError{426, "use 13"}).c_str();
+        EXPECT_TRUE(StringView(response).starts_with("HTTP/1.1 426 Upgrade Required\r\n"));
+        EXPECT_NE(response.find("Sec-WebSocket-Version: 13\r\n"), String::npos);
     }
 
     TEST(WebSocketHandshakeTest, EveryRefusalStatusHasItsReasonPhrase) {
-        EXPECT_TRUE(std::string(BuildRejectResponse(HandshakeError{400, "x"}).c_str()).starts_with("HTTP/1.1 400 Bad Request\r\n"));
-        EXPECT_TRUE(std::string(BuildRejectResponse(HandshakeError{431, "x"}).c_str()).starts_with("HTTP/1.1 431 Request Header Fields Too Large\r\n"));
-        EXPECT_TRUE(std::string(BuildRejectResponse(HandshakeError{503, "x"}).c_str()).starts_with("HTTP/1.1 503 Service Unavailable\r\n"));
+        EXPECT_TRUE(StringView(BuildRejectResponse(HandshakeError{400, "x"})).starts_with("HTTP/1.1 400 Bad Request\r\n"));
+        EXPECT_TRUE(StringView(BuildRejectResponse(HandshakeError{431, "x"})).starts_with("HTTP/1.1 431 Request Header Fields Too Large\r\n"));
+        EXPECT_TRUE(StringView(BuildRejectResponse(HandshakeError{503, "x"})).starts_with("HTTP/1.1 503 Service Unavailable\r\n"));
     }
 
     TEST(WebSocketHandshakeTest, HealthCheckIsAPlainGetOfTheHealthPath) {
@@ -508,7 +508,7 @@ namespace BECore::Tests {
         const HandshakePolicy policy = HealthPolicy();
         for (const char* line : {"GET / HTTP/1.1", "GET /healthz/ HTTP/1.1", "GET /health HTTP/1.1", "GET /healthzz HTTP/1.1", "GET /HEALTHZ HTTP/1.1", "GET /control HTTP/1.1",
                                  "POST /healthz HTTP/1.1", "HEAD /healthz HTTP/1.1", "GET /healthz HTTP/2", "GET /healthz", "GET  HTTP/1.1", ""}) {
-            EXPECT_FALSE(IsHealth(std::string(line) + "\r\nHost: a\r\n\r\n", policy)) << line;
+            EXPECT_FALSE(IsHealth(String(line) + "\r\nHost: a\r\n\r\n", policy)) << line;
         }
     }
 
@@ -523,7 +523,7 @@ namespace BECore::Tests {
     }
 
     TEST(WebSocketHandshakeTest, HealthCheckIsOffForLoopbackAndForAnEmptyPath) {
-        const std::string request = "GET /healthz HTTP/1.1\r\nHost: a\r\n\r\n";
+        const String request = "GET /healthz HTTP/1.1\r\nHost: a\r\n\r\n";
         HandshakePolicy loopback = HealthPolicy();
         loopback.loopbackOnly = true;
         EXPECT_FALSE(IsHealth(request, loopback));
@@ -536,17 +536,17 @@ namespace BECore::Tests {
         const HandshakePolicy policy = HealthPolicy();
         EXPECT_FALSE(IsHealth("GET /healthz HTTP/1.1\r\nHost: a\r\n folded\r\n\r\n", policy));
         EXPECT_FALSE(IsHealth("GET /healthz HTTP/1.1\r\nno colon here\r\n\r\n", policy));
-        EXPECT_FALSE(IsHealth("GET /healthz HTTP/1.1\r\nHost: a\r\n\r\n" + std::string(kMaxHandshakeBytes, 'x'), policy));
+        EXPECT_FALSE(IsHealth("GET /healthz HTTP/1.1\r\nHost: a\r\n\r\n" + String(kMaxHandshakeBytes, 'x'), policy));
     }
 
     TEST(WebSocketHandshakeTest, HealthResponseIsAnOkThatClosesTheConnection) {
-        const std::string response = BuildHealthResponse().c_str();
-        EXPECT_TRUE(response.starts_with("HTTP/1.1 200 OK\r\n"));
-        EXPECT_NE(response.find("Content-Type: text/plain\r\n"), std::string::npos);
-        EXPECT_NE(response.find("Cache-Control: no-store\r\n"), std::string::npos);
-        EXPECT_NE(response.find("Connection: close\r\n"), std::string::npos);
-        EXPECT_NE(response.find("Content-Length: 2\r\n"), std::string::npos);
-        EXPECT_TRUE(response.ends_with("\r\n\r\nok"));
+        const String response = BuildHealthResponse().c_str();
+        EXPECT_TRUE(StringView(response).starts_with("HTTP/1.1 200 OK\r\n"));
+        EXPECT_NE(response.find("Content-Type: text/plain\r\n"), String::npos);
+        EXPECT_NE(response.find("Cache-Control: no-store\r\n"), String::npos);
+        EXPECT_NE(response.find("Connection: close\r\n"), String::npos);
+        EXPECT_NE(response.find("Content-Length: 2\r\n"), String::npos);
+        EXPECT_TRUE(StringView(response).ends_with("\r\n\r\nok"));
     }
 
     // What a head of the largest allowed size costs: heads built to hit a scan that is more than linear
@@ -564,9 +564,9 @@ namespace BECore::Tests {
         }
 
         /// A request head of about kMaxHandshakeBytes: the valid lines, then @p padding repeated up to the limit
-        std::string FullHead(const std::string& padding, const std::string& fixedLinesBefore = {}) {
-            std::string text = "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n" + fixedLinesBefore;
-            const std::string tail = "Connection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n";
+        String FullHead(const String& padding, const String& fixedLinesBefore = {}) {
+            String text = "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n" + fixedLinesBefore;
+            const String tail = "Connection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n";
             while (text.size() + padding.size() + tail.size() <= kMaxHandshakeBytes) {
                 text += padding;
             }
@@ -576,13 +576,13 @@ namespace BECore::Tests {
     }  // namespace
 
     TEST(WebSocketHandshakeTest, AFullHeadOfRepeatedTokensIsCheapToRead) {
-        const std::vector<std::string> heads = {
+        const Vector<String> heads = {
             FullHead("X-A: b\r\n"),                                        // as many header lines as fit
             FullHead("Upgrade: a\r\n"),                                    // a list header joined over and over
             FullHead("Connection: ,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,\r\n"),  // long lists of empty tokens
             FullHead("a:\r\n"),                                            // the shortest valid line
         };
-        for (const std::string& head : heads) {
+        for (const String& head : heads) {
             ASSERT_LE(head.size(), kMaxHandshakeBytes);
             const HandshakePolicy policy = PublicPolicy();
             EXPECT_LT(ElapsedMilliseconds([&] { (void)ParseHandshakeRequest(View(head), HandshakePolicy{}); }), kScanLimitMilliseconds);
@@ -590,12 +590,12 @@ namespace BECore::Tests {
             EXPECT_LT(ElapsedMilliseconds([&] { (void)IsHealthCheckRequest(View(head), HealthPolicy()); }), kScanLimitMilliseconds);
         }
         // One header line that is a single list: the token scan is the cost
-        const std::string oneLongList = "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: " + std::string(kMaxHandshakeBytes - 200, ',') + "\r\n\r\n";
+        const String oneLongList = "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: " + String(kMaxHandshakeBytes - 200, ',') + "\r\n\r\n";
         EXPECT_LT(ElapsedMilliseconds([&] { (void)ParseHandshakeRequest(View(oneLongList), HandshakePolicy{}); }), kScanLimitMilliseconds);
     }
 
     TEST(WebSocketHandshakeTest, TokenSearchDoesNotAllocatePerToken) {
-        const std::string commas(kMaxHandshakeBytes, ',');
+        const String commas(kMaxHandshakeBytes, ',');
         EXPECT_LT(ElapsedMilliseconds([&] { EXPECT_FALSE(HeaderHasToken(View(commas), "upgrade")); }), kScanLimitMilliseconds);
         EXPECT_TRUE(HeaderHasToken(View(commas + " Upgrade"), "upgrade"));
         EXPECT_TRUE(EqualsIgnoreCase("WebSocket", "websocket"));
@@ -604,7 +604,7 @@ namespace BECore::Tests {
     }
 
     TEST(WebSocketHandshakeTest, RefusalMessagesQuoteWhatThePeerSent) {
-        const std::string longHost = std::string(1000, 'h') + "\x01";
+        const String longHost = String(1000, 'h') + "\x01";
         const auto refusedHost = Parse(Request().Set("Host", longHost));
         ExpectRefused(refusedHost, 403);
         EXPECT_LT(refusedHost.error().message.size(), 200u) << "a loopback refusal repeats the Host cut like a public one repeats the Origin";
@@ -619,10 +619,10 @@ namespace BECore::Tests {
     TEST(WebSocketHandshakeTest, QuoteForMessageCutsAndMasks) {
         EXPECT_EQ(QuoteForMessage("plain"), "plain");
         EXPECT_EQ(QuoteForMessage("a\r\nb\x7F\xC3"), "a??b??");
-        const String cut = QuoteForMessage(View(std::string(500, 'x')));
+        const String cut = QuoteForMessage(View(String(500, 'x')));
         EXPECT_EQ(cut.size(), kMaxQuotedBytes + 3);
         EXPECT_TRUE(StringView(cut).ends_with("..."));
-        EXPECT_EQ(QuoteForMessage(View(std::string(kMaxQuotedBytes, 'x'))).size(), kMaxQuotedBytes);
+        EXPECT_EQ(QuoteForMessage(View(String(kMaxQuotedBytes, 'x'))).size(), kMaxQuotedBytes);
     }
 
     TEST(WebSocketHandshakeTest, ForwardedClientIsTheEntryFromTheRight) {
@@ -664,19 +664,19 @@ namespace BECore::Tests {
     TEST(WebSocketHandshakeTest, ForwardedEntryThatIsNotAnAddressIsIgnored) {
         for (const char* entry : {"unknown", "1.2.3", "1.2.3.4.5", "256.1.1.1", "1.2.3.-4", "1.2.3.4:8080", "01234.1.1.1", "1..3.4", "12:34", "gggg::1", "a:b:c:d:e:f:1:2:3", "[::1]", "1.2.3.4 5",
                                   "<script>", "203.0.113.9\x01"}) {
-            EXPECT_EQ(Forwarded(Request().Add(std::string("X-Forwarded-For: 203.0.113.1, ") + entry), 1), "") << entry;
+            EXPECT_EQ(Forwarded(Request().Add(String("X-Forwarded-For: 203.0.113.1, ") + entry), 1), "") << entry;
         }
         EXPECT_EQ(Forwarded(Request().Add("X-Forwarded-For: 203.0.113.1,"), 1), "") << "an empty entry is not an address";
         EXPECT_EQ(Forwarded(Request().Add("X-Forwarded-For: 203.0.113.1,,203.0.113.2"), 2), "") << "the empty entry counts as an entry";
-        EXPECT_EQ(Forwarded(Request().Add("X-Forwarded-For: " + std::string(1000, '1')), 1), "");
-        EXPECT_EQ(Forwarded(Request().Add("X-Forwarded-For: " + std::string(kMaxForwardedAddressBytes + 1, 'a')), 1), "");
+        EXPECT_EQ(Forwarded(Request().Add("X-Forwarded-For: " + String(1000, '1')), 1), "");
+        EXPECT_EQ(Forwarded(Request().Add("X-Forwarded-For: " + String(kMaxForwardedAddressBytes + 1, 'a')), 1), "");
     }
 
     TEST(WebSocketHandshakeTest, ForwardedClientTakesIpv6AndLowersIt) {
         EXPECT_EQ(Forwarded(Request().Add("X-Forwarded-For: 2001:DB8::1"), 1), "2001:db8::1");
         EXPECT_EQ(Forwarded(Request().Add("X-Forwarded-For: ::ffff:192.0.2.1"), 1), "::ffff:192.0.2.1");
         EXPECT_EQ(Forwarded(Request().Add("X-Forwarded-For: ::1"), 1), "::1");
-        const std::string longest = "0000:0000:0000:0000:0000:ffff:192.168.100.228";
+        const String longest = "0000:0000:0000:0000:0000:ffff:192.168.100.228";
         ASSERT_EQ(longest.size(), kMaxForwardedAddressBytes);
         EXPECT_EQ(Forwarded(Request().Add("X-Forwarded-For: " + longest), 1), longest) << "the longest literal fits";
     }
@@ -685,7 +685,7 @@ namespace BECore::Tests {
         EXPECT_EQ(ParseForwardedClientAddress("", 1), "");
         EXPECT_EQ(ParseForwardedClientAddress("GET / HTTP/1.1", 1), "");
         EXPECT_EQ(ParseForwardedClientAddress("GET / HTTP/1.1\r\nno colon\r\n\r\n", 1), "");
-        const std::string huge = std::string(kMaxHandshakeBytes + 1, 'x');
+        const String huge = String(kMaxHandshakeBytes + 1, 'x');
         EXPECT_EQ(ParseForwardedClientAddress(View(huge), 1), "");
 
         // The header does not change what the handshake accepts or refuses

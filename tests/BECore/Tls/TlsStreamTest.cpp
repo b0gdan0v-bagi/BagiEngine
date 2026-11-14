@@ -32,7 +32,7 @@ namespace BECore::Tests {
             }
 
             /// Accepts the client and answers its hello (@p rejectReason empty: accepts it); @p stall keeps the answer back
-            void StartHandshake(std::string rejectReason = {}, std::chrono::milliseconds stall = 0ms) {
+            void StartHandshake(String rejectReason = {}, std::chrono::milliseconds stall = 0ms) {
                 _thread = std::thread([this, rejectReason = std::move(rejectReason), stall] {
                     auto accepted = _listener.Accept(kWaitLimit);
                     if (!accepted) {
@@ -61,11 +61,11 @@ namespace BECore::Tests {
             }
 
             /// The bytes the client sent after the handshake, as they travel (masked) or after the server removed the mask
-            std::string ReadFromClient(size_t count, bool unmask) {
-                std::string bytes;
+            String ReadFromClient(size_t count, bool unmask) {
+                String bytes;
                 _peer.SetReceiveTimeout(kWaitLimit);
                 while (bytes.size() < count) {
-                    std::array<uint8_t, 256> chunk;
+                    Array<uint8_t, 256> chunk;
                     const auto received = _peer.Receive(Span<uint8_t>(chunk.data(), std::min(chunk.size(), count - bytes.size())));
                     if (!received) {
                         break;
@@ -78,10 +78,10 @@ namespace BECore::Tests {
                 return bytes;
             }
 
-            void SendToClient(const std::string& text) {
-                std::string masked = text;
+            void SendToClient(const String& text) {
+                String masked = text;
                 FakeTlsMask(reinterpret_cast<uint8_t*>(masked.data()), masked.size());
-                EXPECT_TRUE(_peer.SendAll(AsBytes(FromStd(masked))));
+                EXPECT_TRUE(_peer.SendAll(AsBytes(masked)));
             }
 
             Socket& Peer() {
@@ -148,7 +148,7 @@ namespace BECore::Tests {
         params.port = 443;
         const auto connected = stream->Connect(params);
         ASSERT_FALSE(connected.has_value());
-        EXPECT_TRUE(std::string(connected.error().c_str()).starts_with("tls_unsupported: this platform has no TLS backend")) << connected.error().c_str();
+        EXPECT_TRUE(StringView(connected.error()).starts_with("tls_unsupported: this platform has no TLS backend")) << connected.error().c_str();
         EXPECT_EQ(stream->GetLastError(), connected.error());
         EXPECT_FALSE(stream->IsValid());
     }
@@ -157,7 +157,7 @@ namespace BECore::Tests {
         FakeTlsStream fake;
         auto stub = MakeTlsStream();
         for (ITlsStream* stream : {static_cast<ITlsStream*>(&fake), stub.get()}) {
-            std::array<uint8_t, 8> buffer{};
+            Array<uint8_t, 8> buffer{};
             const auto received = stream->Receive(Span<uint8_t>(buffer.data(), buffer.size()));
             ASSERT_FALSE(received.has_value());
             EXPECT_EQ(received.error(), SocketError::Failed);
@@ -191,10 +191,10 @@ namespace BECore::Tests {
         const auto connected = stream.Connect(ParamsFor(server));
         server.Join();
         ASSERT_FALSE(connected.has_value());
-        EXPECT_NE(std::string(connected.error().c_str()).find("certificate is not trusted"), std::string::npos) << connected.error().c_str();
+        EXPECT_NE(connected.error().find("certificate is not trusted"), String::npos) << connected.error().c_str();
         EXPECT_EQ(stream.GetLastError(), connected.error());
         EXPECT_FALSE(stream.IsValid());
-        std::array<uint8_t, 8> buffer{};
+        Array<uint8_t, 8> buffer{};
         EXPECT_FALSE(stream.Receive(Span<uint8_t>(buffer.data(), buffer.size())).has_value());
     }
 
@@ -211,7 +211,7 @@ namespace BECore::Tests {
         params.connectTimeout = 5s;
         const auto connected = stream.Connect(params);
         ASSERT_FALSE(connected.has_value());
-        EXPECT_NE(std::string(connected.error().c_str()).find("127.0.0.1:" + std::to_string(closedPort)), std::string::npos) << connected.error().c_str();
+        EXPECT_NE(connected.error().find("127.0.0.1:" + ToString(closedPort)), String::npos) << connected.error().c_str();
     }
 
     TEST(TlsStreamTest, AServerThatNeverAnswersTheHelloEndsAtTheDeadline) {
@@ -223,7 +223,7 @@ namespace BECore::Tests {
         const auto started = std::chrono::steady_clock::now();
         const auto connected = stream.Connect(params);
         ASSERT_FALSE(connected.has_value());
-        EXPECT_NE(std::string(connected.error().c_str()).find("timed out"), std::string::npos) << connected.error().c_str();
+        EXPECT_NE(connected.error().find("timed out"), String::npos) << connected.error().c_str();
         EXPECT_LT(std::chrono::steady_clock::now() - started, 10s);
         server.Join();
     }
@@ -247,7 +247,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(WaitUntil([&] { return ended.load(); }));
         connecting.join();
         ASSERT_FALSE(connected.has_value());
-        EXPECT_NE(std::string(connected.error().c_str()).find("cancelled"), std::string::npos) << connected.error().c_str();
+        EXPECT_NE(connected.error().find("cancelled"), String::npos) << connected.error().c_str();
         server.Join();
     }
 
@@ -256,18 +256,18 @@ namespace BECore::Tests {
         FakeTlsStream stream;
         ASSERT_NO_FATAL_FAILURE(Connect(server, stream));
 
-        const std::string hello = "hello server";
-        ASSERT_TRUE(stream.SendAll(BECore::AsBytes(FromStd(hello))));
-        const std::string onTheWire = server.ReadFromClient(hello.size(), /*unmask=*/false);
+        const String hello = "hello server";
+        ASSERT_TRUE(stream.SendAll(BECore::AsBytes(hello)));
+        const String onTheWire = server.ReadFromClient(hello.size(), /*unmask=*/false);
         EXPECT_NE(onTheWire, hello) << "the fake has to change the bytes, or a missing 'encryption' goes unnoticed";
-        std::string unmasked = onTheWire;
+        String unmasked = onTheWire;
         FakeTlsMask(reinterpret_cast<uint8_t*>(unmasked.data()), unmasked.size());
         EXPECT_EQ(unmasked, hello);
 
         server.SendToClient("hello client");
-        std::string received;
+        String received;
         while (received.size() < 12) {
-            std::array<uint8_t, 64> buffer;
+            Array<uint8_t, 64> buffer;
             const auto count = stream.Receive(Span<uint8_t>(buffer.data(), buffer.size()));
             ASSERT_TRUE(count.has_value());
             ASSERT_GT(*count, 0u);
@@ -276,7 +276,7 @@ namespace BECore::Tests {
         EXPECT_EQ(received, "hello client");
 
         server.Peer().ShutdownBoth();
-        std::array<uint8_t, 8> buffer{};
+        Array<uint8_t, 8> buffer{};
         const auto ended = stream.Receive(Span<uint8_t>(buffer.data(), buffer.size()));
         ASSERT_FALSE(ended.has_value());
         EXPECT_EQ(ended.error(), SocketError::Closed);
@@ -287,7 +287,7 @@ namespace BECore::Tests {
         FakeTlsStream stream;
         ASSERT_NO_FATAL_FAILURE(Connect(server, stream));
         EXPECT_TRUE(stream.SetReceiveTimeout(50ms));
-        std::array<uint8_t, 8> buffer{};
+        Array<uint8_t, 8> buffer{};
         const auto received = stream.Receive(Span<uint8_t>(buffer.data(), buffer.size()));
         ASSERT_FALSE(received.has_value());
         EXPECT_EQ(received.error(), SocketError::TimedOut);
@@ -303,7 +303,7 @@ namespace BECore::Tests {
         std::atomic<bool> ended{false};
         std::atomic<bool> closed{false};
         std::thread reader([&] {
-            std::array<uint8_t, 16> buffer;
+            Array<uint8_t, 16> buffer;
             const auto received = stream.Receive(Span<uint8_t>(buffer.data(), buffer.size()));
             closed = !received && received.error() == SocketError::Closed;
             ended = true;
@@ -322,21 +322,21 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(Connect(server, stream));
 
         constexpr size_t kBytes = 256 * 1024;
-        std::string payload(kBytes, 'x');
+        String payload(kBytes, 'x');
         for (size_t i = 0; i < payload.size(); ++i) {
             payload[i] = static_cast<char>('a' + i % 26);
         }
 
         // The server echoes what it reads, byte for byte, while the client sends and reads at once
         std::thread echo([&] {
-            std::string seen = server.ReadFromClient(kBytes, /*unmask=*/true);
+            String seen = server.ReadFromClient(kBytes, /*unmask=*/true);
             server.SendToClient(seen);
         });
-        std::thread sender([&] { EXPECT_TRUE(stream.SendAll(BECore::AsBytes(FromStd(payload)))); });
+        std::thread sender([&] { EXPECT_TRUE(stream.SendAll(BECore::AsBytes(payload))); });
 
-        std::string received;
+        String received;
         while (received.size() < kBytes) {
-            std::array<uint8_t, 4096> buffer;
+            Array<uint8_t, 4096> buffer;
             const auto count = stream.Receive(Span<uint8_t>(buffer.data(), buffer.size()));
             if (!count) {
                 ADD_FAILURE() << "the stream ended after " << received.size() << " bytes";

@@ -14,7 +14,7 @@ namespace BECore {
     String XmlSerializer::SaveToString() const {
         std::ostringstream oss;
         _document.save(oss, "  ");
-        // std: the text of an std::ostringstream
+        //-NoStd: the text of an std::ostringstream
         std::string stdStr = oss.str();
         return String(stdStr.c_str(), stdStr.size());
     }

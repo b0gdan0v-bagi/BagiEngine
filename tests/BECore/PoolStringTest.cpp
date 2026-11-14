@@ -1,10 +1,7 @@
 #include <BECore/PoolString/PoolStringChain.h>
 #include <Common/Printers.h>
-#include <algorithm>
-#include <atomic>
 #include <chrono>
 #include <cstdio>
-#include <string>
 #include <thread>
 #include <vector>
 
@@ -103,8 +100,8 @@ namespace BECore::Tests {
 
     namespace {
 
-        StringView View(const std::string& str) {
-            return FromStd(str);
+        StringView View(const String& str) {
+            return str;
         }
 
         constexpr int kLockCostNames = 1000;
@@ -114,7 +111,7 @@ namespace BECore::Tests {
         constexpr int kLockCostThreads = 4;
 
         /// One thread's work: kLockCostRounds passes over the names; with newEvery > 0 every newEvery-th call interns a string not seen before
-        double InternNanosecondsPerCall(const std::vector<std::string>& names, const std::vector<std::string>& fresh, int newEvery) {
+        double InternNanosecondsPerCall(const Vector<String>& names, const Vector<String>& fresh, int newEvery) {
             size_t nextFresh = 0;
             size_t sink = 0;
             const auto start = std::chrono::steady_clock::now();
@@ -135,23 +132,23 @@ namespace BECore::Tests {
         /// The best of kLockCostRepeats runs of `threads` threads doing the same work; nanoseconds per call of one thread
         double BestInternNanoseconds(int threads, int newEvery) {
             static std::atomic<uint32_t> s_serial{0};
-            std::vector<std::string> names;
+            Vector<String> names;
             for (int i = 0; i < kLockCostNames; ++i) {
-                names.push_back("pool_lock_cost_" + std::to_string(i));
+                names.push_back("pool_lock_cost_" + ToString(i));
                 static_cast<void>(PoolString::Intern(View(names.back())));
             }
             double best = 1e30;
             for (int repeat = 0; repeat < kLockCostRepeats; ++repeat) {
-                std::vector<std::vector<std::string>> fresh(static_cast<size_t>(threads));
+                Vector<Vector<String>> fresh(static_cast<size_t>(threads));
                 for (auto& list : fresh) {
                     const size_t count = newEvery > 0 ? static_cast<size_t>(kLockCostRounds) * kLockCostNames / newEvery : 0;
                     for (size_t i = 0; i < count; ++i) {
-                        list.push_back("pool_lock_cost_new_" + std::to_string(s_serial.fetch_add(1)));
+                        list.push_back("pool_lock_cost_new_" + ToString(s_serial.fetch_add(1)));
                     }
                 }
-                std::vector<double> results(static_cast<size_t>(threads), 0.0);
+                Vector<double> results(static_cast<size_t>(threads), 0.0);
                 std::atomic<int> ready{0};
-                std::vector<std::thread> pool;
+                Vector<std::thread> pool;
                 for (int t = 0; t < threads; ++t) {
                     pool.emplace_back([&, t] {
                         ready.fetch_add(1);

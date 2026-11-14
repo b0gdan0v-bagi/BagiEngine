@@ -59,7 +59,7 @@ namespace BECore::Tests {
   </component>
 </components></node>)";
 
-        void WriteFile(const std::filesystem::path& path, const std::string& text) {
+        void WriteFile(const std::filesystem::path& path, const String& text) {
             std::filesystem::create_directories(path.parent_path());
             std::ofstream(path) << text;
         }
@@ -71,12 +71,12 @@ namespace BECore::Tests {
         }
 
         /// The components of @p node as text: type and serialized fields, in order
-        std::vector<std::string> ComponentTexts(const SceneNode& node) {
-            std::vector<std::string> texts;
+        Vector<String> ComponentTexts(const SceneNode& node) {
+            Vector<String> texts;
             for (const auto& component : node.GetComponents()) {
                 XmlSerializer serializer;
                 component->Serialize(serializer);
-                texts.push_back(std::string(component->GetTypeMeta().typeName.data()) + ":" + Printed(serializer.GetRootNode()).c_str());
+                texts.push_back(String(component->GetTypeMeta().typeName.data()) + ":" + Printed(serializer.GetRootNode()).c_str());
             }
             return texts;
         }
@@ -105,8 +105,8 @@ namespace BECore::Tests {
         }
 
         /// Loads a scene Main whose only node is @p nodeXml (a `<node ref>` or an inline node) and returns that node
-        SceneNode& LoadNode(const std::string& nodeXml) {
-            const std::string text = "<SceneManager><scenes><scene type=\"Scene\" name=\"Main\"><nodes>" + nodeXml + "</nodes></scene></scenes></SceneManager>";
+        SceneNode& LoadNode(const String& nodeXml) {
+            const String text = "<SceneManager><scenes><scene type=\"Scene\" name=\"Main\"><nodes>" + nodeXml + "</nodes></scene></scenes></SceneManager>";
             const pugi::xml_parse_result parsed = _doc.load_string(text.c_str());
             EXPECT_TRUE(parsed) << parsed.description();
             _manager = LoadSceneManager(XmlNode{_doc.document_element()}, _loader);
@@ -117,7 +117,7 @@ namespace BECore::Tests {
         }
 
         /// BuildNodeReference into a fresh `<nodes>`; the result is the printed element that was appended, empty when nothing was
-        bool Build(const SceneNode& node, std::string& result, String& reason) {
+        bool Build(const SceneNode& node, String& result, String& reason) {
             _out.reset();
             pugi::xml_node nodesEl = _out.append_child("nodes");
             const bool built = BuildNodeReference(node, _loader, nodesEl, reason);
@@ -142,8 +142,8 @@ namespace BECore::Tests {
         }
 
         /// Build must succeed and give exactly @p expected; the round trip holds
-        void ExpectBuilt(const SceneNode& node, const std::string& expected) {
-            std::string result;
+        void ExpectBuilt(const SceneNode& node, const String& expected) {
+            String result;
             String reason;
             ASSERT_TRUE(Build(node, result, reason)) << reason.c_str();
             EXPECT_EQ(result, "<nodes>" + expected + "</nodes>");
@@ -209,7 +209,7 @@ namespace BECore::Tests {
         node.GetComponent<TransformComponent>()->_width = 31.0f;
         node.GetComponent<QuadRendererComponent>()->_color = Color{9, 8, 7, 255};
 
-        std::string result;
+        String result;
         String reason;
         ASSERT_TRUE(Build(node, result, reason)) << reason.c_str();
         ExpectRoundTrip(node);
@@ -249,7 +249,7 @@ namespace BECore::Tests {
         ASSERT_EQ(canvas->_elements.size(), 2u);
         canvas->_elements.pop_back();
 
-        std::string result;
+        String result;
         String reason;
         ASSERT_TRUE(Build(node, result, reason)) << reason.c_str();
         ExpectRoundTrip(node);
@@ -265,7 +265,7 @@ namespace BECore::Tests {
         SceneNode& node = LoadNode(R"(<node ref="nodes/Panel"/>)");
         node.GetComponent<UICanvasComponent>()->_elements.clear();
 
-        std::string result;
+        String result;
         String reason;
         ASSERT_TRUE(Build(node, result, reason)) << reason.c_str();
 
@@ -287,7 +287,7 @@ namespace BECore::Tests {
         SceneNode& node = LoadNode(R"(<node ref="nodes/Box"/>)");
         node.AddComponent(BECore::New<ClickableComponent>());
 
-        std::string result;
+        String result;
         String reason;
         EXPECT_FALSE(Build(node, result, reason));
         EXPECT_FALSE(reason.empty());
@@ -298,7 +298,7 @@ namespace BECore::Tests {
         SceneNode& node = LoadNode(R"(<node ref="nodes/Box"/>)");
         node.RemoveComponent(PoolString::Intern("QuadRendererComponent"));
 
-        std::string result;
+        String result;
         String reason;
         EXPECT_FALSE(Build(node, result, reason));
         EXPECT_FALSE(reason.empty());
@@ -313,7 +313,7 @@ namespace BECore::Tests {
         node.AddComponent(transform);
         ASSERT_EQ(node.GetComponents().size(), 2u);
 
-        std::string result;
+        String result;
         String reason;
         EXPECT_FALSE(Build(node, result, reason));
         EXPECT_FALSE(reason.empty());
@@ -324,7 +324,7 @@ namespace BECore::Tests {
         SceneNode& node = LoadNode(R"(<node ref="nodes/Box"/>)");
         std::filesystem::remove(_dir / "nodes" / "Box.xml");
 
-        std::string result;
+        String result;
         String reason;
         EXPECT_FALSE(Build(node, result, reason));
         EXPECT_FALSE(reason.empty());
@@ -334,7 +334,7 @@ namespace BECore::Tests {
     TEST_F(SceneNodeInstanceTest, ANodeWithoutASourceRefIsRefused) {
         SceneNode& node = LoadNode(R"(<node name="Own"/>)");
 
-        std::string result;
+        String result;
         String reason;
         EXPECT_FALSE(Build(node, result, reason));
         EXPECT_FALSE(reason.empty());

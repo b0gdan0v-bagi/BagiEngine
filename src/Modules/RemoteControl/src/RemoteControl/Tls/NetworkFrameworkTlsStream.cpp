@@ -27,7 +27,7 @@ namespace BECore {
         };
 
         template <typename T>
-        using OsOwned = std::unique_ptr<std::remove_pointer_t<T>, OsObjectReleaser>;
+        using OsOwned = UniquePtr<std::remove_pointer_t<T>, OsObjectReleaser>;
 
         struct CfReleaser {
             void operator()(CFTypeRef object) const {
@@ -38,7 +38,7 @@ namespace BECore {
         };
 
         template <typename T>
-        using CfOwned = std::unique_ptr<std::remove_pointer_t<T>, CfReleaser>;
+        using CfOwned = UniquePtr<std::remove_pointer_t<T>, CfReleaser>;
 
         StringView TlsVersionName(tls_protocol_version_t version) {
             switch (version) {
@@ -195,7 +195,7 @@ namespace BECore {
 
             /// Called with the mutex held; starts the one pending receive. @p self is a copy on purpose: a block captures a reference
             /// parameter as a reference, and the completion runs after the caller has returned
-            void StartReceiveLocked(std::shared_ptr<StreamState> self) {
+            void StartReceiveLocked(SharedPtr<StreamState> self) {
                 if (receiveInFlight || connection == nullptr) {
                     return;
                 }
@@ -248,14 +248,14 @@ namespace BECore {
         /// The TLS stream of macOS over Network.framework (see Tls/CLAUDE.md for why not Secure Transport)
         class NetworkFrameworkTlsStream final : public ITlsStream {
         public:
-            NetworkFrameworkTlsStream() : _state(std::make_shared<StreamState>()) {}
+            NetworkFrameworkTlsStream() : _state(MakeShared<StreamState>()) {}
 
             ~NetworkFrameworkTlsStream() override {
                 Close();
             }
 
             std::expected<void, String> Connect(const TlsConnectParams& params) override {
-                const std::shared_ptr<StreamState> state = _state;
+                const SharedPtr<StreamState> state = _state;
                 const String host(params.host.data(), params.host.size());
                 {
                     LockGuard lock(state->mutex);
@@ -334,7 +334,7 @@ namespace BECore {
                 if (data.empty()) {
                     return IsValid();
                 }
-                const std::shared_ptr<StreamState> state = _state;
+                const SharedPtr<StreamState> state = _state;
                 UniqueLock lock(state->mutex);
                 if (state->closing || state->phase != Phase::Ready || state->connection == nullptr) {
                     return false;
@@ -352,7 +352,7 @@ namespace BECore {
                 if (buffer.empty()) {
                     return std::unexpected(SocketError::Failed);
                 }
-                const std::shared_ptr<StreamState> state = _state;
+                const SharedPtr<StreamState> state = _state;
                 UniqueLock lock(state->mutex);
                 const bool hasDeadline = state->receiveTimeout > std::chrono::milliseconds::zero();
                 const auto deadline = hasDeadline ? std::chrono::steady_clock::now() + state->receiveTimeout : std::chrono::steady_clock::time_point::max();
@@ -485,7 +485,7 @@ namespace BECore {
                 }
             }
 
-            std::shared_ptr<StreamState> _state;
+            SharedPtr<StreamState> _state;
         };
 
     }  // namespace
@@ -551,7 +551,7 @@ namespace BECore {
     }
 
     UniquePtr<ITlsStream> MakeTlsStream() {
-        return eastl::make_unique<NetworkFrameworkTlsStream>();
+        return MakeUnique<NetworkFrameworkTlsStream>();
     }
 
 }  // namespace BECore

@@ -29,9 +29,9 @@ namespace BECore {
         }
 
         // Сканируем слои для поиска XML файлов
-        Vector<eastl::pair<std::filesystem::path, PoolString>> filesToLoad;
+        Vector<Pair<std::filesystem::path, PoolString>> filesToLoad;
         for (const auto& layer : layers) {
-            Vector<eastl::pair<std::filesystem::path, PoolString>> layerFiles;
+            Vector<Pair<std::filesystem::path, PoolString>> layerFiles;
             ScanDirectory(layer, layerFiles);
 
             for (auto& layerFile : layerFiles) {
@@ -84,7 +84,7 @@ namespace BECore {
             if (!root) {
                 return nullptr;
             }
-            auto deserializer = eastl::make_unique<XmlDeserializer>();
+            auto deserializer = MakeUnique<XmlDeserializer>();
             if (!deserializer->LoadFromXmlNode(root)) {
                 return nullptr;
             }
@@ -200,7 +200,7 @@ namespace BECore {
         return true;
     }
 
-    void ConfigManager::ScanDirectory(const std::filesystem::path& dir, Vector<eastl::pair<std::filesystem::path, PoolString>>& filesToLoad) const {
+    void ConfigManager::ScanDirectory(const std::filesystem::path& dir, Vector<Pair<std::filesystem::path, PoolString>>& filesToLoad) const {
         // filesystem может бросать исключения, но exceptions отключены
         // Просто пропускаем ошибки
         for (const auto& entry : std::filesystem::recursive_directory_iterator(dir)) {

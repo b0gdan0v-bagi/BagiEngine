@@ -31,9 +31,9 @@ namespace BECore::Tests {
             /// How many connections the client made
             size_t connections = 0;
             /// The `type` of every text the client received, in order
-            std::vector<std::string> types;
+            Vector<String> types;
 
-            [[nodiscard]] size_t CountType(std::string_view type) const {
+            [[nodiscard]] size_t CountType(StringView type) const {
                 return static_cast<size_t>(std::count(types.begin(), types.end(), type));
             }
 
@@ -77,7 +77,7 @@ namespace BECore::Tests {
                 }
                 if (event.kind == RoomTransportEventKind::Text) {
                     const auto parsed = ParseJson(event.text);
-                    _tap.types.push_back(parsed ? std::string(GetJsonString(*parsed, "type").value_or(String()).c_str()) : std::string("?"));
+                    _tap.types.push_back(parsed ? GetJsonString(*parsed, "type").value_or(String()) : String("?"));
                 }
                 return true;
             }
@@ -95,15 +95,15 @@ namespace BECore::Tests {
 
         /// A human at the table: a RoomClient on the native transport, judged on the wire, that plays the first action it is offered
         struct Player {
-            explicit Player(RoomClientSettings settings = {}) : judge(std::make_shared<WireJudgeLog>()) {
+            explicit Player(RoomClientSettings settings = {}) : judge(MakeShared<WireJudgeLog>()) {
                 settings.transportFactory = [this]() -> UniquePtr<IRoomTransport> {
                     auto native = MakeDefaultRoomTransport();
                     if (!native) {
                         return nullptr;
                     }
-                    return eastl::make_unique<TappedTransport>(eastl::make_unique<JudgedTransport>(std::move(native), judge), tap);
+                    return MakeUnique<TappedTransport>(MakeUnique<JudgedTransport>(std::move(native), judge), tap);
                 };
-                client = std::make_unique<RoomClient>(std::move(settings));
+                client = MakeUnique<RoomClient>(std::move(settings));
             }
 
             [[nodiscard]] size_t Count(Kind kind) const {
@@ -155,8 +155,8 @@ namespace BECore::Tests {
 
             // The tap and the judge are used by the transports the client makes: they outlive the client (declared first)
             Tap tap;
-            std::shared_ptr<WireJudgeLog> judge;
-            std::unique_ptr<RoomClient> client;
+            SharedPtr<WireJudgeLog> judge;
+            UniquePtr<RoomClient> client;
             Vector<RoomClientEvent> events;
             bool autoplay = true;
             bool acted = false;
@@ -184,8 +184,8 @@ namespace BECore::Tests {
         class RoomClientSocketTest : public ::testing::Test {
         protected:
             void SetUp() override {
-                ASSERT_TRUE(registry.Register(SeatedGameInfo{"cards", DemoCardGame::kSeatCount}, [] { return eastl::make_unique<DemoCardGame>(); }));
-                ASSERT_TRUE(registry.Register(SeatedGameInfo{"cards-leaky", DemoCardGame::kSeatCount}, [] { return eastl::make_unique<LeakyDemoCardGame>(); }));
+                ASSERT_TRUE(registry.Register(SeatedGameInfo{"cards", DemoCardGame::kSeatCount}, [] { return MakeUnique<DemoCardGame>(); }));
+                ASSERT_TRUE(registry.Register(SeatedGameInfo{"cards-leaky", DemoCardGame::kSeatCount}, [] { return MakeUnique<LeakyDemoCardGame>(); }));
             }
 
             void TearDown() override {
@@ -197,7 +197,7 @@ namespace BECore::Tests {
             }
 
             void StartServer(RoomServerSettings settings = MakeServerSettings()) {
-                server = std::make_unique<RoomWebSocketServer>(registry, std::move(settings));
+                server = MakeUnique<RoomWebSocketServer>(registry, std::move(settings));
                 const auto started = server->Start();
                 ASSERT_TRUE(started.has_value()) << (started.has_value() ? "" : started.error().message.c_str());
                 port = *started;
@@ -205,7 +205,7 @@ namespace BECore::Tests {
             }
 
             Player& AddPlayer(RoomClientSettings settings = MakeClientSettings()) {
-                players.push_back(std::make_unique<Player>(std::move(settings)));
+                players.push_back(MakeUnique<Player>(std::move(settings)));
                 return *players.back();
             }
 
@@ -247,10 +247,10 @@ namespace BECore::Tests {
             }
 
             SeatedGameRegistry registry;
-            std::unique_ptr<RoomWebSocketServer> server;
+            UniquePtr<RoomWebSocketServer> server;
             uint16_t port = 0;
             String url;
-            std::vector<std::unique_ptr<Player>> players;
+            Vector<UniquePtr<Player>> players;
         };
 
     }  // namespace
@@ -419,8 +419,8 @@ namespace BECore::Tests {
         const auto hosted = player.client->Host("wss://127.0.0.1:9", "cards", "P0");
         ASSERT_FALSE(hosted.has_value());
         EXPECT_EQ(hosted.error().code, RoomClientErrors::kConnectFailed);
-        EXPECT_EQ(std::string(hosted.error().message.c_str()).rfind(std::string(kWebSocketTlsUnsupported.data(), kWebSocketTlsUnsupported.size()), 0), 0u) << hosted.error().message.c_str();
-        EXPECT_NE(std::string(hosted.error().message.c_str()).find("browser"), std::string::npos);
+        EXPECT_EQ(hosted.error().message.rfind(String(kWebSocketTlsUnsupported.data(), kWebSocketTlsUnsupported.size()), 0), 0u) << hosted.error().message.c_str();
+        EXPECT_NE(hosted.error().message.find("browser"), String::npos);
         EXPECT_EQ(player.client->GetState(), RoomClientState::Disconnected);
         EXPECT_EQ(player.tap.connections, 1u);
     }

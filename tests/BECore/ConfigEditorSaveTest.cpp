@@ -99,8 +99,8 @@ namespace BECore::Tests {
         /// defaults, so a save that loses an attribute shows. The first sink carries a `filename` that OutputSink ignores:
         /// the editor changes its type to FileSink as well, and it must not fall back to ./engine.log.
         bool LoadTemplate(XmlDocument& document) const {
-            const std::string firstLog = FirstLogPath().generic_string();
-            const std::string engineLog = EngineLogPath().generic_string();
+            const String firstLog = FromStdString(FirstLogPath().generic_string());
+            const String engineLog = FromStdString(EngineLogPath().generic_string());
             const String xml = Format(R"(<?xml version="1.0" encoding="UTF-8"?>
 <root>
     <!-- Logger Sinks Configuration -->

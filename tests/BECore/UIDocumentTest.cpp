@@ -34,7 +34,7 @@ namespace BECore::Tests {
     </variant>
   </variants>)";
 
-        std::string ScenesXml(const std::string& componentAttributes, const std::string& componentBody) {
+        String ScenesXml(const String& componentAttributes, const String& componentBody) {
             return "<SceneManager><scenes><scene type=\"Scene\" name=\"Main\"><nodes><node name=\"Hud\"><components>"
                    "<component type=\"UICanvasComponent\" space=\"Screen\" scaleMode=\"ScaleWithScreen\" referenceWidth=\"1280\" referenceHeight=\"720\" match=\"0.5\" " +
                    componentAttributes + ">" + componentBody + "</component></components></node></nodes></scene></scenes></SceneManager>";
@@ -54,10 +54,10 @@ namespace BECore::Tests {
             }
 
             /// Writes a file and returns its absolute path, which the file system takes as it is
-            std::string Write(const char* name, const std::string& content) const {
+            String Write(const char* name, const String& content) const {
                 const auto file = _path / name;
                 std::ofstream(file) << content;
-                return file.generic_string();
+                return FromStdString(file.generic_string());
             }
 
         private:
@@ -68,8 +68,8 @@ namespace BECore::Tests {
         struct BagElement {
             const char* type;
             const char* name;
-            std::vector<std::pair<const char*, const char*>> declarations;
-            std::vector<BagElement> children;
+            Vector<Pair<const char*, const char*>> declarations;
+            Vector<BagElement> children;
         };
 
         void AddBagElement(pugi::xml_node parent, const BagElement& bag) {
@@ -101,10 +101,10 @@ namespace BECore::Tests {
         }
 
         /// Loads a scene with one canvas on the node "Hud"
-        IntrusivePtr<UICanvasComponent> LoadCanvas(const std::string& attributes, const std::string& body) {
+        IntrusivePtr<UICanvasComponent> LoadCanvas(const String& attributes, const String& body) {
             XmlDeserializer deserializer;
-            const std::string xml = ScenesXml(attributes, body);
-            EXPECT_TRUE(deserializer.LoadFromString(FromStd(xml)));
+            const String xml = ScenesXml(attributes, body);
+            EXPECT_TRUE(deserializer.LoadFromString(xml));
             _manager = New<SceneManager>();
             _manager->Deserialize(deserializer);
             EXPECT_FALSE(deserializer.HasErrors());
@@ -117,11 +117,11 @@ namespace BECore::Tests {
             return {};
         }
 
-        static std::string SourceAttribute(const std::string& path) {
+        static String SourceAttribute(const String& path) {
             return "source=\"" + path + "\"";
         }
 
-        static std::string DocumentXml(const std::string& body) {
+        static String DocumentXml(const String& body) {
             return "<ui>" + body + "</ui>";
         }
 
@@ -139,7 +139,7 @@ namespace BECore::Tests {
         const auto expectedElements = inlineCanvas->GetRoot().children;
         const auto expectedVariants = inlineCanvas->GetLayout().variants;
 
-        const std::string path = _temp.Write("hud.ui.xml", DocumentXml(kScreenBody));
+        const String path = _temp.Write("hud.ui.xml", DocumentXml(kScreenBody));
         const auto fileCanvas = LoadCanvas(SourceAttribute(path), "");
         ASSERT_TRUE(fileCanvas);
 
@@ -185,7 +185,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIDocumentTest, TheDocumentLaysOutLikeTheInlineScreen) {
-        const std::string path = _temp.Write("hud.ui.xml", DocumentXml(kScreenBody));
+        const String path = _temp.Write("hud.ui.xml", DocumentXml(kScreenBody));
         const auto canvas = LoadCanvas(SourceAttribute(path), "");
         ASSERT_TRUE(canvas);
         const UIElement& panel = *canvas->GetRoot().children.at(0);
@@ -202,12 +202,12 @@ namespace BECore::Tests {
     // ---- the resource -----------------------------------------------------------------------------------------------------
 
     TEST_F(UIDocumentTest, ResourceManagerPicksTheLoaderByTheLongestSuffix) {
-        const std::string uiPath = _temp.Write("screen.ui.xml", DocumentXml(kScreenBody));
-        const std::string xmlPath = _temp.Write("plain.xml", "<root><value a=\"1\"/></root>");
+        const String uiPath = _temp.Write("screen.ui.xml", DocumentXml(kScreenBody));
+        const String xmlPath = _temp.Write("plain.xml", "<root><value a=\"1\"/></root>");
         auto& resources = CoreManager::GetResourceManager();
 
-        const auto document = resources.Load<UIDocument>(FromStd(uiPath));
-        const auto plain = resources.Load<XmlResource>(FromStd(xmlPath));
+        const auto document = resources.Load<UIDocument>(uiPath);
+        const auto plain = resources.Load<XmlResource>(xmlPath);
 
         ASSERT_TRUE(document);
         EXPECT_EQ(document->GetState(), ResourceState::Loaded);
@@ -217,8 +217,8 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIDocumentTest, EveryInstantiationHasElementsOfItsOwn) {
-        const std::string path = _temp.Write("hud.ui.xml", DocumentXml(kScreenBody));
-        const auto document = CoreManager::GetResourceManager().Load<UIDocument>(FromStd(path));
+        const String path = _temp.Write("hud.ui.xml", DocumentXml(kScreenBody));
+        const auto document = CoreManager::GetResourceManager().Load<UIDocument>(path);
         ASSERT_TRUE(document);
 
         UIScreenContent first;
@@ -233,7 +233,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIDocumentTest, TwoCanvasesOfOneFileDoNotShareTheirLayout) {
-        const std::string path = _temp.Write("hud.ui.xml", DocumentXml(kScreenBody));
+        const String path = _temp.Write("hud.ui.xml", DocumentXml(kScreenBody));
         const auto first = LoadCanvas(SourceAttribute(path), "");
         ASSERT_TRUE(first);
         const UIElement& firstPanel = *first->GetRoot().children.at(0);
@@ -252,7 +252,7 @@ namespace BECore::Tests {
     // ---- file and inline together -----------------------------------------------------------------------------------------
 
     TEST_F(UIDocumentTest, InlineElementsAndVariantsComeAfterTheFile) {
-        const std::string path = _temp.Write("base.ui.xml", DocumentXml(R"(<elements><element type="UIElement" name="FromFile"/></elements>
+        const String path = _temp.Write("base.ui.xml", DocumentXml(R"(<elements><element type="UIElement" name="FromFile"/></elements>
 <variants><variant when="orientation:portrait"><overrides><set element="FromFile" x="1"/></overrides></variant></variants>)"));
         const auto canvas = LoadCanvas(SourceAttribute(path), R"(<elements><element type="UIElement" name="Inline"/></elements>
 <variants><variant when="orientation:portrait"><overrides><set element="FromFile" x="2"/></overrides></variant></variants>)");
@@ -297,7 +297,7 @@ namespace BECore::Tests {
     // ---- failures ---------------------------------------------------------------------------------------------------------
 
     TEST_F(UIDocumentTest, AMissingFileLeavesTheInlineScreen) {
-        const std::string path = (std::filesystem::temp_directory_path() / "BagiEngineUIDocumentTest" / "missing.ui.xml").generic_string();
+        const String path = FromStdString((std::filesystem::temp_directory_path() / "BagiEngineUIDocumentTest" / "missing.ui.xml").generic_string());
         const auto canvas = LoadCanvas(SourceAttribute(path), R"(<elements><element type="UIElement" name="Inline"/></elements>)");
         ASSERT_TRUE(canvas);
 
@@ -306,8 +306,8 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIDocumentTest, AMalformedFileIsNotLoaded) {
-        const std::string path = _temp.Write("broken.ui.xml", "<ui><elements>");
-        const auto document = CoreManager::GetResourceManager().Load<UIDocument>(FromStd(path));
+        const String path = _temp.Write("broken.ui.xml", "<ui><elements>");
+        const auto document = CoreManager::GetResourceManager().Load<UIDocument>(path);
         UIScreenContent content;
 
         // The loader may hand back a failed resource or none at all; either way there is nothing to build
@@ -319,11 +319,11 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIDocumentTest, ABadValueIsReportedAndTheRestIsBuilt) {
-        const std::string path = _temp.Write("bad.ui.xml", DocumentXml(R"(<elements>
+        const String path = _temp.Write("bad.ui.xml", DocumentXml(R"(<elements>
   <element type="UIElement" name="Bad" width="wide"/>
   <element type="UIElement" name="Good" width="50"/>
 </elements>)"));
-        const auto document = CoreManager::GetResourceManager().Load<UIDocument>(FromStd(path));
+        const auto document = CoreManager::GetResourceManager().Load<UIDocument>(path);
         ASSERT_TRUE(document);
 
         UIScreenContent content;

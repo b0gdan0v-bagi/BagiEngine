@@ -27,8 +27,10 @@ namespace BECore::Tests {
     }
 
     TEST(StringUtilsTest, StdStringViewOverloadAgrees) {
+        //-NoStd: the overload that stays for the games
         constexpr std::string_view text = "BECore";
         EXPECT_EQ(StringUtils::GetHash(text), StringUtils::GetHash(FromStd(text)));
+        //-NoStd: the overload that stays for the games
         static_assert(StringUtils::GetHash(std::string_view{"a"}) == 0xaf63dc4c8601ec8cULL);
     }
 

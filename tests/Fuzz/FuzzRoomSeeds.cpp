@@ -110,7 +110,7 @@ namespace BECore::Fuzz {
         class Recorder {
         public:
             Recorder() : _hub(_registry, RoomHubInput::MakeSettings(), RoomHubInput::MakeRandom(), MakeSink()) {
-                _registry.Register(SeatedGameInfo{"demo", DemoCardGame::kSeatCount}, [] { return UniquePtr<ISeatedGame>(eastl::make_unique<DemoCardGame>()); });
+                _registry.Register(SeatedGameInfo{"demo", DemoCardGame::kSeatCount}, [] { return UniquePtr<ISeatedGame>(MakeUnique<DemoCardGame>()); });
             }
 
             void Connect(uint8_t number) {
@@ -372,7 +372,7 @@ namespace BECore::Fuzz {
             return FuzzBytes(text.begin(), text.end());
         }
 
-        Json Params(std::initializer_list<std::pair<const char*, Json>> members) {
+        Json Params(std::initializer_list<Pair<const char*, Json>> members) {
             Json params = Json::object();
             for (const auto& [key, value] : members) {
                 params[key] = value;
@@ -390,7 +390,7 @@ namespace BECore::Fuzz {
             add("resume.bin", Request(6, "resume"));
             add("quit.bin", Request("quit-1", "quit"));
             add("list-games.bin", Request(7, "list_games"));
-            add("switch-game.bin", Request(8, "switch_game", Params({{"name", "Match3"}})));
+            add("switch-game.bin", Request(8, "switch_game", Params({{"name", "Stress"}})));
             add("reset.bin", Request(9, "reset", Params({{"seed", 42}})));
             add("get-state.bin", Request(10, "get_state"));
             add("list-actions.bin", Request(11, "list_actions"));

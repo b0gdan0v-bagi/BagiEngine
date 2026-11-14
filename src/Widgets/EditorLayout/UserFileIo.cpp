@@ -16,7 +16,7 @@ namespace BECore {
         if (file.bad()) {
             return std::unexpected(Format("Cannot read '{}'", path.string()));
         }
-        // std: the text of an std::ostringstream
+        //-NoStd: the text of an std::ostringstream
         const std::string text = content.str();
         return String(text.c_str(), text.size());
     }

@@ -93,9 +93,9 @@ namespace BECore::Tests {
             const auto factory = [this, leaky]() -> UniquePtr<ISeatedGame> {
                 const String room = _startingRoom;
                 if (leaky) {
-                    return eastl::make_unique<Tracked<LeakyFakeSeatedGame>>(this, room);
+                    return MakeUnique<Tracked<LeakyFakeSeatedGame>>(this, room);
                 }
-                return eastl::make_unique<Tracked<FakeSeatedGame>>(this, room);
+                return MakeUnique<Tracked<FakeSeatedGame>>(this, room);
             };
             EXPECT_TRUE(_registry.Register(SeatedGameInfo{"fake", FakeSeatedGame::kSeatCount}, factory));
             // The same game with public options: the lobby shows `open` and `count` of `create_room`

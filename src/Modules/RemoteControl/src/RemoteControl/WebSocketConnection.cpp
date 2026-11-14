@@ -46,7 +46,7 @@ namespace BECore {
         const auto deadline = std::chrono::steady_clock::now() + timeout;
 
         Vector<uint8_t> received;
-        std::array<uint8_t, 1024> chunk;
+        Array<uint8_t, 1024> chunk;
         size_t headSize = 0;
         for (;;) {
             // Zero would mean "wait for ever" to the socket, so a deadline that is (nearly) reached ends the handshake
@@ -59,7 +59,7 @@ namespace BECore {
             if (!count) {
                 return false;  // the client is gone or too slow
             }
-            // Pointers, not std::array iterators: EASTL's insert does not take MSVC's class iterator
+            // Plain pointers: an Array iterator is a pointer in EASTL, and its insert does not take MSVC's class iterator of a std:: container
             received.insert(received.end(), chunk.data(), chunk.data() + *count);
 
             const StringView text(reinterpret_cast<const char*>(received.data()), received.size());

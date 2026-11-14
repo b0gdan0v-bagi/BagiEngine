@@ -266,10 +266,10 @@ namespace BECore::Tests {
         }
 
         /// Sends one request and runs the main-thread side; the response
-        Json Call(std::string_view method, const Json& params = Json::object()) {
+        Json Call(StringView method, const Json& params = Json::object()) {
             Json request = Json::object();
             request["id"] = 1;
-            request["method"] = std::string(method);
+            request["method"] = ToStdString(method);
             request["params"] = params;
             Json response;
             service.Post(DumpJson(request), [&response](String text) {
@@ -280,10 +280,10 @@ namespace BECore::Tests {
             return response;
         }
 
-        static std::string ErrorCode(const Json& response) {
+        static String ErrorCode(const Json& response) {
             const Json* error = FindJsonMember(response, "error");
             const auto code = error != nullptr ? GetJsonString(*error, "code") : std::nullopt;
-            return code ? std::string(code->c_str()) : std::string();
+            return code ? String(code->c_str()) : String();
         }
 
         ControlService service;

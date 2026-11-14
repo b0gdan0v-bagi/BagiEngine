@@ -82,7 +82,7 @@ namespace BECore {
     /// One vertex buffer of vertices @p stride bytes apart, read as @p attributeCount attributes
     struct VertexLayout {
         uint32_t stride = 0;
-        std::array<VertexAttribute, kMaxVertexAttributes> attributes{};
+        Array<VertexAttribute, kMaxVertexAttributes> attributes{};
         uint32_t attributeCount = 0;
 
         /// Appends an attribute; false (and nothing added) when kMaxVertexAttributes are in use

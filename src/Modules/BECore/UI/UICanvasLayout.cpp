@@ -112,7 +112,7 @@ namespace BECore {
         return ended;
     }
 
-    std::pair<float, float> UICanvasLayout::OutputToCanvas(float outputX, float outputY) const {
+    Pair<float, float> UICanvasLayout::OutputToCanvas(float outputX, float outputY) const {
         return {_resolved.transform.ToViewX(outputX), _resolved.transform.ToViewY(outputY)};
     }
 

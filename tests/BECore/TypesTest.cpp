@@ -1,7 +1,4 @@
 #include <Common/Printers.h>
-#include <limits>
-#include <string>
-#include <string_view>
 
 namespace BECore::Tests {
 
@@ -12,6 +9,15 @@ namespace BECore::Tests {
         constMap.contains(key);
         constMap.count(key);
         constMap.at(key);
+    };
+
+    template <typename S, typename K>
+    concept SetLooksUpBy = requires(S & set, const S& constSet, const K& key) {
+        set.find(key);
+        constSet.find(key);
+        constSet.contains(key);
+        constSet.count(key);
+        set.erase(key);
     };
 
     // The aliases that are a plain `using`: the same type as the eastl:: / std:: name.
@@ -32,6 +38,12 @@ namespace BECore::Tests {
     static_assert(std::is_same_v<Map<int, int>, eastl::map<int, int, eastl::less<int>>>);
     static_assert(std::is_same_v<FlatMap<int, int>, eastl::vector_map<int, int, eastl::less<int>>>);
     static_assert(std::is_same_v<FlatSet<int>, eastl::vector_set<int, eastl::less<int>>>);
+    static_assert(std::is_same_v<HashSet<int>, eastl::hash_set<int, eastl::hash<int>, eastl::equal_to<int>>>);
+    static_assert(std::is_same_v<Set<int>, eastl::set<int, eastl::less<int>>>);
+    static_assert(std::is_same_v<Pair<int, float>, eastl::pair<int, float>>);
+    static_assert(std::is_same_v<Variant<int, String>, std::variant<int, String>>);
+    static_assert(std::is_same_v<Tuple<int, float, char>, std::tuple<int, float, char>>);
+    static_assert(std::is_same_v<SharedPtr<int>, eastl::shared_ptr<int>>);
 
     // A String key gets the transparent hash, equality and order; any other key keeps the EASTL ones.
     static_assert(std::is_same_v<HashMap<String, int>, eastl::hash_map<String, int, StringHash, StringEqual>>);
@@ -39,6 +51,8 @@ namespace BECore::Tests {
     static_assert(std::is_same_v<FixedHashMap<String, int, 8>, eastl::fixed_hash_map<String, int, 8, 9, true, StringHash, StringEqual>>);
     static_assert(std::is_same_v<FixedHashMap<int, int, 8>, eastl::fixed_hash_map<int, int, 8, 9, true, eastl::hash<int>, eastl::equal_to<int>>>);
     static_assert(std::is_same_v<FlatMap<String, int>, eastl::vector_map<String, int, StringLess>>);
+    static_assert(std::is_same_v<HashSet<String>, eastl::hash_set<String, StringHash, StringEqual>>);
+    static_assert(std::is_same_v<Set<String>, eastl::set<String, StringLess>>);
 
     // A map of String keys finds by a view and a literal without making a String; the map of eastl::string keys does not.
     static_assert(LooksUpBy<HashMap<String, int>, StringView>);
@@ -47,6 +61,12 @@ namespace BECore::Tests {
     static_assert(LooksUpBy<Map<String, int>, StringView>);
     static_assert(LooksUpBy<Map<String, int>, char[4]>);
     static_assert(LooksUpBy<FixedHashMap<String, int, 8>, StringView>);
+    static_assert(SetLooksUpBy<HashSet<String>, StringView>);
+    static_assert(SetLooksUpBy<HashSet<String>, char[4]>);
+    static_assert(SetLooksUpBy<Set<String>, StringView>);
+    static_assert(SetLooksUpBy<Set<String>, char[4]>);
+    static_assert(!SetLooksUpBy<eastl::hash_set<eastl::string>, StringView>);
+    static_assert(!SetLooksUpBy<eastl::set<eastl::string>, StringView>);
     static_assert(!LooksUpBy<eastl::hash_map<eastl::string, int>, StringView>);
     static_assert(!LooksUpBy<eastl::map<eastl::string, int>, StringView>);
 
@@ -137,6 +157,60 @@ namespace BECore::Tests {
         EXPECT_EQ(constMap.at(StringView{"pear"}), reference["pear"]);
     }
 
+    TEST(TypesTest, HashSetOfStringsIteratesInTheOrderOfTheEastlSet) {
+        HashSet<String> set;
+        eastl::hash_set<eastl::string> reference;
+        for (int i = 0; i < 200; ++i) {
+            const String key = Format("key_{}_{}", i, i * 7919);
+            set.insert(key);
+            reference.insert(eastl::string{key.c_str()});
+        }
+        ASSERT_EQ(set.size(), reference.size());
+        auto itSet = set.begin();
+        for (auto itReference = reference.begin(); itReference != reference.end(); ++itReference, ++itSet) {
+            EXPECT_EQ(*itSet, *itReference);
+        }
+    }
+
+    TEST(TypesTest, HashSetOfStringsLooksUpByViewAndLiteral) {
+        HashSet<String> set;
+        set.insert("one");
+        set.insert(String{"two"});
+        set.emplace("three");
+        EXPECT_FALSE(set.insert("one").second);
+
+        const auto& constSet = set;
+        EXPECT_NE(constSet.find("one"), constSet.end());
+        EXPECT_NE(constSet.find(StringView{"two"}), constSet.end());
+        EXPECT_EQ(constSet.find(StringView{"on"}), constSet.end());
+        EXPECT_TRUE(constSet.contains(StringView{"three"}));
+        EXPECT_FALSE(constSet.contains("THREE"));
+        EXPECT_EQ(constSet.count("one"), 1u);
+        EXPECT_EQ(constSet.count("none"), 0u);
+        EXPECT_EQ(set.erase(StringView{"one"}), 1u);
+        EXPECT_FALSE(set.contains("one"));
+    }
+
+    TEST(TypesTest, SetOfStringsLooksUpByViewAndKeepsTheOrder) {
+        Set<String> set;
+        eastl::set<eastl::string> reference;
+        for (const char* key : {"pear", "apple", "fig", "\x80z", "Apple", "", "applesauce"}) {
+            set.insert(key);
+            reference.insert(eastl::string{key});
+        }
+        ASSERT_EQ(set.size(), reference.size());
+        auto itSet = set.begin();
+        for (auto itReference = reference.begin(); itReference != reference.end(); ++itReference, ++itSet) {
+            EXPECT_EQ(*itSet, *itReference);
+        }
+        const auto& constSet = set;
+        EXPECT_NE(constSet.find(StringView{"fig"}), constSet.end());
+        EXPECT_TRUE(constSet.contains("apple"));
+        EXPECT_EQ(constSet.count("pea"), 0u);
+        EXPECT_EQ(set.erase(StringView{"fig"}), 1u);
+        EXPECT_FALSE(set.contains(StringView{"fig"}));
+    }
+
     TEST(TypesTest, FixedHashMapOfStringsLooksUpByView) {
         FixedHashMap<String, int, 4> map;
         map["a"] = 1;
@@ -173,6 +247,100 @@ namespace BECore::Tests {
         EXPECT_TRUE(fixed.full());
         EXPECT_FALSE(fixed.has_overflowed());
         EXPECT_EQ(fixed.capacity(), 2u);
+    }
+
+    TEST(TypesTest, MakeUniqueMakesAValueAnArrayAndTakesMoveOnlyArguments) {
+        struct Point {
+            Point(int x, int y) : x(x), y(y) {}
+            int x;
+            int y;
+        };
+        const UniquePtr<Point> point = MakeUnique<Point>(3, 4);
+        static_assert(std::is_same_v<decltype(MakeUnique<Point>(1, 2)), UniquePtr<Point>>);
+        ASSERT_NE(point, nullptr);
+        EXPECT_EQ(point->x, 3);
+        EXPECT_EQ(point->y, 4);
+
+        static_assert(std::is_same_v<decltype(MakeUnique<int[]>(size_t{4})), UniquePtr<int[]>>);
+        const UniquePtr<int[]> array = MakeUnique<int[]>(size_t{4});
+        ASSERT_NE(array, nullptr);
+        array[3] = 9;
+        EXPECT_EQ(array[3], 9);
+
+        struct Holder {
+            explicit Holder(UniquePtr<int> value) : value(eastl::move(value)) {}
+            UniquePtr<int> value;
+        };
+        UniquePtr<int> moved = MakeUnique<int>(7);
+        const UniquePtr<Holder> holder = MakeUnique<Holder>(eastl::move(moved));
+        EXPECT_EQ(moved, nullptr);
+        ASSERT_NE(holder->value, nullptr);
+        EXPECT_EQ(*holder->value, 7);
+    }
+
+    TEST(TypesTest, MakeSharedCountsItsOwners) {
+        static_assert(std::is_same_v<decltype(MakeShared<String>("text")), SharedPtr<String>>);
+        SharedPtr<String> first = MakeShared<String>("text");
+        ASSERT_NE(first, nullptr);
+        EXPECT_EQ(*first, "text");
+        EXPECT_EQ(first.use_count(), 1);
+        {
+            const SharedPtr<String> second = first;
+            EXPECT_EQ(first.use_count(), 2);
+            EXPECT_EQ(first.get(), second.get());
+        }
+        EXPECT_EQ(first.use_count(), 1);
+        const SharedPtr<String> sized = MakeShared<String>(3, 'x');
+        EXPECT_EQ(*sized, "xxx");
+    }
+
+    TEST(TypesTest, MakePairAndPairBehaveAsEastlPair) {
+        const auto pair = MakePair(1, String{"one"});
+        static_assert(std::is_same_v<decltype(pair), const Pair<int, String>>);
+        EXPECT_EQ(pair.first, 1);
+        EXPECT_EQ(pair.second, "one");
+        const auto& [number, text] = pair;
+        EXPECT_EQ(number, 1);
+        EXPECT_EQ(text, "one");
+
+        Map<String, int> map;
+        map.insert(MakePair(String{"a"}, 5));
+        Vector<Pair<String, int>> entries{map.begin(), map.end()};
+        ASSERT_EQ(entries.size(), 1u);
+        EXPECT_EQ(entries[0].first, "a");
+        EXPECT_EQ(entries[0].second, 5);
+
+        // A pair of references keeps the references, as eastl::make_pair does
+        int value = 2;
+        const auto reference = MakePair(eastl::ref(value), 3);
+        static_assert(std::is_same_v<decltype(reference), const Pair<int&, int>>);
+    }
+
+    TEST(TypesTest, VariantIsVisitedAndReadWithTheStdFunctions) {
+        Variant<std::monostate, int, String> value;
+        EXPECT_TRUE(std::holds_alternative<std::monostate>(value));
+        value = 12;
+        EXPECT_EQ(std::get<int>(value), 12);
+        value = String{"twelve"};
+        EXPECT_EQ(std::get_if<int>(&value), nullptr);
+        const String seen = std::visit(
+            [](const auto& held) -> String {
+                if constexpr (std::is_same_v<std::decay_t<decltype(held)>, String>) {
+                    return held;
+                } else {
+                    return "other";
+                }
+            },
+            value);
+        EXPECT_EQ(seen, "twelve");
+    }
+
+    TEST(TypesTest, TupleIsAppliedAndReadWithTheStdFunctions) {
+        Tuple<int, String, float> tuple{1, "two", 3.0f};
+        EXPECT_EQ(std::get<1>(tuple), "two");
+        static_assert(std::tuple_size_v<Tuple<int, String, float>> == 3);
+        const float sum = std::apply([](int a, const String& b, float c) { return static_cast<float>(a) + static_cast<float>(b.size()) + c; }, tuple);
+        EXPECT_FLOAT_EQ(sum, 7.0f);
     }
 
     TEST(TypesTest, ToStringOfIntegers) {

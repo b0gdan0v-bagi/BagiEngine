@@ -20,8 +20,8 @@ namespace BECore::Tests {
 
     TEST(GamesConfigTest, ReadsTheDefaultGame) {
         Vector<DeserializeError> errors;
-        const auto config = Load(R"(<root><defaultGame name="Match3"/></root>)", errors);
-        EXPECT_EQ(config._defaultGame._name.ToStringView(), "Match3");
+        const auto config = Load(R"(<root><defaultGame name="Stress"/></root>)", errors);
+        EXPECT_EQ(config._defaultGame._name.ToStringView(), "Stress");
         EXPECT_TRUE(errors.empty());
     }
 

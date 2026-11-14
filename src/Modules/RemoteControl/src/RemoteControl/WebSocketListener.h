@@ -55,7 +55,7 @@ namespace BECore {
      * (the client left, a protocol error, a refusal of `onMessage`, Stop()), after its writer has stopped.
      */
     struct WebSocketHandler {
-        using ConnectionPtr = eastl::shared_ptr<WebSocketConnection>;
+        using ConnectionPtr = SharedPtr<WebSocketConnection>;
 
         /// The handshake succeeded and the connection takes frames
         std::function<void(const ConnectionPtr&)> onOpen;

@@ -2,6 +2,7 @@
 #include <BECore/Profiler/Profiler.h>
 #include <BECore/Profiler/Ring/FrozenTrace.h>
 #include <BECore/Profiler/Ring/SpikeCapture.h>
+#include <Common/Printers.h>
 #include <Common/TempPath.h>
 #include <gtest/gtest.h>
 #include <map>
@@ -63,18 +64,14 @@ namespace BECore::Tests {
             return snapshot;
         }
 
-        std::string Text(const String& text) {
-            return std::string(text.data(), text.size());
-        }
-
-        std::string Member(const Json& event, const char* key) {
+        String Member(const Json& event, const char* key) {
             const auto value = GetJsonString(event, key);
-            return value ? Text(*value) : std::string();
+            return value ? *value : String();
         }
 
         Json ParseTrace(const String& trace) {
             auto parsed = ParseJson(trace);
-            EXPECT_TRUE(parsed.has_value()) << Text(trace);
+            EXPECT_TRUE(parsed.has_value()) << trace;
             return parsed ? *parsed : Json::object();
         }
 
@@ -286,14 +283,14 @@ namespace BECore::Tests {
 
         const Json trace = ParseTrace(WriteFrozenTraceJson(capture.GetSpikes()));
         const Json events = EventsOf(trace);
-        std::map<int64_t, int> depth;
+        Map<int64_t, int> depth;
         size_t begins = 0;
         size_t ends = 0;
         size_t threadNames = 0;
         size_t frameMarks = 0;
         double lastTs = -1.0;
         for (const Json& event : events) {
-            const std::string phase = Member(event, "ph");
+            const String phase = Member(event, "ph");
             const int64_t tid = GetJsonInt(event, "tid").value_or(-1);
             if (phase == "B" || phase == "E") {
                 const double ts = GetJsonNumber(event, "ts").value_or(-1.0);
@@ -359,7 +356,7 @@ namespace BECore::Tests {
         std::ifstream in(path, std::ios::binary);
         std::stringstream content;
         content << in.rdbuf();
-        EXPECT_EQ(content.str(), Text(WriteFrozenTraceJson(capture.GetSpikes())));
+        EXPECT_EQ(FromStdString(content.str()), WriteFrozenTraceJson(capture.GetSpikes()));
         in.close();
         std::filesystem::remove(path);
 

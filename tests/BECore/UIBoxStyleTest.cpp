@@ -127,8 +127,8 @@ namespace BECore::Tests {
 
     TEST(UIBoxStyleTest, EachFieldAloneDrawsOneGeometryCall) {
         const UIBoxStyle every = EveryField();
-        const Vector<eastl::pair<const char*, UIBoxStyle>> cases = [&] {
-            Vector<eastl::pair<const char*, UIBoxStyle>> list;
+        const Vector<Pair<const char*, UIBoxStyle>> cases = [&] {
+            Vector<Pair<const char*, UIBoxStyle>> list;
             UIBoxStyle box;
             box.cornerRadius = every.cornerRadius;
             list.emplace_back("cornerRadius", box);

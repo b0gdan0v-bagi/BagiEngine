@@ -214,7 +214,7 @@ namespace BECore {
         service.RegisterHandler("perform_action", HandlePerformAction);
         service.RegisterHandler("set_state", HandleSetState);
 
-        auto watcher = eastl::make_shared<StateChangeWatcher>(service);
+        auto watcher = MakeShared<StateChangeWatcher>(service);
         service.SetFrameEndHook(GameControlEvents::kStateChanged, [watcher] { watcher->OnFrameEnd(); });
     }
 

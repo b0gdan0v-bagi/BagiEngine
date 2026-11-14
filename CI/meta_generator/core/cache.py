@@ -22,7 +22,7 @@ class MetadataCache:
     to detect when files need to be re-parsed.
     """
     
-    CACHE_VERSION = "2.6"  # 2.6: String and FixedString are primitive strings (stored FieldData.is_primitive); 2.5: template writes StringUtils (cached output is skipped unchanged sources); 2.4: ClassData.icon; 2.1: ClassData.is_abstract; 2.2: FileMetadata.warnings; 2.3: parser fixes (inline bodies, namespace A::B, real lines)
+    CACHE_VERSION = "2.6"  # 2.6: String and FixedString are primitive strings (stored FieldData.is_primitive); 2.5: the template writes StringUtils (older cache entries would skip unchanged sources, so their output would not be regenerated); 2.4: ClassData.icon; 2.1: ClassData.is_abstract; 2.2: FileMetadata.warnings; 2.3: parser fixes (inline bodies, namespace A::B, real lines)
     
     def __init__(self, cache_path: Path):
         """

@@ -19,7 +19,7 @@ namespace BECore::Tests {
         /// A room over the fake game, and the way to look at the game the room made (the truth, for the leak check)
         struct TestRoom {
             Room room;
-            eastl::shared_ptr<FakeSeatedGame*> game;
+            SharedPtr<FakeSeatedGame*> game;
             Vector<RoomMemberJoined> members;
 
             const FakeSeatedGame& Game() const {
@@ -28,9 +28,9 @@ namespace BECore::Tests {
         };
 
         TestRoom MakeTestRoom(int humans, RoomTimings timings = {std::chrono::seconds(30), std::chrono::minutes(10), std::chrono::milliseconds(0)}) {
-            auto game = eastl::make_shared<FakeSeatedGame*>(nullptr);
+            auto game = MakeShared<FakeSeatedGame*>(nullptr);
             SeatedGameFactory factory = [game]() -> UniquePtr<ISeatedGame> {
-                auto made = eastl::make_unique<FakeSeatedGame>();
+                auto made = MakeUnique<FakeSeatedGame>();
                 *game = made.get();
                 return made;
             };
@@ -145,7 +145,7 @@ namespace BECore::Tests {
         EXPECT_EQ(CodeOf(empty.Start(emptyHost->player, kNow)), RoomErrors::kInternalError);
         EXPECT_EQ(empty.GetPhase(), RoomPhase::Lobby);
 
-        Room mismatch("ABCDE", SeatedGameInfo{"fake", 3}, MakeSequence(1), []() -> UniquePtr<ISeatedGame> { return eastl::make_unique<FakeSeatedGame>(); });
+        Room mismatch("ABCDE", SeatedGameInfo{"fake", 3}, MakeSequence(1), []() -> UniquePtr<ISeatedGame> { return MakeUnique<FakeSeatedGame>(); });
         const auto mismatchHost = mismatch.AddMember("Ann", kNow);
         ASSERT_TRUE(mismatchHost.has_value());
         EXPECT_EQ(CodeOf(mismatch.Start(mismatchHost->player, kNow)), RoomErrors::kInternalError);
@@ -411,9 +411,9 @@ namespace BECore::Tests {
     }  // namespace
 
     TEST(RoomPlayTest, ARefusedComputerMoveIsNotRetriedAndChangesNothing) {
-        auto game = eastl::make_shared<StubbornGame*>(nullptr);
+        auto game = MakeShared<StubbornGame*>(nullptr);
         SeatedGameFactory factory = [game]() -> UniquePtr<ISeatedGame> {
-            auto made = eastl::make_unique<StubbornGame>();
+            auto made = MakeUnique<StubbornGame>();
             *game = made.get();
             return made;
         };

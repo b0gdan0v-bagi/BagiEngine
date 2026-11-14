@@ -17,7 +17,7 @@ namespace BECore::Tests {
     inline constexpr int kHumansAtFullTable = 4;
     inline constexpr int kHumansOfAPair = 2;
 
-    using Clients = std::vector<std::unique_ptr<RoomSocketClient>>;
+    using Clients = Vector<UniquePtr<RoomSocketClient>>;
 
     /// The last message of @p type the client received, or null
     inline const ReceivedMessage* LastOf(const RoomSocketClient& client, StringView type) {
@@ -99,7 +99,7 @@ namespace BECore::Tests {
 
     /// Plays the hands of @p clients until each has seen the end of its game; @p alsoPump runs on every round (other sockets to serve)
     inline bool PlayToTheEnd(const Clients& clients, const WaitPump& alsoPump = {}) {
-        std::vector<HandPlayer> players;
+        Vector<HandPlayer> players;
         for (const auto& client : clients) {
             players.emplace_back(*client);
         }
@@ -116,10 +116,10 @@ namespace BECore::Tests {
     }
 
     /// What the judge says of every text the client received: the ids of the cards it must not have seen
-    inline std::vector<std::string> LeaksOf(const RoomSocketClient& client) {
-        std::vector<std::string> leaks;
+    inline Vector<String> LeaksOf(const RoomSocketClient& client) {
+        Vector<String> leaks;
         for (const ReceivedMessage& message : client.Received()) {
-            for (std::string& id : FindLeakedCardIds(std::string_view(message.text.c_str(), message.text.size()), client.seat)) {
+            for (String& id : FindLeakedCardIds(StringView(message.text.c_str(), message.text.size()), client.seat)) {
                 leaks.push_back(std::move(id));
             }
         }
@@ -136,7 +136,7 @@ namespace BECore::Tests {
 
     inline void ExpectCleanWire(const Clients& clients) {
         for (size_t i = 0; i < clients.size(); ++i) {
-            ExpectCleanWire(*clients[i], ("client " + std::to_string(i)).c_str());
+            ExpectCleanWire(*clients[i], ("client " + ToString(i)).c_str());
         }
     }
 
@@ -145,14 +145,14 @@ namespace BECore::Tests {
         ASSERT_TRUE(SeesTheEnd(client));
         const Json* table = LastTable(client);
         ASSERT_NE(table, nullptr);
-        const std::vector<std::string> ids = FindCardIds(table->dump());
+        const Vector<String> ids = FindCardIds(FromStd(table->dump()));
         EXPECT_EQ(ids.size(), static_cast<size_t>(DemoCardGame::kTotalPlays));
-        EXPECT_EQ(std::set<std::string>(ids.begin(), ids.end()).size(), static_cast<size_t>(DemoCardGame::kTotalPlays));
+        EXPECT_EQ(Set<String>(ids.begin(), ids.end()).size(), static_cast<size_t>(DemoCardGame::kTotalPlays));
     }
 
     /// Frames of @p count identical text messages in one buffer
-    inline Vector<uint8_t> RepeatText(const std::string& text, int count) {
-        const auto frame = EncodeTextFrame(FromStd(text), kClientMask);
+    inline Vector<uint8_t> RepeatText(const String& text, int count) {
+        const auto frame = EncodeTextFrame(text, kClientMask);
         Vector<uint8_t> batch;
         for (int i = 0; i < count; ++i) {
             batch.insert(batch.end(), frame.data(), frame.data() + frame.size());
@@ -187,7 +187,7 @@ namespace BECore::Tests {
             }
             ASSERT_TRUE(client->WaitFor(RoomMessageTypes::kJoined).has_value());
             ASSERT_TRUE(client->WaitFor(RoomMessageTypes::kLobby).has_value());
-            out.push_back(std::make_unique<RoomSocketClient>(std::move(*client)));
+            out.push_back(MakeUnique<RoomSocketClient>(std::move(*client)));
         }
     }
 

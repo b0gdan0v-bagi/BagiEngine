@@ -147,7 +147,7 @@ namespace BECore::Tests {
         const double nan = std::numeric_limits<double>::quiet_NaN();
         const double infinity = std::numeric_limits<double>::infinity();
         for (const double bad : {nan, infinity, -infinity, -5.0}) {
-            SCOPED_TRACE(std::to_string(bad));
+            SCOPED_TRACE(ToString(bad));
             const WebCanvasSize size = FitWindowSize(bad, bad, 64, 48);
             EXPECT_EQ(size.width, 64);
             EXPECT_EQ(size.height, 48);
@@ -181,7 +181,7 @@ namespace BECore::Tests {
         const double nan = std::numeric_limits<double>::quiet_NaN();
         const double infinity = std::numeric_limits<double>::infinity();
         for (const double bad : {nan, infinity, -infinity, -12.0}) {
-            SCOPED_TRACE(std::to_string(bad));
+            SCOPED_TRACE(ToString(bad));
             const WebSafeArea area = SafeAreaFromInsets(800.0, 600.0, bad, bad, bad, 10.0);
             EXPECT_EQ(area.x, 10.0);
             EXPECT_EQ(area.y, 0.0);

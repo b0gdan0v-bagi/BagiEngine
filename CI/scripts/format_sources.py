@@ -143,10 +143,10 @@ def get_changed_files(project_root: Path, ignore_patterns: list[str]) -> list[Pa
 
 
 def get_all_source_files(project_root: Path, ignore_patterns: list[str]) -> list[Path]:
-    """Return list of all source files under src/, config/ and games/ (a game repository: src/, config/, tests/), respecting ignore."""
+    """Return list of all source files under src/, config/ and tools/stress/ (a game repository: src/, config/, tests/), respecting ignore."""
     result = []
     # A game repository keeps its gtest sources in tests/; the engine's own tests/ are not formatted by this script
-    tops = ("src", "config", "games") if project_root == ENGINE_ROOT else ("src", "config", "tests")
+    tops = ("src", "config", "tools/stress") if project_root == ENGINE_ROOT else ("src", "config", "tests")
     for top in tops:
         top_path = project_root / top
         if not top_path.is_dir():
@@ -170,7 +170,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Apply .clang-format to project sources.")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--changed", action="store_true", help="Format only changed files (git)")
-    group.add_argument("--all", action="store_true", help="Format all sources under src/, config/ and games/")
+    group.add_argument("--all", action="store_true", help="Format all sources under src/, config/ and tools/stress/")
     parser.add_argument("--root", metavar="DIR", default=None, help="Project root (default: the engine checkout of this script)")
     args = parser.parse_args()
 

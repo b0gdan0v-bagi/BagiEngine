@@ -154,7 +154,7 @@ namespace BECore::Tests {
         protected:
             void SetUp() override {
                 g_fakeNow = TimePoint{};
-                _pool = eastl::make_unique<ThreadPool>(ThreadPool::InlineTag{});
+                _pool = MakeUnique<ThreadPool>(ThreadPool::InlineTag{});
                 _scheduler.Initialize(_pool.get());
                 _scheduler.SetBudgetClock(&FakeNow);
             }

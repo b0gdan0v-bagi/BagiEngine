@@ -2,7 +2,7 @@
 """Plays a scenario file (JSON lines of control calls, see tools/control/CLAUDE.md, "Scenario files") against a game and checks its expectations.
 
     python3 tools/control/bagi_play.py <exe> <scenario.jsonl>
-    python3 tools/control/bagi_play.py --preset macos-debug --game BagiMatch3 <scenario.jsonl>
+    python3 tools/control/bagi_play.py --preset macos-debug --game BagiStress <scenario.jsonl>
     python3 tools/control/bagi_play.py <exe> <scenario.jsonl> --update        # rewrite the expectations from a run
     python3 tools/control/bagi_play.py <exe> <scenario.jsonl> --shrink short.jsonl   # the fewest calls that still fail the same way
 
@@ -195,7 +195,7 @@ def parse_arguments(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("paths", nargs="+", metavar="[exe] scenario", help="the game executable (unless --preset and --game name it) and the scenario file")
     parser.add_argument("--preset", help="the CMake preset that built the game: the executable is build/<preset>/bin/<game>")
-    parser.add_argument("--game", help="the executable name for --preset, e.g. BagiMatch3")
+    parser.add_argument("--game", help="the executable name for --preset, e.g. BagiStress")
     parser.add_argument("--root", type=Path, help="the repository whose build/ folder --preset means (default: the one holding these tools)")
     parser.add_argument("--update", action="store_true", help="play every call without checking and rewrite the expectations of the file from the run")
     parser.add_argument("--shrink", type=Path, metavar="OUT", help="write to OUT the fewest calls of the scenario that still fail the same way (the scenario has to fail)")

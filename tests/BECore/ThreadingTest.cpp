@@ -1,16 +1,10 @@
 #include <BECore/Profiler/Profiler.h>
-#include <BECore/Threading/ConditionVariable.h>
-#include <BECore/Threading/LockGuards.h>
 #include <BECore/Threading/LockOrder.h>
 #include <BECore/Threading/Mutex.h>
 #include <BECore/Threading/SharedMutex.h>
-#include <BECore/Threading/Thread.h>
-#include <atomic>
 #include <chrono>
-#include <cstring>
 #include <gtest/gtest-spi.h>
 #include <gtest/gtest.h>
-#include <string>
 #include <thread>
 #include <vector>
 
@@ -43,7 +37,7 @@ namespace BECore::Tests {
         Mutex mutex{BE_LOCK_SITE("Test counter")};
         int counter = 0;  // not atomic: only the mutex keeps it right
 
-        std::vector<std::thread> threads;
+        Vector<std::thread> threads;
         for (int i = 0; i < kContendingThreads; ++i) {
             threads.emplace_back([&] {
                 for (int n = 0; n < kIncrementsPerThread; ++n) {
@@ -118,7 +112,7 @@ namespace BECore::Tests {
         std::atomic<int> readersInside{0};
         std::atomic<bool> release{false};
 
-        std::vector<std::thread> readers;
+        Vector<std::thread> readers;
         for (int i = 0; i < kContendingThreads; ++i) {
             readers.emplace_back([&] {
                 std::shared_lock<SharedMutex> lock(mutex);
@@ -147,7 +141,7 @@ namespace BECore::Tests {
         SharedMutex mutex{BE_LOCK_SITE("Test writer")};
         int counter = 0;
 
-        std::vector<std::thread> threads;
+        Vector<std::thread> threads;
         for (int i = 0; i < kContendingThreads; ++i) {
             threads.emplace_back([&] {
                 for (int n = 0; n < kIncrementsPerThread; ++n) {
@@ -480,7 +474,7 @@ namespace BECore::Tests {
         constexpr uint32_t kTestSortIndex = 321;
 
         /// The name the profiler has for the calling thread, "" when it has none (and always "" with the profiler off)
-        std::string CurrentThreadNameInProfiler() {
+        String CurrentThreadNameInProfiler() {
 #if BE_PROFILER
             const char* name = Profiler::GetThreadName(Profiler::CurrentThreadId());
             return name != nullptr ? name : "";
@@ -503,7 +497,7 @@ namespace BECore::Tests {
     }
 
     TEST(ThreadingTest, ThreadIsNamedBeforeItsBodyRuns) {
-        std::string seen;
+        String seen;
         uint32_t seenSortIndex = 0;
         Thread thread("Test named", [&] {
             seen = CurrentThreadNameInProfiler();
@@ -522,7 +516,7 @@ namespace BECore::Tests {
     }
 
     TEST(ThreadingTest, ThreadKeepsItsSortIndex) {
-        std::string seen;
+        String seen;
         uint32_t seenSortIndex = 0;
         Thread thread("Test sorted", kTestSortIndex, [&] {
             seen = CurrentThreadNameInProfiler();
@@ -542,8 +536,8 @@ namespace BECore::Tests {
 
     TEST(ThreadingTest, ThreadCopiesARunTimeName) {
         std::atomic<bool> nameGone{false};
-        std::string seen;
-        auto name = std::make_unique<std::string>("Test run-time name 7");
+        String seen;
+        auto name = MakeUnique<String>("Test run-time name 7");
         Thread thread(name->c_str(), [&] {
             while (!nameGone.load()) {
                 std::this_thread::yield();
@@ -595,7 +589,7 @@ namespace BECore::Tests {
         struct State {
             std::atomic<bool> ran{false};
         };
-        auto state = std::make_shared<State>();
+        auto state = MakeShared<State>();
         Thread thread("Test detach", [state] { state->ran.store(true); });
         thread.detach();
         EXPECT_FALSE(thread.joinable());
@@ -603,7 +597,7 @@ namespace BECore::Tests {
     }
 
     TEST(ThreadingTest, ThreadTakesAMoveOnlyBody) {
-        auto payload = std::make_unique<int>(42);
+        auto payload = MakeUnique<int>(42);
         int seen = 0;
         Thread thread("Test move-only body", [owned = std::move(payload), &seen] { seen = *owned; });
         thread.join();

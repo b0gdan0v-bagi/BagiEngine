@@ -49,7 +49,7 @@ namespace BECore::Tests {
         std::atomic<bool> ended{false};
         std::atomic<bool> closed{false};
         std::thread reader([&] {
-            std::array<uint8_t, 16> buffer;
+            Array<uint8_t, 16> buffer;
             const auto received = pair.accepted.Receive(Span<uint8_t>(buffer.data(), buffer.size()));
             closed = !received && received.error() == SocketError::Closed;
             ended = true;
@@ -101,7 +101,7 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(MakePair(pair));
 
         ASSERT_TRUE(pair.accepted.SetReceiveTimeout(80ms));
-        std::array<uint8_t, 16> buffer;
+        Array<uint8_t, 16> buffer;
         const auto before = std::chrono::steady_clock::now();
         const auto received = pair.accepted.Receive(Span<uint8_t>(buffer.data(), buffer.size()));
         const auto waited = std::chrono::steady_clock::now() - before;
@@ -116,9 +116,9 @@ namespace BECore::Tests {
         SocketPair pair;
         ASSERT_NO_FATAL_FAILURE(MakePair(pair));
 
-        const std::array<uint8_t, 3> bytes = {1, 2, 3};
+        const Array<uint8_t, 3> bytes = {1, 2, 3};
         ASSERT_TRUE(pair.client.SendAll(Span<const uint8_t>(bytes.data(), bytes.size())));
-        std::array<uint8_t, 16> buffer;
+        Array<uint8_t, 16> buffer;
         const auto received = pair.accepted.Receive(Span<uint8_t>(buffer.data(), buffer.size()));
         ASSERT_TRUE(received.has_value());
         EXPECT_EQ(*received, 3u);
@@ -175,9 +175,9 @@ namespace BECore::Tests {
             ASSERT_TRUE(accepted.has_value()) << host;
 
             // The connected socket is the usual blocking one: bytes go through both ways
-            const std::array<uint8_t, 2> bytes = {7, 9};
+            const Array<uint8_t, 2> bytes = {7, 9};
             ASSERT_TRUE(client->SendAll(Span<const uint8_t>(bytes.data(), bytes.size())));
-            std::array<uint8_t, 8> buffer;
+            Array<uint8_t, 8> buffer;
             const auto received = accepted->Receive(Span<uint8_t>(buffer.data(), buffer.size()));
             ASSERT_TRUE(received.has_value()) << host;
             EXPECT_EQ(*received, 2u);

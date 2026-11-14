@@ -119,7 +119,7 @@ namespace BECore::Tests {
                 return returned->load(std::memory_order_acquire);
             }
 
-            eastl::shared_ptr<std::atomic<bool>> returned = eastl::make_shared<std::atomic<bool>>(false);
+            SharedPtr<std::atomic<bool>> returned = MakeShared<std::atomic<bool>>(false);
             std::thread thread;
         };
 

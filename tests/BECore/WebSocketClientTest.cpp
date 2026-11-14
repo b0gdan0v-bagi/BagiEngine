@@ -18,14 +18,10 @@ namespace BECore::Tests {
         constexpr std::chrono::milliseconds kShortTimeout{200};
         constexpr std::chrono::seconds kNeverTimeout{60};  // a timeout the test must not wait for: the thing under test has to end earlier
 
-        [[nodiscard]] std::string ToStd(const String& text) {
-            return std::string(text.c_str(), text.size());
-        }
-
         /// A client and the events it produced, polled the way a game does it
         struct Session {
             WebSocketClient client;
-            std::vector<WebSocketClientEvent> events;
+            Vector<WebSocketClientEvent> events;
 
             void Pump() {
                 WebSocketClientEvent event;
@@ -61,11 +57,11 @@ namespace BECore::Tests {
                 return none;
             }
 
-            [[nodiscard]] std::vector<std::string> Texts() const {
-                std::vector<std::string> texts;
+            [[nodiscard]] Vector<String> Texts() const {
+                Vector<String> texts;
                 for (const WebSocketClientEvent& event : events) {
                     if (event.kind == WebSocketClientEventKind::Text) {
-                        texts.push_back(ToStd(event.text));
+                        texts.push_back(event.text);
                     }
                 }
                 return texts;
@@ -87,7 +83,7 @@ namespace BECore::Tests {
         /// A frame the client sent, as the bytes said (masked, with its key)
         struct ClientFrame {
             uint8_t opcode = 0;
-            std::string payload;  // unmasked
+            String payload;  // unmasked
             bool masked = false;
             WebSocketMask key{};
         };
@@ -107,13 +103,13 @@ namespace BECore::Tests {
                 return _listener.GetLocalPort();
             }
 
-            [[nodiscard]] std::string Url(const std::string& path = "/") const {
-                return "ws://127.0.0.1:" + std::to_string(GetPort()) + path;
+            [[nodiscard]] String Url(const String& path = "/") const {
+                return "ws://127.0.0.1:" + ToString(GetPort()) + path;
             }
 
             /// A `wss://` address of this server; @p host is the name in it (localhost reaches the same loopback)
-            [[nodiscard]] std::string TlsUrl(const std::string& host = "127.0.0.1", const std::string& path = "/") const {
-                return "wss://" + host + ":" + std::to_string(GetPort()) + path;
+            [[nodiscard]] String TlsUrl(const String& host = "127.0.0.1", const String& path = "/") const {
+                return "wss://" + host + ":" + ToString(GetPort()) + path;
             }
 
             /// Takes the connection of the client (no byte is read)
@@ -130,7 +126,7 @@ namespace BECore::Tests {
 
             /// The server's end of the fake TLS handshake (FakeTlsStream.h): from here on every byte is masked both ways when the
             /// client was accepted; @p rejectReason refuses it. What the hello said is in TlsHello()
-            bool FakeTlsHandshake(const std::string& rejectReason = {}) {
+            bool FakeTlsHandshake(const String& rejectReason = {}) {
                 _fakeTls = _tlsHello.Handshake(_peer, rejectReason);
                 _peer.SetReceiveTimeout(5ms);  // the handshake changed it
                 return _fakeTls;
@@ -149,7 +145,7 @@ namespace BECore::Tests {
             bool ReadRequest() {
                 const bool read = WaitUntil({}, [&] {
                     Fill();
-                    return _buffer.find("\r\n\r\n") != std::string::npos;
+                    return _buffer.find("\r\n\r\n") != String::npos;
                 });
                 if (!read) {
                     ADD_FAILURE() << "no request head";
@@ -161,46 +157,46 @@ namespace BECore::Tests {
                 return true;
             }
 
-            [[nodiscard]] const std::string& Request() const {
+            [[nodiscard]] const String& Request() const {
                 return _request;
             }
 
             /// The value of the request header @p name ("" when there is none)
-            [[nodiscard]] std::string RequestHeader(const std::string& name) const {
-                const std::string needle = "\r\n" + name + ": ";
+            [[nodiscard]] String RequestHeader(const String& name) const {
+                const String needle = "\r\n" + name + ": ";
                 const size_t at = _request.find(needle);
-                if (at == std::string::npos) {
+                if (at == String::npos) {
                     return {};
                 }
                 const size_t start = at + needle.size();
                 return _request.substr(start, _request.find("\r\n", start) - start);
             }
 
-            [[nodiscard]] std::string AcceptResponse(const std::string& acceptValue) const {
+            [[nodiscard]] String AcceptResponse(const String& acceptValue) const {
                 return "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " + acceptValue + "\r\n\r\n";
             }
 
             /// The right answer to the request that was read; @p extraBytes follow it in the same send
-            void Accept(const std::string& extraBytes = "") {
-                const std::string key = RequestHeader("Sec-WebSocket-Key");
-                const String accept = ComputeAcceptKey(String(key.c_str(), key.size()));
-                SendRaw(AcceptResponse(ToStd(accept)) + extraBytes);
+            void Accept(const String& extraBytes = "") {
+                const String key = RequestHeader("Sec-WebSocket-Key");
+                const String accept = ComputeAcceptKey(key);
+                SendRaw(AcceptResponse(accept) + extraBytes);
             }
 
-            void SendRaw(const std::string& bytes) {
+            void SendRaw(const String& bytes) {
                 Send(Vector<uint8_t>(bytes.data(), bytes.data() + bytes.size()));
             }
 
-            void SendFrame(uint8_t opcode, const std::string& payload, Optional<WebSocketMask> mask = std::nullopt) {
+            void SendFrame(uint8_t opcode, const String& payload, Optional<WebSocketMask> mask = std::nullopt) {
                 Send(EncodeFrame(opcode, Span<const uint8_t>(reinterpret_cast<const uint8_t*>(payload.data()), payload.size()), mask));
             }
 
-            void SendText(const std::string& text) {
+            void SendText(const String& text) {
                 SendFrame(WebSocketOpcode::kText, text);
             }
 
-            void SendClose(uint16_t code, const std::string& reason) {
-                Send(EncodeCloseFrame(code, FromStd(reason)));
+            void SendClose(uint16_t code, const String& reason) {
+                Send(EncodeCloseFrame(code, reason));
             }
 
             /// The next frame of the client (masked frames are expected; the key is kept), nullopt when none came in @p limit
@@ -239,7 +235,7 @@ namespace BECore::Tests {
             }
 
             void Fill() {
-                std::array<uint8_t, 4096> chunk;
+                Array<uint8_t, 4096> chunk;
                 for (int i = 0; i < 1024; ++i) {
                     const auto received = _peer.Receive(Span<uint8_t>(chunk.data(), chunk.size()));
                     if (!received) {
@@ -300,8 +296,8 @@ namespace BECore::Tests {
 
             Socket _listener;
             Socket _peer;
-            std::string _buffer;
-            std::string _request;
+            String _buffer;
+            String _request;
             bool _ended = false;
             bool _fakeTls = false;  // the fake handshake was accepted: the bytes are masked both ways
             FakeTlsServerSide _tlsHello;
@@ -329,7 +325,7 @@ namespace BECore::Tests {
                     std::lock_guard<std::mutex> lock(_mutex);
                     ++_closed;
                 };
-                _listener = std::make_unique<WebSocketListener>(std::move(settings), std::move(handler));
+                _listener = MakeUnique<WebSocketListener>(std::move(settings), std::move(handler));
                 const auto port = _listener->Start(0);
                 EXPECT_TRUE(port.has_value());
                 _port = port.value_or(0);
@@ -339,8 +335,8 @@ namespace BECore::Tests {
                 _listener->Stop();
             }
 
-            [[nodiscard]] std::string Url() const {
-                return "ws://127.0.0.1:" + std::to_string(_port) + "/rooms";
+            [[nodiscard]] String Url() const {
+                return "ws://127.0.0.1:" + ToString(_port) + "/rooms";
             }
 
             [[nodiscard]] uint16_t GetPort() const {
@@ -367,12 +363,12 @@ namespace BECore::Tests {
             }
 
         private:
-            std::unique_ptr<WebSocketListener> _listener;
+            UniquePtr<WebSocketListener> _listener;
             uint16_t _port = 0;
             mutable std::mutex _mutex;
             int _opened = 0;
             int _closed = 0;
-            std::vector<WebSocketHandler::ConnectionPtr> _connections;
+            Vector<WebSocketHandler::ConnectionPtr> _connections;
         };
 
         [[nodiscard]] WebSocketClientSettings QuickSettings() {
@@ -406,15 +402,15 @@ namespace BECore::Tests {
 
         constexpr int kCount = 100;
         for (int i = 0; i < kCount; ++i) {
-            const std::string text = "message " + std::to_string(i);
-            ASSERT_TRUE(session.client.SendText(FromStd(text)));
+            const String text = "message " + ToString(i);
+            ASSERT_TRUE(session.client.SendText(text));
         }
         ASSERT_TRUE(session.WaitForCount(WebSocketClientEventKind::Text, kCount));
 
-        const std::vector<std::string> texts = session.Texts();
+        const Vector<String> texts = session.Texts();
         ASSERT_EQ(texts.size(), static_cast<size_t>(kCount));
         for (int i = 0; i < kCount; ++i) {
-            EXPECT_EQ(texts[static_cast<size_t>(i)], "message " + std::to_string(i));
+            EXPECT_EQ(texts[static_cast<size_t>(i)], "message " + ToString(i));
         }
         EXPECT_GT(session.client.GetBytesReceived(), 0u);
     }
@@ -425,11 +421,11 @@ namespace BECore::Tests {
         ASSERT_TRUE(session.client.Open(server.Url("/rooms?lang=en").c_str()).has_value());
         ASSERT_TRUE(server.AcceptAndReadRequest());
 
-        EXPECT_TRUE(server.Request().starts_with("GET /rooms?lang=en HTTP/1.1\r\n"));
-        EXPECT_EQ(server.RequestHeader("Host"), "127.0.0.1:" + std::to_string(server.GetPort()));
+        EXPECT_TRUE(StringView(server.Request()).starts_with("GET /rooms?lang=en HTTP/1.1\r\n"));
+        EXPECT_EQ(server.RequestHeader("Host"), "127.0.0.1:" + ToString(server.GetPort()));
         EXPECT_EQ(server.RequestHeader("Sec-WebSocket-Version"), "13");
         EXPECT_EQ(server.RequestHeader("Origin"), "");
-        EXPECT_EQ(server.Request().find("Origin"), std::string::npos);
+        EXPECT_EQ(server.Request().find("Origin"), String::npos);
     }
 
     TEST(WebSocketClientTest, BytesThatCameWithTheHandshakeAreRead) {
@@ -439,7 +435,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(server.AcceptAndReadRequest());
 
         const Vector<uint8_t> frame = EncodeTextFrame("first");
-        server.Accept(std::string(reinterpret_cast<const char*>(frame.data()), frame.size()));
+        server.Accept(String(reinterpret_cast<const char*>(frame.data()), frame.size()));
         ASSERT_TRUE(session.WaitForCount(WebSocketClientEventKind::Text, 1));
         EXPECT_EQ(session.Texts().front(), "first");
     }
@@ -456,7 +452,7 @@ namespace BECore::Tests {
         for (int i = 0; i < kCount; ++i) {
             ASSERT_TRUE(session.client.SendText("hello"));
         }
-        std::set<uint32_t> keys;
+        Set<uint32_t> keys;
         for (int i = 0; i < kCount; ++i) {
             const auto frame = server.ReadFrame();
             ASSERT_TRUE(frame.has_value());
@@ -503,8 +499,8 @@ namespace BECore::Tests {
 
         session.ExpectSingleClosed();
         EXPECT_EQ(session.Closed().closeCode, WebSocketCloseCode::kGoingAway);
-        EXPECT_EQ(ToStd(session.Closed().reason), "restarting");
-        EXPECT_EQ(session.Texts(), std::vector<std::string>{"last words"}) << "a message that arrived before the close is delivered before Closed";
+        EXPECT_EQ(session.Closed().reason, "restarting");
+        EXPECT_EQ(session.Texts(), Vector<String>{"last words"}) << "a message that arrived before the close is delivered before Closed";
         EXPECT_FALSE(session.client.IsOpen());
         EXPECT_TRUE(server.WaitForEndOfStream());
     }
@@ -522,9 +518,9 @@ namespace BECore::Tests {
 
         session.ExpectSingleClosed();
         EXPECT_EQ(session.Closed().closeCode, WebSocketCloseCode::kNormal);
-        EXPECT_EQ(ToStd(session.Closed().reason), "done");
+        EXPECT_EQ(session.Closed().reason, "done");
         EXPECT_TRUE(WaitUntil({}, [&] { return server.Closed() == 1; })) << "the server saw the connection end";
-        EXPECT_EQ(session.Texts(), std::vector<std::string>{"one"}) << "what was sent before the close is delivered and answered";
+        EXPECT_EQ(session.Texts(), Vector<String>{"one"}) << "what was sent before the close is delivered and answered";
     }
 
     TEST(WebSocketClientTest, CloseSendsTheCodeAndWaitsOnlyCloseTimeoutForAnAnswer) {
@@ -600,24 +596,24 @@ namespace BECore::Tests {
             port = listener->GetLocalPort();
         }  // the port is free again, nobody listens
         Session session;
-        const std::string url = "ws://127.0.0.1:" + std::to_string(port);
+        const String url = "ws://127.0.0.1:" + ToString(port);
         ASSERT_TRUE(session.client.Open(url.c_str()).has_value());
         session.ExpectSingleClosed();
         EXPECT_EQ(session.Closed().closeCode, WebSocketCloseCode::kAbnormalClosure);
-        EXPECT_NE(ToStd(session.Closed().reason).find(std::to_string(port)), std::string::npos) << "the reason names the port";
+        EXPECT_NE(session.Closed().reason.find(ToString(port)), String::npos) << "the reason names the port";
         EXPECT_EQ(session.Count(WebSocketClientEventKind::Opened), 0u);
     }
 
     TEST(WebSocketClientTest, AnAnswerThatIsNotAHandshakeIsClosedWithAReason) {
         struct Case {
             const char* name;
-            std::function<std::string(const ScriptedServer&)> response;
+            std::function<String(const ScriptedServer&)> response;
             const char* expectedInReason;
         };
-        const std::vector<Case> cases = {
+        const Vector<Case> cases = {
             {"wrong accept", [](const ScriptedServer& server) { return server.AcceptResponse("AAAAAAAAAAAAAAAAAAAAAAAAAAA="); }, "Accept"},
-            {"not 101", [](const ScriptedServer&) { return std::string("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n"); }, "403"},
-            {"not http", [](const ScriptedServer&) { return std::string("SSH-2.0-OpenSSH_9.0\r\n\r\n"); }, "HTTP"},
+            {"not 101", [](const ScriptedServer&) { return String("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n"); }, "403"},
+            {"not http", [](const ScriptedServer&) { return String("SSH-2.0-OpenSSH_9.0\r\n\r\n"); }, "HTTP"},
         };
         for (const Case& item : cases) {
             SCOPED_TRACE(item.name);
@@ -628,7 +624,7 @@ namespace BECore::Tests {
             server.SendRaw(item.response(server));
             session.ExpectSingleClosed();
             EXPECT_EQ(session.Closed().closeCode, WebSocketCloseCode::kAbnormalClosure);
-            EXPECT_NE(ToStd(session.Closed().reason).find(item.expectedInReason), std::string::npos) << ToStd(session.Closed().reason);
+            EXPECT_NE(session.Closed().reason.find(item.expectedInReason), String::npos) << session.Closed().reason;
             EXPECT_EQ(session.Count(WebSocketClientEventKind::Opened), 0u);
             EXPECT_TRUE(server.WaitForEndOfStream()) << "the client leaves a server that refused it";
         }
@@ -639,9 +635,9 @@ namespace BECore::Tests {
         Session session;
         ASSERT_TRUE(session.client.Open(server.Url().c_str()).has_value());
         ASSERT_TRUE(server.AcceptAndReadRequest());
-        server.SendRaw("HTTP/1.1 101 Switching Protocols\r\nX-Padding: " + std::string(kMaxHandshakeBytes + 100, 'a'));
+        server.SendRaw("HTTP/1.1 101 Switching Protocols\r\nX-Padding: " + String(kMaxHandshakeBytes + 100, 'a'));
         session.ExpectSingleClosed();
-        EXPECT_NE(ToStd(session.Closed().reason).find("too long"), std::string::npos);
+        EXPECT_NE(session.Closed().reason.find("too long"), String::npos);
     }
 
     TEST(WebSocketClientTest, AServerThatNeverAnswersTheHandshakeTimesOut) {
@@ -653,7 +649,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(server.AcceptAndReadRequest());  // and then it says nothing
         session.ExpectSingleClosed();
         EXPECT_EQ(session.Closed().closeCode, WebSocketCloseCode::kAbnormalClosure);
-        EXPECT_NE(ToStd(session.Closed().reason).find("did not answer"), std::string::npos) << ToStd(session.Closed().reason);
+        EXPECT_NE(session.Closed().reason.find("did not answer"), String::npos) << session.Closed().reason;
     }
 
     TEST(WebSocketClientTest, AMaskedFrameOfTheServerIsAProtocolError) {
@@ -684,7 +680,7 @@ namespace BECore::Tests {
         server.Accept();
         ASSERT_TRUE(session.WaitForOpened());
 
-        server.SendText(std::string(101, 'x'));
+        server.SendText(String(101, 'x'));
         const auto close = server.ReadFrame();
         ASSERT_TRUE(close.has_value());
         EXPECT_EQ(CloseCodeOfFrame(*close), WebSocketCloseCode::kMessageTooBig);
@@ -702,7 +698,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(server.AcceptAndReadRequest());
         server.Accept();
         ASSERT_TRUE(session.WaitForOpened());
-        server.SendText(std::string(100, 'x'));
+        server.SendText(String(100, 'x'));
         ASSERT_TRUE(session.WaitForCount(WebSocketClientEventKind::Text, 1));
         EXPECT_EQ(session.Texts().front().size(), 100u);
     }
@@ -739,8 +735,8 @@ namespace BECore::Tests {
         const auto connection = server.Connection(0);
         ASSERT_TRUE(connection != nullptr);
         for (int i = 0; i < kMessages; ++i) {
-            const std::string text = std::to_string(i) + ":" + std::string(kMessageBytes, 'x');
-            ASSERT_TRUE(connection->QueueText(FromStd(text)));
+            const String text = ToString(i) + ":" + String(kMessageBytes, 'x');
+            ASSERT_TRUE(connection->QueueText(text));
         }
 
         // Nothing is polled: the reader stops after a few messages and the bytes it took stay far below what was sent
@@ -756,9 +752,9 @@ namespace BECore::Tests {
 
         // Taking the events lets it go on: every message arrives, in order
         ASSERT_TRUE(session.WaitForCount(WebSocketClientEventKind::Text, kMessages));
-        const std::vector<std::string> texts = session.Texts();
+        const Vector<String> texts = session.Texts();
         for (int i = 0; i < kMessages; ++i) {
-            EXPECT_TRUE(texts[static_cast<size_t>(i)].starts_with(std::to_string(i) + ":")) << "message " << i;
+            EXPECT_TRUE(StringView(texts[static_cast<size_t>(i)]).starts_with(ToString(i) + ":")) << "message " << i;
         }
     }
 
@@ -934,7 +930,7 @@ namespace BECore::Tests {
         if (!IsTlsSupported()) {  // with a backend `wss://` is accepted and fails later (the TLS tests)
             const auto tls = session.client.Open("wss://example.com/rooms");
             ASSERT_FALSE(tls.has_value());
-            EXPECT_TRUE(ToStd(tls.error()).starts_with("tls_unsupported"));
+            EXPECT_TRUE(StringView(tls.error()).starts_with("tls_unsupported"));
         }
 
         for (const char* url : {"http://example.com", "ws://", "ws://host:99999", "ws://[::1]:80/", "ws://a b/"}) {
@@ -960,7 +956,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(session.WaitForOpened());
 
         EXPECT_TRUE(session.client.SendText("fits"));
-        EXPECT_FALSE(session.client.SendText(std::string(2000, 'x').c_str())) << "one message over the cap of an empty queue is refused";
+        EXPECT_FALSE(session.client.SendText(String(2000, 'x').c_str())) << "one message over the cap of an empty queue is refused";
         EXPECT_TRUE(session.client.IsOpen()) << "and the connection stays";
         const auto frame = server.ReadFrame();
         ASSERT_TRUE(frame.has_value());
@@ -978,10 +974,10 @@ namespace BECore::Tests {
         ASSERT_TRUE(session.WaitForOpened());
 
         // The socket buffers take some megabytes; then the writer blocks and the queue fills up to its cap
-        const std::string text(100 * 1024, 'x');
+        const String text(100 * 1024, 'x');
         bool refused = false;
         for (int i = 0; i < 2000 && !refused; ++i) {
-            refused = !session.client.SendText(FromStd(text));
+            refused = !session.client.SendText(text);
             if (!refused && i % 16 == 15) {
                 std::this_thread::sleep_for(1ms);  // let the writer run, a queue that is merely not drained yet is no proof
             }
@@ -989,7 +985,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(refused);
         session.ExpectSingleClosed();
         EXPECT_EQ(session.Closed().closeCode, WebSocketCloseCode::kAbnormalClosure);
-        EXPECT_NE(ToStd(session.Closed().reason).find("does not read"), std::string::npos) << ToStd(session.Closed().reason);
+        EXPECT_NE(session.Closed().reason.find("does not read"), String::npos) << session.Closed().reason;
     }
 
     TEST(WebSocketClientTest, TheOriginSettingReachesTheServersPolicy) {
@@ -1016,7 +1012,7 @@ namespace BECore::Tests {
             settings.origin = "https://evil.example";
             ASSERT_TRUE(session.client.Open(server.Url().c_str(), settings).has_value());
             session.ExpectSingleClosed();
-            EXPECT_NE(ToStd(session.Closed().reason).find("403"), std::string::npos) << ToStd(session.Closed().reason);
+            EXPECT_NE(session.Closed().reason.find("403"), String::npos) << session.Closed().reason;
             EXPECT_EQ(session.Count(WebSocketClientEventKind::Opened), 0u);
         }
     }
@@ -1026,7 +1022,7 @@ namespace BECore::Tests {
         Session session;
         ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), FakeTlsSettings()).has_value());
         ASSERT_TRUE(AcceptFakeTlsAndRequest(server));
-        EXPECT_EQ(server.RequestHeader("Host"), "127.0.0.1:" + std::to_string(server.GetPort()));
+        EXPECT_EQ(server.RequestHeader("Host"), "127.0.0.1:" + ToString(server.GetPort()));
         server.Accept();
         ASSERT_TRUE(session.WaitForOpened());
         EXPECT_TRUE(session.client.IsOpen());
@@ -1041,7 +1037,7 @@ namespace BECore::Tests {
         server.SendText("to the client");
         server.SendText("and again");
         ASSERT_TRUE(session.WaitForCount(WebSocketClientEventKind::Text, 2));
-        EXPECT_EQ(session.Texts(), (std::vector<std::string>{"to the client", "and again"}));
+        EXPECT_EQ(session.Texts(), (Vector<String>{"to the client", "and again"}));
     }
 
     TEST(WebSocketClientTest, PingPongAndTheCloseHandshakeWorkOverTheFakeBackend) {
@@ -1082,7 +1078,7 @@ namespace BECore::Tests {
         EXPECT_EQ(echoed->opcode, WebSocketOpcode::kClose);
         session.ExpectSingleClosed();
         EXPECT_EQ(session.Closed().closeCode, WebSocketCloseCode::kGoingAway);
-        EXPECT_EQ(ToStd(session.Closed().reason), "restart");
+        EXPECT_EQ(session.Closed().reason, "restart");
     }
 
     TEST(WebSocketClientTest, ARejectedTlsHandshakeIsClosed1006WithTheReason) {
@@ -1093,7 +1089,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(server.FakeTlsHandshake("certificate is not trusted for 127.0.0.1"));
         session.ExpectSingleClosed();
         EXPECT_EQ(session.Closed().closeCode, WebSocketCloseCode::kAbnormalClosure);
-        EXPECT_NE(ToStd(session.Closed().reason).find("certificate is not trusted for 127.0.0.1"), std::string::npos) << ToStd(session.Closed().reason);
+        EXPECT_NE(session.Closed().reason.find("certificate is not trusted for 127.0.0.1"), String::npos) << session.Closed().reason;
         EXPECT_EQ(session.Count(WebSocketClientEventKind::Opened), 0u);
         EXPECT_FALSE(session.client.IsOpen());
     }
@@ -1105,10 +1101,10 @@ namespace BECore::Tests {
             closedPort = server.GetPort();
         }
         Session session;
-        ASSERT_TRUE(session.client.Open(("wss://127.0.0.1:" + std::to_string(closedPort) + "/").c_str(), FakeTlsSettings()).has_value());
+        ASSERT_TRUE(session.client.Open(("wss://127.0.0.1:" + ToString(closedPort) + "/").c_str(), FakeTlsSettings()).has_value());
         session.ExpectSingleClosed();
         EXPECT_EQ(session.Closed().closeCode, WebSocketCloseCode::kAbnormalClosure);
-        EXPECT_NE(ToStd(session.Closed().reason).find("127.0.0.1:" + std::to_string(closedPort)), std::string::npos) << ToStd(session.Closed().reason);
+        EXPECT_NE(session.Closed().reason.find("127.0.0.1:" + ToString(closedPort)), String::npos) << session.Closed().reason;
     }
 
     TEST(WebSocketClientTest, TheStreamGetsTheHostOfTheUrlAsItsServerName) {
@@ -1144,7 +1140,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(server.AcceptConnection());  // and then it says nothing to the hello
         session.ExpectSingleClosed();
         EXPECT_EQ(session.Closed().closeCode, WebSocketCloseCode::kAbnormalClosure);
-        EXPECT_NE(ToStd(session.Closed().reason).find("timed out"), std::string::npos) << ToStd(session.Closed().reason);
+        EXPECT_NE(session.Closed().reason.find("timed out"), String::npos) << session.Closed().reason;
     }
 
     TEST(WebSocketClientTest, TheTlsHandshakeAndTheOpeningRequestShareOneDeadline) {
@@ -1164,7 +1160,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(server.ReadRequest());
         session.ExpectSingleClosed();
         EXPECT_LT(std::chrono::steady_clock::now() - started, kHandshakeTimeout + 700ms);
-        EXPECT_NE(ToStd(session.Closed().reason).find("did not answer"), std::string::npos) << ToStd(session.Closed().reason);
+        EXPECT_NE(session.Closed().reason.find("did not answer"), String::npos) << session.Closed().reason;
     }
 
     TEST(WebSocketClientTest, AbortEndsAWssConnectionInEveryState) {

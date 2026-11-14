@@ -94,14 +94,14 @@ namespace BECore::Tests {
         }
 
         /// A pure canvas layout with the screen, built through the same reflected path as a `.ui.xml` file; @p edit changes the text of the file first
-        void BuildLayout(UICanvasLayout& layout, const std::function<void(std::string&)>& edit = {}) {
-            std::string body = kScreenBody;
+        void BuildLayout(UICanvasLayout& layout, const std::function<void(String&)>& edit = {}) {
+            String body = kScreenBody;
             if (edit) {
                 edit(body);
             }
-            const std::string xml = "<root>" + body + "</root>";
+            const String xml = "<root>" + body + "</root>";
             XmlDeserializer deserializer;
-            ASSERT_TRUE(deserializer.LoadFromString(FromStd(xml)));
+            ASSERT_TRUE(deserializer.LoadFromString(xml));
             UIScreenContent content;
             content.Deserialize(deserializer);
             ASSERT_FALSE(deserializer.HasErrors());
@@ -119,9 +119,9 @@ namespace BECore::Tests {
         }
 
         /// Replaces the first @p what in @p text, and fails the test when it is not there (a broken copy that changed nothing would prove nothing)
-        void Replace(std::string& text, const std::string& what, const std::string& with) {
+        void Replace(String& text, const String& what, const String& with) {
             const size_t at = text.find(what);
-            ASSERT_NE(at, std::string::npos) << what;
+            ASSERT_NE(at, String::npos) << what;
             text.replace(at, what.size(), with);
         }
 
@@ -274,7 +274,7 @@ namespace BECore::Tests {
     TEST_F(UIEdgeAnchorScreenTest, AnOffsetThatLeavesTheRegionIsCaughtOnTheMatrix) {
         // The same screen with the bar pushed 40 units down from the bottom of its region instead of 16 up
         UICanvasLayout layout;
-        ASSERT_NO_FATAL_FAILURE(BuildLayout(layout, [](std::string& text) { Replace(text, "y=\"-16\"", "y=\"40\""); }));
+        ASSERT_NO_FATAL_FAILURE(BuildLayout(layout, [](String& text) { Replace(text, "y=\"-16\"", "y=\"40\""); }));
 
         const auto failures = ValidateOnMatrix(layout, Options(), {}, {}, PublishPlay);
 
@@ -294,7 +294,7 @@ namespace BECore::Tests {
     TEST_F(UIEdgeAnchorScreenTest, AnEdgeAnchoredButtonThatTheWindowMakesTooSmallIsCaught) {
         // The OK button 20 units high instead of 56, with no minScale: too small to touch on a small window
         UICanvasLayout layout;
-        ASSERT_NO_FATAL_FAILURE(BuildLayout(layout, [](std::string& text) { Replace(text, "height=\"56\" y=\"-12\"", "height=\"20\" y=\"-12\""); }));
+        ASSERT_NO_FATAL_FAILURE(BuildLayout(layout, [](String& text) { Replace(text, "height=\"56\" y=\"-12\"", "height=\"20\" y=\"-12\""); }));
         layout.params.minScale = 0.25f;
         layout.Invalidate();
 

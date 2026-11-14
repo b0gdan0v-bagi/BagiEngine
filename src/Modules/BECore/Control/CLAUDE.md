@@ -22,7 +22,7 @@ JSON text, one message per request.
 request   {"id": 1, "method": "perform_action", "params": {...}}     id: integer or string, required; params: object, optional
 response  {"id": 1, "ok": true,  "result": {...}}
           {"id": 1, "ok": false, "error": {"code": "illegal_action", "message": "..."}}
-push      {"event": "state_changed", "data": {"game": "Match3", "version": 12, "state": {...}}}
+push      {"event": "state_changed", "data": {"game": "Stress", "version": 12, "state": {...}}}
 ```
 
 Error codes are strings and part of the protocol (`ControlErrors`): `parse_error`, `invalid_request`, `invalid_params`, `unknown_method`, `request_too_large`, `internal_error`, `shutting_down`, `manual_clock`. A method adds its own (`illegal_action`, ...). A request that cannot be parsed gets `"id": null`. `ping` reports `ControlService::kProtocolVersion`; change it when the format changes incompatibly.

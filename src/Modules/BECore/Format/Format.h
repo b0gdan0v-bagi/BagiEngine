@@ -7,16 +7,16 @@
  * Это позволяет использовать их напрямую в функциях форматирования. Строка с любым аллокатором форматируется так же.
  */
 template <typename Allocator>
-struct fmt::formatter<eastl::basic_string<char, Allocator>> : formatter<std::string_view> {  // std: fmt formats std::string_view
+struct fmt::formatter<eastl::basic_string<char, Allocator>> : formatter<std::string_view> {  //-NoStd: fmt formats std::string_view
     auto format(const eastl::basic_string<char, Allocator>& s, format_context& ctx) const {
-        return formatter<std::string_view>::format(BECore::ToStd(BECore::StringView{s}), ctx);  // std: fmt
+        return formatter<std::string_view>::format(BECore::ToStd(BECore::StringView{s}), ctx);  //-NoStd: fmt
     }
 };
 
 template <>
-struct fmt::formatter<BECore::StringView> : formatter<std::string_view> {  // std: fmt formats std::string_view
+struct fmt::formatter<BECore::StringView> : formatter<std::string_view> {  //-NoStd: fmt formats std::string_view
     auto format(BECore::StringView s, format_context& ctx) const {
-        return formatter<std::string_view>::format(BECore::ToStd(s), ctx);  // std: fmt
+        return formatter<std::string_view>::format(BECore::ToStd(s), ctx);  //-NoStd: fmt
     }
 };
 
@@ -32,7 +32,7 @@ namespace BECore {
         using format_string = fmt::format_string<Args...>;
 
         /**
-         * @brief Форматирует строку и возвращает String. Короткий результат не выделяет память, кроме самой строки.
+         * @brief Formats a string and returns a String. A short result allocates nothing but the string itself.
          */
         template <typename... Args>
         [[nodiscard]] inline String Format(format_string<Args...> fmt, Args&&... args) {
@@ -42,7 +42,7 @@ namespace BECore {
         }
 
         /**
-         * @brief Дописывает отформатированный текст в конец существующей строки (одно место для формата в строку).
+         * @brief Appends the formatted text to the end of an existing string (one place for formatting into a string).
          */
         template <typename... Args>
         inline void AppendFormat(String& out, format_string<Args...> fmt, Args&&... args) {

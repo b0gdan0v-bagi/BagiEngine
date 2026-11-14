@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- The menu and the HUD of games/Match3/config/SceneConfig.xml as they were at version 4: a SceneConfig, three labels among composed buttons. -->
+<!-- A menu and a HUD in the shape of a game's SceneConfig.xml as they were at version 4: a SceneConfig, three labels among composed buttons. -->
 <SceneManager contentVersion="4">
   <scenes>
     <scene
@@ -16,7 +16,7 @@
                     <element type="UIElement" name="Play" height="56" fontSize="28" color="40,90,60,255">
                       <components>
                         <component type="UITextComponent" text="Play" align="Center" verticalAlign="Center" wrap="false"/>
-                        <component type="UIInputClicker" action="Match3Play"/>
+                        <component type="UIInputClicker" action="GamePlay"/>
                       </components>
                     </element>
                   </children>

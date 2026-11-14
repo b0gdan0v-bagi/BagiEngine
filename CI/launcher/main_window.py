@@ -515,7 +515,7 @@ class StripPchScopeDialog(QDialog):
 
     def _browse_folder(self):
         start = str(self._project_root) if self._project_root else ""
-        path = QFileDialog.getExistingDirectory(self, "Select folder (under src/, config/ or games/)", start)
+        path = QFileDialog.getExistingDirectory(self, "Select folder (under src/, config/ or tools/stress/)", start)
         if not path:
             return
         try:
@@ -523,14 +523,14 @@ class StripPchScopeDialog(QDialog):
         except ValueError:
             return
         rel_str = str(rel).replace("\\", "/")
-        if rel_str.startswith(("src/", "config/", "games/")) or rel_str in ("src", "config", "games"):
+        if rel_str.startswith(("src/", "config/", "tools/stress/")) or rel_str in ("src", "config", "tools/stress"):
             self._dir_rel = rel_str
             self._dir_label.setText(rel_str)
         else:
             QMessageBox.warning(
                 self,
                 "Invalid folder",
-                "Please select a folder under src/, config/ or games/.",
+                "Please select a folder under src/, config/ or tools/stress/.",
             )
 
     def get_options(self) -> dict:

@@ -7,7 +7,7 @@ import pytest
 import scenario
 from scenario import ABSENT, Header, Outcome, ScenarioError, Step, VersionTracker, evaluate
 
-HEADER_LINE = '{"scenario": 1, "game": "Match3", "flags": ["--headless", "--manual-clock"], "title": "A tour"}'
+HEADER_LINE = '{"scenario": 1, "game": "Sample", "flags": ["--headless", "--manual-clock"], "title": "A tour"}'
 
 
 def parse_error(text: str) -> ScenarioError:
@@ -32,7 +32,7 @@ def test_a_file_loads_into_a_header_and_steps(tmp_path):
         encoding="utf-8",
     )
     header, steps = scenario.load(path)
-    assert header == Header(1, "Match3", ["--headless", "--manual-clock"], "A tour")
+    assert header == Header(1, "Sample", ["--headless", "--manual-clock"], "A tour")
     assert steps == [Step("reset", {"seed": 1}, {"versionStep": 1}, "start"), Step("get_state")]
 
 

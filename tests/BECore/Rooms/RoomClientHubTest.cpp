@@ -20,10 +20,10 @@ namespace BECore::Tests {
 
         /// A human at the table: a RoomClient over the hub, judged on the wire, that plays the first action it is offered
         struct Player {
-            Player(HubWorld& world, bool judged, RoomClientSettings settings = {}) : judge(std::make_shared<WireJudgeLog>()) {
+            Player(HubWorld& world, bool judged, RoomClientSettings settings = {}) : judge(MakeShared<WireJudgeLog>()) {
                 RoomTransportFactory factory = world.Factory(links);
                 settings.transportFactory = judged ? MakeJudgedFactory(std::move(factory), judge) : std::move(factory);
-                client = std::make_unique<RoomClient>(std::move(settings));
+                client = MakeUnique<RoomClient>(std::move(settings));
             }
 
             [[nodiscard]] size_t Count(RoomClientEventKind kind) const {
@@ -60,8 +60,8 @@ namespace BECore::Tests {
             }
 
             HubClientLinks links;
-            std::shared_ptr<WireJudgeLog> judge;
-            std::unique_ptr<RoomClient> client;
+            SharedPtr<WireJudgeLog> judge;
+            UniquePtr<RoomClient> client;
             Vector<RoomClientEvent> events;
             bool acted = false;
             uint64_t actedVersion = 0;
@@ -71,7 +71,7 @@ namespace BECore::Tests {
         class RoomClientHubTest : public ::testing::Test {
         protected:
             Player& AddPlayer(bool judged = true, RoomClientSettings settings = {}) {
-                _players.push_back(std::make_unique<Player>(World(), judged, std::move(settings)));
+                _players.push_back(MakeUnique<Player>(World(), judged, std::move(settings)));
                 return *_players.back();
             }
 
@@ -118,11 +118,11 @@ namespace BECore::Tests {
 
             void ResetWorld(RoomHubSettings settings) {
                 ASSERT_TRUE(_players.empty());
-                _world = std::make_unique<HubWorld>(std::move(settings));
+                _world = MakeUnique<HubWorld>(std::move(settings));
             }
 
-            std::unique_ptr<HubWorld> _world = std::make_unique<HubWorld>(HubWorld::MakeSettings(milliseconds(200)));
-            std::vector<std::unique_ptr<Player>> _players;
+            UniquePtr<HubWorld> _world = MakeUnique<HubWorld>(HubWorld::MakeSettings(milliseconds(200)));
+            Vector<UniquePtr<Player>> _players;
         };
 
         using Kind = RoomClientEventKind;

@@ -29,15 +29,15 @@ namespace BECore::Tests {
                 std::filesystem::remove_all(_directory, ec);
             }
 
-            void WriteFile(const char* name, const std::string& text) const {
+            void WriteFile(const char* name, const String& text) const {
                 std::ofstream(_directory / name, std::ios::binary) << text;
             }
 
-            [[nodiscard]] std::string ReadFile(const char* name) const {
+            [[nodiscard]] String ReadFile(const char* name) const {
                 std::ifstream file(_directory / name, std::ios::binary);
                 std::ostringstream content;
                 content << file.rdbuf();
-                return content.str();
+                return FromStdString(content.str());
             }
 
             [[nodiscard]] bool Exists(const char* name) const {
@@ -45,8 +45,8 @@ namespace BECore::Tests {
             }
 
             [[nodiscard]] Json ReadJsonFile(const char* name) const {
-                const std::string text = ReadFile(name);
-                auto parsed = ParseJson(FromStd(text));
+                const String text = ReadFile(name);
+                auto parsed = ParseJson(text);
                 EXPECT_TRUE(parsed.has_value()) << name;
                 return parsed ? *parsed : Json::object();
             }
@@ -153,7 +153,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(EditorSettingsTest, ACorruptFileGivesTheDefaultsAndIsNotRewrittenByLoad) {
-        const std::string garbage = "{ this is not json";
+        const String garbage = "{ this is not json";
         WriteFile("preferences.json", garbage);
         WriteFile("hotkeys.json", "[1, 2, 3]");
         EditorSettings settings(_directory);
@@ -166,7 +166,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(EditorSettingsTest, TheFirstSaveAfterACorruptFileKeepsTheOldTextAside) {
-        const std::string garbage = "{ this is not json";
+        const String garbage = "{ this is not json";
         WriteFile("preferences.json", garbage);
         EditorSettings settings(_directory);
         settings.Load();
@@ -260,7 +260,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(writer.SavePreferences());
 
         const Json file = ReadJsonFile("preferences.json");
-        EXPECT_EQ(file["viewportPreview"]["device"], std::string(devices[1].name.data(), devices[1].name.size()));
+        EXPECT_EQ(file["viewportPreview"]["device"], ToStdString(StringView(devices[1].name.data(), devices[1].name.size())));
         EXPECT_EQ(file["viewportPreview"]["aspect"], "Wide16x9");
         EXPECT_EQ(file["viewportPreview"]["safeArea"], "SideInsets");
 
@@ -286,7 +286,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(EditorSettingsTest, PreviewMembersOfTheWrongTypeGiveTheirDefaultAndSizesAreClamped) {
-        const std::string text = R"({"viewportPreview":{"aspect":3,"custom":"yes","customWidth":10,"customHeight":99999,"rotated":true,"safeArea":"Nope","overlayViewBounds":1,"overlayRegions":1}})";
+        const String text = R"({"viewportPreview":{"aspect":3,"custom":"yes","customWidth":10,"customHeight":99999,"rotated":true,"safeArea":"Nope","overlayViewBounds":1,"overlayRegions":1}})";
         WriteFile("preferences.json", text);
         EditorSettings settings(_directory);
         settings.Load();
@@ -371,7 +371,7 @@ namespace BECore::Tests {
 
     TEST_F(EditorSettingsTest, AnUnknownViewportInputModeGivesPlayAndTheOtherFieldsStay) {
         for (const char* text : {R"("fly")", R"("")", "3", "true", R"("Edit")"}) {
-            WriteFile("preferences.json", std::string(R"({"version":1,"fontScale":1.5,"viewportInputMode":)") + text + "}");
+            WriteFile("preferences.json", String(R"({"version":1,"fontScale":1.5,"viewportInputMode":)") + text + "}");
             EditorSettings settings(_directory);
             settings.Load();
             EXPECT_EQ(settings.GetPreferences().viewportInputMode, ViewportInputMode::Play) << text;
@@ -460,7 +460,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(EditorSettingsTest, TheEnvironmentVariableMovesTheFolder) {
-        const std::string value = _directory.string();
+        const String value = FromStdString(_directory.string());
 #if defined(_WIN32)
         ASSERT_EQ(_putenv_s(kEditorDirectoryEnvironmentVariable, value.c_str()), 0);
 #else

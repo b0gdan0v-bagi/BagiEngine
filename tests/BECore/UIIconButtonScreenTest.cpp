@@ -76,10 +76,10 @@ namespace BECore::Tests {
   </nodes></scene>
 </scenes></SceneManager>)";
 
-        std::string BarXml(float side) {
-            std::string xml = kBarXml;
-            const std::string value = std::to_string(static_cast<int>(side));
-            for (size_t at = xml.find("@SIDE@"); at != std::string::npos; at = xml.find("@SIDE@", at)) {
+        String BarXml(float side) {
+            String xml = kBarXml;
+            const String value = ToString(static_cast<int>(side));
+            for (size_t at = xml.find("@SIDE@"); at != String::npos; at = xml.find("@SIDE@", at)) {
                 xml.replace(at, 6, value);
             }
             return xml;
@@ -114,8 +114,8 @@ namespace BECore::Tests {
 
         void Load(float side) {
             XmlDeserializer deserializer;
-            const std::string xml = BarXml(side);
-            ASSERT_TRUE(deserializer.LoadFromString(FromStd(xml)));
+            const String xml = BarXml(side);
+            ASSERT_TRUE(deserializer.LoadFromString(xml));
             _manager = New<SceneManager>();
             _manager->Deserialize(deserializer);
             ASSERT_FALSE(deserializer.HasErrors());

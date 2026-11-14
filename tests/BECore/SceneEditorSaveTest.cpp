@@ -92,7 +92,7 @@ namespace BECore::Tests {
         String Print(pugi::xml_node node) {
             std::ostringstream stream;
             node.print(stream, "  ");
-            const std::string text = stream.str();
+            const String text = FromStdString(stream.str());
             return String{text.c_str(), text.size()};
         }
 
@@ -157,7 +157,7 @@ namespace BECore::Tests {
         String Raw(pugi::xml_node node) {
             std::ostringstream stream;
             node.print(stream, "", pugi::format_raw);
-            const std::string text = stream.str();
+            const String text = FromStdString(stream.str());
             return String{text.c_str(), text.size()};
         }
 

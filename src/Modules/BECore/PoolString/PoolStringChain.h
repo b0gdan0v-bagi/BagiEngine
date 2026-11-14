@@ -46,7 +46,7 @@ namespace BECore {
         };
 
     public:
-        using PoolStringElement = eastl::variant<PoolString, int>;
+        using PoolStringElement = Variant<PoolString, int>;
 
         constexpr PoolStringChain() : _mode(Mode::Empty), _count(0) {}
 

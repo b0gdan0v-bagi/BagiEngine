@@ -55,8 +55,8 @@ namespace BECore::Tests {
         class RoomServerScenarioTest : public ::testing::Test {
         protected:
             void SetUp() override {
-                ASSERT_TRUE(registry.Register(SeatedGameInfo{"cards", DemoCardGame::kSeatCount}, [] { return eastl::make_unique<DemoCardGame>(); }));
-                ASSERT_TRUE(registry.Register(SeatedGameInfo{"cards-leaky", DemoCardGame::kSeatCount}, [] { return eastl::make_unique<LeakyDemoCardGame>(); }));
+                ASSERT_TRUE(registry.Register(SeatedGameInfo{"cards", DemoCardGame::kSeatCount}, [] { return MakeUnique<DemoCardGame>(); }));
+                ASSERT_TRUE(registry.Register(SeatedGameInfo{"cards-leaky", DemoCardGame::kSeatCount}, [] { return MakeUnique<LeakyDemoCardGame>(); }));
             }
 
             void TearDown() override {
@@ -66,14 +66,14 @@ namespace BECore::Tests {
             }
 
             uint16_t StartServer(RoomServerSettings settings = MakeSettings()) {
-                server = std::make_unique<RoomWebSocketServer>(registry, std::move(settings));
+                server = MakeUnique<RoomWebSocketServer>(registry, std::move(settings));
                 const auto port = server->Start();
                 EXPECT_TRUE(port.has_value()) << (port.has_value() ? "" : port.error().message.c_str());
                 return port.value_or(0);
             }
 
             SeatedGameRegistry registry;
-            std::unique_ptr<RoomWebSocketServer> server;
+            UniquePtr<RoomWebSocketServer> server;
         };
 
     }  // namespace
@@ -81,26 +81,26 @@ namespace BECore::Tests {
     // ---- the judge itself --------------------------------------------------------------------------------------------------------
 
     TEST_F(RoomServerScenarioTest, TheJudgeFindsWholeCardIdsOnly) {
-        EXPECT_EQ(FindCardIds("[\"c1_2\",\"c3_0\"]"), (std::vector<std::string>{"c1_2", "c3_0"}));
+        EXPECT_EQ(FindCardIds("[\"c1_2\",\"c3_0\"]"), (Vector<String>{"c1_2", "c3_0"}));
         EXPECT_TRUE(FindCardIds("c1_20 xc1_2 c1_2x c12 c_1 C1_2").empty());
-        EXPECT_EQ(FindCardIds("c1_2"), (std::vector<std::string>{"c1_2"}));
+        EXPECT_EQ(FindCardIds("c1_2"), (Vector<String>{"c1_2"}));
         EXPECT_TRUE(FindCardIds("c1_").empty());
     }
 
     TEST_F(RoomServerScenarioTest, TheJudgeLetsASeatKnowItsHandAndTheTableAndNothingElse) {
-        const std::string honest = R"({"type":"view","room":"ABCD","seat":0,"view":{"hand":["c0_1","c0_2"],"table":[{"seat":2,"card":"c2_0"}]},"actions":[{"type":"play","card":"c0_1"}]})";
+        const String honest = R"({"type":"view","room":"ABCD","seat":0,"view":{"hand":["c0_1","c0_2"],"table":[{"seat":2,"card":"c2_0"}]},"actions":[{"type":"play","card":"c0_1"}]})";
         EXPECT_TRUE(FindLeakedCardIds(honest, 0).empty());
         // The same text for another seat: its hand is somebody else's
-        EXPECT_EQ(FindLeakedCardIds(honest, 1), (std::vector<std::string>{"c0_1", "c0_2", "c0_1"}));
+        EXPECT_EQ(FindLeakedCardIds(honest, 1), (Vector<String>{"c0_1", "c0_2", "c0_1"}));
 
-        const std::string leaky = R"({"type":"view","seat":0,"view":{"hand":["c0_1"],"table":[],"allHands":[["c0_1"],["c1_0"],["c2_2"]]}})";
-        EXPECT_EQ(FindLeakedCardIds(leaky, 0), (std::vector<std::string>{"c1_0", "c2_2"}));
+        const String leaky = R"({"type":"view","seat":0,"view":{"hand":["c0_1"],"table":[],"allHands":[["c0_1"],["c1_0"],["c2_2"]]}})";
+        EXPECT_EQ(FindLeakedCardIds(leaky, 0), (Vector<String>{"c1_0", "c2_2"}));
 
         // Not JSON, or a client with no seat: only what is on the table (nothing) is allowed
-        EXPECT_EQ(FindLeakedCardIds("the card c0_1", 0), std::vector<std::string>{});
-        EXPECT_EQ(FindLeakedCardIds("the card c0_1", -1), (std::vector<std::string>{"c0_1"}));
+        EXPECT_EQ(FindLeakedCardIds("the card c0_1", 0), Vector<String>{});
+        EXPECT_EQ(FindLeakedCardIds("the card c0_1", -1), (Vector<String>{"c0_1"}));
         // A card on the table of another message is not on the table of this one
-        EXPECT_EQ(FindLeakedCardIds(R"({"type":"error","message":"c2_0"})", 0), (std::vector<std::string>{"c2_0"}));
+        EXPECT_EQ(FindLeakedCardIds(R"({"type":"error","message":"c2_0"})", 0), (Vector<String>{"c2_0"}));
     }
 
     // ---- the scenarios over real sockets -----------------------------------------------------------------------------------------
@@ -123,7 +123,7 @@ namespace BECore::Tests {
         const uint16_t port = StartServer();
         Clients clients;
         ASSERT_NO_FATAL_FAILURE(OpenTable(port, "cards", kHumansAtFullTable, clients));
-        std::set<int> seats;
+        Set<int> seats;
         for (const auto& client : clients) {
             seats.insert(client->seat);
         }
@@ -239,7 +239,7 @@ namespace BECore::Tests {
         // Both humans play on to the end
         Clients playing;
         playing.push_back(std::move(clients[0]));
-        playing.push_back(std::make_unique<RoomSocketClient>(std::move(*replacement)));
+        playing.push_back(MakeUnique<RoomSocketClient>(std::move(*replacement)));
         ASSERT_TRUE(PlayToTheEnd(playing)) << "the hand did not end after the return";
         ExpectAllTwelveCardsPlayed(*playing[0]);
         ExpectAllTwelveCardsPlayed(*playing[1]);
@@ -289,7 +289,7 @@ namespace BECore::Tests {
         table[0]->Start();
 
         // The good hand is played from every wait of the hostile clients, so it is under way the whole time
-        std::vector<HandPlayer> players;
+        Vector<HandPlayer> players;
         for (const auto& client : table) {
             players.emplace_back(*client);
         }
@@ -302,14 +302,14 @@ namespace BECore::Tests {
         // A handshake that never ends: held until the server's handshake timeout cuts it
         auto halfOpen = WebSocketTestClient::Open(port, pumpTheHand);
         ASSERT_TRUE(halfOpen.has_value());
-        halfOpen->Send(std::string("GET /control HTTP/1.1\r\nHost: 127.0.0.1\r\nUpgrade: websocket\r\n"));
+        halfOpen->Send(String("GET /control HTTP/1.1\r\nHost: 127.0.0.1\r\nUpgrade: websocket\r\n"));
 
         // Bytes that are not a frame: a protocol error
         {
             auto garbage = WebSocketTestClient::Open(port, pumpTheHand);
             ASSERT_TRUE(garbage.has_value());
             ASSERT_TRUE(garbage->Handshake(port));
-            garbage->Send(AsBytes(std::string("\xFF\xFF\xFF\xFF\xFF\xFF", 6)));
+            garbage->Send(AsBytes(String("\xFF\xFF\xFF\xFF\xFF\xFF", 6)));
             const auto close = ReadUntilClose(*garbage);
             ASSERT_TRUE(close.has_value());
             EXPECT_EQ(CloseCodeOf(*close), WebSocketCloseCode::kProtocolError);
@@ -326,7 +326,7 @@ namespace BECore::Tests {
                 const auto reply = junk->WaitForFrame();
                 ASSERT_TRUE(reply.has_value()) << text;
                 EXPECT_EQ(reply->opcode, WebSocketOpcode::kText);
-                EXPECT_NE(reply->payload.find("\"error\""), std::string::npos) << reply->payload;
+                EXPECT_NE(reply->payload.find("\"error\""), String::npos) << reply->payload;
             }
         }
 
@@ -405,8 +405,8 @@ namespace BECore::Tests {
         ASSERT_TRUE(browser->WaitFor(RoomMessageTypes::kLobby).has_value());
         open->Start();
         Clients playing;
-        playing.push_back(std::make_unique<RoomSocketClient>(std::move(*open)));
-        playing.push_back(std::make_unique<RoomSocketClient>(std::move(*browser)));
+        playing.push_back(MakeUnique<RoomSocketClient>(std::move(*open)));
+        playing.push_back(MakeUnique<RoomSocketClient>(std::move(*browser)));
         ASSERT_TRUE(PlayToTheEnd(playing));
         for (const auto& client : playing) {
             ExpectAllTwelveCardsPlayed(*client);

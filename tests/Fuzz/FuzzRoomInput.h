@@ -43,7 +43,7 @@ namespace BECore::Fuzz {
 
         /// Words of splitmix64: the same on every platform, no state outside the hub. The target and the recorder of the seeds both make the hub's random function here
         inline RandomFn MakeRandom() {
-            auto state = eastl::make_shared<uint64_t>(kRandomSeed);
+            auto state = MakeShared<uint64_t>(kRandomSeed);
             return [state]() -> uint64_t {
                 uint64_t z = (*state += 0x9E3779B97F4A7C15ULL);
                 z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;

@@ -387,7 +387,7 @@ namespace BECore::Fuzz {
             if (error) {
                 return false;
             }
-            std::ofstream file(folder / seed.name, std::ios::binary | std::ios::trunc);
+            std::ofstream file(folder / ToStd(seed.name), std::ios::binary | std::ios::trunc);
             file.write(reinterpret_cast<const char*>(seed.bytes.data()), static_cast<std::streamsize>(seed.bytes.size()));
             if (!file) {
                 return false;

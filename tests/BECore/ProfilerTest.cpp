@@ -3,6 +3,7 @@
 #include <BECore/Profiler/ProfilerClock.h>
 #include <BECore/Profiler/ProfilerSettings.h>
 #include <BECore/Profiler/ScopedTrace.h>
+#include <Common/Printers.h>
 #include <Common/TempPath.h>
 #include <chrono>
 #include <cstdio>
@@ -23,19 +24,15 @@ namespace BECore::Tests {
         constexpr ProfileSite kOuterSite{"Outer", "Test", "ProfilerTest.cpp", 1, 0};
         constexpr ProfileSite kInnerSite{"Inner \"quoted\"\\", "Test", "C:\\dir\\ProfilerTest.cpp", 2, 0};
 
-        std::string Text(const String& text) {
-            return std::string(text.data(), text.size());
-        }
-
-        std::string Member(const Json& event, const char* key) {
+        String Member(const Json& event, const char* key) {
             const auto value = GetJsonString(event, key);
-            return value ? Text(*value) : std::string();
+            return value ? *value : String();
         }
 
         /// The events of a trace, parsed back (fails the test when the JSON is not valid)
         Json ParseEvents(const String& trace) {
             auto parsed = ParseJson(trace);
-            EXPECT_TRUE(parsed.has_value()) << Text(trace);
+            EXPECT_TRUE(parsed.has_value()) << trace;
             if (!parsed) {
                 return Json::array();
             }
@@ -56,10 +53,10 @@ namespace BECore::Tests {
 
         /// Every thread's B and E events nest, in the order of their time stamps
         void ExpectBalanced(const Json& events) {
-            std::map<int64_t, int> depth;
-            std::map<int64_t, double> lastTs;
+            Map<int64_t, int> depth;
+            Map<int64_t, double> lastTs;
             for (const Json& event : events) {
-                const std::string phase = Member(event, "ph");
+                const String phase = Member(event, "ph");
                 if (phase != "B" && phase != "E") {
                     continue;
                 }
@@ -119,7 +116,7 @@ namespace BECore::Tests {
         for (const Args& args : {Args{"--trace"}, Args{"--trace="}, Args{"--profiler"}, Args{"--profiler="}, Args{"--profiler=perfetto"}, Args{"--trace=t.json", "--profiler=none"},
                                  Args{"--trace=t.json", "--profiler=tracy"}}) {
             const auto settings = ResolveProfilerSettings(args, kFullBuild);
-            EXPECT_FALSE(settings.has_value()) << Text(args.front());
+            EXPECT_FALSE(settings.has_value()) << args.front();
             if (!settings) {
                 EXPECT_FALSE(settings.error().empty());
             }
@@ -160,9 +157,9 @@ namespace BECore::Tests {
         EXPECT_EQ(CountPhase(events, "C"), 1u);
         EXPECT_EQ(CountPhase(events, "i"), 1u);
 
-        std::vector<std::string> begun;
+        Vector<String> begun;
         for (const Json& event : events) {
-            const std::string phase = Member(event, "ph");
+            const String phase = Member(event, "ph");
             if (phase == "B") {
                 begun.push_back(Member(event, "name"));
             } else if (phase == "C") {
@@ -172,7 +169,7 @@ namespace BECore::Tests {
                 EXPECT_EQ(Member(*FindJsonMember(event, "args"), "name"), "Test main");
             }
         }
-        EXPECT_EQ(begun, (std::vector<std::string>{"Outer", "Inner \"quoted\"\\"}));
+        EXPECT_EQ(begun, (Vector<String>{"Outer", "Inner \"quoted\"\\"}));
         EXPECT_EQ(CountPhase(events, "M"), 1u);
     }
 
@@ -207,7 +204,7 @@ namespace BECore::Tests {
         constexpr int kZonesPerThread = 1000;
         ChromeTraceBackend recorder;
         std::atomic<int> started{0};
-        std::vector<std::thread> threads;
+        Vector<std::thread> threads;
         for (int t = 0; t < kThreads; ++t) {
             threads.emplace_back([&recorder, &started] {
                 started.fetch_add(1);
@@ -332,7 +329,7 @@ namespace BECore::Tests {
         }
         EXPECT_EQ(Profiler::GetBackend(), nullptr);
         std::ifstream stream(file);
-        const std::string text((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
+        const String text((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
         const Json events = ParseEvents(String(text.c_str()));
         EXPECT_EQ(CountPhase(events, "B"), 2u);
         ExpectBalanced(events);

@@ -22,7 +22,7 @@ namespace BECore {
 #if BE_SINGLE_THREAD
         // No thread at all (the single-thread build, BE_SINGLE_THREAD): background jobs run on the calling thread at submit time,
         // so the start-up WaitAll over the config loads finds them done.
-        _threadPool = eastl::make_unique<ThreadPool>(ThreadPool::InlineTag{});
+        _threadPool = MakeUnique<ThreadPool>(ThreadPool::InlineTag{});
 
         _scheduler.Initialize(_threadPool.get());
 
@@ -34,7 +34,7 @@ namespace BECore {
             numThreads = 2;
         }
 
-        _threadPool = eastl::make_unique<ThreadPool>(numThreads);
+        _threadPool = MakeUnique<ThreadPool>(numThreads);
 
         // Инициализируем планировщик
         _scheduler.Initialize(_threadPool.get());

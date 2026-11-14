@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Common/Printers.h>
 #include <RemoteControl/Tls/TlsStream.h>
 #include <gtest/gtest.h>
 
@@ -24,7 +25,7 @@ namespace BECore::Tests {
 
         /// One line of the handshake, a byte at a time so nothing after it is taken. The socket's receive timeout is set here
         /// in slices; @p cancel and @p deadline end the wait. Empty text and false on a timeout, a cancel or the end of the stream
-        inline bool ReadLine(Socket& socket, std::string& line, std::chrono::steady_clock::time_point deadline, const std::atomic<bool>* cancel, std::string& whyNot) {
+        inline bool ReadLine(Socket& socket, String& line, std::chrono::steady_clock::time_point deadline, const std::atomic<bool>* cancel, String& whyNot) {
             for (;;) {
                 if (cancel != nullptr && cancel->load()) {
                     whyNot = "cancelled";
@@ -61,24 +62,24 @@ namespace BECore::Tests {
         }
 
         std::expected<void, String> Connect(const TlsConnectParams& params) override {
-            const std::string target = std::string(params.host.data(), params.host.size()) + ":" + std::to_string(params.port);
+            const String target = String(params.host.data(), params.host.size()) + ":" + ToString(params.port);
             auto connected = Socket::Connect(params.host, params.port, params.connectTimeout, params.cancel);
             if (!connected) {
                 return std::unexpected(SetError(connected.error()));
             }
             Socket socket = std::move(*connected);
-            const std::string hello = "FAKE-HELLO " + std::string(params.host.data(), params.host.size()) + " " + std::to_string(params.additionalTrustAnchorsDer.size()) + "\n";
-            if (!socket.SendAll(BECore::AsBytes(FromStd(hello)))) {
+            const String hello = "FAKE-HELLO " + String(params.host.data(), params.host.size()) + " " + ToString(params.additionalTrustAnchorsDer.size()) + "\n";
+            if (!socket.SendAll(BECore::AsBytes(hello))) {
                 return std::unexpected(SetError(String(("TLS: sending the hello to " + target + " failed").c_str())));
             }
-            std::string answer;
-            std::string whyNot;
+            String answer;
+            String whyNot;
             if (!FakeTlsDetail::ReadLine(socket, answer, params.handshakeDeadline, params.cancel, whyNot)) {
                 return std::unexpected(SetError(String(("TLS: no handshake answer from " + target + ": " + whyNot).c_str())));
             }
             if (answer != "FAKE-OK") {
-                constexpr std::string_view kReject = "FAKE-REJECT ";
-                const std::string reason = answer.rfind(kReject, 0) == 0 ? answer.substr(kReject.size()) : "bad handshake answer: " + answer;
+                constexpr StringView kReject = "FAKE-REJECT ";
+                const String reason = StringView(answer).starts_with(kReject) ? answer.substr(kReject.size()) : "bad handshake answer: " + answer;
                 return std::unexpected(SetError(String(("TLS: " + reason).c_str())));
             }
             socket.SetReceiveTimeout(std::chrono::milliseconds::zero());
@@ -156,37 +157,37 @@ namespace BECore::Tests {
 
     /// A factory that gives a FakeTlsStream
     [[nodiscard]] inline TlsStreamFactory FakeTlsFactory() {
-        return [] { return UniquePtr<ITlsStream>(eastl::make_unique<FakeTlsStream>()); };
+        return [] { return UniquePtr<ITlsStream>(MakeUnique<FakeTlsStream>()); };
     }
 
     /// The server's end of the fake handshake and of the "encryption", for a hand-written server on an accepted Socket
     struct FakeTlsServerSide {
-        std::string serverName;  // what the client's hello said
+        String serverName;  // what the client's hello said
         size_t anchorCount = 0;
         bool hello = false;  // a hello line was read
 
         /// Reads the client's hello and answers it: FAKE-OK, or FAKE-REJECT with @p rejectReason when that is not empty.
         /// True when the stream is encrypted from here on (the client was accepted)
-        bool Handshake(Socket& peer, const std::string& rejectReason = {}, std::chrono::milliseconds limit = kFakeTlsServerWait) {
-            std::string line;
-            std::string whyNot;
+        bool Handshake(Socket& peer, const String& rejectReason = {}, std::chrono::milliseconds limit = kFakeTlsServerWait) {
+            String line;
+            String whyNot;
             if (!FakeTlsDetail::ReadLine(peer, line, std::chrono::steady_clock::now() + limit, nullptr, whyNot)) {
                 ADD_FAILURE() << "no fake TLS hello: " << whyNot;
                 return false;
             }
-            constexpr std::string_view kHello = "FAKE-HELLO ";
-            if (line.rfind(kHello, 0) != 0) {
+            constexpr StringView kHello = "FAKE-HELLO ";
+            if (!StringView(line).starts_with(kHello)) {
                 ADD_FAILURE() << "not a fake TLS hello: " << line;
                 return false;
             }
-            const std::string rest = line.substr(kHello.size());
+            const String rest = line.substr(kHello.size());
             const size_t space = rest.rfind(' ');
             serverName = rest.substr(0, space);
-            anchorCount = space == std::string::npos ? 0 : static_cast<size_t>(std::stoul(rest.substr(space + 1)));
+            anchorCount = space == String::npos ? 0 : static_cast<size_t>(std::stoul(rest.substr(space + 1).c_str()));
             hello = true;
 
-            const std::string answer = rejectReason.empty() ? "FAKE-OK\n" : "FAKE-REJECT " + rejectReason + "\n";
-            EXPECT_TRUE(peer.SendAll(BECore::AsBytes(FromStd(answer))));
+            const String answer = rejectReason.empty() ? "FAKE-OK\n" : "FAKE-REJECT " + rejectReason + "\n";
+            EXPECT_TRUE(peer.SendAll(BECore::AsBytes(answer)));
             return rejectReason.empty();
         }
     };

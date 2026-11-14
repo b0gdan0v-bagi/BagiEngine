@@ -212,7 +212,7 @@ namespace BECore {
         for (const auto& relativePath : files) {
             String virtualPath(mountPoint.ToStringView().data(), mountPoint.ToStringView().size());
             virtualPath += "/";
-            // std: the text of a std::filesystem::path
+            //-NoStd: the text of a std::filesystem::path
             const std::string relStr = relativePath.string();
             virtualPath.append(relStr.data(), relStr.size());
 

@@ -17,7 +17,7 @@ namespace BECore::Tests {
         constexpr const char* kSavePngVariable = "BE_UI_BOX_PNG";  // set it to a folder to keep the frames of this test as PNG files for a look
         constexpr int kBlendTolerance = 4;
 
-        using Pixel = std::array<int, 3>;
+        using Pixel = Array<int, 3>;
 
         const Color kBackground{10, 20, 30, 255};
         const Pixel kBackgroundPixel{10, 20, 30};

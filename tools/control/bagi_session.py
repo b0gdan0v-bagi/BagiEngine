@@ -4,8 +4,8 @@ No MCP code in here (bagi_mcp.py maps these methods onto tools), so it runs and 
 Standard library only.
 
     session = GameSession()
-    session.launch(preset="macos-debug", game="BagiMatch3")  # or launch("<path of a built game>")
-    session.call("perform_action", {"type": "swap", "from": {"col": 0, "row": 0}, "to": {"col": 1, "row": 0}})
+    session.launch(preset="macos-debug", game="BagiStress")  # or launch("<path of a built game>")
+    session.call("perform_action", {"type": "set_count", "count": 1000})  # the game's own action
     png, size = session.screenshot()
     session.quit()
 

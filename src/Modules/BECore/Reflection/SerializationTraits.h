@@ -7,15 +7,20 @@ namespace BECore {
 
     namespace Detail {
 
-        /// Puts @p text into any string type; a FixedString that cannot overflow keeps what fits (a longer text from a file is no assertion)
+        /// Puts @p text into any string type and returns how many bytes did not fit: a FixedString that cannot overflow keeps the
+        /// part that fits (a longer text from a file is no assertion), any other string takes it all and the result is 0
         template <typename Text>
-        void AssignText(Text& value, StringView text) {
+        size_t AssignText(Text& value, StringView text) {
+            size_t dropped = 0;
             if constexpr (requires { Text::can_overflow(); }) {
-                if (!Text::can_overflow() && text.size() > static_cast<size_t>(value.max_size())) {
-                    text = text.substr(0, static_cast<size_t>(value.max_size()));
+                const size_t capacity = static_cast<size_t>(value.max_size());
+                if (!Text::can_overflow() && text.size() > capacity) {
+                    dropped = text.size() - capacity;
+                    text = text.substr(0, capacity);
                 }
             }
             value.assign(text.data(), text.size());
+            return dropped;
         }
 
     }  // namespace Detail

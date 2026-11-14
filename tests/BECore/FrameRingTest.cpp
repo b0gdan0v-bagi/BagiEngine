@@ -596,7 +596,7 @@ namespace BECore::Tests {
             size_t count = 0;
             for (const RingThread& thread : Profiler::GetFrameRing().Snapshot().threads) {
                 for (const ZoneRecord& zone : thread.zones) {
-                    count += std::string_view(zone.site->name) == name ? 1 : 0;
+                    count += StringView(zone.site->name) == name ? 1 : 0;
                 }
             }
             return count;

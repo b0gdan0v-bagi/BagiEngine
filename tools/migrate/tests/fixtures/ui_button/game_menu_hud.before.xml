@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- The menu and the HUD of games/Match3/config/SceneConfig.xml, the canvases as they are shipped without the components of the game (the test engine does not have them). -->
+<!-- A menu and a HUD in the shape of a game's SceneConfig.xml, the canvases as they are shipped without the components of the game (the test engine does not have them). -->
 <SceneManager>
   <scenes>
     <scene
@@ -13,8 +13,8 @@
                 <element type="UIStack" name="Column" anchor="Center" width="90%" maxWidth="320" height="232" direction="Vertical" spacing="16" crossAlign="Stretch">
                   <children>
                     <element type="UILabel" name="Title" height="88" text="Match 3" fontSize="56" align="Center" verticalAlign="Center" />
-                    <element type="UIButton" name="Play" height="56" text="Play" fontSize="28" action="Match3Play" color="40,90,60,255" />
-                    <element type="UIButton" name="Quit" height="56" text="Quit" fontSize="28" action="Match3Quit" color="90,50,50,255" />
+                    <element type="UIButton" name="Play" height="56" text="Play" fontSize="28" action="GamePlay" color="40,90,60,255" />
+                    <element type="UIButton" name="Quit" height="56" text="Quit" fontSize="28" action="GameQuit" color="90,50,50,255" />
                   </children>
                 </element>
               </elements>
@@ -26,7 +26,7 @@
 
     <scene
       type="Scene"
-      name="Match3Scene"
+      name="GameScene"
       viewWidth="712"
       viewHeight="672">
       <nodes>
@@ -38,8 +38,8 @@
                 <element type="UILabel" name="Score" x="96" y="12" width="250" height="40" text="Score: {score}" fontSize="28" verticalAlign="Center" />
                 <element type="UIStack" name="Buttons" anchor="TopRight" x="-96" y="12" width="260" height="48" direction="Horizontal" spacing="12" crossAlign="Stretch">
                   <children>
-                    <element type="UIButton" name="Reset" width="124" height="48" text="Reset" fontSize="24" action="Match3Reset" color="40,90,60,255" />
-                    <element type="UIButton" name="Menu" width="124" height="48" text="Menu" fontSize="24" action="Match3Menu" color="70,70,100,255" />
+                    <element type="UIButton" name="Reset" width="124" height="48" text="Reset" fontSize="24" action="GameReset" color="40,90,60,255" />
+                    <element type="UIButton" name="Menu" width="124" height="48" text="Menu" fontSize="24" action="GameMenu" color="70,70,100,255" />
                   </children>
                 </element>
               </elements>

@@ -24,7 +24,7 @@ namespace BECore::Tests {
         class TaskSchedulerGameTimeTest : public ::testing::Test {
         protected:
             void SetUp() override {
-                _pool = std::make_unique<ThreadPool>(1);
+                _pool = MakeUnique<ThreadPool>(1);
                 _scheduler.Initialize(_pool.get());
             }
 
@@ -59,7 +59,7 @@ namespace BECore::Tests {
             }
 
             TaskScheduler _scheduler;
-            std::unique_ptr<ThreadPool> _pool;
+            UniquePtr<ThreadPool> _pool;
             int _ran = 0;
             Vector<int> _order;
         };

@@ -50,7 +50,7 @@ namespace BECore {
     }
 
     UniquePtr<ITlsStream> MakeTlsStream() {
-        return eastl::make_unique<UnsupportedTlsStream>();
+        return MakeUnique<UnsupportedTlsStream>();
     }
 
 }  // namespace BECore

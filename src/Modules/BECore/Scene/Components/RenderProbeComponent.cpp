@@ -58,11 +58,11 @@ namespace BECore {
         const Color kWhite{kOpaque, kOpaque, kOpaque, kOpaque};
 
         /// Two triangles over the unit square at the origin, wound the same way the quad of a texture is
-        constexpr std::array<int, 6> kQuadIndices{0, 1, 2, 2, 1, 3};
+        constexpr Array<int, 6> kQuadIndices{0, 1, 2, 2, 1, 3};
 
         /// Untextured: a color per corner, so the interpolation and the blending of the last corner (it is faint) are visible
         void DrawColorQuad(IRenderer& renderer, float x, float y, float size) {
-            const std::array<GeometryVertex, 4> vertices{{
+            const Array<GeometryVertex, 4> vertices{{
                 {0.0f, 0.0f, kCornerRed, 0.0f, 0.0f},
                 {size, 0.0f, kCornerGreen, 1.0f, 0.0f},
                 {0.0f, size, kCornerBlue, 0.0f, 1.0f},
@@ -73,7 +73,7 @@ namespace BECore {
 
         /// Textured and mirrored left to right (u runs from 1 to 0), so it differs from DrawTexture() in the corners, drawn through the translation
         void DrawMirroredTexture(IRenderer& renderer, ITexture& texture, float x, float y, float size) {
-            const std::array<GeometryVertex, 4> vertices{{
+            const Array<GeometryVertex, 4> vertices{{
                 {0.0f, 0.0f, kWhite, 1.0f, 0.0f},
                 {size, 0.0f, kWhite, 0.0f, 0.0f},
                 {0.0f, size, kWhite, 1.0f, 1.0f},

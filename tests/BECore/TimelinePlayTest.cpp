@@ -34,7 +34,7 @@ namespace BECore::Tests {
         }
 
         /// What the clips of a timeline wrote: `(clip id, value)` in the order of the calls
-        using Calls = Vector<eastl::pair<int, float>>;
+        using Calls = Vector<Pair<int, float>>;
 
         /// A sequence of @p kClipCount clips of a quarter second, clip `i` writes to @p calls with its id
         Timeline MakeSequence(Calls& calls) {
@@ -441,7 +441,7 @@ namespace BECore::Tests {
         TweenManager tweens;
         Calls calls;
         int cancelled = 0;
-        auto scoped = eastl::make_unique<ScopedTween>();
+        auto scoped = MakeUnique<ScopedTween>();
         scoped->Reset(tweens.Play(MakeCancelling(calls, [&scoped] { scoped.reset(); }), 0.0f, {}, [&cancelled] { ++cancelled; }));
 
         tweens.Advance(kOneSecond);
@@ -456,7 +456,7 @@ namespace BECore::Tests {
         bool dead = false;
         int callsAfterTheDeath = 0;
         int callsBeforeTheDeath = 0;
-        auto owner = eastl::make_unique<DyingOwner>(dead);
+        auto owner = MakeUnique<DyingOwner>(dead);
         const auto count = [&](const float&) { ++(dead ? callsAfterTheDeath : callsBeforeTheDeath); };
         Timeline timeline;
         timeline.Append<float>(0.0f, kTo, Settings(kQuarterSecond), count);

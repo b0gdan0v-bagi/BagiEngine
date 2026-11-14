@@ -7,6 +7,11 @@
 // so failure messages would be unreadable. ADL finds PrintTo only in the type's own namespace.
 namespace eastl {
 
+    /// `ASSERT_TRUE(x) << message` takes a String as it takes a std::string
+    inline std::ostream& operator<<(std::ostream& os, const string& value) {
+        return os.write(value.data(), static_cast<std::streamsize>(value.size()));
+    }
+
     inline void PrintTo(const string& value, std::ostream* os) {
         *os << '"' << value.c_str() << '"';
     }

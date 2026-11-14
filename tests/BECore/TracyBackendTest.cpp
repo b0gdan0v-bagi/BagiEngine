@@ -77,7 +77,7 @@ namespace BECore::Tests {
             constexpr int kRounds = 500;
             int counter = 0;
             int sharedCounter = 0;
-            std::vector<std::thread> threads;
+            Vector<std::thread> threads;
             for (int i = 0; i < kThreads; ++i) {
                 threads.emplace_back([&] {
                     for (int n = 0; n < kRounds; ++n) {

@@ -20,7 +20,7 @@ namespace BECore::Tests {
 
         bool HasTempFile(const std::filesystem::path& directory) {
             for (const auto& entry : std::filesystem::directory_iterator(directory)) {
-                if (entry.path().extension().string() == std::string_view(kSaveTempExtension.data(), kSaveTempExtension.size())) {
+                if (entry.path().extension().string() == ToStd(kSaveTempExtension)) {
                     return true;
                 }
             }

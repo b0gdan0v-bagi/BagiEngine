@@ -1,6 +1,5 @@
 #pragma once
 
-
 namespace BECore {
 
     /// What a renderer drew since the counters were last taken (IRenderer::TakeRenderCounters)

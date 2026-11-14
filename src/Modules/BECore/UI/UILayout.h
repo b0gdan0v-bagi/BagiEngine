@@ -21,7 +21,7 @@ namespace BECore {
     class UILayout {
     public:
         /// The point of a parent that an anchor names, as fractions of its width and height (BottomRight is {1, 1}); Stretch is the center
-        [[nodiscard]] static constexpr std::pair<float, float> AnchorFraction(UIAnchor anchor);
+        [[nodiscard]] static constexpr Pair<float, float> AnchorFraction(UIAnchor anchor);
 
         /**
          * @brief The anchors that lay @p spec out: the shorthand of `spec.anchor` (a point: min = max = pivot = AnchorFraction; Stretch: min 0, max 1,
@@ -58,7 +58,7 @@ namespace BECore {
         static void LayoutStack(const Rect& parent, const UIStackSpec& stack, Span<const UIRectSpec> children, Vector<Rect>& rects);
     };
 
-    constexpr std::pair<float, float> UILayout::AnchorFraction(UIAnchor anchor) {
+    constexpr Pair<float, float> UILayout::AnchorFraction(UIAnchor anchor) {
         switch (anchor) {
             case UIAnchor::TopLeft:
                 return {0.0f, 0.0f};

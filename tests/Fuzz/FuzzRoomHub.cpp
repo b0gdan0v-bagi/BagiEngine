@@ -73,7 +73,7 @@ namespace BECore::Fuzz {
         class HubRun {
         public:
             HubRun() : _hub(_registry, MakeSettings(), MakeRandom(), MakeSink()) {
-                const bool registered = _registry.Register(SeatedGameInfo{"demo", DemoCardGame::kSeatCount}, [] { return UniquePtr<ISeatedGame>(eastl::make_unique<DemoCardGame>()); });
+                const bool registered = _registry.Register(SeatedGameInfo{"demo", DemoCardGame::kSeatCount}, [] { return UniquePtr<ISeatedGame>(MakeUnique<DemoCardGame>()); });
                 FUZZ_CHECK(registered);
             }
 
@@ -168,8 +168,8 @@ namespace BECore::Fuzz {
 
                 // A card the connection may not know: the judge of the socket scenarios, on the text alone
                 const int seat = connection.viewSeat >= 0 ? connection.viewSeat : connection.joinedSeat;
-                const std::vector<std::string> leaked = Tests::FindLeakedCardIds(std::string_view(text.data(), text.size()), seat);
-                for (const std::string& card : leaked) {
+                const auto leaked = Tests::FindLeakedCardIds(text, seat);
+                for (const auto& card : leaked) {
                     // An error that quotes the card the client itself sent tells it nothing
                     FUZZ_CHECK(*type == RoomMessageTypes::kError && connection.lastSent.find(card.c_str()) != String::npos);
                 }
@@ -215,7 +215,7 @@ namespace BECore::Fuzz {
                 FUZZ_CHECK(GetJsonString(message, "game") == Optional<String>("demo"));
                 const Json* rooms = FindJsonMember(message, "rooms");
                 FUZZ_CHECK(rooms != nullptr && rooms->is_array() && rooms->size() <= RoomLimits::kMaxListedRooms);
-                eastl::hash_set<String> seen;
+                HashSet<String> seen;
                 for (const Json& entry : *rooms) {
                     const auto code = GetJsonString(entry, "room");
                     const auto taken = GetJsonInt(entry, "taken");
@@ -262,7 +262,7 @@ namespace BECore::Fuzz {
             SeatedGameRegistry _registry;
             Map<ConnectionId, ConnectionModel> _connections;
             HashMap<String, String> _tokenOwners;
-            eastl::hash_set<String> _publicRooms;  ///< The codes that were answered to a create_room with "public":true
+            HashSet<String> _publicRooms;  ///< The codes that were answered to a create_room with "public":true
             RoomTime _now = kStart;
             RoomHub _hub;
         };

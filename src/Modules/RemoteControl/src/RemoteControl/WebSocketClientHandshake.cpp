@@ -47,7 +47,7 @@ namespace BECore {
     }  // namespace
 
     String GenerateClientKey(std::random_device& random) {
-        std::array<uint8_t, kClientKeyBytes> bytes{};
+        Array<uint8_t, kClientKeyBytes> bytes{};
         for (uint8_t& byte : bytes) {
             byte = static_cast<uint8_t>(random());
         }

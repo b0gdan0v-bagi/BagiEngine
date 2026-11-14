@@ -45,34 +45,34 @@ namespace BECore::Tests {
 
         constexpr const char* kBoxRef = "nodes/Box";
 
-        void WriteFile(const std::filesystem::path& path, const std::string& text) {
+        void WriteFile(const std::filesystem::path& path, const String& text) {
             std::filesystem::create_directories(path.parent_path());
             std::ofstream(path) << text;
         }
 
         /// A scene "Main" with the given nodes; two plain nodes, A and C, are what the instances are placed between
-        std::string SceneText(const std::string& nodesXml) {
+        String SceneText(const String& nodesXml) {
             return "<SceneManager><scenes><scene type=\"Scene\" name=\"Main\" viewWidth=\"800\" viewHeight=\"600\"><nodes>" + nodesXml + "</nodes></scene></scenes></SceneManager>";
         }
 
         constexpr const char* kPlainNodes = R"(<node name="A"/><node name="C"/>)";
 
         /// What a component writes: its type and its serialization, one text per component of the node
-        std::vector<std::string> ComponentTexts(const SceneNode& node) {
-            std::vector<std::string> texts;
+        Vector<String> ComponentTexts(const SceneNode& node) {
+            Vector<String> texts;
             for (const auto& component : node.GetComponents()) {
                 XmlSerializer serializer;
                 component->Serialize(serializer);
                 std::ostringstream out;
                 out << component->GetTypeMeta().typeName.data() << ":";
                 serializer.GetRootNode().print(out, "", pugi::format_raw);
-                texts.push_back(out.str());
+                texts.push_back(FromStdString(out.str()));
             }
             return texts;
         }
 
-        std::vector<std::string> ChildNames(const SceneNode& parent) {
-            std::vector<std::string> names;
+        Vector<String> ChildNames(const SceneNode& parent) {
+            Vector<String> names;
             for (const auto& child : parent.GetChildren()) {
                 names.emplace_back(child->GetName().CStr());
             }
@@ -126,7 +126,7 @@ namespace BECore::Tests {
         }
 
         /// Loads @p sceneXml (a SceneConfig text) and keeps the manager; the scene "Main" is the one tests work on
-        Scene& Load(const std::string& sceneXml) {
+        Scene& Load(const String& sceneXml) {
             const pugi::xml_parse_result parsed = _doc.load_string(sceneXml.c_str());
             EXPECT_TRUE(parsed) << parsed.description();
             _manager = LoadSceneManager(XmlNode{_doc.document_element()}, _loader);
@@ -137,15 +137,15 @@ namespace BECore::Tests {
         }
 
         /// A `<node ref>` element of @p text, alive as long as the fixture
-        pugi::xml_node Ref(const std::string& text) {
+        pugi::xml_node Ref(const String& text) {
             const pugi::xml_parse_result parsed = _refDoc.load_string(text.c_str());
             EXPECT_TRUE(parsed) << parsed.description();
             return _refDoc.document_element();
         }
 
         /// The scene Main with A and C, and the instance of @p reference between them, loaded from a file the plain way (the expected one)
-        Scene& LoadExpected(const std::string& reference) {
-            return Load(SceneText(std::string("<node name=\"A\"/>") + reference + "<node name=\"C\"/>"));
+        Scene& LoadExpected(const String& reference) {
+            return Load(SceneText(String("<node name=\"A\"/>") + reference + "<node name=\"C\"/>"));
         }
 
         std::filesystem::path _dir;
@@ -188,7 +188,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(scene.InstantiateNode("nodes/NoSuchNode"));
 
         EXPECT_EQ(errors.Count(), 1u);
-        EXPECT_EQ(ChildNames(scene.GetRootNode()), (std::vector<std::string>{"A", "C"}));
+        EXPECT_EQ(ChildNames(scene.GetRootNode()), (Vector<String>{"A", "C"}));
     }
 
     TEST_F(SceneInstantiateTest, OverridesGiveTheNodeOfTheSameReferenceInAScene) {
@@ -198,7 +198,7 @@ namespace BECore::Tests {
 </components></node>)";
         Scene& expected = LoadExpected(reference);
         const SceneNode& expectedNode = *expected.GetRootNode().GetChildren()[1];
-        const std::vector<std::string> expectedTexts = ComponentTexts(expectedNode);
+        const Vector<String> expectedTexts = ComponentTexts(expectedNode);
         const int32_t expectedRank = expected.GetDrawRank(expectedNode);
         const PoolString expectedSource = expectedNode.GetSourceRef();
         _manager.Reset();
@@ -207,7 +207,7 @@ namespace BECore::Tests {
         const IntrusivePtr<SceneNode> node = scene.InstantiateNode(Ref(reference), _loader, nullptr, 1);
 
         ASSERT_TRUE(node);
-        EXPECT_EQ(ChildNames(scene.GetRootNode()), (std::vector<std::string>{"A", "Crate", "C"}));
+        EXPECT_EQ(ChildNames(scene.GetRootNode()), (Vector<String>{"A", "Crate", "C"}));
         EXPECT_EQ(node->GetName(), PoolString::Intern("Crate"));
         EXPECT_EQ(node->GetLayer(), 5);
         EXPECT_EQ(node->GetSourceRef(), expectedSource);
@@ -226,8 +226,8 @@ namespace BECore::Tests {
 
         ASSERT_TRUE(node);
         EXPECT_EQ(node->GetParent(), parent);
-        EXPECT_EQ(ChildNames(*parent), (std::vector<std::string>{"Existing", "Box"}));
-        EXPECT_EQ(ChildNames(scene.GetRootNode()), (std::vector<std::string>{"A", "C"}));
+        EXPECT_EQ(ChildNames(*parent), (Vector<String>{"Existing", "Box"}));
+        EXPECT_EQ(ChildNames(scene.GetRootNode()), (Vector<String>{"A", "C"}));
         EXPECT_TRUE(scene.GetRegistry().valid(node->GetEntity()));
     }
 
@@ -236,13 +236,13 @@ namespace BECore::Tests {
         const pugi::xml_node first = Ref(R"(<node ref="nodes/Box" name="M"/>)");
 
         scene.InstantiateNode(first, _loader, nullptr, 1);
-        EXPECT_EQ(ChildNames(scene.GetRootNode()), (std::vector<std::string>{"A", "M", "C"}));
+        EXPECT_EQ(ChildNames(scene.GetRootNode()), (Vector<String>{"A", "M", "C"}));
 
         scene.InstantiateNode(first, _loader, nullptr, 0);
-        EXPECT_EQ(ChildNames(scene.GetRootNode()), (std::vector<std::string>{"M", "A", "M", "C"}));
+        EXPECT_EQ(ChildNames(scene.GetRootNode()), (Vector<String>{"M", "A", "M", "C"}));
 
         scene.InstantiateNode(first, _loader, nullptr, 99);
-        EXPECT_EQ(ChildNames(scene.GetRootNode()), (std::vector<std::string>{"M", "A", "M", "C", "M"}));
+        EXPECT_EQ(ChildNames(scene.GetRootNode()), (Vector<String>{"M", "A", "M", "C", "M"}));
 
         scene.InstantiateNode(first, _loader, nullptr, Scene::kAppend);
         EXPECT_EQ(scene.GetRootNode().GetChildren().size(), 6u);
@@ -322,7 +322,7 @@ namespace BECore::Tests {
   </element>
 </elements></component></components></node>)";
         Scene& expected = LoadExpected(reference);
-        const std::vector<std::string> expectedTexts = ComponentTexts(*expected.GetRootNode().GetChildren()[1]);
+        const Vector<String> expectedTexts = ComponentTexts(*expected.GetRootNode().GetChildren()[1]);
         _manager.Reset();
 
         Scene& scene = Load(SceneText(kPlainNodes));
@@ -335,7 +335,7 @@ namespace BECore::Tests {
 
     TEST_F(SceneInstantiateTest, ABadReferenceChangesNothingAndLogsOnce) {
         Scene& scene = Load(SceneText(kPlainNodes));
-        const std::vector<std::string> before = ChildNames(scene.GetRootNode());
+        const Vector<String> before = ChildNames(scene.GetRootNode());
         const ErrorCounter errors("Scene 'Main'");
 
         EXPECT_FALSE(scene.InstantiateNode(Ref(R"(<node ref="../Box"/>)"), _loader));
@@ -375,7 +375,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(scene.InstantiateNode(Ref(R"(<node ref="nodes/Box"/>)"), _loader, &foreign));
 
         EXPECT_EQ(errors.Count(), 1u);
-        EXPECT_EQ(ChildNames(scene.GetRootNode()), (std::vector<std::string>{"A", "C"}));
+        EXPECT_EQ(ChildNames(scene.GetRootNode()), (Vector<String>{"A", "C"}));
         EXPECT_TRUE(foreign.GetChildren().empty());
     }
 

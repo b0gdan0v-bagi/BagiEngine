@@ -619,7 +619,7 @@ namespace BECore::Tests {
 
     TEST(UILayoutMatrixTest, AVariantThatNarrowsThePanelMakesTheScreenPass) {
         auto build = [](bool withVariant) {
-            auto canvas = eastl::make_unique<UICanvasLayout>();
+            auto canvas = MakeUnique<UICanvasLayout>();
             auto panel = AddBox(*canvas->root, "Panel", 10.0f, 10.0f, 700.0f, 100.0f);
             panel->blocksInput = true;
             if (withVariant) {

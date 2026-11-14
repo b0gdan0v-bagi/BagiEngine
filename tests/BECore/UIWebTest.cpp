@@ -53,14 +53,14 @@ namespace BECore::Tests {
             }
 
             /// An attribute of the element of that name; "" when there is none
-            [[nodiscard]] std::string Attr(const char* name, const char* attribute) const {
+            [[nodiscard]] String Attr(const char* name, const char* attribute) const {
                 return Find(name).attribute(attribute).as_string();
             }
 
             /// The component of that type of the element of that name (`UITextComponent`...); empty when there is none
             [[nodiscard]] pugi::xml_node Component(const char* name, const char* type) const {
                 for (pugi::xml_node component : Find(name).child("components").children()) {
-                    if (std::string(component.attribute("type").as_string()) == type) {
+                    if (String(component.attribute("type").as_string()) == type) {
                         return component;
                     }
                 }
@@ -68,7 +68,7 @@ namespace BECore::Tests {
             }
 
             /// An attribute of a component of the element of that name; "" when there is none
-            [[nodiscard]] std::string ComponentAttr(const char* name, const char* type, const char* attribute) const {
+            [[nodiscard]] String ComponentAttr(const char* name, const char* type, const char* attribute) const {
                 return Component(name, type).attribute(attribute).as_string();
             }
 
@@ -84,7 +84,7 @@ namespace BECore::Tests {
             [[nodiscard]] size_t IssuesMentioning(const char* text) const {
                 size_t count = 0;
                 for (const UIWebIssue& issue : report.issues) {
-                    if (std::string(issue.message.c_str()).find(text) != std::string::npos) {
+                    if (issue.message.find(text) != String::npos) {
                         ++count;
                     }
                 }
@@ -103,7 +103,7 @@ namespace BECore::Tests {
         private:
             static pugi::xml_node FindIn(pugi::xml_node node, const char* name) {
                 for (pugi::xml_node child : node.children()) {
-                    if (std::string(child.name()) == "element" && std::string(child.attribute("name").as_string()) == name) {
+                    if (String(child.name()) == "element" && String(child.attribute("name").as_string()) == name) {
                         return child;
                     }
                     if (pugi::xml_node found = FindIn(child, name)) {
@@ -114,10 +114,10 @@ namespace BECore::Tests {
             }
         };
 
-        std::unique_ptr<Compiled> Compile(const std::string& html, const std::string& css = {}) {
-            auto compiled = std::make_unique<Compiled>();
-            const std::string source = css.empty() ? html : "<style>" + css + "</style>" + html;
-            compiled->xml = UIWebCompiler::Compile(FromStd(source), {}, compiled->report);
+        UniquePtr<Compiled> Compile(const String& html, const String& css = {}) {
+            auto compiled = MakeUnique<Compiled>();
+            const String source = css.empty() ? html : "<style>" + css + "</style>" + html;
+            compiled->xml = UIWebCompiler::Compile(source, {}, compiled->report);
             EXPECT_TRUE(compiled->document.load_string(compiled->xml.c_str())) << compiled->xml.c_str();
             XmlDeserializer deserializer;
             if (deserializer.LoadFromString(compiled->xml)) {
@@ -128,10 +128,10 @@ namespace BECore::Tests {
         }
 
         /// The same screen the way the engine's own front-end writes it, for comparison
-        UIScreenContent ReadXml(const std::string& xml) {
+        UIScreenContent ReadXml(const String& xml) {
             UIScreenContent content;
             XmlDeserializer deserializer;
-            EXPECT_TRUE(deserializer.LoadFromString(FromStd(xml)));
+            EXPECT_TRUE(deserializer.LoadFromString(xml));
             content.Deserialize(deserializer);
             EXPECT_FALSE(deserializer.HasErrors());
             return content;
@@ -191,7 +191,7 @@ namespace BECore::Tests {
         constexpr const char* kHudHtml = R"(
 <div id="Hud" class="hud">
   <span id="Score">Score: {score}</span>
-  <button id="Reset" data-action="Match3Reset">Reset</button>
+  <button id="Reset" data-action="GameReset">Reset</button>
 </div>)";
 
         constexpr const char* kHudCss = R"(
@@ -215,7 +215,7 @@ button:hover { background: #3a6; }
         <element type="UIElement" name="Reset" anchor="BottomRight" x="-12" y="-10" width="96" height="48" fontSize="24" color="40,90,60,255" hoverColor="51,170,102,255">
           <components>
             <component type="UITextComponent" text="Reset" align="Center" verticalAlign="Center" wrap="false"/>
-            <component type="UIInputClicker" action="Match3Reset"/>
+            <component type="UIInputClicker" action="GameReset"/>
           </components>
         </element>
       </children>
@@ -228,7 +228,7 @@ button:hover { background: #3a6; }
   </variants>
 </ui>)";
 
-        // The main menu of Match3 as the game shipped it before its buttons became composed (games/Match3/config/SceneConfig.xml; the HTML compiler writes the composed form, whose layout is the
+        // A game's main menu as it shipped before its buttons became composed (the HTML compiler writes the composed form, whose layout is the
         // same), and the same menu in HTML + CSS
         constexpr const char* kMenuXml = R"(<ui><elements>
   <element type="UIStack" name="Column" anchor="Center" width="90%" maxWidth="320" height="232" direction="Vertical" spacing="16" crossAlign="Stretch">
@@ -241,13 +241,13 @@ button:hover { background: #3a6; }
       <element type="UIElement" name="Play" height="56" fontSize="28" color="40,90,60,255">
         <components>
           <component type="UITextComponent" text="Play" align="Center" verticalAlign="Center" wrap="false"/>
-          <component type="UIInputClicker" action="Match3Play"/>
+          <component type="UIInputClicker" action="GamePlay"/>
         </components>
       </element>
       <element type="UIElement" name="Quit" height="56" fontSize="28" color="90,50,50,255">
         <components>
           <component type="UITextComponent" text="Quit" align="Center" verticalAlign="Center" wrap="false"/>
-          <component type="UIInputClicker" action="Match3Quit"/>
+          <component type="UIInputClicker" action="GameQuit"/>
         </components>
       </element>
     </children>
@@ -257,8 +257,8 @@ button:hover { background: #3a6; }
         constexpr const char* kMenuHtml = R"(
 <div id="Column">
   <h1 id="Title">Match 3</h1>
-  <button id="Play" data-action="Match3Play">Play</button>
-  <button id="Quit" data-action="Match3Quit">Quit</button>
+  <button id="Play" data-action="GamePlay">Play</button>
+  <button id="Quit" data-action="GameQuit">Quit</button>
 </div>)";
 
         constexpr const char* kMenuCss = R"(
@@ -269,8 +269,8 @@ button  { height: 56px; font-size: 28px; }
 #Quit   { background: rgb(90, 50, 50); }
 )";
 
-        // The HUD of Match3 as the game shipped it before its buttons became composed (same note as the menu), and the same HUD in HTML + CSS
-        constexpr const char* kMatch3HudXml = R"(<ui><elements>
+        // A game's HUD as it shipped before its buttons became composed (same note as the menu), and the same HUD in HTML + CSS
+        constexpr const char* kGameHudXml = R"(<ui><elements>
   <element type="UIElement" name="Score" x="96" y="12" width="250" height="40" fontSize="28">
     <components>
       <component type="UITextComponent" text="Score: {score}" verticalAlign="Center"/>
@@ -281,13 +281,13 @@ button  { height: 56px; font-size: 28px; }
       <element type="UIElement" name="Reset" width="124" height="48" fontSize="24" color="40,90,60,255">
         <components>
           <component type="UITextComponent" text="Reset" align="Center" verticalAlign="Center" wrap="false"/>
-          <component type="UIInputClicker" action="Match3Reset"/>
+          <component type="UIInputClicker" action="GameReset"/>
         </components>
       </element>
       <element type="UIElement" name="Menu" width="124" height="48" fontSize="24" color="70,70,100,255">
         <components>
           <component type="UITextComponent" text="Menu" align="Center" verticalAlign="Center" wrap="false"/>
-          <component type="UIInputClicker" action="Match3Menu"/>
+          <component type="UIInputClicker" action="GameMenu"/>
         </components>
       </element>
     </children>
@@ -299,15 +299,15 @@ button  { height: 56px; font-size: 28px; }
   </element>
 </elements></ui>)";
 
-        constexpr const char* kMatch3HudHtml = R"(
+        constexpr const char* kGameHudHtml = R"(
 <span id="Score">Score: {score}</span>
 <div id="Buttons">
-  <button id="Reset" data-action="Match3Reset">Reset</button>
-  <button id="Menu" data-action="Match3Menu">Menu</button>
+  <button id="Reset" data-action="GameReset">Reset</button>
+  <button id="Menu" data-action="GameMenu">Menu</button>
 </div>
 <span id="Seed">seed {seed}</span>)";
 
-        constexpr const char* kMatch3HudCss = R"(
+        constexpr const char* kGameHudCss = R"(
 #Score   { left: 96px; top: 12px; width: 250px; height: 40px; font-size: 28px; vertical-align: middle; }
 #Buttons { anchor: top-right; right: 96px; top: 12px; width: 260px; height: 48px; display: flex; gap: 12px; align-items: stretch; }
 button   { width: 124px; height: 48px; font-size: 24px; }
@@ -524,20 +524,20 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         /// Three spellings are the same thing and are not compared: a `UIStack` is a `UIElement` with `layout="Stack"` (the compile writes the second), and a `Vertical`
         /// direction is the default and is not written
         void ExpectSameAttributes(pugi::xml_node expected, pugi::xml_node actual) {
-            ASSERT_EQ(std::string(expected.attribute("name").as_string()), std::string(actual.attribute("name").as_string()));
-            const std::string name = expected.attribute("name").as_string();
+            ASSERT_EQ(String(expected.attribute("name").as_string()), String(actual.attribute("name").as_string()));
+            const String name = expected.attribute("name").as_string();
             const auto skipped = [](const pugi::xml_attribute& attribute, const pugi::xml_node& owner) {
-                const std::string key = attribute.name();
-                return key == "layout" || (key == "type" && std::string(attribute.as_string()) == "UIStack" && !owner.attribute("bind")) ||
-                       (key == "direction" && std::string(attribute.as_string()) == "Vertical");
+                const String key = attribute.name();
+                return key == "layout" || (key == "type" && String(attribute.as_string()) == "UIStack" && !owner.attribute("bind")) ||
+                       (key == "direction" && String(attribute.as_string()) == "Vertical");
             };
             for (pugi::xml_attribute attribute : expected.attributes()) {
                 if (!skipped(attribute, expected)) {
-                    EXPECT_EQ(std::string(attribute.as_string()), std::string(actual.attribute(attribute.name()).as_string())) << name << "." << attribute.name();
+                    EXPECT_EQ(String(attribute.as_string()), String(actual.attribute(attribute.name()).as_string())) << name << "." << attribute.name();
                 }
             }
             for (pugi::xml_attribute attribute : actual.attributes()) {
-                if (!skipped(attribute, actual) && std::string(attribute.name()) != "type") {
+                if (!skipped(attribute, actual) && String(attribute.name()) != "type") {
                     EXPECT_FALSE(expected.attribute(attribute.name()).empty()) << name << " has the extra attribute " << attribute.name();
                 }
             }
@@ -546,7 +546,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
             for (pugi::xml_node expectedComponent : expected.child("components").children()) {
                 ASSERT_TRUE(actualComponent) << name << " lacks the component " << expectedComponent.attribute("type").as_string();
                 for (pugi::xml_attribute attribute : expectedComponent.attributes()) {
-                    EXPECT_EQ(std::string(attribute.as_string()), std::string(actualComponent.attribute(attribute.name()).as_string())) << name << " " << attribute.name();
+                    EXPECT_EQ(String(attribute.as_string()), String(actualComponent.attribute(attribute.name()).as_string())) << name << " " << attribute.name();
                 }
                 for (pugi::xml_attribute attribute : actualComponent.attributes()) {
                     EXPECT_FALSE(expectedComponent.attribute(attribute.name()).empty()) << name << " has the extra component attribute " << attribute.name();
@@ -1116,7 +1116,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         ASSERT_NE(reset->GetComponent<UITextComponent>(), nullptr);
         ASSERT_NE(reset->GetComponent<UIInputClicker>(), nullptr);
         EXPECT_EQ(reset->GetComponent<UITextComponent>()->text, "Reset");
-        EXPECT_EQ(reset->GetComponent<UIInputClicker>()->action.ToStringView(), "Match3Reset");
+        EXPECT_EQ(reset->GetComponent<UIInputClicker>()->action.ToStringView(), "GameReset");
         EXPECT_EQ(reset->hoverColor.r, 51);
         EXPECT_EQ(reset->hoverColor.g, 170);
         EXPECT_EQ(compiled->report.elements, 3u);
@@ -1129,7 +1129,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         LaidOut web(compiled->content);
         const UIScreenContent expectedContent = ReadXml(kHudXml);
         LaidOut xml(expectedContent);
-        for (const auto& [width, height] : {std::pair{1280.0f, 720.0f}, {640.0f, 360.0f}, {720.0f, 1280.0f}, {480.0f, 480.0f}, {2560.0f, 1080.0f}}) {
+        for (const auto& [width, height] : {Pair<float, float>{1280.0f, 720.0f}, {640.0f, 360.0f}, {720.0f, 1280.0f}, {480.0f, 480.0f}, {2560.0f, 1080.0f}}) {
             web.At(width, height);
             xml.At(width, height);
             for (const char* name : {"Hud", "Score", "Reset"}) {
@@ -1147,7 +1147,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         const UIScreenContent shipped = ReadXml(kMenuXml);
         LaidOut web(compiled->content);
         LaidOut xml(shipped);
-        for (const auto& [width, height] : {std::pair{1280.0f, 720.0f}, {640.0f, 360.0f}, {720.0f, 1280.0f}, {480.0f, 480.0f}, {3840.0f, 1080.0f}}) {
+        for (const auto& [width, height] : {Pair<float, float>{1280.0f, 720.0f}, {640.0f, 360.0f}, {720.0f, 1280.0f}, {480.0f, 480.0f}, {3840.0f, 1080.0f}}) {
             web.At(width, height);
             xml.At(width, height);
             for (const char* name : {"Column", "Title", "Play", "Quit"}) {
@@ -1171,17 +1171,17 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_TRUE(failures.empty()) << DescribeMatrixFailures(failures).c_str();
     }
 
-    TEST_F(UIWebTest, TheMatch3HudInHtmlLaysOutLikeTheShippedXml) {
-        const auto compiled = Compile(kMatch3HudHtml, kMatch3HudCss);
+    TEST_F(UIWebTest, TheGameHudInHtmlLaysOutLikeTheShippedXml) {
+        const auto compiled = Compile(kGameHudHtml, kGameHudCss);
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
         EXPECT_FALSE(compiled->report.HasIssues()) << compiled->report.issues[0].message.c_str() << " / " << compiled->xml.c_str();
 
-        const UIScreenContent shipped = ReadXml(kMatch3HudXml);
+        const UIScreenContent shipped = ReadXml(kGameHudXml);
         LaidOut web(compiled->content);
         LaidOut xml(shipped);
         web.InSceneView(712.0f, 672.0f);
         xml.InSceneView(712.0f, 672.0f);
-        for (const auto& [width, height] : {std::pair{1280.0f, 720.0f}, {480.0f, 480.0f}, {720.0f, 1280.0f}, {2560.0f, 1080.0f}}) {
+        for (const auto& [width, height] : {Pair<float, float>{1280.0f, 720.0f}, {480.0f, 480.0f}, {720.0f, 1280.0f}, {2560.0f, 1080.0f}}) {
             web.At(width, height);
             xml.At(width, height);
             for (const char* name : {"Score", "Buttons", "Reset", "Menu", "Seed"}) {
@@ -1192,10 +1192,10 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->Element("Seed")->GetComponent<UITextComponent>()->textColor.r, 190);
     }
 
-    TEST_F(UIWebTest, TheMatch3HudInHtmlPassesTheSizeMatrixInTheMarginsOfItsView) {
+    TEST_F(UIWebTest, TheGameHudInHtmlPassesTheSizeMatrixInTheMarginsOfItsView) {
         constexpr float kViewWidth = 712.0f;
         constexpr float kViewHeight = 672.0f;
-        const auto compiled = Compile(kMatch3HudHtml, kMatch3HudCss);
+        const auto compiled = Compile(kGameHudHtml, kGameHudCss);
         LaidOut web(compiled->content);
         web.InSceneView(kViewWidth, kViewHeight);
         // The longest words the game can show
@@ -1248,12 +1248,12 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
         const UIScreenContent expectedContent = ReadXml(kPanelXml);
         // The view of the Chess board (landscape: the portrait variant is off) and a portrait view (the variant is on)
-        for (const auto& [viewWidth, viewHeight] : {std::pair{840.0f, 800.0f}, {560.0f, 840.0f}}) {
+        for (const auto& [viewWidth, viewHeight] : {Pair<float, float>{840.0f, 800.0f}, {560.0f, 840.0f}}) {
             LaidOut web(compiled->content);
             LaidOut xml(expectedContent);
             web.InSceneView(viewWidth, viewHeight);
             xml.InSceneView(viewWidth, viewHeight);
-            for (const auto& [width, height] : {std::pair{1280.0f, 720.0f}, {640.0f, 360.0f}, {720.0f, 1280.0f}, {480.0f, 480.0f}, {2560.0f, 1080.0f}}) {
+            for (const auto& [width, height] : {Pair<float, float>{1280.0f, 720.0f}, {640.0f, 360.0f}, {720.0f, 1280.0f}, {480.0f, 480.0f}, {2560.0f, 1080.0f}}) {
                 web.At(width, height);
                 xml.At(width, height);
                 for (const char* name : kPanelNames) {
@@ -1336,7 +1336,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         const auto unknown = Compile(R"(<div id="g" data-widget="dropdown"></div>)");
         EXPECT_EQ(unknown->IssuesMentioning("data-widget=\"dropdown\" is not supported"), 1u);
         EXPECT_EQ(unknown->IssuesMentioning("\"segmented\", \"toggle\", \"slider\" and \"progress\""), 1u) << "the message names every widget";
-        EXPECT_EQ(unknown->Find("g").attribute("type").as_string(), std::string("UIElement"));
+        EXPECT_EQ(unknown->Find("g").attribute("type").as_string(), String("UIElement"));
 
         // data-bind with no widget, on a div and on a button
         const auto bind = Compile(R"(<div id="g" data-bind="v"></div><button id="b" data-bind="w">B</button>)");
@@ -1348,7 +1348,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         const auto noFlex = Compile(R"(<div id="g" data-widget="segmented" data-bind="v"><button id="a" data-value="x">A</button></div>)");
         EXPECT_EQ(noFlex->IssuesMentioning("needs display: flex"), 1u);
         EXPECT_EQ(noFlex->Attr("g", "bind"), "v");
-        EXPECT_EQ(noFlex->Find("g").attribute("type").as_string(), std::string("UISegmented"));
+        EXPECT_EQ(noFlex->Find("g").attribute("type").as_string(), String("UISegmented"));
         const auto flex = Compile(R"(<div id="g" data-widget="segmented"><button>A</button></div>)", "div { display: flex }");
         EXPECT_EQ(flex->IssuesMentioning("needs display: flex"), 0u);
 
@@ -1358,11 +1358,11 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_FALSE(value->Has("g", "value"));
         const auto onButton = Compile(R"(<button id="b" data-widget="segmented">B</button>)");
         EXPECT_EQ(onButton->IssuesMentioning("on a <button> is left out"), 1u);
-        EXPECT_EQ(onButton->Find("b").attribute("type").as_string(), std::string("UIElement")) << "a button that is no segment is composed";
+        EXPECT_EQ(onButton->Find("b").attribute("type").as_string(), String("UIElement")) << "a button that is no segment is composed";
 
         // The widget name is not case sensitive, like a tag
         const auto upper = Compile(R"(<div id="g" data-widget="Segmented"></div>)", "div { display: flex }");
-        EXPECT_EQ(upper->Find("g").attribute("type").as_string(), std::string("UISegmented"));
+        EXPECT_EQ(upper->Find("g").attribute("type").as_string(), String("UISegmented"));
         EXPECT_TRUE(upper->report.issues.empty());
     }
 
@@ -1421,12 +1421,12 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
         const UIScreenContent expectedContent = ReadXml(kSettingsPanelXml);
         // The view of the Chess board (landscape: the portrait variant is off) and a portrait view (the variant is on)
-        for (const auto& [viewWidth, viewHeight] : {std::pair{840.0f, 800.0f}, {560.0f, 840.0f}}) {
+        for (const auto& [viewWidth, viewHeight] : {Pair<float, float>{840.0f, 800.0f}, {560.0f, 840.0f}}) {
             LaidOut web(compiled->content);
             LaidOut xml(expectedContent);
             web.InSceneView(viewWidth, viewHeight);
             xml.InSceneView(viewWidth, viewHeight);
-            for (const auto& [width, height] : {std::pair{1280.0f, 720.0f}, {640.0f, 360.0f}, {720.0f, 1280.0f}, {480.0f, 480.0f}, {2560.0f, 1080.0f}}) {
+            for (const auto& [width, height] : {Pair<float, float>{1280.0f, 720.0f}, {640.0f, 360.0f}, {720.0f, 1280.0f}, {480.0f, 480.0f}, {2560.0f, 1080.0f}}) {
                 web.At(width, height);
                 xml.At(width, height);
                 for (const char* name : kSettingsPanelNames) {
@@ -1495,7 +1495,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_TRUE(compiled->report.issues.empty()) << compiled->report.issues[0].message.c_str();
 
         EXPECT_FALSE(compiled->Component("t", "UIToggleComponent").empty()) << "the widget name is not case sensitive";
-        EXPECT_EQ(compiled->Find("t").attribute("type").as_string(), std::string("UIElement"));
+        EXPECT_EQ(compiled->Find("t").attribute("type").as_string(), String("UIElement"));
         EXPECT_EQ(compiled->ComponentAttr("t", "UIToggleComponent", "bind"), "muted");
         EXPECT_EQ(compiled->ComponentAttr("t", "UIToggleComponent", "action"), "Mute") << "the plain `action` attribute is accepted as on a button";
         EXPECT_EQ(compiled->ComponentAttr("t", "UIToggleComponent", "onValue"), "1");
@@ -1591,8 +1591,8 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(onButton->IssuesMentioning("data-widget=\"toggle\" on a <button> is left out"), 1u);
         EXPECT_EQ(onButton->IssuesMentioning("data-widget=\"slider\" on a <img> is left out"), 1u);
         EXPECT_EQ(onButton->IssuesMentioning("disabled does not apply to a progress bar"), 1u);
-        EXPECT_EQ(onButton->Find("b").attribute("type").as_string(), std::string("UIElement")) << "a button that is no segment is composed";
-        EXPECT_EQ(onButton->Find("i").attribute("type").as_string(), std::string("UIElement")) << "an image is an element with a UIImageComponent";
+        EXPECT_EQ(onButton->Find("b").attribute("type").as_string(), String("UIElement")) << "a button that is no segment is composed";
+        EXPECT_EQ(onButton->Find("i").attribute("type").as_string(), String("UIElement")) << "an image is an element with a UIImageComponent";
         EXPECT_FALSE(onButton->Component("i", "UIImageComponent").empty());
         EXPECT_FALSE(onButton->Has("p", "disabled"));
 
@@ -1749,12 +1749,12 @@ button   { width: 124px; height: 48px; font-size: 24px; }
                                                                                                                                "#p { background-image: url('Panel9'); border-image-slice: 12 8 }\n"
                                                                                                                                "#q { background: #112233 url(Plate) no-repeat }");
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
-        EXPECT_EQ(compiled->Find("i").attribute("type").as_string(), std::string("UIElement")) << "a picture is an element with a UIImageComponent";
+        EXPECT_EQ(compiled->Find("i").attribute("type").as_string(), String("UIElement")) << "a picture is an element with a UIImageComponent";
         EXPECT_EQ(compiled->ComponentAttr("i", "UIImageComponent", "sprite"), "Hero");
         EXPECT_FALSE(compiled->Has("i", "sprite")) << "the sprite lives on the component";
         EXPECT_EQ(compiled->ComponentAttr("s", "UIImageComponent", "stretch"), "true");
-        EXPECT_NEAR(std::stof(compiled->Attr("s", "aspectRatio")), 16.0f / 9.0f, 1e-4f);
-        EXPECT_EQ(compiled->Find("p").attribute("type").as_string(), std::string("UIPanel"));
+        EXPECT_NEAR(std::stof(compiled->Attr("s", "aspectRatio").c_str()), 16.0f / 9.0f, 1e-4f);
+        EXPECT_EQ(compiled->Find("p").attribute("type").as_string(), String("UIPanel"));
         EXPECT_EQ(compiled->Attr("p", "sprite"), "Panel9");
         EXPECT_EQ(compiled->Attr("p", "sliceBorder"), "8,12,8,12");
         EXPECT_FALSE(compiled->Has("p", "blocksInput")) << "a panel takes clicks by itself";
@@ -1768,7 +1768,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
             <b>big</b> world &amp; co<br>second line </div><p id="e"></p>)",
                                       ".tag { background: rgba(0, 0, 0, 0.5); white-space: nowrap; text-overflow: clip; line-height: 1.5; font-family: sans-serif }");
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
-        EXPECT_EQ(compiled->Find("t").attribute("type").as_string(), std::string("UIElement")) << "a text is an element with a UITextComponent";
+        EXPECT_EQ(compiled->Find("t").attribute("type").as_string(), String("UIElement")) << "a text is an element with a UITextComponent";
         EXPECT_EQ(compiled->ComponentAttr("t", "UITextComponent", "text"), "Hello, big world & co\nsecond line");
         EXPECT_FALSE(compiled->Has("t", "text")) << "the text lives on the component";
         EXPECT_EQ(compiled->Attr("t", "color"), "0,0,0,128");
@@ -1867,9 +1867,9 @@ button   { width: 124px; height: 48px; font-size: 24px; }
     TEST_F(UIWebTest, AStringReferenceIsTextLikeAVariableAndReachesTheXmlUntouched) {
         const auto compiled = Compile(R"(<button id="b" data-action="Start">{#menu.start}</button><span id="s">{#score.title}: {score}</span><p id="q">{{#menu.start}}</p>)");
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
-        EXPECT_EQ(compiled->Find("b").attribute("type").as_string(), std::string("UIElement"));
+        EXPECT_EQ(compiled->Find("b").attribute("type").as_string(), String("UIElement"));
         EXPECT_EQ(compiled->ComponentAttr("b", "UITextComponent", "text"), "{#menu.start}");
-        EXPECT_EQ(compiled->Find("s").attribute("type").as_string(), std::string("UIElement"));
+        EXPECT_EQ(compiled->Find("s").attribute("type").as_string(), String("UIElement"));
         EXPECT_EQ(compiled->ComponentAttr("s", "UITextComponent", "text"), "{#score.title}: {score}");
         EXPECT_EQ(compiled->ComponentAttr("q", "UITextComponent", "text"), "{{#menu.start}}") << "an escaped brace stays escaped";
         EXPECT_TRUE(compiled->report.issues.empty());
@@ -2001,7 +2001,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         }
 
         UIBoxStyle BoxFromXml(const char* attributes) {
-            const std::string xml = std::string("<ui><elements><element type=\"UIElement\" name=\"x\" ") + attributes + "/></elements></ui>";
+            const String xml = String("<ui><elements><element type=\"UIElement\" name=\"x\" ") + attributes + "/></elements></ui>";
             const UIScreenContent content = ReadXml(xml);
             EXPECT_EQ(content.elements.size(), 1u);
             return content.elements.empty() ? UIBoxStyle{} : content.elements[0]->box;
@@ -2122,7 +2122,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
     TEST_F(UIWebTest, AGradientBesideASpriteGivesBoth) {
         const auto compiled = Compile(R"(<div id="a"></div>)", "#a { width: 50px; height: 50px; background: linear-gradient(red, blue) url(Panel9) }");
         EXPECT_TRUE(compiled->report.issues.empty());
-        EXPECT_EQ(compiled->Find("a").attribute("type").as_string(), std::string("UIPanel"));
+        EXPECT_EQ(compiled->Find("a").attribute("type").as_string(), String("UIPanel"));
         EXPECT_EQ(compiled->Attr("a", "sprite"), "Panel9");
         EXPECT_EQ(compiled->Attr("a", "gradientColor"), "0,0,255,255");
         EXPECT_EQ(compiled->Attr("a", "color"), "255,0,0,255");
@@ -2186,9 +2186,9 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->Attr("tCaption", "fontSize"), "20");
         EXPECT_FALSE(compiled->Has("t", "fontSize"));
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
-        const std::string xml = compiled->xml.c_str();
-        EXPECT_NE(xml.find(R"(<set element="tCaption" fontSize="14")"), std::string::npos) << xml;
-        EXPECT_EQ(xml.find(R"(<set element="t" fontSize)"), std::string::npos) << xml;
+        const String xml = compiled->xml.c_str();
+        EXPECT_NE(xml.find(R"(<set element="tCaption" fontSize="14")"), String::npos) << xml;
+        EXPECT_EQ(xml.find(R"(<set element="t" fontSize)"), String::npos) << xml;
     }
 
     // ---- the icon and the tooltip of a button ----------------------------------------------------------------------------------
@@ -2401,7 +2401,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
     }
 
     TEST_F(UIWebTest, AnIconOnlyButtonThatIsTooSmallIsReportedByItsRect) {
-        const auto compiled = Compile(kIconButtonsHtml, std::string(kIconButtonsCss) + "#Only { width: 32px; height: 32px; }");
+        const auto compiled = Compile(kIconButtonsHtml, String(kIconButtonsCss) + "#Only { width: 32px; height: 32px; }");
         LaidOut web(compiled->content);
         UILayoutValidatorOptions options;
         options.minTouchSize = CoreManager::GetUIEnvironment().GetSettings().minTouchSize;
@@ -2623,7 +2623,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
     TEST_F(UIWebTest, TextBesideElementsIsReported) {
         const auto compiled = Compile(R"(<div id="a">loose <span>kept</span></div>)");
         EXPECT_EQ(compiled->IssuesMentioning("text next to other elements"), 0u) << "inline text with inline elements is one label";
-        EXPECT_EQ(compiled->Find("a").attribute("type").as_string(), std::string("UIElement"));
+        EXPECT_EQ(compiled->Find("a").attribute("type").as_string(), String("UIElement"));
         EXPECT_FALSE(compiled->Component("a", "UITextComponent").empty());
         const auto mixed = Compile(R"(<div id="a">loose <div id="b"></div></div>)");
         EXPECT_EQ(mixed->IssuesMentioning("text next to other elements"), 1u);
@@ -2638,9 +2638,9 @@ button   { width: 124px; height: 48px; font-size: 24px; }
     TEST_F(UIWebTest, StyleSheetsAreReadThroughTheLoader) {
         UIWebReport report;
         Vector<String> asked;
-        const std::string html = R"(<link rel="stylesheet" href="a.css"><link rel="stylesheet" href="missing.css"><div id="x" class="k"></div><style>.k { height: 9px }</style>)";
+        const String html = R"(<link rel="stylesheet" href="a.css"><link rel="stylesheet" href="missing.css"><div id="x" class="k"></div><style>.k { height: 9px }</style>)";
         const String xml = UIWebCompiler::Compile(
-            FromStd(html),
+            html,
             [&](StringView href) -> Optional<String> {
                 asked.push_back(String(href));
                 if (href == "a.css") {
@@ -2653,8 +2653,8 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         pugi::xml_document document;
         ASSERT_TRUE(document.load_string(xml.c_str()));
         const pugi::xml_node element = document.document_element().child("elements").child("element");
-        EXPECT_EQ(std::string(element.attribute("width").as_string()), "7");
-        EXPECT_EQ(std::string(element.attribute("height").as_string()), "9") << "the <style> after the <link> comes later in the cascade";
+        EXPECT_EQ(String(element.attribute("width").as_string()), "7");
+        EXPECT_EQ(String(element.attribute("height").as_string()), "9") << "the <style> after the <link> comes later in the cascade";
         ASSERT_EQ(report.issues.size(), 1u);
         EXPECT_EQ(report.issues[0].source, "html");
         EXPECT_TRUE(report.issues[0].message.find("missing.css") != String::npos);
@@ -2676,10 +2676,10 @@ button   { width: 124px; height: 48px; font-size: 24px; }
                 std::filesystem::remove_all(_path, ignored);
             }
 
-            std::string Write(const char* name, const std::string& content) const {
+            String Write(const char* name, const String& content) const {
                 const auto file = _path / name;
                 std::ofstream(file) << content;
-                return file.generic_string();
+                return FromStdString(file.generic_string());
             }
 
         private:
@@ -2691,9 +2691,9 @@ button   { width: 124px; height: 48px; font-size: 24px; }
     TEST_F(UIWebTest, ADocumentInHtmlLoadsThroughTheResourceManagerAndBuildsTheSameElements) {
         TempDirectory temp;
         temp.Write("hud.css", kHudCss);
-        const std::string path = temp.Write("hud.ui.html", std::string("<link rel=\"stylesheet\" href=\"hud.css\">") + kHudHtml);
+        const String path = temp.Write("hud.ui.html", String("<link rel=\"stylesheet\" href=\"hud.css\">") + kHudHtml);
 
-        auto handle = CoreManager::GetResourceManager().Load<UIDocument>(FromStd(path));
+        auto handle = CoreManager::GetResourceManager().Load<UIDocument>(path);
         ASSERT_TRUE(handle);
         ASSERT_EQ(handle->GetState(), ResourceState::Loaded);
 
@@ -2744,10 +2744,10 @@ button  { height: 56px; font-size: 28px; }
         </components>
       </element>
       <element type="UIElement" name="Play" height="56" fontSize="28" color="@play">
-        <components><component type="UITextComponent" text="Play" align="Center" verticalAlign="Center" wrap="false"/><component type="UIInputClicker" action="Match3Play"/></components>
+        <components><component type="UITextComponent" text="Play" align="Center" verticalAlign="Center" wrap="false"/><component type="UIInputClicker" action="GamePlay"/></components>
       </element>
       <element type="UIElement" name="Quit" height="56" fontSize="28" color="@quit">
-        <components><component type="UITextComponent" text="Quit" align="Center" verticalAlign="Center" wrap="false"/><component type="UIInputClicker" action="Match3Quit"/></components>
+        <components><component type="UITextComponent" text="Quit" align="Center" verticalAlign="Center" wrap="false"/><component type="UIInputClicker" action="GameQuit"/></components>
       </element>
     </children>
   </element>
@@ -2976,16 +2976,16 @@ button:checked { background: var(--panel); }
             UIWebReport report;
         };
 
-        CompiledWithSheet CompileWithSheet(const std::string& html, const std::string& css) {
+        CompiledWithSheet CompileWithSheet(const String& html, const String& css) {
             CompiledWithSheet result;
-            const std::string source = "<link rel=\"stylesheet\" href=\"a.css\">" + html;
+            const String source = "<link rel=\"stylesheet\" href=\"a.css\">" + html;
             const UIWebCompiler::StylesheetLoader loader = [&css](StringView) { return Optional<String>(String(css.data(), css.size())); };
-            result.xml = UIWebCompiler::Compile(FromStd(source), loader, result.report);
+            result.xml = UIWebCompiler::Compile(source, loader, result.report);
             return result;
         }
 
-        std::string Repeat(const std::string& unit, size_t count) {
-            std::string text;
+        String Repeat(const String& unit, size_t count) {
+            String text;
             text.reserve(unit.size() * count);
             for (size_t i = 0; i < count; ++i) {
                 text += unit;
@@ -2994,14 +2994,14 @@ button:checked { background: var(--panel); }
         }
 
         bool Mentions(const UIWebReport& report, const char* text) {
-            return std::any_of(report.issues.begin(), report.issues.end(), [&](const UIWebIssue& issue) { return std::string(issue.message.c_str()).find(text) != std::string::npos; });
+            return std::any_of(report.issues.begin(), report.issues.end(), [&](const UIWebIssue& issue) { return issue.message.find(text) != String::npos; });
         }
 
     }  // namespace
 
     TEST_F(UIWebTest, ADocumentNestedAHundredThousandDeepKeepsTheFirstLevelsAndSaysSo) {
         const Stopwatch watch;
-        const std::string html = Repeat("<div>", 100000);
+        const String html = Repeat("<div>", 100000);
         const auto compiled = Compile(html);
         EXPECT_LT(watch.Seconds(), kLimitTestBudgetSeconds);
         EXPECT_TRUE(Mentions(compiled->report, "nested deeper than 64"));
@@ -3010,7 +3010,7 @@ button:checked { background: var(--panel); }
     }
 
     TEST_F(UIWebTest, ANestingAtTheLimitIsKeptWhole) {
-        const std::string html = Repeat("<div>", UIHtmlParser::kMaxDepth) + Repeat("</div>", UIHtmlParser::kMaxDepth);
+        const String html = Repeat("<div>", UIHtmlParser::kMaxDepth) + Repeat("</div>", UIHtmlParser::kMaxDepth);
         const auto compiled = Compile(html);
         EXPECT_FALSE(Mentions(compiled->report, "nested deeper"));
         EXPECT_EQ(compiled->report.elements, UIHtmlParser::kMaxDepth);
@@ -3026,14 +3026,14 @@ button:checked { background: var(--panel); }
     }
 
     TEST_F(UIWebTest, ADocumentOverTheSizeLimitIsCutWithAnEntry) {
-        const std::string html = "<span id=\"s\">" + std::string(2 * UIHtmlParser::kMaxDocumentBytes, 'a') + "</span>";
+        const String html = "<span id=\"s\">" + String(2 * UIHtmlParser::kMaxDocumentBytes, 'a') + "</span>";
         const auto compiled = Compile(html);
         EXPECT_TRUE(Mentions(compiled->report, "document is longer than 1048576 bytes"));
     }
 
     TEST_F(UIWebTest, AStyleSheetOfTenMegabytesIsReadUpToTheLimitInTime) {
         const Stopwatch watch;
-        const std::string css = Repeat(".a { width: 1px; }\n", 10 * 1024 * 1024 / 19);
+        const String css = Repeat(".a { width: 1px; }\n", 10 * 1024 * 1024 / 19);
         const CompiledWithSheet compiled = CompileWithSheet("<div id=\"a\" class=\"a\"></div>", css);
         EXPECT_LT(watch.Seconds(), kLimitTestBudgetSeconds);
         EXPECT_TRUE(Mentions(compiled.report, "style sheet is longer than 1048576 bytes"));
@@ -3043,7 +3043,7 @@ button:checked { background: var(--panel); }
 
     TEST_F(UIWebTest, ASelectorOfOneMegabyteIsLeftOutAndTheRuleAfterItStays) {
         const Stopwatch watch;
-        const std::string css = "." + std::string(1024 * 1024 - 100, 'a') + " { width: 5px; }\n#b { width: 7px; }";
+        const String css = "." + String(1024 * 1024 - 100, 'a') + " { width: 5px; }\n#b { width: 7px; }";
         const CompiledWithSheet compiled = CompileWithSheet("<div id=\"b\"></div>", css);
         EXPECT_LT(watch.Seconds(), kLimitTestBudgetSeconds);
         EXPECT_TRUE(Mentions(compiled.report, "selector longer than 1024 bytes"));
@@ -3054,12 +3054,12 @@ button:checked { background: var(--panel); }
     }
 
     TEST_F(UIWebTest, ASelectorOfTooManyPartsAndARuleOfTooManySelectorsAreLeftOut) {
-        const std::string parts = Repeat("div ", UICssParser::kMaxSelectorParts) + "span";
+        const String parts = Repeat("div ", UICssParser::kMaxSelectorParts) + "span";
         const auto tooLong = Compile("<div id=\"a\"></div>", parts + " { width: 1px; }");
         EXPECT_TRUE(Mentions(tooLong->report, "more than 16 parts"));
         EXPECT_EQ(tooLong->report.rules, 0u);
 
-        const std::string atTheLimit = Repeat("div ", UICssParser::kMaxSelectorParts - 1) + "span";
+        const String atTheLimit = Repeat("div ", UICssParser::kMaxSelectorParts - 1) + "span";
         const auto fits = Compile("<div id=\"a\"></div>", atTheLimit + " { width: 1px; }");
         EXPECT_FALSE(Mentions(fits->report, "more than 16 parts"));
         EXPECT_EQ(fits->report.rules, 1u);
@@ -3094,7 +3094,7 @@ button:checked { background: var(--panel); }
         EXPECT_TRUE(Mentions(many->report, "more than 64 attributes"));
         EXPECT_TRUE(static_cast<bool>(many->Find("a"))) << "the element itself stays";
 
-        const auto longValue = Compile("<div id=\"a\" title=\"" + std::string(UIHtmlParser::kMaxAttributeBytes + 1, 'x') + "\"></div>");
+        const auto longValue = Compile("<div id=\"a\" title=\"" + String(UIHtmlParser::kMaxAttributeBytes + 1, 'x') + "\"></div>");
         EXPECT_TRUE(Mentions(longValue->report, "longer than 16384 bytes"));
         EXPECT_EQ(longValue->report.elements, 1u);
     }
@@ -3102,16 +3102,16 @@ button:checked { background: var(--panel); }
     TEST_F(UIWebTest, NumericEntitiesAtTheEdgesOfUnicodeBecomeAQuestionMark) {
         // 0, a surrogate, one past the last code point and a number that does not fit 32 bits; the last real one and a plain one are decoded
         const auto compiled = Compile("<span id=\"t\">&#0;|&#xD800;|&#xDFFF;|&#x110000;|&#4294967296;|&#x10FFFF;|&#65;</span>");
-        const std::string text = compiled->ComponentAttr("t", "UITextComponent", "text");
-        EXPECT_EQ(text.substr(0, std::string("?|?|?|?|&#4294967296;|").size()), "?|?|?|?|&#4294967296;|");
-        EXPECT_NE(text.find("\xF4\x8F\xBF\xBF"), std::string::npos);
+        const String text = compiled->ComponentAttr("t", "UITextComponent", "text");
+        EXPECT_EQ(text.substr(0, String("?|?|?|?|&#4294967296;|").size()), "?|?|?|?|&#4294967296;|");
+        EXPECT_NE(text.find("\xF4\x8F\xBF\xBF"), String::npos);
         EXPECT_EQ(text.substr(text.size() - 1), "A");
     }
 
     TEST_F(UIWebTest, MoreIssuesThanTheReportKeepsAreCountedAndSaidOnce) {
-        std::string css = "#a {";
+        String css = "#a {";
         for (size_t i = 0; i < 500; ++i) {
-            css += " unknown-" + std::to_string(i) + ": 1;";
+            css += " unknown-" + ToString(i) + ": 1;";
         }
         css += " }";
         const auto compiled = Compile("<div id=\"a\"></div>", css);
@@ -3122,7 +3122,7 @@ button:checked { background: var(--panel); }
     }
 
     TEST_F(UIWebTest, AMessageThatRepeatsTheFileHasNoLineBreakAndIsCut) {
-        const std::string name = "bad\nname" + std::string(1000, 'z');
+        const String name = "bad\nname" + String(1000, 'z');
         const auto compiled = Compile("<div id=\"a\"></div>", "#a { " + name + ": 1; }");
         ASSERT_TRUE(compiled->report.HasIssues());
         for (const UIWebIssue& issue : compiled->report.issues) {
@@ -3132,19 +3132,19 @@ button:checked { background: var(--panel); }
         // A cut never leaves half of a UTF-8 character: the text is Cyrillic, two bytes a letter, and the cut falls between the two bytes of one
         const auto cyrillic = Compile("<div id=\"a\"></div>", "#a { " + Repeat("\xD0\xB1", 400) + ": 1; }");
         ASSERT_TRUE(cyrillic->report.HasIssues());
-        const std::string message = cyrillic->report.issues[0].message.c_str();
+        const String message = cyrillic->report.issues[0].message.c_str();
         const size_t dots = message.find("...");
-        ASSERT_NE(dots, std::string::npos);
+        ASSERT_NE(dots, String::npos);
         EXPECT_EQ(static_cast<uint8_t>(message[dots - 1]) & 0xC0, 0x80) << "the character before the dots is whole: it ends in a continuation byte";
         EXPECT_EQ(static_cast<uint8_t>(message[dots - 2]) & 0xFF, 0xD0);
-        EXPECT_NE(message.find("is not supported"), std::string::npos) << "the reason is not cut away";
+        EXPECT_NE(message.find("is not supported"), String::npos) << "the reason is not cut away";
     }
 
     TEST_F(UIWebTest, AnIssueOfAStartTagThatSpansLinesIsOnTheLineItStarts) {
         const auto compiled = Compile("<div id=\"a\">\n<blink\n   id=\"b\"\n   title=\"x\"></blink></div>");
         bool found = false;
         for (const UIWebIssue& issue : compiled->report.issues) {
-            if (std::string(issue.message.c_str()).find("<blink> is not supported") != std::string::npos) {
+            if (issue.message.find("<blink> is not supported") != String::npos) {
                 EXPECT_EQ(issue.line, 2u);
                 found = true;
             }
@@ -3153,7 +3153,7 @@ button:checked { background: var(--panel); }
     }
 
     TEST_F(UIWebTest, AnInlineStyleWithLineBreaksReportsInsideTheDocument) {
-        const std::string html = "<div id=\"a\" style=\"\nbogus: 1;\nwidth: 5px\n\"></div>";
+        const String html = "<div id=\"a\" style=\"\nbogus: 1;\nwidth: 5px\n\"></div>";
         const auto compiled = Compile(html);
         size_t lines = 1;
         for (const char c : html) {
@@ -3168,7 +3168,7 @@ button:checked { background: var(--panel); }
     TEST_F(UIWebTest, ADescendantSelectorOverADeepChainCostsTheChainNotTheNumberOfWaysThroughIt) {
         // `span` is never an ancestor, so every way down the chain of 60 divs fails at the end: without memory that is the number of ways to choose 14 of 60
         const Stopwatch watch;
-        const std::string selector = "span " + Repeat("div ", 14) + "div";
+        const String selector = "span " + Repeat("div ", 14) + "div";
         const auto compiled = Compile(Repeat("<div>", 60) + Repeat("</div>", 60), selector + " { width: 1px; }");
         EXPECT_LT(watch.Seconds(), kLimitTestBudgetSeconds);
         EXPECT_FALSE(compiled->report.HasIssues());
@@ -3202,7 +3202,7 @@ button:checked { background: var(--panel); }
         const Stopwatch watch;
         const auto compiled = Compile("<div id=\"div-2\"></div>" + Repeat("<div class=\"x\"></div>", 2000), "@media (min-width: 1px) { .x { width: 5px; } }");
         EXPECT_LT(watch.Seconds(), kLimitTestBudgetSeconds);
-        std::set<std::string> names;
+        Set<String> names;
         for (const pugi::xpath_node node : compiled->document.select_nodes("//element")) {
             names.insert(node.node().attribute("name").as_string());
         }
@@ -3314,10 +3314,10 @@ button:checked { background: var(--panel); }
     }
 
     TEST_F(UIWebTest, TheCssEasingsMapToTheEngineCurves) {
-        const std::pair<const char*, EaseType> cases[] = {{"linear", EaseType::Linear},    {"ease", EaseType::QuadInOut},        {"ease-in", EaseType::QuadIn},
-                                                          {"ease-out", EaseType::QuadOut}, {"ease-in-out", EaseType::QuadInOut}, {"", EaseType::QuadInOut}};
+        const Pair<const char*, EaseType> cases[] = {{"linear", EaseType::Linear},    {"ease", EaseType::QuadInOut},        {"ease-in", EaseType::QuadIn},
+                                                     {"ease-out", EaseType::QuadOut}, {"ease-in-out", EaseType::QuadInOut}, {"", EaseType::QuadInOut}};
         for (const auto& [word, ease] : cases) {
-            const auto compiled = Compile(R"(<div id="p"></div>)", std::string("#p { transition: opacity .1s ") + word + " }");
+            const auto compiled = Compile(R"(<div id="p"></div>)", String("#p { transition: opacity .1s ") + word + " }");
             const auto* transition = compiled->Element("p")->GetComponent<UITransitionComponent>();
             ASSERT_NE(transition, nullptr) << word;
             EXPECT_EQ(transition->ease, ease) << "'" << word << "' (no word is CSS's `ease`)";
