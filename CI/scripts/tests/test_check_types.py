@@ -3,13 +3,14 @@
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+ENGINE = Path(__file__).resolve().parents[3]
+
+sys.path.insert(0, str(ENGINE / "CI" / "scripts"))
+sys.path.insert(0, str(ENGINE / "tools" / "codemod"))
 
 import check_types as types  # noqa: E402
 import nostd  # noqa: E402
 import pytest  # noqa: E402
-
-ENGINE = Path(__file__).resolve().parents[2]
 
 
 def write(root: Path, relative: str, text: str) -> Path:
@@ -160,7 +161,6 @@ def test_other_spellings_are_no_marker(tmp_path, marker):
 
 
 def test_the_exempt_lines_are_the_ones_of_the_codemod(tmp_path):
-    sys.path.insert(0, str(ENGINE / "tools" / "codemod"))
     import codemod
 
     source = "a; //-NoStd: x\n//-NoStd: y\nb;\nc;\n  //-NoStd: z\nd;\n// NoStd: no\ne;\n"

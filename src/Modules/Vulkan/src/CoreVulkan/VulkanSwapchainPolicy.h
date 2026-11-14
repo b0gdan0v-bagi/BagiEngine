@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <algorithm>
 #include <cstdint>
