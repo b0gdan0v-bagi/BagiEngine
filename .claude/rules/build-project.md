@@ -31,7 +31,7 @@ Fields the `build` skill reads. A game fills every row.
 | Product | the executable (target name; the file is `build/<preset>/bin/<name>[.exe]`) | `BagiStress` |
 | Tests | the gtest targets; the argument `tests` builds exactly these (`--target <tests>`) | `BagiEngineTests StressTests` |
 | Default build | what `cmake --build --preset <p>` with no `--target` builds | every target: the product and the test executables |
-| Source paths | the paths of `git status --porcelain -- <paths>` (a configure trigger) and of the `BE_CLASS` / `BE_EVENT` / `BE_REFLECT_FIELD` search | `src tests games` |
+| Source paths | the paths of `git status --porcelain -- <paths>` (a configure trigger) and of the `BE_CLASS` / `BE_EVENT` / `BE_REFLECT_FIELD` search | `src tests tools/stress` |
 | Extra configure triggers | cases besides the common ones (below) that need `cmake --preset <p>` | a change of `BE_WITH_EDITOR` (`-DBE_WITH_EDITOR=...`, or a switch between a preset with and without the editor): the set of runtime and test sources changes (see "Gotchas") |
 | Extra failure hints | cause and fix for a configure, compile or link failure that is specific to this repository | see "Failure hints" |
 | Extra gotchas | facts about the output, the tests or the run that hold only here | see "Gotchas" |
