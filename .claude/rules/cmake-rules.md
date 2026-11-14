@@ -105,7 +105,7 @@ Each engine module has its own `CMakeLists.txt`:
 - Create `STATIC` library (`be_add_module` does this for modules laid out as `<dir>/src/<Name>/`)
 - Include directories: own `src/` + cross-module path
 - Link to `BECoreModule` if needed
-- Reuse PCH: `target_precompile_headers(MyModule REUSE_FROM BECoreModule)`. Targets whose sources rely on the PCH contents (game executables, `RuntimeModule`, game modules, test executables) also force-include it via `be_force_include_pch`
+- Reuse PCH: `target_precompile_headers(MyModule REUSE_FROM BECoreModule)`. Targets whose sources rely on the PCH contents (game executables, `RuntimeModule`, game modules, test executables) also force-include it via `be_force_include_pch`. A gtest target reuses `BagiTestPch` instead (the same PCH with `<gtest/gtest.h>` after it; `tests/Common/CMakeLists.txt`)
 - Reflected classes in an **engine** module: add its source directory to `source_dirs` / `scan_dirs` of `BECoreModule` in `CI/meta_generator/reflection_targets.json`. Only `BECoreModule` calls `add_reflection_target()`. **Game** modules call `be_add_game_reflection()` instead and have no entry in that file
 - Registration code (factories) lives in static initializers, so executables link the engine libraries and the game modules with `WHOLE_ARCHIVE` (`be_link_engine`, `be_add_game_executable`)
 
@@ -143,7 +143,7 @@ BECoreModule must be first (provides PCH):
 
 - `ENGINE_BUILD_TESTS` (default `ON`) controls `enable_testing()`, `add_subdirectory(external/googletest)`, `BagiEngineTestSupport` and the test executables.
 - GoogleTest is added **after** the `ENGINE_NO_EXCEPTIONS` block in `cmake/BagiEngine.cmake` on purpose, so it is compiled with the same `-fno-exceptions` as the test sources. `gtest_force_shared_crt` is `ON` (the engine uses `/MD`); `BUILD_GMOCK` and `INSTALL_GTEST` are `OFF`.
-- Every test executable is created with `be_add_game_tests`: `BagiEngineTests` (`tests/CMakeLists.txt`) and `StressTests` (`tools/stress/CMakeLists.txt`); a game's tests are in its repository. The function applies the `REUSE_FROM BECoreModule` PCH, force-include of `BECore/pch.h`, `IMGUI_VULKAN_AVAILABLE=1` + `REFLECTION_GENERATED=1`, `${CMAKE_BINARY_DIR}` on the include path for `<Generated/*.gen.hpp>`, and `WHOLE_ARCHIVE` for `BECoreModule` / `EventsModule` / `TaskSystemModule` so static-initializer registrations survive. `main()`, the engine environment and the assert bridge come from the static library `BagiEngineTestSupport` (`tests/Common/`).
+- Every test executable is created with `be_add_game_tests`: `BagiEngineTests` (`tests/CMakeLists.txt`) and `StressTests` (`tools/stress/CMakeLists.txt`); a game's tests are in its repository. The function applies the `REUSE_FROM BagiTestPch` PCH (BECore's with gtest), force-include of `BECore/pch.h`, `IMGUI_VULKAN_AVAILABLE=1` + `REFLECTION_GENERATED=1`, `${CMAKE_BINARY_DIR}` on the include path for `<Generated/*.gen.hpp>`, and `WHOLE_ARCHIVE` for `BECoreModule` / `EventsModule` / `TaskSystemModule` so static-initializer registrations survive. `main()`, the engine environment and the assert bridge come from the static library `BagiEngineTestSupport` (`tests/Common/`).
 - **Parallel run.** `test-base` in `CMakePresets.json` sets `execution.jobs` 8, so `ctest --preset <p>` runs eight entries at once (`-j1` switches it off; `CTEST_PARALLEL_LEVEL` does not override a preset). Every gtest case is its own ctest entry and process and carries no property: the tests are written to run beside each other (`.claude/rules/tests-module.md`, "Rules"). `be_add_game_control_tests` and `be_add_game_scenario_tests` set `RESOURCE_LOCK bagi_control_smoke` (two games with the control API never run together; unit tests run beside them), `SKIP_RETURN_CODE 77` and `TIMEOUT 120`. It is not `RUN_SERIAL`, which would stop the whole run for the time of the test. A test of a game that cannot run beside others sets `RUN_SERIAL` or a `RESOURCE_LOCK` in `set_tests_properties` in its own CMakeLists.
 - `gtest_discover_tests(<Name> DISCOVERY_MODE PRE_TEST)`: tests are listed when `ctest` starts and run from the executable's binary directory (`build/<preset>/tests`, `build/<preset>/tools/stress`); without content roots `FileSystem` finds `config/` by walking up from the working directory. The test environment pins the engine's `config/` / `assets/` through `BAGI_ENGINE_ROOT`. Do not pass `WORKING_DIRECTORY` (not even inside `PROPERTIES`): it also moves `cmake_test_discovery_*.json` there, which litters the source tree when it is the repository root. An out-of-tree build directory needs the executable started from inside the repository.
 - Build them with `cmake --build --preset <preset> --target BagiEngineTests StressTests`: a plain `--build --preset <preset>` builds everything (`all`); the build presets name no targets, so that a game repository can include these presets (a preset name cannot be redefined by the including file).
@@ -155,7 +155,7 @@ BECoreModule must be first (provides PCH):
 | Headers other modules need | `PUBLIC` |
 | Implementation details | `PRIVATE` |
 | Static libraries | Always for engine modules |
-| PCH reuse | `REUSE_FROM BECoreModule` |
+| PCH reuse | `REUSE_FROM BECoreModule`; gtest targets `REUSE_FROM BagiTestPch` |
 
 ## Platform-Specific
 

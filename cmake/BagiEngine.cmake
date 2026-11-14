@@ -377,7 +377,8 @@ endif()
 
 # be_force_include_pch(<target>)
 # Force-includes BECore/pch.h so sources can rely on it without including it themselves. The target
-# must also reuse the PCH: target_precompile_headers(<target> REUSE_FROM BECoreModule).
+# must also reuse a PCH that starts with it: target_precompile_headers(<target> REUSE_FROM BECoreModule), or
+# BagiTestPch (BECore/pch.h and gtest) for a gtest target.
 function(be_force_include_pch TARGET_NAME)
     if(MSVC)
         target_compile_options(${TARGET_NAME} PRIVATE /FI"BECore/pch.h")
@@ -800,8 +801,8 @@ if(ENGINE_BUILD_TESTS)
         source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" PREFIX "Tests" FILES ${ARG_SOURCES})
         set_target_properties(${NAME} PROPERTIES FOLDER "Tests")
 
-        # Reuse the PCH of BECoreModule; test sources include engine headers that rely on it
-        target_precompile_headers(${NAME} REUSE_FROM BECoreModule)
+        # Reuse the PCH of BagiTestPch (tests/Common/CMakeLists.txt): the engine's PCH and gtest; test sources include engine headers that rely on it
+        target_precompile_headers(${NAME} REUSE_FROM BagiTestPch)
         be_force_include_pch(${NAME})
 
         # IMGUI_VULKAN_AVAILABLE must match BECoreModule, otherwise the reused PCH is rejected.

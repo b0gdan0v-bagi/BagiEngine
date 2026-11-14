@@ -64,6 +64,7 @@ Steps of slice 4 (CPU total of the build after the step; "kept" rows are commits
 | `CoreManager.h`, the by-value managers (WP 4) | | | | not done: the game takes their headers through `CoreManager.h` in about 78 places; needs a game entry, then a `CoreServices` holder |
 | json in the tests (WP 5: the `PrintTo` for `nlohmann::json`, `ExpectJsonEq`) | | | | not done: all of `PrintToString<json>` is 0.74 s in 9 TUs (A4a trace); the rest of the json rows (`json.hpp`, `parse<const char*>` from the inline `operator""_json`) comes with the include itself in 60 TUs, and the printer is not in it |
 | `Control/Json.h` to `JsonFwd.h` in `ISeatedGame.h` (WP 5c, once, load 6.7) | 359.7 | 223.3 | 27.2 | dropped: 10.8 s below A4a (the rule needs 11.8) and `json.hpp` 60 -> 58 TUs (the plan needs a third): the TUs that include it use `Json` themselves; the other three headers hold `Json` by value |
+| a test PCH with gtest, `BagiTestPch` (WP 6, once, load 5.7; the new last kept state) | 313.6 | 177.0 | 24.1 | kept: 56.9 s (15 %) below A4a, the rule needs 11.8; `gtest/gtest.h` 31 s in 237 TUs falls to one parse of 1.5 s (the PCH compile of the tests), `BagiEngineTests`, `StressTests`, `BagiEngineTestSupport` and the game's tests reuse it, `BagiFuzzTargets` keeps the PCH of BECore (no gtest) |
 
 ## Sanitizers and fuzzing
 
