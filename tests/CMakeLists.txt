@@ -40,6 +40,12 @@ if(Python3_FOUND)
     # a quoted include is allowed only for a source file's own header; every other include is <...> from an include root
     add_test(NAME BagiIncludeStyle
         COMMAND ${Python3_EXECUTABLE} ${BAGI_ENGINE_DIR}/CI/scripts/check_includes.py --root ${BAGI_ENGINE_DIR})
+    # the type rules of BECore/Types/CLAUDE.md as a check (raw std::/eastl:: types, allocating calls: CI/scripts/check_types.py).
+    # The engine still holds lines that other entries own (std::function, file streams, directory iterators), so the check has a baseline,
+    # CI/types_baseline.txt: it only shrinks, a fix removes its lines, and a new hit or a line that is gone fails the test.
+    add_test(NAME BagiTypesCheck
+        COMMAND ${Python3_EXECUTABLE} ${BAGI_ENGINE_DIR}/CI/scripts/check_types.py --root ${BAGI_ENGINE_DIR}
+            --baseline ${BAGI_ENGINE_DIR}/CI/types_baseline.txt)
     # every header compiles alone (no PCH), and any header that does not fails the test: there is no baseline (CI/scripts/check_headers.py).
     # A fragment by design would be an --exclude here, with its reason in a comment above it; there is none.
     # RmlUiHost is compiled only with ENGINE_UI_RMLUI, so a build without it has no flags for its headers and the check leaves them out;

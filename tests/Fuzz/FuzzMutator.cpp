@@ -43,7 +43,7 @@ namespace BECore::Fuzz {
         return static_cast<uint32_t>((Next() >> 32) % bound);
     }
 
-    FuzzMutation ApplyMutation(FuzzMutation kind, FuzzBytes& bytes, FuzzRandom& random, std::span<const FuzzBytes> otherSeeds) {
+    FuzzMutation ApplyMutation(FuzzMutation kind, FuzzBytes& bytes, FuzzRandom& random, Span<const FuzzBytes> otherSeeds) {
         const size_t size = bytes.size();
 
         // Everything but an insert needs bytes to work on
@@ -120,7 +120,7 @@ namespace BECore::Fuzz {
         return kind;
     }
 
-    FuzzMutation Mutate(FuzzBytes& bytes, FuzzRandom& random, std::span<const FuzzBytes> otherSeeds) {
+    FuzzMutation Mutate(FuzzBytes& bytes, FuzzRandom& random, Span<const FuzzBytes> otherSeeds) {
         const auto kind = static_cast<FuzzMutation>(random.Below(static_cast<uint32_t>(EnumUtils<FuzzMutation>::Count())));
         return ApplyMutation(kind, bytes, random, otherSeeds);
     }
