@@ -29,7 +29,7 @@ namespace BECore::Tests {
     /// A fake client connection: records everything the hub sent it and whether the hub closed it
     struct TestClient {
         ConnectionId id = 0;
-        eastl::vector<ReceivedMessage> received;
+        Vector<ReceivedMessage> received;
         bool closed = false;
         String closeReason;
         /// Learned from the messages: the room it is in and its seat ("" and -1 when none)
@@ -90,7 +90,7 @@ namespace BECore::Tests {
     class HubHarness {
     public:
         explicit HubHarness(RoomHubSettings settings = MakeSettings(), bool leaky = false, RandomFn random = MakeSequence(42)) : _hub(_registry, settings, std::move(random), MakeSink()) {
-            const auto factory = [this, leaky]() -> eastl::unique_ptr<ISeatedGame> {
+            const auto factory = [this, leaky]() -> UniquePtr<ISeatedGame> {
                 const String room = _startingRoom;
                 if (leaky) {
                     return eastl::make_unique<Tracked<LeakyFakeSeatedGame>>(this, room);
@@ -199,8 +199,8 @@ namespace BECore::Tests {
         }
 
         /// Creates a room with a host and @p guests more humans; returns the connections (host first). The room is in the lobby.
-        eastl::vector<ConnectionId> MakeLobby(int humans) {
-            eastl::vector<ConnectionId> ids;
+        Vector<ConnectionId> MakeLobby(int humans) {
+            Vector<ConnectionId> ids;
             const ConnectionId host = Connect();
             Create(host, "P0");
             ids.push_back(host);
@@ -295,7 +295,7 @@ namespace BECore::Tests {
             }
             // The game of the client's room as it is right now
             if (const FakeSeatedGame* game = GetGame(client.roomCode); game && client.seat >= 0) {
-                eastl::vector<String> leaked = FindLeakedCards(text, client.seat, *game);
+                Vector<String> leaked = FindLeakedCards(text, client.seat, *game);
                 if (message.type == RoomMessageTypes::kError) {
                     // A refusal that quotes the card the client itself sent ("seat 0 does not hold 'c3_1'") gives away nothing
                     leaked.erase(eastl::remove_if(leaked.begin(), leaked.end(), [&](const String& card) { return client.lastSent.find(card) != String::npos; }), leaked.end());

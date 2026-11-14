@@ -82,7 +82,7 @@ namespace BECore {
                 Json result = Json::object();
                 result["width"] = png->width;
                 result["height"] = png->height;
-                result["png_base64"] = MakeJsonString(Base64Encode(eastl::span<const uint8_t>(png->bytes.data(), png->bytes.size())));
+                result["png_base64"] = MakeJsonString(Base64Encode(Span<const uint8_t>(png->bytes.data(), png->bytes.size())));
                 done.Reply(std::move(result));
             });
         }

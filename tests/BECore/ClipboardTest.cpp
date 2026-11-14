@@ -46,7 +46,7 @@ namespace BECore::Tests {
             Board().RequestText([this](const ClipboardText& answer) { answers.push_back(answer); });
         }
 
-        eastl::vector<ClipboardText> answers;
+        Vector<ClipboardText> answers;
 
         FakeClipboard& Fake() {
             return *_fake;
@@ -133,7 +133,7 @@ namespace BECore::Tests {
     TEST_F(ClipboardTest, RequestsDuringOneDeferredReadShareItsResultInOrder) {
         Fake().SetContent("shared");
         Fake().SetDeferred(2);
-        eastl::vector<int> order;
+        Vector<int> order;
         Board().RequestText([&](const ClipboardText&) { order.push_back(1); });
         Board().Update();
         Board().RequestText([&](const ClipboardText&) { order.push_back(2); });
@@ -141,7 +141,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(order.empty());
         Board().Update();
 
-        EXPECT_EQ(order, (eastl::vector<int>{1, 2}));
+        EXPECT_EQ(order, (Vector<int>{1, 2}));
         EXPECT_EQ(Fake().ReadCount(), 1);
         EXPECT_FALSE(Board().HasPending());
     }
@@ -174,7 +174,7 @@ namespace BECore::Tests {
         Board().Update();
         Board().Update();
 
-        EXPECT_EQ(recorder.pastes, (eastl::vector<String>{"ABC"}));
+        EXPECT_EQ(recorder.pastes, (Vector<String>{"ABC"}));
     }
 
     TEST_F(ClipboardTest, ARequestPasteOnEmptyOrRefusedEmitsNothing) {
@@ -196,7 +196,7 @@ namespace BECore::Tests {
 
         Board().Update();
 
-        EXPECT_EQ(recorder.pastes, (eastl::vector<String>{"from the page"}));
+        EXPECT_EQ(recorder.pastes, (Vector<String>{"from the page"}));
     }
 
     TEST_F(ClipboardTest, APasteTheBackendAnnouncesComesEvenWhenTheApiIsNotAvailable) {
@@ -206,7 +206,7 @@ namespace BECore::Tests {
 
         Board().Update();
 
-        EXPECT_EQ(recorder.pastes, (eastl::vector<String>{"from the page"}));
+        EXPECT_EQ(recorder.pastes, (Vector<String>{"from the page"}));
     }
 
     TEST_F(ClipboardTest, AnnouncedPastesAreDroppedWhilePaused) {
@@ -229,7 +229,7 @@ namespace BECore::Tests {
         Board().RequestPaste();
         Board().Update();
 
-        EXPECT_EQ(recorder.pastes, (eastl::vector<String>{"kept"}));
+        EXPECT_EQ(recorder.pastes, (Vector<String>{"kept"}));
     }
 
     TEST_F(ClipboardTest, ATextOverTheLimitIsRefused) {

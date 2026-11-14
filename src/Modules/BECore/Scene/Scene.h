@@ -70,7 +70,7 @@ namespace BECore {
         uint32_t GetViewVersion() const;
 
         /// The declared view variants, read only (a tool lists them by name; a variant's index is the one `ActiveSceneView::index` carries)
-        eastl::span<const SceneViewVariant> GetViewVariants() const;
+        Span<const SceneViewVariant> GetViewVariants() const;
 
         /**
          * @brief A tool's override of the pick: nullopt picks by the output as always, -1 forces the default view, `i` forces the variant `i`.
@@ -192,8 +192,8 @@ namespace BECore {
         BE_REFLECT_FIELD PoolString _name;
         BE_REFLECT_FIELD float _viewWidth = 0.0f;
         BE_REFLECT_FIELD float _viewHeight = 0.0f;
-        BE_REFLECT_FIELD eastl::vector<SceneViewVariant> _viewVariants;
-        BE_REFLECT_FIELD eastl::vector<IntrusivePtr<SceneNode>> _nodes;
+        BE_REFLECT_FIELD Vector<SceneViewVariant> _viewVariants;
+        BE_REFLECT_FIELD Vector<IntrusivePtr<SceneNode>> _nodes;
         entt::registry _registry;
         IntrusivePtr<SceneNode> _rootNode;
         ViewTransform _viewTransform;   // fit of the view to the output, set by Draw(), read by ScreenToScene*

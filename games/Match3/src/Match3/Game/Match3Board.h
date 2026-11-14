@@ -30,7 +30,7 @@ namespace BECore::Match3 {
         }
 
     private:
-        eastl::array<GemType, static_cast<size_t>(kBoardSize) * static_cast<size_t>(kBoardSize)> _cells{};
+        Array<GemType, static_cast<size_t>(kBoardSize) * static_cast<size_t>(kBoardSize)> _cells{};
     };
 
 }  // namespace BECore::Match3

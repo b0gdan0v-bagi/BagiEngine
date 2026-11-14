@@ -49,7 +49,7 @@ namespace BECore {
         }
 
         /// Checks the whole reference element and looks every component up in @p node, changing nothing
-        bool CollectOverrides(pugi::xml_node node, pugi::xml_node reference, eastl::vector<ComponentOverride>& overrides, String& error) {
+        bool CollectOverrides(pugi::xml_node node, pugi::xml_node reference, Vector<ComponentOverride>& overrides, String& error) {
             for (pugi::xml_attribute attr = reference.first_attribute(); attr; attr = attr.next_attribute()) {
                 const StringView name = attr.name();
                 if (name != kNodeRefAttribute && !IsNodeOverrideAttribute(name)) {
@@ -236,7 +236,7 @@ namespace BECore {
     }
 
     bool ApplyNodeOverrides(pugi::xml_node node, pugi::xml_node reference, String& error) {
-        eastl::vector<ComponentOverride> overrides;
+        Vector<ComponentOverride> overrides;
         if (!CollectOverrides(node, reference, overrides, error)) {
             return false;
         }

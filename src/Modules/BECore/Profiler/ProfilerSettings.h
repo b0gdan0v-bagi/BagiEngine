@@ -43,6 +43,6 @@ namespace BECore {
      * @param args Command line without the program name
      * @param build What the build contains; tests pass another one
      */
-    [[nodiscard]] std::expected<ProfilerSettings, String> ResolveProfilerSettings(eastl::span<const String> args, ProfilerBuild build = kProfilerBuild);
+    [[nodiscard]] std::expected<ProfilerSettings, String> ResolveProfilerSettings(Span<const String> args, ProfilerBuild build = kProfilerBuild);
 
 }  // namespace BECore

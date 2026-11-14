@@ -69,7 +69,7 @@ namespace BECore::Fuzz {
         constexpr uint32_t kHugeLength = 0xFFFFFFFFu;
 
         FuzzBytes ToBytes(const BinarySerializer& serializer) {
-            const eastl::vector<uint8_t>& data = serializer.GetData();
+            const Vector<uint8_t>& data = serializer.GetData();
             return FuzzBytes(data.begin(), data.end());
         }
 
@@ -218,8 +218,8 @@ namespace BECore::Fuzz {
             return frame;
         }
 
-        eastl::span<const uint8_t> PayloadOf(StringView text) {
-            return eastl::span<const uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), text.size());
+        Span<const uint8_t> PayloadOf(StringView text) {
+            return Span<const uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), text.size());
         }
 
         /// A frame input: the selector byte, then the frames in order
@@ -233,12 +233,12 @@ namespace BECore::Fuzz {
         }
 
         FuzzBytes Frame(uint8_t opcode, StringView payload, Optional<WebSocketMask> mask, bool fin = true) {
-            const eastl::vector<uint8_t> frame = EncodeFrame(opcode, PayloadOf(payload), mask, fin);
+            const Vector<uint8_t> frame = EncodeFrame(opcode, PayloadOf(payload), mask, fin);
             return FuzzBytes(frame.begin(), frame.end());
         }
 
         FuzzBytes CloseFrame(uint16_t code, StringView reason, Optional<WebSocketMask> mask) {
-            const eastl::vector<uint8_t> frame = EncodeCloseFrame(code, reason, mask);
+            const Vector<uint8_t> frame = EncodeCloseFrame(code, reason, mask);
             return FuzzBytes(frame.begin(), frame.end());
         }
 
@@ -279,7 +279,7 @@ namespace BECore::Fuzz {
             return response;
         }
 
-        void AddWebSocketSeeds(eastl::vector<FuzzSeedFile>& seeds) {
+        void AddWebSocketSeeds(Vector<FuzzSeedFile>& seeds) {
             using enum WebSocketPeer;
             const Optional<WebSocketMask> noMask;
             const Optional<WebSocketMask> mask = kRfcMask;
@@ -332,8 +332,8 @@ namespace BECore::Fuzz {
 
     }  // namespace
 
-    eastl::vector<FuzzSeedFile> MakeGeneratedSeeds() {
-        eastl::vector<FuzzSeedFile> seeds;
+    Vector<FuzzSeedFile> MakeGeneratedSeeds() {
+        Vector<FuzzSeedFile> seeds;
 
         const FuzzBytes allTags = MakeAllTagsStream();
         seeds.push_back({kBinaryFolder, "all-tags.bin", allTags});

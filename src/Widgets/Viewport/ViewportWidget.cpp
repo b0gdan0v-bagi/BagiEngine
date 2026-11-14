@@ -114,7 +114,7 @@ namespace BECore {
 
         // The canvases of a subtree in the order of the scene (the walk of CollectCanvases in UIControl.cpp), without the subtree of a
         // node hidden in the editor: it draws nothing, so it gets no overlay
-        void CollectCanvases(const SceneNode& node, eastl::vector<IntrusivePtr<UICanvasComponent>>& out) {
+        void CollectCanvases(const SceneNode& node, Vector<IntrusivePtr<UICanvasComponent>>& out) {
             if (node.HasEditorFlag(EditorFlags::Hidden)) {
                 return;
             }
@@ -326,8 +326,7 @@ namespace BECore {
 
             // The gizmo goes before the mouse is forwarded, so a press on a handle is consumed first
             const bool pointerFree = editing && editorTarget && !_cameraInput.IsPanning();
-            const eastl::span<SceneNode* const> selection =
-                activeScene && activeScene == _selectedScene ? eastl::span<SceneNode* const>(_selectedNodes.data(), _selectedNodes.size()) : eastl::span<SceneNode* const>();
+            const Span<SceneNode* const> selection = activeScene && activeScene == _selectedScene ? Span<SceneNode* const>(_selectedNodes.data(), _selectedNodes.size()) : Span<SceneNode* const>();
             const bool gizmoTookPress = _gizmos.Update({activeScene, selection, &frame, editing, pointerFree, imageHovered});
             _boxSelect.Update(frame, activeScene, pointerFree, imageHovered, gizmoTookPress);
 
@@ -465,7 +464,7 @@ namespace BECore {
     }
 
     void ViewportWidget::DrawViewCombo(const Scene& scene) {
-        const eastl::span<const SceneViewVariant> variants = scene.GetViewVariants();
+        const Span<const SceneViewVariant> variants = scene.GetViewVariants();
         if (variants.empty()) {
             return;
         }
@@ -588,13 +587,13 @@ namespace BECore {
         }
 
         if (scene && (_overlays.canvasBounds || _overlays.touchTargets || _overlays.regions)) {
-            eastl::vector<IntrusivePtr<UICanvasComponent>> canvases;
+            Vector<IntrusivePtr<UICanvasComponent>> canvases;
             CollectCanvases(scene->GetRootNode(), canvases);
             const float minTouchSize = CoreManager::GetUIEnvironment().GetSettings().minTouchSize;
             const ImVec2 mouse = ImGui::GetIO().MousePos;
             const TouchMark* hoveredMark = nullptr;
-            eastl::vector<TouchMark> marks;
-            eastl::vector<HoverRegion> regionHits;
+            Vector<TouchMark> marks;
+            Vector<HoverRegion> regionHits;
             for (const auto& canvas : canvases) {
                 const UICanvasLayout& layout = canvas->GetLayout();
                 if (!canvas->_visible || !layout.HasLayout()) {
@@ -682,7 +681,7 @@ namespace BECore {
             const ImU32 color = index + 1 == _selectedNodes.size() ? primaryColor : otherColor;
             const ScenePick::Outlines outlines = ScenePick::SelectionOutlines(*scene, *node);
             for (size_t i = 0; i < outlines.count; ++i) {
-                eastl::array<ImVec2, 4> corners;
+                Array<ImVec2, 4> corners;
                 for (size_t corner = 0; corner < corners.size(); ++corner) {
                     corners[corner] = frame.ToScreen(outlines.quads[i][corner]);
                 }

@@ -186,7 +186,7 @@ namespace BECore::Tests::MigrationTwin {
             _renderer->height = kLargeHeight;
             CoreManager::GetRendererManager().SetRenderer(_renderer);
             RegisterUIControl(_service);
-            const eastl::vector<uint8_t> pixels(static_cast<size_t>(kIconPixels) * kIconPixels * 4, 200);
+            const Vector<uint8_t> pixels(static_cast<size_t>(kIconPixels) * kIconPixels * 4, 200);
             _icon = _renderer->CreateTexture(pixels.data(), kIconPixels, kIconPixels);
         }
 

@@ -168,8 +168,8 @@ namespace BECore::Tests {
         }
 
         /// GetDrawRank of every child of the scene root, in scene order
-        eastl::vector<int32_t> DrawRanks(BECore::Scene& scene) {
-            eastl::vector<int32_t> ranks;
+        Vector<int32_t> DrawRanks(BECore::Scene& scene) {
+            Vector<int32_t> ranks;
             for (const auto& node : scene.GetRootNode().GetChildren()) {
                 ranks.push_back(scene.GetDrawRank(*node));
             }
@@ -307,7 +307,7 @@ namespace BECore::Tests {
         EXPECT_EQ(NodeNamesOf(Main(split)), (std::vector<std::string>{"Board", "Hud", "Menu"}));
         ExpectSameScene(Main(inlined), Main(split));
         // The draw order is by layer, then scene order: Board (0) first, Menu (5), Hud (10) last; the ranks count the root node too
-        EXPECT_EQ(DrawRanks(Main(split)), (eastl::vector<int32_t>{1, 3, 2}));
+        EXPECT_EQ(DrawRanks(Main(split)), (Vector<int32_t>{1, 3, 2}));
     }
 
     TEST_F(SceneSplitTest, ALoadedNodeKnowsItsNodeFile) {
@@ -455,7 +455,7 @@ namespace BECore::Tests {
         ExpectSameScene(Main(inlined), Main(split));
         EXPECT_EQ(NodeNamesOf(Main(split)), (std::vector<std::string>{"PanelA", "PanelB", "PanelC"}));
         // The layers decide the draw order: PanelC (1), PanelB (2), PanelA (7); the ranks count the root node too
-        EXPECT_EQ(DrawRanks(Main(split)), (eastl::vector<int32_t>{3, 2, 1}));
+        EXPECT_EQ(DrawRanks(Main(split)), (Vector<int32_t>{3, 2, 1}));
 
         const auto& nodes = Main(split).GetRootNode().GetChildren();
         EXPECT_EQ(nodes[0]->GetLayer(), 7);

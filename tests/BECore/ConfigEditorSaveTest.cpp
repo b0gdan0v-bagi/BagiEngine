@@ -23,8 +23,8 @@ namespace BECore::Tests {
         constexpr int kFilePriority = 100;
 
         /// The `<sink>` elements of a logger config document, in file order
-        eastl::vector<pugi::xml_node> SinkElements(const XmlDocument& document) {
-            eastl::vector<pugi::xml_node> sinks;
+        Vector<pugi::xml_node> SinkElements(const XmlDocument& document) {
+            Vector<pugi::xml_node> sinks;
             const XmlNode sinksNode = document.GetRoot().GetChild("sinks");
             for (const XmlNode child : sinksNode.Children()) {
                 if (child.Name() == "sink") {
@@ -45,7 +45,7 @@ namespace BECore::Tests {
             return count;
         }
 
-        bool Contains(const eastl::vector<String>& options, StringView value) {
+        bool Contains(const Vector<String>& options, StringView value) {
             return eastl::find(options.begin(), options.end(), value) != options.end();
         }
 
@@ -126,7 +126,7 @@ namespace BECore::Tests {
             if (!LoadTemplate(edited)) {
                 return false;
             }
-            const eastl::vector<pugi::xml_node> sinks = SinkElements(edited);
+            const Vector<pugi::xml_node> sinks = SinkElements(edited);
             if (sinks.empty()) {
                 return false;
             }
@@ -189,7 +189,7 @@ namespace BECore::Tests {
 
         XmlDocument original;
         ASSERT_TRUE(LoadTemplate(original));
-        const eastl::vector<pugi::xml_node> originalSinks = SinkElements(original);
+        const Vector<pugi::xml_node> originalSinks = SinkElements(original);
         ASSERT_EQ(originalSinks.size(), 3u);
 
         for (const String& option : offered.options) {
@@ -202,7 +202,7 @@ namespace BECore::Tests {
             // In the file: only the `type` of the first sink differs from the copy that was edited
             XmlDocument reloaded;
             ASSERT_TRUE(reloaded.LoadFromFile(SavedPath()));
-            const eastl::vector<pugi::xml_node> reloadedSinks = SinkElements(reloaded);
+            const Vector<pugi::xml_node> reloadedSinks = SinkElements(reloaded);
             ASSERT_EQ(reloadedSinks.size(), originalSinks.size());
             for (size_t i = 0; i < originalSinks.size(); ++i) {
                 size_t attributeCount = 0;

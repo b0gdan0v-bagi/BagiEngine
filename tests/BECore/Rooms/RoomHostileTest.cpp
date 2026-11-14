@@ -28,7 +28,7 @@ namespace BECore::Tests {
         }
 
         /// Ticks the clock and lets the humans play their first action until every one has seen the end
-        bool PlayToTheEnd(HubHarness& harness, const eastl::vector<ConnectionId>& humans) {
+        bool PlayToTheEnd(HubHarness& harness, const Vector<ConnectionId>& humans) {
             for (int step = 0; step < kMaxSteps; ++step) {
                 harness.Tick(milliseconds(10));
                 bool allDone = true;
@@ -44,7 +44,7 @@ namespace BECore::Tests {
         }
 
         /// Ticks until one of the humans has an action; the connection, or 0
-        ConnectionId WaitForAHumanTurn(HubHarness& harness, const eastl::vector<ConnectionId>& humans) {
+        ConnectionId WaitForAHumanTurn(HubHarness& harness, const Vector<ConnectionId>& humans) {
             for (int step = 0; step < kMaxSteps; ++step) {
                 for (const ConnectionId id : humans) {
                     const ReceivedMessage* view = harness.Client(id).Last(RoomMessageTypes::kView);
@@ -121,8 +121,8 @@ namespace BECore::Tests {
 
     TEST(RoomHostileTest, ListingAThousandTimesBetweenGuessesLearnsNoPrivateCodeAndTheCloseAfterWrongCodesStillComes) {
         HubHarness harness;
-        eastl::vector<String> privateCodes;
-        eastl::vector<ConnectionId> members;
+        Vector<String> privateCodes;
+        Vector<ConnectionId> members;
         for (int i = 0; i < 3; ++i) {
             const ConnectionId host = harness.Connect();
             harness.Create(host, Format("Private{}", i).c_str());
@@ -134,7 +134,7 @@ namespace BECore::Tests {
         members.push_back(publicHost);
 
         // Many connections, each of which lists as much as it may and guesses a wrong code now and then; every one is closed in the end
-        eastl::vector<ConnectionId> attackers;
+        Vector<ConnectionId> attackers;
         int lists = 0;
         while (lists < 1000) {
             const ConnectionId attacker = harness.Connect("10.0.0.9");

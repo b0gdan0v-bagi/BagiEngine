@@ -79,15 +79,15 @@ namespace BECore {
 
         /// Unknown names already reported. Views of the literals in the generated ClassMeta, so no string is copied;
         /// only a name that is not in the table is ever searched here.
-        eastl::vector<StringView>& WarnedNames() {
-            static eastl::vector<StringView> names;
+        Vector<StringView>& WarnedNames() {
+            static Vector<StringView> names;
             return names;
         }
 
     }  // namespace
 
-    eastl::span<const IconEntry> GetIconTable() {
-        return eastl::span<const IconEntry>(kIcons);
+    Span<const IconEntry> GetIconTable() {
+        return Span<const IconEntry>(kIcons);
     }
 
     const char* FindIcon(StringView name) {

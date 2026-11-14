@@ -51,7 +51,7 @@ namespace BECore {
         return _nodes.empty() ? nullptr : _nodes.back();
     }
 
-    eastl::span<SceneNode* const> SceneSelection::Nodes() const {
+    Span<SceneNode* const> SceneSelection::Nodes() const {
         return {_nodes.data(), _nodes.size()};
     }
 

@@ -44,7 +44,7 @@ namespace BECore::Tests {
         /// Records what a client's transport receives and lets the test abort the live connection
         class TappedTransport final : public IRoomTransport {
         public:
-            TappedTransport(eastl::unique_ptr<IRoomTransport> inner, Tap& tap) : _inner(std::move(inner)), _tap(tap) {
+            TappedTransport(UniquePtr<IRoomTransport> inner, Tap& tap) : _inner(std::move(inner)), _tap(tap) {
                 _tap.current = this;
                 ++_tap.connections;
             }
@@ -83,7 +83,7 @@ namespace BECore::Tests {
             }
 
         private:
-            eastl::unique_ptr<IRoomTransport> _inner;
+            UniquePtr<IRoomTransport> _inner;
             Tap& _tap;
         };
 
@@ -96,7 +96,7 @@ namespace BECore::Tests {
         /// A human at the table: a RoomClient on the native transport, judged on the wire, that plays the first action it is offered
         struct Player {
             explicit Player(RoomClientSettings settings = {}) : judge(std::make_shared<WireJudgeLog>()) {
-                settings.transportFactory = [this]() -> eastl::unique_ptr<IRoomTransport> {
+                settings.transportFactory = [this]() -> UniquePtr<IRoomTransport> {
                     auto native = MakeDefaultRoomTransport();
                     if (!native) {
                         return nullptr;
@@ -157,7 +157,7 @@ namespace BECore::Tests {
             Tap tap;
             std::shared_ptr<WireJudgeLog> judge;
             std::unique_ptr<RoomClient> client;
-            eastl::vector<RoomClientEvent> events;
+            Vector<RoomClientEvent> events;
             bool autoplay = true;
             bool acted = false;
             uint64_t actedVersion = 0;

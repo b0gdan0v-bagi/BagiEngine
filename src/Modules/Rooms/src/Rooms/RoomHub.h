@@ -89,13 +89,13 @@ namespace BECore {
         };
 
         struct RoomEntry {
-            eastl::unique_ptr<Room> room;
+            UniquePtr<Room> room;
             /// The order of creation (the hub counts up), so a list is oldest first whatever the hash order
             uint64_t creation = 0;
             /// The `options` of `create_room`, handed to the game at `start`
             Json options = Json::object();
             /// The connections of the members that are connected, in the order they joined
-            eastl::vector<ConnectionId> connections;
+            Vector<ConnectionId> connections;
             /// The address of the connection that created the room (empty: unknown)
             String address;
             /// The last message of a member other than `ping`, or the creation (the lobby timeout)
@@ -157,7 +157,7 @@ namespace BECore {
         uint64_t _roomsCreated = 0;
         eastl::hash_map<String, AddressState> _addresses;
         eastl::hash_map<ConnectionId, Connection> _connections;
-        eastl::hash_map<String, eastl::unique_ptr<RoomEntry>> _rooms;
+        eastl::hash_map<String, UniquePtr<RoomEntry>> _rooms;
     };
 
 }  // namespace BECore

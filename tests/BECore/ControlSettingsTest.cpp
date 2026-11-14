@@ -8,7 +8,7 @@ namespace BECore::Tests {
 
     namespace {
 
-        using Args = eastl::vector<String>;
+        using Args = Vector<String>;
 
         /// The ApplicationConfig the engine reads from @p xml (the code path of the real start-up, strict values)
         ApplicationConfigLoad LoadFrom(const char* xml) {

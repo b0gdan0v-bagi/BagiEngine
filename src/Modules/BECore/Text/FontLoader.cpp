@@ -29,7 +29,7 @@ namespace BECore {
             return Font::CreateFromMemory(path, {});
         }
         const auto size = static_cast<size_t>(file.tellg());
-        eastl::vector<uint8_t> bytes(size);
+        Vector<uint8_t> bytes(size);
         file.seekg(0);
         file.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(size));
         if (!file) {

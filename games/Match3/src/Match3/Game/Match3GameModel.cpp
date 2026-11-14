@@ -196,8 +196,8 @@ namespace BECore::Match3 {
         return MatchFinder::HasAnyMatch(trial);
     }
 
-    eastl::vector<eastl::pair<Cell, Cell>> Match3GameModel::GetLegalSwaps() const {
-        eastl::vector<eastl::pair<Cell, Cell>> swaps;
+    Vector<eastl::pair<Cell, Cell>> Match3GameModel::GetLegalSwaps() const {
+        Vector<eastl::pair<Cell, Cell>> swaps;
         for (int8_t row = 0; row < kBoardSize; ++row) {
             for (int8_t col = 0; col < kBoardSize; ++col) {
                 const Cell from{col, row};
@@ -218,7 +218,7 @@ namespace BECore::Match3 {
         return ResolveCascade(nullptr);
     }
 
-    int Match3GameModel::ResolveCascade(eastl::vector<CascadeStep>* steps) {
+    int Match3GameModel::ResolveCascade(Vector<CascadeStep>* steps) {
         int totalRemoved = 0;
         while (true) {
             const auto matched = MatchFinder::FindMatches(_board);

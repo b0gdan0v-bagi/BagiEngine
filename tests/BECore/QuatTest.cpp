@@ -21,7 +21,7 @@ namespace BECore::Tests {
         constexpr Vec3 kAxisZ{0.0f, 0.0f, 1.0f};
 
         struct StepVisitor {
-            eastl::vector<String> names;
+            Vector<String> names;
 
             bool Visit(const char* name, float& value) {
                 names.push_back(name);

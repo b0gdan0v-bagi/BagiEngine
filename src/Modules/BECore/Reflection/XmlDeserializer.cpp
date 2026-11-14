@@ -705,7 +705,7 @@ namespace BECore {
         return !_errors.empty();
     }
 
-    const eastl::vector<DeserializeError>& XmlDeserializer::GetErrors() const {
+    const Vector<DeserializeError>& XmlDeserializer::GetErrors() const {
         return _errors;
     }
 

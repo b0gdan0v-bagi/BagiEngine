@@ -33,12 +33,12 @@ namespace BECore::Tests {
         return false;
     }
 
-    inline eastl::span<const uint8_t> AsBytes(const std::string& text) {
-        return eastl::span<const uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), text.size());
+    inline Span<const uint8_t> AsBytes(const std::string& text) {
+        return Span<const uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), text.size());
     }
 
-    inline eastl::span<const uint8_t> AsBytes(const eastl::vector<uint8_t>& bytes) {
-        return eastl::span<const uint8_t>(bytes.data(), bytes.size());
+    inline Span<const uint8_t> AsBytes(const Vector<uint8_t>& bytes) {
+        return Span<const uint8_t>(bytes.data(), bytes.size());
     }
 
     /// The opening handshake of the RFC for a server on @p port; @p host replaces the `Host` header value when it is not empty
@@ -81,7 +81,7 @@ namespace BECore::Tests {
             return client;
         }
 
-        void Send(eastl::span<const uint8_t> bytes) {
+        void Send(Span<const uint8_t> bytes) {
             EXPECT_TRUE(_socket.SendAll(bytes));
         }
 
@@ -90,7 +90,7 @@ namespace BECore::Tests {
         }
 
         /// Sends without a test failure when the server has ended the connection (a client that is being dropped); false then
-        [[nodiscard]] bool TrySend(eastl::span<const uint8_t> bytes) {
+        [[nodiscard]] bool TrySend(Span<const uint8_t> bytes) {
             return _socket.SendAll(bytes);
         }
 
@@ -174,7 +174,7 @@ namespace BECore::Tests {
         void FillBuffer() {
             std::array<uint8_t, 4096> chunk;
             for (int i = 0; i < kMaxChunksPerFill; ++i) {
-                const auto received = _socket.Receive(eastl::span<uint8_t>(chunk.data(), chunk.size()));
+                const auto received = _socket.Receive(Span<uint8_t>(chunk.data(), chunk.size()));
                 if (!received) {
                     if (received.error() != SocketError::TimedOut) {
                         _ended = true;
@@ -217,7 +217,7 @@ namespace BECore::Tests {
 
         Socket _socket;
         WaitPump _pump;
-        eastl::vector<uint8_t> _buffer;
+        Vector<uint8_t> _buffer;
         bool _ended = false;
     };
 

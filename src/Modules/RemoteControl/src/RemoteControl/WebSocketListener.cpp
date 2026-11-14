@@ -14,7 +14,7 @@ namespace BECore {
         void RejectBusy(Socket socket, const String& message) {
             socket.SetReceiveTimeout(kBusyDrainTimeout);
             std::array<uint8_t, kMaxHandshakeBytes> discarded;
-            (void)socket.Receive(eastl::span<uint8_t>(discarded.data(), discarded.size()));
+            (void)socket.Receive(Span<uint8_t>(discarded.data(), discarded.size()));
             const String response = BuildRejectResponse(HandshakeError{kServiceUnavailable, message});
             (void)socket.SendAll(AsBytes(response));
         }
@@ -60,7 +60,7 @@ namespace BECore {
         }
         _listener.Close();
 
-        eastl::vector<ConnectionPtr> connections;
+        Vector<ConnectionPtr> connections;
         {
             LockGuard lock(_connectionsMutex);
             connections.swap(_connections);
@@ -75,7 +75,7 @@ namespace BECore {
     }
 
     void WebSocketListener::ForEachOpenConnection(const std::function<void(WebSocketConnection&)>& visit) {
-        eastl::vector<ConnectionPtr> targets;
+        Vector<ConnectionPtr> targets;
         {
             LockGuard lock(_connectionsMutex);
             targets = _connections;
@@ -159,7 +159,7 @@ namespace BECore {
     }
 
     void WebSocketListener::ReapFinishedConnections() {
-        eastl::vector<ConnectionPtr> finished;
+        Vector<ConnectionPtr> finished;
         {
             LockGuard lock(_connectionsMutex);
             for (auto it = _connections.begin(); it != _connections.end();) {
@@ -177,7 +177,7 @@ namespace BECore {
     }
 
     void WebSocketListener::RunConnection(const ConnectionPtr& connection) {
-        eastl::vector<uint8_t> pendingBytes;
+        Vector<uint8_t> pendingBytes;
         AdmitClientFn admit;
         if (_settings.policy.trustedProxyHops != 0) {
             admit = [this, &connection](const String& clientAddress) { return AdmitByClientAddress(*connection, clientAddress); };
@@ -200,9 +200,9 @@ namespace BECore {
         connection->MarkFinished();
     }
 
-    void WebSocketListener::ReadMessages(const ConnectionPtr& connection, eastl::vector<uint8_t> pendingBytes) {
+    void WebSocketListener::ReadMessages(const ConnectionPtr& connection, Vector<uint8_t> pendingBytes) {
         WebSocketFrameParser parser(_settings.maxMessageBytes);
-        parser.Feed(eastl::span<const uint8_t>(pendingBytes.data(), pendingBytes.size()));
+        parser.Feed(Span<const uint8_t>(pendingBytes.data(), pendingBytes.size()));
 
         std::array<uint8_t, kReadChunkSize> chunk;
         for (;;) {
@@ -221,11 +221,11 @@ namespace BECore {
                 }
             }
 
-            const auto received = connection->Receive(eastl::span<uint8_t>(chunk.data(), chunk.size()));
+            const auto received = connection->Receive(Span<uint8_t>(chunk.data(), chunk.size()));
             if (!received) {
                 return;
             }
-            parser.Feed(eastl::span<const uint8_t>(chunk.data(), *received));
+            parser.Feed(Span<const uint8_t>(chunk.data(), *received));
         }
     }
 
@@ -237,7 +237,7 @@ namespace BECore {
                 connection->QueueClose(WebSocketCloseCode::kUnsupportedData, "binary messages are not supported");
                 return false;
             case WebSocketMessageKind::Ping:
-                connection->QueuePong(eastl::span<const uint8_t>(message.payload.data(), message.payload.size()));
+                connection->QueuePong(Span<const uint8_t>(message.payload.data(), message.payload.size()));
                 return true;
             case WebSocketMessageKind::Pong:
                 return true;

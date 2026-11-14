@@ -12,7 +12,7 @@ namespace BECore {
         // Автоматически монтируем стандартные директории каждого корня, если они существуют.
         // Корни идут от младшего приоритета к старшему, поэтому слой игры перекрывает слой движка.
         for (const auto& root : _roots) {
-            for (const PoolString name : eastl::array<PoolString, 2>{"config"_intern, "assets"_intern}) {
+            for (const PoolString name : Array<PoolString, 2>{"config"_intern, "assets"_intern}) {
                 const auto dirName = name.ToStringView();
                 std::filesystem::path dirPath = root / ToStd(dirName);
                 if (std::filesystem::exists(dirPath) && std::filesystem::is_directory(dirPath)) {
@@ -139,7 +139,7 @@ namespace BECore {
         return {};
     }
 
-    eastl::vector<std::filesystem::path> FileSystem::GetMountLayers(PoolString virtualPath) const {
+    Vector<std::filesystem::path> FileSystem::GetMountLayers(PoolString virtualPath) const {
         auto it = _mountPoints.find(virtualPath);
         if (it != _mountPoints.end()) {
             return it->second;
@@ -147,8 +147,8 @@ namespace BECore {
         return {};
     }
 
-    eastl::vector<PoolString> FileSystem::EnumerateFiles(PoolString mountPoint, eastl::span<const StringView> extensions) const {
-        eastl::vector<PoolString> result;
+    Vector<PoolString> FileSystem::EnumerateFiles(PoolString mountPoint, Span<const StringView> extensions) const {
+        Vector<PoolString> result;
 
         auto it = _mountPoints.find(mountPoint);
         if (it == _mountPoints.end()) {
@@ -156,7 +156,7 @@ namespace BECore {
         }
 
         // Relative paths from all layers: a file present in several layers is listed once
-        eastl::vector<std::filesystem::path> files;
+        Vector<std::filesystem::path> files;
 
         for (const auto& basePath : it->second) {
             std::error_code ec;

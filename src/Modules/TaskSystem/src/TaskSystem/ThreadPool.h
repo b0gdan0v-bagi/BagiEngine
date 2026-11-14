@@ -114,13 +114,13 @@ namespace BECore {
         void SetWorkerBusy(size_t threadIndex, bool busy);
         bool TryStealTask(size_t thiefIndex, TaskQueue::TaskFunc& task);
 
-        eastl::vector<Thread> _threads;
-        eastl::vector<eastl::unique_ptr<TaskQueue>> _queues;
+        Vector<Thread> _threads;
+        Vector<UniquePtr<TaskQueue>> _queues;
         std::atomic<bool> _stopped{false};
         std::atomic<size_t> _nextQueue{0};
 
         // One flag per worker (written by that worker, read by GetBusyWorkerCount) and the jobs taken from another worker's queue since the last sample
-        eastl::unique_ptr<std::atomic<bool>[]> _workerBusy;
+        UniquePtr<std::atomic<bool>[]> _workerBusy;
         Mutex _busyReportMutex{BE_LOCK_SITE("Pool busy report")};  // orders the busy graphs of the workers (only while a profiler backend records)
         std::atomic<uint64_t> _stealCount{0};
 

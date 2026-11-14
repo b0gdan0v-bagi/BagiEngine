@@ -12,7 +12,7 @@ namespace BECore {
 
     }  // namespace
 
-    void CommandLine::Set(eastl::span<const String> arguments) {
+    void CommandLine::Set(Span<const String> arguments) {
         _arguments.assign(arguments.begin(), arguments.end());
     }
 

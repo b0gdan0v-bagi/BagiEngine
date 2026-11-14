@@ -8,7 +8,7 @@ namespace BECore::Tests {
 
     class RecordedGpuBuffer : public IGpuBuffer {
     public:
-        RecordedGpuBuffer(const BufferDesc& desc, eastl::span<const std::byte> initial) : _desc(desc), _bytes(desc.size, std::byte{0}) {
+        RecordedGpuBuffer(const BufferDesc& desc, Span<const std::byte> initial) : _desc(desc), _bytes(desc.size, std::byte{0}) {
             std::copy(initial.begin(), initial.end(), _bytes.begin());
         }
 
@@ -16,13 +16,13 @@ namespace BECore::Tests {
             return _desc;
         }
         /// The content: @p desc.size bytes, the initial data first
-        const eastl::vector<std::byte>& GetBytes() const {
+        const Vector<std::byte>& GetBytes() const {
             return _bytes;
         }
 
     private:
         BufferDesc _desc;
-        eastl::vector<std::byte> _bytes;
+        Vector<std::byte> _bytes;
     };
 
     class RecordedGpuPipeline : public IGpuPipeline {
@@ -68,7 +68,7 @@ namespace BECore::Tests {
         uint32_t textureSlot = 0;                            ///< SetTexture
         const ITexture* texture = nullptr;                   ///< SetTexture
         ConstantsSlot constantsSlot = ConstantsSlot::Frame;  ///< SetConstants
-        eastl::vector<std::byte> constants;                  ///< SetConstants: the bytes as they were passed
+        Vector<std::byte> constants;                         ///< SetConstants: the bytes as they were passed
         Rect rect;                                           ///< SetViewport, SetScissor
         uint32_t indexCount = 0;                             ///< DrawIndexed
         uint32_t firstIndex = 0;                             ///< DrawIndexed
@@ -81,7 +81,7 @@ namespace BECore::Tests {
         const IGpuBuffer* vertexBuffer = nullptr;
         const IGpuBuffer* indexBuffer = nullptr;
         IndexType indexType = IndexType::Uint32;
-        std::array<eastl::vector<std::byte>, kConstantsSlotCount> constants;  ///< by ConstantsSlot, the last block set (empty when none)
+        std::array<Vector<std::byte>, kConstantsSlotCount> constants;  ///< by ConstantsSlot, the last block set (empty when none)
         std::array<const ITexture*, kMaxTextureSlots> textures{};
         Rect viewport;  ///< as set in the pass; empty when none was (the whole target)
         Rect scissor;
@@ -93,7 +93,7 @@ namespace BECore::Tests {
         template <typename T>
         [[nodiscard]] T ConstantsAs(ConstantsSlot slot) const {
             T value{};
-            const eastl::vector<std::byte>& bytes = constants[static_cast<size_t>(slot)];
+            const Vector<std::byte>& bytes = constants[static_cast<size_t>(slot)];
             std::memcpy(&value, bytes.data(), std::min(bytes.size(), sizeof(T)));
             return value;
         }
@@ -108,7 +108,7 @@ namespace BECore::Tests {
      */
     class RecordingGpuDevice : public IGpuDevice {
     public:
-        IntrusivePtr<IGpuBuffer> CreateBuffer(const BufferDesc& desc, eastl::span<const std::byte> initial) override {
+        IntrusivePtr<IGpuBuffer> CreateBuffer(const BufferDesc& desc, Span<const std::byte> initial) override {
             if (desc.size == 0 || initial.size() > desc.size) {
                 Fail(Format("a buffer of {} bytes cannot hold {} bytes of initial data", desc.size, initial.size()));
                 return {};
@@ -229,7 +229,7 @@ namespace BECore::Tests {
             commands.push_back(std::move(command));
         }
 
-        void SetConstants(ConstantsSlot slot, eastl::span<const std::byte> bytes) override {
+        void SetConstants(ConstantsSlot slot, Span<const std::byte> bytes) override {
             if (!RequirePass("SetConstants")) {
                 return;
             }
@@ -318,8 +318,8 @@ namespace BECore::Tests {
         }
 
         /// The recorded commands of @p kind, in order
-        [[nodiscard]] eastl::vector<const GpuCommand*> CommandsOf(GpuCommandKind kind) const {
-            eastl::vector<const GpuCommand*> result;
+        [[nodiscard]] Vector<const GpuCommand*> CommandsOf(GpuCommandKind kind) const {
+            Vector<const GpuCommand*> result;
             for (const GpuCommand& command : commands) {
                 if (command.kind == kind) {
                     result.push_back(&command);
@@ -332,9 +332,9 @@ namespace BECore::Tests {
             return _passOpen;
         }
 
-        eastl::vector<GpuCommand> commands;
-        eastl::vector<RecordedDraw> draws;
-        eastl::vector<String> errors;  ///< one reason per call that broke a rule
+        Vector<GpuCommand> commands;
+        Vector<RecordedDraw> draws;
+        Vector<String> errors;  ///< one reason per call that broke a rule
         uint32_t buffersCreated = 0;
         uint32_t pipelinesCreated = 0;
         uint32_t depthTexturesCreated = 0;
@@ -346,7 +346,7 @@ namespace BECore::Tests {
             const IGpuBuffer* vertexBuffer = nullptr;
             const IGpuBuffer* indexBuffer = nullptr;
             IndexType indexType = IndexType::Uint32;
-            std::array<eastl::vector<std::byte>, kConstantsSlotCount> constants;
+            std::array<Vector<std::byte>, kConstantsSlotCount> constants;
             std::array<bool, kConstantsSlotCount> constantsSet{};
             std::array<const ITexture*, kMaxTextureSlots> textures{};
             Rect viewport;

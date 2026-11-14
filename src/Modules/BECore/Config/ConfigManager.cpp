@@ -29,9 +29,9 @@ namespace BECore {
         }
 
         // Сканируем слои для поиска XML файлов
-        eastl::vector<eastl::pair<std::filesystem::path, PoolString>> filesToLoad;
+        Vector<eastl::pair<std::filesystem::path, PoolString>> filesToLoad;
         for (const auto& layer : layers) {
-            eastl::vector<eastl::pair<std::filesystem::path, PoolString>> layerFiles;
+            Vector<eastl::pair<std::filesystem::path, PoolString>> layerFiles;
             ScanDirectory(layer, layerFiles);
 
             for (auto& layerFile : layerFiles) {
@@ -80,7 +80,7 @@ namespace BECore {
 
     namespace {
 
-        eastl::unique_ptr<IDeserializer> MakeDeserializer(const XmlNode& root) {
+        UniquePtr<IDeserializer> MakeDeserializer(const XmlNode& root) {
             if (!root) {
                 return nullptr;
             }
@@ -93,11 +93,11 @@ namespace BECore {
 
     }  // namespace
 
-    eastl::unique_ptr<IDeserializer> ConfigManager::CreateDeserializer(PoolString name) const {
+    UniquePtr<IDeserializer> ConfigManager::CreateDeserializer(PoolString name) const {
         return MakeDeserializer(GetConfig(name));
     }
 
-    eastl::unique_ptr<IDeserializer> ConfigManager::CreateDeserializer(StringView name) const {
+    UniquePtr<IDeserializer> ConfigManager::CreateDeserializer(StringView name) const {
         return MakeDeserializer(GetConfig(name));
     }
 
@@ -125,9 +125,9 @@ namespace BECore {
         return _configs.size();
     }
 
-    eastl::vector<PoolString> ConfigManager::GetAllConfigNames() const {
+    Vector<PoolString> ConfigManager::GetAllConfigNames() const {
         ASSERT(_initialized.load(std::memory_order_acquire));
-        eastl::vector<PoolString> names;
+        Vector<PoolString> names;
         names.reserve(_configs.size());
         for (const auto& [name, entry] : _configs) {
             names.push_back(name);
@@ -200,7 +200,7 @@ namespace BECore {
         return true;
     }
 
-    void ConfigManager::ScanDirectory(const std::filesystem::path& dir, eastl::vector<eastl::pair<std::filesystem::path, PoolString>>& filesToLoad) const {
+    void ConfigManager::ScanDirectory(const std::filesystem::path& dir, Vector<eastl::pair<std::filesystem::path, PoolString>>& filesToLoad) const {
         // filesystem может бросать исключения, но exceptions отключены
         // Просто пропускаем ошибки
         for (const auto& entry : std::filesystem::recursive_directory_iterator(dir)) {

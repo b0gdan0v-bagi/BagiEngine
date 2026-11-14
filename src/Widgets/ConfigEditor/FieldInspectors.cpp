@@ -12,7 +12,7 @@ namespace BECore {
 
         constexpr size_t k_textBufSize = 256;
         constexpr const char* k_unknownValueMarker = "(not a known value)";
-        using TextBuf = eastl::array<char, k_textBufSize>;
+        using TextBuf = Array<char, k_textBufSize>;
 
         // Persistent char buffers for InputText fields, keyed by widgetId
         eastl::unordered_map<String, TextBuf> s_textBuffers;
@@ -66,7 +66,7 @@ namespace BECore {
             return {};
         }
 
-        InspectorResult RenderEnum(const String& widgetId, StringView currentValue, const eastl::vector<String>& options) {
+        InspectorResult RenderEnum(const String& widgetId, StringView currentValue, const Vector<String>& options) {
             if (options.empty()) {
                 return {};
             }
@@ -109,7 +109,7 @@ namespace BECore {
             return result;
         }
 
-        InspectorResult RenderFlags(const String& widgetId, StringView currentValue, const eastl::vector<String>& options) {
+        InspectorResult RenderFlags(const String& widgetId, StringView currentValue, const Vector<String>& options) {
             if (options.empty()) {
                 return {};
             }
@@ -138,7 +138,7 @@ namespace BECore {
             };
 
             bool anyChanged = false;
-            eastl::vector<bool> checked(options.size());
+            Vector<bool> checked(options.size());
             for (size_t i = 0; i < options.size(); ++i) {
                 checked[i] = isActive(options[i]);
             }

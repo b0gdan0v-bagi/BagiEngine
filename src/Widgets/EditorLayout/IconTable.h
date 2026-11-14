@@ -13,7 +13,7 @@ namespace BECore {
 
     /// The icons the editor and the engine's components use, sorted by name (a static_assert in IconTable.cpp holds it).
     /// To add one: put a row in its place in IconTable.cpp, `{"name", ICON_LC_NAME}` from Icons/IconsLucide.h.
-    eastl::span<const IconEntry> GetIconTable();
+    Span<const IconEntry> GetIconTable();
 
     /// The glyph of a Lucide name, or null when the table has no such row. Binary search, never allocates.
     const char* FindIcon(StringView name);

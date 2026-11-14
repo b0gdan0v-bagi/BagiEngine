@@ -59,7 +59,7 @@ namespace BECore {
         bool _sawError = false;
         Thread::Id _owner;
         /// The events not taken yet are _events[_head, _count); the slots stay allocated, so a steady stream reuses their buffers
-        eastl::vector<RoomTransportEvent> _events;
+        Vector<RoomTransportEvent> _events;
         size_t _head = 0;
         size_t _count = 0;
         /// The NUL-terminated copy of the text being sent (the API takes a C string); a member so it keeps its capacity

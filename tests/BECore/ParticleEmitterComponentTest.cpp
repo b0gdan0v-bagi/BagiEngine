@@ -125,7 +125,7 @@ namespace BECore::Tests {
                 return false;
             }
 
-            eastl::vector<String> _names;
+            Vector<String> _names;
         };
 
         void ExpectColor(const Color& actual, const Color& expected) {
@@ -193,10 +193,10 @@ namespace BECore::Tests {
         }
 
         /// The geometry draw calls of one draw pass of the active scene
-        eastl::vector<DrawCall> Draw() {
+        Vector<DrawCall> Draw() {
             _renderer->ClearCalls();
             _manager->DrawAll();
-            eastl::vector<DrawCall> geometry;
+            Vector<DrawCall> geometry;
             for (const DrawCall& call : _renderer->calls) {
                 if (call.kind == DrawKind::Geometry) {
                     geometry.push_back(call);
@@ -337,7 +337,7 @@ namespace BECore::Tests {
 
     TEST_F(ParticleEmitterComponentTest, ASpriteOfTheLibraryGivesTexturedGeometryWithItsUVs) {
         auto emitter = Emitter("Spark");
-        const eastl::vector<uint8_t> pixels(static_cast<size_t>(kTextureSize) * kTextureSize * kBytesPerPixel, 255);
+        const Vector<uint8_t> pixels(static_cast<size_t>(kTextureSize) * kTextureSize * kBytesPerPixel, 255);
         auto texture = _renderer->CreateTexture(pixels.data(), kTextureSize, kTextureSize);
         emitter->SetTexture(texture);
         Frame();

@@ -24,7 +24,7 @@ namespace BECore {
 
     }  // namespace
 
-    std::expected<ProfilerSettings, String> ResolveProfilerSettings(eastl::span<const String> args, ProfilerBuild build) {
+    std::expected<ProfilerSettings, String> ResolveProfilerSettings(Span<const String> args, ProfilerBuild build) {
         using namespace ProfilerArguments;
 
         Optional<ProfilerBackendKind> asked;

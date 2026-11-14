@@ -56,7 +56,7 @@ namespace BECore::Stress {
         /// Starts the tween of node @p index: @p first begins at the node's `startTurn`, a restart at 0
         void StartTween(uint32_t index, bool first);
 
-        eastl::vector<Entity> _entities;
+        Vector<Entity> _entities;
         FieldView _view;
         uint64_t _restartCount = 0;
         uint64_t _builtVersion = 0;  // the StressState version the nodes were last brought to; 0 is never a version

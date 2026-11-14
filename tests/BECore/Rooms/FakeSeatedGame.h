@@ -11,7 +11,7 @@ namespace BECore::Tests {
     using LeakyFakeSeatedGame = LeakyDemoCardGame;
 
     /// The card ids that @p text mentions and that sit in the hand of a seat other than @p seat in @p game right now
-    [[nodiscard]] inline eastl::vector<String> FindLeakedCards(const String& text, int seat, const FakeSeatedGame& game) {
+    [[nodiscard]] inline Vector<String> FindLeakedCards(const String& text, int seat, const FakeSeatedGame& game) {
         return FindHiddenCards(text, seat, game);
     }
 

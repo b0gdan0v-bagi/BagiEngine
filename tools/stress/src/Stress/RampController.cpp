@@ -61,7 +61,7 @@ namespace BECore::Stress {
 
         // The step is over: its verdict is the percentile of the measured frames, on a sorted copy (no allocation)
         ++_result.steps;
-        eastl::array<double, kMeasureFrames> sorted = _window;
+        Array<double, kMeasureFrames> sorted = _window;
         eastl::sort(sorted.begin(), sorted.end());
         OnStepEnd(NearestRank(sorted, kRampPercentile) <= kRampBudgetMs);
         return {_count, _phase == Phase::Done};

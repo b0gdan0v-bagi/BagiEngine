@@ -139,24 +139,24 @@ namespace BECore {
 
         [[nodiscard]] bool BypassesBarrier(const Request& request) const;
         void Process(Request& request);
-        void Settle(eastl::unique_ptr<ControlCall> call);
+        void Settle(UniquePtr<ControlCall> call);
 
         Mutex _mutex{BE_LOCK_SITE("Control queue")};
-        ConditionVariable _posted;                        // notified by Post(); WaitForRequests() waits on it
-        eastl::deque<eastl::unique_ptr<Request>> _queue;  // posted, not yet seen by the main thread; guarded by _mutex
-        bool _stopped = false;                            // guarded by _mutex
+        ConditionVariable _posted;                // notified by Post(); WaitForRequests() waits on it
+        eastl::deque<UniquePtr<Request>> _queue;  // posted, not yet seen by the main thread; guarded by _mutex
+        bool _stopped = false;                    // guarded by _mutex
 
         // Main thread only
-        eastl::deque<eastl::unique_ptr<Request>> _inbox;  // taken from _queue, in order, waiting for the barrier
+        eastl::deque<UniquePtr<Request>> _inbox;  // taken from _queue, in order, waiting for the barrier
         eastl::hash_map<String, HandlerEntry> _handlers;
-        eastl::unique_ptr<ControlCall> _pending;
+        UniquePtr<ControlCall> _pending;
         uint32_t _pendingFramesLeft = 0;
         double _pendingSeconds = kDefaultStepSeconds;
         bool _manualClock = false;
         GamePause* _pause = nullptr;
         ControlServerStatus _serverStatus;
         EventSink _eventSink;
-        eastl::vector<HookEntry> _frameEndHooks;
+        Vector<HookEntry> _frameEndHooks;
     };
 
 }  // namespace BECore

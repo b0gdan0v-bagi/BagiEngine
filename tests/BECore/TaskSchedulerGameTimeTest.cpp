@@ -61,7 +61,7 @@ namespace BECore::Tests {
             TaskScheduler _scheduler;
             std::unique_ptr<ThreadPool> _pool;
             int _ran = 0;
-            eastl::vector<int> _order;
+            Vector<int> _order;
         };
 
     }  // namespace

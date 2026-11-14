@@ -234,7 +234,7 @@ namespace BECore::Tests {
         }
 
         /// The card on the whole matrix, in the theme that is current: the validator does not read colours, but a theme must not change what it finds
-        eastl::vector<UIMatrixFailure> ValidateCard() const {
+        Vector<UIMatrixFailure> ValidateCard() const {
             UILayoutValidatorOptions options;
             options.minTouchSize = CoreManager::GetUIEnvironment().GetSettings().minTouchSize;
             return ValidateOnMatrix(_canvas->GetLayout(), options, ViewContext());
@@ -295,8 +295,8 @@ namespace BECore::Tests {
         }
 
         /// The colours the last draw filled rects with, in draw order: what a theme looks like to the renderer
-        eastl::vector<Color> Fills() const {
-            eastl::vector<Color> fills;
+        Vector<Color> Fills() const {
+            Vector<Color> fills;
             for (const DrawCall& call : _renderer->calls) {
                 if (call.kind == DrawKind::Rect) {
                     fills.push_back(call.color);
@@ -305,7 +305,7 @@ namespace BECore::Tests {
             return fills;
         }
 
-        static bool SameFills(const eastl::vector<Color>& a, const eastl::vector<Color>& b) {
+        static bool SameFills(const Vector<Color>& a, const Vector<Color>& b) {
             if (a.size() != b.size()) {
                 return false;
             }
@@ -345,7 +345,7 @@ namespace BECore::Tests {
     TEST_F(UIThemeScreenTest, ForEachThemeVisitsEveryThemeInTheOrderOfTheTableAndPutsTheCurrentOneBack) {
         UIThemes& themes = CoreManager::GetUIThemes();
         ASSERT_TRUE(themes.SetTheme(PoolString::Intern(kDark)));
-        eastl::vector<PoolString> visited;
+        Vector<PoolString> visited;
         ForEachTheme(themes, [&](PoolString theme) {
             EXPECT_EQ(themes.GetTheme(), theme);
             visited.push_back(theme);
@@ -360,7 +360,7 @@ namespace BECore::Tests {
     TEST_F(UIThemeScreenTest, EveryThemeDrawsItsOwnFillsAndTheCompiledPartFollowsTheTheme) {
         ASSERT_NO_FATAL_FAILURE(LoadScene());
         UIThemes& themes = CoreManager::GetUIThemes();
-        eastl::vector<eastl::vector<Color>> fills;
+        Vector<Vector<Color>> fills;
         ForEachTheme(themes, [&](PoolString) {
             Draw();
             fills.push_back(Fills());

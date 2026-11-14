@@ -210,7 +210,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(client.has_value());
 
         constexpr int kRequests = 50;
-        eastl::vector<uint8_t> batch;
+        Vector<uint8_t> batch;
         for (int id = 1; id <= kRequests; ++id) {
             const std::string text = Request(id, "echo", "{\"n\":" + std::to_string(id) + "}");
             const auto frame = EncodeTextFrame(FromStd(text), kMask);
@@ -318,7 +318,7 @@ namespace BECore::Tests {
 
         // Only the header of a frame that announces more than the limit: the server must not wait for the payload
         const uint64_t length = ControlService::kMaxRequestBytes + 1;
-        eastl::vector<uint8_t> header = {0x81, 0xFF};
+        Vector<uint8_t> header = {0x81, 0xFF};
         for (int shift = 56; shift >= 0; shift -= 8) {
             header.push_back(static_cast<uint8_t>(length >> shift));
         }
@@ -405,7 +405,7 @@ namespace BECore::Tests {
     TEST_F(WebSocketServerTest, FifthConnectionIsRefusedAsBusy) {
         const uint16_t port = StartServer();
 
-        eastl::vector<TestClient> clients;
+        Vector<TestClient> clients;
         for (size_t i = 0; i < WebSocketServer::kMaxConnections; ++i) {
             auto client = Connect(port);
             ASSERT_TRUE(client.has_value());

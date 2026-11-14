@@ -19,7 +19,7 @@ namespace BECore {
         return it->second.info;
     }
 
-    eastl::unique_ptr<ISeatedGame> SeatedGameRegistry::Create(StringView name) const {
+    UniquePtr<ISeatedGame> SeatedGameRegistry::Create(StringView name) const {
         const auto it = _games.find(String(name));
         if (it == _games.end()) {
             return nullptr;

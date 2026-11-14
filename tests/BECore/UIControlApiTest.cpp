@@ -556,8 +556,8 @@ namespace BECore::Tests {
                 ++ups;
             }
 
-            eastl::vector<PoolString> _actions;
-            eastl::vector<PoolString> _values;
+            Vector<PoolString> _actions;
+            Vector<PoolString> _values;
         };
 
         std::string Text(const String& text) {

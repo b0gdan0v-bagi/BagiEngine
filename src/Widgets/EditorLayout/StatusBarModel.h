@@ -55,7 +55,7 @@ namespace BECore {
         }
 
     private:
-        eastl::array<double, kMeterWindow> _window{};
+        Array<double, kMeterWindow> _window{};
         size_t _count = 0;  // filled slots, up to kMeterWindow
         size_t _next = 0;   // the slot the next frame goes to
         uint64_t _lastFrame = 0;
@@ -67,12 +67,12 @@ namespace BECore {
     // The formatters write NUL-terminated text into the caller's buffer and cut it when it is too small; none allocates.
 
     /// "60 fps"
-    void FormatFps(uint32_t fps, eastl::span<char> buffer);
+    void FormatFps(uint32_t fps, Span<char> buffer);
     /// "16.7 ms"
-    void FormatFrameMs(double frameMs, eastl::span<char> buffer);
+    void FormatFrameMs(double frameMs, Span<char> buffer);
     /// "0 allocs", "1 alloc", "12 allocs"
-    void FormatAllocs(uint64_t count, eastl::span<char> buffer);
+    void FormatAllocs(uint64_t count, Span<char> buffer);
     /// "off" when not listening, otherwise ":<port>  <n> client(s)"
-    void FormatControlStatus(bool listening, uint16_t port, uint32_t clients, eastl::span<char> buffer);
+    void FormatControlStatus(bool listening, uint16_t port, uint32_t clients, Span<char> buffer);
 
 }  // namespace BECore

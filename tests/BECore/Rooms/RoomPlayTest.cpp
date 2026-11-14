@@ -20,7 +20,7 @@ namespace BECore::Tests {
         struct TestRoom {
             Room room;
             eastl::shared_ptr<FakeSeatedGame*> game;
-            eastl::vector<RoomMemberJoined> members;
+            Vector<RoomMemberJoined> members;
 
             const FakeSeatedGame& Game() const {
                 return **game;
@@ -29,7 +29,7 @@ namespace BECore::Tests {
 
         TestRoom MakeTestRoom(int humans, RoomTimings timings = {std::chrono::seconds(30), std::chrono::minutes(10), std::chrono::milliseconds(0)}) {
             auto game = eastl::make_shared<FakeSeatedGame*>(nullptr);
-            SeatedGameFactory factory = [game]() -> eastl::unique_ptr<ISeatedGame> {
+            SeatedGameFactory factory = [game]() -> UniquePtr<ISeatedGame> {
                 auto made = eastl::make_unique<FakeSeatedGame>();
                 *game = made.get();
                 return made;
@@ -139,13 +139,13 @@ namespace BECore::Tests {
         EXPECT_EQ(bare.GetPhase(), RoomPhase::Lobby);
 
         // A factory that gives nothing, and one whose game has another seat count than the registry said
-        Room empty("ABCDE", SeatedGameInfo{"fake", 4}, MakeSequence(1), []() -> eastl::unique_ptr<ISeatedGame> { return nullptr; });
+        Room empty("ABCDE", SeatedGameInfo{"fake", 4}, MakeSequence(1), []() -> UniquePtr<ISeatedGame> { return nullptr; });
         const auto emptyHost = empty.AddMember("Ann", kNow);
         ASSERT_TRUE(emptyHost.has_value());
         EXPECT_EQ(CodeOf(empty.Start(emptyHost->player, kNow)), RoomErrors::kInternalError);
         EXPECT_EQ(empty.GetPhase(), RoomPhase::Lobby);
 
-        Room mismatch("ABCDE", SeatedGameInfo{"fake", 3}, MakeSequence(1), []() -> eastl::unique_ptr<ISeatedGame> { return eastl::make_unique<FakeSeatedGame>(); });
+        Room mismatch("ABCDE", SeatedGameInfo{"fake", 3}, MakeSequence(1), []() -> UniquePtr<ISeatedGame> { return eastl::make_unique<FakeSeatedGame>(); });
         const auto mismatchHost = mismatch.AddMember("Ann", kNow);
         ASSERT_TRUE(mismatchHost.has_value());
         EXPECT_EQ(CodeOf(mismatch.Start(mismatchHost->player, kNow)), RoomErrors::kInternalError);
@@ -394,7 +394,7 @@ namespace BECore::Tests {
                 Subscribe<LogEvent, &LogRecorder::OnLog>(this);
             }
 
-            const eastl::vector<String>& Errors() const {
+            const Vector<String>& Errors() const {
                 return _errors;
             }
 
@@ -405,14 +405,14 @@ namespace BECore::Tests {
                 }
             }
 
-            eastl::vector<String> _errors;
+            Vector<String> _errors;
         };
 
     }  // namespace
 
     TEST(RoomPlayTest, ARefusedComputerMoveIsNotRetriedAndChangesNothing) {
         auto game = eastl::make_shared<StubbornGame*>(nullptr);
-        SeatedGameFactory factory = [game]() -> eastl::unique_ptr<ISeatedGame> {
+        SeatedGameFactory factory = [game]() -> UniquePtr<ISeatedGame> {
             auto made = eastl::make_unique<StubbornGame>();
             *game = made.get();
             return made;

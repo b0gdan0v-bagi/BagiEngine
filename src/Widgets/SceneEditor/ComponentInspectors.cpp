@@ -73,12 +73,12 @@ namespace BECore {
                 ImGui::BeginDisabled();
             }
 
-            static eastl::vector<PoolString> cachedAssets;
+            static Vector<PoolString> cachedAssets;
             static bool assetsLoaded = false;
 
             if (!assetsLoaded) {
                 static const StringView extensions[] = {".png", ".jpg", ".jpeg", ".bmp"};
-                cachedAssets = CoreManager::GetFileSystem().EnumerateFiles("assets"_intern, eastl::span<const StringView>(extensions));
+                cachedAssets = CoreManager::GetFileSystem().EnumerateFiles("assets"_intern, Span<const StringView>(extensions));
                 assetsLoaded = true;
             }
 

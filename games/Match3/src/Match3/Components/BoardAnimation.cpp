@@ -80,8 +80,8 @@ namespace BECore::Match3 {
     }
 
     void BoardAnimation::AddCascadeStep(Timeline& timeline, SpriteGrid& grid, const CascadeStep& step) {
-        eastl::vector<int> clearedSprites;
-        eastl::vector<eastl::pair<Cell, GemType>> cleared;
+        Vector<int> clearedSprites;
+        Vector<eastl::pair<Cell, GemType>> cleared;
         for (const Cell c : step.removed) {
             const int sprite = grid[c.Index()];
             grid[c.Index()] = kNoSprite;

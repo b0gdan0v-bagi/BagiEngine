@@ -52,7 +52,7 @@ namespace BECore::Fuzz {
             return kind == SaveErrorKind::Corrupt || kind == SaveErrorKind::WrongGame || kind == SaveErrorKind::VersionTooNew || kind == SaveErrorKind::VersionTooOld;
         }
 
-        void CheckSlot(SaveGameService& service, const eastl::vector<uint8_t>& bytes) {
+        void CheckSlot(SaveGameService& service, const Vector<uint8_t>& bytes) {
             FUZZ_CHECK(service.WriteSlot(kSlot, bytes).has_value());
 
             // The same file as read back: what the service stores is what it was given
@@ -112,18 +112,18 @@ namespace BECore::Fuzz {
 
     void FuzzSaveEnvelope(const uint8_t* data, size_t size) {
         SaveGameService& service = Workspace().Service();
-        CheckSlot(service, eastl::vector<uint8_t>(data, data + size));
+        CheckSlot(service, Vector<uint8_t>(data, data + size));
 
-        const eastl::vector<uint8_t> repaired = WithTrueBinaryHeader(data, size);
+        const Vector<uint8_t> repaired = WithTrueBinaryHeader(data, size);
         if (!repaired.empty()) {
             CheckSlot(service, repaired);
         }
     }
 
-    eastl::vector<uint8_t> MakeSaveFileBytes(StringView game, uint32_t version) {
+    Vector<uint8_t> MakeSaveFileBytes(StringView game, uint32_t version) {
         const std::string tag = Format("{:08x}", std::random_device{}()).c_str();
         const std::filesystem::path directory = std::filesystem::temp_directory_path() / ("BagiFuzzSeed_" + tag);
-        eastl::vector<uint8_t> bytes;
+        Vector<uint8_t> bytes;
         {
             FileSystem fileSystem;
             SaveGameService service(fileSystem);

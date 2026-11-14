@@ -48,7 +48,7 @@ namespace BECore {
 
         /// The names of the saved layouts, sorted. Leftover `.tmp` files, other files, folders and files whose name
         /// is not a valid layout name are left out.
-        [[nodiscard]] eastl::vector<String> List() const;
+        [[nodiscard]] Vector<String> List() const;
 
     private:
         [[nodiscard]] std::filesystem::path PathOf(StringView name) const;

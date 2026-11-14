@@ -33,7 +33,7 @@ namespace BECore {
         _clientAddress = std::move(address);
     }
 
-    std::expected<size_t, SocketError> WebSocketConnection::Receive(eastl::span<uint8_t> buffer) {
+    std::expected<size_t, SocketError> WebSocketConnection::Receive(Span<uint8_t> buffer) {
         const auto received = _socket.Receive(buffer);
         if (received) {
             _bytesReceived.fetch_add(*received, std::memory_order_relaxed);
@@ -41,11 +41,11 @@ namespace BECore {
         return received;
     }
 
-    bool WebSocketConnection::Handshake(const HandshakePolicy& policy, std::chrono::milliseconds timeout, eastl::vector<uint8_t>& pendingBytes, const AdmitClientFn& admit) {
+    bool WebSocketConnection::Handshake(const HandshakePolicy& policy, std::chrono::milliseconds timeout, Vector<uint8_t>& pendingBytes, const AdmitClientFn& admit) {
         // One deadline for the whole head: a timeout per Receive() would let a client that sends a byte every few seconds hold the slot for ever
         const auto deadline = std::chrono::steady_clock::now() + timeout;
 
-        eastl::vector<uint8_t> received;
+        Vector<uint8_t> received;
         std::array<uint8_t, 1024> chunk;
         size_t headSize = 0;
         for (;;) {
@@ -55,7 +55,7 @@ namespace BECore {
                 return false;
             }
             _socket.SetReceiveTimeout(left);
-            const auto count = Receive(eastl::span<uint8_t>(chunk.data(), chunk.size()));
+            const auto count = Receive(Span<uint8_t>(chunk.data(), chunk.size()));
             if (!count) {
                 return false;  // the client is gone or too slow
             }
@@ -145,7 +145,7 @@ namespace BECore {
         _wake.notify_all();
     }
 
-    bool WebSocketConnection::QueueFrame(eastl::vector<uint8_t> bytes, bool isClose) {
+    bool WebSocketConnection::QueueFrame(Vector<uint8_t> bytes, bool isClose) {
         bool overflow = false;
         {
             LockGuard lock(_mutex);
@@ -183,7 +183,7 @@ namespace BECore {
                 _outboxBytes -= frame.bytes.size();
             }
 
-            if (!_socket.SendAll(eastl::span<const uint8_t>(frame.bytes.data(), frame.bytes.size()))) {
+            if (!_socket.SendAll(Span<const uint8_t>(frame.bytes.data(), frame.bytes.size()))) {
                 Abort();
                 return;
             }

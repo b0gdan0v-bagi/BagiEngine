@@ -94,7 +94,7 @@ namespace BECore {
 
     private:
         String _content;
-        eastl::vector<String> _pasted;
+        Vector<String> _pasted;
         bool _available = true;
         bool _refuse = false;
         int _deferredPolls = 0;
@@ -110,7 +110,7 @@ namespace BECore {
             Subscribe<ClipboardEvents::PasteEvent, &PasteRecorder::OnPaste>(this);
         }
 
-        eastl::vector<String> pastes;
+        Vector<String> pastes;
 
     private:
         void OnPaste(const ClipboardEvents::PasteEvent& event) {

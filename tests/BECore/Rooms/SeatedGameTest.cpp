@@ -59,7 +59,7 @@ namespace BECore::Tests {
 
     TEST(SeatedGameTest, StartDealsThreeUniqueCardsPerSeat) {
         FakeSeatedGame game = MakeStartedGame();
-        eastl::vector<String> all;
+        Vector<String> all;
         for (int seat = 0; seat < FakeSeatedGame::kSeatCount; ++seat) {
             ASSERT_EQ(game.GetHand(seat).size(), 3u);
             for (const String& card : game.GetHand(seat)) {
@@ -205,7 +205,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(actions.has_value());
         EXPECT_NE(std::find(actions->begin(), actions->end(), *chosen), actions->end());
         // the lowest card id of the hand
-        eastl::vector<String> hand = game.GetHand(0);
+        Vector<String> hand = game.GetHand(0);
         eastl::sort(hand.begin(), hand.end());
         EXPECT_EQ(GetJsonString(*chosen, "card"), hand.front());
         // choosing does not play
@@ -254,12 +254,12 @@ namespace BECore::Tests {
         const auto view = game.GetSeatView(2);
         ASSERT_TRUE(view.has_value());
         ASSERT_TRUE(view->is_object());
-        eastl::vector<String> keys;
+        Vector<String> keys;
         for (const auto& item : view->items()) {
             keys.push_back(item.key().c_str());
         }
         eastl::sort(keys.begin(), keys.end());
-        const eastl::vector<String> expected = {"cardCounts", "finished", "hand", "seat", "table", "turn"};
+        const Vector<String> expected = {"cardCounts", "finished", "hand", "seat", "table", "turn"};
         EXPECT_EQ(keys, expected);
         EXPECT_EQ(FindJsonMember(*view, "hand")->size(), 3u);
         const Json* counts = FindJsonMember(*view, "cardCounts");

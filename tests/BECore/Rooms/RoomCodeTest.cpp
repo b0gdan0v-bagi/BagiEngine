@@ -10,7 +10,7 @@ namespace BECore::Tests {
     namespace {
 
         /// Always the same words, in order, then the last one again
-        RandomFn MakeFixed(eastl::vector<uint64_t> words) {
+        RandomFn MakeFixed(Vector<uint64_t> words) {
             auto index = eastl::make_shared<size_t>(0);
             return [words = std::move(words), index]() -> uint64_t {
                 const size_t at = *index < words.size() ? (*index)++ : words.size() - 1;

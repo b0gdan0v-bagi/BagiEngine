@@ -122,7 +122,7 @@ namespace BECore {
          * @brief Get all deserialization errors
          * @return Vector of errors encountered
          */
-        virtual const eastl::vector<DeserializeError>& GetErrors() const = 0;
+        virtual const Vector<DeserializeError>& GetErrors() const = 0;
 
         /**
          * @brief Clear all accumulated errors
@@ -239,7 +239,7 @@ namespace BECore {
          * The path and the message are cut to kMaxErrorTextBytes (they are interned into the PoolString table, which is never freed, and
          * they can hold text of the input). The list holds at most kMaxRecordedErrors: the last place says once that the rest were dropped.
          */
-        static void StoreError(eastl::vector<DeserializeError>& errors, StringView path, StringView message, int32_t line);
+        static void StoreError(Vector<DeserializeError>& errors, StringView path, StringView message, int32_t line);
 
         /**
          * @brief The first @p maxBytes of @p text, or fewer so that no UTF-8 sequence is split
@@ -251,7 +251,7 @@ namespace BECore {
             String name;
             bool isArrayIndex = false;
         };
-        eastl::vector<PathSegment> _pathStack;
+        Vector<PathSegment> _pathStack;
     };
 
 }  // namespace BECore

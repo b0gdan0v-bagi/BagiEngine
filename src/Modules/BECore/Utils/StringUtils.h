@@ -4,7 +4,7 @@ namespace BECore {
 
     class StringUtils {
     public:
-        using SmallStrVector = eastl::fixed_vector<StringView, 4>;
+        using SmallStrVector = SmallVector<StringView, 4>;
 
         static constexpr uint64_t hashOffset = 14695981039346656037ULL;
         static constexpr uint64_t hashPrime = 1099511628211ULL;

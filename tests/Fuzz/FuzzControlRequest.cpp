@@ -66,7 +66,7 @@ namespace BECore::Fuzz {
         RegisterControlBuiltins(service);
         RegisterGameControl(service);
 
-        eastl::vector<String> replies;
+        Vector<String> replies;
         service.Post(text, [&replies](String reply) { replies.push_back(std::move(reply)); });
         service.Drain();
         for (int frame = 0; frame < kFramesToWait && replies.empty(); ++frame) {

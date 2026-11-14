@@ -39,7 +39,7 @@ namespace BECore {
         _isRecording = true;
     }
 
-    eastl::vector<RmlUiFileStamp> RmlUiFileInterface::EndRecording() {
+    Vector<RmlUiFileStamp> RmlUiFileInterface::EndRecording() {
         _isRecording = false;
         return std::move(_recorded);
     }

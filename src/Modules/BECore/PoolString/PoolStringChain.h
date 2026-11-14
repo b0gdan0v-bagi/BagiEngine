@@ -40,7 +40,7 @@ namespace BECore {
                 const char* p;
                 size_t s;
             } view;
-            eastl::array<TaggedVal, 3> compound;
+            Array<TaggedVal, 3> compound;
 
             constexpr Storage() : compound{TaggedVal{0}, TaggedVal{0}, TaggedVal{0}} {}
         };

@@ -31,13 +31,13 @@ namespace BECore::Gizmo {
     class GizmoDrag {
     public:
         /// Starts a drag; nothing starts (IsActive() stays false) for no items or Handle::None
-        void Begin(Tool tool, Space space, Handle handle, eastl::span<const Item> items, Vec2 point, const SnapSettings& snap);
+        void Begin(Tool tool, Space space, Handle handle, Span<const Item> items, Vec2 point, const SnapSettings& snap);
 
         /// The items for the pointer at @p point, in the order of Begin()'s items; empty when no drag is active. Valid until the next call
-        [[nodiscard]] eastl::span<const Item> Update(Vec2 point, bool snapModifier, bool keepAspect = false);
+        [[nodiscard]] Span<const Item> Update(Vec2 point, bool snapModifier, bool keepAspect = false);
 
         /// Ends the drag and returns the start snapshot, valid until the next Begin()
-        [[nodiscard]] eastl::span<const Item> Cancel();
+        [[nodiscard]] Span<const Item> Cancel();
 
         /// Ends the drag and keeps the last result as it is
         void End();
@@ -46,12 +46,12 @@ namespace BECore::Gizmo {
             return _active;
         }
 
-        [[nodiscard]] eastl::span<const Item> Start() const {
+        [[nodiscard]] Span<const Item> Start() const {
             return {_start.data(), _start.size()};
         }
 
         /// The result of the last Update() (the start values before the first one)
-        [[nodiscard]] eastl::span<const Item> Current() const {
+        [[nodiscard]] Span<const Item> Current() const {
             return {_result.data(), _result.size()};
         }
 
@@ -69,8 +69,8 @@ namespace BECore::Gizmo {
         Vec2 _startPoint;
         Frame _frame;
         Vec2 _pivot;
-        eastl::vector<Item> _start;
-        eastl::vector<Item> _result;
+        Vector<Item> _start;
+        Vector<Item> _result;
     };
 
 }  // namespace BECore::Gizmo

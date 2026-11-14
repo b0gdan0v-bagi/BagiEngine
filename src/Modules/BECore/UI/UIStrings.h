@@ -50,7 +50,7 @@ namespace BECore {
         [[nodiscard]] PoolString GetLanguage() const;
 
         /// The languages that have strings, in the order they were first set
-        [[nodiscard]] const eastl::vector<PoolString>& GetLanguages() const {
+        [[nodiscard]] const Vector<PoolString>& GetLanguages() const {
             return _languageIds;
         }
         [[nodiscard]] bool HasLanguage(PoolString language) const;
@@ -66,7 +66,7 @@ namespace BECore {
         [[nodiscard]] static bool HasReferences(StringView text);
 
         /// The keys Resolve() did not find, once per language and key, in the order they were asked for
-        [[nodiscard]] const eastl::vector<MissingString>& GetMissing() const {
+        [[nodiscard]] const Vector<MissingString>& GetMissing() const {
             return _missing;
         }
 
@@ -85,7 +85,7 @@ namespace BECore {
          *         one language (the first stays), a language with no strings, a `default` that names no language, an unknown element. The rest is loaded. Each problem is one line of at most
          * `UIText::kMaxMessageBytes` (it repeats text of the file, which is cut). An empty node adds nothing
          */
-        eastl::vector<String> LoadFromXml(const XmlNode& node);
+        Vector<String> LoadFromXml(const XmlNode& node);
 
     private:
         struct Language {
@@ -97,9 +97,9 @@ namespace BECore {
         [[nodiscard]] const String* FindString(const Language* language, StringView key) const;
         void RecordMissing(StringView key);
 
-        eastl::vector<Language> _languages;
-        eastl::vector<PoolString> _languageIds;
-        eastl::vector<MissingString> _missing;
+        Vector<Language> _languages;
+        Vector<PoolString> _languageIds;
+        Vector<MissingString> _missing;
         PoolString _default;
         PoolString _current;
         uint64_t _version = 0;

@@ -314,7 +314,7 @@ namespace BECore {
             PoolString id;
             Optional<KeyChord> chord;
         };
-        eastl::vector<Override> overrides;
+        Vector<Override> overrides;
         for (const auto& [key, value] : bindings->items()) {
             const String id(key.c_str(), key.size());
             const PoolString commandId = PoolString::Intern(StringView(id));

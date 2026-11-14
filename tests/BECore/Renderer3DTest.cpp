@@ -339,7 +339,7 @@ namespace BECore::Tests {
         EXPECT_EQ(f.renderer.texturesCreated, 1u);  // the white one, once
         const ITexture* white = f.device->draws[0].textures[0];
         ASSERT_NE(white, nullptr);
-        EXPECT_EQ(static_cast<const RecordedTexture*>(white)->GetPixels(), (eastl::vector<uint8_t>{255, 255, 255, 255}));
+        EXPECT_EQ(static_cast<const RecordedTexture*>(white)->GetPixels(), (Vector<uint8_t>{255, 255, 255, 255}));
         EXPECT_EQ(f.device->draws[1].textures[0], own.Get());
         EXPECT_EQ(f.device->draws[2].textures[0], white);
     }

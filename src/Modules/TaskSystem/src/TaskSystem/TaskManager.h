@@ -213,7 +213,7 @@ namespace BECore {
         Thread::Id _mainThreadId;
         Duration _frameBudget = kDefaultFrameBudget;
 
-        eastl::unique_ptr<ThreadPool> _threadPool;
+        UniquePtr<ThreadPool> _threadPool;
         TaskScheduler _scheduler;
     };
 

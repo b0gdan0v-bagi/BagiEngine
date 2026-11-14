@@ -137,9 +137,9 @@ namespace BECore {
         PoolString _viewPreviewName;
         bool _gridEnabled = false;
         int32_t _gridStep = 0;
-        const Scene* _selectedScene = nullptr;     // the selection last told by SceneSelectionChangedEvent: a node is never dereferenced before it is found in the active scene
-        eastl::vector<SceneNode*> _selectedNodes;  // in selection order, the primary last
-        ViewportCamera _camera;                    // the editor camera; the image is drawn with it while the input mode is Edit
+        const Scene* _selectedScene = nullptr;  // the selection last told by SceneSelectionChangedEvent: a node is never dereferenced before it is found in the active scene
+        Vector<SceneNode*> _selectedNodes;      // in selection order, the primary last
+        ViewportCamera _camera;                 // the editor camera; the image is drawn with it while the input mode is Edit
         ViewportCameraInput _cameraInput;
         ViewportGizmos _gizmos;
         bool _frameRequested = false;  // viewport.frameSelected, answered in the next Update (it needs the panel size)

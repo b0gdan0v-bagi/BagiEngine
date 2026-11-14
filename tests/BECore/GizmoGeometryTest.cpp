@@ -27,7 +27,7 @@ namespace BECore::Tests {
         }
 
         Frame FrameOf(const Item& item, Space space = Space::World) {
-            return MakeFrame(eastl::span<const Item>(&item, 1), space);
+            return MakeFrame(Span<const Item>(&item, 1), space);
         }
 
         // A 100 x 50 item at the origin: its centre is (50, 25)

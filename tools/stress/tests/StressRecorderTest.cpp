@@ -42,8 +42,8 @@ namespace BECore::Stress::Tests {
         }
 
         /// The keys of a one-level JSON line in the order they are written
-        eastl::vector<String> KeysInOrder(const String& line) {
-            eastl::vector<String> keys;
+        Vector<String> KeysInOrder(const String& line) {
+            Vector<String> keys;
             const std::string text(line.c_str(), line.size());
             const std::regex key("\"([A-Za-z0-9]+)\":");
             for (auto it = std::sregex_iterator(text.begin(), text.end(), key); it != std::sregex_iterator(); ++it) {
@@ -199,7 +199,7 @@ namespace BECore::Stress::Tests {
             EXPECT_NE(FindJsonMember(*parsed, key), nullptr) << key;
         }
 
-        const eastl::vector<String> written = KeysInOrder(line);
+        const Vector<String> written = KeysInOrder(line);
         ASSERT_EQ(written.size(), std::size(kKeys));
         for (size_t i = 0; i < written.size(); ++i) {
             EXPECT_EQ(written[i], kKeys[i]) << "the keys are written sorted";

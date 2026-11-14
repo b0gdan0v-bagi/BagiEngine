@@ -101,7 +101,7 @@ namespace BECore {
         }
 
         /// The live particles in spawn order
-        [[nodiscard]] const eastl::vector<Particle>& GetParticles() const {
+        [[nodiscard]] const Vector<Particle>& GetParticles() const {
             return _particles;
         }
 
@@ -112,7 +112,7 @@ namespace BECore {
         [[nodiscard]] static ParticleLook SampleLook(const ParticleEffect& effect, float progress);
 
         /// Reserve @p vertices (four per particle) and @p indices (six) for @p maxParticles and write the index pattern `0 1 2 0 2 3 ...` once
-        static void ReserveGeometry(int32_t maxParticles, eastl::vector<GeometryVertex>& vertices, eastl::vector<int>& indices);
+        static void ReserveGeometry(int32_t maxParticles, Vector<GeometryVertex>& vertices, Vector<int>& indices);
 
         /**
          * @brief Fill @p vertices with one rotated square per live particle (four vertices each, corners in the order top left,
@@ -123,7 +123,7 @@ namespace BECore {
          * @return the number of quads: draw `indices` up to `6 * quads` with `vertices`. Allocates only when the vectors are smaller
          *         than `ReserveGeometry` makes them
          */
-        size_t BuildGeometry(const ParticleEffect& effect, const Rect& source, Vec2 textureSize, eastl::vector<GeometryVertex>& vertices, eastl::vector<int>& indices) const;
+        size_t BuildGeometry(const ParticleEffect& effect, const Rect& source, Vec2 textureSize, Vector<GeometryVertex>& vertices, Vector<int>& indices) const;
 
     private:
         void Spawn(const ParticleEffect& effect, const Rect& area, uint64_t serial, double spawnTime, Color tint);
@@ -131,7 +131,7 @@ namespace BECore {
         void SpawnLoopDue(const ParticleEffect& effect, const Rect& area);
         void RemoveDead();
 
-        eastl::vector<Particle> _particles;
+        Vector<Particle> _particles;
         double _time = 0.0;
         double _playStart = 0.0;                                      ///< emitter time of the last `Play`
         double _nextDeath = std::numeric_limits<double>::infinity();  ///< the earliest death of a live particle: no compaction before it

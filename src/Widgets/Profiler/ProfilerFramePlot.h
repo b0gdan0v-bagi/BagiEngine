@@ -25,7 +25,7 @@ namespace BECore {
          * taken together with it; @p selectedFrame (a RingFrame::index) is outlined.
          * @return The RingFrame::index of the frame that was clicked, none when the click missed or the bar has no frame in the ring
          */
-        [[nodiscard]] Optional<uint64_t> Draw(const eastl::vector<FrameStats>& history, const RingSnapshot& snapshot, Optional<uint64_t> selectedFrame);
+        [[nodiscard]] Optional<uint64_t> Draw(const Vector<FrameStats>& history, const RingSnapshot& snapshot, Optional<uint64_t> selectedFrame);
 
         [[nodiscard]] double GetBudgetMs() const;
 
@@ -44,16 +44,16 @@ namespace BECore {
         enum class BarMode : int { FrameTime, StageSplit };
 
         void DrawStageLegend() const;
-        void DrawCounters(const eastl::vector<FrameStats>& history, const RingSnapshot& snapshot, Optional<uint64_t> selectedFrame);
+        void DrawCounters(const Vector<FrameStats>& history, const RingSnapshot& snapshot, Optional<uint64_t> selectedFrame);
 
         Budget _budget = Budget::Fps60;
         float _customBudgetMs = 20.0f;
         BarMode _barMode = BarMode::FrameTime;
 
         // Kept as members so a steady panel allocates nothing: the names are rebuilt when the newest frame number moves
-        eastl::vector<PoolString> _counterNames;
-        eastl::vector<PoolString> _pickedCounters;
-        eastl::vector<float> _counterValues;
+        Vector<PoolString> _counterNames;
+        Vector<PoolString> _pickedCounters;
+        Vector<float> _counterValues;
         uint64_t _counterNamesFrame = 0;
     };
 

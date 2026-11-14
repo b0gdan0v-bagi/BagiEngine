@@ -181,8 +181,8 @@ namespace BECore {
         ++_version;
     }
 
-    eastl::vector<String> UIThemes::LoadFromXml(const XmlNode& node) {
-        eastl::vector<String> problems;
+    Vector<String> UIThemes::LoadFromXml(const XmlNode& node) {
+        Vector<String> problems;
         if (!node) {
             return problems;
         }

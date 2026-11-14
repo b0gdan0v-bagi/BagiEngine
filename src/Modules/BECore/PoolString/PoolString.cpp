@@ -34,9 +34,9 @@ namespace BECore {
         struct Page {
             static constexpr size_t Size = 128 * 1024;
             alignas(uint64_t) char data[Size];
-            eastl::unique_ptr<Page> prev;
+            UniquePtr<Page> prev;
         };
-        eastl::unique_ptr<Page> _currentPage;
+        UniquePtr<Page> _currentPage;
         size_t _offset = 0;
 
     public:

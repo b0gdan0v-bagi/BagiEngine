@@ -15,9 +15,9 @@ namespace BECore {
 
         String tag;   ///< lower case; empty for a text node and for the document node
         String text;  ///< a text node: its characters with the entities decoded (the text of `<style>` is raw)
-        eastl::vector<UIHtmlAttribute> attributes;
+        Vector<UIHtmlAttribute> attributes;
         int parent = NoNode;
-        eastl::vector<int> children;
+        Vector<int> children;
         uint32_t line = 0;
 
         [[nodiscard]] bool IsElement() const {
@@ -35,7 +35,7 @@ namespace BECore {
     /// A parsed document: `nodes[0]` is the document node, a parent always comes before its children
     struct UIHtmlDocument {
         static constexpr int RootIndex = 0;
-        eastl::vector<UIHtmlNode> nodes;
+        Vector<UIHtmlNode> nodes;
     };
 
     /**

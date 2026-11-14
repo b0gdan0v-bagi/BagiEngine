@@ -15,7 +15,7 @@ namespace BECore {
      *
      * Pure, no ImGui context.
      */
-    [[nodiscard]] eastl::vector<const EditorCommand*> FilterCommands(StringView query, eastl::span<const EditorCommand> commands);
+    [[nodiscard]] Vector<const EditorCommand*> FilterCommands(StringView query, Span<const EditorCommand> commands);
 
     /// The row selected after moving @p delta rows from @p selected in a list of @p count rows: wraps at both ends, 0 for an
     /// empty list. A @p selected outside the list is brought into it first.

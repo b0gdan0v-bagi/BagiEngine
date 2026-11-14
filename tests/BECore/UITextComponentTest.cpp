@@ -119,9 +119,9 @@ namespace BECore::Tests {
         }
 
         /// The textured draws of the row of Cap in the last frame (the glyphs; the outline is drawn first, in its own colour). Narrow and Shrinking start at y 100
-        eastl::vector<DrawCall> Glyphs() const {
+        Vector<DrawCall> Glyphs() const {
             constexpr float kCapRowBottom = 95.0f;
-            eastl::vector<DrawCall> glyphs;
+            Vector<DrawCall> glyphs;
             for (const DrawCall& call : _renderer->calls) {
                 if (call.kind == DrawKind::Texture && call.rect.y < kCapRowBottom) {
                     glyphs.push_back(call);

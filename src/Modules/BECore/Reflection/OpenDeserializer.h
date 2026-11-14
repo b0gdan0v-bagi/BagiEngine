@@ -16,7 +16,7 @@ namespace BECore {
      * @return The deserializer positioned at the root of the file, or a message when the extension is not supported,
      *         the path does not resolve or the file does not load.
      */
-    std::expected<eastl::unique_ptr<IDeserializer>, String> OpenDeserializer(StringView virtualPath);
+    std::expected<UniquePtr<IDeserializer>, String> OpenDeserializer(StringView virtualPath);
 
     /**
      * @brief Write every error the deserializer collected to the log, one LOG_ERROR per error.
@@ -30,6 +30,6 @@ namespace BECore {
     void LogDeserializeErrors(StringView configName, const IDeserializer& deserializer);
 
     /// The same for errors that were copied out of a deserializer (a loaded settings struct keeps them), same message format.
-    void LogDeserializeErrors(StringView configName, eastl::span<const DeserializeError> errors);
+    void LogDeserializeErrors(StringView configName, Span<const DeserializeError> errors);
 
 }  // namespace BECore

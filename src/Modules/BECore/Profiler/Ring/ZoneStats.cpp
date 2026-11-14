@@ -67,8 +67,8 @@ namespace BECore {
 
     }  // namespace
 
-    eastl::vector<ZoneStatRow> ComputeZoneStats(const RingSnapshot& snapshot, uint64_t firstFrame, uint64_t lastFrame) {
-        eastl::vector<ZoneStatRow> rows;
+    Vector<ZoneStatRow> ComputeZoneStats(const RingSnapshot& snapshot, uint64_t firstFrame, uint64_t lastFrame) {
+        Vector<ZoneStatRow> rows;
 
         bool haveWindow = false;
         uint64_t windowBegin = 0;
@@ -86,12 +86,12 @@ namespace BECore {
         }
 
         eastl::hash_map<const ProfileSite*, size_t> rowOfSite;
-        eastl::vector<eastl::vector<double>> durationsOfRow;
-        eastl::vector<uint64_t> childTicks;
-        eastl::vector<size_t> stack;
+        Vector<Vector<double>> durationsOfRow;
+        Vector<uint64_t> childTicks;
+        Vector<size_t> stack;
 
         for (const RingThread& thread : snapshot.threads) {
-            const eastl::vector<ZoneRecord>& zones = thread.zones;
+            const Vector<ZoneRecord>& zones = thread.zones;
             childTicks.assign(zones.size(), 0);
             stack.clear();
             for (size_t i = 0; i < zones.size(); ++i) {
@@ -130,7 +130,7 @@ namespace BECore {
         }
 
         for (size_t i = 0; i < rows.size(); ++i) {
-            eastl::vector<double>& durations = durationsOfRow[i];
+            Vector<double>& durations = durationsOfRow[i];
             eastl::sort(durations.begin(), durations.end());
             rows[i].meanMs = rows[i].totalMs / static_cast<double>(rows[i].calls);
             rows[i].p95Ms = durations[P95Index(durations.size())];
@@ -138,7 +138,7 @@ namespace BECore {
         return rows;
     }
 
-    void SortZoneStats(eastl::vector<ZoneStatRow>& rows, ZoneStatColumn column, bool ascending) {
+    void SortZoneStats(Vector<ZoneStatRow>& rows, ZoneStatColumn column, bool ascending) {
         eastl::sort(rows.begin(), rows.end(), [column, ascending](const ZoneStatRow& a, const ZoneStatRow& b) {
             int order = 0;
             if (column == ZoneStatColumn::Name) {
@@ -155,11 +155,11 @@ namespace BECore {
         });
     }
 
-    eastl::vector<ZoneStatRow> FilterZoneStats(const eastl::vector<ZoneStatRow>& rows, StringView text) {
+    Vector<ZoneStatRow> FilterZoneStats(const Vector<ZoneStatRow>& rows, StringView text) {
         if (text.empty()) {
             return rows;
         }
-        eastl::vector<ZoneStatRow> kept;
+        Vector<ZoneStatRow> kept;
         for (const ZoneStatRow& row : rows) {
             const String place = Format("{}:{}", row.site->file, row.site->line);
             if (ContainsIgnoreCase(row.site->name, text) || ContainsIgnoreCase(place, text)) {
@@ -169,11 +169,11 @@ namespace BECore {
         return kept;
     }
 
-    eastl::array<double, kExclusiveStageCount> ExclusiveStageMs(const FrameStats& frame) {
+    Array<double, kExclusiveStageCount> ExclusiveStageMs(const FrameStats& frame) {
         const double sceneUpdate = eastl::max(frame.GetStageMs(FrameStage::SceneUpdate), 0.0);
         const double sceneDraw = eastl::max(frame.GetStageMs(FrameStage::SceneDraw), 0.0);
         const double present = eastl::max(frame.GetStageMs(FrameStage::Present), 0.0);
-        eastl::array<double, kExclusiveStageCount> result{};
+        Array<double, kExclusiveStageCount> result{};
         result[+ExclusiveStage::UpdateOnly] = eastl::max(frame.GetStageMs(FrameStage::Update) - sceneUpdate, 0.0);
         result[+ExclusiveStage::SceneUpdateStage] = sceneUpdate;
         result[+ExclusiveStage::RenderOnly] = eastl::max(frame.GetStageMs(FrameStage::Render) - sceneDraw, 0.0);

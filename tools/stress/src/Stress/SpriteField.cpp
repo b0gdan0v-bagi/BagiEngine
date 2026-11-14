@@ -58,9 +58,9 @@ namespace BECore::Stress {
         return placement;
     }
 
-    eastl::vector<uint8_t> MakeAtlasPixels(uint32_t atlasIndex, uint32_t cells, uint32_t cellSize) {
+    Vector<uint8_t> MakeAtlasPixels(uint32_t atlasIndex, uint32_t cells, uint32_t cellSize) {
         const uint32_t side = cells * cellSize;
-        eastl::vector<uint8_t> pixels(static_cast<size_t>(side) * side * kChannelCount, 0);
+        Vector<uint8_t> pixels(static_cast<size_t>(side) * side * kChannelCount, 0);
         for (uint32_t y = 0; y < side; ++y) {
             for (uint32_t x = 0; x < side; ++x) {
                 const uint32_t cellX = x / cellSize;

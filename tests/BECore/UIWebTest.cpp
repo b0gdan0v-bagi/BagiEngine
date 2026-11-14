@@ -2637,7 +2637,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
 
     TEST_F(UIWebTest, StyleSheetsAreReadThroughTheLoader) {
         UIWebReport report;
-        eastl::vector<String> asked;
+        Vector<String> asked;
         const std::string html = R"(<link rel="stylesheet" href="a.css"><link rel="stylesheet" href="missing.css"><div id="x" class="k"></div><style>.k { height: 9px }</style>)";
         const String xml = UIWebCompiler::Compile(
             FromStd(html),

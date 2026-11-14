@@ -88,7 +88,7 @@ namespace BECore {
 
             nw_connection_t connection = nullptr;
 
-            eastl::vector<uint8_t> inbox;
+            Vector<uint8_t> inbox;
             size_t inboxRead = 0;
             bool receiveInFlight = false;
             bool endOfStream = false;
@@ -232,9 +232,9 @@ namespace BECore {
         }
 
         /// The anchors as certificates; an empty result with a non-empty input means a certificate was not valid DER (the caller then refuses to connect)
-        CfOwned<CFArrayRef> MakeAnchors(eastl::span<const eastl::vector<uint8_t>> anchorsDer) {
+        CfOwned<CFArrayRef> MakeAnchors(Span<const Vector<uint8_t>> anchorsDer) {
             CfOwned<CFMutableArrayRef> array(CFArrayCreateMutable(kCFAllocatorDefault, static_cast<CFIndex>(anchorsDer.size()), &kCFTypeArrayCallBacks));
-            for (const eastl::vector<uint8_t>& der : anchorsDer) {
+            for (const Vector<uint8_t>& der : anchorsDer) {
                 CfOwned<CFDataRef> data(CFDataCreate(kCFAllocatorDefault, der.data(), static_cast<CFIndex>(der.size())));
                 CfOwned<SecCertificateRef> certificate(data ? SecCertificateCreateWithData(kCFAllocatorDefault, data.get()) : nullptr);
                 if (!certificate) {
@@ -330,7 +330,7 @@ namespace BECore {
                 return WaitUntilReady(*state, params);
             }
 
-            bool SendAll(eastl::span<const uint8_t> data) override {
+            bool SendAll(Span<const uint8_t> data) override {
                 if (data.empty()) {
                     return IsValid();
                 }
@@ -348,7 +348,7 @@ namespace BECore {
                 return state->sendsCompleted >= ticket && !state->sendFailed && !state->closing && state->phase == Phase::Ready;
             }
 
-            std::expected<size_t, SocketError> Receive(eastl::span<uint8_t> buffer) override {
+            std::expected<size_t, SocketError> Receive(Span<uint8_t> buffer) override {
                 if (buffer.empty()) {
                     return std::unexpected(SocketError::Failed);
                 }
@@ -550,7 +550,7 @@ namespace BECore {
         return true;
     }
 
-    eastl::unique_ptr<ITlsStream> MakeTlsStream() {
+    UniquePtr<ITlsStream> MakeTlsStream() {
         return eastl::make_unique<NetworkFrameworkTlsStream>();
     }
 

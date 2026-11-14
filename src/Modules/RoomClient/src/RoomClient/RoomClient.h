@@ -187,7 +187,7 @@ namespace BECore {
         void Poll();
 
         /// Appends the queued events to @p out in the order they happened and forgets them. Keep @p out as a member so it keeps its capacity
-        void DrainEvents(eastl::vector<RoomClientEvent>& out);
+        void DrainEvents(Vector<RoomClientEvent>& out);
 
         // ---- State ----
 
@@ -303,9 +303,9 @@ namespace BECore {
 
         RoomClientSettings _settings;
 
-        eastl::unique_ptr<IRoomTransport> _transport;
+        UniquePtr<IRoomTransport> _transport;
         /// A transport that was told to close: polled until its Closed, then freed
-        eastl::unique_ptr<IRoomTransport> _retired;
+        UniquePtr<IRoomTransport> _retired;
         RoomClientState _state = RoomClientState::Disconnected;
         String _url;
         /// Sent when the transport opens
@@ -346,7 +346,7 @@ namespace BECore {
         RoomSession _session;
         ControlError _lastError;
 
-        eastl::vector<RoomClientEvent> _events;
+        Vector<RoomClientEvent> _events;
         /// Where PollEvent() writes: a member, so the buffers keep their capacity
         RoomTransportEvent _polled;
     };

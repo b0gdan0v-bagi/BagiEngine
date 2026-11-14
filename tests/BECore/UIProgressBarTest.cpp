@@ -171,8 +171,8 @@ namespace BECore::Tests {
         }
 
         /// The rect calls of the last draw that lie inside @p area, in order
-        eastl::vector<DrawCall> RectsIn(const Rect& area) const {
-            eastl::vector<DrawCall> found;
+        Vector<DrawCall> RectsIn(const Rect& area) const {
+            Vector<DrawCall> found;
             for (const DrawCall& call : _renderer->calls) {
                 if (call.kind == DrawKind::Rect && call.rect.x >= area.x - 1e-2f && call.rect.y >= area.y - 1e-2f && call.rect.x + call.rect.w <= area.x + area.w + 1e-2f &&
                     call.rect.y + call.rect.h <= area.y + area.h + 1e-2f) {

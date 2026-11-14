@@ -62,7 +62,7 @@ namespace BECore::Tests {
                 Subscribe<InputEvents::ActionEvent, &ActionRecorder::OnAction>(this);
             }
 
-            eastl::vector<PoolString> actions;
+            Vector<PoolString> actions;
 
         private:
             void OnAction(const InputEvents::ActionEvent& e) {
@@ -334,7 +334,7 @@ namespace BECore::Tests {
     // The override a tool (the editor viewport) sets around one pass
 
     TEST_F(SceneViewVariantsTest, TheVariantsAreListedInTheOrderOfTheFile) {
-        const eastl::span<const SceneViewVariant> variants = _scene->GetViewVariants();
+        const Span<const SceneViewVariant> variants = _scene->GetViewVariants();
         ASSERT_EQ(variants.size(), 2u);
         EXPECT_EQ(variants[0].name, "Portrait"_intern);
         EXPECT_EQ(variants[1].name, "Wide"_intern);

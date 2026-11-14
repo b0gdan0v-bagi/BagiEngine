@@ -55,19 +55,19 @@ namespace BECore {
         return true;
     }
 
-    void FormatFps(uint32_t fps, eastl::span<char> buffer) {
+    void FormatFps(uint32_t fps, Span<char> buffer) {
         if (!buffer.empty()) {
             std::snprintf(buffer.data(), buffer.size(), "%u fps", fps);
         }
     }
 
-    void FormatFrameMs(double frameMs, eastl::span<char> buffer) {
+    void FormatFrameMs(double frameMs, Span<char> buffer) {
         if (!buffer.empty()) {
             std::snprintf(buffer.data(), buffer.size(), "%.1f ms", frameMs);
         }
     }
 
-    void FormatAllocs(uint64_t count, eastl::span<char> buffer) {
+    void FormatAllocs(uint64_t count, Span<char> buffer) {
         if (buffer.empty()) {
             return;
         }
@@ -79,7 +79,7 @@ namespace BECore {
         }
     }
 
-    void FormatControlStatus(bool listening, uint16_t port, uint32_t clients, eastl::span<char> buffer) {
+    void FormatControlStatus(bool listening, uint16_t port, uint32_t clients, Span<char> buffer) {
         if (buffer.empty()) {
             return;
         }

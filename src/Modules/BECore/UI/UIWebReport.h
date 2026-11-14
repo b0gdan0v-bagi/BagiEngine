@@ -18,7 +18,7 @@ namespace BECore {
      * are the numbers of the decision record ("CSS reach", `src/Modules/BECore/UI/AuthoringDecision.md`).
      */
     struct UIWebReport {
-        eastl::vector<UIWebIssue> issues;
+        Vector<UIWebIssue> issues;
         uint32_t elements = 0;                 ///< elements written
         uint32_t rules = 0;                    ///< rules of the style sheets that were read
         uint32_t mediaBlocks = 0;              ///< `@media` blocks that were read

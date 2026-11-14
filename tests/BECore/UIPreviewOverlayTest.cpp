@@ -51,7 +51,7 @@ namespace BECore::Tests {
             return canvas;
         }
 
-        const TouchMark* Find(const eastl::vector<TouchMark>& marks, PoolString name) {
+        const TouchMark* Find(const Vector<TouchMark>& marks, PoolString name) {
             for (const TouchMark& mark : marks) {
                 if (mark.name == name) {
                     return &mark;

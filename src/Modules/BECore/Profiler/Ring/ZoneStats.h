@@ -32,13 +32,13 @@ namespace BECore {
      * children begin in a later frame. **p95** is the nearest-rank percentile of the per-call durations: the value at rank
      * ceil(0.95 * n) of the n sorted calls, so one call is its own duration. The rows come in the order the sites were first met.
      */
-    [[nodiscard]] eastl::vector<ZoneStatRow> ComputeZoneStats(const RingSnapshot& snapshot, uint64_t firstFrame, uint64_t lastFrame);
+    [[nodiscard]] Vector<ZoneStatRow> ComputeZoneStats(const RingSnapshot& snapshot, uint64_t firstFrame, uint64_t lastFrame);
 
     /// Orders the rows by @p column; equal values are ordered by name, then file and line, in either direction of the sort, so the order is stable
-    void SortZoneStats(eastl::vector<ZoneStatRow>& rows, ZoneStatColumn column, bool ascending);
+    void SortZoneStats(Vector<ZoneStatRow>& rows, ZoneStatColumn column, bool ascending);
 
     /// The rows whose zone name or `file:line` contains @p text, ignoring case; empty text keeps every row
-    [[nodiscard]] eastl::vector<ZoneStatRow> FilterZoneStats(const eastl::vector<ZoneStatRow>& rows, StringView text);
+    [[nodiscard]] Vector<ZoneStatRow> FilterZoneStats(const Vector<ZoneStatRow>& rows, StringView text);
 
     /// The segments of the stacked stage bar, in the order they are stacked from the bottom
     CORE_ENUM(ExclusiveStage, uint8_t, UpdateOnly, SceneUpdateStage, RenderOnly, SceneDrawStage, PresentStage, OtherStage)
@@ -51,6 +51,6 @@ namespace BECore {
      * clock hiccup) and a sum over cpuMs give 0 for that segment, never a negative one, so the segments sum to cpuMs unless the stages
      * together exceed it.
      */
-    [[nodiscard]] eastl::array<double, kExclusiveStageCount> ExclusiveStageMs(const FrameStats& frame);
+    [[nodiscard]] Array<double, kExclusiveStageCount> ExclusiveStageMs(const FrameStats& frame);
 
 }  // namespace BECore

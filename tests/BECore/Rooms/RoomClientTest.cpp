@@ -72,7 +72,7 @@ namespace BECore::Tests {
             }
 
             /// The kinds of the events since the last Forget(), then forgets them
-            [[nodiscard]] eastl::vector<RoomClientEventKind> TakeKinds() {
+            [[nodiscard]] Vector<RoomClientEventKind> TakeKinds() {
                 auto kinds = Kinds();
                 _events.clear();
                 return kinds;
@@ -96,8 +96,8 @@ namespace BECore::Tests {
             }
 
             /// The kinds of the events so far, in order
-            [[nodiscard]] eastl::vector<RoomClientEventKind> Kinds() const {
-                eastl::vector<RoomClientEventKind> kinds;
+            [[nodiscard]] Vector<RoomClientEventKind> Kinds() const {
+                Vector<RoomClientEventKind> kinds;
                 for (const RoomClientEvent& event : _events) {
                     kinds.push_back(event.kind);
                 }
@@ -116,7 +116,7 @@ namespace BECore::Tests {
             ManualClock _clock;
             FakeTransports _transports;
             std::unique_ptr<RoomClient> _client;
-            eastl::vector<RoomClientEvent> _events;
+            Vector<RoomClientEvent> _events;
         };
 
         using Kind = RoomClientEventKind;
@@ -196,7 +196,7 @@ namespace BECore::Tests {
         EXPECT_EQ(_client->GetView(), Json::object({{"hand", Json::array({1, 2, 3})}}));
         EXPECT_EQ(_client->GetActions(), Json::array({OneAction()}));
 
-        const eastl::vector<RoomClientEventKind> expected = {Kind::Connected, Kind::Joined, Kind::LobbyChanged, Kind::ViewChanged};
+        const Vector<RoomClientEventKind> expected = {Kind::Connected, Kind::Joined, Kind::LobbyChanged, Kind::ViewChanged};
         EXPECT_EQ(Kinds(), expected);
     }
 
@@ -344,7 +344,7 @@ namespace BECore::Tests {
         link.PushText(View(9));
         Pump();
 
-        const eastl::vector<RoomClientEventKind> expected = {Kind::Error, Kind::ViewChanged};
+        const Vector<RoomClientEventKind> expected = {Kind::Error, Kind::ViewChanged};
         EXPECT_EQ(Kinds(), expected);
         EXPECT_EQ(_events[0].code, RoomErrors::kStaleAction);
         EXPECT_EQ(_events[0].ref, RoomMessageTypes::kAction);
@@ -437,7 +437,7 @@ namespace BECore::Tests {
         Pump();
         EXPECT_EQ(_client->GetState(), RoomClientState::Connected);
         EXPECT_FALSE(_client->HasView());
-        const eastl::vector<RoomClientEventKind> expected = {Kind::Connected};
+        const Vector<RoomClientEventKind> expected = {Kind::Connected};
         EXPECT_EQ(Kinds(), expected);
     }
 
@@ -510,7 +510,7 @@ namespace BECore::Tests {
         link.PushText(MakeLeftMessage("room_finished"));
         link.PushClosed(1000, "bye");
         Pump();
-        const eastl::vector<RoomClientEventKind> expected = {Kind::ViewChanged, Kind::Left, Kind::Closed};
+        const Vector<RoomClientEventKind> expected = {Kind::ViewChanged, Kind::Left, Kind::Closed};
         EXPECT_EQ(Kinds(), expected);
     }
 
@@ -611,7 +611,7 @@ namespace BECore::Tests {
         link.PushText(View(2));
         link.PushText(Lobby(0));
         Pump();
-        const eastl::vector<RoomClientEventKind> expected = {Kind::LobbyChanged, Kind::ViewChanged, Kind::LobbyChanged};
+        const Vector<RoomClientEventKind> expected = {Kind::LobbyChanged, Kind::ViewChanged, Kind::LobbyChanged};
         EXPECT_EQ(Kinds(), expected);
         EXPECT_EQ(_client->GetViewVersion(), 2u);
         EXPECT_EQ(_client->GetLobby().hostSeat, 0);
@@ -651,7 +651,7 @@ namespace BECore::Tests {
         link.PushText(View(1));
         Pump();
         EXPECT_EQ(_events.size(), taken + 1);
-        eastl::vector<RoomClientEvent> again;
+        Vector<RoomClientEvent> again;
         _client->DrainEvents(again);
         EXPECT_TRUE(again.empty());
     }
@@ -799,7 +799,7 @@ namespace BECore::Tests {
         EXPECT_EQ(_client->GetViewVersion(), 9u);
         EXPECT_EQ(_client->GetLobby().phase, RoomPhase::Playing);
         EXPECT_EQ(_client->GetSession().token, kToken);
-        const eastl::vector<RoomClientEventKind> expected = {Kind::Resumed, Kind::LobbyChanged, Kind::ViewChanged};
+        const Vector<RoomClientEventKind> expected = {Kind::Resumed, Kind::LobbyChanged, Kind::ViewChanged};
         EXPECT_EQ(Kinds(), expected);
         EXPECT_TRUE(first.destroyed);
 
@@ -934,7 +934,7 @@ namespace BECore::Tests {
         link.PushClosed(1000, "replaced");
         Pump();
         EXPECT_EQ(_client->GetState(), RoomClientState::Disconnected);
-        const eastl::vector<RoomClientEventKind> expected = {Kind::Left, Kind::Closed};
+        const Vector<RoomClientEventKind> expected = {Kind::Left, Kind::Closed};
         EXPECT_EQ(Kinds(), expected);
         EXPECT_EQ(_events[0].code, "replaced");
         EXPECT_EQ(_events[1].code, RoomClientCloseReasons::kReplaced);
@@ -1101,7 +1101,7 @@ namespace BECore::Tests {
         EXPECT_EQ(fresh.GetPlayer(), 2u);
         EXPECT_FALSE(fresh.IsHost());
         EXPECT_TRUE(fresh.HasView());
-        const eastl::vector<RoomClientEventKind> expected = {Kind::Resumed, Kind::LobbyChanged, Kind::ViewChanged};
+        const Vector<RoomClientEventKind> expected = {Kind::Resumed, Kind::LobbyChanged, Kind::ViewChanged};
         EXPECT_EQ(Kinds(), expected);
         EXPECT_EQ(fresh.GetSession().url, kUrl);
     }
@@ -1194,7 +1194,7 @@ namespace BECore::Tests {
 
         _events.clear();
         Receive(link, RoomsAnswer(true));
-        EXPECT_EQ(Kinds(), (eastl::vector<RoomClientEventKind>{Kind::RoomList}));
+        EXPECT_EQ(Kinds(), (Vector<RoomClientEventKind>{Kind::RoomList}));
         const RoomListMessage& rooms = _client->GetRoomList();
         EXPECT_EQ(rooms.game, "cards");
         ASSERT_EQ(rooms.rooms.size(), 2u);

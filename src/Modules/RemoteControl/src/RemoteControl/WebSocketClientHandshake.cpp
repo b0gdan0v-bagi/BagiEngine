@@ -51,7 +51,7 @@ namespace BECore {
         for (uint8_t& byte : bytes) {
             byte = static_cast<uint8_t>(random());
         }
-        return Base64Encode(eastl::span<const uint8_t>(bytes.data(), bytes.size()));
+        return Base64Encode(Span<const uint8_t>(bytes.data(), bytes.size()));
     }
 
     String BuildClientHandshakeRequest(const WebSocketUrl& url, StringView key, StringView origin) {

@@ -74,7 +74,7 @@ namespace BECore {
     }
 
     std::expected<void, ControlError> RoomClient::StartConnection(StringView url, String firstMessage, bool awaitsJoin) {
-        eastl::unique_ptr<IRoomTransport> transport = _settings.transportFactory ? _settings.transportFactory() : MakeDefaultRoomTransport();
+        UniquePtr<IRoomTransport> transport = _settings.transportFactory ? _settings.transportFactory() : MakeDefaultRoomTransport();
         if (!transport) {
             return Fail(RoomClientErrors::kTransportUnavailable, "there is no way to connect to a room server in this build");
         }
@@ -232,7 +232,7 @@ namespace BECore {
         CheckTimers();
     }
 
-    void RoomClient::DrainEvents(eastl::vector<RoomClientEvent>& out) {
+    void RoomClient::DrainEvents(Vector<RoomClientEvent>& out) {
         if (_events.empty()) {
             return;
         }

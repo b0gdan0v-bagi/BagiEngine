@@ -67,7 +67,7 @@ namespace BECore {
 
         /// The arcs of the outline of @p rect moved by @p offset. A corner that is rounded keeps its centre and grows or shrinks its radius (so the outline is a true
         /// offset curve); a square corner stays square unless @p roundOutwards asks for the offset curve of a point (a shadow's soft corner)
-        [[nodiscard]] eastl::array<Arc, kCornerCount> MakeArcs(const Rect& rect, const UICorners& corners, float offset, bool roundOutwards) {
+        [[nodiscard]] Array<Arc, kCornerCount> MakeArcs(const Rect& rect, const UICorners& corners, float offset, bool roundOutwards) {
             const float left = rect.x - offset;
             const float top = rect.y - offset;
             const float right = rect.x + rect.w + offset;
@@ -103,7 +103,7 @@ namespace BECore {
             return (b.x - a.x) * (c.y - a.y) - (c.x - a.x) * (b.y - a.y);
         }
 
-        void AddTriangle(eastl::vector<int>& indices, int a, int b, int c) {
+        void AddTriangle(Vector<int>& indices, int a, int b, int c) {
             indices.push_back(a);
             indices.push_back(b);
             indices.push_back(c);
@@ -119,8 +119,7 @@ namespace BECore {
          * position, so it interpolates exactly) with the alpha of the ring.
          */
         template <typename ColorFn>
-        void AppendCore(eastl::vector<GeometryVertex>& vertices, eastl::vector<int>& indices, int ring, const int* segments, const eastl::array<Arc, kCornerCount>& arcs, float alpha,
-                        ColorFn&& colorOf) {
+        void AppendCore(Vector<GeometryVertex>& vertices, Vector<int>& indices, int ring, const int* segments, const Array<Arc, kCornerCount>& arcs, float alpha, ColorFn&& colorOf) {
             int cornerFirst[kCornerCount];
             int next = ring;
             for (int c = 0; c < kCornerCount; ++c) {
@@ -174,8 +173,8 @@ namespace BECore {
          * bounding boxes would all be the whole box). @p colorOf gives the colour of a point before the ring's alpha is applied.
          */
         template <typename ColorFn>
-        void AppendRings(eastl::vector<GeometryVertex>& vertices, eastl::vector<int>& indices, const Rect& rect, const UICorners& corners, const Ring* rings, int ringCount, const Path& path,
-                         bool roundOutwards, bool fillCore, float pixelsPerUnit, float cornerSagitta, ColorFn&& colorOf) {
+        void AppendRings(Vector<GeometryVertex>& vertices, Vector<int>& indices, const Rect& rect, const UICorners& corners, const Ring* rings, int ringCount, const Path& path, bool roundOutwards,
+                         bool fillCore, float pixelsPerUnit, float cornerSagitta, ColorFn&& colorOf) {
             const UICorners baseCorners = corners.Clamped(rect.w, rect.h);
             const float halfShortSide = std::min(rect.w, rect.h) * 0.5f;
 
@@ -199,7 +198,7 @@ namespace BECore {
             }
 
             const int firstVertex = static_cast<int>(vertices.size());
-            eastl::array<Arc, kCornerCount> lastArcs;
+            Array<Arc, kCornerCount> lastArcs;
             for (int r = 0; r < ringCount; ++r) {
                 // An outline cannot move in further than the middle of the shorter side
                 const float offset = std::max(rings[r].offset, -halfShortSide);
@@ -307,7 +306,7 @@ namespace BECore {
         return std::clamp(segments, kMinCornerSegments, kMaxCornerSegments);
     }
 
-    void UIBoxMesh::AppendFill(eastl::vector<GeometryVertex>& vertices, eastl::vector<int>& indices, const Rect& rect, const UICorners& corners, const Color& color, const UIGradientSpec& gradient,
+    void UIBoxMesh::AppendFill(Vector<GeometryVertex>& vertices, Vector<int>& indices, const Rect& rect, const UICorners& corners, const Color& color, const UIGradientSpec& gradient,
                                float pixelsPerUnit) {
         if (!IsValidBox(rect, pixelsPerUnit)) {
             return;
@@ -335,8 +334,7 @@ namespace BECore {
         });
     }
 
-    void UIBoxMesh::AppendBorder(eastl::vector<GeometryVertex>& vertices, eastl::vector<int>& indices, const Rect& rect, const UICorners& corners, float width, const Color& color,
-                                 float pixelsPerUnit) {
+    void UIBoxMesh::AppendBorder(Vector<GeometryVertex>& vertices, Vector<int>& indices, const Rect& rect, const UICorners& corners, float width, const Color& color, float pixelsPerUnit) {
         if (!IsValidBox(rect, pixelsPerUnit) || !UIBounds::IsBounded(width) || width <= 0.0f || color.a == 0) {
             return;
         }
@@ -353,7 +351,7 @@ namespace BECore {
         AppendRings(vertices, indices, rect, corners, rings, ringCount, Path{}, false, false, pixelsPerUnit, UIBoxMesh::kCornerSagittaPixels, [&](const PointInfo&) { return color; });
     }
 
-    void UIBoxMesh::AppendShadow(eastl::vector<GeometryVertex>& vertices, eastl::vector<int>& indices, const Rect& rect, const UICorners& corners, const UIShadowSpec& shadow, float pixelsPerUnit,
+    void UIBoxMesh::AppendShadow(Vector<GeometryVertex>& vertices, Vector<int>& indices, const Rect& rect, const UICorners& corners, const UIShadowSpec& shadow, float pixelsPerUnit,
                                  GeometryDetail detail) {
         if (!IsValidBox(rect, pixelsPerUnit) || !UIBounds::IsBounded(shadow.offsetX) || !UIBounds::IsBounded(shadow.offsetY) || !UIBounds::IsBounded(shadow.blur) ||
             !UIBounds::IsBounded(shadow.spread) || shadow.color.a == 0) {
@@ -395,7 +393,7 @@ namespace BECore {
         AppendRings(vertices, indices, base, baseCorners, rings, steps + 1, Path{}, true, true, pixelsPerUnit, sagitta, flat);
     }
 
-    void UIBoxMesh::AppendHighlight(eastl::vector<GeometryVertex>& vertices, eastl::vector<int>& indices, const Rect& rect, const UICorners& corners, const Color& color, float pixelsPerUnit) {
+    void UIBoxMesh::AppendHighlight(Vector<GeometryVertex>& vertices, Vector<int>& indices, const Rect& rect, const UICorners& corners, const Color& color, float pixelsPerUnit) {
         if (!IsValidBox(rect, pixelsPerUnit) || color.a == 0) {
             return;
         }

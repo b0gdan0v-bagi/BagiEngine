@@ -103,7 +103,7 @@ namespace BECore::Tests {
     TEST(AllocTrackerTest, AnOverAlignedEastlVectorIsCountedAndFreed) {
         const AllocTotals before = AllocTracker::GetTotals();
         {
-            eastl::vector<Wide> wide(16);
+            Vector<Wide> wide(16);
             EXPECT_EQ(reinterpret_cast<uintptr_t>(wide.data()) % alignof(Wide), 0u);
         }
         const AllocTotals after = AllocTracker::GetTotals();

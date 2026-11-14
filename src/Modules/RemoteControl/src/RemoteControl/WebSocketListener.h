@@ -109,7 +109,7 @@ namespace BECore {
         bool AdmitByClientAddress(WebSocketConnection& connection, const String& clientAddress);
         void ReapFinishedConnections();
         void RunConnection(const ConnectionPtr& connection);
-        void ReadMessages(const ConnectionPtr& connection, eastl::vector<uint8_t> pendingBytes);
+        void ReadMessages(const ConnectionPtr& connection, Vector<uint8_t> pendingBytes);
 
         /// Acts on one message of a client; false when the connection has to end
         bool HandleMessage(const ConnectionPtr& connection, WebSocketMessage message);
@@ -123,7 +123,7 @@ namespace BECore {
         WebSocketConnectionId _nextId = 1;  // accept thread only; not reset by Stop(), so an id is never reused
 
         Mutex _connectionsMutex{BE_LOCK_SITE("WebSocket connections")};
-        eastl::vector<ConnectionPtr> _connections;  // guarded by _connectionsMutex
+        Vector<ConnectionPtr> _connections;  // guarded by _connectionsMutex
     };
 
 }  // namespace BECore

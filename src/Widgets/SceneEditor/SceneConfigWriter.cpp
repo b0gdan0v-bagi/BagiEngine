@@ -15,7 +15,7 @@ namespace BECore {
 
         /// A line in @p notes for every node below @p node that is an instance of a node file: nested nodes are written inline (a reference has no
         /// place among the children), so their link is lost
-        void NoteNestedLinks(const SceneNode& node, eastl::vector<String>& notes) {
+        void NoteNestedLinks(const SceneNode& node, Vector<String>& notes) {
             for (const auto& child : node.GetChildren()) {
                 if (!child->GetSourceRef().Empty()) {
                     notes.push_back(Format("node '{}': written inline, it is nested and its link to the node file '{}' is not kept", child->GetName().CStr(), child->GetSourceRef().CStr()));
@@ -36,7 +36,7 @@ namespace BECore {
 
         /// One top-level node into @p nodesEl: an instance of a node file as its `<node ref>` with the overrides, any other node (and an instance that
         /// cannot be written that way, with a line in @p notes) inline. An instance with children is inline too: the override language has none
-        void AppendNode(pugi::xml_node nodesEl, const SceneNode& node, const NodeFileLoader* loader, eastl::vector<String>* notes) {
+        void AppendNode(pugi::xml_node nodesEl, const SceneNode& node, const NodeFileLoader* loader, Vector<String>* notes) {
             if (!node.GetSourceRef().Empty()) {
                 String reason;
                 if (!node.GetChildren().empty()) {
@@ -60,7 +60,7 @@ namespace BECore {
 
     }  // namespace
 
-    bool WriteSceneToConfig(pugi::xml_node configRoot, Scene& scene, const NodeFileLoader* loader, eastl::vector<String>* notes) {
+    bool WriteSceneToConfig(pugi::xml_node configRoot, Scene& scene, const NodeFileLoader* loader, Vector<String>* notes) {
         if (!configRoot) {
             return false;
         }

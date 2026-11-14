@@ -31,7 +31,7 @@ namespace BECore {
         /// every path of it (the child or a descendant, visible, with a rect) that overlaps `UICanvasResolved::viewBounds` is reported as OverlapsSceneView, and its own
         /// descendants are not looked at. Meant for an `extendToOutput` canvas: on any other canvas `viewBounds` is `bounds`, so everything overlaps. The caller names the
         /// elements (a screen test lists its bar row), the element has no flag of its own. Empty (the default): not checked.
-        eastl::vector<PoolString> keepOffView;
+        Vector<PoolString> keepOffView;
     };
 
     /**
@@ -48,7 +48,7 @@ namespace BECore {
     public:
         /// @param root the canvas root, laid out (UITreeLayout::Run) for @p resolved
         /// @param regions the regions the layout ran with (UITreeLayout::Run); the default, none, reports every `region` of the tree as MissingRegion
-        [[nodiscard]] static eastl::vector<UILayoutIssue> Validate(const UIElement& root, const UICanvasResolved& resolved, const UILayoutValidatorOptions& options, const UIRegionSet& regions = {});
+        [[nodiscard]] static Vector<UILayoutIssue> Validate(const UIElement& root, const UICanvasResolved& resolved, const UILayoutValidatorOptions& options, const UIRegionSet& regions = {});
     };
 
 }  // namespace BECore

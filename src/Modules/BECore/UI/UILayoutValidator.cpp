@@ -18,7 +18,7 @@ namespace BECore {
 
         class Walker {
         public:
-            Walker(const UICanvasResolved& resolved, const UILayoutValidatorOptions& options, const UIRegionSet& regions, eastl::vector<UILayoutIssue>& issues)
+            Walker(const UICanvasResolved& resolved, const UILayoutValidatorOptions& options, const UIRegionSet& regions, Vector<UILayoutIssue>& issues)
                 : _resolved(resolved), _options(options), _regions(regions), _issues(issues) {}
 
             void VisitRoot(const UIElement& root) {
@@ -121,13 +121,13 @@ namespace BECore {
             const UICanvasResolved& _resolved;
             const UILayoutValidatorOptions& _options;
             const UIRegionSet& _regions;
-            eastl::vector<UILayoutIssue>& _issues;
+            Vector<UILayoutIssue>& _issues;
         };
 
     }  // namespace
 
-    eastl::vector<UILayoutIssue> UILayoutValidator::Validate(const UIElement& root, const UICanvasResolved& resolved, const UILayoutValidatorOptions& options, const UIRegionSet& regions) {
-        eastl::vector<UILayoutIssue> issues;
+    Vector<UILayoutIssue> UILayoutValidator::Validate(const UIElement& root, const UICanvasResolved& resolved, const UILayoutValidatorOptions& options, const UIRegionSet& regions) {
+        Vector<UILayoutIssue> issues;
         Walker(resolved, options, regions, issues).VisitRoot(root);
         return issues;
     }

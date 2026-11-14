@@ -29,7 +29,7 @@ namespace BECore {
         }
 
         template <typename T>
-        void SaveItems(ISerializer& s, const eastl::vector<T>& items, StringView key, StringView itemName) {
+        void SaveItems(ISerializer& s, const Vector<T>& items, StringView key, StringView itemName) {
             size_t count = items.size();
             if (s.BeginArray(key, itemName, count)) {
                 for (const T& item : items) {
@@ -43,7 +43,7 @@ namespace BECore {
         }
 
         template <typename T>
-        bool LoadItems(IDeserializer& d, eastl::vector<T>& items, StringView key, StringView itemName) {
+        bool LoadItems(IDeserializer& d, Vector<T>& items, StringView key, StringView itemName) {
             size_t count = 0;
             if (!d.BeginArray(key, itemName, count)) {
                 return false;
@@ -182,15 +182,15 @@ namespace BECore {
         LoadItems(d, overrides, OverridesKey, OverrideItem);
     }
 
-    void Ser::DataAccessor<eastl::vector<UIVariant>>::Save(ISerializer& s, const eastl::vector<UIVariant>& variants, StringView key) {
+    void Ser::DataAccessor<Vector<UIVariant>>::Save(ISerializer& s, const Vector<UIVariant>& variants, StringView key) {
         SaveItems(s, variants, key, VariantItem);
     }
 
-    bool Ser::DataAccessor<eastl::vector<UIVariant>>::Load(IDeserializer& d, eastl::vector<UIVariant>& variants, StringView key) {
+    bool Ser::DataAccessor<Vector<UIVariant>>::Load(IDeserializer& d, Vector<UIVariant>& variants, StringView key) {
         return LoadItems(d, variants, key, VariantItem);
     }
 
-    size_t UIVariants::Apply(UIElement& root, eastl::span<const UIVariant> variants, const Rect& bounds) {
+    size_t UIVariants::Apply(UIElement& root, Span<const UIVariant> variants, const Rect& bounds) {
         ResetActive(root);
         size_t matched = 0;
         for (const UIVariant& variant : variants) {

@@ -23,7 +23,7 @@ namespace BECore {
         uint32_t height = 0;
         int32_t offsetX = 0;
         int32_t offsetY = 0;
-        eastl::vector<uint8_t> coverage;
+        Vector<uint8_t> coverage;
     };
 
     /**
@@ -44,7 +44,7 @@ namespace BECore {
         ~Font() override;
 
         /// Parses font data from memory; @p name is what GetPath() answers. A font that cannot be parsed is in the Failed state.
-        [[nodiscard]] static IntrusivePtr<Font> CreateFromMemory(PoolString name, eastl::vector<uint8_t> data);
+        [[nodiscard]] static IntrusivePtr<Font> CreateFromMemory(PoolString name, Vector<uint8_t> data);
 
         ResourceState GetState() const override;
         PoolString GetPath() const override;
@@ -74,8 +74,8 @@ namespace BECore {
 
         void SetFailed(PoolString name);
 
-        eastl::vector<uint8_t> _data;
-        eastl::unique_ptr<Impl> _impl;
+        Vector<uint8_t> _data;
+        UniquePtr<Impl> _impl;
         PoolString _path;
         ResourceState _state = ResourceState::Unloaded;
     };

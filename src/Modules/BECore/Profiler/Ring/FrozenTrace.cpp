@@ -24,10 +24,10 @@ namespace BECore {
             uint32_t threadId = 0;
             String name;
             uint32_t sortIndex = Profiler::kNoSortIndex;
-            eastl::vector<ThreadZone> zones;
+            Vector<ThreadZone> zones;
         };
 
-        ThreadLane& LaneOf(eastl::vector<ThreadLane>& lanes, const RingThread& thread) {
+        ThreadLane& LaneOf(Vector<ThreadLane>& lanes, const RingThread& thread) {
             for (ThreadLane& lane : lanes) {
                 if (lane.threadId == thread.threadId) {
                     return lane;
@@ -42,10 +42,10 @@ namespace BECore {
 
     }  // namespace
 
-    String WriteFrozenTraceJson(const eastl::vector<FrozenFrame>& frames) {
+    String WriteFrozenTraceJson(const Vector<FrozenFrame>& frames) {
         uint64_t start = frames.empty() ? 0 : frames[0].beginTicks;
         uint64_t truncated = 0;
-        eastl::vector<ThreadLane> lanes;
+        Vector<ThreadLane> lanes;
         for (const FrozenFrame& frame : frames) {
             start = eastl::min(start, frame.beginTicks);
             truncated += frame.truncatedZones;
@@ -85,7 +85,7 @@ namespace BECore {
                                [](const ThreadZone& a, const ThreadZone& b) { return a.zone.beginTicks != b.zone.beginTicks ? a.zone.beginTicks < b.zone.beginTicks : a.zone.depth < b.zone.depth; });
 
             // The zones nest (a zone lies inside the one on top of the stack or after it), so a B/E pair per zone is a well-formed stack
-            eastl::vector<const ThreadZone*> open;
+            Vector<const ThreadZone*> open;
             const auto endEvent = [&](const ThreadZone& zone, uint64_t endTicks) {
                 beginEvent();
                 out.append(Format("{{\"ph\":\"E\",\"pid\":{},\"tid\":{},\"ts\":{:.3f}", kPid, lane.threadId, timestamp(endTicks, zone.nanosecondsPerTick)));
@@ -125,7 +125,7 @@ namespace BECore {
         return out;
     }
 
-    std::expected<void, String> WriteFrozenTraceFile(StringView path, const eastl::vector<FrozenFrame>& frames) {
+    std::expected<void, String> WriteFrozenTraceFile(StringView path, const Vector<FrozenFrame>& frames) {
         const String text = WriteFrozenTraceJson(frames);
         const String fileName(path.data(), path.size());
         std::FILE* file = std::fopen(fileName.c_str(), "wb");

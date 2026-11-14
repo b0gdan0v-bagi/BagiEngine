@@ -52,7 +52,7 @@ namespace BECore::Stress {
         /// Makes @p language the language of the string table, once per change
         void ApplyLanguage(StressLanguage language);
 
-        eastl::vector<Label> _labels;
+        Vector<Label> _labels;
         IntrusivePtr<UICanvasComponent> _canvas;
         uint64_t _builtVersion = 0;  // the StressState version the labels were last brought to; 0 is never a version
         uint32_t _builtCount = kNothingBuilt;

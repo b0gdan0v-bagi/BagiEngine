@@ -31,8 +31,8 @@ namespace BECore::Tests {
             return desc;
         }
 
-        eastl::vector<std::byte> MakeBytes(size_t count, uint8_t fill) {
-            return eastl::vector<std::byte>(count, std::byte{fill});
+        Vector<std::byte> MakeBytes(size_t count, uint8_t fill) {
+            return Vector<std::byte>(count, std::byte{fill});
         }
 
         /// A device with a pipeline, a vertex and an index buffer and a depth texture, ready to record a pass
@@ -41,8 +41,8 @@ namespace BECore::Tests {
                 auto made = device.CreatePipeline(MakeLitDesc());
                 EXPECT_TRUE(made.has_value());
                 pipeline = made.value();
-                const eastl::vector<std::byte> vertices(kVertexStride * 4, std::byte{1});
-                const eastl::vector<std::byte> indices(kCubeIndexCount * sizeof(uint32_t), std::byte{2});
+                const Vector<std::byte> vertices(kVertexStride * 4, std::byte{1});
+                const Vector<std::byte> indices(kCubeIndexCount * sizeof(uint32_t), std::byte{2});
                 vertexBuffer = device.CreateBuffer(BufferDesc{BufferUsage::Vertex, static_cast<uint32_t>(vertices.size()), "vertices"_intern}, {vertices.data(), vertices.size()});
                 indexBuffer = device.CreateBuffer(BufferDesc{BufferUsage::Index, static_cast<uint32_t>(indices.size()), "indices"_intern}, {indices.data(), indices.size()});
                 depth = device.CreateDepthTexture(kTargetSize, kTargetSize);
@@ -175,7 +175,7 @@ namespace BECore::Tests {
 
     TEST(GpuInterfaceBufferTest, KeepsTheInitialBytesAndZeroFillsTheRest) {
         RecordingGpuDevice device;
-        const eastl::vector<std::byte> initial = MakeBytes(4, 7);
+        const Vector<std::byte> initial = MakeBytes(4, 7);
 
         IntrusivePtr<IGpuBuffer> buffer = device.CreateBuffer(BufferDesc{BufferUsage::Vertex, 8, "b"_intern}, {initial.data(), initial.size()});
 
@@ -189,7 +189,7 @@ namespace BECore::Tests {
 
     TEST(GpuInterfaceBufferTest, InitialDataLargerThanTheBufferIsRefused) {
         RecordingGpuDevice device;
-        const eastl::vector<std::byte> initial = MakeBytes(16, 1);
+        const Vector<std::byte> initial = MakeBytes(16, 1);
 
         EXPECT_FALSE(device.CreateBuffer(BufferDesc{BufferUsage::Index, 8, "b"_intern}, {initial.data(), initial.size()}));
         EXPECT_FALSE(device.errors.empty());
@@ -264,8 +264,8 @@ namespace BECore::Tests {
     TEST(GpuInterfaceDrawTest, ABoundPipelineAndConstantsMakeADraw) {
         Fixture f;
         f.BeginBound();
-        const eastl::vector<std::byte> frame = MakeBytes(kFrameBytes, 3);
-        const eastl::vector<std::byte> draw = MakeBytes(kDrawBytes, 4);
+        const Vector<std::byte> frame = MakeBytes(kFrameBytes, 3);
+        const Vector<std::byte> draw = MakeBytes(kDrawBytes, 4);
 
         f.device.SetConstants(ConstantsSlot::Frame, {frame.data(), frame.size()});
         f.device.SetConstants(ConstantsSlot::Draw, {draw.data(), draw.size()});
@@ -286,9 +286,9 @@ namespace BECore::Tests {
     TEST(GpuInterfaceDrawTest, TwoDrawsShareTheFrameConstantsAndOwnTheirDrawConstants) {
         Fixture f;
         f.BeginBound();
-        const eastl::vector<std::byte> frame = MakeBytes(kFrameBytes, 3);
-        const eastl::vector<std::byte> first = MakeBytes(kDrawBytes, 4);
-        const eastl::vector<std::byte> second = MakeBytes(kDrawBytes, 5);
+        const Vector<std::byte> frame = MakeBytes(kFrameBytes, 3);
+        const Vector<std::byte> first = MakeBytes(kDrawBytes, 4);
+        const Vector<std::byte> second = MakeBytes(kDrawBytes, 5);
 
         f.device.SetConstants(ConstantsSlot::Frame, {frame.data(), frame.size()});
         f.device.SetConstants(ConstantsSlot::Draw, {first.data(), first.size()});
@@ -308,7 +308,7 @@ namespace BECore::Tests {
     TEST(GpuInterfaceDrawTest, ABlockOverTheLimitIsRefusedAndNotRecorded) {
         Fixture f;
         f.BeginBound();
-        const eastl::vector<std::byte> tooBig = MakeBytes(kMaxConstantsBytes + kConstantsAlignment, 1);
+        const Vector<std::byte> tooBig = MakeBytes(kMaxConstantsBytes + kConstantsAlignment, 1);
 
         f.device.SetConstants(ConstantsSlot::Draw, {tooBig.data(), tooBig.size()});
 
@@ -320,7 +320,7 @@ namespace BECore::Tests {
     TEST(GpuInterfaceDrawTest, ABlockOfADifferentSizeThanDeclaredIsRefused) {
         Fixture f;
         f.BeginBound();
-        const eastl::vector<std::byte> wrong = MakeBytes(kDrawBytes, 1);
+        const Vector<std::byte> wrong = MakeBytes(kDrawBytes, 1);
 
         f.device.SetConstants(ConstantsSlot::Frame, {wrong.data(), wrong.size()});
 
@@ -344,7 +344,7 @@ namespace BECore::Tests {
     TEST(GpuInterfaceDrawTest, ADrawNeedsEveryDeclaredConstantsBlock) {
         Fixture f;
         f.BeginBound();
-        const eastl::vector<std::byte> frame = MakeBytes(kFrameBytes, 3);
+        const Vector<std::byte> frame = MakeBytes(kFrameBytes, 3);
         f.device.SetConstants(ConstantsSlot::Frame, {frame.data(), frame.size()});
 
         f.device.DrawIndexed(kCubeIndexCount, 0, 0);
@@ -356,8 +356,8 @@ namespace BECore::Tests {
     TEST(GpuInterfaceDrawTest, SettingAPipelineAgainInvalidatesTheConstants) {
         Fixture f;
         f.BeginBound();
-        const eastl::vector<std::byte> frame = MakeBytes(kFrameBytes, 3);
-        const eastl::vector<std::byte> draw = MakeBytes(kDrawBytes, 4);
+        const Vector<std::byte> frame = MakeBytes(kFrameBytes, 3);
+        const Vector<std::byte> draw = MakeBytes(kDrawBytes, 4);
         f.device.SetConstants(ConstantsSlot::Frame, {frame.data(), frame.size()});
         f.device.SetConstants(ConstantsSlot::Draw, {draw.data(), draw.size()});
 
@@ -381,10 +381,10 @@ namespace BECore::Tests {
     TEST(GpuInterfaceDrawTest, TexturesViewportAndScissorAreKeptWithTheDraw) {
         Fixture f;
         f.BeginBound();
-        const eastl::vector<uint8_t> pixels(4, 255);
+        const Vector<uint8_t> pixels(4, 255);
         const IntrusivePtr<RecordedTexture> texture = New<RecordedTexture>(pixels, 1, 1);
-        const eastl::vector<std::byte> frame = MakeBytes(kFrameBytes, 3);
-        const eastl::vector<std::byte> draw = MakeBytes(kDrawBytes, 4);
+        const Vector<std::byte> frame = MakeBytes(kFrameBytes, 3);
+        const Vector<std::byte> draw = MakeBytes(kDrawBytes, 4);
         f.device.SetConstants(ConstantsSlot::Frame, {frame.data(), frame.size()});
         f.device.SetConstants(ConstantsSlot::Draw, {draw.data(), draw.size()});
 

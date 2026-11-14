@@ -11,7 +11,7 @@ namespace BECore {
         constexpr uint32_t kWhitePixelBytes = 4;
 
         template <typename T>
-        eastl::span<const std::byte> BytesOf(const T& value) {
+        Span<const std::byte> BytesOf(const T& value) {
             return {reinterpret_cast<const std::byte*>(&value), sizeof(T)};
         }
 

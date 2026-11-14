@@ -18,7 +18,7 @@ namespace BECore {
     struct PixelBuffer {
         uint32_t width = 0;
         uint32_t height = 0;
-        eastl::vector<uint8_t> rgba;
+        Vector<uint8_t> rgba;
     };
 
     /// One corner of a triangle for IRenderer::DrawGeometry()
@@ -88,7 +88,7 @@ namespace BECore {
         // straight and blended over the target. An index past the vertices ends the draw.
         // Not BE_FUNCTION (spans). The default logs once and draws nothing, for a backend without the primitive (the SDL and the Vulkan backends both have it,
         // .claude/rules/rendering-module.md).
-        virtual void DrawGeometry(ITexture* texture, eastl::span<const GeometryVertex> vertices, eastl::span<const int> indices, float translateX, float translateY);
+        virtual void DrawGeometry(ITexture* texture, Span<const GeometryVertex> vertices, Span<const int> indices, float translateX, float translateY);
 
         // Draws a rect rotated about @p transform's pivot (absolute, in the units of the call). An identity transform is DrawFilledRect() unchanged;
         // otherwise the default builds the four rotated corners (MakeTransformedQuad()) and draws them through DrawGeometry(), which applies the view
@@ -231,7 +231,7 @@ namespace BECore {
         BlendMode _blendMode = BlendMode::Alpha;
         float _opacity = 1.0f;
         // Each entry is already intersected with the one below it
-        eastl::vector<Rect> _clipStack;
+        Vector<Rect> _clipStack;
         RenderCounters _counters;
         const ITexture* _lastCountedTexture = nullptr;  // compared only, never dereferenced
         int _countersPaused = 0;

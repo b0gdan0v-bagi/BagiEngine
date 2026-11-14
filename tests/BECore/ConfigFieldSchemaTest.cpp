@@ -15,13 +15,13 @@ namespace BECore::Tests {
         constexpr StringView kSinkTypePath = "sink/@type";
         constexpr StringView kSinkMinLevelPath = "sink/@minLevel";
 
-        bool Contains(const eastl::vector<String>& options, StringView value) {
+        bool Contains(const Vector<String>& options, StringView value) {
             return eastl::find(options.begin(), options.end(), value) != options.end();
         }
 
         /// The `<sink>` elements of the shipped config/LoggerConfig.xml. Read only: never save it.
-        eastl::vector<XmlNode> ShippedSinks() {
-            eastl::vector<XmlNode> sinks;
+        Vector<XmlNode> ShippedSinks() {
+            Vector<XmlNode> sinks;
             const XmlNode sinksNode = CoreManager::GetConfigManager().GetConfig(kLoggerConfig).GetChild("sinks");
             for (const XmlNode sink : sinksNode.Children()) {
                 if (sink.Name() == "sink") {
@@ -52,7 +52,7 @@ namespace BECore::Tests {
         const FieldHint hint = schema.Resolve(kLoggerConfig, kSinkTypePath, "ConsoleSink");
         EXPECT_EQ(hint.type, FieldType::Enum);
 
-        const eastl::vector<String> expected{"ConsoleSink", "FileSink", "OutputSink"};
+        const Vector<String> expected{"ConsoleSink", "FileSink", "OutputSink"};
         EXPECT_EQ(hint.options, expected);
 
         // The names of the removed hand-written enum are not class names, the loader would drop them
@@ -82,7 +82,7 @@ namespace BECore::Tests {
         const FieldHint levels = schema.Resolve(kLoggerConfig, kSinkMinLevelPath, "");
         EXPECT_EQ(levels.type, FieldType::Enum);
 
-        const eastl::vector<XmlNode> sinks = ShippedSinks();
+        const Vector<XmlNode> sinks = ShippedSinks();
         ASSERT_FALSE(sinks.empty());
         for (const XmlNode& sink : sinks) {
             const auto type = sink.GetAttribute("type");
@@ -104,7 +104,7 @@ namespace BECore::Tests {
         const ConfigFieldSchema& schema = ConfigFieldSchema::GetInstance();
         const FieldHint types = schema.Resolve(kLoggerConfig, kSinkTypePath, "ConsoleSink");
         EXPECT_EQ(types.type, FieldType::Enum);
-        const eastl::vector<String> expectedTypes{"ConsoleSink", "FileSink", "OutputSink"};
+        const Vector<String> expectedTypes{"ConsoleSink", "FileSink", "OutputSink"};
         EXPECT_EQ(types.options, expectedTypes);
 
         const FieldHint levels = schema.Resolve(kLoggerConfig, kSinkMinLevelPath, "Debug");

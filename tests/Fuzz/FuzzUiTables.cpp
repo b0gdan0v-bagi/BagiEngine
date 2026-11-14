@@ -29,7 +29,7 @@ namespace BECore::Fuzz {
             return false;
         }
 
-        void CheckComplaints(const eastl::vector<String>& complaints) {
+        void CheckComplaints(const Vector<String>& complaints) {
             for (const String& complaint : complaints) {
                 FUZZ_CHECK(!complaint.empty());
                 FUZZ_CHECK(complaint.size() <= kMaxComplaintBytes);

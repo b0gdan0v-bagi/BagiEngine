@@ -80,7 +80,7 @@ namespace BECore::Match3 {
          *        they keep the last frame (every gem on its cell, the matched ones at scale 0) until `Finish` or the next `Start`, which is how a
          *        test reads the exact end state. Empty before the first run and after `Finish`. Draw them only while `IsRunning()`.
          */
-        [[nodiscard]] const eastl::vector<GemSprite>& GetSprites() const {
+        [[nodiscard]] const Vector<GemSprite>& GetSprites() const {
             return _sprites;
         }
 
@@ -90,7 +90,7 @@ namespace BECore::Match3 {
 
     private:
         /// The sprite index on every cell of the board; -1 for no sprite. It follows the gems while the timeline is built
-        using SpriteGrid = eastl::array<int, static_cast<size_t>(kBoardSize) * static_cast<size_t>(kBoardSize)>;
+        using SpriteGrid = Array<int, static_cast<size_t>(kBoardSize) * static_cast<size_t>(kBoardSize)>;
 
         SpriteGrid BeginRun(const Match3Board& before);
         void AddSwap(Timeline& timeline, SpriteGrid& grid, Cell a, Cell b);
@@ -99,7 +99,7 @@ namespace BECore::Match3 {
 
         BoardAnimationSettings _settings;
         eastl::function<void(Cell, GemType)> _clearedSink;
-        eastl::vector<GemSprite> _sprites;  // built before the timeline plays and never resized while it does: the setters write by index
+        Vector<GemSprite> _sprites;  // built before the timeline plays and never resized while it does: the setters write by index
         ScopedTween _play;
     };
 

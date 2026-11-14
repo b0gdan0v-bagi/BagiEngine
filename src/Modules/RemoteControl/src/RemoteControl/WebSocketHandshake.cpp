@@ -370,8 +370,8 @@ namespace BECore {
     String ComputeAcceptKey(StringView clientKey) {
         String joined(clientKey.data(), clientKey.size());
         joined.append(kWebSocketGuid.data(), kWebSocketGuid.size());
-        const Sha1Digest digest = Sha1(eastl::span<const uint8_t>(reinterpret_cast<const uint8_t*>(joined.data()), joined.size()));
-        return Base64Encode(eastl::span<const uint8_t>(digest.data(), digest.size()));
+        const Sha1Digest digest = Sha1(Span<const uint8_t>(reinterpret_cast<const uint8_t*>(joined.data()), joined.size()));
+        return Base64Encode(Span<const uint8_t>(digest.data(), digest.size()));
     }
 
     bool IsOriginAllowed(StringView origin, const HandshakePolicy& policy) {

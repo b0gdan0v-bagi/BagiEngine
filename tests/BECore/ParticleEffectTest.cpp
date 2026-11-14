@@ -21,7 +21,7 @@ namespace BECore::Tests {
         }
 
         /// Reads the <effect> element of @p xml into @p out; the errors of the reader go to @p errors when given. Use through ASSERT_NO_FATAL_FAILURE.
-        void LoadEffect(StringView xml, ParticleEffect& out, eastl::vector<DeserializeError>* errors = nullptr) {
+        void LoadEffect(StringView xml, ParticleEffect& out, Vector<DeserializeError>* errors = nullptr) {
             XmlDeserializer deserializer;
             ASSERT_TRUE(deserializer.LoadFromString(xml)) << xml.data();
             ASSERT_TRUE(deserializer.BeginObject("effect")) << xml.data();
@@ -148,7 +148,7 @@ namespace BECore::Tests {
         const String xml = SaveEffect(original);
 
         ParticleEffect loaded;
-        eastl::vector<DeserializeError> errors;
+        Vector<DeserializeError> errors;
         ASSERT_NO_FATAL_FAILURE(LoadEffect(xml.c_str(), loaded, &errors));
         EXPECT_TRUE(errors.empty());
         ExpectEffectEq(loaded, original);
@@ -156,7 +156,7 @@ namespace BECore::Tests {
 
     TEST(ParticleEffectTest, SceneFileTextLoadsTheSameValues) {
         ParticleEffect loaded;
-        eastl::vector<DeserializeError> errors;
+        Vector<DeserializeError> errors;
         ASSERT_NO_FATAL_FAILURE(LoadEffect(kSceneText, loaded, &errors));
         EXPECT_TRUE(errors.empty());
         ExpectEffectEq(loaded, MakeChangedEffect());
@@ -174,7 +174,7 @@ namespace BECore::Tests {
 
     TEST(ParticleEffectTest, BadEnumTextIsReportedAndKeepsTheDefault) {
         ParticleEffect loaded;
-        eastl::vector<DeserializeError> errors;
+        Vector<DeserializeError> errors;
         ASSERT_NO_FATAL_FAILURE(LoadEffect(R"(<root><effect shape="Hexagon" blend="Glow" frameClass="Sometimes">
             <size from="3" to="1" ease="Wobble"/></effect></root>)",
                                            loaded, &errors));

@@ -137,7 +137,7 @@ namespace BECore {
         if (_phase != RoomPhase::Lobby) {
             return std::unexpected(MakeError(RoomErrors::kGameStarted, "The game has already started"));
         }
-        eastl::unique_ptr<ISeatedGame> game = _factory ? _factory() : nullptr;
+        UniquePtr<ISeatedGame> game = _factory ? _factory() : nullptr;
         if (!game || game->GetSeatCount() != _info.seatCount) {
             return std::unexpected(MakeError(RoomErrors::kInternalError, "The game could not be created"));
         }

@@ -182,7 +182,7 @@ namespace BECore::Tests {
 
         ASSERT_EQ(responses.size(), 1u);
         EXPECT_EQ(ErrorCode(0), "");
-        EXPECT_EQ(recorder.pastes, (eastl::vector<String>{"ABC"}));
+        EXPECT_EQ(recorder.pastes, (Vector<String>{"ABC"}));
     }
 
     TEST_F(ClipboardControlTest, PasteOfAnEmptyClipboardEmitsNothing) {

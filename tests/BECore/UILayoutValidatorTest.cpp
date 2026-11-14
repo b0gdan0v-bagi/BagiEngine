@@ -51,7 +51,7 @@ namespace BECore::Tests {
             return box;
         }
 
-        size_t CountOf(const eastl::vector<UILayoutIssue>& issues, UILayoutIssueKind kind) {
+        size_t CountOf(const Vector<UILayoutIssue>& issues, UILayoutIssueKind kind) {
             return static_cast<size_t>(std::count_if(issues.begin(), issues.end(), [kind](const UILayoutIssue& issue) { return issue.kind == kind; }));
         }
 

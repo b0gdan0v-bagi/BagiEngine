@@ -56,7 +56,7 @@ namespace BECore {
          * @brief Get all sinks
          * @return Reference to sinks vector
          */
-        const eastl::vector<IntrusivePtrAtomic<ILogSink>>& GetSinks() const {
+        const Vector<IntrusivePtrAtomic<ILogSink>>& GetSinks() const {
             return _sinks;
         }
 
@@ -66,7 +66,7 @@ namespace BECore {
          */
         void SortSinksByPriority();
 
-        BE_REFLECT_FIELD eastl::vector<IntrusivePtrAtomic<ILogSink>> _sinks;
+        BE_REFLECT_FIELD Vector<IntrusivePtrAtomic<ILogSink>> _sinks;
         bool _initialized = false;
     };
 

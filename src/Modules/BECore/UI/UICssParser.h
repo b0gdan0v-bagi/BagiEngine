@@ -26,33 +26,33 @@ namespace BECore {
         UICssCombinator combinator = UICssCombinator::None;
         String tag;  ///< lower case; empty matches any element
         String id;
-        eastl::vector<String> classes;
+        Vector<String> classes;
         UICssPseudo pseudo = UICssPseudo::None;  ///< only on the last compound of a selector
     };
 
     struct UICssSelector {
-        eastl::vector<UICssCompound> compounds;  ///< left to right; the last one is the element itself
-        uint32_t specificity = 0;                ///< ids << 16 | classes and pseudo-classes << 8 | tags
+        Vector<UICssCompound> compounds;  ///< left to right; the last one is the element itself
+        uint32_t specificity = 0;         ///< ids << 16 | classes and pseudo-classes << 8 | tags
     };
 
     struct UICssRule {
-        eastl::vector<UICssSelector> selectors;  ///< a rule with a selector list is one rule
-        eastl::vector<UICssDeclaration> declarations;
+        Vector<UICssSelector> selectors;  ///< a rule with a selector list is one rule
+        Vector<UICssDeclaration> declarations;
         int media = -1;  ///< index into UICssSheet::medias, -1 outside every `@media`
         uint32_t order = 0;
     };
 
     /// An `@media` block: the block applies while any of the alternatives holds (a comma in the query)
     struct UICssMedia {
-        eastl::vector<UIVariantCondition> alternatives;
+        Vector<UIVariantCondition> alternatives;
         uint32_t line = 0;
         uint32_t sourceId = 0;
     };
 
     struct UICssSheet {
-        eastl::vector<String> sources;  ///< "css" or "css:<href>", for the issues
-        eastl::vector<UICssRule> rules;
-        eastl::vector<UICssMedia> medias;
+        Vector<String> sources;  ///< "css" or "css:<href>", for the issues
+        Vector<UICssRule> rules;
+        Vector<UICssMedia> medias;
     };
 
     /**
@@ -88,7 +88,7 @@ namespace BECore {
         static void ParseInto(UICssSheet& sheet, StringView css, StringView sourceName, uint32_t firstLine, UIWebReport& report);
 
         /// The declarations of a `style=""` attribute
-        [[nodiscard]] static eastl::vector<UICssDeclaration> ParseDeclarations(StringView text, uint32_t line, uint32_t sourceId, UIWebReport& report);
+        [[nodiscard]] static Vector<UICssDeclaration> ParseDeclarations(StringView text, uint32_t line, uint32_t sourceId, UIWebReport& report);
     };
 
 }  // namespace BECore

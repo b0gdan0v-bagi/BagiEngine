@@ -123,7 +123,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(FontAtlasTest, GlyphPicturesDoNotOverlapAndKeepAGapBetweenThem) {
-        eastl::vector<uint32_t> glyphs;
+        Vector<uint32_t> glyphs;
         for (char32_t codePoint = U'A'; codePoint <= U'Z'; ++codePoint) {
             glyphs.push_back(Glyph(codePoint));
         }
@@ -171,7 +171,7 @@ namespace BECore::Tests {
         atlas->Prepare(*renderer, first);
         const AtlasGlyph before = *atlas->Find(first[0]);
         ITexture* firstPage = atlas->GetPage(0);
-        const eastl::vector<uint8_t> firstPixels = AsRecorded(firstPage)->GetPixels();
+        const Vector<uint8_t> firstPixels = AsRecorded(firstPage)->GetPixels();
 
         const uint32_t second[] = {Glyph(U'B')};
         atlas->Prepare(*renderer, second);
@@ -202,7 +202,7 @@ namespace BECore::Tests {
     TEST_F(FontAtlasTest, ABatchThatDoesNotFitOnePageSpillsOverToMore) {
         // 64 px glyphs on a 128 px page: only a few fit on a page
         auto big = New<FontAtlas>(font, 64, 128);
-        eastl::vector<uint32_t> glyphs;
+        Vector<uint32_t> glyphs;
         for (char32_t codePoint = U'A'; codePoint <= U'Z'; ++codePoint) {
             glyphs.push_back(Glyph(codePoint));
         }
@@ -262,7 +262,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(library);
         const uint32_t pagesAfterPreload = static_cast<uint32_t>(library->GetPageCount());
 
-        eastl::vector<uint32_t> glyphs;
+        Vector<uint32_t> glyphs;
         for (const char32_t codePoint : {U'S', U'c', U'o', U'r', U'e', U':', U' ', U'0', U'9', char32_t{0x0421}, char32_t{0x0447}, char32_t{0x0451}, char32_t{0x00E9}}) {
             glyphs.push_back(font->ResolveGlyph(codePoint));
         }
@@ -347,7 +347,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(FontAtlasLibraryTest, AFontThatDidNotLoadGivesNoAtlas) {
-        auto broken = Font::CreateFromMemory("broken"_intern, eastl::vector<uint8_t>(32, 0x41));
+        auto broken = Font::CreateFromMemory("broken"_intern, Vector<uint8_t>(32, 0x41));
 
         EXPECT_FALSE(Library().Get(*renderer, broken, 20));
         EXPECT_FALSE(Library().Get(*renderer, IntrusivePtr<Font>(), 20));
@@ -671,7 +671,7 @@ namespace BECore::Tests {
         const TextLayoutResult layout = Layout("Hi");
         auto fill = Atlas();
         TextRenderer::Draw(*renderer, *fill, layout, 5.0f, 6.0f, kFill);
-        const eastl::vector<DrawCall> plain = renderer->calls;
+        const Vector<DrawCall> plain = renderer->calls;
         renderer->calls.clear();
         auto outline = Library().Get(*renderer, font, 24, kOutlineRadius);
 

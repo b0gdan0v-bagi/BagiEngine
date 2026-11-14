@@ -135,7 +135,7 @@ namespace BECore {
                 ++it;  // held back; the requests that bypass the barrier may still follow
                 continue;
             }
-            eastl::unique_ptr<Request> request = std::move(*it);
+            UniquePtr<Request> request = std::move(*it);
             it = _inbox.erase(it);
             Process(*request);
         }
@@ -162,7 +162,7 @@ namespace BECore {
         Settle(std::move(call));
     }
 
-    void ControlService::Settle(eastl::unique_ptr<ControlCall> call) {
+    void ControlService::Settle(UniquePtr<ControlCall> call) {
         if (call->IsAnswered()) {
             return;
         }
@@ -209,7 +209,7 @@ namespace BECore {
             return;
         }
 
-        eastl::unique_ptr<ControlCall> call = std::move(_pending);
+        UniquePtr<ControlCall> call = std::move(_pending);
         const ControlCall::DoneFn done = std::move(call->_done);
         call->_done = nullptr;
         if (done) {
@@ -231,11 +231,11 @@ namespace BECore {
         const ControlError error = MakeControlError(ControlErrors::kShuttingDown, "the application is shutting down");
 
         if (_pending) {
-            eastl::unique_ptr<ControlCall> call = std::move(_pending);
+            UniquePtr<ControlCall> call = std::move(_pending);
             call->Fail(error);
         }
         while (!_inbox.empty()) {
-            eastl::unique_ptr<Request> request = std::move(_inbox.front());
+            UniquePtr<Request> request = std::move(_inbox.front());
             _inbox.pop_front();
             request->reply(MakeErrorResponse(request->id, error));
         }

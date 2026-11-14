@@ -80,7 +80,7 @@ namespace BECore {
             return 0;
         }
         // The pixels are premultiplied, the renderer blends straight alpha
-        eastl::vector<uint8_t> pixels(source.begin(), source.end());
+        Vector<uint8_t> pixels(source.begin(), source.end());
         for (size_t i = 0; i < pixels.size(); i += kBytesPerPixel) {
             const int alpha = pixels[i + 3];
             pixels[i] = Straight(pixels[i], alpha);

@@ -162,8 +162,8 @@ namespace BECore::Tests {
         }
 
         /// The components of @p node as text: type and serialized fields, in order
-        eastl::vector<String> ComponentTexts(const SceneNode& node) {
-            eastl::vector<String> texts;
+        Vector<String> ComponentTexts(const SceneNode& node) {
+            Vector<String> texts;
             for (const auto& component : node.GetComponents()) {
                 XmlSerializer serializer;
                 component->Serialize(serializer);
@@ -718,13 +718,13 @@ namespace BECore::Tests {
 
         NodeFileLoader _loader;
         XmlDocument _reloadedDocument;
-        eastl::vector<String> _notes;
+        Vector<String> _notes;
     };
 
     TEST_F(SceneEditorSaveReferencesTest, AnUntouchedSplitSceneKeepsItsReferences) {
         ASSERT_NO_FATAL_FAILURE(LoadSplitScenes());
         constexpr size_t kReferenceIndices[] = {0, 2, 3};
-        eastl::vector<String> before;
+        Vector<String> before;
         for (const size_t index : kReferenceIndices) {
             before.push_back(Raw(SavedNode(ConfigRoot(), "Main", index)));
         }

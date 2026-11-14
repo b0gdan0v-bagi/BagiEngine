@@ -98,7 +98,7 @@ namespace BECore {
          *
          * @return InvalidSlotName, NotInitialized or WriteFailed on a failure
          */
-        [[nodiscard]] std::expected<void, SaveError> WriteSlot(StringView slot, const eastl::vector<uint8_t>& bytes);
+        [[nodiscard]] std::expected<void, SaveError> WriteSlot(StringView slot, const Vector<uint8_t>& bytes);
 
         /**
          * @brief Read the whole file of the slot
@@ -106,7 +106,7 @@ namespace BECore {
          * @return InvalidSlotName, NotInitialized, NotFound (no such slot) or ReadFailed (it exists but cannot be read, or is over
          *         ReaderLimits::kMaxBinaryStreamBytes) on a failure
          */
-        [[nodiscard]] std::expected<eastl::vector<uint8_t>, SaveError> ReadSlot(StringView slot) const;
+        [[nodiscard]] std::expected<Vector<uint8_t>, SaveError> ReadSlot(StringView slot) const;
 
         /**
          * @brief Write a game state as the slot: the envelope (game id, version) around the state
@@ -173,7 +173,7 @@ namespace BECore {
         bool Delete(StringView slot);
 
         /// Names of all slots that have a save file, sorted; a leftover temporary file is not listed
-        [[nodiscard]] eastl::vector<PoolString> List() const;
+        [[nodiscard]] Vector<PoolString> List() const;
 
     private:
         /// The real path of the save file of a valid slot, or an empty path when there is none in the save folder

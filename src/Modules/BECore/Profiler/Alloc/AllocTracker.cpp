@@ -126,8 +126,8 @@ namespace BECore {
         slot->bytes.fetch_add(bytes, std::memory_order_relaxed);
     }
 
-    eastl::vector<ZoneAllocStats> AllocTracker::GetZoneStats() {
-        eastl::vector<ZoneAllocStats> stats;
+    Vector<ZoneAllocStats> AllocTracker::GetZoneStats() {
+        Vector<ZoneAllocStats> stats;
         for (const ZoneSlot& slot : g_zoneSlots) {
             const ProfileSite* site = slot.site.load(std::memory_order_acquire);
             const uint64_t calls = slot.calls.load(std::memory_order_relaxed);

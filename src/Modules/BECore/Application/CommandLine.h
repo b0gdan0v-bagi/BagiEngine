@@ -12,9 +12,9 @@ namespace BECore {
     class CommandLine {
     public:
         /// Replaces the arguments
-        void Set(eastl::span<const String> arguments);
+        void Set(Span<const String> arguments);
 
-        eastl::span<const String> GetArguments() const {
+        Span<const String> GetArguments() const {
             return _arguments;
         }
 
@@ -26,7 +26,7 @@ namespace BECore {
         bool HasFlag(StringView name) const;
 
     private:
-        eastl::vector<String> _arguments;
+        Vector<String> _arguments;
     };
 
 }  // namespace BECore

@@ -57,7 +57,7 @@ namespace BECore {
 
     }  // namespace
 
-    eastl::span<const UIAnchorPreset> UIAnchorPresets::All() {
+    Span<const UIAnchorPreset> UIAnchorPresets::All() {
         return {kGrid.data(), kGrid.size()};
     }
 

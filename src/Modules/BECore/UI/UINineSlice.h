@@ -22,7 +22,7 @@ namespace BECore {
     public:
         static constexpr size_t PieceCount = 9;
 
-        [[nodiscard]] static eastl::array<UINineSlicePiece, PieceCount> Compute(const Rect& source, const UIEdges& border, const Rect& destination);
+        [[nodiscard]] static Array<UINineSlicePiece, PieceCount> Compute(const Rect& source, const UIEdges& border, const Rect& destination);
     };
 
 }  // namespace BECore

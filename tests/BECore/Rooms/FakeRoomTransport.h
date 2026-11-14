@@ -14,7 +14,7 @@ namespace BECore::Tests {
         Optional<String> openError;
         bool openCalled = false;
         /// What the client sent, in order
-        eastl::vector<String> sent;
+        Vector<String> sent;
         /// SendText() answers this; false plays a connection that is closing
         bool sendOk = true;
         bool closeCalled = false;
@@ -27,7 +27,7 @@ namespace BECore::Tests {
         bool closeAnswers = true;
 
         /// What the test plays: events the client will poll
-        eastl::vector<RoomTransportEvent> inbox;
+        Vector<RoomTransportEvent> inbox;
         size_t nextEvent = 0;
         bool closedQueued = false;
 
@@ -126,7 +126,7 @@ namespace BECore::Tests {
     class FakeTransports {
     public:
         [[nodiscard]] RoomTransportFactory Factory() {
-            return [this]() -> eastl::unique_ptr<IRoomTransport> {
+            return [this]() -> UniquePtr<IRoomTransport> {
                 if (_unavailable) {
                     return nullptr;
                 }
@@ -162,7 +162,7 @@ namespace BECore::Tests {
         }
 
     private:
-        eastl::vector<std::shared_ptr<FakeLink>> _links;
+        Vector<std::shared_ptr<FakeLink>> _links;
         Optional<String> _nextOpenError;
         bool _unavailable = false;
     };

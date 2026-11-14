@@ -63,7 +63,7 @@ namespace BECore {
         }
 
     private:
-        eastl::vector<entt::scoped_connection> _connections;
+        Vector<entt::scoped_connection> _connections;
     };
 
 }  // namespace BECore

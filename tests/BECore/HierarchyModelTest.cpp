@@ -267,7 +267,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(HierarchyModelTest, TheComponentTypesAreSortedWithoutRepeats) {
-        eastl::vector<StringView> types;
+        Vector<StringView> types;
         types.push_back("Stale");
         CollectComponentTypes(Root(), types);
 
@@ -277,7 +277,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(HierarchyModelTest, CollectingKeepsTheCapacityOfTheVector) {
-        eastl::vector<StringView> types;
+        Vector<StringView> types;
         types.reserve(16);
         const auto* data = types.data();
         CollectComponentTypes(Root(), types);
@@ -373,7 +373,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(HierarchyModelTest, AncestorsOfListsTheRowsToOpenFromTheRootDown) {
-        eastl::vector<SceneNode*> ancestors;
+        Vector<SceneNode*> ancestors;
         ancestors.push_back(&Node("A"));
 
         AncestorsOf(Node("Leaf"), ancestors);

@@ -17,7 +17,7 @@ namespace BECore::Fuzz {
 
         /// What a parser returned for a whole stream: the messages in order and the first error
         struct Outcome {
-            eastl::vector<WebSocketMessage> messages;
+            Vector<WebSocketMessage> messages;
             Optional<WebSocketProtocolError> error;
         };
 
@@ -49,7 +49,7 @@ namespace BECore::Fuzz {
             return 1 + step;
         }
 
-        Outcome Parse(eastl::span<const uint8_t> stream, size_t limit, WebSocketPeer sender, uint8_t pattern) {
+        Outcome Parse(Span<const uint8_t> stream, size_t limit, WebSocketPeer sender, uint8_t pattern) {
             WebSocketFrameParser parser(limit, sender);
             Outcome outcome;
             if (pattern == 0) {
@@ -67,7 +67,7 @@ namespace BECore::Fuzz {
             // After an error the parser stays in it, whatever is fed or asked
             if (outcome.error) {
                 const uint8_t more[] = {0x81, 0x00};
-                parser.Feed(eastl::span<const uint8_t>(more, sizeof(more)));
+                parser.Feed(Span<const uint8_t>(more, sizeof(more)));
                 for (size_t i = 0; i < kRepeatedPops; ++i) {
                     Collect(parser, outcome);
                 }
@@ -95,17 +95,17 @@ namespace BECore::Fuzz {
         }
 
         /// The messages as the other role would send them: the frames of a client are masked, those of a server are not
-        eastl::vector<uint8_t> EncodeForOtherRole(const eastl::vector<WebSocketMessage>& messages, WebSocketPeer sender) {
+        Vector<uint8_t> EncodeForOtherRole(const Vector<WebSocketMessage>& messages, WebSocketPeer sender) {
             const Optional<WebSocketMask> mask = (sender == WebSocketPeer::Client) ? std::nullopt : Optional<WebSocketMask>(kReencodeMask);
-            eastl::vector<uint8_t> stream;
+            Vector<uint8_t> stream;
             for (const WebSocketMessage& message : messages) {
-                eastl::vector<uint8_t> payload;
+                Vector<uint8_t> payload;
                 if (message.kind == WebSocketMessageKind::Close && message.closeCode != WebSocketCloseCode::kNoStatusReceived) {
                     payload.push_back(static_cast<uint8_t>(message.closeCode >> 8));
                     payload.push_back(static_cast<uint8_t>(message.closeCode & 0xFF));
                 }
                 payload.insert(payload.end(), message.payload.begin(), message.payload.end());
-                const eastl::vector<uint8_t> frame = EncodeFrame(OpcodeOf(message.kind), eastl::span<const uint8_t>(payload.data(), payload.size()), mask);
+                const Vector<uint8_t> frame = EncodeFrame(OpcodeOf(message.kind), Span<const uint8_t>(payload.data(), payload.size()), mask);
                 stream.insert(stream.end(), frame.begin(), frame.end());
             }
             return stream;
@@ -121,7 +121,7 @@ namespace BECore::Fuzz {
         const WebSocketPeer sender = (selector & WebSocketInput::kPeerBit) ? WebSocketPeer::Server : WebSocketPeer::Client;
         const size_t limit = kMessageLimits[((selector >> WebSocketInput::kLimitShift) & kLimitMask) % kMessageLimitCount];
         const uint8_t pattern = (selector >> WebSocketInput::kPatternShift) & kPatternMask;
-        const eastl::span<const uint8_t> stream(data + 1, size - 1);
+        const Span<const uint8_t> stream(data + 1, size - 1);
 
         // The whole stream at once is the reference; any chunking gives the same messages and the same first error
         const Outcome whole = Parse(stream, limit, sender, 0);
@@ -147,8 +147,8 @@ namespace BECore::Fuzz {
 
         // What the parser returned, sent by the other role, is read back as it was
         const WebSocketPeer other = (sender == WebSocketPeer::Client) ? WebSocketPeer::Server : WebSocketPeer::Client;
-        const eastl::vector<uint8_t> reencoded = EncodeForOtherRole(whole.messages, sender);
-        const Outcome again = Parse(eastl::span<const uint8_t>(reencoded.data(), reencoded.size()), limit, other, 0);
+        const Vector<uint8_t> reencoded = EncodeForOtherRole(whole.messages, sender);
+        const Outcome again = Parse(Span<const uint8_t>(reencoded.data(), reencoded.size()), limit, other, 0);
         FUZZ_CHECK(!again.error.has_value());
         FUZZ_CHECK(again.messages.size() == whole.messages.size());
         for (size_t i = 0; i < whole.messages.size(); ++i) {

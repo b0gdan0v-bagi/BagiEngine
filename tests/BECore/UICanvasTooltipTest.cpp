@@ -10,7 +10,6 @@
 #include <Common/RecordingRenderer.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
-#include <Events/SubscriptionHolder.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -140,7 +139,7 @@ namespace BECore::Tests {
             void OnAction(const InputEvents::ActionEvent& event) {
                 _actions.push_back(event.action);
             }
-            eastl::vector<PoolString> _actions;
+            Vector<PoolString> _actions;
         };
 
         bool Inside(const Rect& inner, const Rect& outer) {

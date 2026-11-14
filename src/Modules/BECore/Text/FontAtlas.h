@@ -50,10 +50,10 @@ namespace BECore {
          * @brief Draws the glyphs that the atlas does not have yet and uploads them as new pages.
          * @return false when a page could not be made; its glyphs are then left without a picture (and not retried)
          */
-        bool Prepare(IRenderer& renderer, eastl::span<const uint32_t> glyphs);
+        bool Prepare(IRenderer& renderer, Span<const uint32_t> glyphs);
 
         /// Prepare() for the glyphs that the font has for the code points of the ranges (a code point it lacks is skipped, not replaced)
-        bool PrepareCodePoints(IRenderer& renderer, eastl::span<const GlyphRange> ranges);
+        bool PrepareCodePoints(IRenderer& renderer, Span<const GlyphRange> ranges);
 
         /// Null until Prepare() has seen the glyph
         [[nodiscard]] const AtlasGlyph* Find(uint32_t glyph) const;
@@ -77,14 +77,14 @@ namespace BECore {
             uint32_t y = 0;
         };
 
-        void BuildPages(IRenderer& renderer, eastl::vector<Pending>& pending, bool& ok);
+        void BuildPages(IRenderer& renderer, Vector<Pending>& pending, bool& ok);
 
         IntrusivePtr<Font> _font;
         int _pixelSize = 0;
         int _outlinePixels = 0;
         uint32_t _pageSize = 0;
         eastl::hash_map<uint32_t, AtlasGlyph> _glyphs;
-        eastl::vector<IntrusivePtr<ITexture>> _pages;
+        Vector<IntrusivePtr<ITexture>> _pages;
     };
 
 }  // namespace BECore

@@ -48,8 +48,8 @@ namespace BECore::Tests {
             return text;
         }
 
-        eastl::vector<uint8_t> Fragment(uint8_t opcode, const std::string& payload, bool fin) {
-            return EncodeFrame(opcode, eastl::span<const uint8_t>(reinterpret_cast<const uint8_t*>(payload.data()), payload.size()), kClientMask, fin);
+        Vector<uint8_t> Fragment(uint8_t opcode, const std::string& payload, bool fin) {
+            return EncodeFrame(opcode, Span<const uint8_t>(reinterpret_cast<const uint8_t*>(payload.data()), payload.size()), kClientMask, fin);
         }
 
         class RoomServerHostileTest : public ::testing::Test {
@@ -117,7 +117,7 @@ namespace BECore::Tests {
         client->Send(AsBytes(Fragment(WebSocketOpcode::kContinuation, piece, false)));
         const auto third = Fragment(WebSocketOpcode::kContinuation, piece, true);
         const size_t headerBytes = third.size() - kFragmentBytes;
-        client->Send(eastl::span<const uint8_t>(third.data(), headerBytes));
+        client->Send(Span<const uint8_t>(third.data(), headerBytes));
 
         const auto close = ReadUntilClose(*client);
         ASSERT_TRUE(close.has_value()) << "the message was held until its last byte";
@@ -147,7 +147,7 @@ namespace BECore::Tests {
         const std::string text = PingText();
         const auto frame = EncodeTextFrame(FromStd(text), kClientMask);
         for (size_t i = 0; i < frame.size(); ++i) {
-            client->Raw().Send(eastl::span<const uint8_t>(frame.data() + i, 1));
+            client->Raw().Send(Span<const uint8_t>(frame.data() + i, 1));
         }
         const auto pong = client->WaitFor(RoomMessageTypes::kPong);
         ASSERT_TRUE(pong.has_value());

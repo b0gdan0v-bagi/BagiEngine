@@ -12,10 +12,10 @@ namespace BECore::UIWebText {
     [[nodiscard]] String ToLower(StringView text);
 
     /// The parts of @p text between @p separator characters that are outside parentheses and quotes, trimmed. Empty parts are kept
-    [[nodiscard]] eastl::vector<StringView> SplitTopLevel(StringView text, char separator);
+    [[nodiscard]] Vector<StringView> SplitTopLevel(StringView text, char separator);
 
     /// The words of @p text: runs of non-space characters, where a space inside parentheses or quotes does not end a word (`rgba(0, 0, 0, .5)` is one)
-    [[nodiscard]] eastl::vector<StringView> SplitWords(StringView text);
+    [[nodiscard]] Vector<StringView> SplitWords(StringView text);
 
     /// A CSS number with an optional `px` (`12`, `12px`, `.5`, `-3`). Other units give nullopt, and so do `inf` and `nan` (which the C++ parser reads)
     [[nodiscard]] Optional<float> ParsePixels(StringView text);
@@ -81,9 +81,9 @@ namespace BECore::UIWebText {
 
     /// The layers of a `box-shadow`, in the order of the text (the first is painted on top in CSS)
     struct BoxShadows {
-        eastl::array<UIShadowSpec, MaxShadowLayers> layers;  ///< the first `min(count, MaxShadowLayers)` are set; the colour of a layer with a token is transparent
-        eastl::array<PoolString, MaxShadowLayers> tokens;    ///< per layer, the theme token of its colour; empty for a literal (UIShadowSpec is a mesh spec and holds none)
-        size_t count = 0;                                    ///< the layers in the text, also those past MaxShadowLayers (the caller reports them)
+        Array<UIShadowSpec, MaxShadowLayers> layers;  ///< the first `min(count, MaxShadowLayers)` are set; the colour of a layer with a token is transparent
+        Array<PoolString, MaxShadowLayers> tokens;    ///< per layer, the theme token of its colour; empty for a literal (UIShadowSpec is a mesh spec and holds none)
+        size_t count = 0;                             ///< the layers in the text, also those past MaxShadowLayers (the caller reports them)
     };
 
     /// A `box-shadow`: `none` (no layers) or comma-separated layers `offset-x offset-y [blur [spread]] color` (px; the color first or last). A negative blur, `inset`,

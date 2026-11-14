@@ -100,7 +100,7 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
                 Subscribe<SDLEvents::MouseButtonDownEvent, &Recorder::OnDown>(this);
             }
 
-            eastl::vector<PoolString> actions;
+            Vector<PoolString> actions;
             int gameDowns = 0;
 
         private:

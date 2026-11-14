@@ -64,7 +64,7 @@ namespace BECore {
     /// The result of an expansion: how many references were replaced and one message per reference that was not
     struct NodeExpansion {
         size_t expanded = 0;
-        eastl::vector<String> errors;  // each names the scene and the reference
+        Vector<String> errors;  // each names the scene and the reference
 
         bool Ok() const {
             return errors.empty();

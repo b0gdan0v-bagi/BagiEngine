@@ -66,7 +66,7 @@ namespace BECore {
         const Binding* FindBinding(PoolString commandId) const;
         AssignResult Place(PoolString commandId, const KeyChord& chord, bool takeFromOther);
 
-        eastl::vector<Binding> _bindings;
+        Vector<Binding> _bindings;
     };
 
 }  // namespace BECore

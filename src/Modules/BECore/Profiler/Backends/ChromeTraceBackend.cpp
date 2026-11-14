@@ -175,7 +175,7 @@ namespace BECore {
             first = false;
         };
 
-        eastl::vector<const ProfileSite*> open;
+        Vector<const ProfileSite*> open;
         const uint32_t bufferCount = _bufferCount.load(std::memory_order_acquire);
         for (uint32_t i = 0; i < bufferCount; ++i) {
             const ThreadBuffer& buffer = *_buffers[i];

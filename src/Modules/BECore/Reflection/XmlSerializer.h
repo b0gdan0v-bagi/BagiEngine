@@ -115,7 +115,7 @@ namespace BECore {
         pugi::xml_attribute GetOrCreateAttribute(StringView name);
 
         pugi::xml_document _document;
-        eastl::vector<pugi::xml_node> _nodeStack;
+        Vector<pugi::xml_node> _nodeStack;
 
         // For array iteration
         struct ArrayContext {
@@ -123,7 +123,7 @@ namespace BECore {
             String elementName;
             size_t currentIndex = 0;
         };
-        eastl::vector<ArrayContext> _arrayStack;
+        Vector<ArrayContext> _arrayStack;
     };
 
 }  // namespace BECore

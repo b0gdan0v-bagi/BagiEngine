@@ -290,7 +290,7 @@ namespace BECore::Tests {
 
     TEST_F(WebSocketListenerTest, PerAddressLimitOfZeroIsOff) {
         const uint16_t port = Start();
-        eastl::vector<WebSocketTestClient> clients;
+        Vector<WebSocketTestClient> clients;
         for (int i = 0; i < 10; ++i) {
             auto client = Connect(port);
             ASSERT_TRUE(client.has_value()) << i;
@@ -324,7 +324,7 @@ namespace BECore::Tests {
         EXPECT_EQ(echoed->payload.size(), 64u);
 
         // Only the header of a frame that announces more than the limit: the server must not wait for the payload
-        eastl::vector<uint8_t> header = {0x81, 0xFE, 0x00, 65};
+        Vector<uint8_t> header = {0x81, 0xFE, 0x00, 65};
         header.insert(header.end(), kClientMask.data(), kClientMask.data() + kClientMask.size());
         client->Send(AsBytes(header));
         const auto frame = client->WaitForFrame();

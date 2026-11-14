@@ -46,8 +46,8 @@ namespace BECore {
     namespace {
 
         /// The widgets of the config of @p mode, in file order
-        eastl::vector<IntrusivePtr<IWidget>> LoadWidgetsFromConfig(RunMode mode) {
-            eastl::vector<IntrusivePtr<IWidget>> widgets;
+        Vector<IntrusivePtr<IWidget>> LoadWidgetsFromConfig(RunMode mode) {
+            Vector<IntrusivePtr<IWidget>> widgets;
             const PoolString configName = GetWidgetsConfigName(mode);
             if (!CoreManager::GetConfigManager().HasConfig(configName)) {
                 LOG_ERROR("WidgetManager: config '{}' not found, no widgets created"_format(configName.ToStringView()));

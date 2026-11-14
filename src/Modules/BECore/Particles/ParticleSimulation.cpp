@@ -51,7 +51,7 @@ namespace BECore {
             return {particle.originX + particle.velocityX * age + gravityX * halfAgeSquared, particle.originY + particle.velocityY * age + gravityY * halfAgeSquared};
         }
 
-        void WriteIndexPattern(eastl::vector<int>& indices, size_t quads) {
+        void WriteIndexPattern(Vector<int>& indices, size_t quads) {
             size_t quad = indices.size() / kQuadIndices;
             indices.resize(quads * kQuadIndices);
             for (; quad < quads; ++quad) {
@@ -139,14 +139,14 @@ namespace BECore {
         return look;
     }
 
-    void ParticleSimulation::ReserveGeometry(int32_t maxParticles, eastl::vector<GeometryVertex>& vertices, eastl::vector<int>& indices) {
+    void ParticleSimulation::ReserveGeometry(int32_t maxParticles, Vector<GeometryVertex>& vertices, Vector<int>& indices) {
         const auto quads = static_cast<size_t>(std::clamp(maxParticles, ParticleLimits::kMinParticles, ParticleLimits::kMaxParticles));
         vertices.reserve(quads * kQuadVertices);
         indices.reserve(quads * kQuadIndices);
         WriteIndexPattern(indices, quads);
     }
 
-    size_t ParticleSimulation::BuildGeometry(const ParticleEffect& effect, const Rect& source, Vec2 textureSize, eastl::vector<GeometryVertex>& vertices, eastl::vector<int>& indices) const {
+    size_t ParticleSimulation::BuildGeometry(const ParticleEffect& effect, const Rect& source, Vec2 textureSize, Vector<GeometryVertex>& vertices, Vector<int>& indices) const {
         const ParticleEffect clean = effect.Sanitized();
         const size_t quads = _particles.size();
         vertices.resize(quads * kQuadVertices);

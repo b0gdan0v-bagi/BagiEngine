@@ -41,7 +41,7 @@ namespace BECore {
         }
 
         /// Open the bytes, check the shape of the envelope and read game and version; the deserializer stays inside `save`
-        std::expected<SaveInfo, SaveError> OpenEnvelope(BinaryDeserializer& deserializer, const eastl::vector<uint8_t>& bytes, StringView slot) {
+        std::expected<SaveInfo, SaveError> OpenEnvelope(BinaryDeserializer& deserializer, const Vector<uint8_t>& bytes, StringView slot) {
             if (!deserializer.LoadFromBuffer(bytes)) {
                 return MakeError(SaveErrorKind::Corrupt, Format("The save in slot '{}' is not a valid file: {}", slot, FirstErrorOr(deserializer, "unreadable data")));
             }
@@ -111,7 +111,7 @@ namespace BECore {
         return resolved;
     }
 
-    std::expected<void, SaveError> SaveGameService::WriteSlot(StringView slot, const eastl::vector<uint8_t>& bytes) {
+    std::expected<void, SaveError> SaveGameService::WriteSlot(StringView slot, const Vector<uint8_t>& bytes) {
         if (!_initialized) {
             return NotInitializedError();
         }
@@ -154,7 +154,7 @@ namespace BECore {
         return {};
     }
 
-    std::expected<eastl::vector<uint8_t>, SaveError> SaveGameService::ReadSlot(StringView slot) const {
+    std::expected<Vector<uint8_t>, SaveError> SaveGameService::ReadSlot(StringView slot) const {
         if (!_initialized) {
             return NotInitializedError();
         }
@@ -184,7 +184,7 @@ namespace BECore {
             return MakeError(SaveErrorKind::ReadFailed, Format("Cannot open '{}'", path.string()));
         }
 
-        eastl::vector<uint8_t> bytes(static_cast<size_t>(size));
+        Vector<uint8_t> bytes(static_cast<size_t>(size));
         file.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
         if (file.gcount() != static_cast<std::streamsize>(bytes.size())) {
             return MakeError(SaveErrorKind::ReadFailed, Format("Cannot read '{}' to the end", path.string()));
@@ -276,8 +276,8 @@ namespace BECore {
         return removed;
     }
 
-    eastl::vector<PoolString> SaveGameService::List() const {
-        eastl::vector<PoolString> slots;
+    Vector<PoolString> SaveGameService::List() const {
+        Vector<PoolString> slots;
         if (!_initialized) {
             return slots;
         }

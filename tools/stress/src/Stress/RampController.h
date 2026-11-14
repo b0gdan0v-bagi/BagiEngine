@@ -102,7 +102,7 @@ namespace BECore::Stress {
         uint32_t _stepDowns = 0;
         uint32_t _settleLeft = kSettleFrames;
         uint32_t _measured = 0;
-        eastl::array<double, kMeasureFrames> _window{};
+        Array<double, kMeasureFrames> _window{};
         RampResult _result;
     };
 

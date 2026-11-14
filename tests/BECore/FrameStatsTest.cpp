@@ -215,7 +215,7 @@ namespace BECore::Tests {
             collector.BeginFrame();
             collector.EndFrame(RenderCounters{.drawCalls = static_cast<uint32_t>(i)}, AllocTotals{});
         }
-        const eastl::vector<FrameStats> lastThree = collector.GetHistory(3);
+        const Vector<FrameStats> lastThree = collector.GetHistory(3);
         ASSERT_EQ(lastThree.size(), 3u);
         EXPECT_EQ(lastThree[0].frame, frames - 2);
         EXPECT_EQ(lastThree[2].frame, frames);
@@ -240,7 +240,7 @@ namespace BECore::Tests {
         collector.EndFrame({}, AllocTotals{});
         EXPECT_FALSE(collector.GetLast()->paused) << "the flag of one frame does not leak into the next";
 
-        const eastl::vector<FrameStats> history = collector.GetHistory(3);
+        const Vector<FrameStats> history = collector.GetHistory(3);
         ASSERT_EQ(history.size(), 3u);
         EXPECT_FALSE(history[0].paused);
         EXPECT_TRUE(history[1].paused);

@@ -201,10 +201,10 @@ namespace BECore {
         RandomFn _random;
         SeatedGameFactory _factory;
         RoomTimings _timings;
-        eastl::unique_ptr<ISeatedGame> _game;
+        UniquePtr<ISeatedGame> _game;
         RoomTime _lastComputerMove{};
         RoomPhase _phase = RoomPhase::Lobby;
-        eastl::vector<Member> _members;
+        Vector<Member> _members;
         PlayerId _nextPlayer = 1;
         /// 0 when no human is left
         PlayerId _host = 0;

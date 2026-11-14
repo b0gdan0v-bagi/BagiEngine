@@ -16,7 +16,7 @@ namespace BECore::Stress::Tests {
 
         struct RampRun {
             RampResult result;
-            eastl::vector<uint32_t> counts;  // the count shown for every frame fed, in order
+            Vector<uint32_t> counts;  // the count shown for every frame fed, in order
         };
 
         /// Feeds the controller the cost of every frame it asks for until it is done (or @p frameLimit frames went)
@@ -52,7 +52,7 @@ namespace BECore::Stress::Tests {
         }
 
         /// One step of a controller shown @p count: the settle frames at @p settleMs and the measured ones from @p window
-        RampNext RunStep(RampController& controller, double settleMs, const eastl::array<double, kMeasureFrames>& window) {
+        RampNext RunStep(RampController& controller, double settleMs, const Array<double, kMeasureFrames>& window) {
             RampNext next;
             for (uint32_t i = 0; i < kSettleFrames; ++i) {
                 next = controller.OnFrame(settleMs);
@@ -63,8 +63,8 @@ namespace BECore::Stress::Tests {
             return next;
         }
 
-        eastl::array<double, kMeasureFrames> Window(double ms, uint32_t outliers) {
-            eastl::array<double, kMeasureFrames> window;
+        Array<double, kMeasureFrames> Window(double ms, uint32_t outliers) {
+            Array<double, kMeasureFrames> window;
             window.fill(ms);
             for (uint32_t i = 0; i < outliers; ++i) {
                 window[kMeasureFrames - 1 - i * 3] = 100.0;
@@ -113,13 +113,13 @@ namespace BECore::Stress::Tests {
 
     TEST(StressRampTest, TheCountGrowsByAHalfAndAtLeastOne) {
         RampController controller(StressMeasure::Work);
-        eastl::vector<uint32_t> shown;
+        Vector<uint32_t> shown;
         shown.push_back(controller.GetCount());
         for (int step = 0; step < 4; ++step) {
             const RampNext next = RunStep(controller, 1.0, Window(1.0, 0));
             shown.push_back(next.count);
         }
-        const eastl::vector<uint32_t> expected = {100, 150, 225, 337, 505};
+        const Vector<uint32_t> expected = {100, 150, 225, 337, 505};
         EXPECT_EQ(shown, expected);
     }
 
@@ -278,7 +278,7 @@ namespace BECore::Stress::Tests {
         // The keys are in byte order, one object on one line starting with a brace
         EXPECT_EQ(line.front(), '{');
         EXPECT_EQ(line.find('\n'), String::npos);
-        eastl::vector<String> keys;
+        Vector<String> keys;
         for (size_t at = line.find('"'); at != String::npos;) {
             const size_t end = line.find('"', at + 1);
             if (end != String::npos && end + 1 < line.size() && line[end + 1] == ':') {

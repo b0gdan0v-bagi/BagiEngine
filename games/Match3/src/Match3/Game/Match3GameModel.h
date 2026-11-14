@@ -134,7 +134,7 @@ namespace BECore::Match3 {
          * @brief Every swap that TrySwap would commit, each pair once: a cell with its right and its lower neighbour
          *        (`first` is the left or upper cell). Row by row, left to right, right neighbour before lower.
          */
-        [[nodiscard]] eastl::vector<eastl::pair<Cell, Cell>> GetLegalSwaps() const;
+        [[nodiscard]] Vector<eastl::pair<Cell, Cell>> GetLegalSwaps() const;
 
         /// True when @p a and @p b are 4-neighbours (they differ by one in exactly one coordinate)
         [[nodiscard]] static bool IsAdjacent(Cell a, Cell b) noexcept;
@@ -160,7 +160,7 @@ namespace BECore::Match3 {
     private:
         [[nodiscard]] GemType RandomGem();
         void GenerateInitialBoard();
-        int ResolveCascade(eastl::vector<CascadeStep>* steps);
+        int ResolveCascade(Vector<CascadeStep>* steps);
         void ApplyGravity(CascadeStep* step);
         void RefillTop(CascadeStep* step);
 

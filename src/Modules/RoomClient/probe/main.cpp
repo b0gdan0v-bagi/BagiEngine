@@ -83,7 +83,7 @@ int main(int argc, char* argv[]) {
         return Fail(Format("{}: {}", hosted.error().code, hosted.error().message));
     }
 
-    eastl::vector<RoomClientEvent> events;
+    Vector<RoomClientEvent> events;
     bool started = false;
     bool sawView = false;
     uint64_t actedVersion = 0;

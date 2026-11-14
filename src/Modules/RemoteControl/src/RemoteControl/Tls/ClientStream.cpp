@@ -24,7 +24,7 @@ namespace BECore {
         params.connectTimeout = connectTimeout;
         params.handshakeDeadline = handshakeDeadline;
         params.cancel = cancel;
-        params.additionalTrustAnchorsDer = eastl::span<const eastl::vector<uint8_t>>(tls.additionalTrustAnchorsDer.data(), tls.additionalTrustAnchorsDer.size());
+        params.additionalTrustAnchorsDer = Span<const Vector<uint8_t>>(tls.additionalTrustAnchorsDer.data(), tls.additionalTrustAnchorsDer.size());
         const auto connected = stream._tls->Connect(params);
         if (!connected) {
             return std::unexpected(connected.error());
@@ -32,11 +32,11 @@ namespace BECore {
         return stream;
     }
 
-    bool ClientStream::SendAll(eastl::span<const uint8_t> data) {
+    bool ClientStream::SendAll(Span<const uint8_t> data) {
         return _tls ? _tls->SendAll(data) : _socket.SendAll(data);
     }
 
-    std::expected<size_t, SocketError> ClientStream::Receive(eastl::span<uint8_t> buffer) {
+    std::expected<size_t, SocketError> ClientStream::Receive(Span<uint8_t> buffer) {
         return _tls ? _tls->Receive(buffer) : _socket.Receive(buffer);
     }
 

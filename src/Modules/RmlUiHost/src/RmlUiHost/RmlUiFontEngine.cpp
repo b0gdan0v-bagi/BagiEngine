@@ -102,7 +102,7 @@ namespace BECore {
             LOG_ERROR("RmlUiFontEngine: only the first face of a font is read");
             return false;
         }
-        auto font = Font::CreateFromMemory("<rmlui>"_intern, eastl::vector<uint8_t>(data.begin(), data.end()));
+        auto font = Font::CreateFromMemory("<rmlui>"_intern, Vector<uint8_t>(data.begin(), data.end()));
         if (font->GetState() != ResourceState::Loaded) {
             LOG_ERROR("RmlUiFontEngine: the font data cannot be read");
             return false;

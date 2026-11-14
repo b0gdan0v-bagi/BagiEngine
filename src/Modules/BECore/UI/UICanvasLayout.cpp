@@ -29,7 +29,7 @@ namespace BECore {
             return inside && accept(element) ? &element : nullptr;
         }
 
-        void CollectOpenPopups(UIElement& element, eastl::vector<UIElement*>& popups) {
+        void CollectOpenPopups(UIElement& element, Vector<UIElement*>& popups) {
             if (!element.active.visible) {
                 return;
             }
@@ -46,7 +46,7 @@ namespace BECore {
 
         /// The pass of the transitions over the whole tree (a hidden element too: its children have their own flags). @p variantsChosen: `active` was just reset from `style`, so a `held` element
         /// is not visible by its own state any more or again; otherwise the pass of the last layout left `active.visible` true for it and gives the authored `false` back first
-        void SyncTransitions(UIElement& element, double now, bool inheritedLock, bool variantsChosen, eastl::vector<IntrusivePtr<UITransitionComponent>>& found) {
+        void SyncTransitions(UIElement& element, double now, bool inheritedLock, bool variantsChosen, Vector<IntrusivePtr<UITransitionComponent>>& found) {
             bool lock = inheritedLock;
             if (UITransitionComponent* transition = element.GetComponent<UITransitionComponent>()) {
                 if (transition->held && !variantsChosen) {
@@ -116,8 +116,8 @@ namespace BECore {
         return {_resolved.transform.ToViewX(outputX), _resolved.transform.ToViewY(outputY)};
     }
 
-    eastl::vector<UIElement*> UICanvasLayout::OpenPopups() const {
-        eastl::vector<UIElement*> popups;
+    Vector<UIElement*> UICanvasLayout::OpenPopups() const {
+        Vector<UIElement*> popups;
         if (root) {
             CollectOpenPopups(*root, popups);
         }
@@ -133,7 +133,7 @@ namespace BECore {
                 return nullptr;
             }
             // The open popups are drawn above the whole tree, so they are tested first: the later one, then the later child
-            const eastl::vector<UIElement*> popups = layout.OpenPopups();
+            const Vector<UIElement*> popups = layout.OpenPopups();
             for (auto popup = popups.rbegin(); popup != popups.rend(); ++popup) {
                 for (auto child = (*popup)->children.rbegin(); child != (*popup)->children.rend(); ++child) {
                     if (UIElement* hit = FindIn(**child, x, y, accept)) {
@@ -156,7 +156,7 @@ namespace BECore {
                            [canvasRoot](const UIElement& element) { return &element != canvasRoot && (element.IsHitTestable() || element.color.a > 0 || !element.components.empty()); });
     }
 
-    eastl::vector<UILayoutIssue> UICanvasLayout::Validate(const UILayoutValidatorOptions& options) const {
+    Vector<UILayoutIssue> UICanvasLayout::Validate(const UILayoutValidatorOptions& options) const {
         return UILayoutValidator::Validate(*root, _resolved, options, _regions);
     }
 

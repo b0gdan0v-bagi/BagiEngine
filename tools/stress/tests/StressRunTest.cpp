@@ -54,8 +54,8 @@ namespace BECore::Stress::Tests {
         }
 
         /// A fixed run of the entities scene: nothing is drawn, so the only cost is the one the test gives the frame
-        void StartRun(const eastl::vector<String>& extra = {}) {
-            eastl::vector<String> arguments = {"--stress-scene=entities", Format("--stress-count={}", kCount), Format("--stress-frames={}", kFrames), Format("--stress-warmup={}", kWarmup)};
+        void StartRun(const Vector<String>& extra = {}) {
+            Vector<String> arguments = {"--stress-scene=entities", Format("--stress-count={}", kCount), Format("--stress-frames={}", kFrames), Format("--stress-warmup={}", kWarmup)};
             arguments.insert(arguments.end(), extra.begin(), extra.end());
             StartGame(arguments);
             Run().SetLineSink([this](const String& line) { _lines.push_back(line); });
@@ -95,8 +95,8 @@ namespace BECore::Stress::Tests {
         }
 
         /// A ramp run of the entities scene with @p extra flags
-        void StartRamp(const eastl::vector<String>& extra = {}) {
-            eastl::vector<String> arguments = {"--stress-scene=entities", "--stress-ramp"};
+        void StartRamp(const Vector<String>& extra = {}) {
+            Vector<String> arguments = {"--stress-scene=entities", "--stress-ramp"};
             arguments.insert(arguments.end(), extra.begin(), extra.end());
             StartGame(arguments);
             Run().SetLineSink([this](const String& line) { _lines.push_back(line); });
@@ -112,7 +112,7 @@ namespace BECore::Stress::Tests {
             return frames;
         }
 
-        eastl::vector<String> _lines;
+        Vector<String> _lines;
         QuitCounter _quit;
     };
 

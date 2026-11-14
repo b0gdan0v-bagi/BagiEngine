@@ -30,10 +30,10 @@ namespace BECore {
      */
     struct SceneSelectionChangedEvent : public EventBase<SceneSelectionChangedEvent> {
         const Scene* scene = nullptr;
-        eastl::span<SceneNode* const> nodes;
+        Span<SceneNode* const> nodes;
 
         SceneSelectionChangedEvent() = default;
-        SceneSelectionChangedEvent(const Scene* s, eastl::span<SceneNode* const> n) : scene(s), nodes(n) {}
+        SceneSelectionChangedEvent(const Scene* s, Span<SceneNode* const> n) : scene(s), nodes(n) {}
     };
 
     /**

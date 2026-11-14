@@ -54,7 +54,7 @@ namespace BECore::HierarchyModel {
 
     /// Replaces the contents of @p out with the ancestors of @p node from the root down to its parent: the nodes whose rows must be open for @p node to be seen.
     /// @p out keeps its capacity
-    void AncestorsOf(const SceneNode& node, eastl::vector<SceneNode*>& out);
+    void AncestorsOf(const SceneNode& node, Vector<SceneNode*>& out);
 
     /// Remembers the selection that was last told to others, so a selection event is sent once per change
     class SelectionTracker {
@@ -107,6 +107,6 @@ namespace BECore::HierarchyModel {
     bool ValidateName(StringView text);
 
     /// Replaces the contents of @p out with the type names of the components in the tree below @p root (the root included), sorted and without repeats. @p out keeps its capacity
-    void CollectComponentTypes(const SceneNode& root, eastl::vector<StringView>& out);
+    void CollectComponentTypes(const SceneNode& root, Vector<StringView>& out);
 
 }  // namespace BECore::HierarchyModel

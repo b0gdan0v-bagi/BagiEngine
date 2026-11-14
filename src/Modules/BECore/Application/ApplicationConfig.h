@@ -44,7 +44,7 @@ namespace BECore {
     /// An ApplicationConfig and what went wrong while reading it. A field with an error keeps its default.
     struct ApplicationConfigLoad {
         ApplicationConfig config;
-        eastl::vector<DeserializeError> errors;
+        Vector<DeserializeError> errors;
         bool found = false;  // false when there is no config named ApplicationConfig; config then holds the defaults
     };
 

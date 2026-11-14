@@ -24,7 +24,7 @@ namespace BECore {
             return instance;
         }
 
-        eastl::vector<UpdateFunction> _updateFunctions;
+        Vector<UpdateFunction> _updateFunctions;
     };
 
 }  // namespace BECore

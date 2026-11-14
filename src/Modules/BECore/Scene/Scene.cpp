@@ -120,7 +120,7 @@ namespace BECore {
         return _viewVersion;
     }
 
-    eastl::span<const SceneViewVariant> Scene::GetViewVariants() const {
+    Span<const SceneViewVariant> Scene::GetViewVariants() const {
         return {_viewVariants.data(), _viewVariants.size()};
     }
 

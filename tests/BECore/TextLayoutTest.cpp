@@ -18,8 +18,8 @@ namespace BECore::Tests {
         }
 
         /// The code points of one line, in order
-        eastl::vector<char32_t> LineText(const TextLayoutResult& result, size_t line) {
-            eastl::vector<char32_t> text;
+        Vector<char32_t> LineText(const TextLayoutResult& result, size_t line) {
+            Vector<char32_t> text;
             const TextLine& textLine = result.lines[line];
             for (uint32_t i = 0; i < textLine.glyphCount; ++i) {
                 text.push_back(result.glyphs[textLine.firstGlyph + i].codePoint);
@@ -27,8 +27,8 @@ namespace BECore::Tests {
             return text;
         }
 
-        eastl::vector<char32_t> Codes(const char32_t* text) {
-            eastl::vector<char32_t> codes;
+        Vector<char32_t> Codes(const char32_t* text) {
+            Vector<char32_t> codes;
             for (; *text != 0; ++text) {
                 codes.push_back(*text);
             }
@@ -430,7 +430,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(TextLayoutTest, AFontThatFailedToLoadLaysOutNothing) {
-        auto broken = Font::CreateFromMemory("broken"_intern, eastl::vector<uint8_t>(64, 0x41));
+        auto broken = Font::CreateFromMemory("broken"_intern, Vector<uint8_t>(64, 0x41));
 
         const TextLayoutResult result = TextLayout::Layout(*broken, "text", options);
 

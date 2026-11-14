@@ -177,7 +177,7 @@ namespace BECore::Tests {
     }
 
     TEST(RoomProtocolTest, ListRoomsNeedsAGameOfTheRightSize) {
-        const eastl::vector<String> bad = {
+        const Vector<String> bad = {
             Message("list_rooms"),
             Message("list_rooms", R"("game":"")"),
             Message("list_rooms", Format(R"("game":"{}")", Repeat('g', RoomLimits::kMaxGameNameBytes + 1))),
@@ -226,7 +226,7 @@ namespace BECore::Tests {
         action.action = Json::object();
         action.action["type"] = "play";
 
-        const eastl::vector<ClientMessage> messages = {
+        const Vector<ClientMessage> messages = {
             create, publicCreate, joinByName, reconnect, ChooseSeatMessage{2}, StartMessage{}, action, LeaveMessage{}, PingMessage{}, ListRoomsMessage{"mahjong"},
         };
         for (const ClientMessage& original : messages) {
@@ -268,7 +268,7 @@ namespace BECore::Tests {
         const String overlong = Format("{{\"v\":1,\"type\":\"ping\",\"pad\":\"{}\"}}", "\xC0\xAF");
         const String nulByte = String("{\"v\":1,\"type\":\"ping\"}\0garbage", 24);
 
-        const eastl::vector<BadInput> table = {
+        const Vector<BadInput> table = {
             {"empty", "", "bad_message"},
             {"spaces", "   ", "bad_message"},
             {"not json", "hello", "bad_message"},
@@ -566,7 +566,7 @@ namespace BECore::Tests {
     }
 
     TEST(RoomProtocolTest, EveryServerMessageCarriesTheVersionAndAType) {
-        const eastl::vector<String> messages = {
+        const Vector<String> messages = {
             MakeJoinedMessage("ABCDE", 1, "t", 0, false),
             MakeLobbyMessage(LobbySnapshot{}),
             MakeViewMessage("ABCDE", 0, 0, false, Json::object(), Json::array()),
@@ -787,7 +787,7 @@ namespace BECore::Tests {
         const String bombInsideActions = bombIn("actions", bombDepth);
         const String justOverTheDepth = bombIn("view", RoomLimits::kMaxServerJsonDepth);
 
-        const eastl::vector<BadInput> table = {
+        const Vector<BadInput> table = {
             {"empty", "", "bad_message"},
             {"not json", "hello", "bad_message"},
             {"truncated", R"({"v":1,"type":"pong")", "bad_message"},

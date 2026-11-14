@@ -22,7 +22,7 @@ namespace BECore {
         return text.substr(0, length);
     }
 
-    void IDeserializer::StoreError(eastl::vector<DeserializeError>& errors, StringView path, StringView message, int32_t line) {
+    void IDeserializer::StoreError(Vector<DeserializeError>& errors, StringView path, StringView message, int32_t line) {
         if (errors.size() >= ReaderLimits::kMaxRecordedErrors) {
             return;
         }

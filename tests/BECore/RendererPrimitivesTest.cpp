@@ -3,7 +3,6 @@
 #include <BECore/Scene/SceneManager.h>
 #include <Common/RecordingRenderer.h>
 #include <gtest/gtest.h>
-#include <limits>
 
 namespace BECore::Tests {
 
@@ -15,7 +14,7 @@ namespace BECore::Tests {
         constexpr uint32_t kBytesPerPixel = 4;
 
         IntrusivePtr<ITexture> MakeTexture(RecordingRenderer& renderer, uint32_t width, uint32_t height) {
-            const eastl::vector<uint8_t> pixels(static_cast<size_t>(width) * height * kBytesPerPixel, kOpaque);
+            const Vector<uint8_t> pixels(static_cast<size_t>(width) * height * kBytesPerPixel, kOpaque);
             return renderer.CreateTexture(pixels.data(), width, height);
         }
 
@@ -162,7 +161,7 @@ namespace BECore::Tests {
 
     TEST(RendererTextureTest, CreateTextureKeepsTheSizeAndThePixels) {
         RecordingRenderer renderer;
-        const eastl::vector<uint8_t> pixels = {1, 2, 3, 4, 5, 6, 7, 8};
+        const Vector<uint8_t> pixels = {1, 2, 3, 4, 5, 6, 7, 8};
 
         auto texture = renderer.CreateTexture(pixels.data(), 2, 1);
 
@@ -186,13 +185,13 @@ namespace BECore::Tests {
     namespace {
 
         /// A quad of 10 by 20 at the origin, two triangles
-        const eastl::vector<GeometryVertex> kQuad = {
+        const Vector<GeometryVertex> kQuad = {
             {0.0f, 0.0f, kRed, 0.0f, 0.0f},
             {10.0f, 0.0f, kRed, 1.0f, 0.0f},
             {10.0f, 20.0f, kRed, 1.0f, 1.0f},
             {0.0f, 20.0f, kRed, 0.0f, 1.0f},
         };
-        const eastl::vector<int> kQuadIndices = {0, 1, 2, 0, 2, 3};
+        const Vector<int> kQuadIndices = {0, 1, 2, 0, 2, 3};
 
     }  // namespace
 
@@ -247,7 +246,7 @@ namespace BECore::Tests {
         /// A renderer that keeps the default DrawGeometry, like a backend without the primitive
         class NoGeometryRenderer : public RecordingRenderer {
         public:
-            void DrawGeometry(ITexture* texture, eastl::span<const GeometryVertex> vertices, eastl::span<const int> indices, float translateX, float translateY) override {
+            void DrawGeometry(ITexture* texture, Span<const GeometryVertex> vertices, Span<const int> indices, float translateX, float translateY) override {
                 IRenderer::DrawGeometry(texture, vertices, indices, translateX, translateY);
             }
         };
@@ -335,7 +334,7 @@ namespace BECore::Tests {
 
         // The 1000 x 600 view fits an 800 x 600 output at scale 0.8 with bars above and below (offset y = 60).
         // Cell 4 starts at x = 10 + 4 * 120 and is 100 units wide; the inner clip is inset by 25 units.
-        eastl::vector<Rect> clips;
+        Vector<Rect> clips;
         for (const DrawCall& call : _renderer->calls) {
             if (call.clip) {
                 clips.push_back(*call.clip);
@@ -356,7 +355,7 @@ namespace BECore::Tests {
     TEST_F(RenderProbeTest, ItDrawsAColorQuadAndAMirroredTextureThroughGeometry) {
         _manager->DrawAll();
 
-        eastl::vector<const DrawCall*> geometry;
+        Vector<const DrawCall*> geometry;
         for (const DrawCall& call : _renderer->calls) {
             if (call.kind == DrawKind::Geometry) {
                 geometry.push_back(&call);
@@ -393,7 +392,7 @@ namespace BECore::Tests {
     TEST_F(RenderProbeTest, ItDrawsTheTurnedAndTheFlippedTextureThroughGeometry) {
         _manager->DrawAll();
 
-        eastl::vector<const DrawCall*> geometry;
+        Vector<const DrawCall*> geometry;
         for (const DrawCall& call : _renderer->calls) {
             if (call.kind == DrawKind::Geometry && call.texture != nullptr && call.vertices[0].u == 0.0f && call.vertices[1].u == 1.0f) {
                 geometry.push_back(&call);
@@ -453,7 +452,7 @@ namespace BECore::Tests {
         constexpr uint8_t kQuarterAlpha = 64;
         constexpr float kHalf = 0.5f;
         constexpr float kNaN = std::numeric_limits<float>::quiet_NaN();
-        const eastl::vector<GeometryVertex> kFadingQuad = {
+        const Vector<GeometryVertex> kFadingQuad = {
             {0.0f, 0.0f, Color{255, 0, 0, 200}, 0.0f, 0.0f},
             {10.0f, 0.0f, Color{255, 0, 0, 100}, 1.0f, 0.0f},
             {10.0f, 20.0f, Color{255, 0, 0, 255}, 1.0f, 1.0f},

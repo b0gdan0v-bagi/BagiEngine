@@ -51,6 +51,6 @@ namespace BECore {
      * @param file The loaded ApplicationConfig; a default one (no config, `found == false`) is allowed. Errors of other fields (`mode`,
      *             `type`) are not this function's business
      */
-    [[nodiscard]] std::expected<ControlSettings, ControlError> ResolveControlSettings(eastl::span<const String> args, const ApplicationConfigLoad& file);
+    [[nodiscard]] std::expected<ControlSettings, ControlError> ResolveControlSettings(Span<const String> args, const ApplicationConfigLoad& file);
 
 }  // namespace BECore

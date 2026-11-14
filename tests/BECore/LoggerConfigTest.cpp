@@ -60,7 +60,7 @@ namespace BECore::Tests {
                 _entries.push_back({event.level, String(event.message.data(), event.message.size())});
             }
 
-            eastl::vector<Entry> _entries;
+            Vector<Entry> _entries;
         };
 
     }  // namespace

@@ -28,7 +28,7 @@ namespace BECore::Stress {
      *
      * The recorder (p50, p99) and the ramp's step verdict (p95 of its measured frames) both use this one function.
      */
-    double NearestRank(eastl::span<const double> sorted, double fraction);
+    double NearestRank(Span<const double> sorted, double fraction);
 
     /// What a run measured: the percentiles of the three times and the means of the rest
     struct StressSummary {
@@ -72,7 +72,7 @@ namespace BECore::Stress {
         StressSummary Summarize() const;
 
     private:
-        eastl::vector<StressSample> _samples;
+        Vector<StressSample> _samples;
         size_t _limit = 0;
     };
 

@@ -209,7 +209,7 @@ namespace BECore::Tests {
     };
 
     inline RoomTransportFactory HubWorld::Factory(HubClientLinks& links) {
-        return [this, &links]() -> eastl::unique_ptr<IRoomTransport> {
+        return [this, &links]() -> UniquePtr<IRoomTransport> {
             auto link = std::make_shared<HubLink>();
             links.links.push_back(link);
             return eastl::make_unique<HubTransport>(*this, link);

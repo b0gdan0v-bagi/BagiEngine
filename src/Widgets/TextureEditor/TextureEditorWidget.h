@@ -42,7 +42,7 @@ namespace BECore {
         int _selectedIndex = -1;
         bool _isDirty = false;
 
-        eastl::vector<PoolString> _cachedAssets;
+        Vector<PoolString> _cachedAssets;
         bool _assetsLoaded = false;
 
         char _nameEditBuffer[256] = {};

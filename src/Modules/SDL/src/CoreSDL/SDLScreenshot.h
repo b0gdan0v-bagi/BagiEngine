@@ -22,7 +22,7 @@ namespace BECore {
     struct PngImage {
         uint32_t width = 0;
         uint32_t height = 0;
-        eastl::vector<uint8_t> bytes;
+        Vector<uint8_t> bytes;
     };
 
     /**

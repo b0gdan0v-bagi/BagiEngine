@@ -140,8 +140,8 @@ namespace BECore {
         return UILength::Percent(units / parentExtent * 100.0f);
     }
 
-    eastl::vector<PoolString> UIRectEdit::RegionChoices(const UIRegionSet& regions, PoolString current) {
-        eastl::vector<PoolString> names;
+    Vector<PoolString> UIRectEdit::RegionChoices(const UIRegionSet& regions, PoolString current) {
+        Vector<PoolString> names;
         names.reserve(regions.Size() + 1);
         for (const UIRegionSet::Entry& entry : regions) {
             names.push_back(entry.name);

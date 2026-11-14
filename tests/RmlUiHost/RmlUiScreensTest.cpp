@@ -39,7 +39,7 @@ namespace BECore::Tests {
             size_t outside = 0;
             size_t tooSmall = 0;
             size_t overflowing = 0;
-            eastl::vector<String> examples;
+            Vector<String> examples;
 
             void Note(String text) {
                 if (examples.size() < 8) {
@@ -225,7 +225,7 @@ namespace BECore::Tests {
             void On(const InputEvents::ActionEvent& event) {
                 seen.push_back(event.action);
             }
-            eastl::vector<PoolString> seen;
+            Vector<PoolString> seen;
         } actions;
         const Rect play = BoxOf(*doc, "Play");
         const Rect title = BoxOf(*doc, "Title");

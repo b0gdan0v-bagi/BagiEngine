@@ -121,11 +121,11 @@ namespace BECore {
     private:
         struct OutgoingFrame {
             uint8_t opcode = WebSocketOpcode::kText;
-            eastl::vector<uint8_t> payload;
+            Vector<uint8_t> payload;
             bool isClose = false;
         };
 
-        bool QueueFrame(uint8_t opcode, eastl::vector<uint8_t> payload, bool isClose);
+        bool QueueFrame(uint8_t opcode, Vector<uint8_t> payload, bool isClose);
         void AbortConnection(uint16_t code, StringView reason);
         /// Records how the connection ended unless something did already (the first reason is the true one); _mutex held
         void SetEndLocked(uint16_t code, StringView reason);
@@ -136,8 +136,8 @@ namespace BECore {
 
         void ReaderMain();
         bool Connect();
-        bool Handshake(eastl::vector<uint8_t>& pendingBytes);
-        void ReadMessages(eastl::vector<uint8_t> pendingBytes);
+        bool Handshake(Vector<uint8_t>& pendingBytes);
+        void ReadMessages(Vector<uint8_t> pendingBytes);
         bool HandleMessage(WebSocketMessage message);
         bool PushText(WebSocketMessage& message);
         void WriterMain();

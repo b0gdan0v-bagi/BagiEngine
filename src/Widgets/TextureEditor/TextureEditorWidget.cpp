@@ -345,7 +345,7 @@ namespace BECore {
 
     void TextureEditorWidget::RefreshAssetList() {
         static const StringView kExtensions[] = {".png", ".jpg", ".jpeg", ".bmp"};
-        _cachedAssets = CoreManager::GetFileSystem().EnumerateFiles("assets"_intern, eastl::span<const StringView>(kExtensions));
+        _cachedAssets = CoreManager::GetFileSystem().EnumerateFiles("assets"_intern, Span<const StringView>(kExtensions));
         _assetsLoaded = true;
     }
 

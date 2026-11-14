@@ -75,7 +75,7 @@ namespace BECore {
         ImGui::SameLine();
         ImGui::Text("%zu frozen", capture.GetSpikes().size());
 
-        const eastl::vector<FrozenFrame>& spikes = capture.GetSpikes();
+        const Vector<FrozenFrame>& spikes = capture.GetSpikes();
         if (ImGui::BeginChild("##spikeList", ImVec2(0.0f, kListHeight), ImGuiChildFlags_Borders)) {
             if (spikes.empty()) {
                 ImGui::TextDisabled("No spike yet");

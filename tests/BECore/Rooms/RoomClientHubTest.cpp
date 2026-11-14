@@ -62,7 +62,7 @@ namespace BECore::Tests {
             HubClientLinks links;
             std::shared_ptr<WireJudgeLog> judge;
             std::unique_ptr<RoomClient> client;
-            eastl::vector<RoomClientEvent> events;
+            Vector<RoomClientEvent> events;
             bool acted = false;
             uint64_t actedVersion = 0;
         };

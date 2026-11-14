@@ -88,14 +88,14 @@ namespace BECore {
             return nullptr;
         }
 
-        const eastl::vector<IntrusivePtrAtomic<IAssertHandler>>& GetHandlers() const {
+        const Vector<IntrusivePtrAtomic<IAssertHandler>>& GetHandlers() const {
             return _handlers;
         }
 
     private:
         void SortHandlersByPriority();
 
-        BE_REFLECT_FIELD eastl::vector<IntrusivePtrAtomic<IAssertHandler>> _handlers;
+        BE_REFLECT_FIELD Vector<IntrusivePtrAtomic<IAssertHandler>> _handlers;
         bool _initialized = false;
     };
 

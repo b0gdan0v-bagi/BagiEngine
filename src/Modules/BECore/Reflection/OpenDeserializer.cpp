@@ -26,7 +26,7 @@ namespace BECore {
 
     }  // namespace
 
-    std::expected<eastl::unique_ptr<IDeserializer>, String> OpenDeserializer(StringView virtualPath) {
+    std::expected<UniquePtr<IDeserializer>, String> OpenDeserializer(StringView virtualPath) {
         using Error = std::unexpected<String>;
 
         if (EndsWith(virtualPath, kXmlExtension)) {
@@ -34,7 +34,7 @@ namespace BECore {
             if (!deserializer->LoadFromVirtualPath(virtualPath)) {
                 return Error(Format("Failed to load XML '{}': {}", virtualPath, FirstError(*deserializer)));
             }
-            return eastl::unique_ptr<IDeserializer>(eastl::move(deserializer));
+            return UniquePtr<IDeserializer>(eastl::move(deserializer));
         }
 
         if (EndsWith(virtualPath, kBinaryExtension)) {
@@ -46,7 +46,7 @@ namespace BECore {
             if (!deserializer->LoadFromFile(realPath)) {
                 return Error(Format("Failed to load binary '{}': {}", virtualPath, FirstError(*deserializer)));
             }
-            return eastl::unique_ptr<IDeserializer>(eastl::move(deserializer));
+            return UniquePtr<IDeserializer>(eastl::move(deserializer));
         }
 
         return Error(Format("Unsupported file extension (expected .xml or .bin): '{}'", virtualPath));
@@ -54,10 +54,10 @@ namespace BECore {
 
     void LogDeserializeErrors(StringView configName, const IDeserializer& deserializer) {
         const auto& errors = deserializer.GetErrors();
-        LogDeserializeErrors(configName, eastl::span<const DeserializeError>(errors.data(), errors.size()));
+        LogDeserializeErrors(configName, Span<const DeserializeError>(errors.data(), errors.size()));
     }
 
-    void LogDeserializeErrors(StringView configName, eastl::span<const DeserializeError> errors) {
+    void LogDeserializeErrors(StringView configName, Span<const DeserializeError> errors) {
         for (const DeserializeError& error : errors) {
             // A document that fails to parse has no path, and the line is 0 where the format has none (binary)
             const String path = error.path.ToStringView().empty() ? String{} : Format("{}: ", error.path.ToStringView());

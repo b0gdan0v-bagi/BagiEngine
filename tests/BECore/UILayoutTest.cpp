@@ -228,7 +228,7 @@ namespace BECore::Tests {
         UIStackSpec stack;
         stack.spacing = 8.0f;
         const UIRectSpec children[] = {Sized(100.0f, 30.0f), Sized(60.0f, 40.0f), Sized(80.0f, 20.0f)};
-        eastl::vector<Rect> rects;
+        Vector<Rect> rects;
 
         UILayout::LayoutStack(kParent, stack, children, rects);
 
@@ -243,7 +243,7 @@ namespace BECore::Tests {
         stack.direction = UIStackDirection::Horizontal;
         stack.spacing = 10.0f;
         const UIRectSpec children[] = {Sized(50.0f, 30.0f), Sized(70.0f, 40.0f)};
-        eastl::vector<Rect> rects;
+        Vector<Rect> rects;
 
         UILayout::LayoutStack(kParent, stack, children, rects);
 
@@ -255,7 +255,7 @@ namespace BECore::Tests {
         UIStackSpec stack;
         stack.padding = {10.0f, 20.0f, 30.0f, 40.0f};
         const UIRectSpec children[] = {Sized(50.0f, 30.0f)};
-        eastl::vector<Rect> rects;
+        Vector<Rect> rects;
 
         UILayout::LayoutStack(kParent, stack, children, rects);
 
@@ -271,7 +271,7 @@ namespace BECore::Tests {
         UIRectSpec grow3 = Sized(0.0f, 20.0f);
         grow3.flex = 3.0f;
         const UIRectSpec children[] = {Sized(60.0f, 20.0f), grow1, grow3};
-        eastl::vector<Rect> rects;
+        Vector<Rect> rects;
 
         UILayout::LayoutStack(kParent, stack, children, rects);
 
@@ -290,7 +290,7 @@ namespace BECore::Tests {
         UIRectSpec open = Sized(0.0f, 20.0f);
         open.flex = 1.0f;
         const UIRectSpec children[] = {capped, open};
-        eastl::vector<Rect> rects;
+        Vector<Rect> rects;
 
         UILayout::LayoutStack(kParent, stack, children, rects);
 
@@ -304,7 +304,7 @@ namespace BECore::Tests {
         UIRectSpec grow = Sized(0.0f, 20.0f);
         grow.flex = 1.0f;
         const UIRectSpec children[] = {Sized(500.0f, 20.0f), grow};
-        eastl::vector<Rect> rects;
+        Vector<Rect> rects;
 
         UILayout::LayoutStack(kParent, stack, children, rects);
 
@@ -319,7 +319,7 @@ namespace BECore::Tests {
         half.width = UILength::Px(10.0f);
         half.height = UILength::Percent(50.0f);
         const UIRectSpec children[] = {half};
-        eastl::vector<Rect> rects;
+        Vector<Rect> rects;
 
         UILayout::LayoutStack(kParent, stack, children, rects);
 
@@ -328,7 +328,7 @@ namespace BECore::Tests {
 
     TEST(UIStackTest, CrossAlignmentPlacesTheChildrenInTheContentAcross) {
         const UIRectSpec children[] = {Sized(100.0f, 30.0f), Sized(40.0f, 30.0f)};
-        eastl::vector<Rect> rects;
+        Vector<Rect> rects;
         UIStackSpec stack;
 
         stack.crossAlign = UIStackAlign::Start;
@@ -351,7 +351,7 @@ namespace BECore::Tests {
         const UIRectSpec children[] = {Sized(10.0f, 30.0f), limited};
         UIStackSpec stack;
         stack.crossAlign = UIStackAlign::Stretch;
-        eastl::vector<Rect> rects;
+        Vector<Rect> rects;
 
         UILayout::LayoutStack(kParent, stack, children, rects);
 
@@ -363,7 +363,7 @@ namespace BECore::Tests {
         UIStackSpec stack;
         stack.direction = UIStackDirection::Horizontal;
         const UIRectSpec children[] = {Sized(250.0f, 20.0f), Sized(250.0f, 20.0f)};
-        eastl::vector<Rect> rects;
+        Vector<Rect> rects;
 
         UILayout::LayoutStack(kParent, stack, children, rects);
 
@@ -377,7 +377,7 @@ namespace BECore::Tests {
         stack.wrap = true;
         stack.spacing = 10.0f;
         const UIRectSpec children[] = {Sized(150.0f, 20.0f), Sized(150.0f, 30.0f), Sized(150.0f, 25.0f), Sized(90.0f, 10.0f)};
-        eastl::vector<Rect> rects;
+        Vector<Rect> rects;
 
         UILayout::LayoutStack(kParent, stack, children, rects);
 
@@ -393,7 +393,7 @@ namespace BECore::Tests {
         stack.direction = UIStackDirection::Horizontal;
         stack.wrap = true;
         const UIRectSpec children[] = {Sized(600.0f, 20.0f), Sized(50.0f, 20.0f)};
-        eastl::vector<Rect> rects;
+        Vector<Rect> rects;
 
         UILayout::LayoutStack(kParent, stack, children, rects);
 
@@ -409,7 +409,7 @@ namespace BECore::Tests {
         UIRectSpec grow = Sized(100.0f, 20.0f);  // its own size only decides where the line breaks
         grow.flex = 1.0f;
         const UIRectSpec children[] = {Sized(300.0f, 20.0f), grow, grow};
-        eastl::vector<Rect> rects;
+        Vector<Rect> rects;
 
         UILayout::LayoutStack(kParent, stack, children, rects);
 
@@ -452,7 +452,7 @@ namespace BECore::Tests {
         const UIRectSpec children[] = {WithAspect(HeightOnly(UILength::Percent(50.0f)), 2.0f), WithAspect(HeightOnly(UILength::Px(40.0f)), 1.0f)};
         UIStackSpec stack = Horizontal();
         stack.spacing = 10.0f;
-        eastl::vector<Rect> rects;
+        Vector<Rect> rects;
 
         UILayout::LayoutStack(kParent, stack, children, rects);
 
@@ -462,7 +462,7 @@ namespace BECore::Tests {
 
     TEST(UIStackTest, AHorizontalChildWithAWidthAndARatioGetsItsHeight) {
         const UIRectSpec children[] = {WithAspect(WidthOnly(UILength::Px(80.0f)), 2.0f)};
-        eastl::vector<Rect> rects;
+        Vector<Rect> rects;
 
         UILayout::LayoutStack(kParent, Horizontal(), children, rects);
 
@@ -473,7 +473,7 @@ namespace BECore::Tests {
         UIStackSpec stack;
         stack.spacing = 8.0f;
         const UIRectSpec children[] = {WithAspect(WidthOnly(UILength::Px(100.0f)), 2.0f), WithAspect(WidthOnly(UILength::Percent(50.0f)), 4.0f)};
-        eastl::vector<Rect> rects;
+        Vector<Rect> rects;
 
         UILayout::LayoutStack(kParent, stack, children, rects);
 
@@ -483,7 +483,7 @@ namespace BECore::Tests {
 
     TEST(UIStackTest, AChildWithBothSidesOrNoneKeepsItsSpecEvenWithARatio) {
         const UIRectSpec children[] = {WithAspect(Sized(100.0f, 40.0f), 1.0f), WithAspect(UIRectSpec{}, 1.0f)};
-        eastl::vector<Rect> rects;
+        Vector<Rect> rects;
 
         UILayout::LayoutStack(kParent, Horizontal(), children, rects);
 
@@ -495,7 +495,7 @@ namespace BECore::Tests {
         UIRectSpec grow = WithAspect(HeightOnly(UILength::Px(100.0f)), 2.0f);
         grow.flex = 1.0f;
         const UIRectSpec children[] = {grow};
-        eastl::vector<Rect> rects;
+        Vector<Rect> rects;
 
         UILayout::LayoutStack(kParent, Horizontal(), children, rects);
 
@@ -508,7 +508,7 @@ namespace BECore::Tests {
         UIRectSpec floored = WithAspect(HeightOnly(UILength::Px(20.0f)), 1.0f);
         floored.minWidth = UILength::Px(60.0f);
         const UIRectSpec children[] = {capped, floored};
-        eastl::vector<Rect> rects;
+        Vector<Rect> rects;
 
         UILayout::LayoutStack(kParent, Horizontal(), children, rects);
 
@@ -519,7 +519,7 @@ namespace BECore::Tests {
     TEST(UIStackTest, ADerivedSizeIsPlacedByCrossAlign) {
         const UIRectSpec children[] = {WithAspect(HeightOnly(UILength::Px(40.0f)), 1.0f)};
         UIStackSpec stack = Horizontal();
-        eastl::vector<Rect> rects;
+        Vector<Rect> rects;
 
         stack.crossAlign = UIStackAlign::Center;
         UILayout::LayoutStack(kParent, stack, children, rects);
@@ -531,7 +531,7 @@ namespace BECore::Tests {
     }
 
     TEST(UIStackTest, AnEmptyStackGivesNoRects) {
-        eastl::vector<Rect> rects{Rect{1.0f, 2.0f, 3.0f, 4.0f}};
+        Vector<Rect> rects{Rect{1.0f, 2.0f, 3.0f, 4.0f}};
 
         UILayout::LayoutStack(kParent, UIStackSpec{}, {}, rects);
 

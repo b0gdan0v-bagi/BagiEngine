@@ -41,7 +41,7 @@ namespace BECore {
         [[nodiscard]] static Optional<UILength> ConvertUnit(const UILength& length, UIUnit unit, float parentExtent);
 
         /// The names a region picker offers: the published regions in the order of publishing, then @p current when it is named but not published
-        [[nodiscard]] static eastl::vector<PoolString> RegionChoices(const UIRegionSet& regions, PoolString current);
+        [[nodiscard]] static Vector<PoolString> RegionChoices(const UIRegionSet& regions, PoolString current);
     };
 
 }  // namespace BECore

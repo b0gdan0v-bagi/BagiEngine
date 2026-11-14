@@ -35,8 +35,8 @@ namespace BECore::Stress::Tests {
             return String(shown.data(), shown.size());
         }
 
-        eastl::vector<String> ShownByAll(const UIElement& root) {
-            eastl::vector<String> all;
+        Vector<String> ShownByAll(const UIElement& root) {
+            Vector<String> all;
             for (const auto& label : root.children) {
                 all.push_back(Shown(*label));
             }
@@ -155,11 +155,11 @@ namespace BECore::Stress::Tests {
     TEST_F(StressUiTest, ALanguageSwitchRewordsTheKeyLabelsAndNoOther) {
         StartUi(64);
         Update();
-        const eastl::vector<String> english = ShownByAll(Root());
+        const Vector<String> english = ShownByAll(Root());
 
         StressGame::GetActive()->GetState().SetLanguage(StressLanguage::Ru);
         Update();
-        const eastl::vector<String> russian = ShownByAll(Root());
+        const Vector<String> russian = ShownByAll(Root());
 
         ASSERT_EQ(english.size(), russian.size());
         size_t changed = 0;
@@ -182,7 +182,7 @@ namespace BECore::Stress::Tests {
     TEST_F(StressUiTest, ALanguageSwitchLeavesTheLabelsAlone) {
         StartUi(64);
         Update();
-        eastl::vector<const UIElement*> before;
+        Vector<const UIElement*> before;
         for (const auto& label : Root().children) {
             before.push_back(label.Get());
         }
@@ -207,7 +207,7 @@ namespace BECore::Stress::Tests {
     TEST_F(StressUiTest, GrowAppendsAndShrinkRemovesTheTailKeepingTheFirstLabels) {
         StartUi(100);
         Update();
-        eastl::vector<const UIElement*> first;
+        Vector<const UIElement*> first;
         for (size_t i = 0; i < 10; ++i) {
             first.push_back(Root().children[i].Get());
         }

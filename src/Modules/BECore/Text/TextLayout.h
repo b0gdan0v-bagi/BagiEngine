@@ -39,8 +39,8 @@ namespace BECore {
     };
 
     struct TextLayoutResult {
-        eastl::vector<PositionedGlyph> glyphs;
-        eastl::vector<TextLine> lines;
+        Vector<PositionedGlyph> glyphs;
+        Vector<TextLine> lines;
         float width = 0.0f;     ///< of the widest line
         float height = 0.0f;    ///< the number of lines times the line height
         float fontSize = 0.0f;  ///< the size that was used; smaller than asked only after AutoFit

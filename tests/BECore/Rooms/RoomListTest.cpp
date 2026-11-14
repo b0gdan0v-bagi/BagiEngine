@@ -52,7 +52,7 @@ namespace BECore::Tests {
         }
 
         /// Whether any text any client received that is not in @p members contains @p code
-        size_t CountTextsWithCode(HubHarness& harness, const String& code, const eastl::vector<ConnectionId>& members) {
+        size_t CountTextsWithCode(HubHarness& harness, const String& code, const Vector<ConnectionId>& members) {
             size_t count = 0;
             for (const auto& [id, client] : harness.Clients()) {
                 if (eastl::find(members.begin(), members.end(), id) != members.end()) {
@@ -154,7 +154,7 @@ namespace BECore::Tests {
         HubHarness harness;
         const ConnectionId host = MakePublicRoom(harness, "Ann");
         const String code = harness.Client(host).roomCode;
-        eastl::vector<ConnectionId> guests;
+        Vector<ConnectionId> guests;
         for (int i = 1; i < FakeSeatedGame::kSeatCount; ++i) {
             const ConnectionId guest = harness.Connect();
             harness.JoinByName(guest, code, Format("P{}", i).c_str());
@@ -257,7 +257,7 @@ namespace BECore::Tests {
 
     TEST(RoomHubTest, TheAnswerIsCutAtTheCapOldestFirst) {
         HubHarness harness(SettingsWith(2));
-        eastl::vector<String> codes;
+        Vector<String> codes;
         for (int i = 0; i < 3; ++i) {
             codes.push_back(harness.Client(MakePublicRoom(harness, Format("H{}", i).c_str())).roomCode);
         }
@@ -292,7 +292,7 @@ namespace BECore::Tests {
 
     TEST(RoomHubTest, TheOrderIsTheOrderOfCreationWhateverTheCodes) {
         HubHarness harness;
-        eastl::vector<String> codes;
+        Vector<String> codes;
         for (int i = 0; i < 12; ++i) {
             codes.push_back(harness.Client(MakePublicRoom(harness, "H")).roomCode);
         }

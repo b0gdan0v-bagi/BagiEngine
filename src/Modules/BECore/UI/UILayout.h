@@ -55,7 +55,7 @@ namespace BECore {
          * the cross axis, separated by `spacing`. Without `wrap` the line is as wide as the content on the cross axis; with it, as the widest child.
          * @param[out] rects one rect per child, resized to children.size()
          */
-        static void LayoutStack(const Rect& parent, const UIStackSpec& stack, eastl::span<const UIRectSpec> children, eastl::vector<Rect>& rects);
+        static void LayoutStack(const Rect& parent, const UIStackSpec& stack, Span<const UIRectSpec> children, Vector<Rect>& rects);
     };
 
     constexpr std::pair<float, float> UILayout::AnchorFraction(UIAnchor anchor) {

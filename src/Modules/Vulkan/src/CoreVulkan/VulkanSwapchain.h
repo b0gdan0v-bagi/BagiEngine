@@ -65,9 +65,9 @@ namespace BECore {
             VkSwapchainKHR               swapchain = VK_NULL_HANDLE;
             VkFormat                     format    = VK_FORMAT_UNDEFINED;
             VkExtent2D                   extent    = {};
-            eastl::vector<VkImage>       images;
-            eastl::vector<VkImageView>   imageViews;
-            eastl::vector<VkFramebuffer> framebuffers;
+            Vector<VkImage>       images;
+            Vector<VkImageView>   imageViews;
+            Vector<VkFramebuffer> framebuffers;
         };
 
         bool CreateSwapchain(VulkanDevice& device, VkSurfaceKHR surface, int pixelWidth, int pixelHeight,

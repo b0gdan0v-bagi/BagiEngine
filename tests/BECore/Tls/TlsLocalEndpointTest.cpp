@@ -30,10 +30,10 @@ namespace BECore::Tests {
             return value != nullptr ? value : "";
         }
 
-        [[nodiscard]] eastl::vector<uint8_t> ReadFile(const std::string& path) {
+        [[nodiscard]] Vector<uint8_t> ReadFile(const std::string& path) {
             std::ifstream file(path, std::ios::binary);
             const std::vector<char> bytes((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-            return eastl::vector<uint8_t>(reinterpret_cast<const uint8_t*>(bytes.data()), reinterpret_cast<const uint8_t*>(bytes.data()) + bytes.size());
+            return Vector<uint8_t>(reinterpret_cast<const uint8_t*>(bytes.data()), reinterpret_cast<const uint8_t*>(bytes.data()) + bytes.size());
         }
 
         [[nodiscard]] bool Contains(const String& text, const char* part) {
@@ -162,7 +162,7 @@ namespace BECore::Tests {
         params.port = static_cast<uint16_t>(std::stoi(Env(kEnvPort)));
         params.handshakeDeadline = std::chrono::steady_clock::now() + kClientWaitLimit;
         const auto trusted = ReadFile(Env(kEnvCaFile));
-        params.additionalTrustAnchorsDer = eastl::span<const eastl::vector<uint8_t>>(&trusted, 1);
+        params.additionalTrustAnchorsDer = Span<const Vector<uint8_t>>(&trusted, 1);
         ASSERT_TRUE(stream->Connect(params).has_value()) << stream->GetLastError().c_str();
         ASSERT_TRUE(stream->IsValid());
 
@@ -192,7 +192,7 @@ namespace BECore::Tests {
         params.port = static_cast<uint16_t>(std::stoi(Env(kEnvPort)));
         params.handshakeDeadline = std::chrono::steady_clock::now() + kClientWaitLimit;
         const auto trusted = ReadFile(Env(kEnvCaFile));
-        params.additionalTrustAnchorsDer = eastl::span<const eastl::vector<uint8_t>>(&trusted, 1);
+        params.additionalTrustAnchorsDer = Span<const Vector<uint8_t>>(&trusted, 1);
         ASSERT_TRUE(stream->Connect(params).has_value()) << stream->GetLastError().c_str();
         ASSERT_TRUE(stream->SetReceiveTimeout(kShortPause));
         std::array<uint8_t, 16> buffer{};
@@ -240,7 +240,7 @@ namespace BECore::Tests {
             params.host = "localhost";
             params.port = static_cast<uint16_t>(std::stoi(Env(kEnvPort)));
             params.handshakeDeadline = std::chrono::steady_clock::now() + kClientWaitLimit;
-            params.additionalTrustAnchorsDer = eastl::span<const eastl::vector<uint8_t>>(&trusted, 1);
+            params.additionalTrustAnchorsDer = Span<const Vector<uint8_t>>(&trusted, 1);
             std::atomic<bool> started{false};
             std::expected<void, String> result;
             std::thread connecting([&] {

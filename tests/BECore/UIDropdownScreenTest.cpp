@@ -246,12 +246,12 @@ namespace BECore::Tests {
             }
 
             Scene& _scene;
-            eastl::vector<PoolString> _actions;
-            eastl::vector<PoolString> _values;
+            Vector<PoolString> _actions;
+            Vector<PoolString> _values;
         };
 
         /// Every control of the tree that shows text or takes a press, depth first. The options of a closed list have no rect and are not looked at
-        void CollectControls(const UIElement& element, eastl::vector<const UIElement*>& found) {
+        void CollectControls(const UIElement& element, Vector<const UIElement*>& found) {
             if (element.Cast<UIDropdown>() || element.GetComponent<UITextComponent>()) {
                 found.push_back(&element);
             }
@@ -281,7 +281,7 @@ namespace BECore::Tests {
         String Problems(const UICanvasLayout& layout) {
             String problems;
             const float scale = layout.GetResolved().scale;
-            eastl::vector<const UIElement*> controls;
+            Vector<const UIElement*> controls;
             CollectControls(*layout.root, controls);
             for (const UIElement* control : controls) {
                 if (control->rect.IsEmpty()) {
@@ -308,7 +308,7 @@ namespace BECore::Tests {
         void ForEachLanguage(Check&& check) {
             UIStrings& strings = CoreManager::GetUIStrings();
             const PoolString saved = strings.GetLanguage();
-            const eastl::vector<PoolString> languages = strings.GetLanguages();
+            const Vector<PoolString> languages = strings.GetLanguages();
             for (const PoolString language : languages) {
                 ASSERT_TRUE(strings.SetLanguage(language)) << language.ToStringView().data();
                 check(language);
@@ -350,7 +350,7 @@ namespace BECore::Tests {
             strings.Clear();
             auto config = XmlConfig::Create();
             ASSERT_TRUE(config.LoadFromString(FromStd(xml)));
-            const eastl::vector<String> problems = strings.LoadFromXml(config.GetRoot());
+            const Vector<String> problems = strings.LoadFromXml(config.GetRoot());
             EXPECT_TRUE(problems.empty()) << (problems.empty() ? "" : problems[0].c_str());
             ASSERT_EQ(strings.GetLanguages().size(), 3u);
         }
@@ -447,10 +447,10 @@ namespace BECore::Tests {
         }
 
         /// The panel on the whole matrix once for every language: the findings of the validator, each case named with its language
-        eastl::vector<UIMatrixFailure> ValidatePanel(UICanvasComponent& canvas) const {
+        Vector<UIMatrixFailure> ValidatePanel(UICanvasComponent& canvas) const {
             UILayoutValidatorOptions options;
             options.minTouchSize = CoreManager::GetUIEnvironment().GetSettings().minTouchSize;
-            eastl::vector<UIMatrixFailure> all;
+            Vector<UIMatrixFailure> all;
             ForEachLanguage([&](PoolString language) {
                 for (UIMatrixFailure& failure : ValidateOnMatrix(canvas.GetLayout(), options, ViewContext())) {
                     failure.label = Format("[{}] {}", language.ToStringView(), failure.label.c_str());
@@ -695,7 +695,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(ValidatePanel(*_levels).empty());
         EXPECT_NE(Problems(_levels->GetLayout()).find("LevelNovice is 30.0 units high"), String::npos);
 
-        eastl::vector<const UIElement*> controls;
+        Vector<const UIElement*> controls;
         CollectControls(*_levels->GetLayout().root, controls);
         EXPECT_NE(eastl::find(controls.begin(), controls.end(), &Find("LevelEasyCaption")), controls.end()) << "the caption child is checked on its own";
     }
@@ -705,7 +705,7 @@ namespace BECore::Tests {
         for (const auto [width, height] : {std::pair{kViewWidth, kViewHeight}, std::pair{kPortraitWidth, kPortraitHeight}}) {
             ASSERT_NO_FATAL_FAILURE(LoadScene(width, height));
             ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
-            eastl::vector<Rect> buttons;
+            Vector<Rect> buttons;
             for (const char* name : kOptionNames) {
                 buttons.push_back(Find(name).rect);
             }

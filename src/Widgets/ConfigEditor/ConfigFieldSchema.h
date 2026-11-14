@@ -10,7 +10,7 @@ namespace BECore {
 
     struct FieldHint {
         FieldType type = FieldType::String;
-        eastl::vector<String> options;  // enum values or flag names (owned)
+        Vector<String> options;  // enum values or flag names (owned)
     };
 
     /**
@@ -74,7 +74,7 @@ namespace BECore {
          * @param attrPath Path in format "elementName/@attrName"
          * @param flagNames List of all possible flag names
          */
-        void RegisterFlags(PoolString configName, StringView attrPath, eastl::vector<String> flagNames);
+        void RegisterFlags(PoolString configName, StringView attrPath, Vector<String> flagNames);
 
         /**
          * @brief Resolve a FieldHint for the given attribute

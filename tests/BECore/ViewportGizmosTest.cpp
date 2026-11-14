@@ -6,7 +6,6 @@
 #include <BECore/UI/UICanvasComponent.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/RecordingRenderer.h>
-#include <Events/SubscriptionHolder.h>
 #include <Widgets/Viewport/ViewportGizmos.h>
 #include <gtest/gtest.h>
 
@@ -76,18 +75,18 @@ namespace BECore::Tests {
             struct Entry {
                 NodeTransformEditPhase phase;
                 const Scene* scene;
-                eastl::vector<NodeTransformEdit> edits;
+                Vector<NodeTransformEdit> edits;
             };
 
             EditRecorder() {
                 Subscribe<NodeTransformEditEvent, &EditRecorder::OnEdit>(this);
             }
 
-            eastl::vector<Entry> entries;
+            Vector<Entry> entries;
 
         private:
             void OnEdit(const NodeTransformEditEvent& event) {
-                entries.push_back({event.phase, event.scene, eastl::vector<NodeTransformEdit>(event.edits.begin(), event.edits.end())});
+                entries.push_back({event.phase, event.scene, Vector<NodeTransformEdit>(event.edits.begin(), event.edits.end())});
             }
         };
 
@@ -149,8 +148,8 @@ namespace BECore::Tests {
                                  snap);
         }
 
-        eastl::vector<SceneNode*> _nodes;
-        eastl::vector<Gizmo::Item> _items;
+        Vector<SceneNode*> _nodes;
+        Vector<Gizmo::Item> _items;
         EditRecorder _recorder;
     };
 
@@ -209,7 +208,7 @@ namespace BECore::Tests {
         SceneNode* const a = &Node("Main", "A");
         SceneNode* const b = &Node("Main", "B");
         SceneNode* const stranger = &Node("Other", "Elsewhere");  // a node of another tree is not alive in this one
-        const eastl::vector<SceneNode*> selected{b, &Node("Main", "Locked"), stranger, &Node("Main", "Hud"), a};
+        const Vector<SceneNode*> selected{b, &Node("Main", "Locked"), stranger, &Node("Main", "Hud"), a};
 
         CollectMovable(GetScene("Main"), {selected.data(), selected.size()}, _nodes, _items);
 
@@ -222,7 +221,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(ViewportGizmosTest, CollectClearsTheVectorsAndKeepsTheirCapacity) {
-        const eastl::vector<SceneNode*> selected{&Node("Main", "A"), &Node("Main", "B")};
+        const Vector<SceneNode*> selected{&Node("Main", "A"), &Node("Main", "B")};
         CollectMovable(GetScene("Main"), {selected.data(), selected.size()}, _nodes, _items);
         const size_t nodeCapacity = _nodes.capacity();
         const size_t itemCapacity = _items.capacity();
@@ -238,8 +237,8 @@ namespace BECore::Tests {
     TEST_F(ViewportGizmosTest, WriteItemsSetsTheTransformsOfTheNodes) {
         SceneNode* const a = &Node("Main", "A");
         SceneNode* const b = &Node("Main", "B");
-        const eastl::vector<SceneNode*> nodes{a, b};
-        const eastl::vector<Gizmo::Item> items{Moved(ItemOf(*a->GetComponent<TransformComponent>()), 5.0f), Moved(ItemOf(*b->GetComponent<TransformComponent>()), -7.0f)};
+        const Vector<SceneNode*> nodes{a, b};
+        const Vector<Gizmo::Item> items{Moved(ItemOf(*a->GetComponent<TransformComponent>()), 5.0f), Moved(ItemOf(*b->GetComponent<TransformComponent>()), -7.0f)};
 
         EXPECT_TRUE(WriteItems(GetScene("Main"), {nodes.data(), nodes.size()}, {items.data(), items.size()}));
 
@@ -250,8 +249,8 @@ namespace BECore::Tests {
     TEST_F(ViewportGizmosTest, WriteItemsWritesNothingWhenANodeIsGoneOrTheSizesDiffer) {
         SceneNode* const a = &Node("Main", "A");
         SceneNode* const stranger = &Node("Other", "Elsewhere");
-        const eastl::vector<SceneNode*> nodes{a, stranger};
-        const eastl::vector<Gizmo::Item> items{Moved(ItemOf(*a->GetComponent<TransformComponent>()), 5.0f), Gizmo::Item{}};
+        const Vector<SceneNode*> nodes{a, stranger};
+        const Vector<Gizmo::Item> items{Moved(ItemOf(*a->GetComponent<TransformComponent>()), 5.0f), Gizmo::Item{}};
 
         EXPECT_FALSE(AllAlive(GetScene("Main"), {nodes.data(), nodes.size()}));
         EXPECT_FALSE(WriteItems(GetScene("Main"), {nodes.data(), nodes.size()}, {items.data(), items.size()}));
@@ -434,7 +433,7 @@ namespace BECore::Tests {
     TEST_F(ViewportGizmosTest, TheBoundsOfASelectionAreTheUnionOfItsOutlinesInOutputPixels) {
         _manager->SetActiveScene("Fit"_intern);
         _manager->DrawAll();
-        const eastl::vector<SceneNode*> selected{&Node("Fit", "Box"), &Node("Fit", "Box2")};
+        const Vector<SceneNode*> selected{&Node("Fit", "Box"), &Node("Fit", "Box2")};
         Rect bounds;
 
         ASSERT_TRUE(SelectionBounds(GetScene("Fit"), {selected.data(), selected.size()}, bounds));
@@ -448,7 +447,7 @@ namespace BECore::Tests {
 
     TEST_F(ViewportGizmosTest, NoBoundsForAnEmptySelectionOrNodesOfAnotherScene) {
         Rect bounds{1.0f, 2.0f, 3.0f, 4.0f};
-        const eastl::vector<SceneNode*> stranger{&Node("Other", "Elsewhere")};
+        const Vector<SceneNode*> stranger{&Node("Other", "Elsewhere")};
 
         EXPECT_FALSE(SelectionBounds(GetScene("Main"), {}, bounds));
         EXPECT_FALSE(SelectionBounds(GetScene("Main"), {stranger.data(), stranger.size()}, bounds));

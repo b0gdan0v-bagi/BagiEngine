@@ -151,7 +151,7 @@ namespace BECore::Tests {
             EXPECT_NEAR(rect.h, h, kTolerance);
         }
 
-        bool HasIssue(const eastl::vector<UIMatrixFailure>& failures, UILayoutIssueKind kind) {
+        bool HasIssue(const Vector<UIMatrixFailure>& failures, UILayoutIssueKind kind) {
             for (const auto& failure : failures) {
                 for (const UILayoutIssue& issue : failure.issues) {
                     if (issue.kind == kind) {
@@ -187,7 +187,7 @@ namespace BECore::Tests {
         void ForEachLanguage(Check&& check) {
             UIStrings& strings = CoreManager::GetUIStrings();
             const PoolString saved = strings.GetLanguage();
-            const eastl::vector<PoolString> languages = strings.GetLanguages();
+            const Vector<PoolString> languages = strings.GetLanguages();
             for (const PoolString language : languages) {
                 ASSERT_TRUE(strings.SetLanguage(language)) << language.ToStringView().data();
                 check(language);
@@ -211,7 +211,7 @@ namespace BECore::Tests {
 
             auto config = XmlConfig::Create();
             ASSERT_TRUE(config.LoadFromString(kStringsXml));
-            const eastl::vector<String> problems = CoreManager::GetUIStrings().LoadFromXml(config.GetRoot());
+            const Vector<String> problems = CoreManager::GetUIStrings().LoadFromXml(config.GetRoot());
             EXPECT_TRUE(problems.empty()) << (problems.empty() ? "" : problems[0].c_str());
             ASSERT_EQ(CoreManager::GetUIStrings().GetLanguages().size(), 3u);
         }

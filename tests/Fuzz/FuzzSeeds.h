@@ -20,13 +20,13 @@ namespace BECore::Fuzz {
      * Real inputs, not hand-typed bytes: when a format changes the seeds are made again, and the files under
      * tests/Fuzz/corpus change with it. A seed that came from a finding (fix-<what>) is never made here.
      */
-    eastl::vector<FuzzSeedFile> MakeGeneratedSeeds();
+    Vector<FuzzSeedFile> MakeGeneratedSeeds();
 
     /// The seeds of room_protocol, room_hub and control_request (FuzzRoomSeeds.cpp); MakeGeneratedSeeds adds them to its own
-    void AddRoomAndControlSeeds(eastl::vector<FuzzSeedFile>& seeds);
+    void AddRoomAndControlSeeds(Vector<FuzzSeedFile>& seeds);
 
     /// The seeds of web_ui and ui_tables (FuzzUiSeeds.cpp); MakeGeneratedSeeds adds them to its own
-    void AddUiSeeds(eastl::vector<FuzzSeedFile>& seeds);
+    void AddUiSeeds(Vector<FuzzSeedFile>& seeds);
 
     /// Writes every generated seed under @p corpusRoot (<corpusRoot>/<folder>/<name>); returns false if a file cannot be written
     bool WriteGeneratedSeeds(const std::filesystem::path& corpusRoot);

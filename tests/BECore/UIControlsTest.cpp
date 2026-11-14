@@ -149,8 +149,8 @@ namespace BECore::Tests {
                 _values.push_back(event.value);
             }
 
-            eastl::vector<PoolString> _actions;
-            eastl::vector<PoolString> _values;
+            Vector<PoolString> _actions;
+            Vector<PoolString> _values;
         };
 
         String ElementToXml(const UIElement& element) {
@@ -165,8 +165,8 @@ namespace BECore::Tests {
             return std::abs(a.x - b.x) <= tolerance && std::abs(a.y - b.y) <= tolerance && std::abs(a.w - b.w) <= tolerance && std::abs(a.h - b.h) <= tolerance;
         }
 
-        eastl::vector<uint8_t> GreyPixels(uint32_t width, uint32_t height) {
-            return eastl::vector<uint8_t>(static_cast<size_t>(width) * height * 4, 128);
+        Vector<uint8_t> GreyPixels(uint32_t width, uint32_t height) {
+            return Vector<uint8_t>(static_cast<size_t>(width) * height * 4, 128);
         }
 
     }  // namespace
@@ -249,9 +249,9 @@ namespace BECore::Tests {
         }
 
         /// The textured draws that sit inside the rect of an element (its glyphs); the calls are in output pixels, so @p scale is the scale of the canvas
-        eastl::vector<DrawCall> GlyphsIn(const UIElement& element, float scale = 1.0f) const {
+        Vector<DrawCall> GlyphsIn(const UIElement& element, float scale = 1.0f) const {
             const Rect box{element.rect.x * scale, element.rect.y * scale, element.rect.w * scale, element.rect.h * scale};
-            eastl::vector<DrawCall> glyphs;
+            Vector<DrawCall> glyphs;
             for (const DrawCall& call : _renderer->calls) {
                 const Rect& r = call.rect;
                 if (call.kind == DrawKind::Texture && r.x >= box.x - 1.0f && r.y >= box.y - 1.0f && r.x + r.w <= box.x + box.w + 1.0f && r.y + r.h <= box.y + box.h + 1.0f) {
@@ -917,8 +917,8 @@ namespace BECore::Tests {
             return {kOutlineUnits, kOutlineColor, kShadowUnits, kShadowUnits, kShadowColor};
         }
 
-        eastl::vector<DrawCall> Textures(const RecordingRenderer& renderer) {
-            eastl::vector<DrawCall> textures;
+        Vector<DrawCall> Textures(const RecordingRenderer& renderer) {
+            Vector<DrawCall> textures;
             for (const DrawCall& call : renderer.calls) {
                 if (call.kind == DrawKind::Texture) {
                     textures.push_back(call);
@@ -1305,7 +1305,7 @@ namespace BECore::Tests {
         frame.GetSprite().SetTexture(_renderer->CreateTexture(GreyPixels(16, 16).data(), 16, 16), Rect{0, 0, 16, 16});
         Draw();
 
-        eastl::vector<DrawCall> pieces;
+        Vector<DrawCall> pieces;
         for (const DrawCall& call : _renderer->calls) {
             // The glyphs of the other controls are textured too, but they are elsewhere
             if (call.kind == DrawKind::Texture && call.rect.x >= 299.0f && call.rect.x <= 400.0f && call.rect.y >= 99.0f && call.rect.y <= 160.0f) {

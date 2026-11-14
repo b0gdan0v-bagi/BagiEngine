@@ -16,9 +16,9 @@ namespace BECore {
         constexpr KeyChord kF7{ImGuiKey_F7, 0};
         constexpr KeyChord kF8{ImGuiKey_F8, 0};
 
-        const eastl::vector<EditorCommand>& CommandTable() {
+        const Vector<EditorCommand>& CommandTable() {
             using namespace EditorCommandIds;
-            static const eastl::vector<EditorCommand> table = {
+            static const Vector<EditorCommand> table = {
                 {kFileQuit, "Quit", std::nullopt, true},
                 {kViewCommandPalette, "Command Palette", kCtrlP, true},
                 {kViewPreferences, "Preferences", kCtrlComma, true},
@@ -44,8 +44,8 @@ namespace BECore {
 
     }  // namespace
 
-    eastl::span<const EditorCommand> GetEditorCommands() {
-        const eastl::vector<EditorCommand>& table = CommandTable();
+    Span<const EditorCommand> GetEditorCommands() {
+        const Vector<EditorCommand>& table = CommandTable();
         return {table.data(), table.size()};
     }
 

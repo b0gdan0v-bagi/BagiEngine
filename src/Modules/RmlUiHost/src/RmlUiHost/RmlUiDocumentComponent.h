@@ -116,7 +116,7 @@ namespace BECore {
         class ActionListener final : public Rml::EventListener {
         public:
             void ProcessEvent(Rml::Event& event) override;
-            eastl::vector<PoolString> pending;
+            Vector<PoolString> pending;
         };
 
         [[nodiscard]] UILayoutContext MakeContext(float outputWidth, float outputHeight) const;
@@ -148,7 +148,7 @@ namespace BECore {
         bool _holdsRuntime = false;
         bool _extendWarned = false;  // the ignored `extendToOutput` of a Screen or World document was reported
 
-        eastl::vector<RmlUiFileStamp> _watched;
+        Vector<RmlUiFileStamp> _watched;
         double _lastPollTime = -std::numeric_limits<double>::infinity();
 
         float _originX = 0.0f;

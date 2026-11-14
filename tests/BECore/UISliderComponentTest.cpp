@@ -191,8 +191,8 @@ namespace BECore::Tests {
                 _values.push_back(event.value);
             }
 
-            eastl::vector<PoolString> _actions;
-            eastl::vector<PoolString> _values;
+            Vector<PoolString> _actions;
+            Vector<PoolString> _values;
         };
 
         String ElementToXml(const UIElement& element) {
@@ -712,7 +712,7 @@ namespace BECore::Tests {
 
     TEST_F(UISliderComponentTest, ASliderBelowTheTouchSizeIsCaught) {
         UILayoutValidatorOptions options;
-        eastl::vector<PoolString> small;
+        Vector<PoolString> small;
         for (const UILayoutIssue& issue : _canvas->GetLayout().Validate(options)) {
             if (issue.kind == UILayoutIssueKind::TouchTargetTooSmall) {
                 small.push_back(issue.element);

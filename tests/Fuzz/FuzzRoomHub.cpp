@@ -28,8 +28,8 @@ namespace BECore::Fuzz {
         }
 
         /// The runs of exactly kTokenLength lower-case hexadecimal digits that are whole words in @p text: what could be a reconnect token
-        eastl::vector<String> FindTokenLikeWords(StringView text) {
-            eastl::vector<String> found;
+        Vector<String> FindTokenLikeWords(StringView text) {
+            Vector<String> found;
             for (size_t at = 0; at < text.size();) {
                 if (!IsWordLetter(text[at])) {
                     ++at;
@@ -57,7 +57,7 @@ namespace BECore::Fuzz {
             int joinedSeat = -1;
             int viewSeat = -1;  ///< The seat of the last `view` (-1 before the first)
             bool askedForSeat = false;
-            eastl::vector<String> ownTokens;
+            Vector<String> ownTokens;
         };
 
         /// What the last text of a connection, as the hub read it, said about listing the room: none when it was no create_room
@@ -73,7 +73,7 @@ namespace BECore::Fuzz {
         class HubRun {
         public:
             HubRun() : _hub(_registry, MakeSettings(), MakeRandom(), MakeSink()) {
-                const bool registered = _registry.Register(SeatedGameInfo{"demo", DemoCardGame::kSeatCount}, [] { return eastl::unique_ptr<ISeatedGame>(eastl::make_unique<DemoCardGame>()); });
+                const bool registered = _registry.Register(SeatedGameInfo{"demo", DemoCardGame::kSeatCount}, [] { return UniquePtr<ISeatedGame>(eastl::make_unique<DemoCardGame>()); });
                 FUZZ_CHECK(registered);
             }
 

@@ -28,7 +28,7 @@ namespace BECore {
 
     }  // namespace
 
-    std::expected<ControlSettings, ControlError> ResolveControlSettings(eastl::span<const String> args, const ApplicationConfigLoad& file) {
+    std::expected<ControlSettings, ControlError> ResolveControlSettings(Span<const String> args, const ApplicationConfigLoad& file) {
         // The file first, so that the command line overrides it. A bad value is an error even when the API is off or a flag would override it
         for (const DeserializeError& error : file.errors) {
             if (IsControlField(error.path.ToStringView())) {

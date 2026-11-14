@@ -8,7 +8,7 @@ namespace BECore {
     inline constexpr StringView kTlsUnsupported = "tls_unsupported";
 
     /// DER certificates (one X.509 certificate each) that are trusted in addition to the system's
-    using TlsTrustAnchors = eastl::vector<eastl::vector<uint8_t>>;
+    using TlsTrustAnchors = Vector<Vector<uint8_t>>;
 
     /// What ITlsStream::Connect() needs; the views only have to live until Connect() returns
     struct TlsConnectParams {
@@ -27,7 +27,7 @@ namespace BECore {
         const std::atomic<bool>* cancel = nullptr;
 
         /// Trusted in addition to the system's. The chain, the validity and the host name are still checked; this is no way around the check
-        eastl::span<const eastl::vector<uint8_t>> additionalTrustAnchorsDer;
+        Span<const Vector<uint8_t>> additionalTrustAnchorsDer;
     };
 
     /**
@@ -51,10 +51,10 @@ namespace BECore {
         [[nodiscard]] virtual std::expected<void, String> Connect(const TlsConnectParams& params) = 0;
 
         /// Sends all of @p data; false when the stream is gone
-        [[nodiscard]] virtual bool SendAll(eastl::span<const uint8_t> data) = 0;
+        [[nodiscard]] virtual bool SendAll(Span<const uint8_t> data) = 0;
 
         /// Reads what has arrived, at most @p buffer.size() bytes (always at least one). Closed: the peer ended the stream or ShutdownBoth() was called
-        [[nodiscard]] virtual std::expected<size_t, SocketError> Receive(eastl::span<uint8_t> buffer) = 0;
+        [[nodiscard]] virtual std::expected<size_t, SocketError> Receive(Span<uint8_t> buffer) = 0;
 
         /// Receive() gives up with TimedOut after @p timeout; zero waits for ever
         virtual bool SetReceiveTimeout(std::chrono::milliseconds timeout) = 0;
@@ -71,7 +71,7 @@ namespace BECore {
         [[nodiscard]] virtual String GetLastError() const = 0;
     };
 
-    using TlsStreamFactory = eastl::function<eastl::unique_ptr<ITlsStream>()>;
+    using TlsStreamFactory = eastl::function<UniquePtr<ITlsStream>()>;
 
     /// The TLS part of WebSocketClientSettings
     struct TlsClientOptions {
@@ -86,6 +86,6 @@ namespace BECore {
     [[nodiscard]] bool IsTlsSupported();
 
     /// The stream of this platform's backend; on a platform without one a stream whose Connect() fails with kTlsUnsupported
-    [[nodiscard]] eastl::unique_ptr<ITlsStream> MakeTlsStream();
+    [[nodiscard]] UniquePtr<ITlsStream> MakeTlsStream();
 
 }  // namespace BECore

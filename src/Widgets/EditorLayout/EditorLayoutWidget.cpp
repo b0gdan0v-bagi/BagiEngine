@@ -234,7 +234,7 @@ namespace BECore {
         const bool hasStore = _layouts.has_value();
 
         if (ImGui::BeginMenu("Layouts", hasStore)) {
-            const eastl::vector<String> names = _layouts->List();
+            const Vector<String> names = _layouts->List();
             if (names.empty()) {
                 ImGui::TextDisabled("No saved layouts");
             }
@@ -249,7 +249,7 @@ namespace BECore {
         CommandMenuItem(kViewSaveLayout, "Save Layout As...", hasStore);
 
         if (ImGui::BeginMenu("Delete Layout", hasStore)) {
-            const eastl::vector<String> names = _layouts->List();
+            const Vector<String> names = _layouts->List();
             if (names.empty()) {
                 ImGui::TextDisabled("No saved layouts");
             }

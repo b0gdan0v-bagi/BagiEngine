@@ -8,7 +8,7 @@ namespace BECore::Tests {
         using std::chrono::seconds;
 
         /// The first human whose last view offers an action (the one whose turn it is), or 0
-        ConnectionId FindPlayerOnTurn(HubHarness& harness, const eastl::vector<ConnectionId>& ids) {
+        ConnectionId FindPlayerOnTurn(HubHarness& harness, const Vector<ConnectionId>& ids) {
             for (const ConnectionId id : ids) {
                 const ReceivedMessage* view = harness.Client(id).Last(RoomMessageTypes::kView);
                 const Json* actions = view ? FindJsonMember(view->json, "actions") : nullptr;

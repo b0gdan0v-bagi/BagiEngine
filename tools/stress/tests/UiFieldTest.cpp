@@ -126,7 +126,7 @@ namespace BECore::Stress::Tests {
     }
 
     TEST(UiFieldTest, EveryEighthLabelIsAKeyAndTheKeysCycleThroughThePool) {
-        eastl::vector<StringView> keys;
+        Vector<StringView> keys;
         for (uint32_t i = 0; i < kCount; ++i) {
             if (i % kUiKeyEvery != 0) {
                 EXPECT_NE(KindOf(i), UiLabelKind::Key) << i;
@@ -160,8 +160,8 @@ namespace BECore::Stress::Tests {
     }
 
     TEST(UiFieldTest, TheLiteralTextsComeFromPoolsOfTheNamedSize) {
-        eastl::vector<StringView> english;
-        eastl::vector<StringView> russian;
+        Vector<StringView> english;
+        Vector<StringView> russian;
         for (uint32_t i = 0; i < 20000; ++i) {
             auto& pool = KindOf(i) == UiLabelKind::English ? english : russian;
             if (KindOf(i) != UiLabelKind::English && KindOf(i) != UiLabelKind::Russian) {

@@ -59,7 +59,7 @@ namespace BECore {
         [[nodiscard]] static HeaderParts GetHeaderParts(const Rect& header);
 
         /// The strips of the arrow in @p box: the widest at the top for a down arrow, at the bottom for an up arrow
-        [[nodiscard]] static eastl::array<Rect, kArrowRows> GetArrowStrips(const Rect& box, bool pointsUp);
+        [[nodiscard]] static Array<Rect, kArrowRows> GetArrowStrips(const Rect& box, bool pointsUp);
 
         /// The size one option asks for in the list
         struct OptionSize {
@@ -69,14 +69,14 @@ namespace BECore {
 
         /// Where the list is: one rect per option in order, and the column that holds them
         struct PopupGeometry {
-            eastl::vector<Rect> options;
+            Vector<Rect> options;
             Rect list;
             bool above = false;  ///< the list sits over the header, not under it
         };
 
         /// The pure rules of the list. A column as wide as the widest of the header and the options (never wider than @p bounds), directly under @p header, left edges aligned; when it does not
         /// fit below and fits above it goes above the header; when it fits on neither side it is shifted to stay inside @p bounds (a list taller than @p bounds starts at its top edge)
-        [[nodiscard]] static PopupGeometry GetPopupGeometry(const Rect& header, const eastl::vector<OptionSize>& options, const Rect& bounds);
+        [[nodiscard]] static PopupGeometry GetPopupGeometry(const Rect& header, const Vector<OptionSize>& options, const Rect& bounds);
 
         [[nodiscard]] bool IsOpen() const {
             return _open;

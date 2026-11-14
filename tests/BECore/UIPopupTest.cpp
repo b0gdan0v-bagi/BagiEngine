@@ -107,7 +107,7 @@ namespace BECore::Tests {
             return element;
         }
 
-        size_t CountOf(const eastl::vector<UILayoutIssue>& issues, UILayoutIssueKind kind) {
+        size_t CountOf(const Vector<UILayoutIssue>& issues, UILayoutIssueKind kind) {
             return static_cast<size_t>(std::count_if(issues.begin(), issues.end(), [kind](const UILayoutIssue& issue) { return issue.kind == kind; }));
         }
 
@@ -163,8 +163,8 @@ namespace BECore::Tests {
         }
 
         /// The red channels of the draw calls, in order
-        eastl::vector<uint8_t> DrawnReds() const {
-            eastl::vector<uint8_t> reds;
+        Vector<uint8_t> DrawnReds() const {
+            Vector<uint8_t> reds;
             for (const DrawCall& call : _renderer->calls) {
                 reds.push_back(call.color.r);
             }
@@ -205,7 +205,7 @@ namespace BECore::Tests {
 
         Draw();
 
-        EXPECT_EQ(DrawnReds(), (eastl::vector<uint8_t>{kHeaderRed, kCoverRed, 0}));
+        EXPECT_EQ(DrawnReds(), (Vector<uint8_t>{kHeaderRed, kCoverRed, 0}));
     }
 
     // ---- open ------------------------------------------------------------------------------------------------------------
@@ -225,7 +225,7 @@ namespace BECore::Tests {
         Draw();
 
         // Header, then the Cover and Below that come later in the tree, and only then the list
-        EXPECT_EQ(DrawnReds(), (eastl::vector<uint8_t>{kHeaderRed, kCoverRed, 0, kFirstOptionRed, kSecondOptionRed}));
+        EXPECT_EQ(DrawnReds(), (Vector<uint8_t>{kHeaderRed, kCoverRed, 0, kFirstOptionRed, kSecondOptionRed}));
     }
 
     TEST_F(UIPopupTest, TheChildrenOfAnOpenPopupAreHitBeforeALaterSibling) {

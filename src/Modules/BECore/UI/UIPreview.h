@@ -84,7 +84,7 @@ namespace BECore {
         [[nodiscard]] static std::pair<uint32_t, uint32_t> FitSize(ViewportAspect aspect, float availableWidth, float availableHeight);
 
         /// The devices of the picker, in portrait, in a fixed order (the index is PreviewShape::device); names are unique
-        [[nodiscard]] static eastl::span<const PreviewDevice> GetDevices();
+        [[nodiscard]] static Span<const PreviewDevice> GetDevices();
 
         /**
          * @brief The target for a shape in an available area (in ImGui units).

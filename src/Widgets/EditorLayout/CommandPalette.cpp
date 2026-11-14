@@ -62,7 +62,7 @@ namespace BECore {
             _selected = 0;
         }
 
-        const eastl::vector<const EditorCommand*> matches = FilterCommands(_query, GetEditorCommands());
+        const Vector<const EditorCommand*> matches = FilterCommands(_query, GetEditorCommands());
         const int count = static_cast<int>(matches.size());
         _selected = MoveSelection(_selected, move, count);
 

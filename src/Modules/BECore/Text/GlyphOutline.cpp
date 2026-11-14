@@ -8,9 +8,9 @@ namespace BECore {
         constexpr float kFullCoverage = 255.0f;
 
         /// The weight of a source pixel at an offset from the target pixel, for every offset in the square of the radius
-        eastl::vector<float> MakeKernel(int radius) {
+        Vector<float> MakeKernel(int radius) {
             const int side = 2 * radius + 1;
-            eastl::vector<float> kernel(static_cast<size_t>(side) * static_cast<size_t>(side), 0.0f);
+            Vector<float> kernel(static_cast<size_t>(side) * static_cast<size_t>(side), 0.0f);
             for (int dy = -radius; dy <= radius; ++dy) {
                 for (int dx = -radius; dx <= radius; ++dx) {
                     const float distance = std::sqrt(static_cast<float>(dx * dx + dy * dy));
@@ -37,7 +37,7 @@ namespace BECore {
         result.offsetY = glyph.offsetY - radius;
         result.coverage.assign(static_cast<size_t>(result.width) * result.height, 0);
 
-        const eastl::vector<float> kernel = MakeKernel(radius);
+        const Vector<float> kernel = MakeKernel(radius);
         const size_t side = 2 * static_cast<size_t>(radius) + 1;
         for (uint32_t row = 0; row < glyph.height; ++row) {
             for (uint32_t column = 0; column < glyph.width; ++column) {

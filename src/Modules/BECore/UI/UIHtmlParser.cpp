@@ -360,8 +360,8 @@ namespace BECore {
             size_t _pos = 0;
             uint32_t _line = 1;
             int _current = UIHtmlDocument::RootIndex;
-            bool _stopped = false;            ///< a limit ended the read: what is still open is not "never closed"
-            eastl::vector<uint32_t> _depths;  ///< per node, the number of elements open around it (the document node: 0)
+            bool _stopped = false;     ///< a limit ended the read: what is still open is not "never closed"
+            Vector<uint32_t> _depths;  ///< per node, the number of elements open around it (the document node: 0)
         };
 
     }  // namespace

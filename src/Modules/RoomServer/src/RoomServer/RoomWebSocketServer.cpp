@@ -140,7 +140,7 @@ namespace BECore {
     }
 
     void RoomWebSocketServer::DrainConnections() {
-        eastl::vector<eastl::shared_ptr<WebSocketConnection>> open;
+        Vector<eastl::shared_ptr<WebSocketConnection>> open;
         {
             LockGuard lock(_connectionsMutex);
             _draining = true;

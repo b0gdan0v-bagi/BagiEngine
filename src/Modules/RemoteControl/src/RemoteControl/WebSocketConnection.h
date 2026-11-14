@@ -74,12 +74,12 @@ namespace BECore {
         [[nodiscard]] bool IsOpen() const;
 
         /// Reads what has arrived (reader thread only); counts it in GetBytesReceived()
-        [[nodiscard]] std::expected<size_t, SocketError> Receive(eastl::span<uint8_t> buffer);
+        [[nodiscard]] std::expected<size_t, SocketError> Receive(Span<uint8_t> buffer);
 
         /// Reads the HTTP request, answers it and leaves in @p pendingBytes what came after it. With policy.trustedProxyHops > 0 the
         /// client address the proxies report is found first and passed to @p admit (when there is one; otherwise it is simply set).
         /// False: no WebSocket connection (the client was answered with an error or is gone)
-        bool Handshake(const HandshakePolicy& policy, std::chrono::milliseconds timeout, eastl::vector<uint8_t>& pendingBytes, const AdmitClientFn& admit = {});
+        bool Handshake(const HandshakePolicy& policy, std::chrono::milliseconds timeout, Vector<uint8_t>& pendingBytes, const AdmitClientFn& admit = {});
 
         void StartReader(Thread reader) {
             _reader = std::move(reader);
@@ -111,11 +111,11 @@ namespace BECore {
             return QueueFrame(EncodeTextFrame(text), /*isClose=*/false);
         }
 
-        bool QueuePing(eastl::span<const uint8_t> payload = {}) {
+        bool QueuePing(Span<const uint8_t> payload = {}) {
             return QueueFrame(EncodeFrame(WebSocketOpcode::kPing, payload), /*isClose=*/false);
         }
 
-        bool QueuePong(eastl::span<const uint8_t> payload) {
+        bool QueuePong(Span<const uint8_t> payload) {
             return QueueFrame(EncodeFrame(WebSocketOpcode::kPong, payload), /*isClose=*/false);
         }
 
@@ -129,11 +129,11 @@ namespace BECore {
 
     private:
         struct OutgoingFrame {
-            eastl::vector<uint8_t> bytes;
+            Vector<uint8_t> bytes;
             bool isClose = false;
         };
 
-        bool QueueFrame(eastl::vector<uint8_t> bytes, bool isClose);
+        bool QueueFrame(Vector<uint8_t> bytes, bool isClose);
         void WriterLoop();
 
         const WebSocketConnectionId _id;

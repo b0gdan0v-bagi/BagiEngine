@@ -50,7 +50,7 @@ namespace BECore::Tests {
         std::atomic<bool> closed{false};
         std::thread reader([&] {
             std::array<uint8_t, 16> buffer;
-            const auto received = pair.accepted.Receive(eastl::span<uint8_t>(buffer.data(), buffer.size()));
+            const auto received = pair.accepted.Receive(Span<uint8_t>(buffer.data(), buffer.size()));
             closed = !received && received.error() == SocketError::Closed;
             ended = true;
         });
@@ -76,9 +76,9 @@ namespace BECore::Tests {
         std::atomic<bool> ended{false};
         std::atomic<bool> sent{true};
         std::thread writer([&] {
-            const eastl::vector<uint8_t> block(64 * 1024, 0x5A);
+            const Vector<uint8_t> block(64 * 1024, 0x5A);
             for (int i = 0; i < 4096 && sent; ++i) {
-                sent = pair.accepted.SendAll(eastl::span<const uint8_t>(block.data(), block.size()));
+                sent = pair.accepted.SendAll(Span<const uint8_t>(block.data(), block.size()));
             }
             ended = true;
         });
@@ -103,7 +103,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(pair.accepted.SetReceiveTimeout(80ms));
         std::array<uint8_t, 16> buffer;
         const auto before = std::chrono::steady_clock::now();
-        const auto received = pair.accepted.Receive(eastl::span<uint8_t>(buffer.data(), buffer.size()));
+        const auto received = pair.accepted.Receive(Span<uint8_t>(buffer.data(), buffer.size()));
         const auto waited = std::chrono::steady_clock::now() - before;
 
         ASSERT_FALSE(received.has_value());
@@ -117,14 +117,14 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(MakePair(pair));
 
         const std::array<uint8_t, 3> bytes = {1, 2, 3};
-        ASSERT_TRUE(pair.client.SendAll(eastl::span<const uint8_t>(bytes.data(), bytes.size())));
+        ASSERT_TRUE(pair.client.SendAll(Span<const uint8_t>(bytes.data(), bytes.size())));
         std::array<uint8_t, 16> buffer;
-        const auto received = pair.accepted.Receive(eastl::span<uint8_t>(buffer.data(), buffer.size()));
+        const auto received = pair.accepted.Receive(Span<uint8_t>(buffer.data(), buffer.size()));
         ASSERT_TRUE(received.has_value());
         EXPECT_EQ(*received, 3u);
 
         pair.client.Close();
-        const auto ended = pair.accepted.Receive(eastl::span<uint8_t>(buffer.data(), buffer.size()));
+        const auto ended = pair.accepted.Receive(Span<uint8_t>(buffer.data(), buffer.size()));
         ASSERT_FALSE(ended.has_value());
         EXPECT_EQ(ended.error(), SocketError::Closed);
     }
@@ -176,9 +176,9 @@ namespace BECore::Tests {
 
             // The connected socket is the usual blocking one: bytes go through both ways
             const std::array<uint8_t, 2> bytes = {7, 9};
-            ASSERT_TRUE(client->SendAll(eastl::span<const uint8_t>(bytes.data(), bytes.size())));
+            ASSERT_TRUE(client->SendAll(Span<const uint8_t>(bytes.data(), bytes.size())));
             std::array<uint8_t, 8> buffer;
-            const auto received = accepted->Receive(eastl::span<uint8_t>(buffer.data(), buffer.size()));
+            const auto received = accepted->Receive(Span<uint8_t>(buffer.data(), buffer.size()));
             ASSERT_TRUE(received.has_value()) << host;
             EXPECT_EQ(*received, 2u);
         }

@@ -6,8 +6,8 @@ namespace BECore::Tests {
 
     namespace {
 
-        eastl::vector<char32_t> DecodeAll(StringView text) {
-            eastl::vector<char32_t> result;
+        Vector<char32_t> DecodeAll(StringView text) {
+            Vector<char32_t> result;
             size_t pos = 0;
             while (pos < text.size()) {
                 result.push_back(Utf8::DecodeNext(text, pos));

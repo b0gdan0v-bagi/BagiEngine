@@ -286,8 +286,8 @@ namespace BECore::Fuzz {
         /// How many bytes the text sits behind the start of its buffer in the unaligned copy
         constexpr size_t kShift = 1;
 
-        eastl::vector<uint8_t> ShiftedCopy(const uint8_t* data, size_t size) {
-            eastl::vector<uint8_t> buffer(kShift + size);
+        Vector<uint8_t> ShiftedCopy(const uint8_t* data, size_t size) {
+            Vector<uint8_t> buffer(kShift + size);
             if (size > 0) {
                 std::memcpy(buffer.data() + kShift, data, size);
             }
@@ -330,7 +330,7 @@ namespace BECore::Fuzz {
             FUZZ_CHECK(ReadProbeDigest(reader) == first);
 
             // The same text in the middle of a buffer, where nothing is aligned: it loads and reads the same
-            const eastl::vector<uint8_t> shifted = ShiftedCopy(data, size);
+            const Vector<uint8_t> shifted = ShiftedCopy(data, size);
             XmlDeserializer unaligned;
             unaligned.SetStrictValues(strict);
             FUZZ_CHECK(unaligned.LoadFromString(StringView(reinterpret_cast<const char*>(shifted.data()) + kShift, size)));

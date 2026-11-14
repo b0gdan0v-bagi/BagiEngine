@@ -22,7 +22,7 @@ namespace BECore {
     };
 
     /// Every command of the editor in the order the palette lists them when the query is empty
-    [[nodiscard]] eastl::span<const EditorCommand> GetEditorCommands();
+    [[nodiscard]] Span<const EditorCommand> GetEditorCommands();
 
     /// The command with @p id, or nullptr
     [[nodiscard]] const EditorCommand* FindEditorCommand(PoolString id);

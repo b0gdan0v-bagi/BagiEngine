@@ -23,7 +23,7 @@ namespace BECore::Tests {
             return element;
         }
 
-        eastl::vector<DrawCall> Draw(UIElement& element, RecordingRenderer& renderer) {
+        Vector<DrawCall> Draw(UIElement& element, RecordingRenderer& renderer) {
             renderer.ClearCalls();
             element.DrawSelf(renderer);
             return renderer.calls;
@@ -33,7 +33,7 @@ namespace BECore::Tests {
         struct LoadedElement {
             IntrusivePtr<UICanvasComponent> canvas;
             bool hadErrors = false;
-            eastl::vector<DeserializeError> errors;
+            Vector<DeserializeError> errors;
 
             [[nodiscard]] UIElement& Get() const {
                 return *canvas->_elements[0];
@@ -127,8 +127,8 @@ namespace BECore::Tests {
 
     TEST(UIBoxStyleTest, EachFieldAloneDrawsOneGeometryCall) {
         const UIBoxStyle every = EveryField();
-        const eastl::vector<eastl::pair<const char*, UIBoxStyle>> cases = [&] {
-            eastl::vector<eastl::pair<const char*, UIBoxStyle>> list;
+        const Vector<eastl::pair<const char*, UIBoxStyle>> cases = [&] {
+            Vector<eastl::pair<const char*, UIBoxStyle>> list;
             UIBoxStyle box;
             box.cornerRadius = every.cornerRadius;
             list.emplace_back("cornerRadius", box);
@@ -178,14 +178,14 @@ namespace BECore::Tests {
         ExpectValidMesh(calls[0]);
 
         // Every part has its own red channel; the triangles must visit them in this order, each one once
-        eastl::vector<int> order;
+        Vector<int> order;
         for (size_t i = 0; i + 2 < calls[0].indices.size(); i += 3) {
             const int part = calls[0].vertices[static_cast<size_t>(calls[0].indices[i])].color.r;
             if (order.empty() || order.back() != part) {
                 order.push_back(part);
             }
         }
-        const eastl::vector<int> expected = {1, 2, 3, 4, 5};
+        const Vector<int> expected = {1, 2, 3, 4, 5};
         EXPECT_EQ(order, expected);
     }
 
@@ -306,7 +306,7 @@ namespace BECore::Tests {
         panel->color = Color{10, 20, 30, 255};
         panel->box.cornerRadius = UICorners::Uniform(8.0f);
         RecordingRenderer renderer;
-        const eastl::vector<uint8_t> pixels(16 * 16 * 4, 128);
+        const Vector<uint8_t> pixels(16 * 16 * 4, 128);
         panel->GetSprite().SetTexture(renderer.CreateTexture(pixels.data(), 16, 16), Rect{0, 0, 16, 16});
         panel->sprite = PoolString::Intern("Anything");
 

@@ -150,7 +150,7 @@ namespace BECore {
                           ResolveAxisPosition(axisY, parent.y, parent.h, anchors.min.y, anchors.pivot.y, ResolveLength(spec.y, parent.h)), axisX.size, axisY.size});
     }
 
-    void UILayout::LayoutStack(const Rect& parent, const UIStackSpec& givenStack, eastl::span<const UIRectSpec> children, eastl::vector<Rect>& rects) {
+    void UILayout::LayoutStack(const Rect& parent, const UIStackSpec& givenStack, Span<const UIRectSpec> children, Vector<Rect>& rects) {
         rects.assign(children.size(), Rect{});
         if (children.empty()) {
             return;
@@ -164,7 +164,7 @@ namespace BECore {
         const float crossExtent = vertical ? content.w : content.h;
 
         // The sizes of the children as their specs give them, before flex and stretch
-        eastl::vector<ChildSize> sizes(children.size());
+        Vector<ChildSize> sizes(children.size());
         for (size_t i = 0; i < children.size(); ++i) {
             const UIRectSpec& spec = children[i];
             ChildSize& size = sizes[i];
@@ -194,7 +194,7 @@ namespace BECore {
         }
 
         // Lines: one, or as many as the main axis needs when the stack wraps
-        eastl::vector<Line> lines;
+        Vector<Line> lines;
         lines.push_back({0, 0});
         float lineMain = 0.0f;
         for (size_t i = 0; i < sizes.size(); ++i) {

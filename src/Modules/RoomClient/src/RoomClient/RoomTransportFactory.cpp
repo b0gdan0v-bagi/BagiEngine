@@ -10,7 +10,7 @@
 
 namespace BECore {
 
-    eastl::unique_ptr<IRoomTransport> MakeDefaultRoomTransport() {
+    UniquePtr<IRoomTransport> MakeDefaultRoomTransport() {
 #if PLATFORM_WEB
         return eastl::make_unique<EmscriptenRoomTransport>();
 #elif BE_WITH_REMOTE_CONTROL

@@ -237,7 +237,7 @@ namespace BECore {
     }
 
     void ProfilerWidget::WriteFrozen() {
-        eastl::vector<FrozenFrame> frames = _spikes.GetSpikes();
+        Vector<FrozenFrame> frames = _spikes.GetSpikes();
         if (frames.empty()) {
             // Nothing is frozen: the frame the view is on, the selected one or the newest
             const RingFrame* frame = nullptr;

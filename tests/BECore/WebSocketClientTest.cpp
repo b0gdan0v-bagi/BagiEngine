@@ -188,11 +188,11 @@ namespace BECore::Tests {
             }
 
             void SendRaw(const std::string& bytes) {
-                Send(eastl::vector<uint8_t>(bytes.data(), bytes.data() + bytes.size()));
+                Send(Vector<uint8_t>(bytes.data(), bytes.data() + bytes.size()));
             }
 
             void SendFrame(uint8_t opcode, const std::string& payload, Optional<WebSocketMask> mask = std::nullopt) {
-                Send(EncodeFrame(opcode, eastl::span<const uint8_t>(reinterpret_cast<const uint8_t*>(payload.data()), payload.size()), mask));
+                Send(EncodeFrame(opcode, Span<const uint8_t>(reinterpret_cast<const uint8_t*>(payload.data()), payload.size()), mask));
             }
 
             void SendText(const std::string& text) {
@@ -231,17 +231,17 @@ namespace BECore::Tests {
             }
 
         private:
-            void Send(eastl::vector<uint8_t> bytes) {
+            void Send(Vector<uint8_t> bytes) {
                 if (_fakeTls) {
                     FakeTlsMask(bytes.data(), bytes.size());
                 }
-                EXPECT_TRUE(_peer.SendAll(eastl::span<const uint8_t>(bytes.data(), bytes.size())));
+                EXPECT_TRUE(_peer.SendAll(Span<const uint8_t>(bytes.data(), bytes.size())));
             }
 
             void Fill() {
                 std::array<uint8_t, 4096> chunk;
                 for (int i = 0; i < 1024; ++i) {
-                    const auto received = _peer.Receive(eastl::span<uint8_t>(chunk.data(), chunk.size()));
+                    const auto received = _peer.Receive(Span<uint8_t>(chunk.data(), chunk.size()));
                     if (!received) {
                         if (received.error() != SocketError::TimedOut) {
                             _ended = true;
@@ -438,7 +438,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(session.client.Open(server.Url().c_str()).has_value());
         ASSERT_TRUE(server.AcceptAndReadRequest());
 
-        const eastl::vector<uint8_t> frame = EncodeTextFrame("first");
+        const Vector<uint8_t> frame = EncodeTextFrame("first");
         server.Accept(std::string(reinterpret_cast<const char*>(frame.data()), frame.size()));
         ASSERT_TRUE(session.WaitForCount(WebSocketClientEventKind::Text, 1));
         EXPECT_EQ(session.Texts().front(), "first");
@@ -1275,7 +1275,7 @@ namespace BECore::Tests {
         ScriptedServer server;
         Session session;
         WebSocketClientSettings settings = QuickSettings();
-        settings.tls.factory = [] { return eastl::unique_ptr<ITlsStream>(); };
+        settings.tls.factory = [] { return UniquePtr<ITlsStream>(); };
         ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), settings).has_value());
         session.ExpectSingleClosed();
         EXPECT_EQ(session.Closed().closeCode, WebSocketCloseCode::kAbnormalClosure);

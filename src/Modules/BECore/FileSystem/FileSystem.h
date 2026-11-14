@@ -61,7 +61,7 @@ namespace BECore {
         std::filesystem::path GetMountedPath(PoolString virtualPath) const;
 
         /// All layers of a mount point, lowest priority first
-        eastl::vector<std::filesystem::path> GetMountLayers(PoolString virtualPath) const;
+        Vector<std::filesystem::path> GetMountLayers(PoolString virtualPath) const;
 
         /**
          * @brief Recursively enumerate files in all layers of a mount point matching given extensions
@@ -72,12 +72,12 @@ namespace BECore {
          * @param extensions File extensions to match (e.g., {".png", ".jpg"})
          * @return Vector of virtual paths (e.g., "assets/subdir/file.png"), sorted
          */
-        eastl::vector<PoolString> EnumerateFiles(PoolString mountPoint, eastl::span<const StringView> extensions) const;
+        Vector<PoolString> EnumerateFiles(PoolString mountPoint, Span<const StringView> extensions) const;
 
     private:
-        eastl::vector<std::filesystem::path> _roots;                          // lowest priority first
-        std::filesystem::path _rootPath;                                      // _roots.back()
-        UnorderedPoolMap<eastl::vector<std::filesystem::path>> _mountPoints;  // layers, lowest priority first
+        Vector<std::filesystem::path> _roots;                          // lowest priority first
+        std::filesystem::path _rootPath;                               // _roots.back()
+        UnorderedPoolMap<Vector<std::filesystem::path>> _mountPoints;  // layers, lowest priority first
 
         /**
          * Найти корневую директорию проекта автоматически

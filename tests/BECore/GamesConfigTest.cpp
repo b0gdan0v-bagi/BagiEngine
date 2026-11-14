@@ -7,7 +7,7 @@ namespace BECore::Tests {
     namespace {
 
         /// Reads @p xml (the text of a whole config file) into a GamesConfig and returns the errors in @p errors
-        GamesConfig Load(StringView xml, eastl::vector<DeserializeError>& errors) {
+        GamesConfig Load(StringView xml, Vector<DeserializeError>& errors) {
             XmlDeserializer deserializer;
             EXPECT_TRUE(deserializer.LoadFromString(xml));
             GamesConfig config;
@@ -19,34 +19,34 @@ namespace BECore::Tests {
     }  // namespace
 
     TEST(GamesConfigTest, ReadsTheDefaultGame) {
-        eastl::vector<DeserializeError> errors;
+        Vector<DeserializeError> errors;
         const auto config = Load(R"(<root><defaultGame name="Match3"/></root>)", errors);
         EXPECT_EQ(config._defaultGame._name.ToStringView(), "Match3");
         EXPECT_TRUE(errors.empty());
     }
 
     TEST(GamesConfigTest, NoDefaultGameLeavesTheNameEmpty) {
-        eastl::vector<DeserializeError> errors;
+        Vector<DeserializeError> errors;
         const auto config = Load(R"(<root/>)", errors);
         EXPECT_TRUE(config._defaultGame._name.Empty());
         EXPECT_TRUE(errors.empty());
     }
 
     TEST(GamesConfigTest, ADefaultGameWithoutANameLeavesTheNameEmpty) {
-        eastl::vector<DeserializeError> errors;
+        Vector<DeserializeError> errors;
         const auto config = Load(R"(<root><defaultGame/></root>)", errors);
         EXPECT_TRUE(config._defaultGame._name.Empty());
         EXPECT_TRUE(errors.empty());
     }
 
     TEST(GamesConfigTest, AnEmptyNameIsEmpty) {
-        eastl::vector<DeserializeError> errors;
+        Vector<DeserializeError> errors;
         const auto config = Load(R"(<root><defaultGame name=""/></root>)", errors);
         EXPECT_TRUE(config._defaultGame._name.Empty());
     }
 
     TEST(GamesConfigTest, AnUnknownAttributeIsIgnored) {
-        eastl::vector<DeserializeError> errors;
+        Vector<DeserializeError> errors;
         const auto config = Load(R"(<root level="3"><defaultGame name="Chess" colour="white"/><other/></root>)", errors);
         EXPECT_EQ(config._defaultGame._name.ToStringView(), "Chess");
         EXPECT_TRUE(errors.empty());

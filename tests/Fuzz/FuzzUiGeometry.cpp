@@ -51,8 +51,8 @@ namespace BECore::Fuzz {
 
         /// What one call may append: counts under the constants of the builder, whole triangles, indices that are positions in the list, finite vertices
         struct MeshJudge {
-            eastl::vector<GeometryVertex> vertices;
-            eastl::vector<int> indices;
+            Vector<GeometryVertex> vertices;
+            Vector<int> indices;
             size_t checkedVertices = 0;
             size_t checkedIndices = 0;
 
@@ -156,11 +156,11 @@ namespace BECore::Fuzz {
             stack.spacing = stackCase.spacing;
             stack.padding = stackCase.padding;
 
-            eastl::vector<UIRectSpec> specs;
+            Vector<UIRectSpec> specs;
             for (size_t i = 0; i < stackCase.childCount % (kMaxStackChildren + 1); ++i) {
                 specs.push_back(stackCase.children[i].ToSpec());
             }
-            eastl::vector<Rect> rects;
+            Vector<Rect> rects;
             UILayout::LayoutStack(stackCase.parent, stack, specs, rects);
             FUZZ_CHECK(rects.size() == specs.size());
             for (const Rect& rect : rects) {

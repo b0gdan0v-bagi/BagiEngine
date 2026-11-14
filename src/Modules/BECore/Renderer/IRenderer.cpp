@@ -33,7 +33,7 @@ namespace BECore {
         return taken;
     }
 
-    void IRenderer::DrawGeometry(ITexture* /*texture*/, eastl::span<const GeometryVertex> /*vertices*/, eastl::span<const int> /*indices*/, float /*translateX*/, float /*translateY*/) {
+    void IRenderer::DrawGeometry(ITexture* /*texture*/, Span<const GeometryVertex> /*vertices*/, Span<const int> /*indices*/, float /*translateX*/, float /*translateY*/) {
         if (!_geometryWarned) {
             _geometryWarned = true;
             LOG_WARNING("IRenderer: this backend cannot draw geometry, so what needs it is not drawn");

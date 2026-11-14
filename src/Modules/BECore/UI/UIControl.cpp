@@ -30,7 +30,7 @@ namespace BECore {
         };
 
         /// The canvases of a subtree in the order of the scene: a node, then its children
-        void CollectCanvases(const SceneNode& node, eastl::vector<CanvasEntry>& out) {
+        void CollectCanvases(const SceneNode& node, Vector<CanvasEntry>& out) {
             if (auto canvas = node.GetComponent<UICanvasComponent>()) {
                 out.push_back({node.GetName(), std::move(canvas)});
             }
@@ -291,7 +291,7 @@ namespace BECore {
                 call.Fail(UIControlErrors::kNoScene, "there is no active scene");
                 return;
             }
-            eastl::vector<CanvasEntry> canvases;
+            Vector<CanvasEntry> canvases;
             CollectCanvases(scene->GetRootNode(), canvases);
 
             Json list = Json::array();
@@ -316,7 +316,7 @@ namespace BECore {
         };
 
         /// The elements of @p root named @p searched in depth first order
-        void CollectNamed(UIElement& root, PoolString searched, eastl::vector<UIElement*>& out) {
+        void CollectNamed(UIElement& root, PoolString searched, Vector<UIElement*>& out) {
             if (root.name == searched) {
                 out.push_back(&root);
             }
@@ -358,7 +358,7 @@ namespace BECore {
         /// Whether a press on @p element only closes the open list of its canvas: a list is open and the element is neither the dropdown that owns it (its header) nor below it.
         /// The canvas consumes such a press (UICanvasComponent::OnMouseButtonDown), so the element emits nothing
         bool PressOnlyClosesList(const UICanvasLayout& layout, const UIElement& element) {
-            const eastl::vector<UIElement*> open = layout.OpenPopups();
+            const Vector<UIElement*> open = layout.OpenPopups();
             if (open.empty()) {
                 return false;
             }
@@ -384,13 +384,13 @@ namespace BECore {
         }
 
         /// Looks for the element to click. A candidate that cannot be clicked is remembered only until a better miss or a hit turns up
-        bool FindClickable(const eastl::vector<CanvasEntry>& canvases, PoolString name, Optional<PoolString> onlyNode, float at, ClickTarget& target, bool& anyNamed) {
+        bool FindClickable(const Vector<CanvasEntry>& canvases, PoolString name, Optional<PoolString> onlyNode, float at, ClickTarget& target, bool& anyNamed) {
             anyNamed = false;
             for (const CanvasEntry& entry : canvases) {
                 if (onlyNode && entry.node != *onlyNode) {
                     continue;
                 }
-                eastl::vector<UIElement*> named;
+                Vector<UIElement*> named;
                 CollectNamed(*entry.canvas->GetLayout().root, name, named);
                 for (UIElement* element : named) {
                     anyNamed = true;
@@ -485,7 +485,7 @@ namespace BECore {
                 return;
             }
             const auto name = PoolString::Find(StringView(nameText->c_str(), nameText->size()));
-            eastl::vector<CanvasEntry> canvases;
+            Vector<CanvasEntry> canvases;
             CollectCanvases(scene->GetRootNode(), canvases);
 
             ClickTarget target;

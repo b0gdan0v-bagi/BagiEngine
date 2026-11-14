@@ -90,7 +90,7 @@ namespace BECore {
          * Useful for iterating over all registered types, e.g. to
          * instantiate all resource loaders at startup.
          */
-        [[nodiscard]] const eastl::vector<ClassMeta>& GetRegisteredTypes() const {
+        [[nodiscard]] const Vector<ClassMeta>& GetRegisteredTypes() const {
             return _metas;
         }
 
@@ -114,7 +114,7 @@ namespace BECore {
 
         StringView _debugName = ResolveDebugName();
         eastl::hash_map<uint64_t, CreatorFunc> _creators;
-        eastl::vector<ClassMeta> _metas;
+        Vector<ClassMeta> _metas;
     };
 
 }  // namespace BECore

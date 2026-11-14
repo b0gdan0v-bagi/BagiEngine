@@ -15,7 +15,7 @@ namespace BECore {
         SocketBind bind = SocketBind::AnyAddress;
 
         /// The web pages that may connect (`scheme://host[:port]`); `*` is every page (for development only). Empty: no browser page, programs only
-        eastl::vector<String> origins;
+        Vector<String> origins;
 
         /// The connections the hub admits (the next one is closed with `server_full`); the transport allows 64 more for connections still in their handshake
         size_t maxConnections = RoomLimits::kMaxConnections;

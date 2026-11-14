@@ -80,7 +80,7 @@ namespace BECore {
         };
 
         TextSettings _settings = TextSettings::Default();
-        eastl::vector<Entry> _atlases;
+        Vector<Entry> _atlases;
         uint64_t _rendererId = 0;
     };
 

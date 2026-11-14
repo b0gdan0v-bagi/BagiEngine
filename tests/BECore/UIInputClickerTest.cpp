@@ -128,7 +128,7 @@ namespace BECore::Tests {
             ActionRecorder() {
                 Subscribe<InputEvents::ActionEvent, &ActionRecorder::OnAction>(this);
             }
-            [[nodiscard]] const eastl::vector<Emitted>& All() const {
+            [[nodiscard]] const Vector<Emitted>& All() const {
                 return _actions;
             }
             [[nodiscard]] size_t Total() const {
@@ -139,7 +139,7 @@ namespace BECore::Tests {
             void OnAction(const InputEvents::ActionEvent& event) {
                 _actions.push_back({event.action, event.value});
             }
-            eastl::vector<Emitted> _actions;
+            Vector<Emitted> _actions;
         };
 
     }  // namespace
@@ -167,7 +167,7 @@ namespace BECore::Tests {
             _canvas = _manager->GetSceneByName(PoolString::Intern("Main"))->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
             ASSERT_TRUE(_canvas);
 
-            const eastl::vector<uint8_t> pixels(static_cast<size_t>(kPictureSide) * kPictureSide * 4, 200);
+            const Vector<uint8_t> pixels(static_cast<size_t>(kPictureSide) * kPictureSide * 4, 200);
             _texture = _renderer->CreateTexture(pixels.data(), kPictureSide, kPictureSide);
             Get("Pic").GetComponent<UIImageComponent>()->GetSprite().SetTexture(_texture);
             Get("PicOff").GetComponent<UIImageComponent>()->GetSprite().SetTexture(_texture);

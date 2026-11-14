@@ -66,7 +66,7 @@ namespace BECore::Tests {
                 _peer.SetReceiveTimeout(kWaitLimit);
                 while (bytes.size() < count) {
                     std::array<uint8_t, 256> chunk;
-                    const auto received = _peer.Receive(eastl::span<uint8_t>(chunk.data(), std::min(chunk.size(), count - bytes.size())));
+                    const auto received = _peer.Receive(Span<uint8_t>(chunk.data(), std::min(chunk.size(), count - bytes.size())));
                     if (!received) {
                         break;
                     }
@@ -158,10 +158,10 @@ namespace BECore::Tests {
         auto stub = MakeTlsStream();
         for (ITlsStream* stream : {static_cast<ITlsStream*>(&fake), stub.get()}) {
             std::array<uint8_t, 8> buffer{};
-            const auto received = stream->Receive(eastl::span<uint8_t>(buffer.data(), buffer.size()));
+            const auto received = stream->Receive(Span<uint8_t>(buffer.data(), buffer.size()));
             ASSERT_FALSE(received.has_value());
             EXPECT_EQ(received.error(), SocketError::Failed);
-            EXPECT_FALSE(stream->SendAll(eastl::span<const uint8_t>(buffer.data(), buffer.size())));
+            EXPECT_FALSE(stream->SendAll(Span<const uint8_t>(buffer.data(), buffer.size())));
             EXPECT_FALSE(stream->IsValid());
             stream->ShutdownBoth();  // harmless in every state
             stream->Close();
@@ -174,7 +174,7 @@ namespace BECore::Tests {
         FakeTlsStream stream;
         const TlsTrustAnchors anchors = {{1, 2, 3}, {4, 5}};
         TlsConnectParams params = ParamsFor(server, "localhost");
-        params.additionalTrustAnchorsDer = eastl::span<const eastl::vector<uint8_t>>(anchors.data(), anchors.size());
+        params.additionalTrustAnchorsDer = Span<const Vector<uint8_t>>(anchors.data(), anchors.size());
         server.StartHandshake();
         const auto connected = stream.Connect(params);
         server.Join();
@@ -195,7 +195,7 @@ namespace BECore::Tests {
         EXPECT_EQ(stream.GetLastError(), connected.error());
         EXPECT_FALSE(stream.IsValid());
         std::array<uint8_t, 8> buffer{};
-        EXPECT_FALSE(stream.Receive(eastl::span<uint8_t>(buffer.data(), buffer.size())).has_value());
+        EXPECT_FALSE(stream.Receive(Span<uint8_t>(buffer.data(), buffer.size())).has_value());
     }
 
     TEST(TlsStreamTest, AConnectionRefusedNamesTheAddress) {
@@ -268,7 +268,7 @@ namespace BECore::Tests {
         std::string received;
         while (received.size() < 12) {
             std::array<uint8_t, 64> buffer;
-            const auto count = stream.Receive(eastl::span<uint8_t>(buffer.data(), buffer.size()));
+            const auto count = stream.Receive(Span<uint8_t>(buffer.data(), buffer.size()));
             ASSERT_TRUE(count.has_value());
             ASSERT_GT(*count, 0u);
             received.append(reinterpret_cast<const char*>(buffer.data()), *count);
@@ -277,7 +277,7 @@ namespace BECore::Tests {
 
         server.Peer().ShutdownBoth();
         std::array<uint8_t, 8> buffer{};
-        const auto ended = stream.Receive(eastl::span<uint8_t>(buffer.data(), buffer.size()));
+        const auto ended = stream.Receive(Span<uint8_t>(buffer.data(), buffer.size()));
         ASSERT_FALSE(ended.has_value());
         EXPECT_EQ(ended.error(), SocketError::Closed);
     }
@@ -288,7 +288,7 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(Connect(server, stream));
         EXPECT_TRUE(stream.SetReceiveTimeout(50ms));
         std::array<uint8_t, 8> buffer{};
-        const auto received = stream.Receive(eastl::span<uint8_t>(buffer.data(), buffer.size()));
+        const auto received = stream.Receive(Span<uint8_t>(buffer.data(), buffer.size()));
         ASSERT_FALSE(received.has_value());
         EXPECT_EQ(received.error(), SocketError::TimedOut);
         EXPECT_TRUE(stream.IsValid()) << "a timeout does not end the stream";
@@ -304,7 +304,7 @@ namespace BECore::Tests {
         std::atomic<bool> closed{false};
         std::thread reader([&] {
             std::array<uint8_t, 16> buffer;
-            const auto received = stream.Receive(eastl::span<uint8_t>(buffer.data(), buffer.size()));
+            const auto received = stream.Receive(Span<uint8_t>(buffer.data(), buffer.size()));
             closed = !received && received.error() == SocketError::Closed;
             ended = true;
         });
@@ -337,7 +337,7 @@ namespace BECore::Tests {
         std::string received;
         while (received.size() < kBytes) {
             std::array<uint8_t, 4096> buffer;
-            const auto count = stream.Receive(eastl::span<uint8_t>(buffer.data(), buffer.size()));
+            const auto count = stream.Receive(Span<uint8_t>(buffer.data(), buffer.size()));
             if (!count) {
                 ADD_FAILURE() << "the stream ended after " << received.size() << " bytes";
                 break;

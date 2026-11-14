@@ -287,7 +287,7 @@ namespace BECore {
 
         uint32_t count = 0;
         vkGetPhysicalDeviceSurfaceFormatsKHR(device.GetPhysicalDevice(), surface, &count, nullptr);
-        eastl::vector<VkSurfaceFormatKHR> formats(count);
+        Vector<VkSurfaceFormatKHR> formats(count);
         vkGetPhysicalDeviceSurfaceFormatsKHR(device.GetPhysicalDevice(), surface, &count, formats.data());
 
         return VulkanSwapchainPolicy::ChooseSurfaceFormat({formats.data(), formats.size()}, keepFormat);
@@ -298,7 +298,7 @@ namespace BECore {
 
         uint32_t count = 0;
         vkGetPhysicalDeviceSurfacePresentModesKHR(device.GetPhysicalDevice(), surface, &count, nullptr);
-        eastl::vector<VkPresentModeKHR> modes(count);
+        Vector<VkPresentModeKHR> modes(count);
         vkGetPhysicalDeviceSurfacePresentModesKHR(device.GetPhysicalDevice(), surface, &count, modes.data());
 
         // Prefer mailbox (triple-buffered, low latency)

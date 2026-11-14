@@ -19,7 +19,7 @@ namespace BECore::Match3 {
          *
          * Empty cells (GemType::None) are never reported.
          */
-        [[nodiscard]] static eastl::vector<Cell> FindMatches(const Match3Board& board);
+        [[nodiscard]] static Vector<Cell> FindMatches(const Match3Board& board);
 
         /**
          * @brief True if the board contains at least one match. Faster than

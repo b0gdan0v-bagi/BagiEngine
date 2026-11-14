@@ -54,7 +54,7 @@ namespace BECore {
          * Ожидает завершения всех задач.
          */
         void WaitAll() {
-            eastl::vector<IntrusivePtr<TaskHandleBase>> handlesCopy;
+            Vector<IntrusivePtr<TaskHandleBase>> handlesCopy;
             {
                 LockGuard lock(_mutex);
                 handlesCopy = _handles;
@@ -119,7 +119,7 @@ namespace BECore {
         }
 
     private:
-        eastl::vector<IntrusivePtr<TaskHandleBase>> _handles;
+        Vector<IntrusivePtr<TaskHandleBase>> _handles;
         mutable Mutex _mutex{BE_LOCK_SITE("Task group")};
         CancellationToken _token;
     };

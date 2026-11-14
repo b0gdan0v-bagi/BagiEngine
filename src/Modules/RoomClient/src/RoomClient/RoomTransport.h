@@ -59,9 +59,9 @@ namespace BECore {
     };
 
     /// Makes a transport for one connection; RoomClient asks for a new one for every connection
-    using RoomTransportFactory = std::function<eastl::unique_ptr<IRoomTransport>()>;
+    using RoomTransportFactory = std::function<UniquePtr<IRoomTransport>()>;
 
     /// The transport of this platform, or nullptr where there is none (a build without sockets that is not the browser)
-    [[nodiscard]] eastl::unique_ptr<IRoomTransport> MakeDefaultRoomTransport();
+    [[nodiscard]] UniquePtr<IRoomTransport> MakeDefaultRoomTransport();
 
 }  // namespace BECore

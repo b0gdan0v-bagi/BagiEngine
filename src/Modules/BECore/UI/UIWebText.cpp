@@ -116,7 +116,7 @@ namespace BECore::UIWebText {
             for (const char c : arguments) {
                 normalized.push_back(c == '/' ? ',' : c);
             }
-            eastl::vector<StringView> parts = SplitTopLevel(normalized, ',');
+            Vector<StringView> parts = SplitTopLevel(normalized, ',');
             if (parts.size() == 1) {
                 // Space separated: "r g b" or "r g b , a" after the slash became a comma (then it has two parts)
                 parts = SplitWords(parts[0]);
@@ -124,7 +124,7 @@ namespace BECore::UIWebText {
                 // "r g b / a"
                 const auto rgb = SplitWords(parts[0]);
                 if (rgb.size() == 3) {
-                    eastl::vector<StringView> merged = rgb;
+                    Vector<StringView> merged = rgb;
                     merged.push_back(parts[1]);
                     parts = merged;
                 }
@@ -231,7 +231,7 @@ namespace BECore::UIWebText {
         };
 
         Optional<ShadowLayer> ParseShadowLayer(StringView text) {
-            eastl::vector<float> lengths;
+            Vector<float> lengths;
             Optional<WebColor> color;
             for (const StringView word : SplitWords(text)) {
                 if (ToLower(word) == InsetKeyword) {
@@ -287,8 +287,8 @@ namespace BECore::UIWebText {
         return result;
     }
 
-    eastl::vector<StringView> SplitTopLevel(StringView text, char separator) {
-        eastl::vector<StringView> parts;
+    Vector<StringView> SplitTopLevel(StringView text, char separator) {
+        Vector<StringView> parts;
         size_t start = 0;
         int depth = 0;
         char quote = 0;
@@ -313,8 +313,8 @@ namespace BECore::UIWebText {
         return parts;
     }
 
-    eastl::vector<StringView> SplitWords(StringView text) {
-        eastl::vector<StringView> words;
+    Vector<StringView> SplitWords(StringView text) {
+        Vector<StringView> words;
         size_t start = 0;
         bool inWord = false;
         int depth = 0;

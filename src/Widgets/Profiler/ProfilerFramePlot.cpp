@@ -37,9 +37,9 @@ namespace BECore {
         constexpr ImU32 kMarkerColor = IM_COL32(255, 255, 255, 200);
 
         // One fixed color per segment of ExclusiveStage
-        constexpr eastl::array<ImU32, kExclusiveStageCount> kStageColors{IM_COL32(90, 140, 220, 255), IM_COL32(60, 200, 210, 255),  IM_COL32(220, 130, 60, 255),
-                                                                         IM_COL32(230, 200, 70, 255), IM_COL32(170, 100, 210, 255), IM_COL32(130, 130, 130, 255)};
-        constexpr eastl::array<const char*, kExclusiveStageCount> kStageNames{"Update", "Scene update", "Render", "Scene draw", "Present", "Other"};
+        constexpr Array<ImU32, kExclusiveStageCount> kStageColors{IM_COL32(90, 140, 220, 255), IM_COL32(60, 200, 210, 255),  IM_COL32(220, 130, 60, 255),
+                                                                  IM_COL32(230, 200, 70, 255), IM_COL32(170, 100, 210, 255), IM_COL32(130, 130, 130, 255)};
+        constexpr Array<const char*, kExclusiveStageCount> kStageNames{"Update", "Scene update", "Render", "Scene draw", "Present", "Other"};
 
         const char* const kBarModeLabels = "Frame time\0"
                                            "Stage split\0";
@@ -85,7 +85,7 @@ namespace BECore {
         return ringFrameCount - 1 - fromNewest;
     }
 
-    Optional<uint64_t> ProfilerFramePlot::Draw(const eastl::vector<FrameStats>& history, const RingSnapshot& snapshot, Optional<uint64_t> selectedFrame) {
+    Optional<uint64_t> ProfilerFramePlot::Draw(const Vector<FrameStats>& history, const RingSnapshot& snapshot, Optional<uint64_t> selectedFrame) {
         int budgetChoice = static_cast<int>(_budget);
         ImGui::SetNextItemWidth(kBudgetComboWidth);
         if (ImGui::Combo("Budget", &budgetChoice, kBudgetLabels)) {
@@ -125,7 +125,7 @@ namespace BECore {
         const Optional<size_t> selectedPosition = FramePosition(snapshot, selectedFrame);
         for (size_t bar = 0; bar < barCount; ++bar) {
             const float x = origin.x + static_cast<float>(bar) * barWidth;
-            eastl::array<double, kExclusiveStageCount> stages{};
+            Array<double, kExclusiveStageCount> stages{};
             if (_barMode == BarMode::StageSplit) {
                 stages = ExclusiveStageMs(history[bar]);
             }
@@ -187,7 +187,7 @@ namespace BECore {
         }
     }
 
-    void ProfilerFramePlot::DrawCounters(const eastl::vector<FrameStats>& history, const RingSnapshot& snapshot, Optional<uint64_t> selectedFrame) {
+    void ProfilerFramePlot::DrawCounters(const Vector<FrameStats>& history, const RingSnapshot& snapshot, Optional<uint64_t> selectedFrame) {
         if (!ImGui::CollapsingHeader("Counters")) {
             return;
         }

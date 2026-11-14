@@ -6,12 +6,12 @@ namespace BECore::Tests {
 
     namespace {
 
-        eastl::vector<uint8_t> Bytes(std::initializer_list<uint8_t> values) {
-            return eastl::vector<uint8_t>(values);
+        Vector<uint8_t> Bytes(std::initializer_list<uint8_t> values) {
+            return Vector<uint8_t>(values);
         }
 
-        eastl::vector<String> Names(const eastl::vector<PoolString>& slots) {
-            eastl::vector<String> names;
+        Vector<String> Names(const Vector<PoolString>& slots) {
+            Vector<String> names;
             for (const PoolString& slot : slots) {
                 names.emplace_back(slot.ToStringView().data(), slot.ToStringView().size());
             }
@@ -158,7 +158,7 @@ namespace BECore::Tests {
         std::filesystem::create_directories(_saves / "sub");
         std::ofstream(_saves / "sub" / "deep.save") << "x";
 
-        const eastl::vector<String> expected = {"Gamma_2", "a-b", "alpha", "beta"};
+        const Vector<String> expected = {"Gamma_2", "a-b", "alpha", "beta"};
         EXPECT_EQ(Names(service.List()), expected);
     }
 

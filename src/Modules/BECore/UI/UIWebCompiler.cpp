@@ -1129,12 +1129,12 @@ namespace BECore {
                 return nullptr;
             }
 
-            [[nodiscard]] const eastl::vector<std::pair<String, String>>& Entries() const {
+            [[nodiscard]] const Vector<std::pair<String, String>>& Entries() const {
                 return _entries;
             }
 
         private:
-            eastl::vector<std::pair<String, String>> _entries;
+            Vector<std::pair<String, String>> _entries;
         };
 
         String Number(float value) {
@@ -1165,7 +1165,7 @@ namespace BECore {
             WebKind kind = WebKind::Group;
             String name;
             int parent = -1;
-            eastl::vector<int> children;
+            Vector<int> children;
             String text;
         };
 
@@ -1188,7 +1188,7 @@ namespace BECore {
         }
 
         /// The declarations in effect for an element, the one that wins last
-        using DeclarationList = eastl::vector<const UICssDeclaration*>;
+        using DeclarationList = Vector<const UICssDeclaration*>;
 
         class Compiler {
         public:
@@ -1207,7 +1207,7 @@ namespace BECore {
                     _baseAttrs.push_back(BuildAttrs(static_cast<int>(i), base, &_report));
                 }
 
-                eastl::vector<VariantOutput> variants = BuildVariants();
+                Vector<VariantOutput> variants = BuildVariants();
                 ApplyStates();
                 return Write(variants);
             }
@@ -1215,12 +1215,12 @@ namespace BECore {
         private:
             struct Override {
                 int node = -1;
-                eastl::vector<std::pair<String, String>> values;
+                Vector<std::pair<String, String>> values;
             };
 
             struct VariantOutput {
                 UIVariantCondition when;
-                eastl::vector<Override> overrides;
+                Vector<Override> overrides;
             };
 
             // ---- reading the style sheets ----
@@ -1394,8 +1394,8 @@ namespace BECore {
             };
 
             /// The declarations in effect for every HTML node when the rules of @p media apply (-1: only those outside `@media`) and every button is in @p state
-            [[nodiscard]] eastl::vector<DeclarationList> Cascade(int media, CascadeState state) {
-                eastl::vector<DeclarationList> styles(_document.nodes.size());
+            [[nodiscard]] Vector<DeclarationList> Cascade(int media, CascadeState state) {
+                Vector<DeclarationList> styles(_document.nodes.size());
                 for (size_t i = 1; i < _document.nodes.size(); ++i) {
                     const UIHtmlNode& node = _document.nodes[i];
                     if (!node.IsElement()) {
@@ -1412,7 +1412,7 @@ namespace BECore {
                         }
                     }
 
-                    eastl::vector<Match> matches;
+                    Vector<Match> matches;
                     const size_t ruleCount = SpendCascadeWork(_sheet.rules.size() + list.size()) ? _sheet.rules.size() : 0;
                     for (size_t r = 0; r < ruleCount; ++r) {
                         const UICssRule& rule = _sheet.rules[r];
@@ -1531,7 +1531,7 @@ namespace BECore {
                 });
             }
 
-            void BuildTree(int htmlParent, int parent, const eastl::vector<DeclarationList>& base) {
+            void BuildTree(int htmlParent, int parent, const Vector<DeclarationList>& base) {
                 for (const int child : _document.nodes[htmlParent].children) {
                     const UIHtmlNode& html = _document.nodes[child];
                     if (!html.IsElement()) {
@@ -1676,7 +1676,7 @@ namespace BECore {
                 }
             }
 
-            void AddNode(int htmlIndex, int parent, const eastl::vector<DeclarationList>& base) {
+            void AddNode(int htmlIndex, int parent, const Vector<DeclarationList>& base) {
                 const UIHtmlNode& html = _document.nodes[htmlIndex];
                 WebNode node;
                 node.html = htmlIndex;
@@ -1727,7 +1727,7 @@ namespace BECore {
             // ---- the attributes ----
 
             /// The attributes of node @p index when @p styles are in effect. @p report is null when the same node is built again for a variant or a state
-            [[nodiscard]] Attrs BuildAttrs(int index, const eastl::vector<DeclarationList>& styles, UIWebReport* report) const {
+            [[nodiscard]] Attrs BuildAttrs(int index, const Vector<DeclarationList>& styles, UIWebReport* report) const {
                 const WebNode& node = _nodes[index];
                 const UIHtmlNode& html = _document.nodes[node.html];
                 const Resolved r = Resolve(styles[node.html]);
@@ -2187,8 +2187,8 @@ namespace BECore {
 
             // ---- variants and states ----
 
-            [[nodiscard]] eastl::vector<VariantOutput> BuildVariants() {
-                eastl::vector<VariantOutput> variants;
+            [[nodiscard]] Vector<VariantOutput> BuildVariants() {
+                Vector<VariantOutput> variants;
                 for (size_t m = 0; m < _sheet.medias.size(); ++m) {
                     const UICssMedia& media = _sheet.medias[m];
                     const bool used = std::any_of(_sheet.rules.begin(), _sheet.rules.end(), [&](const UICssRule& rule) { return rule.media == static_cast<int>(m); });
@@ -2196,7 +2196,7 @@ namespace BECore {
                         continue;
                     }
                     const auto styles = Cascade(static_cast<int>(m), CascadeState::None);
-                    eastl::vector<Override> overrides;
+                    Vector<Override> overrides;
                     for (size_t i = 0; i < _nodes.size(); ++i) {
                         Override entry = DiffForVariant(static_cast<int>(i), BuildAttrs(static_cast<int>(i), styles, nullptr), media);
                         if (!entry.values.empty()) {
@@ -2599,7 +2599,7 @@ namespace BECore {
                 }
             }
 
-            [[nodiscard]] String Write(const eastl::vector<VariantOutput>& variants) {
+            [[nodiscard]] String Write(const Vector<VariantOutput>& variants) {
                 // An element a variant names needs a name to be found by
                 for (const VariantOutput& variant : variants) {
                     for (const Override& entry : variant.overrides) {
@@ -2664,9 +2664,9 @@ namespace BECore {
             UIWebReport& _report;
             UIHtmlDocument _document;
             UICssSheet _sheet;
-            eastl::vector<eastl::vector<UICssDeclaration>> _inlineStyles;
-            eastl::vector<WebNode> _nodes;
-            eastl::vector<Attrs> _baseAttrs;
+            Vector<Vector<UICssDeclaration>> _inlineStyles;
+            Vector<WebNode> _nodes;
+            Vector<Attrs> _baseAttrs;
             eastl::hash_set<String> _usedNames;
             eastl::hash_map<String, int> _nextNameSuffix;  ///< per tag, where UniqueName goes on counting
             size_t _cascadeWork = 0;

@@ -15,14 +15,14 @@ namespace BECore::Tests {
     /// A case of the matrix that left issues
     struct UIMatrixFailure {
         String label;
-        eastl::vector<UILayoutIssue> issues;
+        Vector<UILayoutIssue> issues;
     };
 
     /// The view declaration of a scene (`viewWidth`, `viewHeight`, `<viewVariants>`): ValidateOnMatrix() picks from it the view the scene would draw with in each case
     struct UIMatrixViews {
         float defaultWidth = 0.0f;
         float defaultHeight = 0.0f;
-        eastl::span<const SceneViewVariant> variants;
+        Span<const SceneViewVariant> variants;
     };
 
     /// Fills the regions a game publishes for one case: @p regions is cleared first, @p resolved (the scale, `bounds`, `contentBounds`, `viewBounds`) is what the canvas will lay out in.
@@ -63,9 +63,9 @@ namespace BECore::Tests {
 
     /// The output sizes and safe areas that every shipped screen is checked on: each aspect ratio at each size that fits 4K, with no insets, a top notch and side insets.
     /// The user scale and the scale mode are not part of it: ValidateOnMatrix() runs every case with each of them.
-    inline const eastl::vector<UIMatrixCase>& UILayoutMatrix() {
-        static const eastl::vector<UIMatrixCase> cases = [] {
-            eastl::vector<UIMatrixCase> built;
+    inline const Vector<UIMatrixCase>& UILayoutMatrix() {
+        static const Vector<UIMatrixCase> cases = [] {
+            Vector<UIMatrixCase> built;
             for (const auto& aspect : UIMatrixDetail::kAspects) {
                 for (float shortSide : UIMatrixDetail::kShortSides) {
                     const bool landscape = aspect.width >= aspect.height;
@@ -103,8 +103,8 @@ namespace BECore::Tests {
      *        resolved canvas (`UICanvasScaler::Resolve` of the case's params and context, before the layout), so the validator checks "inside its region" on the whole matrix.
      *        A name the function does not set is a `MissingRegion` in every case. Left empty (the default), the canvas keeps the regions it has in every case.
      */
-    inline eastl::vector<UIMatrixFailure> ValidateOnMatrix(UICanvasLayout& canvas, const UILayoutValidatorOptions& options = {}, const UILayoutContext& baseContext = {},
-                                                           const UIMatrixViews& views = {}, const UIMatrixRegions& publishRegions = {}) {
+    inline Vector<UIMatrixFailure> ValidateOnMatrix(UICanvasLayout& canvas, const UILayoutValidatorOptions& options = {}, const UILayoutContext& baseContext = {}, const UIMatrixViews& views = {},
+                                                    const UIMatrixRegions& publishRegions = {}) {
         const bool pickView = views.defaultWidth > 0.0f && views.defaultHeight > 0.0f;
         const UICanvasScaleParams saved = canvas.params;
         const UIRegionSet savedRegions = canvas.regions;
@@ -112,7 +112,7 @@ namespace BECore::Tests {
         const CanvasScaleMode modes[] = {CanvasScaleMode::ConstantPixelSize, CanvasScaleMode::ScaleWithScreen, CanvasScaleMode::ConstantPhysicalSize};
         const float userScales[] = {1.0f, 1.5f};
 
-        eastl::vector<UIMatrixFailure> failures;
+        Vector<UIMatrixFailure> failures;
         for (const UIMatrixCase& matrixCase : UILayoutMatrix()) {
             for (CanvasScaleMode mode : modes) {
                 for (float userScale : userScales) {
@@ -164,7 +164,7 @@ namespace BECore::Tests {
     }
 
     /// The first failures as text, for `EXPECT_TRUE(failures.empty()) << DescribeMatrixFailures(failures)`
-    inline String DescribeMatrixFailures(const eastl::vector<UIMatrixFailure>& failures, size_t limit = 8) {
+    inline String DescribeMatrixFailures(const Vector<UIMatrixFailure>& failures, size_t limit = 8) {
         String text = Format("{} case(s) with layout issues:\n", failures.size());
         for (size_t i = 0; i < failures.size() && i < limit; ++i) {
             text += Format("  {}\n", failures[i].label.c_str());

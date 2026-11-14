@@ -158,7 +158,7 @@ namespace BECore::Tests {
         // Binary helpers
         // ---------------------------------------------------------------------
 
-        using ByteBuffer = eastl::vector<uint8_t>;
+        using ByteBuffer = Vector<uint8_t>;
 
         /// Joins the deserializer errors into one line for assertion messages.
         String DescribeErrors(const IDeserializer& deserializer) {
@@ -245,7 +245,7 @@ namespace BECore::Tests {
             state.inventory.itemCount = 3;
             state.level = 4;
 
-            eastl::vector<TestData::Player> players(3);
+            Vector<TestData::Player> players(3);
             players[0].name = PoolString::Intern("First");
             players[1].health = 7;
             players[2].isAlive = false;
@@ -270,7 +270,7 @@ namespace BECore::Tests {
             }
             TestData::GameState state;
             Ser::Load(deserializer, state, "state");
-            eastl::vector<TestData::Player> players;
+            Vector<TestData::Player> players;
             Ser::Load(deserializer, players, "players");
             eastl::map<String, int32_t> scores;
             Ser::Load(deserializer, scores, "scores");
@@ -452,21 +452,21 @@ namespace BECore::Tests {
         }
         {
             SCOPED_TRACE("eastl::fixed_vector");
-            eastl::fixed_vector<int32_t, 8> original;
+            SmallVector<int32_t, 8> original;
             original.push_back(10);
             original.push_back(20);
             original.push_back(30);
-            ExpectBinaryRoundTrip(original, eastl::fixed_vector<int32_t, 8>{99});
+            ExpectBinaryRoundTrip(original, SmallVector<int32_t, 8>{99});
         }
         {
             SCOPED_TRACE("eastl::vector of strings");
-            const eastl::vector<String> original = {"one", "", "three"};
-            ExpectBinaryRoundTrip(original, eastl::vector<String>{"stale"});
+            const Vector<String> original = {"one", "", "three"};
+            ExpectBinaryRoundTrip(original, Vector<String>{"stale"});
         }
         {
             SCOPED_TRACE("eastl::array");
-            const eastl::array<float, 3> original = {1.0f, 2.5f, 3.75f};
-            ExpectBinaryRoundTrip(original, eastl::array<float, 3>{});
+            const Array<float, 3> original = {1.0f, 2.5f, 3.75f};
+            ExpectBinaryRoundTrip(original, Array<float, 3>{});
         }
         {
             SCOPED_TRACE("std::array");
@@ -497,15 +497,15 @@ namespace BECore::Tests {
         }
         {
             SCOPED_TRACE("empty eastl::vector");
-            ExpectBinaryRoundTrip(eastl::vector<int32_t>{}, eastl::vector<int32_t>{1, 2, 3});
+            ExpectBinaryRoundTrip(Vector<int32_t>{}, Vector<int32_t>{1, 2, 3});
         }
     }
 
     TEST(ReflectionTest, BinaryArrayShorterThanTarget) {
-        const eastl::array<int32_t, 2> small = {7, 8};
+        const Array<int32_t, 2> small = {7, 8};
         const ByteBuffer data = SaveToBinary("PartialArr", "values", small);
 
-        eastl::array<int32_t, 4> loaded = {99, 99, 99, 99};
+        Array<int32_t, 4> loaded = {99, 99, 99, 99};
         ASSERT_NO_FATAL_FAILURE(LoadFromBinary(data, "PartialArr", "values", loaded));
 
         EXPECT_EQ(loaded[0], 7);
@@ -518,7 +518,7 @@ namespace BECore::Tests {
         // Array of reflected objects
         {
             SCOPED_TRACE("eastl::vector<Player>");
-            eastl::vector<TestData::Player> original(3);
+            Vector<TestData::Player> original(3);
             original[0].name = PoolString::Intern("First");
             original[1].health = 7;
             original[1].speed = 1.5f;
@@ -526,7 +526,7 @@ namespace BECore::Tests {
 
             const ByteBuffer data = SaveToBinary("Party", "players", original);
 
-            eastl::vector<TestData::Player> loaded(1);
+            Vector<TestData::Player> loaded(1);
             ASSERT_NO_FATAL_FAILURE(LoadFromBinary(data, "Party", "players", loaded));
 
             ASSERT_EQ(loaded.size(), original.size());
@@ -560,12 +560,12 @@ namespace BECore::Tests {
     }
 
     TEST(ReflectionTest, BinaryLargeArray) {
-        eastl::vector<int32_t> original;
+        Vector<int32_t> original;
         original.reserve(20000);
         for (int32_t i = 0; i < 20000; ++i) {
             original.push_back(i * 3 - 1000);
         }
-        ExpectBinaryRoundTrip(original, eastl::vector<int32_t>{});
+        ExpectBinaryRoundTrip(original, Vector<int32_t>{});
     }
 
     TEST(ReflectionTest, BinaryScalarTypes) {
@@ -1181,7 +1181,7 @@ namespace BECore::Tests {
 
     TEST(ReflectionTest, MethodReflection) {
         int methodCount = 0;
-        eastl::vector<StringView> methodNames;
+        Vector<StringView> methodNames;
         ForEachMethod<TestData::Player>([&](auto& method) {
             methodCount++;
             methodNames.push_back(method.name);
@@ -1230,9 +1230,9 @@ namespace BECore::Tests {
         EXPECT_FALSE(DefaultChecker<String>::IsDefault(String{"hello"}));
 
         // eastl::vector
-        EXPECT_TRUE(DefaultChecker<eastl::vector<int32_t>>::IsDefault(eastl::vector<int32_t>{}));
-        const eastl::vector<int32_t> nonEmptyVec{1, 2, 3};
-        EXPECT_FALSE(DefaultChecker<eastl::vector<int32_t>>::IsDefault(nonEmptyVec));
+        EXPECT_TRUE(DefaultChecker<Vector<int32_t>>::IsDefault(Vector<int32_t>{}));
+        const Vector<int32_t> nonEmptyVec{1, 2, 3};
+        EXPECT_FALSE(DefaultChecker<Vector<int32_t>>::IsDefault(nonEmptyVec));
     }
 
     TEST(ReflectionTest, SkipDefaults) {
@@ -1289,14 +1289,14 @@ namespace BECore::Tests {
     }
 
     TEST(ReflectionTest, FixedVectorSerialization) {
-        eastl::fixed_vector<int32_t, 8> original;
+        SmallVector<int32_t, 8> original;
         original.push_back(10);
         original.push_back(20);
         original.push_back(30);
 
         const String xml = SaveToXml("FVTest", "values", original);
 
-        eastl::fixed_vector<int32_t, 8> loaded;
+        SmallVector<int32_t, 8> loaded;
         ASSERT_NO_FATAL_FAILURE(LoadFromXml(xml, "FVTest", "values", loaded));
 
         ASSERT_EQ(loaded.size(), original.size());
@@ -1309,10 +1309,10 @@ namespace BECore::Tests {
         // eastl::array
         {
             SCOPED_TRACE("eastl::array");
-            const eastl::array<float, 3> original = {1.0f, 2.5f, 3.75f};
+            const Array<float, 3> original = {1.0f, 2.5f, 3.75f};
             const String xml = SaveToXml("ArrTest", "values", original);
 
-            eastl::array<float, 3> loaded = {};
+            Array<float, 3> loaded = {};
             ASSERT_NO_FATAL_FAILURE(LoadFromXml(xml, "ArrTest", "values", loaded));
 
             for (size_t i = 0; i < 3; ++i) {
@@ -1337,10 +1337,10 @@ namespace BECore::Tests {
         // Partial load: the XML has fewer elements than the array size
         {
             SCOPED_TRACE("partial load");
-            const eastl::array<int32_t, 2> small = {7, 8};
+            const Array<int32_t, 2> small = {7, 8};
             const String xml = SaveToXml("PartialArr", "values", small);
 
-            eastl::array<int32_t, 4> loaded = {99, 99, 99, 99};
+            Array<int32_t, 4> loaded = {99, 99, 99, 99};
             ASSERT_NO_FATAL_FAILURE(LoadFromXml(xml, "PartialArr", "values", loaded));
 
             EXPECT_EQ(loaded[0], 7);

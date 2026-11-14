@@ -111,7 +111,7 @@ namespace BECore {
          * rectangle (a temporary surface, `SDL_SW_FillTriangle` with blending), and a fan of n points would cost n times the area. It is cut along the four arc
          * centres into small triangles, about twice the area in bounding boxes; the covered area is the same, so Vulkan sees no difference.
          */
-        static void AppendFill(eastl::vector<GeometryVertex>& vertices, eastl::vector<int>& indices, const Rect& rect, const UICorners& corners, const Color& color, const UIGradientSpec& gradient,
+        static void AppendFill(Vector<GeometryVertex>& vertices, Vector<int>& indices, const Rect& rect, const UICorners& corners, const Color& color, const UIGradientSpec& gradient,
                                float pixelsPerUnit);
 
         /**
@@ -119,8 +119,7 @@ namespace BECore {
          * rect; to avoid the overlap (a translucent border) fill the inner outline instead: `rect` inset by @p width on every side with `corners.Inset(width)`.
          * A width larger than the shape holds is the whole shape; a width under one output pixel is drawn as a fainter line.
          */
-        static void AppendBorder(eastl::vector<GeometryVertex>& vertices, eastl::vector<int>& indices, const Rect& rect, const UICorners& corners, float width, const Color& color,
-                                 float pixelsPerUnit);
+        static void AppendBorder(Vector<GeometryVertex>& vertices, Vector<int>& indices, const Rect& rect, const UICorners& corners, float width, const Color& color, float pixelsPerUnit);
 
         /**
          * A shadow or a glow of the box: @p rect moved by the offset and grown by the spread, with the blur falloff outward and inward over the blur: the
@@ -131,14 +130,14 @@ namespace BECore {
          * @p detail is what the renderer asks for (`IRenderer::GetGeometryDetail()`): Full is the mesh above, Reduced has kReducedBlurRings steps and corners within
          * kReducedCornerSagittaPixels, about a third of the triangles, for a renderer that pays for each one. The bounds of a call hold for both.
          */
-        static void AppendShadow(eastl::vector<GeometryVertex>& vertices, eastl::vector<int>& indices, const Rect& rect, const UICorners& corners, const UIShadowSpec& shadow, float pixelsPerUnit,
+        static void AppendShadow(Vector<GeometryVertex>& vertices, Vector<int>& indices, const Rect& rect, const UICorners& corners, const UIShadowSpec& shadow, float pixelsPerUnit,
                                  GeometryDetail detail = GeometryDetail::Full);
 
         /**
          * A line of @ref kHighlightWidth units just inside the top edge, following the top corners (it starts and fades out half way round each of them), for a
          * raised look. It stays inside the shape. Nothing for a rect too small to hold it.
          */
-        static void AppendHighlight(eastl::vector<GeometryVertex>& vertices, eastl::vector<int>& indices, const Rect& rect, const UICorners& corners, const Color& color, float pixelsPerUnit);
+        static void AppendHighlight(Vector<GeometryVertex>& vertices, Vector<int>& indices, const Rect& rect, const UICorners& corners, const Color& color, float pixelsPerUnit);
     };
 
 }  // namespace BECore

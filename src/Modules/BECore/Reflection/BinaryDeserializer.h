@@ -45,7 +45,7 @@ namespace BECore {
          * @return true if the buffer is valid. On failure an error is recorded and every later read fails.
          */
         bool LoadFromBuffer(const uint8_t* data, size_t size);
-        bool LoadFromBuffer(const eastl::vector<uint8_t>& data);
+        bool LoadFromBuffer(const Vector<uint8_t>& data);
 
         /**
          * @brief Load a file written by BinarySerializer::SaveToFile
@@ -99,7 +99,7 @@ namespace BECore {
 
         // Error tracking
         bool HasErrors() const override;
-        const eastl::vector<DeserializeError>& GetErrors() const override;
+        const Vector<DeserializeError>& GetErrors() const override;
         void ClearErrors() override;
 
     protected:
@@ -113,7 +113,7 @@ namespace BECore {
         };
 
         struct ArrayContext {
-            eastl::vector<Scope> elements;
+            Vector<Scope> elements;
             size_t currentIndex = 0;
         };
 
@@ -136,10 +136,10 @@ namespace BECore {
 
         void ResetState();
 
-        eastl::vector<uint8_t> _buffer;
-        eastl::vector<Scope> _scopeStack;
-        eastl::vector<ArrayContext> _arrayStack;
-        eastl::vector<DeserializeError> _errors;
+        Vector<uint8_t> _buffer;
+        Vector<Scope> _scopeStack;
+        Vector<ArrayContext> _arrayStack;
+        Vector<DeserializeError> _errors;
     };
 
 }  // namespace BECore

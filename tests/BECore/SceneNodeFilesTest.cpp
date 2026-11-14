@@ -303,7 +303,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(SceneNodeFilesTest, CustomLoaderIsAsked) {
-        eastl::vector<String> asked;
+        Vector<String> asked;
         const NodeFileLoader loader = [&asked](StringView ref, pugi::xml_document& out, String& error) {
             asked.emplace_back(ref);
             if (ref == "known") {

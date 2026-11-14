@@ -28,8 +28,8 @@ namespace BECore {
         [[nodiscard]] static std::expected<ClientStream, String> Connect(const WebSocketUrl& url, const TlsClientOptions& tls, std::chrono::milliseconds connectTimeout,
                                                                          std::chrono::steady_clock::time_point handshakeDeadline, const std::atomic<bool>* cancel);
 
-        [[nodiscard]] bool SendAll(eastl::span<const uint8_t> data);
-        [[nodiscard]] std::expected<size_t, SocketError> Receive(eastl::span<uint8_t> buffer);
+        [[nodiscard]] bool SendAll(Span<const uint8_t> data);
+        [[nodiscard]] std::expected<size_t, SocketError> Receive(Span<uint8_t> buffer);
         bool SetReceiveTimeout(std::chrono::milliseconds timeout);
         void ShutdownBoth();
         void Close();
@@ -39,8 +39,8 @@ namespace BECore {
         [[nodiscard]] String GetLastError() const;
 
     private:
-        Socket _socket;                      // `ws`
-        eastl::unique_ptr<ITlsStream> _tls;  // `wss`: a connected stream, or null
+        Socket _socket;              // `ws`
+        UniquePtr<ITlsStream> _tls;  // `wss`: a connected stream, or null
     };
 
 }  // namespace BECore

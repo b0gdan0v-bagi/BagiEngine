@@ -41,9 +41,9 @@ namespace BECore {
 
         /// A list of view variants is `<viewVariants><view .../>...</viewVariants>` in a file; an empty list writes nothing
         template <>
-        struct DataAccessor<eastl::vector<SceneViewVariant>> {
-            static void Save(ISerializer& s, const eastl::vector<SceneViewVariant>& variants, StringView key);
-            static bool Load(IDeserializer& d, eastl::vector<SceneViewVariant>& variants, StringView key);
+        struct DataAccessor<Vector<SceneViewVariant>> {
+            static void Save(ISerializer& s, const Vector<SceneViewVariant>& variants, StringView key);
+            static bool Load(IDeserializer& d, Vector<SceneViewVariant>& variants, StringView key);
         };
 
     }  // namespace Ser
@@ -51,7 +51,7 @@ namespace BECore {
     namespace PropVisit {
 
         /// The inspector does not edit view variants: they are shown as nothing (the same as the variants of a canvas)
-        inline bool Visit(IPropertyVisitor& /*v*/, eastl::vector<SceneViewVariant>& /*variants*/, StringView /*key*/) {
+        inline bool Visit(IPropertyVisitor& /*v*/, Vector<SceneViewVariant>& /*variants*/, StringView /*key*/) {
             return false;
         }
 
@@ -65,7 +65,7 @@ namespace BECore {
          * The first variant whose `when` holds for `{0, 0, outputWidth, outputHeight}` and whose size is positive and finite wins; else the
          * default size with index -1. An output that is not positive (no renderer, a minimized window) has no shape, so it is the default too.
          */
-        [[nodiscard]] static ActiveSceneView Pick(float defaultWidth, float defaultHeight, eastl::span<const SceneViewVariant> variants, float outputWidth, float outputHeight);
+        [[nodiscard]] static ActiveSceneView Pick(float defaultWidth, float defaultHeight, Span<const SceneViewVariant> variants, float outputWidth, float outputHeight);
     };
 
 }  // namespace BECore

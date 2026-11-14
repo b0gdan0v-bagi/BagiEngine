@@ -77,8 +77,8 @@ namespace BECore {
         BE_REFLECT_FIELD float stateDuration =
             -1.0f;  ///< seconds the look takes to ease between states (this element's box, and its children's picture and text); -1: `UISettings::stateTransition`, 0: off
         Rect rect;  ///< laid out: canvas coordinates; empty while the element or an ancestor is hidden
-        BE_REFLECT_FIELD eastl::vector<IntrusivePtrNonAtomic<UIElement>> children;      // not the IntrusivePtr alias: the generator looks for the long name to find a factory field
-        BE_REFLECT_FIELD eastl::vector<IntrusivePtrNonAtomic<UIComponent>> components;  // the same: the long name; one of each type, in draw order
+        BE_REFLECT_FIELD Vector<IntrusivePtrNonAtomic<UIElement>> children;      // not the IntrusivePtr alias: the generator looks for the long name to find a factory field
+        BE_REFLECT_FIELD Vector<IntrusivePtrNonAtomic<UIComponent>> components;  // the same: the long name; one of each type, in draw order
 
         /// Pointer state, set by the canvas that owns the tree: the pointer is over the element; a press that began on the element is still held
         bool hovered = false;
@@ -278,8 +278,8 @@ namespace BECore {
         uint64_t _themeVersion = 0;             ///< UIThemes::GetVersion() at the last resolve; 0: never (the table starts at 1)
 
         // The triangles of DrawBox, kept so that a steady frame allocates nothing
-        eastl::vector<GeometryVertex> _boxVertices;
-        eastl::vector<int> _boxIndices;
+        Vector<GeometryVertex> _boxVertices;
+        Vector<int> _boxIndices;
     };
 
 }  // namespace BECore

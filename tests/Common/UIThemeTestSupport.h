@@ -10,7 +10,7 @@ namespace BECore::Tests {
     template <typename Check>
     void ForEachTheme(UIThemes& themes, Check&& check) {
         const PoolString saved = themes.GetTheme();
-        const eastl::vector<PoolString> ids = themes.GetThemes();  // a copy: a check may set more
+        const Vector<PoolString> ids = themes.GetThemes();  // a copy: a check may set more
         for (const PoolString theme : ids) {
             ASSERT_TRUE(themes.SetTheme(theme)) << theme.ToStringView().data();
             check(theme);

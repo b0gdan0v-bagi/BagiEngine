@@ -19,7 +19,7 @@ namespace BECore {
         return false;
     }
 
-    const eastl::vector<IntrusivePtr<SceneNode>>& SceneNode::GetChildren() const {
+    const Vector<IntrusivePtr<SceneNode>>& SceneNode::GetChildren() const {
         return _children;
     }
 
@@ -136,7 +136,7 @@ namespace BECore {
         return _entity;
     }
 
-    const eastl::vector<IntrusivePtr<IComponent>>& SceneNode::GetComponents() const {
+    const Vector<IntrusivePtr<IComponent>>& SceneNode::GetComponents() const {
         return _components;
     }
 

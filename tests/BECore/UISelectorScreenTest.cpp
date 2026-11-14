@@ -215,12 +215,12 @@ namespace BECore::Tests {
         struct Group {
             const char* name;
             const char* variable;
-            eastl::vector<eastl::pair<const char*, const char*>> segments;  // the name of the button, its value
+            Vector<eastl::pair<const char*, const char*>> segments;  // the name of the button, its value
         };
 
         /// The four groups of the panel with the words they show (the text is in the XML above; the values are what the game publishes)
-        const eastl::vector<Group>& Groups() {
-            static const eastl::vector<Group> groups = {
+        const Vector<Group>& Groups() {
+            static const Vector<Group> groups = {
                 {"Mode", "opponentMode", {{"ModeTwo", "two"}, {"ModeComputer", "computer"}}},
                 {"Color", "opponentColor", {{"ColorWhite", "white"}, {"ColorBlack", "black"}}},
                 {"Engine", "opponentEngine", {{"EngineStockfish", "stockfish"}, {"EngineOwn", "own"}}},
@@ -317,12 +317,12 @@ namespace BECore::Tests {
             }
 
             Scene& _scene;
-            eastl::vector<PoolString> _actions;
-            eastl::vector<PoolString> _values;
+            Vector<PoolString> _actions;
+            Vector<PoolString> _values;
         };
 
         /// Every control with text in the tree, depth first (the root itself is the canvas and has none)
-        void CollectControls(const UIElement& element, eastl::vector<const UIElement*>& found) {
+        void CollectControls(const UIElement& element, Vector<const UIElement*>& found) {
             if (element.GetComponent<UITextComponent>()) {
                 found.push_back(&element);
             }
@@ -341,7 +341,7 @@ namespace BECore::Tests {
         String Problems(const UICanvasLayout& layout) {
             String problems;
             const float scale = layout.GetResolved().scale;
-            eastl::vector<const UIElement*> controls;
+            Vector<const UIElement*> controls;
             CollectControls(*layout.root, controls);
             for (const UIElement* control : controls) {
                 if (control->rect.IsEmpty()) {
@@ -363,7 +363,7 @@ namespace BECore::Tests {
             return problems;
         }
 
-        bool HasIssue(const eastl::vector<UIMatrixFailure>& failures, UILayoutIssueKind kind) {
+        bool HasIssue(const Vector<UIMatrixFailure>& failures, UILayoutIssueKind kind) {
             for (const auto& failure : failures) {
                 for (const UILayoutIssue& issue : failure.issues) {
                     if (issue.kind == kind) {
@@ -490,7 +490,7 @@ namespace BECore::Tests {
         }
 
         /// The panel on the whole matrix with the options of the game: the findings of the validator
-        eastl::vector<UIMatrixFailure> ValidatePanel(UICanvasComponent& canvas) const {
+        Vector<UIMatrixFailure> ValidatePanel(UICanvasComponent& canvas) const {
             UILayoutValidatorOptions options;
             options.minTouchSize = CoreManager::GetUIEnvironment().GetSettings().minTouchSize;
             return ValidateOnMatrix(canvas.GetLayout(), options, ViewContext());

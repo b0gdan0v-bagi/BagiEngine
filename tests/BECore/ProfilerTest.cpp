@@ -14,7 +14,7 @@ namespace BECore::Tests {
 
     namespace {
 
-        using Args = eastl::vector<String>;
+        using Args = Vector<String>;
 
         constexpr ProfilerBuild kFullBuild{.profiler = true, .tracy = true};
         constexpr ProfilerBuild kChromeOnlyBuild{.profiler = true, .tracy = false};

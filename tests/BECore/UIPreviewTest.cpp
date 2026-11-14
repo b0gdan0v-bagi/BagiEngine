@@ -284,7 +284,7 @@ namespace BECore::Tests {
 
     TEST(UIPreviewTest, EveryDeviceSafeAreaStaysInsideTheOutputAndIsNeverEmpty) {
         const PreviewDevice huge{"huge", 100, 200, 10000.0f, 10000.0f};
-        eastl::vector<const PreviewDevice*> devices{&huge};
+        Vector<const PreviewDevice*> devices{&huge};
         for (const PreviewDevice& device : UIPreview::GetDevices()) {
             devices.push_back(&device);
         }

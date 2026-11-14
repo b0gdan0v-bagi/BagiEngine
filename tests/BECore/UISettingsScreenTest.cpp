@@ -309,8 +309,8 @@ namespace BECore::Tests {
                 return _values.empty() ? PoolString{} : _values.back();
             }
             /// The values that came with @p action, in order
-            eastl::vector<String> ValuesOf(const char* action) const {
-                eastl::vector<String> values;
+            Vector<String> ValuesOf(const char* action) const {
+                Vector<String> values;
                 for (size_t i = 0; i < _actions.size(); ++i) {
                     if (_actions[i] == PoolString::Intern(action)) {
                         values.push_back(String(_values[i].ToStringView()));
@@ -339,8 +339,8 @@ namespace BECore::Tests {
             }
 
             Scene& _scene;
-            eastl::vector<PoolString> _actions;
-            eastl::vector<PoolString> _values;
+            Vector<PoolString> _actions;
+            Vector<PoolString> _values;
         };
 
         /// A button is an element with a clicker and a text: its text keeps `kButtonAir` from each edge of its fill
@@ -349,7 +349,7 @@ namespace BECore::Tests {
         }
 
         /// Every control of the tree that shows text or takes a press, depth first (the root itself is the canvas and has none)
-        void CollectControls(const UIElement& element, eastl::vector<const UIElement*>& found) {
+        void CollectControls(const UIElement& element, Vector<const UIElement*>& found) {
             if (element.GetComponent<UITextComponent>() || element.IsInteractive()) {
                 found.push_back(&element);
             }
@@ -369,7 +369,7 @@ namespace BECore::Tests {
         String Problems(const UICanvasLayout& layout) {
             String problems;
             const float scale = layout.GetResolved().scale;
-            eastl::vector<const UIElement*> controls;
+            Vector<const UIElement*> controls;
             CollectControls(*layout.root, controls);
             for (const UIElement* control : controls) {
                 if (control->rect.IsEmpty()) {
@@ -391,7 +391,7 @@ namespace BECore::Tests {
             return problems;
         }
 
-        bool HasIssue(const eastl::vector<UIMatrixFailure>& failures, UILayoutIssueKind kind) {
+        bool HasIssue(const Vector<UIMatrixFailure>& failures, UILayoutIssueKind kind) {
             for (const auto& failure : failures) {
                 for (const UILayoutIssue& issue : failure.issues) {
                     if (issue.kind == kind) {
@@ -407,7 +407,7 @@ namespace BECore::Tests {
         void ForEachLanguage(Check&& check) {
             UIStrings& strings = CoreManager::GetUIStrings();
             const PoolString saved = strings.GetLanguage();
-            const eastl::vector<PoolString> languages = strings.GetLanguages();
+            const Vector<PoolString> languages = strings.GetLanguages();
             for (const PoolString language : languages) {
                 ASSERT_TRUE(strings.SetLanguage(language)) << language.ToStringView().data();
                 check(language);
@@ -449,7 +449,7 @@ namespace BECore::Tests {
             strings.Clear();
             auto config = XmlConfig::Create();
             ASSERT_TRUE(config.LoadFromString(xml));
-            const eastl::vector<String> problems = strings.LoadFromXml(config.GetRoot());
+            const Vector<String> problems = strings.LoadFromXml(config.GetRoot());
             EXPECT_TRUE(problems.empty()) << (problems.empty() ? "" : problems[0].c_str());
             ASSERT_EQ(strings.GetLanguages().size(), 3u);
         }
@@ -576,10 +576,10 @@ namespace BECore::Tests {
         }
 
         /// The panel on the whole matrix with the options of the game, once for every language: the findings of the validator, each case named with its language
-        eastl::vector<UIMatrixFailure> ValidatePanel(UICanvasComponent& canvas) const {
+        Vector<UIMatrixFailure> ValidatePanel(UICanvasComponent& canvas) const {
             UILayoutValidatorOptions options;
             options.minTouchSize = CoreManager::GetUIEnvironment().GetSettings().minTouchSize;
-            eastl::vector<UIMatrixFailure> all;
+            Vector<UIMatrixFailure> all;
             ForEachLanguage([&](PoolString language) {
                 for (UIMatrixFailure& failure : ValidateOnMatrix(canvas.GetLayout(), options, ViewContext())) {
                     failure.label = Format("[{}] {}", language.ToStringView(), failure.label.c_str());
@@ -902,7 +902,7 @@ namespace BECore::Tests {
         }
         EXPECT_TRUE(CoreManager::GetUIInput().DispatchMouseButtonUp(Button(XAt(0.7f), y, false)));
 
-        const eastl::vector<String> values = _game->ValuesOf("SettingsVolume");
+        const Vector<String> values = _game->ValuesOf("SettingsVolume");
         const char* const expected[] = {"0.3", "0.4", "0.5", "0.6", "0.7"};
         ASSERT_EQ(values.size(), 5u);
         for (size_t i = 0; i < 5; ++i) {
@@ -923,7 +923,7 @@ namespace BECore::Tests {
         CoreManager::GetUIInput().DispatchMouseMotion(Motion(-100.0f, y + 300.0f, SDL_BUTTON_LMASK));
         CoreManager::GetUIInput().DispatchMouseButtonUp(Button(-100.0f, y + 300.0f, false));
 
-        const eastl::vector<String> values = _game->ValuesOf("SettingsVolume");
+        const Vector<String> values = _game->ValuesOf("SettingsVolume");
         ASSERT_EQ(values.size(), 3u);
         EXPECT_EQ(values[0], "0.5");
         EXPECT_EQ(values[1], "1") << "past the end: the maximum, written without a decimal point";
@@ -996,7 +996,7 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(LoadScene());
         ASSERT_NO_FATAL_FAILURE(Show());
         const char* const names[] = {"Title", "SoundCaption", "MusicCaption", "DownloadCaption", "LanguageCaption", "Ok"};
-        eastl::vector<String> english;
+        Vector<String> english;
         for (const char* name : names) {
             english.push_back(ShownText(*_settings->GetRoot().FindByName(PoolString::Intern(name))));
         }

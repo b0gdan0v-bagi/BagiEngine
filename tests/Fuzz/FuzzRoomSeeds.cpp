@@ -34,7 +34,7 @@ namespace BECore::Fuzz {
         // room_protocol: one message per file, made by the builders of the protocol
         // =============================================================================
 
-        void AddRoomProtocolSeeds(eastl::vector<FuzzSeedFile>& seeds) {
+        void AddRoomProtocolSeeds(Vector<FuzzSeedFile>& seeds) {
             using RoomProtocolInput::PackHeader;
             const auto client = [&seeds](const char* name, const ClientMessage& message, size_t limitIndex = 0) {
                 seeds.push_back({kRoomProtocolFolder, name, TextWithHeader(PackHeader(false, limitIndex), SerializeClientMessage(message))});
@@ -110,7 +110,7 @@ namespace BECore::Fuzz {
         class Recorder {
         public:
             Recorder() : _hub(_registry, RoomHubInput::MakeSettings(), RoomHubInput::MakeRandom(), MakeSink()) {
-                _registry.Register(SeatedGameInfo{"demo", DemoCardGame::kSeatCount}, [] { return eastl::unique_ptr<ISeatedGame>(eastl::make_unique<DemoCardGame>()); });
+                _registry.Register(SeatedGameInfo{"demo", DemoCardGame::kSeatCount}, [] { return UniquePtr<ISeatedGame>(eastl::make_unique<DemoCardGame>()); });
             }
 
             void Connect(uint8_t number) {
@@ -380,7 +380,7 @@ namespace BECore::Fuzz {
             return params;
         }
 
-        void AddControlSeeds(eastl::vector<FuzzSeedFile>& seeds) {
+        void AddControlSeeds(Vector<FuzzSeedFile>& seeds) {
             const auto add = [&seeds](const char* name, FuzzBytes bytes) { seeds.push_back({kControlRequestFolder, name, std::move(bytes)}); };
             add("ping.bin", Request(1, "ping"));
             add("status.bin", Request(2, "status"));
@@ -409,7 +409,7 @@ namespace BECore::Fuzz {
 
     }  // namespace
 
-    void AddRoomAndControlSeeds(eastl::vector<FuzzSeedFile>& seeds) {
+    void AddRoomAndControlSeeds(Vector<FuzzSeedFile>& seeds) {
         AddRoomProtocolSeeds(seeds);
         seeds.push_back({kRoomHubFolder, "play.bin", RecordPlay()});
         seeds.push_back({kRoomHubFolder, "reconnect-by-token.bin", RecordReconnect()});

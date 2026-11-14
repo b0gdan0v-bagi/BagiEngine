@@ -23,8 +23,8 @@ namespace BECore {
     struct FrozenFrame {
         uint64_t frameIndex = 0;
         double frameMs = 0.0;
-        double medianMs = 0.0;              // the median of the frames before it, 0 when there were not enough to take one
-        eastl::vector<RingThread> threads;  // threads with at least one zone in the frame
+        double medianMs = 0.0;       // the median of the frames before it, 0 when there were not enough to take one
+        Vector<RingThread> threads;  // threads with at least one zone in the frame
         uint64_t beginTicks = 0;
         uint64_t endTicks = 0;
         double nanosecondsPerTick = 1.0;
@@ -48,7 +48,7 @@ namespace BECore {
         void Update(const RingSnapshot& snapshot);
 
         /// The frozen frames, the oldest first (at most settings.keep)
-        [[nodiscard]] const eastl::vector<FrozenFrame>& GetSpikes() const {
+        [[nodiscard]] const Vector<FrozenFrame>& GetSpikes() const {
             return _spikes;
         }
 
@@ -67,8 +67,8 @@ namespace BECore {
         void Judge(const RingSnapshot& snapshot, const RingFrame& frame);
 
         SpikeSettings _settings;
-        eastl::vector<FrozenFrame> _spikes;
-        eastl::vector<double> _recentMs;  // durations of the last medianWindow judged frames, oldest first
+        Vector<FrozenFrame> _spikes;
+        Vector<double> _recentMs;  // durations of the last medianWindow judged frames, oldest first
         uint64_t _lastJudged = 0;
         bool _hasJudged = false;
     };

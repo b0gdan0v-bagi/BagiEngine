@@ -37,8 +37,8 @@ namespace BECore {
         }
 
         /// The components of @p node serialized, in order
-        eastl::vector<SerializedComponent> SerializeComponents(const SceneNode& node) {
-            eastl::vector<SerializedComponent> result(node.GetComponents().size());
+        Vector<SerializedComponent> SerializeComponents(const SceneNode& node) {
+            Vector<SerializedComponent> result(node.GetComponents().size());
             for (size_t i = 0; i < result.size(); ++i) {
                 SerializeComponent(*node.GetComponents()[i], result[i]);
             }
@@ -70,15 +70,15 @@ namespace BECore {
             return state;
         }
 
-        void AddName(eastl::vector<String>& names, const char* name) {
+        void AddName(Vector<String>& names, const char* name) {
             if (eastl::find(names.begin(), names.end(), name) == names.end()) {
                 names.push_back(name);
             }
         }
 
         /// The names of the fields of both sides: their attributes and their child elements
-        eastl::vector<String> FieldNames(pugi::xml_node liveFields, pugi::xml_node baseFields) {
-            eastl::vector<String> names;
+        Vector<String> FieldNames(pugi::xml_node liveFields, pugi::xml_node baseFields) {
+            Vector<String> names;
             for (const pugi::xml_node fields : {liveFields, baseFields}) {
                 for (pugi::xml_attribute attr = fields.first_attribute(); attr; attr = attr.next_attribute()) {
                     AddName(names, attr.name());
@@ -118,11 +118,11 @@ namespace BECore {
         }
 
         /// True when @p other has the name, the layer and the serialized components of @p live (the round trip check)
-        bool SameAsLive(const SceneNode& live, const eastl::vector<SerializedComponent>& liveComponents, const SceneNode& other) {
+        bool SameAsLive(const SceneNode& live, const Vector<SerializedComponent>& liveComponents, const SceneNode& other) {
             if (live.GetName() != other.GetName() || live.GetLayer() != other.GetLayer()) {
                 return false;
             }
-            const eastl::vector<SerializedComponent> otherComponents = SerializeComponents(other);
+            const Vector<SerializedComponent> otherComponents = SerializeComponents(other);
             if (liveComponents.size() != otherComponents.size()) {
                 return false;
             }
@@ -219,8 +219,8 @@ namespace BECore {
             refEl.append_attribute("layer").set_value(live.GetLayer());
         }
 
-        const eastl::vector<SerializedComponent> liveComponents = SerializeComponents(live);
-        const eastl::vector<SerializedComponent> baseComponents = SerializeComponents(*baseline);
+        const Vector<SerializedComponent> liveComponents = SerializeComponents(live);
+        const Vector<SerializedComponent> baseComponents = SerializeComponents(*baseline);
         pugi::xml_node componentsEl;
         for (size_t i = 0; i < liveComponents.size(); ++i) {
             pugi::xml_document overrides;

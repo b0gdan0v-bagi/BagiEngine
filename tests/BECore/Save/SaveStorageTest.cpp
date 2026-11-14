@@ -17,8 +17,8 @@ namespace BECore::Tests {
             }
         };
 
-        eastl::vector<uint8_t> Bytes(std::initializer_list<uint8_t> values) {
-            return eastl::vector<uint8_t>(values);
+        Vector<uint8_t> Bytes(std::initializer_list<uint8_t> values) {
+            return Vector<uint8_t>(values);
         }
 
     }  // namespace
@@ -83,7 +83,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(service.WriteSlot("../escape", Bytes({1})).has_value()) << "bad slot name";
         EXPECT_FALSE(service.WriteSlot("", Bytes({1})).has_value());
 
-        const eastl::vector<uint8_t> tooBig(ReaderLimits::kMaxBinaryStreamBytes + 1);
+        const Vector<uint8_t> tooBig(ReaderLimits::kMaxBinaryStreamBytes + 1);
         EXPECT_FALSE(service.WriteSlot("big", tooBig).has_value()) << "over the size limit";
         EXPECT_EQ(_notifications, 0);
     }

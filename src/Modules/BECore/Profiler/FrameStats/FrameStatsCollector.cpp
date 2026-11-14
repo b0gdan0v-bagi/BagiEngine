@@ -92,10 +92,10 @@ namespace BECore {
         BE_PROFILE_COUNTER("Live bytes", _current.liveBytes);
     }
 
-    eastl::vector<FrameStats> FrameStatsCollector::GetHistory(size_t count) const {
+    Vector<FrameStats> FrameStatsCollector::GetHistory(size_t count) const {
         const uint64_t available = _frames < kFrameHistory ? _frames : kFrameHistory;
         const uint64_t taken = count < available ? count : available;
-        eastl::vector<FrameStats> history;
+        Vector<FrameStats> history;
         history.reserve(taken);
         for (uint64_t frame = _frames - taken + 1; frame <= _frames; ++frame) {
             history.push_back(_ring[(frame - 1) % kFrameHistory]);

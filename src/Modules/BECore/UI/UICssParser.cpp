@@ -39,7 +39,7 @@ namespace BECore {
         private:
             const char* _begin = nullptr;
             uint32_t _firstLine = 1;
-            eastl::vector<size_t> _newlines;
+            Vector<size_t> _newlines;
         };
 
         /// The text with the comments replaced by spaces (line breaks stay, so line numbers do)
@@ -288,8 +288,8 @@ namespace BECore {
             return condition;
         }
 
-        eastl::vector<UICssDeclaration> ReadDeclarations(StringView body, const LineIndex& lines, uint32_t sourceId, StringView sourceName, UIWebReport& report) {
-            eastl::vector<UICssDeclaration> declarations;
+        Vector<UICssDeclaration> ReadDeclarations(StringView body, const LineIndex& lines, uint32_t sourceId, StringView sourceName, UIWebReport& report) {
+            Vector<UICssDeclaration> declarations;
             for (const StringView part : UIWebText::SplitTopLevel(body, ';')) {
                 if (part.empty()) {
                     continue;
@@ -469,7 +469,7 @@ namespace BECore {
         SheetReader(sheet, text, firstLine, sourceId, report).ReadRules(0, text.size(), -1);
     }
 
-    eastl::vector<UICssDeclaration> UICssParser::ParseDeclarations(StringView text, uint32_t line, uint32_t sourceId, UIWebReport& report) {
+    Vector<UICssDeclaration> UICssParser::ParseDeclarations(StringView text, uint32_t line, uint32_t sourceId, UIWebReport& report) {
         const String stripped = StripComments(text);
         const LineIndex lines(stripped, line);
         return ReadDeclarations(stripped, lines, sourceId, HtmlSource, report);

@@ -38,7 +38,7 @@ namespace BECore {
          *
          * Loadable by BinaryDeserializer once every Begin* has its matching End*.
          */
-        const eastl::vector<uint8_t>& GetData() const {
+        const Vector<uint8_t>& GetData() const {
             return _buffer;
         }
 
@@ -126,8 +126,8 @@ namespace BECore {
 
         void PatchSizeField(size_t offset, size_t value);
 
-        eastl::vector<uint8_t> _buffer;
-        eastl::vector<Scope> _scopes;
+        Vector<uint8_t> _buffer;
+        Vector<Scope> _scopes;
     };
 
 }  // namespace BECore

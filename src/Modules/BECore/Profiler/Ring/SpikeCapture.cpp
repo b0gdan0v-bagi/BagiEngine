@@ -11,8 +11,8 @@ namespace BECore {
             return eastl::min(SpikeCapture::kMinMedianFrames, settings.medianWindow);
         }
 
-        double MedianOf(const eastl::vector<double>& values) {
-            eastl::vector<double> ordered = values;
+        double MedianOf(const Vector<double>& values) {
+            Vector<double> ordered = values;
             eastl::sort(ordered.begin(), ordered.end());
             const size_t middle = ordered.size() / 2;
             return ordered.size() % 2 == 1 ? ordered[middle] : (ordered[middle - 1] + ordered[middle]) * 0.5;

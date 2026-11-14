@@ -103,10 +103,10 @@ namespace BECore {
          */
         void SaveScene();
 
-        HierarchyState _hierarchy;                  // the primary node, the rename and the pending tree edit of the hierarchy panel
-        SceneSelection _selection;                  // every selected node; its primary is `_hierarchy.selected`
-        eastl::vector<SceneNode*> _boxHits;         // the nodes of a rubber band, kept for its capacity
-        eastl::vector<SceneNode*> _announcedNodes;  // what SceneSelectionChangedEvent last told
+        HierarchyState _hierarchy;           // the primary node, the rename and the pending tree edit of the hierarchy panel
+        SceneSelection _selection;           // every selected node; its primary is `_hierarchy.selected`
+        Vector<SceneNode*> _boxHits;         // the nodes of a rubber band, kept for its capacity
+        Vector<SceneNode*> _announcedNodes;  // what SceneSelectionChangedEvent last told
         const Scene* _announcedNodesScene = nullptr;
         HierarchyModel::SelectionTracker _announcedSelection;  // what SceneNodeSelectedEvent last told
         Scene* _lastScene = nullptr;                           // the scene the selection belongs to: a replaced scene drops it

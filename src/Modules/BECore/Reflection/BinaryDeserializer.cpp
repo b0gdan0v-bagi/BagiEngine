@@ -111,7 +111,7 @@ namespace BECore {
         return true;
     }
 
-    bool BinaryDeserializer::LoadFromBuffer(const eastl::vector<uint8_t>& data) {
+    bool BinaryDeserializer::LoadFromBuffer(const Vector<uint8_t>& data) {
         return LoadFromBuffer(data.data(), data.size());
     }
 
@@ -136,7 +136,7 @@ namespace BECore {
             return false;
         }
 
-        eastl::vector<uint8_t> bytes;
+        Vector<uint8_t> bytes;
         bytes.resize(static_cast<size_t>(fileSize));
         if (!file.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(fileSize))) {
             AddError("", "Failed to read binary file", 0);
@@ -450,7 +450,7 @@ namespace BECore {
         return !_errors.empty();
     }
 
-    const eastl::vector<DeserializeError>& BinaryDeserializer::GetErrors() const {
+    const Vector<DeserializeError>& BinaryDeserializer::GetErrors() const {
         return _errors;
     }
 

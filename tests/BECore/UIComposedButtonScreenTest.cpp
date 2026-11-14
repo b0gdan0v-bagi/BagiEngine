@@ -155,7 +155,7 @@ namespace BECore::Tests {
             return name;
         }
 
-        bool Reports(const eastl::vector<UIMatrixFailure>& failures, UILayoutIssueKind kind, const char* button) {
+        bool Reports(const Vector<UIMatrixFailure>& failures, UILayoutIssueKind kind, const char* button) {
             for (const UIMatrixFailure& failure : failures) {
                 for (const UILayoutIssue& issue : failure.issues) {
                     if (issue.kind == kind && ButtonOf(issue.element) == button) {
@@ -208,7 +208,7 @@ namespace BECore::Tests {
             _bar->UpdateLayout(1280.0f, 720.0f);  // the reflected fields of the component reach the layout on its first update
         }
 
-        eastl::vector<UIMatrixFailure> OnMatrix() const {
+        Vector<UIMatrixFailure> OnMatrix() const {
             UILayoutValidatorOptions options;
             options.minTouchSize = kTouchSize;
             UILayoutContext context;

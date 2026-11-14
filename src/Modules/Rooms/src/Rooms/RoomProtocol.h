@@ -136,7 +136,7 @@ namespace BECore {
         RoomPhase phase = RoomPhase::Lobby;
         /// The seat of the host, or -1 when no human is left
         int hostSeat = -1;
-        eastl::vector<LobbySeat> seats;
+        Vector<LobbySeat> seats;
         /// The public options of the room (`SeatedGameInfo::publicOptions`): an object of booleans and integers, empty when the game
         /// names none. Not written when empty; a reader keeps only boolean and integer members.
         Json options = Json::object();
@@ -161,7 +161,7 @@ namespace BECore {
     struct RoomListMessage {
         String game;
         /// At most RoomLimits::kMaxListedRooms, the oldest room first
-        eastl::vector<RoomListing> rooms;
+        Vector<RoomListing> rooms;
         /// The answer was cut at the cap: more rooms are open
         bool more = false;
     };

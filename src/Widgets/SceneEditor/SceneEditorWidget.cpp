@@ -140,7 +140,7 @@ namespace BECore {
         if (_announcedSelection.Changed(scene, _hierarchy.selected)) {
             SceneNodeSelectedEvent::Emit(scene, _hierarchy.selected);
         }
-        const eastl::span<SceneNode* const> nodes = _selection.Nodes();
+        const Span<SceneNode* const> nodes = _selection.Nodes();
         if (scene != _announcedNodesScene || nodes.size() != _announcedNodes.size() || !eastl::equal(nodes.begin(), nodes.end(), _announcedNodes.begin())) {
             _announcedNodesScene = scene;
             _announcedNodes.assign(nodes.begin(), nodes.end());
@@ -479,7 +479,7 @@ namespace BECore {
 
         // An instance of a node file is saved as its <node ref> with the overrides; one that cannot be goes inline and is told here
         const NodeFileLoader loader = MakeFileSystemNodeLoader(CoreManager::GetFileSystem());
-        eastl::vector<String> notes;
+        Vector<String> notes;
         if (!WriteSceneToConfig(xmlRoot.GetPugiNode(), *scene, &loader, &notes)) {  // <SceneManager>
             return;
         }

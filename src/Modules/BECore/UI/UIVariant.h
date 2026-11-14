@@ -34,7 +34,7 @@ namespace BECore {
     /// A responsive variant: while `when` holds for the canvas bounds, `overrides` are in effect
     struct UIVariant {
         UIVariantCondition when;
-        eastl::vector<UIElementOverride> overrides;
+        Vector<UIElementOverride> overrides;
 
         /// In a file: `<variant when="orientation:portrait"><overrides><set element="Hud" .../></overrides></variant>`
         void Serialize(ISerializer& s) const;
@@ -47,9 +47,9 @@ namespace BECore {
 
         /// A list of variants is `<variants><variant .../>...</variants>` in a file, not the `item` elements a general vector gets
         template <>
-        struct DataAccessor<eastl::vector<UIVariant>> {
-            static void Save(ISerializer& s, const eastl::vector<UIVariant>& variants, StringView key);
-            static bool Load(IDeserializer& d, eastl::vector<UIVariant>& variants, StringView key);
+        struct DataAccessor<Vector<UIVariant>> {
+            static void Save(ISerializer& s, const Vector<UIVariant>& variants, StringView key);
+            static bool Load(IDeserializer& d, Vector<UIVariant>& variants, StringView key);
         };
 
     }  // namespace Ser
@@ -57,7 +57,7 @@ namespace BECore {
     namespace PropVisit {
 
         /// The inspector does not edit variants yet (editor tooling is stage 7 of the UI plan): they are shown as nothing
-        inline bool Visit(IPropertyVisitor& /*v*/, eastl::vector<UIVariant>& /*variants*/, StringView /*key*/) {
+        inline bool Visit(IPropertyVisitor& /*v*/, Vector<UIVariant>& /*variants*/, StringView /*key*/) {
             return false;
         }
 
@@ -72,7 +72,7 @@ namespace BECore {
          * one that names none is ignored. Always starts from `style`, so a shape that no variant matches any more comes back.
          * @return how many variants matched
          */
-        static size_t Apply(UIElement& root, eastl::span<const UIVariant> variants, const Rect& bounds);
+        static size_t Apply(UIElement& root, Span<const UIVariant> variants, const Rect& bounds);
     };
 
 }  // namespace BECore

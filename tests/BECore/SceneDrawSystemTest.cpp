@@ -60,8 +60,8 @@ namespace BECore::Tests {
         }
 
         /// The quad ids in the order of the draw calls of the last draw.
-        eastl::vector<float> DrawnIds(const RecordingRenderer& renderer) {
-            eastl::vector<float> ids;
+        Vector<float> DrawnIds(const RecordingRenderer& renderer) {
+            Vector<float> ids;
             for (const DrawCall& call : renderer.calls) {
                 ids.push_back(call.rect.x);
             }
@@ -69,15 +69,15 @@ namespace BECore::Tests {
         }
 
         /// The names of the nodes in the order of the view over SceneDrawItem, which is the order Draw() calls OnDraw().
-        eastl::vector<PoolString> ViewNames(Scene& scene) {
-            eastl::vector<PoolString> names;
+        Vector<PoolString> ViewNames(Scene& scene) {
+            Vector<PoolString> names;
             for (const auto [entity, item] : scene.GetRegistry().view<SceneDrawItem>().each()) {
                 names.push_back(item.node->GetName());
             }
             return names;
         }
 
-        void CollectNodes(SceneNode& node, eastl::vector<SceneNode*>& nodes) {
+        void CollectNodes(SceneNode& node, Vector<SceneNode*>& nodes) {
             nodes.push_back(&node);
             for (const auto& child : node.GetChildren()) {
                 CollectNodes(*child, nodes);
@@ -101,7 +101,7 @@ namespace BECore::Tests {
         }
 
         /// Draws once and returns the quad ids in draw order.
-        eastl::vector<float> Draw() {
+        Vector<float> Draw() {
             _renderer->calls.clear();
             _scene->Draw();
             return DrawnIds(*_renderer);
@@ -109,7 +109,7 @@ namespace BECore::Tests {
 
         /// Gives @p sprite a white texture of kTextureSize x kTextureSize from the recording renderer.
         void SetWhiteTexture(SpriteRendererComponent& sprite) {
-            const eastl::vector<uint8_t> pixels(static_cast<size_t>(kTextureSize) * kTextureSize * kBytesPerPixel, 255);
+            const Vector<uint8_t> pixels(static_cast<size_t>(kTextureSize) * kTextureSize * kBytesPerPixel, 255);
             sprite.SetTexture(_renderer->CreateTexture(pixels.data(), kTextureSize, kTextureSize));
         }
 
@@ -138,7 +138,7 @@ namespace BECore::Tests {
 
         _scene->Draw();
 
-        eastl::vector<SceneNode*> nodes;
+        Vector<SceneNode*> nodes;
         CollectNodes(_scene->GetRootNode(), nodes);
         ASSERT_EQ(nodes.size(), 4u);
         auto& registry = _scene->GetRegistry();
@@ -165,7 +165,7 @@ namespace BECore::Tests {
         _scene->Draw();
 
         // Scene order: Root, A, AChild, AGrandChild, B, C, D. Layer -1 first, then 0, then 1.
-        const eastl::vector<PoolString> expected = {"C"_intern, "Root"_intern, "A"_intern, "AChild"_intern, "D"_intern, "AGrandChild"_intern, "B"_intern};
+        const Vector<PoolString> expected = {"C"_intern, "Root"_intern, "A"_intern, "AChild"_intern, "D"_intern, "AGrandChild"_intern, "B"_intern};
         EXPECT_EQ(ViewNames(*_scene), expected);
     }
 
@@ -175,7 +175,7 @@ namespace BECore::Tests {
         AddQuad(*_scene, nullptr, "Back", 3.0f, -1);
         AddQuad(*_scene, nullptr, "Middle2", 4.0f);
 
-        const eastl::vector<float> expected = {3.0f, 2.0f, 4.0f, 1.0f};
+        const Vector<float> expected = {3.0f, 2.0f, 4.0f, 1.0f};
         EXPECT_EQ(Draw(), expected);
     }
 
@@ -184,13 +184,13 @@ namespace BECore::Tests {
         AddQuad(*_scene, nullptr, "B", 2.0f);
         AddQuad(*_scene, nullptr, "C", 3.0f);
 
-        EXPECT_EQ(Draw(), (eastl::vector<float>{1.0f, 2.0f, 3.0f}));
+        EXPECT_EQ(Draw(), (Vector<float>{1.0f, 2.0f, 3.0f}));
 
         a->SetLayer(1);
-        EXPECT_EQ(Draw(), (eastl::vector<float>{2.0f, 3.0f, 1.0f}));
+        EXPECT_EQ(Draw(), (Vector<float>{2.0f, 3.0f, 1.0f}));
 
         a->SetLayer(-1);
-        EXPECT_EQ(Draw(), (eastl::vector<float>{1.0f, 2.0f, 3.0f}));
+        EXPECT_EQ(Draw(), (Vector<float>{1.0f, 2.0f, 3.0f}));
         EXPECT_EQ(_scene->GetRegistry().get<SceneDrawItem>(a->GetEntity()).layer, -1);
     }
 
@@ -199,7 +199,7 @@ namespace BECore::Tests {
         auto child = AddQuad(*_scene, removed.Get(), "Child", 2.0f);
         auto grandChild = AddQuad(*_scene, child.Get(), "GrandChild", 3.0f);
         auto kept = AddQuad(*_scene, nullptr, "Kept", 4.0f);
-        EXPECT_EQ(Draw(), (eastl::vector<float>{1.0f, 2.0f, 3.0f, 4.0f}));
+        EXPECT_EQ(Draw(), (Vector<float>{1.0f, 2.0f, 3.0f, 4.0f}));
 
         auto& registry = _scene->GetRegistry();
         const entt::entity removedEntities[] = {removed->GetEntity(), child->GetEntity(), grandChild->GetEntity()};
@@ -219,18 +219,18 @@ namespace BECore::Tests {
         // Only the root and Kept are left: the items went with the entities, before any further draw
         EXPECT_EQ(registry.view<SceneDrawItem>().size(), 2u);
 
-        EXPECT_EQ(Draw(), (eastl::vector<float>{4.0f}));
+        EXPECT_EQ(Draw(), (Vector<float>{4.0f}));
         EXPECT_EQ(registry.view<SceneDrawItem>().size(), 2u);
     }
 
     TEST_F(SceneDrawSystemTest, ANodeAddedBetweenTwoDrawsIsDrawnAtItsScenePosition) {
         auto a = AddQuad(*_scene, nullptr, "A", 1.0f);
         AddQuad(*_scene, nullptr, "B", 2.0f);
-        EXPECT_EQ(Draw(), (eastl::vector<float>{1.0f, 2.0f}));
+        EXPECT_EQ(Draw(), (Vector<float>{1.0f, 2.0f}));
 
         auto child = AddQuad(*_scene, a.Get(), "AChild", 3.0f);
 
-        EXPECT_EQ(Draw(), (eastl::vector<float>{1.0f, 3.0f, 2.0f}));
+        EXPECT_EQ(Draw(), (Vector<float>{1.0f, 3.0f, 2.0f}));
         EXPECT_TRUE(_scene->GetRegistry().all_of<SceneDrawItem>(child->GetEntity()));
     }
 
@@ -246,7 +246,7 @@ namespace BECore::Tests {
         EXPECT_EQ(_scene->GetDrawRank(*aChild), 3);
 
         _scene->Draw();
-        const eastl::vector<PoolString> expected = {"B"_intern, "Root"_intern, "A"_intern, "AChild"_intern};
+        const Vector<PoolString> expected = {"B"_intern, "Root"_intern, "A"_intern, "AChild"_intern};
         EXPECT_EQ(ViewNames(*_scene), expected);
     }
 
@@ -266,7 +266,7 @@ namespace BECore::Tests {
         after->AddComponent(afterMarker);
 
         // [Marker, Quad] draws the marker before the quad, [Quad, Marker] the quad before the marker
-        EXPECT_EQ(Draw(), (eastl::vector<float>{kMarkerId, 1.0f, 2.0f, kMarkerId + 1.0f}));
+        EXPECT_EQ(Draw(), (Vector<float>{kMarkerId, 1.0f, 2.0f, kMarkerId + 1.0f}));
     }
 
     TEST_F(SceneDrawSystemTest, AQuadWithoutATransformDrawsNothing) {
@@ -274,7 +274,7 @@ namespace BECore::Tests {
         node->AddComponent(BECore::New<QuadRendererComponent>());
         AddQuad(*_scene, nullptr, "Plain", 1.0f);
 
-        EXPECT_EQ(Draw(), (eastl::vector<float>{1.0f}));
+        EXPECT_EQ(Draw(), (Vector<float>{1.0f}));
     }
 
     TEST_F(SceneDrawSystemTest, ASpriteWithoutATransformDrawsNothing) {
@@ -296,10 +296,10 @@ namespace BECore::Tests {
         spriteNode->AddComponent(sprite);
         AddQuad(*_scene, nullptr, "Back", 2.0f, -1);
 
-        const eastl::vector<float> ids = Draw();
+        const Vector<float> ids = Draw();
 
         // The sprite is first in the scene, the quad on layer -1 is drawn before it
-        EXPECT_EQ(ids, (eastl::vector<float>{2.0f, 1.0f}));
+        EXPECT_EQ(ids, (Vector<float>{2.0f, 1.0f}));
         ASSERT_EQ(_renderer->calls.size(), 2u);
         EXPECT_EQ(_renderer->calls[0].kind, DrawKind::Rect);
         EXPECT_EQ(_renderer->calls[1].kind, DrawKind::Texture);
@@ -505,13 +505,13 @@ namespace BECore::Tests {
         AddQuad(*_scene, nullptr, "A", 1.0f);
         auto b = AddQuad(*_scene, nullptr, "B", 2.0f);
         AddQuad(*_scene, nullptr, "C", 3.0f);
-        EXPECT_EQ(Draw(), (eastl::vector<float>{1.0f, 2.0f, 3.0f}));
+        EXPECT_EQ(Draw(), (Vector<float>{1.0f, 2.0f, 3.0f}));
 
         b->SetEditorFlags(EditorFlags::Hidden);
-        EXPECT_EQ(Draw(), (eastl::vector<float>{1.0f, 3.0f}));
+        EXPECT_EQ(Draw(), (Vector<float>{1.0f, 3.0f}));
 
         b->SetEditorFlags(EditorFlags::None);
-        EXPECT_EQ(Draw(), (eastl::vector<float>{1.0f, 2.0f, 3.0f}));
+        EXPECT_EQ(Draw(), (Vector<float>{1.0f, 2.0f, 3.0f}));
     }
 
     TEST_F(SceneDrawSystemTest, AHiddenNodeHidesItsDescendantsAndOnDrawToo) {
@@ -521,15 +521,15 @@ namespace BECore::Tests {
         marker->marker = kMarkerId;
         aChild->AddComponent(marker);
         AddQuad(*_scene, nullptr, "B", 3.0f);
-        EXPECT_EQ(Draw(), (eastl::vector<float>{1.0f, 2.0f, kMarkerId, 3.0f}));
+        EXPECT_EQ(Draw(), (Vector<float>{1.0f, 2.0f, kMarkerId, 3.0f}));
 
         a->SetEditorFlags(EditorFlags::Hidden);
-        EXPECT_EQ(Draw(), (eastl::vector<float>{3.0f}));
+        EXPECT_EQ(Draw(), (Vector<float>{3.0f}));
 
         // A hidden child alone leaves its parent and its siblings visible
         a->SetEditorFlags(EditorFlags::None);
         aChild->SetEditorFlags(EditorFlags::Hidden);
-        EXPECT_EQ(Draw(), (eastl::vector<float>{1.0f, 3.0f}));
+        EXPECT_EQ(Draw(), (Vector<float>{1.0f, 3.0f}));
     }
 
     TEST_F(SceneDrawSystemTest, AHiddenNodeKeepsItsItemAndItsRank) {
@@ -537,7 +537,7 @@ namespace BECore::Tests {
         auto aChild = AddQuad(*_scene, a.Get(), "AChild", 2.0f);
         auto b = AddQuad(*_scene, nullptr, "B", 3.0f, -1);
         _scene->Draw();
-        const eastl::vector<PoolString> before = ViewNames(*_scene);
+        const Vector<PoolString> before = ViewNames(*_scene);
         const int32_t rankA = _scene->GetDrawRank(*a);
         const int32_t rankChild = _scene->GetDrawRank(*aChild);
         const int32_t rankB = _scene->GetDrawRank(*b);
@@ -565,7 +565,7 @@ namespace BECore::Tests {
         EXPECT_EQ(_scene->GetRegistry().get<TransformData>(node->GetEntity()).x, 7.0f);
 
         node->SetEditorFlags(EditorFlags::None);
-        EXPECT_EQ(Draw(), (eastl::vector<float>{7.0f}));
+        EXPECT_EQ(Draw(), (Vector<float>{7.0f}));
     }
 
 }  // namespace BECore::Tests

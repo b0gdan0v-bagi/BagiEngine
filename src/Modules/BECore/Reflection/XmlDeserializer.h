@@ -139,7 +139,7 @@ namespace BECore {
 
         // Error tracking
         bool HasErrors() const override;
-        const eastl::vector<DeserializeError>& GetErrors() const override;
+        const Vector<DeserializeError>& GetErrors() const override;
         void ClearErrors() override;
 
     protected:
@@ -185,18 +185,18 @@ namespace BECore {
         bool ApplyStrictText(StringView name, StringView text, T& outValue);
 
         pugi::xml_document _document;
-        eastl::vector<pugi::xml_node> _nodeStack;
+        Vector<pugi::xml_node> _nodeStack;
 
         // For array iteration
         struct ArrayContext {
             pugi::xml_node parentNode;
-            eastl::vector<pugi::xml_node> elements;
+            Vector<pugi::xml_node> elements;
             size_t currentIndex = 0;
         };
-        eastl::vector<ArrayContext> _arrayStack;
+        Vector<ArrayContext> _arrayStack;
 
         // Error tracking
-        eastl::vector<DeserializeError> _errors;
+        Vector<DeserializeError> _errors;
 
         bool _strictValues = false;
     };

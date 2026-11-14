@@ -1,7 +1,6 @@
 #include "FuzzSeeds.h"
 #include "FuzzUiGeometryInput.h"
 
-
 namespace BECore::Fuzz {
 
     namespace {
@@ -375,7 +374,7 @@ div { margin: 1em; width: calc(100% - 4px); opacity: .5; transform: rotate(3deg)
             return bytes;
         }
 
-        void AddGeometrySeeds(eastl::vector<FuzzSeedFile>& seeds) {
+        void AddGeometrySeeds(Vector<FuzzSeedFile>& seeds) {
             const RoundCase screen = ScreenRound();
             seeds.push_back({kUiGeometryFolder, "screen.bin", WriteRounds({screen})});
 
@@ -438,7 +437,7 @@ div { margin: 1em; width: calc(100% - 4px); opacity: .5; transform: rotate(3deg)
 
     }  // namespace
 
-    void AddUiSeeds(eastl::vector<FuzzSeedFile>& seeds) {
+    void AddUiSeeds(Vector<FuzzSeedFile>& seeds) {
         seeds.push_back({kWebUiFolder, "hud-with-link.bin", HtmlAndCss(kHudHtml, kHudCss)});
         seeds.push_back({kWebUiFolder, "menu.bin", HtmlAndCss(kMenuHtml, kMenuCss)});
         seeds.push_back({kWebUiFolder, "match3-hud.bin", HtmlAndCss(kMatch3HudHtml, kMatch3HudCss)});

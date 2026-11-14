@@ -129,7 +129,7 @@ namespace BECore::Tests {
             _bar->UpdateLayout(1280.0f, 720.0f);  // the reflected fields of the component reach the layout on its first update
         }
 
-        eastl::vector<UIMatrixFailure> OnMatrix() const {
+        Vector<UIMatrixFailure> OnMatrix() const {
             UILayoutValidatorOptions options;
             options.minTouchSize = kTouchSize;
             UILayoutContext context;
@@ -154,7 +154,7 @@ namespace BECore::Tests {
         const auto failures = OnMatrix();
         ASSERT_FALSE(failures.empty()) << "a round button of 40 units is under the touch size of 48 however big its icon is";
 
-        eastl::vector<PoolString> reported;
+        Vector<PoolString> reported;
         for (const UIMatrixFailure& failure : failures) {
             for (const UILayoutIssue& issue : failure.issues) {
                 EXPECT_EQ(issue.kind, UILayoutIssueKind::TouchTargetTooSmall) << failure.label.c_str() << " " << issue.element.CStr();

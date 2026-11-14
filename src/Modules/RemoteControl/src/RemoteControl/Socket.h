@@ -11,8 +11,8 @@ namespace BECore {
     CORE_ENUM(SocketBind, uint8_t, Loopback, AnyAddress)
 
     /// The bytes of @p text, for SendAll()
-    [[nodiscard]] inline eastl::span<const uint8_t> AsBytes(StringView text) {
-        return eastl::span<const uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), text.size());
+    [[nodiscard]] inline Span<const uint8_t> AsBytes(StringView text) {
+        return Span<const uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), text.size());
     }
 
     /**
@@ -57,10 +57,10 @@ namespace BECore {
         [[nodiscard]] std::expected<Socket, SocketError> Accept(std::chrono::milliseconds timeout, String* peerAddress = nullptr);
 
         /// Sends all of @p data; false when the connection is gone
-        [[nodiscard]] bool SendAll(eastl::span<const uint8_t> data);
+        [[nodiscard]] bool SendAll(Span<const uint8_t> data);
 
         /// Reads what has arrived, at most @p buffer.size() bytes (always at least one). Closed: the peer closed the connection or ShutdownBoth() was called
-        [[nodiscard]] std::expected<size_t, SocketError> Receive(eastl::span<uint8_t> buffer);
+        [[nodiscard]] std::expected<size_t, SocketError> Receive(Span<uint8_t> buffer);
 
         /// Receive() gives up with TimedOut after @p timeout; zero waits for ever
         bool SetReceiveTimeout(std::chrono::milliseconds timeout);

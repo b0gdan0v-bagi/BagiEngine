@@ -108,8 +108,8 @@ button { width: 124dp; height: 48dp; font-size: 24dp; line-height: 48dp; text-al
         float viewWidth;  ///< the scene's view, for a SceneView screen
         float viewHeight;
         float minScale;
-        eastl::vector<const char*> ids;
-        eastl::vector<const char*> buttons;  ///< the ids that take clicks
+        Vector<const char*> ids;
+        Vector<const char*> buttons;  ///< the ids that take clicks
     };
 
     inline const Screen kScreens[] = {

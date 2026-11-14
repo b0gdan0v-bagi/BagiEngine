@@ -12,7 +12,7 @@ namespace BECore::Tests {
         constexpr float kLandscapeHeight = 720.0f;
 
         /// A scene of 1280 x 720 with a 720 x 1280 view for the tall outputs
-        eastl::vector<SceneViewVariant> PortraitVariants() {
+        Vector<SceneViewVariant> PortraitVariants() {
             SceneViewVariant portrait;
             portrait.name = "Portrait"_intern;
             portrait.when.orientation = UIOrientation::Portrait;
@@ -21,7 +21,7 @@ namespace BECore::Tests {
             return {portrait};
         }
 
-        UIMatrixViews ViewsOf(const eastl::vector<SceneViewVariant>& variants) {
+        UIMatrixViews ViewsOf(const Vector<SceneViewVariant>& variants) {
             return {kLandscapeWidth, kLandscapeHeight, {variants.data(), variants.size()}};
         }
 
@@ -79,7 +79,7 @@ namespace BECore::Tests {
             return context;
         }
 
-        bool AnyLabelEndsWith(const eastl::vector<UIMatrixFailure>& failures, const char* tail) {
+        bool AnyLabelEndsWith(const Vector<UIMatrixFailure>& failures, const char* tail) {
             const StringView want(tail);
             for (const UIMatrixFailure& failure : failures) {
                 const StringView label(failure.label.data(), failure.label.size());
@@ -124,7 +124,7 @@ namespace BECore::Tests {
 
         EXPECT_TRUE(failures.empty()) << DescribeMatrixFailures(failures).c_str();
         // And a declaration with no variants is the default view in every case
-        const eastl::vector<SceneViewVariant> none;
+        const Vector<SceneViewVariant> none;
         EXPECT_TRUE(ValidateOnMatrix(canvas, {}, {}, ViewsOf(none)).empty());
     }
 

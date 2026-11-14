@@ -64,7 +64,7 @@ namespace BECore {
         BE_REFLECT_FIELD bool _open = false;
         bool _paused = false;
         bool _ringRequested = false;  // what this widget asked of Profiler::SetRingEnabled
-        eastl::vector<FrameStats> _history;
+        Vector<FrameStats> _history;
         RingSnapshot _snapshot;
         uint64_t _snapshotVersion = 0;      // counts the snapshots taken, so the zone table knows when its rows are stale
         Optional<uint64_t> _selectedFrame;  // a RingFrame::index

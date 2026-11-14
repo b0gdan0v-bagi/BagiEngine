@@ -58,8 +58,8 @@ namespace BECore {
 
     private:
         struct Geometry {
-            eastl::vector<GeometryVertex> vertices;
-            eastl::vector<int> indices;
+            Vector<GeometryVertex> vertices;
+            Vector<int> indices;
         };
 
         void ApplyScissor();

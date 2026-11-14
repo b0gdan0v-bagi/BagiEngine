@@ -40,7 +40,7 @@ namespace BECore {
         /// Public mode: the pages that may connect, each `scheme://host[:port]` (no path; see IsOriginAllowed()). The entry
         /// `*` allows every origin (for development only), `null` allows the `null` origin. An empty list refuses every browser
         /// and admits programs, which send no `Origin`
-        eastl::vector<String> allowedOrigins;
+        Vector<String> allowedOrigins;
 
         /// Public mode: false refuses a request without `Origin` too, which keeps programs out
         bool allowMissingOrigin = true;

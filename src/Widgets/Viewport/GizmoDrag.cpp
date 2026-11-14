@@ -53,7 +53,7 @@ namespace BECore::Gizmo {
 
     }  // namespace
 
-    void GizmoDrag::Begin(Tool tool, Space space, Handle handle, eastl::span<const Item> items, Vec2 point, const SnapSettings& snap) {
+    void GizmoDrag::Begin(Tool tool, Space space, Handle handle, Span<const Item> items, Vec2 point, const SnapSettings& snap) {
         _active = false;
         _start.assign(items.begin(), items.end());
         _result.assign(items.begin(), items.end());
@@ -69,7 +69,7 @@ namespace BECore::Gizmo {
         _pivot = _frame.origin;
     }
 
-    eastl::span<const Item> GizmoDrag::Update(Vec2 point, bool snapModifier, bool keepAspect) {
+    Span<const Item> GizmoDrag::Update(Vec2 point, bool snapModifier, bool keepAspect) {
         if (!_active) {
             return {};
         }
@@ -89,7 +89,7 @@ namespace BECore::Gizmo {
         return {_result.data(), _result.size()};
     }
 
-    eastl::span<const Item> GizmoDrag::Cancel() {
+    Span<const Item> GizmoDrag::Cancel() {
         _active = false;
         _result.assign(_start.begin(), _start.end());
         return {_start.data(), _start.size()};

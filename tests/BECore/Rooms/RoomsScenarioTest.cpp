@@ -30,7 +30,7 @@ namespace BECore::Tests {
         }
 
         /// Ticks the clock and lets the humans play their first action until every human has seen the end
-        bool PlayToTheEnd(HubHarness& harness, const eastl::vector<ConnectionId>& humans) {
+        bool PlayToTheEnd(HubHarness& harness, const Vector<ConnectionId>& humans) {
             for (int step = 0; step < kMaxSteps; ++step) {
                 harness.Tick(milliseconds(10));
                 bool allDone = true;
@@ -46,7 +46,7 @@ namespace BECore::Tests {
         }
 
         /// Ticks until one of the humans has an action; the connection, or 0
-        ConnectionId WaitForAHumanTurn(HubHarness& harness, const eastl::vector<ConnectionId>& humans) {
+        ConnectionId WaitForAHumanTurn(HubHarness& harness, const Vector<ConnectionId>& humans) {
             for (int step = 0; step < kMaxSteps; ++step) {
                 for (const ConnectionId id : humans) {
                     const ReceivedMessage* view = harness.Client(id).Last(RoomMessageTypes::kView);
@@ -175,7 +175,7 @@ namespace BECore::Tests {
         EXPECT_EQ(gameB->GetPlayCount(), playsB);
         EXPECT_EQ(gameB->GetStateVersion(), versionB);
 
-        eastl::vector<ConnectionId> all = roomA;
+        Vector<ConnectionId> all = roomA;
         for (const ConnectionId id : roomB) {
             all.push_back(id);
         }
@@ -262,7 +262,7 @@ namespace BECore::Tests {
             HubHarness harness;
             const RandomFn random = MakeSequence(seed * 7919);
             ConnectionId slots[kSlots] = {};
-            eastl::vector<eastl::pair<String, String>> knownTokens;
+            Vector<eastl::pair<String, String>> knownTokens;
 
             const auto pick = [&](uint64_t count) { return random() % count; };
             const auto anyCode = [&]() -> String {

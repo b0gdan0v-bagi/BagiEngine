@@ -31,7 +31,7 @@ namespace BECore {
         void FitFrame(const RingFrame& frame);
 
         TimelineView _view;
-        eastl::vector<TimelineLane> _lanes;
+        Vector<TimelineLane> _lanes;
         bool _follow = true;
         bool _fitRequested = false;
         Optional<uint64_t> _shownSelection;

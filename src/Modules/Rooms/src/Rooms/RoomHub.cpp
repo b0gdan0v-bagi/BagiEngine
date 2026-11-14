@@ -310,7 +310,7 @@ namespace BECore {
             return;
         }
 
-        eastl::vector<const RoomEntry*> found;
+        Vector<const RoomEntry*> found;
         for (const auto& [code, entry] : _rooms) {
             const Room& room = *entry->room;
             const RoomPhase phase = room.GetPhase();
@@ -483,7 +483,7 @@ namespace BECore {
         const bool started = room.GetPhase() != RoomPhase::Lobby;
         const String lobbyText = MakeLobbyMessage(lobby);
         // Copy: a sink is not allowed to call back, but the loop must not depend on that
-        const eastl::vector<ConnectionId> ids = entry.connections;
+        const Vector<ConnectionId> ids = entry.connections;
         for (const ConnectionId id : ids) {
             const auto found = _connections.find(id);
             if (found == _connections.end()) {
@@ -508,7 +508,7 @@ namespace BECore {
         if (found == _rooms.end()) {
             return;
         }
-        const eastl::vector<ConnectionId> ids = found->second->connections;
+        const Vector<ConnectionId> ids = found->second->connections;
         for (const ConnectionId id : ids) {
             const auto connection = _connections.find(id);
             if (connection == _connections.end()) {
@@ -536,7 +536,7 @@ namespace BECore {
     }
 
     void RoomHub::Tick(RoomTime now) {
-        eastl::vector<ConnectionId> idle;
+        Vector<ConnectionId> idle;
         for (const auto& [id, connection] : _connections) {
             if (connection.roomCode.empty() && now - connection.lastActivity >= _settings.idleTimeout) {
                 idle.push_back(id);
@@ -556,7 +556,7 @@ namespace BECore {
             }
         }
 
-        eastl::vector<String> codes;
+        Vector<String> codes;
         for (const auto& [code, entry] : _rooms) {
             codes.push_back(code);
         }

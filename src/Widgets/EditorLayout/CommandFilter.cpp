@@ -40,9 +40,9 @@ namespace BECore {
                 return kNoMatch;
             }
             // best[j]: best score with the current query character matched at text[j]
-            eastl::vector<int> best(text.size(), kNoMatch);
+            Vector<int> best(text.size(), kNoMatch);
             for (size_t qi = 0; qi < query.size(); ++qi) {
-                eastl::vector<int> next(text.size(), kNoMatch);
+                Vector<int> next(text.size(), kNoMatch);
                 for (size_t j = 0; j < text.size(); ++j) {
                     if (ToLowerAscii(text[j]) != query[qi]) {
                         continue;
@@ -96,10 +96,10 @@ namespace BECore {
 
     }  // namespace
 
-    eastl::vector<const EditorCommand*> FilterCommands(StringView query, eastl::span<const EditorCommand> commands) {
+    Vector<const EditorCommand*> FilterCommands(StringView query, Span<const EditorCommand> commands) {
         const String normalized = NormalizeQuery(query);
 
-        eastl::vector<const EditorCommand*> result;
+        Vector<const EditorCommand*> result;
         if (normalized.empty()) {
             for (const EditorCommand& command : commands) {
                 result.push_back(&command);
@@ -111,7 +111,7 @@ namespace BECore {
             const EditorCommand* command;
             int score;
         };
-        eastl::vector<Hit> hits;
+        Vector<Hit> hits;
         const StringView needle(normalized.data(), normalized.size());
         for (const EditorCommand& command : commands) {
             int titleScore = ScoreMatch(needle, command.title);

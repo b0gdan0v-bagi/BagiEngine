@@ -57,7 +57,7 @@ namespace BECore {
         }
         if (!(key == _statsKey)) {
             _statsKey = key;
-            _stats = snapshot.frames.empty() ? eastl::vector<ZoneStatRow>() : ComputeZoneStats(snapshot, key.firstFrame, key.lastFrame);
+            _stats = snapshot.frames.empty() ? Vector<ZoneStatRow>() : ComputeZoneStats(snapshot, key.firstFrame, key.lastFrame);
             ++_statsVersion;
         }
 

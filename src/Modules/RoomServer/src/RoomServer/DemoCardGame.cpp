@@ -21,7 +21,7 @@ namespace BECore {
             return seat >= 0 && seat < DemoCardGame::kSeatCount;
         }
 
-        const eastl::vector<String> kNoCards;
+        const Vector<String> kNoCards;
 
     }  // namespace
 
@@ -164,7 +164,7 @@ namespace BECore {
         return _version;
     }
 
-    const eastl::vector<String>& DemoCardGame::GetHand(int seat) const {
+    const Vector<String>& DemoCardGame::GetHand(int seat) const {
         return IsSeatInRange(seat) ? _hands[seat] : kNoCards;
     }
 
@@ -193,8 +193,8 @@ namespace BECore {
         return view;
     }
 
-    eastl::vector<String> FindHiddenCards(const String& text, int seat, const DemoCardGame& game) {
-        eastl::vector<String> leaked;
+    Vector<String> FindHiddenCards(const String& text, int seat, const DemoCardGame& game) {
+        Vector<String> leaked;
         for (int other = 0; other < DemoCardGame::kSeatCount; ++other) {
             if (other == seat) {
                 continue;

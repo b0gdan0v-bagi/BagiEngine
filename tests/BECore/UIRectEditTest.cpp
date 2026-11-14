@@ -292,12 +292,12 @@ namespace BECore::Tests {
         regions.Set("table"_intern, {0.0f, 0.0f, 10.0f, 10.0f});
         regions.Set("table.plate.1"_intern, {1.0f, 1.0f, 2.0f, 2.0f});
 
-        const eastl::vector<PoolString> published = UIRectEdit::RegionChoices(regions, "table.plate.1"_intern);
+        const Vector<PoolString> published = UIRectEdit::RegionChoices(regions, "table.plate.1"_intern);
         ASSERT_EQ(published.size(), 2u);
         EXPECT_EQ(published[0], "table"_intern);
         EXPECT_EQ(published[1], "table.plate.1"_intern);
 
-        const eastl::vector<PoolString> withMissing = UIRectEdit::RegionChoices(regions, "gone"_intern);
+        const Vector<PoolString> withMissing = UIRectEdit::RegionChoices(regions, "gone"_intern);
         ASSERT_EQ(withMissing.size(), 3u);
         EXPECT_EQ(withMissing[2], "gone"_intern);
 

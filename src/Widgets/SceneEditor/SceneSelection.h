@@ -33,7 +33,7 @@ namespace BECore {
         /// The last selected node, or null for none
         [[nodiscard]] SceneNode* Primary() const;
 
-        [[nodiscard]] eastl::span<SceneNode* const> Nodes() const;
+        [[nodiscard]] Span<SceneNode* const> Nodes() const;
 
         [[nodiscard]] size_t Count() const;
 
@@ -41,7 +41,7 @@ namespace BECore {
         bool Prune(Scene& scene);
 
     private:
-        eastl::vector<SceneNode*> _nodes;
+        Vector<SceneNode*> _nodes;
     };
 
     /**

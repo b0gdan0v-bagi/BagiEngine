@@ -146,8 +146,8 @@ namespace BECore::Tests {
             return serializer.SaveToString();
         }
 
-        eastl::vector<String> TypeNames(const UIElement& element) {
-            eastl::vector<String> names;
+        Vector<String> TypeNames(const UIElement& element) {
+            Vector<String> names;
             for (const auto& component : element.components) {
                 names.push_back(String(component->GetTypeMeta().typeName));
             }
@@ -209,7 +209,7 @@ namespace BECore::Tests {
             return -1;
         }
 
-        static bool Contains(const eastl::vector<String>& log, const char* line) {
+        static bool Contains(const Vector<String>& log, const char* line) {
             return eastl::find(log.begin(), log.end(), String(line)) != log.end();
         }
 
@@ -387,7 +387,7 @@ namespace BECore::Tests {
         CoreManager::GetUIInput().DispatchMouseMotion(Motion(host.rect.x + 70.0f, host.rect.y + 40.0f, SDL_BUTTON_LMASK));
         EXPECT_TRUE(ReleaseOn(host));
 
-        const eastl::vector<String> expected{"first press Host", "first drag Host", "first click Host", "second click Host"};
+        const Vector<String> expected{"first press Host", "first drag Host", "first click Host", "second click Host"};
         EXPECT_EQ(UIComponentLog(), expected);
     }
 
@@ -496,7 +496,7 @@ namespace BECore::Tests {
         options.minTouchSize = 48.0f;
         const auto issues = _canvas->GetLayout().Validate(options);
 
-        eastl::vector<PoolString> small;
+        Vector<PoolString> small;
         for (const UILayoutIssue& issue : issues) {
             if (issue.kind == UILayoutIssueKind::TouchTargetTooSmall) {
                 small.push_back(issue.element);
@@ -509,7 +509,7 @@ namespace BECore::Tests {
     TEST_F(UIComponentTest, ThePreviewMarksTheTouchTargetsOfComposedElements) {
         Draw();
         const auto marks = UIPreviewOverlay::TouchTargets(_canvas->GetLayout(), 48.0f, 1.0f);
-        eastl::vector<PoolString> names;
+        Vector<PoolString> names;
         for (const TouchMark& mark : marks) {
             names.push_back(mark.name);
         }
@@ -582,7 +582,7 @@ namespace BECore::Tests {
     protected:
         void SetUp() override {
             UIComponentTest::SetUp();
-            const eastl::vector<uint8_t> pixels(static_cast<size_t>(kPictureSide) * kPictureSide * 4, 200);
+            const Vector<uint8_t> pixels(static_cast<size_t>(kPictureSide) * kPictureSide * 4, 200);
             _texture = _renderer->CreateTexture(pixels.data(), kPictureSide, kPictureSide);
             _image = &Get("Plain").AddComponent<UIImageComponent>();
             _image->GetSprite().SetTexture(_texture);

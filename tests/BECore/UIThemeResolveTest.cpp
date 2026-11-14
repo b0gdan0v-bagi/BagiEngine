@@ -438,7 +438,7 @@ namespace BECore::Tests {
         struct ControlColors {
             const char* type;
             const char* component;
-            eastl::vector<ColorField> fields;
+            Vector<ColorField> fields;
         };
 
         template <typename T>
@@ -457,7 +457,7 @@ namespace BECore::Tests {
         }
 
         // The attributes of every element: its fills and the colours of its box
-        eastl::vector<ColorField> ElementColors() {
+        Vector<ColorField> ElementColors() {
             return {Field<UIElement>("color", &UIElement::color),
                     Field<UIElement>("hoverColor", &UIElement::hoverColor),
                     Field<UIElement>("pressedColor", &UIElement::pressedColor),
@@ -471,22 +471,22 @@ namespace BECore::Tests {
         }
 
         template <typename... Parts>
-        eastl::vector<ColorField> Join(eastl::vector<ColorField> first, Parts... rest) {
+        Vector<ColorField> Join(Vector<ColorField> first, Parts... rest) {
             (first.insert(first.end(), rest.begin(), rest.end()), ...);
             return first;
         }
 
         // THE LIST OF COLOUR FIELDS: a control that gets a new UIColor field (or a new UIBoxStyle / UITextEffects colour) and forgets to resolve it fails only if the field is added here
-        eastl::vector<ControlColors> AllControlColors() {
+        Vector<ControlColors> AllControlColors() {
             return {
                 {"UIElement", nullptr, ElementColors()},
                 {"UIStack", nullptr, ElementColors()},
                 {"UISegmented", nullptr, ElementColors()},
-                {"UIPanel", nullptr, Join(ElementColors(), eastl::vector<ColorField>{Field<UIPanel>("spriteTint", &UIPanel::spriteTint)})},
+                {"UIPanel", nullptr, Join(ElementColors(), Vector<ColorField>{Field<UIPanel>("spriteTint", &UIPanel::spriteTint)})},
                 {"UIProgressBar", nullptr,
-                 Join(ElementColors(), eastl::vector<ColorField>{Field<UIProgressBar>("trackColor", &UIProgressBar::trackColor), Field<UIProgressBar>("fillColor", &UIProgressBar::fillColor)})},
+                 Join(ElementColors(), Vector<ColorField>{Field<UIProgressBar>("trackColor", &UIProgressBar::trackColor), Field<UIProgressBar>("fillColor", &UIProgressBar::fillColor)})},
                 // The header text is a UITextComponent (the rows below)
-                {"UIDropdown", nullptr, Join(ElementColors(), eastl::vector<ColorField>{Field<UIDropdown>("arrowColor", &UIDropdown::arrowColor)})},
+                {"UIDropdown", nullptr, Join(ElementColors(), Vector<ColorField>{Field<UIDropdown>("arrowColor", &UIDropdown::arrowColor)})},
                 {"UIElement",
                  "UIImageComponent",
                  {OfComponent<UIImageComponent>("tint", &UIImageComponent::tint), OfComponent<UIImageComponent>("hoverTint", &UIImageComponent::hoverTint),

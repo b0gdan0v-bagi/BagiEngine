@@ -8,10 +8,7 @@
 #include <CoreSDL/SDLMainWindow.h>
 #include <CoreSDL/SDLRendererBackend.h>
 #include <CoreSDL/SDLScreenshot.h>
-#include <filesystem>
-#include <fstream>
 #include <gtest/gtest.h>
-#include <sstream>
 
 namespace BECore::Tests {
 
@@ -108,8 +105,8 @@ namespace BECore::Tests {
         }
 
         /// A 16 by 16 texture: the left half transparent black, the right half opaque white. A wrong UV shows as a missing particle
-        eastl::vector<uint8_t> HalfAndHalf() {
-            eastl::vector<uint8_t> pixels(static_cast<size_t>(kTextureSize) * kTextureSize * kChannels, 0);
+        Vector<uint8_t> HalfAndHalf() {
+            Vector<uint8_t> pixels(static_cast<size_t>(kTextureSize) * kTextureSize * kChannels, 0);
             for (uint32_t y = 0; y < kTextureSize; ++y) {
                 for (uint32_t x = kTextureSize / 2; x < kTextureSize; ++x) {
                     const size_t offset = (static_cast<size_t>(y) * kTextureSize + x) * kChannels;

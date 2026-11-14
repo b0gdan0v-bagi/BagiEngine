@@ -56,7 +56,7 @@ namespace BECore::Tests {
     }
 
     TEST(HotkeyMapTest, NoTwoCommandsShareADefaultChord) {
-        const eastl::span<const EditorCommand> commands = GetEditorCommands();
+        const Span<const EditorCommand> commands = GetEditorCommands();
         for (size_t i = 0; i < commands.size(); ++i) {
             for (size_t j = i + 1; j < commands.size(); ++j) {
                 if (commands[i].defaultChord && commands[j].defaultChord) {

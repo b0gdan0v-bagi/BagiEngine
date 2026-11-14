@@ -5,7 +5,7 @@
 namespace BECore::Tests {
 
     void ExpectNoLeak(const String& text, int seat, const FakeSeatedGame& game) {
-        const eastl::vector<String> leaked = FindLeakedCards(text, seat, game);
+        const Vector<String> leaked = FindLeakedCards(text, seat, game);
         if (leaked.empty()) {
             return;
         }

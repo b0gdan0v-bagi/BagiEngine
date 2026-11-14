@@ -72,7 +72,7 @@ namespace BECore::HierarchyModel {
             return index;
         }
 
-        void AddComponentTypes(const SceneNode& node, eastl::vector<StringView>& out) {
+        void AddComponentTypes(const SceneNode& node, Vector<StringView>& out) {
             for (const auto& component : node.GetComponents()) {
                 out.push_back(component->GetTypeMeta().typeName);
             }
@@ -100,7 +100,7 @@ namespace BECore::HierarchyModel {
         return FindNode(const_cast<SceneNode&>(root), node) != nullptr;
     }
 
-    void AncestorsOf(const SceneNode& node, eastl::vector<SceneNode*>& out) {
+    void AncestorsOf(const SceneNode& node, Vector<SceneNode*>& out) {
         out.clear();
         for (SceneNode* ancestor = node.GetParent(); ancestor != nullptr; ancestor = ancestor->GetParent()) {
             out.push_back(ancestor);
@@ -218,7 +218,7 @@ namespace BECore::HierarchyModel {
         return false;
     }
 
-    void CollectComponentTypes(const SceneNode& root, eastl::vector<StringView>& out) {
+    void CollectComponentTypes(const SceneNode& root, Vector<StringView>& out) {
         out.clear();
         AddComponentTypes(root, out);
         eastl::sort(out.begin(), out.end());

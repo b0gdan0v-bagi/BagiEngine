@@ -229,7 +229,7 @@ namespace BECore {
                 epochTicks = _epochTicks;
             }
             const uint64_t first = count > kMaxFrames ? count - kMaxFrames : 0;
-            eastl::vector<uint64_t> ticks;
+            Vector<uint64_t> ticks;
             ticks.reserve(static_cast<size_t>(count - first));
             for (uint64_t index = first; index < count; ++index) {
                 ticks.push_back(LoadWord(_markTicks[index % kMaxFrames]));

@@ -102,7 +102,7 @@ namespace BECore::Fuzz {
             void WalkScope(size_t begin, size_t end, size_t depth) {
                 FUZZ_CHECK(depth <= BinaryFormat::MaxDepth);
 
-                eastl::vector<BinaryFormat::EntryView> entries;
+                Vector<BinaryFormat::EntryView> entries;
                 eastl::hash_map<StringView, LastEntries> last;
                 for (size_t position = begin; position < end;) {
                     BinaryFormat::EntryView entry;
@@ -276,7 +276,7 @@ namespace BECore::Fuzz {
     void FuzzBinaryDeserializer(const uint8_t* data, size_t size) {
         CheckBuffer(data, size);
 
-        const eastl::vector<uint8_t> repaired = WithTrueBinaryHeader(data, size);
+        const Vector<uint8_t> repaired = WithTrueBinaryHeader(data, size);
         if (!repaired.empty()) {
             CheckBuffer(repaired.data(), repaired.size());
         }

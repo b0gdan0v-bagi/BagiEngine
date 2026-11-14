@@ -6,7 +6,7 @@ namespace BECore {
         return Format("{}|{}", configName.CStr(), attrPath);
     }
 
-    void ConfigFieldSchema::RegisterFlags(PoolString configName, StringView attrPath, eastl::vector<String> flagNames) {
+    void ConfigFieldSchema::RegisterFlags(PoolString configName, StringView attrPath, Vector<String> flagNames) {
         const String key = MakeKey(configName, attrPath);
         FieldHint hint;
         hint.type = FieldType::Flags;

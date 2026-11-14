@@ -28,7 +28,7 @@ namespace BECore::Tests {
             std::filesystem::path _directory;
         };
 
-        String Joined(const eastl::vector<String>& names) {
+        String Joined(const Vector<String>& names) {
             String text;
             for (const String& name : names) {
                 if (!text.empty()) {

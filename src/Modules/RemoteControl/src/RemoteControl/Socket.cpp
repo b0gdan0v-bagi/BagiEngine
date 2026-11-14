@@ -207,7 +207,7 @@ namespace BECore {
         }
 
         /// The IPv4 addresses of @p host with @p port in them, in the order the system prefers
-        std::expected<eastl::vector<sockaddr_in>, String> ResolveIPv4(const String& host, uint16_t port) {
+        std::expected<Vector<sockaddr_in>, String> ResolveIPv4(const String& host, uint16_t port) {
             EnsureSocketLibrary();
             addrinfo hints{};
             hints.ai_family = AF_INET;
@@ -218,7 +218,7 @@ namespace BECore {
             if (status != 0 || list == nullptr) {
                 return std::unexpected(Format("cannot resolve host \"{}\" ({})", host, DescribeResolveError(status != 0 ? status : EAI_NONAME)));
             }
-            eastl::vector<sockaddr_in> addresses;
+            Vector<sockaddr_in> addresses;
             for (const addrinfo* item = list.get(); item != nullptr; item = item->ai_next) {
                 if (item->ai_family == AF_INET && item->ai_addrlen >= sizeof(sockaddr_in)) {
                     sockaddr_in address{};
@@ -401,7 +401,7 @@ namespace BECore {
         }
     }
 
-    bool Socket::SendAll(eastl::span<const uint8_t> data) {
+    bool Socket::SendAll(Span<const uint8_t> data) {
         if (!IsValid()) {
             return false;
         }
@@ -434,7 +434,7 @@ namespace BECore {
         return true;
     }
 
-    std::expected<size_t, SocketError> Socket::Receive(eastl::span<uint8_t> buffer) {
+    std::expected<size_t, SocketError> Socket::Receive(Span<uint8_t> buffer) {
         if (!IsValid() || buffer.empty()) {
             return std::unexpected(SocketError::Failed);
         }

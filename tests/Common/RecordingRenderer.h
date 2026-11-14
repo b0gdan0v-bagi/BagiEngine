@@ -10,7 +10,7 @@ namespace BECore::Tests {
     /// A texture that holds the pixels it was made from. Made by RecordingRenderer::CreateTexture().
     class RecordedTexture : public ITexture {
     public:
-        RecordedTexture(eastl::vector<uint8_t> rgba, uint32_t width, uint32_t height) : _rgba(std::move(rgba)), _width(width), _height(height) {}
+        RecordedTexture(Vector<uint8_t> rgba, uint32_t width, uint32_t height) : _rgba(std::move(rgba)), _width(width), _height(height) {}
 
         ResourceState GetState() const override {
             return ResourceState::Loaded;
@@ -34,12 +34,12 @@ namespace BECore::Tests {
             return nullptr;
         }
 
-        const eastl::vector<uint8_t>& GetPixels() const {
+        const Vector<uint8_t>& GetPixels() const {
             return _rgba;
         }
 
     private:
-        eastl::vector<uint8_t> _rgba;
+        Vector<uint8_t> _rgba;
         uint32_t _width = 0;
         uint32_t _height = 0;
     };
@@ -52,11 +52,11 @@ namespace BECore::Tests {
         Rect rect;    ///< the destination in output pixels, after the view transform; for geometry the box around its vertices
         Color color;  ///< the fill color of a rect, the tint of a texture, the color of the first vertex of geometry
         const ITexture* texture = nullptr;
-        Optional<Rect> source;                   ///< the source rect of a texture draw, as it was passed
-        Optional<Rect> clip;                     ///< the clip in effect for this call
-        BlendMode blend = BlendMode::Alpha;      ///< the blend mode in effect for this call
-        eastl::vector<GeometryVertex> vertices;  ///< geometry: the vertices with their positions in output pixels (translation and view transform applied)
-        eastl::vector<int> indices;              ///< geometry: the indices as they were passed
+        Optional<Rect> source;               ///< the source rect of a texture draw, as it was passed
+        Optional<Rect> clip;                 ///< the clip in effect for this call
+        BlendMode blend = BlendMode::Alpha;  ///< the blend mode in effect for this call
+        Vector<GeometryVertex> vertices;     ///< geometry: the vertices with their positions in output pixels (translation and view transform applied)
+        Vector<int> indices;                 ///< geometry: the indices as they were passed
     };
 
     /**
@@ -111,7 +111,7 @@ namespace BECore::Tests {
             CountDraw(&texture, kQuadTriangles);
         }
 
-        void DrawGeometry(ITexture* texture, eastl::span<const GeometryVertex> vertices, eastl::span<const int> indices, float translateX, float translateY) override {
+        void DrawGeometry(ITexture* texture, Span<const GeometryVertex> vertices, Span<const int> indices, float translateX, float translateY) override {
             if (IsClipEmpty() || vertices.empty()) {
                 return;
             }
@@ -149,7 +149,7 @@ namespace BECore::Tests {
                 return {};
             }
             ++texturesCreated;
-            return New<RecordedTexture>(eastl::vector<uint8_t>(rgba, rgba + static_cast<size_t>(width) * height * 4), width, height);
+            return New<RecordedTexture>(Vector<uint8_t>(rgba, rgba + static_cast<size_t>(width) * height * 4), width, height);
         }
 
         IntrusivePtr<IRenderTarget> CreateRenderTarget(uint32_t, uint32_t) override {
@@ -182,7 +182,7 @@ namespace BECore::Tests {
 
         float width = 800.0f;
         float height = 600.0f;
-        eastl::vector<DrawCall> calls;
+        Vector<DrawCall> calls;
         uint32_t texturesCreated = 0;
 
     private:

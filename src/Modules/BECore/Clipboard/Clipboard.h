@@ -44,9 +44,9 @@ namespace BECore {
         void AnswerAll(const ClipboardText& result);
 
         IntrusivePtr<IClipboardBackend> _backend;
-        eastl::vector<ClipboardCallback> _waiting;    ///< asked, not yet in a backend read; also the ones that arrive while a read runs
-        eastl::vector<ClipboardCallback> _reading;    ///< the requests the read in flight will answer
-        eastl::vector<ClipboardCallback> _answering;  ///< being called right now; a callback that asks again goes to _waiting
+        Vector<ClipboardCallback> _waiting;    ///< asked, not yet in a backend read; also the ones that arrive while a read runs
+        Vector<ClipboardCallback> _reading;    ///< the requests the read in flight will answer
+        Vector<ClipboardCallback> _answering;  ///< being called right now; a callback that asks again goes to _waiting
         ClipboardText _result;
         ClipboardText _pasted;
         bool _readInFlight = false;

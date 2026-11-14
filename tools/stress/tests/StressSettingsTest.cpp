@@ -5,7 +5,7 @@ namespace BECore::Stress::Tests {
 
     namespace {
 
-        using Args = eastl::vector<String>;
+        using Args = Vector<String>;
 
         std::expected<StressSettings, String> Parse(const Args& args) {
             CommandLine line;

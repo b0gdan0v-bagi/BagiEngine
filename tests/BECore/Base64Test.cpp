@@ -6,13 +6,13 @@ namespace BECore::Tests {
     namespace {
 
         std::string Encode(std::string_view text) {
-            const String encoded = Base64Encode(eastl::span<const uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), text.size()));
+            const String encoded = Base64Encode(Span<const uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), text.size()));
             return std::string(encoded.c_str(), encoded.size());
         }
 
         std::string Encode(std::initializer_list<uint8_t> bytes) {
-            const eastl::vector<uint8_t> data(bytes);
-            const String encoded = Base64Encode(eastl::span<const uint8_t>(data.data(), data.size()));
+            const Vector<uint8_t> data(bytes);
+            const String encoded = Base64Encode(Span<const uint8_t>(data.data(), data.size()));
             return std::string(encoded.c_str(), encoded.size());
         }
 
@@ -36,18 +36,18 @@ namespace BECore::Tests {
     }
 
     TEST(Base64Test, EmptyInputGivesAnEmptyString) {
-        const String encoded = Base64Encode(eastl::span<const uint8_t>());
+        const String encoded = Base64Encode(Span<const uint8_t>());
 
         EXPECT_TRUE(encoded.empty());
     }
 
     TEST(Base64Test, EncodesAllByteValues) {
-        eastl::vector<uint8_t> data;
+        Vector<uint8_t> data;
         for (int value = 0; value < 256; ++value) {
             data.push_back(static_cast<uint8_t>(value));
         }
 
-        const String encoded = Base64Encode(eastl::span<const uint8_t>(data.data(), data.size()));
+        const String encoded = Base64Encode(Span<const uint8_t>(data.data(), data.size()));
 
         EXPECT_EQ(encoded.size(), (256 + 2) / 3 * 4);
         EXPECT_EQ(encoded.substr(0, 8), String("AAECAwQF"));

@@ -14,7 +14,7 @@ namespace BECore {
     struct WidgetList : RefCounted {
         BE_CLASS(WidgetList)
 
-        BE_REFLECT_FIELD eastl::vector<IntrusivePtrNonAtomic<IWidget>> widgets;
+        BE_REFLECT_FIELD Vector<IntrusivePtrNonAtomic<IWidget>> widgets;
     };
 
 }  // namespace BECore

@@ -148,7 +148,7 @@ namespace BECore {
         IResourceLoader* FindLoaderForPath(StringView path) const;
 
         ResourceCache _cache;
-        eastl::vector<IntrusivePtr<IResourceLoader>> _loaders;
+        Vector<IntrusivePtr<IResourceLoader>> _loaders;
     };
 
     // Template implementations

@@ -151,9 +151,9 @@ namespace BECore::Tests {
     }
 
     /// Frames of @p count identical text messages in one buffer
-    inline eastl::vector<uint8_t> RepeatText(const std::string& text, int count) {
+    inline Vector<uint8_t> RepeatText(const std::string& text, int count) {
         const auto frame = EncodeTextFrame(FromStd(text), kClientMask);
-        eastl::vector<uint8_t> batch;
+        Vector<uint8_t> batch;
         for (int i = 0; i < count; ++i) {
             batch.insert(batch.end(), frame.data(), frame.data() + frame.size());
         }

@@ -37,7 +37,7 @@ namespace BECore::Tests {
                 }
                 socket.SetReceiveTimeout(std::min(left, Socket::kWakeInterval));
                 uint8_t byte = 0;
-                const auto received = socket.Receive(eastl::span<uint8_t>(&byte, 1));
+                const auto received = socket.Receive(Span<uint8_t>(&byte, 1));
                 if (!received) {
                     if (received.error() == SocketError::TimedOut) {
                         continue;
@@ -88,21 +88,21 @@ namespace BECore::Tests {
             return {};
         }
 
-        bool SendAll(eastl::span<const uint8_t> data) override {
+        bool SendAll(Span<const uint8_t> data) override {
             if (!_valid) {
                 SetError("TLS: not connected");
                 return false;
             }
-            eastl::vector<uint8_t> masked(data.begin(), data.end());
+            Vector<uint8_t> masked(data.begin(), data.end());
             FakeTlsMask(masked.data(), masked.size());
-            const bool sent = _socket.SendAll(eastl::span<const uint8_t>(masked.data(), masked.size()));
+            const bool sent = _socket.SendAll(Span<const uint8_t>(masked.data(), masked.size()));
             if (!sent) {
                 SetError("TLS: sending failed");
             }
             return sent;
         }
 
-        std::expected<size_t, SocketError> Receive(eastl::span<uint8_t> buffer) override {
+        std::expected<size_t, SocketError> Receive(Span<uint8_t> buffer) override {
             if (!_valid) {
                 SetError("TLS: not connected");
                 return std::unexpected(SocketError::Failed);
@@ -156,7 +156,7 @@ namespace BECore::Tests {
 
     /// A factory that gives a FakeTlsStream
     [[nodiscard]] inline TlsStreamFactory FakeTlsFactory() {
-        return [] { return eastl::unique_ptr<ITlsStream>(eastl::make_unique<FakeTlsStream>()); };
+        return [] { return UniquePtr<ITlsStream>(eastl::make_unique<FakeTlsStream>()); };
     }
 
     /// The server's end of the fake handshake and of the "encryption", for a hand-written server on an accepted Socket

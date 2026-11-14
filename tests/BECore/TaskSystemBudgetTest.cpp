@@ -37,7 +37,7 @@ namespace BECore::Tests {
 
         /// What a coroutine of these tests reports.
         struct Trace {
-            eastl::vector<int> events;
+            Vector<int> events;
             int steps = 0;
             bool shouldYieldSeen = false;
         };
@@ -184,7 +184,7 @@ namespace BECore::Tests {
             }
 
             TaskScheduler _scheduler;
-            eastl::unique_ptr<ThreadPool> _pool;
+            UniquePtr<ThreadPool> _pool;
         };
 
     }  // namespace

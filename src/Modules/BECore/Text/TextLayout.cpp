@@ -21,11 +21,11 @@ namespace BECore {
         };
 
         struct Line {
-            eastl::vector<Item> items;  ///< what is drawn: no trailing spaces
+            Vector<Item> items;  ///< what is drawn: no trailing spaces
             float width = 0.0f;
         };
 
-        float SumAdvances(const eastl::vector<Item>& items) {
+        float SumAdvances(const Vector<Item>& items) {
             float width = 0.0f;
             for (const Item& item : items) {
                 width += item.advance;
@@ -33,8 +33,8 @@ namespace BECore {
             return width;
         }
 
-        eastl::vector<Item> BuildItems(const Font& font, StringView text, float fontSize) {
-            eastl::vector<Item> items;
+        Vector<Item> BuildItems(const Font& font, StringView text, float fontSize) {
+            Vector<Item> items;
             const uint32_t spaceGlyph = font.FindGlyph(U' ');
             const float spaceAdvance = font.GetAdvance(spaceGlyph, fontSize);
             size_t pos = 0;
@@ -68,8 +68,8 @@ namespace BECore {
         }
 
         /// Cuts the items into lines; spaces at a break and at the end of a line are not part of the line
-        eastl::vector<Line> BreakIntoLines(const eastl::vector<Item>& items, float maxWidth, bool wrap) {
-            eastl::vector<Line> lines;
+        Vector<Line> BreakIntoLines(const Vector<Item>& items, float maxWidth, bool wrap) {
+            Vector<Line> lines;
             const size_t count = items.size();
             if (count == 0) {
                 return lines;
@@ -143,8 +143,8 @@ namespace BECore {
         }
 
         /// The glyphs of an ellipsis: U+2026, or three dots when the font has no such character
-        eastl::vector<Item> BuildEllipsis(const Font& font, float fontSize) {
-            eastl::vector<Item> ellipsis;
+        Vector<Item> BuildEllipsis(const Font& font, float fontSize) {
+            Vector<Item> ellipsis;
             Item item;
             if (const uint32_t glyph = font.FindGlyph(kEllipsis); glyph != 0) {
                 item.codePoint = kEllipsis;
@@ -163,7 +163,7 @@ namespace BECore {
         }
 
         /// Takes characters off the end of the line until the ellipsis fits behind it
-        void EndWithEllipsis(Line& line, const eastl::vector<Item>& ellipsis, float maxWidth) {
+        void EndWithEllipsis(Line& line, const Vector<Item>& ellipsis, float maxWidth) {
             const float ellipsisWidth = SumAdvances(ellipsis);
             while (!line.items.empty() && (line.width + ellipsisWidth > maxWidth + kEpsilon || line.items.back().space)) {
                 line.width -= line.items.back().advance;
@@ -176,7 +176,7 @@ namespace BECore {
         }
 
         struct Laid {
-            eastl::vector<Line> lines;
+            Vector<Line> lines;
             bool truncated = false;
         };
 
@@ -198,7 +198,7 @@ namespace BECore {
                 laid.lines.resize(maxLines);
             }
 
-            const eastl::vector<Item> ellipsis = BuildEllipsis(font, fontSize);
+            const Vector<Item> ellipsis = BuildEllipsis(font, fontSize);
             for (size_t i = 0; i < laid.lines.size(); ++i) {
                 Line& line = laid.lines[i];
                 const bool tooWide = options.maxWidth > 0.0f && line.width > options.maxWidth + kEpsilon;

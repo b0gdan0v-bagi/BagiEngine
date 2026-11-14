@@ -42,7 +42,7 @@ namespace BECore {
         return true;
     }
 
-    void Ser::DataAccessor<eastl::vector<SceneViewVariant>>::Save(ISerializer& s, const eastl::vector<SceneViewVariant>& variants, StringView key) {
+    void Ser::DataAccessor<Vector<SceneViewVariant>>::Save(ISerializer& s, const Vector<SceneViewVariant>& variants, StringView key) {
         if (variants.empty()) {
             return;
         }
@@ -58,7 +58,7 @@ namespace BECore {
         }
     }
 
-    bool Ser::DataAccessor<eastl::vector<SceneViewVariant>>::Load(IDeserializer& d, eastl::vector<SceneViewVariant>& variants, StringView key) {
+    bool Ser::DataAccessor<Vector<SceneViewVariant>>::Load(IDeserializer& d, Vector<SceneViewVariant>& variants, StringView key) {
         size_t count = 0;
         if (!d.BeginArray(key, ViewItem, count)) {
             return false;
@@ -77,7 +77,7 @@ namespace BECore {
         return true;
     }
 
-    ActiveSceneView SceneViewSelector::Pick(float defaultWidth, float defaultHeight, eastl::span<const SceneViewVariant> variants, float outputWidth, float outputHeight) {
+    ActiveSceneView SceneViewSelector::Pick(float defaultWidth, float defaultHeight, Span<const SceneViewVariant> variants, float outputWidth, float outputHeight) {
         const ActiveSceneView fallback{PoolString{}, defaultWidth, defaultHeight, -1};
         if (!IsUsableSize(outputWidth, outputHeight)) {
             return fallback;

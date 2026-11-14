@@ -103,7 +103,7 @@ namespace BECore {
         // One bar per frame, the newest on the right; the line is the frame budget
         const float barsBottom = 2.0f * _margin + layout.height + _margin + kBarsHeight;
         const float msPerPixel = (_budgetMs * kBudgetsShown) / kBarsHeight;
-        const eastl::vector<FrameStats> history = CoreManager::GetFrameStats().GetHistory(kBars);
+        const Vector<FrameStats> history = CoreManager::GetFrameStats().GetHistory(kBars);
         float x = 2.0f * _margin + (kBars - history.size()) * kBarWidth;
         for (const FrameStats& frame : history) {
             const float barHeight = std::min(kBarsHeight, static_cast<float>(frame.frameMs) / msPerPixel);

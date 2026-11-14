@@ -269,7 +269,7 @@ namespace BECore {
     }
 
     bool UICanvasComponent::SyncPopups() {
-        const eastl::vector<UIElement*> open = _layout.OpenPopups();
+        const Vector<UIElement*> open = _layout.OpenPopups();
         UIElement* keep = nullptr;
         for (UIElement* popup : open) {
             if (popup != _popup.Get()) {
@@ -309,7 +309,7 @@ namespace BECore {
     }
 
     UIElement* UICanvasComponent::FindPopupOf(const UIElement& element, UIElement*& child) const {
-        const eastl::vector<UIElement*> open = _layout.OpenPopups();
+        const Vector<UIElement*> open = _layout.OpenPopups();
         for (auto popup = open.rbegin(); popup != open.rend(); ++popup) {
             for (const auto& candidate : (*popup)->children) {
                 if (Contains(*candidate, element)) {

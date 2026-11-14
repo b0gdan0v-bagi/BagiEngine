@@ -137,7 +137,7 @@ namespace BECore::Tests {
         const char utf16[] = "\xFF\xFE<\0r\0/\0>\0";
         const char utf32[] = "\xFF\xFE\0\0<\0\0\0r\0\0\0/\0\0\0>\0\0\0";
         for (const StringView text : {StringView(utf16, sizeof(utf16) - 1), StringView(utf32, sizeof(utf32) - 1)}) {
-            eastl::vector<char> buffer(text.size() + 1);
+            Vector<char> buffer(text.size() + 1);
             std::memcpy(buffer.data() + 1, text.data(), text.size());
 
             XmlDeserializer reader;
@@ -269,7 +269,7 @@ namespace BECore::Tests {
     TEST(ReaderLimitsTest, BinaryBufferOverTheLimitIsRefused) {
         BinarySerializer writer;
         writer.WriteAttribute("a", int32_t{1});
-        eastl::vector<uint8_t> bytes = writer.GetData();
+        Vector<uint8_t> bytes = writer.GetData();
         bytes.resize(ReaderLimits::kMaxBinaryStreamBytes + 1);
         BinaryFormat::Store<uint32_t>(bytes.data() + BinaryFormat::PayloadSizeOffset, static_cast<uint32_t>(bytes.size() - BinaryFormat::HeaderSize));
 

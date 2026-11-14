@@ -1,6 +1,4 @@
-#include <BECore/Profiler/Profile.h>
 #include <BECore/Profiler/ProfilerSettings.h>
-#include <BECore/Threading/LockGuards.h>
 #include <BECore/Threading/Mutex.h>
 #include <BECore/Threading/SharedMutex.h>
 #include <gtest/gtest.h>
@@ -57,7 +55,7 @@ namespace BECore::Tests {
             GTEST_SKIP() << "Tracy was shut down by another test of this process (ctest runs each test alone)";
         }
         static constexpr ProfileSite kSite{"Deep", "Test", __FILE__, 1, 0};
-        eastl::vector<uint64_t> tokens;
+        Vector<uint64_t> tokens;
         for (uint32_t i = 0; i < TracyProfilerBackend::kMaxZoneDepth + 4; ++i) {
             tokens.push_back(tracy.BeginZone(kSite));
         }

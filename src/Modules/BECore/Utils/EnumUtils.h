@@ -45,16 +45,16 @@ namespace BECore {
                 Enum value;
             };
 
-            static constexpr eastl::array<Data, Count> tokens{Data{EnumName<Enums>, Enums}...};
-            static constexpr eastl::array<StringView, Count> names{EnumName<Enums>...};
-            static constexpr eastl::array<Enum, Count> values{Enums...};
+            static constexpr Array<Data, Count> tokens{Data{EnumName<Enums>, Enums}...};
+            static constexpr Array<StringView, Count> names{EnumName<Enums>...};
+            static constexpr Array<Enum, Count> values{Enums...};
 
             using Ty = std::underlying_type_t<Enum>;
             static constexpr Enum errorValue{static_cast<Enum>(std::numeric_limits<Ty>::max())};
 
             // Runtime PoolString cache
             struct RuntimeCache {
-                eastl::array<PoolString, Count> poolStrings{};
+                Array<PoolString, Count> poolStrings{};
                 std::once_flag initFlag{};
 
                 void Initialize() {
@@ -108,17 +108,17 @@ namespace BECore {
             }
 
             // Access to the cached PoolString array
-            static const eastl::array<PoolString, Count>& GetPoolStrings() noexcept {
+            static const Array<PoolString, Count>& GetPoolStrings() noexcept {
                 return GetCache().poolStrings;
             }
 
             // Access to compile-time string_view array
-            static constexpr const eastl::array<StringView, Count>& GetNames() noexcept {
+            static constexpr const Array<StringView, Count>& GetNames() noexcept {
                 return names;
             }
 
             // Access to compile-time values array
-            static constexpr const eastl::array<Enum, Count>& GetValues() noexcept {
+            static constexpr const Array<Enum, Count>& GetValues() noexcept {
                 return values;
             }
         };

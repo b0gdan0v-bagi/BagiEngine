@@ -15,8 +15,8 @@ namespace BECore::Stress {
 
         /// The sorted values of one field of the samples
         template <typename Field>
-        eastl::vector<double> SortedOf(const eastl::vector<StressSample>& samples, Field field) {
-            eastl::vector<double> values;
+        Vector<double> SortedOf(const Vector<StressSample>& samples, Field field) {
+            Vector<double> values;
             values.reserve(samples.size());
             for (const StressSample& sample : samples) {
                 values.push_back(sample.*field);
@@ -70,7 +70,7 @@ namespace BECore::Stress {
         return sample;
     }
 
-    double NearestRank(eastl::span<const double> sorted, double fraction) {
+    double NearestRank(Span<const double> sorted, double fraction) {
         if (sorted.empty()) {
             return 0.0;
         }

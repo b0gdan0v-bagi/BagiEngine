@@ -52,8 +52,8 @@ namespace BECore {
         StatsKey _statsKey;
         RowsKey _rowsKey;
         uint64_t _statsVersion = 0;  // counts the times the statistics were computed, so the rows know theirs is stale
-        eastl::vector<ZoneStatRow> _stats;
-        eastl::vector<ZoneStatRow> _rows;  // _stats filtered and sorted
+        Vector<ZoneStatRow> _stats;
+        Vector<ZoneStatRow> _rows;  // _stats filtered and sorted
     };
 
 }  // namespace BECore

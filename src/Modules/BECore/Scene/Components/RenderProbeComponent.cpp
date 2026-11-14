@@ -38,7 +38,7 @@ namespace BECore {
 
         /// A square of red and green gradients: the corners tell the orientation of the texture and of the tint
         IntrusivePtr<ITexture> MakeGradient(IRenderer& renderer) {
-            eastl::vector<uint8_t> pixels;
+            Vector<uint8_t> pixels;
             pixels.reserve(static_cast<size_t>(kGradientSize) * kGradientSize * 4);
             for (uint32_t y = 0; y < kGradientSize; ++y) {
                 for (uint32_t x = 0; x < kGradientSize; ++x) {

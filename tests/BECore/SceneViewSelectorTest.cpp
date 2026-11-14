@@ -25,11 +25,11 @@ namespace BECore::Tests {
             return variant;
         }
 
-        ActiveSceneView Pick(const eastl::vector<SceneViewVariant>& variants, float outputWidth, float outputHeight) {
+        ActiveSceneView Pick(const Vector<SceneViewVariant>& variants, float outputWidth, float outputHeight) {
             return SceneViewSelector::Pick(kDefaultWidth, kDefaultHeight, variants, outputWidth, outputHeight);
         }
 
-        eastl::vector<SceneViewVariant> PortraitAndWide() {
+        Vector<SceneViewVariant> PortraitAndWide() {
             return {MakeVariant("Portrait", "orientation:portrait", 720.0f, 1280.0f), MakeVariant("Wide", "minAspect:2", 1600.0f, 600.0f)};
         }
 
@@ -60,7 +60,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Pick(variants, 1000.0f, 800.0f).index, -1);
 
         // The order of the list decides when two hold: both of these match a 300 x 100 output
-        const eastl::vector<SceneViewVariant> reversed = {MakeVariant("Wide", "minAspect:2", 1600.0f, 600.0f), MakeVariant("Any", "", 10.0f, 10.0f)};
+        const Vector<SceneViewVariant> reversed = {MakeVariant("Wide", "minAspect:2", 1600.0f, 600.0f), MakeVariant("Any", "", 10.0f, 10.0f)};
         EXPECT_EQ(Pick(reversed, 300.0f, 100.0f).index, 0);
         EXPECT_EQ(Pick(reversed, 100.0f, 300.0f).index, 1);
     }
@@ -71,7 +71,7 @@ namespace BECore::Tests {
     }
 
     TEST(SceneViewSelectorTest, AspectAndSizeRangesAreTestedAgainstTheOutputInPixels) {
-        const eastl::vector<SceneViewVariant> variants = {
+        const Vector<SceneViewVariant> variants = {
             MakeVariant("Small", "maxWidth:500", 400.0f, 400.0f),
             MakeVariant("Tall", "maxAspect:0.5;minHeight:1000", 500.0f, 1000.0f),
         };
@@ -84,7 +84,7 @@ namespace BECore::Tests {
     TEST(SceneViewSelectorTest, AVariantWithAnUnusableSizeIsSkipped) {
         const float nan = std::numeric_limits<float>::quiet_NaN();
         const float inf = std::numeric_limits<float>::infinity();
-        const eastl::vector<SceneViewVariant> variants = {
+        const Vector<SceneViewVariant> variants = {
             MakeVariant("Zero", "", 0.0f, 100.0f), MakeVariant("Negative", "", 100.0f, -1.0f), MakeVariant("Nan", "", nan, 100.0f),
             MakeVariant("Inf", "", 100.0f, inf),   MakeVariant("Good", "", 300.0f, 200.0f),
         };
@@ -109,11 +109,11 @@ namespace BECore::Tests {
     }
 
     TEST(SceneViewSelectorTest, VariantsRoundTripThroughTheFileForm) {
-        eastl::vector<SceneViewVariant> variants = PortraitAndWide();
+        Vector<SceneViewVariant> variants = PortraitAndWide();
         variants.push_back(MakeVariant("", "", 10.0f, 20.0f));
 
         XmlSerializer serializer;
-        Ser::DataAccessor<eastl::vector<SceneViewVariant>>::Save(serializer, variants, "viewVariants");
+        Ser::DataAccessor<Vector<SceneViewVariant>>::Save(serializer, variants, "viewVariants");
         const pugi::xml_node list = serializer.GetRootNode().child("viewVariants");
         ASSERT_TRUE(list);
         const pugi::xml_node first = list.child("view");
@@ -132,15 +132,15 @@ namespace BECore::Tests {
         }
         XmlDeserializer deserializer;
         ASSERT_TRUE(deserializer.LoadFromString(text.c_str()));
-        eastl::vector<SceneViewVariant> loaded;
-        ASSERT_TRUE(Ser::DataAccessor<eastl::vector<SceneViewVariant>>::Load(deserializer, loaded, "viewVariants"));
+        Vector<SceneViewVariant> loaded;
+        ASSERT_TRUE(Ser::DataAccessor<Vector<SceneViewVariant>>::Load(deserializer, loaded, "viewVariants"));
         EXPECT_FALSE(deserializer.HasErrors());
         EXPECT_EQ(loaded, variants);
     }
 
     TEST(SceneViewSelectorTest, AnEmptyListWritesNothing) {
         XmlSerializer serializer;
-        Ser::DataAccessor<eastl::vector<SceneViewVariant>>::Save(serializer, {}, "viewVariants");
+        Ser::DataAccessor<Vector<SceneViewVariant>>::Save(serializer, {}, "viewVariants");
         EXPECT_FALSE(serializer.GetRootNode().child("viewVariants"));
     }
 
@@ -152,8 +152,8 @@ namespace BECore::Tests {
 </viewVariants></Scene>)";
         XmlDeserializer deserializer;
         ASSERT_TRUE(deserializer.LoadFromString(xml));
-        eastl::vector<SceneViewVariant> loaded;
-        ASSERT_TRUE(Ser::DataAccessor<eastl::vector<SceneViewVariant>>::Load(deserializer, loaded, "viewVariants"));
+        Vector<SceneViewVariant> loaded;
+        ASSERT_TRUE(Ser::DataAccessor<Vector<SceneViewVariant>>::Load(deserializer, loaded, "viewVariants"));
 
         EXPECT_EQ(deserializer.GetErrors().size(), 1u);
         ASSERT_EQ(loaded.size(), 1u);
