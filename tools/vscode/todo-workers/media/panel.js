@@ -257,7 +257,7 @@
         if (entry) card.appendChild(el("div", "title", entry.title));
         if (worker.queue && worker.queue.length) {
             const row = el("div", "queue");
-            row.appendChild(el("span", "muted", "next:"));
+            row.appendChild(el("span", "muted", worker.queuePaused ? `next (paused: ${worker.queuePaused}):` : "next:"));
             worker.queue.forEach((id) => {
                 const chip = el("span", "chip", id);
                 const x = el("button", "chip-x", "\u00D7");

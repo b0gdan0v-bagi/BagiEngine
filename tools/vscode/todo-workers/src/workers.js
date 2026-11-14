@@ -72,7 +72,8 @@ function attach(ctx) {
         await ctx.refresh();
     }
 
-    // A free worker with a queue gets its next entry; one start per refresh, so the loops do not choose at once.
+    // A free worker with a queue that is not paused (`worker.py queue --pause`) gets its next entry; one start per
+    // refresh, so the loops do not choose at once.
     let autoStarting = false;
     async function autoStartQueues() {
         const c = config();
@@ -80,7 +81,7 @@ function attach(ctx) {
         const state = ctx.state;
         if (!c.autoStartQueue || !tool || !state || autoStarting) return;
         const worker = state.workers.find(
-            (w) => w.queue && w.queue.length && !w.active && !w.dirty && !w.limited && !w.stopped && !busy.has(w.k) && (!w.entry || w.entry.status === "review")
+            (w) => w.queue && w.queue.length && !w.queuePaused && !w.active && !w.dirty && !w.limited && !w.stopped && !busy.has(w.k) && (!w.entry || w.entry.status === "review")
         );
         if (!worker) return;
         autoStarting = true;
