@@ -34,6 +34,21 @@ Per-machine settings go in `CMakeUserPresets.json` (git-ignored). Without preset
 
 `python3 CI/scripts/time_trace_report.py --build build/macos-time-trace [--top N] [--json] [--only tests/]` reads those traces: CPU seconds (`Total ExecuteCompiler`, the figure that holds under load; the wall time is taken with `time`), the PCH compile, the slowest TUs, the headers by **inclusive** parse time summed over TUs (a header's time contains everything it includes, so the rows overlap and are not added up; a header in the PCH is listed apart, once), the slowest template instantiations; `--only` keeps the TUs whose trace path contains the text.
 
+**Baseline, 2026-11-14** (`macos-time-trace`, Apple M4 Pro, 14 cores, load average 2.9 before the build, no other build running; `cmake --build --preset macos-time-trace --target BagiEngineTests StressTests` from an empty folder, 1006 steps; the clock moves with the load, compare the CPU figure):
+
+| | all | `--only tests/` (255 TUs) |
+|---|---|---|
+| wall time | 35 s | |
+| compiler time (`Total ExecuteCompiler`) | 487 s (933 TUs; `user` of the build 398 s) | 277 s |
+| Frontend / Backend | 402 s / 72 s | 228 s / 44 s |
+| inside the Frontend (inclusive, overlapping): `Source` / `ParseClass` / `InstantiateClass` / `InstantiateFunction` | 87 / 57 / 96 / 229 s | 55 / 40 / 61 / 125 s |
+| PCH compile (BECore; the SDL one) | 1.1 s (0.15 s) | |
+| slowest TUs | `ContentMigrationAfterTest` 3.4 s, `ControlServiceTest` 3.1, `UIControlApiTest` 3.0, `UIWebTest` 2.5, `SDLCaptureTest` 2.3 | the same |
+
+Headers outside the PCH, inclusive, summed over TUs (s, TUs): `GameManager/CoreManager.h` 30 (156), `gtest/gtest.h` 28 (237; its `gtest-death-test`, `-matchers`, `-printers` 10 to 12 each), `tests/Common/EngineEnvironment.h` 10.5 (88), `tests/Common/Printers.h` 8.9 (140), `Control/Json.h` with `nlohmann/json.hpp` 8.8 (60). Instantiations (s, TUs): `entt::basic_dispatcher<>::trigger<FlushLogsEvent>` 36 and `EventBase<FlushLogsEvent>::Emit` 21 (562, from the inline `Logger::Fatal` in `Logger/Logger.h`, parsed again in every TU), `entt::locator<meta_ctx>::value_or` 32 (562, inside that chain), `nlohmann::basic_json<>::parse<const char*>` 10 (60), `ValueArray<bool, bool>` of gtest 4.9 (236).
+
+Conclusion: the Frontend is 83 % of the compile time and template instantiation is the largest part of it (229 s of 402), not header parsing (87 s); the headers that cost most are `CoreManager.h` (it pulls the managers and EnTT) and gtest in the tests, and one inline `Logger::Fatal` instantiates the EnTT dispatcher in every TU. Slice 4: move that call out of the header, cut what `CoreManager.h` pulls in, then the test side (json comparison helper, gtest printers); the PCH itself is cheap (1.1 s).
+
 ## Sanitizers and fuzzing
 
 `BagiFuzz.cmake`: `ENGINE_SANITIZE`, a `;` list of `address` and `undefined` (any other value is a configure error; `thread` and coverage are the entry `build-diagnostic-presets`), puts the sanitizers on every target, vendored code included (Clang or GCC; a configure error on `cl`; on Windows the compiler is clang, and `MSVC` is also true for clang with the MSVC target, so the guard tests the compiler id), with frame pointers, and sets `BE_SANITIZED` for the code after it (the fmt rule below reads it). `undefined` is `-fsanitize=undefined,float-cast-overflow` (a float to integer conversion out of range is not in `undefined`; the engine and the vendored code run the corpus and the fuzzers clean with it) with `-fno-sanitize-recover` on both, so a finding stops the process and fails its test. `ENGINE_FUZZ` is `address;undefined`, the same flags. `ENGINE_FUZZ_LIBFUZZER` (needs `ENGINE_FUZZ`) adds the libFuzzer instrumentation and `be_add_fuzz_executable(<Name> <Function>)`: the executable `BagiFuzz<Name>` over `BECore::Fuzz::<Function>`, all of them under the target `BagiFuzzers` (`tests/Fuzz/CLAUDE.md`). The commands are in `.claude/rules/build-project.md`, "Sanitizers" and "Fuzzing".
