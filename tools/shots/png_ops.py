@@ -1,9 +1,11 @@
 """Operations on decoded pictures for the screenshot tools (`tools/shots/CLAUDE.md`): crop, drop alpha, scale and write a PNG. Standard library only.
 
-Pure: a `PngImage` in, a `PngImage` or bytes out, with no file and no process. A picture is a list of `bytes` rows, as the reader gives it.
+Pure: a `PngImage` in, a `PngImage` or bytes out, with no file; a picture is a list of `bytes` rows, as the reader gives it. The one thing that asks
+the outside is `inside_git_work_tree` (a call of `git`), the rule of every tool that writes a picture: never into a repository.
 """
 
 import struct
+import subprocess
 import sys
 import zlib
 from pathlib import Path
@@ -99,6 +101,15 @@ def scale_to(image: PngImage, width: int, height: int) -> PngImage:
     return PngImage(width, height, image.channels, rows)
 
 
+def fit_within(image: PngImage, max_side: int) -> PngImage:
+    """The picture shrunk, its shape kept, so that its longer side is at most `max_side`; a picture that fits is returned as it is, never enlarged."""
+    longer = max(image.width, image.height)
+    if longer <= max_side:
+        return image
+    ratio = max_side / longer
+    return scale_to(image, max(1, round(image.width * ratio)), max(1, round(image.height * ratio)))
+
+
 def _chunk(kind: bytes, body: bytes) -> bytes:
     return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body))
 
@@ -110,3 +121,15 @@ def encode_png(image: PngImage) -> bytes:
     header = struct.pack(">IIBBBBB", image.width, image.height, BIT_DEPTH, COLOR_TYPES[image.channels], 0, 0, 0)
     raw = b"".join(bytes([FILTER_NONE]) + row for row in image.rows)
     return PNG_SIGNATURE + _chunk(b"IHDR", header) + _chunk(b"IDAT", zlib.compress(raw)) + _chunk(b"IEND", b"")
+
+
+def inside_git_work_tree(folder: Path) -> bool:
+    """Whether `folder` (which may not exist yet) lies in a git work tree: pictures must never end up in a repository."""
+    probe = folder.resolve()
+    while not probe.exists():
+        probe = probe.parent
+    try:
+        done = subprocess.run(["git", "-C", str(probe), "rev-parse", "--is-inside-work-tree"], capture_output=True, text=True)
+    except OSError:
+        return False  # no git: nothing it could be a work tree of
+    return done.stdout.strip() == "true"

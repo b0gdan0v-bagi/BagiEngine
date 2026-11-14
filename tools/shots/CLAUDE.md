@@ -6,7 +6,7 @@ Before / after pictures of a game's scenes for the todo loop, and a text diff of
 |------|---------|
 | `shots.py` | the command line: `scenes`, `capture`, `diff` |
 | `png_diff.py` | the pure comparison of two decoded pictures (`compare`, `describe`, `diff_map`, `image_diff`): no I/O, no process |
-| `png_ops.py` | the pure picture operations: `crop`, `to_channels`, `scale_to` (bilinear), `encode_png` |
+| `png_ops.py` | the picture operations: `crop`, `to_channels`, `scale_to` (bilinear), `fit_within`, `encode_png`; `inside_git_work_tree` (the one `git` call, shared with `shots.py` and the MCP tool) |
 | `tests/` | pytest (`write_png` of `conftest.py` makes a picture; a fake game command makes the files) |
 
 The PNG reader is `tools/control/tests/png_reader.py` (the game's `ui_shots.py` imports it from there too): `png_ops.py` puts that folder on `sys.path`, so it is not copied and not moved.
