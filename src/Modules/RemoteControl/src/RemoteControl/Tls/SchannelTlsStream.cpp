@@ -14,6 +14,9 @@
 // clang-format off
 #include <windows.h>
 #include <wincrypt.h>
+// schannel.h declares SCH_CREDENTIALS only under SCHANNEL_USE_BLACKLISTS (its version macro is unconditional), and that part needs UNICODE_STRING from subauth.h
+#define SCHANNEL_USE_BLACKLISTS
+#include <subauth.h>
 #include <schannel.h>
 #define SECURITY_WIN32
 #include <security.h>
