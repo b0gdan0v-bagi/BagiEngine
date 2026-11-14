@@ -66,6 +66,15 @@ if(ENGINE_TARGET_WEB)
     endif()
 endif()
 add_subdirectory(${BAGI_ENGINE_DIR}/external/SDL)
+# SDL's own PCH is an absolute path in the generated cmake_pch.h, which ccache hashes: no object of SDL would be shared between
+# checkouts. Without the PCH the cold build of SDL takes longer; the cache makes up for it (cmake/BagiCompilerCache.cmake).
+if(BE_CCACHE_PCH_LAUNCHER)
+    foreach(BE_SDL_TARGET SDL3-shared SDL3-static)
+        if(TARGET ${BE_SDL_TARGET})
+            set_target_properties(${BE_SDL_TARGET} PROPERTIES DISABLE_PRECOMPILE_HEADERS ON)
+        endif()
+    endforeach()
+endif()
 
 # The vendored imgui CMake file and our modules link the name SDL3-shared; a static SDL keeps it as a shim
 if(ENGINE_STATIC_SDL)

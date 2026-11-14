@@ -11,11 +11,24 @@
 #                                paths, so __FILE__ (asserts, profiler zones), diagnostics and debug info are relative to the
 #                                build folder. Empty: no sharing between checkouts, absolute paths everywhere.
 #
-# The settings that the precompiled header needs are passed on ccache's command line (ccache >= 4.8 takes KEY=VALUE before the
-# compiler), so nobody has to edit their ccache.conf: pch_defines and time_macros (a PCH is hashed by its content, not its
-# defines and __TIME__), include_file_mtime / include_file_ctime (a header written in the same second as the compile is still
-# cached). Clang writes a timestamp into the PCH unless -fno-pch-timestamp; with it the PCH of a rebuild is byte-equal and
+# The settings that the precompiled header needs are given to ccache with every compile (ccache >= 4.8 takes KEY=VALUE before the
+# compiler, the launcher script below sets them in its environment): pch_defines and time_macros (a PCH is hashed by its content,
+# not its defines and __TIME__), include_file_mtime / include_file_ctime (a header written in the same second as the compile is
+# still cached). Clang writes a timestamp into the PCH unless -fno-pch-timestamp; with it the PCH of a rebuild is byte-equal and
 # every object that includes it is a hit. `ccache -s` shows the hit rate, `ccache -z` zeroes it.
+#
+# Sharing between checkouts with the PCH (Clang on macOS and Linux): the PCH of two checkouts is never byte-equal, because Clang
+# writes into it the absolute path of every header it read (the working folder joined with the relative path; no option of Clang 17
+# or Apple clang 17 makes them relative: -fmodule-file-home-is-cwd is for modules only, the debug and file prefix maps do not touch
+# the input files of a PCH), so ccache would hash a different file in each checkout and miss in every object that uses it.
+# cmake/BagiCcacheLauncher.sh is the launcher of such a build: it compiles a PCH without ccache and writes <pch>.sum beside it (a
+# constant), and ccache (pch_external_checksum) hashes that file instead of the PCH; the headers are in the manifest of every
+# object anyway, so a changed header is a miss. Two more things make the PCH's own inputs path-free: the PCH header is given as
+# <BECore/pch.h> (CMake writes the argument into cmake_pch.hxx, which ccache hashes: a path there differs per checkout) and the
+# vendored SDL, whose own PCH is an absolute path in CMake's cmake_pch.h that we cannot change, is built without its PCH
+# (BagiEngine.cmake). A PCH is never taken from the cache: it names the files of the checkout that made it and Clang refuses it
+# when they changed ("has been modified since the precompiled header was built"). The probe `tools/ccache/ccache_share.py`
+# measures all of this.
 include_guard(GLOBAL)
 
 option(ENGINE_CCACHE "Compile through ccache when it is installed" ON)
@@ -28,15 +41,27 @@ if(ENGINE_CCACHE AND NOT MSVC AND NOT EMSCRIPTEN)
         string(REGEX MATCH "version ([0-9]+\\.[0-9]+)" _ "${BE_CCACHE_VERSION_TEXT}")
         set(BE_CCACHE_VERSION "${CMAKE_MATCH_1}")
 
-        set(BE_CCACHE_LAUNCHER ${BE_CCACHE_PROGRAM})
-        if(BE_CCACHE_VERSION VERSION_GREATER_EQUAL 4.8)
-            list(APPEND BE_CCACHE_LAUNCHER "sloppiness=pch_defines,time_macros,include_file_mtime,include_file_ctime")
+        find_program(BE_SH_PROGRAM sh)
+        if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND CMAKE_HOST_UNIX AND BE_SH_PROGRAM)
+            # An empty argument would vanish from the list: "-" says there is no base_dir.
             if(ENGINE_CCACHE_BASE_DIR)
-                # hash_dir off: with -g the working folder is hashed too, and it differs between checkouts
-                list(APPEND BE_CCACHE_LAUNCHER "base_dir=${ENGINE_CCACHE_BASE_DIR}" "hash_dir=false")
+                set(BE_CCACHE_BASE_DIR_ARGUMENT "${ENGINE_CCACHE_BASE_DIR}")
+            else()
+                set(BE_CCACHE_BASE_DIR_ARGUMENT "-")
             endif()
+            set(BE_CCACHE_LAUNCHER ${BE_SH_PROGRAM} ${CMAKE_CURRENT_LIST_DIR}/BagiCcacheLauncher.sh ${BE_CCACHE_PROGRAM} ${BE_CCACHE_BASE_DIR_ARGUMENT})
+            set(BE_CCACHE_PCH_LAUNCHER ON)
         else()
-            message(STATUS "ccache ${BE_CCACHE_VERSION} is older than 4.8: the PCH settings must be in ccache.conf (cmake/BagiCompilerCache.cmake)")
+            set(BE_CCACHE_LAUNCHER ${BE_CCACHE_PROGRAM})
+            if(BE_CCACHE_VERSION VERSION_GREATER_EQUAL 4.8)
+                list(APPEND BE_CCACHE_LAUNCHER "sloppiness=pch_defines,time_macros,include_file_mtime,include_file_ctime")
+                if(ENGINE_CCACHE_BASE_DIR)
+                    # hash_dir off: with -g the working folder is hashed too, and it differs between checkouts
+                    list(APPEND BE_CCACHE_LAUNCHER "base_dir=${ENGINE_CCACHE_BASE_DIR}" "hash_dir=false")
+                endif()
+            else()
+                message(STATUS "ccache ${BE_CCACHE_VERSION} is older than 4.8: the PCH settings must be in ccache.conf (cmake/BagiCompilerCache.cmake)")
+            endif()
         endif()
 
         set(CMAKE_C_COMPILER_LAUNCHER ${BE_CCACHE_LAUNCHER})
@@ -44,7 +69,11 @@ if(ENGINE_CCACHE AND NOT MSVC AND NOT EMSCRIPTEN)
         if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
             add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX>:SHELL:-Xclang -fno-pch-timestamp>")
         endif()
-        message(STATUS "ccache ${BE_CCACHE_VERSION}: ${BE_CCACHE_PROGRAM}")
+        if(BE_CCACHE_PCH_LAUNCHER)
+            message(STATUS "ccache ${BE_CCACHE_VERSION}: ${BE_CCACHE_PROGRAM} (PCH-aware launcher)")
+        else()
+            message(STATUS "ccache ${BE_CCACHE_VERSION}: ${BE_CCACHE_PROGRAM}")
+        endif()
     else()
         message(STATUS "ccache not found: a build without a compiler cache")
     endif()
