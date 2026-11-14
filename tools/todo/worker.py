@@ -16,11 +16,16 @@ worker superproject would rewrite its `core.worktree` to the worker and break th
 worker only, and the nested submodules (`external/*`) are cloned from the main checkout's modules
 with the URL given on the command line, never written to the shared config.
 
+On Windows git makes a tracked symlink as a file symlink when its target is missing at checkout time (the
+game's `.claude/skills/*` into an `engine/` that is empty or on an older commit); `stat` on it then fails and
+the skill does not load. `create`, `update` and `start` remake such links as directory symlinks after both
+repositories moved, `check --fix` does it by hand.
+
 Run it from anywhere inside the main checkout:
 
     python3 engine/tools/todo/worker.py create 3     # w1..w3, each with its first configure
     python3 engine/tools/todo/worker.py list
-    python3 engine/tools/todo/worker.py check [--fix]
+    python3 engine/tools/todo/worker.py check [--fix]  # also a Windows file symlink to a directory (below)
     python3 engine/tools/todo/worker.py run 2        # a Claude session in w2, in this terminal
     python3 engine/tools/todo/worker.py start        # /todo-loop in every worker, background sessions a minute apart
     python3 engine/tools/todo/worker.py stop [k ...] # stop those background sessions
