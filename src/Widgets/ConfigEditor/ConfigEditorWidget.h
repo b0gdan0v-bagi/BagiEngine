@@ -1,8 +1,7 @@
 #pragma once
 
-#include "StagedChanges.h"
-
 #include <BECore/Widgets/IWidget.h>
+#include <Widgets/ConfigEditor/StagedChanges.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 
 // Forward declaration - avoid including pugixml in header

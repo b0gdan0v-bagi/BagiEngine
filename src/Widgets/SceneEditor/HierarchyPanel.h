@@ -1,7 +1,7 @@
 #pragma once
 
-#include "HierarchyModel.h"
-#include "SceneSelection.h"
+#include <Widgets/SceneEditor/HierarchyModel.h>
+#include <Widgets/SceneEditor/SceneSelection.h>
 
 namespace BECore {
 

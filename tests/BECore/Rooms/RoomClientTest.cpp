@@ -1,7 +1,6 @@
-#include "FakeRoomTransport.h"
-#include "ManualClock.h"
-
 #include <BECore/Profiler/Alloc/AllocTracker.h>
+#include <BECore/Rooms/FakeRoomTransport.h>
+#include <BECore/Rooms/ManualClock.h>
 #include <Common/Printers.h>
 #include <RoomClient/RoomClient.h>
 #include <Rooms/RoomErrors.h>

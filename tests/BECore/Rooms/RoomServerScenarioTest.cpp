@@ -1,7 +1,6 @@
-#include "ManualClock.h"
-#include "RoomTableDriver.h"
-#include "TestRandom.h"
-
+#include <BECore/Rooms/ManualClock.h>
+#include <BECore/Rooms/RoomTableDriver.h>
+#include <BECore/Rooms/TestRandom.h>
 #include <RoomServer/DemoCardGame.h>
 #include <RoomServer/RoomWebSocketServer.h>
 #include <Rooms/RoomErrors.h>

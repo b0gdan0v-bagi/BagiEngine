@@ -1,7 +1,6 @@
-#include "FuzzTargets.h"
-
 #include <BECore/UI/UIStrings.h>
 #include <BECore/UI/UIThemes.h>
+#include <Fuzz/FuzzTargets.h>
 #include <map>
 #include <set>
 

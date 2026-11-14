@@ -1,5 +1,3 @@
-#include "UIComponentTest.h"
-
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Scene/Scene.h>
@@ -13,6 +11,7 @@
 #include <BECore/UI/UIStateLook.h>
 #include <BECore/UI/UITextComponent.h>
 #include <BECore/UI/UIToggleComponent.h>
+#include <BECore/UIComponentTest.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>

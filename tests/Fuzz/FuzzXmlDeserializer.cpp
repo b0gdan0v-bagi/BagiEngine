@@ -1,7 +1,6 @@
-#include "FuzzProbeAccess.h"
-#include "FuzzTargets.h"
-
 #include <BECore/Reflection/XmlDeserializer.h>
+#include <Fuzz/FuzzProbeAccess.h>
+#include <Fuzz/FuzzTargets.h>
 #include <cmath>
 
 namespace BECore::Fuzz {

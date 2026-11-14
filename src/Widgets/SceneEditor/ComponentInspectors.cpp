@@ -1,7 +1,5 @@
 #include "ComponentInspectors.h"
 
-#include "ImGuiPropertyVisitor.h"
-
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Input/ActionsLibrary.h>
 #include <BECore/Reflection/ClassMeta.h>
@@ -13,6 +11,7 @@
 #include <Widgets/EditorLayout/EditorControls.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/ImGuiFonts.h>
+#include <Widgets/SceneEditor/ImGuiPropertyVisitor.h>
 #include <imgui.h>
 
 namespace BECore {

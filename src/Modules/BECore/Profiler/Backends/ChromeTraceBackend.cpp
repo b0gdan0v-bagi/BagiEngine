@@ -1,7 +1,6 @@
 #include "ChromeTraceBackend.h"
 
-#include "ChromeTraceJson.h"
-
+#include <BECore/Profiler/Backends/ChromeTraceJson.h>
 #include <BECore/Profiler/Profiler.h>
 #include <BECore/Profiler/ProfilerClock.h>
 #include <bit>

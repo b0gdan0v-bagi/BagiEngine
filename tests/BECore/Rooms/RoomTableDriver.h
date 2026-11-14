@@ -1,8 +1,7 @@
 #pragma once
 
-#include "RoomSocketClient.h"
-#include "WireJudge.h"
-
+#include <BECore/Rooms/RoomSocketClient.h>
+#include <BECore/Rooms/WireJudge.h>
 #include <RoomServer/DemoCardGame.h>
 #include <memory>
 #include <set>

@@ -1,11 +1,10 @@
-#include "FuzzTargets.h"
-#include "FuzzUiGeometryInput.h"
-
 #include <BECore/UI/UIBoxMesh.h>
 #include <BECore/UI/UICanvasLayout.h>
 #include <BECore/UI/UIGeometryBounds.h>
 #include <BECore/UI/UILayout.h>
 #include <BECore/UI/UINineSlice.h>
+#include <Fuzz/FuzzTargets.h>
+#include <Fuzz/FuzzUiGeometryInput.h>
 #include <cmath>
 
 namespace BECore::Fuzz {

@@ -1,6 +1,5 @@
-#include "Tls/FakeTlsStream.h"
-#include "WebSocketTestClient.h"
-
+#include <BECore/Tls/FakeTlsStream.h>
+#include <BECore/WebSocketTestClient.h>
 #include <RemoteControl/WebSocketClient.h>
 #include <RemoteControl/WebSocketHandshake.h>
 #include <RemoteControl/WebSocketListener.h>

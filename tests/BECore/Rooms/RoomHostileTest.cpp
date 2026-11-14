@@ -1,5 +1,5 @@
-#include "TestClient.h"
-#include "WireJudge.h"
+#include <BECore/Rooms/TestClient.h>
+#include <BECore/Rooms/WireJudge.h>
 
 namespace BECore::Tests {
 

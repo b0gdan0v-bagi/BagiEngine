@@ -1,8 +1,7 @@
 #pragma once
 
-#include "GizmoGeometry.h"
-
 #include <Events/EventBase.h>
+#include <Widgets/Viewport/GizmoGeometry.h>
 
 namespace BECore {
 

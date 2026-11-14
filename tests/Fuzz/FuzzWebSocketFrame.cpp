@@ -1,5 +1,5 @@
-#include "FuzzTargets.h"
-#include "FuzzWebSocketInput.h"
+#include <Fuzz/FuzzTargets.h>
+#include <Fuzz/FuzzWebSocketInput.h>
 
 namespace BECore::Fuzz {
 

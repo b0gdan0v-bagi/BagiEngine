@@ -1,7 +1,6 @@
 #include "ReflectionAliasesTest.h"
 
-#include "FactoryInitializeTest.h"
-
+#include <BECore/FactoryInitializeTest.h>
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/BinarySerializer.h>
 #include <BECore/Reflection/DataAccessor.h>

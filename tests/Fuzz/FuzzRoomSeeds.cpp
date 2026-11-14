@@ -1,6 +1,5 @@
-#include "FuzzRoomInput.h"
-#include "FuzzSeeds.h"
-
+#include <Fuzz/FuzzRoomInput.h>
+#include <Fuzz/FuzzSeeds.h>
 #include <RoomServer/DemoCardGame.h>
 #include <Rooms/RoomErrors.h>
 #include <Rooms/RoomProtocol.h>

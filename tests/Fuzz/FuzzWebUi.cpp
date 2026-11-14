@@ -1,8 +1,7 @@
-#include "FuzzTargets.h"
-
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/UI/UIScreenContent.h>
 #include <BECore/UI/UIWebCompiler.h>
+#include <Fuzz/FuzzTargets.h>
 
 namespace BECore::Fuzz {
 

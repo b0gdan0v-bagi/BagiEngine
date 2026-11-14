@@ -1,13 +1,12 @@
 #include "ConfigEditorWidget.h"
 
-#include "ConfigFieldSchema.h"
-#include "FieldInspectors.h"
-
 #include <BECore/Config/ConfigManager.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/ILogSink.h>
 #include <BECore/Reflection/IDeserializer.h>
 #include <Generated/ConfigEditorWidget.gen.hpp>
+#include <Widgets/ConfigEditor/ConfigFieldSchema.h>
+#include <Widgets/ConfigEditor/FieldInspectors.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/EditorLayout/EditorControls.h>
 #include <Widgets/Icons/IconsLucide.h>

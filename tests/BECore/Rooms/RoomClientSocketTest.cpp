@@ -1,8 +1,7 @@
-#include "../WebSocketTestClient.h"
-#include "JudgedTransport.h"
-#include "ManualClock.h"
-#include "TestRandom.h"
-
+#include <BECore/Rooms/JudgedTransport.h>
+#include <BECore/Rooms/ManualClock.h>
+#include <BECore/Rooms/TestRandom.h>
+#include <BECore/WebSocketTestClient.h>
 #include <Common/Printers.h>
 #include <RemoteControl/Tls/TlsStream.h>
 #include <RemoteControl/WebSocketClient.h>

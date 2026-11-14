@@ -1,8 +1,7 @@
-#include "StressSceneFixture.h"
-
 #include <BECore/Animation/TweenManager.h>
 #include <Stress/Components/StressEntitiesComponent.h>
 #include <gtest/gtest.h>
+#include <tests/StressSceneFixture.h>
 
 /**
  * Coverage of StressEntitiesComponent on the shipped scene file: a node and a running tween per count, a field that grows and shrinks from the

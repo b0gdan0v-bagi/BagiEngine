@@ -1,6 +1,5 @@
-#include "FakeSeatedGame.h"
-#include "TestRandom.h"
-
+#include <BECore/Rooms/FakeSeatedGame.h>
+#include <BECore/Rooms/TestRandom.h>
 #include <Common/Printers.h>
 #include <Rooms/Room.h>
 #include <Rooms/RoomErrors.h>

@@ -1,5 +1,4 @@
-#include "FakeSeatedGame.h"
-
+#include <BECore/Rooms/FakeSeatedGame.h>
 #include <Common/Printers.h>
 #include <EASTL/algorithm.h>
 #include <EASTL/sort.h>
