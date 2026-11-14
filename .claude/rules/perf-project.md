@@ -6,7 +6,7 @@ paths:
 
 # The benchmarks of this repository
 
-Read by the skills `perf` and `perf-investigate` and by the sentinel step of `todo-merge` (`.claude/skills/perf/SKILL.md`; the runner and the format of the set: `tools/perf/CLAUDE.md`). A game that carries this repository as the submodule `engine/` has a file of the same name with its own set; the skills are the same text in both.
+Read by the skills `perf` and `perf-investigate` and by the sentinel step of `todo-merge` (`.claude/skills/perf/SKILL.md`; the runner and the format of the set: `tools/perf/CLAUDE.md`). A game that carries this repository as the submodule `engine/` has a file of the same name with its own set (it can run `{engine}/tools/perf/headless_frames.py` on its own executable); the skills are the same text in both.
 
 ## Benchmark set
 
@@ -15,23 +15,10 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
   "area": "engine",
   "preset": "macos-release",
   "profilePreset": "macos-profile",
-  "targets": ["BagiMatch3", "BagiStress", "BagiEngineTests", "Match3Tests"],
+  "targets": ["BagiStress", "BagiEngineTests"],
   "repetitions": 5,
   "thresholdPercent": 3,
   "benchmarks": [
-    {
-      "name": "match3-frames",
-      "about": "Match3 without a window: 3000 frames after 120 of warm-up (a frame is a fifth of a millisecond, so fewer would measure the steps)",
-      "fast": true,
-      "command": ["{python}", "{engine}/tools/perf/headless_frames.py", "--exe", "{bin}/BagiMatch3", "--frames", "3000"],
-      "traceCommand": ["{python}", "{engine}/tools/perf/headless_frames.py", "--exe", "{bin}/BagiMatch3", "--frames", "3000", "--trace", "{trace}"],
-      "metrics": {
-        "fps": {"source": "json", "key": "framesPerSecond", "unit": "frames/s", "better": "higher"},
-        "cpu_ms": {"source": "json", "key": "cpuMs", "unit": "ms/frame", "better": "lower"},
-        "work_ms": {"source": "json", "key": "workMs", "unit": "ms/frame", "better": "lower"},
-        "draw_calls": {"source": "json", "key": "drawCalls", "unit": "per frame", "better": "lower", "gate": false}
-      }
-    },
     {
       "name": "stress-sprites",
       "about": "BagiStress sprites without a window: 5000 spinning sprites, one IRenderer call each, 300 frames after 30 of warm-up. work_ms_p50 is about 0.8 ms (the scene update and the calls); a frame is about 63 ms because the software renderer draws the sprites in its present, so more sprites or frames only make the run longer (10000 sprites: 43 s a run). The number a 2D batcher moves is work_ms",
@@ -122,5 +109,5 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
 ## Notes
 
 - Headless, the present of the SDL software renderer is most of a frame whatever the scene draws; `work_ms` (the frame without the present) is the number that moves with scene and UI code.
-- The `stress-*` benchmarks run `BagiStress` (`tools/stress/CLAUDE.md`) through `tools/perf/stress_frames.py`; the game measures itself (`work_ms` is the CPU time of a frame without the present, nearest-rank percentiles) and the ramp is a number per scene and machine (the scenes do not compare with one another). Their baseline is the owner's word, like every other.
+- The `stress-*` benchmarks run `BagiStress` (`tools/stress/CLAUDE.md`) through `tools/perf/stress_frames.py`; the game measures itself (`work_ms` is the CPU time of a frame without the present, nearest-rank percentiles) and the ramp is a number per scene and machine (the scenes do not compare with one another). The stress scenes are the engine's frame benchmarks; the engine has no game of its own. Their baseline is the owner's word, like every other.
 - The sentinel (`todo-merge`): `ask`.
