@@ -42,7 +42,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import check_includes  # noqa: E402
 
 EXIT_SKIP = 77
-CPP_SOURCE_SUFFIXES = {".cpp", ".cc", ".cxx", ".mm"}
+CPP_SOURCE_SUFFIXES = check_includes.SOURCE_SUFFIXES - {".c", ".m"}
 MSVC_COMPILERS = {"cl", "cl.exe", "clang-cl", "clang-cl.exe"}
 ALWAYS_FLAGS = ["-fsyntax-only", "-x", "c++-header", "-Wno-pragma-once-outside-header", "-w"]
 # Flags kept from a translation unit; the ones with a separate value take the next argument along.
@@ -170,9 +170,11 @@ def write_baseline(path: Path, failing: set[str]) -> None:
 def compare(failing: dict[str, str], baseline: set[str], checked: set[str]) -> tuple[list[str], list[str]]:
     """(lines `new: ...`, lines `fixed: ...`); a baseline entry that is no scanned header counts as fixed."""
     new = [f"new: {path}: {failing[path]}" for path in sorted(failing) if path not in baseline]
-    fixed = [f"fixed: {path}" for path in sorted(baseline) if path not in failing]
-    if fixed:
-        fixed = [line + (" (not a scanned header any more)" if line[7:] not in checked else "") for line in fixed]
+    fixed = [
+        f"fixed: {path}" + ("" if path in checked else " (not a scanned header any more)")
+        for path in sorted(baseline)
+        if path not in failing
+    ]
     return new, fixed
 
 
