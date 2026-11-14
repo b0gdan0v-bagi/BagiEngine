@@ -210,6 +210,8 @@ The order stays: dry run, a bounded folder, the build and the tests, then a wide
 
 The script strips **source files only** (`.cpp .cc .cxx .c .mm`); a header is skipped and counted in the output. A header has to include what it uses and compile alone ("Includes", `check_headers.py`), and stripping the PCH's includes from it would undo that.
 
+The decision (`include-hygiene`, slice 4): the script stays, for `.cpp` only, and is no guard of correctness (`check_headers.py` is). The PCH is the implicit set a `.cpp` may use (`BECore/pch.h`; test targets reuse `BagiTestPch`, the same plus `gtest/gtest.h`), and the script keeps a `.cpp` from repeating it; the PCH costs 1.2 s once and its load is 2.4 % of the compile CPU, so it stays. A game's own `.cpp` files may keep relying on it and keep running the script (`<R>` = the game).
+
 ## Includes
 
 `#include "..."` only for a `.cpp` / `.mm` / `.c` including its own header (`Foo.cpp` -> `"Foo.h"`, no folder in the quotes); every other include is `<...>` from an include root. A quoted include is looked up first in the folder of the including file, so one header gets two spellings and the include roots are bypassed.
