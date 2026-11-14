@@ -1,7 +1,11 @@
 #pragma once
 
 #include <BECore/Animation/Easing.h>
+#include <BECore/RefCounted/RefCounted.h>
+#include <BECore/Types/Types.h>
+#include <BECore/Utils/EnumUtils.h>
 #include <coroutine>
+#include <cstdint>
 
 namespace BECore {
 

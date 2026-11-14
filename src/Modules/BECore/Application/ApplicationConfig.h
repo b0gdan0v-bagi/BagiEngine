@@ -2,7 +2,11 @@
 
 #include <BECore/Application/RunMode.h>
 #include <BECore/Control/ControlSettings.h>
+#include <BECore/PoolString/PoolString.h>
 #include <BECore/Reflection/IDeserializer.h>
+#include <BECore/Reflection/ReflectionMarkers.h>
+#include <BECore/Types/Types.h>
+#include <cstdint>
 
 namespace BECore {
 

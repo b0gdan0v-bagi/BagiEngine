@@ -1,37 +1,15 @@
 # Headers that do not compile alone (CI/scripts/check_headers.py). A fix removes lines, nothing is added.
 # Regenerate: python3 CI/scripts/check_headers.py --root . --build build/macos-debug --baseline CI/scripts/header_baseline.txt --update-baseline
 src/Application/Application.h
-src/Modules/BECore/Animation/Lerp.h
-src/Modules/BECore/Animation/ScopedTween.h
-src/Modules/BECore/Animation/Timeline.h
-src/Modules/BECore/Animation/Tween.h
-src/Modules/BECore/Animation/TweenAwaiter.h
-src/Modules/BECore/Animation/TweenManager.h
-src/Modules/BECore/Application/ApplicationConfig.h
-src/Modules/BECore/Application/ApplicationFabric.h
-src/Modules/BECore/Application/CommandLine.h
-src/Modules/BECore/Clipboard/Clipboard.h
-src/Modules/BECore/Clipboard/ClipboardControl.h
-src/Modules/BECore/Clipboard/FakeClipboard.h
-src/Modules/BECore/Clipboard/IClipboardBackend.h
-src/Modules/BECore/Config/ConfigFactory.h
 src/Modules/BECore/Config/ConfigManager.h
 src/Modules/BECore/Config/ContentVersion.h
-src/Modules/BECore/Config/XmlConfig.h
 src/Modules/BECore/Config/XmlNode.h
 src/Modules/BECore/Control/ControlBuiltins.h
 src/Modules/BECore/Control/ControlCall.h
 src/Modules/BECore/Control/ControlService.h
-src/Modules/BECore/Control/ControlSettings.h
-src/Modules/BECore/Control/ControlTypes.h
 src/Modules/BECore/Control/Json.h
-src/Modules/BECore/GameManager/CoreManager.h
-src/Modules/BECore/Input/ActionsLibrary.h
-src/Modules/BECore/MainWindow/MainWindowManager.h
-src/Modules/BECore/MainWindow/WindowTitle.h
 src/Modules/BECore/Particles/ParticleEffect.h
 src/Modules/BECore/Particles/ParticleSimulation.h
-src/Modules/BECore/Reflection/AbstractFactory.h
 src/Modules/BECore/Reflection/BinaryDeserializer.h
 src/Modules/BECore/Reflection/BinaryFormat.h
 src/Modules/BECore/Reflection/BinarySerializer.h
@@ -62,21 +40,14 @@ src/Modules/BECore/Renderer/Render3D/Scene3D.h
 src/Modules/BECore/Renderer/Render3D/Vertex3D.h
 src/Modules/BECore/Renderer/RenderCounters.h
 src/Modules/BECore/Renderer/RendererManager.h
-src/Modules/BECore/Resource/IResourceLoader.h
 src/Modules/BECore/Resource/ResourceCache.h
-src/Modules/BECore/Resource/ResourceHandle.h
 src/Modules/BECore/Resource/ResourceManager.h
 src/Modules/BECore/Resource/TextureLibrary.h
-src/Modules/BECore/Resource/XmlResource.h
-src/Modules/BECore/Resource/XmlResourceLoader.h
-src/Modules/BECore/Save/SaveGame.h
-src/Modules/BECore/Save/SaveStorage.h
 src/Modules/BECore/Scene/Components/ChangeToRandomColorDebugComponent.h
 src/Modules/BECore/Scene/Components/ClickableComponent.h
 src/Modules/BECore/Scene/Components/ParticleEmitterComponent.h
 src/Modules/BECore/Scene/Components/QuadRendererComponent.h
 src/Modules/BECore/Scene/Components/RenderProbeComponent.h
-src/Modules/BECore/Scene/Components/SpriteRendererComponent.h
 src/Modules/BECore/Scene/Scene.h
 src/Modules/BECore/Scene/SceneDrawSystem.h
 src/Modules/BECore/Scene/SceneLoader.h
@@ -86,11 +57,9 @@ src/Modules/BECore/Scene/SceneNodeFiles.h
 src/Modules/BECore/Scene/SceneNodeInstance.h
 src/Modules/BECore/Scene/SceneRenderData.h
 src/Modules/BECore/Scene/SceneView.h
-src/Modules/BECore/Tests/TestList.h
 src/Modules/BECore/Text/Font.h
 src/Modules/BECore/Text/FontAtlas.h
 src/Modules/BECore/Text/FontAtlasLibrary.h
-src/Modules/BECore/Text/FontLoader.h
 src/Modules/BECore/Text/GlyphOutline.h
 src/Modules/BECore/Text/ShelfPacker.h
 src/Modules/BECore/Text/TextComponent.h
@@ -98,7 +67,6 @@ src/Modules/BECore/Text/TextEffects.h
 src/Modules/BECore/Text/TextRenderer.h
 src/Modules/BECore/Text/TextSettings.h
 src/Modules/BECore/Text/Utf8.h
-src/Modules/BECore/Threading/Thread.h
 src/Modules/BECore/UI/UIAnchorPresets.h
 src/Modules/BECore/UI/UIAttributeIO.h
 src/Modules/BECore/UI/UIBoxMesh.h
@@ -111,7 +79,6 @@ src/Modules/BECore/UI/UIColor.h
 src/Modules/BECore/UI/UIControl.h
 src/Modules/BECore/UI/UICssParser.h
 src/Modules/BECore/UI/UIDocument.h
-src/Modules/BECore/UI/UIDocumentLoader.h
 src/Modules/BECore/UI/UIDropdown.h
 src/Modules/BECore/UI/UIElement.h
 src/Modules/BECore/UI/UIElementStyle.h
@@ -152,7 +119,6 @@ src/Modules/BECore/UI/UIVariant.h
 src/Modules/BECore/UI/UIVariantCondition.h
 src/Modules/BECore/UI/UIVars.h
 src/Modules/BECore/UI/UIWebCompiler.h
-src/Modules/BECore/UI/UIWebDocumentLoader.h
 src/Modules/BECore/UI/UIWebReport.h
 src/Modules/BECore/UI/UIWebText.h
 src/Modules/BECore/Widgets/WidgetList.h
@@ -203,7 +169,6 @@ src/Modules/SDL/src/CoreSDL/SDLEventsProvider.h
 src/Modules/SDL/src/CoreSDL/SDLMainWindow.h
 src/Modules/SDL/src/CoreSDL/SDLRendererBackend.h
 src/Modules/SDL/src/CoreSDL/SDLScreenshot.h
-src/Modules/SDL/src/CoreSDL/SDLTextureLoader.h
 src/Modules/SDL/src/CoreSDL/SDLUtils.h
 src/Modules/SDL/src/CoreSDL/SDLWebPost.h
 src/Modules/SDL/src/CoreSDL/SDLWindowConfig.h
@@ -221,7 +186,6 @@ src/Modules/TaskSystem/src/TaskSystem/TaskStatistics.h
 src/Modules/TaskSystem/src/TaskSystem/ThreadPool.h
 src/Modules/Vulkan/src/CoreVulkan/VulkanGeometryBuffer.h
 src/Modules/Vulkan/src/CoreVulkan/VulkanRendererBackend.h
-src/Modules/Vulkan/src/CoreVulkan/VulkanTextureLoader.h
 src/Modules/Vulkan/src/CoreVulkan/VulkanTextureUpload.h
 src/Widgets/ClearScreenWidget.h
 src/Widgets/ConfigEditor/ConfigEditorWidget.h
@@ -241,11 +205,9 @@ src/Widgets/EditorLayout/KeyChord.h
 src/Widgets/EditorLayout/LayoutStore.h
 src/Widgets/EditorLayout/MainToolbar.h
 src/Widgets/EditorLayout/PreferencesWindow.h
-src/Widgets/EditorLayout/StatusBar.h
 src/Widgets/EditorLayout/UserFileIo.h
 src/Widgets/ImGuiFonts.h
 src/Widgets/Profiler/ProfilerWidget.h
-src/Widgets/ProfilerOverlayWidget.h
 src/Widgets/SceneEditor/HierarchyModel.h
 src/Widgets/SceneEditor/HierarchyPanel.h
 src/Widgets/SceneEditor/ImGuiPropertyVisitor.h
@@ -291,7 +253,6 @@ tests/Common/Printers.h
 tests/Common/RecordingGpuDevice.h
 tests/Common/RecordingRenderer.h
 tests/Common/TempPath.h
-tests/Common/TextTestSupport.h
 tests/Common/UILayoutMatrix.h
 tests/Common/UIPartShapeChecks.h
 tests/Common/UIThemeTestSupport.h
@@ -318,4 +279,3 @@ tools/stress/src/Stress/StressRecorder.h
 tools/stress/src/Stress/StressSettings.h
 tools/stress/src/Stress/StressState.h
 tools/stress/src/Stress/UiField.h
-tools/stress/tests/StressSceneFixture.h

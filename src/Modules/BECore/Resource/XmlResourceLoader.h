@@ -1,7 +1,11 @@
 #pragma once
 
+#include <BECore/PoolString/PoolString.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
+#include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Resource/IResourceLoader.h>
 #include <BECore/Resource/XmlResource.h>
+#include <BECore/Types/Types.h>
 
 namespace BECore {
 

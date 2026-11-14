@@ -1,6 +1,10 @@
 #pragma once
 
 #include <BECore/Config/XmlDocument.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
+#include <BECore/Types/Types.h>
+#include <filesystem>
+#include <utility>
 
 namespace BECore {
 

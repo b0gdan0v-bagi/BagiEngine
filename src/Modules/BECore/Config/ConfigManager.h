@@ -1,7 +1,14 @@
 #pragma once
 
 #include <BECore/Config/XmlDocument.h>
+#include <BECore/PoolString/PoolString.h>
+#include <BECore/PoolString/PoolStringMap.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
+#include <BECore/Types/Types.h>
 #include <TaskSystem/Task.h>
+#include <atomic>
+#include <cstddef>
+#include <filesystem>
 
 namespace BECore {
 

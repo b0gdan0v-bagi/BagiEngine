@@ -2,7 +2,11 @@
 
 #include <BECore/Clipboard/Clipboard.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
+#include <BECore/Types/Types.h>
 #include <Events/ClipboardEvents.h>
+#include <Events/SubscriptionHolder.h>
+#include <utility>
 
 namespace BECore {
 

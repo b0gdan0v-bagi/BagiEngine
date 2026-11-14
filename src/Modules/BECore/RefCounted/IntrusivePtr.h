@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Types/Types.h>
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <tuple>

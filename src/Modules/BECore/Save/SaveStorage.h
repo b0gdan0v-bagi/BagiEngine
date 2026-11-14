@@ -1,5 +1,10 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
+#include <BECore/Utils/EnumUtils.h>
+#include <cstdint>
+#include <filesystem>
+
 namespace BECore {
 
     /// The save folder of a browser build: a folder of the page's virtual file system that the page keeps in the site's IndexedDB (web/saves.js)

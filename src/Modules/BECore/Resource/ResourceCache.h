@@ -1,7 +1,11 @@
 #pragma once
 
+#include <BECore/PoolString/PoolString.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/Resource/IResource.h>
 #include <BECore/Threading/SharedMutex.h>
+#include <cstddef>
+#include <cstdint>
 
 namespace BECore {
 

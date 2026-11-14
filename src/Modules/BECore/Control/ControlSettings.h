@@ -1,6 +1,8 @@
 #pragma once
 
 #include <BECore/Control/ControlTypes.h>
+#include <cstdint>
+#include <expected>
 
 namespace BECore {
 

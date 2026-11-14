@@ -1,5 +1,7 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
+
 namespace BECore {
 
     /// The title of the engine's own window when no game names it

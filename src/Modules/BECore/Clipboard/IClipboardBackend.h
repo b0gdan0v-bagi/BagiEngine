@@ -1,6 +1,8 @@
 #pragma once
 
 #include <BECore/Clipboard/ClipboardTypes.h>
+#include <BECore/RefCounted/RefCounted.h>
+#include <BECore/Types/Types.h>
 
 namespace BECore {
 

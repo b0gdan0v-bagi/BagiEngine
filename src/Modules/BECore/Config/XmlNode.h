@@ -1,5 +1,12 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
+#include <charconv>
+#include <cstddef>
+#include <iterator>
+#include <optional>
+#include <type_traits>
+
 namespace BECore {
 
     /**

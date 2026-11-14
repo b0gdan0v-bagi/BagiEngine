@@ -11,6 +11,7 @@
 #include <BECore/Logger/LoggerManager.h>
 #include <BECore/MainWindow/MainWindowManager.h>
 #include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/Renderer/RendererManager.h>
 #include <BECore/Resource/ResourceManager.h>
 #include <BECore/Resource/TextureLibrary.h>
@@ -23,6 +24,8 @@
 #include <BECore/UI/UIStrings.h>
 #include <BECore/UI/UIThemes.h>
 #include <BECore/UI/UIVars.h>
+#include <BECore/Utils/PassKey.h>
+#include <BECore/Utils/Singleton.h>
 #include <BECore/Widgets/WidgetManager.h>
 #include <Events/EventsProviderManager.h>
 
