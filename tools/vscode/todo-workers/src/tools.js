@@ -118,8 +118,8 @@ function sessionWord(worker) {
     return s.status === "busy" ? "busy" : "idle";
 }
 
-// A webview page: the script and the styles of media/ inline, under a nonce.
-function pageHtml(context, scriptName, styleNames, placeholder) {
+// A webview page: the scripts (one name or several, in order) and the styles of media/ inline, under a nonce.
+function pageHtml(context, scriptNames, styleNames, placeholder) {
     const nonce = crypto.randomBytes(16).toString("hex");
     const read = (name) => fs.readFileSync(path.join(context.extensionPath, "media", name), "utf8");
     const style = styleNames.map(read).join("\n");
@@ -133,7 +133,7 @@ function pageHtml(context, scriptName, styleNames, placeholder) {
 </head>
 <body>
 <div id="root"><p class="muted">${placeholder}</p></div>
-<script nonce="${nonce}">${read(scriptName)}</script>
+${[].concat(scriptNames).map((name) => `<script nonce="${nonce}">${read(name)}</script>`).join("\n")}
 </body>
 </html>`;
 }

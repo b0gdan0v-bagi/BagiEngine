@@ -941,6 +941,11 @@ def test_pending_ask_names_the_tool_call_without_a_result(game: Path, tmp_path, 
     assert worker.pending_ask(record) is None
 
 
+def queued(capsys) -> dict:
+    """The lists of `queue --json`, worker by worker."""
+    return {name: row["queue"] for name, row in json.loads(capsys.readouterr().out).items()}
+
+
 def test_queue_keeps_an_entry_in_one_worker_and_pops_in_order(game: Path, tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude-config"))
     worker.main(["create", "2", "--no-configure"])
@@ -950,7 +955,7 @@ def test_queue_keeps_an_entry_in_one_worker_and_pops_in_order(game: Path, tmp_pa
     assert worker.main(["queue", "1", "--add", "c", "--first"]) == 0
     capsys.readouterr()
     assert worker.main(["queue", "--json"]) == 0
-    assert json.loads(capsys.readouterr().out) == {"w1": ["c", "b"], "w2": ["a"]}
+    assert queued(capsys) == {"w1": ["c", "b"], "w2": ["a"]}
     assert worker.main(["queue", "1", "--pop", "--json"]) == 0
     assert json.loads(capsys.readouterr().out) == {"popped": "c"}
     assert worker.main(["queue", "3", "--add", "x"]) == 1  # no such worker
@@ -1098,8 +1103,10 @@ def test_configure_shares_ccache_between_the_workers(game: Path, monkeypatch):
     assert calls == [["cmake", "--preset", "macos-debug", f"-DENGINE_CCACHE_BASE_DIR={layout.root}"]]
 
 
-def test_start_queued_only_takes_the_head_of_each_queue_and_skips_an_empty_one(game: Path, fake_claude, capsys):
+def test_start_queued_only_takes_the_head_of_each_queue_and_skips_an_empty_one(game: Path, store, fake_claude, capsys):
+    entries, _calls = store
     script, log, _sessions = fake_claude
+    entries["big-entry"] = {"id": "big-entry", "area": "mahjong", "status": "open", "blocked": False}
     worker.main(["create", "2", "--no-configure"])
     assert worker.main(["queue", "1", "--add", "big-entry"]) == 0
     assert worker.main(["queue", "1", "--add", "next-one"]) == 0
@@ -1109,7 +1116,7 @@ def test_start_queued_only_takes_the_head_of_each_queue_and_skips_an_empty_one(g
     assert "w2: its queue is empty, not started" in capsys.readouterr().out
     capsys.readouterr()
     worker.main(["queue", "--json"])
-    assert json.loads(capsys.readouterr().out) == {"w1": ["next-one"], "w2": []}
+    assert queued(capsys) == {"w1": ["next-one"], "w2": []}
 
 
 def test_start_wait_free_starts_once_the_session_ends(game: Path, fake_claude, monkeypatch):
@@ -1188,7 +1195,7 @@ def test_remarks_store_a_plan_reopen_the_work_and_queue_it_on_the_worker_that_ho
     assert ["note", "g-x", "--note", "returned with remarks, round 1 (todo-loop-g-x-remarks-1.md); was: done"] in calls
     capsys.readouterr()
     worker.main(["queue", "--json"])
-    assert json.loads(capsys.readouterr().out) == {"w1": [], "w2": ["g-x"]}
+    assert queued(capsys) == {"w1": [], "w2": ["g-x"]}
     entries["g-y"] = {**review("g-y", "mahjong", "todo/g-y"), "status": "in progress"}
     assert worker.main(["remarks", "g-y", "--file", str(remarks), "--claude", str(script)]) == 1  # not in review
 
@@ -1208,6 +1215,282 @@ def test_merge_refuses_an_entry_whose_blocker_is_not_closed(game: Path, store, c
     assert worker.main(["merge", "g-pair", "--dry-run", "--json"]) == 0
     plan = json.loads(capsys.readouterr().out)
     assert plan["first"] == [] and plan["problems"] == []
+
+
+# --- the queue's pause, its count of entries in a row, blocked heads, kick -------------------------------------
+
+
+def queue_rows(capsys) -> dict:
+    capsys.readouterr()
+    assert worker.main(["queue", "--json"]) == 0
+    return json.loads(capsys.readouterr().out)
+
+
+def open_entry(entry_id: str, area: str = "mahjong", blocked_by: list[dict] | None = None) -> dict:
+    blockers = blocked_by or []
+    return {"id": entry_id, "area": area, "title": f"Title of {entry_id}", "status": "open", "statusNote": None, "branch": None,
+            "blockedBy": blockers, "blocked": any(b["status"] != "closed" for b in blockers)}
+
+
+def bg_calls(log: Path) -> list[str]:
+    return [line for line in log.read_text().splitlines() if line.startswith("bg ")] if log.exists() else []
+
+
+def test_pause_and_resume_are_kept_in_the_queues_file_beside_the_lists(game: Path, fake_claude, capsys):
+    worker.main(["create", "2", "--no-configure"])
+    assert worker.main(["queue", "1", "--add", "a"]) == 0
+    assert worker.main(["queue", "1", "--pause", "--reason", "stopped: BLOCKED"]) == 0
+    rows = queue_rows(capsys)
+    assert rows["w1"]["queue"] == ["a"] and rows["w1"]["paused"] is True and rows["w1"]["reason"] == "stopped: BLOCKED"
+    assert rows["w2"] == {"queue": [], "paused": False, "reason": None, "at": None, "streak": []}
+    assert worker.main(["queue"]) == 0
+    assert "w1: a (paused: stopped: BLOCKED)" in capsys.readouterr().out
+    data = json.loads(worker.queue_file().read_text())
+    root = str(worker.find_layout(game).root)
+    assert data[root] == {"w1": ["a"]}  # the lists keep the shape an older reader knows
+    assert data["state"][root]["w1"]["paused"] is True
+    capsys.readouterr()
+    assert worker.main(["queue", "1", "--pop", "--json"]) == 0  # a paused queue gives nothing to the panel either
+    assert json.loads(capsys.readouterr().out) == {"popped": None, "paused": "stopped: BLOCKED"}
+    assert worker.main(["queue", "1", "--resume"]) == 0
+    assert queue_rows(capsys)["w1"]["paused"] is False
+    assert worker.main(["queue", "1", "--pause", "--resume"]) == 1
+
+
+def test_a_queues_file_without_the_state_still_loads(game: Path, fake_claude, capsys):
+    worker.main(["create", "1", "--no-configure"])
+    path = worker.queue_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    root = str(worker.find_layout(game).root)
+    path.write_text(json.dumps({root: {"w1": ["old"]}, "/elsewhere": {"w1": ["x"]}}))
+    assert queue_rows(capsys)["w1"] == {"queue": ["old"], "paused": False, "reason": None, "at": None, "streak": []}
+    assert worker.main(["queue", "1", "--pause"]) == 0
+    data = json.loads(path.read_text())
+    assert data["/elsewhere"] == {"w1": ["x"]} and data[root] == {"w1": ["old"]}
+    # what an older worker.py writes (the lists of its root alone) keeps the state
+    data[root] = {"w1": ["old", "new"]}
+    path.write_text(json.dumps(data))
+    rows = queue_rows(capsys)
+    assert rows["w1"]["queue"] == ["old", "new"] and rows["w1"]["paused"] is True
+
+
+def test_a_paused_queue_is_not_started(game: Path, store, fake_claude, capsys):
+    entries, _calls = store
+    script, log, _sessions = fake_claude
+    worker.main(["create", "1", "--no-configure"])
+    entries["a"] = open_entry("a")
+    worker.main(["queue", "1", "--add", "a"])
+    worker.main(["queue", "1", "--pause", "--reason", "baseline red"])
+    capsys.readouterr()
+    assert worker.main(["start", "1", "--delay", "0", "--queued-only", "--claude", str(script)]) == 0
+    assert "w1: its queue is paused (baseline red), not started" in capsys.readouterr().out
+    assert bg_calls(log) == [] and queue_rows(capsys)["w1"]["queue"] == ["a"]
+    worker.main(["queue", "1", "--resume"])
+    assert worker.main(["start", "1", "--delay", "0", "--queued-only", "--claude", str(script)]) == 0
+    assert bg_calls(log)[0].endswith("/todo-loop 1 a")
+
+
+def test_four_entries_in_a_row_then_the_queue_pauses_until_the_owner_acts(game: Path, store, fake_claude, capsys):
+    entries, _calls = store
+    script, log, _sessions = fake_claude
+    worker.main(["create", "1", "--no-configure"])
+    for entry_id in ("a", "b", "c", "d", "e", "f"):
+        entries[entry_id] = open_entry(entry_id)
+        worker.main(["queue", "1", "--add", entry_id])
+    start = ["start", "1", "--delay", "0", "--queued-only", "--claude", str(script)]
+    for _ in range(4):
+        assert worker.main(start) == 0
+    # the next slice of a through entry (queued again by its loop) does not count again
+    entries["d"]["status"] = "in progress"
+    assert worker.main(["queue", "1", "--add", "d", "--first", "--by-loop"]) == 0
+    assert worker.main(start) == 0
+    assert [call.rsplit(" ", 1)[1] for call in bg_calls(log)] == ["a", "b", "c", "d", "d"]
+    capsys.readouterr()
+    assert worker.main(start) == 0
+    out = capsys.readouterr().out
+    assert "not started, the queue is paused: 4 entries in a row without the owner (a, b, c, d), e would be the next" in out
+    rows = queue_rows(capsys)
+    assert rows["w1"]["paused"] is True and rows["w1"]["queue"] == ["e", "f"] and len(bg_calls(log)) == 5
+    assert worker.main(["queue", "1", "--resume"]) == 0
+    assert queue_rows(capsys)["w1"]["streak"] == []
+    assert worker.main(start) == 0 and bg_calls(log)[-1].endswith(" e")
+    # an add by the owner and a clear start the count again; an add by a loop does not
+    assert worker.main(["queue", "1", "--add", "g", "--by-loop"]) == 0
+    assert queue_rows(capsys)["w1"]["streak"] == ["e"]
+    assert worker.main(["queue", "1", "--add", "h"]) == 0
+    assert queue_rows(capsys)["w1"]["streak"] == []
+    entries["f"]["status"] = "in progress"
+    assert worker.main(start) == 0
+    assert queue_rows(capsys)["w1"]["streak"] == ["f"]
+    assert worker.main(["queue", "1", "--clear"]) == 0
+    assert queue_rows(capsys)["w1"]["streak"] == []
+
+
+def test_a_merge_of_an_entry_the_worker_held_starts_its_count_again(game: Path, store, fake_claude, capsys):
+    entries, _calls = store
+    script, _log, _sessions = fake_claude
+    worker.main(["create", "2", "--no-configure"])
+    w1 = game.parent / "game.workers" / "w1"
+    entries["g-x"] = open_entry("g-x")
+    entries["other"] = open_entry("other")
+    worker.main(["queue", "1", "--add", "g-x"])
+    worker.main(["queue", "2", "--add", "other"])
+    assert worker.main(["start", "--delay", "0", "--queued-only", "--claude", str(script)]) == 0
+    assert queue_rows(capsys)["w1"]["streak"] == ["g-x"]
+    run("switch", "-q", "-c", "todo/g-x", cwd=w1)
+    (w1 / "x.txt").write_text("x\n")
+    run("add", "x.txt", cwd=w1)
+    run("commit", "-q", "-m", "x", cwd=w1)
+    entries["g-x"] = review("g-x", "mahjong", "todo/g-x")
+    capsys.readouterr()
+    assert worker.main(["merge", "g-x", "--json", "--no-kick", "--claude", str(script)]) == 0
+    assert json.loads(capsys.readouterr().out)["kick"] is None
+    rows = queue_rows(capsys)
+    assert rows["w1"]["streak"] == [] and rows["w2"]["streak"] == ["other"]
+    assert worker.main(["kick", "--merged", "other", "--claude", str(script), "--json"]) == 0
+    assert queue_rows(capsys)["w2"]["streak"] == []
+
+
+def test_blocked_entries_stay_queued_and_the_first_takeable_one_starts(game: Path, store, fake_claude, capsys):
+    entries, _calls = store
+    script, log, _sessions = fake_claude
+    worker.main(["create", "1", "--no-configure"])
+    entries["waits"] = open_entry("waits", blocked_by=[{"id": "far", "status": "open"}])
+    entries["stacked"] = open_entry("stacked", blocked_by=[{"id": "parent", "status": "review"}])
+    entries["parent"] = review("parent", "mahjong", "todo/parent", note="done")
+    entries["free"] = open_entry("free")
+    for entry_id in ("waits", "stacked", "free"):
+        worker.main(["queue", "1", "--add", entry_id])
+    start = ["start", "1", "--delay", "0", "--queued-only", "--claude", str(script)]
+    capsys.readouterr()
+    # the parent's branch is not in this checkout: `stacked` waits as well
+    assert worker.main(start) == 0
+    out = capsys.readouterr().out
+    assert "w1: waits: blocked by far (open), stays queued" in out and "w1: stacked: blocked by parent (review), stays queued" in out
+    assert bg_calls(log)[-1].endswith("/todo-loop 1 free")
+    assert queue_rows(capsys)["w1"]["queue"] == ["waits", "stacked"]
+    branch_with(game, "todo/parent", "main", "p.txt", "p\n")
+    assert worker.main(start) == 0
+    assert bg_calls(log)[-1].endswith("/todo-loop 1 stacked")
+    capsys.readouterr()
+    assert worker.main(start) == 0
+    assert "w1: no queued entry can be taken now, not started: waits: blocked by far (open)" in capsys.readouterr().out
+    assert len(bg_calls(log)) == 2 and queue_rows(capsys)["w1"]["queue"] == ["waits"]
+
+
+def test_a_paired_game_entry_waits_for_an_engine_branch_in_review(game: Path, store):
+    entries, _calls = store
+    layout = worker.find_layout(game)
+    table = {row["area"]: row for row in worker.rule_area_table(game)}
+    entries["g"] = open_entry("g", blocked_by=[{"id": "e", "status": "review"}])
+    entries["e"] = review("e", "engine", "todo/e")
+    assert worker.queue_wait(layout, "g", table) == "blocked by e (review)"  # no such engine branch here
+    branch_with(game / "engine", "todo/e", "games/chess", "e.txt", "e\n")
+    assert worker.queue_wait(layout, "g", table) is None
+    entries["e"]["statusNote"] = f"half, slice 1 of 2, {worker.SLICE_REOPEN}"
+    assert worker.queue_wait(layout, "g", table) == "blocked by e (review)"  # a slice that reopens finishes nothing
+    entries["e"]["statusNote"] = "done"
+    entries["g2"] = open_entry("g2", area="engine", blocked_by=[{"id": "m", "status": "review"}])
+    entries["m"] = review("m", "mahjong", "todo/m")
+    branch_with(game, "todo/m", "main", "m.txt", "m\n")
+    assert worker.queue_wait(layout, "g2", table) == "blocked by m (review)"  # an engine entry never waits on a game branch
+    entries["gone"] = {**open_entry("gone"), "status": "closed"}
+    assert worker.queue_wait(layout, "gone", table) == "closed"
+    assert worker.queue_wait(layout, "unknown", table) is None  # the store cannot say: the loop decides
+
+
+def test_list_json_store_says_why_each_queued_entry_waits_and_how_it_waits_for_its_blockers(game: Path, store, fake_claude, monkeypatch, capsys):
+    entries, calls = store
+    script, _log, _sessions = fake_claude
+    store_run = worker.subprocess.run
+    listed = {"in progress,review": lambda: []}  # store_entries (no actor); the queue lookup is added below
+
+    def fake_run(command, *args, **kwargs):
+        if any(str(part).endswith("todo.py") for part in command) and "list" in command:
+            for status, rows in listed.items():
+                if status in command:
+                    return subprocess.CompletedProcess(command, 0, json.dumps(rows()), "")
+        return store_run(command, *args, **kwargs)
+
+    monkeypatch.setattr(worker.subprocess, "run", fake_run)
+    worker.main(["create", "2", "--no-configure"])
+    entries["free"] = open_entry("free")
+    entries["waits"] = open_entry("waits", blocked_by=[{"id": "far", "status": "open"}, {"id": "parent", "status": "review"}])
+    entries["stacked"] = open_entry("stacked", blocked_by=[{"id": "parent", "status": "review"}])
+    entries["parent"] = review("parent", "mahjong", "todo/parent")
+    entries["g"] = open_entry("g", blocked_by=[{"id": "e", "status": "review"}])
+    entries["e"] = review("e", "engine", "todo/e")
+    branch_with(game, "todo/parent", "main", "p.txt", "p\n")
+    branch_with(game / "engine", "todo/e", "games/chess", "e.txt", "e\n")
+    for entry_id in ("free", "waits", "stacked"):
+        worker.main(["queue", "1", "--add", entry_id])
+    worker.main(["queue", "2", "--add", "g"])
+    capsys.readouterr()
+    assert worker.main(["list", "--json", "--store", "--claude", str(script)]) == 0
+    first, second = json.loads(capsys.readouterr().out)["workers"]
+    items = {row["id"]: row for row in first["queueItems"]}
+    assert [row["id"] for row in first["queueItems"]] == ["free", "waits", "stacked"]
+    assert (items["free"]["wait"], items["free"]["blockedBy"], items["free"]["title"], items["free"]["status"]) == (None, [], "Title of free", "open")
+    assert items["waits"]["wait"] == "blocked by far (open), parent (review)"
+    assert [(b["id"], b["kind"]) for b in items["waits"]["blockedBy"]] == [("far", "waits"), ("parent", "stacked")]
+    assert items["stacked"]["wait"] is None and items["stacked"]["blockedBy"][0]["kind"] == "stacked"
+    assert second["queueItems"][0]["wait"] is None and second["queueItems"][0]["blockedBy"][0]["kind"] == "paired"
+    # a slice that reopens its entry is no branch to stack on: the blocked one waits for the merge
+    entries["parent"]["statusNote"] = f"slice 1 of 2, {worker.SLICE_REOPEN}"
+    assert worker.main(["list", "--json", "--store", "--claude", str(script)]) == 0
+    stacked = json.loads(capsys.readouterr().out)["workers"][0]["queueItems"][2]
+    assert stacked["wait"] == "blocked by parent (review)" and stacked["blockedBy"][0]["kind"] == "waits"
+    # without --store the panel gets no items; one list of the store serves every queue when it answers
+    assert worker.main(["list", "--json", "--claude", str(script)]) == 0
+    assert json.loads(capsys.readouterr().out)["workers"][0]["queueItems"] is None
+    shows = len([c for c in calls if c[0] == "show"])
+    listed["open,in progress,review"] = lambda: list(entries.values())
+    assert worker.main(["list", "--json", "--store", "--claude", str(script)]) == 0
+    assert json.loads(capsys.readouterr().out)["workers"][0]["queueItems"][1]["wait"] == "blocked by far (open), parent (review)"
+    assert len([c for c in calls if c[0] == "show"]) == shows
+
+
+def test_kick_starts_only_idle_unpaused_workers_with_a_takeable_head(game: Path, store, fake_claude, monkeypatch, capsys):
+    entries, _calls = store
+    script, _log, sessions = fake_claude
+    worker.main(["create", "6", "--no-configure"])
+    workers = game.parent / "game.workers"
+    for k, entry_id in enumerate(("idle", "busy", "paused", "dirty", "blocked"), start=1):
+        entries[entry_id] = open_entry(entry_id)
+        worker.main(["queue", str(k), "--add", entry_id])
+    entries["blocked"] = open_entry("blocked", blocked_by=[{"id": "far", "status": "open"}])
+    worker.main(["queue", "3", "--pause", "--reason", "stopped"])
+    (workers / "w4" / "wip.txt").write_text("wip\n")
+    sessions.write_text(json.dumps([session(workers / "w1", "done", "a"), session(workers / "w2", "working", "b", status="busy")]))
+    spawned = []
+    monkeypatch.setattr(worker, "spawn_start", lambda argv, ks: spawned.append(argv) or {"pid": 7, "log": "start.log"})
+    capsys.readouterr()
+    assert worker.main(["kick", "--delay", "5", "--claude", str(script), "--json"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["started"] == [{"k": 1, "name": "w1", "entry": "idle"}]
+    assert {row["name"]: row["reason"] for row in result["skipped"]} == {
+        "w2": "its session runs", "w3": "its queue is paused (stopped)", "w4": "it has uncommitted changes",
+        "w5": "no takeable entry (blocked: blocked by far (open))", "w6": "its queue is empty",
+    }
+    assert spawned == [["start", "1", "--queued-only", "--delay", "5", "--claude", str(script)]]
+    assert queue_rows(capsys)["w1"]["queue"] == ["idle"]  # the detached start takes it out, not kick
+
+
+def test_merge_kicks_the_idle_workers_after_the_close(game: Path, store, fake_claude, monkeypatch, capsys):
+    entries, _calls = store
+    script, _log, _sessions = fake_claude
+    worker.main(["create", "1", "--no-configure"])
+    branch_with(game, "todo/g-x", "main", "x.txt", "x\n")
+    entries["g-x"] = review("g-x", "mahjong", "todo/g-x")
+    entries["next"] = open_entry("next")
+    worker.main(["queue", "1", "--add", "next"])
+    spawned = []
+    monkeypatch.setattr(worker, "spawn_start", lambda argv, ks: spawned.append(argv) or {"pid": 7, "log": "start.log"})
+    capsys.readouterr()
+    assert worker.main(["merge", "g-x", "--json", "--delay", "0", "--claude", str(script)]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["status"] == "closed" and result["kick"]["started"] == [{"k": 1, "name": "w1", "entry": "next"}]
+    assert spawned == [["start", "1", "--queued-only", "--delay", "0", "--claude", str(script)]]
 
 
 # --- a directory link that git made as a file link (Windows) ------------------------------------------------

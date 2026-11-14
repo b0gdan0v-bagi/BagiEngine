@@ -22,7 +22,6 @@ namespace BECore {
 
         // The JavaScript of EM_ASM is stringized as it stands, so clang-format must not touch it (it splits === into == =)
         // clang-format off
-        // 1 persistent, 0 anything else (the page has no Module.bagiSaves, or its state is "memory")
         bool PageSavesArePersistent() {
             return EM_ASM_INT({
                 var saves = Module.bagiSaves;

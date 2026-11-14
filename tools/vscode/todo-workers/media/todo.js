@@ -147,38 +147,36 @@
         return bar;
     }
 
-    // The queues of the workers: drag an entry to change the order of its worker's queue.
+    // The queues of the workers as the flow graph (graph.js): a click on a box unfolds that entry below, × takes it
+    // out of the queue, dragging a queued box along its lane reorders the queue.
     function queues() {
-        const workers = (payload.workers || []).filter((w) => (w.queue || []).length);
-        if (!workers.length) return null;
+        const lanes = (payload.workers || []).map((w) => w.graph).filter(Boolean);
+        if (!lanes.length) return null;
+        const graph = TodoGraph.mount(lanes, {
+            onSelect: (act) => act.entry && focusEntry(act.entry),
+            onUnqueue: (entry, worker) => vscode.postMessage({ cmd: "unqueue", entry, worker }),
+            onReorder: (worker, ids) => vscode.postMessage({ cmd: "reorderQueue", worker, ids }),
+        });
         const box = el("div", "card queues");
-        box.appendChild(el("div", "muted", "Queues (drag to reorder; the panel starts the first one when the worker is free)"));
-        for (const w of workers) {
-            const line = box.appendChild(el("div", "queue-line"));
-            line.appendChild(el("span", "entry", w.name));
-            const items = [...w.queue];
-            items.forEach((id, index) => {
-                const chip = line.appendChild(el("span", "badge queued drag", `${index + 1}. ${id}`));
-                chip.draggable = true;
-                chip.addEventListener("dragstart", (event) => event.dataTransfer.setData("text/plain", JSON.stringify({ k: w.k, index })));
-                chip.addEventListener("dragover", (event) => event.preventDefault());
-                chip.addEventListener("drop", (event) => {
-                    event.preventDefault();
-                    let from;
-                    try {
-                        from = JSON.parse(event.dataTransfer.getData("text/plain"));
-                    } catch (error) {
-                        return;
-                    }
-                    if (from.k !== w.k || from.index === index) return;
-                    const order = [...items];
-                    const [moved] = order.splice(from.index, 1);
-                    order.splice(index, 0, moved);
-                    vscode.postMessage({ cmd: "reorderQueue", worker: w.k, ids: order });
-                });
-            });
-        }
+        box.appendChild(el("div", "muted", "Workers and their queues (drag a queued box to reorder; the panel starts the first takeable one when the worker is free)"));
+        box.appendChild(graph);
         return box;
+    }
+
+    // Unfold one entry and bring it into sight; the filters are widened so far that it shows.
+    function focusEntry(id) {
+        const entry = (payload.entries || []).find((e) => e.id === id);
+        if (!entry) return;
+        open.add(id);
+        if (!matches(entry)) {
+            filter.statuses.add(entry.status);
+            if (!matchesArea(entry)) filter.area = "all";
+            if (!matches(entry)) filter.text = "";
+        }
+        save();
+        render();
+        const item = list && [...list.children].find((c) => c.dataset && c.dataset.id === id);
+        if (item) item.scrollIntoView({ block: "center", behavior: "smooth" });
     }
 
     function matchesArea(entry) {
@@ -188,6 +186,7 @@
 
     function row(entry) {
         const item = el("div", `card todo-entry${open.has(entry.id) ? " open" : ""}`);
+        item.dataset.id = entry.id;
         const top = el("div", "card-top");
         top.append(
             el("span", "entry", entry.id),
@@ -307,7 +306,14 @@
         for (const entry of entries) list.appendChild(row(entry));
     }
 
+    let renderLater = null;
     function render() {
+        // a re-render under a box being dragged would drop it: wait for the drop
+        if (TodoGraph.isDragging()) {
+            clearTimeout(renderLater);
+            renderLater = setTimeout(render, 300);
+            return;
+        }
         const focused = document.activeElement && document.activeElement.classList.contains("search");
         root.replaceChildren();
         const entries = payload.entries || [];
@@ -326,8 +332,10 @@
     }
 
     window.addEventListener("message", (event) => {
-        payload = { ...payload, ...event.data };
+        const { focus, ...data } = event.data || {};
+        payload = { ...payload, ...data };
         render();
+        if (focus) focusEntry(focus);
     });
     render();
     vscode.postMessage({ cmd: "ready" });

@@ -97,8 +97,7 @@ namespace BECore {
         XmlSerializer serializer;
         Write(serializer);
 
-        // The one place that still touches pugi: replace the `sprites` section of the cached document and keep the rest of the file
-        // (other children, comments). A ConfigManager helper for "replace a section of a config" is for the editors' slice.
+        // Replace only the `sprites` child, so the file's other children and comments survive.
         pugi::xml_node pugiRoot = xmlRoot.GetPugiNode();
         pugiRoot.remove_child("sprites");
         pugiRoot.append_copy(serializer.GetRootNode().child("sprites"));

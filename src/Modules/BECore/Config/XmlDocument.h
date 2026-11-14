@@ -10,52 +10,27 @@ namespace BECore {
     class XmlNode;
 
     /**
-     * @brief XML document wrapper with ownership
-     *
-     * Owns the underlying pugi::xml_document and provides lifetime management.
-     * Use with IntrusivePtr for reference counting.
+     * @brief Owns a pugi::xml_document; every XmlNode taken from it is valid only while the document lives
      */
     class XmlDocument : public RefCountedAtomic {
     public:
         XmlDocument() = default;
         ~XmlDocument() = default;
 
-        /**
-         * @brief Load XML from file
-         * @param filepath Path to XML file
-         * @return True if successfully loaded
-         */
+        /// @return false when the file is missing, is not a regular file or does not parse
         bool LoadFromFile(const std::filesystem::path& filepath);
 
-        /**
-         * @brief Load XML from string
-         * @param xmlContent XML content as string
-         * @return True if successfully loaded
-         */
+        /// @return false for an empty string or one that does not parse
         bool LoadFromString(StringView xmlContent);
 
-        /**
-         * @brief Save XML to file
-         * @param filepath Path to save to
-         * @return True if successfully saved
-         */
+        /// Creates the missing parent folders; writes two-space indentation, one attribute per line
         bool SaveToFile(const std::filesystem::path& filepath) const;
 
-        /**
-         * @brief Get root node of the document
-         * @return XmlNode wrapping first child
-         */
+        /// The first child of the document (its root element), or an empty node
         XmlNode GetRoot() const;
 
-        /**
-         * @brief Clear the document
-         */
         void Clear();
 
-        /**
-         * @brief Check if document is loaded
-         * @return True if document has content
-         */
         bool IsLoaded() const;
 
     private:

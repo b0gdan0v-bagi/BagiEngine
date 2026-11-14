@@ -16,8 +16,7 @@ namespace BECore {
     }
 
     uint64_t XmlResource::GetMemoryUsage() const {
-        // Base size + path + approximate XML document size
-        // For more precise measurement, would need to track XmlConfig memory usage
+        // The size of the XML document itself is not counted.
         return sizeof(*this) + _path.ToStringView().size();
     }
 

@@ -32,6 +32,8 @@ Run it from anywhere inside the main checkout:
     python3 engine/tools/todo/worker.py relaunch [k ...]  # continue the sessions the usage limit stopped (after the reset)
     python3 engine/tools/todo/worker.py merge <id> [--dry-run]  # the quick merge of an entry in review
     python3 engine/tools/todo/worker.py update [k ...] # detach a finished, clean worker at the tips of the bases
+    python3 engine/tools/todo/worker.py queue [k] [--add id | --pause | --resume ...]  # the next entries of each worker
+    python3 engine/tools/todo/worker.py kick           # idle workers take the head of their queues (after a merge)
     python3 engine/tools/todo/worker.py remove 3
 
 Python 3.10+, standard library only.
@@ -616,7 +618,7 @@ def store_entries(layout: Layout) -> tuple[list[dict], str | None]:
 
 # --- merge: the quick merge of an entry in review -------------------------------------------------
 #
-# What /todo-merge does after the owner's yes (.claude/skills/todo-merge/SKILL.md, steps 6 to 9), without a
+# What /todo-merge does after the owner's yes (.claude/skills/todo-merge/SKILL.md, steps 6 to 10), without a
 # Claude session: the VS Code panel shows `merge <id> --dry-run --json` in a dialog and runs `merge <id>`
 # on a yes. It refuses what the skill refuses (conflicts, a dirty checkout, an entry not in review) and,
 # unlike the skill, never builds: a base that moved since the branch was cut is only reported.
@@ -838,7 +840,15 @@ def cmd_merge(layout: Layout, args) -> None:
         if plan["moved"]:
             print("the base moved since the branch was cut: the merge is not built or tested")
         return
+    holders = entry_holders(layout, plan["id"], Path(plan["heldBy"]) if plan["heldBy"] else None)
     result = do_merge(layout, plan)
+    reset_streaks(layout, holders)  # a merge is the owner's act: the workers that held the entry count from zero again
+    result["kick"] = None
+    if not args.no_kick and layout.workers():
+        try:
+            result["kick"] = kick(layout, args.claude, args.delay)
+        except WorkerError as error:
+            result["notes"].append(f"kick: {error}")
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=1))
         return
@@ -847,6 +857,8 @@ def cmd_merge(layout: Layout, args) -> None:
         print(f"engine pointer: {result['pointer']}")
     for note in result["notes"]:
         print(f"note: {note}")
+    if result["kick"]:
+        print_kick(result["kick"])
 
 
 # --- activity: what a session does now, from its transcript ---------------------------------------
@@ -1359,7 +1371,9 @@ def cmd_remarks(layout: Layout, args) -> None:
             if args.id in items:
                 items.remove(args.id)
         queues.setdefault(key, []).insert(0, args.id)
-        write_queues(layout, queues)
+        state = read_queue_state(layout)
+        queue_state_of(state, key)["streak"] = []  # the owner's remarks, as a `queue --add`
+        write_queues(layout, queues, state)
         result["worker"] = key
         if args.start and not is_running(session_in(sessions or [], chosen[1])):
             start_args = argparse.Namespace(
@@ -1367,7 +1381,7 @@ def cmd_remarks(layout: Layout, args) -> None:
                 effort=DEFAULT_LOOP_EFFORT, claude=args.claude, print_only=False, rest=[], queued_only=True, wait_free=0, detach=False,
             )
             cmd_start(layout, start_args)
-            result["started"] = True
+            result["started"] = args.id not in read_queues(layout).get(key, [])  # a paused queue starts nothing
     if args.json:
         print(json.dumps(result))
         return
@@ -1376,42 +1390,215 @@ def cmd_remarks(layout: Layout, args) -> None:
 
 
 def queue_file() -> Path:
-    """The entries the panel starts next in each worker: `{"<root>": {"w1": [ids]}}`, by the workers' root."""
+    """The entries started next in each worker: `{"<root>": {"w1": [ids]}, "state": {"<root>": {"w1": {...}}}}`, by the
+    workers' root. The state of a queue (`paused`, `reason`, `at`, `streak`) is a top-level key of its own, so a reader
+    or a writer that knows only the lists (an older worker.py in a running loop) keeps working and keeps it."""
     return claude_home() / "todo" / "worker-queues.json"
 
 
-def read_queues(layout: Layout) -> dict[str, list[str]]:
+QUEUE_STATE_KEY = "state"
+# `start --queued-only` starts at most this many distinct entries from a worker's queue in a row; the next one pauses
+# the queue until the owner acts (`queue --add`, `--resume`, `--clear`, a merge of an entry the worker held).
+QUEUE_STREAK_LIMIT = 4
+QUEUE_ACTOR = "worker-queue"
+
+
+def read_queue_data() -> dict:
     try:
         data = json.loads(queue_file().read_text())
     except (OSError, ValueError):
         return {}
-    mine = data.get(str(layout.root)) if isinstance(data, dict) else None
+    return data if isinstance(data, dict) else {}
+
+
+def read_queues(layout: Layout) -> dict[str, list[str]]:
+    mine = read_queue_data().get(str(layout.root))
     return {k: [str(i) for i in v] for k, v in mine.items() if isinstance(v, list)} if isinstance(mine, dict) else {}
 
 
-def write_queues(layout: Layout, queues: dict[str, list[str]]) -> None:
+def read_queue_state(layout: Layout) -> dict[str, dict]:
+    """`{"w1": {"paused": bool, "reason": str | None, "at": str | None, "streak": [ids]}}`; a worker missing here (or a
+    file of before the state) has a running queue and an empty streak."""
+    rooted = read_queue_data().get(QUEUE_STATE_KEY)
+    mine = rooted.get(str(layout.root)) if isinstance(rooted, dict) else None
+    state = {}
+    for name, value in (mine or {}).items() if isinstance(mine, dict) else ():
+        if isinstance(value, dict):
+            streak = value.get("streak")
+            state[name] = {
+                "paused": bool(value.get("paused")),
+                "reason": value.get("reason") if isinstance(value.get("reason"), str) else None,
+                "at": value.get("at") if isinstance(value.get("at"), str) else None,
+                "streak": [str(i) for i in streak] if isinstance(streak, list) else [],
+            }
+    return state
+
+
+def queue_state_of(state: dict[str, dict], name: str) -> dict:
+    return state.setdefault(name, {"paused": False, "reason": None, "at": None, "streak": []})
+
+
+def write_queues(layout: Layout, queues: dict[str, list[str]], state: dict[str, dict] | None = None) -> None:
+    """The lists of this root, and its state when given; every other root and key stays as it is."""
     path = queue_file()
-    try:
-        data = json.loads(path.read_text())
-        data = data if isinstance(data, dict) else {}
-    except (OSError, ValueError):
-        data = {}
+    data = read_queue_data()
     data[str(layout.root)] = {k: v for k, v in queues.items() if v}
+    if state is not None:
+        rooted = data.get(QUEUE_STATE_KEY) if isinstance(data.get(QUEUE_STATE_KEY), dict) else {}
+        rooted[str(layout.root)] = {k: v for k, v in state.items() if v.get("paused") or v.get("streak")}
+        data[QUEUE_STATE_KEY] = rooted
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(".tmp")
     temporary.write_text(json.dumps(data, indent=1))
     temporary.replace(path)
 
 
+def pause_queue(state: dict[str, dict], name: str, reason: str) -> None:
+    mine = queue_state_of(state, name)
+    mine.update(paused=True, reason=reason, at=datetime.now(timezone.utc).isoformat(timespec="seconds"))
+
+
+def reset_streaks(layout: Layout, names: set[str]) -> None:
+    """The owner acted for these workers (a merge of an entry they held): their count of entries in a row starts again."""
+    queues, state = read_queues(layout), read_queue_state(layout)
+    if any(state.get(name, {}).get("streak") for name in names):
+        for name in names:
+            if name in state:
+                state[name]["streak"] = []
+        write_queues(layout, queues, state)
+
+
+def entry_holders(layout: Layout, entry_id: str, held_by: Path | None = None) -> set[str]:
+    """The workers that held an entry: the one whose folder (or its engine/) has the branch checked out, and every
+    worker whose streak names the entry (it was started there from the queue)."""
+    names = {name for name, value in read_queue_state(layout).items() if entry_id in value.get("streak", [])}
+    for k, path in layout.workers():
+        if held_by is not None and held_by.resolve() in (path.resolve(), (path / SHARED_SUBMODULE).resolve()):
+            names.add(f"{WORKER_PREFIX}{k}")
+    return names
+
+
+def show_entry(layout: Layout, entry_id: str) -> dict | None:
+    """The entry from the store, or None when the store cannot say (no answer, unknown id)."""
+    try:
+        shown = json.loads(todo_cli(layout, "show", entry_id, "--json", actor=QUEUE_ACTOR))
+    except (WorkerError, ValueError):
+        return None
+    return shown if isinstance(shown, dict) else None
+
+
+def branch_unmerged(layout: Layout, area: dict, branch: str | None) -> bool:
+    repo = (layout.main / area["repo"]).resolve()
+    return bool(branch) and repo.is_dir() and git_ok("rev-parse", "--verify", "--quiet", f"refs/heads/{branch}", cwd=repo) \
+        and not git_ok("merge-base", "--is-ancestor", branch, area["base"], cwd=repo)
+
+
+def blocker_kind(layout: Layout, entry: dict, blocker: dict, table: dict[str, dict], show) -> str:
+    """How an entry waits for one open blocker: `stacked` (a branch of the same area in review, unmerged here, not
+    itself stacked: the entry is cut from it), `paired` (the shared engine's branch in review while the entry is the
+    game's), else `waits` (the blocker must be closed first). A slice that reopens its entry is never stacked on."""
+    if blocker.get("status") != "review":
+        return "waits"
+    parent = show(str(blocker.get("id")))
+    own, theirs = table.get(entry.get("area")), table.get((parent or {}).get("area"))
+    if parent is None or own is None or theirs is None or parent.get("status") != "review":
+        return "waits"
+    note = parent.get("statusNote") or ""
+    same = parent.get("area") == entry.get("area")
+    stacked = same and "stacked on todo/" not in note
+    paired = not same and own["repo"] == "." and layout.shared is not None \
+        and (layout.main / theirs["repo"]).resolve() == layout.shared.resolve()
+    if (stacked or paired) and SLICE_REOPEN not in note and branch_unmerged(layout, theirs, parent.get("branch")):
+        return "stacked" if stacked else "paired"
+    return "waits"
+
+
+def open_blockers(entry: dict) -> list[dict]:
+    return [b for b in entry.get("blockedBy") or [] if isinstance(b, dict) and b.get("status") != "closed"]
+
+
+def queue_relation(layout: Layout, entry_id: str, table: dict[str, dict], show=None) -> dict:
+    """A queued entry as the panel's graph draws it: `{id, title, status, area, wait, blockedBy: [{id, status, title,
+    kind}]}`, `wait` being `queue_wait`'s answer and `kind` `blocker_kind`'s. `show(id)` gives an entry or None (the
+    store by default; `list_json` passes one list read once)."""
+    show = show or (lambda i: show_entry(layout, i))
+    entry = show(entry_id)
+    row = {"id": entry_id, "title": None, "status": None, "area": None, "wait": None, "blockedBy": []}
+    if entry is None:
+        return row
+    status = entry.get("status")
+    blockers = open_blockers(entry)
+    row.update(title=entry.get("title"), status=status, area=entry.get("area"), blockedBy=[
+        {"id": b.get("id"), "status": b.get("status"), "title": b.get("title"), "kind": blocker_kind(layout, entry, b, table, show)} for b in blockers
+    ])
+    if status == "closed":
+        row["wait"] = "closed"
+    elif status == "open" and entry.get("blocked"):
+        named = ", ".join(f"{b.get('id')} ({b.get('status')})" for b in blockers)
+        takeable = len(blockers) == 1 and row["blockedBy"][0]["kind"] in ("stacked", "paired")
+        row["wait"] = None if takeable else f"blocked by {named or '?'}"
+    return row
+
+
+def queue_wait(layout: Layout, entry_id: str, table: dict[str, dict], show=None) -> str | None:
+    """Why a queued entry cannot be started now, or None when it can. What the store's JSON allows of the loop's own
+    rule (todo-loop/SKILL.md, step 1, "Stacked branches", "Paired"): an entry not `open` is the loop's to continue (a
+    through slice, a remarks round); an open one is takeable when it is not `blocked`, or when its only open blocker is
+    in `review` with an unmerged branch in this checkout, of the same area (stacked: the blocker not itself stacked, by
+    its note) or of the shared engine while the entry is the game's (paired), and that blocker's note is not a slice that
+    reopens (`blocker_kind`). Busy files are not compared here (the loop does it). An entry the store cannot show is left
+    to the loop."""
+    return queue_relation(layout, entry_id, table, show)["wait"]
+
+
+def store_lookup(layout: Layout):
+    """`show(id)` over one `todo.py list` of the open, in progress and review entries (what a queue and its blockers
+    are), falling back to `todo.py show` for an id the list has not (a closed one) and keeping each answer."""
+    try:
+        rows = json.loads(todo_cli(layout, "list", "--status", "open,in progress,review", "--json", actor=QUEUE_ACTOR) or "null")
+    except (WorkerError, ValueError):
+        rows = None
+    known = {row["id"]: row for row in rows if isinstance(row, dict) and "id" in row} if isinstance(rows, list) else {}
+
+    def show(entry_id: str) -> dict | None:
+        if entry_id not in known:
+            known[entry_id] = show_entry(layout, entry_id)
+        return known[entry_id]
+    return show
+
+
+def queue_head(layout: Layout, items: list[str]) -> tuple[str | None, list[str]]:
+    """The first queued entry that can be started now (`queue_wait`), and `<id>: <why>` of each one before it."""
+    table = {row["area"]: row for row in rule_area_table(layout.main)}
+    waits = []
+    for entry_id in items:
+        why = queue_wait(layout, entry_id, table)
+        if why is None:
+            return entry_id, waits
+        waits.append(f"{entry_id}: {why}")
+    return None, waits
+
+
+def queue_line(items: list[str], mine: dict) -> str:
+    paused = f" (paused: {mine.get('reason') or 'by hand'})" if mine.get("paused") else ""
+    return f"{' '.join(items) if items else '(empty)'}{paused}"
+
+
 def cmd_queue(layout: Layout, args) -> None:
-    """`queue` (all), `queue <k> --add <id> [--first]`, `queue <k> --remove <id>`, `queue <k> --pop`, `queue <k> --clear`."""
+    """`queue` (all), `queue <k> --add <id> [--first] [--by-loop]`, `--remove <id>`, `--pop`, `--clear`, `--pause
+    [--reason R]`, `--resume`. An add without `--by-loop`, a clear and a resume are the owner's: the count of entries
+    started in a row (`QUEUE_STREAK_LIMIT`) starts again."""
     queues = read_queues(layout)
+    state = read_queue_state(layout)
     names = {f"{WORKER_PREFIX}{k}" for k, _path in layout.workers()}
     if args.k is not None:
         name = f"{WORKER_PREFIX}{args.k}"
         if name not in names:
             raise WorkerError(f"no worker {name} in {layout.root}")
+        if args.pause and args.resume:
+            raise WorkerError("--pause and --resume together")
         items = queues.get(name, [])
+        mine = queue_state_of(state, name)
         popped = None
         if args.add:
             if not re.fullmatch(r"[A-Za-z0-9_-]+", args.add):
@@ -1423,22 +1610,29 @@ def cmd_queue(layout: Layout, args) -> None:
             items.insert(0, args.add) if args.first else items.append(args.add)
         if args.remove and args.remove in items:
             items.remove(args.remove)
-        if args.pop and items:
+        if args.pop and items and not mine["paused"]:
             popped = items.pop(0)
         if args.clear:
             items = []
+        if (args.add and not args.by_loop) or args.clear or args.resume:
+            mine["streak"] = []
+        if args.resume:
+            mine.update(paused=False, reason=None, at=None)
+        if args.pause:
+            pause_queue(state, name, args.reason or "by hand")
         queues[name] = items
-        if args.add or args.remove or args.pop or args.clear:
-            write_queues(layout, queues)
+        if args.add or args.remove or args.pop or args.clear or args.pause or args.resume:
+            write_queues(layout, queues, state)
         if args.pop:
-            print(json.dumps({"popped": popped}) if args.json else (popped or ""))
+            out = {"popped": popped, **({"paused": mine["reason"]} if mine["paused"] else {})}
+            print(json.dumps(out) if args.json else (popped or (f"paused: {mine['reason']}" if mine["paused"] else "")))
             return
     shown = {name: queues.get(name, []) for name in sorted(names)}
     if args.json:
-        print(json.dumps(shown))
+        print(json.dumps({name: {"queue": items, **queue_state_of(state, name)} for name, items in shown.items()}))
         return
     for name, items in shown.items():
-        print(f"{name}: {' '.join(items) if items else '(empty)'}")
+        print(f"{name}: {queue_line(items, queue_state_of(state, name))}")
 
 
 PATH_IN_TEXT = re.compile(r"`([A-Za-z0-9_.\-/]+/[A-Za-z0-9_.\-/{},*]*|[A-Za-z0-9_\-/]+\.[A-Za-z]{1,5})`")
@@ -1669,7 +1863,7 @@ def dispatch_state(layout: Layout, args) -> dict:
         holds = next((e["id"] for e in entries if e.get("branch") in branches and e.get("status") != "review"), None)
         why = ("running" if w["active"] and not w["waiting"] else None) or ("waiting" if w["waiting"] else None) \
             or ("dirty" if w["dirty"] else None) or ("limited" if w["limited"] else None) or (f"holds {holds}" if holds else None)
-        workers.append({"k": w["k"], "name": w["name"], "free": why is None, "busy": why, "branches": branches, "queue": w["queue"]})
+        workers.append({"k": w["k"], "name": w["name"], "free": why is None, "busy": why, "branches": branches, "queue": w["queue"], "paused": w["queuePaused"]})
 
     cache = read_rooted(verdicts_file(), layout)
     now = time.time()
@@ -1808,7 +2002,10 @@ def list_json(layout: Layout, args) -> dict:
     if args.store:
         review_checks(entries)
     queues = read_queues(layout)
+    queue_states = read_queue_state(layout)
     by_branch = {entry["branch"]: entry for entry in entries if entry.get("branch")}
+    table = {row["area"]: row for row in rule_area_table(layout.main)} if args.store else {}
+    show = None
     workers = []
     for k, path in layout.workers():
         game = head_json(path)
@@ -1817,6 +2014,13 @@ def list_json(layout: Layout, args) -> dict:
         session = session_in(sessions or [], path)
         entry = next((by_branch[h["branch"]] for h in (engine, game) if h and h["branch"] in by_branch), None)
         limited = limit_hit(session)
+        queue_state = queue_state_of(queue_states, f"{WORKER_PREFIX}{k}")
+        items = queues.get(f"{WORKER_PREFIX}{k}", [])
+        if args.store and (items or (entry and open_blockers(entry))):
+            show = show or store_lookup(layout)
+            if entry:
+                for blocker in open_blockers(entry):
+                    blocker["kind"] = blocker_kind(layout, entry, blocker, table, show)
         workers.append({
             "k": k,
             "name": f"{WORKER_PREFIX}{k}",
@@ -1835,6 +2039,12 @@ def list_json(layout: Layout, args) -> dict:
             "usage": session_usage(session) if args.usage else None,
             "entry": entry,
             "queue": queues.get(f"{WORKER_PREFIX}{k}", []),
+            # the reason a loop or the streak limit paused the queue (`queue --pause`), None while it runs
+            "queuePaused": (queue_state["reason"] or "by hand") if queue_state["paused"] else None,
+            "queueStreak": queue_state["streak"],
+            # with --store: each queued entry with `wait` (why the panel will not start it now) and its open blockers
+            # with `kind` (`queue_relation`); the held entry's open blockers get `kind` too
+            "queueItems": [queue_relation(layout, i, table, show) for i in items] if args.store else None,
         })
     entry_usage = update_ledger(workers) if args.usage else {}
     usage: dict = {}
@@ -2008,8 +2218,13 @@ def wait_until_free(args, k: int, path: Path) -> bool:
 def start_detached(args) -> None:
     """Run the same `start` again in a process of its own (without `--detach`) and return at once: a loop that
     queues its own next slice starts it this way and then ends, and the child waits for that end (`--wait-free`)."""
-    argv = [part for part in args.argv if part != "--detach"]
-    log = claude_home() / "todo" / f"start-{'-'.join(map(str, args.workers)) or 'all'}.log"
+    child = spawn_start([part for part in args.argv if part != "--detach"], args.workers)
+    print(f"detached: pid {child['pid']}, log {child['log']}")
+
+
+def spawn_start(argv: list[str], workers: list[int]) -> dict:
+    """`worker.py <argv>` in a process of its own, its output appended to a log in ~/.claude/todo/."""
+    log = claude_home() / "todo" / f"start-{'-'.join(map(str, workers)) or 'all'}.log"
     log.parent.mkdir(parents=True, exist_ok=True)
     with log.open("a", encoding="utf-8") as out:
         out.write(f"\n--- {datetime.now().isoformat(timespec='seconds')} worker.py {' '.join(argv)}\n")
@@ -2018,7 +2233,109 @@ def start_detached(args) -> None:
             [sys.executable, str(Path(__file__).resolve()), *argv], cwd=Path.cwd(), stdout=out, stderr=subprocess.STDOUT,
             stdin=subprocess.DEVNULL, start_new_session=True,
         )
-    print(f"detached: pid {child.pid}, log {log}")
+    return {"pid": child.pid, "log": str(log)}
+
+
+def worker_dirty(layout: Layout, path: Path) -> bool:
+    engine = path / SHARED_SUBMODULE
+    return bool(dirty(path, ignore_submodules=True) or (layout.shared is not None and (engine / ".git").exists() and dirty(engine)))
+
+
+def kick(layout: Layout, claude: str, delay: int, report_to: str | None = None) -> dict:
+    """Start every idle worker on the head of its queue: its session finished (not stopped by `stop`), its folder
+    clean, its queue not paused and with a takeable head (`queue_head`). One detached `start <k...> --queued-only`
+    does it, `delay` seconds apart, so the caller (a merge) does not wait; that start checks each queue again."""
+    sessions = list_sessions(claude)
+    if sessions is None:
+        raise WorkerError(f"`{claude} agents --json` did not answer: cannot tell which workers are idle")
+    queues, state = read_queues(layout), read_queue_state(layout)
+    chosen, skipped = [], []
+    for k, path in layout.workers():
+        name = f"{WORKER_PREFIX}{k}"
+        session = session_in(sessions, path)
+        mine = queue_state_of(state, name)
+        items = queues.get(name, [])
+        why = None
+        if not items:
+            why = "its queue is empty"
+        elif mine["paused"]:
+            why = f"its queue is paused ({mine['reason'] or 'by hand'})"
+        elif is_running(session):
+            why = "its session runs"
+        elif stopped_at(session) is not None:
+            why = "its session was stopped by worker.py stop"
+        elif worker_dirty(layout, path):
+            why = "it has uncommitted changes"
+        else:
+            entry, waits = queue_head(layout, items)
+            if entry is None:
+                why = f"no takeable entry ({'; '.join(waits)})"
+            else:
+                chosen.append({"k": k, "name": name, "entry": entry})
+        if why:
+            skipped.append({"k": k, "name": name, "reason": why})
+    result = {"started": chosen, "skipped": skipped, "detached": None}
+    if chosen:
+        argv = ["start", *(str(c["k"]) for c in chosen), "--queued-only", "--delay", str(delay), "--claude", claude]
+        argv += ["--report-to", report_to] if report_to else []
+        result["detached"] = spawn_start(argv, [c["k"] for c in chosen])
+    return result
+
+
+def print_kick(result: dict) -> None:
+    for row in result["started"]:
+        print(f"{row['name']}: starts {row['entry']} from its queue")
+    for row in result["skipped"]:
+        print(f"{row['name']}: not started, {row['reason']}")
+    if result["detached"]:
+        print(f"detached: pid {result['detached']['pid']}, log {result['detached']['log']}")
+
+
+def cmd_kick(layout: Layout, args) -> None:
+    """`kick [--merged <id>]`: after a merge, the idle workers take the next entry of their queues (`kick`)."""
+    if args.merged:
+        reset_streaks(layout, entry_holders(layout, args.merged))
+    result = kick(layout, args.claude, args.delay, args.report_to)
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False))
+        return
+    print_kick(result)
+
+
+def take_queued(layout: Layout, k: int, print_only: bool) -> str | None:
+    """The entry `start --queued-only` starts in worker k, taken out of its queue, or None (with the line that says why):
+    a paused queue, an empty one, none takeable (`queue_head`: the blocked ones stay, in order), or a new entry beyond
+    QUEUE_STREAK_LIMIT in a row, which pauses the queue instead. An entry already in the streak (the next slice of a
+    through entry, a remarks round) does not count again."""
+    name = f"{WORKER_PREFIX}{k}"
+    queues, state = read_queues(layout), read_queue_state(layout)
+    mine = queue_state_of(state, name)
+    items = queues.get(name, [])
+    if mine["paused"]:
+        print(f"{name}: its queue is paused ({mine['reason'] or 'by hand'}), not started; `worker.py queue {k} --resume` lifts it")
+        return None
+    if not items:
+        print(f"{name}: its queue is empty, not started")
+        return None
+    entry, waits = queue_head(layout, items)
+    if entry is None:
+        print(f"{name}: no queued entry can be taken now, not started: {'; '.join(waits)}")
+        return None
+    for line in waits:
+        print(f"{name}: {line}, stays queued")
+    if entry not in mine["streak"] and len(mine["streak"]) >= QUEUE_STREAK_LIMIT:
+        reason = f"{QUEUE_STREAK_LIMIT} entries in a row without the owner ({', '.join(mine['streak'])}), {entry} would be the next"
+        print(f"{name}: not started, the queue is paused: {reason}; `worker.py queue {k} --resume` goes on")
+        if not print_only:
+            pause_queue(state, name, reason)
+            write_queues(layout, queues, state)
+        return None
+    if not print_only:
+        items.remove(entry)
+        if entry not in mine["streak"]:
+            mine["streak"].append(entry)
+        write_queues(layout, queues, state)
+    return entry
 
 
 def cmd_start(layout: Layout, args) -> None:
@@ -2053,14 +2370,9 @@ def cmd_start(layout: Layout, args) -> None:
             continue
         worker_prompt = prompt
         if args.queued_only:
-            queues = read_queues(layout)
-            items = queues.get(f"{WORKER_PREFIX}{k}", [])
-            if not items:
-                print(f"w{k}: its queue is empty, not started")
+            entry = take_queued(layout, k, args.print_only)
+            if entry is None:
                 continue
-            entry = items[0] if args.print_only else items.pop(0)
-            if not args.print_only:
-                write_queues(layout, queues)
             worker_prompt = loop_prompt(args, entry)
         if is_active(session) and not args.print_only:
             subprocess.run([args.claude, "stop", str(session.get("id") or session["sessionId"])], capture_output=True, text=True)
@@ -2275,13 +2587,22 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--effort", default=DEFAULT_LOOP_EFFORT, help=f"the effort of the loop sessions (default {DEFAULT_LOOP_EFFORT}; '' leaves Claude Code's default)")
     p.add_argument("--claude", default="claude", help="the command (default claude)")
     p.add_argument("--print", dest="print_only", action="store_true", help="only print the commands")
-    p.add_argument("--queued-only", action="store_true", help="start only workers with a queue, each on the first entry of its queue (taken out)")
+    p.add_argument("--queued-only", action="store_true", help="start only workers with a queue that is not paused, each on its first takeable entry (taken out; blocked ones stay)")
     p.add_argument("--wait-free", type=int, default=0, metavar="S", help="wait up to S seconds for each worker's session to end before starting it")
     p.add_argument("--detach", action="store_true", help="do it in a background process and return at once (a loop starts its own next slice so)")
     p = sub.add_parser("merge", help="merge the branch of an entry in review into its base, close the entry, delete the branch (the quick merge of the VS Code panel)")
     p.add_argument("id")
     p.add_argument("--dry-run", action="store_true", help="only say what it would do and what stops it")
     p.add_argument("--json", action="store_true", help="print JSON (for tools/vscode/todo-workers)")
+    p.add_argument("--no-kick", action="store_true", help="do not start the idle workers on their queues afterwards (`kick`)")
+    p.add_argument("--delay", type=int, default=DEFAULT_DELAY_S, help=f"seconds between two starts of the kick (default {DEFAULT_DELAY_S})")
+    p.add_argument("--claude", default="claude", help="the command (default claude)")
+    p = sub.add_parser("kick", help="start every idle worker (finished, clean, queue not paused) on the first takeable entry of its queue, detached")
+    p.add_argument("--merged", help="the entry just merged: the workers that held it count their entries in a row from zero again")
+    p.add_argument("--delay", type=int, default=DEFAULT_DELAY_S, help=f"seconds between two starts (default {DEFAULT_DELAY_S})")
+    p.add_argument("--report-to", help="the session the loops report to")
+    p.add_argument("--claude", default="claude", help="the command (default claude)")
+    p.add_argument("--json", action="store_true")
     p = sub.add_parser("update", help="detach the repositories of the workers at the tips of their base branches (a finished session, a clean folder)")
     p.add_argument("workers", nargs="*", type=int, help="the workers (default: all)")
     p.add_argument("--claude", default="claude", help="the command (default claude)")
@@ -2299,11 +2620,15 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--print", dest="print_only", action="store_true", help="only print the command")
     p = sub.add_parser("queue", help="the entries the VS Code panel starts next in each worker (a local file, ~/.claude/todo/worker-queues.json)")
     p.add_argument("k", nargs="?", type=int, help="the worker (default: show every queue)")
-    p.add_argument("--add", help="put this entry at the end (taken out of any other queue)")
+    p.add_argument("--add", help="put this entry at the end (taken out of any other queue); the count of entries in a row starts again")
     p.add_argument("--first", action="store_true", help="with --add: at the front")
+    p.add_argument("--by-loop", action="store_true", help="with --add: a loop queues its own next work, the count of entries in a row stays")
     p.add_argument("--remove", help="take this entry out")
-    p.add_argument("--pop", action="store_true", help="take the first entry out and print it")
-    p.add_argument("--clear", action="store_true", help="empty the queue")
+    p.add_argument("--pop", action="store_true", help="take the first entry out and print it (nothing from a paused queue)")
+    p.add_argument("--clear", action="store_true", help="empty the queue; the count of entries in a row starts again")
+    p.add_argument("--pause", action="store_true", help="--queued-only and kick start nothing from it until --resume (a loop that stopped)")
+    p.add_argument("--reason", help="with --pause: why")
+    p.add_argument("--resume", action="store_true", help="lift a pause; the count of entries in a row starts again")
     p.add_argument("--json", action="store_true")
     p = sub.add_parser("overlap", help="the busy entries whose slice plans name files the entry names (a hint before a start)")
     p.add_argument("id")
@@ -2350,7 +2675,7 @@ def main(argv: list[str] | None = None) -> int:
     args.argv = argv + (["--", *rest] if rest else [])
     try:
         layout = find_layout(Path.cwd())
-        commands = {"create": cmd_create, "list": cmd_list, "check": cmd_check, "remove": cmd_remove, "run": cmd_run, "start": cmd_start, "stop": cmd_stop, "relaunch": cmd_relaunch, "merge": cmd_merge, "update": cmd_update, "attach": cmd_session, "logs": cmd_session, "queue": cmd_queue, "overlap": cmd_overlap, "prefs": cmd_prefs, "dispatch": cmd_dispatch, "build-info": cmd_build_info, "cost": cmd_cost, "remarks": cmd_remarks}
+        commands = {"create": cmd_create, "list": cmd_list, "check": cmd_check, "remove": cmd_remove, "run": cmd_run, "start": cmd_start, "stop": cmd_stop, "relaunch": cmd_relaunch, "merge": cmd_merge, "update": cmd_update, "attach": cmd_session, "logs": cmd_session, "queue": cmd_queue, "overlap": cmd_overlap, "prefs": cmd_prefs, "dispatch": cmd_dispatch, "build-info": cmd_build_info, "cost": cmd_cost, "remarks": cmd_remarks, "kick": cmd_kick}
         commands[args.command](layout, args)
     except WorkerError as error:
         print(f"error: {error}", file=sys.stderr)
