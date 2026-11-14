@@ -1,3 +1,4 @@
+#include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <Common/Printers.h>
 
 namespace BECore::Tests {
@@ -360,6 +361,52 @@ namespace BECore::Tests {
             EXPECT_EQ(ToString(value), String{expected.c_str()}) << expected;
         }
         EXPECT_EQ(ToString(1.5f), "1.500000");
+    }
+
+    TEST(TypesTest, ToStringOfFloatWidensToDoubleAsStdToStringDoes) {
+        for (const float value : {0.1f, 1.5f, 16777216.0f, 1e10f, 3.4e38f, 1e-10f, -0.0f}) {
+            const std::string expected = std::to_string(value);
+            EXPECT_EQ(ToString(value), String{expected.c_str()}) << expected;
+        }
+        EXPECT_EQ(ToString(0.1f), "0.100000");
+        EXPECT_EQ(ToString(-0.0f), "-0.000000");
+        EXPECT_EQ(ToString(1e-10f), "0.000000");
+    }
+
+    TEST(TypesTest, ToStringOfNonFiniteValuesWritesWhatStdToStringWrites) {
+        const double inf = std::numeric_limits<double>::infinity();
+        const double nan = std::numeric_limits<double>::quiet_NaN();
+        for (const double value : {inf, -inf}) {
+            const std::string expected = std::to_string(value);
+            EXPECT_EQ(ToString(value), String{expected.c_str()}) << expected;
+        }
+        EXPECT_EQ(ToString(inf), "inf");
+        EXPECT_EQ(ToString(-inf), "-inf");
+        EXPECT_EQ(ToString(std::numeric_limits<float>::infinity()), "inf");
+        EXPECT_EQ(ToString(-std::numeric_limits<float>::infinity()), "-inf");
+        EXPECT_EQ(ToString(std::numeric_limits<long double>::infinity()), "inf");
+        // printf writes a NaN without its sign on macOS and with it on glibc, fmt always with it: ToString says "nan" for both signs
+        EXPECT_EQ(ToString(nan), "nan");
+        EXPECT_EQ(ToString(-nan), "nan");
+        EXPECT_EQ(ToString(-std::numeric_limits<float>::quiet_NaN()), "nan");
+        EXPECT_EQ(ToString(-std::numeric_limits<long double>::quiet_NaN()), "nan");
+    }
+
+    TEST(TypesTest, ToStringOfLongDoubleKeepsItsPrecision) {
+        for (const long double value : {0.0L, 1.5L, -2.25L, 1e-7L, 123456789.125L, 1e30L}) {
+            const std::string expected = std::to_string(value);
+            EXPECT_EQ(ToString(value), String{expected.c_str()}) << expected;
+        }
+    }
+
+    TEST(TypesTest, ToStringOfAShortFloatAllocatesNothing) {
+        const AllocTracker::ThreadCounters before = AllocTracker::GetThreadCounters();
+        const String text = ToString(1.5f);
+        const AllocTracker::ThreadCounters after = AllocTracker::GetThreadCounters();
+        if constexpr (AllocTracker::kEnabled) {
+            EXPECT_EQ(after.count, before.count);
+        }
+        EXPECT_EQ(text, "1.500000");
     }
 
     TEST(TypesTest, ToStringDoesNotTakeCharactersOrBool) {
