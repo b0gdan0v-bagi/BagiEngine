@@ -42,13 +42,13 @@ ImGui's vertex colours are sRGB values (a theme colour means what it shows on th
 
 ## Checking by hand
 
-The window cannot be driven by a test. Run `BagiMatch3` (or a game) with `VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation` (see "Looking at the pixels") and read stderr:
+The window cannot be driven by a test. Run `BagiStress` (or a game) with `VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation` (see "Looking at the pixels") and read stderr:
 
 - Maximize and restore (the window starts `SDL_WINDOW_MAXIMIZED`): the picture refills the window with no stretch and no bars other than the scene's own.
 - Drag-resize the window slowly and fast, both axes: no frozen or stretched frame, no validation errors, no crash on exit.
 - Minimize and restore: no CPU spin while minimized (Activity Monitor), the picture comes back at the right size; also minimize while resizing.
 - Move the window between a Retina and a non-Retina display (and change the display's scale in System Settings while the game runs): the output size follows.
-- HiDPI (the window config asks for `SDL_WINDOW_HIGH_PIXEL_DENSITY`): on a Retina display the output (swapchain) is twice the window size in units and the picture is sharp, with no 2 px per scene unit blur; a click on a Match3 cell, a canvas button and, in a game with a view size, a tile hits the right target, also at the edges of the window; the UI keeps its size in window units.
+- HiDPI (the window config asks for `SDL_WINDOW_HIGH_PIXEL_DENSITY`): on a Retina display the output (swapchain) is twice the window size in units and the picture is sharp, with no 2 px per scene unit blur; a click on a board cell, a canvas button and, in a game with a view size, a tile hits the right target, also at the edges of the window; the UI keeps its size in window units.
 - Editor mode: a docked panel and a floating window (drag a tab out) show the same `ImGuiTheme` colours (a pixel of a docked panel in a screenshot matches `panelBg` of `GetImGuiPalette()`), and a viewport or sprite picture is as bright as in the game.
 - Editor mode (Ctrl+Shift+E, Debug build) on the Retina display: panels and fonts readable and not doubled, the viewport picture and its clicks as before (the viewport stays one pixel per ImGui unit, so it is as soft as today). ImGui's font sharpness there is not changed.
 - Whether the "format no longer offered" case after a display move ever happens (the logged error of `Recreate`); if it does, the render pass and pipelines must be rebuilt, which is not done.

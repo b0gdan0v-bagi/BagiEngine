@@ -52,7 +52,7 @@ namespace BECore {
          */
         virtual std::expected<Json, ControlError> PerformAction(const Json& action) = 0;
 
-        /// Starts a new game. @p options is an object whose members are the game's (Match3: "seed"); it may be empty
+        /// Starts a new game. @p options is an object whose members are the game's (e.g. "seed"); it may be empty
         virtual std::expected<void, ControlError> Reset(const Json& options) = 0;
 
         /// Loads a state (a game's own form, e.g. {"fen": ".."} for Chess). The default answers unsupported

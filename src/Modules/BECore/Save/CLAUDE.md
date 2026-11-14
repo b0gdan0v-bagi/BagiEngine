@@ -35,7 +35,7 @@ A file is a stream of `BinarySerializer` (`Reflection/BinaryFormat.h`) with one 
 
 ```
 save
-├── game     string   the id of the game ("Match3")
+├── game     string   the id of the game ("<Game>")
 ├── version  u32      the version of the game's state schema when it was written
 └── state    object   filled by the game's reflected Serialize()
 ```
@@ -46,7 +46,7 @@ save
 
 **`Load` checks in this order**, and calls the reader only when all pass: the stream is valid (`LoadFromBuffer` validates it whole; else `Corrupt` with the deserializer's first error as `detail`); there is an object `save` with a readable `game` and `version` (else `Corrupt`); `game` equals `schema.game` (else `WrongGame`); `version <= schema.version` (else `VersionTooNew`); `version >= schema.minVersion` (else `VersionTooOld`); the object `state` exists (else `Corrupt`). After the reader, any error the deserializer recorded (a missing entry read with `Read`, a field of another type) is `Corrupt`. `Save` and `Load` refuse a bad slot name or an uninitialized service before they call the callbacks. `Peek` reads only `game` and `version` (no schema, no `state`): for a list of saves in a load menu.
 
-**What a failed `Load` leaves.** A failure before the reader (every kind but `Corrupt` from the state itself) leaves the target untouched. A `Corrupt` from the reader may leave the state partly filled, so a game with something to protect loads into a temporary object and applies it after a success (the Match3 consumer does).
+**What a failed `Load` leaves.** A failure before the reader (every kind but `Corrupt` from the state itself) leaves the target untouched. A `Corrupt` from the reader may leave the state partly filled, so a game with something to protect loads into a temporary object and applies it after a success (the loader of a game does).
 
 **Version policy.** Added fields need no version: storage is name-keyed, so a field missing from an old file keeps the default of the new type. Raise `version` when the meaning of existing data changes or a field is removed, and raise `minVersion` when the old shape can no longer be read. An older but accepted file loads and `Load` returns its version in `SaveInfo`, so the game can fix the data up after the load (`if (info->version < 2) { state.lives = 3; }`). A newer file is refused rather than guessed at.
 
@@ -61,7 +61,7 @@ A game calls `SaveGameService::Initialize(PersistentSaveDirectory())`: the path 
 
 ## What a consumer does with a refused save
 
-The file is input nobody trusts: a player edits it, a disk damages it, an update changes the game. A consumer (the code that turns a `Load` into a live game) keeps these rules; `LoadMatch3` and `Match3SaveDamageTest` are the model.
+The file is input nobody trusts: a player edits it, a disk damages it, an update changes the game. A consumer (the code that turns a `Load` into a live game) keeps these rules; the game's loader and its damage test are the model.
 
 - **Load into a temporary, apply after a success.** The live state changes only when `Load` and the game's own checks have both passed, and the apply step cannot fail halfway: a refused save leaves the game exactly as it was.
 - **One message, one log line, never a crash.** Every refusal is a `SaveError` whose `detail` is one short sentence; the game shows or logs it once and goes on. A check the consumer makes after `Load` (a board of 63 letters) is worded by the consumer as `Corrupt`, with its reason in the `detail`.

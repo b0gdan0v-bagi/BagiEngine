@@ -7,7 +7,7 @@
 
 namespace BECore::Tests::RmlUiScreens {
 
-    // The three screens that the repository ships, in the engine's XML (games/*/config/SceneConfig.xml) and in RmlUi's HTML + CSS dialect.
+    // The three screens that the repository ships, in the engine's XML (the config/SceneConfig.xml of a game) and in RmlUi's HTML + CSS dialect.
     // The XML is the reference: every element of the RML screen must land on the same rect, in every shape of the size matrix.
     // The XML is written composed, as the shipped files and the HTML compiler write it (a text is a `UIElement` with a `UITextComponent`, a button one with a text and a clicker).
 

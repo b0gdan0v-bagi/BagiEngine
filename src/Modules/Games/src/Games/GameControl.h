@@ -11,7 +11,7 @@ namespace BECore {
      * |--------|--------|--------|
      * | list_games | none | {"active": name or null, "games": [{"name", "scene", "controllable"}]} |
      * | switch_game | {"name"} | {"active": name} |
-     * | reset | the game's options (Match3: {"seed"}) | {"game", "version"} (a game that is not controllable gets a plain IGame::Reset and no version) |
+     * | reset | the game's options (e.g. a seed) | {"game", "version"} (a game that is not controllable gets a plain IGame::Reset and no version) |
      * | get_state | none | {"game", "version", "state"} |
      * | list_actions | none | {"game", "version", "actions": [..]} |
      * | perform_action | the action object itself, as listed by list_actions | {"game", "version", "outcome"} |
