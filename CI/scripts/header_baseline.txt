@@ -1,12 +1,2 @@
 # Headers that do not compile alone (CI/scripts/check_headers.py). A fix removes lines, nothing is added.
 # Regenerate: python3 CI/scripts/check_headers.py --root . --build build/macos-debug --baseline CI/scripts/header_baseline.txt --update-baseline
-tests/BECore/ConfigDeserializerTest.h
-tests/BECore/FactoryInitializeTest.h
-tests/BECore/FuzzProbe.h
-tests/BECore/ReflectionEventTest.h
-tests/BECore/ReflectionTest.h
-tests/BECore/Rooms/RoomSocketClient.h
-tests/BECore/Rooms/RoomTableDriver.h
-tests/BECore/Rooms/TestClient.h
-tests/BECore/Save/SaveGameTest.h
-tests/BECore/Tls/FakeTlsStream.h

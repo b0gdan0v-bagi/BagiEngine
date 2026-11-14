@@ -1,6 +1,11 @@
 #pragma once
 
+#include <BECore/PoolString/PoolString.h>
+#include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Reflection/TypeTraits.h>
+#include <BECore/Types/Types.h>
+#include <BECore/Utils/EnumUtils.h>
+#include <cstdint>
 
 namespace BECore {
 

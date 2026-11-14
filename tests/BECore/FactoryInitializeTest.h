@@ -1,6 +1,11 @@
 #pragma once
 
+#include <BECore/RefCounted/IntrusivePtr.h>
+#include <BECore/RefCounted/RefCounted.h>
+#include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Reflection/TypeTraits.h>
+#include <BECore/Types/Types.h>
+#include <cstdint>
 
 namespace BECore {
     class IDeserializer;
