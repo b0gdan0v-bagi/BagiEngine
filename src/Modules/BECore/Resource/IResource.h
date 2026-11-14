@@ -8,11 +8,7 @@
 
 namespace BECore {
 
-    /**
-     * @brief Resource loading state
-     *
-     * Tracks the current state of a resource through its loading lifecycle.
-     */
+    /** @brief Where a resource is in its loading lifecycle. */
     CORE_ENUM(ResourceState, uint8_t,
               Unloaded,  ///< Resource not yet loaded
               Loading,   ///< Resource is currently loading
@@ -21,58 +17,22 @@ namespace BECore {
     )
 
     /**
-     * @brief Base interface for all managed resources
+     * @brief Base of every resource ResourceManager caches (held by IntrusivePtr).
      *
-     * All resource types inherit from IResource and are managed
-     * by ResourceManager with reference counting via IntrusivePtr.
-     *
-     * Resources are immutable after loading, making them thread-safe
-     * for concurrent read access.
-     *
-     * @example
-     * class MyResource : public IResource {
-     *     BE_CLASS(MyResource)
-     * public:
-     *     ResourceState GetState() const override { return _state; }
-     *     PoolString GetPath() const override { return _path; }
-     *     uint64_t GetMemoryUsage() const override { return sizeof(*this); }
-     *     PoolString GetTypeName() const override { return "MyResource"; }
-     * private:
-     *     PoolString _path;
-     *     ResourceState _state = ResourceState::Unloaded;
-     * };
+     * A resource is immutable after loading, so concurrent reads are safe.
      */
     class IResource : public RefCounted {
         BE_CLASS(IResource, FACTORY_BASE)
     public:
         virtual ~IResource() = default;
 
-        /**
-         * @brief Get current loading state
-         * @return ResourceState enum value
-         */
         virtual ResourceState GetState() const = 0;
 
-        /**
-         * @brief Get virtual path to this resource
-         * @return PoolString with the resource path
-         */
         virtual PoolString GetPath() const = 0;
 
-        /**
-         * @brief Get estimated memory usage in bytes
-         *
-         * Used for cache statistics and memory tracking.
-         * Should include the size of all owned data.
-         *
-         * @return Memory usage of this resource
-         */
+        /** @brief Bytes owned by the resource, for cache statistics; include all owned data. */
         virtual uint64_t GetMemoryUsage() const = 0;
 
-        /**
-         * @brief Get human-readable type name
-         * @return PoolString with type name (e.g., "XmlResource")
-         */
         virtual PoolString GetTypeName() const = 0;
     };
 

@@ -11,85 +11,34 @@
 namespace BECore {
 
     /**
-     * @brief Thread-safe cache for loaded resources
+     * @brief Thread-safe cache of loaded resources by virtual path (shared lock for reads, exclusive for writes).
      *
-     * Stores resources by virtual path with reference counting.
-     * Uses SharedMutex for read-heavy concurrent access patterns.
-     *
-     * @note Eviction is not implemented in v1. Resources stay cached
-     * until explicitly cleared or application shutdown.
-     *
-     * @example
-     * ResourceCache cache;
-     * cache.Put("config.xml", myResource);
-     * if (auto res = cache.Get("config.xml")) {
-     *     // Use resource...
-     * }
+     * There is no eviction: a resource stays until Clear() or shutdown.
      */
     class ResourceCache {
     public:
         ResourceCache() = default;
         ~ResourceCache() = default;
 
-        // Non-copyable, non-movable (contains mutex)
+        // The mutex can be neither copied nor moved.
         ResourceCache(const ResourceCache&) = delete;
         ResourceCache& operator=(const ResourceCache&) = delete;
         ResourceCache(ResourceCache&&) = delete;
         ResourceCache& operator=(ResourceCache&&) = delete;
 
-        /**
-         * @brief Get cached resource by path
-         *
-         * Thread-safe for concurrent reads.
-         *
-         * @param path Virtual path to the resource
-         * @return Resource pointer or nullptr if not cached
-         */
+        /** @return The cached resource, or nullptr. */
         IntrusivePtr<IResource> Get(PoolString path) const;
 
-        /**
-         * @brief Store resource in cache
-         *
-         * Thread-safe. If resource already exists, it will be replaced.
-         *
-         * @param path Virtual path as cache key
-         * @param resource Resource to cache
-         */
+        /** @brief Replaces an entry of the same path. */
         void Put(PoolString path, IntrusivePtr<IResource> resource);
 
-        /**
-         * @brief Check if resource is cached
-         *
-         * Thread-safe for concurrent reads.
-         *
-         * @param path Virtual path to check
-         * @return true if resource exists in cache
-         */
         bool Contains(PoolString path) const;
 
-        /**
-         * @brief Clear all cached resources
-         *
-         * Thread-safe. Acquires exclusive lock.
-         */
         void Clear();
 
-        /**
-         * @brief Get total memory usage of cached resources
-         *
-         * Thread-safe for concurrent reads.
-         *
-         * @return Sum of GetMemoryUsage() for all cached resources
-         */
+        /** @return The sum of GetMemoryUsage() over the cached resources. */
         uint64_t GetTotalMemoryUsage() const;
 
-        /**
-         * @brief Get number of cached resources
-         *
-         * Thread-safe for concurrent reads.
-         *
-         * @return Cache entry count
-         */
         size_t GetCount() const;
 
     private:
