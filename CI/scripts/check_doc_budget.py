@@ -37,8 +37,13 @@ def walk_claude_files(root: Path, skip: set[Path]) -> list[Path]:
     while stack:
         folder = stack.pop()
         for child in sorted(folder.iterdir()):
+            # First, and with an lstat: is_dir() is a stat, which raises on Windows for a file symlink to a directory
+            # (what a checkout makes when the target is missing at that moment). The file a link points to is counted
+            # at its own place.
+            if child.is_symlink():
+                continue
             if child.is_dir():
-                if child.name in SKIP_DIRS or child.resolve() in skip or child.is_symlink():
+                if child.name in SKIP_DIRS or child.resolve() in skip:
                     continue
                 if child != root and (child / ".git").exists():
                     continue  # a submodule checks itself

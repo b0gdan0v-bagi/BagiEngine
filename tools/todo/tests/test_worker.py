@@ -114,21 +114,49 @@ def test_run_print_only_prints(game: Path, capsys):
 
 # --- background sessions, against a fake `claude` that records its calls ---------------------------
 
-FAKE_CLAUDE = """#!/bin/sh
-log="$FAKE_CLAUDE_LOG"
-if [ "$1" = agents ]; then cat "$FAKE_CLAUDE_SESSIONS" 2>/dev/null || echo '[]'; exit 0; fi
-if [ "$1" = stop ]; then echo "stop $2" >> "$log"; echo "stopped $2"; exit 0; fi
-echo "bg cwd=$(pwd) jobs=$CMAKE_BUILD_PARALLEL_LEVEL args=$*" >> "$log"
-if [ -n "$FAKE_CLAUDE_UNTRUSTED" ]; then echo "Workspace not trusted. Run claude once and accept the trust prompt"; exit 1; fi
-echo "backgrounded · abcd1234 · $3"
+# The fake `claude` is a Python script, so it runs on Windows too (a `#!/bin/sh` script cannot be started there): on POSIX the
+# file itself with a shebang to this interpreter, on Windows a `.cmd` beside it that hands its arguments to it
+FAKE_CLAUDE = """import os
+import sys
+from pathlib import Path
+
+args = sys.argv[1:]
+
+
+def append(line):
+    with open(os.environ["FAKE_CLAUDE_LOG"], "a", encoding="utf-8") as log:
+        log.write(line + "\\n")
+
+
+if args[:1] == ["agents"]:
+    try:
+        print(Path(os.environ["FAKE_CLAUDE_SESSIONS"]).read_text())
+    except OSError:
+        print("[]")
+    sys.exit(0)
+if args[:1] == ["stop"]:
+    append(f"stop {args[1]}")
+    print(f"stopped {args[1]}")
+    sys.exit(0)
+append(f"bg cwd={Path.cwd().as_posix()} jobs={os.environ.get('CMAKE_BUILD_PARALLEL_LEVEL', '')} args={' '.join(args)}")
+if os.environ.get("FAKE_CLAUDE_UNTRUSTED"):
+    print("Workspace not trusted. Run claude once and accept the trust prompt")
+    sys.exit(1)
+print(f"backgrounded · abcd1234 · {args[2] if len(args) > 2 else ''}")
 """
 
 
 @pytest.fixture
 def fake_claude(tmp_path: Path, monkeypatch) -> tuple[Path, Path, Path]:
-    script = tmp_path / "fake-claude"
-    script.write_text(FAKE_CLAUDE)
-    script.chmod(0o755)
+    source = tmp_path / "fake-claude.py"
+    if os.name == "nt":
+        source.write_text(FAKE_CLAUDE, encoding="utf-8")
+        script = tmp_path / "fake-claude.cmd"
+        script.write_text(f'@"{sys.executable}" "%~dp0fake-claude.py" %*\n', encoding="utf-8")
+    else:
+        script = tmp_path / "fake-claude"
+        script.write_text(f"#!{sys.executable}\n{FAKE_CLAUDE}", encoding="utf-8")
+        script.chmod(0o755)
     log = tmp_path / "claude.log"
     sessions = tmp_path / "sessions.json"
     monkeypatch.setenv("FAKE_CLAUDE_LOG", str(log))
@@ -1180,3 +1208,120 @@ def test_merge_refuses_an_entry_whose_blocker_is_not_closed(game: Path, store, c
     assert worker.main(["merge", "g-pair", "--dry-run", "--json"]) == 0
     plan = json.loads(capsys.readouterr().out)
     assert plan["first"] == [] and plan["problems"] == []
+
+
+# --- a directory link that git made as a file link (Windows) ------------------------------------------------
+
+LINK = ".claude/skills/probe"
+LINK_TEXT = "../../engine/skills/probe"
+windows_only = pytest.mark.skipif(os.name != "nt", reason="git makes a file link only on Windows")
+
+
+def symlink_or_skip(text: str, link: Path, directory: bool = False) -> None:
+    link.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        os.symlink(text, link, target_is_directory=directory)
+    except (OSError, NotImplementedError):
+        pytest.skip("this machine cannot make a symlink")
+
+
+def is_directory_link(link: Path) -> bool:
+    return link.is_symlink() and bool(os.lstat(link).st_file_attributes & worker.stat.FILE_ATTRIBUTE_DIRECTORY)
+
+
+def commit_probe_link(game: Path) -> None:
+    """The engine gets `skills/probe/x.txt` on games/chess, the game the tracked link to it and the new pointer."""
+    eng = game / "engine"
+    run("switch", "-q", "games/chess", cwd=eng)
+    (eng / "skills" / "probe").mkdir(parents=True)
+    (eng / "skills" / "probe" / "x.txt").write_text("x\n")
+    run("add", "skills", cwd=eng)
+    run("commit", "-q", "-m", "probe", cwd=eng)
+    symlink_or_skip(LINK_TEXT, game / LINK, directory=True)
+    run("config", "core.symlinks", "true", cwd=game)  # the system config of Git for Windows says false; the real game has it true
+    run("add", LINK, "engine", cwd=game)
+    run("commit", "-q", "-m", "Update engine: probe, and a link to it", cwd=game)
+
+
+def make_file_link(link: Path, text: str) -> None:
+    """The fault by hand: a file link to a directory (os.symlink picks the type by the target, so it is moved away)."""
+    target = link.parent / text
+    aside = target.with_name(target.name + ".aside")
+    target.rename(aside)
+    link.unlink()
+    symlink_or_skip(text, link)
+    aside.rename(target)
+    assert link.is_symlink() and not is_directory_link(link)
+
+
+@windows_only
+def test_update_remakes_the_link_git_made_as_a_file_link(game: Path, store):
+    worker.main(["create", "1", "--no-configure"])
+    w1 = game.parent / "game.workers" / "w1"
+    commit_probe_link(game)
+    # what git does without the repair: the game moves first, engine/ is still on the old commit
+    run("switch", "-q", "--detach", "main", cwd=w1)
+    assert (w1 / LINK).is_symlink() and not is_directory_link(w1 / LINK)
+    run("switch", "-q", "--detach", "HEAD~1", cwd=w1)
+    result = worker.update_one(worker.find_layout(game), 1, w1, [])
+    assert is_directory_link(w1 / LINK)
+    assert (w1 / LINK / "x.txt").exists()
+    assert result["links"] == [LINK] and any(LINK in note for note in result["notes"])
+    assert run("status", "--porcelain", cwd=w1) == ""
+    assert worker.update_one(worker.find_layout(game), 1, w1, [])["links"] == []
+
+
+@windows_only
+def test_create_leaves_no_file_link_when_the_base_holds_a_link_into_engine(game: Path, capsys):
+    commit_probe_link(game)
+    capsys.readouterr()
+    assert worker.main(["create", "1", "--no-configure"]) == 0
+    w1 = game.parent / "game.workers" / "w1"
+    assert is_directory_link(w1 / LINK) and (w1 / LINK / "x.txt").exists()
+    assert LINK in capsys.readouterr().out
+    assert run("status", "--porcelain", cwd=w1) == ""
+
+
+@windows_only
+def test_check_finds_and_fixes_a_file_link_to_a_directory(game: Path, capsys):
+    commit_probe_link(game)
+    worker.main(["create", "1", "--no-configure"])
+    w1 = game.parent / "game.workers" / "w1"
+    assert worker.main(["check"]) == 0
+    make_file_link(w1 / LINK, LINK_TEXT)
+    capsys.readouterr()
+    with pytest.raises(SystemExit) as stop:
+        worker.main(["check"])
+    assert stop.value.code == 1
+    assert f"w1: {LINK} is a file symlink to a directory" in capsys.readouterr().out
+    assert worker.main(["check", "--fix"]) == 0
+    assert f"w1: {LINK} remade as a directory symlink" in capsys.readouterr().out
+    assert is_directory_link(w1 / LINK) and run("status", "--porcelain", cwd=w1) == ""
+    assert worker.main(["check"]) == 0
+    assert capsys.readouterr().out.strip() == "ok"
+
+
+def test_only_a_tracked_file_link_to_a_directory_is_reported(tmp_path: Path, monkeypatch):
+    """The classifier is replaced, so this runs on every platform."""
+    repo = tmp_path / "repo"
+    (repo / "dir").mkdir(parents=True)
+    (repo / "dir" / "x.txt").write_text("x\n")
+    (repo / "file.txt").write_text("f\n")
+    run("init", "-q", "-b", "main", cwd=repo)
+    symlink_or_skip("dir", repo / "to_dir", directory=True)
+    symlink_or_skip("missing", repo / "broken")
+    symlink_or_skip("file.txt", repo / "to_file")
+    run("add", ".", cwd=repo)
+    run("commit", "-q", "-m", "all", cwd=repo)
+    kind = {"file": True}
+    monkeypatch.setattr(worker, "ON_WINDOWS", True)
+    monkeypatch.setattr(worker, "is_file_link", lambda link: kind["file"])
+    assert worker.file_links_to_directories(repo) == [repo / "to_dir"]
+    kind["file"] = False
+    assert worker.file_links_to_directories(repo) == []
+    kind["file"] = True
+    assert worker.fix_directory_links(repo) == ["to_dir"]
+    assert (repo / "to_dir").is_symlink() and os.readlink(repo / "to_dir") == "dir"
+    assert run("status", "--porcelain", cwd=repo) == ""
+    monkeypatch.setattr(worker, "ON_WINDOWS", False)
+    assert worker.file_links_to_directories(repo) == []
