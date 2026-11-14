@@ -4,8 +4,7 @@
 # Included once by cmake/BagiEngine.cmake before the first target, so the flags reach every target (the vendored libraries too).
 #
 #   ENGINE_SANITIZE        ""   A ';' list of sanitizers for all code, compile and link, with frame pointers. Clang and GCC only: on Windows
-#                               the compiler is clang (preset windows-clang-asan), and with address its runtime DLL is copied next to the
-#                               executables at configure.
+#                               the compiler is clang (preset windows-clang-asan), and address needs the static C runtime there.
 #                               address    AddressSanitizer (-fsanitize=address)
 #                               undefined  UndefinedBehaviorSanitizer with float-cast-overflow (a float to integer conversion out of range;
 #                                          not in -fsanitize=undefined) and -fno-sanitize-recover (a finding stops the process)
@@ -62,22 +61,10 @@ if(BE_SANITIZERS)
     endif()
     add_link_options(${BE_SANITIZER_FLAGS})
 
-    # The Windows ASan runtime is a DLL the executables load at start (without it they stop with 0xc0000135): copy it next to them
-    if(WIN32 AND "address" IN_LIST BE_SANITIZERS)
-        execute_process(COMMAND ${CMAKE_CXX_COMPILER} --print-resource-dir
-            OUTPUT_VARIABLE BE_CLANG_RESOURCE_DIR OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
-        file(TO_CMAKE_PATH "${BE_CLANG_RESOURCE_DIR}" BE_CLANG_RESOURCE_DIR)
-        # lib/windows/clang_rt.asan_dynamic-x86_64.dll or lib/x86_64-pc-windows-msvc/clang_rt.asan_dynamic.dll, never the other targets'
-        file(GLOB_RECURSE BE_ASAN_DLLS "${BE_CLANG_RESOURCE_DIR}/lib/*asan_dynamic*.dll")
-        list(FILTER BE_ASAN_DLLS EXCLUDE REGEX "(i386|aarch64)")
-        if(BE_ASAN_DLLS)
-            list(GET BE_ASAN_DLLS 0 BE_ASAN_DLL)
-        else()
-            message(FATAL_ERROR "Sanitizers: the ASan runtime DLL (clang_rt.asan_dynamic*.dll) is not under '${BE_CLANG_RESOURCE_DIR}/lib' (compiler ${CMAKE_CXX_COMPILER}); install the LLVM that ships it")
-        endif()
-        file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
-        file(COPY "${BE_ASAN_DLL}" DESTINATION "${CMAKE_BINARY_DIR}/bin")
-        message(STATUS "Sanitizers: ASan runtime ${BE_ASAN_DLL} copied to ${CMAKE_BINARY_DIR}/bin")
+    # The Windows ASan runtime is linked statically with the static C runtime (preset mixin asan-windows-crt: CMAKE_MSVC_RUNTIME_LIBRARY=
+    # MultiThreaded, no DLL in the build); with /MD the DLL thunks of the runtime fail to link (duplicate symbol: malloc)
+    if(WIN32 AND "address" IN_LIST BE_SANITIZERS AND (NOT CMAKE_MSVC_RUNTIME_LIBRARY STREQUAL "MultiThreaded" OR NOT ENGINE_STATIC_SDL))
+        message(WARNING "Sanitizers: ASan on Windows needs CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded and ENGINE_STATIC_SDL=ON (the preset windows-clang-asan); this build has runtime '${CMAKE_MSVC_RUNTIME_LIBRARY}', ENGINE_STATIC_SDL=${ENGINE_STATIC_SDL} and does not link")
     endif()
 
     if(ENGINE_FUZZ_LIBFUZZER)
