@@ -6,6 +6,10 @@ Parses src/Modules/BECore/pch.h (or given path), collects include paths, then
 walks sources under src/, config/ and tools/stress/ and removes matching includes. Supports
 --dir to limit to a subfolder (e.g. src/Widgets) for incremental runs.
 
+Only source files are processed (`.cpp .cc .cxx .c .mm`), never a header: a header has to include what it uses and compile
+alone (CI/scripts/check_headers.py), so it may not rely on the PCH, and stripping it would undo the includes it needs. The
+output says how many headers were skipped.
+
 Modes:
   --changed  Only files with uncommitted changes (git).
   --all      All C/C++ sources under src/, config/ and tools/stress/.
@@ -45,6 +49,7 @@ def get_strip_pch_ignore_patterns(project_root: Path) -> list[str]:
     base = load_ignore_patterns(project_root)
     return [p for p in base if p != "src/Modules/BECore" and not p.startswith("src/Modules/BECore/")]
 
+STRIPPED_SUFFIXES = {".cpp", ".cc", ".cxx", ".c", ".mm"}
 INCLUDE_LINE_RE = re.compile(r'^\s*#\s*include\s*[<"]([^>"]+)[>"]\s*(?://.*)?$')
 # Не трогать сам файл PCH
 PCH_FILE_RE = re.compile(r"pch\.h$", re.IGNORECASE)
@@ -84,6 +89,12 @@ def filter_by_dir(files: list[Path], project_root: Path, dir_rel: str) -> list[P
         if rel_str == prefix or rel_str.startswith(prefix + "/"):
             result.append(p)
     return result
+
+
+def keep_sources(files: list[Path]) -> tuple[list[Path], int]:
+    """The source files of `files` (the ones whose includes may be stripped) and the number of other files left out (headers)."""
+    kept = [p for p in files if p.suffix.lower() in STRIPPED_SUFFIXES]
+    return kept, len(files) - len(kept)
 
 
 def process_file(
@@ -169,13 +180,16 @@ def main() -> int:
     if args.dir is not None:
         files = filter_by_dir(files, project_root, args.dir.strip().replace("\\", "/"))
 
+    files, skipped_headers = keep_sources(files)
+    skipped_label = f" ({skipped_headers} header(s) skipped: a header includes what it uses)" if skipped_headers else ""
+
     if not files:
-        print("No files to process.")
+        print(f"No files to process.{skipped_label}")
         return 0
 
     scope_label = "changed" if args.changed else "all"
     dir_label = f" under {args.dir}" if args.dir else ""
-    print(f"Strip PCH includes: {len(files)} file(s) ({scope_label}{dir_label}), PCH: {pch_path.name}")
+    print(f"Strip PCH includes: {len(files)} file(s) ({scope_label}{dir_label}), PCH: {pch_path.name}{skipped_label}")
     if args.dry_run:
         print("Dry run — no files will be modified.")
 

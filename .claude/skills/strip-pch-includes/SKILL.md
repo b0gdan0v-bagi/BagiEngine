@@ -38,6 +38,7 @@ From the root of the repository you work in:
 
 - The script is `<engine>/CI/scripts/strip_pch_includes.py`. The PCH defaults to `src/Modules/BECore/pch.h` of the engine (the optional positional argument `pch`, relative to the engine).
 - It finds sources like `format_sources.py` (the `clang-format` skill): the same scope of `--all` and the same `.clang-format-ignore` of `<R>`, with one difference: the engine's `BECore` module is not excluded, so `--dir src/Modules/BECore` works in the engine. The PCH file itself is never edited.
+- **Headers are skipped** (`--all`, `--changed` and `--dir` alike; the output counts them): only `.cpp .cc .cxx .c .mm` files are stripped. A header must include what it uses and compile alone (`<engine>/CI/scripts/check_headers.py`, ctest `BagiHeadersStandalone`), so it may not rely on the PCH, and stripping it would remove includes it needs. A `.cpp` may still rely on the PCH.
 
 ## Scope
 

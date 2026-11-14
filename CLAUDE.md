@@ -66,7 +66,7 @@ tools/            todo (the todo store), control (control API client, smoke test
 
 ## After making changes
 
-- Run `clang-format` on changed files; after include changes run `strip-pch-includes`.
+- Run `clang-format` on changed files; after include changes run `strip-pch-includes` (`.cpp` files only).
 - A change that alters what a content file (`SceneConfig.xml`, a node file) may say (renames or removes a reflected class or field it can name, moves a field, turns a control into components) **adds a step** to `tools/migrate/steps/`, bumps `kContentVersion` and runs the tool on the engine's content; a game's content files are never edited by hand (`tools/migrate/CLAUDE.md`, `src/Modules/BECore/Config/CLAUDE.md`, "Content version").
 - Plans are never committed: they live in the todo store (`python3 tools/todo/todo.py plan put NAME.md`). Status `review` is set only by `todo-loop`; `/todo-merge` merges, closes and deletes the branch.
 
