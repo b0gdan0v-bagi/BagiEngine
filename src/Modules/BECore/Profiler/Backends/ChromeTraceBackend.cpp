@@ -246,7 +246,7 @@ namespace BECore {
         return out;
     }
 
-    std::expected<void, eastl::string> ChromeTraceBackend::WriteFile(eastl::string_view path) const {
+    std::expected<void, eastl::string> ChromeTraceBackend::WriteFile(StringView path) const {
         const eastl::string text = WriteJson();
         const eastl::string fileName(path.data(), path.size());
         std::FILE* file = std::fopen(fileName.c_str(), "wb");

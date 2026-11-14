@@ -9,10 +9,10 @@ namespace BECore {
 
     /// Flags of the command line that Application hands to ResolveControlSettings()
     namespace ControlArguments {
-        inline constexpr eastl::string_view kControl = "--control";
-        inline constexpr eastl::string_view kControlPortPrefix = "--control-port=";
-        inline constexpr eastl::string_view kManualClock = "--manual-clock";
-        inline constexpr eastl::string_view kHeadless = "--headless";
+        inline constexpr StringView kControl = "--control";
+        inline constexpr StringView kControlPortPrefix = "--control-port=";
+        inline constexpr StringView kManualClock = "--manual-clock";
+        inline constexpr StringView kHeadless = "--headless";
     }  // namespace ControlArguments
 
     struct ApplicationConfigLoad;  // Application/ApplicationConfig.h, which includes this file

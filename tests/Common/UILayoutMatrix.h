@@ -151,7 +151,7 @@ namespace BECore::Tests {
                     caseOptions.pixelDensity = context.pixelDensity;
                     auto issues = canvas.Validate(caseOptions);
                     if (!issues.empty()) {
-                        const eastl::string_view modeName = screen ? EnumUtils<CanvasScaleMode>::ToString(mode) : eastl::string_view("-");
+                        const StringView modeName = screen ? EnumUtils<CanvasScaleMode>::ToString(mode) : StringView("-");
                         failures.push_back({Format("{} {} x{}{}", matrixCase.label, modeName, userScale, viewName), std::move(issues)});
                     }
                 }

@@ -148,7 +148,7 @@ namespace BECore {
 
             case SDL_EVENT_TEXT_INPUT:
                 if (KeyboardReachesGame()) {
-                    SDLEvents::TextInputEvent::Emit(eastl::string_view(sdlEvent.text.text != nullptr ? sdlEvent.text.text : ""));
+                    SDLEvents::TextInputEvent::Emit(StringView(sdlEvent.text.text != nullptr ? sdlEvent.text.text : ""));
                 }
                 break;
 

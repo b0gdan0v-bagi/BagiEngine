@@ -11,7 +11,7 @@ namespace BECore {
         static_assert(RoomLimits::kRoomCodeAlphabet.size() == (size_t{1} << kBitsPerCodeChar), "5 bits pick one character exactly");
         static_assert(RoomLimits::kRoomCodeLength * kBitsPerCodeChar <= 64, "a code comes from one word");
 
-        constexpr eastl::string_view kHexDigits = "0123456789abcdef";
+        constexpr StringView kHexDigits = "0123456789abcdef";
         constexpr size_t kHexDigitsPerWord = 16;
 
         void AppendHex(eastl::string& out, uint64_t word) {
@@ -33,7 +33,7 @@ namespace BECore {
         return code;
     }
 
-    Optional<eastl::string> NormalizeRoomCode(eastl::string_view text) {
+    Optional<eastl::string> NormalizeRoomCode(StringView text) {
         if (text.size() != RoomLimits::kRoomCodeLength) {
             return std::nullopt;
         }
@@ -41,7 +41,7 @@ namespace BECore {
         code.reserve(text.size());
         for (const char c : text) {
             const char upper = (c >= 'a' && c <= 'z') ? static_cast<char>(c - 'a' + 'A') : c;
-            if (RoomLimits::kRoomCodeAlphabet.find(upper) == eastl::string_view::npos) {
+            if (RoomLimits::kRoomCodeAlphabet.find(upper) == StringView::npos) {
                 return std::nullopt;
             }
             code.push_back(upper);
@@ -57,7 +57,7 @@ namespace BECore {
         return token;
     }
 
-    bool IsWellFormedToken(eastl::string_view text) {
+    bool IsWellFormedToken(StringView text) {
         if (text.size() != RoomLimits::kTokenLength) {
             return false;
         }

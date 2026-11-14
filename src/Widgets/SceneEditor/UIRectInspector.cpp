@@ -194,7 +194,7 @@ namespace BECore {
             ImGui::SetNextItemWidth(kPairWidth);
             ImGui::InputText("Name##region_name", buffer, sizeof(buffer), ImGuiInputTextFlags_EnterReturnsTrue);
             if (ImGui::IsItemDeactivatedAfterEdit()) {
-                const PoolString typed = PoolString::Intern(eastl::string_view(buffer));
+                const PoolString typed = PoolString::Intern(StringView(buffer));
                 if (typed != spec.region) {
                     spec.region = typed;
                     changed = true;

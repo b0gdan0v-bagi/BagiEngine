@@ -28,7 +28,7 @@ namespace BECore::Fuzz {
         }
 
         /// The runs of exactly kTokenLength lower-case hexadecimal digits that are whole words in @p text: what could be a reconnect token
-        eastl::vector<eastl::string> FindTokenLikeWords(eastl::string_view text) {
+        eastl::vector<eastl::string> FindTokenLikeWords(StringView text) {
             eastl::vector<eastl::string> found;
             for (size_t at = 0; at < text.size();) {
                 if (!IsWordLetter(text[at])) {
@@ -61,7 +61,7 @@ namespace BECore::Fuzz {
         };
 
         /// What the last text of a connection, as the hub read it, said about listing the room: none when it was no create_room
-        Optional<bool> AsksToListTheRoom(eastl::string_view lastSent) {
+        Optional<bool> AsksToListTheRoom(StringView lastSent) {
             const auto parsed = ParseClientMessage(lastSent, kMaxMessageBytes);
             const auto* create = parsed ? std::get_if<CreateRoomMessage>(&*parsed) : nullptr;
             if (create == nullptr) {
@@ -77,13 +77,13 @@ namespace BECore::Fuzz {
                 FUZZ_CHECK(registered);
             }
 
-            void Apply(Op op, uint8_t number, uint16_t length, eastl::string_view text) {
+            void Apply(Op op, uint8_t number, uint16_t length, StringView text) {
                 const ConnectionId id = ConnectionOf(number);
                 switch (op) {
                     case Op::Message: {
                         ConnectionModel& connection = _connections[id];
                         connection.lastSent.assign(text.data(), text.size());
-                        connection.askedForSeat = connection.askedForSeat || text.find("choose_seat") != eastl::string_view::npos;
+                        connection.askedForSeat = connection.askedForSeat || text.find("choose_seat") != StringView::npos;
                         _hub.OnMessage(id, text, _now);
                         break;
                     }
@@ -278,10 +278,10 @@ namespace BECore::Fuzz {
             const auto length = static_cast<uint16_t>(data[at + 1] | (data[at + 2] << 8));
             at += kOperationHeaderBytes;
 
-            eastl::string_view text;
+            StringView text;
             if (op == Op::Message) {
                 const size_t textBytes = std::min<size_t>(length, size - at);
-                text = eastl::string_view(reinterpret_cast<const char*>(data + at), textBytes);
+                text = StringView(reinterpret_cast<const char*>(data + at), textBytes);
                 at += textBytes;
             }
             run.Apply(op, number, length, text);

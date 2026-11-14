@@ -68,7 +68,7 @@ namespace BECore {
          *
          * @return New instance, or empty pointer if type is not registered.
          */
-        BasePtr Create(eastl::string_view name) const {
+        BasePtr Create(StringView name) const {
             return FindAndCreate(StringUtils::GetHash(name));
         }
 
@@ -95,7 +95,7 @@ namespace BECore {
         }
 
     private:
-        static constexpr eastl::string_view ResolveDebugName() {
+        static constexpr StringView ResolveDebugName() {
             if constexpr (HasReflection<BaseType>) {
                 return ReflectionTraits<BaseType>::name;
             } else {
@@ -112,7 +112,7 @@ namespace BECore {
             return {};
         }
 
-        eastl::string_view _debugName = ResolveDebugName();
+        StringView _debugName = ResolveDebugName();
         eastl::hash_map<uint64_t, CreatorFunc> _creators;
         eastl::vector<ClassMeta> _metas;
     };

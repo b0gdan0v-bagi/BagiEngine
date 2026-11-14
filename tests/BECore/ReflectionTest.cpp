@@ -106,7 +106,7 @@ namespace BECore::Tests {
 
         /// Saves @p value as <objectName> with one @p key entry and returns the XML text.
         template <typename T>
-        eastl::string SaveToXml(eastl::string_view objectName, eastl::string_view key, const T& value) {
+        eastl::string SaveToXml(StringView objectName, StringView key, const T& value) {
             XmlSerializer serializer;
             if (serializer.BeginObject(objectName)) {
                 Ser::Save(serializer, value, key);
@@ -117,7 +117,7 @@ namespace BECore::Tests {
 
         /// Loads the @p key entry of <objectName> from @p xml into @p out. Use through ASSERT_NO_FATAL_FAILURE.
         template <typename T>
-        void LoadFromXml(const eastl::string& xml, eastl::string_view objectName, eastl::string_view key, T& out) {
+        void LoadFromXml(const eastl::string& xml, StringView objectName, StringView key, T& out) {
             XmlDeserializer deserializer;
             ASSERT_TRUE(deserializer.LoadFromString(xml)) << "Failed to load XML:\n" << xml.c_str();
             if (deserializer.BeginObject(objectName)) {
@@ -171,7 +171,7 @@ namespace BECore::Tests {
 
         /// Saves @p value as <objectName> with one @p key entry and returns the binary stream.
         template <typename T>
-        ByteBuffer SaveToBinary(eastl::string_view objectName, eastl::string_view key, const T& value) {
+        ByteBuffer SaveToBinary(StringView objectName, StringView key, const T& value) {
             BinarySerializer serializer;
             if (serializer.BeginObject(objectName)) {
                 Ser::Save(serializer, value, key);
@@ -182,7 +182,7 @@ namespace BECore::Tests {
 
         /// Loads the @p key entry of <objectName> from @p data into @p out. Use through ASSERT_NO_FATAL_FAILURE.
         template <typename T>
-        void LoadFromBinary(const ByteBuffer& data, eastl::string_view objectName, eastl::string_view key, T& out) {
+        void LoadFromBinary(const ByteBuffer& data, StringView objectName, StringView key, T& out) {
             BinaryDeserializer deserializer;
             ASSERT_TRUE(deserializer.LoadFromBuffer(data)) << DescribeErrors(deserializer).c_str();
             ASSERT_TRUE(deserializer.BeginObject(objectName)) << "the object is missing from the binary stream";
@@ -257,7 +257,7 @@ namespace BECore::Tests {
                 Ser::Save(serializer, state, "state");
                 Ser::Save(serializer, players, "players");
                 Ser::Save(serializer, scores, "scores");
-                serializer.Write("title", eastl::string_view("a title"));
+                serializer.Write("title", StringView("a title"));
                 serializer.EndObject();
             }
             return serializer.GetData();
@@ -318,7 +318,7 @@ namespace BECore::Tests {
         player.isAlive = false;
 
         int fieldCount = 0;
-        ForEachField(player, [&](eastl::string_view, auto&) { fieldCount++; });
+        ForEachField(player, [&](StringView, auto&) { fieldCount++; });
 
         EXPECT_EQ(fieldCount, 4) << "ForEachField should visit every reflected field";
     }
@@ -603,10 +603,10 @@ namespace BECore::Tests {
         const char embeddedNul[] = {'a', '\0', 'b'};
 
         BinarySerializer serializer;
-        serializer.Write("empty", eastl::string_view(""));
-        serializer.Write("utf8", eastl::string_view("h\xC3\xA9llo w\xC3\xB6rld \xE2\x9C\x93"));
-        serializer.Write("embeddedNul", eastl::string_view(embeddedNul, sizeof(embeddedNul)));
-        serializer.WriteAttribute("long", eastl::string_view(longText.data(), longText.size()));
+        serializer.Write("empty", StringView(""));
+        serializer.Write("utf8", StringView("h\xC3\xA9llo w\xC3\xB6rld \xE2\x9C\x93"));
+        serializer.Write("embeddedNul", StringView(embeddedNul, sizeof(embeddedNul)));
+        serializer.WriteAttribute("long", StringView(longText));
         serializer.Write("pool", PoolString::Intern("Hero"));
         serializer.WriteAttribute("emptyPool", PoolString{});
 
@@ -871,7 +871,7 @@ namespace BECore::Tests {
     TEST(ReflectionTest, BinaryTypeMismatchIsReported) {
         BinarySerializer serializer;
         serializer.Write("number", int32_t{7});
-        serializer.Write("text", eastl::string_view("seven"));
+        serializer.Write("text", StringView("seven"));
 
         BinaryDeserializer deserializer;
         ASSERT_TRUE(deserializer.LoadFromBuffer(serializer.GetData()));
@@ -1181,7 +1181,7 @@ namespace BECore::Tests {
 
     TEST(ReflectionTest, MethodReflection) {
         int methodCount = 0;
-        eastl::vector<eastl::string_view> methodNames;
+        eastl::vector<StringView> methodNames;
         ForEachMethod<TestData::Player>([&](auto& method) {
             methodCount++;
             methodNames.push_back(method.name);
@@ -1189,7 +1189,7 @@ namespace BECore::Tests {
 
         EXPECT_EQ(methodCount, 4) << "ForEachMethod should visit every reflected method";
 
-        const auto hasName = [&methodNames](eastl::string_view expected) { return eastl::find(methodNames.begin(), methodNames.end(), expected) != methodNames.end(); };
+        const auto hasName = [&methodNames](StringView expected) { return eastl::find(methodNames.begin(), methodNames.end(), expected) != methodNames.end(); };
         EXPECT_TRUE(hasName("TakeDamage"));
         EXPECT_TRUE(hasName("Heal"));
         EXPECT_TRUE(hasName("IsDead"));
@@ -1420,7 +1420,7 @@ namespace BECore::Tests {
 
     TEST(ReflectionTest, ErrorReporting) {
         // Nested structure: root > player > inventory. Read a field that doesn't exist inside inventory.
-        constexpr eastl::string_view xml = R"(
+        constexpr StringView xml = R"(
             <root>
               <player>
                 <inventory gold="50"/>

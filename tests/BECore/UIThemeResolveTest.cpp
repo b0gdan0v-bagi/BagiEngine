@@ -68,47 +68,47 @@ namespace BECore::Tests {
         public:
             explicit GreenEditor(bool editing) : _editing(editing) {}
 
-            bool Visit(eastl::string_view name, uint8_t& value) override {
+            bool Visit(StringView name, uint8_t& value) override {
                 if (_editing && name == "g") {
                     value = kEditedGreen;
                     return true;
                 }
                 return false;
             }
-            bool Visit(eastl::string_view, bool&) override {
+            bool Visit(StringView, bool&) override {
                 return false;
             }
-            bool Visit(eastl::string_view, int8_t&) override {
+            bool Visit(StringView, int8_t&) override {
                 return false;
             }
-            bool Visit(eastl::string_view, int16_t&) override {
+            bool Visit(StringView, int16_t&) override {
                 return false;
             }
-            bool Visit(eastl::string_view, uint16_t&) override {
+            bool Visit(StringView, uint16_t&) override {
                 return false;
             }
-            bool Visit(eastl::string_view, int32_t&) override {
+            bool Visit(StringView, int32_t&) override {
                 return false;
             }
-            bool Visit(eastl::string_view, uint32_t&) override {
+            bool Visit(StringView, uint32_t&) override {
                 return false;
             }
-            bool Visit(eastl::string_view, int64_t&) override {
+            bool Visit(StringView, int64_t&) override {
                 return false;
             }
-            bool Visit(eastl::string_view, uint64_t&) override {
+            bool Visit(StringView, uint64_t&) override {
                 return false;
             }
-            bool Visit(eastl::string_view, float&) override {
+            bool Visit(StringView, float&) override {
                 return false;
             }
-            bool Visit(eastl::string_view, double&) override {
+            bool Visit(StringView, double&) override {
                 return false;
             }
-            bool Visit(eastl::string_view, PoolString&) override {
+            bool Visit(StringView, PoolString&) override {
                 return false;
             }
-            bool Visit(eastl::string_view, eastl::string&) override {
+            bool Visit(StringView, eastl::string&) override {
                 return false;
             }
 
@@ -521,8 +521,8 @@ namespace BECore::Tests {
         themes.Clear();  // a table of numbered tokens, a different colour in each of two themes
         for (int i = 0; i < kTableTokens; ++i) {
             const eastl::string name = Format("t{}", i);
-            themes.Set("first"_intern, eastl::string_view(name.data(), name.size()), TableColor(i, false));
-            themes.Set("second"_intern, eastl::string_view(name.data(), name.size()), TableColor(i, true));
+            themes.Set("first"_intern, StringView(name), TableColor(i, false));
+            themes.Set("second"_intern, StringView(name), TableColor(i, true));
         }
         ASSERT_TRUE(themes.SetTheme("first"_intern));
 
@@ -540,7 +540,7 @@ namespace BECore::Tests {
                                           : Format("<root><element type=\"{}\"{}/></root>", control.type, attributes);
 
             XmlDeserializer deserializer;
-            ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size()))) << where.c_str();
+            ASSERT_TRUE(deserializer.LoadFromString(StringView(xml))) << where.c_str();
             auto element = AbstractFactory<UIElement>::GetInstance().Create(control.type);
             ASSERT_TRUE(element) << where.c_str();
             ASSERT_TRUE(deserializer.BeginObject("element"));

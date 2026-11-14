@@ -7,16 +7,16 @@
  * Это позволяет использовать их напрямую в функциях форматирования. Строка с любым аллокатором форматируется так же.
  */
 template <typename Allocator>
-struct fmt::formatter<eastl::basic_string<char, Allocator>> : formatter<std::string_view> {
+struct fmt::formatter<eastl::basic_string<char, Allocator>> : formatter<std::string_view> {  // std: fmt formats std::string_view
     auto format(const eastl::basic_string<char, Allocator>& s, format_context& ctx) const {
-        return formatter<std::string_view>::format(BECore::ToStd(BECore::StringView{s}), ctx);
+        return formatter<std::string_view>::format(BECore::ToStd(BECore::StringView{s}), ctx);  // std: fmt
     }
 };
 
 template <>
-struct fmt::formatter<eastl::string_view> : formatter<std::string_view> {
-    auto format(eastl::string_view s, format_context& ctx) const {
-        return formatter<std::string_view>::format(BECore::ToStd(s), ctx);
+struct fmt::formatter<BECore::StringView> : formatter<std::string_view> {  // std: fmt formats std::string_view
+    auto format(BECore::StringView s, format_context& ctx) const {
+        return formatter<std::string_view>::format(BECore::ToStd(s), ctx);  // std: fmt
     }
 };
 

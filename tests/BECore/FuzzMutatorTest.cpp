@@ -46,7 +46,7 @@ namespace BECore::Tests {
         }
 
         std::string Name(FuzzMutation kind) {
-            const eastl::string_view name = MutationUtils::ToString(kind);
+            const StringView name = MutationUtils::ToString(kind);
             return std::string(name.data(), name.size());
         }
 

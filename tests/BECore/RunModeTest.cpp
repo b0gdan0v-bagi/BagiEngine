@@ -19,7 +19,7 @@ namespace BECore::Tests {
             eastl::vector<eastl::string> types;
             const XmlNode widgets = CoreManager::GetConfigManager().GetConfig(configName).GetChild("widgets");
             for (const XmlNode widget : widgets.Children()) {
-                if (const auto type = widget.ParseAttribute<eastl::string_view>("type")) {
+                if (const auto type = widget.ParseAttribute<StringView>("type")) {
                     types.emplace_back(type->data(), type->size());
                 }
             }

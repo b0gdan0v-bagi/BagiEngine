@@ -11,7 +11,7 @@ namespace BECore {
         return true;
     }
 
-    Optional<SeatedGameInfo> SeatedGameRegistry::Find(eastl::string_view name) const {
+    Optional<SeatedGameInfo> SeatedGameRegistry::Find(StringView name) const {
         const auto it = _games.find(eastl::string(name));
         if (it == _games.end()) {
             return std::nullopt;
@@ -19,7 +19,7 @@ namespace BECore {
         return it->second.info;
     }
 
-    eastl::unique_ptr<ISeatedGame> SeatedGameRegistry::Create(eastl::string_view name) const {
+    eastl::unique_ptr<ISeatedGame> SeatedGameRegistry::Create(StringView name) const {
         const auto it = _games.find(eastl::string(name));
         if (it == _games.end()) {
             return nullptr;

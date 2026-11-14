@@ -11,7 +11,7 @@ namespace BECore::Stress::Tests {
         constexpr uint32_t kCount = 2000;
         constexpr float kEpsilon = 0.01f;
 
-        bool IsValidUtf8(eastl::string_view text) {
+        bool IsValidUtf8(StringView text) {
             size_t position = 0;
             while (position < text.size()) {
                 if (Utf8::DecodeNext(text, position) == U'�') {
@@ -21,7 +21,7 @@ namespace BECore::Stress::Tests {
             return true;
         }
 
-        bool HasCyrillic(eastl::string_view text) {
+        bool HasCyrillic(StringView text) {
             size_t position = 0;
             while (position < text.size()) {
                 const char32_t codePoint = Utf8::DecodeNext(text, position);
@@ -92,7 +92,7 @@ namespace BECore::Stress::Tests {
 
     TEST(UiFieldTest, EveryTextIsNotEmptyAndValidUtf8) {
         for (uint32_t i = 0; i < kCount; ++i) {
-            const eastl::string_view text = TextOf(i);
+            const StringView text = TextOf(i);
             ASSERT_FALSE(text.empty()) << i;
             ASSERT_TRUE(IsValidUtf8(text)) << i;
         }
@@ -126,7 +126,7 @@ namespace BECore::Stress::Tests {
     }
 
     TEST(UiFieldTest, EveryEighthLabelIsAKeyAndTheKeysCycleThroughThePool) {
-        eastl::vector<eastl::string_view> keys;
+        eastl::vector<StringView> keys;
         for (uint32_t i = 0; i < kCount; ++i) {
             if (i % kUiKeyEvery != 0) {
                 EXPECT_NE(KindOf(i), UiLabelKind::Key) << i;
@@ -134,7 +134,7 @@ namespace BECore::Stress::Tests {
             }
             ASSERT_EQ(KindOf(i), UiLabelKind::Key) << i;
             const eastl::string expected = eastl::string("{#") + eastl::string(KeyOf(i).data(), KeyOf(i).size()) + "}";
-            EXPECT_EQ(TextOf(i), eastl::string_view(expected.data(), expected.size()));
+            EXPECT_EQ(TextOf(i), StringView(expected));
             if (eastl::find(keys.begin(), keys.end(), KeyOf(i)) == keys.end()) {
                 keys.push_back(KeyOf(i));
             }
@@ -145,10 +145,10 @@ namespace BECore::Stress::Tests {
     TEST(UiFieldTest, SomeLabelsHoldAVariableAndTheRestHoldNone) {
         size_t variables = 0;
         for (uint32_t i = 0; i < kCount; ++i) {
-            const bool holds = TextOf(i).find('{') != eastl::string_view::npos;
+            const bool holds = TextOf(i).find('{') != StringView::npos;
             if (KindOf(i) == UiLabelKind::Variable) {
                 EXPECT_TRUE(holds) << i;
-                EXPECT_EQ(TextOf(i).find("{#"), eastl::string_view::npos) << i;
+                EXPECT_EQ(TextOf(i).find("{#"), StringView::npos) << i;
                 ++variables;
             } else if (KindOf(i) == UiLabelKind::Key) {
                 EXPECT_TRUE(holds) << i;
@@ -160,8 +160,8 @@ namespace BECore::Stress::Tests {
     }
 
     TEST(UiFieldTest, TheLiteralTextsComeFromPoolsOfTheNamedSize) {
-        eastl::vector<eastl::string_view> english;
-        eastl::vector<eastl::string_view> russian;
+        eastl::vector<StringView> english;
+        eastl::vector<StringView> russian;
         for (uint32_t i = 0; i < 20000; ++i) {
             auto& pool = KindOf(i) == UiLabelKind::English ? english : russian;
             if (KindOf(i) != UiLabelKind::English && KindOf(i) != UiLabelKind::Russian) {

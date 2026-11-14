@@ -6,7 +6,7 @@
 namespace BECore {
 
     bool RmlUiVarsDefinition::Scalar::Get(void* ptr, Rml::Variant& variant) {
-        const eastl::string_view value = CoreManager::GetUIVars().Get(*static_cast<const PoolString*>(ptr));
+        const StringView value = CoreManager::GetUIVars().Get(*static_cast<const PoolString*>(ptr));
         variant = Rml::String(value.data(), value.size());
         return true;
     }

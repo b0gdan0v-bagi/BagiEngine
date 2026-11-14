@@ -35,7 +35,7 @@ namespace BECore {
          * @param extension File extension (e.g., ".xml", ".png", ".bin")
          * @return true if this loader supports the extension
          */
-        virtual bool CanLoad(eastl::string_view extension) const = 0;
+        virtual bool CanLoad(StringView extension) const = 0;
 
         /**
          * @brief Load resource asynchronously

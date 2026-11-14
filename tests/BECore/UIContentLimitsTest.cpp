@@ -64,12 +64,12 @@ namespace BECore::Tests {
         EXPECT_EQ(UIText::TidyMessage("a plain message"), "a plain message");
         EXPECT_EQ(UIText::TidyMessage("tab\tand\nline"), "tab and line");
         const std::string exact(UIText::kMaxMessageBytes, 'e');
-        EXPECT_EQ(UIText::TidyMessage(eastl::string_view(exact.data(), exact.size())).size(), UIText::kMaxMessageBytes);
+        EXPECT_EQ(UIText::TidyMessage(FromStd(exact)).size(), UIText::kMaxMessageBytes);
         const std::string over(UIText::kMaxMessageBytes + 1, 'e');
-        const eastl::string cut = UIText::TidyMessage(eastl::string_view(over.data(), over.size()));
+        const eastl::string cut = UIText::TidyMessage(FromStd(over));
         EXPECT_EQ(cut.size(), UIText::kMaxMessageBytes);
         EXPECT_EQ(cut.substr(cut.size() - 3), "...");
-        EXPECT_EQ(UIText::Excerpt(eastl::string_view(over.data(), over.size())).size(), UIText::kMaxExcerptBytes);
+        EXPECT_EQ(UIText::Excerpt(FromStd(over)).size(), UIText::kMaxExcerptBytes);
     }
 
     // =========================================================================

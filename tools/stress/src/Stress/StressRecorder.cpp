@@ -26,7 +26,7 @@ namespace BECore::Stress {
         }
 
         /// A `"key":value` member (a number written by FormatNumber); the keys are added in sorted order by the caller
-        void AddMember(eastl::string& line, eastl::string_view key, const eastl::string& value) {
+        void AddMember(eastl::string& line, StringView key, const eastl::string& value) {
             if (!line.empty()) {
                 line += ',';
             }
@@ -36,19 +36,19 @@ namespace BECore::Stress {
             line += value;
         }
 
-        void AddNumber(eastl::string& line, eastl::string_view key, double value) {
+        void AddNumber(eastl::string& line, StringView key, double value) {
             AddMember(line, key, FormatNumber(value));
         }
 
-        void AddInteger(eastl::string& line, eastl::string_view key, uint32_t value) {
+        void AddInteger(eastl::string& line, StringView key, uint32_t value) {
             AddMember(line, key, Format("{}", value));
         }
 
-        void AddBool(eastl::string& line, eastl::string_view key, bool value) {
+        void AddBool(eastl::string& line, StringView key, bool value) {
             AddMember(line, key, value ? "true" : "false");
         }
 
-        void AddText(eastl::string& line, eastl::string_view key, eastl::string_view value) {
+        void AddText(eastl::string& line, StringView key, StringView value) {
             eastl::string quoted("\"");
             quoted.append(value.data(), value.size());
             quoted += '"';

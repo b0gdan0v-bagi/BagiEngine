@@ -22,15 +22,15 @@ namespace BECore::Tests {
     public:
         JudgedTransport(eastl::unique_ptr<IRoomTransport> inner, std::shared_ptr<WireJudgeLog> log) : _inner(std::move(inner)), _log(std::move(log)) {}
 
-        std::expected<void, eastl::string> Open(eastl::string_view url) override {
+        std::expected<void, eastl::string> Open(StringView url) override {
             return _inner->Open(url);
         }
 
-        bool SendText(eastl::string_view text) override {
+        bool SendText(StringView text) override {
             return _inner->SendText(text);
         }
 
-        void Close(uint16_t code, eastl::string_view reason) override {
+        void Close(uint16_t code, StringView reason) override {
             _inner->Close(code, reason);
         }
 

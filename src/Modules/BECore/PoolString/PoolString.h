@@ -15,7 +15,7 @@ namespace BECore {
 
             constexpr PoolStringEntry(uint64_t h, uint32_t s) : hash(h), nextEntry(nullptr), size(s), data{'\0'} {}
 
-            [[nodiscard]] constexpr eastl::string_view ToStringView() const noexcept {
+            [[nodiscard]] constexpr StringView ToStringView() const noexcept {
                 return {&data[0], static_cast<size_t>(size)};
             }
         };
@@ -38,15 +38,15 @@ namespace BECore {
         // Используем адрес заранее созданной константы
         constexpr PoolString() noexcept : _entry(&Details::g_EmptyEntryStore.header) {}
 
-        static PoolString Intern(eastl::string_view str);
+        static PoolString Intern(StringView str);
 
         /// Returns the pooled string equal to `str`, or nullopt when no such string was interned. Never adds to the pool.
-        [[nodiscard]] static Optional<PoolString> Find(eastl::string_view str);
+        [[nodiscard]] static Optional<PoolString> Find(StringView str);
 
         [[nodiscard]] constexpr uint64_t HashValue() const noexcept {
             return _entry->hash;
         }
-        [[nodiscard]] constexpr eastl::string_view ToStringView() const noexcept {
+        [[nodiscard]] constexpr StringView ToStringView() const noexcept {
             return _entry->ToStringView();
         }
         [[nodiscard]] constexpr const char* CStr() const noexcept {

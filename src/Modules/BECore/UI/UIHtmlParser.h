@@ -25,11 +25,11 @@ namespace BECore {
         }
 
         /// The value of the attribute, null when there is none
-        [[nodiscard]] const eastl::string* FindAttribute(eastl::string_view name) const;
-        [[nodiscard]] bool HasAttribute(eastl::string_view name) const {
+        [[nodiscard]] const eastl::string* FindAttribute(StringView name) const;
+        [[nodiscard]] bool HasAttribute(StringView name) const {
             return FindAttribute(name) != nullptr;
         }
-        [[nodiscard]] bool HasClass(eastl::string_view className) const;
+        [[nodiscard]] bool HasClass(StringView className) const;
     };
 
     /// A parsed document: `nodes[0]` is the document node, a parent always comes before its children
@@ -63,7 +63,7 @@ namespace BECore {
         /// Bytes of the name and of the value of an attribute
         static constexpr size_t kMaxAttributeBytes = 16 * 1024;
 
-        [[nodiscard]] static UIHtmlDocument Parse(eastl::string_view html, UIWebReport& report);
+        [[nodiscard]] static UIHtmlDocument Parse(StringView html, UIWebReport& report);
     };
 
 }  // namespace BECore

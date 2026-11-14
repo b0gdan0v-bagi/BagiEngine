@@ -59,7 +59,7 @@ namespace BECore {
      */
     class TextLayout {
     public:
-        [[nodiscard]] static TextLayoutResult Layout(const Font& font, eastl::string_view utf8, const TextLayoutOptions& options);
+        [[nodiscard]] static TextLayoutResult Layout(const Font& font, StringView utf8, const TextLayoutOptions& options);
     };
 
 }  // namespace BECore

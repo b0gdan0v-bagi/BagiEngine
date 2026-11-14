@@ -310,7 +310,7 @@ namespace BECore {
         ImGui::SetNextItemWidth(kSaveLayoutFieldWidth);
         const bool enterPressed = ImGui::InputText("##LayoutName", _layoutNameBuffer, sizeof(_layoutNameBuffer), ImGuiInputTextFlags_EnterReturnsTrue);
 
-        const eastl::string_view name = _layoutNameBuffer;
+        const StringView name = _layoutNameBuffer;
         const bool isEmpty = name.empty();
         const bool isValid = IsValidLayoutName(name);
         const bool exists = isValid && _layouts->Exists(name);
@@ -370,12 +370,12 @@ namespace BECore {
         _pendingLayoutText = *text;
     }
 
-    std::expected<void, eastl::string> EditorLayoutWidget::SaveCurrentLayout(eastl::string_view name) {
+    std::expected<void, eastl::string> EditorLayoutWidget::SaveCurrentLayout(StringView name) {
         size_t size = 0;
         const char* text = ImGui::SaveIniSettingsToMemory(&size);
         // SaveIniSettingsToMemory cancels the pending write of imgui.ini
         ImGui::MarkIniSettingsDirty();
-        const auto result = _layouts->Save(name, eastl::string_view(text, size));
+        const auto result = _layouts->Save(name, StringView(text, size));
         if (!result) {
             LOG_ERROR(Format("Editor: cannot save layout '{}': {}", name, result.error().detail));
             return std::unexpected(result.error().detail);

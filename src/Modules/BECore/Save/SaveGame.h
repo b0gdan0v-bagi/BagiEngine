@@ -6,13 +6,13 @@
 namespace BECore {
 
     /// Name of the virtual mount point that the save folder is mounted as ("saves/<slot>.save")
-    inline constexpr eastl::string_view kSaveMountPoint = "saves";
+    inline constexpr StringView kSaveMountPoint = "saves";
 
     /// Extension of a save file
-    inline constexpr eastl::string_view kSaveExtension = ".save";
+    inline constexpr StringView kSaveExtension = ".save";
 
     /// Extension added to the name of a save file while it is being written (the file is renamed over the save when it is whole)
-    inline constexpr eastl::string_view kSaveTempExtension = ".tmp";
+    inline constexpr StringView kSaveTempExtension = ".tmp";
 
     /// Longest slot name, in characters
     inline constexpr size_t kMaxSlotNameLength = 64;
@@ -37,7 +37,7 @@ namespace BECore {
     /// What a game writes into a save and reads back: its id and the version of its state schema
     struct SaveSchema {
         /// The id of the game (a save of another game is refused as WrongGame)
-        eastl::string_view game;
+        StringView game;
         /// The version of the state that is written now; a file with a higher version is refused as VersionTooNew
         uint32_t version = 1;
         /// The oldest version this game still reads; a file below it is refused as VersionTooOld
@@ -88,7 +88,7 @@ namespace BECore {
         }
 
         /// True for 1 to kMaxSlotNameLength characters of [A-Za-z0-9_-]: no dot, slash or space, so a name cannot leave the folder
-        [[nodiscard]] static bool IsValidSlotName(eastl::string_view slot);
+        [[nodiscard]] static bool IsValidSlotName(StringView slot);
 
         /**
          * @brief Write the bytes as the slot, replacing an existing save
@@ -98,7 +98,7 @@ namespace BECore {
          *
          * @return InvalidSlotName, NotInitialized or WriteFailed on a failure
          */
-        [[nodiscard]] std::expected<void, SaveError> WriteSlot(eastl::string_view slot, const eastl::vector<uint8_t>& bytes);
+        [[nodiscard]] std::expected<void, SaveError> WriteSlot(StringView slot, const eastl::vector<uint8_t>& bytes);
 
         /**
          * @brief Read the whole file of the slot
@@ -106,7 +106,7 @@ namespace BECore {
          * @return InvalidSlotName, NotInitialized, NotFound (no such slot) or ReadFailed (it exists but cannot be read, or is over
          *         ReaderLimits::kMaxBinaryStreamBytes) on a failure
          */
-        [[nodiscard]] std::expected<eastl::vector<uint8_t>, SaveError> ReadSlot(eastl::string_view slot) const;
+        [[nodiscard]] std::expected<eastl::vector<uint8_t>, SaveError> ReadSlot(StringView slot) const;
 
         /**
          * @brief Write a game state as the slot: the envelope (game id, version) around the state
@@ -117,7 +117,7 @@ namespace BECore {
          *
          * @return the errors of WriteSlot()
          */
-        [[nodiscard]] std::expected<void, SaveError> Save(eastl::string_view slot, const SaveSchema& schema, const eastl::function<void(ISerializer&)>& writeState);
+        [[nodiscard]] std::expected<void, SaveError> Save(StringView slot, const SaveSchema& schema, const eastl::function<void(ISerializer&)>& writeState);
 
         /**
          * @brief Read the slot and hand its `state` object to @p readState
@@ -132,14 +132,14 @@ namespace BECore {
          * @return what the file says (its version lets the caller migrate an older state), or ReadSlot()'s errors and the
          *         ones above
          */
-        [[nodiscard]] std::expected<SaveInfo, SaveError> Load(eastl::string_view slot, const SaveSchema& schema, const eastl::function<void(IDeserializer&)>& readState) const;
+        [[nodiscard]] std::expected<SaveInfo, SaveError> Load(StringView slot, const SaveSchema& schema, const eastl::function<void(IDeserializer&)>& readState) const;
 
         /// Save a reflected state (`state.Serialize(ISerializer&)`) as the slot; see the non-template Save()
         template <typename State>
         requires requires(const State& state, ISerializer& serializer) {
             state.Serialize(serializer);
         }
-        [[nodiscard]] std::expected<void, SaveError> Save(eastl::string_view slot, const SaveSchema& schema, const State& state) {
+        [[nodiscard]] std::expected<void, SaveError> Save(StringView slot, const SaveSchema& schema, const State& state) {
             return Save(slot, schema, eastl::function<void(ISerializer&)>([&state](ISerializer& serializer) { state.Serialize(serializer); }));
         }
 
@@ -153,7 +153,7 @@ namespace BECore {
         requires requires(State& state, IDeserializer& deserializer) {
             state.Deserialize(deserializer);
         }
-        [[nodiscard]] std::expected<SaveInfo, SaveError> Load(eastl::string_view slot, const SaveSchema& schema, State& state) const {
+        [[nodiscard]] std::expected<SaveInfo, SaveError> Load(StringView slot, const SaveSchema& schema, State& state) const {
             return Load(slot, schema, eastl::function<void(IDeserializer&)>([&state](IDeserializer& deserializer) { state.Deserialize(deserializer); }));
         }
 
@@ -164,23 +164,23 @@ namespace BECore {
          *
          * @return ReadSlot()'s errors, or Corrupt when the file is not a save file
          */
-        [[nodiscard]] std::expected<SaveInfo, SaveError> Peek(eastl::string_view slot) const;
+        [[nodiscard]] std::expected<SaveInfo, SaveError> Peek(StringView slot) const;
 
         /// True if the slot has a save file (false for a bad name or before Initialize())
-        [[nodiscard]] bool Exists(eastl::string_view slot) const;
+        [[nodiscard]] bool Exists(StringView slot) const;
 
         /// Remove the save file of the slot; false when there is none (or the name is bad, or before Initialize())
-        bool Delete(eastl::string_view slot);
+        bool Delete(StringView slot);
 
         /// Names of all slots that have a save file, sorted; a leftover temporary file is not listed
         [[nodiscard]] eastl::vector<PoolString> List() const;
 
     private:
         /// The real path of the save file of a valid slot, or an empty path when there is none in the save folder
-        [[nodiscard]] std::filesystem::path ResolveSlot(eastl::string_view slot) const;
+        [[nodiscard]] std::filesystem::path ResolveSlot(StringView slot) const;
 
         /// The path of a file named `<slot><suffix>` in the save folder (the file need not exist)
-        [[nodiscard]] std::filesystem::path MakePath(eastl::string_view slot, eastl::string_view suffix) const;
+        [[nodiscard]] std::filesystem::path MakePath(StringView slot, StringView suffix) const;
 
         FileSystem& _fileSystem;
         std::filesystem::path _directory;

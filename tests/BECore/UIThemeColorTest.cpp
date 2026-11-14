@@ -29,7 +29,7 @@ namespace BECore::Tests {
         IntrusivePtr<UIElement> Load(const char* type, const char* attributes, bool& hadErrors, const char* body = "") {
             const eastl::string xml = Format("<root><element type=\"{}\" {}>{}</element></root>", type, attributes, body);
             XmlDeserializer deserializer;
-            EXPECT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+            EXPECT_TRUE(deserializer.LoadFromString(StringView(xml)));
             auto element = AbstractFactory<UIElement>::GetInstance().Create(type);
             EXPECT_TRUE(deserializer.BeginObject("element"));
             element->Deserialize(deserializer);

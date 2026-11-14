@@ -21,7 +21,7 @@ namespace BECore {
 
         // The first character of the text, of a word after a separator, or an upper case letter after a lower case one
         // ("commandPalette" has two words)
-        bool IsWordStart(eastl::string_view text, size_t index) {
+        bool IsWordStart(StringView text, size_t index) {
             if (index == 0) {
                 return true;
             }
@@ -35,7 +35,7 @@ namespace BECore {
 
         // Best score of matching @p query (lower case, no spaces) as a subsequence of @p text, or kNoMatch. Tries every
         // placement (a short text and query, so the table of best scores stays small).
-        int ScoreMatch(eastl::string_view query, eastl::string_view text) {
+        int ScoreMatch(StringView query, StringView text) {
             if (query.size() > text.size()) {
                 return kNoMatch;
             }
@@ -72,7 +72,7 @@ namespace BECore {
             return result;
         }
 
-        bool StartsWithNoCase(eastl::string_view text, eastl::string_view prefix) {
+        bool StartsWithNoCase(StringView text, StringView prefix) {
             if (prefix.size() > text.size()) {
                 return false;
             }
@@ -84,7 +84,7 @@ namespace BECore {
             return true;
         }
 
-        eastl::string NormalizeQuery(eastl::string_view query) {
+        eastl::string NormalizeQuery(StringView query) {
             eastl::string normalized;
             for (const char c : query) {
                 if (c != ' ') {
@@ -96,7 +96,7 @@ namespace BECore {
 
     }  // namespace
 
-    eastl::vector<const EditorCommand*> FilterCommands(eastl::string_view query, eastl::span<const EditorCommand> commands) {
+    eastl::vector<const EditorCommand*> FilterCommands(StringView query, eastl::span<const EditorCommand> commands) {
         const eastl::string normalized = NormalizeQuery(query);
 
         eastl::vector<const EditorCommand*> result;
@@ -112,7 +112,7 @@ namespace BECore {
             int score;
         };
         eastl::vector<Hit> hits;
-        const eastl::string_view needle(normalized.data(), normalized.size());
+        const StringView needle(normalized.data(), normalized.size());
         for (const EditorCommand& command : commands) {
             int titleScore = ScoreMatch(needle, command.title);
             if (titleScore != kNoMatch && StartsWithNoCase(command.title, needle)) {

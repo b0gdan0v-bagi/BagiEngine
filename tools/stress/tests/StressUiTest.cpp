@@ -32,7 +32,7 @@ namespace BECore::Stress::Tests {
         eastl::string Shown(const UIElement& label) {
             const UITextComponent* text = label.GetComponent<UITextComponent>();
             EXPECT_NE(text, nullptr);
-            const eastl::string_view shown = text->GetDisplayText();
+            const StringView shown = text->GetDisplayText();
             return eastl::string(shown.data(), shown.size());
         }
 
@@ -287,7 +287,7 @@ namespace BECore::Stress::Tests {
     TEST_F(StressUiTest, EveryKeyOfTheLabelsIsInBothLanguages) {
         UIStrings& strings = CoreManager::GetUIStrings();
         for (uint32_t i = 0; i < kUiPoolSize * kUiKeyEvery; i += kUiKeyEvery) {
-            const eastl::string_view key = KeyOf(i);
+            const StringView key = KeyOf(i);
             for (const char* language : {"en", "ru"}) {
                 ASSERT_TRUE(strings.SetLanguage(PoolString::Intern(language)));
                 const auto text = strings.Find(key);

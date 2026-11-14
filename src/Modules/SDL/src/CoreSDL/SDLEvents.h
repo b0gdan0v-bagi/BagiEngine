@@ -51,7 +51,7 @@ namespace BECore {
         struct TextInputEvent : public EventBase<TextInputEvent> {
             eastl::string text;
 
-            explicit TextInputEvent(eastl::string_view t) : text(t.data(), t.size()) {}
+            explicit TextInputEvent(StringView t) : text(t.data(), t.size()) {}
         };
 
         // События окна

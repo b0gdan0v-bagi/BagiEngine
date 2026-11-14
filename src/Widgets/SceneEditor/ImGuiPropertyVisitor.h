@@ -21,23 +21,23 @@ namespace BECore {
         ImGuiPropertyVisitor() = default;
         ~ImGuiPropertyVisitor() override = default;
 
-        bool Visit(eastl::string_view name, bool& value) override;
-        bool Visit(eastl::string_view name, int8_t& value) override;
-        bool Visit(eastl::string_view name, uint8_t& value) override;
-        bool Visit(eastl::string_view name, int16_t& value) override;
-        bool Visit(eastl::string_view name, uint16_t& value) override;
-        bool Visit(eastl::string_view name, int32_t& value) override;
-        bool Visit(eastl::string_view name, uint32_t& value) override;
-        bool Visit(eastl::string_view name, int64_t& value) override;
-        bool Visit(eastl::string_view name, uint64_t& value) override;
-        bool Visit(eastl::string_view name, float& value) override;
-        bool Visit(eastl::string_view name, double& value) override;
-        bool Visit(eastl::string_view name, PoolString& value) override;
-        bool Visit(eastl::string_view name, eastl::string& value) override;
+        bool Visit(StringView name, bool& value) override;
+        bool Visit(StringView name, int8_t& value) override;
+        bool Visit(StringView name, uint8_t& value) override;
+        bool Visit(StringView name, int16_t& value) override;
+        bool Visit(StringView name, uint16_t& value) override;
+        bool Visit(StringView name, int32_t& value) override;
+        bool Visit(StringView name, uint32_t& value) override;
+        bool Visit(StringView name, int64_t& value) override;
+        bool Visit(StringView name, uint64_t& value) override;
+        bool Visit(StringView name, float& value) override;
+        bool Visit(StringView name, double& value) override;
+        bool Visit(StringView name, PoolString& value) override;
+        bool Visit(StringView name, eastl::string& value) override;
 
-        bool VisitEnum(eastl::string_view name, const eastl::string_view* enumNames, size_t enumCount, size_t& selectedIndex) override;
+        bool VisitEnum(StringView name, const StringView* enumNames, size_t enumCount, size_t& selectedIndex) override;
 
-        bool BeginCompound(eastl::string_view name) override;
+        bool BeginCompound(StringView name) override;
         void EndCompound() override;
 
     private:

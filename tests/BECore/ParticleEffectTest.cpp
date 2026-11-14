@@ -22,7 +22,7 @@ namespace BECore::Tests {
         }
 
         /// Reads the <effect> element of @p xml into @p out; the errors of the reader go to @p errors when given. Use through ASSERT_NO_FATAL_FAILURE.
-        void LoadEffect(eastl::string_view xml, ParticleEffect& out, eastl::vector<DeserializeError>* errors = nullptr) {
+        void LoadEffect(StringView xml, ParticleEffect& out, eastl::vector<DeserializeError>* errors = nullptr) {
             XmlDeserializer deserializer;
             ASSERT_TRUE(deserializer.LoadFromString(xml)) << xml.data();
             ASSERT_TRUE(deserializer.BeginObject("effect")) << xml.data();
@@ -108,7 +108,7 @@ namespace BECore::Tests {
         }
 
         /// The effect written as the text a scene file carries
-        constexpr eastl::string_view kSceneText = R"(<root>
+        constexpr StringView kSceneText = R"(<root>
   <effect looping="true" rate="45.5" burstCount="7" maxParticles="512" seed="987654321"
           lifetimeMin="0.25" lifetimeMax="1.75" shape="Circle" shapeRadius="12.5"
           speedMin="10" speedMax="250" direction="270" spread="45" gravityX="-3.5" gravityY="400"

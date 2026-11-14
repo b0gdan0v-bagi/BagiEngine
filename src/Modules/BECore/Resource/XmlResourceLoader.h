@@ -26,7 +26,7 @@ namespace BECore {
          * @param extension File extension
          * @return true if extension is ".xml"
          */
-        bool CanLoad(eastl::string_view extension) const override;
+        bool CanLoad(StringView extension) const override;
 
         /**
          * @brief Load XML resource asynchronously

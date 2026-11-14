@@ -103,8 +103,8 @@ namespace BECore::Tests {
 
     namespace {
 
-        eastl::string_view View(const std::string& str) {
-            return eastl::string_view(str.data(), str.size());
+        StringView View(const std::string& str) {
+            return FromStd(str);
         }
 
         constexpr int kLockCostNames = 1000;

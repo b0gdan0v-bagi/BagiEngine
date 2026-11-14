@@ -30,6 +30,6 @@ namespace BECore::Fuzz::WebSocketInput {
     CORE_ENUM(HandshakePolicyKind, uint8_t, Loopback, PublicWithOrigins, PublicAnyOrigin, PublicNoMissingOrigin, PublicWithHealthPath)
 
     /// The key of the client in every handshake input (the example of RFC 6455 section 1.3)
-    inline constexpr eastl::string_view kHandshakeKey = "dGhlIHNhbXBsZSBub25jZQ==";
+    inline constexpr StringView kHandshakeKey = "dGhlIHNhbXBsZSBub25jZQ==";
 
 }  // namespace BECore::Fuzz::WebSocketInput

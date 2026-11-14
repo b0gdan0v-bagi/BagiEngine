@@ -10,13 +10,13 @@ namespace BECore::UIText {
      *
      * For the messages of the loaders of content (`UIStrings`, `UIThemes`, `UIWebReport`), whose text has pieces of the file in it.
      */
-    [[nodiscard]] eastl::string TidyMessage(eastl::string_view text);
+    [[nodiscard]] eastl::string TidyMessage(StringView text);
 
     /// The most bytes of a piece of the file that a message repeats before its own words (`selector '<piece>' is left out: ...`): the cut of TidyMessage is at the end of the
     /// message, where the reason is
     inline constexpr size_t kMaxExcerptBytes = 80;
 
     /// The first kMaxExcerptBytes of @p text (cut at a UTF-8 character, `...` after) with its control characters as spaces
-    [[nodiscard]] eastl::string Excerpt(eastl::string_view text);
+    [[nodiscard]] eastl::string Excerpt(StringView text);
 
 }  // namespace BECore::UIText

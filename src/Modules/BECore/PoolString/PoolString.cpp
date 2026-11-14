@@ -14,7 +14,7 @@ namespace BECore {
             _buckets[idx] = entry;
         }
 
-        T* Find(uint64_t hash, eastl::string_view str) const noexcept {
+        T* Find(uint64_t hash, StringView str) const noexcept {
             const uint32_t idx = static_cast<uint32_t>(hash & (BucketCount - 1));
             for (T* e = _buckets[idx]; e; e = e->nextEntry) {
                 if (e->hash == hash && e->size == str.size()) {
@@ -49,7 +49,7 @@ namespace BECore {
             _currentPage = eastl::make_unique<Page>();
         }
 
-        const Entry* Find(eastl::string_view str) {
+        const Entry* Find(StringView str) {
             if (str.empty()) {
                 return &Details::g_EmptyEntryStore.header;
             }
@@ -59,7 +59,7 @@ namespace BECore {
             return _table.Find(hash, str);
         }
 
-        const Entry* GetOrAdd(eastl::string_view str) {
+        const Entry* GetOrAdd(StringView str) {
             if (str.empty()) {
                 return &Details::g_EmptyEntryStore.header;
             }
@@ -103,11 +103,11 @@ namespace BECore {
         }
     };
 
-    PoolString PoolString::Intern(eastl::string_view str) {
+    PoolString PoolString::Intern(StringView str) {
         return PoolString(Storage::Instance().GetOrAdd(str));
     }
 
-    Optional<PoolString> PoolString::Find(eastl::string_view str) {
+    Optional<PoolString> PoolString::Find(StringView str) {
         if (const Entry* entry = Storage::Instance().Find(str)) {
             return PoolString(entry);
         }

@@ -5,11 +5,11 @@
 
 namespace BECore::Match3 {
 
-    std::expected<void, SaveError> SaveMatch3(SaveGameService& service, eastl::string_view slot, const Match3GameModel& model) {
+    std::expected<void, SaveError> SaveMatch3(SaveGameService& service, StringView slot, const Match3GameModel& model) {
         return service.Save(slot, kMatch3SaveSchema, model.CaptureState());
     }
 
-    std::expected<SaveInfo, SaveError> LoadMatch3(const SaveGameService& service, eastl::string_view slot, Match3GameModel& model) {
+    std::expected<SaveInfo, SaveError> LoadMatch3(const SaveGameService& service, StringView slot, Match3GameModel& model) {
         Match3SaveState state;
         auto info = service.Load(slot, kMatch3SaveSchema, state);
         if (!info) {

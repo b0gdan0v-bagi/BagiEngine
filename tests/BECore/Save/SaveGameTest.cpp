@@ -14,12 +14,12 @@ namespace BECore::Tests {
 
     namespace {
 
-        constexpr eastl::string_view kGame = "TestGame";
+        constexpr StringView kGame = "TestGame";
 
         /// The game as it is now (version 2, reads from 1)
         constexpr SaveSchema kSchema{kGame, 2, 1};
 
-        Item MakeItem(int32_t id, float weight, eastl::string_view label) {
+        Item MakeItem(int32_t id, float weight, StringView label) {
             Item item;
             item.id = id;
             item.weight = weight;
@@ -106,7 +106,7 @@ namespace BECore::Tests {
                 serializer.WriteAttribute("game", kGame);
             }
             if (withVersion && versionIsText) {
-                serializer.WriteAttribute("version", eastl::string_view("two"));
+                serializer.WriteAttribute("version", StringView("two"));
             } else if (withVersion) {
                 serializer.WriteAttribute("version", uint32_t{2});
             }

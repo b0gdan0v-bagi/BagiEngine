@@ -17,7 +17,7 @@ namespace BECore {
         // Persistent char buffers for InputText fields, keyed by widgetId
         eastl::unordered_map<eastl::string, TextBuf> s_textBuffers;
 
-        char* GetOrCreateTextBuffer(const eastl::string& widgetId, eastl::string_view initialValue) {
+        char* GetOrCreateTextBuffer(const eastl::string& widgetId, StringView initialValue) {
             auto it = s_textBuffers.find(widgetId);
             if (it == s_textBuffers.end()) {
                 auto& buf = s_textBuffers[widgetId];
@@ -33,7 +33,7 @@ namespace BECore {
         // Per-type renderers
         // -------------------------------------------------------------------------
 
-        InspectorResult RenderBool(const eastl::string& widgetId, eastl::string_view currentValue) {
+        InspectorResult RenderBool(const eastl::string& widgetId, StringView currentValue) {
             bool value = (currentValue == "true");
             const eastl::string label = Format("##{}", widgetId);
             if (ImGui::Checkbox(label.c_str(), &value)) {
@@ -42,7 +42,7 @@ namespace BECore {
             return {};
         }
 
-        InspectorResult RenderInt(const eastl::string& widgetId, eastl::string_view currentValue) {
+        InspectorResult RenderInt(const eastl::string& widgetId, StringView currentValue) {
             int value = 0;
             std::from_chars(currentValue.data(), currentValue.data() + currentValue.size(), value);
             const eastl::string label = Format("##{}", widgetId);
@@ -54,7 +54,7 @@ namespace BECore {
             return {};
         }
 
-        InspectorResult RenderFloat(const eastl::string& widgetId, eastl::string_view currentValue) {
+        InspectorResult RenderFloat(const eastl::string& widgetId, StringView currentValue) {
             float value = 0.0f;
             std::from_chars(currentValue.data(), currentValue.data() + currentValue.size(), value);
             const eastl::string label = Format("##{}", widgetId);
@@ -66,14 +66,14 @@ namespace BECore {
             return {};
         }
 
-        InspectorResult RenderEnum(const eastl::string& widgetId, eastl::string_view currentValue, const eastl::vector<eastl::string>& options) {
+        InspectorResult RenderEnum(const eastl::string& widgetId, StringView currentValue, const eastl::vector<eastl::string>& options) {
             if (options.empty()) {
                 return {};
             }
 
             int selectedIndex = -1;
             for (int i = 0; i < static_cast<int>(options.size()); ++i) {
-                if (eastl::string_view{options[i].c_str(), options[i].size()} == currentValue) {
+                if (StringView{options[i].c_str(), options[i].size()} == currentValue) {
                     selectedIndex = i;
                     break;
                 }
@@ -109,27 +109,27 @@ namespace BECore {
             return result;
         }
 
-        InspectorResult RenderFlags(const eastl::string& widgetId, eastl::string_view currentValue, const eastl::vector<eastl::string>& options) {
+        InspectorResult RenderFlags(const eastl::string& widgetId, StringView currentValue, const eastl::vector<eastl::string>& options) {
             if (options.empty()) {
                 return {};
             }
 
             // Parse current active flags from the value string
             auto isActive = [&](const eastl::string& flag) {
-                eastl::string_view remaining = currentValue;
+                StringView remaining = currentValue;
                 while (!remaining.empty()) {
                     const auto pos = remaining.find('|');
-                    eastl::string_view token = (pos == eastl::string_view::npos) ? remaining : remaining.substr(0, pos);
+                    StringView token = (pos == StringView::npos) ? remaining : remaining.substr(0, pos);
                     while (!token.empty() && token.front() == ' ') {
                         token.remove_prefix(1);
                     }
                     while (!token.empty() && token.back() == ' ') {
                         token.remove_suffix(1);
                     }
-                    if (token == eastl::string_view{flag.c_str(), flag.size()}) {
+                    if (token == StringView{flag.c_str(), flag.size()}) {
                         return true;
                     }
-                    if (pos == eastl::string_view::npos) {
+                    if (pos == StringView::npos) {
                         break;
                     }
                     remaining = remaining.substr(pos + 1);
@@ -167,7 +167,7 @@ namespace BECore {
             return {};
         }
 
-        InspectorResult RenderString(const eastl::string& widgetId, eastl::string_view currentValue) {
+        InspectorResult RenderString(const eastl::string& widgetId, StringView currentValue) {
             char* buf = GetOrCreateTextBuffer(widgetId, currentValue);
             const eastl::string label = Format("##{}", widgetId);
             ImGui::SetNextItemWidth(-1.0f);
@@ -183,7 +183,7 @@ namespace BECore {
     // Public API
     // =========================================================================
 
-    InspectorResult RenderFieldInspector(const eastl::string& widgetId, eastl::string_view currentValue, const FieldHint& hint) {
+    InspectorResult RenderFieldInspector(const eastl::string& widgetId, StringView currentValue, const FieldHint& hint) {
         switch (hint.type) {
             case FieldType::Bool:
                 return RenderBool(widgetId, currentValue);

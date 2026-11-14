@@ -58,10 +58,10 @@ namespace BECore {
         [[nodiscard]] Color GetStateColor(const UIStateLook::State& state) const;
 
         /// The text as it is shown, with its `{#key}` and `{name}` expanded (`UITextPainter::GetDisplayText`)
-        [[nodiscard]] eastl::string_view GetDisplayText() const;
+        [[nodiscard]] StringView GetDisplayText() const;
 
         /// The same for the text @p owner shows: its `GetTextOverride()` when it has one, else `text` (a dropdown's header shows the chosen option's caption)
-        [[nodiscard]] eastl::string_view GetDisplayText(const UIElement& owner) const;
+        [[nodiscard]] StringView GetDisplayText(const UIElement& owner) const;
 
         /// The size the shown text takes when wrapped at @p maxWidth canvas units, at the font size of @p owner; see `UITextPainter::Measure`
         [[nodiscard]] Vec2 MeasureText(const UIElement& owner, float maxWidth, float scale) const;

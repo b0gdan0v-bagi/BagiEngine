@@ -10,7 +10,7 @@ namespace BECore {
 
         virtual void Initialize() = 0;
 
-        virtual void Write(LogLevel level, eastl::string_view message) = 0;
+        virtual void Write(LogLevel level, StringView message) = 0;
 
         void SetMinLevel(LogLevel level) {
             _minLevel = level;

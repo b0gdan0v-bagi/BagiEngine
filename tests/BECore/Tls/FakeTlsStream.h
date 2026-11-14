@@ -69,7 +69,7 @@ namespace BECore::Tests {
             }
             Socket socket = std::move(*connected);
             const std::string hello = "FAKE-HELLO " + std::string(params.host.data(), params.host.size()) + " " + std::to_string(params.additionalTrustAnchorsDer.size()) + "\n";
-            if (!socket.SendAll(BECore::AsBytes(eastl::string_view(hello.data(), hello.size())))) {
+            if (!socket.SendAll(BECore::AsBytes(FromStd(hello)))) {
                 return std::unexpected(SetError(eastl::string(("TLS: sending the hello to " + target + " failed").c_str())));
             }
             std::string answer;
@@ -187,7 +187,7 @@ namespace BECore::Tests {
             hello = true;
 
             const std::string answer = rejectReason.empty() ? "FAKE-OK\n" : "FAKE-REJECT " + rejectReason + "\n";
-            EXPECT_TRUE(peer.SendAll(BECore::AsBytes(eastl::string_view(answer.data(), answer.size()))));
+            EXPECT_TRUE(peer.SendAll(BECore::AsBytes(FromStd(answer))));
             return rejectReason.empty();
         }
     };

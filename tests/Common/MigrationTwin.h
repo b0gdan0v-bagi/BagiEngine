@@ -146,12 +146,12 @@ namespace BECore::Tests::MigrationTwin {
         }
     }
 
-    inline std::string JsonText(const Json& object, eastl::string_view key) {
+    inline std::string JsonText(const Json& object, StringView key) {
         const auto value = GetJsonString(object, key);
         return value ? Text(*value) : std::string();
     }
 
-    inline std::string JsonFlag(const Json& object, eastl::string_view key) {
+    inline std::string JsonFlag(const Json& object, StringView key) {
         return GetJsonBool(object, key).value_or(false) ? "true" : "false";
     }
 
@@ -203,7 +203,7 @@ namespace BECore::Tests::MigrationTwin {
         /// Loads a scene manager from @p xml, makes it the active one in the services and gives the icons their texture
         bool Load(const std::string& xml) {
             XmlDeserializer deserializer;
-            if (!deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size()))) {
+            if (!deserializer.LoadFromString(FromStd(xml))) {
                 ADD_FAILURE() << "the scene does not parse";
                 return false;
             }

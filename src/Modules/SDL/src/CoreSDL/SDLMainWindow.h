@@ -10,7 +10,7 @@ namespace BECore {
         SDLMainWindow();
         ~SDLMainWindow() override;
 
-        bool Initialize(eastl::string_view configPath) override;
+        bool Initialize(StringView configPath) override;
         void Destroy() override;
         bool IsValid() const override;
         int GetWidth() const override;
@@ -18,8 +18,8 @@ namespace BECore {
         float GetPixelDensity() const override;
         float GetDisplayScale() const override;
         Rect GetSafeArea() const override;
-        void SetTitle(eastl::string_view title) override;
-        eastl::string_view GetConfiguredTitle() const override {
+        void SetTitle(StringView title) override;
+        StringView GetConfiguredTitle() const override {
             return _configuredTitle;
         }
 

@@ -24,8 +24,8 @@ namespace BECore::Tests {
         constexpr int32_t kFirstExtra = 11;
         constexpr int32_t kLastExtra = 44;
 
-        bool Contains(eastl::string_view text, eastl::string_view part) {
-            return text.find(part) != eastl::string_view::npos;
+        bool Contains(StringView text, StringView part) {
+            return text.find(part) != StringView::npos;
         }
 
         /// Loads the XML into a fresh InitProbeList; the deserializer stays with the caller to read its errors
@@ -75,7 +75,7 @@ namespace BECore::Tests {
         ASSERT_EQ(InitProbeFails::initializeCalls, 1);
         ASSERT_TRUE(deserializer.HasErrors());
         ASSERT_EQ(deserializer.GetErrors().size(), 1u);
-        const eastl::string_view message = deserializer.GetErrors()[0].errorMessage.ToStringView();
+        const StringView message = deserializer.GetErrors()[0].errorMessage.ToStringView();
         EXPECT_TRUE(Contains(message, "InitProbeFails")) << message.data();
         EXPECT_TRUE(Contains(message, "failed to initialize")) << message.data();
 

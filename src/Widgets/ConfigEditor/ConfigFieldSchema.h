@@ -30,7 +30,7 @@ namespace BECore {
          * @param attrPath Path in format "elementName/@attrName"
          */
         template <typename EnumT>
-        void RegisterEnum(PoolString configName, eastl::string_view attrPath) {
+        void RegisterEnum(PoolString configName, StringView attrPath) {
             const eastl::string key = MakeKey(configName, attrPath);
             FieldHint hint;
             hint.type = FieldType::Enum;
@@ -55,7 +55,7 @@ namespace BECore {
          * @param attrPath Path in format "elementName/@attrName"
          */
         template <typename BaseT>
-        void RegisterFactoryTypes(PoolString configName, eastl::string_view attrPath) {
+        void RegisterFactoryTypes(PoolString configName, StringView attrPath) {
             const eastl::string key = MakeKey(configName, attrPath);
             FieldHint hint;
             hint.type = FieldType::Enum;
@@ -74,7 +74,7 @@ namespace BECore {
          * @param attrPath Path in format "elementName/@attrName"
          * @param flagNames List of all possible flag names
          */
-        void RegisterFlags(PoolString configName, eastl::string_view attrPath, eastl::vector<eastl::string> flagNames);
+        void RegisterFlags(PoolString configName, StringView attrPath, eastl::vector<eastl::string> flagNames);
 
         /**
          * @brief Resolve a FieldHint for the given attribute
@@ -90,10 +90,10 @@ namespace BECore {
          * @param attrPath Path in format "elementName/@attrName"
          * @param currentValue Current attribute value for heuristic fallback
          */
-        FieldHint Resolve(PoolString configName, eastl::string_view attrPath, eastl::string_view currentValue) const;
+        FieldHint Resolve(PoolString configName, StringView attrPath, StringView currentValue) const;
 
     private:
-        static eastl::string MakeKey(PoolString configName, eastl::string_view attrPath);
+        static eastl::string MakeKey(PoolString configName, StringView attrPath);
 
         eastl::unordered_map<eastl::string, FieldHint> _hints;
     };

@@ -86,7 +86,7 @@ namespace BECore::Tests {
         }
 
         bool IsRound(const UILayoutIssue& issue) {
-            const eastl::string_view name = issue.element.ToStringView();
+            const StringView name = issue.element.ToStringView();
             return name.size() == 6 && name.substr(0, 5) == "Round";
         }
 
@@ -115,7 +115,7 @@ namespace BECore::Tests {
         void Load(float side) {
             XmlDeserializer deserializer;
             const std::string xml = BarXml(side);
-            ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+            ASSERT_TRUE(deserializer.LoadFromString(FromStd(xml)));
             _manager = New<SceneManager>();
             _manager->Deserialize(deserializer);
             ASSERT_FALSE(deserializer.HasErrors());

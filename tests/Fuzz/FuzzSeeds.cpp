@@ -21,31 +21,31 @@ namespace BECore::Fuzz {
         constexpr const char* kWebSocketHandshakeFolder = "ws_handshake";
 
         /// The game id and the schema versions of the save seeds against the schema of FuzzSaveEnvelope (game "FuzzGame", writes 3, reads 2 and 3)
-        constexpr eastl::string_view kSaveGame = "FuzzGame";
+        constexpr StringView kSaveGame = "FuzzGame";
         constexpr uint32_t kSaveVersionCurrent = 3;
         constexpr uint32_t kSaveVersionOldest = 2;
         constexpr uint32_t kSaveVersionTooOld = 1;
         constexpr uint32_t kSaveVersionTooNew = 4;
 
         /// A scene that references the node file with overrides of the node and of one component
-        constexpr eastl::string_view kSceneWithOverrides = R"(<SceneManager><scenes><scene type="Scene" name="Main" viewWidth="800" viewHeight="600"><nodes>
+        constexpr StringView kSceneWithOverrides = R"(<SceneManager><scenes><scene type="Scene" name="Main" viewWidth="800" viewHeight="600"><nodes>
   <node name="Plain"/>
   <node ref="nodes/Fuzz" name="Renamed" layer="3"><components><component type="TransformComponent" x="40"/></components></node>
 </nodes></scene></scenes></SceneManager>)";
 
         /// A scene with a reference and no override, and one that the node file cannot satisfy
-        constexpr eastl::string_view kSceneWithReference =
+        constexpr StringView kSceneWithReference =
             R"(<SceneManager><scenes><scene type="Scene" name="Main"><nodes><node ref="nodes/Fuzz"/><node ref="nodes/Missing"/></nodes></scene></scenes></SceneManager>)";
 
         /// A node file of the built-in components
-        constexpr eastl::string_view kBoxNodeFile = R"(<node name="Box" layer="2"><components>
+        constexpr StringView kBoxNodeFile = R"(<node name="Box" layer="2"><components>
   <component type="TransformComponent" x="1" y="2" width="30" height="40"/>
   <component type="QuadRendererComponent"><color r="1" g="2" b="3" a="255"/></component>
   <component type="ClickableComponent" actionName="box"/>
 </components></node>)";
 
         /// A node file with a canvas of UI elements
-        constexpr eastl::string_view kCanvasNodeFile = R"(<node name="Panel"><components>
+        constexpr StringView kCanvasNodeFile = R"(<node name="Panel"><components>
   <component type="UICanvasComponent" space="Screen" scaleMode="ConstantPixelSize">
     <elements>
       <element type="UIElement" name="Title" x="8" y="8" width="184" height="30" fontSize="24">
@@ -87,11 +87,11 @@ namespace BECore::Fuzz {
             writer.WriteAttribute("u64", static_cast<uint64_t>(18000000000000000000ull));
             writer.WriteAttribute("f32", 1.5f);
             writer.WriteAttribute("f64", -2.25);
-            writer.WriteAttribute("text", eastl::string_view("hello"));
+            writer.WriteAttribute("text", StringView("hello"));
 
             if (writer.BeginObject("player")) {
                 writer.WriteAttribute("health", static_cast<int32_t>(100));
-                writer.WriteAttribute("name", eastl::string_view("Hero"));
+                writer.WriteAttribute("name", StringView("Hero"));
                 if (writer.BeginObject("position")) {
                     writer.WriteAttribute("x", 1.0f);
                     writer.WriteAttribute("y", 2.0f);
@@ -105,7 +105,7 @@ namespace BECore::Fuzz {
                 for (int32_t id = 0; id < 3; ++id) {
                     if (writer.BeginArrayElement()) {
                         writer.WriteAttribute("id", id);
-                        writer.WriteAttribute("label", eastl::string_view(id == 0 ? "first" : "other"));
+                        writer.WriteAttribute("label", StringView(id == 0 ? "first" : "other"));
                         writer.EndArrayElement();
                     }
                 }
@@ -128,7 +128,7 @@ namespace BECore::Fuzz {
         /// Only the string "s" = "abc"
         FuzzBytes MakeStringStream() {
             BinarySerializer writer;
-            writer.WriteAttribute("s", eastl::string_view("abc"));
+            writer.WriteAttribute("s", StringView("abc"));
             return ToBytes(writer);
         }
 
@@ -148,13 +148,13 @@ namespace BECore::Fuzz {
             return ToBytes(writer);
         }
 
-        FuzzBytes TextBytes(eastl::string_view text) {
+        FuzzBytes TextBytes(StringView text) {
             const auto* begin = reinterpret_cast<const uint8_t*>(text.data());
             return FuzzBytes(begin, begin + text.size());
         }
 
         /// The input of FuzzSceneNode: the scene text, a NUL byte, the node file
-        FuzzBytes SceneAndNode(eastl::string_view scene, eastl::string_view node) {
+        FuzzBytes SceneAndNode(StringView scene, StringView node) {
             FuzzBytes bytes = TextBytes(scene);
             bytes.push_back(0);
             const FuzzBytes nodeBytes = TextBytes(node);
@@ -167,7 +167,7 @@ namespace BECore::Fuzz {
             XmlSerializer writer;
             MakeFilledProbe().Serialize(writer);
             const eastl::string text = writer.SaveToString();
-            return TextBytes(eastl::string_view(text.data(), text.size()));
+            return TextBytes(StringView(text));
         }
 
         void StoreWord(FuzzBytes& bytes, size_t offset, uint32_t value) {
@@ -201,7 +201,7 @@ namespace BECore::Fuzz {
         constexpr uint8_t kLongChunkPattern = 7;  // chunks of up to 128 bytes
 
         /// The 8-byte length form of a frame that would fit the 2-byte one: the form is legal for any length (RFC 6455 section 5.2 asks for the shortest, parsers accept either)
-        FuzzBytes LongLengthFrame(uint8_t opcode, eastl::string_view payload, const WebSocketMask& mask) {
+        FuzzBytes LongLengthFrame(uint8_t opcode, StringView payload, const WebSocketMask& mask) {
             constexpr uint8_t kFin = 0x80;
             constexpr uint8_t kMaskBit = 0x80;
             constexpr uint8_t kLength64Marker = 127;
@@ -218,7 +218,7 @@ namespace BECore::Fuzz {
             return frame;
         }
 
-        eastl::span<const uint8_t> PayloadOf(eastl::string_view text) {
+        eastl::span<const uint8_t> PayloadOf(StringView text) {
             return eastl::span<const uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), text.size());
         }
 
@@ -232,18 +232,18 @@ namespace BECore::Fuzz {
             return bytes;
         }
 
-        FuzzBytes Frame(uint8_t opcode, eastl::string_view payload, Optional<WebSocketMask> mask, bool fin = true) {
+        FuzzBytes Frame(uint8_t opcode, StringView payload, Optional<WebSocketMask> mask, bool fin = true) {
             const eastl::vector<uint8_t> frame = EncodeFrame(opcode, PayloadOf(payload), mask, fin);
             return FuzzBytes(frame.begin(), frame.end());
         }
 
-        FuzzBytes CloseFrame(uint16_t code, eastl::string_view reason, Optional<WebSocketMask> mask) {
+        FuzzBytes CloseFrame(uint16_t code, StringView reason, Optional<WebSocketMask> mask) {
             const eastl::vector<uint8_t> frame = EncodeCloseFrame(code, reason, mask);
             return FuzzBytes(frame.begin(), frame.end());
         }
 
         /// A handshake input: the policy byte, then the text
-        FuzzBytes HandshakeInput(HandshakePolicyKind policy, eastl::string_view text) {
+        FuzzBytes HandshakeInput(HandshakePolicyKind policy, StringView text) {
             FuzzBytes bytes;
             bytes.push_back(static_cast<uint8_t>(policy));
             const FuzzBytes textBytes = TextBytes(text);
@@ -252,23 +252,23 @@ namespace BECore::Fuzz {
         }
 
         /// The request head of a browser (the RFC's example, and the header set of a current browser)
-        constexpr eastl::string_view kRfcRequest = "GET /chat HTTP/1.1\r\nHost: server.example.com\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: "
-                                                   "dGhlIHNhbXBsZSBub25jZQ==\r\nOrigin: http://example.com\r\nSec-WebSocket-Version: 13\r\n\r\n";
-        constexpr eastl::string_view kBrowserRequest =
+        constexpr StringView kRfcRequest = "GET /chat HTTP/1.1\r\nHost: server.example.com\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: "
+                                           "dGhlIHNhbXBsZSBub25jZQ==\r\nOrigin: http://example.com\r\nSec-WebSocket-Version: 13\r\n\r\n";
+        constexpr StringView kBrowserRequest =
             "GET / HTTP/1.1\r\nHost: rooms.example:8080\r\nConnection: Upgrade\r\nPragma: no-cache\r\nCache-Control: no-cache\r\nUser-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
             "AppleWebKit/537.36 "
             "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\r\nUpgrade: websocket\r\nOrigin: https://good.example\r\nSec-WebSocket-Version: 13\r\nAccept-Encoding: gzip, deflate, br\r\n"
             "Accept-Language: en-US,en;q=0.9\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Extensions: permessage-deflate; client_max_window_bits\r\n\r\n";
-        constexpr eastl::string_view kHealthRequest = "GET /healthz HTTP/1.1\r\nHost: rooms.example\r\nUser-Agent: kube-probe/1.28\r\nAccept: */*\r\nConnection: close\r\n\r\n";
-        constexpr eastl::string_view kDuplicatedHeadersRequest =
+        constexpr StringView kHealthRequest = "GET /healthz HTTP/1.1\r\nHost: rooms.example\r\nUser-Agent: kube-probe/1.28\r\nAccept: */*\r\nConnection: close\r\n\r\n";
+        constexpr StringView kDuplicatedHeadersRequest =
             "GET / HTTP/1.1\r\nHost: a\r\nHost: b\r\nUpgrade: h2c\r\nUpgrade: websocket\r\nConnection: keep-alive\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
             "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n";
-        constexpr eastl::string_view kUrlOfARoom = "wss://Rooms.Example.com/room?code=ABCD&name=x";
-        constexpr eastl::string_view kUrlOfTheControlApi = "ws://127.0.0.1:8765/control";
-        constexpr eastl::string_view kUrlWithABadPort = "ws://host:99999/path";
+        constexpr StringView kUrlOfARoom = "wss://Rooms.Example.com/room?code=ABCD&name=x";
+        constexpr StringView kUrlOfTheControlApi = "ws://127.0.0.1:8765/control";
+        constexpr StringView kUrlWithABadPort = "ws://host:99999/path";
 
         /// A request head made by the client's own builder
-        eastl::string ProgramRequest(eastl::string_view url, eastl::string_view origin) {
+        eastl::string ProgramRequest(StringView url, StringView origin) {
             const auto parsed = ParseWebSocketUrl(url);
             return BuildClientHandshakeRequest(*parsed, WebSocketInput::kHandshakeKey, origin);
         }

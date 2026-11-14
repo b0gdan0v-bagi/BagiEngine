@@ -38,7 +38,7 @@ namespace BECore {
     void SortZoneStats(eastl::vector<ZoneStatRow>& rows, ZoneStatColumn column, bool ascending);
 
     /// The rows whose zone name or `file:line` contains @p text, ignoring case; empty text keeps every row
-    [[nodiscard]] eastl::vector<ZoneStatRow> FilterZoneStats(const eastl::vector<ZoneStatRow>& rows, eastl::string_view text);
+    [[nodiscard]] eastl::vector<ZoneStatRow> FilterZoneStats(const eastl::vector<ZoneStatRow>& rows, StringView text);
 
     /// The segments of the stacked stage bar, in the order they are stacked from the bottom
     CORE_ENUM(ExclusiveStage, uint8_t, UpdateOnly, SceneUpdateStage, RenderOnly, SceneDrawStage, PresentStage, OtherStage)

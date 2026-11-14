@@ -304,7 +304,7 @@ namespace BECore::Tests {
 
     TEST_F(SceneNodeFilesTest, CustomLoaderIsAsked) {
         eastl::vector<eastl::string> asked;
-        const NodeFileLoader loader = [&asked](eastl::string_view ref, pugi::xml_document& out, eastl::string& error) {
+        const NodeFileLoader loader = [&asked](StringView ref, pugi::xml_document& out, eastl::string& error) {
             asked.emplace_back(ref);
             if (ref == "known") {
                 return static_cast<bool>(out.load_string(R"(<node name="Known"/>)"));
@@ -798,7 +798,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(SceneNodeFilesTest, ExpandNodeReferenceReportsTheLoadersReason) {
-        const NodeFileLoader loader = [](eastl::string_view, pugi::xml_document&, eastl::string& error) {
+        const NodeFileLoader loader = [](StringView, pugi::xml_document&, eastl::string& error) {
             error = "the loader says no";
             return false;
         };

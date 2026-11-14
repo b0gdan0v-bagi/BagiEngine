@@ -118,7 +118,7 @@ namespace BECore::Tests {
 
         IntrusivePtr<UICanvasComponent> FromXml(const eastl::string& xml, bool expectClean = true) {
             XmlDeserializer deserializer;
-            EXPECT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+            EXPECT_TRUE(deserializer.LoadFromString(StringView(xml)));
             auto canvas = New<UICanvasComponent>();
             EXPECT_TRUE(deserializer.BeginObject("component"));
             canvas->Deserialize(deserializer);
@@ -331,7 +331,7 @@ namespace BECore::Tests {
         for (const char* attribute : {"anchorMin=\"1\"", "anchorMax=\"a,b\"", "pivot=\"nan,0\"", "anchorMin=\"1,2,3\""}) {
             const eastl::string xml = eastl::string("<root><component><elements><element type=\"UIElement\" name=\"A\" x=\"5\" ") + attribute + "/></elements></component></root>";
             XmlDeserializer deserializer;
-            ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+            ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
             auto canvas = New<UICanvasComponent>();
             ASSERT_TRUE(deserializer.BeginObject("component"));
             canvas->Deserialize(deserializer);
@@ -358,7 +358,7 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(element.style.rect.x.value, 5.0f);  // the well-formed attributes still load
 
         XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+        ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
         auto again = New<UICanvasComponent>();
         ASSERT_TRUE(deserializer.BeginObject("component"));
         again->Deserialize(deserializer);
@@ -375,7 +375,7 @@ namespace BECore::Tests {
         deserializer.EndObject();
 
         ASSERT_TRUE(deserializer.HasErrors());
-        EXPECT_NE(deserializer.GetErrors()[0].errorMessage.ToStringView().find("NoSuchControl"), eastl::string_view::npos);
+        EXPECT_NE(deserializer.GetErrors()[0].errorMessage.ToStringView().find("NoSuchControl"), StringView::npos);
     }
 
     // ---- from a scene file ------------------------------------------------------------------------------------------------

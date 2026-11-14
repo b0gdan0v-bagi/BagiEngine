@@ -40,7 +40,7 @@ namespace BECore {
         template <typename T>
         using CfOwned = std::unique_ptr<std::remove_pointer_t<T>, CfReleaser>;
 
-        eastl::string_view TlsVersionName(tls_protocol_version_t version) {
+        StringView TlsVersionName(tls_protocol_version_t version) {
             switch (version) {
                 case tls_protocol_version_TLSv12:
                     return "1.2";
@@ -490,7 +490,7 @@ namespace BECore {
 
     }  // namespace
 
-    eastl::string_view DescribeNetworkFailure(NetworkErrorDomain domain, int code) {
+    StringView DescribeNetworkFailure(NetworkErrorDomain domain, int code) {
         switch (domain) {
             case NetworkErrorDomain::Posix:
                 switch (code) {

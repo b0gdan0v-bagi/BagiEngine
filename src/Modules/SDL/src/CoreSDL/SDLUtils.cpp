@@ -4,7 +4,7 @@ namespace BECore {
 
     namespace {
         struct FlagEntry {
-            eastl::string_view name;
+            StringView name;
             SDL_WindowFlags value;
         };
 
@@ -15,7 +15,7 @@ namespace BECore {
         }
     }  // namespace
 
-    SDL_WindowFlags SDLUtils::ParseWindowFlags(eastl::string_view flagsString) {
+    SDL_WindowFlags SDLUtils::ParseWindowFlags(StringView flagsString) {
         if (flagsString.empty()) {
             return 0;
         }
@@ -32,7 +32,7 @@ namespace BECore {
         return result;
     }
 
-    SDL_WindowFlags SDLUtils::GetWindowFlagValue(eastl::string_view flagName) {
+    SDL_WindowFlags SDLUtils::GetWindowFlagValue(StringView flagName) {
         // Маппинг имен флагов на их значения
         static constexpr auto flagTable = SortFlagEntryFlags(std::array<FlagEntry, 25>{{
             {.name = "SDL_WINDOW_FULLSCREEN", .value = SDL_WINDOW_FULLSCREEN},

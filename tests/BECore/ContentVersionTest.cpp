@@ -31,7 +31,7 @@ namespace BECore::Tests {
         }
 
         NodeFileLoader NoNodeFiles() {
-            return [](eastl::string_view, pugi::xml_document&, eastl::string& error) {
+            return [](StringView, pugi::xml_document&, eastl::string& error) {
                 error = "no node files in this test";
                 return false;
             };

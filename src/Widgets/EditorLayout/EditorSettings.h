@@ -31,8 +31,8 @@ namespace BECore {
     [[nodiscard]] EditorPreferences ClampPreferences(EditorPreferences preferences);
 
     /// Names of the user files in the editor folder
-    inline constexpr eastl::string_view kPreferencesFileName = "preferences.json";
-    inline constexpr eastl::string_view kHotkeysFileName = "hotkeys.json";
+    inline constexpr StringView kPreferencesFileName = "preferences.json";
+    inline constexpr StringView kHotkeysFileName = "hotkeys.json";
     /// Name of the environment variable that moves the editor folder (tests, CI)
     inline constexpr const char* kEditorDirectoryEnvironmentVariable = "BAGI_EDITOR_DIR";
 

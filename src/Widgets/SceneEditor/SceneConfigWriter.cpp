@@ -25,9 +25,9 @@ namespace BECore {
         }
 
         /// The `<scene>` of @p scenesEl whose `name` is @p name, or an invalid node
-        pugi::xml_node FindSceneElement(pugi::xml_node scenesEl, eastl::string_view name) {
+        pugi::xml_node FindSceneElement(pugi::xml_node scenesEl, StringView name) {
             for (pugi::xml_node el = scenesEl.child("scene"); el; el = el.next_sibling("scene")) {
-                if (eastl::string_view{el.attribute("name").as_string()} == name) {
+                if (StringView{el.attribute("name").as_string()} == name) {
                     return el;
                 }
             }
@@ -87,7 +87,7 @@ namespace BECore {
             sceneEl.append_attribute(attr.name()).set_value(attr.value());
         }
         for (auto child = srcRoot.first_child(); child; child = child.next_sibling()) {
-            if (eastl::string_view{child.name()} != "nodes") {
+            if (StringView{child.name()} != "nodes") {
                 sceneEl.append_copy(child);
             }
         }

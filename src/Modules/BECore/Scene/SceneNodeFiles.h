@@ -25,31 +25,31 @@ namespace BECore {
      */
 
     /// Name of the element that is a node and of the one that may be a reference
-    inline constexpr eastl::string_view kNodeElementName = "node";
+    inline constexpr StringView kNodeElementName = "node";
 
     /// Attribute of `<node>` that makes it a reference
-    inline constexpr eastl::string_view kNodeRefAttribute = "ref";
+    inline constexpr StringView kNodeRefAttribute = "ref";
 
     /// Attributes of a reference that replace the same attribute of the node file's `<node>`: the reflected fields of
     /// SceneNode (`_name`, `_layer`). When SceneNode gets a field, extend this list.
-    inline constexpr std::array<eastl::string_view, 2> kNodeOverrideAttributes = {"name", "layer"};
+    inline constexpr std::array<StringView, 2> kNodeOverrideAttributes = {"name", "layer"};
 
     /// Attribute that the expansion may set on the copy of a node file's `<node>`: the reference it came from. The live
     /// SceneNode keeps it (`GetSourceRef`) so the scene editor can write the node back as a reference
-    inline constexpr eastl::string_view kNodeSourceAttribute = "sourceRef";
+    inline constexpr StringView kNodeSourceAttribute = "sourceRef";
 
     /// The only child element of a reference, and its children: one per component to override
-    inline constexpr eastl::string_view kComponentsElementName = "components";
-    inline constexpr eastl::string_view kComponentElementName = "component";
+    inline constexpr StringView kComponentsElementName = "components";
+    inline constexpr StringView kComponentElementName = "component";
 
     /// Attribute of `<component>` that names its type (in the node file and in the override)
-    inline constexpr eastl::string_view kComponentTypeAttribute = "type";
+    inline constexpr StringView kComponentTypeAttribute = "type";
 
     /// Mount point of the node files; a reference `a/b` is the file `config/a/b.xml`
-    inline constexpr eastl::string_view kNodeFilesMountPoint = "config";
+    inline constexpr StringView kNodeFilesMountPoint = "config";
 
     /// Extension of a node file
-    inline constexpr eastl::string_view kNodeFileExtension = ".xml";
+    inline constexpr StringView kNodeFileExtension = ".xml";
 
     /**
      * @brief Fills @p out with the parsed node file of a reference
@@ -59,7 +59,7 @@ namespace BECore {
      * @param error Receives the reason when the file cannot be used
      * @return false when it cannot be read, parsed or is not a node file
      */
-    using NodeFileLoader = eastl::function<bool(eastl::string_view ref, pugi::xml_document& out, eastl::string& error)>;
+    using NodeFileLoader = eastl::function<bool(StringView ref, pugi::xml_document& out, eastl::string& error)>;
 
     /// The result of an expansion: how many references were replaced and one message per reference that was not
     struct NodeExpansion {
@@ -76,7 +76,7 @@ namespace BECore {
      *
      * No empty segment, no `.` or `..`, no leading `/`, no `\`, no extension (the dot is not in the alphabet).
      */
-    bool IsValidNodeRef(eastl::string_view ref);
+    bool IsValidNodeRef(StringView ref);
 
     /**
      * @brief Merges the overrides of a node reference into the `<node>` of its file

@@ -42,7 +42,7 @@ namespace BECore {
         void Reply(Json result);
 
         /// Answers with an error
-        void Fail(eastl::string_view code, eastl::string_view message);
+        void Fail(StringView code, StringView message);
         void Fail(const ControlError& error);
 
         /**

@@ -14,7 +14,7 @@ namespace BECore::Stress::Tests {
         }
 
         /// The error of @p args, which has to name @p flag
-        void ExpectErrorNaming(const Args& args, eastl::string_view flag) {
+        void ExpectErrorNaming(const Args& args, StringView flag) {
             const auto result = Parse(args);
             ASSERT_FALSE(result.has_value()) << args[0].c_str();
             EXPECT_TRUE(result.error().find(eastl::string(flag)) != eastl::string::npos) << result.error().c_str();

@@ -5,11 +5,11 @@ namespace BECore {
     namespace {
 
         /// The flag name without its '=' ("--trace" of "--trace=")
-        eastl::string_view BareFlag(eastl::string_view prefix) {
+        StringView BareFlag(StringView prefix) {
             return prefix.substr(0, prefix.size() - 1);
         }
 
-        Optional<ProfilerBackendKind> ParseBackend(eastl::string_view value) {
+        Optional<ProfilerBackendKind> ParseBackend(StringView value) {
             if (value == ProfilerArguments::kNone) {
                 return ProfilerBackendKind::None;
             }
@@ -31,7 +31,7 @@ namespace BECore {
         eastl::string tracePath;
         bool anyFlag = false;
         for (const eastl::string& arg : args) {
-            const eastl::string_view argument(arg.data(), arg.size());
+            const StringView argument(arg.data(), arg.size());
             if (argument.starts_with(kTracePrefix)) {
                 anyFlag = true;
                 tracePath.assign(argument.substr(kTracePrefix.size()).data(), argument.size() - kTracePrefix.size());
@@ -40,7 +40,7 @@ namespace BECore {
                 }
             } else if (argument.starts_with(kProfilerPrefix)) {
                 anyFlag = true;
-                const eastl::string_view value = argument.substr(kProfilerPrefix.size());
+                const StringView value = argument.substr(kProfilerPrefix.size());
                 asked = ParseBackend(value);
                 if (!asked) {
                     return std::unexpected(Format("'{}': the profiler is one of {}, {}, {}", argument, kNone, kChrome, kTracy));

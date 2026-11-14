@@ -140,6 +140,11 @@ def test_tests_keep_std_string_and_std_vector() -> None:
     assert convert(source, is_test=True) == in_namespace("std::string a; std::vector<int> b; String c; Vector<int> d; HashMap<int, int> e; Optional<int> f;")
 
 
+def test_tests_keep_std_string_view_and_its_shape() -> None:
+    source = in_namespace("std::string_view a{s.data(), s.size()}; eastl::string_view b; auto c = eastl::string_view(x.data(), x.size());")
+    assert convert(source, is_test=True) == in_namespace("std::string_view a{s.data(), s.size()}; StringView b; auto c = FromStd(x);")
+
+
 # ---- the namespace --------------------------------------------------------------------------------------------------------------
 
 

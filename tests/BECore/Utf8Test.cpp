@@ -6,7 +6,7 @@ namespace BECore::Tests {
 
     namespace {
 
-        eastl::vector<char32_t> DecodeAll(eastl::string_view text) {
+        eastl::vector<char32_t> DecodeAll(StringView text) {
             eastl::vector<char32_t> result;
             size_t pos = 0;
             while (pos < text.size()) {
@@ -37,7 +37,7 @@ namespace BECore::Tests {
     }
 
     TEST(Utf8Test, DecodeAdvancesPastTheSequence) {
-        const eastl::string_view text = "Ж!";
+        const StringView text = "Ж!";
         size_t pos = 0;
 
         EXPECT_EQ(Utf8::DecodeNext(text, pos), 0x0416u);
@@ -55,13 +55,13 @@ namespace BECore::Tests {
 
     TEST(Utf8Test, MalformedBytesGiveTheReplacementOneByteAtATime) {
         // A stray continuation byte, a truncated two-byte sequence, an overlong 'A', a surrogate, past U+10FFFF
-        const eastl::string_view stray("\x80", 1);
-        const eastl::string_view truncated("\xD0", 1);
-        const eastl::string_view overlong("\xC1\x81", 2);
-        const eastl::string_view surrogate("\xED\xA0\x80", 3);
-        const eastl::string_view tooBig("\xF4\x90\x80\x80", 4);
+        const StringView stray("\x80", 1);
+        const StringView truncated("\xD0", 1);
+        const StringView overlong("\xC1\x81", 2);
+        const StringView surrogate("\xED\xA0\x80", 3);
+        const StringView tooBig("\xF4\x90\x80\x80", 4);
 
-        for (const eastl::string_view text : {stray, truncated, overlong, surrogate, tooBig}) {
+        for (const StringView text : {stray, truncated, overlong, surrogate, tooBig}) {
             size_t pos = 0;
             EXPECT_EQ(Utf8::DecodeNext(text, pos), Utf8::kReplacement);
             EXPECT_EQ(pos, 1u);
@@ -69,7 +69,7 @@ namespace BECore::Tests {
     }
 
     TEST(Utf8Test, ADamagedSequenceDoesNotSwallowTheNextCharacter) {
-        const eastl::string_view text("\xD0z", 2);  // a lead byte followed by an ASCII letter
+        const StringView text("\xD0z", 2);  // a lead byte followed by an ASCII letter
         const auto result = DecodeAll(text);
 
         ASSERT_EQ(result.size(), 2u);
@@ -104,7 +104,7 @@ namespace BECore::Tests {
     TEST(Utf8Test, CountsCodePointsNotBytes) {
         EXPECT_EQ(Utf8::CountCodePoints("Привет"), 6u);
         EXPECT_EQ(Utf8::CountCodePoints(""), 0u);
-        EXPECT_EQ(Utf8::CountCodePoints(eastl::string_view("a\x80z", 3)), 3u);
+        EXPECT_EQ(Utf8::CountCodePoints(StringView("a\x80z", 3)), 3u);
     }
 
 }  // namespace BECore::Tests

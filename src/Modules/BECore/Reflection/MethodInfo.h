@@ -22,7 +22,7 @@ namespace BECore {
      */
     template <typename Class, typename Ret, typename... Args>
     struct MethodInfo {
-        eastl::string_view name;
+        StringView name;
         Ret (Class::*ptr)(Args...);
 
         /**
@@ -45,7 +45,7 @@ namespace BECore {
      */
     template <typename Class, typename Ret, typename... Args>
     struct ConstMethodInfo {
-        eastl::string_view name;
+        StringView name;
         Ret (Class::*ptr)(Args...) const;
 
         /**
@@ -63,12 +63,12 @@ namespace BECore {
      * @brief Helper to deduce MethodInfo type from pointer-to-member-function
      */
     template <typename Class, typename Ret, typename... Args>
-    MethodInfo(eastl::string_view, Ret (Class::*)(Args...)) -> MethodInfo<Class, Ret, Args...>;
+    MethodInfo(StringView, Ret (Class::*)(Args...)) -> MethodInfo<Class, Ret, Args...>;
 
     /**
      * @brief Helper to deduce ConstMethodInfo type from const pointer-to-member-function
      */
     template <typename Class, typename Ret, typename... Args>
-    ConstMethodInfo(eastl::string_view, Ret (Class::*)(Args...) const) -> ConstMethodInfo<Class, Ret, Args...>;
+    ConstMethodInfo(StringView, Ret (Class::*)(Args...) const) -> ConstMethodInfo<Class, Ret, Args...>;
 
 }  // namespace BECore

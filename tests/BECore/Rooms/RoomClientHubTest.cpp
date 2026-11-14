@@ -14,7 +14,7 @@ namespace BECore::Tests {
         using std::chrono::milliseconds;
         using std::chrono::seconds;
 
-        constexpr eastl::string_view kUrl = "ws://hub.test";
+        constexpr StringView kUrl = "ws://hub.test";
         constexpr milliseconds kStep{10};
         constexpr int kMaxSteps = 20000;
         constexpr int kCardsInAHand = DemoCardGame::kTotalPlays;
@@ -97,7 +97,7 @@ namespace BECore::Tests {
             }
 
             /// The host makes a room of @p game and everybody else joins it; the client of every player is in the room afterwards
-            void MakeLobby(eastl::string_view game, size_t humans, const Json& options = Json::object()) {
+            void MakeLobby(StringView game, size_t humans, const Json& options = Json::object()) {
                 Player& host = AddPlayer();
                 ASSERT_TRUE(host.client->Host(kUrl, game, "P0", options).has_value());
                 ASSERT_TRUE(StepUntil([&] { return host.client->IsInRoom(); }));

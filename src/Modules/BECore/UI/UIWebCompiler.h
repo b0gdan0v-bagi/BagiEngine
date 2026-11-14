@@ -53,10 +53,10 @@ namespace BECore {
         static constexpr size_t kMaxCascadeWork = 2'000'000;
 
         /// Gives the text of the style sheet at @p href (relative to the document), or nothing when it cannot be read
-        using StylesheetLoader = eastl::function<Optional<eastl::string>(eastl::string_view href)>;
+        using StylesheetLoader = eastl::function<Optional<eastl::string>(StringView href)>;
 
         /// @p loadStylesheet may be empty when the document has no `<link>`
-        [[nodiscard]] static eastl::string Compile(eastl::string_view html, const StylesheetLoader& loadStylesheet, UIWebReport& report);
+        [[nodiscard]] static eastl::string Compile(StringView html, const StylesheetLoader& loadStylesheet, UIWebReport& report);
     };
 
 }  // namespace BECore

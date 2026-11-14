@@ -42,8 +42,8 @@ namespace BECore {
         /// A list of view variants is `<viewVariants><view .../>...</viewVariants>` in a file; an empty list writes nothing
         template <>
         struct DataAccessor<eastl::vector<SceneViewVariant>> {
-            static void Save(ISerializer& s, const eastl::vector<SceneViewVariant>& variants, eastl::string_view key);
-            static bool Load(IDeserializer& d, eastl::vector<SceneViewVariant>& variants, eastl::string_view key);
+            static void Save(ISerializer& s, const eastl::vector<SceneViewVariant>& variants, StringView key);
+            static bool Load(IDeserializer& d, eastl::vector<SceneViewVariant>& variants, StringView key);
         };
 
     }  // namespace Ser
@@ -51,7 +51,7 @@ namespace BECore {
     namespace PropVisit {
 
         /// The inspector does not edit view variants: they are shown as nothing (the same as the variants of a canvas)
-        inline bool Visit(IPropertyVisitor& /*v*/, eastl::vector<SceneViewVariant>& /*variants*/, eastl::string_view /*key*/) {
+        inline bool Visit(IPropertyVisitor& /*v*/, eastl::vector<SceneViewVariant>& /*variants*/, StringView /*key*/) {
             return false;
         }
 

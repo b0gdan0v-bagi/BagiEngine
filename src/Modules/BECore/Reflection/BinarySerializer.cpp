@@ -45,7 +45,7 @@ namespace BECore {
         AppendValue<uint32_t>(0);  // payload size, kept up to date by Append()
     }
 
-    bool BinarySerializer::BeginEntry(uint8_t tag, eastl::string_view name) {
+    bool BinarySerializer::BeginEntry(uint8_t tag, StringView name) {
         if (!_scopes.empty() && _scopes.back().isArray) {
             EXPECT(false, "Entries must be written inside BeginArrayElement, not directly into an array");
             return false;
@@ -65,7 +65,7 @@ namespace BECore {
     // =============================================================================
 
     template <typename T>
-    void BinarySerializer::WriteScalar(eastl::string_view name, T value) {
+    void BinarySerializer::WriteScalar(StringView name, T value) {
         if (!BeginEntry(BinaryFormat::TagFor<T>(), name)) {
             return;
         }
@@ -76,7 +76,7 @@ namespace BECore {
         }
     }
 
-    void BinarySerializer::WriteString(eastl::string_view name, eastl::string_view value) {
+    void BinarySerializer::WriteString(StringView name, StringView value) {
         if (!BeginEntry(BinaryFormat::Tag::String, name)) {
             return;
         }
@@ -85,55 +85,55 @@ namespace BECore {
         Append(value.data(), value.size());
     }
 
-    void BinarySerializer::Write(eastl::string_view name, bool value) {
+    void BinarySerializer::Write(StringView name, bool value) {
         WriteScalar(name, value);
     }
 
-    void BinarySerializer::Write(eastl::string_view name, int8_t value) {
+    void BinarySerializer::Write(StringView name, int8_t value) {
         WriteScalar(name, value);
     }
 
-    void BinarySerializer::Write(eastl::string_view name, uint8_t value) {
+    void BinarySerializer::Write(StringView name, uint8_t value) {
         WriteScalar(name, value);
     }
 
-    void BinarySerializer::Write(eastl::string_view name, int16_t value) {
+    void BinarySerializer::Write(StringView name, int16_t value) {
         WriteScalar(name, value);
     }
 
-    void BinarySerializer::Write(eastl::string_view name, uint16_t value) {
+    void BinarySerializer::Write(StringView name, uint16_t value) {
         WriteScalar(name, value);
     }
 
-    void BinarySerializer::Write(eastl::string_view name, int32_t value) {
+    void BinarySerializer::Write(StringView name, int32_t value) {
         WriteScalar(name, value);
     }
 
-    void BinarySerializer::Write(eastl::string_view name, uint32_t value) {
+    void BinarySerializer::Write(StringView name, uint32_t value) {
         WriteScalar(name, value);
     }
 
-    void BinarySerializer::Write(eastl::string_view name, int64_t value) {
+    void BinarySerializer::Write(StringView name, int64_t value) {
         WriteScalar(name, value);
     }
 
-    void BinarySerializer::Write(eastl::string_view name, uint64_t value) {
+    void BinarySerializer::Write(StringView name, uint64_t value) {
         WriteScalar(name, value);
     }
 
-    void BinarySerializer::Write(eastl::string_view name, float value) {
+    void BinarySerializer::Write(StringView name, float value) {
         WriteScalar(name, value);
     }
 
-    void BinarySerializer::Write(eastl::string_view name, double value) {
+    void BinarySerializer::Write(StringView name, double value) {
         WriteScalar(name, value);
     }
 
-    void BinarySerializer::Write(eastl::string_view name, eastl::string_view value) {
+    void BinarySerializer::Write(StringView name, StringView value) {
         WriteString(name, value);
     }
 
-    void BinarySerializer::Write(eastl::string_view name, const PoolString& value) {
+    void BinarySerializer::Write(StringView name, const PoolString& value) {
         WriteString(name, value.ToStringView());
     }
 
@@ -141,55 +141,55 @@ namespace BECore {
     // WriteAttribute methods (same entries as Write)
     // =============================================================================
 
-    void BinarySerializer::WriteAttribute(eastl::string_view name, bool value) {
+    void BinarySerializer::WriteAttribute(StringView name, bool value) {
         WriteScalar(name, value);
     }
 
-    void BinarySerializer::WriteAttribute(eastl::string_view name, int8_t value) {
+    void BinarySerializer::WriteAttribute(StringView name, int8_t value) {
         WriteScalar(name, value);
     }
 
-    void BinarySerializer::WriteAttribute(eastl::string_view name, uint8_t value) {
+    void BinarySerializer::WriteAttribute(StringView name, uint8_t value) {
         WriteScalar(name, value);
     }
 
-    void BinarySerializer::WriteAttribute(eastl::string_view name, int16_t value) {
+    void BinarySerializer::WriteAttribute(StringView name, int16_t value) {
         WriteScalar(name, value);
     }
 
-    void BinarySerializer::WriteAttribute(eastl::string_view name, uint16_t value) {
+    void BinarySerializer::WriteAttribute(StringView name, uint16_t value) {
         WriteScalar(name, value);
     }
 
-    void BinarySerializer::WriteAttribute(eastl::string_view name, int32_t value) {
+    void BinarySerializer::WriteAttribute(StringView name, int32_t value) {
         WriteScalar(name, value);
     }
 
-    void BinarySerializer::WriteAttribute(eastl::string_view name, uint32_t value) {
+    void BinarySerializer::WriteAttribute(StringView name, uint32_t value) {
         WriteScalar(name, value);
     }
 
-    void BinarySerializer::WriteAttribute(eastl::string_view name, int64_t value) {
+    void BinarySerializer::WriteAttribute(StringView name, int64_t value) {
         WriteScalar(name, value);
     }
 
-    void BinarySerializer::WriteAttribute(eastl::string_view name, uint64_t value) {
+    void BinarySerializer::WriteAttribute(StringView name, uint64_t value) {
         WriteScalar(name, value);
     }
 
-    void BinarySerializer::WriteAttribute(eastl::string_view name, float value) {
+    void BinarySerializer::WriteAttribute(StringView name, float value) {
         WriteScalar(name, value);
     }
 
-    void BinarySerializer::WriteAttribute(eastl::string_view name, double value) {
+    void BinarySerializer::WriteAttribute(StringView name, double value) {
         WriteScalar(name, value);
     }
 
-    void BinarySerializer::WriteAttribute(eastl::string_view name, eastl::string_view value) {
+    void BinarySerializer::WriteAttribute(StringView name, StringView value) {
         WriteString(name, value);
     }
 
-    void BinarySerializer::WriteAttribute(eastl::string_view name, const PoolString& value) {
+    void BinarySerializer::WriteAttribute(StringView name, const PoolString& value) {
         WriteString(name, value.ToStringView());
     }
 
@@ -224,7 +224,7 @@ namespace BECore {
         }
     }
 
-    bool BinarySerializer::BeginObject(eastl::string_view name) {
+    bool BinarySerializer::BeginObject(StringView name) {
         if (!BeginEntry(BinaryFormat::Tag::Object, name)) {
             return false;
         }
@@ -236,7 +236,7 @@ namespace BECore {
         CloseScope(false);
     }
 
-    bool BinarySerializer::BeginArray(eastl::string_view name, eastl::string_view /*elementName*/, size_t& /*count*/) {
+    bool BinarySerializer::BeginArray(StringView name, StringView /*elementName*/, size_t& /*count*/) {
         if (!BeginEntry(BinaryFormat::Tag::Array, name)) {
             return false;
         }

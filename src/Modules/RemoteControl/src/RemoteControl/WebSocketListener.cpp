@@ -19,7 +19,7 @@ namespace BECore {
             (void)socket.SendAll(AsBytes(response));
         }
 
-        [[nodiscard]] eastl::string MakeThreadName(const WebSocketListenerSettings& settings, eastl::string_view role) {
+        [[nodiscard]] eastl::string MakeThreadName(const WebSocketListenerSettings& settings, StringView role) {
             return Format("{} {}", settings.threadName, role);
         }
 

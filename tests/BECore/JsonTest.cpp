@@ -5,8 +5,8 @@ namespace BECore::Tests {
 
     namespace {
 
-        eastl::string_view View(std::string_view text) {
-            return eastl::string_view(text.data(), text.size());
+        StringView View(std::string_view text) {
+            return FromStd(text);
         }
 
         Json SampleObject() {

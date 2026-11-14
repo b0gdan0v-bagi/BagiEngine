@@ -357,7 +357,7 @@ namespace BECore::Tests {
         capture.Update(WithASpike(80));
 
         const std::filesystem::path path = TestTempPath("frozen_trace").replace_extension(".json");
-        const auto written = WriteFrozenTraceFile(eastl::string_view(path.string().c_str()), capture.GetSpikes());
+        const auto written = WriteFrozenTraceFile(StringView(path.string().c_str()), capture.GetSpikes());
         ASSERT_TRUE(written.has_value());
         std::ifstream in(path, std::ios::binary);
         std::stringstream content;
@@ -366,7 +366,7 @@ namespace BECore::Tests {
         in.close();
         std::filesystem::remove(path);
 
-        const auto refused = WriteFrozenTraceFile(eastl::string_view((path / "no" / "such" / "dir.json").string().c_str()), capture.GetSpikes());
+        const auto refused = WriteFrozenTraceFile(StringView((path / "no" / "such" / "dir.json").string().c_str()), capture.GetSpikes());
         ASSERT_FALSE(refused.has_value());
         EXPECT_NE(refused.error().find("cannot write"), eastl::string::npos);
     }

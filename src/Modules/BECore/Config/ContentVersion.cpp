@@ -1,15 +1,14 @@
 #include "ContentVersion.h"
 
-
 namespace BECore {
 
     namespace {
 
-        constexpr eastl::string_view kMigrateCommand = "python3 engine/tools/migrate/migrate.py <your game folder>";
+        constexpr StringView kMigrateCommand = "python3 engine/tools/migrate/migrate.py <your game folder>";
 
     }  // namespace
 
-    bool IsContentRoot(eastl::string_view rootName) {
+    bool IsContentRoot(StringView rootName) {
         return rootName == kSceneConfigRootName || rootName == kNodeFileRootName;
     }
 
@@ -28,7 +27,7 @@ namespace BECore {
         return version;
     }
 
-    std::expected<void, eastl::string> CheckContentVersion(pugi::xml_node root, eastl::string_view what) {
+    std::expected<void, eastl::string> CheckContentVersion(pugi::xml_node root, StringView what) {
         const std::expected<uint32_t, eastl::string> version = GetContentVersion(root);
         if (!version) {
             return std::unexpected(Format("{}: {}", what, version.error()));

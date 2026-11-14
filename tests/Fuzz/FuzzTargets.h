@@ -79,6 +79,6 @@ namespace BECore::Fuzz {
     void FuzzUiGeometry(const uint8_t* data, size_t size);
 
     /// A save file as the seeds make it: the bytes SaveGameService::Save writes for the probe state under the given game id and schema version
-    eastl::vector<uint8_t> MakeSaveFileBytes(eastl::string_view game, uint32_t version);
+    eastl::vector<uint8_t> MakeSaveFileBytes(StringView game, uint32_t version);
 
 }  // namespace BECore::Fuzz

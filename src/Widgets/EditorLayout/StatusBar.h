@@ -19,7 +19,7 @@ namespace BECore {
         [[nodiscard]] static float GetHeight();
 
         /// The branch of the engine's repository, read once by the owner; empty leaves it out
-        void SetBranch(eastl::string_view branch);
+        void SetBranch(StringView branch);
 
         void Draw();
 

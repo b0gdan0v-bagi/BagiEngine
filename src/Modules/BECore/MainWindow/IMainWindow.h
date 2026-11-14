@@ -7,7 +7,7 @@ namespace BECore {
     public:
         ~IMainWindow() override = default;
 
-        virtual bool Initialize(eastl::string_view configPath) = 0;
+        virtual bool Initialize(StringView configPath) = 0;
         virtual void Destroy() = 0;
 
         virtual bool IsValid() const = 0;
@@ -30,10 +30,10 @@ namespace BECore {
         }
 
         /// Sets the title of the window (ComposeWindowTitle makes it); nothing by default, for a window that has none
-        virtual void SetTitle(eastl::string_view /*title*/) {}
+        virtual void SetTitle(StringView /*title*/) {}
 
         /// The `title` the window config sets, empty when it sets none: the input of ComposeWindowTitle
-        virtual eastl::string_view GetConfiguredTitle() const {
+        virtual StringView GetConfiguredTitle() const {
             return {};
         }
 

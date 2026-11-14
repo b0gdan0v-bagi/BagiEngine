@@ -312,7 +312,7 @@ namespace BECore::Tests {
         harness.SendText(id, "\xff\xfe\x01{[");
         EXPECT_EQ(client.LastErrorCode(), RoomErrors::kBadMessage);
         const char withNul[] = "{\"v\":1,\"type\":\"ping\"}\0{\"x\":1}";
-        harness.SendText(id, eastl::string_view(withNul, sizeof(withNul) - 1));
+        harness.SendText(id, StringView(withNul, sizeof(withNul) - 1));
         EXPECT_EQ(client.LastErrorCode(), RoomErrors::kBadMessage);
         harness.SendText(id, eastl::string(5000, '['));
         EXPECT_EQ(client.LastErrorCode(), RoomErrors::kBadMessage);

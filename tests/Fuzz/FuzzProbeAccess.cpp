@@ -23,7 +23,7 @@ namespace BECore::Fuzz {
                 AddBytes(&value, sizeof(T));
             }
 
-            void AddText(eastl::string_view text) {
+            void AddText(StringView text) {
                 Add(text.size());
                 AddBytes(text.data(), text.size());
             }

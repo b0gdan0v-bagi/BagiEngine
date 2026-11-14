@@ -46,7 +46,7 @@ namespace BECore {
         void OnAttached() override;
         void OnDraw() override;
 
-        void SetText(eastl::string_view text);
+        void SetText(StringView text);
 
         /// Load the font again from `_fontPath`, or `_fontFamily` and `_fontWeight`. A changed path, family or weight is noticed by the next draw by itself;
         /// call it to read the file again

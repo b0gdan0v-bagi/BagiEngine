@@ -61,19 +61,19 @@ namespace BECore {
          * when its turn comes, so the order of the answers stays the order of the requests. @p reply gets the response
          * on the main thread. After Shutdown() the request is answered at once, on the calling thread.
          */
-        void Post(eastl::string_view requestText, ControlReplyFn reply);
+        void Post(StringView requestText, ControlReplyFn reply);
 
         /// Registers (or replaces) the handler of @p method. A method with @p bypassBarrier runs even while a deferred call is pending
-        void RegisterHandler(eastl::string_view method, Handler handler, bool bypassBarrier = false);
+        void RegisterHandler(StringView method, Handler handler, bool bypassBarrier = false);
 
         /// Where Publish() sends its messages (the transport); none by default
         void SetEventSink(EventSink sink);
 
         /// Sends {"event":..,"data":..} to the event sink, if there is one
-        void Publish(eastl::string_view event, const Json& data);
+        void Publish(StringView event, const Json& data);
 
         /// Runs @p hook at the end of every frame, before a deferred call is completed. A hook of the same @p name is replaced, so registering a module again adds nothing
-        void SetFrameEndHook(eastl::string_view name, FrameEndHook hook);
+        void SetFrameEndHook(StringView name, FrameEndHook hook);
 
         /// Runs the queued requests (frame stage 1b)
         void Drain();
@@ -135,7 +135,7 @@ namespace BECore {
             FrameEndHook hook;
         };
 
-        static void ParseRequest(eastl::string_view text, Request& request);
+        static void ParseRequest(StringView text, Request& request);
 
         [[nodiscard]] bool BypassesBarrier(const Request& request) const;
         void Process(Request& request);

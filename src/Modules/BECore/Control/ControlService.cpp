@@ -22,7 +22,7 @@ namespace BECore {
     ControlService::ControlService() = default;
     ControlService::~ControlService() = default;
 
-    void ControlService::ParseRequest(eastl::string_view text, Request& request) {
+    void ControlService::ParseRequest(StringView text, Request& request) {
         if (text.size() > kMaxRequestBytes) {
             request.error = MakeControlError(ControlErrors::kRequestTooLarge, Format("the request is {} bytes, the limit is {}", text.size(), kMaxRequestBytes));
             return;
@@ -71,7 +71,7 @@ namespace BECore {
         request.params = *params;
     }
 
-    void ControlService::Post(eastl::string_view requestText, ControlReplyFn reply) {
+    void ControlService::Post(StringView requestText, ControlReplyFn reply) {
         auto request = eastl::make_unique<Request>();
         request->reply = std::move(reply);
         ParseRequest(requestText, *request);
@@ -88,7 +88,7 @@ namespace BECore {
         request->reply(MakeErrorResponse(request->id, MakeControlError(ControlErrors::kShuttingDown, "the application is shutting down")));
     }
 
-    void ControlService::RegisterHandler(eastl::string_view method, Handler handler, bool bypassBarrier) {
+    void ControlService::RegisterHandler(StringView method, Handler handler, bool bypassBarrier) {
         _handlers[eastl::string(method)] = HandlerEntry{std::move(handler), bypassBarrier};
     }
 
@@ -96,7 +96,7 @@ namespace BECore {
         _eventSink = std::move(sink);
     }
 
-    void ControlService::Publish(eastl::string_view event, const Json& data) {
+    void ControlService::Publish(StringView event, const Json& data) {
         if (!_eventSink) {
             return;
         }
@@ -106,7 +106,7 @@ namespace BECore {
         _eventSink(DumpJson(message));
     }
 
-    void ControlService::SetFrameEndHook(eastl::string_view name, FrameEndHook hook) {
+    void ControlService::SetFrameEndHook(StringView name, FrameEndHook hook) {
         for (HookEntry& entry : _frameEndHooks) {
             if (entry.name == name) {
                 entry.hook = std::move(hook);

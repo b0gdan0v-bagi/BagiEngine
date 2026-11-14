@@ -128,7 +128,7 @@ namespace BECore {
             _nameDirty = true;
         }
         if (_nameDirty && ImGui::IsItemDeactivatedAfterEdit()) {
-            PoolString newName = PoolString::Intern(eastl::string_view(_nameEditBuffer));
+            PoolString newName = PoolString::Intern(StringView(_nameEditBuffer));
             if (newName != entry.name) {
                 lib.Remove(entry.name);
                 entry.name = newName;
@@ -344,8 +344,8 @@ namespace BECore {
     }
 
     void TextureEditorWidget::RefreshAssetList() {
-        static const eastl::string_view kExtensions[] = {".png", ".jpg", ".jpeg", ".bmp"};
-        _cachedAssets = CoreManager::GetFileSystem().EnumerateFiles("assets"_intern, eastl::span<const eastl::string_view>(kExtensions));
+        static const StringView kExtensions[] = {".png", ".jpg", ".jpeg", ".bmp"};
+        _cachedAssets = CoreManager::GetFileSystem().EnumerateFiles("assets"_intern, eastl::span<const StringView>(kExtensions));
         _assetsLoaded = true;
     }
 

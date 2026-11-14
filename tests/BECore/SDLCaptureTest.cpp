@@ -18,7 +18,7 @@ namespace BECore::Tests {
     namespace {
 
         constexpr const char* kWindowConfig = "config/SDLWindowConfig.xml";
-        constexpr eastl::string_view kPngBase64Prefix = "iVBORw0KGgo";  // the 8 bytes of a PNG signature in base64
+        constexpr StringView kPngBase64Prefix = "iVBORw0KGgo";  // the 8 bytes of a PNG signature in base64
 
         using Pixel = std::array<uint8_t, 4>;
 
@@ -997,7 +997,7 @@ namespace BECore::Tests {
         ASSERT_NE(Result(0), nullptr);
         const auto base64 = GetJsonString(*Result(0), "png_base64");
         ASSERT_TRUE(base64.has_value());
-        EXPECT_TRUE(eastl::string_view(base64->data(), base64->size()).starts_with(kPngBase64Prefix));
+        EXPECT_TRUE(StringView(base64->data(), base64->size()).starts_with(kPngBase64Prefix));
         const int64_t width = GetJsonInt(*Result(0), "width").value_or(0);
         const int64_t height = GetJsonInt(*Result(0), "height").value_or(0);
         EXPECT_EQ(width, 1024);  // the window of the engine config is 1920 by 1080, cut to the default 1024

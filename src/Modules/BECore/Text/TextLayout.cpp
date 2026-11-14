@@ -33,7 +33,7 @@ namespace BECore {
             return width;
         }
 
-        eastl::vector<Item> BuildItems(const Font& font, eastl::string_view text, float fontSize) {
+        eastl::vector<Item> BuildItems(const Font& font, StringView text, float fontSize) {
             eastl::vector<Item> items;
             const uint32_t spaceGlyph = font.FindGlyph(U' ');
             const float spaceAdvance = font.GetAdvance(spaceGlyph, fontSize);
@@ -180,7 +180,7 @@ namespace BECore {
             bool truncated = false;
         };
 
-        Laid LayoutLines(const Font& font, eastl::string_view text, float fontSize, const TextLayoutOptions& options, bool ellipsize) {
+        Laid LayoutLines(const Font& font, StringView text, float fontSize, const TextLayoutOptions& options, bool ellipsize) {
             Laid laid;
             laid.lines = BreakIntoLines(BuildItems(font, text, fontSize), options.maxWidth, options.wrap);
             if (!ellipsize) {
@@ -265,7 +265,7 @@ namespace BECore {
 
     }  // namespace
 
-    TextLayoutResult TextLayout::Layout(const Font& font, eastl::string_view utf8, const TextLayoutOptions& options) {
+    TextLayoutResult TextLayout::Layout(const Font& font, StringView utf8, const TextLayoutOptions& options) {
         BE_PROFILE_SCOPE("TextLayout::Layout");
         if (font.GetState() != ResourceState::Loaded || options.fontSize <= 0.0f) {
             return {};

@@ -367,7 +367,7 @@ namespace BECore::Tests {
         const eastl::string xml = serializer.SaveToString();
 
         XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+        ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
         auto loaded = New<UICanvasComponent>();
         ASSERT_TRUE(deserializer.BeginObject("component"));
         loaded->Deserialize(deserializer);
@@ -492,7 +492,7 @@ namespace BECore::Tests {
         }
 
         void SetEveryControlField(UIElement& element, bool tokens) {
-            const eastl::string_view typeName = element.GetTypeMeta().typeName;
+            const StringView typeName = element.GetTypeMeta().typeName;
             element.name = PoolString::Intern("Busy");
             element.layout = UILayoutKind::Stack;
             element.color = Paint(tokens, Color{1, 2, 3, 4});
@@ -553,7 +553,7 @@ namespace BECore::Tests {
                 EXPECT_EQ(xml.find("@tok") != eastl::string::npos, tokens) << type << ": " << xml.c_str();
 
                 XmlDeserializer deserializer;
-                ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+                ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
                 auto loaded = New<UICanvasComponent>();
                 ASSERT_TRUE(deserializer.BeginObject("component"));
                 loaded->Deserialize(deserializer);
@@ -946,7 +946,7 @@ namespace BECore::Tests {
         const auto load = [](const char* attributes, bool& hadErrors) {
             const eastl::string xml = Format("<root><element type=\"UIElement\"><components><component type=\"UITextComponent\" {}/></components></element></root>", attributes);
             XmlDeserializer deserializer;
-            EXPECT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+            EXPECT_TRUE(deserializer.LoadFromString(StringView(xml)));
             auto element = AbstractFactory<UIElement>::GetInstance().Create("UIElement");
             EXPECT_TRUE(deserializer.BeginObject("element"));
             element->Deserialize(deserializer);

@@ -23,8 +23,8 @@ namespace BECore::Tests {
         constexpr int32_t kFirstId = 1;
         constexpr int32_t kLastId = 4;
 
-        bool Contains(eastl::string_view text, eastl::string_view part) {
-            return text.find(part) != eastl::string_view::npos;
+        bool Contains(StringView text, StringView part) {
+            return text.find(part) != StringView::npos;
         }
 
         /// Loads the XML into a fresh holder; the deserializer stays with the caller to read its errors
@@ -41,7 +41,7 @@ namespace BECore::Tests {
             eastl::vector<eastl::string> types;
             const XmlNode widgets = CoreManager::GetConfigManager().GetConfig(configName).GetChild("widgets");
             for (const XmlNode widget : widgets.Children()) {
-                if (const auto type = widget.ParseAttribute<eastl::string_view>("type")) {
+                if (const auto type = widget.ParseAttribute<StringView>("type")) {
                     types.emplace_back(type->data(), type->size());
                 }
             }
@@ -86,7 +86,7 @@ namespace BECore::Tests {
                                               </widgets></root>)");
 
         ASSERT_EQ(deserializer.GetErrors().size(), 1u);
-        const eastl::string_view message = deserializer.GetErrors()[0].errorMessage.ToStringView();
+        const StringView message = deserializer.GetErrors()[0].errorMessage.ToStringView();
         EXPECT_TRUE(Contains(message, "Unknown factory type")) << message.data();
         EXPECT_TRUE(Contains(message, "'NoSuchWidget'")) << message.data();
         ASSERT_EQ(list->widgets.size(), 2u);
@@ -130,7 +130,7 @@ namespace BECore::Tests {
                                               </widgets></root>)");
 
         ASSERT_EQ(deserializer.GetErrors().size(), 1u);
-        const eastl::string_view message = deserializer.GetErrors()[0].errorMessage.ToStringView();
+        const StringView message = deserializer.GetErrors()[0].errorMessage.ToStringView();
         EXPECT_TRUE(Contains(message, "ProbeWidget")) << message.data();
         EXPECT_TRUE(Contains(message, "failed to initialize")) << message.data();
         ASSERT_EQ(list->widgets.size(), 2u);
@@ -166,7 +166,8 @@ namespace BECore::Tests {
     TEST_F(WidgetListTest, EditorModeConfigListsTheEditorWidgetsInOrder) {
         const auto types = WidgetTypes(GetWidgetsConfigName(RunMode::Editor));
 
-        const eastl::vector<eastl::string> expected{"ImGuiWidget", "EditorLayoutWidget", "ViewportWidget", "ClearScreenWidget", "ConfigEditorWidget", "SceneEditorWidget", "TextureEditorWidget", "ProfilerWidget"};
+        const eastl::vector<eastl::string> expected{"ImGuiWidget",        "EditorLayoutWidget", "ViewportWidget",      "ClearScreenWidget",
+                                                    "ConfigEditorWidget", "SceneEditorWidget",  "TextureEditorWidget", "ProfilerWidget"};
         EXPECT_EQ(types, expected);
     }
 
@@ -182,7 +183,7 @@ namespace BECore::Tests {
                                             </tests></root>)");
 
         ASSERT_EQ(deserializer.GetErrors().size(), 1u);
-        const eastl::string_view message = deserializer.GetErrors()[0].errorMessage.ToStringView();
+        const StringView message = deserializer.GetErrors()[0].errorMessage.ToStringView();
         EXPECT_TRUE(Contains(message, "Unknown factory type")) << message.data();
         EXPECT_TRUE(Contains(message, "'NoSuchTest'")) << message.data();
         ASSERT_EQ(list->tests.size(), 2u);

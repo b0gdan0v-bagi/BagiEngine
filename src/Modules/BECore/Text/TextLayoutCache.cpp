@@ -11,8 +11,8 @@ namespace BECore {
 
     }  // namespace
 
-    const TextLayoutResult& TextLayoutCache::Get(const Font& font, eastl::string_view utf8, const TextLayoutOptions& options) {
-        const bool same = _font == &font && SameOptions(_options, options) && eastl::string_view(_text.data(), _text.size()) == utf8;
+    const TextLayoutResult& TextLayoutCache::Get(const Font& font, StringView utf8, const TextLayoutOptions& options) {
+        const bool same = _font == &font && SameOptions(_options, options) && StringView(_text) == utf8;
         if (!same) {
             _layout = TextLayout::Layout(font, utf8, options);
             _font = &font;

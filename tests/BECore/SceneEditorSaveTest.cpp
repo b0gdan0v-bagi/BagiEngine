@@ -62,7 +62,7 @@ namespace BECore::Tests {
         /// The `<scene>` of @p configRoot whose `name` is @p name, or an invalid node
         pugi::xml_node FindSceneElement(pugi::xml_node configRoot, const char* name) {
             for (pugi::xml_node el = configRoot.child("scenes").child("scene"); el; el = el.next_sibling("scene")) {
-                if (eastl::string_view{el.attribute("name").as_string()} == name) {
+                if (StringView{el.attribute("name").as_string()} == name) {
                     return el;
                 }
             }
@@ -504,7 +504,7 @@ namespace BECore::Tests {
         EXPECT_EQ(SceneOrder(ConfigRoot()), "Menu,Credits,Game");
         EXPECT_EQ(Print(FindSceneElement(ConfigRoot(), "Menu")), menuBefore);
         EXPECT_EQ(Print(FindSceneElement(ConfigRoot(), "Credits")), creditsBefore);
-        EXPECT_EQ(eastl::string_view{scenes.last_child().attribute("name").as_string()}, "Game");
+        EXPECT_EQ(StringView{scenes.last_child().attribute("name").as_string()}, "Game");
 
         ASSERT_NO_FATAL_FAILURE(SaveAndReload());
         EXPECT_EQ(Reloaded("Game").GetRootNode().GetChildren().size(), 2u);
@@ -549,7 +549,7 @@ namespace BECore::Tests {
         }
 
         // The type is the class name of the scene, not a literal
-        EXPECT_EQ(eastl::string_view{saved.attribute("type").as_string()}, game.GetTypeMeta().typeName);
+        EXPECT_EQ(StringView{saved.attribute("type").as_string()}, game.GetTypeMeta().typeName);
 
         // A scene with a view keeps it, one without a view comes back without one
         ASSERT_NO_FATAL_FAILURE(SaveAndReload());

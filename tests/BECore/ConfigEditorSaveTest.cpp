@@ -14,10 +14,10 @@ namespace BECore::Tests {
     namespace {
 
         const PoolString kLoggerConfig = "LoggerConfig"_intern;
-        constexpr eastl::string_view kSinkTypePath = "sink/@type";
+        constexpr StringView kSinkTypePath = "sink/@type";
 
         // The key the Config Editor gives the `type` attribute of the first sink: "<nodePath>@<attrName>"
-        constexpr eastl::string_view kFirstSinkTypeKey = "root/sinks/sink[0]@type";
+        constexpr StringView kFirstSinkTypeKey = "root/sinks/sink[0]@type";
 
         constexpr int kOutputPriority = 7;
         constexpr int kFilePriority = 100;
@@ -38,19 +38,19 @@ namespace BECore::Tests {
         size_t CountEnabledSinks(const XmlDocument& document) {
             size_t count = 0;
             for (const pugi::xml_node& sink : SinkElements(document)) {
-                if (eastl::string_view{sink.attribute("enabled").as_string("true")} != "false") {
+                if (StringView{sink.attribute("enabled").as_string("true")} != "false") {
                     ++count;
                 }
             }
             return count;
         }
 
-        bool Contains(const eastl::vector<eastl::string>& options, eastl::string_view value) {
+        bool Contains(const eastl::vector<eastl::string>& options, StringView value) {
             return eastl::find(options.begin(), options.end(), value) != options.end();
         }
 
         eastl::string TypeNameOf(const ILogSink& sink) {
-            const eastl::string_view name = sink.GetTypeMeta().typeName;
+            const StringView name = sink.GetTypeMeta().typeName;
             return eastl::string{name.data(), name.size()};
         }
 
@@ -117,12 +117,12 @@ namespace BECore::Tests {
 </root>
 )",
                                              kOutputPriority, firstLog, kFilePriority, engineLog);
-            return document.LoadFromString(eastl::string_view{xml.c_str(), xml.size()});
+            return document.LoadFromString(StringView{xml.c_str(), xml.size()});
         }
 
         /// Plays the Save button on a fresh copy of the config: stages @p type as the `type` of the first sink, applies it to
         /// the DOM, saves the file and reads it back into @p saved. @p edited receives the document as it was saved.
-        bool SaveEditedType(eastl::string_view type, XmlDocument& edited, XmlDeserializer& saved) const {
+        bool SaveEditedType(StringView type, XmlDocument& edited, XmlDeserializer& saved) const {
             if (!LoadTemplate(edited)) {
                 return false;
             }
@@ -163,7 +163,7 @@ namespace BECore::Tests {
 
             XmlDocument edited;
             XmlDeserializer saved;
-            ASSERT_TRUE(SaveEditedType(eastl::string_view{option.c_str(), option.size()}, edited, saved));
+            ASSERT_TRUE(SaveEditedType(StringView{option.c_str(), option.size()}, edited, saved));
 
             // The manager goes out of scope with the iteration: its sinks subscribe to the global LogEvent
             const auto manager = New<LoggerManager>();
@@ -197,7 +197,7 @@ namespace BECore::Tests {
 
             XmlDocument edited;
             XmlDeserializer saved;
-            ASSERT_TRUE(SaveEditedType(eastl::string_view{option.c_str(), option.size()}, edited, saved));
+            ASSERT_TRUE(SaveEditedType(StringView{option.c_str(), option.size()}, edited, saved));
 
             // In the file: only the `type` of the first sink differs from the copy that was edited
             XmlDocument reloaded;
@@ -208,7 +208,7 @@ namespace BECore::Tests {
                 size_t attributeCount = 0;
                 for (pugi::xml_attribute attr = originalSinks[i].first_attribute(); attr; attr = attr.next_attribute()) {
                     ++attributeCount;
-                    if (i == 0 && eastl::string_view{attr.name()} == "type") {
+                    if (i == 0 && StringView{attr.name()} == "type") {
                         EXPECT_STREQ(reloadedSinks[i].attribute("type").value(), option.c_str());
                     } else {
                         EXPECT_STREQ(reloadedSinks[i].attribute(attr.name()).value(), attr.value()) << "sink " << i << " attribute " << attr.name();

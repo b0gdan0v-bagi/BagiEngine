@@ -2,7 +2,7 @@
 
 namespace BECore {
 
-    Optional<Color> Color::ParseColorFromString(eastl::string_view data) {
+    Optional<Color> Color::ParseColorFromString(StringView data) {
         if (data.empty()) {
             return {};
         }
@@ -13,7 +13,7 @@ namespace BECore {
             return {};
         }
 
-        const auto fromStringView = [](eastl::string_view s) -> unsigned char {
+        const auto fromStringView = [](StringView s) -> unsigned char {
             unsigned char result;
             auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.size(), result);
             if (ec == std::errc{}) {

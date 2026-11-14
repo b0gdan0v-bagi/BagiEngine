@@ -23,8 +23,8 @@ namespace BECore {
 
         // The filter: matches stay with their ancestors, the rest is hidden
         char searchBuffer[HierarchyModel::kMaxNodeNameLength + 1] = {};
-        eastl::string_view componentType;                  ///< empty = any; a name from ClassMeta, which lives as long as the program
-        eastl::vector<eastl::string_view> componentTypes;  ///< what the type combo offers, made again each time it opens
+        StringView componentType;                  ///< empty = any; a name from ClassMeta, which lives as long as the program
+        eastl::vector<StringView> componentTypes;  ///< what the type combo offers, made again each time it opens
         bool typeComboOpen = false;
         bool focusSearch = false;       ///< Ctrl+F: the search box takes the keyboard focus
         SceneNode* dragNode = nullptr;  ///< the node being dragged, once found alive in the tree (the payload holds only a pointer)

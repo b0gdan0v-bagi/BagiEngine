@@ -16,7 +16,7 @@ namespace BECore::Fuzz {
 
         /// The id the answer has to carry: the request's own when the request is an object with an integer or a string id, otherwise null (a request nested too deeply is
         /// refused before anything is read from it, the id included)
-        Json ExpectedId(eastl::string_view text) {
+        Json ExpectedId(StringView text) {
             if (IsJsonNestedDeeperThan(text, ControlService::kMaxRequestDepth)) {
                 return Json();
             }

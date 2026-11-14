@@ -163,7 +163,7 @@ namespace BECore::Tests {
             return std::string(text.c_str(), text.size());
         }
 
-        const Json* Member(const Json& object, eastl::string_view key) {
+        const Json* Member(const Json& object, StringView key) {
             return FindJsonMember(object, key);
         }
 

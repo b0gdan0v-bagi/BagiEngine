@@ -16,7 +16,7 @@ namespace BECore {
             return static_cast<size_t>(rank - 1);
         }
 
-        bool ContainsIgnoreCase(eastl::string_view haystack, eastl::string_view needle) {
+        bool ContainsIgnoreCase(StringView haystack, StringView needle) {
             if (needle.size() > haystack.size()) {
                 return false;
             }
@@ -155,7 +155,7 @@ namespace BECore {
         });
     }
 
-    eastl::vector<ZoneStatRow> FilterZoneStats(const eastl::vector<ZoneStatRow>& rows, eastl::string_view text) {
+    eastl::vector<ZoneStatRow> FilterZoneStats(const eastl::vector<ZoneStatRow>& rows, StringView text) {
         if (text.empty()) {
             return rows;
         }

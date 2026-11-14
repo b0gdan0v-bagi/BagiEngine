@@ -17,6 +17,6 @@ namespace BECore {
     [[nodiscard]] eastl::string WriteFrozenTraceJson(const eastl::vector<FrozenFrame>& frames);
 
     /// Writes WriteFrozenTraceJson to @p path; the error names the file and the reason, as ChromeTraceBackend::WriteFile does
-    [[nodiscard]] std::expected<void, eastl::string> WriteFrozenTraceFile(eastl::string_view path, const eastl::vector<FrozenFrame>& frames);
+    [[nodiscard]] std::expected<void, eastl::string> WriteFrozenTraceFile(StringView path, const eastl::vector<FrozenFrame>& frames);
 
 }  // namespace BECore

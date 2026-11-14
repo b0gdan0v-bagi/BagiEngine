@@ -51,12 +51,12 @@ namespace BECore::Tests {
             options.fontSize = kSize;
         }
 
-        TextLayoutResult Layout(eastl::string_view text) const {
+        TextLayoutResult Layout(StringView text) const {
             return TextLayout::Layout(*font, text, options);
         }
 
         /// The width of the text on one line without any limit
-        float WidthOf(eastl::string_view text) const {
+        float WidthOf(StringView text) const {
             TextLayoutOptions unlimited;
             unlimited.fontSize = options.fontSize;
             return TextLayout::Layout(*font, text, unlimited).width;
@@ -272,7 +272,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(TextLayoutTest, DamagedUtf8DoesNotStopTheLayout) {
-        const TextLayoutResult result = Layout(eastl::string_view("a\xD0z", 3));
+        const TextLayoutResult result = Layout(StringView("a\xD0z", 3));
 
         EXPECT_EQ(result.glyphs.size(), 3u);
     }

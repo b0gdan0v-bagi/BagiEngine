@@ -6,30 +6,30 @@ namespace BECore {
 
     namespace {
 
-        constexpr eastl::string_view kBranchRefPrefix = "ref: refs/heads/";
-        constexpr eastl::string_view kGitDirPrefix = "gitdir:";
-        constexpr eastl::string_view kGitEntryName = ".git";
-        constexpr eastl::string_view kHeadFileName = "HEAD";
-        constexpr eastl::string_view kBlank = " \t\r\n";
+        constexpr StringView kBranchRefPrefix = "ref: refs/heads/";
+        constexpr StringView kGitDirPrefix = "gitdir:";
+        constexpr StringView kGitEntryName = ".git";
+        constexpr StringView kHeadFileName = "HEAD";
+        constexpr StringView kBlank = " \t\r\n";
         constexpr size_t kSha1HexLength = 40;
         constexpr size_t kSha256HexLength = 64;
 
-        eastl::string_view Trim(eastl::string_view text) {
+        StringView Trim(StringView text) {
             const size_t first = text.find_first_not_of(kBlank);
-            if (first == eastl::string_view::npos) {
+            if (first == StringView::npos) {
                 return {};
             }
             return text.substr(first, text.find_last_not_of(kBlank) - first + 1);
         }
 
-        bool IsHexId(eastl::string_view text) {
+        bool IsHexId(StringView text) {
             if (text.size() != kSha1HexLength && text.size() != kSha256HexLength) {
                 return false;
             }
             return std::ranges::all_of(text, [](char c) { return std::isxdigit(static_cast<unsigned char>(c)) != 0; });
         }
 
-        std::filesystem::path ToPath(eastl::string_view text) {
+        std::filesystem::path ToPath(StringView text) {
             return std::filesystem::path(std::string(text.data(), text.size()));
         }
 
@@ -46,11 +46,11 @@ namespace BECore {
             if (!content) {
                 return {};
             }
-            const eastl::string_view line = Trim(*content);
+            const StringView line = Trim(*content);
             if (!line.starts_with(kGitDirPrefix)) {
                 return {};
             }
-            const eastl::string_view target = Trim(line.substr(kGitDirPrefix.size()));
+            const StringView target = Trim(line.substr(kGitDirPrefix.size()));
             if (target.empty()) {
                 return {};
             }
@@ -60,10 +60,10 @@ namespace BECore {
 
     }  // namespace
 
-    eastl::string ParseGitHead(eastl::string_view text) {
-        const eastl::string_view line = Trim(text);
+    eastl::string ParseGitHead(StringView text) {
+        const StringView line = Trim(text);
         if (line.starts_with(kBranchRefPrefix)) {
-            const eastl::string_view name = line.substr(kBranchRefPrefix.size());
+            const StringView name = line.substr(kBranchRefPrefix.size());
             return eastl::string(name.data(), name.size());
         }
         if (IsHexId(line)) {

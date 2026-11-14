@@ -6,7 +6,7 @@ namespace BECore {
 
         struct NamedKey {
             ImGuiKey key;
-            eastl::string_view name;
+            StringView name;
         };
 
         // Keys with a fixed name; letters, digits and F1..F12 are laid out in ImGuiKey in a row and named by their offset
@@ -29,7 +29,7 @@ namespace BECore {
             return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;
         }
 
-        bool EqualsNoCase(eastl::string_view lhs, eastl::string_view rhs) {
+        bool EqualsNoCase(StringView lhs, StringView rhs) {
             if (lhs.size() != rhs.size()) {
                 return false;
             }
@@ -41,7 +41,7 @@ namespace BECore {
             return true;
         }
 
-        eastl::string_view Trim(eastl::string_view text) {
+        StringView Trim(StringView text) {
             while (!text.empty() && text.front() == ' ') {
                 text.remove_prefix(1);
             }
@@ -59,7 +59,7 @@ namespace BECore {
             return InRange(key, ImGuiKey_F1, kFunctionKeyCount);
         }
 
-        Optional<uint8_t> ParseModifier(eastl::string_view token) {
+        Optional<uint8_t> ParseModifier(StringView token) {
             if (EqualsNoCase(token, "Ctrl")) {
                 return kChordModCtrl;
             }
@@ -90,7 +90,7 @@ namespace BECore {
             return {};
         }
 
-        Optional<ImGuiKey> ParseKey(eastl::string_view token) {
+        Optional<ImGuiKey> ParseKey(StringView token) {
             if (token.size() == 1) {
                 const char c = ToLowerAscii(token[0]);
                 if (c >= 'a' && c <= 'z') {
@@ -155,13 +155,13 @@ namespace BECore {
         return text;
     }
 
-    Optional<KeyChord> ParseKeyChord(eastl::string_view text) {
+    Optional<KeyChord> ParseKeyChord(StringView text) {
         KeyChord chord;
         bool hasKey = false;
         size_t start = 0;
         while (true) {
             const size_t plus = text.find('+', start);
-            const eastl::string_view token = Trim(text.substr(start, plus == eastl::string_view::npos ? eastl::string_view::npos : plus - start));
+            const StringView token = Trim(text.substr(start, plus == StringView::npos ? StringView::npos : plus - start));
             if (token.empty()) {
                 return std::nullopt;
             }
@@ -176,7 +176,7 @@ namespace BECore {
             } else {
                 return std::nullopt;
             }
-            if (plus == eastl::string_view::npos) {
+            if (plus == StringView::npos) {
                 break;
             }
             start = plus + 1;

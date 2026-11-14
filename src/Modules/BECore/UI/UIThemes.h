@@ -35,13 +35,13 @@ namespace BECore {
         void Initialize();
 
         /// Whether @p token is a legal token name
-        [[nodiscard]] static bool IsValidToken(eastl::string_view token);
+        [[nodiscard]] static bool IsValidToken(StringView token);
 
         /**
          * @brief Sets the colour of @p token in @p theme. The first theme set is the default one until SetDefaultTheme() says otherwise
          * @return false and nothing changed when @p token is not a legal name or @p theme is empty. A value equal to the current one changes nothing (and keeps the version)
          */
-        bool Set(PoolString theme, eastl::string_view token, const Color& color);
+        bool Set(PoolString theme, StringView token, const Color& color);
 
         /// The theme a token falls back to. Any id: a default with no colours is a table with no fallback
         void SetDefaultTheme(PoolString theme);
@@ -60,7 +60,7 @@ namespace BECore {
         [[nodiscard]] bool HasTheme(PoolString theme) const;
 
         /// The colour of @p token in the current theme, else in the default theme, else nothing. Records nothing
-        [[nodiscard]] Optional<Color> Find(eastl::string_view token) const;
+        [[nodiscard]] Optional<Color> Find(StringView token) const;
 
         /**
          * @brief Writes into @p color the channels of its token: the colour of Find(), else kMissingTokenColor with the token recorded in GetMissing() and logged, once per token.
@@ -78,7 +78,7 @@ namespace BECore {
             return _tokens;
         }
         /// Whether @p theme itself (not its fallback to the default) defines @p token
-        [[nodiscard]] bool HasToken(PoolString theme, eastl::string_view token) const;
+        [[nodiscard]] bool HasToken(PoolString theme, StringView token) const;
 
         /// Drops every theme, the default and the current theme, and the record of missing tokens. The version grows
         void Clear();
@@ -104,7 +104,7 @@ namespace BECore {
         };
 
         [[nodiscard]] const Theme* FindTheme(PoolString theme) const;
-        [[nodiscard]] static Optional<Color> FindColor(const Theme* theme, eastl::string_view token);
+        [[nodiscard]] static Optional<Color> FindColor(const Theme* theme, StringView token);
 
         eastl::vector<Theme> _themes;
         eastl::vector<PoolString> _themeIds;

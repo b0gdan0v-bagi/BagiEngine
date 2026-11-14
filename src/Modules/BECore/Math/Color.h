@@ -16,7 +16,7 @@ namespace BECore {
         constexpr Color() = default;
         constexpr Color(unsigned char r_, unsigned char g_, unsigned char b_, unsigned char a_) : r(r_), g(g_), b(b_), a(a_) {}
 
-        static Optional<Color> ParseColorFromString(eastl::string_view data);
+        static Optional<Color> ParseColorFromString(StringView data);
 
         // Manual serialization for lightweight types
         template <typename Serializer>

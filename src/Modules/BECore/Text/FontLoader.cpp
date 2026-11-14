@@ -7,7 +7,7 @@
 
 namespace BECore {
 
-    bool FontLoader::CanLoad(eastl::string_view extension) const {
+    bool FontLoader::CanLoad(StringView extension) const {
         return extension == ".ttf" || extension == ".otf";
     }
 

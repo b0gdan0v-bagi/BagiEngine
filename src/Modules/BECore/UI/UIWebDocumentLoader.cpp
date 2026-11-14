@@ -10,10 +10,10 @@ namespace BECore {
 
     namespace {
 
-        constexpr eastl::string_view HtmlExtension = ".ui.html";
-        constexpr eastl::string_view CurrentDirectoryPrefix = "./";
+        constexpr StringView HtmlExtension = ".ui.html";
+        constexpr StringView CurrentDirectoryPrefix = "./";
 
-        Optional<eastl::string> ReadVirtualFile(eastl::string_view virtualPath) {
+        Optional<eastl::string> ReadVirtualFile(StringView virtualPath) {
             const std::filesystem::path resolved = CoreManager::GetFileSystem().ResolvePath(virtualPath);
             if (resolved.empty()) {
                 return std::nullopt;
@@ -29,12 +29,12 @@ namespace BECore {
         }
 
         /// The path of @p href next to the document at @p documentPath
-        eastl::string SiblingPath(eastl::string_view documentPath, eastl::string_view href) {
+        eastl::string SiblingPath(StringView documentPath, StringView href) {
             while (href.substr(0, CurrentDirectoryPrefix.size()) == CurrentDirectoryPrefix) {
                 href.remove_prefix(CurrentDirectoryPrefix.size());
             }
             const size_t slash = documentPath.rfind('/');
-            if (slash == eastl::string_view::npos) {
+            if (slash == StringView::npos) {
                 return eastl::string(href);
             }
             return Format("{}/{}", eastl::string(documentPath.substr(0, slash)).c_str(), eastl::string(href).c_str());
@@ -42,7 +42,7 @@ namespace BECore {
 
     }  // namespace
 
-    bool UIWebDocumentLoader::CanLoad(eastl::string_view extension) const {
+    bool UIWebDocumentLoader::CanLoad(StringView extension) const {
         return extension == HtmlExtension;
     }
 
@@ -66,7 +66,7 @@ namespace BECore {
         }
 
         UIWebReport report;
-        const eastl::string xml = UIWebCompiler::Compile(*html, [&](eastl::string_view href) { return ReadVirtualFile(SiblingPath(path.ToStringView(), href)); }, report);
+        const eastl::string xml = UIWebCompiler::Compile(*html, [&](StringView href) { return ReadVirtualFile(SiblingPath(path.ToStringView(), href)); }, report);
         for (const UIWebIssue& issue : report.issues) {
             LOG_WARNING("UIWebDocumentLoader: '{}' {} line {}: {}"_format(path.ToStringView(), issue.source.c_str(), issue.line, issue.message.c_str()));
         }

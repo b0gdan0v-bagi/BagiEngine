@@ -147,7 +147,7 @@ namespace BECore {
         IntrusivePtr<SceneNode> InstantiateNode(pugi::xml_node reference, const NodeFileLoader& loader, SceneNode* parent = nullptr, size_t index = kAppend);
 
         /// InstantiateNode() of a reference without overrides (`nodes/MahjongHud`), the node file found through the FileSystem of CoreManager (a game's `config/nodes/X.xml` wins over the engine's)
-        IntrusivePtr<SceneNode> InstantiateNode(eastl::string_view ref, SceneNode* parent = nullptr, size_t index = kAppend);
+        IntrusivePtr<SceneNode> InstantiateNode(StringView ref, SceneNode* parent = nullptr, size_t index = kAppend);
 
         /// InstantiateNode() of a reference element with overrides, the node file found through the FileSystem of CoreManager
         IntrusivePtr<SceneNode> InstantiateNode(const XmlNode& reference, SceneNode* parent = nullptr, size_t index = kAppend);
@@ -176,7 +176,7 @@ namespace BECore {
         IntrusivePtr<SceneNode> DuplicateNode(const SceneNode& node);
 
         /// @p base when no child of @p parent is called so, else `base 2`, `base 3`, ... the first one that is free
-        PoolString MakeUniqueSiblingName(const SceneNode& parent, eastl::string_view base) const;
+        PoolString MakeUniqueSiblingName(const SceneNode& parent, StringView base) const;
 
         /// Clears the editor flags (SceneNode::GetEditorFlags()) of every node of the tree, the root included. The scene editor calls it when it goes away
         void ClearEditorFlags();

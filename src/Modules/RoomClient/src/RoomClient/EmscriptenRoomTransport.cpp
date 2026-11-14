@@ -23,7 +23,7 @@ namespace BECore {
         constexpr uint16_t kUnsupportedData = 1003;
         constexpr uint16_t kMessageTooBig = 1009;
 
-        [[nodiscard]] bool StartsWithNoCase(eastl::string_view text, eastl::string_view prefix) {
+        [[nodiscard]] bool StartsWithNoCase(StringView text, StringView prefix) {
             if (text.size() < prefix.size()) {
                 return false;
             }
@@ -37,7 +37,7 @@ namespace BECore {
 
         /// The browser throws (and the page dies) on a malformed address, so the plain mistakes are refused here: the scheme, spaces and
         /// control characters. Everything else is the browser's to judge
-        [[nodiscard]] std::expected<void, eastl::string> CheckUrl(eastl::string_view url) {
+        [[nodiscard]] std::expected<void, eastl::string> CheckUrl(StringView url) {
             if (!StartsWithNoCase(url, "ws://") && !StartsWithNoCase(url, "wss://")) {
                 return std::unexpected(eastl::string("the address must start with ws:// or wss://"));
             }
@@ -54,7 +54,7 @@ namespace BECore {
         }
 
         /// A reason of at most kMaxCloseReasonBytes bytes, cut so that no UTF-8 sequence is split (a longer one makes the browser throw)
-        [[nodiscard]] eastl::string ClipReason(eastl::string_view reason) {
+        [[nodiscard]] eastl::string ClipReason(StringView reason) {
             size_t length = std::min(reason.size(), kMaxCloseReasonBytes);
             if (length < reason.size()) {
                 // A continuation byte (10xxxxxx) at the cut belongs to a sequence that started before it
@@ -78,7 +78,7 @@ namespace BECore {
         DeleteSocket();
     }
 
-    std::expected<void, eastl::string> EmscriptenRoomTransport::Open(eastl::string_view url) {
+    std::expected<void, eastl::string> EmscriptenRoomTransport::Open(StringView url) {
         if (_phase != Phase::Idle) {
             return std::unexpected(eastl::string("the transport serves one connection"));
         }
@@ -117,13 +117,13 @@ namespace BECore {
         return {};
     }
 
-    bool EmscriptenRoomTransport::SendText(eastl::string_view text) {
+    bool EmscriptenRoomTransport::SendText(StringView text) {
         ASSERT(Thread::CurrentId() == _owner, "EmscriptenRoomTransport is used off its thread");
         if (_phase != Phase::Open) {
             return false;
         }
         // The API takes a C string, so a NUL inside would cut the message; a protocol message is JSON and has none
-        if (text.find('\0') != eastl::string_view::npos) {
+        if (text.find('\0') != StringView::npos) {
             return false;
         }
         size_t buffered = 0;
@@ -134,7 +134,7 @@ namespace BECore {
         return emscripten_websocket_send_utf8_text(_socket, _sendBuffer.c_str()) == EMSCRIPTEN_RESULT_SUCCESS;
     }
 
-    void EmscriptenRoomTransport::Close(uint16_t code, eastl::string_view reason) {
+    void EmscriptenRoomTransport::Close(uint16_t code, StringView reason) {
         ASSERT(Thread::CurrentId() == _owner, "EmscriptenRoomTransport is used off its thread");
         switch (_phase) {
             case Phase::Connecting:
@@ -240,7 +240,7 @@ namespace BECore {
         return true;
     }
 
-    void EmscriptenRoomTransport::Finish(uint16_t closeCode, eastl::string_view reason) {
+    void EmscriptenRoomTransport::Finish(uint16_t closeCode, StringView reason) {
         if (_phase == Phase::Finished) {
             return;
         }
@@ -249,7 +249,7 @@ namespace BECore {
         PushEvent(RoomTransportEventKind::Closed, {}, closeCode, reason);
     }
 
-    void EmscriptenRoomTransport::PushEvent(RoomTransportEventKind kind, eastl::string_view text, uint16_t closeCode, eastl::string_view reason) {
+    void EmscriptenRoomTransport::PushEvent(RoomTransportEventKind kind, StringView text, uint16_t closeCode, StringView reason) {
         if (_count == _events.size()) {
             _events.emplace_back();
         }

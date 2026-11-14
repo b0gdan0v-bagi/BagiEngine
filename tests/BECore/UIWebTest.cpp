@@ -117,7 +117,7 @@ namespace BECore::Tests {
         std::unique_ptr<Compiled> Compile(const std::string& html, const std::string& css = {}) {
             auto compiled = std::make_unique<Compiled>();
             const std::string source = css.empty() ? html : "<style>" + css + "</style>" + html;
-            compiled->xml = UIWebCompiler::Compile(eastl::string_view(source.data(), source.size()), {}, compiled->report);
+            compiled->xml = UIWebCompiler::Compile(FromStd(source), {}, compiled->report);
             EXPECT_TRUE(compiled->document.load_string(compiled->xml.c_str())) << compiled->xml.c_str();
             XmlDeserializer deserializer;
             if (deserializer.LoadFromString(compiled->xml)) {
@@ -131,7 +131,7 @@ namespace BECore::Tests {
         UIScreenContent ReadXml(const std::string& xml) {
             UIScreenContent content;
             XmlDeserializer deserializer;
-            EXPECT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+            EXPECT_TRUE(deserializer.LoadFromString(FromStd(xml)));
             content.Deserialize(deserializer);
             EXPECT_FALSE(deserializer.HasErrors());
             return content;
@@ -2640,8 +2640,8 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         eastl::vector<eastl::string> asked;
         const std::string html = R"(<link rel="stylesheet" href="a.css"><link rel="stylesheet" href="missing.css"><div id="x" class="k"></div><style>.k { height: 9px }</style>)";
         const eastl::string xml = UIWebCompiler::Compile(
-            eastl::string_view(html.data(), html.size()),
-            [&](eastl::string_view href) -> Optional<eastl::string> {
+            FromStd(html),
+            [&](StringView href) -> Optional<eastl::string> {
                 asked.push_back(eastl::string(href));
                 if (href == "a.css") {
                     return eastl::string(".k { width: 7px; height: 1px }");
@@ -2693,7 +2693,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         temp.Write("hud.css", kHudCss);
         const std::string path = temp.Write("hud.ui.html", std::string("<link rel=\"stylesheet\" href=\"hud.css\">") + kHudHtml);
 
-        auto handle = CoreManager::GetResourceManager().Load<UIDocument>(eastl::string_view(path.data(), path.size()));
+        auto handle = CoreManager::GetResourceManager().Load<UIDocument>(FromStd(path));
         ASSERT_TRUE(handle);
         ASSERT_EQ(handle->GetState(), ResourceState::Loaded);
 
@@ -2979,8 +2979,8 @@ button:checked { background: var(--panel); }
         CompiledWithSheet CompileWithSheet(const std::string& html, const std::string& css) {
             CompiledWithSheet result;
             const std::string source = "<link rel=\"stylesheet\" href=\"a.css\">" + html;
-            const UIWebCompiler::StylesheetLoader loader = [&css](eastl::string_view) { return Optional<eastl::string>(eastl::string(css.data(), css.size())); };
-            result.xml = UIWebCompiler::Compile(eastl::string_view(source.data(), source.size()), loader, result.report);
+            const UIWebCompiler::StylesheetLoader loader = [&css](StringView) { return Optional<eastl::string>(eastl::string(css.data(), css.size())); };
+            result.xml = UIWebCompiler::Compile(FromStd(source), loader, result.report);
             return result;
         }
 

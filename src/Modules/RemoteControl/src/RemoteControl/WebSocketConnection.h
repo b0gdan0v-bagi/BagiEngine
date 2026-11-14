@@ -107,7 +107,7 @@ namespace BECore {
         void EndReading();
 
         /// Queues a text frame; false when the connection takes no more frames
-        bool QueueText(eastl::string_view text) {
+        bool QueueText(StringView text) {
             return QueueFrame(EncodeTextFrame(text), /*isClose=*/false);
         }
 
@@ -120,7 +120,7 @@ namespace BECore {
         }
 
         /// Queues the close frame; the connection ends after it was sent
-        bool QueueClose(uint16_t code, eastl::string_view reason) {
+        bool QueueClose(uint16_t code, StringView reason) {
             return QueueFrame(EncodeCloseFrame(code, reason), /*isClose=*/true);
         }
 

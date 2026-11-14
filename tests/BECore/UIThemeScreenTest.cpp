@@ -189,14 +189,14 @@ namespace BECore::Tests {
             _manager.Reset();
             UIWebReport report;
             const std::string source = std::string("<style>") + css + "</style>" + kNoteHtml;
-            const eastl::string compiled = UIWebCompiler::Compile(eastl::string_view(source.data(), source.size()), {}, report);
+            const eastl::string compiled = UIWebCompiler::Compile(FromStd(source), {}, report);
             ASSERT_FALSE(report.HasIssues()) << report.issues[0].message.c_str() << " / " << compiled.c_str();
             const std::string note = CompiledElements(compiled);
             ASSERT_FALSE(note.empty()) << compiled.c_str();
 
             XmlDeserializer deserializer;
             const std::string xml = Spliced(note);
-            ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+            ASSERT_TRUE(deserializer.LoadFromString(FromStd(xml)));
             _manager = New<SceneManager>();
             _manager->Deserialize(deserializer);
             ASSERT_FALSE(deserializer.HasErrors());

@@ -68,19 +68,19 @@ namespace BECore {
 
         template <>
         struct DataAccessor<UIColor> {
-            static void Save(ISerializer& s, const UIColor& value, eastl::string_view key) {
+            static void Save(ISerializer& s, const UIColor& value, StringView key) {
                 const eastl::string text = UIText::FormatColorRef(value, value.token);
-                s.WriteAttribute(key, eastl::string_view(text.data(), text.size()));
+                s.WriteAttribute(key, StringView(text));
             }
 
-            static bool Load(IDeserializer& d, UIColor& value, eastl::string_view key) {
+            static bool Load(IDeserializer& d, UIColor& value, StringView key) {
                 eastl::string text;
                 if (!d.ReadAttribute(key, text)) {
                     return false;
                 }
-                const auto color = UIText::ParseColorRef(eastl::string_view(text.data(), text.size()));
+                const auto color = UIText::ParseColorRef(StringView(text));
                 if (!color) {
-                    d.ReportError(key, eastl::string_view(Format("Invalid color: '{}'", text).c_str()));
+                    d.ReportError(key, StringView(Format("Invalid color: '{}'", text).c_str()));
                     return false;
                 }
                 value = color->token.Empty() ? UIColor(color->color) : UIColor::FromToken(color->token);
@@ -94,7 +94,7 @@ namespace BECore {
 
         /// The inspector edits the channels of a UIColor; an edit makes it a literal colour, so the token that would overwrite the channels at the next draw is dropped (an edit of a
         /// token is a decision to leave it). Like the Color it derives from, the channels are one group of four numbers
-        inline bool Visit(IPropertyVisitor& v, UIColor& value, eastl::string_view key) {
+        inline bool Visit(IPropertyVisitor& v, UIColor& value, StringView key) {
             bool changed = false;
             if (v.BeginCompound(key)) {
                 changed = value.VisitProperties(v);

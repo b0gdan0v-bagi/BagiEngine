@@ -19,7 +19,7 @@ namespace BECore {
             return std::unexpected(Format("TLS: no stream for {}:{}", url.host, url.port));
         }
         TlsConnectParams params;
-        params.host = eastl::string_view(url.host.data(), url.host.size());
+        params.host = StringView(url.host);
         params.port = url.port;
         params.connectTimeout = connectTimeout;
         params.handshakeDeadline = handshakeDeadline;

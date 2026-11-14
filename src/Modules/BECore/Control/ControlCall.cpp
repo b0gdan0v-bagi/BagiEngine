@@ -34,7 +34,7 @@ namespace BECore {
         _reply(MakeOkResponse(_id, std::move(result)));
     }
 
-    void ControlCall::Fail(eastl::string_view code, eastl::string_view message) {
+    void ControlCall::Fail(StringView code, StringView message) {
         Fail(MakeControlError(code, eastl::string(message)));
     }
 

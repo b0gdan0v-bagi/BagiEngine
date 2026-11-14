@@ -60,9 +60,9 @@ namespace BECore {
     }
 
     Rml::TextureHandle RmlUiRenderInterface::LoadTexture(Rml::Vector2i& textureDimensions, const Rml::String& source) {
-        auto loaded = CoreManager::GetResourceManager().Load<ITexture>(eastl::string_view(source.data(), source.size()));
+        auto loaded = CoreManager::GetResourceManager().Load<ITexture>(FromStd(source));
         if (!loaded || loaded->GetState() != ResourceState::Loaded) {
-            LOG_ERROR("RmlUi: cannot load the texture '{}'"_format(eastl::string_view(source.data(), source.size())));
+            LOG_ERROR("RmlUi: cannot load the texture '{}'"_format(FromStd(source)));
             return 0;
         }
         textureDimensions.x = static_cast<int>(loaded->GetWidth());

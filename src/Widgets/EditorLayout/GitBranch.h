@@ -12,7 +12,7 @@ namespace BECore {
      * HEAD, gives its first kShortCommitLength characters; a trailing newline, CR and spaces around the line are ignored. Anything
      * else (garbage, an empty text, a `ref:` to something that is not a branch) gives an empty string.
      */
-    [[nodiscard]] eastl::string ParseGitHead(eastl::string_view text);
+    [[nodiscard]] eastl::string ParseGitHead(StringView text);
 
     /**
      * @brief The branch (or the short commit id) of the repository that contains @p startDirectory; empty when there is none.

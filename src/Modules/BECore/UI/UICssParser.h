@@ -85,10 +85,10 @@ namespace BECore {
         static constexpr size_t kMaxSelectorBytes = 1024;
 
         /// Reads @p css and adds its rules to @p sheet after the ones already there. @p sourceName names the text in the issues, @p firstLine is the line of its first character in the file
-        static void ParseInto(UICssSheet& sheet, eastl::string_view css, eastl::string_view sourceName, uint32_t firstLine, UIWebReport& report);
+        static void ParseInto(UICssSheet& sheet, StringView css, StringView sourceName, uint32_t firstLine, UIWebReport& report);
 
         /// The declarations of a `style=""` attribute
-        [[nodiscard]] static eastl::vector<UICssDeclaration> ParseDeclarations(eastl::string_view text, uint32_t line, uint32_t sourceId, UIWebReport& report);
+        [[nodiscard]] static eastl::vector<UICssDeclaration> ParseDeclarations(StringView text, uint32_t line, uint32_t sourceId, UIWebReport& report);
     };
 
 }  // namespace BECore

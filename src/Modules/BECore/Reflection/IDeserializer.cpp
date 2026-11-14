@@ -7,11 +7,11 @@ namespace BECore {
         constexpr uint8_t kUtf8ContinuationMask = 0xC0;
         constexpr uint8_t kUtf8ContinuationBits = 0x80;
 
-        constexpr eastl::string_view kTooManyErrors = "Too many errors: the rest are not recorded";
+        constexpr StringView kTooManyErrors = "Too many errors: the rest are not recorded";
 
     }  // namespace
 
-    eastl::string_view IDeserializer::CutText(eastl::string_view text, size_t maxBytes) {
+    StringView IDeserializer::CutText(StringView text, size_t maxBytes) {
         if (text.size() <= maxBytes) {
             return text;
         }
@@ -22,7 +22,7 @@ namespace BECore {
         return text.substr(0, length);
     }
 
-    void IDeserializer::StoreError(eastl::vector<DeserializeError>& errors, eastl::string_view path, eastl::string_view message, int32_t line) {
+    void IDeserializer::StoreError(eastl::vector<DeserializeError>& errors, StringView path, StringView message, int32_t line) {
         if (errors.size() >= ReaderLimits::kMaxRecordedErrors) {
             return;
         }

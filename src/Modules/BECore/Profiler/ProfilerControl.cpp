@@ -11,8 +11,8 @@ namespace BECore {
 
     namespace {
 
-        constexpr eastl::string_view kNotRecording = "not_recording";
-        constexpr eastl::string_view kDefaultTracePath = "trace.json";
+        constexpr StringView kNotRecording = "not_recording";
+        constexpr StringView kDefaultTracePath = "trace.json";
         constexpr int64_t kDefaultTopZones = 20;
         constexpr int64_t kMaxTopZones = 1000;
 
@@ -24,7 +24,7 @@ namespace BECore {
             frame["cpuMs"] = stats.cpuMs;
             Json stages = Json::object();
             for (size_t i = 0; i < kFrameStageCount; ++i) {
-                const eastl::string_view name = EnumUtils<FrameStage>::ToString(static_cast<FrameStage>(i));
+                const StringView name = EnumUtils<FrameStage>::ToString(static_cast<FrameStage>(i));
                 stages[std::string(name.data(), name.size())] = stats.stageMs[i];
             }
             frame["stagesMs"] = std::move(stages);
@@ -36,7 +36,7 @@ namespace BECore {
             frame["liveBytes"] = stats.liveBytes;
             Json counters = Json::object();
             for (const FrameCounter& counter : stats.counters) {
-                const eastl::string_view name = counter.name.ToStringView();
+                const StringView name = counter.name.ToStringView();
                 counters[std::string(name.data(), name.size())] = counter.value;
             }
             frame["counters"] = std::move(counters);
@@ -44,7 +44,7 @@ namespace BECore {
         }
 
         /// A positive integer member of at most @p max, or @p fallback when absent
-        std::expected<int64_t, ControlError> ReadCount(const Json& params, eastl::string_view key, int64_t fallback, int64_t max) {
+        std::expected<int64_t, ControlError> ReadCount(const Json& params, StringView key, int64_t fallback, int64_t max) {
             if (FindJsonMember(params, key) == nullptr) {
                 return fallback;
             }
@@ -72,7 +72,7 @@ namespace BECore {
         }
 
         /// @p text as a trace path the game may write: relative and inside the working folder
-        bool IsSafeRelativePath(eastl::string_view text) {
+        bool IsSafeRelativePath(StringView text) {
             if (text.empty()) {
                 return false;
             }

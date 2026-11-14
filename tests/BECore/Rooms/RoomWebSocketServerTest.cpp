@@ -40,7 +40,7 @@ namespace BECore::Tests {
 
         /// Frames of @p count identical text messages in one buffer
         eastl::vector<uint8_t> RepeatText(const std::string& text, int count) {
-            const auto frame = EncodeTextFrame(eastl::string_view(text.data(), text.size()), kClientMask);
+            const auto frame = EncodeTextFrame(FromStd(text), kClientMask);
             eastl::vector<uint8_t> batch;
             batch.reserve(frame.size() * static_cast<size_t>(count));
             for (int i = 0; i < count; ++i) {
@@ -74,7 +74,7 @@ namespace BECore::Tests {
             }
 
             /// A host that created a room: the client with `joined` and `lobby` read
-            Optional<RoomSocketClient> MakeHost(uint16_t port, eastl::string_view name = "Host") {
+            Optional<RoomSocketClient> MakeHost(uint16_t port, StringView name = "Host") {
                 auto host = RoomSocketClient::Connect(port);
                 if (!host) {
                     return std::nullopt;
@@ -179,7 +179,7 @@ namespace BECore::Tests {
         };
         eastl::vector<uint8_t> batch;
         for (const auto& [text, reply] : script) {
-            const auto frame = EncodeTextFrame(eastl::string_view(text.data(), text.size()), kClientMask);
+            const auto frame = EncodeTextFrame(FromStd(text), kClientMask);
             batch.insert(batch.end(), frame.data(), frame.data() + frame.size());
         }
         client->Raw().Send(AsBytes(batch));

@@ -269,7 +269,7 @@ namespace BECore::Tests {
         const eastl::string xml = serializer.SaveToString();
         EXPECT_NE(xml.find("x=\"5%\""), eastl::string::npos);
         XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+        ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
         UIVariant loaded;
         ASSERT_TRUE(deserializer.BeginObject("variant"));
         loaded.Deserialize(deserializer);
@@ -300,7 +300,7 @@ namespace BECore::Tests {
         EXPECT_NE(xml.find("pivot=\"0.5,0\""), eastl::string::npos);
         EXPECT_NE(xml.find("margin=\"0\""), eastl::string::npos);
         XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+        ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
         UIVariant loaded;
         ASSERT_TRUE(deserializer.BeginObject("variant"));
         loaded.Deserialize(deserializer);
@@ -352,7 +352,7 @@ namespace BECore::Tests {
         serializer.EndObject();
         const eastl::string xml = serializer.SaveToString();
         XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+        ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
         UIVariant loaded;
         ASSERT_TRUE(deserializer.BeginObject("variant"));
         loaded.Deserialize(deserializer);

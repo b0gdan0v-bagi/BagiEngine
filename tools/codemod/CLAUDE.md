@@ -11,7 +11,7 @@ python3 engine/tools/codemod/codemod.py --root src --family optionals|views|stri
 - **Idempotent:** the rules run until nothing changes, so a second run changes nothing. `--dry-run` writes nothing and prints the counts per rule; `--fail-on-change` writes nothing and exits 1 when anything would change: the "family is done" check. `--report` lists the notes: what the tool found and left (an allocator argument, `eastl::optional<T&>`, a `std::to_string`, a `find` / `contains` / `count` / `at` whose argument builds a temporary string).
 - **`// std: <why>`** on a line or on the line before keeps that line as it is, in every family: a `std::` type that meets `std::filesystem`, `nlohmann`, a socket or an SDL API says so there.
 - A name outside `namespace BECore` (and no `using namespace BECore` before it) becomes `BECore::String`.
-- Test code (a `tests` or `test` folder, also the root itself) keeps `std::string` and `std::vector`: they are test data at the gtest, JSON and file boundaries.
+- Test code (a `tests` or `test` folder, also the root itself) keeps `std::string`, `std::string_view` and `std::vector`: they are test data at the gtest, JSON and file boundaries.
 
 ## Families
 

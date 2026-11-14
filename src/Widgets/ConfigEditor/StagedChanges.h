@@ -20,7 +20,7 @@ namespace BECore {
          * @param attr Pugixml attribute handle (must remain valid until ApplyTo/Clear)
          * @param newValue New string value to apply on save
          */
-        void Set(const eastl::string& key, pugi::xml_attribute attr, eastl::string_view newValue);
+        void Set(const eastl::string& key, pugi::xml_attribute attr, StringView newValue);
 
         /**
          * @brief Stage a new value for an XML text node
@@ -28,7 +28,7 @@ namespace BECore {
          * @param textNode Pugixml text node handle (must remain valid until ApplyTo/Clear)
          * @param newValue New string value to apply on save
          */
-        void SetText(const eastl::string& key, pugi::xml_node textNode, eastl::string_view newValue);
+        void SetText(const eastl::string& key, pugi::xml_node textNode, StringView newValue);
 
         /**
          * @brief Get staged value for a key, or nullptr if not staged

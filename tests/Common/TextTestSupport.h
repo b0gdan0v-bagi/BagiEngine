@@ -53,8 +53,8 @@ namespace BECore::Tests {
 
     private:
         void OnLog(const LogEvent& event) {
-            const eastl::string_view message = event.message;
-            if (event.level == LogLevel::Warning && message.find(eastl::string_view(_part.data(), _part.size())) != eastl::string_view::npos) {
+            const StringView message = event.message;
+            if (event.level == LogLevel::Warning && message.find(StringView(_part)) != StringView::npos) {
                 ++_count;
             }
         }

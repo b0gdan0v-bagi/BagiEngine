@@ -17,11 +17,11 @@ namespace BECore::Fuzz {
         /// Most entries (a string, a colour) whose lookups are checked in one input: a table can hold thousands in 64 KiB, and the lookups are not what is under test
         constexpr size_t kMaxCheckedEntries = 512;
 
-        constexpr eastl::string_view kStringsRoot = "UIStrings";
-        constexpr eastl::string_view kThemesRoot = "UIThemes";
+        constexpr StringView kStringsRoot = "UIStrings";
+        constexpr StringView kThemesRoot = "UIThemes";
 
         /// Whether @p text has a control character (a line break included): a log line made of it is more than one line
-        bool HasControlCharacter(eastl::string_view text) {
+        bool HasControlCharacter(StringView text) {
             for (const char c : text) {
                 const auto byte = static_cast<uint8_t>(c);
                 if (byte < 0x20 || byte == 0x7F) {
@@ -35,7 +35,7 @@ namespace BECore::Fuzz {
             for (const eastl::string& complaint : complaints) {
                 FUZZ_CHECK(!complaint.empty());
                 FUZZ_CHECK(complaint.size() <= kMaxComplaintBytes);
-                FUZZ_CHECK(!HasControlCharacter(eastl::string_view(complaint.data(), complaint.size())));
+                FUZZ_CHECK(!HasControlCharacter(StringView(complaint)));
             }
         }
 
@@ -76,8 +76,8 @@ namespace BECore::Fuzz {
                 if (checked++ == kMaxCheckedEntries) {
                     break;
                 }
-                FUZZ_CHECK(table.SetLanguage(PoolString::Intern(eastl::string_view(id.first.data(), id.first.size()))));
-                const auto found = table.Find(eastl::string_view(id.second.data(), id.second.size()));
+                FUZZ_CHECK(table.SetLanguage(PoolString::Intern(FromStd(id.first))));
+                const auto found = table.Find(FromStd(id.second));
                 digest += found ? std::string(found->data(), found->size()) : std::string("<none>");
                 digest += '\n';
             }
@@ -100,18 +100,18 @@ namespace BECore::Fuzz {
                 if (checked++ == kMaxCheckedEntries) {
                     break;
                 }
-                const PoolString language = PoolString::Intern(eastl::string_view(id.first.data(), id.first.size()));
+                const PoolString language = PoolString::Intern(FromStd(id.first));
                 FUZZ_CHECK(table.HasLanguage(language));
                 FUZZ_CHECK(table.SetLanguage(language));
-                const auto found = table.Find(eastl::string_view(id.second.data(), id.second.size()));
+                const auto found = table.Find(FromStd(id.second));
                 FUZZ_CHECK(found.has_value());
-                FUZZ_CHECK(eastl::string_view(found->data(), found->size()) == eastl::string_view(text.data(), text.size()));
+                FUZZ_CHECK(StringView(found->data(), found->size()) == FromStd(text));
                 // A text with no reference resolves to itself, and a reference to this key gives this text
                 if (!UIStrings::HasReferences(*found)) {
                     const eastl::string expectedText(found->data(), found->size());
                     FUZZ_CHECK(table.Resolve(*found) == expectedText);
                     const eastl::string reference = Format("{{#{}}}", id.second.c_str());
-                    FUZZ_CHECK(table.Resolve(eastl::string_view(reference.data(), reference.size())) == expectedText);
+                    FUZZ_CHECK(table.Resolve(StringView(reference)) == expectedText);
                 }
             }
 
@@ -248,7 +248,7 @@ namespace BECore::Fuzz {
         if (!root) {
             return;
         }
-        const eastl::string_view rootName(root.name());
+        const StringView rootName(root.name());
         if (rootName != kThemesRoot) {
             CheckStrings(root);
         }

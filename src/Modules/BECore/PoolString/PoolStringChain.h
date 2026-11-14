@@ -50,7 +50,7 @@ namespace BECore {
 
         constexpr PoolStringChain() : _mode(Mode::Empty), _count(0) {}
 
-        constexpr PoolStringChain(eastl::string_view sv) : _mode(Mode::Literal), _count(0) {
+        constexpr PoolStringChain(StringView sv) : _mode(Mode::Literal), _count(0) {
             _storage.view.p = sv.data();
             _storage.view.s = sv.size();
         }
@@ -78,7 +78,7 @@ namespace BECore {
             return s;
         }
 
-        constexpr eastl::string_view View() const {
+        constexpr StringView View() const {
             if (_mode == Mode::Literal)
                 return {_storage.view.p, _storage.view.s};
             if (_mode == Mode::Atom)

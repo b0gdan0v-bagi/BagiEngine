@@ -7,28 +7,28 @@ namespace BECore {
 
     namespace {
 
-        constexpr eastl::string_view ConfigName = "UIStrings";
-        constexpr eastl::string_view LanguageElement = "language";
-        constexpr eastl::string_view StringElement = "string";
+        constexpr StringView ConfigName = "UIStrings";
+        constexpr StringView LanguageElement = "language";
+        constexpr StringView StringElement = "string";
 
         /// The end of the reference that starts at @p open (the position of its `{`), or npos when it is not one: not `{#`, unclosed, or empty (`{#}`)
-        size_t ReferenceEnd(eastl::string_view text, size_t open) {
+        size_t ReferenceEnd(StringView text, size_t open) {
             if (open + 1 >= text.size() || text[open + 1] != '#') {
-                return eastl::string_view::npos;
+                return StringView::npos;
             }
             const size_t close = text.find('}', open + 2);
-            if (close == eastl::string_view::npos || close == open + 2) {
-                return eastl::string_view::npos;
+            if (close == StringView::npos || close == open + 2) {
+                return StringView::npos;
             }
             return close;
         }
 
         /// The key is any text without `}`, and not empty
-        bool IsValidKey(eastl::string_view key) {
-            return !key.empty() && key.find('}') == eastl::string_view::npos;
+        bool IsValidKey(StringView key) {
+            return !key.empty() && key.find('}') == StringView::npos;
         }
 
-        eastl::string Describe(eastl::string_view what, eastl::string_view detail) {
+        eastl::string Describe(StringView what, StringView detail) {
             return Format("{}: {}", what, detail);
         }
 
@@ -53,7 +53,7 @@ namespace BECore {
         return nullptr;
     }
 
-    const eastl::string* UIStrings::FindString(const Language* language, eastl::string_view key) const {
+    const eastl::string* UIStrings::FindString(const Language* language, StringView key) const {
         if (!language) {
             return nullptr;
         }
@@ -65,7 +65,7 @@ namespace BECore {
         return it == language->strings.end() ? nullptr : &it->second;
     }
 
-    bool UIStrings::Set(PoolString language, eastl::string_view key, eastl::string_view text) {
+    bool UIStrings::Set(PoolString language, StringView key, StringView text) {
         if (language.Empty() || !IsValidKey(key)) {
             return false;
         }
@@ -89,7 +89,7 @@ namespace BECore {
         const auto it = target->strings.find(pooledKey);
         if (it == target->strings.end()) {
             target->strings.emplace(pooledKey, eastl::string(text.data(), text.size()));
-        } else if (eastl::string_view(it->second.data(), it->second.size()) == text) {
+        } else if (StringView(it->second) == text) {
             return true;
         } else {
             it->second.assign(text.data(), text.size());
@@ -125,17 +125,17 @@ namespace BECore {
         return FindLanguage(language) != nullptr;
     }
 
-    Optional<eastl::string_view> UIStrings::Find(eastl::string_view key) const {
+    Optional<StringView> UIStrings::Find(StringView key) const {
         const PoolString current = GetLanguage();
         for (const PoolString language : {current, _default}) {
             if (const eastl::string* text = FindString(FindLanguage(language), key)) {
-                return eastl::string_view(text->data(), text->size());
+                return StringView(text->data(), text->size());
             }
         }
         return std::nullopt;
     }
 
-    bool UIStrings::HasReferences(eastl::string_view text) {
+    bool UIStrings::HasReferences(StringView text) {
         for (size_t i = 0; i < text.size(); ++i) {
             if (text[i] != '{') {
                 continue;
@@ -144,24 +144,24 @@ namespace BECore {
                 ++i;  // `{{` is a literal brace, and a `#` after it is not a reference
                 continue;
             }
-            if (ReferenceEnd(text, i) != eastl::string_view::npos) {
+            if (ReferenceEnd(text, i) != StringView::npos) {
                 return true;
             }
         }
         return false;
     }
 
-    void UIStrings::RecordMissing(eastl::string_view key) {
+    void UIStrings::RecordMissing(StringView key) {
         const PoolString language = GetLanguage();
         for (const MissingString& missing : _missing) {
-            if (missing.language == language && eastl::string_view(missing.key.data(), missing.key.size()) == key) {
+            if (missing.language == language && StringView(missing.key) == key) {
                 return;
             }
         }
         _missing.push_back(MissingString{language, eastl::string(key.data(), key.size())});
     }
 
-    eastl::string UIStrings::Resolve(eastl::string_view text) {
+    eastl::string UIStrings::Resolve(StringView text) {
         eastl::string result;
         result.reserve(text.size());
         for (size_t i = 0; i < text.size(); ++i) {
@@ -176,11 +176,11 @@ namespace BECore {
                 continue;
             }
             const size_t close = ReferenceEnd(text, i);
-            if (close == eastl::string_view::npos) {
+            if (close == StringView::npos) {
                 result += c;
                 continue;
             }
-            const eastl::string_view key = text.substr(i + 2, close - i - 2);
+            const StringView key = text.substr(i + 2, close - i - 2);
             if (const auto found = Find(key)) {
                 result.append(found->data(), found->size());
             } else {
@@ -208,7 +208,7 @@ namespace BECore {
         }
 
         for (const XmlNode child : node.Children()) {
-            const eastl::string_view name = child.Name();
+            const StringView name = child.Name();
             if (name.empty()) {
                 continue;  // a comment or text
             }
@@ -224,7 +224,7 @@ namespace BECore {
             const PoolString language = PoolString::Intern(*id);
             size_t loaded = 0;
             for (const XmlNode entry : child.Children()) {
-                const eastl::string_view entryName = entry.Name();
+                const StringView entryName = entry.Name();
                 if (entryName.empty()) {
                     continue;
                 }
@@ -270,7 +270,7 @@ namespace BECore {
         }
         // The messages repeat ids, keys and values of the file
         for (eastl::string& problem : problems) {
-            problem = UIText::TidyMessage(eastl::string_view(problem.data(), problem.size()));
+            problem = UIText::TidyMessage(StringView(problem));
         }
         return problems;
     }

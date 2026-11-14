@@ -4,7 +4,7 @@ namespace BECore {
 
     namespace {
 
-        constexpr eastl::string_view kHandshakeHeadEnd = "\r\n\r\n";
+        constexpr StringView kHandshakeHeadEnd = "\r\n\r\n";
         constexpr int kHeaderTooLarge = 431;
         constexpr int kServiceUnavailable = 503;
 
@@ -62,9 +62,9 @@ namespace BECore {
             // Pointers, not std::array iterators: EASTL's insert does not take MSVC's class iterator
             received.insert(received.end(), chunk.data(), chunk.data() + *count);
 
-            const eastl::string_view text(reinterpret_cast<const char*>(received.data()), received.size());
+            const StringView text(reinterpret_cast<const char*>(received.data()), received.size());
             const size_t end = text.find(kHandshakeHeadEnd);
-            if (end != eastl::string_view::npos) {
+            if (end != StringView::npos) {
                 headSize = end + kHandshakeHeadEnd.size();
                 break;
             }
@@ -75,7 +75,7 @@ namespace BECore {
             }
         }
 
-        const eastl::string_view head(reinterpret_cast<const char*>(received.data()), headSize);
+        const StringView head(reinterpret_cast<const char*>(received.data()), headSize);
         if (IsHealthCheckRequest(head, policy)) {
             // A probe of the hosting platform: answered and closed, the handler never hears of it and nothing is logged per check
             (void)_socket.SendAll(AsBytes(BuildHealthResponse()));

@@ -47,7 +47,7 @@ namespace BECore {
 
         FontFamily ParseFamily(const XmlNode& node) {
             FontFamily family;
-            const auto name = node.ParseAttribute<eastl::string_view>("name");
+            const auto name = node.ParseAttribute<StringView>("name");
             if (!name || name->empty()) {
                 LOG_WARNING("TextConfig: a family needs a name, ignoring it");
                 return family;
@@ -55,7 +55,7 @@ namespace BECore {
             family.name = PoolString::Intern(*name);
             for (XmlNode face : node.Children()) {
                 const auto weight = face.ParseAttribute<int>("weight");
-                const auto path = face.ParseAttribute<eastl::string_view>("path");
+                const auto path = face.ParseAttribute<StringView>("path");
                 if (!weight || *weight < 1 || *weight > kMaxFaceWeight || !path || path->empty()) {
                     LOG_WARNING("TextConfig: a face of the family '{}' needs a weight of 1..1000 and a path, ignoring it"_format(*name));
                     continue;
@@ -107,10 +107,10 @@ namespace BECore {
         if (!node) {
             return settings;
         }
-        if (auto font = node.ParseAttribute<eastl::string_view>("defaultFont")) {
+        if (auto font = node.ParseAttribute<StringView>("defaultFont")) {
             settings.defaultFont = PoolString::Intern(*font);
         }
-        if (auto family = node.ParseAttribute<eastl::string_view>("defaultFamily")) {
+        if (auto family = node.ParseAttribute<StringView>("defaultFamily")) {
             settings.defaultFamily = PoolString::Intern(*family);
         }
         if (auto pageSize = node.ParseAttribute<uint32_t>("pageSize")) {

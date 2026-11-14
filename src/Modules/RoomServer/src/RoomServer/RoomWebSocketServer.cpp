@@ -7,9 +7,9 @@ namespace BECore {
 
     namespace {
 
-        constexpr eastl::string_view kLogName = "Room server";
-        constexpr eastl::string_view kBusyMessage = "the server is full, try again later";
-        constexpr eastl::string_view kStoppingReason = "server_stopping";
+        constexpr StringView kLogName = "Room server";
+        constexpr StringView kBusyMessage = "the server is full, try again later";
+        constexpr StringView kStoppingReason = "server_stopping";
         constexpr uint32_t kThreadOrder = 210;  // the listener's threads take this and the next two, the hub thread the one after
 
         /// What the client is told when the hub ends its connection

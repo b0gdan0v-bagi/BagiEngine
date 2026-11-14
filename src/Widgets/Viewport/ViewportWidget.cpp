@@ -448,7 +448,7 @@ namespace BECore {
             // The view the scene drew with last, picked by the size of this image or forced by the combo (read only)
             const ActiveSceneView view = scene->GetActiveView();
             ImGui::SameLine();
-            const eastl::string_view name = view.index < 0 ? eastl::string_view("default") : view.name.ToStringView();
+            const StringView name = view.index < 0 ? StringView("default") : view.name.ToStringView();
             ImGui::TextDisabled("View: %.*s %.0f x %.0f", static_cast<int>(name.size()), name.data(), view.width, view.height);
         }
     }
@@ -614,7 +614,7 @@ namespace BECore {
                         const auto [min, max] = toScreen(mark.rect);
                         fill(mark.rect, kRegionFill);
                         drawList->AddRect(min, max, kRegionColor);
-                        const eastl::string_view name = mark.name.ToStringView();
+                        const StringView name = mark.name.ToStringView();
                         const ImVec2 textSize = ImGui::CalcTextSize(name.data(), name.data() + name.size());
                         if (max.x - min.x >= textSize.x + kRegionLabelInset * 2.0f) {
                             drawList->AddText({min.x + kRegionLabelInset, min.y + kRegionLabelInset}, kRegionColor, name.data(), name.data() + name.size());
@@ -640,7 +640,7 @@ namespace BECore {
                 }
             }
             if (hoveredMark) {
-                const eastl::string_view name = hoveredMark->name.ToStringView();
+                const StringView name = hoveredMark->name.ToStringView();
                 ImGui::SetTooltip("%.*s", static_cast<int>(name.size()), name.data());
             } else if (hovered) {
                 // The smallest region under the pointer, so a region inside another one stays reachable
@@ -653,7 +653,7 @@ namespace BECore {
                     }
                 }
                 if (smallest) {
-                    const eastl::string_view name = smallest->mark.name.ToStringView();
+                    const StringView name = smallest->mark.name.ToStringView();
                     const Rect& rect = smallest->canvasRect;
                     ImGui::SetTooltip("%.*s\nx %g  y %g  w %g  h %g", static_cast<int>(name.size()), name.data(), rect.x, rect.y, rect.w, rect.h);
                 }

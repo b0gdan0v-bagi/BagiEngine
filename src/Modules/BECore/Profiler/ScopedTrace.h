@@ -14,7 +14,7 @@ namespace BECore {
      */
     class ScopedTrace {
     public:
-        explicit ScopedTrace(eastl::string_view path);
+        explicit ScopedTrace(StringView path);
         ~ScopedTrace();
 
         ScopedTrace(const ScopedTrace&) = delete;

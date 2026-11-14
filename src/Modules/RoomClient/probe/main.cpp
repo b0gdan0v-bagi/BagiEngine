@@ -33,7 +33,7 @@ namespace {
     /// Reads the arguments; false (after a message) when they are not usable
     bool ParseArgs(int argc, char* argv[], ProbeArgs& args) {
         for (int i = 1; i < argc; ++i) {
-            const eastl::string_view flag = argv[i];
+            const StringView flag = argv[i];
             if (flag == "--help" || flag == "-h") {
                 PrintUsage();
                 return false;

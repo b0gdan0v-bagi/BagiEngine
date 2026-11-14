@@ -84,23 +84,23 @@ namespace BECore::Tests {
         const std::string payload65535(65535, 'a');
         const std::string payload65536(65536, 'a');
 
-        const auto frame125 = EncodeTextFrame(eastl::string_view(payload125.data(), payload125.size()));
+        const auto frame125 = EncodeTextFrame(FromStd(payload125));
         EXPECT_EQ(frame125.size(), 2u + 125);
         EXPECT_EQ(frame125[1], 125);
 
-        const auto frame126 = EncodeTextFrame(eastl::string_view(payload126.data(), payload126.size()));
+        const auto frame126 = EncodeTextFrame(FromStd(payload126));
         EXPECT_EQ(frame126.size(), 4u + 126);
         EXPECT_EQ(frame126[1], 126);
         EXPECT_EQ(frame126[2], 0x00);
         EXPECT_EQ(frame126[3], 126);
 
-        const auto frame65535 = EncodeTextFrame(eastl::string_view(payload65535.data(), payload65535.size()));
+        const auto frame65535 = EncodeTextFrame(FromStd(payload65535));
         EXPECT_EQ(frame65535.size(), 4u + 65535);
         EXPECT_EQ(frame65535[1], 126);
         EXPECT_EQ(frame65535[2], 0xFF);
         EXPECT_EQ(frame65535[3], 0xFF);
 
-        const auto frame65536 = EncodeTextFrame(eastl::string_view(payload65536.data(), payload65536.size()));
+        const auto frame65536 = EncodeTextFrame(FromStd(payload65536));
         EXPECT_EQ(frame65536.size(), 10u + 65536);
         EXPECT_EQ(frame65536[1], 127);
         EXPECT_EQ(frame65536[7], 0x01);
@@ -112,7 +112,7 @@ namespace BECore::Tests {
         for (const size_t length : {0u, 1u, 125u, 126u, 127u, 65535u, 65536u, 100000u}) {
             const std::string payload(length, 'x');
             WebSocketFrameParser parser;
-            parser.Feed(Span(EncodeTextFrame(eastl::string_view(payload.data(), payload.size()), kMask)));
+            parser.Feed(Span(EncodeTextFrame(FromStd(payload), kMask)));
             const WebSocketMessage message = PopMessage(parser);
             EXPECT_EQ(message.kind, WebSocketMessageKind::Text) << length;
             EXPECT_EQ(TextOf(message), payload) << length;
@@ -122,7 +122,7 @@ namespace BECore::Tests {
     TEST(WebSocketFrameTest, TheMaskIsAppliedByTheBytePosition) {
         const std::string payload = "The quick brown fox jumps over the lazy dog";
         WebSocketFrameParser parser;
-        parser.Feed(Span(EncodeTextFrame(eastl::string_view(payload.data(), payload.size()), WebSocketMask{0x01, 0x02, 0x03, 0x04})));
+        parser.Feed(Span(EncodeTextFrame(FromStd(payload), WebSocketMask{0x01, 0x02, 0x03, 0x04})));
         EXPECT_EQ(TextOf(PopMessage(parser)), payload);
     }
 
@@ -257,7 +257,7 @@ namespace BECore::Tests {
 
     TEST(WebSocketFrameTest, EncodedCloseFrameCutsALongReason) {
         const std::string reason(300, 'r');
-        const eastl::vector<uint8_t> frame = EncodeCloseFrame(WebSocketCloseCode::kGoingAway, eastl::string_view(reason.data(), reason.size()));
+        const eastl::vector<uint8_t> frame = EncodeCloseFrame(WebSocketCloseCode::kGoingAway, FromStd(reason));
         EXPECT_EQ(frame[0], 0x88);
         EXPECT_EQ(frame[1], kMaxControlPayload);
         EXPECT_EQ(frame[2], 0x03);
@@ -310,7 +310,7 @@ namespace BECore::Tests {
 
     TEST(WebSocketFrameTest, MessageOverTheLimitIsTooBig) {
         const std::string payload(11, 'x');
-        ExpectViolationOf(EncodeTextFrame(eastl::string_view(payload.data(), payload.size()), kMask), WebSocketCloseCode::kMessageTooBig, /*maxMessageBytes=*/10);
+        ExpectViolationOf(EncodeTextFrame(FromStd(payload), kMask), WebSocketCloseCode::kMessageTooBig, /*maxMessageBytes=*/10);
 
         // The limit itself is fine
         WebSocketFrameParser parser(10);
@@ -401,7 +401,7 @@ namespace BECore::Tests {
 
         for (const size_t length : {0u, 125u, 126u, 65535u, 65536u, 100000u}) {
             const std::string payload(length, 'y');
-            parser.Feed(Span(EncodeTextFrame(eastl::string_view(payload.data(), payload.size()))));
+            parser.Feed(Span(EncodeTextFrame(FromStd(payload))));
             EXPECT_EQ(TextOf(PopMessage(parser)), payload) << length;
         }
     }

@@ -419,7 +419,7 @@ namespace BECore::Tests {
 
     class TextRendererTest : public FontAtlasLibraryTest {
     protected:
-        TextLayoutResult Layout(eastl::string_view text, int size = 24, float maxWidth = 0.0f) const {
+        TextLayoutResult Layout(StringView text, int size = 24, float maxWidth = 0.0f) const {
             TextLayoutOptions options;
             options.fontSize = static_cast<float>(size);
             options.maxWidth = maxWidth;

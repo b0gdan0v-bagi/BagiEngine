@@ -200,7 +200,7 @@ namespace BECore::Tests {
             }
 
             void SendClose(uint16_t code, const std::string& reason) {
-                Send(EncodeCloseFrame(code, eastl::string_view(reason.data(), reason.size())));
+                Send(EncodeCloseFrame(code, FromStd(reason)));
             }
 
             /// The next frame of the client (masked frames are expected; the key is kept), nullopt when none came in @p limit
@@ -407,7 +407,7 @@ namespace BECore::Tests {
         constexpr int kCount = 100;
         for (int i = 0; i < kCount; ++i) {
             const std::string text = "message " + std::to_string(i);
-            ASSERT_TRUE(session.client.SendText(eastl::string_view(text.data(), text.size())));
+            ASSERT_TRUE(session.client.SendText(FromStd(text)));
         }
         ASSERT_TRUE(session.WaitForCount(WebSocketClientEventKind::Text, kCount));
 
@@ -740,7 +740,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(connection != nullptr);
         for (int i = 0; i < kMessages; ++i) {
             const std::string text = std::to_string(i) + ":" + std::string(kMessageBytes, 'x');
-            ASSERT_TRUE(connection->QueueText(eastl::string_view(text.data(), text.size())));
+            ASSERT_TRUE(connection->QueueText(FromStd(text)));
         }
 
         // Nothing is polled: the reader stops after a few messages and the bytes it took stay far below what was sent
@@ -981,7 +981,7 @@ namespace BECore::Tests {
         const std::string text(100 * 1024, 'x');
         bool refused = false;
         for (int i = 0; i < 2000 && !refused; ++i) {
-            refused = !session.client.SendText(eastl::string_view(text.data(), text.size()));
+            refused = !session.client.SendText(FromStd(text));
             if (!refused && i % 16 == 15) {
                 std::this_thread::sleep_for(1ms);  // let the writer run, a queue that is merely not drained yet is no proof
             }

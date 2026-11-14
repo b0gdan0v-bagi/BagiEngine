@@ -2,14 +2,14 @@
 
 namespace BECore {
 
-    void StagedChanges::Set(const eastl::string& key, pugi::xml_attribute attr, eastl::string_view newValue) {
+    void StagedChanges::Set(const eastl::string& key, pugi::xml_attribute attr, StringView newValue) {
         auto& entry = _changes[key];
         entry.value.assign(newValue.data(), newValue.size());
         entry.attr = attr;
         entry.textNode = pugi::xml_node{};
     }
 
-    void StagedChanges::SetText(const eastl::string& key, pugi::xml_node textNode, eastl::string_view newValue) {
+    void StagedChanges::SetText(const eastl::string& key, pugi::xml_node textNode, StringView newValue) {
         auto& entry = _changes[key];
         entry.value.assign(newValue.data(), newValue.size());
         entry.attr = pugi::xml_attribute{};

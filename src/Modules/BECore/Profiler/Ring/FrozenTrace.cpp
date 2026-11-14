@@ -125,7 +125,7 @@ namespace BECore {
         return out;
     }
 
-    std::expected<void, eastl::string> WriteFrozenTraceFile(eastl::string_view path, const eastl::vector<FrozenFrame>& frames) {
+    std::expected<void, eastl::string> WriteFrozenTraceFile(StringView path, const eastl::vector<FrozenFrame>& frames) {
         const eastl::string text = WriteFrozenTraceJson(frames);
         const eastl::string fileName(path.data(), path.size());
         std::FILE* file = std::fopen(fileName.c_str(), "wb");

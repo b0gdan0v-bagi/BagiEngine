@@ -35,19 +35,19 @@ namespace BECore {
     namespace PropVisit {
 
         /// The property visitor has no general support for a vector of structs or of values by value (the inspector shows none): the fuzz targets edit none
-        inline bool Visit(IPropertyVisitor& /*v*/, eastl::vector<FuzzProbeData::ProbeLeaf>& /*leaves*/, eastl::string_view /*key*/) {
+        inline bool Visit(IPropertyVisitor& /*v*/, eastl::vector<FuzzProbeData::ProbeLeaf>& /*leaves*/, StringView /*key*/) {
             return false;
         }
 
-        inline bool Visit(IPropertyVisitor& /*v*/, eastl::vector<FuzzProbeData::ProbeNode>& /*children*/, eastl::string_view /*key*/) {
+        inline bool Visit(IPropertyVisitor& /*v*/, eastl::vector<FuzzProbeData::ProbeNode>& /*children*/, StringView /*key*/) {
             return false;
         }
 
-        inline bool Visit(IPropertyVisitor& /*v*/, eastl::vector<int32_t>& /*numbers*/, eastl::string_view /*key*/) {
+        inline bool Visit(IPropertyVisitor& /*v*/, eastl::vector<int32_t>& /*numbers*/, StringView /*key*/) {
             return false;
         }
 
-        inline bool Visit(IPropertyVisitor& /*v*/, eastl::vector<eastl::string>& /*words*/, eastl::string_view /*key*/) {
+        inline bool Visit(IPropertyVisitor& /*v*/, eastl::vector<eastl::string>& /*words*/, StringView /*key*/) {
             return false;
         }
 

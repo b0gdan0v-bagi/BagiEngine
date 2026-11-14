@@ -12,17 +12,17 @@ namespace BECore {
     class UIVars {
     public:
         /// Sets a variable. A value equal to the current one changes nothing, so the version stays and no label is laid out again
-        void Set(PoolString name, eastl::string_view value);
+        void Set(PoolString name, StringView value);
 
         /// A number is written the way Format() writes it ("120", "0.5")
         template <typename T>
         requires std::is_arithmetic_v<T> void Set(PoolString name, T value) {
             const eastl::string text = Format("{}", value);
-            Set(name, eastl::string_view(text.data(), text.size()));
+            Set(name, StringView(text));
         }
 
         /// The value of a variable, or an empty text when nobody set it
-        [[nodiscard]] eastl::string_view Get(PoolString name) const;
+        [[nodiscard]] StringView Get(PoolString name) const;
 
         [[nodiscard]] bool Has(PoolString name) const;
 
@@ -38,10 +38,10 @@ namespace BECore {
         }
 
         /// @p text with every `{name}` replaced by the value of the variable; `{{` and `}}` become one brace. An unclosed `{` stays as it is
-        [[nodiscard]] eastl::string Expand(eastl::string_view text) const;
+        [[nodiscard]] eastl::string Expand(StringView text) const;
 
         /// True when Expand() could change @p text, so a label skips the work for a plain text
-        [[nodiscard]] static bool HasPlaceholders(eastl::string_view text);
+        [[nodiscard]] static bool HasPlaceholders(StringView text);
 
     private:
         UnorderedPoolMap<eastl::string> _values;

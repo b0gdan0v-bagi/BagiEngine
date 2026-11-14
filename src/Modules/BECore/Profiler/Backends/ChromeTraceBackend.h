@@ -40,7 +40,7 @@ namespace BECore {
         /// The trace as JSON text (main thread; other threads may go on recording)
         [[nodiscard]] eastl::string WriteJson() const;
         /// WriteJson() into the file @p path (created or replaced); the reason when it cannot be written
-        [[nodiscard]] std::expected<void, eastl::string> WriteFile(eastl::string_view path) const;
+        [[nodiscard]] std::expected<void, eastl::string> WriteFile(StringView path) const;
 
         /// Events lost because a thread's buffer was full or there were too many threads
         [[nodiscard]] uint64_t GetDroppedCount() const;

@@ -28,9 +28,9 @@ namespace BECore {
         EmscriptenRoomTransport(const EmscriptenRoomTransport&) = delete;
         EmscriptenRoomTransport& operator=(const EmscriptenRoomTransport&) = delete;
 
-        [[nodiscard]] std::expected<void, eastl::string> Open(eastl::string_view url) override;
-        bool SendText(eastl::string_view text) override;
-        void Close(uint16_t code, eastl::string_view reason) override;
+        [[nodiscard]] std::expected<void, eastl::string> Open(StringView url) override;
+        bool SendText(StringView text) override;
+        void Close(uint16_t code, StringView reason) override;
         void Abort() override;
         [[nodiscard]] bool PollEvent(RoomTransportEvent& event) override;
 
@@ -49,8 +49,8 @@ namespace BECore {
         static bool OnClose(int eventType, const EmscriptenWebSocketCloseEvent* event, void* userData);
 
         /// Queues the one Closed and ends the connection on our side: the browser's callbacks are detached, the socket deleted
-        void Finish(uint16_t closeCode, eastl::string_view reason);
-        void PushEvent(RoomTransportEventKind kind, eastl::string_view text, uint16_t closeCode, eastl::string_view reason);
+        void Finish(uint16_t closeCode, StringView reason);
+        void PushEvent(RoomTransportEventKind kind, StringView text, uint16_t closeCode, StringView reason);
         void DeleteSocket();
 
         EMSCRIPTEN_WEBSOCKET_T _socket = 0;

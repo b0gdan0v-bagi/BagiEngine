@@ -2,7 +2,7 @@
 
 namespace BECore {
 
-    bool IsJsonNestedDeeperThan(eastl::string_view text, size_t maxDepth) {
+    bool IsJsonNestedDeeperThan(StringView text, size_t maxDepth) {
         size_t depth = 0;
         bool inString = false;
         for (size_t i = 0; i < text.size(); ++i) {
@@ -26,7 +26,7 @@ namespace BECore {
         return false;
     }
 
-    std::expected<Json, ControlError> ParseJson(eastl::string_view text) {
+    std::expected<Json, ControlError> ParseJson(StringView text) {
         // allow_exceptions = false: bad input gives a discarded value instead of a throw (an abort in this build)
         Json parsed = Json::parse(text.data(), text.data() + text.size(), nullptr, false);
         if (parsed.is_discarded()) {
@@ -40,19 +40,19 @@ namespace BECore {
         return eastl::string(text.c_str(), text.size());
     }
 
-    Json MakeJsonString(eastl::string_view text) {
+    Json MakeJsonString(StringView text) {
         return Json(std::string(text.data(), text.size()));
     }
 
-    const Json* FindJsonMember(const Json& object, eastl::string_view key) {
+    const Json* FindJsonMember(const Json& object, StringView key) {
         if (!object.is_object()) {
             return nullptr;
         }
-        const auto it = object.find(std::string_view(key.data(), key.size()));
+        const auto it = object.find(ToStd(key));
         return it == object.end() ? nullptr : &*it;
     }
 
-    Optional<eastl::string> GetJsonString(const Json& object, eastl::string_view key) {
+    Optional<eastl::string> GetJsonString(const Json& object, StringView key) {
         const Json* member = FindJsonMember(object, key);
         if (member == nullptr || !member->is_string()) {
             return std::nullopt;
@@ -61,7 +61,7 @@ namespace BECore {
         return eastl::string(text.c_str(), text.size());
     }
 
-    Optional<int64_t> GetJsonInt(const Json& object, eastl::string_view key) {
+    Optional<int64_t> GetJsonInt(const Json& object, StringView key) {
         const Json* member = FindJsonMember(object, key);
         if (member == nullptr || !member->is_number_integer()) {
             return std::nullopt;
@@ -76,7 +76,7 @@ namespace BECore {
         return member->get<int64_t>();
     }
 
-    Optional<double> GetJsonNumber(const Json& object, eastl::string_view key) {
+    Optional<double> GetJsonNumber(const Json& object, StringView key) {
         const Json* member = FindJsonMember(object, key);
         if (member == nullptr || !member->is_number()) {
             return std::nullopt;
@@ -84,7 +84,7 @@ namespace BECore {
         return member->get<double>();
     }
 
-    Optional<bool> GetJsonBool(const Json& object, eastl::string_view key) {
+    Optional<bool> GetJsonBool(const Json& object, StringView key) {
         const Json* member = FindJsonMember(object, key);
         if (member == nullptr || !member->is_boolean()) {
             return std::nullopt;

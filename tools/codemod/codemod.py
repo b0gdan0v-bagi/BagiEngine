@@ -198,7 +198,7 @@ class Name:
     source: str
     alias: str
     max_args: Optional[int] = None  # more template arguments than this (an allocator, ...): reported, left
-    keep_in_tests: bool = False  # test code keeps it (std::string, std::vector)
+    keep_in_tests: bool = False  # test code keeps it (std::string, std::string_view, std::vector)
     pattern: "re.Pattern[str]" = field(init=False, compare=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -213,7 +213,7 @@ NAMES: Tuple[Name, ...] = (
     Name("optionals", "eastl::optional", "Optional", max_args=1),
     Name("optionals", "std::optional", "Optional", max_args=1),
     Name("views", "eastl::string_view", "StringView"),
-    Name("views", "std::string_view", "StringView"),
+    Name("views", "std::string_view", "StringView", keep_in_tests=True),
     Name("strings", "eastl::string", "String"),
     Name("strings", "std::string", "String", keep_in_tests=True),
     Name("containers", "eastl::vector", "Vector", max_args=1),
@@ -390,6 +390,8 @@ class Pass:
             first = re.fullmatch(r"(.+)\.data\(\)", self.text(ranges[0]), re.DOTALL)
             second = re.fullmatch(r"(.+)\.size\(\)", self.text(ranges[1]), re.DOTALL)
             if not first or not second or first.group(1).strip() != second.group(1).strip():
+                continue
+            if m.group(1) == "std" and self.is_test:
                 continue
             function = "ToStd" if m.group(1) == "std" else "FromStd"
             source = f"{m.group(1)}::string_view(X.data(), X.size()) -> {function}(X)"

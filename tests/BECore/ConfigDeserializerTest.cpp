@@ -17,7 +17,7 @@ namespace BECore::Tests {
 
         constexpr const char* kMountPoint = "BagiConfigDeserializerTest";
         constexpr int32_t kProbeWidth = 640;
-        constexpr eastl::string_view kProbeTitle = "probe";
+        constexpr StringView kProbeTitle = "probe";
 
         DeserializerProbe MakeProbe() {
             DeserializerProbe probe;
@@ -88,7 +88,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(ConfigDeserializerTest, CreateDeserializerStringViewOverloadReadsKnownConfig) {
-        auto deserializer = CoreManager::GetConfigManager().CreateDeserializer(eastl::string_view("ApplicationConfig"));
+        auto deserializer = CoreManager::GetConfigManager().CreateDeserializer(StringView("ApplicationConfig"));
         ASSERT_NE(deserializer, nullptr);
 
         eastl::string mode;
@@ -98,7 +98,7 @@ namespace BECore::Tests {
 
     TEST_F(ConfigDeserializerTest, CreateDeserializerOfUnknownConfigIsNull) {
         EXPECT_EQ(CoreManager::GetConfigManager().CreateDeserializer("NoSuchConfig"_intern), nullptr);
-        EXPECT_EQ(CoreManager::GetConfigManager().CreateDeserializer(eastl::string_view("NoSuchConfig")), nullptr);
+        EXPECT_EQ(CoreManager::GetConfigManager().CreateDeserializer(StringView("NoSuchConfig")), nullptr);
     }
 
     TEST_F(ConfigDeserializerTest, OpenDeserializerReadsXmlFile) {

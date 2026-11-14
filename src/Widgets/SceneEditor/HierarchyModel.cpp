@@ -19,7 +19,7 @@ namespace BECore::HierarchyModel {
             return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\v' || c == '\f';
         }
 
-        bool ContainsIgnoreCase(eastl::string_view text, eastl::string_view part) {
+        bool ContainsIgnoreCase(StringView text, StringView part) {
             if (part.size() > text.size()) {
                 return false;
             }
@@ -35,7 +35,7 @@ namespace BECore::HierarchyModel {
             return false;
         }
 
-        bool HasComponentOfType(const SceneNode& node, eastl::string_view typeName) {
+        bool HasComponentOfType(const SceneNode& node, StringView typeName) {
             for (const auto& component : node.GetComponents()) {
                 if (component->GetTypeMeta().typeName == typeName) {
                     return true;
@@ -72,7 +72,7 @@ namespace BECore::HierarchyModel {
             return index;
         }
 
-        void AddComponentTypes(const SceneNode& node, eastl::vector<eastl::string_view>& out) {
+        void AddComponentTypes(const SceneNode& node, eastl::vector<StringView>& out) {
             for (const auto& component : node.GetComponents()) {
                 out.push_back(component->GetTypeMeta().typeName);
             }
@@ -108,18 +108,18 @@ namespace BECore::HierarchyModel {
         eastl::reverse(out.begin(), out.end());
     }
 
-    bool IsFilterActive(eastl::string_view query, eastl::string_view componentType) {
+    bool IsFilterActive(StringView query, StringView componentType) {
         return !query.empty() || !componentType.empty();
     }
 
-    bool NodeMatchesFilter(const SceneNode& node, eastl::string_view query, eastl::string_view componentType) {
+    bool NodeMatchesFilter(const SceneNode& node, StringView query, StringView componentType) {
         if (!query.empty() && !ContainsIgnoreCase(node.GetName().ToStringView(), query)) {
             return false;
         }
         return componentType.empty() || HasComponentOfType(node, componentType);
     }
 
-    bool SubtreeMatchesFilter(const SceneNode& node, eastl::string_view query, eastl::string_view componentType) {
+    bool SubtreeMatchesFilter(const SceneNode& node, StringView query, StringView componentType) {
         if (NodeMatchesFilter(node, query, componentType)) {
             return true;
         }
@@ -206,7 +206,7 @@ namespace BECore::HierarchyModel {
         return ancestor != nullptr && node != nullptr && (ancestor == node || node->IsDescendantOf(*ancestor));
     }
 
-    bool ValidateName(eastl::string_view text) {
+    bool ValidateName(StringView text) {
         if (text.size() > kMaxNodeNameLength) {
             return false;
         }
@@ -218,7 +218,7 @@ namespace BECore::HierarchyModel {
         return false;
     }
 
-    void CollectComponentTypes(const SceneNode& root, eastl::vector<eastl::string_view>& out) {
+    void CollectComponentTypes(const SceneNode& root, eastl::vector<StringView>& out) {
         out.clear();
         AddComponentTypes(root, out);
         eastl::sort(out.begin(), out.end());

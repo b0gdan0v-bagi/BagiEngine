@@ -8,10 +8,10 @@ namespace BECore::Fuzz {
 
     namespace {
 
-        constexpr eastl::string_view kSlot = "fuzz";
+        constexpr StringView kSlot = "fuzz";
 
         /// The game the loads below belong to; a seed of another game is a refusal
-        constexpr eastl::string_view kGame = "FuzzGame";
+        constexpr StringView kGame = "FuzzGame";
         constexpr SaveSchema kSchema{kGame, 3, 2};
 
         /// The slot folder of the process, made on the first input and removed when the process ends normally
@@ -81,7 +81,7 @@ namespace BECore::Fuzz {
                 FUZZ_CHECK(peek.has_value());
                 FUZZ_CHECK(loaded->game == peek->game);
                 FUZZ_CHECK(loaded->version == peek->version);
-                FUZZ_CHECK(eastl::string_view(loaded->game.data(), loaded->game.size()) == kGame);
+                FUZZ_CHECK(StringView(loaded->game) == kGame);
                 FUZZ_CHECK(loaded->version >= kSchema.minVersion && loaded->version <= kSchema.version);
             } else {
                 FUZZ_CHECK(IsFileContentError(loaded.error().kind));
@@ -120,7 +120,7 @@ namespace BECore::Fuzz {
         }
     }
 
-    eastl::vector<uint8_t> MakeSaveFileBytes(eastl::string_view game, uint32_t version) {
+    eastl::vector<uint8_t> MakeSaveFileBytes(StringView game, uint32_t version) {
         const std::string tag = Format("{:08x}", std::random_device{}()).c_str();
         const std::filesystem::path directory = std::filesystem::temp_directory_path() / ("BagiFuzzSeed_" + tag);
         eastl::vector<uint8_t> bytes;

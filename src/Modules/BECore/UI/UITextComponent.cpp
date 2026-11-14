@@ -14,7 +14,7 @@ namespace BECore {
 
     UITextParams UITextComponent::MakeParams(float fontSize, const eastl::string& shown) const {
         UITextParams params;
-        params.text = eastl::string_view(shown.data(), shown.size());
+        params.text = StringView(shown);
         params.font = font;
         params.fontFamily = fontFamily;
         params.fontWeight = fontWeight;
@@ -65,13 +65,13 @@ namespace BECore {
         return _painter.Check(MakeParams(owner.active.fontSize, ShownText(owner, text)), width, height, scale);
     }
 
-    eastl::string_view UITextComponent::GetDisplayText() const {
-        return _painter.GetDisplayText(eastl::string_view(text.data(), text.size()));
+    StringView UITextComponent::GetDisplayText() const {
+        return _painter.GetDisplayText(StringView(text));
     }
 
-    eastl::string_view UITextComponent::GetDisplayText(const UIElement& owner) const {
+    StringView UITextComponent::GetDisplayText(const UIElement& owner) const {
         const eastl::string& shown = ShownText(owner, text);
-        return _painter.GetDisplayText(eastl::string_view(shown.data(), shown.size()));
+        return _painter.GetDisplayText(StringView(shown));
     }
 
     Vec2 UITextComponent::MeasureText(const UIElement& owner, float maxWidth, float scale) const {

@@ -8,7 +8,7 @@ namespace BECore::Fuzz {
     namespace {
 
         /// The reference every node file of the target is found under
-        constexpr eastl::string_view kNodeRef = "nodes/Fuzz";
+        constexpr StringView kNodeRef = "nodes/Fuzz";
 
         /// The scene an input without a NUL byte is a node file for: one reference, no override
         constexpr const char* kReferenceScene = R"(<SceneManager><scenes><scene type="Scene" name="Fuzz"><nodes><node ref="nodes/Fuzz"/></nodes></scene></scenes></SceneManager>)";
@@ -16,12 +16,12 @@ namespace BECore::Fuzz {
         /// Whether @p text is a node file the loader accepts: parses, and its document element is a `node` that is no reference
         bool IsNodeFile(const pugi::xml_document& document) {
             const pugi::xml_node root = document.document_element();
-            return root && eastl::string_view(root.name()) == kNodeElementName && !root.attribute(kNodeRefAttribute.data());
+            return root && StringView(root.name()) == kNodeElementName && !root.attribute(kNodeRefAttribute.data());
         }
 
         /// A loader that serves the node file of the input under kNodeRef and nothing else
-        NodeFileLoader MakeInputLoader(eastl::string_view nodeText) {
-            return [nodeText](eastl::string_view ref, pugi::xml_document& out, eastl::string& error) {
+        NodeFileLoader MakeInputLoader(StringView nodeText) {
+            return [nodeText](StringView ref, pugi::xml_document& out, eastl::string& error) {
                 if (ref != kNodeRef) {
                     error = "no such node file";
                     return false;
@@ -69,7 +69,7 @@ namespace BECore::Fuzz {
         if (!sceneDocument.load_buffer(sceneText.data(), sceneText.size()) || !sceneDocument.document_element()) {
             return;
         }
-        const NodeFileLoader loader = MakeInputLoader(eastl::string_view(nodeText.data(), nodeText.size()));
+        const NodeFileLoader loader = MakeInputLoader(StringView(nodeText));
 
         // The expansion alone is pure pugixml: every reference is replaced or reported, and what is left has none
         pugi::xml_document expanded;

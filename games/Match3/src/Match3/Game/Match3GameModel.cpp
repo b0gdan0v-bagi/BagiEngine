@@ -21,7 +21,7 @@ namespace BECore::Match3 {
 
         /// True for the shape that operator<< gives a std::mt19937: decimal numbers that fit 32 bits with one space between, the 624 of the state as the standard has them (MSVC, libc++) or one more,
         /// the position, as libstdc++ writes. Checked before operator>> reads, which does not defend against other text or against a number out of range
-        bool LooksLikeGeneratorText(eastl::string_view text) noexcept {
+        bool LooksLikeGeneratorText(StringView text) noexcept {
             size_t numbers = 0;
             uint64_t value = 0;
             bool inNumber = false;
@@ -155,7 +155,7 @@ namespace BECore::Match3 {
         }
 
         // The text has to be what operator<< writes for the generator it reads as: the round trip also refuses a leading zero or a position out of range
-        if (!LooksLikeGeneratorText(eastl::string_view(state.rng.data(), state.rng.size()))) {
+        if (!LooksLikeGeneratorText(StringView(state.rng))) {
             return std::unexpected(eastl::string("the random generator text is not the text of a std::mt19937"));
         }
         const std::string rngText(state.rng.data(), state.rng.size());

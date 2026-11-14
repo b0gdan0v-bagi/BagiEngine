@@ -10,7 +10,7 @@ namespace BECore::Tests {
     static_assert(fmt::is_formattable<bool>::value, "bool should be formattable");
     static_assert(fmt::is_formattable<const char*>::value, "const char* should be formattable");
     static_assert(fmt::is_formattable<eastl::string>::value, "eastl::string should be formattable");
-    static_assert(fmt::is_formattable<eastl::string_view>::value, "eastl::string_view should be formattable");
+    static_assert(fmt::is_formattable<StringView>::value, "eastl::string_view should be formattable");
 
     TEST(FormatTest, CompileTimeChecks) {
         SUCCEED() << "The static_asserts at the top of this file are the check";
@@ -30,14 +30,14 @@ namespace BECore::Tests {
 
     TEST(FormatTest, EastlTypes) {
         eastl::string name = "Bagi";
-        eastl::string_view suffix = "Engine";
+        StringView suffix = "Engine";
         EXPECT_EQ(BECore::Format("Welcome to {}{}", name, suffix), "Welcome to BagiEngine");
     }
 
     TEST(FormatTest, FormatTo) {
         eastl::fixed_string<char, 64> buffer;
         BECore::FormatTo(eastl::back_inserter(buffer), "Buffer: {}", 123);
-        EXPECT_TRUE(buffer == eastl::string_view("Buffer: 123"));
+        EXPECT_TRUE(buffer == StringView("Buffer: 123"));
     }
 
     TEST(FormatTest, UserDefinedLiteral) {

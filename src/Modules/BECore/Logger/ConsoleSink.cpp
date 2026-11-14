@@ -46,7 +46,7 @@ namespace BECore {
         Write(event.level, event.message);
     }
 
-    void ConsoleSink::Write(LogLevel level, eastl::string_view message) {
+    void ConsoleSink::Write(LogLevel level, StringView message) {
         if (!ShouldLog(level)) {
             return;
         }

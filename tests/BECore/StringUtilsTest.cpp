@@ -20,15 +20,15 @@ namespace BECore::Tests {
 
     TEST(StringUtilsTest, GetHashIsFnv1a64) {
         // The generated reflection code relies on these values.
-        EXPECT_EQ(StringUtils::GetHash(eastl::string_view{""}), 0xcbf29ce484222325ULL);
-        EXPECT_EQ(StringUtils::GetHash(eastl::string_view{"a"}), 0xaf63dc4c8601ec8cULL);
-        EXPECT_EQ(StringUtils::GetHash(eastl::string_view{"foobar"}), 0x85944171f73967e8ULL);
+        EXPECT_EQ(StringUtils::GetHash(StringView{""}), 0xcbf29ce484222325ULL);
+        EXPECT_EQ(StringUtils::GetHash(StringView{"a"}), 0xaf63dc4c8601ec8cULL);
+        EXPECT_EQ(StringUtils::GetHash(StringView{"foobar"}), 0x85944171f73967e8ULL);
         EXPECT_EQ(StringUtils::GetEmptyHash(), 0xcbf29ce484222325ULL);
     }
 
     TEST(StringUtilsTest, StdStringViewOverloadAgrees) {
         constexpr std::string_view text = "BECore";
-        EXPECT_EQ(StringUtils::GetHash(text), StringUtils::GetHash(eastl::string_view{text.data(), text.size()}));
+        EXPECT_EQ(StringUtils::GetHash(text), StringUtils::GetHash(FromStd(text)));
         static_assert(StringUtils::GetHash(std::string_view{"a"}) == 0xaf63dc4c8601ec8cULL);
     }
 

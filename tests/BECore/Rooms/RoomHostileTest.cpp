@@ -78,7 +78,7 @@ namespace BECore::Tests {
         }
 
         /// A rate limit is not what these cases test: the clock moves a second between two raw messages
-        void SendRaw(HubHarness& harness, ConnectionId id, eastl::string_view text) {
+        void SendRaw(HubHarness& harness, ConnectionId id, StringView text) {
             harness.Advance(seconds(1));
             harness.SendText(id, text);
         }

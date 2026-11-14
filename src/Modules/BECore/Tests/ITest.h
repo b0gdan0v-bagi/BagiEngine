@@ -9,7 +9,7 @@ namespace BECore::Tests {
         ~ITest() override = default;
 
         virtual bool Run() = 0;
-        virtual eastl::string_view GetName() = 0;
+        virtual StringView GetName() = 0;
     };
 
     /**
@@ -26,12 +26,8 @@ namespace BECore::Tests {
      */
     template <typename T>
     concept ValidTest = requires(T t) {
-        {
-            t.Run()
-        } -> std::same_as<bool>;
-        {
-            T::GetStaticTypeName()
-        } -> std::convertible_to<eastl::string_view>;
+        {t.Run()}->std::same_as<bool>;
+        {T::GetStaticTypeName()}->std::convertible_to<StringView>;
         requires std::is_base_of_v<ITest, T>;
     };
 

@@ -74,11 +74,11 @@ namespace BECore {
         return frame;
     }
 
-    eastl::vector<uint8_t> EncodeTextFrame(eastl::string_view text, Optional<WebSocketMask> mask) {
+    eastl::vector<uint8_t> EncodeTextFrame(StringView text, Optional<WebSocketMask> mask) {
         return EncodeFrame(WebSocketOpcode::kText, eastl::span<const uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), text.size()), mask);
     }
 
-    eastl::vector<uint8_t> EncodeCloseFrame(uint16_t code, eastl::string_view reason, Optional<WebSocketMask> mask) {
+    eastl::vector<uint8_t> EncodeCloseFrame(uint16_t code, StringView reason, Optional<WebSocketMask> mask) {
         eastl::vector<uint8_t> payload;
         AppendBigEndian(payload, code, kCloseCodeSize);
         const size_t reasonSize = std::min(reason.size(), kMaxControlPayload - kCloseCodeSize);

@@ -241,9 +241,9 @@ namespace BECore::Tests {
         }
 
         /// The header text as shown: the chosen option's caption, else the placeholder of the text component
-        eastl::string_view HeaderText(const UIDropdown& dropdown) {
+        StringView HeaderText(const UIDropdown& dropdown) {
             const UITextComponent* header = dropdown.GetComponent<UITextComponent>();
-            return header ? header->GetDisplayText(dropdown) : eastl::string_view{};
+            return header ? header->GetDisplayText(dropdown) : StringView{};
         }
 
         bool SameRect(const Rect& a, const Rect& b) {

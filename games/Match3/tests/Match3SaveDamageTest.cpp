@@ -16,7 +16,7 @@ namespace BECore::Match3::Tests {
 
     namespace {
 
-        constexpr eastl::string_view kSlot = "damaged";
+        constexpr StringView kSlot = "damaged";
 
         /// Mutations of the sweep, and the most one input gets stacked
         constexpr int kSweepCount = 3000;

@@ -14,7 +14,7 @@ namespace BECore {
         for (const auto& root : _roots) {
             for (const PoolString name : eastl::array<PoolString, 2>{"config"_intern, "assets"_intern}) {
                 const auto dirName = name.ToStringView();
-                std::filesystem::path dirPath = root / std::string_view(dirName.data(), dirName.size());
+                std::filesystem::path dirPath = root / ToStd(dirName);
                 if (std::filesystem::exists(dirPath) && std::filesystem::is_directory(dirPath)) {
                     Mount(name, dirPath);
                 }
@@ -67,13 +67,13 @@ namespace BECore {
         _mountPoints.erase(virtualPath);
     }
 
-    std::filesystem::path FileSystem::ResolvePath(eastl::string_view virtualPath) const {
+    std::filesystem::path FileSystem::ResolvePath(StringView virtualPath) const {
         if (virtualPath.empty()) {
             return {};
         }
 
         // 2. Если путь абсолютный
-        std::filesystem::path path(std::string_view(virtualPath.data(), virtualPath.size()));  // Здесь аллокация неизбежна для std::filesystem::path
+        std::filesystem::path path(ToStd(virtualPath));  // Здесь аллокация неизбежна для std::filesystem::path
         if (path.is_absolute()) {
             return std::filesystem::exists(path) ? path : std::filesystem::path{};
         }
@@ -81,10 +81,10 @@ namespace BECore {
         // 3. Разделяем путь на точку монтирования и остаток через string_view
         size_t firstSlash = virtualPath.find_first_of("/\\");
 
-        eastl::string_view mountPoint;
-        eastl::string_view remainingPath;
+        StringView mountPoint;
+        StringView remainingPath;
 
-        if (firstSlash != eastl::string_view::npos) {
+        if (firstSlash != StringView::npos) {
             mountPoint = virtualPath.substr(0, firstSlash);
             remainingPath = virtualPath.substr(firstSlash + 1);
         } else {
@@ -100,7 +100,7 @@ namespace BECore {
 
                 if (!remainingPath.empty()) {
                     // Конвертируем оставшийся кусочек в path при склейке
-                    fullPath /= std::string_view(remainingPath.data(), remainingPath.size());
+                    fullPath /= ToStd(remainingPath);
                 }
 
                 if (std::filesystem::exists(fullPath)) {
@@ -111,14 +111,14 @@ namespace BECore {
 
         // 5. Поиск относительно корней, от старшего приоритета к младшему
         for (auto root = _roots.rbegin(); root != _roots.rend(); ++root) {
-            std::filesystem::path rootFullPath = *root / std::string_view(virtualPath.data(), virtualPath.size());
+            std::filesystem::path rootFullPath = *root / ToStd(virtualPath);
             if (std::filesystem::exists(rootFullPath)) {
                 return rootFullPath;
             }
         }
 
         // 6. Относительно текущей директории
-        std::filesystem::path currentPath = std::filesystem::current_path() / std::string_view(virtualPath.data(), virtualPath.size());
+        std::filesystem::path currentPath = std::filesystem::current_path() / ToStd(virtualPath);
         if (std::filesystem::exists(currentPath)) {
             return currentPath;
         }
@@ -126,7 +126,7 @@ namespace BECore {
         return {};
     }
 
-    bool FileSystem::Exists(eastl::string_view virtualPath) const {
+    bool FileSystem::Exists(StringView virtualPath) const {
         std::filesystem::path resolved = ResolvePath(virtualPath);
         return !resolved.empty() && std::filesystem::exists(resolved);
     }
@@ -147,7 +147,7 @@ namespace BECore {
         return {};
     }
 
-    eastl::vector<PoolString> FileSystem::EnumerateFiles(PoolString mountPoint, eastl::span<const eastl::string_view> extensions) const {
+    eastl::vector<PoolString> FileSystem::EnumerateFiles(PoolString mountPoint, eastl::span<const StringView> extensions) const {
         eastl::vector<PoolString> result;
 
         auto it = _mountPoints.find(mountPoint);
@@ -222,7 +222,7 @@ namespace BECore {
                 }
             }
 
-            result.push_back(PoolString::Intern(eastl::string_view(virtualPath.data(), virtualPath.size())));
+            result.push_back(PoolString::Intern(StringView(virtualPath)));
         }
 
         return result;

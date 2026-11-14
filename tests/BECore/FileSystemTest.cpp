@@ -140,8 +140,8 @@ namespace BECore::Tests {
         fs.AddContentRoot(_game);
         fs.Initialize();
 
-        const eastl::string_view extensions[] = {".png"};
-        const auto files = fs.EnumerateFiles("assets"_intern, eastl::span<const eastl::string_view>(extensions));
+        const StringView extensions[] = {".png"};
+        const auto files = fs.EnumerateFiles("assets"_intern, eastl::span<const StringView>(extensions));
 
         ASSERT_EQ(files.size(), 3u);
         EXPECT_EQ(files[0].ToStringView(), "assets/a.png");

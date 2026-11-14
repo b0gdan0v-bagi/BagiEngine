@@ -10,7 +10,7 @@ namespace BECore {
         return XmlConfig(std::move(doc));
     }
 
-    bool XmlConfig::LoadFromVirtualPath(eastl::string_view virtualPath) const {
+    bool XmlConfig::LoadFromVirtualPath(StringView virtualPath) const {
         if (!_doc) {
             return false;
         }
@@ -28,7 +28,7 @@ namespace BECore {
         return _doc->LoadFromFile(filepath);
     }
 
-    bool XmlConfig::LoadFromString(eastl::string_view xmlContent) const {
+    bool XmlConfig::LoadFromString(StringView xmlContent) const {
         if (!_doc) {
             return false;
         }

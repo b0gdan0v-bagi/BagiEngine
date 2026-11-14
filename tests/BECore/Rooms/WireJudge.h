@@ -51,7 +51,7 @@ namespace BECore::Tests {
     /// The card ids @p text names that the client of @p seat (-1: a client that has no seat yet) may not know, in order
     inline std::vector<std::string> FindLeakedCardIds(std::string_view text, int seat) {
         std::vector<std::string> allowedTable;
-        if (const auto parsed = ParseJson(eastl::string_view(text.data(), text.size())); parsed && parsed->is_object()) {
+        if (const auto parsed = ParseJson(FromStd(text)); parsed && parsed->is_object()) {
             const Json* view = FindJsonMember(*parsed, "view");
             const Json* table = view && view->is_object() ? FindJsonMember(*view, "table") : nullptr;
             if (table) {

@@ -156,7 +156,7 @@ namespace BECore {
             return text.data();
         }
 
-        eastl::string DescribeError(eastl::string_view what, int error) {
+        eastl::string DescribeError(StringView what, int error) {
             return Format("{} failed (error {})", what, error);
         }
 
@@ -321,7 +321,7 @@ namespace BECore {
         return Connect("127.0.0.1", port, kLoopbackConnectTimeout);
     }
 
-    std::expected<Socket, eastl::string> Socket::Connect(eastl::string_view host, uint16_t port, std::chrono::milliseconds timeout, const std::atomic<bool>* cancel) {
+    std::expected<Socket, eastl::string> Socket::Connect(StringView host, uint16_t port, std::chrono::milliseconds timeout, const std::atomic<bool>* cancel) {
         const eastl::string target = Format("{}:{}", host, port);
         if (cancel != nullptr && cancel->load()) {
             return std::unexpected(Format("connect() to {} cancelled", target));

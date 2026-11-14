@@ -6,7 +6,7 @@ namespace BECore::Tests {
 
     namespace {
 
-        constexpr eastl::string_view kGoodPath = "/matches/0123456789abcdef0123456789abcdef/0";
+        constexpr StringView kGoodPath = "/matches/0123456789abcdef0123456789abcdef/0";
 
     }  // namespace
 
@@ -45,7 +45,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(IsWebPostPathValid("/a b"));
         EXPECT_FALSE(IsWebPostPathValid("/a\tb"));
         EXPECT_FALSE(IsWebPostPathValid("/a\nb"));
-        EXPECT_FALSE(IsWebPostPathValid(eastl::string_view("/a\0b", 4)));
+        EXPECT_FALSE(IsWebPostPathValid(StringView("/a\0b", 4)));
         EXPECT_FALSE(IsWebPostPathValid("/a\x7f"));
         EXPECT_FALSE(IsWebPostPathValid("/a\\b"));
         EXPECT_FALSE(IsWebPostPathValid("/a/../b"));

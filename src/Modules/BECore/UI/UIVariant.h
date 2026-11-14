@@ -48,8 +48,8 @@ namespace BECore {
         /// A list of variants is `<variants><variant .../>...</variants>` in a file, not the `item` elements a general vector gets
         template <>
         struct DataAccessor<eastl::vector<UIVariant>> {
-            static void Save(ISerializer& s, const eastl::vector<UIVariant>& variants, eastl::string_view key);
-            static bool Load(IDeserializer& d, eastl::vector<UIVariant>& variants, eastl::string_view key);
+            static void Save(ISerializer& s, const eastl::vector<UIVariant>& variants, StringView key);
+            static bool Load(IDeserializer& d, eastl::vector<UIVariant>& variants, StringView key);
         };
 
     }  // namespace Ser
@@ -57,7 +57,7 @@ namespace BECore {
     namespace PropVisit {
 
         /// The inspector does not edit variants yet (editor tooling is stage 7 of the UI plan): they are shown as nothing
-        inline bool Visit(IPropertyVisitor& /*v*/, eastl::vector<UIVariant>& /*variants*/, eastl::string_view /*key*/) {
+        inline bool Visit(IPropertyVisitor& /*v*/, eastl::vector<UIVariant>& /*variants*/, StringView /*key*/) {
             return false;
         }
 

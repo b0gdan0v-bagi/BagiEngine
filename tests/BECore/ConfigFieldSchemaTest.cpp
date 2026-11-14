@@ -12,10 +12,10 @@ namespace BECore::Tests {
     namespace {
 
         const PoolString kLoggerConfig = "LoggerConfig"_intern;
-        constexpr eastl::string_view kSinkTypePath = "sink/@type";
-        constexpr eastl::string_view kSinkMinLevelPath = "sink/@minLevel";
+        constexpr StringView kSinkTypePath = "sink/@type";
+        constexpr StringView kSinkMinLevelPath = "sink/@minLevel";
 
-        bool Contains(const eastl::vector<eastl::string>& options, eastl::string_view value) {
+        bool Contains(const eastl::vector<eastl::string>& options, StringView value) {
             return eastl::find(options.begin(), options.end(), value) != options.end();
         }
 
@@ -68,7 +68,7 @@ namespace BECore::Tests {
         const FieldHint hint = schema.Resolve(kLoggerConfig, kSinkTypePath, "");
         ASSERT_FALSE(hint.options.empty());
         for (const eastl::string& option : hint.options) {
-            const auto sink = AbstractFactory<ILogSink>::GetInstance().Create(eastl::string_view{option.c_str(), option.size()});
+            const auto sink = AbstractFactory<ILogSink>::GetInstance().Create(StringView{option.c_str(), option.size()});
             EXPECT_TRUE(sink) << option.c_str();
         }
     }
@@ -110,7 +110,7 @@ namespace BECore::Tests {
         const FieldHint levels = schema.Resolve(kLoggerConfig, kSinkMinLevelPath, "Debug");
         EXPECT_EQ(levels.type, FieldType::Enum);
         EXPECT_EQ(levels.options.size(), EnumUtils<LogLevel>::Count());
-        for (const eastl::string_view name : EnumUtils<LogLevel>::Names()) {
+        for (const StringView name : EnumUtils<LogLevel>::Names()) {
             EXPECT_TRUE(Contains(levels.options, name)) << eastl::string{name.data(), name.size()}.c_str();
         }
     }

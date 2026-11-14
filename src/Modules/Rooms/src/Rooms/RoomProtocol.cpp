@@ -22,7 +22,7 @@ namespace BECore {
 
         /// Reads one strictly valid UTF-8 character at @p pos; nullopt for a bad lead byte, a missing or bad continuation byte,
         /// an overlong form, a surrogate or a value above U+10FFFF
-        [[nodiscard]] Optional<DecodedChar> DecodeUtf8(eastl::string_view text, size_t pos) {
+        [[nodiscard]] Optional<DecodedChar> DecodeUtf8(StringView text, size_t pos) {
             const auto byteAt = [&](size_t index) { return static_cast<unsigned char>(text[index]); };
             const unsigned char lead = byteAt(pos);
             size_t length = 0;
@@ -72,7 +72,7 @@ namespace BECore {
                    || codePoint == 0xFEFF;                                       // byte order mark
         }
 
-        [[nodiscard]] std::unexpected<ControlError> Fail(eastl::string_view code, eastl::string message) {
+        [[nodiscard]] std::unexpected<ControlError> Fail(StringView code, eastl::string message) {
             return std::unexpected(MakeControlError(code, std::move(message)));
         }
 
@@ -81,7 +81,7 @@ namespace BECore {
         }
 
         /// A string member that must be there
-        [[nodiscard]] std::expected<eastl::string, ControlError> RequireString(const Json& root, eastl::string_view key) {
+        [[nodiscard]] std::expected<eastl::string, ControlError> RequireString(const Json& root, StringView key) {
             auto value = GetJsonString(root, key);
             if (!value) {
                 return BadMessage(Format("'{}' must be a string", key));
@@ -207,7 +207,7 @@ namespace BECore {
         }
 
         /// The common start of every message: `v` and `type`
-        [[nodiscard]] Json MakeEnvelope(eastl::string_view type) {
+        [[nodiscard]] Json MakeEnvelope(StringView type) {
             Json root = Json::object();
             root["v"] = kRoomProtocolVersion;
             root["type"] = MakeJsonString(type);
@@ -216,7 +216,7 @@ namespace BECore {
 
         // ---- Reading the server's messages ----
 
-        [[nodiscard]] Optional<RoomPhase> ParsePhaseName(eastl::string_view name) {
+        [[nodiscard]] Optional<RoomPhase> ParsePhaseName(StringView name) {
             for (const RoomPhase phase : {RoomPhase::Lobby, RoomPhase::Playing, RoomPhase::Finished}) {
                 if (GetPhaseName(phase) == name) {
                     return phase;
@@ -225,7 +225,7 @@ namespace BECore {
             return std::nullopt;
         }
 
-        [[nodiscard]] Optional<SeatKind> ParseSeatKindName(eastl::string_view name) {
+        [[nodiscard]] Optional<SeatKind> ParseSeatKindName(StringView name) {
             for (const SeatKind kind : {SeatKind::Human, SeatKind::Computer, SeatKind::Empty}) {
                 if (GetSeatKindName(kind) == name) {
                     return kind;
@@ -235,7 +235,7 @@ namespace BECore {
         }
 
         /// An integer member in [min, max]
-        [[nodiscard]] std::expected<int64_t, ControlError> RequireInt(const Json& root, eastl::string_view key, int64_t min, int64_t max) {
+        [[nodiscard]] std::expected<int64_t, ControlError> RequireInt(const Json& root, StringView key, int64_t min, int64_t max) {
             const auto value = GetJsonInt(root, key);
             if (!value || *value < min || *value > max) {
                 return BadMessage(Format("'{}' must be an integer from {} to {}", key, min, max));
@@ -243,7 +243,7 @@ namespace BECore {
             return *value;
         }
 
-        [[nodiscard]] std::expected<bool, ControlError> RequireBool(const Json& root, eastl::string_view key) {
+        [[nodiscard]] std::expected<bool, ControlError> RequireBool(const Json& root, StringView key) {
             const auto value = GetJsonBool(root, key);
             if (!value) {
                 return BadMessage(Format("'{}' must be a boolean", key));
@@ -514,12 +514,12 @@ namespace BECore {
 
     }  // namespace
 
-    std::expected<ClientMessage, ControlError> ParseClientMessage(eastl::string_view text, size_t maxBytes) {
+    std::expected<ClientMessage, ControlError> ParseClientMessage(StringView text, size_t maxBytes) {
         if (text.size() > maxBytes) {
             return Fail(RoomErrors::kMessageTooLarge, Format("a message is at most {} bytes", maxBytes));
         }
         // The JSON lexer takes a NUL byte for the end of the input and would ignore what follows it
-        if (text.find('\0') != eastl::string_view::npos) {
+        if (text.find('\0') != StringView::npos) {
             return BadMessage("the message must not contain a NUL byte");
         }
         if (IsJsonNestedDeeperThan(text, RoomLimits::kMaxClientJsonDepth)) {
@@ -571,7 +571,7 @@ namespace BECore {
         return BadMessage("unknown message type");
     }
 
-    eastl::string_view GetClientMessageType(const ClientMessage& message) {
+    StringView GetClientMessageType(const ClientMessage& message) {
         return std::visit(overload{
                               [](const CreateRoomMessage&) { return RoomMessageTypes::kCreateRoom; },
                               [](const JoinRoomMessage&) { return RoomMessageTypes::kJoinRoom; },
@@ -618,7 +618,7 @@ namespace BECore {
         return DumpJson(root);
     }
 
-    Optional<eastl::string> SanitizePlayerName(eastl::string_view text) {
+    Optional<eastl::string> SanitizePlayerName(StringView text) {
         for (size_t pos = 0; pos < text.size();) {
             const auto decoded = DecodeUtf8(text, pos);
             if (!decoded || IsForbiddenInName(decoded->codePoint)) {
@@ -642,7 +642,7 @@ namespace BECore {
         return eastl::string(text.data() + first, length);
     }
 
-    eastl::string MakeJoinedMessage(eastl::string_view room, PlayerId player, eastl::string_view token, int seat, bool host) {
+    eastl::string MakeJoinedMessage(StringView room, PlayerId player, StringView token, int seat, bool host) {
         Json root = MakeEnvelope(RoomMessageTypes::kJoined);
         root["room"] = MakeJsonString(room);
         root["player"] = player;
@@ -697,7 +697,7 @@ namespace BECore {
         return DumpJson(root);
     }
 
-    eastl::string MakeViewMessage(eastl::string_view room, int seat, uint64_t version, bool finished, const Json& view, const Json& actions) {
+    eastl::string MakeViewMessage(StringView room, int seat, uint64_t version, bool finished, const Json& view, const Json& actions) {
         Json root = MakeEnvelope(RoomMessageTypes::kView);
         root["room"] = MakeJsonString(room);
         root["seat"] = seat;
@@ -708,7 +708,7 @@ namespace BECore {
         return DumpJson(root);
     }
 
-    eastl::string MakeErrorMessage(eastl::string_view code, eastl::string_view message, eastl::string_view ref) {
+    eastl::string MakeErrorMessage(StringView code, StringView message, StringView ref) {
         Json root = MakeEnvelope(RoomMessageTypes::kError);
         root["code"] = MakeJsonString(code);
         root["message"] = MakeJsonString(message);
@@ -718,7 +718,7 @@ namespace BECore {
         return DumpJson(root);
     }
 
-    eastl::string MakeLeftMessage(eastl::string_view reason) {
+    eastl::string MakeLeftMessage(StringView reason) {
         Json root = MakeEnvelope(RoomMessageTypes::kLeft);
         root["reason"] = MakeJsonString(reason);
         return DumpJson(root);
@@ -728,11 +728,11 @@ namespace BECore {
         return DumpJson(MakeEnvelope(RoomMessageTypes::kPong));
     }
 
-    std::expected<ServerMessage, ControlError> ParseServerMessage(eastl::string_view text, size_t maxBytes) {
+    std::expected<ServerMessage, ControlError> ParseServerMessage(StringView text, size_t maxBytes) {
         if (text.size() > maxBytes) {
             return Fail(RoomErrors::kMessageTooLarge, Format("a message is at most {} bytes", maxBytes));
         }
-        if (text.find('\0') != eastl::string_view::npos) {
+        if (text.find('\0') != StringView::npos) {
             return BadMessage("the message must not contain a NUL byte");
         }
         if (IsJsonNestedDeeperThan(text, RoomLimits::kMaxServerJsonDepth)) {
@@ -781,7 +781,7 @@ namespace BECore {
         return ServerMessage(UnknownServerMessage{std::move(*type)});
     }
 
-    eastl::string_view GetServerMessageType(const ServerMessage& message) {
+    StringView GetServerMessageType(const ServerMessage& message) {
         return std::visit(overload{
                               [](const JoinedMessage&) { return RoomMessageTypes::kJoined; },
                               [](const LobbyMessage&) { return RoomMessageTypes::kLobby; },
@@ -790,7 +790,7 @@ namespace BECore {
                               [](const LeftMessage&) { return RoomMessageTypes::kLeft; },
                               [](const PongMessage&) { return RoomMessageTypes::kPong; },
                               [](const RoomListMessage&) { return RoomMessageTypes::kRooms; },
-                              [](const UnknownServerMessage& m) { return eastl::string_view(m.type); },
+                              [](const UnknownServerMessage& m) { return StringView(m.type); },
                           },
                           message);
     }

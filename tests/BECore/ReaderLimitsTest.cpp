@@ -51,9 +51,9 @@ namespace BECore::Tests {
             return deepest + 1;
         }
 
-        bool HasErrorContaining(const IDeserializer& reader, eastl::string_view part) {
+        bool HasErrorContaining(const IDeserializer& reader, StringView part) {
             for (const DeserializeError& error : reader.GetErrors()) {
-                if (error.errorMessage.ToStringView().find(part) != eastl::string_view::npos) {
+                if (error.errorMessage.ToStringView().find(part) != StringView::npos) {
                     return true;
                 }
             }
@@ -136,12 +136,12 @@ namespace BECore::Tests {
         // The first bytes of a UTF-16 and of a UTF-32 text: not decoded, and the view into the middle of a buffer is not read as words
         const char utf16[] = "\xFF\xFE<\0r\0/\0>\0";
         const char utf32[] = "\xFF\xFE\0\0<\0\0\0r\0\0\0/\0\0\0>\0\0\0";
-        for (const eastl::string_view text : {eastl::string_view(utf16, sizeof(utf16) - 1), eastl::string_view(utf32, sizeof(utf32) - 1)}) {
+        for (const StringView text : {StringView(utf16, sizeof(utf16) - 1), StringView(utf32, sizeof(utf32) - 1)}) {
             eastl::vector<char> buffer(text.size() + 1);
             std::memcpy(buffer.data() + 1, text.data(), text.size());
 
             XmlDeserializer reader;
-            EXPECT_FALSE(reader.LoadFromString(eastl::string_view(buffer.data() + 1, text.size())));
+            EXPECT_FALSE(reader.LoadFromString(StringView(buffer.data() + 1, text.size())));
             EXPECT_TRUE(reader.HasErrors());
         }
 
@@ -219,7 +219,7 @@ namespace BECore::Tests {
         int32_t value = 0;
         const eastl::string longName(ReaderLimits::kMaxErrorTextBytes * 4, 'n');
         for (size_t i = 0; i < ReaderLimits::kMaxRecordedErrors * 4; ++i) {
-            reader.Read(eastl::string_view(longName.data(), longName.size()), value);
+            reader.Read(StringView(longName), value);
         }
 
         const auto& errors = reader.GetErrors();
@@ -243,9 +243,9 @@ namespace BECore::Tests {
         int32_t value = 0;
         EXPECT_FALSE(reader.ReadAttribute("a", value));
         ASSERT_EQ(reader.GetErrors().size(), 1u);
-        const eastl::string_view message = reader.GetErrors()[0].errorMessage.ToStringView();
+        const StringView message = reader.GetErrors()[0].errorMessage.ToStringView();
         EXPECT_LT(message.size(), 100u);
-        EXPECT_NE(message.find("..."), eastl::string_view::npos);
+        EXPECT_NE(message.find("..."), StringView::npos);
     }
 
     // ---------------------------------------------------------------------------------------------

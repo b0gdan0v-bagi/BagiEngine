@@ -145,7 +145,7 @@ namespace BECore::Tests {
         auto client = RoomSocketClient::Connect(port);
         ASSERT_TRUE(client.has_value());
         const std::string text = PingText();
-        const auto frame = EncodeTextFrame(eastl::string_view(text.data(), text.size()), kClientMask);
+        const auto frame = EncodeTextFrame(FromStd(text), kClientMask);
         for (size_t i = 0; i < frame.size(); ++i) {
             client->Raw().Send(eastl::span<const uint8_t>(frame.data() + i, 1));
         }
@@ -180,7 +180,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(client.has_value());
         ASSERT_TRUE(client->Handshake(port));
         const std::string text = PingText();
-        client->Send(AsBytes(EncodeTextFrame(eastl::string_view(text.data(), text.size()))));
+        client->Send(AsBytes(EncodeTextFrame(FromStd(text))));
         const auto close = ReadUntilClose(*client);
         ASSERT_TRUE(close.has_value());
         EXPECT_EQ(CloseCodeOf(*close), WebSocketCloseCode::kProtocolError);

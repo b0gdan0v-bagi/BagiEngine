@@ -15,7 +15,7 @@ namespace BECore {
      * `Origin` is written only when @p origin is not empty; it comes from the program's settings and must not hold a
      * line break. A native client sends none (it is not a page); the server's allow-list is about pages.
      */
-    [[nodiscard]] eastl::string BuildClientHandshakeRequest(const WebSocketUrl& url, eastl::string_view key, eastl::string_view origin = {});
+    [[nodiscard]] eastl::string BuildClientHandshakeRequest(const WebSocketUrl& url, StringView key, StringView origin = {});
 
     /**
      * @brief Checks the head of the server's answer to a request made with @p key.
@@ -25,6 +25,6 @@ namespace BECore {
      * `Sec-WebSocket-Extensions` nor `Sec-WebSocket-Protocol` (the request asked for none). The error is a message
      * for the log (a refusal names the status the server answered with).
      */
-    [[nodiscard]] std::expected<void, eastl::string> CheckServerHandshakeResponse(eastl::string_view responseHead, eastl::string_view key);
+    [[nodiscard]] std::expected<void, eastl::string> CheckServerHandshakeResponse(StringView responseHead, StringView key);
 
 }  // namespace BECore

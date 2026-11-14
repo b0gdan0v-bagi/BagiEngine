@@ -244,7 +244,7 @@ namespace BECore::Tests {
         EXPECT_NE(xml.find("<components>"), eastl::string::npos) << xml.c_str();
 
         XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+        ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
         auto loaded = New<UIElement>();
         ASSERT_TRUE(deserializer.BeginObject("element"));
         loaded->Deserialize(deserializer);
@@ -280,7 +280,7 @@ namespace BECore::Tests {
 
         const eastl::string saved = ElementToXml(*loaded);
         XmlDeserializer again;
-        ASSERT_TRUE(again.LoadFromString(eastl::string_view(saved.data(), saved.size())));
+        ASSERT_TRUE(again.LoadFromString(StringView(saved)));
         auto reloaded = New<UIElement>();
         ASSERT_TRUE(again.BeginObject("element"));
         reloaded->Deserialize(again);
@@ -296,7 +296,7 @@ namespace BECore::Tests {
     TEST_F(UIComponentTest, AnElementWithNoComponentsSavesNoneAndLoadsNone) {
         const eastl::string xml = ElementToXml(Get("Plain"));
         XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+        ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
         auto loaded = New<UIElement>();
         ASSERT_TRUE(deserializer.BeginObject("element"));
         loaded->Deserialize(deserializer);
@@ -314,7 +314,7 @@ namespace BECore::Tests {
         loaded->Deserialize(deserializer);
         deserializer.EndObject();
         ASSERT_TRUE(deserializer.HasErrors());
-        EXPECT_NE(deserializer.GetErrors()[0].errorMessage.ToStringView().find("NoSuchComponent"), eastl::string_view::npos);
+        EXPECT_NE(deserializer.GetErrors()[0].errorMessage.ToStringView().find("NoSuchComponent"), StringView::npos);
     }
 
     // ---- one of each type -------------------------------------------------------------------------------------------------
@@ -803,7 +803,7 @@ namespace BECore::Tests {
         EXPECT_NE(saved.find("partShape=\"Round\""), eastl::string::npos) << saved.c_str();
 
         XmlDeserializer again;
-        ASSERT_TRUE(again.LoadFromString(eastl::string_view(saved.data(), saved.size())));
+        ASSERT_TRUE(again.LoadFromString(StringView(saved)));
         auto reloaded = New<UIElement>();
         ASSERT_TRUE(again.BeginObject("element"));
         reloaded->Deserialize(again);
@@ -850,7 +850,7 @@ namespace BECore::Tests {
 
         const eastl::string saved = ElementToXml(*loaded);
         XmlDeserializer again;
-        ASSERT_TRUE(again.LoadFromString(eastl::string_view(saved.data(), saved.size())));
+        ASSERT_TRUE(again.LoadFromString(StringView(saved)));
         auto reloaded = New<UIElement>();
         ASSERT_TRUE(again.BeginObject("element"));
         reloaded->Deserialize(again);

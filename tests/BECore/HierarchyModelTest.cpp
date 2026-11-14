@@ -87,13 +87,13 @@ namespace BECore::Tests {
         }
 
         /// The names of the nodes that pass the filter, in tree order
-        eastl::string Matches(eastl::string_view query, eastl::string_view type) {
+        eastl::string Matches(StringView query, StringView type) {
             eastl::string out;
             Collect(Root(), query, type, out);
             return out;
         }
 
-        void Collect(const SceneNode& node, eastl::string_view query, eastl::string_view type, eastl::string& out) {
+        void Collect(const SceneNode& node, StringView query, StringView type, eastl::string& out) {
             for (const auto& child : node.GetChildren()) {
                 if (NodeMatchesFilter(*child, query, type)) {
                     out.append(out.empty() ? "" : " ");
@@ -267,7 +267,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(HierarchyModelTest, TheComponentTypesAreSortedWithoutRepeats) {
-        eastl::vector<eastl::string_view> types;
+        eastl::vector<StringView> types;
         types.push_back("Stale");
         CollectComponentTypes(Root(), types);
 
@@ -277,7 +277,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(HierarchyModelTest, CollectingKeepsTheCapacityOfTheVector) {
-        eastl::vector<eastl::string_view> types;
+        eastl::vector<StringView> types;
         types.reserve(16);
         const auto* data = types.data();
         CollectComponentTypes(Root(), types);

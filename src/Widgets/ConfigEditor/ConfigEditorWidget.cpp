@@ -262,9 +262,9 @@ namespace BECore {
                         // Column 1: type-appropriate inspector
                         ImGui::TableSetColumnIndex(1);
 
-                        const eastl::string_view domValue{attr.value()};
+                        const StringView domValue{attr.value()};
                         const eastl::string* stagedPtr = _staged.Get(attrKey);
-                        const eastl::string_view currentValue = stagedPtr ? eastl::string_view{*stagedPtr} : domValue;
+                        const StringView currentValue = stagedPtr ? StringView{*stagedPtr} : domValue;
 
                         const eastl::string schemaPath = Format("{}/@{}", node.name(), attr.name());
                         const FieldHint hint = schema.Resolve(_selectedConfig, schemaPath, currentValue);
@@ -289,7 +289,7 @@ namespace BECore {
                 } else if (child.type() == pugi::node_pcdata) {
                     const eastl::string textKey = Format("{}#text", nodePath);
                     const eastl::string* stagedPtr = _staged.Get(textKey);
-                    const eastl::string_view currentValue = stagedPtr ? eastl::string_view{*stagedPtr} : eastl::string_view{child.value()};
+                    const StringView currentValue = stagedPtr ? StringView{*stagedPtr} : StringView{child.value()};
 
                     const FieldHint stringHint{FieldType::String};
                     const auto result = RenderFieldInspector(textKey, currentValue, stringHint);

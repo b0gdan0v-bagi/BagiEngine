@@ -30,7 +30,7 @@ namespace BECore::Fuzz {
                 AddBytes(&value, sizeof(T));
             }
 
-            void AddText(eastl::string_view text) {
+            void AddText(StringView text) {
                 Add(text.size());
                 AddBytes(text.data(), text.size());
             }
@@ -55,11 +55,11 @@ namespace BECore::Fuzz {
             }
         }
 
-        eastl::string_view TextOf(const eastl::string& value) {
-            return eastl::string_view(value.data(), value.size());
+        StringView TextOf(const eastl::string& value) {
+            return StringView(value);
         }
 
-        eastl::string_view TextOf(const PoolString& value) {
+        StringView TextOf(const PoolString& value) {
             return value.ToStringView();
         }
 
@@ -71,7 +71,7 @@ namespace BECore::Fuzz {
                 return value == (*payload != 0);
             } else if constexpr (IsTextType<T>) {
                 const size_t length = BinaryFormat::Load<uint32_t>(payload);
-                return TextOf(value) == eastl::string_view(reinterpret_cast<const char*>(payload + sizeof(uint32_t)), length);
+                return TextOf(value) == StringView(reinterpret_cast<const char*>(payload + sizeof(uint32_t)), length);
             } else {
                 const T raw = BinaryFormat::Load<T>(payload);
                 return std::memcmp(&raw, &value, sizeof(T)) == 0;
@@ -103,7 +103,7 @@ namespace BECore::Fuzz {
                 FUZZ_CHECK(depth <= BinaryFormat::MaxDepth);
 
                 eastl::vector<BinaryFormat::EntryView> entries;
-                eastl::hash_map<eastl::string_view, LastEntries> last;
+                eastl::hash_map<StringView, LastEntries> last;
                 for (size_t position = begin; position < end;) {
                     BinaryFormat::EntryView entry;
                     FUZZ_CHECK(BinaryFormat::ParseEntry(_data, position, end, entry));

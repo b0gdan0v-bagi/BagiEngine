@@ -23,8 +23,8 @@ namespace BECore::Tests {
             }
         };
 
-        eastl::string_view View(std::string_view text) {
-            return eastl::string_view(text.data(), text.size());
+        StringView View(std::string_view text) {
+            return FromStd(text);
         }
 
         std::string ErrorCode(const Json& response) {

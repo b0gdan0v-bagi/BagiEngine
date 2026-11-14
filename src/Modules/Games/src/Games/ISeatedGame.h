@@ -8,9 +8,9 @@ namespace BECore {
     /// Error codes of a seated game, beside GameControlErrors (a game uses kIllegalAction of that one for a move the rules refuse)
     namespace SeatedGameErrors {
         /// The seat is well-formed but it is not the seat's turn to act
-        inline constexpr eastl::string_view kNotYourTurn = "not_your_turn";
+        inline constexpr StringView kNotYourTurn = "not_your_turn";
         /// The seat number is outside 0..GetSeatCount()-1
-        inline constexpr eastl::string_view kInvalidSeat = "invalid_seat";
+        inline constexpr StringView kInvalidSeat = "invalid_seat";
     }  // namespace SeatedGameErrors
 
     /**

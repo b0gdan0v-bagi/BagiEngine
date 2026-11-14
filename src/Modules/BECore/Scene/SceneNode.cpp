@@ -71,7 +71,7 @@ namespace BECore {
         }
     }
 
-    IntrusivePtr<IComponent> SceneNode::GetComponent(eastl::string_view typeName) const {
+    IntrusivePtr<IComponent> SceneNode::GetComponent(StringView typeName) const {
         auto it = eastl::find_if(_components.begin(), _components.end(), [&typeName](const IntrusivePtr<IComponent>& comp) { return comp->GetTypeMeta().typeName == typeName; });
 
         if (it != _components.end()) {

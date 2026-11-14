@@ -87,7 +87,7 @@ namespace BECore {
         }
     }
 
-    eastl::string_view UIDropdown::GetSelectedValue() const {
+    StringView UIDropdown::GetSelectedValue() const {
         if (bind.Empty()) {
             return {};
         }
@@ -95,7 +95,7 @@ namespace BECore {
     }
 
     UIElement* UIDropdown::FindChosenOption() const {
-        const eastl::string_view chosen = GetSelectedValue();
+        const StringView chosen = GetSelectedValue();
         if (chosen.empty()) {
             return nullptr;
         }

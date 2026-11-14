@@ -7,7 +7,7 @@ namespace BECore {
 
     namespace {
 
-        ControlError MakeError(eastl::string_view code, eastl::string_view message) {
+        ControlError MakeError(StringView code, StringView message) {
             return ControlError{eastl::string(code), eastl::string(message)};
         }
 
@@ -50,7 +50,7 @@ namespace BECore {
         ++_lobbyRevision;
     }
 
-    std::expected<RoomMemberJoined, ControlError> Room::AddMember(eastl::string_view name, RoomTime /*now*/) {
+    std::expected<RoomMemberJoined, ControlError> Room::AddMember(StringView name, RoomTime /*now*/) {
         Optional<eastl::string> cleanName = SanitizePlayerName(name);
         if (!cleanName) {
             return std::unexpected(MakeError(RoomErrors::kBadName, "The name must be 1 to 24 bytes of printable text"));
@@ -219,7 +219,7 @@ namespace BECore {
         return true;
     }
 
-    std::expected<void, ControlError> Room::MarkReturned(PlayerId player, eastl::string_view token) {
+    std::expected<void, ControlError> Room::MarkReturned(PlayerId player, StringView token) {
         Member* member = FindMember(player);
         if (!member) {
             return std::unexpected(MakeError(RoomErrors::kNotInRoom, "You are not in this room"));
@@ -288,7 +288,7 @@ namespace BECore {
         return true;
     }
 
-    Optional<PlayerId> Room::FindByToken(eastl::string_view token) const {
+    Optional<PlayerId> Room::FindByToken(StringView token) const {
         // Every member is compared over the whole length of the longer text, with no early exit, so the time says nothing about
         // how many characters are right or which member is nearly right
         Optional<PlayerId> found;

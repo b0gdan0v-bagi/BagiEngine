@@ -201,7 +201,7 @@ namespace BECore::Tests {
             return event;
         }
 
-        size_t Characters(eastl::string_view text) {
+        size_t Characters(StringView text) {
             size_t count = 0;
             for (const char c : text) {
                 if ((static_cast<unsigned char>(c) & 0xC0u) != 0x80u) {
@@ -349,7 +349,7 @@ namespace BECore::Tests {
             UIStrings& strings = CoreManager::GetUIStrings();
             strings.Clear();
             auto config = XmlConfig::Create();
-            ASSERT_TRUE(config.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+            ASSERT_TRUE(config.LoadFromString(FromStd(xml)));
             const eastl::vector<eastl::string> problems = strings.LoadFromXml(config.GetRoot());
             EXPECT_TRUE(problems.empty()) << (problems.empty() ? "" : problems[0].c_str());
             ASSERT_EQ(strings.GetLanguages().size(), 3u);
@@ -361,7 +361,7 @@ namespace BECore::Tests {
             _levels.Reset();
             XmlDeserializer deserializer;
             const std::string xml = SceneXml(viewWidth, viewHeight, edit);
-            ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+            ASSERT_TRUE(deserializer.LoadFromString(FromStd(xml)));
             _manager = New<SceneManager>();
             _manager->Deserialize(deserializer);
             ASSERT_FALSE(deserializer.HasErrors());

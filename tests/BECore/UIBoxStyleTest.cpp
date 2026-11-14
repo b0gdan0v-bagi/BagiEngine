@@ -43,7 +43,7 @@ namespace BECore::Tests {
         LoadedElement LoadElement(const char* type, const char* attributes) {
             const eastl::string xml = Format("<root><component><elements><element type=\"{}\" name=\"A\" {}/></elements></component></root>", type, attributes);
             XmlDeserializer deserializer;
-            EXPECT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+            EXPECT_TRUE(deserializer.LoadFromString(StringView(xml)));
             LoadedElement loaded;
             loaded.canvas = New<UICanvasComponent>();
             EXPECT_TRUE(deserializer.BeginObject("component"));
@@ -371,7 +371,7 @@ namespace BECore::Tests {
         }
 
         XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+        ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
         auto loaded = New<UICanvasComponent>();
         ASSERT_TRUE(deserializer.BeginObject("component"));
         loaded->Deserialize(deserializer);

@@ -17,11 +17,11 @@ namespace BECore::Tests {
         Json json;
         eastl::string type;
 
-        [[nodiscard]] eastl::string GetString(eastl::string_view key) const {
+        [[nodiscard]] eastl::string GetString(StringView key) const {
             return GetJsonString(json, key).value_or(eastl::string());
         }
 
-        [[nodiscard]] int64_t GetInt(eastl::string_view key, int64_t fallback = -1000) const {
+        [[nodiscard]] int64_t GetInt(StringView key, int64_t fallback = -1000) const {
             return GetJsonInt(json, key).value_or(fallback);
         }
     };
@@ -39,7 +39,7 @@ namespace BECore::Tests {
         /// The last text the client sent: an `error` may repeat what the client itself named (a card it does not hold), which tells it nothing
         eastl::string lastSent;
 
-        [[nodiscard]] size_t Count(eastl::string_view type) const {
+        [[nodiscard]] size_t Count(StringView type) const {
             size_t count = 0;
             for (const ReceivedMessage& message : received) {
                 count += message.type == type ? 1 : 0;
@@ -48,7 +48,7 @@ namespace BECore::Tests {
         }
 
         /// The last message of the type, or null
-        [[nodiscard]] const ReceivedMessage* Last(eastl::string_view type) const {
+        [[nodiscard]] const ReceivedMessage* Last(StringView type) const {
             for (size_t i = received.size(); i > 0; --i) {
                 if (received[i - 1].type == type) {
                     return &received[i - 1];
@@ -130,7 +130,7 @@ namespace BECore::Tests {
         }
 
         /// @param address The client's address handed to the hub ("" is unknown: no per-address rule)
-        ConnectionId Connect(eastl::string_view address = {}) {
+        ConnectionId Connect(StringView address = {}) {
             const ConnectionId id = _nextConnection++;
             TestClient client;
             client.id = id;
@@ -153,7 +153,7 @@ namespace BECore::Tests {
         }
 
         /// Sends raw text as if it came from the connection
-        void SendText(ConnectionId id, eastl::string_view text) {
+        void SendText(ConnectionId id, StringView text) {
             _startingRoom = Client(id).roomCode;
             Client(id).lastSent = eastl::string(text);
             _hub.OnMessage(id, text, _now);
@@ -163,23 +163,23 @@ namespace BECore::Tests {
             SendText(id, SerializeClientMessage(message));
         }
 
-        void Create(ConnectionId id, eastl::string_view name, eastl::string_view game = "fake", Json options = Json::object(), bool isPublic = false) {
+        void Create(ConnectionId id, StringView name, StringView game = "fake", Json options = Json::object(), bool isPublic = false) {
             Send(id, CreateRoomMessage{eastl::string(game), eastl::string(name), std::move(options), isPublic});
         }
 
         /// `list_rooms` for @p game
-        void List(ConnectionId id, eastl::string_view game = "fake") {
+        void List(ConnectionId id, StringView game = "fake") {
             Send(id, ListRoomsMessage{eastl::string(game)});
         }
 
-        void JoinByName(ConnectionId id, eastl::string_view code, eastl::string_view name) {
+        void JoinByName(ConnectionId id, StringView code, StringView name) {
             JoinRoomMessage message;
             message.code = eastl::string(code);
             message.name = eastl::string(name);
             Send(id, message);
         }
 
-        void JoinByToken(ConnectionId id, eastl::string_view code, eastl::string_view token) {
+        void JoinByToken(ConnectionId id, StringView code, StringView token) {
             JoinRoomMessage message;
             message.code = eastl::string(code);
             message.token = eastl::string(token);

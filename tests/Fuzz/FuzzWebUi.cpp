@@ -10,12 +10,12 @@ namespace BECore::Fuzz {
     namespace {
 
         /// The sources a report names: the document, a `<style>` or `style=""` (css), and a linked style sheet (css:<href>)
-        constexpr eastl::string_view kSourceHtml = "html";
-        constexpr eastl::string_view kSourceCss = "css";
-        constexpr eastl::string_view kSourceLinked = "css:";
+        constexpr StringView kSourceHtml = "html";
+        constexpr StringView kSourceCss = "css";
+        constexpr StringView kSourceLinked = "css:";
 
         /// Lines of a text as the front end counts them: 1 and one more for every line feed
-        uint32_t CountLines(eastl::string_view text) {
+        uint32_t CountLines(StringView text) {
             uint32_t lines = 1;
             for (const char c : text) {
                 if (c == '\n') {
@@ -26,7 +26,7 @@ namespace BECore::Fuzz {
         }
 
         /// Whether @p text has a control character (a line break included): a log line made of it is more than one line
-        bool HasControlCharacter(eastl::string_view text) {
+        bool HasControlCharacter(StringView text) {
             for (const char c : text) {
                 const auto byte = static_cast<uint8_t>(c);
                 if (byte < 0x20 || byte == 0x7F) {
@@ -52,13 +52,13 @@ namespace BECore::Fuzz {
         void CheckReport(const UIWebReport& report, uint32_t lineBound) {
             FUZZ_CHECK(report.issues.size() <= UIWebReport::kMaxIssues + 1);
             for (const UIWebIssue& issue : report.issues) {
-                const eastl::string_view source(issue.source.data(), issue.source.size());
+                const StringView source(issue.source.data(), issue.source.size());
                 FUZZ_CHECK(source == kSourceHtml || source == kSourceCss || source.starts_with(kSourceLinked));
                 FUZZ_CHECK(source.size() <= UIWebReport::kMaxMessageBytes);
                 FUZZ_CHECK(issue.line <= lineBound);
                 FUZZ_CHECK(!issue.message.empty());
                 FUZZ_CHECK(issue.message.size() <= UIWebReport::kMaxMessageBytes);
-                FUZZ_CHECK(!HasControlCharacter(eastl::string_view(issue.message.data(), issue.message.size())));
+                FUZZ_CHECK(!HasControlCharacter(StringView(issue.message)));
             }
         }
 
@@ -79,15 +79,15 @@ namespace BECore::Fuzz {
         const eastl::string html(begin, htmlSize);
         const eastl::string css = separator != nullptr ? eastl::string(separator + 1, size - htmlSize - 1) : eastl::string();
 
-        const UIWebCompiler::StylesheetLoader loader = [&css](eastl::string_view) { return Optional<eastl::string>(css); };
+        const UIWebCompiler::StylesheetLoader loader = [&css](StringView) { return Optional<eastl::string>(css); };
 
         UIWebReport report;
-        const eastl::string xml = UIWebCompiler::Compile(eastl::string_view(html.data(), html.size()), loader, report);
+        const eastl::string xml = UIWebCompiler::Compile(StringView(html), loader, report);
         UIWebReport again;
-        const eastl::string xmlAgain = UIWebCompiler::Compile(eastl::string_view(html.data(), html.size()), loader, again);
+        const eastl::string xmlAgain = UIWebCompiler::Compile(StringView(html), loader, again);
         FUZZ_CHECK(xml == xmlAgain);
         FUZZ_CHECK(SameReport(report, again));
-        CheckReport(report, std::max(CountLines(eastl::string_view(html.data(), html.size())), CountLines(eastl::string_view(css.data(), css.size()))));
+        CheckReport(report, std::max(CountLines(StringView(html)), CountLines(StringView(css))));
 
         pugi::xml_document document;
         const bool wellFormed = document.load_buffer(xml.data(), xml.size());
@@ -96,7 +96,7 @@ namespace BECore::Fuzz {
         }
 
         XmlDeserializer deserializer;
-        if (deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size()))) {
+        if (deserializer.LoadFromString(StringView(xml))) {
             UIScreenContent content;
             content.Deserialize(deserializer);
         }

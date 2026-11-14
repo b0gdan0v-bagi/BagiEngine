@@ -10,18 +10,18 @@ namespace BECore::Tests {
     namespace {
 
         // minLevel="Fatal" keeps the sinks quiet while they are subscribed to LogEvent
-        constexpr eastl::string_view kUnknownTypeXml = "<root><sinks>"
-                                                       "<sink type=\"Console\" enabled=\"true\" minLevel=\"Fatal\"/>"
-                                                       "<sink type=\"ConsoleSink\" enabled=\"true\" minLevel=\"Fatal\" colorEnabled=\"false\"/>"
-                                                       "</sinks></root>";
+        constexpr StringView kUnknownTypeXml = "<root><sinks>"
+                                               "<sink type=\"Console\" enabled=\"true\" minLevel=\"Fatal\"/>"
+                                               "<sink type=\"ConsoleSink\" enabled=\"true\" minLevel=\"Fatal\" colorEnabled=\"false\"/>"
+                                               "</sinks></root>";
 
-        constexpr eastl::string_view kValidTypesXml = "<root><sinks>"
-                                                      "<sink type=\"OutputSink\" enabled=\"true\" minLevel=\"Fatal\"/>"
-                                                      "<sink type=\"ConsoleSink\" enabled=\"true\" minLevel=\"Fatal\" colorEnabled=\"false\"/>"
-                                                      "</sinks></root>";
+        constexpr StringView kValidTypesXml = "<root><sinks>"
+                                              "<sink type=\"OutputSink\" enabled=\"true\" minLevel=\"Fatal\"/>"
+                                              "<sink type=\"ConsoleSink\" enabled=\"true\" minLevel=\"Fatal\" colorEnabled=\"false\"/>"
+                                              "</sinks></root>";
 
-        bool Contains(eastl::string_view text, eastl::string_view part) {
-            return text.find(part) != eastl::string_view::npos;
+        bool Contains(StringView text, StringView part) {
+            return text.find(part) != StringView::npos;
         }
 
         /// Collects the log messages that LogEvent::Flush() delivers. It copies them: the string_view of a LogEvent
@@ -38,14 +38,14 @@ namespace BECore::Tests {
             }
 
             /// The first recorded message of @p level that contains every part of @p parts, or nullptr.
-            const Entry* Find(LogLevel level, std::initializer_list<eastl::string_view> parts) const {
+            const Entry* Find(LogLevel level, std::initializer_list<StringView> parts) const {
                 for (const Entry& entry : _entries) {
                     if (entry.level != level) {
                         continue;
                     }
-                    const eastl::string_view message(entry.message.data(), entry.message.size());
+                    const StringView message(entry.message.data(), entry.message.size());
                     bool all = true;
-                    for (const eastl::string_view part : parts) {
+                    for (const StringView part : parts) {
                         all = all && Contains(message, part);
                     }
                     if (all) {
@@ -74,7 +74,7 @@ namespace BECore::Tests {
 
         ASSERT_TRUE(deserializer.HasErrors());
         ASSERT_EQ(deserializer.GetErrors().size(), 1u);
-        const eastl::string_view message = deserializer.GetErrors()[0].errorMessage.ToStringView();
+        const StringView message = deserializer.GetErrors()[0].errorMessage.ToStringView();
         EXPECT_TRUE(Contains(message, "Unknown factory type")) << message.data();
         EXPECT_TRUE(Contains(message, "'Console'")) << message.data();
 

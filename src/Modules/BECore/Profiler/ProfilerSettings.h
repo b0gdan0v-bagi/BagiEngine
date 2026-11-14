@@ -7,11 +7,11 @@ namespace BECore {
 
     /// Flags of the command line that Application hands to ResolveProfilerSettings()
     namespace ProfilerArguments {
-        inline constexpr eastl::string_view kTracePrefix = "--trace=";
-        inline constexpr eastl::string_view kProfilerPrefix = "--profiler=";
-        inline constexpr eastl::string_view kNone = "none";
-        inline constexpr eastl::string_view kChrome = "chrome";
-        inline constexpr eastl::string_view kTracy = "tracy";
+        inline constexpr StringView kTracePrefix = "--trace=";
+        inline constexpr StringView kProfilerPrefix = "--profiler=";
+        inline constexpr StringView kNone = "none";
+        inline constexpr StringView kChrome = "chrome";
+        inline constexpr StringView kTracy = "tracy";
     }  // namespace ProfilerArguments
 
     /// What this build can profile (the CMake options ENGINE_PROFILER and ENGINE_PROFILER_TRACY)

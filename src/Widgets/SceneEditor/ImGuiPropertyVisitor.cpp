@@ -9,14 +9,14 @@ namespace BECore {
 
         constexpr size_t kHiddenLabelSize = 24;
 
-        void MakeLabel(char* buf, size_t bufSize, eastl::string_view name, int id) {
+        void MakeLabel(char* buf, size_t bufSize, StringView name, int id) {
             snprintf(buf, bufSize, "%.*s##%d", static_cast<int>(name.size()), name.data(), id);
         }
 
         /// A number field in the mono font, its name after it in the UI font (ImGui draws the label of a drag field with the
         /// font of the field, so the label is hidden and drawn here). The item width is the same as with the label inside.
         template <typename Draw>
-        bool DrawNumber(eastl::string_view name, int id, Draw&& draw) {
+        bool DrawNumber(StringView name, int id, Draw&& draw) {
             char hiddenLabel[kHiddenLabelSize];
             snprintf(hiddenLabel, sizeof(hiddenLabel), "##%d", id);
             bool changed = false;
@@ -31,70 +31,70 @@ namespace BECore {
 
     }  // namespace
 
-    bool ImGuiPropertyVisitor::Visit(eastl::string_view name, bool& value) {
+    bool ImGuiPropertyVisitor::Visit(StringView name, bool& value) {
         char label[128];
         MakeLabel(label, sizeof(label), name, _idCounter++);
         return ImGui::Checkbox(label, &value);
     }
 
-    bool ImGuiPropertyVisitor::Visit(eastl::string_view name, int8_t& value) {
+    bool ImGuiPropertyVisitor::Visit(StringView name, int8_t& value) {
         return DrawNumber(name, _idCounter++, [&](const char* label) { return ImGui::DragScalar(label, ImGuiDataType_S8, &value, 1.0f); });
     }
 
-    bool ImGuiPropertyVisitor::Visit(eastl::string_view name, uint8_t& value) {
+    bool ImGuiPropertyVisitor::Visit(StringView name, uint8_t& value) {
         return DrawNumber(name, _idCounter++, [&](const char* label) { return ImGui::DragScalar(label, ImGuiDataType_U8, &value, 1.0f); });
     }
 
-    bool ImGuiPropertyVisitor::Visit(eastl::string_view name, int16_t& value) {
+    bool ImGuiPropertyVisitor::Visit(StringView name, int16_t& value) {
         return DrawNumber(name, _idCounter++, [&](const char* label) { return ImGui::DragScalar(label, ImGuiDataType_S16, &value, 1.0f); });
     }
 
-    bool ImGuiPropertyVisitor::Visit(eastl::string_view name, uint16_t& value) {
+    bool ImGuiPropertyVisitor::Visit(StringView name, uint16_t& value) {
         return DrawNumber(name, _idCounter++, [&](const char* label) { return ImGui::DragScalar(label, ImGuiDataType_U16, &value, 1.0f); });
     }
 
-    bool ImGuiPropertyVisitor::Visit(eastl::string_view name, int32_t& value) {
+    bool ImGuiPropertyVisitor::Visit(StringView name, int32_t& value) {
         return DrawNumber(name, _idCounter++, [&](const char* label) { return ImGui::DragInt(label, &value); });
     }
 
-    bool ImGuiPropertyVisitor::Visit(eastl::string_view name, uint32_t& value) {
+    bool ImGuiPropertyVisitor::Visit(StringView name, uint32_t& value) {
         return DrawNumber(name, _idCounter++, [&](const char* label) { return ImGui::DragScalar(label, ImGuiDataType_U32, &value, 1.0f); });
     }
 
-    bool ImGuiPropertyVisitor::Visit(eastl::string_view name, int64_t& value) {
+    bool ImGuiPropertyVisitor::Visit(StringView name, int64_t& value) {
         return DrawNumber(name, _idCounter++, [&](const char* label) { return ImGui::DragScalar(label, ImGuiDataType_S64, &value, 1.0f); });
     }
 
-    bool ImGuiPropertyVisitor::Visit(eastl::string_view name, uint64_t& value) {
+    bool ImGuiPropertyVisitor::Visit(StringView name, uint64_t& value) {
         return DrawNumber(name, _idCounter++, [&](const char* label) { return ImGui::DragScalar(label, ImGuiDataType_U64, &value, 1.0f); });
     }
 
-    bool ImGuiPropertyVisitor::Visit(eastl::string_view name, float& value) {
+    bool ImGuiPropertyVisitor::Visit(StringView name, float& value) {
         return DrawNumber(name, _idCounter++, [&](const char* label) { return ImGui::DragFloat(label, &value, 0.1f); });
     }
 
-    bool ImGuiPropertyVisitor::Visit(eastl::string_view name, double& value) {
+    bool ImGuiPropertyVisitor::Visit(StringView name, double& value) {
         return DrawNumber(name, _idCounter++, [&](const char* label) { return ImGui::DragScalar(label, ImGuiDataType_Double, &value, 0.1); });
     }
 
-    bool ImGuiPropertyVisitor::Visit(eastl::string_view name, PoolString& value) {
+    bool ImGuiPropertyVisitor::Visit(StringView name, PoolString& value) {
         char label[128];
         MakeLabel(label, sizeof(label), name, _idCounter++);
 
         char buf[256] = {};
-        const eastl::string_view sv = value.ToStringView();
+        const StringView sv = value.ToStringView();
         size_t copyLen = sv.size() < sizeof(buf) - 1 ? sv.size() : sizeof(buf) - 1;
         memcpy(buf, sv.data(), copyLen);
         buf[copyLen] = '\0';
 
         if (ImGui::InputText(label, buf, sizeof(buf))) {
-            value = PoolString::Intern(eastl::string_view(buf));
+            value = PoolString::Intern(StringView(buf));
             return true;
         }
         return false;
     }
 
-    bool ImGuiPropertyVisitor::Visit(eastl::string_view name, eastl::string& value) {
+    bool ImGuiPropertyVisitor::Visit(StringView name, eastl::string& value) {
         char label[128];
         MakeLabel(label, sizeof(label), name, _idCounter++);
 
@@ -110,13 +110,13 @@ namespace BECore {
         return false;
     }
 
-    bool ImGuiPropertyVisitor::BeginCompound(eastl::string_view name) {
+    bool ImGuiPropertyVisitor::BeginCompound(StringView name) {
         char label[128];
         MakeLabel(label, sizeof(label), name, _idCounter++);
         return ImGui::TreeNode(label);
     }
 
-    bool ImGuiPropertyVisitor::VisitEnum(eastl::string_view name, const eastl::string_view* enumNames, size_t enumCount, size_t& selectedIndex) {
+    bool ImGuiPropertyVisitor::VisitEnum(StringView name, const StringView* enumNames, size_t enumCount, size_t& selectedIndex) {
         char label[128];
         MakeLabel(label, sizeof(label), name, _idCounter++);
         const char* preview = selectedIndex < enumCount ? enumNames[selectedIndex].data() : "";

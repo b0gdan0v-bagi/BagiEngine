@@ -2,23 +2,23 @@
 
 namespace BECore {
 
-    void UIVars::Set(PoolString name, eastl::string_view value) {
+    void UIVars::Set(PoolString name, StringView value) {
         const auto it = _values.find(name);
         if (it == _values.end()) {
             _values.emplace(name, eastl::string(value.data(), value.size()));
             ++_version;
             return;
         }
-        if (eastl::string_view(it->second.data(), it->second.size()) == value) {
+        if (StringView(it->second) == value) {
             return;
         }
         it->second.assign(value.data(), value.size());
         ++_version;
     }
 
-    eastl::string_view UIVars::Get(PoolString name) const {
+    StringView UIVars::Get(PoolString name) const {
         const auto it = _values.find(name);
-        return it == _values.end() ? eastl::string_view{} : eastl::string_view(it->second.data(), it->second.size());
+        return it == _values.end() ? StringView{} : StringView(it->second);
     }
 
     bool UIVars::Has(PoolString name) const {
@@ -40,11 +40,11 @@ namespace BECore {
         ++_version;
     }
 
-    bool UIVars::HasPlaceholders(eastl::string_view text) {
-        return text.find('{') != eastl::string_view::npos || text.find('}') != eastl::string_view::npos;
+    bool UIVars::HasPlaceholders(StringView text) {
+        return text.find('{') != StringView::npos || text.find('}') != StringView::npos;
     }
 
-    eastl::string UIVars::Expand(eastl::string_view text) const {
+    eastl::string UIVars::Expand(StringView text) const {
         eastl::string result;
         result.reserve(text.size());
         for (size_t i = 0; i < text.size(); ++i) {
@@ -56,12 +56,12 @@ namespace BECore {
                     continue;
                 }
                 const size_t close = text.find('}', i + 1);
-                if (close == eastl::string_view::npos) {
+                if (close == StringView::npos) {
                     result += c;  // unclosed: left as it is
                     continue;
                 }
-                const eastl::string_view name = text.substr(i + 1, close - i - 1);
-                const eastl::string_view value = Get(PoolString::Intern(name));
+                const StringView name = text.substr(i + 1, close - i - 1);
+                const StringView value = Get(PoolString::Intern(name));
                 result.append(value.data(), value.size());
                 i = close;
             } else if (c == '}' && i + 1 < text.size() && text[i + 1] == '}') {

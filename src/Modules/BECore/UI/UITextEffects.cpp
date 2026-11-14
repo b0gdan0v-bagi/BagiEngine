@@ -9,8 +9,8 @@ namespace BECore {
 
     namespace {
 
-        constexpr eastl::string_view OutlineKey = "textOutline";
-        constexpr eastl::string_view ShadowKey = "textShadow";
+        constexpr StringView OutlineKey = "textOutline";
+        constexpr StringView ShadowKey = "textShadow";
 
     }  // namespace
 

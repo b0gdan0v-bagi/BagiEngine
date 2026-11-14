@@ -13,7 +13,7 @@ namespace BECore {
             return z ^ (z >> 31);
         }
 
-        std::unexpected<ControlError> Fail(eastl::string_view code, eastl::string message) {
+        std::unexpected<ControlError> Fail(StringView code, eastl::string message) {
             return std::unexpected(MakeControlError(code, std::move(message)));
         }
 

@@ -2,7 +2,7 @@
 
 namespace BECore {
 
-    StringUtils::SmallStrVector StringUtils::Split(eastl::string_view str, char delimiter) {
+    StringUtils::SmallStrVector StringUtils::Split(StringView str, char delimiter) {
         SmallStrVector result;
 
         if (str.empty()) {

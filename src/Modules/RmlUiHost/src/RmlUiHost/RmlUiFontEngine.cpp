@@ -89,7 +89,7 @@ namespace BECore {
         if (fallbackFace) {
             LOG_WARNING("RmlUiFontEngine: '{}': fallback faces are not supported, it is loaded as an ordinary face"_format(fileName.c_str()));
         }
-        auto handle = CoreManager::GetResourceManager().Load<Font>(eastl::string_view(fileName.data(), fileName.size()));
+        auto handle = CoreManager::GetResourceManager().Load<Font>(FromStd(fileName));
         if (!handle || handle->GetState() != ResourceState::Loaded) {
             LOG_ERROR("RmlUiFontEngine: cannot load the font '{}'"_format(fileName.c_str()));
             return false;
@@ -215,7 +215,7 @@ namespace BECore {
 
         uint32_t previous = priorCharacter != Rml::Character::Null ? font.ResolveGlyph(static_cast<char32_t>(priorCharacter)) : 0;
         float width = 0.0f;
-        const eastl::string_view text(string.begin(), string.size());
+        const StringView text(string.begin(), string.size());
         size_t position = 0;
         while (position < text.size()) {
             const char32_t codePoint = Utf8::DecodeNext(text, position);
@@ -248,7 +248,7 @@ namespace BECore {
 
         uint32_t previous = 0;
         float pen = 0.0f;
-        const eastl::string_view text(string.begin(), string.size());
+        const StringView text(string.begin(), string.size());
         size_t offset = 0;
         while (offset < text.size()) {
             const char32_t codePoint = Utf8::DecodeNext(text, offset);

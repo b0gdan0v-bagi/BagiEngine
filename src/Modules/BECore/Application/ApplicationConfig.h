@@ -9,10 +9,10 @@ namespace BECore {
     /// The names of the four attributes of ApplicationConfig that are control settings (the field names without the `_`);
     /// ResolveControlSettings tells their errors from those of `mode` and `type` by these.
     namespace ApplicationConfigFields {
-        inline constexpr eastl::string_view kControl = "control";
-        inline constexpr eastl::string_view kControlPort = "controlPort";
-        inline constexpr eastl::string_view kManualClock = "manualClock";
-        inline constexpr eastl::string_view kHeadless = "headless";
+        inline constexpr StringView kControl = "control";
+        inline constexpr StringView kControlPort = "controlPort";
+        inline constexpr StringView kManualClock = "manualClock";
+        inline constexpr StringView kHeadless = "headless";
     }  // namespace ApplicationConfigFields
 
     /// The value of `taskFrameBudgetMs` that leaves the default frame budget of TaskManager as it is

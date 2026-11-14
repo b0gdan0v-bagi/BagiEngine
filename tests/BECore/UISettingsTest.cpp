@@ -18,7 +18,7 @@ namespace BECore::Tests {
         /// A window with chosen metrics, in window units
         class MetricsWindow : public IMainWindow {
         public:
-            bool Initialize(eastl::string_view /*configPath*/) override {
+            bool Initialize(StringView /*configPath*/) override {
                 return true;
             }
             void Destroy() override {}

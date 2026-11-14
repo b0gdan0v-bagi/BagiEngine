@@ -14,7 +14,7 @@ namespace BECore {
      * @param nodeEl The `<node>` element, usually the copy ExpandNodeReference made
      * @param what Names the node in the log messages (`Scene 'Main': nodes/Hud`)
      */
-    IntrusivePtr<SceneNode> DeserializeNode(pugi::xml_node nodeEl, eastl::string_view what);
+    IntrusivePtr<SceneNode> DeserializeNode(pugi::xml_node nodeEl, StringView what);
 
     /**
      * @brief Appends to @p parent the `<node>` element of @p node and, in `<children>`, of every node below it: the inline form of a scene file

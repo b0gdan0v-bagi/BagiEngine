@@ -32,9 +32,7 @@ namespace BECore {
     template <typename T>
     concept HasFactory = requires {
         typename FactoryTraits<T>::EnumType;
-        {
-            FactoryTraits<T>::elementName
-        } -> std::convertible_to<eastl::string_view>;
+        {FactoryTraits<T>::elementName}->std::convertible_to<StringView>;
     };
 
 }  // namespace BECore

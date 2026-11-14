@@ -123,7 +123,7 @@ button { width: 124dp; height: 48dp; font-size: 24dp; line-height: 48dp; text-al
     inline UIScreenContent ReadXml(const char* xml) {
         UIScreenContent content;
         XmlDeserializer deserializer;
-        EXPECT_TRUE(deserializer.LoadFromString(eastl::string_view(xml)));
+        EXPECT_TRUE(deserializer.LoadFromString(StringView(xml)));
         content.Deserialize(deserializer);
         EXPECT_FALSE(deserializer.HasErrors());
         return content;

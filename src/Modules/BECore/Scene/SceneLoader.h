@@ -6,7 +6,7 @@
 namespace BECore {
 
     /// The name of the config that holds the scenes of a game (`config/SceneConfig.xml`)
-    inline constexpr eastl::string_view kSceneConfigName = "SceneConfig";
+    inline constexpr StringView kSceneConfigName = "SceneConfig";
 
     /**
      * @brief Builds the SceneManager of a `SceneConfig` whose scenes may reference node files (`<node ref="..."/>`)
@@ -25,7 +25,7 @@ namespace BECore {
      * @param loader Reads the node file of a reference
      * @param configName Name used in the log messages
      */
-    IntrusivePtrAtomic<SceneManager> LoadSceneManager(const XmlNode& configRoot, const NodeFileLoader& loader, eastl::string_view configName = kSceneConfigName);
+    IntrusivePtrAtomic<SceneManager> LoadSceneManager(const XmlNode& configRoot, const NodeFileLoader& loader, StringView configName = kSceneConfigName);
 
     /**
      * @brief LoadSceneManager of a root whose content version is checked first
@@ -33,7 +33,7 @@ namespace BECore {
      * A root that is not kContentVersion (`BECore/Config/ContentVersion.h`) is one LOG_ERROR with the message of
      * CheckContentVersion and gives an empty SceneManager: no scene is read from a format the engine does not know.
      */
-    IntrusivePtrAtomic<SceneManager> LoadCheckedSceneManager(const XmlNode& configRoot, const NodeFileLoader& loader, eastl::string_view configName = kSceneConfigName);
+    IntrusivePtrAtomic<SceneManager> LoadCheckedSceneManager(const XmlNode& configRoot, const NodeFileLoader& loader, StringView configName = kSceneConfigName);
 
     /// LoadCheckedSceneManager of the config `SceneConfig` of ConfigManager, with the node files found through the layered FileSystem (`config/<ref>.xml`, checked too)
     IntrusivePtrAtomic<SceneManager> LoadSceneManagerFromConfig();

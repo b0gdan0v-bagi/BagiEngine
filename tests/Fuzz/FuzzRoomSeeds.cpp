@@ -13,8 +13,8 @@ namespace BECore::Fuzz {
         constexpr const char* kRoomHubFolder = "room_hub";
         constexpr const char* kControlRequestFolder = "control_request";
 
-        constexpr eastl::string_view kGame = "demo";
-        constexpr eastl::string_view kUnknownCode = "ZZZZZ";
+        constexpr StringView kGame = "demo";
+        constexpr StringView kUnknownCode = "ZZZZZ";
         constexpr size_t kBigOptionsBytes = RoomHubInput::kMaxMessageBytes + 100;
         constexpr uint16_t kPlayPause = 900;
         constexpr uint16_t kLongPause = 40000;
@@ -23,7 +23,7 @@ namespace BECore::Fuzz {
         constexpr int kFailedJoins = 6;
         constexpr int kListFlood = RoomLimits::kListBurst + 2;
 
-        FuzzBytes TextWithHeader(uint8_t header, eastl::string_view text) {
+        FuzzBytes TextWithHeader(uint8_t header, StringView text) {
             FuzzBytes bytes;
             bytes.push_back(header);
             bytes.insert(bytes.end(), text.begin(), text.end());
@@ -135,22 +135,22 @@ namespace BECore::Fuzz {
                 _hub.OnMessage(RoomHubInput::ConnectionOf(number), text, _now);
             }
 
-            void Create(uint8_t number, eastl::string_view name, eastl::string_view game = kGame, bool isPublic = false) {
+            void Create(uint8_t number, StringView name, StringView game = kGame, bool isPublic = false) {
                 Send(number, CreateRoomMessage{eastl::string(game), eastl::string(name), Json::object(), isPublic});
             }
 
-            void List(uint8_t number, eastl::string_view game = kGame) {
+            void List(uint8_t number, StringView game = kGame) {
                 Send(number, ListRoomsMessage{eastl::string(game)});
             }
 
-            void JoinByName(uint8_t number, eastl::string_view code, eastl::string_view name) {
+            void JoinByName(uint8_t number, StringView code, StringView name) {
                 JoinRoomMessage join;
                 join.code = eastl::string(code);
                 join.name = eastl::string(name);
                 Send(number, join);
             }
 
-            void JoinByToken(uint8_t number, eastl::string_view code, eastl::string_view token) {
+            void JoinByToken(uint8_t number, StringView code, StringView token) {
                 JoinRoomMessage join;
                 join.code = eastl::string(code);
                 join.token = eastl::string(token);
@@ -361,7 +361,7 @@ namespace BECore::Fuzz {
         // control_request: every method of the API with parameters as the tools send them
         // =============================================================================
 
-        FuzzBytes Request(const Json& id, eastl::string_view method, const Json& params = Json()) {
+        FuzzBytes Request(const Json& id, StringView method, const Json& params = Json()) {
             Json request = Json::object();
             request["id"] = id;
             request["method"] = MakeJsonString(method);

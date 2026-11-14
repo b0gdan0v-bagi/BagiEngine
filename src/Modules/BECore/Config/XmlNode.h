@@ -19,7 +19,7 @@ namespace BECore {
          * @param name Name of the child element
          * @return XmlNode wrapping the child, or empty node if not found
          */
-        XmlNode GetChild(eastl::string_view name) const {
+        XmlNode GetChild(StringView name) const {
             return XmlNode{_node.child(name.data())};
         }
 
@@ -103,8 +103,8 @@ namespace BECore {
          * @brief Get node name
          * @return Name of the element
          */
-        eastl::string_view Name() const {
-            return eastl::string_view(_node.name());
+        StringView Name() const {
+            return StringView(_node.name());
         }
 
         /**
@@ -112,12 +112,12 @@ namespace BECore {
          * @param name Attribute name
          * @return Attribute value or nullopt if not found
          */
-        Optional<eastl::string_view> GetAttribute(eastl::string_view name) const {
+        Optional<StringView> GetAttribute(StringView name) const {
             auto attr = _node.attribute(name.data());
             if (!attr) {
                 return std::nullopt;
             }
-            return eastl::string_view(attr.value());
+            return StringView(attr.value());
         }
 
         /**
@@ -127,13 +127,13 @@ namespace BECore {
          * @return Parsed value or nullopt if not found or parse failed
          */
         template <typename T>
-        Optional<T> ParseAttribute(eastl::string_view name) const {
+        Optional<T> ParseAttribute(StringView name) const {
             auto attrOpt = GetAttribute(name);
 
             if (!attrOpt)
                 return std::nullopt;
 
-            eastl::string_view s = *attrOpt;
+            StringView s = *attrOpt;
 
             if constexpr (std::is_integral_v<T> && !std::is_same_v<T, bool>) {
                 T result;

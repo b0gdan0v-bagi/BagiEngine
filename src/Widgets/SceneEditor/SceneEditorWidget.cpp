@@ -320,7 +320,7 @@ namespace BECore {
         char nameBuffer[256] = {};
         snprintf(nameBuffer, sizeof(nameBuffer), "%s", _hierarchy.selected->GetName().CStr());
         if (ImGui::InputText("##node_name", nameBuffer, sizeof(nameBuffer))) {
-            _hierarchy.selected->SetName(PoolString::Intern(eastl::string_view(nameBuffer)));
+            _hierarchy.selected->SetName(PoolString::Intern(StringView(nameBuffer)));
             _isDirty = true;
         }
 
@@ -407,7 +407,7 @@ namespace BECore {
                     auto* scene = CoreManager::GetSceneManager().GetActiveScene();
                     if (scene) {
                         SceneNode* target = _contextMenuTargetNode ? _contextMenuTargetNode : &scene->GetRootNode();
-                        target->AddChild(PoolString::Intern(eastl::string_view(_nodeNameBuffer)));
+                        target->AddChild(PoolString::Intern(StringView(_nodeNameBuffer)));
                         _hierarchy.revealNode = target;
                         _isDirty = true;
                     }

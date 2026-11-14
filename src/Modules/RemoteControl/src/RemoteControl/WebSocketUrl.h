@@ -26,7 +26,7 @@ namespace BECore {
      * IPv4). The port is 1..65535 and defaults to 80 (443 for wss). Refused: another scheme, a fragment, userinfo, a space or
      * a control or non-ASCII byte, an empty host or port, a host over kMaxWebSocketHostBytes, a text over kMaxWebSocketUrlBytes. The error is a message for the log.
      */
-    [[nodiscard]] std::expected<WebSocketUrl, eastl::string> ParseWebSocketUrl(eastl::string_view text);
+    [[nodiscard]] std::expected<WebSocketUrl, eastl::string> ParseWebSocketUrl(StringView text);
 
     /// The `Host` header value for a request to @p url: the port is left out when it is the default of the scheme
     [[nodiscard]] eastl::string GetHostHeader(const WebSocketUrl& url);

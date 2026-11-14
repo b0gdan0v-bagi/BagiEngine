@@ -8,10 +8,10 @@ namespace BECore {
 
     namespace {
 
-        constexpr eastl::string_view kXmlExtension = ".xml";
-        constexpr eastl::string_view kBinaryExtension = ".bin";
+        constexpr StringView kXmlExtension = ".xml";
+        constexpr StringView kBinaryExtension = ".bin";
 
-        bool EndsWith(eastl::string_view text, eastl::string_view suffix) {
+        bool EndsWith(StringView text, StringView suffix) {
             return text.size() >= suffix.size() && text.substr(text.size() - suffix.size()) == suffix;
         }
 
@@ -26,7 +26,7 @@ namespace BECore {
 
     }  // namespace
 
-    std::expected<eastl::unique_ptr<IDeserializer>, eastl::string> OpenDeserializer(eastl::string_view virtualPath) {
+    std::expected<eastl::unique_ptr<IDeserializer>, eastl::string> OpenDeserializer(StringView virtualPath) {
         using Error = std::unexpected<eastl::string>;
 
         if (EndsWith(virtualPath, kXmlExtension)) {
@@ -52,12 +52,12 @@ namespace BECore {
         return Error(Format("Unsupported file extension (expected .xml or .bin): '{}'", virtualPath));
     }
 
-    void LogDeserializeErrors(eastl::string_view configName, const IDeserializer& deserializer) {
+    void LogDeserializeErrors(StringView configName, const IDeserializer& deserializer) {
         const auto& errors = deserializer.GetErrors();
         LogDeserializeErrors(configName, eastl::span<const DeserializeError>(errors.data(), errors.size()));
     }
 
-    void LogDeserializeErrors(eastl::string_view configName, eastl::span<const DeserializeError> errors) {
+    void LogDeserializeErrors(StringView configName, eastl::span<const DeserializeError> errors) {
         for (const DeserializeError& error : errors) {
             // A document that fails to parse has no path, and the line is 0 where the format has none (binary)
             const eastl::string path = error.path.ToStringView().empty() ? eastl::string{} : Format("{}: ", error.path.ToStringView());

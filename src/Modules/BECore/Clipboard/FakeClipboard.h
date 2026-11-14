@@ -11,13 +11,13 @@ namespace BECore {
     public:
         FakeClipboard() = default;
 
-        explicit FakeClipboard(eastl::string_view content) : _content(content) {}
+        explicit FakeClipboard(StringView content) : _content(content) {}
 
         [[nodiscard]] bool IsAvailable() const override {
             return _available;
         }
 
-        bool WriteText(eastl::string_view text) override {
+        bool WriteText(StringView text) override {
             ++_writeCount;
             if (_refuse) {
                 return false;
@@ -57,7 +57,7 @@ namespace BECore {
             return true;
         }
 
-        void SetContent(eastl::string_view content) {
+        void SetContent(StringView content) {
             _content.assign(content.data(), content.size());
         }
 
@@ -80,7 +80,7 @@ namespace BECore {
         }
 
         /// A paste the platform announces by itself, handed out by TakePasted
-        void QueuePasted(eastl::string_view text) {
+        void QueuePasted(StringView text) {
             _pasted.emplace_back(text.data(), text.size());
         }
 

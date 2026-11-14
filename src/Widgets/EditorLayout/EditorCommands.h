@@ -14,8 +14,8 @@ namespace BECore {
      * re-created at a mode switch). A panel acts on the commands it owns by subscribing to EditorCommandEvent.
      */
     struct EditorCommand {
-        PoolString id;             // "area.action", the key in hotkeys.json and in EditorCommandEvent
-        eastl::string_view title;  // shown in the palette and in the hotkey table
+        PoolString id;     // "area.action", the key in hotkeys.json and in EditorCommandEvent
+        StringView title;  // shown in the palette and in the hotkey table
         Optional<KeyChord> defaultChord;
         bool rebindable = true;  // false: the chord is fixed and not in the map's reach (mode.toggle)
         bool repeats = false;    // the hotkey fires again while the chord is held (game.step)

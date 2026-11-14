@@ -89,7 +89,7 @@ namespace BECore {
 
         /// The words for the person for an SSPI status or a certificate chain policy error; the number goes only to the log.
         /// Pure (mirrors DescribeNetworkFailure of the macOS backend). The result is a string literal
-        eastl::string_view DescribeSecurityFailure(long status) {
+        StringView DescribeSecurityFailure(long status) {
             switch (status) {
                 case SEC_E_UNTRUSTED_ROOT:
                 case CERT_E_UNTRUSTEDROOT:
@@ -157,7 +157,7 @@ namespace BECore {
             return wide;
         }
 
-        eastl::string_view TlsVersionName(DWORD protocol) {
+        StringView TlsVersionName(DWORD protocol) {
 #ifdef SP_PROT_TLS1_3_CLIENT
             if ((protocol & SP_PROT_TLS1_3_CLIENT) != 0) {
                 return "1.3";

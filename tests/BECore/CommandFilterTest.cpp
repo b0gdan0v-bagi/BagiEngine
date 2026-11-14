@@ -27,7 +27,7 @@ namespace BECore::Tests {
             return text;
         }
 
-        eastl::string Filter(eastl::string_view query, const eastl::vector<EditorCommand>& commands) {
+        eastl::string Filter(StringView query, const eastl::vector<EditorCommand>& commands) {
             return Titles(FilterCommands(query, {commands.data(), commands.size()}));
         }
 

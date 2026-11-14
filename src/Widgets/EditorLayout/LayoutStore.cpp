@@ -17,13 +17,13 @@ namespace BECore {
         }
 
         // CON, PRN, AUX, NUL, COM1..COM9, LPT1..LPT9: names that Windows opens as a device whatever the extension
-        bool IsDeviceName(eastl::string_view name) {
+        bool IsDeviceName(StringView name) {
             eastl::string upper;
             for (const char c : name) {
                 upper.push_back(ToUpperAscii(c));
             }
-            constexpr eastl::string_view kPlain[] = {"CON", "PRN", "AUX", "NUL"};
-            for (const eastl::string_view device : kPlain) {
+            constexpr StringView kPlain[] = {"CON", "PRN", "AUX", "NUL"};
+            for (const StringView device : kPlain) {
                 if (upper == device) {
                     return true;
                 }
@@ -38,33 +38,33 @@ namespace BECore {
             return LayoutError{kind, std::move(detail)};
         }
 
-        std::filesystem::path ToPath(eastl::string_view text) {
+        std::filesystem::path ToPath(StringView text) {
             return std::filesystem::path(std::string(text.data(), text.size()));
         }
 
     }  // namespace
 
-    bool IsValidLayoutName(eastl::string_view name) {
+    bool IsValidLayoutName(StringView name) {
         if (name.empty() || name.size() > kMaxLayoutNameLength || name.front() == ' ' || name.back() == ' ') {
             return false;
         }
         return std::ranges::all_of(name, IsNameChar) && !IsDeviceName(name);
     }
 
-    bool LooksLikeLayoutText(eastl::string_view text) {
-        constexpr eastl::string_view kDockingSection = "[Docking][";
-        return text.find(kDockingSection) != eastl::string_view::npos;
+    bool LooksLikeLayoutText(StringView text) {
+        constexpr StringView kDockingSection = "[Docking][";
+        return text.find(kDockingSection) != StringView::npos;
     }
 
     LayoutStore::LayoutStore(std::filesystem::path userDirectory) : _folder(std::move(userDirectory) / ToPath(kLayoutsFolderName)) {}
 
-    std::filesystem::path LayoutStore::PathOf(eastl::string_view name) const {
+    std::filesystem::path LayoutStore::PathOf(StringView name) const {
         std::filesystem::path path = _folder / ToPath(name);
         path += std::string(kLayoutExtension.data(), kLayoutExtension.size());
         return path;
     }
 
-    std::expected<void, LayoutError> LayoutStore::Save(eastl::string_view name, eastl::string_view text) {
+    std::expected<void, LayoutError> LayoutStore::Save(StringView name, StringView text) {
         if (!IsValidLayoutName(name)) {
             return std::unexpected(MakeLayoutError(LayoutErrorKind::InvalidName, Format("'{}' is not a valid layout name", name)));
         }
@@ -78,7 +78,7 @@ namespace BECore {
         return {};
     }
 
-    std::expected<eastl::string, LayoutError> LayoutStore::Load(eastl::string_view name) const {
+    std::expected<eastl::string, LayoutError> LayoutStore::Load(StringView name) const {
         if (!IsValidLayoutName(name)) {
             return std::unexpected(MakeLayoutError(LayoutErrorKind::InvalidName, Format("'{}' is not a valid layout name", name)));
         }
@@ -94,7 +94,7 @@ namespace BECore {
         return std::move(*text);
     }
 
-    std::expected<void, LayoutError> LayoutStore::Delete(eastl::string_view name) {
+    std::expected<void, LayoutError> LayoutStore::Delete(StringView name) {
         if (!IsValidLayoutName(name)) {
             return std::unexpected(MakeLayoutError(LayoutErrorKind::InvalidName, Format("'{}' is not a valid layout name", name)));
         }
@@ -108,7 +108,7 @@ namespace BECore {
         return {};
     }
 
-    bool LayoutStore::Exists(eastl::string_view name) const {
+    bool LayoutStore::Exists(StringView name) const {
         if (!IsValidLayoutName(name)) {
             return false;
         }
@@ -129,7 +129,7 @@ namespace BECore {
                 continue;
             }
             const std::string stem = entry.path().stem().string();
-            if (IsValidLayoutName(eastl::string_view(stem.data(), stem.size()))) {
+            if (IsValidLayoutName(FromStd(stem))) {
                 names.push_back(eastl::string(stem.c_str(), stem.size()));
             }
         }

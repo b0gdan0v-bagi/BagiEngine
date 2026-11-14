@@ -101,7 +101,7 @@ namespace BECore::Tests {
             }
             const std::string xml = "<root>" + body + "</root>";
             XmlDeserializer deserializer;
-            ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+            ASSERT_TRUE(deserializer.LoadFromString(FromStd(xml)));
             UIScreenContent content;
             content.Deserialize(deserializer);
             ASSERT_FALSE(deserializer.HasErrors());

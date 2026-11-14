@@ -41,7 +41,7 @@ namespace BECore {
 
         void AddComponent(IntrusivePtr<IComponent> component);
         void RemoveComponent(PoolString typeName);
-        IntrusivePtr<IComponent> GetComponent(eastl::string_view typeName) const;
+        IntrusivePtr<IComponent> GetComponent(StringView typeName) const;
 
         template <typename T>
         IntrusivePtr<T> GetComponent() const {

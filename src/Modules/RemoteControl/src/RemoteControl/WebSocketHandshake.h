@@ -3,7 +3,7 @@
 namespace BECore {
 
     /// The GUID that RFC 6455 (section 4.2.2) appends to the client key before hashing
-    inline constexpr eastl::string_view kWebSocketGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+    inline constexpr StringView kWebSocketGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
     /// Longest request header the server reads while waiting for the end of the handshake
     inline constexpr size_t kMaxHandshakeBytes = 8 * 1024;
@@ -15,21 +15,21 @@ namespace BECore {
     };
 
     /// Small helpers for the text of HTTP headers, shared by the server's handshake and the client's (ASCII only)
-    [[nodiscard]] eastl::string LowerAscii(eastl::string_view text);
-    [[nodiscard]] bool EqualsIgnoreCase(eastl::string_view left, eastl::string_view right);
+    [[nodiscard]] eastl::string LowerAscii(StringView text);
+    [[nodiscard]] bool EqualsIgnoreCase(StringView left, StringView right);
     /// @p text without the spaces and tabs at both ends
-    [[nodiscard]] eastl::string_view TrimHeaderValue(eastl::string_view text);
+    [[nodiscard]] StringView TrimHeaderValue(StringView text);
     /// True when the comma-separated list @p value has the token @p token (any case)
-    [[nodiscard]] bool HeaderHasToken(eastl::string_view value, eastl::string_view token);
+    [[nodiscard]] bool HeaderHasToken(StringView value, StringView token);
 
     /// How much of a text of the peer an error message repeats
     inline constexpr size_t kMaxQuotedBytes = 100;
 
     /// @p text as an error message may repeat it: printable ASCII only (anything else is `?`), cut to kMaxQuotedBytes with `...` after
-    [[nodiscard]] eastl::string QuoteForMessage(eastl::string_view text);
+    [[nodiscard]] eastl::string QuoteForMessage(StringView text);
 
     /// `Sec-WebSocket-Accept` for @p clientKey: base64(SHA-1(key + GUID))
-    [[nodiscard]] eastl::string ComputeAcceptKey(eastl::string_view clientKey);
+    [[nodiscard]] eastl::string ComputeAcceptKey(StringView clientKey);
 
     /// Who may open a connection. The default is the control API's: a program on this machine, or a page of the loopback
     struct HandshakePolicy {
@@ -69,7 +69,7 @@ namespace BECore {
      * pick its own address. Empty (the caller keeps the address of the socket) when @p trustedProxyHops is 0, the header is missing,
      * has fewer entries, the head is malformed, or the entry is not a dotted IPv4 or an IPv6 literal of at most kMaxForwardedAddressBytes.
      */
-    [[nodiscard]] eastl::string ParseForwardedClientAddress(eastl::string_view requestText, size_t trustedProxyHops);
+    [[nodiscard]] eastl::string ParseForwardedClientAddress(StringView requestText, size_t trustedProxyHops);
 
     /**
      * @brief Whether a request that carries the `Origin` header @p origin may connect under @p policy.
@@ -88,7 +88,7 @@ namespace BECore {
      *
      * Not for a missing header: that is HandshakePolicy::allowMissingOrigin.
      */
-    [[nodiscard]] bool IsOriginAllowed(eastl::string_view origin, const HandshakePolicy& policy);
+    [[nodiscard]] bool IsOriginAllowed(StringView origin, const HandshakePolicy& policy);
 
     /**
      * @brief Checks the HTTP request of a WebSocket opening handshake and returns its `Sec-WebSocket-Key`.
@@ -107,7 +107,7 @@ namespace BECore {
      * Status codes: 400 for a malformed request, 403 for a foreign `Host` or `Origin` (the message of a public refusal
      * names the origin, cut to 100 bytes), 426 for another protocol version, 431 for a head over kMaxHandshakeBytes.
      */
-    [[nodiscard]] std::expected<eastl::string, HandshakeError> ParseHandshakeRequest(eastl::string_view requestText, const HandshakePolicy& policy = HandshakePolicy{});
+    [[nodiscard]] std::expected<eastl::string, HandshakeError> ParseHandshakeRequest(StringView requestText, const HandshakePolicy& policy = HandshakePolicy{});
 
     /**
      * @brief Whether the request head @p requestText is a health check under @p policy: `GET <healthPath>` (an optional
@@ -117,13 +117,13 @@ namespace BECore {
      * WebSocket on the health path still gets one. False when the policy is loopback-only or has no health path. `Host` and
      * `Origin` are not looked at: a platform's probe sends no page origin and its own host name.
      */
-    [[nodiscard]] bool IsHealthCheckRequest(eastl::string_view requestText, const HandshakePolicy& policy);
+    [[nodiscard]] bool IsHealthCheckRequest(StringView requestText, const HandshakePolicy& policy);
 
     /// The `200 OK` answer to a health check: body `ok`, not cacheable, and the connection is closed after it
     [[nodiscard]] eastl::string BuildHealthResponse();
 
     /// The 101 response that completes the handshake for @p clientKey
-    [[nodiscard]] eastl::string BuildAcceptResponse(eastl::string_view clientKey);
+    [[nodiscard]] eastl::string BuildAcceptResponse(StringView clientKey);
 
     /// An HTTP error response for @p error (it closes the connection; a 426 names the version the server speaks)
     [[nodiscard]] eastl::string BuildRejectResponse(const HandshakeError& error);

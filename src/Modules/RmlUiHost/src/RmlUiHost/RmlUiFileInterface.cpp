@@ -45,7 +45,7 @@ namespace BECore {
     }
 
     Rml::FileHandle RmlUiFileInterface::Open(const Rml::String& path) {
-        const eastl::string_view virtualPath(path.data(), path.size());
+        const StringView virtualPath(path.data(), path.size());
         std::filesystem::path realPath = CoreManager::GetFileSystem().ResolvePath(virtualPath);
         std::error_code error;
         if (realPath.empty() || !std::filesystem::is_regular_file(realPath, error)) {

@@ -18,7 +18,7 @@ namespace BECore {
         FontLoader() = default;
         ~FontLoader() override = default;
 
-        bool CanLoad(eastl::string_view extension) const override;
+        bool CanLoad(StringView extension) const override;
         Task<IntrusivePtr<IResource>> LoadAsync(PoolString path) override;
         IntrusivePtr<IResource> LoadSync(PoolString path) override;
 

@@ -27,7 +27,7 @@ namespace BECore::Tests {
             return params;
         }
 
-        std::string StringOf(const Json* object, eastl::string_view key) {
+        std::string StringOf(const Json* object, StringView key) {
             if (object == nullptr) {
                 return {};
             }

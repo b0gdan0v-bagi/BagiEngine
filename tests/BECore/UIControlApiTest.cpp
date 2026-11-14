@@ -564,20 +564,20 @@ namespace BECore::Tests {
             return std::string(text.c_str(), text.size());
         }
 
-        std::string StringMember(const Json& object, eastl::string_view key) {
+        std::string StringMember(const Json& object, StringView key) {
             const auto value = GetJsonString(object, key);
             return value ? Text(*value) : std::string("<missing>");
         }
 
-        double NumberMember(const Json& object, eastl::string_view key) {
+        double NumberMember(const Json& object, StringView key) {
             return GetJsonNumber(object, key).value_or(-12345.0);
         }
 
-        bool BoolMember(const Json& object, eastl::string_view key) {
+        bool BoolMember(const Json& object, StringView key) {
             return GetJsonBool(object, key).value_or(false);
         }
 
-        const Json* Member(const Json& object, eastl::string_view key) {
+        const Json* Member(const Json& object, StringView key) {
             return FindJsonMember(object, key);
         }
 

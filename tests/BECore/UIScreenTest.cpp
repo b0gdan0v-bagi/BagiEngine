@@ -61,7 +61,7 @@ namespace BECore::Tests {
         void BuildHudLayout(UICanvasLayout& layout) {
             const std::string xml = std::string("<root>") + kHudBody + "</root>";
             XmlDeserializer deserializer;
-            ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+            ASSERT_TRUE(deserializer.LoadFromString(FromStd(xml)));
             UIScreenContent content;
             content.Deserialize(deserializer);  // positioned at the document's root element already
             ASSERT_FALSE(deserializer.HasErrors());
@@ -104,7 +104,7 @@ namespace BECore::Tests {
         void LoadScene() {
             XmlDeserializer deserializer;
             const std::string xml = HudScenesXml();
-            ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+            ASSERT_TRUE(deserializer.LoadFromString(FromStd(xml)));
             _manager = New<SceneManager>();
             _manager->Deserialize(deserializer);
             ASSERT_FALSE(deserializer.HasErrors());

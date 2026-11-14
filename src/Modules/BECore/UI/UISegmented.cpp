@@ -6,7 +6,7 @@
 
 namespace BECore {
 
-    eastl::string_view UISegmented::GetSelectedValue() const {
+    StringView UISegmented::GetSelectedValue() const {
         if (bind.Empty()) {
             return {};
         }
@@ -14,7 +14,7 @@ namespace BECore {
     }
 
     void UISegmented::SyncChildren() {
-        const eastl::string_view chosen = GetSelectedValue();
+        const StringView chosen = GetSelectedValue();
         for (const auto& child : children) {
             if (!UIChoice::IsOption(*child)) {
                 continue;

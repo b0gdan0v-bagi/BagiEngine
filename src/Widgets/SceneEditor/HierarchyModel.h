@@ -75,7 +75,7 @@ namespace BECore::HierarchyModel {
     };
 
     /// True when a search text or a component type is set, so the tree shows only what the filter keeps
-    bool IsFilterActive(eastl::string_view query, eastl::string_view componentType);
+    bool IsFilterActive(StringView query, StringView componentType);
 
     /**
      * @brief Whether the node itself passes the filter of the hierarchy panel
@@ -83,10 +83,10 @@ namespace BECore::HierarchyModel {
      * The name must contain @p query (ASCII letters compared without case; empty keeps every name) and, when @p componentType is not empty, the node
      * must carry a component of that type name. Allocates nothing.
      */
-    bool NodeMatchesFilter(const SceneNode& node, eastl::string_view query, eastl::string_view componentType);
+    bool NodeMatchesFilter(const SceneNode& node, StringView query, StringView componentType);
 
     /// True when the node or any node below it passes the filter: an ancestor of a match stays in the tree (the panel dims it and opens its path)
-    bool SubtreeMatchesFilter(const SceneNode& node, eastl::string_view query, eastl::string_view componentType);
+    bool SubtreeMatchesFilter(const SceneNode& node, StringView query, StringView componentType);
 
     /// The upper quarter of a row drops before it, the lower quarter after it, the middle into it. @p fractionOfRowHeight is 0 at the top of the row, 1 at the bottom
     DropPlace ClassifyDropPlace(float fractionOfRowHeight);
@@ -104,9 +104,9 @@ namespace BECore::HierarchyModel {
     DropTarget ResolveDrop(const SceneNode& dragged, SceneNode& target, DropPlace place);
 
     /// True when @p text has a character other than whitespace and is at most kMaxNodeNameLength long
-    bool ValidateName(eastl::string_view text);
+    bool ValidateName(StringView text);
 
     /// Replaces the contents of @p out with the type names of the components in the tree below @p root (the root included), sorted and without repeats. @p out keeps its capacity
-    void CollectComponentTypes(const SceneNode& root, eastl::vector<eastl::string_view>& out);
+    void CollectComponentTypes(const SceneNode& root, eastl::vector<StringView>& out);
 
 }  // namespace BECore::HierarchyModel

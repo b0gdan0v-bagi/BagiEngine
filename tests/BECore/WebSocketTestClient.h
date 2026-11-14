@@ -95,7 +95,7 @@ namespace BECore::Tests {
         }
 
         void SendText(const std::string& text) {
-            Send(AsBytes(EncodeTextFrame(eastl::string_view(text.data(), text.size()), kClientMask)));
+            Send(AsBytes(EncodeTextFrame(FromStd(text), kClientMask)));
         }
 
         /// The response head of the handshake, and the body when it says Content-Length. Empty when nothing came in time

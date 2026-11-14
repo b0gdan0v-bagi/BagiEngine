@@ -191,7 +191,7 @@ button { width: 56dp; height: 24dp; font-size: 14dp; background-color: rgb(40, 9
         const auto startA = Clock::now();
         {
             XmlDeserializer deserializer;
-            ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+            ASSERT_TRUE(deserializer.LoadFromString(FromStd(xml)));
             contentA.Deserialize(deserializer);
             ASSERT_FALSE(deserializer.HasErrors());
         }
@@ -205,7 +205,7 @@ button { width: 56dp; height: 24dp; font-size: 14dp; background-color: rgb(40, 9
         // ---- B: HTML + CSS compiled to the XML ----
         UIWebReport report;
         const auto startB = Clock::now();
-        const eastl::string compiled = UIWebCompiler::Compile(eastl::string_view(web.data(), web.size()), {}, report);
+        const eastl::string compiled = UIWebCompiler::Compile(FromStd(web), {}, report);
         const double compileB = MillisecondsSince(startB);
         UIScreenContent contentB;
         const auto startBLoad = Clock::now();

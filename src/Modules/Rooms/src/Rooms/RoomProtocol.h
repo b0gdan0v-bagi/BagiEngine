@@ -12,22 +12,22 @@ namespace BECore {
     /// The `type` of every message of the protocol
     namespace RoomMessageTypes {
         // client to server
-        inline constexpr eastl::string_view kCreateRoom = "create_room";
-        inline constexpr eastl::string_view kJoinRoom = "join_room";
-        inline constexpr eastl::string_view kChooseSeat = "choose_seat";
-        inline constexpr eastl::string_view kStart = "start";
-        inline constexpr eastl::string_view kAction = "action";
-        inline constexpr eastl::string_view kLeave = "leave";
-        inline constexpr eastl::string_view kPing = "ping";
-        inline constexpr eastl::string_view kListRooms = "list_rooms";
+        inline constexpr StringView kCreateRoom = "create_room";
+        inline constexpr StringView kJoinRoom = "join_room";
+        inline constexpr StringView kChooseSeat = "choose_seat";
+        inline constexpr StringView kStart = "start";
+        inline constexpr StringView kAction = "action";
+        inline constexpr StringView kLeave = "leave";
+        inline constexpr StringView kPing = "ping";
+        inline constexpr StringView kListRooms = "list_rooms";
         // server to client
-        inline constexpr eastl::string_view kJoined = "joined";
-        inline constexpr eastl::string_view kLobby = "lobby";
-        inline constexpr eastl::string_view kView = "view";
-        inline constexpr eastl::string_view kError = "error";
-        inline constexpr eastl::string_view kLeft = "left";
-        inline constexpr eastl::string_view kPong = "pong";
-        inline constexpr eastl::string_view kRooms = "rooms";
+        inline constexpr StringView kJoined = "joined";
+        inline constexpr StringView kLobby = "lobby";
+        inline constexpr StringView kView = "view";
+        inline constexpr StringView kError = "error";
+        inline constexpr StringView kLeft = "left";
+        inline constexpr StringView kPong = "pong";
+        inline constexpr StringView kRooms = "rooms";
     }  // namespace RoomMessageTypes
 
     // ---- Client to server -------------------------------------------------------------------------------------------------------
@@ -100,10 +100,10 @@ namespace BECore {
      * @param text The message exactly as it came from the transport.
      * @param maxBytes The size limit (kMaxMessageBytes by default).
      */
-    [[nodiscard]] std::expected<ClientMessage, ControlError> ParseClientMessage(eastl::string_view text, size_t maxBytes = RoomLimits::kMaxMessageBytes);
+    [[nodiscard]] std::expected<ClientMessage, ControlError> ParseClientMessage(StringView text, size_t maxBytes = RoomLimits::kMaxMessageBytes);
 
     /// The `type` of a parsed message
-    [[nodiscard]] eastl::string_view GetClientMessageType(const ClientMessage& message);
+    [[nodiscard]] StringView GetClientMessageType(const ClientMessage& message);
 
     /// The text a client sends for @p message (the inverse of ParseClientMessage; for clients and tests)
     [[nodiscard]] eastl::string SerializeClientMessage(const ClientMessage& message);
@@ -115,7 +115,7 @@ namespace BECore {
      * the line and paragraph separators, zero-width and bidirectional control characters, the byte order mark), then the spaces at
      * both ends removed, and kMinNameBytes to kMaxNameBytes bytes left.
      */
-    [[nodiscard]] Optional<eastl::string> SanitizePlayerName(eastl::string_view text);
+    [[nodiscard]] Optional<eastl::string> SanitizePlayerName(StringView text);
 
     // ---- Server to client -------------------------------------------------------------------------------------------------------
 
@@ -167,23 +167,23 @@ namespace BECore {
     };
 
     /// `joined {room, player, token, seat, host}`. The token is a secret: this message goes to its owner only.
-    [[nodiscard]] eastl::string MakeJoinedMessage(eastl::string_view room, PlayerId player, eastl::string_view token, int seat, bool host);
+    [[nodiscard]] eastl::string MakeJoinedMessage(StringView room, PlayerId player, StringView token, int seat, bool host);
 
     /// `lobby {room, game, phase, host, seats:[{seat, kind, name?, connected?}], options?}`; to every member when it changes
     [[nodiscard]] eastl::string MakeLobbyMessage(const LobbySnapshot& lobby);
 
     /// `view {room, seat, version, finished, view, actions}`: what the game says the seat sees and may send now (no hidden information
     /// of the others: the game's contract)
-    [[nodiscard]] eastl::string MakeViewMessage(eastl::string_view room, int seat, uint64_t version, bool finished, const Json& view, const Json& actions);
+    [[nodiscard]] eastl::string MakeViewMessage(StringView room, int seat, uint64_t version, bool finished, const Json& view, const Json& actions);
 
     /// `rooms {game, rooms:[{room, host, taken, seats, started, options?}], more}`: the answer to `list_rooms`
     [[nodiscard]] eastl::string MakeRoomListMessage(const RoomListMessage& list);
 
     /// `error {code, message, ref?}`; @p ref is the type of the message it answers (left out when empty)
-    [[nodiscard]] eastl::string MakeErrorMessage(eastl::string_view code, eastl::string_view message, eastl::string_view ref = {});
+    [[nodiscard]] eastl::string MakeErrorMessage(StringView code, StringView message, StringView ref = {});
 
     /// `left {reason}`: the sender is no longer in the room
-    [[nodiscard]] eastl::string MakeLeftMessage(eastl::string_view reason);
+    [[nodiscard]] eastl::string MakeLeftMessage(StringView reason);
 
     /// `pong {}`
     [[nodiscard]] eastl::string MakePongMessage();
@@ -247,9 +247,9 @@ namespace BECore {
      * object of at most kMaxLobbyOptions booleans and integers are `bad_message` too. Members the type does not define are ignored. An unknown
      * `type` is UnknownServerMessage. A string is copied, never interned into a PoolString.
      */
-    [[nodiscard]] std::expected<ServerMessage, ControlError> ParseServerMessage(eastl::string_view text, size_t maxBytes = RoomLimits::kMaxServerMessageBytes);
+    [[nodiscard]] std::expected<ServerMessage, ControlError> ParseServerMessage(StringView text, size_t maxBytes = RoomLimits::kMaxServerMessageBytes);
 
     /// The `type` of a parsed server message (for the log)
-    [[nodiscard]] eastl::string_view GetServerMessageType(const ServerMessage& message);
+    [[nodiscard]] StringView GetServerMessageType(const ServerMessage& message);
 
 }  // namespace BECore

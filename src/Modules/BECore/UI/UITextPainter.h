@@ -15,7 +15,7 @@ namespace BECore {
 
     /// What the painter reads of a text: the fields of a `UITextComponent`, taken as they are now. A view, never kept
     struct UITextParams {
-        eastl::string_view text;  ///< the source text, with its `{#key}` and `{name}` (the painter expands them)
+        StringView text;  ///< the source text, with its `{#key}` and `{name}` (the painter expands them)
         PoolString font;
         PoolString fontFamily;
         uint16_t fontWeight = 400;
@@ -45,7 +45,7 @@ namespace BECore {
 
         /// The text as it is shown: @p source with every `{#key}` replaced by the string of the current language (UIStrings), then every `{name}` by the variable of that name
         /// (UIVars; `{{` and `}}` are literal braces). A key nobody translated shows as the key and is logged once. The view is valid until the next call
-        [[nodiscard]] eastl::string_view GetDisplayText(eastl::string_view source);
+        [[nodiscard]] StringView GetDisplayText(StringView source);
 
         /// The font file the text is measured and drawn with (the path of `font`, else the face of family and weight), empty when it did not load
         [[nodiscard]] PoolString GetResolvedFontPath(const UITextParams& params);

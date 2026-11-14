@@ -52,7 +52,7 @@ namespace BECore {
             if (const Rml::Variant* action = element->GetAttribute(kActionAttribute)) {
                 const Rml::String name = action->Get<Rml::String>();
                 if (!name.empty()) {
-                    pending.push_back(PoolString::Intern(eastl::string_view(name.data(), name.size())));
+                    pending.push_back(PoolString::Intern(FromStd(name)));
                 }
                 return;
             }
@@ -75,7 +75,7 @@ namespace BECore {
         _contextName = runtime.NextContextName();
         _context = Rml::CreateContext(_contextName, Rml::Vector2i(kInitialContextWidth, kInitialContextHeight));
         if (!_context) {
-            LOG_ERROR("RmlUiDocumentComponent: cannot create the context '{}'"_format(eastl::string_view(_contextName.data(), _contextName.size())));
+            LOG_ERROR("RmlUiDocumentComponent: cannot create the context '{}'"_format(FromStd(_contextName)));
             DestroyContext();
             return false;
         }

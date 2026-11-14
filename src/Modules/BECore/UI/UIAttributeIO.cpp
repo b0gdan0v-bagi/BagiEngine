@@ -8,31 +8,31 @@ namespace BECore::UIAttr {
 
     namespace {
 
-        void WriteText(ISerializer& s, eastl::string_view key, const eastl::string& text) {
-            s.WriteAttribute(key, eastl::string_view(text.data(), text.size()));
+        void WriteText(ISerializer& s, StringView key, const eastl::string& text) {
+            s.WriteAttribute(key, StringView(text));
         }
 
         /// The text of an attribute, or false when there is none
-        bool ReadText(IDeserializer& d, eastl::string_view key, eastl::string& text) {
+        bool ReadText(IDeserializer& d, StringView key, eastl::string& text) {
             return d.ReadAttribute(key, text);
         }
 
-        void ReportMalformed(IDeserializer& d, eastl::string_view key, const eastl::string& text) {
-            d.ReportError(key, eastl::string_view(Format("Invalid value: '{}'", text).c_str()));
+        void ReportMalformed(IDeserializer& d, StringView key, const eastl::string& text) {
+            d.ReportError(key, StringView(Format("Invalid value: '{}'", text).c_str()));
         }
 
     }  // namespace
 
-    void WriteLength(ISerializer& s, eastl::string_view key, const UILength& length) {
+    void WriteLength(ISerializer& s, StringView key, const UILength& length) {
         WriteText(s, key, UIText::FormatLength(length));
     }
 
-    bool ReadLength(IDeserializer& d, eastl::string_view key, UILength& out) {
+    bool ReadLength(IDeserializer& d, StringView key, UILength& out) {
         eastl::string text;
         if (!ReadText(d, key, text)) {
             return false;
         }
-        const auto length = UIText::ParseLength(eastl::string_view(text.data(), text.size()));
+        const auto length = UIText::ParseLength(StringView(text));
         if (!length) {
             ReportMalformed(d, key, text);
             return false;
@@ -41,16 +41,16 @@ namespace BECore::UIAttr {
         return true;
     }
 
-    void WriteEdges(ISerializer& s, eastl::string_view key, const UIEdges& edges) {
+    void WriteEdges(ISerializer& s, StringView key, const UIEdges& edges) {
         WriteText(s, key, UIText::FormatEdges(edges));
     }
 
-    bool ReadEdges(IDeserializer& d, eastl::string_view key, UIEdges& out) {
+    bool ReadEdges(IDeserializer& d, StringView key, UIEdges& out) {
         eastl::string text;
         if (!ReadText(d, key, text)) {
             return false;
         }
-        const auto edges = UIText::ParseEdges(eastl::string_view(text.data(), text.size()));
+        const auto edges = UIText::ParseEdges(StringView(text));
         if (!edges) {
             ReportMalformed(d, key, text);
             return false;
@@ -59,22 +59,22 @@ namespace BECore::UIAttr {
         return true;
     }
 
-    void WriteVec2Fraction(ISerializer& s, eastl::string_view key, const Vec2& value) {
+    void WriteVec2Fraction(ISerializer& s, StringView key, const Vec2& value) {
         WriteText(s, key, UIText::FormatFraction2(value));
     }
 
-    void WriteOptionalVec2Fraction(ISerializer& s, eastl::string_view key, const Optional<Vec2>& value) {
+    void WriteOptionalVec2Fraction(ISerializer& s, StringView key, const Optional<Vec2>& value) {
         if (value) {
             WriteVec2Fraction(s, key, *value);
         }
     }
 
-    void ReadOptionalVec2Fraction(IDeserializer& d, eastl::string_view key, Optional<Vec2>& out) {
+    void ReadOptionalVec2Fraction(IDeserializer& d, StringView key, Optional<Vec2>& out) {
         eastl::string text;
         if (!ReadText(d, key, text)) {
             return;
         }
-        const auto value = UIText::ParseFraction2(eastl::string_view(text.data(), text.size()));
+        const auto value = UIText::ParseFraction2(StringView(text));
         if (!value) {
             ReportMalformed(d, key, text);
             return;
@@ -82,29 +82,29 @@ namespace BECore::UIAttr {
         out = *value;
     }
 
-    void WriteOptionalEdges(ISerializer& s, eastl::string_view key, const Optional<UIEdges>& edges) {
+    void WriteOptionalEdges(ISerializer& s, StringView key, const Optional<UIEdges>& edges) {
         if (edges) {
             WriteEdges(s, key, *edges);
         }
     }
 
-    void ReadOptionalEdges(IDeserializer& d, eastl::string_view key, Optional<UIEdges>& out) {
+    void ReadOptionalEdges(IDeserializer& d, StringView key, Optional<UIEdges>& out) {
         UIEdges edges;
         if (ReadEdges(d, key, edges)) {
             out = edges;
         }
     }
 
-    void WriteCorners(ISerializer& s, eastl::string_view key, const UICorners& corners) {
+    void WriteCorners(ISerializer& s, StringView key, const UICorners& corners) {
         WriteText(s, key, UIText::FormatCorners(corners));
     }
 
-    bool ReadCorners(IDeserializer& d, eastl::string_view key, UICorners& out) {
+    bool ReadCorners(IDeserializer& d, StringView key, UICorners& out) {
         eastl::string text;
         if (!ReadText(d, key, text)) {
             return false;
         }
-        const auto corners = UIText::ParseCorners(eastl::string_view(text.data(), text.size()));
+        const auto corners = UIText::ParseCorners(StringView(text));
         if (!corners) {
             ReportMalformed(d, key, text);
             return false;
@@ -113,17 +113,17 @@ namespace BECore::UIAttr {
         return true;
     }
 
-    void WriteShadow(ISerializer& s, eastl::string_view key, const UIShadowSpec& shadow, PoolString colorToken) {
+    void WriteShadow(ISerializer& s, StringView key, const UIShadowSpec& shadow, PoolString colorToken) {
         WriteText(s, key, UIText::FormatShadow(shadow, colorToken));
     }
 
-    bool ReadShadow(IDeserializer& d, eastl::string_view key, UIShadowSpec& out, PoolString& colorToken) {
+    bool ReadShadow(IDeserializer& d, StringView key, UIShadowSpec& out, PoolString& colorToken) {
         eastl::string text;
         if (!ReadText(d, key, text)) {
             return false;
         }
         PoolString token;
-        const auto shadow = UIText::ParseShadow(eastl::string_view(text.data(), text.size()), &token);
+        const auto shadow = UIText::ParseShadow(StringView(text), &token);
         if (!shadow) {
             ReportMalformed(d, key, text);
             return false;
@@ -133,11 +133,11 @@ namespace BECore::UIAttr {
         return true;
     }
 
-    void WriteTextOutline(ISerializer& s, eastl::string_view key, float width, const UIColor& color) {
+    void WriteTextOutline(ISerializer& s, StringView key, float width, const UIColor& color) {
         WriteText(s, key, UIText::FormatTextOutline(width, color, color.token));
     }
 
-    bool ReadTextOutline(IDeserializer& d, eastl::string_view key, float& width, UIColor& color) {
+    bool ReadTextOutline(IDeserializer& d, StringView key, float& width, UIColor& color) {
         eastl::string text;
         if (!ReadText(d, key, text)) {
             return false;
@@ -145,7 +145,7 @@ namespace BECore::UIAttr {
         float parsedWidth = 0.0f;
         Color parsedColor;
         PoolString token;
-        if (!UIText::ParseTextOutline(eastl::string_view(text.data(), text.size()), parsedWidth, parsedColor, &token)) {
+        if (!UIText::ParseTextOutline(StringView(text), parsedWidth, parsedColor, &token)) {
             ReportMalformed(d, key, text);
             return false;
         }
@@ -154,11 +154,11 @@ namespace BECore::UIAttr {
         return true;
     }
 
-    void WriteTextShadow(ISerializer& s, eastl::string_view key, float offsetX, float offsetY, const UIColor& color) {
+    void WriteTextShadow(ISerializer& s, StringView key, float offsetX, float offsetY, const UIColor& color) {
         WriteText(s, key, UIText::FormatTextShadow(offsetX, offsetY, color, color.token));
     }
 
-    bool ReadTextShadow(IDeserializer& d, eastl::string_view key, float& offsetX, float& offsetY, UIColor& color) {
+    bool ReadTextShadow(IDeserializer& d, StringView key, float& offsetX, float& offsetY, UIColor& color) {
         eastl::string text;
         if (!ReadText(d, key, text)) {
             return false;
@@ -167,7 +167,7 @@ namespace BECore::UIAttr {
         float parsedY = 0.0f;
         Color parsedColor;
         PoolString token;
-        if (!UIText::ParseTextShadow(eastl::string_view(text.data(), text.size()), parsedX, parsedY, parsedColor, &token)) {
+        if (!UIText::ParseTextShadow(StringView(text), parsedX, parsedY, parsedColor, &token)) {
             ReportMalformed(d, key, text);
             return false;
         }
@@ -177,13 +177,13 @@ namespace BECore::UIAttr {
         return true;
     }
 
-    void WriteOptionalLength(ISerializer& s, eastl::string_view key, const Optional<UILength>& length) {
+    void WriteOptionalLength(ISerializer& s, StringView key, const Optional<UILength>& length) {
         if (length) {
             WriteLength(s, key, *length);
         }
     }
 
-    void ReadOptionalLength(IDeserializer& d, eastl::string_view key, Optional<UILength>& out) {
+    void ReadOptionalLength(IDeserializer& d, StringView key, Optional<UILength>& out) {
         UILength length;
         if (ReadLength(d, key, length)) {
             out = length;

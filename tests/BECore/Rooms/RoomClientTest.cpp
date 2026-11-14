@@ -14,9 +14,9 @@ namespace BECore::Tests {
         using std::chrono::milliseconds;
         using std::chrono::seconds;
 
-        constexpr eastl::string_view kUrl = "ws://127.0.0.1:9000";
-        constexpr eastl::string_view kRoom = "ABCDE";
-        constexpr eastl::string_view kToken = "00112233445566778899aabbccddeeff";
+        constexpr StringView kUrl = "ws://127.0.0.1:9000";
+        constexpr StringView kRoom = "ABCDE";
+        constexpr StringView kToken = "00112233445566778899aabbccddeeff";
 
         eastl::string Lobby(int hostSeat = 0, RoomPhase phase = RoomPhase::Lobby) {
             LobbySnapshot lobby;
@@ -66,7 +66,7 @@ namespace BECore::Tests {
             }
 
             /// The connection breaks while in the room
-            void Lose(FakeLink& link, uint16_t code = kRoomTransportAbnormalClosure, eastl::string_view reason = "connection lost") {
+            void Lose(FakeLink& link, uint16_t code = kRoomTransportAbnormalClosure, StringView reason = "connection lost") {
                 link.PushClosed(code, reason);
                 Pump();
             }
@@ -78,7 +78,7 @@ namespace BECore::Tests {
                 return kinds;
             }
 
-            void Receive(FakeLink& link, eastl::string_view text) {
+            void Receive(FakeLink& link, StringView text) {
                 link.PushText(text);
                 Pump();
             }
@@ -887,7 +887,7 @@ namespace BECore::Tests {
     // ---- Where it stops -----------------------------------------------------------------------------------------------------------
 
     TEST_F(RoomClientTest, ATokenThatTheServerRefusesEndsItForGood) {
-        for (const eastl::string_view code : {RoomErrors::kBadToken, RoomErrors::kUnknownRoom}) {
+        for (const StringView code : {RoomErrors::kBadToken, RoomErrors::kUnknownRoom}) {
             MakeClient({});
             _events.clear();
             FakeLink& first = EnterAsHost();
@@ -944,7 +944,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(RoomClientTest, ACloseForBreakingTheLimitsIsNotRetried) {
-        for (const eastl::string_view reason : {"rate_limited", "too_many_failed_joins"}) {
+        for (const StringView reason : {"rate_limited", "too_many_failed_joins"}) {
             MakeClient({});
             FakeLink& link = EnterAsHost();
             _events.clear();

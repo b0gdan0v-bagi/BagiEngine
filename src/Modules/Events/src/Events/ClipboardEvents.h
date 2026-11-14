@@ -8,7 +8,7 @@ namespace BECore::ClipboardEvents {
     struct PasteEvent : public EventBase<PasteEvent> {
         eastl::string text;
 
-        explicit PasteEvent(eastl::string_view value) : text(value.data(), value.size()) {}
+        explicit PasteEvent(StringView value) : text(value.data(), value.size()) {}
     };
 
 }  // namespace BECore::ClipboardEvents

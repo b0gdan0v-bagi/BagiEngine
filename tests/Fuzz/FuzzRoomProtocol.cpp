@@ -13,19 +13,19 @@ namespace BECore::Fuzz {
         using RoomProtocolInput::kServerBit;
 
         /// The codes a refusal of a client message may carry (the ones ParseClientMessage documents)
-        bool IsClientRefusalCode(eastl::string_view code) {
+        bool IsClientRefusalCode(StringView code) {
             return code == RoomErrors::kBadMessage || code == RoomErrors::kUnsupportedVersion || code == RoomErrors::kMessageTooLarge || code == RoomErrors::kBadName ||
                    code == RoomErrors::kUnknownRoom || code == RoomErrors::kBadToken;
         }
 
-        bool IsServerRefusalCode(eastl::string_view code) {
+        bool IsServerRefusalCode(StringView code) {
             return code == RoomErrors::kBadMessage || code == RoomErrors::kUnsupportedVersion || code == RoomErrors::kMessageTooLarge;
         }
 
         /// A refusal reaches a log and a reply: a message of printable ASCII, not empty, not long
-        bool IsTidyRefusal(const ControlError& error, bool (*isKnownCode)(eastl::string_view)) {
+        bool IsTidyRefusal(const ControlError& error, bool (*isKnownCode)(StringView)) {
             constexpr size_t kMaxRefusalBytes = 200;
-            const eastl::string_view message = error.message;
+            const StringView message = error.message;
             return isKnownCode(error.code) && !message.empty() && message.size() <= kMaxRefusalBytes &&
                    std::all_of(message.begin(), message.end(), [](char letter) { return letter >= ' ' && letter <= '~'; });
         }
@@ -33,7 +33,7 @@ namespace BECore::Fuzz {
         // ---- Strict UTF-8, from the ranges of the Unicode standard (Table 3-7), not the code under test ------------------------------
 
         /// The length of the well-formed character at @p pos, or 0
-        size_t Utf8Length(eastl::string_view text, size_t pos) {
+        size_t Utf8Length(StringView text, size_t pos) {
             const auto at = [&](size_t index) -> int { return index < text.size() ? static_cast<unsigned char>(text[index]) : -1; };
             const auto in = [](int value, int low, int high) { return value >= low && value <= high; };
             const int b0 = at(pos);
@@ -56,7 +56,7 @@ namespace BECore::Fuzz {
             return 0;
         }
 
-        bool IsValidUtf8WithoutControls(eastl::string_view text) {
+        bool IsValidUtf8WithoutControls(StringView text) {
             for (size_t pos = 0; pos < text.size();) {
                 const size_t length = Utf8Length(text, pos);
                 if (length == 0) {
@@ -109,7 +109,7 @@ namespace BECore::Fuzz {
                 a);
         }
 
-        void CheckClientMessage(eastl::string_view text, size_t maxBytes) {
+        void CheckClientMessage(StringView text, size_t maxBytes) {
             const auto parsed = ParseClientMessage(text, maxBytes);
             if (!parsed.has_value()) {
                 FUZZ_CHECK(IsTidyRefusal(parsed.error(), &IsClientRefusalCode));
@@ -185,7 +185,7 @@ namespace BECore::Fuzz {
             }
         }
 
-        void CheckServerMessage(eastl::string_view text, size_t maxBytes) {
+        void CheckServerMessage(StringView text, size_t maxBytes) {
             const auto parsed = ParseServerMessage(text, maxBytes);
             if (!parsed.has_value()) {
                 FUZZ_CHECK(IsTidyRefusal(parsed.error(), &IsServerRefusalCode));
@@ -215,7 +215,7 @@ namespace BECore::Fuzz {
             FUZZ_CHECK(RebuildServerText(*again) == rebuilt);
         }
 
-        void CheckPlayerName(eastl::string_view text) {
+        void CheckPlayerName(StringView text) {
             const auto name = SanitizePlayerName(text);
             if (!name.has_value()) {
                 return;
@@ -223,8 +223,8 @@ namespace BECore::Fuzz {
             FUZZ_CHECK(name->size() >= RoomLimits::kMinNameBytes && name->size() <= RoomLimits::kMaxNameBytes);
             FUZZ_CHECK(IsValidUtf8WithoutControls(*name));
             FUZZ_CHECK((*name)[0] != ' ' && (*name)[name->size() - 1] != ' ');
-            FUZZ_CHECK(text.find(name->c_str()) != eastl::string_view::npos);  // the name is a piece of the input: nothing is added
-            FUZZ_CHECK(SanitizePlayerName(*name) == name);                     // idempotent
+            FUZZ_CHECK(text.find(name->c_str()) != StringView::npos);  // the name is a piece of the input: nothing is added
+            FUZZ_CHECK(SanitizePlayerName(*name) == name);             // idempotent
         }
 
     }  // namespace
@@ -235,7 +235,7 @@ namespace BECore::Fuzz {
         }
         const bool server = (data[0] & kServerBit) != 0;
         const size_t limitIndex = (data[0] >> RoomProtocolInput::kLimitShift) % std::size(kMessageLimits);
-        const eastl::string_view text(reinterpret_cast<const char*>(data + 1), size - 1);
+        const StringView text(reinterpret_cast<const char*>(data + 1), size - 1);
 
         const size_t maxBytes = kMessageLimits[limitIndex] != 0 ? kMessageLimits[limitIndex] : (server ? RoomLimits::kMaxServerMessageBytes : RoomLimits::kMaxMessageBytes);
         if (server) {

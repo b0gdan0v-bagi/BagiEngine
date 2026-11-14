@@ -539,7 +539,7 @@ namespace BECore::Tests {
                 const float value = slider.ValueAt(element, XAt(name, static_cast<float>(i) / 100.0f));
                 const eastl::string text = UISliderComponent::FormatValue(value);
                 EXPECT_LE(text.size(), 9u) << name << " " << text.c_str();
-                CoreManager::GetUIVars().Set(slider.bind, eastl::string_view(text.data(), text.size()));
+                CoreManager::GetUIVars().Set(slider.bind, StringView(text));
                 const float expected = UIText::FractionInRange(value, slider.minValue, slider.maxValue);
                 EXPECT_NEAR(slider.GetFraction(), expected, 1e-6f) << name << " " << text.c_str();
             }
@@ -735,7 +735,7 @@ namespace BECore::Tests {
         const eastl::string xml = serializer.SaveToString();
 
         XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+        ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
         auto loaded = New<UICanvasComponent>();
         ASSERT_TRUE(deserializer.BeginObject("component"));
         loaded->Deserialize(deserializer);

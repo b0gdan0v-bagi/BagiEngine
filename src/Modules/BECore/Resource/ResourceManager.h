@@ -71,7 +71,7 @@ namespace BECore {
          * @return Task that resolves to ResourceHandle<T>
          */
         template <typename T>
-        requires std::derived_from<T, IResource> Task<ResourceHandle<T>> LoadAsync(eastl::string_view path);
+        requires std::derived_from<T, IResource> Task<ResourceHandle<T>> LoadAsync(StringView path);
 
         /**
          * @brief Load resource synchronously (blocking)
@@ -83,7 +83,7 @@ namespace BECore {
          * @return ResourceHandle<T> (may be empty on failure)
          */
         template <typename T>
-        requires std::derived_from<T, IResource> ResourceHandle<T> Load(eastl::string_view path);
+        requires std::derived_from<T, IResource> ResourceHandle<T> Load(StringView path);
 
         /**
          * @brief Load and deserialize object via Reflection system
@@ -96,7 +96,7 @@ namespace BECore {
          * @return Task that resolves to deserialized object
          */
         template <HasReflection T>
-        Task<T> LoadSerializedAsync(eastl::string_view path);
+        Task<T> LoadSerializedAsync(StringView path);
 
         /**
          * @brief Load and deserialize object synchronously
@@ -106,7 +106,7 @@ namespace BECore {
          * @return Deserialized object (default-constructed on failure)
          */
         template <HasReflection T>
-        T LoadSerialized(eastl::string_view path);
+        T LoadSerialized(StringView path);
 
         /**
          * @brief Register a resource loader
@@ -136,7 +136,7 @@ namespace BECore {
          * @param extension File extension (e.g., ".xml", ".ui.xml")
          * @return Pointer to loader or nullptr if none found
          */
-        IResourceLoader* FindLoader(eastl::string_view extension) const;
+        IResourceLoader* FindLoader(StringView extension) const;
 
         /**
          * @brief Find the loader of a file by the longest suffix of its name that a loader accepts
@@ -145,7 +145,7 @@ namespace BECore {
          * @param path File path
          * @return Pointer to loader or nullptr if none found
          */
-        IResourceLoader* FindLoaderForPath(eastl::string_view path) const;
+        IResourceLoader* FindLoaderForPath(StringView path) const;
 
         ResourceCache _cache;
         eastl::vector<IntrusivePtr<IResourceLoader>> _loaders;
@@ -154,7 +154,7 @@ namespace BECore {
     // Template implementations
 
     template <typename T>
-    requires std::derived_from<T, IResource> Task<ResourceHandle<T>> ResourceManager::LoadAsync(eastl::string_view path) {
+    requires std::derived_from<T, IResource> Task<ResourceHandle<T>> ResourceManager::LoadAsync(StringView path) {
         // Convert string_view to PoolString for cache key
         PoolString pathKey = PoolString::Intern(path);
 
@@ -195,7 +195,7 @@ namespace BECore {
     }
 
     template <typename T>
-    requires std::derived_from<T, IResource> ResourceHandle<T> ResourceManager::Load(eastl::string_view path) {
+    requires std::derived_from<T, IResource> ResourceHandle<T> ResourceManager::Load(StringView path) {
         // Convert string_view to PoolString for cache key
         PoolString pathKey = PoolString::Intern(path);
 
@@ -234,7 +234,7 @@ namespace BECore {
     }
 
     template <HasReflection T>
-    Task<T> ResourceManager::LoadSerializedAsync(eastl::string_view path) {
+    Task<T> ResourceManager::LoadSerializedAsync(StringView path) {
         // Switch to background thread for I/O
         co_await SwitchToBackground(TaskPriority::Normal, BE_TASK_LABEL("Load serialized resource"));
 
@@ -257,7 +257,7 @@ namespace BECore {
     }
 
     template <HasReflection T>
-    T ResourceManager::LoadSerialized(eastl::string_view path) {
+    T ResourceManager::LoadSerialized(StringView path) {
         auto opened = OpenDeserializer(path);
         if (!opened) {
             LOG_ERROR(Format("Failed to load file for deserialization: {}", opened.error()).c_str());

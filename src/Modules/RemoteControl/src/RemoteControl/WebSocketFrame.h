@@ -42,10 +42,10 @@ namespace BECore {
     [[nodiscard]] eastl::vector<uint8_t> EncodeFrame(uint8_t opcode, eastl::span<const uint8_t> payload, Optional<WebSocketMask> mask = std::nullopt, bool fin = true);
 
     /// A text frame holding @p text
-    [[nodiscard]] eastl::vector<uint8_t> EncodeTextFrame(eastl::string_view text, Optional<WebSocketMask> mask = std::nullopt);
+    [[nodiscard]] eastl::vector<uint8_t> EncodeTextFrame(StringView text, Optional<WebSocketMask> mask = std::nullopt);
 
     /// A close frame with @p code and @p reason (the reason is cut to fit a control frame)
-    [[nodiscard]] eastl::vector<uint8_t> EncodeCloseFrame(uint16_t code, eastl::string_view reason = {}, Optional<WebSocketMask> mask = std::nullopt);
+    [[nodiscard]] eastl::vector<uint8_t> EncodeCloseFrame(uint16_t code, StringView reason = {}, Optional<WebSocketMask> mask = std::nullopt);
 
     CORE_ENUM(WebSocketMessageKind, uint8_t, Text, Binary, Ping, Pong, Close)
 
@@ -56,8 +56,8 @@ namespace BECore {
         uint16_t closeCode = WebSocketCloseCode::kNoStatusReceived;  // Close only
 
         /// The payload as text (Text, Ping, Pong and the reason of a Close)
-        [[nodiscard]] eastl::string_view GetText() const {
-            return eastl::string_view(reinterpret_cast<const char*>(payload.data()), payload.size());
+        [[nodiscard]] StringView GetText() const {
+            return StringView(reinterpret_cast<const char*>(payload.data()), payload.size());
         }
     };
 

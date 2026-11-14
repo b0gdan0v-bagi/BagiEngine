@@ -6,8 +6,8 @@ namespace BECore {
 
     namespace {
 
-        constexpr eastl::string_view kLogName = "Room client";
-        constexpr eastl::string_view kThreadName = "RoomClient";
+        constexpr StringView kLogName = "Room client";
+        constexpr StringView kThreadName = "RoomClient";
         constexpr uint32_t kThreadOrder = 230;  // the reader takes this and the writer the next number (the server's threads start at 210)
 
         [[nodiscard]] RoomTransportEventKind ToTransportKind(WebSocketClientEventKind kind) {
@@ -24,7 +24,7 @@ namespace BECore {
 
     }  // namespace
 
-    std::expected<void, eastl::string> NativeRoomTransport::Open(eastl::string_view url) {
+    std::expected<void, eastl::string> NativeRoomTransport::Open(StringView url) {
         WebSocketClientSettings settings;
         settings.logName = eastl::string(kLogName);
         settings.threadName = eastl::string(kThreadName);
@@ -32,11 +32,11 @@ namespace BECore {
         return _client.Open(url, std::move(settings));
     }
 
-    bool NativeRoomTransport::SendText(eastl::string_view text) {
+    bool NativeRoomTransport::SendText(StringView text) {
         return _client.SendText(text);
     }
 
-    void NativeRoomTransport::Close(uint16_t code, eastl::string_view reason) {
+    void NativeRoomTransport::Close(uint16_t code, StringView reason) {
         _client.Close(code, reason);
     }
 

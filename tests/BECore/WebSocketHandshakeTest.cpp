@@ -8,8 +8,8 @@ namespace BECore::Tests {
 
         constexpr const char* kRfcKey = "dGhlIHNhbXBsZSBub25jZQ==";
 
-        eastl::string_view View(const std::string& text) {
-            return eastl::string_view(text.data(), text.size());
+        StringView View(const std::string& text) {
+            return FromStd(text);
         }
 
         bool NameIs(const std::string& line, std::string_view name) {
@@ -621,7 +621,7 @@ namespace BECore::Tests {
         EXPECT_EQ(QuoteForMessage("a\r\nb\x7F\xC3"), "a??b??");
         const eastl::string cut = QuoteForMessage(View(std::string(500, 'x')));
         EXPECT_EQ(cut.size(), kMaxQuotedBytes + 3);
-        EXPECT_TRUE(eastl::string_view(cut).ends_with("..."));
+        EXPECT_TRUE(StringView(cut).ends_with("..."));
         EXPECT_EQ(QuoteForMessage(View(std::string(kMaxQuotedBytes, 'x'))).size(), kMaxQuotedBytes);
     }
 

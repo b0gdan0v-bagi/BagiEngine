@@ -38,14 +38,14 @@ namespace BECore::Tests {
         }
 
         /// A host makes a public room of @p game; returns the host's connection (the code is in its client)
-        ConnectionId MakePublicRoom(HubHarness& harness, eastl::string_view name, eastl::string_view game = "fake", Json options = Json::object()) {
+        ConnectionId MakePublicRoom(HubHarness& harness, StringView name, StringView game = "fake", Json options = Json::object()) {
             const ConnectionId host = harness.Connect();
             harness.Create(host, name, game, std::move(options), true);
             return host;
         }
 
         /// A browser: a connection in no room that lists @p game once; returns it
-        ConnectionId Browse(HubHarness& harness, eastl::string_view game = "fake") {
+        ConnectionId Browse(HubHarness& harness, StringView game = "fake") {
             const ConnectionId browser = harness.Connect();
             harness.List(browser, game);
             return browser;
@@ -437,7 +437,7 @@ namespace BECore::Tests {
     namespace {
 
         /// What a join gives back to the connection, with the parts that are chance (the room, the token) taken out
-        eastl::string JoinOutcome(HubHarness& harness, ConnectionId id, const eastl::string& code, eastl::string_view name) {
+        eastl::string JoinOutcome(HubHarness& harness, ConnectionId id, const eastl::string& code, StringView name) {
             harness.Client(id).Clear();
             harness.JoinByName(id, code, name);
             const TestClient& client = harness.Client(id);

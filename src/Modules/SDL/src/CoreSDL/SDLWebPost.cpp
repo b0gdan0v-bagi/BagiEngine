@@ -14,11 +14,11 @@ namespace BECore {
 
     }  // namespace
 
-    bool IsWebPostPathValid(eastl::string_view path) {
+    bool IsWebPostPathValid(StringView path) {
         if (path.empty() || path.size() > kWebPostMaxPathBytes) {
             return false;
         }
-        if (path[0] != '/' || (path.size() > 1 && path[1] == '/') || path.find("..") != eastl::string_view::npos) {
+        if (path[0] != '/' || (path.size() > 1 && path[1] == '/') || path.find("..") != StringView::npos) {
             return false;
         }
         for (const char c : path) {
@@ -84,7 +84,7 @@ namespace BECore {
     }
 #endif
 
-    std::expected<WebPostId, eastl::string> WebPostStart(eastl::string_view path, eastl::string_view body, eastl::string_view contentType) {
+    std::expected<WebPostId, eastl::string> WebPostStart(StringView path, StringView body, StringView contentType) {
         if (!IsWebPostPathValid(path)) {
             return std::unexpected(eastl::string("bad path"));
         }

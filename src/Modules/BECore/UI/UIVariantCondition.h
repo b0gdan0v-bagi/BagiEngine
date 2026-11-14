@@ -25,7 +25,7 @@ namespace BECore {
         [[nodiscard]] eastl::string ToText() const;
 
         /// Reads the form of ToText(); the names and `portrait` / `landscape` / `any` are case-insensitive. The error names the part that was not understood
-        [[nodiscard]] static std::expected<UIVariantCondition, eastl::string> FromText(eastl::string_view text);
+        [[nodiscard]] static std::expected<UIVariantCondition, eastl::string> FromText(StringView text);
 
         [[nodiscard]] bool operator==(const UIVariantCondition&) const = default;
     };

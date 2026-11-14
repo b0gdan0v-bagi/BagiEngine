@@ -167,7 +167,7 @@ namespace BECore::Tests {
         EXPECT_NE(xml.find("textOutline"), eastl::string::npos) << xml.c_str();
 
         XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+        ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
         auto loaded = New<UIElement>();
         ASSERT_TRUE(deserializer.BeginObject("element"));
         loaded->Deserialize(deserializer);

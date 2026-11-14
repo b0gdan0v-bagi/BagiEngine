@@ -18,9 +18,9 @@ namespace BECore {
      */
     class NativeRoomTransport final : public IRoomTransport {
     public:
-        [[nodiscard]] std::expected<void, eastl::string> Open(eastl::string_view url) override;
-        bool SendText(eastl::string_view text) override;
-        void Close(uint16_t code, eastl::string_view reason) override;
+        [[nodiscard]] std::expected<void, eastl::string> Open(StringView url) override;
+        bool SendText(StringView text) override;
+        void Close(uint16_t code, StringView reason) override;
         void Abort() override;
         [[nodiscard]] bool PollEvent(RoomTransportEvent& event) override;
 

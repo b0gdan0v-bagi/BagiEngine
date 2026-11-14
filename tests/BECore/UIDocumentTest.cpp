@@ -105,7 +105,7 @@ namespace BECore::Tests {
         IntrusivePtr<UICanvasComponent> LoadCanvas(const std::string& attributes, const std::string& body) {
             XmlDeserializer deserializer;
             const std::string xml = ScenesXml(attributes, body);
-            EXPECT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+            EXPECT_TRUE(deserializer.LoadFromString(FromStd(xml)));
             _manager = New<SceneManager>();
             _manager->Deserialize(deserializer);
             EXPECT_FALSE(deserializer.HasErrors());
@@ -207,8 +207,8 @@ namespace BECore::Tests {
         const std::string xmlPath = _temp.Write("plain.xml", "<root><value a=\"1\"/></root>");
         auto& resources = CoreManager::GetResourceManager();
 
-        const auto document = resources.Load<UIDocument>(eastl::string_view(uiPath.data(), uiPath.size()));
-        const auto plain = resources.Load<XmlResource>(eastl::string_view(xmlPath.data(), xmlPath.size()));
+        const auto document = resources.Load<UIDocument>(FromStd(uiPath));
+        const auto plain = resources.Load<XmlResource>(FromStd(xmlPath));
 
         ASSERT_TRUE(document);
         EXPECT_EQ(document->GetState(), ResourceState::Loaded);
@@ -219,7 +219,7 @@ namespace BECore::Tests {
 
     TEST_F(UIDocumentTest, EveryInstantiationHasElementsOfItsOwn) {
         const std::string path = _temp.Write("hud.ui.xml", DocumentXml(kScreenBody));
-        const auto document = CoreManager::GetResourceManager().Load<UIDocument>(eastl::string_view(path.data(), path.size()));
+        const auto document = CoreManager::GetResourceManager().Load<UIDocument>(FromStd(path));
         ASSERT_TRUE(document);
 
         UIScreenContent first;
@@ -283,7 +283,7 @@ namespace BECore::Tests {
         serializer.EndObject();
         const eastl::string xml = serializer.SaveToString();
         XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+        ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
         auto loaded = New<UICanvasComponent>();
         ASSERT_TRUE(deserializer.BeginObject("component"));
         loaded->Deserialize(deserializer);
@@ -308,7 +308,7 @@ namespace BECore::Tests {
 
     TEST_F(UIDocumentTest, AMalformedFileIsNotLoaded) {
         const std::string path = _temp.Write("broken.ui.xml", "<ui><elements>");
-        const auto document = CoreManager::GetResourceManager().Load<UIDocument>(eastl::string_view(path.data(), path.size()));
+        const auto document = CoreManager::GetResourceManager().Load<UIDocument>(FromStd(path));
         UIScreenContent content;
 
         // The loader may hand back a failed resource or none at all; either way there is nothing to build
@@ -324,7 +324,7 @@ namespace BECore::Tests {
   <element type="UIElement" name="Bad" width="wide"/>
   <element type="UIElement" name="Good" width="50"/>
 </elements>)"));
-        const auto document = CoreManager::GetResourceManager().Load<UIDocument>(eastl::string_view(path.data(), path.size()));
+        const auto document = CoreManager::GetResourceManager().Load<UIDocument>(FromStd(path));
         ASSERT_TRUE(document);
 
         UIScreenContent content;

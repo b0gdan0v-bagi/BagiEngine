@@ -81,7 +81,7 @@ namespace BECore::Tests {
             void SendToClient(const std::string& text) {
                 std::string masked = text;
                 FakeTlsMask(reinterpret_cast<uint8_t*>(masked.data()), masked.size());
-                EXPECT_TRUE(_peer.SendAll(AsBytes(eastl::string_view(masked.data(), masked.size()))));
+                EXPECT_TRUE(_peer.SendAll(AsBytes(FromStd(masked))));
             }
 
             Socket& Peer() {
@@ -104,7 +104,7 @@ namespace BECore::Tests {
             bool _done = false;  // written by the thread, read after Join()
         };
 
-        [[nodiscard]] TlsConnectParams ParamsFor(const FakeServer& server, eastl::string_view host = "127.0.0.1") {
+        [[nodiscard]] TlsConnectParams ParamsFor(const FakeServer& server, StringView host = "127.0.0.1") {
             TlsConnectParams params;
             params.host = host;
             params.port = server.GetPort();
@@ -257,7 +257,7 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(Connect(server, stream));
 
         const std::string hello = "hello server";
-        ASSERT_TRUE(stream.SendAll(BECore::AsBytes(eastl::string_view(hello.data(), hello.size()))));
+        ASSERT_TRUE(stream.SendAll(BECore::AsBytes(FromStd(hello))));
         const std::string onTheWire = server.ReadFromClient(hello.size(), /*unmask=*/false);
         EXPECT_NE(onTheWire, hello) << "the fake has to change the bytes, or a missing 'encryption' goes unnoticed";
         std::string unmasked = onTheWire;
@@ -332,7 +332,7 @@ namespace BECore::Tests {
             std::string seen = server.ReadFromClient(kBytes, /*unmask=*/true);
             server.SendToClient(seen);
         });
-        std::thread sender([&] { EXPECT_TRUE(stream.SendAll(BECore::AsBytes(eastl::string_view(payload.data(), payload.size())))); });
+        std::thread sender([&] { EXPECT_TRUE(stream.SendAll(BECore::AsBytes(FromStd(payload)))); });
 
         std::string received;
         while (received.size() < kBytes) {

@@ -21,17 +21,17 @@ namespace BECore::Stress {
             return std::max<uint32_t>(1, static_cast<uint32_t>(static_cast<double>(lo) * kRampPrecision));
         }
 
-        void AddBool(eastl::string& line, eastl::string_view key, bool value) {
+        void AddBool(eastl::string& line, StringView key, bool value) {
             line += '"';
             line.append(key.data(), key.size());
             line += value ? "\":true," : "\":false,";
         }
 
-        void AddInteger(eastl::string& line, eastl::string_view key, uint32_t value) {
+        void AddInteger(eastl::string& line, StringView key, uint32_t value) {
             line += Format("\"{}\":{},", key, value);
         }
 
-        void AddText(eastl::string& line, eastl::string_view key, eastl::string_view value) {
+        void AddText(eastl::string& line, StringView key, StringView value) {
             line += Format("\"{}\":\"{}\",", key, value);
         }
 

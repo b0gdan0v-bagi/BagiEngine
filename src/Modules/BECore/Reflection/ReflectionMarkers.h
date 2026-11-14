@@ -72,7 +72,7 @@ namespace BECore {
 #define BE_CLASS(ClassName, ...)                                                                                                                                                                       \
 public:                                                                                                                                                                                                \
     /** @brief Get the type name as string_view */                                                                                                                                                     \
-    static eastl::string_view GetStaticTypeName();                                                                                                                                                     \
+    static BECore::StringView GetStaticTypeName();                                                                                                                                                     \
     /** @brief Get the number of reflected fields */                                                                                                                                                   \
     static size_t GetStaticFieldCount();                                                                                                                                                               \
     /** @brief Iterate over all reflected fields (mutable) */                                                                                                                                          \
@@ -139,7 +139,7 @@ public:
 #define BE_EVENT(EventName)                                                                                                                                                                            \
 public:                                                                                                                                                                                                \
     /** @brief Get the event type name as string_view */                                                                                                                                               \
-    static eastl::string_view GetStaticTypeName();                                                                                                                                                     \
+    static BECore::StringView GetStaticTypeName();                                                                                                                                                     \
     /** @brief Get static ClassMeta for this event type (defined in generated code) */                                                                                                                 \
     static const ::BECore::ClassMeta& GetStaticTypeMeta();                                                                                                                                             \
     /** @brief Get event type hash for efficient dispatch */                                                                                                                                           \

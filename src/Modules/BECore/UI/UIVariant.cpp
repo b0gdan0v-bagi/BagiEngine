@@ -8,20 +8,20 @@ namespace BECore {
 
     namespace {
 
-        constexpr eastl::string_view OverridesKey = "overrides";
-        constexpr eastl::string_view OverrideItem = "set";
-        constexpr eastl::string_view VariantItem = "variant";
+        constexpr StringView OverridesKey = "overrides";
+        constexpr StringView OverrideItem = "set";
+        constexpr StringView VariantItem = "variant";
 
         /// Writes an optional property as an attribute even when it equals T{} (an override "x is 0" must survive); Ser::Save would drop it under skip-defaults
         template <typename T>
-        void SaveOptional(ISerializer& s, eastl::string_view key, const Optional<T>& value) {
+        void SaveOptional(ISerializer& s, StringView key, const Optional<T>& value) {
             if (value) {
                 Ser::DataAccessor<T>::Save(s, *value, key);
             }
         }
 
         template <typename T>
-        void LoadOptional(IDeserializer& d, eastl::string_view key, Optional<T>& out) {
+        void LoadOptional(IDeserializer& d, StringView key, Optional<T>& out) {
             T value{};
             if (Ser::DataAccessor<T>::Load(d, value, key)) {
                 out = value;
@@ -29,7 +29,7 @@ namespace BECore {
         }
 
         template <typename T>
-        void SaveItems(ISerializer& s, const eastl::vector<T>& items, eastl::string_view key, eastl::string_view itemName) {
+        void SaveItems(ISerializer& s, const eastl::vector<T>& items, StringView key, StringView itemName) {
             size_t count = items.size();
             if (s.BeginArray(key, itemName, count)) {
                 for (const T& item : items) {
@@ -43,7 +43,7 @@ namespace BECore {
         }
 
         template <typename T>
-        bool LoadItems(IDeserializer& d, eastl::vector<T>& items, eastl::string_view key, eastl::string_view itemName) {
+        bool LoadItems(IDeserializer& d, eastl::vector<T>& items, StringView key, StringView itemName) {
             size_t count = 0;
             if (!d.BeginArray(key, itemName, count)) {
                 return false;
@@ -165,28 +165,28 @@ namespace BECore {
 
     void UIVariant::Serialize(ISerializer& s) const {
         const eastl::string text = when.ToText();
-        s.WriteAttribute("when", eastl::string_view(text.data(), text.size()));
+        s.WriteAttribute("when", StringView(text));
         SaveItems(s, overrides, OverridesKey, OverrideItem);
     }
 
     void UIVariant::Deserialize(IDeserializer& d) {
         eastl::string text;
         if (d.ReadAttribute("when", text)) {
-            const auto condition = UIVariantCondition::FromText(eastl::string_view(text.data(), text.size()));
+            const auto condition = UIVariantCondition::FromText(StringView(text));
             if (condition) {
                 when = *condition;
             } else {
-                d.ReportError("when", eastl::string_view(condition.error().c_str()));
+                d.ReportError("when", StringView(condition.error().c_str()));
             }
         }
         LoadItems(d, overrides, OverridesKey, OverrideItem);
     }
 
-    void Ser::DataAccessor<eastl::vector<UIVariant>>::Save(ISerializer& s, const eastl::vector<UIVariant>& variants, eastl::string_view key) {
+    void Ser::DataAccessor<eastl::vector<UIVariant>>::Save(ISerializer& s, const eastl::vector<UIVariant>& variants, StringView key) {
         SaveItems(s, variants, key, VariantItem);
     }
 
-    bool Ser::DataAccessor<eastl::vector<UIVariant>>::Load(IDeserializer& d, eastl::vector<UIVariant>& variants, eastl::string_view key) {
+    bool Ser::DataAccessor<eastl::vector<UIVariant>>::Load(IDeserializer& d, eastl::vector<UIVariant>& variants, StringView key) {
         return LoadItems(d, variants, key, VariantItem);
     }
 

@@ -90,7 +90,7 @@ namespace BECore {
         void SyncChildren();
 
         /// The value of the bound variable; empty when `bind` is empty or the variable is not set
-        [[nodiscard]] eastl::string_view GetSelectedValue() const;
+        [[nodiscard]] StringView GetSelectedValue() const;
 
         /// Whether a click on @p option emits `ActionEvent(action, option value)`: not when the dropdown or the option is disabled (`IsDisabled()`), or `action` is empty
         [[nodiscard]] bool EmitsOnChoice(const UIElement& option) const;

@@ -5,7 +5,7 @@
 namespace BECore {
 
     /// The error text of a TLS connect on a platform without a backend starts with this (and WebSocketClient::Open() refuses `wss://` with it)
-    inline constexpr eastl::string_view kTlsUnsupported = "tls_unsupported";
+    inline constexpr StringView kTlsUnsupported = "tls_unsupported";
 
     /// DER certificates (one X.509 certificate each) that are trusted in addition to the system's
     using TlsTrustAnchors = eastl::vector<eastl::vector<uint8_t>>;
@@ -13,7 +13,7 @@ namespace BECore {
     /// What ITlsStream::Connect() needs; the views only have to live until Connect() returns
     struct TlsConnectParams {
         /// The server's name: where to connect, and the name the certificate has to be valid for (SNI)
-        eastl::string_view host;
+        StringView host;
         uint16_t port = 0;
 
         /// How long the TCP connect may take (the name lookup before it is not bounded)

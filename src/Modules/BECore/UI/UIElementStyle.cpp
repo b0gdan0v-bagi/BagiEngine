@@ -10,25 +10,25 @@ namespace BECore {
         /// Writes a plain value (number, bool, enum) when it differs from the style's default. Not Ser::Save: that one also drops a value equal to T{} when the
         /// serializer skips defaults, and `visible` false is exactly that while the default of the style is true.
         template <typename T>
-        void SaveIfChanged(ISerializer& s, const T& value, const T& defaultValue, eastl::string_view key) {
+        void SaveIfChanged(ISerializer& s, const T& value, const T& defaultValue, StringView key) {
             if (!(value == defaultValue)) {
                 Ser::DataAccessor<T>::Save(s, value, key);
             }
         }
 
-        void SaveLengthIfChanged(ISerializer& s, const UILength& value, const UILength& defaultValue, eastl::string_view key) {
+        void SaveLengthIfChanged(ISerializer& s, const UILength& value, const UILength& defaultValue, StringView key) {
             if (!(value == defaultValue)) {
                 UIAttr::WriteLength(s, key, value);
             }
         }
 
-        void SaveEdgesIfChanged(ISerializer& s, const UIEdges& value, const UIEdges& defaultValue, eastl::string_view key) {
+        void SaveEdgesIfChanged(ISerializer& s, const UIEdges& value, const UIEdges& defaultValue, StringView key) {
             if (!(value == defaultValue)) {
                 UIAttr::WriteEdges(s, key, value);
             }
         }
 
-        bool VisitLength(IPropertyVisitor& v, eastl::string_view key, UILength& length) {
+        bool VisitLength(IPropertyVisitor& v, StringView key, UILength& length) {
             bool changed = false;
             if (v.BeginCompound(key)) {
                 changed |= PropVisit::Visit(v, length.value, "value");
@@ -38,7 +38,7 @@ namespace BECore {
             return changed;
         }
 
-        bool VisitVec2(IPropertyVisitor& v, eastl::string_view key, Vec2& value) {
+        bool VisitVec2(IPropertyVisitor& v, StringView key, Vec2& value) {
             bool changed = false;
             if (v.BeginCompound(key)) {
                 changed |= PropVisit::Visit(v, value.x, "x");
@@ -48,11 +48,11 @@ namespace BECore {
             return changed;
         }
 
-        bool VisitOptionalVec2(IPropertyVisitor& v, eastl::string_view key, Optional<Vec2>& value) {
+        bool VisitOptionalVec2(IPropertyVisitor& v, StringView key, Optional<Vec2>& value) {
             return value && VisitVec2(v, key, *value);
         }
 
-        bool VisitOptionalLength(IPropertyVisitor& v, eastl::string_view key, Optional<UILength>& length) {
+        bool VisitOptionalLength(IPropertyVisitor& v, StringView key, Optional<UILength>& length) {
             return length && VisitLength(v, key, *length);
         }
 

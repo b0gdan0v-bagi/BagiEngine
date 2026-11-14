@@ -39,18 +39,18 @@ namespace BECore::Tests {
             _raw.SendText(std::string(text.c_str(), text.size()));
         }
 
-        void Create(eastl::string_view name, eastl::string_view game = "fake") {
+        void Create(StringView name, StringView game = "fake") {
             Send(CreateRoomMessage{eastl::string(game), eastl::string(name), Json::object()});
         }
 
-        void JoinByName(eastl::string_view code, eastl::string_view name) {
+        void JoinByName(StringView code, StringView name) {
             JoinRoomMessage message;
             message.code = eastl::string(code);
             message.name = eastl::string(name);
             Send(message);
         }
 
-        void JoinByToken(eastl::string_view code, eastl::string_view token) {
+        void JoinByToken(StringView code, StringView token) {
             JoinRoomMessage message;
             message.code = eastl::string(code);
             message.token = eastl::string(token);
@@ -100,7 +100,7 @@ namespace BECore::Tests {
         }
 
         /// Reads forward until a message of @p type arrives (the ones in between stay in Received()); nullopt when none does
-        Optional<ReceivedMessage> WaitFor(eastl::string_view type, std::chrono::milliseconds limit = kClientWaitLimit) {
+        Optional<ReceivedMessage> WaitFor(StringView type, std::chrono::milliseconds limit = kClientWaitLimit) {
             const auto deadline = std::chrono::steady_clock::now() + limit;
             while (std::chrono::steady_clock::now() < deadline) {
                 const auto message = Next(std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now()));

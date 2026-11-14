@@ -9,10 +9,10 @@ namespace BECore::Tests {
         /// One element `<root a="TEXT"/>` read through ReadAttribute, strict or lenient.
         class AttributeCase {
         public:
-            AttributeCase(eastl::string_view text, bool strict) {
+            AttributeCase(StringView text, bool strict) {
                 _deserializer.SetStrictValues(strict);
                 const eastl::string xml = "<root a=\"" + eastl::string(text.data(), text.size()) + "\"/>";
-                EXPECT_TRUE(_deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+                EXPECT_TRUE(_deserializer.LoadFromString(StringView(xml)));
             }
 
             template <typename T>
@@ -29,7 +29,7 @@ namespace BECore::Tests {
         };
 
         template <typename T>
-        bool StrictReads(eastl::string_view text, T expected) {
+        bool StrictReads(StringView text, T expected) {
             AttributeCase c(text, true);
             T value{};
             return c.Read(value) && value == expected && !c.Get().HasErrors();
@@ -37,7 +37,7 @@ namespace BECore::Tests {
 
         /// Rejected: false, the target untouched, one error under the name of the attribute.
         template <typename T>
-        bool StrictRejects(eastl::string_view text) {
+        bool StrictRejects(StringView text) {
             AttributeCase c(text, true);
             T value = static_cast<T>(42);
             const bool read = c.Read(value);

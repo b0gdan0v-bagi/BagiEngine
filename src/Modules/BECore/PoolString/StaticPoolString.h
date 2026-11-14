@@ -9,7 +9,7 @@ namespace BECore {
                 for (size_t i = 0; i < N; ++i)
                     data[i] = str[i];
             }
-            constexpr eastl::string_view View() const noexcept {
+            constexpr StringView View() const noexcept {
                 return {data, N - 1};
             }
         };
@@ -66,7 +66,7 @@ namespace BECore {
             return BECore::StringUtils::GetHash(Str.View());
         }
 
-        [[nodiscard]] constexpr eastl::string_view View() const noexcept {
+        [[nodiscard]] constexpr StringView View() const noexcept {
             return Str.View();
         }
     };

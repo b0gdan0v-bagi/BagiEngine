@@ -9,7 +9,7 @@
 namespace BECore {
 
     /// The old name of kTlsUnsupported (Tls/TlsStream.h): the error text of a `wss://` address on a platform without a TLS backend starts with it
-    inline constexpr eastl::string_view kWebSocketTlsUnsupported = kTlsUnsupported;
+    inline constexpr StringView kWebSocketTlsUnsupported = kTlsUnsupported;
 
     /// The limits, timeouts and names of one client
     struct WebSocketClientSettings {
@@ -93,16 +93,16 @@ namespace BECore {
         /// Starts connecting to @p url. The error is a message for the log and means no thread was started and no Closed will
         /// come: a URL that does not parse, `wss://` on a platform without a TLS backend (starts with kTlsUnsupported), a previous connection that has not
         /// ended yet. Events of a previous connection that were not taken are dropped
-        [[nodiscard]] std::expected<void, eastl::string> Open(eastl::string_view url, WebSocketClientSettings settings = {});
+        [[nodiscard]] std::expected<void, eastl::string> Open(StringView url, WebSocketClientSettings settings = {});
 
         /// Queues a text message; false when the connection is not open, is closing, or the queue is full (over the cap, and a
         /// queue that holds something already means the server does not read: the connection is then dropped)
-        bool SendText(eastl::string_view text);
+        bool SendText(StringView text);
 
         /// Starts the closing handshake: the close frame follows what is queued, and if the server does not answer within
         /// closeTimeout the connection is aborted. During the connect it is the same as Abort(). Closed carries @p code and @p reason
         /// unless the server closed first
-        void Close(uint16_t code = WebSocketCloseCode::kNormal, eastl::string_view reason = {});
+        void Close(uint16_t code = WebSocketCloseCode::kNormal, StringView reason = {});
 
         /// Ends the connection now, without a close frame; wakes every wait. Closed (1006) still follows
         void Abort();
@@ -126,13 +126,13 @@ namespace BECore {
         };
 
         bool QueueFrame(uint8_t opcode, eastl::vector<uint8_t> payload, bool isClose);
-        void AbortConnection(uint16_t code, eastl::string_view reason);
+        void AbortConnection(uint16_t code, StringView reason);
         /// Records how the connection ended unless something did already (the first reason is the true one); _mutex held
-        void SetEndLocked(uint16_t code, eastl::string_view reason);
-        void SetEnd(uint16_t code, eastl::string_view reason);
+        void SetEndLocked(uint16_t code, StringView reason);
+        void SetEnd(uint16_t code, StringView reason);
         void PushEvent(WebSocketClientEvent event);
         /// @p what, with the reason the stream gives (a TLS failure) after a colon when it has one
-        eastl::string WithStreamError(eastl::string_view what) const;
+        eastl::string WithStreamError(StringView what) const;
 
         void ReaderMain();
         bool Connect();

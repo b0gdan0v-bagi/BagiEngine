@@ -37,7 +37,7 @@ namespace BECore {
          * @brief Sets the text of @p key in @p language. The first language set is the default one until SetDefaultLanguage() says otherwise
          * @return false and nothing changed when @p key is empty or contains `}`, or @p language is empty. A value equal to the current one changes nothing (and keeps the version)
          */
-        bool Set(PoolString language, eastl::string_view key, eastl::string_view text);
+        bool Set(PoolString language, StringView key, StringView text);
 
         /// The language a key falls back to. Any id: a default with no strings is a table with no fallback
         void SetDefaultLanguage(PoolString language);
@@ -56,14 +56,14 @@ namespace BECore {
         [[nodiscard]] bool HasLanguage(PoolString language) const;
 
         /// The text of @p key in the current language, else in the default language, else nothing. Does not record a miss
-        [[nodiscard]] Optional<eastl::string_view> Find(eastl::string_view key) const;
+        [[nodiscard]] Optional<StringView> Find(StringView key) const;
 
         /// @p text with every `{#key}` replaced (see the class comment). A missing key becomes the key text and is recorded once per language and key. An unclosed `{#`, an
         /// empty `{#}` and a `{{#` stay as written
-        [[nodiscard]] eastl::string Resolve(eastl::string_view text);
+        [[nodiscard]] eastl::string Resolve(StringView text);
 
         /// True when Resolve() could change @p text: a `{#` that is not part of `{{`
-        [[nodiscard]] static bool HasReferences(eastl::string_view text);
+        [[nodiscard]] static bool HasReferences(StringView text);
 
         /// The keys Resolve() did not find, once per language and key, in the order they were asked for
         [[nodiscard]] const eastl::vector<MissingString>& GetMissing() const {
@@ -94,8 +94,8 @@ namespace BECore {
         };
 
         [[nodiscard]] const Language* FindLanguage(PoolString language) const;
-        [[nodiscard]] const eastl::string* FindString(const Language* language, eastl::string_view key) const;
-        void RecordMissing(eastl::string_view key);
+        [[nodiscard]] const eastl::string* FindString(const Language* language, StringView key) const;
+        void RecordMissing(StringView key);
 
         eastl::vector<Language> _languages;
         eastl::vector<PoolString> _languageIds;

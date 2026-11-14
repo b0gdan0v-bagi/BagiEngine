@@ -34,7 +34,7 @@ namespace BECore {
     namespace PropVisit {
 
         /// The property visitor has no general support for a vector of structs by value (the inspector shows none): these tests do not edit one
-        inline bool Visit(IPropertyVisitor& /*v*/, eastl::vector<SaveTestData::Item>& /*items*/, eastl::string_view /*key*/) {
+        inline bool Visit(IPropertyVisitor& /*v*/, eastl::vector<SaveTestData::Item>& /*items*/, StringView /*key*/) {
             return false;
         }
 

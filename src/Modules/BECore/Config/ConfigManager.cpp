@@ -97,7 +97,7 @@ namespace BECore {
         return MakeDeserializer(GetConfig(name));
     }
 
-    eastl::unique_ptr<IDeserializer> ConfigManager::CreateDeserializer(eastl::string_view name) const {
+    eastl::unique_ptr<IDeserializer> ConfigManager::CreateDeserializer(StringView name) const {
         return MakeDeserializer(GetConfig(name));
     }
 
@@ -106,7 +106,7 @@ namespace BECore {
         return _configs.find(name) != _configs.end();
     }
 
-    XmlNode ConfigManager::GetConfig(eastl::string_view name) const {
+    XmlNode ConfigManager::GetConfig(StringView name) const {
         ASSERT(_initialized.load(std::memory_order_acquire));
         auto it = _configs.Find(name);
         if (it != _configs.end() && it->second.doc) {
@@ -115,7 +115,7 @@ namespace BECore {
         return XmlNode();
     }
 
-    bool ConfigManager::HasConfig(eastl::string_view name) const {
+    bool ConfigManager::HasConfig(StringView name) const {
         ASSERT(_initialized.load(std::memory_order_acquire));
         return _configs.Find(name) != _configs.end();
     }
@@ -208,7 +208,7 @@ namespace BECore {
                 // Используем stem (имя без расширения) как ключ
                 auto stemStr = entry.path().stem().string();
                 // Конвертируем std::string в eastl::string_view через c_str()
-                auto name = PoolString::Intern(eastl::string_view(stemStr.c_str(), stemStr.length()));
+                auto name = PoolString::Intern(StringView(stemStr.c_str(), stemStr.length()));
                 filesToLoad.push_back({entry.path(), name});
 
                 LOG_DEBUG(Format("[ConfigManager] Found config: {} -> {}", stemStr, entry.path().string()).c_str());

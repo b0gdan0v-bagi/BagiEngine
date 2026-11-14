@@ -6,9 +6,9 @@ namespace BECore::Stress {
 
     namespace {
 
-        constexpr eastl::string_view kSetScene = "set_scene";
-        constexpr eastl::string_view kSetCount = "set_count";
-        constexpr eastl::string_view kSetLanguage = "set_language";
+        constexpr StringView kSetScene = "set_scene";
+        constexpr StringView kSetCount = "set_count";
+        constexpr StringView kSetLanguage = "set_language";
 
         std::unexpected<ControlError> InvalidParams(eastl::string message) {
             return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, std::move(message)));
@@ -23,7 +23,7 @@ namespace BECore::Stress {
         }
 
         /// The scene named by member @p key of @p object, or the invalid_params error that says what is wrong with it
-        std::expected<StressScene, ControlError> ReadScene(const Json& object, eastl::string_view key) {
+        std::expected<StressScene, ControlError> ReadScene(const Json& object, StringView key) {
             const auto name = GetJsonString(object, key);
             const auto scene = name ? ParseScene(*name) : std::nullopt;
             if (!scene) {
@@ -32,7 +32,7 @@ namespace BECore::Stress {
             return *scene;
         }
 
-        std::expected<StressLanguage, ControlError> ReadLanguage(const Json& object, eastl::string_view key) {
+        std::expected<StressLanguage, ControlError> ReadLanguage(const Json& object, StringView key) {
             const auto name = GetJsonString(object, key);
             const auto language = name ? ParseLanguage(*name) : std::nullopt;
             if (!language) {
@@ -42,7 +42,7 @@ namespace BECore::Stress {
         }
 
         /// The count in member @p key of @p object (1..kMaxCount). Checked as int64_t before the narrowing, so a huge number cannot wrap
-        std::expected<uint32_t, ControlError> ReadCount(const Json& object, eastl::string_view key) {
+        std::expected<uint32_t, ControlError> ReadCount(const Json& object, StringView key) {
             const auto count = GetJsonInt(object, key);
             if (!count || *count < 1 || *count > static_cast<int64_t>(kMaxCount)) {
                 return InvalidParams(Format("'{}' has to be an integer from 1 to {}", key, kMaxCount));
@@ -50,7 +50,7 @@ namespace BECore::Stress {
             return static_cast<uint32_t>(*count);
         }
 
-        Json DescribeAction(eastl::string_view type, eastl::string_view key, Json value) {
+        Json DescribeAction(StringView type, StringView key, Json value) {
             Json action = Json::object();
             action["type"] = MakeJsonString(type);
             action[std::string(key.data(), key.size())] = std::move(value);

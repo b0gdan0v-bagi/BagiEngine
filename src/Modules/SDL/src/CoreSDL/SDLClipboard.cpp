@@ -40,7 +40,7 @@ namespace BECore {
         return (SDL_WasInit(SDL_INIT_VIDEO) & SDL_INIT_VIDEO) != 0;
     }
 
-    bool SDLClipboardBackend::WriteText(eastl::string_view text) {
+    bool SDLClipboardBackend::WriteText(StringView text) {
         _writeBuffer.assign(text.data(), text.size());
         if (!SDL_SetClipboardText(_writeBuffer.c_str())) {
             LOG_WARNING("Clipboard: SDL_SetClipboardText failed: {}"_format(SDL_GetError()));
@@ -88,7 +88,7 @@ namespace BECore {
         return startedMs <= nowMs && nowMs - startedMs <= windowMs;
     }
 
-    ClipboardText MakeWebClipboardText(int code, eastl::string_view text) {
+    ClipboardText MakeWebClipboardText(int code, StringView text) {
         ClipboardText result;
         result.status = StatusFromWebCode(code);
         if (result.status == ClipboardStatus::Ok) {
@@ -250,7 +250,7 @@ namespace BECore {
         }
 
         // Writes at once; the result is kWriteNoApi, kWriteThrew or 1
-        int WriteToPage(eastl::string_view text) {
+        int WriteToPage(StringView text) {
             return EM_ASM_INT({ return window.bagiClipboard.write(UTF8ToString($0, $1)); }, text.data(), static_cast<int>(text.size()));
         }
 
@@ -344,7 +344,7 @@ namespace BECore {
                 return _available;
             }
 
-            bool WriteText(eastl::string_view text) override {
+            bool WriteText(StringView text) override {
                 const int result = WriteToPage(text);
                 if (result == kWriteThrew && !std::exchange(_warnedWrite, true)) {
                     LOG_WARNING("Clipboard: navigator.clipboard.writeText threw, the text is tried again at the next tap or key press");

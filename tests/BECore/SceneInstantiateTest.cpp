@@ -94,7 +94,7 @@ namespace BECore::Tests {
 
         private:
             void OnLog(const LogEvent& event) {
-                if (event.level == LogLevel::Error && event.message.find(eastl::string_view(_part.data(), _part.size())) != eastl::string_view::npos) {
+                if (event.level == LogLevel::Error && event.message.find(StringView(_part)) != StringView::npos) {
                     ++_count;
                 }
             }

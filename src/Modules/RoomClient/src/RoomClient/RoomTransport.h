@@ -42,13 +42,13 @@ namespace BECore {
 
         /// Starts connecting to @p url (`ws://host[:port][/path]`, or `wss://` where the platform speaks it). An error is a message for
         /// the log and means no Closed will follow
-        [[nodiscard]] virtual std::expected<void, eastl::string> Open(eastl::string_view url) = 0;
+        [[nodiscard]] virtual std::expected<void, eastl::string> Open(StringView url) = 0;
 
         /// Queues a text message; false when the connection is not open, is closing, or its queue is full
-        virtual bool SendText(eastl::string_view text) = 0;
+        virtual bool SendText(StringView text) = 0;
 
         /// Starts the closing handshake with @p code and @p reason; Closed follows. During the connect it is the same as Abort()
-        virtual void Close(uint16_t code, eastl::string_view reason) = 0;
+        virtual void Close(uint16_t code, StringView reason) = 0;
 
         /// Ends the connection now, without a close frame; Closed (kRoomTransportAbnormalClosure) still follows
         virtual void Abort() = 0;

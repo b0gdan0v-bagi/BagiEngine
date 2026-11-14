@@ -10,7 +10,7 @@
 
 namespace BECore {
 
-    bool VulkanTextureLoader::CanLoad(eastl::string_view extension) const {
+    bool VulkanTextureLoader::CanLoad(StringView extension) const {
         if (extension != ".bmp" && extension != ".png" && extension != ".jpg" && extension != ".jpeg") {
             return false;
         }

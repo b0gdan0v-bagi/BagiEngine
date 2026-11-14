@@ -142,7 +142,7 @@ namespace BECore {
             }
             const eastl::string& tooltip = element.GetTooltipText();
             if (!tooltip.empty()) {
-                json["tooltip"] = MakeJsonString(eastl::string_view(tooltip.data(), tooltip.size()));
+                json["tooltip"] = MakeJsonString(StringView(tooltip));
             }
         }
 
@@ -468,7 +468,7 @@ namespace BECore {
                     return;
                 }
                 // A name that was never interned belongs to no node; client text does not go into the pool
-                onlyNode = PoolString::Find(eastl::string_view(nodeText->c_str(), nodeText->size())).value_or(PoolString{});
+                onlyNode = PoolString::Find(StringView(nodeText->c_str(), nodeText->size())).value_or(PoolString{});
             }
             float at = kDefaultAt;
             if (FindJsonMember(call.Params(), "at") != nullptr) {
@@ -484,7 +484,7 @@ namespace BECore {
                 call.Fail(UIControlErrors::kNoScene, "there is no active scene");
                 return;
             }
-            const auto name = PoolString::Find(eastl::string_view(nameText->c_str(), nameText->size()));
+            const auto name = PoolString::Find(StringView(nameText->c_str(), nameText->size()));
             eastl::vector<CanvasEntry> canvases;
             CollectCanvases(scene->GetRootNode(), canvases);
 
@@ -529,7 +529,7 @@ namespace BECore {
                 static_cast<void>(input.DispatchMouseButtonUp(MakeButtonEvent(outputX, outputY, false)));
 
                 Json result = Json::object();
-                result["clicked"] = MakeJsonString(eastl::string_view(nameText->c_str(), nameText->size()));
+                result["clicked"] = MakeJsonString(StringView(nameText->c_str(), nameText->size()));
                 result["canvas"] = MakeJsonString(canvasNode.ToStringView());
                 result["x"] = outputX;
                 result["y"] = outputY;
@@ -550,8 +550,8 @@ namespace BECore {
                 }
                 if (onlyClosesList && result.contains("action")) {
                     // The press only closed the open list and reached nothing below it: no action, no value
-                    result["action"] = MakeJsonString(eastl::string_view{});
-                    result["value"] = MakeJsonString(eastl::string_view{});
+                    result["action"] = MakeJsonString(StringView{});
+                    result["value"] = MakeJsonString(StringView{});
                 }
                 call.Reply(std::move(result));
                 return;

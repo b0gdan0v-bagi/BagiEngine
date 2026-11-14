@@ -126,7 +126,7 @@ namespace BECore::Tests {
         public:
             explicit DensityWindow(float density) : _density(density) {}
 
-            bool Initialize(eastl::string_view /*configPath*/) override {
+            bool Initialize(StringView /*configPath*/) override {
                 return true;
             }
 

@@ -7,29 +7,29 @@ namespace BECore {
 
     namespace {
 
-        constexpr eastl::string_view kSupportedVersion = "13";
-        constexpr eastl::string_view kRequestLinePrefix = "GET ";
-        constexpr eastl::string_view kRequestLineSuffix = " HTTP/1.1";
-        constexpr eastl::string_view kRequestLineSuffixHttp10 = " HTTP/1.0";
-        constexpr eastl::string_view kHealthBody = "ok";
+        constexpr StringView kSupportedVersion = "13";
+        constexpr StringView kRequestLinePrefix = "GET ";
+        constexpr StringView kRequestLineSuffix = " HTTP/1.1";
+        constexpr StringView kRequestLineSuffixHttp10 = " HTTP/1.0";
+        constexpr StringView kHealthBody = "ok";
         constexpr size_t kClientKeyLength = 24;  // 16 random bytes in base64 with padding
         constexpr size_t kMaxPortDigits = 5;
         constexpr uint32_t kMaxPort = 65535;
         constexpr int kNoPort = -1;
         constexpr int kDefaultHttpPort = 80;
         constexpr int kDefaultHttpsPort = 443;
-        constexpr eastl::string_view kSchemeSeparator = "://";
-        constexpr eastl::string_view kAnyOrigin = "*";
-        constexpr eastl::string_view kNullOrigin = "null";
+        constexpr StringView kSchemeSeparator = "://";
+        constexpr StringView kAnyOrigin = "*";
+        constexpr StringView kNullOrigin = "null";
 
         namespace HeaderNames {
-            constexpr eastl::string_view kHost = "host";
-            constexpr eastl::string_view kOrigin = "origin";
-            constexpr eastl::string_view kUpgrade = "upgrade";
-            constexpr eastl::string_view kConnection = "connection";
-            constexpr eastl::string_view kKey = "sec-websocket-key";
-            constexpr eastl::string_view kVersion = "sec-websocket-version";
-            constexpr eastl::string_view kForwardedFor = "x-forwarded-for";
+            constexpr StringView kHost = "host";
+            constexpr StringView kOrigin = "origin";
+            constexpr StringView kUpgrade = "upgrade";
+            constexpr StringView kConnection = "connection";
+            constexpr StringView kKey = "sec-websocket-key";
+            constexpr StringView kVersion = "sec-websocket-version";
+            constexpr StringView kForwardedFor = "x-forwarded-for";
         }  // namespace HeaderNames
 
         using Headers = eastl::hash_map<eastl::string, eastl::string>;
@@ -42,7 +42,7 @@ namespace BECore {
             return HandshakeError{status, std::move(message)};
         }
 
-        bool IsPort(eastl::string_view text) {
+        bool IsPort(StringView text) {
             if (text.empty() || text.size() > kMaxPortDigits) {
                 return false;
             }
@@ -50,21 +50,21 @@ namespace BECore {
         }
 
         /// `127.0.0.1`, `localhost` or `[::1]`, each optionally followed by `:port` (the form of a Host header and of an Origin authority)
-        bool IsLoopbackAuthority(eastl::string_view authority) {
-            eastl::string_view host = authority;
+        bool IsLoopbackAuthority(StringView authority) {
+            StringView host = authority;
             if (authority.starts_with('[')) {
                 const size_t close = authority.find(']');
-                if (close == eastl::string_view::npos) {
+                if (close == StringView::npos) {
                     return false;
                 }
                 host = authority.substr(0, close + 1);
-                const eastl::string_view rest = authority.substr(close + 1);
+                const StringView rest = authority.substr(close + 1);
                 if (!rest.empty() && !(rest.starts_with(':') && IsPort(rest.substr(1)))) {
                     return false;
                 }
             } else {
                 const size_t colon = authority.find(':');
-                if (colon != eastl::string_view::npos) {
+                if (colon != StringView::npos) {
                     if (!IsPort(authority.substr(colon + 1))) {
                         return false;
                     }
@@ -75,8 +75,8 @@ namespace BECore {
         }
 
         /// `http://127.0.0.1:3000` and `https://localhost`; a path after the authority is tolerated. The `null` origin of a file page is not loopback.
-        bool IsLoopbackOrigin(eastl::string_view origin) {
-            eastl::string_view rest;
+        bool IsLoopbackOrigin(StringView origin) {
+            StringView rest;
             if (origin.starts_with("http://")) {
                 rest = origin.substr(7);
             } else if (origin.starts_with("https://")) {
@@ -108,7 +108,7 @@ namespace BECore {
         }
 
         /// A registered name, an IPv4 address or an IPv6 literal in brackets (hex digits, ':' and '.'); never empty
-        bool IsOriginHost(eastl::string_view host) {
+        bool IsOriginHost(StringView host) {
             if (host.empty()) {
                 return false;
             }
@@ -116,7 +116,7 @@ namespace BECore {
                 if (host.size() < 3 || host.back() != ']') {
                     return false;
                 }
-                const eastl::string_view inside = host.substr(1, host.size() - 2);
+                const StringView inside = host.substr(1, host.size() - 2);
                 return std::all_of(inside.begin(), inside.end(), [](char letter) {
                     const char lower = AsciiLower(letter);
                     return (lower >= 'a' && lower <= 'f') || (letter >= '0' && letter <= '9') || letter == ':' || letter == '.';
@@ -125,7 +125,7 @@ namespace BECore {
             return std::all_of(host.begin(), host.end(), IsHostCharacter);
         }
 
-        int DefaultPortOf(eastl::string_view scheme) {
+        int DefaultPortOf(StringView scheme) {
             if (scheme == "http") {
                 return kDefaultHttpPort;
             }
@@ -133,33 +133,33 @@ namespace BECore {
         }
 
         /// Parses `scheme://host[:port]` with an optional single trailing `/`; nullopt for anything else
-        Optional<ParsedOrigin> ParseOrigin(eastl::string_view text) {
+        Optional<ParsedOrigin> ParseOrigin(StringView text) {
             const size_t separator = text.find(kSchemeSeparator);
-            if (separator == eastl::string_view::npos || separator == 0) {
+            if (separator == StringView::npos || separator == 0) {
                 return std::nullopt;
             }
-            const eastl::string_view scheme = text.substr(0, separator);
+            const StringView scheme = text.substr(0, separator);
             for (size_t i = 0; i < scheme.size(); ++i) {
                 if (!IsSchemeCharacter(scheme[i], i == 0)) {
                     return std::nullopt;
                 }
             }
 
-            eastl::string_view authority = text.substr(separator + kSchemeSeparator.size());
+            StringView authority = text.substr(separator + kSchemeSeparator.size());
             if (authority.ends_with('/')) {
                 authority.remove_suffix(1);  // `https://a.com/` is the same origin; `https://a.com/x` is not an origin at all
             }
 
-            eastl::string_view host = authority;
-            eastl::string_view port;
+            StringView host = authority;
+            StringView port;
             bool hasPort = false;
             const size_t hostEnd = authority.starts_with('[') ? authority.find(']') : authority.find(':');
             if (authority.starts_with('[')) {
-                if (hostEnd == eastl::string_view::npos) {
+                if (hostEnd == StringView::npos) {
                     return std::nullopt;
                 }
                 host = authority.substr(0, hostEnd + 1);
-                const eastl::string_view rest = authority.substr(hostEnd + 1);
+                const StringView rest = authority.substr(hostEnd + 1);
                 if (!rest.empty()) {
                     if (!rest.starts_with(':')) {
                         return std::nullopt;
@@ -167,7 +167,7 @@ namespace BECore {
                     port = rest.substr(1);
                     hasPort = true;
                 }
-            } else if (hostEnd != eastl::string_view::npos) {
+            } else if (hostEnd != StringView::npos) {
                 host = authority.substr(0, hostEnd);
                 port = authority.substr(hostEnd + 1);
                 hasPort = true;
@@ -205,7 +205,7 @@ namespace BECore {
         }
 
         /// The shape of 16 bytes in base64: 22 characters and "=="
-        bool IsClientKey(eastl::string_view key) {
+        bool IsClientKey(StringView key) {
             if (key.size() != kClientKeyLength || !key.ends_with("==")) {
                 return false;
             }
@@ -213,11 +213,11 @@ namespace BECore {
         }
 
         /// Reads the header lines after the request line into @p headers (names in lower case); a repeated header is joined only for the list headers
-        Optional<HandshakeError> ReadHeaders(eastl::string_view lines, Headers& headers) {
+        Optional<HandshakeError> ReadHeaders(StringView lines, Headers& headers) {
             while (!lines.empty()) {
                 const size_t end = lines.find('\n');
-                eastl::string_view line = lines.substr(0, end);
-                lines = (end == eastl::string_view::npos) ? eastl::string_view() : lines.substr(end + 1);
+                StringView line = lines.substr(0, end);
+                lines = (end == StringView::npos) ? StringView() : lines.substr(end + 1);
                 if (line.ends_with('\r')) {
                     line.remove_suffix(1);
                 }
@@ -229,11 +229,11 @@ namespace BECore {
                 }
 
                 const size_t colon = line.find(':');
-                if (colon == eastl::string_view::npos || colon == 0) {
+                if (colon == StringView::npos || colon == 0) {
                     return Refuse(400, "a header line has no name or no colon");
                 }
                 const eastl::string name = LowerAscii(line.substr(0, colon));
-                const eastl::string_view value = TrimHeaderValue(line.substr(colon + 1));
+                const StringView value = TrimHeaderValue(line.substr(colon + 1));
 
                 auto found = headers.find(name);
                 if (found == headers.end()) {
@@ -248,7 +248,7 @@ namespace BECore {
             return std::nullopt;
         }
 
-        const eastl::string* FindHeader(const Headers& headers, eastl::string_view name) {
+        const eastl::string* FindHeader(const Headers& headers, StringView name) {
             const auto found = headers.find(eastl::string(name.data(), name.size()));
             return found == headers.end() ? nullptr : &found->second;
         }
@@ -259,11 +259,11 @@ namespace BECore {
         constexpr size_t kMinIpv6Colons = 2;
         constexpr size_t kMaxIpv6Colons = 7;
 
-        bool IsDottedIpv4(eastl::string_view text) {
+        bool IsDottedIpv4(StringView text) {
             size_t parts = 0;
             while (true) {
                 const size_t dot = text.find('.');
-                const eastl::string_view part = text.substr(0, dot);
+                const StringView part = text.substr(0, dot);
                 if (part.empty() || part.size() > kMaxIpv4PartDigits) {
                     return false;
                 }
@@ -278,7 +278,7 @@ namespace BECore {
                     return false;
                 }
                 ++parts;
-                if (dot == eastl::string_view::npos) {
+                if (dot == StringView::npos) {
                     break;
                 }
                 text.remove_prefix(dot + 1);
@@ -287,7 +287,7 @@ namespace BECore {
         }
 
         /// Hex digits, ':' and an optional dotted tail; the shape of a literal, not a full grammar (it is only a key for a limit)
-        bool IsIpv6Literal(eastl::string_view text) {
+        bool IsIpv6Literal(StringView text) {
             const auto colons = static_cast<size_t>(std::count(text.begin(), text.end(), ':'));
             if (colons < kMinIpv6Colons || colons > kMaxIpv6Colons) {
                 return false;
@@ -298,7 +298,7 @@ namespace BECore {
             });
         }
 
-        eastl::string_view ReasonPhrase(int status) {
+        StringView ReasonPhrase(int status) {
             switch (status) {
                 case 101:
                     return "Switching Protocols";
@@ -317,7 +317,7 @@ namespace BECore {
 
     }  // namespace
 
-    eastl::string LowerAscii(eastl::string_view text) {
+    eastl::string LowerAscii(StringView text) {
         eastl::string lowered;
         lowered.reserve(text.size());
         for (const char letter : text) {
@@ -326,11 +326,11 @@ namespace BECore {
         return lowered;
     }
 
-    bool EqualsIgnoreCase(eastl::string_view left, eastl::string_view right) {
+    bool EqualsIgnoreCase(StringView left, StringView right) {
         return left.size() == right.size() && std::equal(left.begin(), left.end(), right.begin(), [](char a, char b) { return AsciiLower(a) == AsciiLower(b); });
     }
 
-    eastl::string QuoteForMessage(eastl::string_view text) {
+    eastl::string QuoteForMessage(StringView text) {
         eastl::string quoted;
         quoted.reserve(std::min(text.size(), kMaxQuotedBytes) + 3);
         for (const char letter : text.substr(0, kMaxQuotedBytes)) {
@@ -342,7 +342,7 @@ namespace BECore {
         return quoted;
     }
 
-    eastl::string_view TrimHeaderValue(eastl::string_view text) {
+    StringView TrimHeaderValue(StringView text) {
         while (!text.empty() && (text.front() == ' ' || text.front() == '\t')) {
             text.remove_prefix(1);
         }
@@ -352,14 +352,14 @@ namespace BECore {
         return text;
     }
 
-    bool HeaderHasToken(eastl::string_view value, eastl::string_view token) {
+    bool HeaderHasToken(StringView value, StringView token) {
         while (!value.empty()) {
             const size_t comma = value.find(',');
-            const eastl::string_view item = TrimHeaderValue(value.substr(0, comma));
+            const StringView item = TrimHeaderValue(value.substr(0, comma));
             if (EqualsIgnoreCase(item, token)) {
                 return true;
             }
-            if (comma == eastl::string_view::npos) {
+            if (comma == StringView::npos) {
                 break;
             }
             value.remove_prefix(comma + 1);
@@ -367,21 +367,21 @@ namespace BECore {
         return false;
     }
 
-    eastl::string ComputeAcceptKey(eastl::string_view clientKey) {
+    eastl::string ComputeAcceptKey(StringView clientKey) {
         eastl::string joined(clientKey.data(), clientKey.size());
         joined.append(kWebSocketGuid.data(), kWebSocketGuid.size());
         const Sha1Digest digest = Sha1(eastl::span<const uint8_t>(reinterpret_cast<const uint8_t*>(joined.data()), joined.size()));
         return Base64Encode(eastl::span<const uint8_t>(digest.data(), digest.size()));
     }
 
-    bool IsOriginAllowed(eastl::string_view origin, const HandshakePolicy& policy) {
+    bool IsOriginAllowed(StringView origin, const HandshakePolicy& policy) {
         if (policy.loopbackOnly) {
             return IsLoopbackOrigin(origin);
         }
         const bool isNull = EqualsIgnoreCase(origin, kNullOrigin);
         const Optional<ParsedOrigin> parsed = isNull ? std::nullopt : ParseOrigin(origin);
         for (const eastl::string& entry : policy.allowedOrigins) {
-            const eastl::string_view allowed(entry.data(), entry.size());
+            const StringView allowed(entry.data(), entry.size());
             if (allowed == kAnyOrigin) {
                 return true;
             }
@@ -402,17 +402,17 @@ namespace BECore {
         return false;
     }
 
-    std::expected<eastl::string, HandshakeError> ParseHandshakeRequest(eastl::string_view requestText, const HandshakePolicy& policy) {
+    std::expected<eastl::string, HandshakeError> ParseHandshakeRequest(StringView requestText, const HandshakePolicy& policy) {
         if (requestText.size() > kMaxHandshakeBytes) {
             return std::unexpected(Refuse(431, "the request head is too long"));
         }
 
         const size_t requestLineEnd = requestText.find('\n');
-        eastl::string_view requestLine = requestText.substr(0, requestLineEnd);
+        StringView requestLine = requestText.substr(0, requestLineEnd);
         if (requestLine.ends_with('\r')) {
             requestLine.remove_suffix(1);
         }
-        const eastl::string_view headerLines = (requestLineEnd == eastl::string_view::npos) ? eastl::string_view() : requestText.substr(requestLineEnd + 1);
+        const StringView headerLines = (requestLineEnd == StringView::npos) ? StringView() : requestText.substr(requestLineEnd + 1);
 
         // "GET <target> HTTP/1.1": the target is not used, any path opens the same endpoint
         if (!requestLine.starts_with(kRequestLinePrefix) || !requestLine.ends_with(kRequestLineSuffix) || requestLine.size() <= kRequestLinePrefix.size() + kRequestLineSuffix.size()) {
@@ -462,12 +462,12 @@ namespace BECore {
         return *key;
     }
 
-    eastl::string ParseForwardedClientAddress(eastl::string_view requestText, size_t trustedProxyHops) {
+    eastl::string ParseForwardedClientAddress(StringView requestText, size_t trustedProxyHops) {
         if (trustedProxyHops == 0 || requestText.size() > kMaxHandshakeBytes) {
             return {};
         }
         const size_t requestLineEnd = requestText.find('\n');
-        if (requestLineEnd == eastl::string_view::npos) {
+        if (requestLineEnd == StringView::npos) {
             return {};
         }
         Headers headers;
@@ -480,29 +480,29 @@ namespace BECore {
         }
 
         // From the right: the last entry is the one the nearest proxy appended
-        eastl::string_view rest(list->data(), list->size());
+        StringView rest(list->data(), list->size());
         for (size_t skipped = 1; skipped < trustedProxyHops; ++skipped) {
             const size_t comma = rest.rfind(',');
-            if (comma == eastl::string_view::npos) {
+            if (comma == StringView::npos) {
                 return {};
             }
             rest = rest.substr(0, comma);
         }
         const size_t comma = rest.rfind(',');
-        const eastl::string_view entry = TrimHeaderValue(comma == eastl::string_view::npos ? rest : rest.substr(comma + 1));
+        const StringView entry = TrimHeaderValue(comma == StringView::npos ? rest : rest.substr(comma + 1));
         if (entry.empty() || entry.size() > kMaxForwardedAddressBytes || !(IsDottedIpv4(entry) || IsIpv6Literal(entry))) {
             return {};
         }
         return LowerAscii(entry);
     }
 
-    bool IsHealthCheckRequest(eastl::string_view requestText, const HandshakePolicy& policy) {
+    bool IsHealthCheckRequest(StringView requestText, const HandshakePolicy& policy) {
         if (policy.loopbackOnly || policy.healthPath.empty() || requestText.size() > kMaxHandshakeBytes) {
             return false;
         }
 
         const size_t requestLineEnd = requestText.find('\n');
-        eastl::string_view requestLine = requestText.substr(0, requestLineEnd);
+        StringView requestLine = requestText.substr(0, requestLineEnd);
         if (requestLine.ends_with('\r')) {
             requestLine.remove_suffix(1);
         }
@@ -517,12 +517,12 @@ namespace BECore {
         } else {
             return false;
         }
-        const eastl::string_view path = requestLine.substr(0, requestLine.find('?'));
-        if (path != eastl::string_view(policy.healthPath.data(), policy.healthPath.size())) {
+        const StringView path = requestLine.substr(0, requestLine.find('?'));
+        if (path != StringView(policy.healthPath)) {
             return false;
         }
 
-        const eastl::string_view headerLines = (requestLineEnd == eastl::string_view::npos) ? eastl::string_view() : requestText.substr(requestLineEnd + 1);
+        const StringView headerLines = (requestLineEnd == StringView::npos) ? StringView() : requestText.substr(requestLineEnd + 1);
         Headers headers;
         if (ReadHeaders(headerLines, headers)) {
             return false;  // a malformed head gets the usual 400
@@ -534,12 +534,12 @@ namespace BECore {
         return Format("HTTP/1.1 200 OK\r\nConnection: close\r\nCache-Control: no-store\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}", kHealthBody.size(), kHealthBody);
     }
 
-    eastl::string BuildAcceptResponse(eastl::string_view clientKey) {
+    eastl::string BuildAcceptResponse(StringView clientKey) {
         return Format("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {}\r\n\r\n", ComputeAcceptKey(clientKey));
     }
 
     eastl::string BuildRejectResponse(const HandshakeError& error) {
-        const eastl::string_view versionHeader = (error.httpStatus == 426) ? "Sec-WebSocket-Version: 13\r\n" : "";
+        const StringView versionHeader = (error.httpStatus == 426) ? "Sec-WebSocket-Version: 13\r\n" : "";
         return Format("HTTP/1.1 {} {}\r\nConnection: close\r\n{}Content-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}", error.httpStatus, ReasonPhrase(error.httpStatus), versionHeader,
                       error.message.size(), error.message);
     }

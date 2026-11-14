@@ -20,7 +20,7 @@ namespace BECore {
         Write(event.level, event.message);
     }
 
-    void OutputSink::Write(LogLevel level, eastl::string_view message) {
+    void OutputSink::Write(LogLevel level, StringView message) {
         if (!ShouldLog(level)) {
             return;
         }

@@ -35,10 +35,10 @@ namespace BECore {
         bool Register(SeatedGameInfo info, SeatedGameFactory factory);
 
         /// The info of the game @p name, or nullopt when there is none
-        [[nodiscard]] Optional<SeatedGameInfo> Find(eastl::string_view name) const;
+        [[nodiscard]] Optional<SeatedGameInfo> Find(StringView name) const;
 
         /// A new independent instance of the game @p name (not started), or null when there is none
-        [[nodiscard]] eastl::unique_ptr<ISeatedGame> Create(eastl::string_view name) const;
+        [[nodiscard]] eastl::unique_ptr<ISeatedGame> Create(StringView name) const;
 
         [[nodiscard]] size_t GetCount() const;
 

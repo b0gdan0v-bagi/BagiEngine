@@ -301,7 +301,7 @@ namespace BECore::Tests {
                     }
                     case 1: {
                         const eastl::string valid = SerializeClientMessage(ClientMessage{ChooseSeatMessage{static_cast<int64_t>(pick(5))}});
-                        harness.SendText(id, eastl::string_view(valid.data(), static_cast<size_t>(pick(valid.size() + 1))));
+                        harness.SendText(id, StringView(valid.data(), static_cast<size_t>(pick(valid.size() + 1))));
                         break;
                     }
                     case 2:

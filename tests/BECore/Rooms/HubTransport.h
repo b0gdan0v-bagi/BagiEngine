@@ -25,7 +25,7 @@ namespace BECore::Tests {
         std::deque<RoomTransportEvent> toClient;
         bool closedQueued = false;
 
-        void QueueText(eastl::string_view text) {
+        void QueueText(StringView text) {
             RoomTransportEvent event;
             event.kind = RoomTransportEventKind::Text;
             event.text = eastl::string(text);
@@ -33,7 +33,7 @@ namespace BECore::Tests {
         }
 
         /// The one Closed of the connection; a second call does nothing
-        void QueueClosed(uint16_t code, eastl::string_view reason) {
+        void QueueClosed(uint16_t code, StringView reason) {
             if (closedQueued) {
                 return;
             }
@@ -112,8 +112,8 @@ namespace BECore::Tests {
 
         /// The transport calls these
         void Connect(const std::shared_ptr<HubLink>& link);
-        void Deliver(HubLink& link, eastl::string_view text);
-        void Disconnect(HubLink& link, uint16_t code, eastl::string_view reason);
+        void Deliver(HubLink& link, StringView text);
+        void Disconnect(HubLink& link, uint16_t code, StringView reason);
 
     private:
         SeatedGameRegistry& MakeRegistry() {
@@ -173,12 +173,12 @@ namespace BECore::Tests {
             }
         }
 
-        std::expected<void, eastl::string> Open(eastl::string_view /*url*/) override {
+        std::expected<void, eastl::string> Open(StringView /*url*/) override {
             _world.Connect(_link);
             return {};
         }
 
-        bool SendText(eastl::string_view text) override {
+        bool SendText(StringView text) override {
             if (!_link->open) {
                 return false;
             }
@@ -186,7 +186,7 @@ namespace BECore::Tests {
             return true;
         }
 
-        void Close(uint16_t code, eastl::string_view reason) override {
+        void Close(uint16_t code, StringView reason) override {
             _world.Disconnect(*_link, code, reason);
         }
 
@@ -230,14 +230,14 @@ namespace BECore::Tests {
         link->toClient.push_back(std::move(opened));
     }
 
-    inline void HubWorld::Deliver(HubLink& link, eastl::string_view text) {
+    inline void HubWorld::Deliver(HubLink& link, StringView text) {
         if (link.blackhole) {
             return;
         }
         _hub.OnMessage(link.id, text, _clock.Now());
     }
 
-    inline void HubWorld::Disconnect(HubLink& link, uint16_t code, eastl::string_view reason) {
+    inline void HubWorld::Disconnect(HubLink& link, uint16_t code, StringView reason) {
         if (link.open) {
             link.open = false;
             _hub.OnDisconnected(link.id, _clock.Now());

@@ -79,8 +79,8 @@ namespace BECore {
 
         /// Unknown names already reported. Views of the literals in the generated ClassMeta, so no string is copied;
         /// only a name that is not in the table is ever searched here.
-        eastl::vector<eastl::string_view>& WarnedNames() {
-            static eastl::vector<eastl::string_view> names;
+        eastl::vector<StringView>& WarnedNames() {
+            static eastl::vector<StringView> names;
             return names;
         }
 
@@ -90,7 +90,7 @@ namespace BECore {
         return eastl::span<const IconEntry>(kIcons);
     }
 
-    const char* FindIcon(eastl::string_view name) {
+    const char* FindIcon(StringView name) {
         size_t low = 0;
         size_t high = std::size(kIcons);
         while (low < high) {

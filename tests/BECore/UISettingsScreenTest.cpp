@@ -266,7 +266,7 @@ namespace BECore::Tests {
         }
 
         /// The number of characters (code points) of a UTF-8 text: the length of a word, whatever the language
-        size_t Characters(eastl::string_view text) {
+        size_t Characters(StringView text) {
             size_t count = 0;
             for (const char c : text) {
                 if ((static_cast<unsigned char>(c) & 0xC0u) != 0x80u) {
@@ -468,7 +468,7 @@ namespace BECore::Tests {
             _settings.Reset();
             XmlDeserializer deserializer;
             const std::string xml = SceneXml(viewWidth, viewHeight, edit);
-            ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+            ASSERT_TRUE(deserializer.LoadFromString(FromStd(xml)));
             _manager = New<SceneManager>();
             _manager->Deserialize(deserializer);
             ASSERT_FALSE(deserializer.HasErrors());

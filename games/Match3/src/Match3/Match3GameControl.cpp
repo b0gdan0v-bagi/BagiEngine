@@ -6,8 +6,8 @@ namespace BECore::Match3 {
 
     namespace {
 
-        constexpr eastl::string_view kStatusPlaying = "playing";
-        constexpr eastl::string_view kStatusNoMoves = "no_moves";
+        constexpr StringView kStatusPlaying = "playing";
+        constexpr StringView kStatusNoMoves = "no_moves";
 
         std::unexpected<ControlError> NoActiveModel() {
             return std::unexpected(MakeControlError(GameControlErrors::kNoActiveModel, "the Match3 board is not active"));
@@ -21,7 +21,7 @@ namespace BECore::Match3 {
         }
 
         /// The cell in member @p name of @p action, or the invalid_params error that says what is wrong with it
-        std::expected<Cell, ControlError> ParseCell(const Json& action, eastl::string_view name) {
+        std::expected<Cell, ControlError> ParseCell(const Json& action, StringView name) {
             const Json* member = FindJsonMember(action, name);
             if (member == nullptr || !member->is_object()) {
                 return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, Format("'{}' has to be an object {{\"col\", \"row\"}}", name)));

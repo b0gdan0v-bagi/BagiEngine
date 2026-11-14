@@ -17,7 +17,7 @@ namespace BECore::Tests {
         public:
             SizeOnlyWindow(int width, int height) : _width(width), _height(height) {}
 
-            bool Initialize(eastl::string_view /*configPath*/) override {
+            bool Initialize(StringView /*configPath*/) override {
                 return true;
             }
 

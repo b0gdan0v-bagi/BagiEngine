@@ -18,7 +18,7 @@ namespace BECore {
         [[nodiscard]] virtual bool IsAvailable() const = 0;
 
         /// @return true when the platform took the call; a web write can still fail later
-        virtual bool WriteText(eastl::string_view text) = 0;
+        virtual bool WriteText(StringView text) = 0;
 
         /// Starts a read; the result comes from PollRead(). Called only when no read is in flight
         virtual void BeginRead() = 0;

@@ -80,7 +80,7 @@ namespace BECore {
                 return;
             }
             seen = name;
-            const eastl::string_view view = name.ToStringView();
+            const StringView view = name.ToStringView();
             target.assign(view.data(), view.size());
         }
 
@@ -90,7 +90,7 @@ namespace BECore {
         return ImGui::GetFrameHeight() + ImGui::GetStyle().FramePadding.y * 2.0f;
     }
 
-    void StatusBar::SetBranch(eastl::string_view branch) {
+    void StatusBar::SetBranch(StringView branch) {
         _branch.assign(branch.data(), branch.size());
     }
 

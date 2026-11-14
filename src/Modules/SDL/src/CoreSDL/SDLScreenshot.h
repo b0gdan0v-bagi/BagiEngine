@@ -15,7 +15,7 @@ namespace BECore {
 
     /// Error codes of `screenshot` (the parameter errors are ControlErrors::kInvalidParams)
     namespace ScreenshotErrors {
-        inline constexpr eastl::string_view kCaptureFailed = "capture_failed";
+        inline constexpr StringView kCaptureFailed = "capture_failed";
     }  // namespace ScreenshotErrors
 
     /// A picture as a PNG file in memory

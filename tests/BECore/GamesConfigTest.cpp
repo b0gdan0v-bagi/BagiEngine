@@ -7,7 +7,7 @@ namespace BECore::Tests {
     namespace {
 
         /// Reads @p xml (the text of a whole config file) into a GamesConfig and returns the errors in @p errors
-        GamesConfig Load(eastl::string_view xml, eastl::vector<DeserializeError>& errors) {
+        GamesConfig Load(StringView xml, eastl::vector<DeserializeError>& errors) {
             XmlDeserializer deserializer;
             EXPECT_TRUE(deserializer.LoadFromString(xml));
             GamesConfig config;

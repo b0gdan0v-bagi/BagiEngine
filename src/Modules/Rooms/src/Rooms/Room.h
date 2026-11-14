@@ -40,7 +40,7 @@ namespace BECore {
          * @return `bad_name`, `game_started` (the room is no longer in the lobby: only a member can return, by token), `room_full`,
          *         `internal_error` (no free token in a bounded number of tries: a broken RandomFn).
          */
-        [[nodiscard]] std::expected<RoomMemberJoined, ControlError> AddMember(eastl::string_view name, RoomTime now);
+        [[nodiscard]] std::expected<RoomMemberJoined, ControlError> AddMember(StringView name, RoomTime now);
 
         /// Removes a member of a room in the lobby: the seat is free again, and when it was the host, the host passes to the human
         /// of the lowest seat. False (and nothing changes) for an unknown player or a room that has started (see Leave).
@@ -83,7 +83,7 @@ namespace BECore {
 
         /// The member returns with its token: control of the seat comes back at once. When no connected human was left to host, the
         /// returning member becomes the host. `not_in_room`, `bad_token`.
-        [[nodiscard]] std::expected<void, ControlError> MarkReturned(PlayerId player, eastl::string_view token);
+        [[nodiscard]] std::expected<void, ControlError> MarkReturned(PlayerId player, StringView token);
 
         /// True when a computer plays @p seat now: nobody holds it, or its player has been away for the grace or longer. Never in the lobby.
         [[nodiscard]] bool IsSeatComputerControlled(int seat, RoomTime now) const;
@@ -108,7 +108,7 @@ namespace BECore {
         [[nodiscard]] bool ShouldClose(RoomTime now) const;
 
         /// The member that has @p token. Compares in time that does not depend on how much of the token is right. Untrusted input.
-        [[nodiscard]] Optional<PlayerId> FindByToken(eastl::string_view token) const;
+        [[nodiscard]] Optional<PlayerId> FindByToken(StringView token) const;
 
         /**
          * @brief Moves a member of a room in the lobby to a free seat.

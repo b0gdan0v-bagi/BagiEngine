@@ -11,7 +11,7 @@ namespace BECore {
         constexpr float kPaletteWidth = 480.0f;
         constexpr float kPaletteListHeight = 240.0f;
         constexpr float kPaletteTopFraction = 0.2f;  // of the viewport height: the popup sits in the upper part, like a search box
-        constexpr eastl::string_view kFixedSuffix = " (fixed)";
+        constexpr StringView kFixedSuffix = " (fixed)";
 
         // Up and Down in a single-line field would otherwise move ImGui's navigation out of it
         int OnQueryKey(ImGuiInputTextCallbackData* data) {

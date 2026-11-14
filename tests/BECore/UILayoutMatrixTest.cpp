@@ -80,9 +80,9 @@ namespace BECore::Tests {
         }
 
         bool AnyLabelEndsWith(const eastl::vector<UIMatrixFailure>& failures, const char* tail) {
-            const eastl::string_view want(tail);
+            const StringView want(tail);
             for (const UIMatrixFailure& failure : failures) {
-                const eastl::string_view label(failure.label.data(), failure.label.size());
+                const StringView label(failure.label.data(), failure.label.size());
                 if (label.size() >= want.size() && label.substr(label.size() - want.size()) == want) {
                     return true;
                 }

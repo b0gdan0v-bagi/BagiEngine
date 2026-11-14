@@ -21,18 +21,18 @@ namespace BECore {
             return MakeError(SaveErrorKind::NotInitialized, "The save folder is not set up: call SaveGameService::Initialize() first");
         }
 
-        std::unexpected<SaveError> InvalidSlotNameError(eastl::string_view slot) {
+        std::unexpected<SaveError> InvalidSlotNameError(StringView slot) {
             return MakeError(SaveErrorKind::InvalidSlotName, Format("'{}' is not a slot name: use 1 to {} characters of A-Z, a-z, 0-9, '_' and '-'", slot, kMaxSlotNameLength));
         }
 
         // The names of the entries of the envelope (see SaveGameService::Save)
-        constexpr eastl::string_view kEnvelopeObject = "save";
-        constexpr eastl::string_view kEnvelopeGame = "game";
-        constexpr eastl::string_view kEnvelopeVersion = "version";
-        constexpr eastl::string_view kEnvelopeState = "state";
+        constexpr StringView kEnvelopeObject = "save";
+        constexpr StringView kEnvelopeGame = "game";
+        constexpr StringView kEnvelopeVersion = "version";
+        constexpr StringView kEnvelopeState = "state";
 
         /// The first error the deserializer recorded as a sentence, or @p fallback when it recorded none
-        eastl::string FirstErrorOr(const IDeserializer& deserializer, eastl::string_view fallback) {
+        eastl::string FirstErrorOr(const IDeserializer& deserializer, StringView fallback) {
             if (!deserializer.HasErrors()) {
                 return eastl::string(fallback);
             }
@@ -41,7 +41,7 @@ namespace BECore {
         }
 
         /// Open the bytes, check the shape of the envelope and read game and version; the deserializer stays inside `save`
-        std::expected<SaveInfo, SaveError> OpenEnvelope(BinaryDeserializer& deserializer, const eastl::vector<uint8_t>& bytes, eastl::string_view slot) {
+        std::expected<SaveInfo, SaveError> OpenEnvelope(BinaryDeserializer& deserializer, const eastl::vector<uint8_t>& bytes, StringView slot) {
             if (!deserializer.LoadFromBuffer(bytes)) {
                 return MakeError(SaveErrorKind::Corrupt, Format("The save in slot '{}' is not a valid file: {}", slot, FirstErrorOr(deserializer, "unreadable data")));
             }
@@ -88,17 +88,17 @@ namespace BECore {
         return _initialized;
     }
 
-    bool SaveGameService::IsValidSlotName(eastl::string_view slot) {
+    bool SaveGameService::IsValidSlotName(StringView slot) {
         return !slot.empty() && slot.size() <= kMaxSlotNameLength && eastl::all_of(slot.begin(), slot.end(), IsSlotNameCharacter);
     }
 
-    std::filesystem::path SaveGameService::MakePath(eastl::string_view slot, eastl::string_view suffix) const {
+    std::filesystem::path SaveGameService::MakePath(StringView slot, StringView suffix) const {
         std::string name = ToStdString(slot);
         name.append(suffix.data(), suffix.size());
         return _directory / name;
     }
 
-    std::filesystem::path SaveGameService::ResolveSlot(eastl::string_view slot) const {
+    std::filesystem::path SaveGameService::ResolveSlot(StringView slot) const {
         const eastl::string virtualPath = Format("{}/{}{}", kSaveMountPoint, slot, kSaveExtension);
         std::filesystem::path resolved = _fileSystem.ResolvePath(virtualPath);
 
@@ -110,7 +110,7 @@ namespace BECore {
         return resolved;
     }
 
-    std::expected<void, SaveError> SaveGameService::WriteSlot(eastl::string_view slot, const eastl::vector<uint8_t>& bytes) {
+    std::expected<void, SaveError> SaveGameService::WriteSlot(StringView slot, const eastl::vector<uint8_t>& bytes) {
         if (!_initialized) {
             return NotInitializedError();
         }
@@ -153,7 +153,7 @@ namespace BECore {
         return {};
     }
 
-    std::expected<eastl::vector<uint8_t>, SaveError> SaveGameService::ReadSlot(eastl::string_view slot) const {
+    std::expected<eastl::vector<uint8_t>, SaveError> SaveGameService::ReadSlot(StringView slot) const {
         if (!_initialized) {
             return NotInitializedError();
         }
@@ -191,7 +191,7 @@ namespace BECore {
         return bytes;
     }
 
-    std::expected<void, SaveError> SaveGameService::Save(eastl::string_view slot, const SaveSchema& schema, const eastl::function<void(ISerializer&)>& writeState) {
+    std::expected<void, SaveError> SaveGameService::Save(StringView slot, const SaveSchema& schema, const eastl::function<void(ISerializer&)>& writeState) {
         BE_PROFILE_SCOPE("SaveGame::Save");
         if (!_initialized) {
             return NotInitializedError();
@@ -211,7 +211,7 @@ namespace BECore {
         return WriteSlot(slot, serializer.GetData());
     }
 
-    std::expected<SaveInfo, SaveError> SaveGameService::Load(eastl::string_view slot, const SaveSchema& schema, const eastl::function<void(IDeserializer&)>& readState) const {
+    std::expected<SaveInfo, SaveError> SaveGameService::Load(StringView slot, const SaveSchema& schema, const eastl::function<void(IDeserializer&)>& readState) const {
         BE_PROFILE_SCOPE("SaveGame::Load");
         const auto bytes = ReadSlot(slot);
         if (!bytes) {
@@ -245,7 +245,7 @@ namespace BECore {
         return info;
     }
 
-    std::expected<SaveInfo, SaveError> SaveGameService::Peek(eastl::string_view slot) const {
+    std::expected<SaveInfo, SaveError> SaveGameService::Peek(StringView slot) const {
         const auto bytes = ReadSlot(slot);
         if (!bytes) {
             return std::unexpected(bytes.error());
@@ -254,7 +254,7 @@ namespace BECore {
         return OpenEnvelope(deserializer, *bytes, slot);
     }
 
-    bool SaveGameService::Exists(eastl::string_view slot) const {
+    bool SaveGameService::Exists(StringView slot) const {
         if (!_initialized || !IsValidSlotName(slot)) {
             return false;
         }
@@ -263,7 +263,7 @@ namespace BECore {
         return !path.empty() && std::filesystem::is_regular_file(path, ec);
     }
 
-    bool SaveGameService::Delete(eastl::string_view slot) {
+    bool SaveGameService::Delete(StringView slot) {
         if (!Exists(slot)) {
             return false;
         }
@@ -281,11 +281,11 @@ namespace BECore {
             return slots;
         }
 
-        const eastl::string_view extensions[] = {kSaveExtension};
+        const StringView extensions[] = {kSaveExtension};
         const eastl::string prefix = Format("{}/", kSaveMountPoint);
         for (const PoolString& file : _fileSystem.EnumerateFiles(PoolString::Intern(kSaveMountPoint), extensions)) {
             // "saves/<slot>.save": a file in a subfolder or with a name that is not a slot name is not a save of this service
-            eastl::string_view name = file.ToStringView();
+            StringView name = file.ToStringView();
             if (!name.starts_with(prefix) || !name.ends_with(kSaveExtension)) {
                 continue;
             }

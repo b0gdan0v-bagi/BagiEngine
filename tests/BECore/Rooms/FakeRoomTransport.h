@@ -37,7 +37,7 @@ namespace BECore::Tests {
             inbox.push_back(std::move(event));
         }
 
-        void PushText(eastl::string_view text) {
+        void PushText(StringView text) {
             RoomTransportEvent event;
             event.kind = RoomTransportEventKind::Text;
             event.text = eastl::string(text);
@@ -45,7 +45,7 @@ namespace BECore::Tests {
         }
 
         /// Queues the one Closed of the connection; a second call does nothing
-        void PushClosed(uint16_t code = kRoomTransportAbnormalClosure, eastl::string_view reason = "connection lost") {
+        void PushClosed(uint16_t code = kRoomTransportAbnormalClosure, StringView reason = "connection lost") {
             if (closedQueued) {
                 return;
             }
@@ -77,7 +77,7 @@ namespace BECore::Tests {
             _link->destroyed = true;
         }
 
-        std::expected<void, eastl::string> Open(eastl::string_view url) override {
+        std::expected<void, eastl::string> Open(StringView url) override {
             _link->openCalled = true;
             _link->url = eastl::string(url);
             if (_link->openError) {
@@ -86,7 +86,7 @@ namespace BECore::Tests {
             return {};
         }
 
-        bool SendText(eastl::string_view text) override {
+        bool SendText(StringView text) override {
             if (!_link->sendOk) {
                 return false;
             }
@@ -94,7 +94,7 @@ namespace BECore::Tests {
             return true;
         }
 
-        void Close(uint16_t code, eastl::string_view reason) override {
+        void Close(uint16_t code, StringView reason) override {
             _link->closeCalled = true;
             _link->closeCode = code;
             _link->closeReason = eastl::string(reason);
@@ -139,7 +139,7 @@ namespace BECore::Tests {
         }
 
         /// The next transport fails to start connecting
-        void FailNextOpen(eastl::string_view message) {
+        void FailNextOpen(StringView message) {
             _nextOpenError = eastl::string(message);
         }
 

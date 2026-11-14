@@ -20,7 +20,7 @@ namespace BECore {
         return eastl::string(text.c_str(), text.size());
     }
 
-    std::expected<void, eastl::string> WriteTextFileAtomically(const std::filesystem::path& path, eastl::string_view text) {
+    std::expected<void, eastl::string> WriteTextFileAtomically(const std::filesystem::path& path, StringView text) {
         std::error_code ec;
         if (path.has_parent_path()) {
             std::filesystem::create_directories(path.parent_path(), ec);

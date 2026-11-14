@@ -25,7 +25,7 @@ namespace BECore {
          * @param name Name of the nested object
          * @return true if object exists (for reading) or was created (for writing)
          */
-        virtual bool BeginObject(eastl::string_view name) = 0;
+        virtual bool BeginObject(StringView name) = 0;
 
         /**
          * @brief End the current nested object/section
@@ -47,7 +47,7 @@ namespace BECore {
          * @param count [in/out] Number of elements
          * @return true if array exists or was created
          */
-        virtual bool BeginArray(eastl::string_view name, eastl::string_view elementName, size_t& count) = 0;
+        virtual bool BeginArray(StringView name, StringView elementName, size_t& count) = 0;
 
         /**
          * @brief End the current array section
@@ -106,42 +106,42 @@ namespace BECore {
         // Primitive types serialization (as child elements)
         // =================================================================
 
-        virtual void Write(eastl::string_view name, bool value) = 0;
-        virtual void Write(eastl::string_view name, int8_t value) = 0;
-        virtual void Write(eastl::string_view name, uint8_t value) = 0;
-        virtual void Write(eastl::string_view name, int16_t value) = 0;
-        virtual void Write(eastl::string_view name, uint16_t value) = 0;
-        virtual void Write(eastl::string_view name, int32_t value) = 0;
-        virtual void Write(eastl::string_view name, uint32_t value) = 0;
-        virtual void Write(eastl::string_view name, int64_t value) = 0;
-        virtual void Write(eastl::string_view name, uint64_t value) = 0;
-        virtual void Write(eastl::string_view name, float value) = 0;
-        virtual void Write(eastl::string_view name, double value) = 0;
+        virtual void Write(StringView name, bool value) = 0;
+        virtual void Write(StringView name, int8_t value) = 0;
+        virtual void Write(StringView name, uint8_t value) = 0;
+        virtual void Write(StringView name, int16_t value) = 0;
+        virtual void Write(StringView name, uint16_t value) = 0;
+        virtual void Write(StringView name, int32_t value) = 0;
+        virtual void Write(StringView name, uint32_t value) = 0;
+        virtual void Write(StringView name, int64_t value) = 0;
+        virtual void Write(StringView name, uint64_t value) = 0;
+        virtual void Write(StringView name, float value) = 0;
+        virtual void Write(StringView name, double value) = 0;
 
         // =================================================================
         // String types serialization (as child elements)
         // =================================================================
 
-        virtual void Write(eastl::string_view name, eastl::string_view value) = 0;
-        virtual void Write(eastl::string_view name, const PoolString& value) = 0;
+        virtual void Write(StringView name, StringView value) = 0;
+        virtual void Write(StringView name, const PoolString& value) = 0;
 
         // =================================================================
         // Attribute serialization (for XML attributes, inline for binary)
         // =================================================================
 
-        virtual void WriteAttribute(eastl::string_view name, bool value) = 0;
-        virtual void WriteAttribute(eastl::string_view name, int8_t value) = 0;
-        virtual void WriteAttribute(eastl::string_view name, uint8_t value) = 0;
-        virtual void WriteAttribute(eastl::string_view name, int16_t value) = 0;
-        virtual void WriteAttribute(eastl::string_view name, uint16_t value) = 0;
-        virtual void WriteAttribute(eastl::string_view name, int32_t value) = 0;
-        virtual void WriteAttribute(eastl::string_view name, uint32_t value) = 0;
-        virtual void WriteAttribute(eastl::string_view name, int64_t value) = 0;
-        virtual void WriteAttribute(eastl::string_view name, uint64_t value) = 0;
-        virtual void WriteAttribute(eastl::string_view name, float value) = 0;
-        virtual void WriteAttribute(eastl::string_view name, double value) = 0;
-        virtual void WriteAttribute(eastl::string_view name, eastl::string_view value) = 0;
-        virtual void WriteAttribute(eastl::string_view name, const PoolString& value) = 0;
+        virtual void WriteAttribute(StringView name, bool value) = 0;
+        virtual void WriteAttribute(StringView name, int8_t value) = 0;
+        virtual void WriteAttribute(StringView name, uint8_t value) = 0;
+        virtual void WriteAttribute(StringView name, int16_t value) = 0;
+        virtual void WriteAttribute(StringView name, uint16_t value) = 0;
+        virtual void WriteAttribute(StringView name, int32_t value) = 0;
+        virtual void WriteAttribute(StringView name, uint32_t value) = 0;
+        virtual void WriteAttribute(StringView name, int64_t value) = 0;
+        virtual void WriteAttribute(StringView name, uint64_t value) = 0;
+        virtual void WriteAttribute(StringView name, float value) = 0;
+        virtual void WriteAttribute(StringView name, double value) = 0;
+        virtual void WriteAttribute(StringView name, StringView value) = 0;
+        virtual void WriteAttribute(StringView name, const PoolString& value) = 0;
 
     protected:
         ISerializer() = default;

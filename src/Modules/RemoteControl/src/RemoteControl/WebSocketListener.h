@@ -7,8 +7,8 @@ namespace BECore {
 
     /// Error codes of WebSocketListener::Start() (and of the servers built on it)
     namespace RemoteControlErrors {
-        inline constexpr eastl::string_view kListenFailed = "listen_failed";
-        inline constexpr eastl::string_view kAlreadyRunning = "already_running";
+        inline constexpr StringView kListenFailed = "listen_failed";
+        inline constexpr StringView kAlreadyRunning = "already_running";
     }  // namespace RemoteControlErrors
 
     /// The limits and names of one listener. The defaults suit a small public server; the control server overrides them

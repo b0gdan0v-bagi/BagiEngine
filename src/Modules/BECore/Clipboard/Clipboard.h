@@ -22,7 +22,7 @@ namespace BECore {
         [[nodiscard]] bool IsAvailable() const;
 
         /// @return false when there is no clipboard, the text is longer than kMaxClipboardBytes or the platform refused it
-        bool SetText(eastl::string_view text);
+        bool SetText(StringView text);
 
         /// Asks for the text; @p callback runs from a later Update() with the status and the text
         void RequestText(ClipboardCallback callback);

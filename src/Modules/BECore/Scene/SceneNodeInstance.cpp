@@ -136,7 +136,7 @@ namespace BECore {
 
     }  // namespace
 
-    IntrusivePtr<SceneNode> DeserializeNode(pugi::xml_node nodeEl, eastl::string_view what) {
+    IntrusivePtr<SceneNode> DeserializeNode(pugi::xml_node nodeEl, StringView what) {
         auto node = New<SceneNode>();
         XmlDeserializer deserializer;
         if (deserializer.LoadFromXmlNode(XmlNode{nodeEl})) {

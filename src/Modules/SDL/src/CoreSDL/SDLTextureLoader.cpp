@@ -9,7 +9,7 @@
 
 namespace BECore {
 
-    bool SDLTextureLoader::CanLoad(eastl::string_view extension) const {
+    bool SDLTextureLoader::CanLoad(StringView extension) const {
         if (extension != ".bmp" && extension != ".png" && extension != ".jpg" && extension != ".jpeg") {
             return false;
         }

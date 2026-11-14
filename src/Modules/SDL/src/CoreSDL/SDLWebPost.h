@@ -27,7 +27,7 @@ namespace BECore {
      * (no space, control character or non-ASCII), no backslash, no "..", at most kWebPostMaxPathBytes. The same rule as
      * window.bagiWebPost in web/shell.html. Pure, so it runs, and is tested, on every platform.
      */
-    [[nodiscard]] bool IsWebPostPathValid(eastl::string_view path);
+    [[nodiscard]] bool IsWebPostPathValid(StringView path);
 
     /// Whether this build can post: a browser build whose page defines window.bagiWebPost. Every other build says false.
     [[nodiscard]] bool WebPostIsAvailable();
@@ -39,7 +39,7 @@ namespace BECore {
      * (a build that is not a browser one, or a page without window.bagiWebPost) or "refused" (the page has too many posts in flight).
      * The answer is read with WebPostPoll. Browser main thread only; asserted in Debug.
      */
-    [[nodiscard]] std::expected<WebPostId, eastl::string> WebPostStart(eastl::string_view path, eastl::string_view body, eastl::string_view contentType);
+    [[nodiscard]] std::expected<WebPostId, eastl::string> WebPostStart(StringView path, StringView body, StringView contentType);
 
     /**
      * @brief The state of a post: Pending until the answer arrives, then Done with the HTTP status or Failed (network failure) once;

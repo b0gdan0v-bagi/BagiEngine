@@ -38,7 +38,7 @@ namespace BECore::Tests {
 
         Response ParseResponse(const std::string& text) {
             Response response;
-            auto parsed = ParseJson(eastl::string_view(text.data(), text.size()));
+            auto parsed = ParseJson(FromStd(text));
             if (!parsed) {
                 ADD_FAILURE() << "the response is not JSON: " << text;
                 return response;
@@ -213,7 +213,7 @@ namespace BECore::Tests {
         eastl::vector<uint8_t> batch;
         for (int id = 1; id <= kRequests; ++id) {
             const std::string text = Request(id, "echo", "{\"n\":" + std::to_string(id) + "}");
-            const auto frame = EncodeTextFrame(eastl::string_view(text.data(), text.size()), kMask);
+            const auto frame = EncodeTextFrame(FromStd(text), kMask);
             batch.insert(batch.end(), frame.begin(), frame.end());
         }
         client->Send(AsBytes(batch));
@@ -460,7 +460,7 @@ namespace BECore::Tests {
             const auto frame = client->WaitForFrame();
             ASSERT_TRUE(frame.has_value());
             EXPECT_EQ(frame->opcode, WebSocketOpcode::kText);
-            const auto event = ParseJson(eastl::string_view(frame->payload.data(), frame->payload.size()));
+            const auto event = ParseJson(FromStd(frame->payload));
             ASSERT_TRUE(event.has_value());
             EXPECT_EQ(GetJsonString(*event, "event").value_or(""), "state_changed");
             const Json* eventData = FindJsonMember(*event, "data");

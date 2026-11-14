@@ -15,7 +15,7 @@ namespace BECore::Tests {
             return Room("ABCDE", SeatedGameInfo{"fake", seatCount}, MakeSequence(7));
         }
 
-        RoomMemberJoined Join(Room& room, eastl::string_view name) {
+        RoomMemberJoined Join(Room& room, StringView name) {
             auto joined = room.AddMember(name, kNow);
             EXPECT_TRUE(joined.has_value());
             return joined ? *joined : RoomMemberJoined{};
@@ -208,7 +208,7 @@ namespace BECore::Tests {
         last[last.size() - 1] = last[last.size() - 1] == '0' ? '1' : '0';
         EXPECT_FALSE(room.FindByToken(first).has_value());
         EXPECT_FALSE(room.FindByToken(last).has_value());
-        EXPECT_FALSE(room.FindByToken(eastl::string_view(a.token.data(), a.token.size() - 1)).has_value());
+        EXPECT_FALSE(room.FindByToken(StringView(a.token.data(), a.token.size() - 1)).has_value());
         EXPECT_FALSE(room.FindByToken(eastl::string(a.token) + "0").has_value());
     }
 

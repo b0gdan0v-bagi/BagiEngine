@@ -10,14 +10,14 @@ namespace BECore::Fuzz {
 
         using WebSocketInput::HandshakePolicyKind;
 
-        constexpr eastl::string_view kHealthPath = "/healthz";
-        constexpr eastl::string_view kHeadEnd = "\r\n\r\n";
+        constexpr StringView kHealthPath = "/healthz";
+        constexpr StringView kHeadEnd = "\r\n\r\n";
 
         /// Longest message a refusal may carry: a quoted piece of the peer's text (kMaxQuotedBytes and the three dots) in a sentence of ours
         constexpr size_t kMaxRefusalBytes = kMaxQuotedBytes + 3 + 100;
 
         /// A message for a log or a reject body that repeats the peer's text: printable ASCII and short, whatever the peer sent
-        bool IsTidyMessage(eastl::string_view message) {
+        bool IsTidyMessage(StringView message) {
             return !message.empty() && message.size() <= kMaxRefusalBytes && std::all_of(message.begin(), message.end(), [](char letter) { return letter >= ' ' && letter <= '~'; });
         }
 
@@ -54,7 +54,7 @@ namespace BECore::Fuzz {
         }
 
         /// The server's half: the bytes as the head of a request
-        void CheckRequest(eastl::string_view text, const HandshakePolicy& policy) {
+        void CheckRequest(StringView text, const HandshakePolicy& policy) {
             const auto parsed = ParseHandshakeRequest(text, policy);
             const bool isHealthCheck = IsHealthCheckRequest(text, policy);
             if (isHealthCheck) {
@@ -67,7 +67,7 @@ namespace BECore::Fuzz {
                 FUZZ_CHECK(IsKnownRefusalStatus(parsed.error().httpStatus));
                 FUZZ_CHECK(IsTidyMessage(parsed.error().message));
                 const eastl::string reject = BuildRejectResponse(parsed.error());
-                FUZZ_CHECK(eastl::string_view(reject).starts_with("HTTP/1.1 "));
+                FUZZ_CHECK(StringView(reject).starts_with("HTTP/1.1 "));
                 FUZZ_CHECK(!CheckServerHandshakeResponse(reject, WebSocketInput::kHandshakeKey).has_value());  // a refusal is never an accepted answer
                 return;
             }
@@ -84,7 +84,7 @@ namespace BECore::Fuzz {
         }
 
         /// The client's half: the bytes as the head of a response
-        void CheckResponse(eastl::string_view text) {
+        void CheckResponse(StringView text) {
             const auto checked = CheckServerHandshakeResponse(text, WebSocketInput::kHandshakeKey);
             if (!checked.has_value()) {
                 FUZZ_CHECK(IsTidyMessage(checked.error()));
@@ -92,12 +92,12 @@ namespace BECore::Fuzz {
             }
             // Accepted: nothing but a well-formed 101 for this key can be, so the answer must name the right accept value
             const eastl::string accept = ComputeAcceptKey(WebSocketInput::kHandshakeKey);
-            FUZZ_CHECK(text.find(accept.c_str()) != eastl::string_view::npos);
+            FUZZ_CHECK(text.find(accept.c_str()) != StringView::npos);
             FUZZ_CHECK(text.starts_with("HTTP/1.1 101"));
         }
 
         /// The Host header of a request for @p url names the same address as the URL
-        void CheckUrl(eastl::string_view text) {
+        void CheckUrl(StringView text) {
             const auto parsed = ParseWebSocketUrl(text);
             if (!parsed.has_value()) {
                 FUZZ_CHECK(IsTidyMessage(parsed.error()));
@@ -133,7 +133,7 @@ namespace BECore::Fuzz {
             return;
         }
         const auto kind = static_cast<HandshakePolicyKind>(data[0] % EnumUtils<HandshakePolicyKind>::Count());
-        const eastl::string_view text(reinterpret_cast<const char*>(data + 1), size - 1);
+        const StringView text(reinterpret_cast<const char*>(data + 1), size - 1);
 
         CheckRequest(text, MakePolicy(kind));
         CheckResponse(text);

@@ -4,14 +4,14 @@ namespace BECore {
 
     class StringUtils {
     public:
-        using SmallStrVector = eastl::fixed_vector<eastl::string_view, 4>;
+        using SmallStrVector = eastl::fixed_vector<StringView, 4>;
 
         static constexpr uint64_t hashOffset = 14695981039346656037ULL;
         static constexpr uint64_t hashPrime = 1099511628211ULL;
 
-        static SmallStrVector Split(eastl::string_view str, char delimiter);
+        static SmallStrVector Split(StringView str, char delimiter);
 
-        static constexpr uint64_t GetHash(eastl::string_view sv) noexcept {
+        static constexpr uint64_t GetHash(StringView sv) noexcept {
 
             uint64_t hash = hashOffset;
             for (char c : sv) {
@@ -21,8 +21,8 @@ namespace BECore {
             return hash;
         }
 
-        static constexpr uint64_t GetHash(std::string_view sv) noexcept {
-            return GetHash(eastl::string_view{sv.data(), sv.size()});
+        static constexpr uint64_t GetHash(std::string_view sv) noexcept {  // std: the callers that hold a std view
+            return GetHash(FromStd(sv));
         }
 
         static constexpr uint64_t GetEmptyHash() noexcept {
