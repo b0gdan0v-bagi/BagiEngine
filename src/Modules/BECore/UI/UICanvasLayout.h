@@ -66,7 +66,7 @@ namespace BECore {
         }
 
         /// A point in render output pixels as a point of the canvas, using the layout of the last Update()
-        [[nodiscard]] std::pair<float, float> OutputToCanvas(float outputX, float outputY) const;
+        [[nodiscard]] Pair<float, float> OutputToCanvas(float outputX, float outputY) const;
 
         /**
          * @brief The topmost hit-testable element at a point of the canvas, or null.

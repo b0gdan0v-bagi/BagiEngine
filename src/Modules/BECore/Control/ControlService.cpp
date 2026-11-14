@@ -72,7 +72,7 @@ namespace BECore {
     }
 
     void ControlService::Post(StringView requestText, ControlReplyFn reply) {
-        auto request = eastl::make_unique<Request>();
+        auto request = MakeUnique<Request>();
         request->reply = std::move(reply);
         ParseRequest(requestText, *request);
 
@@ -157,7 +157,7 @@ namespace BECore {
 
         // A copy: the handler may register handlers, which can move the entry
         const Handler handler = entry->second.handler;
-        auto call = eastl::make_unique<ControlCall>(PassKey<ControlService>{}, std::move(request.method), std::move(request.id), std::move(request.params), std::move(request.reply));
+        auto call = MakeUnique<ControlCall>(PassKey<ControlService>{}, std::move(request.method), std::move(request.id), std::move(request.params), std::move(request.reply));
         handler(*call);
         Settle(std::move(call));
     }

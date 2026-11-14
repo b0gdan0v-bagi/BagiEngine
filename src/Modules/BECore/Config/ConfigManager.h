@@ -131,7 +131,7 @@ namespace BECore {
          * @param dir Directory to scan
          * @param filesToLoad Output vector of (path, name) pairs
          */
-        void ScanDirectory(const std::filesystem::path& dir, Vector<eastl::pair<std::filesystem::path, PoolString>>& filesToLoad) const;
+        void ScanDirectory(const std::filesystem::path& dir, Vector<Pair<std::filesystem::path, PoolString>>& filesToLoad) const;
 
         /**
          * @brief Load single config file asynchronously

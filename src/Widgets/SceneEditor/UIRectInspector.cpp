@@ -84,7 +84,7 @@ namespace BECore {
             auto axis = [&](float lo, float hi, float start) {
                 const float a = start + inner * lo;
                 const float b = start + inner * hi;
-                return lo == hi ? std::pair{a - kPresetDotPad * 0.5f, a + kPresetDotPad * 0.5f} : std::pair{a, b};
+                return lo == hi ? Pair<float, float>{a - kPresetDotPad * 0.5f, a + kPresetDotPad * 0.5f} : Pair<float, float>{a, b};
             };
             const auto [x0, x1] = axis(preset.anchorMin.x, preset.anchorMax.x, frameMin.x);
             const auto [y0, y1] = axis(preset.anchorMin.y, preset.anchorMax.y, frameMin.y);

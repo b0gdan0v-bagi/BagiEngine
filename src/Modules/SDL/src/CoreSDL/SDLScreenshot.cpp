@@ -29,7 +29,7 @@ namespace BECore {
         }
 
         /// The size @p width by @p height gets when its longer side is cut to @p maxSide (each side is at least 1 pixel)
-        std::pair<int, int> ScaledSize(uint32_t width, uint32_t height, uint32_t maxSide) {
+        Pair<int, int> ScaledSize(uint32_t width, uint32_t height, uint32_t maxSide) {
             const uint32_t longer = std::max(width, height);
             if (maxSide == 0 || longer <= maxSide) {
                 return {static_cast<int>(width), static_cast<int>(height)};
@@ -57,7 +57,7 @@ namespace BECore {
             }
 
             // The renderer fills it when the frame is presented; the answer is built at the end of that frame
-            auto capture = eastl::make_shared<Optional<CaptureResult>>();
+            auto capture = MakeShared<Optional<CaptureResult>>();
             renderer->RequestCapture([capture](CaptureResult result) { *capture = std::move(result); });
             if (*capture && !**capture) {  // refused at once: this backend cannot capture
                 call.Fail(ScreenshotErrors::kCaptureFailed, (*capture)->error());

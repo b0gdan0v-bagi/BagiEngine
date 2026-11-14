@@ -13,7 +13,7 @@ The client is `RoomClient/CLAUDE.md`.
 | `RoomTypes.h/.cpp` | `ConnectionId`, `PlayerId`, `RoomTime` (`steady_clock::time_point`, always passed in), `RandomFn` (`uint64_t()`, injected), `MakeSecureRandom()` (`std::random_device`), `RoomPhase` (`Lobby`, `Playing`, `Finished`), `SeatKind` (`Human`, `Computer`, `Empty`) and their wire names |
 | `RoomLimits.h` | `RoomLimits::k*` (the constants of the table below), `RoomTimings` (grace, abandoned timeout, computer delay) and `RoomHubSettings` (the same values as defaults, so a test overrides them; the three times are its member `timings`, handed to every room) |
 | `RoomErrors.h` | `RoomErrors::k*`, the stable error codes |
-| `RoomProtocol.h/.cpp` | `ClientMessage` (a `std::variant` of the eight client messages), `ParseClientMessage`, `SerializeClientMessage`, `SanitizePlayerName`, the builders of the server messages, `LobbySnapshot`, `ParseServerMessage` (the inverse of the builders, for clients: `ServerMessage` variant, an unknown `type` is ignorable) |
+| `RoomProtocol.h/.cpp` | `ClientMessage` (a `Variant` of the eight client messages), `ParseClientMessage`, `SerializeClientMessage`, `SanitizePlayerName`, the builders of the server messages, `LobbySnapshot`, `ParseServerMessage` (the inverse of the builders, for clients: `ServerMessage` variant, an unknown `type` is ignorable) |
 | `RoomCode.h/.cpp` | `GenerateRoomCode`, `NormalizeRoomCode`, `GenerateToken`, `IsWellFormedToken` |
 | `RateLimiter.h/.cpp` | a token bucket over `RoomTime` |
 | `Room.h/.cpp` | `Room`: members, seats, host, lobby snapshot and revision, phase, the game (start, actions, views, computers), absence and return (see "Room lifecycle") |

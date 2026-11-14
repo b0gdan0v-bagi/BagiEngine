@@ -81,7 +81,7 @@ namespace BECore {
          *
          * At least 1 x 1 pixel, and 0 x 0 for an available area with no size.
          */
-        [[nodiscard]] static std::pair<uint32_t, uint32_t> FitSize(ViewportAspect aspect, float availableWidth, float availableHeight);
+        [[nodiscard]] static Pair<uint32_t, uint32_t> FitSize(ViewportAspect aspect, float availableWidth, float availableHeight);
 
         /// The devices of the picker, in portrait, in a fixed order (the index is PreviewShape::device); names are unique
         [[nodiscard]] static Span<const PreviewDevice> GetDevices();
@@ -109,7 +109,7 @@ namespace BECore {
 
     private:
         // FitSize for a ratio (width / height) instead of a preset; 0 is Free
-        [[nodiscard]] static std::pair<uint32_t, uint32_t> FitRatio(float ratio, float availableWidth, float availableHeight);
+        [[nodiscard]] static Pair<uint32_t, uint32_t> FitRatio(float ratio, float availableWidth, float availableHeight);
     };
 
 }  // namespace BECore

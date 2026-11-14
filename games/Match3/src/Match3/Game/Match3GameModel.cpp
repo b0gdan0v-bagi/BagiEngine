@@ -196,8 +196,8 @@ namespace BECore::Match3 {
         return MatchFinder::HasAnyMatch(trial);
     }
 
-    Vector<eastl::pair<Cell, Cell>> Match3GameModel::GetLegalSwaps() const {
-        Vector<eastl::pair<Cell, Cell>> swaps;
+    Vector<Pair<Cell, Cell>> Match3GameModel::GetLegalSwaps() const {
+        Vector<Pair<Cell, Cell>> swaps;
         for (int8_t row = 0; row < kBoardSize; ++row) {
             for (int8_t col = 0; col < kBoardSize; ++col) {
                 const Cell from{col, row};

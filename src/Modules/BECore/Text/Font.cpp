@@ -46,7 +46,7 @@ namespace BECore {
             return font;
         }
         font->_data = std::move(data);
-        font->_impl = eastl::make_unique<Impl>();
+        font->_impl = MakeUnique<Impl>();
         const unsigned char* bytes = font->_data.data();
         const int offset = stbtt_GetFontOffsetForIndex(bytes, 0);
         if (offset < 0 || stbtt_InitFont(&font->_impl->info, bytes, offset) == 0) {

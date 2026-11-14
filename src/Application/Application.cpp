@@ -231,7 +231,7 @@ namespace BECore {
 
 #if BE_WITH_REMOTE_CONTROL
     bool Application::StartControlServer(uint16_t port) {
-        _controlServer = eastl::make_unique<WebSocketServer>(CoreManager::GetControlService());
+        _controlServer = MakeUnique<WebSocketServer>(CoreManager::GetControlService());
         const auto started = _controlServer->Start(port);
         if (!started) {
             LOG_ERROR("Control API: {}"_format(started.error().message));

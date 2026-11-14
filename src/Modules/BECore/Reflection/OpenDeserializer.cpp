@@ -30,7 +30,7 @@ namespace BECore {
         using Error = std::unexpected<String>;
 
         if (EndsWith(virtualPath, kXmlExtension)) {
-            auto deserializer = eastl::make_unique<XmlDeserializer>();
+            auto deserializer = MakeUnique<XmlDeserializer>();
             if (!deserializer->LoadFromVirtualPath(virtualPath)) {
                 return Error(Format("Failed to load XML '{}': {}", virtualPath, FirstError(*deserializer)));
             }
@@ -42,7 +42,7 @@ namespace BECore {
             if (realPath.empty()) {
                 return Error(Format("Failed to resolve virtual path '{}'", virtualPath));
             }
-            auto deserializer = eastl::make_unique<BinaryDeserializer>();
+            auto deserializer = MakeUnique<BinaryDeserializer>();
             if (!deserializer->LoadFromFile(realPath)) {
                 return Error(Format("Failed to load binary '{}': {}", virtualPath, FirstError(*deserializer)));
             }

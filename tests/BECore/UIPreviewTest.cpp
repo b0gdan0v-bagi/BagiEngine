@@ -7,7 +7,7 @@ namespace BECore::Tests {
 
         constexpr float kTolerance = 1e-3f;
 
-        float RatioOf(const std::pair<uint32_t, uint32_t>& size) {
+        float RatioOf(const Pair<uint32_t, uint32_t>& size) {
             return static_cast<float>(size.first) / static_cast<float>(size.second);
         }
 
@@ -49,8 +49,8 @@ namespace BECore::Tests {
     }
 
     TEST(UIPreviewTest, AnAreaWithNoSizeGivesNoImageAndATinyOneIsAtLeastOnePixel) {
-        EXPECT_EQ(UIPreview::FitSize(ViewportAspect::Free, 0.0f, 600.0f), (std::pair<uint32_t, uint32_t>{0, 0}));
-        EXPECT_EQ(UIPreview::FitSize(ViewportAspect::Wide16x9, 600.0f, 0.5f), (std::pair<uint32_t, uint32_t>{0, 0}));
+        EXPECT_EQ(UIPreview::FitSize(ViewportAspect::Free, 0.0f, 600.0f), (Pair<uint32_t, uint32_t>{0, 0}));
+        EXPECT_EQ(UIPreview::FitSize(ViewportAspect::Wide16x9, 600.0f, 0.5f), (Pair<uint32_t, uint32_t>{0, 0}));
 
         const auto tiny = UIPreview::FitSize(ViewportAspect::UltraWide21x9, 1.0f, 100.0f);
         EXPECT_GE(tiny.first, 1u);

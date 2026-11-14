@@ -24,8 +24,8 @@ int main(int argc, char* argv[]) {
         std::fprintf(stderr, "BagiRoomServer: this executable has no product game; start it with --test-games (a game brings its own server main)\n");
         return 1;
     }
-    registry.Register(SeatedGameInfo{"cards", DemoCardGame::kSeatCount}, [] { return eastl::make_unique<DemoCardGame>(); });
-    registry.Register(SeatedGameInfo{"cards-leaky", DemoCardGame::kSeatCount}, [] { return eastl::make_unique<LeakyDemoCardGame>(); });
+    registry.Register(SeatedGameInfo{"cards", DemoCardGame::kSeatCount}, [] { return MakeUnique<DemoCardGame>(); });
+    registry.Register(SeatedGameInfo{"cards-leaky", DemoCardGame::kSeatCount}, [] { return MakeUnique<LeakyDemoCardGame>(); });
 
     return RunRoomServer(registry, *args);
 }

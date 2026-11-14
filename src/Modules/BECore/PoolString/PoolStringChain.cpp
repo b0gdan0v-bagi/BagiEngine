@@ -6,7 +6,7 @@ namespace BECore {
 
     PoolStringChain::PoolStringChain(std::initializer_list<PoolStringElement> fragments) : _mode(Mode::Empty), _count(0) {
         for (const auto& fragment : fragments) {
-            eastl::visit(
+            std::visit(
                 [this](auto&& arg) {
                     using T = std::decay_t<decltype(arg)>;
                     if constexpr (std::is_same_v<T, PoolString>) {

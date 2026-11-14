@@ -562,7 +562,7 @@ namespace BECore {
         drawList->PushClipRect(frame.imageMin, frame.imageMax, true);
 
         // Rects are in target pixels, the frame takes them to the screen
-        const auto toScreen = [&](const Rect& rect) { return std::pair<ImVec2, ImVec2>{frame.ToScreen({rect.x, rect.y}), frame.ToScreen({rect.x + rect.w, rect.y + rect.h})}; };
+        const auto toScreen = [&](const Rect& rect) { return Pair<ImVec2, ImVec2>{frame.ToScreen({rect.x, rect.y}), frame.ToScreen({rect.x + rect.w, rect.y + rect.h})}; };
         const auto fill = [&](const Rect& rect, ImU32 color) {
             if (rect.w > kMinBarSize && rect.h > kMinBarSize) {
                 const auto [min, max] = toScreen(rect);

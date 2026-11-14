@@ -46,7 +46,7 @@ namespace BECore {
         }
 
         Storage() {
-            _currentPage = eastl::make_unique<Page>();
+            _currentPage = MakeUnique<Page>();
         }
 
         const Entry* Find(StringView str) {
@@ -87,7 +87,7 @@ namespace BECore {
             const size_t alignedSize = (totalSize + 7) & ~7;
 
             if (_offset + alignedSize > Page::Size) {
-                auto newPage = eastl::make_unique<Page>();
+                auto newPage = MakeUnique<Page>();
                 newPage->prev = eastl::move(_currentPage);
                 _currentPage = eastl::move(newPage);
                 _offset = 0;

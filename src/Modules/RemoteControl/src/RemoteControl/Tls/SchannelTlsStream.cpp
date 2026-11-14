@@ -747,7 +747,7 @@ namespace BECore {
     }
 
     UniquePtr<ITlsStream> MakeTlsStream() {
-        return eastl::make_unique<SchannelTlsStream>();
+        return MakeUnique<SchannelTlsStream>();
     }
 
 }  // namespace BECore

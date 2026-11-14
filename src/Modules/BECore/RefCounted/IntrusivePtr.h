@@ -344,7 +344,7 @@ namespace BECore {
     }
 
     template <typename T, typename... Args>
-    std::enable_if_t<sizeof...(Args) != 1 || !std::is_same_v<std::decay_t<std::tuple_element_t<0, std::tuple<Args...>>>, T*>, IntrusivePtrNonAtomic<T>> MakeIntrusiveNonAtomic(Args&&... args) {
+    std::enable_if_t<sizeof...(Args) != 1 || !std::is_same_v<std::decay_t<std::tuple_element_t<0, Tuple<Args...>>>, T*>, IntrusivePtrNonAtomic<T>> MakeIntrusiveNonAtomic(Args&&... args) {
         return IntrusivePtrNonAtomic<T>(new T(std::forward<Args>(args)...));
     }
 
@@ -354,7 +354,7 @@ namespace BECore {
     }
 
     template <typename T, typename... Args>
-    std::enable_if_t<sizeof...(Args) != 1 || !std::is_same_v<std::decay_t<std::tuple_element_t<0, std::tuple<Args...>>>, T*>, IntrusivePtrAtomic<T>> MakeIntrusiveAtomic(Args&&... args) {
+    std::enable_if_t<sizeof...(Args) != 1 || !std::is_same_v<std::decay_t<std::tuple_element_t<0, Tuple<Args...>>>, T*>, IntrusivePtrAtomic<T>> MakeIntrusiveAtomic(Args&&... args) {
         return IntrusivePtrAtomic<T>(new T(std::forward<Args>(args)...));
     }
 
@@ -367,7 +367,7 @@ namespace BECore {
     }
 
     template <typename T, typename... Args>
-    std::enable_if_t<sizeof...(Args) != 1 || !std::is_same_v<std::decay_t<std::tuple_element_t<0, std::tuple<Args...>>>, T*>, IntrusivePtr<T>> MakeIntrusive(Args&&... args) {
+    std::enable_if_t<sizeof...(Args) != 1 || !std::is_same_v<std::decay_t<std::tuple_element_t<0, Tuple<Args...>>>, T*>, IntrusivePtr<T>> MakeIntrusive(Args&&... args) {
         return IntrusivePtr<T>(new T(std::forward<Args>(args)...));
     }
 }  // namespace BECore

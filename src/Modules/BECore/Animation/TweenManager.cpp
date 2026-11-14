@@ -52,7 +52,7 @@ namespace BECore {
     IntrusivePtr<TweenHandle> TweenManager::Play(Timeline timeline, float delay, eastl::function<void()> onComplete, eastl::function<void()> onCancel) {
         const float duration = timeline.GetDuration();
         // `eastl::function` needs a copyable callable and a Timeline is move-only: the tween owns it through a shared pointer
-        auto owned = eastl::make_shared<Timeline>(std::move(timeline));
+        auto owned = MakeShared<Timeline>(std::move(timeline));
         // The progress of the last step is exactly 1, so the last call is exactly the duration; the tween itself is linear
         auto apply = [owned, duration](float progress) { owned->Evaluate(progress * duration); };
         auto handle = StartErased({.duration = duration, .delay = delay, .ease = EaseType::Linear}, std::move(apply), std::move(onComplete), std::move(onCancel));

@@ -82,7 +82,7 @@ namespace BECore {
         String game;
     };
 
-    using ClientMessage = std::variant<CreateRoomMessage, JoinRoomMessage, ChooseSeatMessage, StartMessage, ActionMessage, LeaveMessage, PingMessage, ListRoomsMessage>;
+    using ClientMessage = Variant<CreateRoomMessage, JoinRoomMessage, ChooseSeatMessage, StartMessage, ActionMessage, LeaveMessage, PingMessage, ListRoomsMessage>;
 
     /**
      * @brief Reads one text message of a client. Never throws, aborts or asserts, whatever the bytes are.
@@ -234,7 +234,7 @@ namespace BECore {
         String type;
     };
 
-    using ServerMessage = std::variant<JoinedMessage, LobbyMessage, ViewMessage, ErrorMessage, LeftMessage, PongMessage, RoomListMessage, UnknownServerMessage>;
+    using ServerMessage = Variant<JoinedMessage, LobbyMessage, ViewMessage, ErrorMessage, LeftMessage, PongMessage, RoomListMessage, UnknownServerMessage>;
 
     /**
      * @brief Reads one text message of the server (the inverse of the Make*Message builders). Never throws, aborts or asserts.

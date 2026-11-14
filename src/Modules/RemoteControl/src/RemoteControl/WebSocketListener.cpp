@@ -125,7 +125,7 @@ namespace BECore {
                 connectionSettings.writerThreadName = MakeThreadName(_settings, "writer");
                 connectionSettings.writerThreadOrder = _settings.threadOrder + 2;
 
-                auto connection = eastl::make_shared<WebSocketConnection>(_nextId++, std::move(socket), std::move(peerAddress), std::move(connectionSettings));
+                auto connection = MakeShared<WebSocketConnection>(_nextId++, std::move(socket), std::move(peerAddress), std::move(connectionSettings));
                 _connections.push_back(connection);
                 connection->StartReader(Thread(MakeThreadName(_settings, "reader").c_str(), _settings.threadOrder + 1, [this, connection] { RunConnection(connection); }));
                 return;
