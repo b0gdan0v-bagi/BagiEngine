@@ -370,7 +370,8 @@ endif()
 # option every TU that loads the PCH instantiates them again (the EnTT dispatcher, fmt and std::format rows of time_trace_report.py).
 # CMake adds the option to the PCH compile itself (property PCH_INSTANTIATE_TEMPLATES, ON by default) for Clang >= 11, Emscripten
 # included, and not for AppleClang, which its Modules/Compiler/Clang.cmake leaves out although AppleClang 17 has the option. MSVC
-# and GCC have no such option and get nothing.
+# and GCC have no such option and get nothing. The variable is internal to CMake's compiler modules (checked with CMake 4.2.1);
+# if a newer CMake renames it, the only symptom is the compile times coming back.
 if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
     set(CMAKE_CXX_COMPILE_OPTIONS_INSTANTIATE_TEMPLATES_PCH -fpch-instantiate-templates)
 endif()

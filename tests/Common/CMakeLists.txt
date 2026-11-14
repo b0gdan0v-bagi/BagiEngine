@@ -11,6 +11,8 @@ file(GLOB TEST_SUPPORT_SOURCES
 # each. Its flags (the definitions below, the usage requirements of BECoreModule) are those of the tests, or the PCH is rejected
 # (-Winvalid-pch). The library has one empty source and nobody links it: be_add_game_tests, BagiEngineTestSupport and so a game's tests reuse
 # its PCH. The source is in tests/Pch/ because check_headers.py takes the flags of the headers of this folder from the sources beside them.
+# gtest is parsed once here, without the definitions of the consumer: a GTEST_* macro (or any macro gtest.h or pch.h reads) set
+# by target_compile_definitions of one test target is not seen by the PCH, silently; put it here, for all tests, or not at all.
 # What is not a test (the modules, BagiFuzzTargets) keeps the PCH of BECoreModule, which has no gtest.
 add_library(BagiTestPch STATIC "${BAGI_ENGINE_DIR}/tests/Pch/TestPch.cpp")
 set_target_properties(BagiTestPch PROPERTIES FOLDER "Tests")

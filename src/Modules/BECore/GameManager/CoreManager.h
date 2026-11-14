@@ -41,7 +41,7 @@ namespace BECore {
 
     class CoreManager : public Singleton<CoreManager> {
     public:
-        // Out of line: the pointers to the logger, assert handler and scene managers need their complete types to be made and dropped
+        // Out of line: the pointers to the logger, assert handler and scene managers need their complete types to be dropped (the destructor)
         CoreManager();
         ~CoreManager() override;
 
