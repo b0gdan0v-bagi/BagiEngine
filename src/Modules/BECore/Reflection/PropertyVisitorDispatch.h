@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Utils/EnumUtils.h>
 #include <BECore/Reflection/IPropertyVisitor.h>
 #include <BECore/Reflection/SerializationTraits.h>
 #include <cstdio>

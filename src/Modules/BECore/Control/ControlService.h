@@ -2,6 +2,9 @@
 
 #include <BECore/Control/ControlTypes.h>
 #include <BECore/Control/JsonFwd.h>
+#include <BECore/Threading/ConditionVariable.h>
+#include <BECore/Threading/LockSite.h>
+#include <BECore/Threading/Mutex.h>
 #include <EASTL/deque.h>
 #include <chrono>
 

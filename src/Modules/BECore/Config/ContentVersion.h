@@ -3,6 +3,7 @@
 #include <BECore/Types/Types.h>
 #include <cstdint>
 #include <expected>
+#include <pugixml.hpp>
 
 namespace BECore {
 

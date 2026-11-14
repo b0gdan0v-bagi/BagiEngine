@@ -1,5 +1,8 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
+#include <BECore/PoolString/PoolString.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
 #include <EASTL/array.h>
 #include <EASTL/optional.h>
 
