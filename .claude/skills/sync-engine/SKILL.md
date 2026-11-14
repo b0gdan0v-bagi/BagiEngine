@@ -1,13 +1,13 @@
 ---
-name: engine-sync
-description: Carries the engine's branches around the triangle games/X -> main -> the other games/* by local merges only, and prints the git push commands for the owner (it never pushes). Reminds the owner to push from the other PCs first, fetches, stops when a local branch is behind or diverged from origin, shows what each games/* holds that main has not, merges the games that are ahead into main after the owner's yes, builds the engine and runs its tests on the result before keeping it, then merges main back into every games/*. Run ONLY on the owner's explicit command and never offered by another skill or by the loop. Use when the owner says "engine-sync", "sync the engine branches", "синхронизируй ветки движка", "синхронизируй games и main", "прогони треугольник веток".
+name: sync-engine
+description: Carries the engine's branches around the triangle games/X -> main -> the other games/* by local merges only, and prints the git push commands for the owner (it never pushes). Reminds the owner to push from the other PCs first, fetches, stops when a local branch is behind or diverged from origin, shows what each games/* holds that main has not, merges the games that are ahead into main after the owner's yes, builds the engine and runs its tests on the result before keeping it, then merges main back into every games/*. Run ONLY on the owner's explicit command and never offered by another skill or by the loop. Use when the owner says "sync-engine", "engine-sync", "sync the engine branches", "синхронизируй ветки движка", "синхронизируй games и main", "прогони треугольник веток".
 ---
 
-# engine-sync
+# sync-engine
 
 You are the **conductor** and do everything yourself, no agents. The engine repository has `main` (the showcase) and a branch per game (`games/mahjong`, `games/chess`, ...). The model (the owner's, 2026-11-14): nothing reaches `main` except through a `games/*`; a `todo/<id>` branch is never merged into `main` and never cut from it; engine work is done in the `games/*` branches (mostly `games/mahjong`); the owner syncs the triangle themself, rarely. This skill is run **only when the owner asks for it**: no other skill, `todo-loop` or `todo-merge` offers it. It merges locally and **never pushes**; engine work happens on more than one PC, so pushing and pulling is the owner's.
 
-`/engine-sync`
+`/sync-engine`
 
 Terms (those of `.claude/rules/build-project.md`, "Terms"): `<E>` is the engine repository, the same as `<engine>`: `.` in the engine repository, `engine` in a game. `<p>` is the preset the `build` skill would pick for this OS, `<E>`'s own presets (`macos-debug` on macOS); every build and test command runs from `<E>`. The read-only helper is `python3 <helper> --repo <E> ...` (`tools/sync/CLAUDE.md`: the fields of its JSON, the config keys, the exit codes); it never writes, so the skill fetches first. `<helper>` is a **copy** of `<E>/tools/sync/engine_sync.py` that step 1 makes outside the repository: after a `switch` to `main` or to a game that does not have the file yet, the original is gone. Ask the owner in Russian (AskUserQuestion) and report in Russian.
 

@@ -1,4 +1,4 @@
-"""The read-only git-state helper of the engine-sync skill (`.claude/skills/engine-sync/SKILL.md`). Standard library only.
+"""The read-only git-state helper of the sync-engine skill (`.claude/skills/sync-engine/SKILL.md`). Standard library only.
 
     python3 <engine>/tools/sync/engine_sync.py --repo <E> status [--json]
     python3 <engine>/tools/sync/engine_sync.py --repo <E> pushes
