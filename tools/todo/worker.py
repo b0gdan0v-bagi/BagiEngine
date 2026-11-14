@@ -37,6 +37,7 @@ import json
 import re
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import time
@@ -47,6 +48,7 @@ from pathlib import Path
 if sys.version_info < (3, 10):  # before the first `X | None` evaluated at import, which 3.9 turns into a TypeError
     sys.exit(f"error: worker.py needs Python 3.10 or newer, this is {sys.version.split()[0]} ({sys.executable})")
 
+ON_WINDOWS = os.name == "nt"
 SHARED_SUBMODULE = "engine"
 WORKER_PREFIX = "w"
 WORKERS_SUFFIX = ".workers"
@@ -203,6 +205,56 @@ def link_files(layout: Layout, worker: Path) -> None:
             exclude(worker, rel)
 
 
+def is_file_link(link: Path) -> bool:
+    """A Windows symlink made as a file link: no directory flag in its own attributes (an lstat; a stat on a
+    file link to a directory raises)."""
+    return not getattr(os.lstat(link), "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_DIRECTORY
+
+
+def file_links_to_directories(repo: Path) -> list[Path]:
+    """The tracked symlinks of `repo` that are file links although their target is a directory (what git makes
+    on Windows when the target is missing at checkout time). Never stats a link itself. A link to nothing and a
+    tracked link that is a plain file on disk (`core.symlinks` false) are left out."""
+    if not ON_WINDOWS:
+        return []
+    listing = git("ls-files", "-s", "-z", cwd=repo, check=False)
+    found = []
+    for entry in listing.split("\0"):
+        mode, _, rest = entry.partition(" ")
+        if mode != "120000":
+            continue
+        link = repo / rest.partition("\t")[2]
+        if not link.is_symlink() or not is_file_link(link):
+            continue
+        if (link.parent / os.readlink(link)).is_dir():
+            found.append(link)
+    return found
+
+
+def fix_directory_links(repo: Path) -> list[str]:
+    """Remake each of those links as a directory symlink with the text it had; the paths remade, relative to `repo`."""
+    remade = []
+    for link in file_links_to_directories(repo):
+        text = os.readlink(link)
+        os.unlink(link)
+        os.symlink(text, link, target_is_directory=True)
+        remade.append(link.relative_to(repo).as_posix())
+    return remade
+
+
+def link_repos(path: Path) -> list[Path]:
+    """The checkouts of a worker (or of the main checkout) whose tracked links are checked: the game and its engine/."""
+    return [path] + ([path / SHARED_SUBMODULE] if (path / SHARED_SUBMODULE / ".git").exists() else [])
+
+
+def fix_worker_links(path: Path) -> list[str]:
+    """`fix_directory_links` over `link_repos`, the paths relative to `path`."""
+    remade = []
+    for repo in link_repos(path):
+        remade += [(repo.relative_to(path) / rel).as_posix() for rel in fix_directory_links(repo)]
+    return remade
+
+
 def configure(layout: Layout, worker: Path, preset: str) -> None:
     """The first configure of the worker's own build/, so its first build needs none. ENGINE_CCACHE_BASE_DIR
     is the folder of the workers: ccache hashes the paths under it relative to the build folder, so the
@@ -242,6 +294,9 @@ def create_one(layout: Layout, k: int, base: str, preset: str | None) -> None:
     else:
         init_submodules(worker, layout.main)
     link_files(layout, worker)
+    remade = fix_worker_links(worker)  # the game was checked out first, while engine/ was still empty
+    if remade:
+        print(f"  remade as directory symlinks: {', '.join(remade)}")
     problems = verify_worker(layout, worker, at_pointer=True)
     if problems:
         raise WorkerError(f"{worker.name}: " + "; ".join(problems))
@@ -1831,6 +1886,15 @@ def cmd_check(layout: Layout, args) -> None:
     problems = check_shared_config(layout, fix=args.fix)
     for _k, path in layout.workers():
         problems += [f"{path.name}: {p}" for p in verify_worker(layout, path, at_pointer=False) if not p.startswith("not clean")]
+    for label, path in [("main", layout.main)] + [(path.name, path) for _k, path in layout.workers()]:
+        if args.fix:
+            problems += [f"{label}: {rel} remade as a directory symlink" for rel in fix_worker_links(path)]
+        else:
+            problems += [
+                f"{label}: {link.relative_to(path).as_posix()} is a file symlink to a directory (Windows; run check --fix)"
+                for repo in link_repos(path)
+                for link in file_links_to_directories(repo)
+            ]
     for problem in problems:
         print(problem)
     if not problems:
@@ -2137,12 +2201,16 @@ def update_one(layout: Layout, k: int, path: Path, sessions: list[dict] | None) 
         after = head_json(repo)
         moved.append({"repo": str(repo), "base": base, "from": before["branch"] or before["commit"], "to": after["commit"], "changed": before["commit"] != after["commit"] or before["branch"] is not None})
     notes = []
+    # after both repositories moved: git made a link into engine/ as a file link if the game moved first
+    links = fix_worker_links(path)
+    if links:
+        notes.append(f"remade as directory symlinks: {', '.join(links)}")
     if layout.shared is not None and (path / SHARED_SUBMODULE / ".git").exists() and any(repo == path / SHARED_SUBMODULE for repo, _ in repos):
         pointer = git("rev-parse", f"HEAD:{SHARED_SUBMODULE}", cwd=path, check=False)
         engine = git("rev-parse", "HEAD", cwd=path / SHARED_SUBMODULE, check=False)
         if pointer and engine and pointer != engine:
             notes.append(f"the game's pointer of {SHARED_SUBMODULE}/ is {pointer[:9]}, not the tip of its base ({engine[:9]}): the pointer commit is not made yet")
-    return {"k": k, "name": f"{WORKER_PREFIX}{k}", "repos": moved, "notes": notes}
+    return {"k": k, "name": f"{WORKER_PREFIX}{k}", "repos": moved, "notes": notes, "links": links}
 
 
 def cmd_update(layout: Layout, args) -> None:
