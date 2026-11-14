@@ -40,6 +40,15 @@ if(Python3_FOUND)
     # a quoted include is allowed only for a source file's own header; every other include is <...> from an include root
     add_test(NAME BagiIncludeStyle
         COMMAND ${Python3_EXECUTABLE} ${BAGI_ENGINE_DIR}/CI/scripts/check_includes.py --root ${BAGI_ENGINE_DIR})
+    # every header compiles alone (no PCH): the baseline lists the headers still to fix and only shrinks (CI/scripts/check_headers.py).
+    # RmlUiHost is built only with ENGINE_UI_RMLUI, so a default build has no compile flags for it: it is checked in a build with the option.
+    # 4 compiles at once, about 15 s beside the other tests, so no RUN_SERIAL (it would stop the other 7 slots while it waits and runs).
+    add_test(NAME BagiHeadersStandalone
+        COMMAND ${Python3_EXECUTABLE} ${BAGI_ENGINE_DIR}/CI/scripts/check_headers.py --root ${BAGI_ENGINE_DIR} --build ${CMAKE_BINARY_DIR}
+            --baseline ${BAGI_ENGINE_DIR}/CI/scripts/header_baseline.txt --exclude src/Modules/RmlUiHost --jobs 4)
+    set_tests_properties(BagiHeadersStandalone PROPERTIES
+        SKIP_RETURN_CODE 77
+        TIMEOUT 300)
 endif()
 
 # A real TLS handshake of the platform's backend against local servers: tls_local_check.py starts a Python `ssl` WebSocket echo server
