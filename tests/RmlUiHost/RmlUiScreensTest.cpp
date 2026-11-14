@@ -195,11 +195,11 @@ namespace BECore::Tests {
 
     TEST_F(RmlUiScreensTest, ABrokenScreenIsCaught) {
         // The menu with a Play button of 20 units, a Title that is 40 units too tall and a Play text far too big for its button: the checks must see all three
-        std::string markup = kMenuRml;
-        markup.replace(markup.find("button { height: 56dp; font-size: 28dp;"), std::string("button { height: 56dp; font-size: 28dp;").size(),
+        String markup = kMenuRml;
+        markup.replace(markup.find("button { height: 56dp; font-size: 28dp;"), String("button { height: 56dp; font-size: 28dp;").size(),
                        "button { height: 56dp; font-size: 90dp; white-space: nowrap;");
-        markup.replace(markup.find("button { height: 56dp;"), std::string("button { height: 56dp;").size(), "button { height: 20dp;");  // after the font change above: the text before it is intact
-        markup.replace(markup.find("#Title { height: 88dp;"), std::string("#Title { height: 88dp;").size(), "#Title { height: 128dp;");
+        markup.replace(markup.find("button { height: 56dp;"), String("button { height: 56dp;").size(), "button { height: 20dp;");  // after the font change above: the text before it is intact
+        markup.replace(markup.find("#Title { height: 88dp;"), String("#Title { height: 88dp;").size(), "#Title { height: 128dp;");
         Screen broken = kScreens[0];
         broken.rml = markup.c_str();
         auto doc = Load(broken);

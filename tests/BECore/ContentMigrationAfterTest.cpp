@@ -142,7 +142,7 @@ namespace BECore::Tests {
         /// The findings of the layout validator on the size matrix that a loaded case is meant to have, as "folder/case | kind | element | other": the fixture puts a control where
         /// a narrow output scales it off the canvas. The touch size is not checked (`minTouchSize` is 0 below): the fixtures are 56 unit controls on `Screen` canvases that scale
         /// below the minimum in a small window, and the minimum of real screens is held by the tests of those screens
-        const Set<std::string> kExpectedIssues = {
+        const Set<String> kExpectedIssues = {
             "ui_group/segmented_icon | OutsideCanvas | Mode | ",
             "ui_group/segmented_icon | OutsideCanvas |  | ",
             "ui_text/nested | OutsideCanvas | Badge | ",
@@ -153,35 +153,35 @@ namespace BECore::Tests {
             "ui_value/toggle_literal_color | OutsideCanvas | TransparentSwitch | ",
         };
 
-        std::string Key(const char* folder, const char* name) {
-            return std::string(folder) + "/" + name;
+        String Key(const char* folder, const char* name) {
+            return String(folder) + "/" + name;
         }
 
-        std::string Number(double value) {
+        String Number(double value) {
             char buffer[32];
             std::snprintf(buffer, sizeof(buffer), "%g", value);
             return buffer;
         }
 
         /// What the test checks of one entry of `ui_tree`, as one line; @p checked is the state of a toggle
-        std::string TreeLine(const char* type, const Control& control, bool checked) {
-            std::string line = std::string("type=") + type + "; text=" + control.text + "; icon=" + control.icon + "; action=" + control.action + "; value=" + control.value +
-                               "; tooltip=" + control.tooltip + "; bind=" + control.bind + "; range=" + control.range + "; disabled=" + (control.disabled ? "true" : "false");
+        String TreeLine(const char* type, const Control& control, bool checked) {
+            String line = String("type=") + type + "; text=" + control.text + "; icon=" + control.icon + "; action=" + control.action + "; value=" + control.value + "; tooltip=" + control.tooltip +
+                          "; bind=" + control.bind + "; range=" + control.range + "; disabled=" + (control.disabled ? "true" : "false");
             if (control.kind == Kind::Toggle) {
-                line += std::string("; checked=") + (checked ? "true" : "false");
+                line += String("; checked=") + (checked ? "true" : "false");
             }
             return line;
         }
 
-        std::string TreeLineOf(const Json& element) {
-            std::string range;
+        String TreeLineOf(const Json& element) {
+            String range;
             if (const auto min = GetJsonNumber(element, "minValue")) {
                 range = Number(*min) + ".." + Number(GetJsonNumber(element, "maxValue").value_or(0.0)) + " step " + Number(GetJsonNumber(element, "step").value_or(0.0));
             }
             // A slider answers `value` as a number: the clicker's value is the string; only a string is read here
-            std::string line = "type=" + JsonText(element, "type") + "; text=" + JsonText(element, "text") + "; icon=" + JsonText(element, "icon") + "; action=" + JsonText(element, "action") +
-                               "; value=" + (range.empty() ? JsonText(element, "value") : std::string()) + "; tooltip=" + JsonText(element, "tooltip") + "; bind=" + JsonText(element, "bind") +
-                               "; range=" + range + "; disabled=" + JsonFlag(element, "disabled");
+            String line = "type=" + JsonText(element, "type") + "; text=" + JsonText(element, "text") + "; icon=" + JsonText(element, "icon") + "; action=" + JsonText(element, "action") +
+                          "; value=" + (range.empty() ? JsonText(element, "value") : String()) + "; tooltip=" + JsonText(element, "tooltip") + "; bind=" + JsonText(element, "bind") +
+                          "; range=" + range + "; disabled=" + JsonFlag(element, "disabled");
             if (FindJsonMember(element, "checked") != nullptr) {
                 line += "; checked=" + JsonFlag(element, "checked");
             }
@@ -192,9 +192,9 @@ namespace BECore::Tests {
 
     class ContentMigrationAfterTest : public Fixture {
     protected:
-        void LoadCase(const std::string& xml) {
+        void LoadCase(const String& xml) {
             ASSERT_TRUE(Load(xml));
-            const Vector<std::string> sceneNames = SceneNames(xml);  // a node file is put into a scene of its own, a SceneConfig names its scenes
+            const Vector<String> sceneNames = SceneNames(xml);  // a node file is put into a scene of its own, a SceneConfig names its scenes
             ASSERT_FALSE(sceneNames.empty());
             _scene = _manager->GetSceneByName(PoolString::Intern(sceneNames.front().c_str()));
             ASSERT_NE(_scene, nullptr);
@@ -205,7 +205,7 @@ namespace BECore::Tests {
         }
 
         /// The first element of that name in the scene and the canvas it is in
-        UIElement* Find(const std::string& name, const UICanvasComponent** canvas = nullptr) {
+        UIElement* Find(const String& name, const UICanvasComponent** canvas = nullptr) {
             for (const CanvasRef& ref : _canvases) {
                 UIElement* found = nullptr;
                 WalkElements(ref.canvas->GetRoot(), [&](UIElement& element) {
@@ -224,8 +224,8 @@ namespace BECore::Tests {
         }
 
         /// What the layout validator finds on the size matrix, as "kind | element | other" (the case of the matrix is dropped: a finding is named by what it is about)
-        Set<std::string> ValidatorFindings() {
-            Set<std::string> findings;
+        Set<String> ValidatorFindings() {
+            Set<String> findings;
             UILayoutValidatorOptions options;
             options.minTouchSize = 0.0f;
             UILayoutContext context;
@@ -234,7 +234,7 @@ namespace BECore::Tests {
             for (const CanvasRef& ref : _canvases) {
                 for (const UIMatrixFailure& failure : ValidateOnMatrix(ref.canvas->GetLayout(), options, context)) {
                     for (const UILayoutIssue& issue : failure.issues) {
-                        findings.insert(std::string(EnumUtils<UILayoutIssueKind>::ToString(issue.kind).data()) + " | " + issue.element.CStr() + " | " + issue.other.CStr());
+                        findings.insert(String(EnumUtils<UILayoutIssueKind>::ToString(issue.kind).data()) + " | " + issue.element.CStr() + " | " + issue.other.CStr());
                     }
                 }
             }
@@ -242,13 +242,13 @@ namespace BECore::Tests {
         }
 
         /// The tree answer of every named element, by name (the first of a name wins)
-        Map<std::string, std::string> Tree() {
-            Map<std::string, std::string> lines;
+        Map<String, String> Tree() {
+            Map<String, String> lines;
             for (const Json& canvas : CallTree(kNodeSceneName)) {
-                Set<std::string> seen;
+                Set<String> seen;
                 CollectTree(canvas, "", seen, lines, TreeLineOf);
             }
-            Map<std::string, std::string> byName;
+            Map<String, String> byName;
             for (const auto& [key, line] : lines) {
                 byName.emplace(key.substr(key.find('|') + 1), line);
             }
@@ -256,14 +256,14 @@ namespace BECore::Tests {
         }
 
         /// A click at the centre of @p element, then the pointer is parked; the actions that went out
-        Vector<std::string> ClickOn(const UICanvasComponent& canvas, const UIElement& element) {
-            const Vector<std::string> emitted = Click(OutputCenter(canvas, element));
+        Vector<String> ClickOn(const UICanvasComponent& canvas, const UIElement& element) {
+            const Vector<String> emitted = Click(OutputCenter(canvas, element));
             Park();
             Draw(kLargeWidth, kLargeHeight);
             return emitted;
         }
 
-        void CheckControl(const std::string& label, const Control& control, const Map<std::string, std::string>& tree) {
+        void CheckControl(const String& label, const Control& control, const Map<String, String>& tree) {
             const UICanvasComponent* canvas = nullptr;
             UIElement* element = Find(control.name, &canvas);
             ASSERT_NE(element, nullptr) << label << ": no element " << control.name;
@@ -273,24 +273,24 @@ namespace BECore::Tests {
             ASSERT_NE(line, tree.end()) << label << ": ui_tree does not list " << control.name;
             EXPECT_EQ(line->second, TreeLine("UIElement", control, false)) << label << " " << control.name << " in ui_tree";
 
-            const std::string action = control.action;
-            const std::string expected = control.disabled || action.empty() ? ""
-                                                                            : action + "=" +
-                                                                                  (control.kind == Kind::Toggle   ? control.on
-                                                                                   : control.kind == Kind::Slider ? control.middle
-                                                                                                                  : control.value);
-            const auto emitted = [&](const Vector<std::string>& actions) { return actions.empty() ? std::string() : actions.front(); };
+            const String action = control.action;
+            const String expected = control.disabled || action.empty() ? ""
+                                                                       : action + "=" +
+                                                                             (control.kind == Kind::Toggle   ? control.on
+                                                                              : control.kind == Kind::Slider ? control.middle
+                                                                                                             : control.value);
+            const auto emitted = [&](const Vector<String>& actions) { return actions.empty() ? String() : actions.front(); };
 
             Vector<const UIElement*> targets{element};
             if (control.kind == Kind::Toggle) {
                 for (const char* suffix : {"Caption", "Switch"}) {
-                    if (const UIElement* part = Find(std::string(control.name) + suffix); part != nullptr && !part->rect.IsEmpty()) {
+                    if (const UIElement* part = Find(String(control.name) + suffix); part != nullptr && !part->rect.IsEmpty()) {
                         targets.push_back(part);
                     }
                 }
             }
             for (const UIElement* target : targets) {
-                const Vector<std::string> actions = ClickOn(*canvas, *target);
+                const Vector<String> actions = ClickOn(*canvas, *target);
                 EXPECT_LE(actions.size(), 1u) << label << " a click on " << target->name.CStr() << " emitted more than one action";
                 EXPECT_EQ(emitted(actions), expected) << label << " a click on " << target->name.CStr();
             }
@@ -300,11 +300,11 @@ namespace BECore::Tests {
             if (control.kind == Kind::Toggle) {
                 CoreManager::GetUIVars().Set(PoolString::Intern(control.bind), control.on);
                 Draw(kLargeWidth, kLargeHeight);
-                const Map<std::string, std::string> on = Tree();
+                const Map<String, String> on = Tree();
                 const auto onLine = on.find(control.name);
                 ASSERT_NE(onLine, on.end());
                 EXPECT_EQ(onLine->second, TreeLine("UIElement", control, true)) << label << " " << control.name << " in ui_tree with the variable on";
-                const std::string flipped = control.disabled || action.empty() ? "" : action + "=" + control.off;
+                const String flipped = control.disabled || action.empty() ? "" : action + "=" + control.off;
                 EXPECT_EQ(emitted(ClickOn(*canvas, *element)), flipped) << label << " a click on " << control.name << " with the variable on";
                 CoreManager::GetUIVars().Clear();
                 Draw(kLargeWidth, kLargeHeight);
@@ -313,7 +313,7 @@ namespace BECore::Tests {
 
         /// Every control that is not a member of a group is disabled by its group (the way a `UISegmented` or a form disables what it holds): a click on it, or on a part of it,
         /// emits nothing. A member of a group takes its flags from the group at every draw, so it is not set by hand
-        void CheckGroupDisabled(const std::string& label, const Expectation& expectation) {
+        void CheckGroupDisabled(const String& label, const Expectation& expectation) {
             Set<const UIElement*> members;
             Vector<UIElement*> clickers;
             for (const CanvasRef& ref : _canvases) {
@@ -348,14 +348,14 @@ namespace BECore::Tests {
     };
 
     TEST(ContentMigrationAfterFixtures, EveryFixtureIsLoadedOrSkippedWithAReason) {
-        Set<std::string> found;
+        Set<String> found;
         for (const char* folder : {"ui_button", "ui_group", "ui_value", "ui_text"}) {
             ASSERT_TRUE(std::filesystem::is_directory(FixtureFolder(folder))) << FixtureFolder(folder).string();
-            for (const std::string& name : CaseNames(FixtureFolder(folder))) {
+            for (const String& name : CaseNames(FixtureFolder(folder))) {
                 found.insert(Key(folder, name.c_str()));
             }
         }
-        Set<std::string> known;
+        Set<String> known;
         for (const Expectation& expectation : Expectations()) {
             known.insert(Key(expectation.folder, expectation.name));
         }
@@ -369,31 +369,31 @@ namespace BECore::Tests {
         static const std::regex removed(R"re(type="(UIButton|UILabel|UIImage|UIToggle|UISlider|UIDropdown)")re");
         static const std::regex removedInText(R"re(type="(UIButton|UILabel|UIImage|UIToggle|UISlider)")re");
         for (const char* skipped : kSkipped) {
-            const std::string key = skipped;
-            const std::string folder = key.substr(0, key.find('/'));
-            const std::string name = key.substr(key.find('/') + 1);
-            const std::string xml = ReadFile(FixtureFolder(folder.c_str()) / (name + ".after.xml"));
+            const String key = skipped;
+            const String folder = key.substr(0, key.find('/'));
+            const String name = key.substr(key.find('/') + 1);
+            const String xml = ReadFile(FixtureFolder(folder.c_str()) / ToStd(name + ".after.xml"));
             ASSERT_FALSE(xml.empty()) << key;
-            EXPECT_TRUE(std::regex_search(xml, removed)) << key << " holds no such element: load it instead of skipping it";
+            EXPECT_TRUE(std::regex_search(xml.c_str(), removed)) << key << " holds no such element: load it instead of skipping it";
         }
         for (const Expectation& expectation : Expectations()) {
-            const std::string xml = ReadFile(FixtureFolder(expectation.folder) / (std::string(expectation.name) + ".after.xml"));
+            const String xml = ReadFile(FixtureFolder(expectation.folder) / ToStd(String(expectation.name) + ".after.xml"));
             ASSERT_FALSE(xml.empty()) << expectation.name;
             // The dropdown stays a class: in `ui_text/` it is the final form, with its header as a text component
-            const bool isText = std::string(expectation.folder) == "ui_text";
-            EXPECT_FALSE(std::regex_search(xml, isText ? removedInText : removed)) << Key(expectation.folder, expectation.name) << " holds an element of a class that is removed: skip it";
+            const bool isText = String(expectation.folder) == "ui_text";
+            EXPECT_FALSE(std::regex_search(xml.c_str(), isText ? removedInText : removed)) << Key(expectation.folder, expectation.name) << " holds an element of a class that is removed: skip it";
         }
     }
 
     TEST_P(ContentMigrationAfterTest, TheComposedScreenBehaves) {
-        const Expectation& expectation = Expectations()[static_cast<size_t>(std::stoi(GetParam()))];
-        const std::string label = Key(expectation.folder, expectation.name);
-        const std::string xml = SceneManagerXml(ReadFile(FixtureFolder(expectation.folder) / (std::string(expectation.name) + ".after.xml")));
+        const Expectation& expectation = Expectations()[static_cast<size_t>(std::stoi(GetParam().c_str()))];
+        const String label = Key(expectation.folder, expectation.name);
+        const String xml = SceneManagerXml(ReadFile(FixtureFolder(expectation.folder) / ToStd(String(expectation.name) + ".after.xml")));
         ASSERT_FALSE(xml.empty());
         LoadCase(xml);
         ASSERT_NE(_scene, nullptr);
 
-        for (const std::string& finding : ValidatorFindings()) {
+        for (const String& finding : ValidatorFindings()) {
             EXPECT_TRUE(kExpectedIssues.contains(label + " | " + finding)) << label << ": the validator finds on the size matrix: " << finding;
         }
 
@@ -406,7 +406,7 @@ namespace BECore::Tests {
         }
         Draw(kLargeWidth, kLargeHeight);
 
-        const Map<std::string, std::string> tree = Tree();
+        const Map<String, String> tree = Tree();
         for (const Control& control : expectation.controls) {
             CheckControl(label, control, tree);
         }
@@ -464,18 +464,18 @@ namespace BECore::Tests {
         }
     }
 
-    INSTANTIATE_TEST_SUITE_P(Fixtures, ContentMigrationPictureTest, ::testing::Values(std::string("picture_under_clicker")));
+    INSTANTIATE_TEST_SUITE_P(Fixtures, ContentMigrationPictureTest, ::testing::Values(String("picture_under_clicker")));
 
     INSTANTIATE_TEST_SUITE_P(Fixtures, ContentMigrationAfterTest, ::testing::ValuesIn([] {
-                                 Vector<std::string> indices;
+                                 Vector<String> indices;
                                  for (size_t i = 0; i < Expectations().size(); ++i) {
-                                     indices.push_back(std::to_string(i));
+                                     indices.push_back(ToString(i));
                                  }
                                  return indices;
                              }()),
-                             [](const ::testing::TestParamInfo<std::string>& info) {
-                                 const Expectation& expectation = Expectations()[static_cast<size_t>(std::stoi(info.param))];
-                                 return std::string(expectation.folder) + "_" + expectation.name;
+                             [](const ::testing::TestParamInfo<String>& info) {
+                                 const Expectation& expectation = Expectations()[static_cast<size_t>(std::stoi(info.param.c_str()))];
+                                 return std::string(expectation.folder) + "_" + expectation.name;  // std: gtest takes the test name from a std::string
                              });
 
 }  // namespace BECore::Tests

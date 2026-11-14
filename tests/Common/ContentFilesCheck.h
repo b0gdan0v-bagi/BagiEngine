@@ -11,8 +11,8 @@ namespace BECore::Tests {
      * message per file: the path, then what CheckContentVersion says. A file that does not parse, or whose root is
      * not a content root, is not a content file and is skipped. Sorted by path.
      */
-    inline Vector<std::string> FindStaleContentFiles(const std::filesystem::path& folder) {
-        Vector<std::string> stale;
+    inline Vector<String> FindStaleContentFiles(const std::filesystem::path& folder) {
+        Vector<String> stale;
         std::error_code ec;
         for (std::filesystem::recursive_directory_iterator it(folder, ec), end; !ec && it != end; it.increment(ec)) {
             if (!it->is_regular_file(ec) || it->path().extension() != ".xml") {
@@ -22,7 +22,7 @@ namespace BECore::Tests {
             if (!document.load_file(it->path().c_str()) || !IsContentRoot(document.document_element().name())) {
                 continue;
             }
-            const std::string path = it->path().generic_string();
+            const String path = FromStdString(it->path().generic_string());
             if (const auto version = CheckContentVersion(document.document_element(), path.c_str()); !version) {
                 stale.emplace_back(version.error().c_str());
             }
@@ -38,7 +38,7 @@ namespace BECore::Tests {
      */
     inline void ExpectContentFilesAtCurrentVersion(const std::filesystem::path& configFolder) {
         EXPECT_TRUE(std::filesystem::is_directory(configFolder)) << "no folder " << configFolder.string();
-        for (const std::string& message : FindStaleContentFiles(configFolder)) {
+        for (const String& message : FindStaleContentFiles(configFolder)) {
             ADD_FAILURE() << message;
         }
     }

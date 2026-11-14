@@ -10,7 +10,7 @@ namespace BECore::Fuzz {
     /// A seed file: its name inside the folder of its target and its bytes
     struct FuzzSeedFile {
         std::filesystem::path folder;  ///< Relative to the corpus root (the corpusFolder of the target)
-        std::string name;
+        String name;
         FuzzBytes bytes;
     };
 

@@ -44,15 +44,15 @@ namespace BECore::Tests::MigrationTwin {
     }
 
     /// The names of the cases of a fixture folder: every `<case>.before.xml` that has an `<case>.after.xml`
-    inline Vector<std::string> CaseNames(const std::filesystem::path& folder) {
-        Vector<std::string> names;
-        const std::string suffix = ".before.xml";
+    inline Vector<String> CaseNames(const std::filesystem::path& folder) {
+        Vector<String> names;
+        const String suffix = ".before.xml";
         std::error_code error;
         for (const auto& entry : std::filesystem::directory_iterator(folder, error)) {
-            const std::string file = entry.path().filename().string();
+            const String file = FromStdString(entry.path().filename().string());
             if (file.size() > suffix.size() && file.compare(file.size() - suffix.size(), suffix.size(), suffix) == 0) {
-                const std::string name = file.substr(0, file.size() - suffix.size());
-                if (std::filesystem::exists(folder / (name + ".after.xml"))) {
+                const String name = file.substr(0, file.size() - suffix.size());
+                if (std::filesystem::exists(folder / ToStd(name + ".after.xml"))) {
                     names.push_back(name);
                 }
             }
@@ -61,44 +61,44 @@ namespace BECore::Tests::MigrationTwin {
         return names;
     }
 
-    inline std::string ReadFile(const std::filesystem::path& path) {
+    inline String ReadFile(const std::filesystem::path& path) {
         std::ifstream file(path, std::ios::binary);
         std::ostringstream text;
         text << file.rdbuf();
-        return text.str();
+        return FromStdString(text.str());
     }
 
     /// A content file as a scene manager the loader reads: a `SceneManager` is itself, a `node` goes into a scene of its own
-    inline std::string SceneManagerXml(std::string text) {
+    inline String SceneManagerXml(String text) {
         const size_t declaration = text.find("<?xml");
-        if (declaration != std::string::npos) {
+        if (declaration != String::npos) {
             text.erase(declaration, text.find("?>", declaration) + 2 - declaration);
         }
         static const std::regex root(R"(<([A-Za-z][A-Za-z0-9_]*))");
-        std::string stripped;
+        String stripped;
         for (size_t at = 0; at < text.size();) {  // the first element that is not a comment: skip the comments, which may mention tags
             const size_t comment = text.find("<!--", at);
             const size_t tag = text.find('<', at);
-            if (comment != std::string::npos && comment == tag) {
+            if (comment != String::npos && comment == tag) {
                 at = text.find("-->", comment) + 3;
                 continue;
             }
             stripped = text.substr(tag);
             break;
         }
-        std::smatch match;
-        if (std::regex_search(stripped, match, root) && match[1] == "node") {
-            return "<SceneManager><scenes><scene type=\"Scene\" name=\"" + std::string(kNodeSceneName) + "\" viewWidth=\"" + std::to_string(static_cast<int>(kDefaultViewWidth)) + "\" viewHeight=\"" +
-                   std::to_string(static_cast<int>(kDefaultViewHeight)) + "\"><nodes>" + text + "</nodes></scene></scenes></SceneManager>";
+        std::cmatch match;
+        if (std::regex_search(stripped.c_str(), match, root) && match[1] == "node") {
+            return "<SceneManager><scenes><scene type=\"Scene\" name=\"" + String(kNodeSceneName) + "\" viewWidth=\"" + ToString(static_cast<int>(kDefaultViewWidth)) + "\" viewHeight=\"" +
+                   ToString(static_cast<int>(kDefaultViewHeight)) + "\"><nodes>" + text + "</nodes></scene></scenes></SceneManager>";
         }
         return text;
     }
 
-    inline Vector<std::string> SceneNames(const std::string& xml) {
-        Vector<std::string> names;
+    inline Vector<String> SceneNames(const String& xml) {
+        Vector<String> names;
         static const std::regex scene(R"re(<scene\b[^>]*?\bname="([^"]*)")re");
-        for (std::sregex_iterator it(xml.begin(), xml.end(), scene), end; it != end; ++it) {
-            names.push_back((*it)[1]);
+        for (std::cregex_iterator it(xml.data(), xml.data() + xml.size(), scene), end; it != end; ++it) {
+            names.push_back(String((*it)[1].first, (*it)[1].second));
         }
         return names;
     }
@@ -127,17 +127,13 @@ namespace BECore::Tests::MigrationTwin {
         ActionRecorder() {
             Subscribe<InputEvents::ActionEvent, &ActionRecorder::OnAction>(this);
         }
-        Vector<std::string> emitted;
+        Vector<String> emitted;
 
     private:
         void OnAction(const InputEvents::ActionEvent& event) {
-            emitted.push_back(std::string(event.action.CStr()) + "=" + std::string(event.value.CStr()));
+            emitted.push_back(String(event.action.CStr()) + "=" + String(event.value.CStr()));
         }
     };
-
-    inline std::string Text(const String& text) {
-        return std::string(text.c_str(), text.size());
-    }
 
     inline void WalkElements(UIElement& parent, const std::function<void(UIElement&)>& visit) {
         for (const auto& child : parent.children) {
@@ -146,24 +142,23 @@ namespace BECore::Tests::MigrationTwin {
         }
     }
 
-    inline std::string JsonText(const Json& object, StringView key) {
-        const auto value = GetJsonString(object, key);
-        return value ? Text(*value) : std::string();
+    inline String JsonText(const Json& object, StringView key) {
+        return GetJsonString(object, key).value_or(String());
     }
 
-    inline std::string JsonFlag(const Json& object, StringView key) {
+    inline String JsonFlag(const Json& object, StringView key) {
         return GetJsonBool(object, key).value_or(false) ? "true" : "false";
     }
 
     /// The named elements of a `ui_tree` canvas (or of an element below it) as "canvasKey|name" -> @p fieldsOf of its entry; the first element of a name wins
-    inline void CollectTree(const Json& parent, const std::string& canvasKey, Set<std::string>& seen, Map<std::string, std::string>& out, const std::function<std::string(const Json&)>& fieldsOf) {
+    inline void CollectTree(const Json& parent, const String& canvasKey, Set<String>& seen, Map<String, String>& out, const std::function<String(const Json&)>& fieldsOf) {
         const Json* list = FindJsonMember(parent, parent.contains("elements") ? "elements" : "children");
         if (list == nullptr || !list->is_array()) {
             return;
         }
         for (const Json& element : *list) {
-            const std::string name = JsonText(element, "name");
-            const std::string key = canvasKey + "|" + name;
+            const String name = JsonText(element, "name");
+            const String key = canvasKey + "|" + name;
             if (!name.empty() && seen.insert(key).second) {
                 out[key] = fieldsOf(element);
             }
@@ -172,7 +167,7 @@ namespace BECore::Tests::MigrationTwin {
     }
 
     /// A screen of one form loaded into canvases on a `RecordingRenderer`; a test derives from it and looks at what the screen draws and answers
-    class Fixture : public ::testing::TestWithParam<std::string> {
+    class Fixture : public ::testing::TestWithParam<String> {
     protected:
         static void SetUpTestSuite() {
             EngineEnvironment::EnsureCoreServices();
@@ -200,9 +195,9 @@ namespace BECore::Tests::MigrationTwin {
         }
 
         /// Loads a scene manager from @p xml, makes it the active one in the services and gives the icons their texture
-        bool Load(const std::string& xml) {
+        bool Load(const String& xml) {
             XmlDeserializer deserializer;
-            if (!deserializer.LoadFromString(FromStd(xml))) {
+            if (!deserializer.LoadFromString(xml)) {
                 ADD_FAILURE() << "the scene does not parse";
                 return false;
             }
@@ -224,8 +219,8 @@ namespace BECore::Tests::MigrationTwin {
         }
 
         /// The sprite of every image component, whatever its name, is the texture of the test: the icon quad is then in the draw
-        void GiveTheIconsATexture(const std::string& xml) {
-            for (const std::string& sceneName : SceneNames(xml)) {
+        void GiveTheIconsATexture(const String& xml) {
+            for (const String& sceneName : SceneNames(xml)) {
                 Scene* scene = _manager->GetSceneByName(PoolString::Intern(sceneName.c_str()));
                 if (scene == nullptr) {
                     continue;
@@ -245,7 +240,7 @@ namespace BECore::Tests::MigrationTwin {
         }
 
         struct CanvasRef {
-            std::string node;
+            String node;
             IntrusivePtr<UICanvasComponent> canvas;
         };
 
@@ -253,7 +248,7 @@ namespace BECore::Tests::MigrationTwin {
             Vector<CanvasRef> canvases;
             for (const auto& node : scene.GetRootNode().GetChildren()) {
                 if (auto canvas = node->GetComponent<UICanvasComponent>()) {
-                    canvases.push_back({std::string(node->GetName().CStr()), canvas});
+                    canvases.push_back({String(node->GetName().CStr()), canvas});
                 }
             }
             return canvases;
@@ -289,7 +284,7 @@ namespace BECore::Tests::MigrationTwin {
         }
 
         /// A press and a release at @p at; the actions that went out
-        static Vector<std::string> Click(const Vec2& at) {
+        static Vector<String> Click(const Vec2& at) {
             ActionRecorder recorder;
             CoreManager::GetUIInput().DispatchMouseMotion(Motion(at.x, at.y));
             CoreManager::GetUIInput().DispatchMouseButtonDown(Button(at.x, at.y, true));
@@ -298,7 +293,7 @@ namespace BECore::Tests::MigrationTwin {
         }
 
         /// The `canvases` array of the answer of `ui_tree`; empty (and a failure) when it answers none
-        Json CallTree(const std::string& sceneName) {
+        Json CallTree(const String& sceneName) {
             Json request = Json::object();
             request["id"] = ++_nextId;
             request["method"] = "ui_tree";

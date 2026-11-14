@@ -10,8 +10,8 @@ namespace BECore::Stress::Tests {
 
     namespace {
 
-        std::string ErrorCodeOf(const ControlError& error) {
-            return std::string(error.code.c_str(), error.code.size());
+        String ErrorCodeOf(const ControlError& error) {
+            return error.code;
         }
 
         Json ActionOf(const char* type) {

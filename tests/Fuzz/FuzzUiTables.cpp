@@ -37,7 +37,7 @@ namespace BECore::Fuzz {
             }
         }
 
-        std::string Attribute(pugi::xml_node node, const char* name) {
+        String Attribute(pugi::xml_node node, const char* name) {
             return node.attribute(name).as_string();
         }
 
@@ -46,18 +46,18 @@ namespace BECore::Fuzz {
         // =========================================================================
 
         /// (language, key) -> text of the first `string` that says it with a key the table accepts, read from the document by pugixml alone
-        using ExpectedStrings = Map<Pair<std::string, std::string>, std::string>;
+        using ExpectedStrings = Map<Pair<String, String>, String>;
 
         ExpectedStrings ReadExpectedStrings(pugi::xml_node root) {
             ExpectedStrings expected;
             for (const pugi::xml_node language : root.children("language")) {
-                const std::string id = Attribute(language, "id");
+                const String id = Attribute(language, "id");
                 if (id.empty()) {
                     continue;
                 }
                 for (const pugi::xml_node string : language.children("string")) {
-                    const std::string key = Attribute(string, "key");
-                    if (key.empty() || key.find('}') != std::string::npos || !string.attribute("text")) {
+                    const String key = Attribute(string, "key");
+                    if (key.empty() || key.find('}') != String::npos || !string.attribute("text")) {
                         continue;
                     }
                     expected.emplace(MakePair(id, key), Attribute(string, "text"));
@@ -67,16 +67,16 @@ namespace BECore::Fuzz {
         }
 
         /// The texts the table gives for the first entries of @p expected, one string, to compare two tables
-        std::string DigestStrings(UIStrings& table, const ExpectedStrings& expected) {
-            std::string digest;
+        String DigestStrings(UIStrings& table, const ExpectedStrings& expected) {
+            String digest;
             size_t checked = 0;
             for (const auto& [id, text] : expected) {
                 if (checked++ == kMaxCheckedEntries) {
                     break;
                 }
-                FUZZ_CHECK(table.SetLanguage(PoolString::Intern(FromStd(id.first))));
-                const auto found = table.Find(FromStd(id.second));
-                digest += found ? std::string(found->data(), found->size()) : std::string("<none>");
+                FUZZ_CHECK(table.SetLanguage(PoolString::Intern(id.first)));
+                const auto found = table.Find(id.second);
+                digest += found ? String(found->data(), found->size()) : String("<none>");
                 digest += '\n';
             }
             for (const PoolString language : table.GetLanguages()) {
@@ -98,12 +98,12 @@ namespace BECore::Fuzz {
                 if (checked++ == kMaxCheckedEntries) {
                     break;
                 }
-                const PoolString language = PoolString::Intern(FromStd(id.first));
+                const PoolString language = PoolString::Intern(id.first);
                 FUZZ_CHECK(table.HasLanguage(language));
                 FUZZ_CHECK(table.SetLanguage(language));
-                const auto found = table.Find(FromStd(id.second));
+                const auto found = table.Find(id.second);
                 FUZZ_CHECK(found.has_value());
-                FUZZ_CHECK(StringView(found->data(), found->size()) == FromStd(text));
+                FUZZ_CHECK(StringView(found->data(), found->size()) == StringView(text));
                 // A text with no reference resolves to itself, and a reference to this key gives this text
                 if (!UIStrings::HasReferences(*found)) {
                     const String expectedText(found->data(), found->size());
@@ -127,7 +127,7 @@ namespace BECore::Fuzz {
             FUZZ_CHECK(languages.empty() || table.HasLanguage(table.GetDefaultLanguage()));
 
             // The same file again changes nothing; a fresh table gives the same texts
-            const std::string before = DigestStrings(table, expected);
+            const String before = DigestStrings(table, expected);
             CheckComplaints(table.LoadFromXml(XmlNode{root}));
             FUZZ_CHECK(DigestStrings(table, expected) == before);
             FUZZ_CHECK(table.GetLanguages().size() == languages.size());
@@ -142,8 +142,8 @@ namespace BECore::Fuzz {
         // =========================================================================
 
         /// The colours of every (theme, token) the table has, in the order of its lists, to compare two tables
-        std::string DigestThemes(UIThemes& table) {
-            std::string digest;
+        String DigestThemes(UIThemes& table) {
+            String digest;
             size_t checked = 0;
             for (const PoolString theme : table.GetThemes()) {
                 for (const PoolString token : table.GetTokens()) {
@@ -157,7 +157,7 @@ namespace BECore::Fuzz {
                     FUZZ_CHECK(table.SetTheme(theme));
                     const auto color = table.Find(token.ToStringView());
                     FUZZ_CHECK(color.has_value());
-                    digest += std::to_string(color->r) + "," + std::to_string(color->g) + "," + std::to_string(color->b) + "," + std::to_string(color->a) + ";";
+                    digest += ToString(color->r) + "," + ToString(color->g) + "," + ToString(color->b) + "," + ToString(color->a) + ";";
                 }
             }
             return digest;
@@ -193,7 +193,7 @@ namespace BECore::Fuzz {
             FUZZ_CHECK(themes.empty() || table.HasTheme(table.GetDefaultTheme()));
 
             // A colour the table has is one the file says: in that theme, under a good name, with a value (the value may still be refused, so not the other way round)
-            Set<Pair<std::string, std::string>> said;
+            Set<Pair<String, String>> said;
             for (const pugi::xml_node theme : root.children("theme")) {
                 for (const pugi::xml_node color : theme.children("color")) {
                     if (color.attribute("value")) {
@@ -208,13 +208,13 @@ namespace BECore::Fuzz {
                         break;
                     }
                     if (table.HasToken(theme, token.ToStringView())) {
-                        FUZZ_CHECK(said.contains({std::string(theme.ToStringView().data(), theme.ToStringView().size()), std::string(token.ToStringView().data(), token.ToStringView().size())}));
+                        FUZZ_CHECK(said.contains({String(theme.ToStringView().data(), theme.ToStringView().size()), String(token.ToStringView().data(), token.ToStringView().size())}));
                     }
                 }
             }
 
             // The same file again changes nothing; a fresh table gives the same colours
-            const std::string before = DigestThemes(table);
+            const String before = DigestThemes(table);
             CheckComplaints(table.LoadFromXml(XmlNode{root}));
             FUZZ_CHECK(DigestThemes(table) == before);
             FUZZ_CHECK(table.GetThemes().size() == themes.size());

@@ -9,9 +9,9 @@ namespace BECore::Tests {
             return std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();
         }
 
-        void WriteFile(const std::filesystem::path& path, const std::string& text) {
+        void WriteFile(const std::filesystem::path& path, const String& text) {
             std::filesystem::create_directories(path.parent_path());
-            std::ofstream(path) << text;
+            std::ofstream(path).write(text.data(), static_cast<std::streamsize>(text.size()));
         }
 
     }  // namespace
@@ -42,19 +42,19 @@ namespace BECore::Tests {
         WriteFile(dir / "UIConfig.xml", "<UIConfig contentVersion=\"0\"/>");
         WriteFile(dir / "notes.txt", "<node/>");
 
-        const Vector<std::string> stale = FindStaleContentFiles(dir);
+        const Vector<String> stale = FindStaleContentFiles(dir);
         std::error_code ignored;
         std::filesystem::remove_all(dir, ignored);
 
         ASSERT_EQ(stale.size(), 3u);
-        const std::string base = dir.generic_string() + "/nodes/";
-        EXPECT_TRUE(stale[0].starts_with(base + "Bad.xml: ")) << stale[0];
-        EXPECT_NE(stale[0].find("is not a whole number"), std::string::npos) << stale[0];
-        EXPECT_TRUE(stale[1].starts_with(base + "New.xml: ")) << stale[1];
-        EXPECT_NE(stale[1].find("newer than this engine reads"), std::string::npos) << stale[1];
-        EXPECT_TRUE(stale[2].starts_with(base + "Old.xml: ")) << stale[2];
-        EXPECT_NE(stale[2].find("content version 0"), std::string::npos) << stale[2];
-        EXPECT_NE(stale[2].find("python3 engine/tools/migrate/migrate.py"), std::string::npos) << stale[2];
+        const String base = FromStdString(dir.generic_string()) + "/nodes/";
+        EXPECT_TRUE(StringView(stale[0]).starts_with(base + "Bad.xml: ")) << stale[0];
+        EXPECT_NE(stale[0].find("is not a whole number"), String::npos) << stale[0];
+        EXPECT_TRUE(StringView(stale[1]).starts_with(base + "New.xml: ")) << stale[1];
+        EXPECT_NE(stale[1].find("newer than this engine reads"), String::npos) << stale[1];
+        EXPECT_TRUE(StringView(stale[2]).starts_with(base + "Old.xml: ")) << stale[2];
+        EXPECT_NE(stale[2].find("content version 0"), String::npos) << stale[2];
+        EXPECT_NE(stale[2].find("python3 engine/tools/migrate/migrate.py"), String::npos) << stale[2];
     }
 
 }  // namespace BECore::Tests

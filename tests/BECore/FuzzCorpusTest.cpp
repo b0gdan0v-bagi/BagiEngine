@@ -27,7 +27,7 @@ namespace BECore::Tests {
         constexpr uint32_t kMaxStackedMutations = 3;
 
         struct CorpusFile {
-            std::string name;
+            String name;
             FuzzBytes bytes;
         };
 
@@ -61,9 +61,9 @@ namespace BECore::Tests {
                     continue;
                 }
                 std::ifstream stream(entry.path(), std::ios::binary);
-                std::string content((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
+                std::string content((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());  // std: an eastl::string cannot be built from an istreambuf_iterator
                 CorpusFile file;
-                file.name = entry.path().filename().string();
+                file.name = FromStdString(entry.path().filename().string());
                 file.bytes.assign(reinterpret_cast<const uint8_t*>(content.data()), reinterpret_cast<const uint8_t*>(content.data()) + content.size());
                 files.push_back(std::move(file));
             }
@@ -71,7 +71,7 @@ namespace BECore::Tests {
             return files;
         }
 
-        const FuzzTarget& FindTarget(const std::string& name) {
+        const FuzzTarget& FindTarget(const String& name) {
             const std::span<const FuzzTarget> targets = Fuzz::FuzzTargetList();
             const auto found = std::find_if(targets.begin(), targets.end(), [&](const FuzzTarget& target) { return name == target.name; });
             return *found;
@@ -81,7 +81,7 @@ namespace BECore::Tests {
 
     /// The parameter of a case is the name of its target. It prints bare, because ctest names the case after what gtest prints for it
     struct FuzzCase {
-        std::string name;
+        String name;
     };
 
     void PrintTo(const FuzzCase& fuzzCase, std::ostream* stream) {

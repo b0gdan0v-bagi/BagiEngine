@@ -12,10 +12,10 @@ namespace BECore::Match3::Tests {
 
     namespace {
 
-        Vector<std::string> BoardRows(const Match3GameModel& model) {
-            Vector<std::string> rows;
+        Vector<String> BoardRows(const Match3GameModel& model) {
+            Vector<String> rows;
             for (int8_t row = 0; row < kBoardSize; ++row) {
-                std::string line;
+                String line;
                 for (int8_t col = 0; col < kBoardSize; ++col) {
                     line.push_back(kGemLetters[static_cast<size_t>(model.GetCellAt(Cell{col, row}))]);
                 }
@@ -208,7 +208,7 @@ namespace BECore::Match3::Tests {
     TEST(Match3LegalSwapsTest, SeedGivesTheSameBoardOnEveryPlatform) {
         struct Golden {
             uint32_t seed;
-            Vector<std::string> rows;
+            Vector<String> rows;
         };
         const Golden goldens[] = {
             {1337, {"OOYBPOPY", "RYYRGBRB", "PBGOPRYR", "RGRGPYPG", "RPGPOOGY", "BRGGRPGR", "PPYYRBBG", "RBROPBYR"}},

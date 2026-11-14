@@ -44,10 +44,9 @@ namespace BECore::Stress::Tests {
         /// The keys of a one-level JSON line in the order they are written
         Vector<String> KeysInOrder(const String& line) {
             Vector<String> keys;
-            const std::string text(line.c_str(), line.size());
             const std::regex key("\"([A-Za-z0-9]+)\":");
-            for (auto it = std::sregex_iterator(text.begin(), text.end(), key); it != std::sregex_iterator(); ++it) {
-                keys.emplace_back((*it)[1].str().c_str());
+            for (auto it = std::cregex_iterator(line.data(), line.data() + line.size(), key); it != std::cregex_iterator(); ++it) {
+                keys.emplace_back((*it)[1].first, (*it)[1].second);
             }
             return keys;
         }
