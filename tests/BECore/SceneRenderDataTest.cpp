@@ -5,6 +5,7 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneRenderData.h>
 #include <Common/RecordingRenderer.h>
+#include <entt/entt.hpp>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {

@@ -6,14 +6,19 @@
 #include <BECore/Scene/SceneNodeInstance.h>
 #include <Events/SceneEvents.h>
 #include <Generated/Scene.gen.hpp>
+#include <entt/entt.hpp>
 
 namespace BECore {
+
+    Scene::Scene() : _registry(MakeUnique<entt::registry>()) {}
+
+    Scene::~Scene() = default;
 
     void Scene::Initialize() {
         _rootNode = BECore::New<SceneNode>();
         _rootNode->_name = "Root"_intern;
         _rootNode->_scene = this;
-        _rootNode->_entity = _registry.create();
+        _rootNode->_entity = _registry->create();
 
         for (auto& node : _nodes) {
             node->WireToScene(this, _rootNode.Get());
@@ -157,7 +162,7 @@ namespace BECore {
     }
 
     entt::registry& Scene::GetRegistry() {
-        return _registry;
+        return *_registry;
     }
 
     SceneNode& Scene::GetRootNode() {
@@ -177,7 +182,7 @@ namespace BECore {
     IntrusivePtr<SceneNode> Scene::CreateNode(PoolString name, SceneNode* parent) {
         auto node = BECore::New<SceneNode>();
         node->_name = name;
-        node->_entity = _registry.create();
+        node->_entity = _registry->create();
         node->_scene = this;
 
         SceneNode* targetParent = parent ? parent : _rootNode.Get();
@@ -200,7 +205,7 @@ namespace BECore {
             return fail("the scene is not initialized");
         }
         SceneNode* const target = parent ? parent : _rootNode.Get();
-        if (target->_scene != this || !_registry.valid(target->_entity)) {
+        if (target->_scene != this || !_registry->valid(target->_entity)) {
             return fail("the parent is not a node of this scene");
         }
 
@@ -228,7 +233,7 @@ namespace BECore {
     }
 
     bool Scene::IsLiveNode(const SceneNode& node) const {
-        return node._scene == this && _registry.valid(node._entity);
+        return node._scene == this && _registry->valid(node._entity);
     }
 
     bool Scene::MoveNode(SceneNode& node, SceneNode* newParent, size_t index) {
@@ -313,8 +318,8 @@ namespace BECore {
         for (const auto& child : node.GetChildren()) {
             DestroyEntities(*child);
         }
-        if (_registry.valid(node._entity)) {
-            _registry.destroy(node._entity);
+        if (_registry->valid(node._entity)) {
+            _registry->destroy(node._entity);
         }
         node._entity = entt::null;
     }

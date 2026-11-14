@@ -13,7 +13,7 @@
 #include <BECore/Utils/PassKey.h>
 #include <cstddef>
 #include <cstdint>
-#include <entt/entt.hpp>
+#include <entt/entity/fwd.hpp>
 #include <limits>
 
 namespace BECore {
@@ -23,8 +23,8 @@ namespace BECore {
     class Scene : public RefCounted {
         BE_CLASS(Scene, FACTORY_BASE)
     public:
-        Scene() = default;
-        ~Scene() override = default;
+        Scene();
+        ~Scene() override;
 
         void Initialize();
 
@@ -204,7 +204,7 @@ namespace BECore {
         BE_REFLECT_FIELD float _viewHeight = 0.0f;
         BE_REFLECT_FIELD Vector<SceneViewVariant> _viewVariants;
         BE_REFLECT_FIELD Vector<IntrusivePtr<SceneNode>> _nodes;
-        entt::registry _registry;
+        UniquePtr<entt::registry> _registry;  // by pointer so that this header needs no entt.hpp
         IntrusivePtr<SceneNode> _rootNode;
         ViewTransform _viewTransform;   // fit of the view to the output, set by Draw(), read by ScreenToScene*
         int32_t _activeViewIndex = -1;  // index in _viewVariants, -1 the default view; set by Draw()

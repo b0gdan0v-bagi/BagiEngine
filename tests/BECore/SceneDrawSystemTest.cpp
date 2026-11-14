@@ -9,6 +9,7 @@
 #include <BECore/Scene/SceneRenderData.h>
 #include <Common/RecordingRenderer.h>
 #include <Generated/SceneDrawSystemTest.gen.hpp>
+#include <entt/entt.hpp>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {

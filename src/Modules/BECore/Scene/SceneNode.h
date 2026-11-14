@@ -7,7 +7,7 @@
 #include <BECore/Scene/IComponent.h>
 #include <BECore/Types/Types.h>
 #include <cstdint>
-#include <entt/entt.hpp>
+#include <entt/entity/fwd.hpp>
 
 namespace BECore {
 
@@ -35,7 +35,7 @@ namespace BECore {
     class SceneNode : public RefCounted {
         BE_CLASS(SceneNode, FACTORY_BASE, ELEMENT = node)
     public:
-        SceneNode() = default;
+        SceneNode();
         ~SceneNode() override = default;
 
         SceneNode* GetParent() const;
@@ -101,7 +101,7 @@ namespace BECore {
         BE_REFLECT_FIELD PoolString _name;
         BE_REFLECT_FIELD int32_t _layer = 0;
         BE_REFLECT_FIELD PoolString _sourceRef;
-        entt::entity _entity = entt::null;
+        entt::entity _entity;  // entt::null until Scene makes the entity
         Scene* _scene = nullptr;
         SceneNode* _parent = nullptr;
         EditorFlags _editorFlags = EditorFlags::None;
