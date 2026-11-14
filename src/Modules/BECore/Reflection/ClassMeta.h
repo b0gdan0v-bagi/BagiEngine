@@ -63,7 +63,7 @@ namespace BECore {
     template <typename T>
     requires HasReflection<T> consteval ClassMeta GetClassMeta() {
         constexpr auto name = ReflectionTraits<T>::name;
-        return ClassMeta{String::GetHash(name), name};
+        return ClassMeta{StringUtils::GetHash(name), name};
     }
 
 }  // namespace BECore

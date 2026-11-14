@@ -13,7 +13,7 @@
 #include <BECore/Reflection/DataAccessor.h>
 #include <BECore/Reflection/PropertyVisitorDispatch.h>
 #include <BECore/Utils/EnumUtils.h>
-#include <BECore/Utils/String.h>
+#include <BECore/Utils/StringUtils.h>
 #include <EASTL/string_view.h>
 #include <tuple>
 
@@ -149,7 +149,7 @@ eastl::string_view {{ cls.full_qualified_name }}::GetStaticTypeName() {
 // {{ cls.full_qualified_name }}::GetStaticTypeMeta()
 const ::BECore::ClassMeta& {{ cls.full_qualified_name }}::GetStaticTypeMeta() {
     static const ::BECore::ClassMeta meta{
-        ::BECore::String::GetHash(eastl::string_view{"{{ cls.name }}"}),
+        ::BECore::StringUtils::GetHash(eastl::string_view{"{{ cls.name }}"}),
         eastl::string_view{"{{ cls.name }}"}
     };
     return meta;
@@ -218,7 +218,7 @@ size_t {{ cls.full_qualified_name }}::GetStaticFieldCount() {
 // {{ cls.full_qualified_name }}::GetStaticTypeMeta()
 const ::BECore::ClassMeta& {{ cls.full_qualified_name }}::GetStaticTypeMeta() {
     static const ::BECore::ClassMeta meta{
-        ::BECore::String::GetHash(eastl::string_view{"{{ cls.name }}"}),
+        ::BECore::StringUtils::GetHash(eastl::string_view{"{{ cls.name }}"}),
         eastl::string_view{"{{ cls.name }}"},
         eastl::string_view{"{{ cls.icon }}"}
     };

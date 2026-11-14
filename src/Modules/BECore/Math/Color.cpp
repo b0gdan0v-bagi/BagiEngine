@@ -7,7 +7,7 @@ namespace BECore {
             return {};
         }
 
-        const auto& tokens = BECore::String::Split(data, ',');
+        const auto& tokens = BECore::StringUtils::Split(data, ',');
 
         if (tokens.size() != 4) {
             return {};

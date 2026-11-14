@@ -84,7 +84,7 @@ namespace BECore {
 
     std::expected<UIVariantCondition, eastl::string> UIVariantCondition::FromText(eastl::string_view text) {
         UIVariantCondition condition;
-        for (const eastl::string_view rawPart : String::Split(UIText::Trim(text), ConditionSeparator)) {
+        for (const eastl::string_view rawPart : StringUtils::Split(UIText::Trim(text), ConditionSeparator)) {
             const eastl::string_view part = UIText::Trim(rawPart);
             if (part.empty()) {
                 continue;

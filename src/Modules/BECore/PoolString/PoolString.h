@@ -23,7 +23,7 @@ namespace BECore {
         // Специальная обертка для пустой строки, вынесенная отдельно для MSVC
         struct EmptyEntry {
             PoolStringEntry header;
-            constexpr EmptyEntry() : header(BECore::String::GetEmptyHash(), 0) {}
+            constexpr EmptyEntry() : header(BECore::StringUtils::GetEmptyHash(), 0) {}
         };
 
         // Инициализируем пустую запись здесь, чтобы избежать C2131 внутри класса

@@ -21,7 +21,7 @@ namespace BECore {
         }
 
         // Разделяем строку по разделителям (для имен флагов)
-        const auto& flagNames = BECore::String::Split(flagsString, '|');
+        const auto& flagNames = BECore::StringUtils::Split(flagsString, '|');
 
         SDL_WindowFlags result = 0;
         for (const auto& flagName : flagNames) {

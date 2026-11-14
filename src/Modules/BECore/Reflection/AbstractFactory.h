@@ -69,7 +69,7 @@ namespace BECore {
          * @return New instance, or empty pointer if type is not registered.
          */
         BasePtr Create(eastl::string_view name) const {
-            return FindAndCreate(String::GetHash(name));
+            return FindAndCreate(StringUtils::GetHash(name));
         }
 
         /**

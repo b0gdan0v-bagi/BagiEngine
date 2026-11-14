@@ -54,7 +54,7 @@ namespace BECore {
                 return &Details::g_EmptyEntryStore.header;
             }
 
-            const uint64_t hash = String::GetHash(str);
+            const uint64_t hash = StringUtils::GetHash(str);
             SharedLock lock(_mutex);
             return _table.Find(hash, str);
         }
@@ -64,7 +64,7 @@ namespace BECore {
                 return &Details::g_EmptyEntryStore.header;
             }
 
-            const uint64_t hash = String::GetHash(str);
+            const uint64_t hash = StringUtils::GetHash(str);
 
             // 1. Поиск под Shared Lock
             {

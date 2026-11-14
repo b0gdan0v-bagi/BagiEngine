@@ -1,8 +1,8 @@
-#include "String.h"
+#include "StringUtils.h"
 
 namespace BECore {
 
-    String::SmallStrVector String::Split(eastl::string_view str, char delimiter) {
+    StringUtils::SmallStrVector StringUtils::Split(eastl::string_view str, char delimiter) {
         SmallStrVector result;
 
         if (str.empty()) {

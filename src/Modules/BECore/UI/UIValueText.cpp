@@ -126,7 +126,7 @@ namespace BECore::UIText {
     }
 
     std::optional<Vec2> ParseFraction2(eastl::string_view text) {
-        const auto parts = String::Split(Trim(text), ',');
+        const auto parts = StringUtils::Split(Trim(text), ',');
         if (parts.size() != FractionPartCount) {
             return std::nullopt;
         }
@@ -155,7 +155,7 @@ namespace BECore::UIText {
     }
 
     std::optional<UIEdges> ParseEdges(eastl::string_view text) {
-        const auto parts = String::Split(Trim(text), ',');
+        const auto parts = StringUtils::Split(Trim(text), ',');
         if (parts.size() == 1) {
             const auto all = ParseFloat(parts[0]);
             if (!all) {
@@ -184,7 +184,7 @@ namespace BECore::UIText {
     }
 
     std::optional<UICorners> ParseCorners(eastl::string_view text) {
-        const auto parts = String::Split(Trim(text), ',');
+        const auto parts = StringUtils::Split(Trim(text), ',');
         if (parts.size() != 1 && parts.size() != CornerCount) {
             return std::nullopt;
         }
@@ -304,7 +304,7 @@ namespace BECore::UIText {
             }
             return Color{*r, *g, *b, *a};
         }
-        const auto parts = String::Split(text, ',');
+        const auto parts = StringUtils::Split(text, ',');
         if (parts.size() != RgbaPartCount) {
             return std::nullopt;
         }

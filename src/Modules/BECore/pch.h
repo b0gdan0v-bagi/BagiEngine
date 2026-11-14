@@ -54,7 +54,7 @@
 #include <BECore/Threading/Thread.h>
 
 // Core
-#include <BECore/Utils/String.h>
+#include <BECore/Utils/StringUtils.h>
 #include <BECore/Utils/Singleton.h>
 #include <BECore/Utils/PassKey.h>
 #include <BECore/PoolString/PoolString.h>

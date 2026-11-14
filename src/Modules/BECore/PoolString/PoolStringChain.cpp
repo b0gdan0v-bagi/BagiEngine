@@ -131,13 +131,13 @@ namespace BECore {
             return _storage.single.HashValue();
         }
         if (_mode == Mode::Literal) {
-            return String::GetHash(eastl::string_view(_storage.view.p, _storage.view.s));
+            return StringUtils::GetHash(eastl::string_view(_storage.view.p, _storage.view.s));
         }
         if (_mode == Mode::Empty) {
-            return String::GetEmptyHash();
+            return StringUtils::GetEmptyHash();
         }
 
-        uint64_t hash = String::hashOffset;
+        uint64_t hash = StringUtils::hashOffset;
         for (uint8_t i = 0; i < _count; ++i) {
             const auto& v = _storage.compound[i];
             if (v.IsInt()) {

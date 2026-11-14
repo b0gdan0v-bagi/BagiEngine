@@ -2,7 +2,7 @@
 
 namespace BECore {
 
-    class String {
+    class StringUtils {
     public:
         using SmallStrVector = eastl::fixed_vector<eastl::string_view, 4>;
 
