@@ -12,7 +12,7 @@ namespace BECore {
     }
 
     Optional<SeatedGameInfo> SeatedGameRegistry::Find(StringView name) const {
-        const auto it = _games.find(String(name));
+        const auto it = _games.find(name);
         if (it == _games.end()) {
             return std::nullopt;
         }
@@ -20,7 +20,7 @@ namespace BECore {
     }
 
     UniquePtr<ISeatedGame> SeatedGameRegistry::Create(StringView name) const {
-        const auto it = _games.find(String(name));
+        const auto it = _games.find(name);
         if (it == _games.end()) {
             return nullptr;
         }

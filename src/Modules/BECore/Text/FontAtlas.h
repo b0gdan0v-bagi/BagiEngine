@@ -83,7 +83,7 @@ namespace BECore {
         int _pixelSize = 0;
         int _outlinePixels = 0;
         uint32_t _pageSize = 0;
-        eastl::hash_map<uint32_t, AtlasGlyph> _glyphs;
+        HashMap<uint32_t, AtlasGlyph> _glyphs;
         Vector<IntrusivePtr<ITexture>> _pages;
     };
 

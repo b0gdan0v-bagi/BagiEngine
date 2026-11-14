@@ -46,7 +46,7 @@ namespace BECore {
             size_t position = 0;
         };
 
-        eastl::hash_map<Rml::FileHandle, OpenFile> _files;
+        HashMap<Rml::FileHandle, OpenFile> _files;
         Rml::FileHandle _nextHandle = 1;
         Vector<RmlUiFileStamp> _recorded;
         bool _isRecording = false;

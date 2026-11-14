@@ -32,11 +32,11 @@ namespace BECore {
         : _registry(registry), _settings(settings), _random(std::move(random)), _sink(std::move(sink)), _serverJoinBudget(settings.serverJoinBurst, RefillRate(settings.serverJoinRefill)) {}
 
     bool RoomHub::HasRoom(StringView code) const {
-        return _rooms.find(String(code)) != _rooms.end();
+        return _rooms.find(code) != _rooms.end();
     }
 
     RoomHub::RoomEntry* RoomHub::FindRoom(StringView code) {
-        const auto found = _rooms.find(String(code));
+        const auto found = _rooms.find(code);
         return found == _rooms.end() ? nullptr : found->second.get();
     }
 

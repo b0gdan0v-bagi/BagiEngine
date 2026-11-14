@@ -48,7 +48,7 @@ namespace BECore {
             SeatedGameFactory factory;
         };
 
-        eastl::hash_map<String, Entry> _games;
+        HashMap<String, Entry> _games;
     };
 
 }  // namespace BECore

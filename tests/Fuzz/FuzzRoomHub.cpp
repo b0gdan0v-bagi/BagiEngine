@@ -260,8 +260,8 @@ namespace BECore::Fuzz {
 
             // The registry first (the hub keeps a reference), the hub last
             SeatedGameRegistry _registry;
-            eastl::map<ConnectionId, ConnectionModel> _connections;
-            eastl::hash_map<String, String> _tokenOwners;
+            Map<ConnectionId, ConnectionModel> _connections;
+            HashMap<String, String> _tokenOwners;
             eastl::hash_set<String> _publicRooms;  ///< The codes that were answered to a create_room with "public":true
             RoomTime _now = kStart;
             RoomHub _hub;

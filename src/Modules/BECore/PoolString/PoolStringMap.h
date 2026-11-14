@@ -73,9 +73,9 @@ namespace BECore {
 
     // Класс-обёртка для unordered_map с методом Find
     template <typename T>
-    class UnorderedPoolMap : public eastl::unordered_map<PoolString, T, PoolStringHasher, PoolStringEquality> {
+    class UnorderedPoolMap : public HashMap<PoolString, T, PoolStringHasher, PoolStringEquality> {
     public:
-        using Base = eastl::unordered_map<PoolString, T, PoolStringHasher, PoolStringEquality>;
+        using Base = HashMap<PoolString, T, PoolStringHasher, PoolStringEquality>;
         using Base::Base;
 
         // Гетерогенный поиск без необходимости указывать функторы
@@ -91,9 +91,9 @@ namespace BECore {
 
     // Класс-обёртка для map с методом Find
     template <typename T>
-    class PoolMap : public eastl::map<PoolString, T, eastl::less<PoolString>> {
+    class PoolMap : public Map<PoolString, T, eastl::less<PoolString>> {
     public:
-        using Base = eastl::map<PoolString, T, eastl::less<PoolString>>;
+        using Base = Map<PoolString, T, eastl::less<PoolString>>;
         using Base::Base;
 
         // Гетерогенный поиск без необходимости указывать компаратор

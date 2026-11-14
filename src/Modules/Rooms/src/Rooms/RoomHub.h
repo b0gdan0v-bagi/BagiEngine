@@ -155,9 +155,9 @@ namespace BECore {
 
         RateLimiter _serverJoinBudget;
         uint64_t _roomsCreated = 0;
-        eastl::hash_map<String, AddressState> _addresses;
-        eastl::hash_map<ConnectionId, Connection> _connections;
-        eastl::hash_map<String, UniquePtr<RoomEntry>> _rooms;
+        HashMap<String, AddressState> _addresses;
+        HashMap<ConnectionId, Connection> _connections;
+        HashMap<String, UniquePtr<RoomEntry>> _rooms;
     };
 
 }  // namespace BECore

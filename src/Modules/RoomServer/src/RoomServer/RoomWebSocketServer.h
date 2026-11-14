@@ -91,7 +91,7 @@ namespace BECore {
             RoomTime lastLife;           // when anything last arrived
             bool pingSent = false;       // a ping went out since then
         };
-        using LivenessMap = eastl::hash_map<ConnectionId, Liveness>;
+        using LivenessMap = HashMap<ConnectionId, Liveness>;
 
         [[nodiscard]] WebSocketHandler MakeHandler();
         void RunHub();
@@ -120,9 +120,9 @@ namespace BECore {
         const RandomFn _random;
 
         Mutex _connectionsMutex{BE_LOCK_SITE("Room connections")};
-        eastl::hash_map<ConnectionId, eastl::shared_ptr<WebSocketConnection>> _connections;  // open connections by id; guarded by _connectionsMutex
-        bool _draining = false;                                                              // Stop() is telling the clients; guarded by _connectionsMutex
-        ConditionVariable _connectionsChanged;                                               // a connection ended (with _connectionsMutex); Stop() waits here during the drain
+        HashMap<ConnectionId, eastl::shared_ptr<WebSocketConnection>> _connections;  // open connections by id; guarded by _connectionsMutex
+        bool _draining = false;                                                      // Stop() is telling the clients; guarded by _connectionsMutex
+        ConditionVariable _connectionsChanged;                                       // a connection ended (with _connectionsMutex); Stop() waits here during the drain
 
         Mutex _queueMutex{BE_LOCK_SITE("Room event queue")};  // guards the queue, its byte count and _stopping
         ConditionVariable _hubWake;                           // the hub thread waits here for an event, the tick or the stop

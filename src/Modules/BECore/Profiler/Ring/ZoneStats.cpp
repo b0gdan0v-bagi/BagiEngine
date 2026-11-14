@@ -85,7 +85,7 @@ namespace BECore {
             return rows;
         }
 
-        eastl::hash_map<const ProfileSite*, size_t> rowOfSite;
+        HashMap<const ProfileSite*, size_t> rowOfSite;
         Vector<Vector<double>> durationsOfRow;
         Vector<uint64_t> childTicks;
         Vector<size_t> stack;

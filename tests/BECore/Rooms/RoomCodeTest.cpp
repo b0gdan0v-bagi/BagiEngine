@@ -45,7 +45,7 @@ namespace BECore::Tests {
 
     TEST(RoomCodeTest, GeneratedCodesHaveTheLengthAndTheAlphabet) {
         const RandomFn random = MakeSequence(1);
-        eastl::hash_map<char, int> seen;
+        HashMap<char, int> seen;
         for (int i = 0; i < 3000; ++i) {
             const String code = GenerateRoomCode(random);
             ASSERT_EQ(code.size(), RoomLimits::kRoomCodeLength) << code.c_str();
@@ -132,7 +132,7 @@ namespace BECore::Tests {
 
     TEST(RoomCodeTest, TokensDiffer) {
         const RandomFn random = MakeSequence(21);
-        eastl::hash_map<String, int> seen;
+        HashMap<String, int> seen;
         for (int i = 0; i < 500; ++i) {
             ++seen[GenerateToken(random)];
         }

@@ -250,7 +250,7 @@ namespace BECore::Tests {
             players[1].health = 7;
             players[2].isAlive = false;
 
-            const eastl::map<String, int32_t> scores = {{"alpha", 1}, {"bravo", 2}, {"charlie", 3}};
+            const Map<String, int32_t> scores = {{"alpha", 1}, {"bravo", 2}, {"charlie", 3}};
 
             BinarySerializer serializer;
             if (serializer.BeginObject("Doc")) {
@@ -272,7 +272,7 @@ namespace BECore::Tests {
             Ser::Load(deserializer, state, "state");
             Vector<TestData::Player> players;
             Ser::Load(deserializer, players, "players");
-            eastl::map<String, int32_t> scores;
+            Map<String, int32_t> scores;
             Ser::Load(deserializer, scores, "scores");
             String title;
             deserializer.ReadAttribute("title", title);
@@ -442,13 +442,13 @@ namespace BECore::Tests {
     TEST(ReflectionTest, BinaryContainers) {
         {
             SCOPED_TRACE("eastl::map");
-            const eastl::map<String, int32_t> original = {{"charlie", 3}, {"alpha", 1}, {"bravo", 2}};
-            ExpectBinaryRoundTrip(original, eastl::map<String, int32_t>{{"stale", 99}});
+            const Map<String, int32_t> original = {{"charlie", 3}, {"alpha", 1}, {"bravo", 2}};
+            ExpectBinaryRoundTrip(original, Map<String, int32_t>{{"stale", 99}});
         }
         {
             SCOPED_TRACE("eastl::unordered_map");
-            const eastl::unordered_map<String, int32_t> original = {{"zebra", 26}, {"apple", 1}, {"mango", 13}};
-            ExpectBinaryRoundTrip(original, eastl::unordered_map<String, int32_t>{{"stale", 99}});
+            const HashMap<String, int32_t> original = {{"zebra", 26}, {"apple", 1}, {"mango", 13}};
+            ExpectBinaryRoundTrip(original, HashMap<String, int32_t>{{"stale", 99}});
         }
         {
             SCOPED_TRACE("eastl::fixed_vector");
@@ -539,7 +539,7 @@ namespace BECore::Tests {
         // Map whose values are reflected objects: "key" and the object's own fields share one element
         {
             SCOPED_TRACE("eastl::map<string, Player>");
-            eastl::map<String, TestData::Player> original;
+            Map<String, TestData::Player> original;
             original["bob"].health = 10;
             original["bob"].name = PoolString::Intern("Bob");
             original["alice"].health = 20;
@@ -547,7 +547,7 @@ namespace BECore::Tests {
 
             const ByteBuffer data = SaveToBinary("Roster", "players", original);
 
-            eastl::map<String, TestData::Player> loaded;
+            Map<String, TestData::Player> loaded;
             ASSERT_NO_FATAL_FAILURE(LoadFromBinary(data, "Roster", "players", loaded));
 
             ASSERT_EQ(loaded.size(), original.size());
@@ -1270,14 +1270,14 @@ namespace BECore::Tests {
     }
 
     TEST(ReflectionTest, MapSerialization) {
-        eastl::map<String, int32_t> original;
+        Map<String, int32_t> original;
         original["charlie"] = 3;
         original["alpha"] = 1;
         original["bravo"] = 2;
 
         const String xml = SaveToXml("MapTest", "scores", original);
 
-        eastl::map<String, int32_t> loaded;
+        Map<String, int32_t> loaded;
         ASSERT_NO_FATAL_FAILURE(LoadFromXml(xml, "MapTest", "scores", loaded));
 
         ASSERT_EQ(loaded.size(), original.size());
@@ -1453,7 +1453,7 @@ namespace BECore::Tests {
     }
 
     TEST(ReflectionTest, UnorderedMapSortedKeys) {
-        eastl::unordered_map<String, int32_t> original;
+        HashMap<String, int32_t> original;
         original["zebra"] = 26;
         original["apple"] = 1;
         original["mango"] = 13;
@@ -1471,7 +1471,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(posApple < posMango && posMango < posZebra) << "keys not sorted: apple=" << posApple << ", mango=" << posMango << ", zebra=" << posZebra;
 
         // The round-trip must still work
-        eastl::unordered_map<String, int32_t> loaded;
+        HashMap<String, int32_t> loaded;
         ASSERT_NO_FATAL_FAILURE(LoadFromXml(xml, "MapSortTest", "entries", loaded));
 
         ASSERT_EQ(loaded.size(), original.size());

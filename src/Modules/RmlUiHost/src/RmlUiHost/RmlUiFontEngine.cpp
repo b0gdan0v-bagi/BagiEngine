@@ -243,7 +243,7 @@ namespace BECore {
         const bool kerning = IsKerningEnabled(textShapingContext);
 
         // One mesh per page that the text touches, in the order the pages first appear
-        eastl::hash_map<int, size_t> meshOfPage;
+        HashMap<int, size_t> meshOfPage;
         meshList.clear();
 
         uint32_t previous = 0;

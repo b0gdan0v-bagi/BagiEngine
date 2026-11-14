@@ -148,7 +148,7 @@ namespace BECore {
 
         // Main thread only
         eastl::deque<UniquePtr<Request>> _inbox;  // taken from _queue, in order, waiting for the barrier
-        eastl::hash_map<String, HandlerEntry> _handlers;
+        HashMap<String, HandlerEntry> _handlers;
         UniquePtr<ControlCall> _pending;
         uint32_t _pendingFramesLeft = 0;
         double _pendingSeconds = kDefaultStepSeconds;

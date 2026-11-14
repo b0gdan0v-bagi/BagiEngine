@@ -32,7 +32,7 @@ namespace BECore {
             constexpr StringView kForwardedFor = "x-forwarded-for";
         }  // namespace HeaderNames
 
-        using Headers = eastl::hash_map<String, String>;
+        using Headers = HashMap<String, String>;
 
         char AsciiLower(char letter) {
             return (letter >= 'A' && letter <= 'Z') ? static_cast<char>(letter - 'A' + 'a') : letter;
@@ -249,7 +249,7 @@ namespace BECore {
         }
 
         const String* FindHeader(const Headers& headers, StringView name) {
-            const auto found = headers.find(String(name.data(), name.size()));
+            const auto found = headers.find(name);
             return found == headers.end() ? nullptr : &found->second;
         }
 

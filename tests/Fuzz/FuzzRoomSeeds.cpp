@@ -225,7 +225,7 @@ namespace BECore::Fuzz {
             RoomHub _hub;
             RoomTime _now{std::chrono::seconds(1000)};
             FuzzBytes _bytes;
-            eastl::map<uint8_t, Known> _known;
+            Map<uint8_t, Known> _known;
         };
 
         /// Three humans in a room, a seat chosen, a start, and rounds of plays by whoever has an action

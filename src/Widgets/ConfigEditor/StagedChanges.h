@@ -69,7 +69,7 @@ namespace BECore {
             pugi::xml_node textNode;
         };
 
-        eastl::unordered_map<String, Entry> _changes;
+        HashMap<String, Entry> _changes;
     };
 
 }  // namespace BECore

@@ -15,7 +15,7 @@ namespace BECore {
         using TextBuf = Array<char, k_textBufSize>;
 
         // Persistent char buffers for InputText fields, keyed by widgetId
-        eastl::unordered_map<String, TextBuf> s_textBuffers;
+        HashMap<String, TextBuf> s_textBuffers;
 
         char* GetOrCreateTextBuffer(const String& widgetId, StringView initialValue) {
             auto it = s_textBuffers.find(widgetId);

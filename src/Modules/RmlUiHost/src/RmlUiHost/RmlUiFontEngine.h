@@ -82,7 +82,7 @@ namespace BECore {
             const Face* face = nullptr;
             int size = 0;
             Rml::FontMetrics metrics{};
-            eastl::hash_map<char32_t, Glyph> glyphs;
+            HashMap<char32_t, Glyph> glyphs;
             Vector<UniquePtr<Page>> pages;
         };
 

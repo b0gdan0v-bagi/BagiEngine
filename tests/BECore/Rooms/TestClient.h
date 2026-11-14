@@ -148,7 +148,7 @@ namespace BECore::Tests {
         }
 
         /// Every client the harness has made, with everything each was sent
-        [[nodiscard]] const eastl::map<ConnectionId, TestClient>& Clients() const {
+        [[nodiscard]] const Map<ConnectionId, TestClient>& Clients() const {
             return _clients;
         }
 
@@ -315,9 +315,9 @@ namespace BECore::Tests {
         }
 
         // Declaration order matters: the hub (and with it the games) is destroyed before the maps its games unregister from
-        eastl::hash_map<String, FakeSeatedGame*> _games;
+        HashMap<String, FakeSeatedGame*> _games;
         // A node-based map: a test may hold a TestClient& while other clients connect
-        eastl::map<ConnectionId, TestClient> _clients;
+        Map<ConnectionId, TestClient> _clients;
         SeatedGameRegistry _registry;
         RoomHub _hub;
         RoomTime _now{std::chrono::seconds(1000)};

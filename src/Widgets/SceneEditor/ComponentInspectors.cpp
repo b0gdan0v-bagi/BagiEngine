@@ -19,8 +19,8 @@ namespace BECore {
 
     namespace {
 
-        eastl::unordered_map<uint64_t, InspectorFunc>& GetRegistry() {
-            static eastl::unordered_map<uint64_t, InspectorFunc> reg;
+        HashMap<uint64_t, InspectorFunc>& GetRegistry() {
+            static HashMap<uint64_t, InspectorFunc> reg;
             return reg;
         }
 

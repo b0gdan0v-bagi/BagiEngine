@@ -113,7 +113,7 @@ namespace BECore {
         }
 
         StringView _debugName = ResolveDebugName();
-        eastl::hash_map<uint64_t, CreatorFunc> _creators;
+        HashMap<uint64_t, CreatorFunc> _creators;
         Vector<ClassMeta> _metas;
     };
 

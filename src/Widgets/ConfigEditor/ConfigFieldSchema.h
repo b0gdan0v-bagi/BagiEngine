@@ -95,7 +95,7 @@ namespace BECore {
     private:
         static String MakeKey(PoolString configName, StringView attrPath);
 
-        eastl::unordered_map<String, FieldHint> _hints;
+        HashMap<String, FieldHint> _hints;
     };
 
 }  // namespace BECore

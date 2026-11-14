@@ -22,7 +22,7 @@ namespace BECore::Stress::Tests {
         /// Feeds the controller the cost of every frame it asks for until it is done (or @p frameLimit frames went)
         RampRun Drive(RampController& controller, const CostOf& cost, uint32_t frameLimit = 100000) {
             RampRun run;
-            eastl::hash_map<uint32_t, uint32_t> visits;
+            HashMap<uint32_t, uint32_t> visits;
             uint32_t shown = 0;
             for (uint32_t frame = 0; frame < frameLimit && !controller.IsDone(); ++frame) {
                 const uint32_t count = controller.GetCount();

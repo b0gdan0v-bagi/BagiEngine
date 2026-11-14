@@ -2668,7 +2668,7 @@ namespace BECore {
             Vector<WebNode> _nodes;
             Vector<Attrs> _baseAttrs;
             eastl::hash_set<String> _usedNames;
-            eastl::hash_map<String, int> _nextNameSuffix;  ///< per tag, where UniqueName goes on counting
+            HashMap<String, int> _nextNameSuffix;  ///< per tag, where UniqueName goes on counting
             size_t _cascadeWork = 0;
         };
 

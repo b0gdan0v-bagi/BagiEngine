@@ -103,7 +103,7 @@ namespace BECore::Fuzz {
                 FUZZ_CHECK(depth <= BinaryFormat::MaxDepth);
 
                 Vector<BinaryFormat::EntryView> entries;
-                eastl::hash_map<StringView, LastEntries> last;
+                HashMap<StringView, LastEntries> last;
                 for (size_t position = begin; position < end;) {
                     BinaryFormat::EntryView entry;
                     FUZZ_CHECK(BinaryFormat::ParseEntry(_data, position, end, entry));
