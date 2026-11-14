@@ -1,8 +1,8 @@
 #pragma once
 
-#include <BECore/Utils/EnumUtils.h>
 #include <BECore/Reflection/IPropertyVisitor.h>
 #include <BECore/Reflection/SerializationTraits.h>
+#include <BECore/Utils/EnumUtils.h>
 #include <cstdio>
 
 namespace BECore {
