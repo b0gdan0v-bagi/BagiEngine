@@ -34,20 +34,25 @@ Per-machine settings go in `CMakeUserPresets.json` (git-ignored). Without preset
 
 `python3 CI/scripts/time_trace_report.py --build build/macos-time-trace [--top N] [--json] [--only tests/]` reads those traces: CPU seconds (`Total ExecuteCompiler`, the figure that holds under load; the wall time is taken with `time`), the PCH compile, the slowest TUs, the headers by **inclusive** parse time summed over TUs (a header's time contains everything it includes, so the rows overlap and are not added up; a header in the PCH is listed apart, once), the slowest template instantiations; `--only` keeps the TUs whose trace path contains the text.
 
-**Baseline, 2026-11-14** (`macos-time-trace`, Apple M4 Pro, 14 cores, load average 2.9 before the build, no other build running; `cmake --build --preset macos-time-trace --target BagiEngineTests StressTests` from an empty folder, 1006 steps; the clock moves with the load, compare the CPU figure):
+**Protocol of a measurement** (slice 4 of `include-hygiene`; Apple M4 Pro, 14 cores): from `engine/`, `uptime` (write the load down), then `rm -rf build/macos-time-trace && cmake --preset macos-time-trace && time cmake --build --preset macos-time-trace --target BagiEngineTests StressTests`, then the report with `--top 30`, with `--json`, and the same with `--only tests/`. The figure that counts is the CPU total; wall time is written down and never decides (the clock moves with the load). The noise **N** is the difference of two clean builds of the same tree. **The rule:** a step is kept only if the CPU total falls by at least `max(1 % of B0, 2 x N)` against the last kept state; otherwise it is dropped (not committed) and its row below says so with the numbers. A step is **game-safe**: the game (`cmake --preset macos-debug`, `BagiMahjong MahjongTests`) builds and passes with no game file edited.
 
-| | all | `--only tests/` (255 TUs) |
+| | origin (slice 1, before any header change; load 2.9) | B0 (after slices 2 and 3; load 1.7 before the first build, the second ran right after it) |
 |---|---|---|
-| wall time | 35 s | |
-| compiler time (`Total ExecuteCompiler`) | 487 s (933 TUs; `user` of the build 398 s) | 277 s |
-| Frontend / Backend | 402 s / 72 s | 228 s / 44 s |
-| inside the Frontend (inclusive, overlapping): `Source` / `ParseClass` / `InstantiateClass` / `InstantiateFunction` | 87 / 57 / 96 / 229 s | 55 / 40 / 61 / 125 s |
-| PCH compile (BECore; the SDL one) | 1.1 s (0.15 s) | |
-| slowest TUs | `ContentMigrationAfterTest` 3.4 s, `ControlServiceTest` 3.1, `UIControlApiTest` 3.0, `UIWebTest` 2.5, `SDLCaptureTest` 2.3 | the same |
+| CPU total, all (TUs) | 487 s (933) | 533.1 and 520.5 s (933); N = 12.6 s, so the rule needs 25.2 s |
+| `--only tests/` (255 TUs) | 277 s | 302.7 and 295.1 s |
+| Frontend / Backend | 402 / 72 s | 444 / 74 and 433 / 73 s |
+| inside the Frontend, inclusive: `Source` / `ParseClass` / `InstantiateClass` / `InstantiateFunction` | 87 / 57 / 96 / 229 s | 100 / 65 / 106 / 252 and 96 / 62 / 103 / 245 s |
+| `ReadAST` (the PCH loaded per TU) | 7.2 s = 1.5 % | 8.7 and 8.2 s = 1.6 % |
+| PCH compile (BECore) | 1.1 s | 1.2 s |
+| wall time | 35 s | 38.5 and 37.7 s |
+| slowest TUs | `ContentMigrationAfterTest` 3.4 s, `ControlServiceTest` 3.1 | the same, 3.3 to 3.6 and 3.1 to 3.2 |
 
-Headers outside the PCH, inclusive, summed over TUs (s, TUs): `GameManager/CoreManager.h` 30 (156), `gtest/gtest.h` 28 (237; its `gtest-death-test`, `-matchers`, `-printers` 10 to 12 each), `tests/Common/EngineEnvironment.h` 10.5 (88), `tests/Common/Printers.h` 8.9 (140), `Control/Json.h` with `nlohmann/json.hpp` 8.8 (60). Instantiations (s, TUs): `entt::basic_dispatcher<>::trigger<FlushLogsEvent>` 36 and `EventBase<FlushLogsEvent>::Emit` 21 (562, from the inline `Logger::Fatal` in `Logger/Logger.h`, parsed again in every TU), `entt::locator<meta_ctx>::value_or` 32 (562, inside that chain), `nlohmann::basic_json<>::parse<const char*>` 10 (60), `ValueArray<bool, bool>` of gtest 4.9 (236).
+Slices 2 and 3 (standalone headers: a header names what it uses) saved no compile time: B0 is 7 to 9 % above the origin, more than N, and the cause was not isolated (the origin was taken on another day). What costs, at B0 (s, TUs): `CoreManager.h` 33 (156), `gtest/gtest.h` 31 (237), `EngineEnvironment.h` 11 (88), `Printers.h` 10 (140), `Control/Json.h` with `nlohmann/json.hpp` 10 (60); `entt::basic_dispatcher<>::trigger<FlushLogsEvent>` 40 and `EventBase<FlushLogsEvent>::Emit` 23 and `entt::locator<meta_ctx>::value_or` 35 (562 TUs each, from the inline `Logger::Fatal`), `nlohmann::basic_json<>::parse<const char*>` 10 (60). The Frontend is 83 % of the compile time and template instantiation is the largest part of it, not header parsing.
 
-Conclusion: the Frontend is 83 % of the compile time and template instantiation is the largest part of it (229 s of 402), not header parsing (87 s); the headers that cost most are `CoreManager.h` (it pulls the managers and EnTT) and gtest in the tests, and one inline `Logger::Fatal` instantiates the EnTT dispatcher in every TU. Slice 4: move that call out of the header, cut what `CoreManager.h` pulls in, then the test side (json comparison helper, gtest printers); the PCH itself is cheap (1.1 s).
+Steps of slice 4 (CPU total of the build after the step; "kept" rows are commits `WP k/9`):
+
+| step | CPU s | tests CPU s | wall s | kept or dropped |
+|---|---|---|---|---|
 
 ## Sanitizers and fuzzing
 

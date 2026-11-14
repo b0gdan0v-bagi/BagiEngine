@@ -41,13 +41,13 @@ def make_build(tmp_path: Path) -> Path:
         build,
         "src/CMakeFiles/Mod.dir/A.cpp.json",
         source("/inc/Own.h", 100, 2_100) + source("/inc/Own.h", 3_000, 4_000) + source("/inc/Other.h", 5_000, 6_000)
-        + [total("ExecuteCompiler", 3_000_000), total("Frontend", 2_000_000), total("Backend", 1_000_000), total("Source", 1_500_000)]
+        + [total("ExecuteCompiler", 3_000_000), total("Frontend", 2_000_000), total("Backend", 1_000_000), total("Source", 1_500_000), total("ReadAST", 400_000)]
         + [item("InstantiateFunction", "std::vector<int>::push_back", 700_000), item("ParseClass", "Foo", 100_000)],
     )
     write_trace(
         build,
         "tests/CMakeFiles/T.dir/BTest.cpp.json",
-        source("/inc/Own.h", 0, 500) + [total("ExecuteCompiler", 7_000_000), item("InstantiateFunction", "std::vector<int>::push_back", 300_000)],
+        source("/inc/Own.h", 0, 500) + [total("ExecuteCompiler", 7_000_000), total("ReadAST", 600_000), item("InstantiateFunction", "std::vector<int>::push_back", 300_000)],
     )
     (build / "compile_commands.json").write_text("[]")
     (build / "other.json").write_text('{"a": 1}')
@@ -71,6 +71,15 @@ def test_report_counts_tus_cpu_and_pch(tmp_path):
     assert result["parts_seconds"]["Source"] == 1.5
     assert [entry["seconds"] for entry in result["pch"]] == [5.0]
     assert result["slowest_tus"][0]["tu"] == "tests/CMakeFiles/T.dir/BTest.cpp.json"
+
+
+def test_read_ast_is_summed_over_the_tus_with_its_share_of_the_cpu_total(tmp_path):
+    build = make_build(tmp_path)
+    result = report.build_report(report.collect(build, "", 1), 5)
+    assert abs(result["read_ast_seconds"] - 1.0) < 1e-9
+    assert abs(result["read_ast_percent"] - 1.0 / 15.0 * 100.0) < 1e-9
+    only = report.build_report(report.collect(build, "tests/", 1), 5)
+    assert abs(only["read_ast_seconds"] - 0.6) < 1e-9
 
 
 def test_headers_are_summed_over_tus_with_their_count(tmp_path):
@@ -107,6 +116,7 @@ def test_main_prints_text_and_json(tmp_path, capsys):
     assert report.main(["--build", str(build), "--top", "3", "--jobs", "1"]) == 0
     text = capsys.readouterr().out
     assert "PCH compile: 5.00 s" in text
+    assert "ReadAST (the PCH loaded into the TUs): 1.0 s = 6.7 % of the CPU total" in text
     assert "Slowest TUs" in text
     assert report.main(["--build", str(build), "--json", "--jobs", "1"]) == 0
     assert json.loads(capsys.readouterr().out)["tus"] == 2

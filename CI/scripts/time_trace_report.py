@@ -12,7 +12,7 @@ A TU is named by the path of its trace file relative to the build folder.
 The report holds: the number of TUs and the sum of their `Total ExecuteCompiler` (the time of the compiler process: close to CPU seconds
 and steadier than the wall time, which is taken with `time`; it grows a little when the cores are oversubscribed), the sums of `Total
 Frontend` and `Total Backend`, the sums of `Total Source` (parsing of included files), `Total ParseClass`, `Total InstantiateClass` and
-`Total InstantiateFunction` over the TUs, the PCH compile, the slowest TUs, the headers with the largest **inclusive** `Source` time and
+`Total InstantiateFunction` over the TUs, `Total ReadAST` (the load of the PCH into each TU) with its share of the CPU total, the PCH compile, the slowest TUs, the headers with the largest **inclusive** `Source` time and
 the slowest `ParseClass`, `InstantiateClass` and `InstantiateFunction` names. Inclusive means the time of the header together with
 everything it includes, so the lists overlap (a header's total contains the headers below it, an instantiation contains the ones it
 causes) and must not be added up. A header is summed over all TUs and shown with the number of TUs that parse it: a header the PCH holds
@@ -36,6 +36,8 @@ from pathlib import Path
 PCH_MARK = "cmake_pch"
 TEMPLATE_EVENTS = ("ParseClass", "InstantiateClass", "InstantiateFunction")
 PARTS = ("Source", *TEMPLATE_EVENTS)
+READ_AST = "ReadAST"
+PERCENT = 100.0
 POOL_THRESHOLD = 32
 MICROSECONDS = 1_000_000.0
 
@@ -64,11 +66,11 @@ def pair_source_events(events: list[dict]) -> dict[str, int]:
 def summarize(events: list[dict]) -> dict:
     """One trace as a small dict: the totals, the headers and the template items (all in microseconds)."""
     totals = {"execute": 0, "frontend": 0, "backend": 0}
-    for kind in PARTS:
+    for kind in (*PARTS, READ_AST):
         totals[kind] = 0
     fallback = {"execute": 0, "frontend": 0, "backend": 0}
     wanted = {"Total ExecuteCompiler": "execute", "Total Frontend": "frontend", "Total Backend": "backend"}
-    wanted.update({f"Total {kind}": kind for kind in PARTS})
+    wanted.update({f"Total {kind}": kind for kind in (*PARTS, READ_AST)})
     plain = {"ExecuteCompiler": "execute", "Frontend": "frontend", "Backend": "backend"}
     templates: dict[tuple[str, str], int] = defaultdict(int)
     for event in events:
@@ -170,13 +172,17 @@ def build_report(traces: list[dict], top: int) -> dict:
         return sum(t["totals"][key] for t in items) / MICROSECONDS
 
     slowest = sorted(units, key=lambda t: -t["totals"]["execute"])[:top]
+    cpu = seconds(traces, "execute")
+    read_ast = seconds(units, READ_AST)
     return {
         "tus": len(units),
-        "cpu_seconds": seconds(traces, "execute"),
+        "cpu_seconds": cpu,
         "tu_cpu_seconds": seconds(units, "execute"),
         "frontend_seconds": seconds(traces, "frontend"),
         "backend_seconds": seconds(traces, "backend"),
         "parts_seconds": {kind: seconds(units, kind) for kind in PARTS},
+        "read_ast_seconds": read_ast,
+        "read_ast_percent": read_ast / cpu * PERCENT if cpu > 0 else 0.0,
         "pch": [{"trace": t["path"], "seconds": t["totals"]["execute"] / MICROSECONDS} for t in pchs],
         "slowest_tus": [{"tu": t["path"], "seconds": t["totals"]["execute"] / MICROSECONDS} for t in slowest],
         "headers": top_headers(units, top),
@@ -196,6 +202,7 @@ def format_report(report: dict, only: str) -> str:
     lines.append(f"Frontend: {report['frontend_seconds']:.1f} s   Backend: {report['backend_seconds']:.1f} s")
     parts = report["parts_seconds"]
     lines.append("Inside the Frontend of the TUs (inclusive, the parts overlap): " + "   ".join(f"{k}: {v:.1f} s" for k, v in parts.items()))
+    lines.append(f"ReadAST (the PCH loaded into the TUs): {report['read_ast_seconds']:.1f} s = {report['read_ast_percent']:.1f} % of the CPU total")
     if report["pch"]:
         for entry in report["pch"]:
             lines.append(f"PCH compile: {entry['seconds']:.2f} s   {entry['trace']}")
