@@ -31,6 +31,8 @@ include(${CMAKE_CURRENT_LIST_DIR}/BagiWeb.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/BagiPlatformOptions.cmake)
 # ccache in front of the compiler when it is installed (before the first target, so every target gets the launcher)
 include(${CMAKE_CURRENT_LIST_DIR}/BagiCompilerCache.cmake)
+# clang -ftime-trace on every compile when ENGINE_TIME_TRACE is ON (the preset macos-time-trace; before the first target)
+include(${CMAKE_CURRENT_LIST_DIR}/BagiTimeTrace.cmake)
 # Sanitizers on every target and the libFuzzer executables (ENGINE_SANITIZE, ENGINE_FUZZ, ENGINE_FUZZ_LIBFUZZER; before the first target, like the cache)
 include(${CMAKE_CURRENT_LIST_DIR}/BagiFuzz.cmake)
 
