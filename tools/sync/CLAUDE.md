@@ -1,6 +1,6 @@
 # tools/sync
 
-`engine_sync.py` is the read-only helper of the skill `engine-sync`: it reads the git state of the engine repository so that the skill's decisions (stop on divergence, what is ahead of `main`, which pushes to print) are tested code and not prose. Standard library only, Python 3.10+; tests in `tests/` (pytest over real repositories made in a temp folder: a bare "origin", a seed and a work clone; no network).
+`engine_sync.py` is the read-only helper of the skill `engine-sync` (`.claude/skills/engine-sync/SKILL.md`; the branch model: `NEW_GAME.md`, section 1): it reads the git state of the engine repository so that the skill's decisions (stop on divergence, what is ahead of `main`, which pushes to print) are tested code and not prose. Standard library only, Python 3.10+; tests in `tests/` (pytest over real repositories made in a temp folder: a bare "origin", a seed and a work clone; no network).
 
 ```bash
 python3 <engine>/tools/sync/engine_sync.py --repo <E> status [--json]   # <E>: '.' in the engine, 'engine' in a game
