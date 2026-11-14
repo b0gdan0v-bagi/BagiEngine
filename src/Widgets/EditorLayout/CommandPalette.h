@@ -1,6 +1,8 @@
 #pragma once
 
+#include <BECore/PoolString/PoolString.h>
 #include <Widgets/EditorLayout/HotkeyMap.h>
+#include <cstddef>
 
 namespace BECore {
 

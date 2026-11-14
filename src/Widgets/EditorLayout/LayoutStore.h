@@ -1,5 +1,12 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
+#include <BECore/Utils/EnumUtils.h>
+#include <cstddef>
+#include <cstdint>
+#include <expected>
+#include <filesystem>
+
 namespace BECore {
 
     /// A layout name is 1 to 64 characters

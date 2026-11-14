@@ -1,6 +1,8 @@
 #pragma once
 
+#include <BECore/Math/Rect.h>
 #include <BECore/Math/Vec2.h>
+#include <BECore/Types/Types.h>
 #include <Widgets/Viewport/GizmoDrag.h>
 #include <Widgets/Viewport/ViewportCamera.h>
 #include <Widgets/Viewport/ViewportEvents.h>

@@ -1,9 +1,14 @@
 #pragma once
 
+#include <BECore/PoolString/PoolString.h>
+#include <BECore/PoolString/StaticPoolString.h>
+#include <BECore/Reflection/ReflectionMarkers.h>
+#include <BECore/Types/Types.h>
 #include <BECore/UI/UIPreview.h>
 #include <Events/EventBase.h>
 #include <Widgets/EditorLayout/KeyChord.h>
 #include <Widgets/Viewport/ViewportInput.h>
+#include <cstdint>
 
 namespace BECore {
 

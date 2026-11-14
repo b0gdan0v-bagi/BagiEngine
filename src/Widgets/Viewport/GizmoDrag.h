@@ -1,5 +1,7 @@
 #pragma once
 
+#include <BECore/Math/Vec2.h>
+#include <BECore/Types/Types.h>
 #include <Widgets/Viewport/GizmoGeometry.h>
 
 namespace BECore::Gizmo {

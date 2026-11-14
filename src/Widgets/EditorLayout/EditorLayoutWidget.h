@@ -1,5 +1,8 @@
 #pragma once
 
+#include <BECore/PoolString/PoolString.h>
+#include <BECore/Reflection/ReflectionMarkers.h>
+#include <BECore/Types/Types.h>
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/EditorLayout/CommandPalette.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
@@ -9,6 +12,7 @@
 #include <Widgets/EditorLayout/MainToolbar.h>
 #include <Widgets/EditorLayout/PreferencesWindow.h>
 #include <Widgets/EditorLayout/StatusBar.h>
+#include <expected>
 #include <imgui.h>
 
 namespace BECore {

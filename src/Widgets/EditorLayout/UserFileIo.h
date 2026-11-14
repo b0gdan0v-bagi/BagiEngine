@@ -1,5 +1,9 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
+#include <expected>
+#include <filesystem>
+
 namespace BECore {
 
     /// Suffix of the temporary file next to the one being written

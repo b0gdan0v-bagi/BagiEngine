@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 
 namespace BECore {

@@ -3,12 +3,16 @@
 #include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Profiler/Ring/RingSnapshot.h>
 #include <BECore/Profiler/Ring/SpikeCapture.h>
+#include <BECore/Reflection/ReflectionMarkers.h>
+#include <BECore/Types/Types.h>
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/Profiler/ProfilerFramePlot.h>
 #include <Widgets/Profiler/ProfilerSpikePanel.h>
 #include <Widgets/Profiler/ProfilerTimelinePanel.h>
 #include <Widgets/Profiler/ProfilerZoneTablePanel.h>
+#include <cstddef>
+#include <cstdint>
 
 namespace BECore {
 

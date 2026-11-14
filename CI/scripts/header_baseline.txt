@@ -1,35 +1,5 @@
 # Headers that do not compile alone (CI/scripts/check_headers.py). A fix removes lines, nothing is added.
 # Regenerate: python3 CI/scripts/check_headers.py --root . --build build/macos-debug --baseline CI/scripts/header_baseline.txt --update-baseline
-src/Widgets/ClearScreenWidget.h
-src/Widgets/ConfigEditor/ConfigEditorWidget.h
-src/Widgets/ConfigEditor/ConfigFieldSchema.h
-src/Widgets/ConfigEditor/FieldInspectors.h
-src/Widgets/ConfigEditor/StagedChanges.h
-src/Widgets/EditorLayout/CommandFilter.h
-src/Widgets/EditorLayout/CommandPalette.h
-src/Widgets/EditorLayout/EditorCommands.h
-src/Widgets/EditorLayout/EditorLayoutWidget.h
-src/Widgets/EditorLayout/EditorPlayModel.h
-src/Widgets/EditorLayout/EditorSettings.h
-src/Widgets/EditorLayout/GitBranch.h
-src/Widgets/EditorLayout/HotkeyMap.h
-src/Widgets/EditorLayout/IconTable.h
-src/Widgets/EditorLayout/KeyChord.h
-src/Widgets/EditorLayout/LayoutStore.h
-src/Widgets/EditorLayout/MainToolbar.h
-src/Widgets/EditorLayout/PreferencesWindow.h
-src/Widgets/EditorLayout/UserFileIo.h
-src/Widgets/ImGuiFonts.h
-src/Widgets/Profiler/ProfilerWidget.h
-src/Widgets/SceneEditor/SceneEditorWidget.h
-src/Widgets/TextureEditor/TextureEditorWidget.h
-src/Widgets/Viewport/GizmoDrag.h
-src/Widgets/Viewport/GizmoGeometry.h
-src/Widgets/Viewport/ViewportCamera.h
-src/Widgets/Viewport/ViewportEvents.h
-src/Widgets/Viewport/ViewportGizmos.h
-src/Widgets/Viewport/ViewportInput.h
-src/Widgets/Viewport/ViewportWidget.h
 tests/BECore/ConfigDeserializerTest.h
 tests/BECore/FactoryInitializeTest.h
 tests/BECore/FuzzProbe.h
