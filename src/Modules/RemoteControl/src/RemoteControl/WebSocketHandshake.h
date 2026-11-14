@@ -1,5 +1,9 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
+#include <cstddef>
+#include <expected>
+
 namespace BECore {
 
     /// The GUID that RFC 6455 (section 4.2.2) appends to the client key before hashing

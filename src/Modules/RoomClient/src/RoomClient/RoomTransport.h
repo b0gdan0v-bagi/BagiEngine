@@ -1,5 +1,11 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
+#include <BECore/Utils/EnumUtils.h>
+#include <cstdint>
+#include <expected>
+#include <functional>
+
 namespace BECore {
 
     /// The status a transport reports when a connection ends without a close frame (refused, dropped, aborted): RFC 6455, 1006

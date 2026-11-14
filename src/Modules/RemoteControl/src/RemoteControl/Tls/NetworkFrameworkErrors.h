@@ -1,5 +1,9 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
+#include <BECore/Utils/EnumUtils.h>
+#include <cstdint>
+
 namespace BECore {
 
     /// Which list an error code of the macOS backend belongs to (the domains of `nw_error_t`)

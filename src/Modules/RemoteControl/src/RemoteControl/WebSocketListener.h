@@ -1,7 +1,16 @@
 #pragma once
 
 #include <BECore/Control/ControlTypes.h>
+#include <BECore/Threading/Mutex.h>
+#include <BECore/Threading/Thread.h>
+#include <BECore/Types/Types.h>
 #include <RemoteControl/WebSocketConnection.h>
+#include <atomic>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <expected>
+#include <functional>
 
 namespace BECore {
 

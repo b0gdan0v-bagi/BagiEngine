@@ -1,8 +1,12 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
 #include <Rooms/RateLimiter.h>
 #include <Rooms/Room.h>
 #include <Rooms/RoomLimits.h>
+#include <cstddef>
+#include <cstdint>
+#include <functional>
 
 namespace BECore {
 

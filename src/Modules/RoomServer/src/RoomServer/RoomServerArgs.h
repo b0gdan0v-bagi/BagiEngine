@@ -1,6 +1,12 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
 #include <RoomServer/RoomServerSettings.h>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <expected>
+#include <functional>
 
 namespace BECore {
 

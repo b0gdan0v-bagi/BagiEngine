@@ -1,6 +1,10 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
+#include <BECore/Utils/EnumUtils.h>
 #include <chrono>
+#include <cstdint>
+#include <functional>
 
 namespace BECore {
 

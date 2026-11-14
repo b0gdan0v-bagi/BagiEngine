@@ -1,6 +1,12 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
 #include <RemoteControl/Socket.h>
+#include <atomic>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <expected>
 
 namespace BECore {
 
