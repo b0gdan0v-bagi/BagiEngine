@@ -670,6 +670,7 @@ class RegexParser:
                 parent_class=parent_class,
                 source_file=str(source_path),
                 line=line_no,
+                marker_line=self._line_at(brace_pos + 1 + be.start()),
                 element_name=element_name,
                 register_self=register_self,
                 icon=icon,

@@ -428,9 +428,10 @@ def test_warnings_are_printed_again_from_the_cache(run_cli, broken_source):
     assert first and second == first
 
 
-def test_clean_source_exits_with_zero_even_as_errors(run_cli, tmp_path):
+def test_clean_source_exits_with_zero_even_as_errors(run_cli, tmp_path, include_gen):
     source = tmp_path / "src"
     source.mkdir()
+    include_gen(source, 'Ok')
     (source / "Ok.h").write_text("struct Ok {\n BE_CLASS(Ok)\n BE_REFLECT_FIELD int a = 0;\n};\n", encoding="utf-8")
     code, _, err = run_cli(source, "--warnings-as-errors")
     assert code == 0

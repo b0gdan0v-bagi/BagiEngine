@@ -277,6 +277,7 @@ class ClassData:
     parent_class: Optional[str] = None  # Direct parent class name if inheriting
     source_file: str = ""
     line: int = 0
+    marker_line: int = 0  # the line of the BE_CLASS / BE_EVENT marker
     # Custom XML element name from ELEMENT=xxx option in BE_CLASS macro.
     element_name: Optional[str] = None
     # REGISTER_SELF option on a FACTORY_BASE: the base registers itself in its factory even when it has derived classes.
@@ -302,6 +303,7 @@ class ClassData:
             "parent_class": self.parent_class,
             "source_file": self.source_file,
             "line": self.line,
+            "marker_line": self.marker_line,
             "element_name": self.element_name,
             "register_self": self.register_self,
             "icon": self.icon,
@@ -325,6 +327,7 @@ class ClassData:
             parent_class=data.get("parent_class"),
             source_file=data.get("source_file", ""),
             line=data.get("line", 0),
+            marker_line=data.get("marker_line", 0),
             element_name=data.get("element_name"),
             register_self=data.get("register_self", False),
             icon=data.get("icon", ""),
