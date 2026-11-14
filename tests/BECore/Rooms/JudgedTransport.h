@@ -20,7 +20,7 @@ namespace BECore::Tests {
     /// Wraps a transport and runs the wire judge (WireJudge.h) on every text it delivers, before the client sees it
     class JudgedTransport final : public IRoomTransport {
     public:
-        JudgedTransport(UniquePtr<IRoomTransport> inner, std::shared_ptr<WireJudgeLog> log) : _inner(std::move(inner)), _log(std::move(log)) {}
+        JudgedTransport(UniquePtr<IRoomTransport> inner, SharedPtr<WireJudgeLog> log) : _inner(std::move(inner)), _log(std::move(log)) {}
 
         std::expected<void, String> Open(StringView url) override {
             return _inner->Open(url);
@@ -65,17 +65,17 @@ namespace BECore::Tests {
         }
 
         UniquePtr<IRoomTransport> _inner;
-        std::shared_ptr<WireJudgeLog> _log;
+        SharedPtr<WireJudgeLog> _log;
     };
 
     /// A factory whose transports are judged
-    [[nodiscard]] inline RoomTransportFactory MakeJudgedFactory(RoomTransportFactory inner, std::shared_ptr<WireJudgeLog> log) {
+    [[nodiscard]] inline RoomTransportFactory MakeJudgedFactory(RoomTransportFactory inner, SharedPtr<WireJudgeLog> log) {
         return [inner = std::move(inner), log = std::move(log)]() -> UniquePtr<IRoomTransport> {
             auto transport = inner();
             if (!transport) {
                 return nullptr;
             }
-            return eastl::make_unique<JudgedTransport>(std::move(transport), log);
+            return MakeUnique<JudgedTransport>(std::move(transport), log);
         };
     }
 

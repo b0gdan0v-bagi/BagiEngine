@@ -55,8 +55,8 @@ namespace BECore::Tests {
         class RoomServerScenarioTest : public ::testing::Test {
         protected:
             void SetUp() override {
-                ASSERT_TRUE(registry.Register(SeatedGameInfo{"cards", DemoCardGame::kSeatCount}, [] { return eastl::make_unique<DemoCardGame>(); }));
-                ASSERT_TRUE(registry.Register(SeatedGameInfo{"cards-leaky", DemoCardGame::kSeatCount}, [] { return eastl::make_unique<LeakyDemoCardGame>(); }));
+                ASSERT_TRUE(registry.Register(SeatedGameInfo{"cards", DemoCardGame::kSeatCount}, [] { return MakeUnique<DemoCardGame>(); }));
+                ASSERT_TRUE(registry.Register(SeatedGameInfo{"cards-leaky", DemoCardGame::kSeatCount}, [] { return MakeUnique<LeakyDemoCardGame>(); }));
             }
 
             void TearDown() override {
@@ -66,14 +66,14 @@ namespace BECore::Tests {
             }
 
             uint16_t StartServer(RoomServerSettings settings = MakeSettings()) {
-                server = std::make_unique<RoomWebSocketServer>(registry, std::move(settings));
+                server = MakeUnique<RoomWebSocketServer>(registry, std::move(settings));
                 const auto port = server->Start();
                 EXPECT_TRUE(port.has_value()) << (port.has_value() ? "" : port.error().message.c_str());
                 return port.value_or(0);
             }
 
             SeatedGameRegistry registry;
-            std::unique_ptr<RoomWebSocketServer> server;
+            UniquePtr<RoomWebSocketServer> server;
         };
 
     }  // namespace
@@ -239,7 +239,7 @@ namespace BECore::Tests {
         // Both humans play on to the end
         Clients playing;
         playing.push_back(std::move(clients[0]));
-        playing.push_back(std::make_unique<RoomSocketClient>(std::move(*replacement)));
+        playing.push_back(MakeUnique<RoomSocketClient>(std::move(*replacement)));
         ASSERT_TRUE(PlayToTheEnd(playing)) << "the hand did not end after the return";
         ExpectAllTwelveCardsPlayed(*playing[0]);
         ExpectAllTwelveCardsPlayed(*playing[1]);
@@ -405,8 +405,8 @@ namespace BECore::Tests {
         ASSERT_TRUE(browser->WaitFor(RoomMessageTypes::kLobby).has_value());
         open->Start();
         Clients playing;
-        playing.push_back(std::make_unique<RoomSocketClient>(std::move(*open)));
-        playing.push_back(std::make_unique<RoomSocketClient>(std::move(*browser)));
+        playing.push_back(MakeUnique<RoomSocketClient>(std::move(*open)));
+        playing.push_back(MakeUnique<RoomSocketClient>(std::move(*browser)));
         ASSERT_TRUE(PlayToTheEnd(playing));
         for (const auto& client : playing) {
             ExpectAllTwelveCardsPlayed(*client);

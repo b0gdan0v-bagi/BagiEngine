@@ -110,7 +110,7 @@ namespace BECore::Fuzz {
         class Recorder {
         public:
             Recorder() : _hub(_registry, RoomHubInput::MakeSettings(), RoomHubInput::MakeRandom(), MakeSink()) {
-                _registry.Register(SeatedGameInfo{"demo", DemoCardGame::kSeatCount}, [] { return UniquePtr<ISeatedGame>(eastl::make_unique<DemoCardGame>()); });
+                _registry.Register(SeatedGameInfo{"demo", DemoCardGame::kSeatCount}, [] { return UniquePtr<ISeatedGame>(MakeUnique<DemoCardGame>()); });
             }
 
             void Connect(uint8_t number) {
@@ -372,7 +372,7 @@ namespace BECore::Fuzz {
             return FuzzBytes(text.begin(), text.end());
         }
 
-        Json Params(std::initializer_list<std::pair<const char*, Json>> members) {
+        Json Params(std::initializer_list<Pair<const char*, Json>> members) {
             Json params = Json::object();
             for (const auto& [key, value] : members) {
                 params[key] = value;

@@ -321,7 +321,7 @@ namespace BECore::Tests {
 
     TEST(SeatedGameRegistryTest, RegisterFindCreate) {
         SeatedGameRegistry registry;
-        ASSERT_TRUE(registry.Register({"Fake", 4}, [] { return eastl::make_unique<FakeSeatedGame>(); }));
+        ASSERT_TRUE(registry.Register({"Fake", 4}, [] { return MakeUnique<FakeSeatedGame>(); }));
         const auto info = registry.Find("Fake");
         ASSERT_TRUE(info.has_value());
         EXPECT_EQ(info->name, "Fake");
@@ -334,8 +334,8 @@ namespace BECore::Tests {
 
     TEST(SeatedGameRegistryTest, DuplicateRegistrationReplaces) {
         SeatedGameRegistry registry;
-        ASSERT_TRUE(registry.Register({"G", 4}, [] { return eastl::make_unique<FakeSeatedGame>(); }));
-        ASSERT_TRUE(registry.Register({"G", 3}, [] { return eastl::make_unique<LeakyFakeSeatedGame>(); }));
+        ASSERT_TRUE(registry.Register({"G", 4}, [] { return MakeUnique<FakeSeatedGame>(); }));
+        ASSERT_TRUE(registry.Register({"G", 3}, [] { return MakeUnique<LeakyFakeSeatedGame>(); }));
         EXPECT_EQ(registry.GetCount(), 1u);
         EXPECT_EQ(registry.Find("G")->seatCount, 3);
         const auto game = registry.Create("G");
@@ -345,7 +345,7 @@ namespace BECore::Tests {
 
     TEST(SeatedGameRegistryTest, RefusesAnInvalidRegistration) {
         SeatedGameRegistry registry;
-        const SeatedGameFactory factory = [] { return eastl::make_unique<FakeSeatedGame>(); };
+        const SeatedGameFactory factory = [] { return MakeUnique<FakeSeatedGame>(); };
         EXPECT_FALSE(registry.Register({"", 4}, factory));
         EXPECT_FALSE(registry.Register({"G", 0}, factory));
         EXPECT_FALSE(registry.Register({"G", -2}, factory));
@@ -358,7 +358,7 @@ namespace BECore::Tests {
 
     TEST(SeatedGameRegistryTest, CreateMakesIndependentInstances) {
         SeatedGameRegistry registry;
-        ASSERT_TRUE(registry.Register({"Fake", 4}, [] { return eastl::make_unique<FakeSeatedGame>(); }));
+        ASSERT_TRUE(registry.Register({"Fake", 4}, [] { return MakeUnique<FakeSeatedGame>(); }));
         auto first = registry.Create("Fake");
         auto second = registry.Create("Fake");
         ASSERT_TRUE(first != nullptr);
@@ -371,7 +371,7 @@ namespace BECore::Tests {
 
     TEST(SeatedGameRegistryTest, ClientNamesAreNotInterned) {
         SeatedGameRegistry registry;
-        ASSERT_TRUE(registry.Register({"Fake", 4}, [] { return eastl::make_unique<FakeSeatedGame>(); }));
+        ASSERT_TRUE(registry.Register({"Fake", 4}, [] { return MakeUnique<FakeSeatedGame>(); }));
         const String name = "NeverInternedGameName_5d1f";
         EXPECT_FALSE(PoolString::Find(name.c_str()).has_value());
         EXPECT_FALSE(registry.Find(name).has_value());

@@ -171,8 +171,8 @@ namespace BECore::Tests {
                 ++clicks;
             }
 
-            Vector<std::pair<float, float>> presses;
-            Vector<std::pair<float, float>> drags;
+            Vector<Pair<float, float>> presses;
+            Vector<Pair<float, float>> drags;
             int clicks = 0;
         };
 

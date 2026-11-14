@@ -89,7 +89,7 @@ namespace BECore::Tests {
                 };
                 handler.onClosed = [this](const WebSocketHandler::ConnectionPtr& connection) { recorder.Add("closed:" + std::to_string(connection->GetId())); };
 
-                listener = std::make_unique<WebSocketListener>(std::move(settings), std::move(handler));
+                listener = MakeUnique<WebSocketListener>(std::move(settings), std::move(handler));
                 const auto port = listener->Start(0);
                 EXPECT_TRUE(port.has_value()) << (port.has_value() ? "" : port.error().message.c_str());
                 return port.value_or(0);
@@ -120,7 +120,7 @@ namespace BECore::Tests {
             }
 
             Recorder recorder;
-            std::unique_ptr<WebSocketListener> listener;
+            UniquePtr<WebSocketListener> listener;
         };
 
     }  // namespace

@@ -71,7 +71,7 @@ namespace BECore::Tests {
 
     class FakeRoomTransport final : public IRoomTransport {
     public:
-        explicit FakeRoomTransport(std::shared_ptr<FakeLink> link) : _link(std::move(link)) {}
+        explicit FakeRoomTransport(SharedPtr<FakeLink> link) : _link(std::move(link)) {}
 
         ~FakeRoomTransport() override {
             _link->destroyed = true;
@@ -119,7 +119,7 @@ namespace BECore::Tests {
         }
 
     private:
-        std::shared_ptr<FakeLink> _link;
+        SharedPtr<FakeLink> _link;
     };
 
     /// Hands a RoomClient one fake transport per connection and keeps their links for the test
@@ -130,11 +130,11 @@ namespace BECore::Tests {
                 if (_unavailable) {
                     return nullptr;
                 }
-                auto link = std::make_shared<FakeLink>();
+                auto link = MakeShared<FakeLink>();
                 link->openError = _nextOpenError;
                 _nextOpenError.reset();
                 _links.push_back(link);
-                return eastl::make_unique<FakeRoomTransport>(link);
+                return MakeUnique<FakeRoomTransport>(link);
             };
         }
 
@@ -162,7 +162,7 @@ namespace BECore::Tests {
         }
 
     private:
-        Vector<std::shared_ptr<FakeLink>> _links;
+        Vector<SharedPtr<FakeLink>> _links;
         Optional<String> _nextOpenError;
         bool _unavailable = false;
     };

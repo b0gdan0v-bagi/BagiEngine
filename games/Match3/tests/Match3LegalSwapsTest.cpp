@@ -25,8 +25,8 @@ namespace BECore::Match3::Tests {
         }
 
         /// Every 4-neighbour pair of the board once: a cell with its right and its lower neighbour
-        std::vector<std::pair<Cell, Cell>> AllNeighbourPairs() {
-            std::vector<std::pair<Cell, Cell>> pairs;
+        std::vector<Pair<Cell, Cell>> AllNeighbourPairs() {
+            std::vector<Pair<Cell, Cell>> pairs;
             for (int8_t row = 0; row < kBoardSize; ++row) {
                 for (int8_t col = 0; col < kBoardSize; ++col) {
                     if (col + 1 < kBoardSize) {
@@ -67,7 +67,7 @@ namespace BECore::Match3::Tests {
             model.Reset(seed);
 
             // The brute force: try every neighbour pair on a copy of the model
-            std::vector<std::pair<Cell, Cell>> expected;
+            std::vector<Pair<Cell, Cell>> expected;
             for (const auto& [a, b] : AllNeighbourPairs()) {
                 Match3GameModel copy = model;
                 if (copy.TrySwap(a, b)) {

@@ -329,7 +329,7 @@ namespace BECore::Tests {
                     std::lock_guard<std::mutex> lock(_mutex);
                     ++_closed;
                 };
-                _listener = std::make_unique<WebSocketListener>(std::move(settings), std::move(handler));
+                _listener = MakeUnique<WebSocketListener>(std::move(settings), std::move(handler));
                 const auto port = _listener->Start(0);
                 EXPECT_TRUE(port.has_value());
                 _port = port.value_or(0);
@@ -367,7 +367,7 @@ namespace BECore::Tests {
             }
 
         private:
-            std::unique_ptr<WebSocketListener> _listener;
+            UniquePtr<WebSocketListener> _listener;
             uint16_t _port = 0;
             mutable std::mutex _mutex;
             int _opened = 0;

@@ -114,8 +114,8 @@ namespace BECore::Tests {
             }
         };
 
-        std::unique_ptr<Compiled> Compile(const std::string& html, const std::string& css = {}) {
-            auto compiled = std::make_unique<Compiled>();
+        UniquePtr<Compiled> Compile(const std::string& html, const std::string& css = {}) {
+            auto compiled = MakeUnique<Compiled>();
             const std::string source = css.empty() ? html : "<style>" + css + "</style>" + html;
             compiled->xml = UIWebCompiler::Compile(FromStd(source), {}, compiled->report);
             EXPECT_TRUE(compiled->document.load_string(compiled->xml.c_str())) << compiled->xml.c_str();
@@ -1129,7 +1129,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         LaidOut web(compiled->content);
         const UIScreenContent expectedContent = ReadXml(kHudXml);
         LaidOut xml(expectedContent);
-        for (const auto& [width, height] : {std::pair{1280.0f, 720.0f}, {640.0f, 360.0f}, {720.0f, 1280.0f}, {480.0f, 480.0f}, {2560.0f, 1080.0f}}) {
+        for (const auto& [width, height] : {Pair<float, float>{1280.0f, 720.0f}, {640.0f, 360.0f}, {720.0f, 1280.0f}, {480.0f, 480.0f}, {2560.0f, 1080.0f}}) {
             web.At(width, height);
             xml.At(width, height);
             for (const char* name : {"Hud", "Score", "Reset"}) {
@@ -1147,7 +1147,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         const UIScreenContent shipped = ReadXml(kMenuXml);
         LaidOut web(compiled->content);
         LaidOut xml(shipped);
-        for (const auto& [width, height] : {std::pair{1280.0f, 720.0f}, {640.0f, 360.0f}, {720.0f, 1280.0f}, {480.0f, 480.0f}, {3840.0f, 1080.0f}}) {
+        for (const auto& [width, height] : {Pair<float, float>{1280.0f, 720.0f}, {640.0f, 360.0f}, {720.0f, 1280.0f}, {480.0f, 480.0f}, {3840.0f, 1080.0f}}) {
             web.At(width, height);
             xml.At(width, height);
             for (const char* name : {"Column", "Title", "Play", "Quit"}) {
@@ -1181,7 +1181,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         LaidOut xml(shipped);
         web.InSceneView(712.0f, 672.0f);
         xml.InSceneView(712.0f, 672.0f);
-        for (const auto& [width, height] : {std::pair{1280.0f, 720.0f}, {480.0f, 480.0f}, {720.0f, 1280.0f}, {2560.0f, 1080.0f}}) {
+        for (const auto& [width, height] : {Pair<float, float>{1280.0f, 720.0f}, {480.0f, 480.0f}, {720.0f, 1280.0f}, {2560.0f, 1080.0f}}) {
             web.At(width, height);
             xml.At(width, height);
             for (const char* name : {"Score", "Buttons", "Reset", "Menu", "Seed"}) {
@@ -1248,12 +1248,12 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
         const UIScreenContent expectedContent = ReadXml(kPanelXml);
         // The view of the Chess board (landscape: the portrait variant is off) and a portrait view (the variant is on)
-        for (const auto& [viewWidth, viewHeight] : {std::pair{840.0f, 800.0f}, {560.0f, 840.0f}}) {
+        for (const auto& [viewWidth, viewHeight] : {Pair<float, float>{840.0f, 800.0f}, {560.0f, 840.0f}}) {
             LaidOut web(compiled->content);
             LaidOut xml(expectedContent);
             web.InSceneView(viewWidth, viewHeight);
             xml.InSceneView(viewWidth, viewHeight);
-            for (const auto& [width, height] : {std::pair{1280.0f, 720.0f}, {640.0f, 360.0f}, {720.0f, 1280.0f}, {480.0f, 480.0f}, {2560.0f, 1080.0f}}) {
+            for (const auto& [width, height] : {Pair<float, float>{1280.0f, 720.0f}, {640.0f, 360.0f}, {720.0f, 1280.0f}, {480.0f, 480.0f}, {2560.0f, 1080.0f}}) {
                 web.At(width, height);
                 xml.At(width, height);
                 for (const char* name : kPanelNames) {
@@ -1421,12 +1421,12 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
         const UIScreenContent expectedContent = ReadXml(kSettingsPanelXml);
         // The view of the Chess board (landscape: the portrait variant is off) and a portrait view (the variant is on)
-        for (const auto& [viewWidth, viewHeight] : {std::pair{840.0f, 800.0f}, {560.0f, 840.0f}}) {
+        for (const auto& [viewWidth, viewHeight] : {Pair<float, float>{840.0f, 800.0f}, {560.0f, 840.0f}}) {
             LaidOut web(compiled->content);
             LaidOut xml(expectedContent);
             web.InSceneView(viewWidth, viewHeight);
             xml.InSceneView(viewWidth, viewHeight);
-            for (const auto& [width, height] : {std::pair{1280.0f, 720.0f}, {640.0f, 360.0f}, {720.0f, 1280.0f}, {480.0f, 480.0f}, {2560.0f, 1080.0f}}) {
+            for (const auto& [width, height] : {Pair<float, float>{1280.0f, 720.0f}, {640.0f, 360.0f}, {720.0f, 1280.0f}, {480.0f, 480.0f}, {2560.0f, 1080.0f}}) {
                 web.At(width, height);
                 xml.At(width, height);
                 for (const char* name : kSettingsPanelNames) {
@@ -3314,8 +3314,8 @@ button:checked { background: var(--panel); }
     }
 
     TEST_F(UIWebTest, TheCssEasingsMapToTheEngineCurves) {
-        const std::pair<const char*, EaseType> cases[] = {{"linear", EaseType::Linear},    {"ease", EaseType::QuadInOut},        {"ease-in", EaseType::QuadIn},
-                                                          {"ease-out", EaseType::QuadOut}, {"ease-in-out", EaseType::QuadInOut}, {"", EaseType::QuadInOut}};
+        const Pair<const char*, EaseType> cases[] = {{"linear", EaseType::Linear},    {"ease", EaseType::QuadInOut},        {"ease-in", EaseType::QuadIn},
+                                                     {"ease-out", EaseType::QuadOut}, {"ease-in-out", EaseType::QuadInOut}, {"", EaseType::QuadInOut}};
         for (const auto& [word, ease] : cases) {
             const auto compiled = Compile(R"(<div id="p"></div>)", std::string("#p { transition: opacity .1s ") + word + " }");
             const auto* transition = compiled->Element("p")->GetComponent<UITransitionComponent>();

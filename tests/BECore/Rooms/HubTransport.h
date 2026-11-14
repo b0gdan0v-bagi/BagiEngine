@@ -48,7 +48,7 @@ namespace BECore::Tests {
 
     /// The connections one client made, in order (a reconnect makes a new one)
     struct HubClientLinks {
-        std::vector<std::shared_ptr<HubLink>> links;
+        std::vector<SharedPtr<HubLink>> links;
 
         [[nodiscard]] HubLink& Last() {
             return *links.back();
@@ -111,14 +111,14 @@ namespace BECore::Tests {
         [[nodiscard]] RoomTransportFactory Factory(HubClientLinks& links);
 
         /// The transport calls these
-        void Connect(const std::shared_ptr<HubLink>& link);
+        void Connect(const SharedPtr<HubLink>& link);
         void Deliver(HubLink& link, StringView text);
         void Disconnect(HubLink& link, uint16_t code, StringView reason);
 
     private:
         SeatedGameRegistry& MakeRegistry() {
-            _registry.Register(SeatedGameInfo{"cards", DemoCardGame::kSeatCount}, [] { return eastl::make_unique<DemoCardGame>(); });
-            _registry.Register(SeatedGameInfo{"cards-leaky", DemoCardGame::kSeatCount}, [] { return eastl::make_unique<LeakyDemoCardGame>(); });
+            _registry.Register(SeatedGameInfo{"cards", DemoCardGame::kSeatCount}, [] { return MakeUnique<DemoCardGame>(); });
+            _registry.Register(SeatedGameInfo{"cards-leaky", DemoCardGame::kSeatCount}, [] { return MakeUnique<LeakyDemoCardGame>(); });
             return _registry;
         }
 
@@ -156,7 +156,7 @@ namespace BECore::Tests {
         SeatedGameRegistry _registry;
         ManualClock _clock;
         RoomHub _hub;
-        Map<ConnectionId, std::shared_ptr<HubLink>> _byId;
+        Map<ConnectionId, SharedPtr<HubLink>> _byId;
         ConnectionId _nextId = 1;
         bool _refusing = false;
     };
@@ -164,7 +164,7 @@ namespace BECore::Tests {
     /// An IRoomTransport that talks to a HubWorld
     class HubTransport final : public IRoomTransport {
     public:
-        HubTransport(HubWorld& world, std::shared_ptr<HubLink> link) : _world(world), _link(std::move(link)) {}
+        HubTransport(HubWorld& world, SharedPtr<HubLink> link) : _world(world), _link(std::move(link)) {}
 
         ~HubTransport() override {
             // Letting go of a connection ends it, as closing the socket does
@@ -205,18 +205,18 @@ namespace BECore::Tests {
 
     private:
         HubWorld& _world;
-        std::shared_ptr<HubLink> _link;
+        SharedPtr<HubLink> _link;
     };
 
     inline RoomTransportFactory HubWorld::Factory(HubClientLinks& links) {
         return [this, &links]() -> UniquePtr<IRoomTransport> {
-            auto link = std::make_shared<HubLink>();
+            auto link = MakeShared<HubLink>();
             links.links.push_back(link);
-            return eastl::make_unique<HubTransport>(*this, link);
+            return MakeUnique<HubTransport>(*this, link);
         };
     }
 
-    inline void HubWorld::Connect(const std::shared_ptr<HubLink>& link) {
+    inline void HubWorld::Connect(const SharedPtr<HubLink>& link) {
         if (_refusing) {
             link->QueueClosed(kRoomTransportAbnormalClosure, "connection refused");
             return;

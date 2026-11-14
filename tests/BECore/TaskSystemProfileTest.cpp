@@ -68,7 +68,7 @@ namespace BECore::Tests {
         private:
             mutable std::mutex _mutex;
             std::vector<std::string> _zones;
-            std::vector<std::pair<std::string, double>> _counters;
+            std::vector<Pair<std::string, double>> _counters;
         };
 
         /// The one backend of these tests, emptied. It is never destroyed: a worker of the TaskManager's pool may sit in a zone that began on
@@ -214,8 +214,8 @@ namespace BECore::Tests {
         const Json* events = FindJsonMember(*parsed, "traceEvents");
         ASSERT_NE(events, nullptr);
 
-        std::vector<std::pair<std::string, int64_t>> names;    // thread name, tid
-        std::vector<std::pair<int64_t, int64_t>> sortIndexes;  // tid, sort index
+        std::vector<Pair<std::string, int64_t>> names;    // thread name, tid
+        std::vector<Pair<int64_t, int64_t>> sortIndexes;  // tid, sort index
         std::vector<std::string> counters;
         for (const Json& event : *events) {
             const auto name = GetJsonString(event, "name");
@@ -237,7 +237,7 @@ namespace BECore::Tests {
             }
         }
 
-        for (const auto& [workerName, expectedIndex] : {std::pair<const char*, int64_t>{"Worker 0", 100}, {"Worker 1", 101}}) {
+        for (const auto& [workerName, expectedIndex] : {Pair<const char*, int64_t>{"Worker 0", 100}, {"Worker 1", 101}}) {
             int64_t tid = -1;
             for (const auto& [name, id] : names) {
                 if (name == workerName) {

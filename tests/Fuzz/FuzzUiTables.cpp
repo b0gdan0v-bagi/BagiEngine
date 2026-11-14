@@ -46,7 +46,7 @@ namespace BECore::Fuzz {
         // =========================================================================
 
         /// (language, key) -> text of the first `string` that says it with a key the table accepts, read from the document by pugixml alone
-        using ExpectedStrings = Map<std::pair<std::string, std::string>, std::string>;
+        using ExpectedStrings = Map<Pair<std::string, std::string>, std::string>;
 
         ExpectedStrings ReadExpectedStrings(pugi::xml_node root) {
             ExpectedStrings expected;
@@ -60,7 +60,7 @@ namespace BECore::Fuzz {
                     if (key.empty() || key.find('}') != std::string::npos || !string.attribute("text")) {
                         continue;
                     }
-                    expected.emplace(std::make_pair(id, key), Attribute(string, "text"));
+                    expected.emplace(MakePair(id, key), Attribute(string, "text"));
                 }
             }
             return expected;
@@ -193,7 +193,7 @@ namespace BECore::Fuzz {
             FUZZ_CHECK(themes.empty() || table.HasTheme(table.GetDefaultTheme()));
 
             // A colour the table has is one the file says: in that theme, under a good name, with a value (the value may still be refused, so not the other way round)
-            Set<std::pair<std::string, std::string>> said;
+            Set<Pair<std::string, std::string>> said;
             for (const pugi::xml_node theme : root.children("theme")) {
                 for (const pugi::xml_node color : theme.children("color")) {
                     if (color.attribute("value")) {

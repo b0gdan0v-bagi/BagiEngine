@@ -17,7 +17,7 @@ namespace BECore::Tests {
     inline constexpr int kHumansAtFullTable = 4;
     inline constexpr int kHumansOfAPair = 2;
 
-    using Clients = std::vector<std::unique_ptr<RoomSocketClient>>;
+    using Clients = std::vector<UniquePtr<RoomSocketClient>>;
 
     /// The last message of @p type the client received, or null
     inline const ReceivedMessage* LastOf(const RoomSocketClient& client, StringView type) {
@@ -187,7 +187,7 @@ namespace BECore::Tests {
             }
             ASSERT_TRUE(client->WaitFor(RoomMessageTypes::kJoined).has_value());
             ASSERT_TRUE(client->WaitFor(RoomMessageTypes::kLobby).has_value());
-            out.push_back(std::make_unique<RoomSocketClient>(std::move(*client)));
+            out.push_back(MakeUnique<RoomSocketClient>(std::move(*client)));
         }
     }
 

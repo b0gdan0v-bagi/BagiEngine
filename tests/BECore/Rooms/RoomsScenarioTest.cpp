@@ -262,7 +262,7 @@ namespace BECore::Tests {
             HubHarness harness;
             const RandomFn random = MakeSequence(seed * 7919);
             ConnectionId slots[kSlots] = {};
-            Vector<eastl::pair<String, String>> knownTokens;
+            Vector<Pair<String, String>> knownTokens;
 
             const auto pick = [&](uint64_t count) { return random() % count; };
             const auto anyCode = [&]() -> String {

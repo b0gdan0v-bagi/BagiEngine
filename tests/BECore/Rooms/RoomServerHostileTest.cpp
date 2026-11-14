@@ -55,7 +55,7 @@ namespace BECore::Tests {
         class RoomServerHostileTest : public ::testing::Test {
         protected:
             void SetUp() override {
-                ASSERT_TRUE(registry.Register(SeatedGameInfo{"cards", DemoCardGame::kSeatCount}, [] { return eastl::make_unique<DemoCardGame>(); }));
+                ASSERT_TRUE(registry.Register(SeatedGameInfo{"cards", DemoCardGame::kSeatCount}, [] { return MakeUnique<DemoCardGame>(); }));
             }
 
             void TearDown() override {
@@ -65,7 +65,7 @@ namespace BECore::Tests {
             }
 
             uint16_t StartServer(RoomServerSettings settings = MakeSettings()) {
-                server = std::make_unique<RoomWebSocketServer>(registry, std::move(settings));
+                server = MakeUnique<RoomWebSocketServer>(registry, std::move(settings));
                 const auto port = server->Start();
                 EXPECT_TRUE(port.has_value()) << (port.has_value() ? "" : port.error().message.c_str());
                 return port.value_or(0);
@@ -95,7 +95,7 @@ namespace BECore::Tests {
             }
 
             SeatedGameRegistry registry;
-            std::unique_ptr<RoomWebSocketServer> server;
+            UniquePtr<RoomWebSocketServer> server;
             std::vector<HandPlayer> players;
         };
 
@@ -226,7 +226,7 @@ namespace BECore::Tests {
         for (int i = 0; i < kFloodSockets; ++i) {
             auto client = RoomSocketClient::Connect(port);
             ASSERT_TRUE(client.has_value());
-            flooders.push_back(std::make_unique<RoomSocketClient>(std::move(*client)));
+            flooders.push_back(MakeUnique<RoomSocketClient>(std::move(*client)));
         }
         for (int round = 0; round < kFloodRounds; ++round) {
             for (int i = 0; i < kFloodSockets; ++i) {

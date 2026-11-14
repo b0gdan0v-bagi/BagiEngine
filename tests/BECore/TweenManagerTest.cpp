@@ -485,7 +485,7 @@ namespace BECore::Tests {
     TEST(TweenManagerTest, TheRunningSetterSurvivesACancelOfItsOwnTween) {
         TweenManager tweens;
         IntrusivePtr<TweenHandle> handle;
-        const auto token = eastl::make_shared<int>(0);  // the setter holds a copy: its use count says whether the setter is alive
+        const auto token = MakeShared<int>(0);  // the setter holds a copy: its use count says whether the setter is alive
         bool aliveInsideAfterCancel = false;
         handle = tweens.Start<float>(0.0f, kTo, Settings(kOneSecond), [&, guard = token](const float&) {
             handle->Cancel();
@@ -502,7 +502,7 @@ namespace BECore::Tests {
 
     TEST(TweenManagerTest, TheRunningSetterSurvivesAClearInsideIt) {
         TweenManager tweens;
-        const auto token = eastl::make_shared<int>(0);
+        const auto token = MakeShared<int>(0);
         bool aliveInsideAfterClear = false;
         tweens.Start<float>(0.0f, kTo, Settings(kOneSecond), [&, guard = token](const float&) {
             tweens.Clear();

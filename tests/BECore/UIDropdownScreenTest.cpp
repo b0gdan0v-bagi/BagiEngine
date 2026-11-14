@@ -426,7 +426,7 @@ namespace BECore::Tests {
             return *element;
         }
 
-        static std::pair<float, float> CenterOf(const UIElement& element) {
+        static Pair<float, float> CenterOf(const UIElement& element) {
             return {element.rect.x + element.rect.w * 0.5f, element.rect.y + element.rect.h * 0.5f};
         }
 
@@ -502,7 +502,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIDropdownScreenTest, TheOpenPanelPassesTheSizeMatrixInEveryLanguageInALandscapeAndAPortraitView) {
-        for (const auto [width, height] : {std::pair{kViewWidth, kViewHeight}, std::pair{kPortraitWidth, kPortraitHeight}}) {
+        for (const auto [width, height] : {Pair<float, float>{kViewWidth, kViewHeight}, Pair<float, float>{kPortraitWidth, kPortraitHeight}}) {
             ASSERT_NO_FATAL_FAILURE(LoadScene(width, height));
             ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
             const auto failures = ValidatePanel(*_levels);
@@ -511,7 +511,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIDropdownScreenTest, NoWordIsCutClosedOrOpenOnAnyCaseOfTheMatrixInAnyLanguage) {
-        for (const auto [width, height] : {std::pair{kViewWidth, kViewHeight}, std::pair{kPortraitWidth, kPortraitHeight}}) {
+        for (const auto [width, height] : {Pair<float, float>{kViewWidth, kViewHeight}, Pair<float, float>{kPortraitWidth, kPortraitHeight}}) {
             ASSERT_NO_FATAL_FAILURE(LoadScene(width, height));
             ASSERT_NO_FATAL_FAILURE(Show());
             const String closed = ProblemsOnMatrix(*_levels);
@@ -665,7 +665,7 @@ namespace BECore::Tests {
     // ---- an option with an icon: the same panel, the same findings ------------------------------------------------
 
     TEST_F(UIDropdownScreenTest, AnIconOptionPassesTheSizeMatrixClosedAndOpenInEveryLanguageInBothViews) {
-        for (const auto [width, height] : {std::pair{kViewWidth, kViewHeight}, std::pair{kPortraitWidth, kPortraitHeight}}) {
+        for (const auto [width, height] : {Pair<float, float>{kViewWidth, kViewHeight}, Pair<float, float>{kPortraitWidth, kPortraitHeight}}) {
             ASSERT_NO_FATAL_FAILURE(LoadScene(width, height, GiveEasyAnIcon));
             ASSERT_NO_FATAL_FAILURE(Show());
             const auto closed = ValidatePanel(*_levels);
@@ -678,7 +678,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIDropdownScreenTest, NoWordOfAnIconOptionIsCutOnAnyCaseOfTheMatrixInAnyLanguage) {
-        for (const auto [width, height] : {std::pair{kViewWidth, kViewHeight}, std::pair{kPortraitWidth, kPortraitHeight}}) {
+        for (const auto [width, height] : {Pair<float, float>{kViewWidth, kViewHeight}, Pair<float, float>{kPortraitWidth, kPortraitHeight}}) {
             ASSERT_NO_FATAL_FAILURE(LoadScene(width, height, GiveEasyAnIcon));
             ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
             const String open = ProblemsOnMatrix(*_levels);
@@ -702,7 +702,7 @@ namespace BECore::Tests {
 
     TEST_F(UIDropdownScreenTest, AnIconOptionHasTheRectOfAPlainOne) {
         // The same list twice, once with the plain options and once with an icon on the second: every option in the same place, in both views
-        for (const auto [width, height] : {std::pair{kViewWidth, kViewHeight}, std::pair{kPortraitWidth, kPortraitHeight}}) {
+        for (const auto [width, height] : {Pair<float, float>{kViewWidth, kViewHeight}, Pair<float, float>{kPortraitWidth, kPortraitHeight}}) {
             ASSERT_NO_FATAL_FAILURE(LoadScene(width, height));
             ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
             Vector<Rect> buttons;

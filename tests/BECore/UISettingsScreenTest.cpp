@@ -550,17 +550,17 @@ namespace BECore::Tests {
             return *typed;
         }
 
-        static std::pair<float, float> CenterOf(const UIElement& element) {
+        static Pair<float, float> CenterOf(const UIElement& element) {
             return {element.rect.x + element.rect.w * 0.5f, element.rect.y + element.rect.h * 0.5f};
         }
 
-        std::pair<bool, bool> ClickAt(float x, float y) {
+        Pair<bool, bool> ClickAt(float x, float y) {
             const bool pressed = CoreManager::GetUIInput().DispatchMouseButtonDown(Button(x, y, true));
             const bool released = CoreManager::GetUIInput().DispatchMouseButtonUp(Button(x, y, false));
             return {pressed, released};
         }
 
-        std::pair<bool, bool> Click(const UIElement& element) {
+        Pair<bool, bool> Click(const UIElement& element) {
             const auto [x, y] = CenterOf(element);
             return ClickAt(x, y);
         }
@@ -799,7 +799,7 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(Show());
         BoardClicks board;
         const UIElement& plate = Get<UIStack>("Plate");
-        const std::pair<float, float> points[] = {CenterOf(El("Sound")), {plate.rect.x + 4.0f, plate.rect.y + 4.0f}, {5.0f, 5.0f}, {kViewWidth - 5.0f, kViewHeight - 5.0f}};
+        const Pair<float, float> points[] = {CenterOf(El("Sound")), {plate.rect.x + 4.0f, plate.rect.y + 4.0f}, {5.0f, 5.0f}, {kViewWidth - 5.0f, kViewHeight - 5.0f}};
         for (const auto& [x, y] : points) {
             const auto [pressed, released] = ClickAt(x, y);
             EXPECT_TRUE(pressed) << x << "," << y;

@@ -68,7 +68,7 @@ namespace BECore::Tests {
         struct BagElement {
             const char* type;
             const char* name;
-            std::vector<std::pair<const char*, const char*>> declarations;
+            std::vector<Pair<const char*, const char*>> declarations;
             std::vector<BagElement> children;
         };
 

@@ -365,7 +365,7 @@ namespace BECore::Tests {
     }
 
     TEST(RoomServerArgsTest, BadVariableNamesTheVariable) {
-        const std::pair<const char*, const char*> bad[] = {
+        const Pair<const char*, const char*> bad[] = {
             {"PORT", "70000"},
             {"PORT", "abc"},
             {"BAGI_ROOMS_BIND", "everywhere"},

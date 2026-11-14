@@ -377,7 +377,7 @@ namespace BECore::Match3::Tests {
 
     namespace {
 
-        using Cleared = Vector<eastl::pair<Cell, GemType>>;
+        using Cleared = Vector<Pair<Cell, GemType>>;
 
         /// A swap that clears in two rounds or more: the board before it and the model after it
         Swapped FindCascade() {

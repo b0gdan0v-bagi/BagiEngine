@@ -56,7 +56,7 @@ namespace BECore::Tests {
         class RoomWebSocketServerTest : public ::testing::Test {
         protected:
             void SetUp() override {
-                ASSERT_TRUE(registry.Register(SeatedGameInfo{"fake", FakeSeatedGame::kSeatCount}, [] { return eastl::make_unique<FakeSeatedGame>(); }));
+                ASSERT_TRUE(registry.Register(SeatedGameInfo{"fake", FakeSeatedGame::kSeatCount}, [] { return MakeUnique<FakeSeatedGame>(); }));
             }
 
             void TearDown() override {
@@ -66,7 +66,7 @@ namespace BECore::Tests {
             }
 
             uint16_t StartServer(RoomServerSettings settings = MakeSettings()) {
-                server = std::make_unique<RoomWebSocketServer>(registry, std::move(settings));
+                server = MakeUnique<RoomWebSocketServer>(registry, std::move(settings));
                 const auto port = server->Start();
                 EXPECT_TRUE(port.has_value()) << (port.has_value() ? "" : port.error().message.c_str());
                 return port.value_or(0);
@@ -85,7 +85,7 @@ namespace BECore::Tests {
             }
 
             SeatedGameRegistry registry;
-            std::unique_ptr<RoomWebSocketServer> server;
+            UniquePtr<RoomWebSocketServer> server;
         };
 
     }  // namespace
@@ -172,7 +172,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(client.has_value());
 
         // A ping answers pong, garbage answers error: sent in a row, answered in a row
-        const std::vector<std::pair<std::string, std::string>> script = {
+        const std::vector<Pair<std::string, std::string>> script = {
             {"{\"v\":1,\"type\":\"ping\"}", "pong"}, {"not json", "error"}, {"{\"v\":1,\"type\":\"ping\"}", "pong"}, {"{\"v\":1,\"type\":\"no_such\"}", "error"},
             {"{\"v\":1,\"type\":\"ping\"}", "pong"},
         };
@@ -971,7 +971,7 @@ namespace BECore::Tests {
 
     // ASan is the assertion: a function that held the clock itself would read freed memory
     TEST(ManualClockTest, AFunctionMadeFromTheClockOutlivesIt) {
-        auto clock = std::make_unique<ManualClock>();
+        auto clock = MakeUnique<ManualClock>();
         const RoomTime before = clock->Now();
         const std::function<RoomTime()> now = clock->AsFunction();
         clock->Advance(5s);

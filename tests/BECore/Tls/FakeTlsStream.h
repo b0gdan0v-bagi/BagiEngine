@@ -156,7 +156,7 @@ namespace BECore::Tests {
 
     /// A factory that gives a FakeTlsStream
     [[nodiscard]] inline TlsStreamFactory FakeTlsFactory() {
-        return [] { return UniquePtr<ITlsStream>(eastl::make_unique<FakeTlsStream>()); };
+        return [] { return UniquePtr<ITlsStream>(MakeUnique<FakeTlsStream>()); };
     }
 
     /// The server's end of the fake handshake and of the "encryption", for a hand-written server on an accepted Socket

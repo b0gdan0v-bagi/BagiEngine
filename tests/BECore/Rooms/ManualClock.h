@@ -1,7 +1,6 @@
 #pragma once
 
 #include <Rooms/RoomTypes.h>
-#include <atomic>
 #include <memory>
 
 namespace BECore::Tests {
@@ -34,7 +33,7 @@ namespace BECore::Tests {
             }
         };
 
-        std::shared_ptr<State> _state = std::make_shared<State>();
+        SharedPtr<State> _state = MakeShared<State>();
     };
 
 }  // namespace BECore::Tests

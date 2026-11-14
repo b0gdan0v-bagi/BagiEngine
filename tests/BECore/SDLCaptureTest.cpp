@@ -72,7 +72,7 @@ namespace BECore::Tests {
         }
 
         /// The size that the IHDR chunk of a PNG file gives (big-endian, at bytes 16 to 23)
-        std::pair<uint32_t, uint32_t> PngSize(const Vector<uint8_t>& png) {
+        Pair<uint32_t, uint32_t> PngSize(const Vector<uint8_t>& png) {
             const auto read = [&png](size_t at) {
                 return (static_cast<uint32_t>(png[at]) << 24) | (static_cast<uint32_t>(png[at + 1]) << 16) | (static_cast<uint32_t>(png[at + 2]) << 8) | png[at + 3];
             };
@@ -905,7 +905,7 @@ namespace BECore::Tests {
         ASSERT_GT(png->bytes.size(), 24u);
         const std::array<uint8_t, 8> signature{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
         EXPECT_TRUE(std::equal(signature.begin(), signature.end(), png->bytes.begin()));
-        EXPECT_EQ(PngSize(png->bytes), (std::pair<uint32_t, uint32_t>{64, 32}));
+        EXPECT_EQ(PngSize(png->bytes), (Pair<uint32_t, uint32_t>{64, 32}));
     }
 
     TEST(EncodePngTest, PixelsSurviveTheRoundTrip) {
@@ -932,7 +932,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(wide.has_value()) << wide.error().c_str();
         EXPECT_EQ(wide->width, 1024u);
         EXPECT_EQ(wide->height, 576u);
-        EXPECT_EQ(PngSize(wide->bytes), (std::pair<uint32_t, uint32_t>{1024, 576}));
+        EXPECT_EQ(PngSize(wide->bytes), (Pair<uint32_t, uint32_t>{1024, 576}));
 
         const auto tall = EncodePng(MakeImage(100, 400, kBackground), 200);
         ASSERT_TRUE(tall.has_value()) << tall.error().c_str();

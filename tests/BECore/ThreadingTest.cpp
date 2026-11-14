@@ -1,16 +1,10 @@
 #include <BECore/Profiler/Profiler.h>
-#include <BECore/Threading/ConditionVariable.h>
-#include <BECore/Threading/LockGuards.h>
 #include <BECore/Threading/LockOrder.h>
 #include <BECore/Threading/Mutex.h>
 #include <BECore/Threading/SharedMutex.h>
-#include <BECore/Threading/Thread.h>
-#include <atomic>
 #include <chrono>
-#include <cstring>
 #include <gtest/gtest-spi.h>
 #include <gtest/gtest.h>
-#include <string>
 #include <thread>
 #include <vector>
 
@@ -543,7 +537,7 @@ namespace BECore::Tests {
     TEST(ThreadingTest, ThreadCopiesARunTimeName) {
         std::atomic<bool> nameGone{false};
         std::string seen;
-        auto name = std::make_unique<std::string>("Test run-time name 7");
+        auto name = MakeUnique<std::string>("Test run-time name 7");
         Thread thread(name->c_str(), [&] {
             while (!nameGone.load()) {
                 std::this_thread::yield();
@@ -595,7 +589,7 @@ namespace BECore::Tests {
         struct State {
             std::atomic<bool> ran{false};
         };
-        auto state = std::make_shared<State>();
+        auto state = MakeShared<State>();
         Thread thread("Test detach", [state] { state->ran.store(true); });
         thread.detach();
         EXPECT_FALSE(thread.joinable());
@@ -603,7 +597,7 @@ namespace BECore::Tests {
     }
 
     TEST(ThreadingTest, ThreadTakesAMoveOnlyBody) {
-        auto payload = std::make_unique<int>(42);
+        auto payload = MakeUnique<int>(42);
         int seen = 0;
         Thread thread("Test move-only body", [owned = std::move(payload), &seen] { seen = *owned; });
         thread.join();

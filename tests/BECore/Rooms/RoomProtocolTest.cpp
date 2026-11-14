@@ -498,7 +498,8 @@ namespace BECore::Tests {
         lobby.room = "ABCDE";
         lobby.game = "fake";
         lobby.hostSeat = -1;
-        for (const auto& [phase, name] : {std::pair{RoomPhase::Lobby, "lobby"}, std::pair{RoomPhase::Playing, "playing"}, std::pair{RoomPhase::Finished, "finished"}}) {
+        for (const auto& [phase, name] :
+             {Pair<RoomPhase, const char*>{RoomPhase::Lobby, "lobby"}, Pair<RoomPhase, const char*>{RoomPhase::Playing, "playing"}, Pair<RoomPhase, const char*>{RoomPhase::Finished, "finished"}}) {
             lobby.phase = phase;
             const Json message = ParseOrNull(MakeLobbyMessage(lobby));
             EXPECT_EQ(GetJsonString(message, "phase"), String(name));

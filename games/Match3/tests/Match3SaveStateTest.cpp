@@ -171,7 +171,7 @@ namespace BECore::Match3::Tests {
             _base = BECore::Tests::TestTempDirectory("BagiMatch3SaveTest");
             std::filesystem::remove_all(_base);
             std::filesystem::create_directories(_base);
-            _service = std::make_unique<SaveGameService>(_fileSystem);
+            _service = MakeUnique<SaveGameService>(_fileSystem);
             ASSERT_TRUE(_service->Initialize(_base / "saves"));
         }
 
@@ -183,7 +183,7 @@ namespace BECore::Match3::Tests {
 
         std::filesystem::path _base;
         FileSystem _fileSystem;
-        std::unique_ptr<SaveGameService> _service;
+        UniquePtr<SaveGameService> _service;
     };
 
     TEST_F(Match3SaveFileTest, SavedGameIsLoadedIntoAFreshModelAndPlayContinues) {

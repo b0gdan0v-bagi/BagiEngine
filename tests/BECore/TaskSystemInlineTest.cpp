@@ -57,7 +57,7 @@ namespace BECore::Tests {
         class TaskSystemInlineTest : public ::testing::Test {
         protected:
             void SetUp() override {
-                _pool = eastl::make_unique<ThreadPool>(ThreadPool::InlineTag{});
+                _pool = MakeUnique<ThreadPool>(ThreadPool::InlineTag{});
                 _scheduler.Initialize(_pool.get());
             }
 

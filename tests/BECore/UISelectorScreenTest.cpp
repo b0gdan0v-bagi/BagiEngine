@@ -215,7 +215,7 @@ namespace BECore::Tests {
         struct Group {
             const char* name;
             const char* variable;
-            Vector<eastl::pair<const char*, const char*>> segments;  // the name of the button, its value
+            Vector<Pair<const char*, const char*>> segments;  // the name of the button, its value
         };
 
         /// The four groups of the panel with the words they show (the text is in the XML above; the values are what the game publishes)
@@ -473,18 +473,18 @@ namespace BECore::Tests {
             return *typed;
         }
 
-        static std::pair<float, float> CenterOf(const UIElement& element) {
+        static Pair<float, float> CenterOf(const UIElement& element) {
             return {element.rect.x + element.rect.w * 0.5f, element.rect.y + element.rect.h * 0.5f};
         }
 
         /// A press and its release at the center of @p element as it was laid out in the last draw; returns what the two events were taken for
-        std::pair<bool, bool> ClickAt(float x, float y) {
+        Pair<bool, bool> ClickAt(float x, float y) {
             const bool pressed = CoreManager::GetUIInput().DispatchMouseButtonDown(Button(x, y, true));
             const bool released = CoreManager::GetUIInput().DispatchMouseButtonUp(Button(x, y, false));
             return {pressed, released};
         }
 
-        std::pair<bool, bool> Click(const UIElement& element) {
+        Pair<bool, bool> Click(const UIElement& element) {
             const auto [x, y] = CenterOf(element);
             return ClickAt(x, y);
         }
@@ -721,7 +721,7 @@ namespace BECore::Tests {
 
         // On a segment, on the plate between two controls and on the dim far from the plate: all are the panel's
         const UIElement& plate = Get<UIStack>("Plate");
-        const std::pair<float, float> points[] = {CenterOf(El("LevelHard")), {plate.rect.x + 4.0f, plate.rect.y + 4.0f}, {5.0f, 5.0f}, {kViewWidth - 5.0f, kViewHeight - 5.0f}};
+        const Pair<float, float> points[] = {CenterOf(El("LevelHard")), {plate.rect.x + 4.0f, plate.rect.y + 4.0f}, {5.0f, 5.0f}, {kViewWidth - 5.0f, kViewHeight - 5.0f}};
         for (const auto& [x, y] : points) {
             const auto [pressed, released] = ClickAt(x, y);
             EXPECT_TRUE(pressed) << x << "," << y;

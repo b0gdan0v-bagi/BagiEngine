@@ -11,7 +11,7 @@ namespace BECore::Tests {
 
         /// Always the same words, in order, then the last one again
         RandomFn MakeFixed(Vector<uint64_t> words) {
-            auto index = eastl::make_shared<size_t>(0);
+            auto index = MakeShared<size_t>(0);
             return [words = std::move(words), index]() -> uint64_t {
                 const size_t at = *index < words.size() ? (*index)++ : words.size() - 1;
                 return words[at];

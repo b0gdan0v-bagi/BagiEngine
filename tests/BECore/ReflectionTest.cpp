@@ -475,12 +475,14 @@ namespace BECore::Tests {
         }
         {
             SCOPED_TRACE("eastl::pair");
-            const eastl::pair<int32_t, String> original = {42, String("hello")};
-            ExpectBinaryRoundTrip(original, eastl::pair<int32_t, String>{0, String{}});
+            const Pair<int32_t, String> original = {42, String("hello")};
+            ExpectBinaryRoundTrip(original, Pair<int32_t, String>{0, String{}});
         }
         {
             SCOPED_TRACE("std::pair");
+            // std: twin case: the reflection reads std::pair as well as eastl::pair
             const std::pair<int32_t, String> original = {99, String("world")};
+            // std: twin case: the reflection reads std::pair as well as eastl::pair
             ExpectBinaryRoundTrip(original, std::pair<int32_t, String>{0, String{}});
         }
         {
@@ -1354,10 +1356,10 @@ namespace BECore::Tests {
         // eastl::pair
         {
             SCOPED_TRACE("eastl::pair");
-            const eastl::pair<int32_t, String> original = {42, String("hello")};
+            const Pair<int32_t, String> original = {42, String("hello")};
             const String xml = SaveToXml("PairTest", "entry", original);
 
-            eastl::pair<int32_t, String> loaded = {0, String{}};
+            Pair<int32_t, String> loaded = {0, String{}};
             ASSERT_NO_FATAL_FAILURE(LoadFromXml(xml, "PairTest", "entry", loaded));
 
             EXPECT_EQ(loaded.first, original.first);
@@ -1367,9 +1369,11 @@ namespace BECore::Tests {
         // std::pair
         {
             SCOPED_TRACE("std::pair");
+            // std: twin case: the reflection reads std::pair as well as eastl::pair
             const std::pair<int32_t, String> original = {99, String("world")};
             const String xml = SaveToXml("StdPairTest", "entry", original);
 
+            // std: twin case: the reflection reads std::pair as well as eastl::pair
             std::pair<int32_t, String> loaded = {0, String{}};
             ASSERT_NO_FATAL_FAILURE(LoadFromXml(xml, "StdPairTest", "entry", loaded));
 
