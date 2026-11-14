@@ -353,3 +353,12 @@ def test_a_bad_root_a_bad_allow_and_an_unknown_option_exit_2(tmp_path, capsys):
     broken = baseline_file(tmp_path, "garbage\n")
     assert types.main(["--root", str(tmp_path), "--baseline", str(broken)]) == 2
     capsys.readouterr()
+
+
+def test_the_engine_tree_has_no_finding_against_its_committed_baseline():
+    baseline = ENGINE / "CI" / "types_baseline.txt"
+    if not (ENGINE / "src" / "Modules" / "BECore").is_dir() or not baseline.is_file():
+        pytest.skip("the engine tree or its baseline is not here")
+    result = types.check(ENGINE, baseline=types.read_baseline(baseline))
+    assert [f"{hit.path}:{hit.line}: [{hit.rule}]" for hit in result.new] == []
+    assert result.fixed == []

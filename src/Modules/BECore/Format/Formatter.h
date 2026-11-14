@@ -43,7 +43,7 @@ namespace BECore {
         }
 
     private:
-        fmt::formatter<std::string_view> _spec;  //-NoStd: the spec parser of fmt works on std::string_view
+        fmt::formatter<std::string_view> _spec;
     };
 
 }  // namespace BECore

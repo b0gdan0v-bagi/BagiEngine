@@ -5,7 +5,6 @@
 #include <cstdint>
 #include <limits>
 #include <optional>
-#include <span>
 #include <vulkan/vulkan.h>
 
 /**
@@ -101,7 +100,7 @@ namespace BECore::VulkanSwapchainPolicy {
     /// The format to create the swapchain with. `keep` is the format of the swapchain being replaced: the render
     /// pass and the pipelines were built for it, so it is taken whenever the surface still offers it (with the sRGB
     /// non-linear color space). Otherwise BGRA8 sRGB, otherwise the first one. Empty for an empty list.
-    [[nodiscard]] constexpr Optional<VkSurfaceFormatKHR> ChooseSurfaceFormat(std::span<const VkSurfaceFormatKHR> formats, Optional<VkFormat> keep = std::nullopt) {
+    [[nodiscard]] constexpr Optional<VkSurfaceFormatKHR> ChooseSurfaceFormat(Span<const VkSurfaceFormatKHR> formats, Optional<VkFormat> keep = std::nullopt) {
         if (keep) {
             for (const VkSurfaceFormatKHR& f : formats) {
                 if (f.format == *keep && f.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {

@@ -6,7 +6,7 @@
 
 namespace BECore::Fuzz {
 
-    std::span<const FuzzTarget> FuzzTargetList() {
+    Span<const FuzzTarget> FuzzTargetList() {
         static const FuzzTarget targets[] = {
             {"BinaryDeserializer", &FuzzBinaryDeserializer, "binary", 1},
             {"XmlDeserializer", &FuzzXmlDeserializer, "xml", 2},
