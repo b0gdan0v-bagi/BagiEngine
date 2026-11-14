@@ -20,17 +20,18 @@ namespace BECore {
     std::expected<UniquePtr<IDeserializer>, String> OpenDeserializer(StringView virtualPath);
 
     /**
-     * @brief Write every error the deserializer collected to the log, one LOG_ERROR per error.
+     * @brief Write what the deserializer collected to the log: one LOG_ERROR per error, one LOG_WARNING per warning (finding).
      *
-     * Form: `Config 'LoggerConfig': sinks[0].type: Unknown factory type: 'Console'`. The path is left out when the
-     * error has none (a document that does not parse), and ` (line N)` is appended when it has a line.
+     * Form: `Config 'LoggerConfig': sinks[0].type: Unknown factory type: 'Console'`, the same for both levels. The path is
+     * left out when the message has none (a document that does not parse), and ` (line N)` is appended when it has a line.
      *
      * @param configName    Name of the config (or the path of the file) the deserializer read, for the message.
      * @param deserializer  Deserializer that finished (or failed) reading it.
      */
     void LogDeserializeErrors(StringView configName, const IDeserializer& deserializer);
 
-    /// The same for errors that were copied out of a deserializer (a loaded settings struct keeps them), same message format.
-    void LogDeserializeErrors(StringView configName, Span<const DeserializeError> errors);
+    /// The same for messages that were copied out of a deserializer (a loaded settings struct keeps them), same message format.
+    /// @p warnings are logged as LOG_WARNING after the errors; the form without them is for a caller that has errors only.
+    void LogDeserializeErrors(StringView configName, Span<const DeserializeError> errors, Span<const DeserializeError> warnings = {});
 
 }  // namespace BECore

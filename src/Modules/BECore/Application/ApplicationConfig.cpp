@@ -10,7 +10,9 @@ namespace BECore {
         load.found = true;
         deserializer.SetStrictValues(true);
         load.config.Deserialize(deserializer);
+        deserializer.FinishLoad();
         load.errors = deserializer.GetErrors();
+        load.warnings = deserializer.GetWarnings();
         return load;
     }
 

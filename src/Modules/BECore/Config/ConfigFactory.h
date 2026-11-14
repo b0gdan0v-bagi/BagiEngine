@@ -11,7 +11,8 @@ namespace BECore {
      * @brief Create a RefCounted object and deserialize it from a named XML config
      *
      * An unknown config gives the object with default field values. Errors the deserializer reports (an unknown factory
-     * `type`, a malformed value) go to the log through LogDeserializeErrors(); the object keeps what could be read. A
+     * `type`, a malformed value) and its findings (an unknown key, a missing `required` field, a value outside `range`:
+     * ConfigManager::GetDiagnostics) go to the log through LogDeserializeErrors(); the object keeps what could be read. A
      * message logged before LoggerManager has its sinks waits in the log ring buffer, so this also works for LoggerConfig.
      *
      * @note Include from .cpp files only: it pulls in CoreManager.h.
@@ -25,9 +26,8 @@ namespace BECore {
         auto obj = BECore::New<T>(std::forward<Args>(args)...);
         if (auto deserializer = CoreManager::GetConfigManager().CreateDeserializer(configName)) {
             obj->Deserialize(*deserializer);
-            if (deserializer->HasErrors()) {
-                LogDeserializeErrors(configName, *deserializer);
-            }
+            deserializer->FinishLoad();
+            LogDeserializeErrors(configName, *deserializer);
         }
         return obj;
     }

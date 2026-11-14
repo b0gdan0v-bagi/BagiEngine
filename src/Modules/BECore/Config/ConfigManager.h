@@ -4,6 +4,7 @@
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/PoolString/PoolStringMap.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
+#include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Types/Types.h>
 #include <TaskSystem/Task.h>
 #include <atomic>
@@ -12,7 +13,8 @@
 
 namespace BECore {
 
-    class IDeserializer;
+    /// The bare command-line flag that makes the findings of a config load errors (ConfigManager::GetDiagnostics)
+    inline constexpr StringView kStrictConfigFlag = "--strict-config";
 
     /**
      * @brief Loads and caches every XML config of the `config` mount layers by file stem
@@ -40,9 +42,18 @@ namespace BECore {
         XmlNode GetConfig(StringView name) const;
 
         /**
+         * @brief The diagnostics mode of every read of a config: Warn, or Error when the command line has `--strict-config`
+         *
+         * Read at each call, so nothing depends on the order of start-up. A reader of a config that does not come through
+         * CreateDeserializer (OpenDeserializer, a scene's own XmlDeserializer) sets it on its deserializer itself.
+         */
+        static DiagnosticsMode GetDiagnostics();
+
+        /**
          * @brief Get an IDeserializer positioned at the root of a loaded config
          *
          * The one way to read a named config through the reflection: the caller does not pick XmlDeserializer itself.
+         * The deserializer has the diagnostics mode of GetDiagnostics(); the caller ends the read with FinishLoad().
          * The deserializer reads the cached document, so it must not outlive a ReloadConfig of that config.
          * @return The deserializer, or nullptr if the config is unknown
          */
