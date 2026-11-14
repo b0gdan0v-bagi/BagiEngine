@@ -1,4 +1,4 @@
-#include "TestClient.h"
+#include <BECore/Rooms/TestClient.h>
 
 namespace BECore::Tests {
 

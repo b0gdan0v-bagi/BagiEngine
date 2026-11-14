@@ -1,5 +1,4 @@
-#include "WebSocketTestClient.h"
-
+#include <BECore/WebSocketTestClient.h>
 #include <Common/Printers.h>
 #include <RemoteControl/WebSocketFrame.h>
 #include <RemoteControl/WebSocketListener.h>

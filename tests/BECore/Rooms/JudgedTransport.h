@@ -1,7 +1,6 @@
 #pragma once
 
-#include "WireJudge.h"
-
+#include <BECore/Rooms/WireJudge.h>
 #include <RoomClient/RoomTransport.h>
 #include <Rooms/RoomProtocol.h>
 #include <memory>
