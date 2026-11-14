@@ -208,6 +208,17 @@ python3 CI/scripts/strip_pch_includes.py --all --root . --dir src/Widgets
 
 The order stays: dry run, a bounded folder, the build and the tests, then a wider scope.
 
+## Includes
+
+`#include "..."` only for a `.cpp` / `.mm` / `.c` including its own header (`Foo.cpp` -> `"Foo.h"`, no folder in the quotes); every other include is `<...>` from an include root. A quoted include is looked up first in the folder of the including file, so one header gets two spellings and the include roots are bypassed.
+
+| Field | Engine value |
+|-------|--------------|
+| Include roots | `src`, `src/Modules`, the `src/` of a module (`<RemoteControl/WebSocketUrl.h>`); a test helper through the `tests/` root (`<BECore/Rooms/TestClient.h>`); a game adds its own `src/` |
+| Check | `python3 CI/scripts/check_includes.py --root .` (in a game: `python3 engine/CI/scripts/check_includes.py --root .`, with `--exclude <path>` for the game's own vendored code); ctest `BagiIncludeStyle` in the engine |
+
+`clang-format` leaves the own header first and sorts the rest as one block.
+
 ## Launcher
 
 Engine only. A game has no launcher: it fills the heading with "none".
