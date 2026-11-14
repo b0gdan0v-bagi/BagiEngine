@@ -109,6 +109,10 @@ namespace BECore {
         return _nodeStack.back().attribute(nameStr.c_str());
     }
 
+    bool XmlDeserializer::HasKey(StringView name) const {
+        return !GetAttribute(name).empty() || !GetChild(name).empty();
+    }
+
     void XmlDeserializer::AddError(StringView path, StringView message, int32_t line) {
         StoreError(_errors, path, message, line);
     }

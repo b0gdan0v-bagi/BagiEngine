@@ -98,6 +98,8 @@ namespace BECore {
         bool BeginArrayElement() override;
         void EndArrayElement() override;
 
+        bool HasKey(StringView name) const override;
+
         // Error tracking
         bool HasErrors() const override;
         const Vector<DeserializeError>& GetErrors() const override;

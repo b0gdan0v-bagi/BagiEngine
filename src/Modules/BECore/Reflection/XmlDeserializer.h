@@ -139,6 +139,8 @@ namespace BECore {
             return _strictValues;
         }
 
+        bool HasKey(StringView name) const override;
+
         // Error tracking
         bool HasErrors() const override;
         const Vector<DeserializeError>& GetErrors() const override;
