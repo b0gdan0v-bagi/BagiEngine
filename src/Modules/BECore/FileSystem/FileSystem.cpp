@@ -9,8 +9,7 @@ namespace BECore {
             AddContentRoot(FindRootDirectory());
         }
 
-        // Автоматически монтируем стандартные директории каждого корня, если они существуют.
-        // Корни идут от младшего приоритета к старшему, поэтому слой игры перекрывает слой движка.
+        // Lowest priority first, so the layer of the game lands above the engine's
         for (const auto& root : _roots) {
             for (const PoolString name : Array<PoolString, 2>{"config"_intern, "assets"_intern}) {
                 const auto dirName = name.ToStringView();
@@ -72,13 +71,11 @@ namespace BECore {
             return {};
         }
 
-        // 2. Если путь абсолютный
-        std::filesystem::path path(ToStd(virtualPath));  // Здесь аллокация неизбежна для std::filesystem::path
+        std::filesystem::path path(ToStd(virtualPath));  // std::filesystem::path always allocates
         if (path.is_absolute()) {
             return std::filesystem::exists(path) ? path : std::filesystem::path{};
         }
 
-        // 3. Разделяем путь на точку монтирования и остаток через string_view
         size_t firstSlash = virtualPath.find_first_of("/\\");
 
         StringView mountPoint;
@@ -91,7 +88,7 @@ namespace BECore {
             mountPoint = virtualPath;
         }
 
-        // 4. Поиск по точке монтирования (Гетерогенный поиск без аллокаций), слои от старшего приоритета к младшему
+        // Heterogeneous lookup: no allocation for the mount point; layers from the top
         auto it = _mountPoints.Find(mountPoint);
 
         if (it != _mountPoints.end()) {
@@ -99,7 +96,6 @@ namespace BECore {
                 std::filesystem::path fullPath = *layer;
 
                 if (!remainingPath.empty()) {
-                    // Конвертируем оставшийся кусочек в path при склейке
                     fullPath /= ToStd(remainingPath);
                 }
 
@@ -109,7 +105,6 @@ namespace BECore {
             }
         }
 
-        // 5. Поиск относительно корней, от старшего приоритета к младшему
         for (auto root = _roots.rbegin(); root != _roots.rend(); ++root) {
             std::filesystem::path rootFullPath = *root / ToStd(virtualPath);
             if (std::filesystem::exists(rootFullPath)) {
@@ -117,7 +112,6 @@ namespace BECore {
             }
         }
 
-        // 6. Относительно текущей директории
         std::filesystem::path currentPath = std::filesystem::current_path() / ToStd(virtualPath);
         if (std::filesystem::exists(currentPath)) {
             return currentPath;
@@ -175,7 +169,6 @@ namespace BECore {
 
                     bool matches = false;
                     for (const auto& targetExt : extensions) {
-                        // Case-insensitive extension comparison
                         if (ext.size() == targetExt.size()) {
                             bool same = true;
                             for (size_t i = 0; i < ext.size(); ++i) {
@@ -216,7 +209,6 @@ namespace BECore {
             const std::string relStr = relativePath.string();
             virtualPath.append(relStr.data(), relStr.size());
 
-            // Normalize to forward slashes
             for (auto& ch : virtualPath) {
                 if (ch == '\\') {
                     ch = '/';
@@ -230,15 +222,12 @@ namespace BECore {
     }
 
     std::filesystem::path FileSystem::FindRootDirectory() const {
-        // Получаем путь к исполняемому файлу
         std::filesystem::path exePath;
 
-        // Пробуем найти корневую директорию, поднимаясь вверх от exe
         std::filesystem::path current = std::filesystem::current_path();
 
-        // Ищем директорию с config/example_config.xml или другими маркерами
         std::filesystem::path searchPath = current;
-        int maxDepth = 10;  // Ограничение глубины поиска
+        int maxDepth = 10;
 
         for (int i = 0; i < maxDepth; ++i) {
             std::filesystem::path configDir = searchPath / "config";
@@ -253,7 +242,6 @@ namespace BECore {
             }
         }
 
-        // Если не нашли, возвращаем текущую директорию
         return current;
     }
 

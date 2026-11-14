@@ -19,6 +19,7 @@ function attach(ctx) {
     let todoLoading = false;
     let todoAgain = false;
     let entries = []; // the last list, for the pickers and the duplicate hint
+    let focusNext = null;
 
     function todo(args, input) {
         const tool = findTool();
@@ -42,7 +43,8 @@ function attach(ctx) {
         try {
             entries = JSON.parse(await runTool(todoTool(tool), ["list", "--all", "--json", "--body"], 30000));
             const state = ctx.state;
-            if (todoPanel) todoPanel.webview.postMessage({ loading: false, entries, areas: state && state.areas ? state.areas : null, workers: ctx.workersForList(), elsewhere: ctx.elsewhereForList(), at: Date.now() });
+            if (todoPanel) todoPanel.webview.postMessage({ loading: false, entries, areas: state && state.areas ? state.areas : null, workers: ctx.workersForList(), elsewhere: ctx.elsewhereForList(), at: Date.now(), focus: focusNext });
+            if (todoPanel) focusNext = null;
         } catch (error) {
             if (todoPanel) todoPanel.webview.postMessage({ loading: false, error: `todo.py list: ${error.message}` });
         } finally {
@@ -240,14 +242,17 @@ function attach(ctx) {
         if (pick) await write(`todo.py dep rm ${id}`, ["dep", "rm", id, blocker]);
     }
 
-    function openTodoList() {
+    // focus: an entry id to unfold and scroll to (a click on a queued box of the Workers panel's graph); it rides
+    // on the next list sent, so it also reaches a tab that is only being made.
+    function openTodoList(focus) {
+        if (typeof focus === "string" && ID_RE.test(focus)) focusNext = focus;
         if (todoPanel) {
             todoPanel.reveal();
             return loadTodoList();
         }
         todoPanel = vscode.window.createWebviewPanel("todoWorkers.todoList", "Todo list", vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true });
         todoPanel.iconPath = vscode.Uri.file(path.join(ctx.context.extensionPath, "media", "workers.svg"));
-        todoPanel.webview.html = pageHtml(ctx.context, "todo.js", ["panel.css", "todo.css"], "Asking todo.py ...");
+        todoPanel.webview.html = pageHtml(ctx.context, ["graph.js", "todo.js"], ["panel.css", "todo.css", "graph.css"], "Asking todo.py ...");
         todoPanel.webview.onDidReceiveMessage((message) => {
             switch (message.cmd) {
                 case "ready":

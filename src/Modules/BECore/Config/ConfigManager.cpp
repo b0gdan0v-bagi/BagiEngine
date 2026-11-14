@@ -20,7 +20,6 @@ namespace BECore {
 
         LOG_INFO("[ConfigManager] Initializing...");
 
-        // Слои config/ из FileSystem (движок, затем игра): одноимённый файл верхнего слоя перекрывает нижний
         const auto layers = CoreManager::GetFileSystem().GetMountLayers("config"_intern);
         if (layers.empty()) {
             LOG_WARNING("[ConfigManager] Config directory not found, skipping initialization");
@@ -28,7 +27,6 @@ namespace BECore {
             return;
         }
 
-        // Сканируем слои для поиска XML файлов
         Vector<Pair<std::filesystem::path, PoolString>> filesToLoad;
         for (const auto& layer : layers) {
             Vector<Pair<std::filesystem::path, PoolString>> layerFiles;
@@ -53,14 +51,12 @@ namespace BECore {
 
         LOG_INFO(Format("[ConfigManager] Found {} config files", filesToLoad.size()).c_str());
 
-        // Запускаем параллельные задачи загрузки
         TaskGroup group;
         for (const auto& [path, name] : filesToLoad) {
             auto handle = TaskManager::GetInstance().Run(LoadConfigAsync(path, name), TaskPriority::Normal, ThreadType::Background, BE_TASK_LABEL("Load config"));
             group.Add(handle);
         }
 
-        // Ждём завершения всех задач
         group.WaitAll();
 
         auto loadedCount = _configs.size();
@@ -201,13 +197,9 @@ namespace BECore {
     }
 
     void ConfigManager::ScanDirectory(const std::filesystem::path& dir, Vector<Pair<std::filesystem::path, PoolString>>& filesToLoad) const {
-        // filesystem может бросать исключения, но exceptions отключены
-        // Просто пропускаем ошибки
         for (const auto& entry : std::filesystem::recursive_directory_iterator(dir)) {
             if (entry.is_regular_file() && entry.path().extension() == ".xml") {
-                // Используем stem (имя без расширения) как ключ
                 auto stemStr = entry.path().stem().string();
-                // Конвертируем std::string в eastl::string_view через c_str()
                 auto name = PoolString::Intern(StringView(stemStr.c_str(), stemStr.length()));
                 filesToLoad.push_back({entry.path(), name});
 
@@ -217,11 +209,9 @@ namespace BECore {
     }
 
     Task<void> ConfigManager::LoadConfigAsync(std::filesystem::path path, PoolString name) {
-        // Задача уже запущена на background потоке через TaskManager::Run
-
         LOG_DEBUG(Format("[ConfigManager] Loading config: {}", name.ToStringView()).c_str());
 
-        // Проверяем, не загружен ли уже конфиг (защита от дубликатов)
+        // The same stem twice in one layer: the first task to get the lock wins
         {
             LockGuard lock(_writeMutex);
             if (_configs.find(name) != _configs.end()) {
@@ -230,19 +220,16 @@ namespace BECore {
             }
         }
 
-        // Создаём XmlDocument напрямую
         auto doc = BECore::New<XmlDocument>();
 
-        // Используем LoadFromFile для физического пути
         if (!doc->LoadFromFile(path)) {
             LOG_ERROR(Format("[ConfigManager] Failed to load config: {} from {}", name.ToStringView(), path.string()).c_str());
             co_return;
         }
 
-        // Добавляем в кэш (потокобезопасно)
         {
             LockGuard lock(_writeMutex);
-            // Повторная проверка на случай race condition
+            // The file was parsed outside the lock, so another task may have added the name meanwhile
             if (_configs.find(name) != _configs.end()) {
                 LOG_WARNING(Format("[ConfigManager] Config {} was loaded by another thread, discarding duplicate", name.ToStringView()).c_str());
                 co_return;

@@ -9,7 +9,6 @@ namespace BECore {
     }
 
     Task<IntrusivePtr<IResource>> XmlResourceLoader::LoadAsync(PoolString path) {
-        // Run loading on thread pool
         co_await SwitchToBackground(TaskPriority::Normal, BE_TASK_LABEL("Load XML resource"));
 
         auto resource = LoadInternal(path);
@@ -23,7 +22,6 @@ namespace BECore {
     IntrusivePtr<XmlResource> XmlResourceLoader::LoadInternal(PoolString path) {
         auto resource = XmlResource::Create();
 
-        // Create and load XmlConfig
         auto config = XmlConfig::Create();
         if (!config.LoadFromVirtualPath(path.ToStringView())) {
             LOG_ERROR(Format("Failed to load XML resource: {}", path.ToStringView()).c_str());
@@ -31,7 +29,6 @@ namespace BECore {
             return resource;
         }
 
-        // Mark as loaded
         resource->SetLoaded(path, std::move(config));
         LOG_INFO(Format("Loaded XML resource: {}", path.ToStringView()).c_str());
 

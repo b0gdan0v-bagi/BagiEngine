@@ -310,6 +310,8 @@ def cmd_history(api: Api, args) -> None:
 def cmd_add(api: Api, args) -> None:
     body = read_text(args.body_file) if args.body_file else ""
     fields = {"id": args.id, "area": args.area, "title": args.title, "body": body, "stage": args.stage, "status": args.status, "priority": args.priority}
+    if args.slicing != "none":
+        fields["slicing"] = args.slicing
     entry = api.call("POST", "/entries", fields)
     emit(entry, args.json, lambda e: print(f"added {e['id']} ({e['area']}): {e['title']}"))
 
@@ -616,6 +618,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--stage", type=int)
     p.add_argument("--priority", choices=PRIORITIES, help="the owner's priority; leave it unset unless the owner or the text states it")
     p.add_argument("--status", default="open", choices=["open", "deferred"])
+    p.add_argument("--slicing", default="through", choices=["through", "none"], help="through (the default): the slices run on one branch and the owner merges once; none: each slice waits for its merge")
     p.add_argument("--body-file", help="markdown file of the body, '-' for stdin")
 
     p = sub.add_parser("edit", parents=[common], help="change fields of an entry")

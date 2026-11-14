@@ -31,7 +31,6 @@ namespace BECore {
         constexpr StringView kEnvelopeVersion = "version";
         constexpr StringView kEnvelopeState = "state";
 
-        /// The first error the deserializer recorded as a sentence, or @p fallback when it recorded none
         String FirstErrorOr(const IDeserializer& deserializer, StringView fallback) {
             if (!deserializer.HasErrors()) {
                 return String(fallback);
@@ -40,7 +39,7 @@ namespace BECore {
             return Format("{} (at '{}')", error.errorMessage.ToStringView(), error.path.ToStringView());
         }
 
-        /// Open the bytes, check the shape of the envelope and read game and version; the deserializer stays inside `save`
+        /// Leaves @p deserializer inside the object `save`, so Load goes on with `state`
         std::expected<SaveInfo, SaveError> OpenEnvelope(BinaryDeserializer& deserializer, const Vector<uint8_t>& bytes, StringView slot) {
             if (!deserializer.LoadFromBuffer(bytes)) {
                 return MakeError(SaveErrorKind::Corrupt, Format("The save in slot '{}' is not a valid file: {}", slot, FirstErrorOr(deserializer, "unreadable data")));

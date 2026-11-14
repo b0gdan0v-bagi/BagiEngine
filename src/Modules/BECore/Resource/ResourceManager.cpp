@@ -8,9 +8,7 @@ namespace BECore {
         BE_PROFILE_SCOPE("ResourceManager::Initialize");
         LOG_INFO("Initializing ResourceManager...");
 
-        // Create all registered loaders via the self-registration factory.
-        // Each concrete loader registered itself when its .gen.hpp was included
-        // in its own .cpp, so no EnumXxx.gen.hpp include is needed here.
+        // A loader registers itself in the factory when its .gen.hpp is included in its own .cpp.
         for (const auto& meta : AbstractFactory<IResourceLoader>::GetInstance().GetRegisteredTypes()) {
             auto loader = AbstractFactory<IResourceLoader>::GetInstance().Create(meta);
             if (loader) {

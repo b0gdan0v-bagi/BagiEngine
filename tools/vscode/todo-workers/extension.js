@@ -31,7 +31,7 @@ class WorkersView {
     resolveWebviewView(view) {
         this.view = view;
         view.webview.options = { enableScripts: true };
-        view.webview.html = pageHtml(this.context, "panel.js", ["panel.css"], "Asking worker.py ...");
+        view.webview.html = pageHtml(this.context, ["graph.js", "panel.js"], ["panel.css", "graph.css"], "Asking worker.py ...");
         view.webview.onDidReceiveMessage((message) => this.actions(message));
         view.onDidChangeVisibility(() => {
             if (view.visible) this.actions({ cmd: "refresh" });
@@ -90,11 +90,12 @@ function activate(context) {
             case "run": return message.entry ? ctx.runBranch(entryOf(message.entry), null) : ctx.runBranch(worker && worker.entry, worker);
             case "shots": return ctx.shots(entryOf(message.entry));
             case "unqueue": return ctx.unqueueEntry(message.entry, message.worker);
+            case "reorderQueue": return ctx.reorderQueue(message.worker, message.ids);
             case "commitPointer": return ctx.commitPointer();
             case "clearFeed": return ctx.clearFeed();
             case "review": return ctx.reviewBranch(entryOf(message.entry));
             case "claudeReview": return ctx.startClaudeReview(entryOf(message.entry));
-            case "todoList": return ctx.openTodoList();
+            case "todoList": return ctx.openTodoList(message.entry);
             case "settings": return vscode.commands.executeCommand("workbench.action.openSettings", "todoWorkers");
         }
     }
