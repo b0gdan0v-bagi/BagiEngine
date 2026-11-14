@@ -1,6 +1,11 @@
 #pragma once
 
+#include <BECore/Math/Rect.h>
+#include <BECore/Math/Vec2.h>
+#include <BECore/Types/Types.h>
 #include <BECore/UI/UIRectEdit.h>
+#include <cstddef>
+#include <cstdint>
 
 namespace BECore {
 

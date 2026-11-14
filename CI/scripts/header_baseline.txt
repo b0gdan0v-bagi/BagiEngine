@@ -1,22 +1,6 @@
 # Headers that do not compile alone (CI/scripts/check_headers.py). A fix removes lines, nothing is added.
 # Regenerate: python3 CI/scripts/check_headers.py --root . --build build/macos-debug --baseline CI/scripts/header_baseline.txt --update-baseline
 src/Application/Application.h
-src/Modules/BECore/UI/UIAnchorPresets.h
-src/Modules/BECore/UI/UICanvasComponent.h
-src/Modules/BECore/UI/UICanvasLayout.h
-src/Modules/BECore/UI/UICanvasScaler.h
-src/Modules/BECore/UI/UIControl.h
-src/Modules/BECore/UI/UIDocument.h
-src/Modules/BECore/UI/UIEnvironment.h
-src/Modules/BECore/UI/UIGeometryBounds.h
-src/Modules/BECore/UI/UIHtmlParser.h
-src/Modules/BECore/UI/UIInputClicker.h
-src/Modules/BECore/UI/UILayout.h
-src/Modules/BECore/UI/UILayoutContext.h
-src/Modules/BECore/UI/UILayoutValidator.h
-src/Modules/BECore/UI/UINineSlice.h
-src/Modules/BECore/UI/UIPreview.h
-src/Modules/BECore/UI/UIPreviewOverlay.h
 src/Modules/BECore/UI/UIRectEdit.h
 src/Modules/BECore/UI/UIRegions.h
 src/Modules/BECore/UI/UISprite.h

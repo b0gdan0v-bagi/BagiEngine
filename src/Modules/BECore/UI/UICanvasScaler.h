@@ -1,7 +1,10 @@
 #pragma once
 
+#include <BECore/Math/Rect.h>
 #include <BECore/Renderer/ViewTransform.h>
 #include <BECore/UI/UILayoutContext.h>
+#include <BECore/Utils/EnumUtils.h>
+#include <cstdint>
 
 namespace BECore {
 

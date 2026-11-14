@@ -1,5 +1,7 @@
 #pragma once
 
+#include <BECore/Math/Rect.h>
+
 namespace BECore::UIBounds {
 
     /// The largest magnitude of a position, a size, an offset or a margin the pure UI geometry works with, in UI units. A screen is some thousands of units wide, so this is

@@ -1,5 +1,10 @@
 #pragma once
 
+#include <BECore/Math/Rect.h>
+#include <BECore/Types/Types.h>
+#include <BECore/Utils/EnumUtils.h>
+#include <cstdint>
+
 namespace BECore {
 
     /// The shapes the editor viewport can be forced to, to look at a layout in several of them without resizing the window. Free follows the panel.

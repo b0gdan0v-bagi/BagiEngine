@@ -1,5 +1,7 @@
 #pragma once
 
+#include <BECore/Math/Rect.h>
+#include <BECore/Types/Types.h>
 #include <BECore/UI/UILayoutContext.h>
 #include <BECore/UI/UISettings.h>
 
