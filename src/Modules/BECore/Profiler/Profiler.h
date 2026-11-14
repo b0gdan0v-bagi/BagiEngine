@@ -1,6 +1,10 @@
 #pragma once
 
 #include <BECore/Profiler/IProfilerBackend.h>
+#include <BECore/Types/Types.h>
+#include <atomic>
+#include <cstdint>
+#include <expected>
 
 namespace BECore {
 

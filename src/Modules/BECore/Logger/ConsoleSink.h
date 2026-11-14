@@ -1,6 +1,8 @@
 #pragma once
 
 #include <BECore/Logger/ILogSink.h>
+#include <BECore/Reflection/ReflectionMarkers.h>
+#include <BECore/Types/Types.h>
 
 namespace BECore {
 

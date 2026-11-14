@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Profiler/Profiler.h>
+#include <cstdint>
 
 namespace BECore {
 

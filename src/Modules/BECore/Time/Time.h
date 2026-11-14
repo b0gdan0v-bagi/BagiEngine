@@ -1,6 +1,9 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
+#include <BECore/Utils/PassKey.h>
 #include <chrono>
+#include <cstdint>
 
 namespace BECore {
 

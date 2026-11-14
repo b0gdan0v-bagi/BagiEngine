@@ -1,6 +1,10 @@
 #pragma once
 
 #include <BECore/Profiler/Ring/RingSnapshot.h>
+#include <BECore/Types/Types.h>
+#include <BECore/Utils/EnumUtils.h>
+#include <cstddef>
+#include <cstdint>
 
 namespace BECore {
 

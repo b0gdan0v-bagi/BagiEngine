@@ -2,6 +2,8 @@
 
 #include <BECore/Logger/ILogSink.h>
 #include <BECore/Logger/LogEvent.h>
+#include <BECore/Reflection/ReflectionMarkers.h>
+#include <BECore/Types/Types.h>
 
 #ifdef PLATFORM_WINDOWS
 #include <windows.h>
