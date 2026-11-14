@@ -57,12 +57,12 @@ tools/            todo (the todo store), control (control API client, smoke test
 - `ASSERT()` / `EXPECT()` / `FATALERROR()`; they compile out in Release, so no side effects inside.
 - `std::expected<T, E>` for recoverable errors.
 - `Mutex`, `SharedMutex`, `ConditionVariable`, `Thread` of `BECore/Threading/` instead of raw `std::mutex` / `std::thread`; a lock has a `BE_LOCK_SITE("name")` (`Threading/CLAUDE.md`).
-- `Format("... {}", args)` or `"... {}"_format(args)`; `LOG_*` take one string.
+- Format through `BECore::Format` / `FormatArg` / `Formatter<T>` (`Format/CLAUDE.md`): `Format("... {}", args)` or `"... {}"_format(args)`; `LOG_*` take one string.
 - `override`, `#pragma once`, namespace closing comments, inline member initialisers.
 - Look at similar code first and put new code in the matching module. Widely used headers go into `BECore/pch.h`. A new module needs its own `CMakeLists.txt` and an `add_subdirectory` (`.claude/rules/cmake-rules.md`).
 - **Zero allocations in a steady frame:** a frame in which nothing changed allocates nothing, on every path a frame runs (scene update and draw, UI canvases and layout, text, a game's components). Make a thing again only when its key moved (a version, the window, the strings) and keep lists as members so they keep their capacity. A phone and the browser pay for every allocation in frame time, and one per frame stays hidden until a profile shows it. Check it in `macos-profile` (`ENGINE_PROFILER_ALLOC`): `AllocTracker::GetThreadCounters()` around a frame in a test, `frame_stats` / `zone_allocs` in a running game (`Profiler/CLAUDE.md`); a game holds its scene to it with a test of its own.
 
-**DON'T:** `std::string` / `std::string_view` where `PoolString`, `String` or `StringView` fit (a real boundary says `//-NoStd: <why>`; `ToString` / `Format` make strings, `ToStd` / `FromStd` cross); a function or a variable named like an alias (`Span`, `Map`); `enum class`; C-style casts; string concatenation with `+`; magic numbers without a named constant; globals instead of `Singleton<T>`; circular module dependencies; abstractions the task does not need.
+**DON'T:** `std::string` / `std::string_view` where `PoolString`, `String` or `StringView` fit (a real boundary says `//-NoStd: <why>`; `ToString` / `Format` make strings, `ToStd` / `FromStd` cross); a function or a variable named like an alias (`Span`, `Map`); `enum class`; C-style casts; string concatenation with `+`; magic numbers without a named constant; globals instead of `Singleton<T>`; `fmt::` outside `BECore/Format/` and the type layer (a real boundary says `//-NoStd: <why>`); circular module dependencies; abstractions the task does not need.
 
 ## After making changes
 

@@ -154,4 +154,18 @@ namespace BECore::Tests {
         EXPECT_EQ(Format("Selected: {}", static_cast<TestColor>(2)), "Selected: Blue");
     }
 
+    TEST(EnumUtilsTest, FormattingTakesAStringSpec) {
+        EXPECT_EQ(Format("[{:>8}]", TestColor::Red), "[     Red]");
+        EXPECT_EQ(Format("[{:<7}|]", TestColor::Blue), "[Blue   |]");
+        EXPECT_EQ(Format("[{:^8}]", TestColor::Green), "[ Green  ]");
+        EXPECT_EQ(Format("[{:.3}]", TestColor::Yellow), "[Yel]");
+        EXPECT_EQ(Format("{:>7}/{:<7}|", TestColor::Red, TestColor::Yellow), "    Red/Yellow |");
+    }
+
+    TEST(EnumUtilsTest, AnEnumIsFormattableThroughTheLayer) {
+        static_assert(Formattable<TestColor>);
+        static_assert(HasFormatter<TestColor>);
+        EXPECT_EQ(Format("{}", TestColor::Green), "Green");
+    }
+
 }  // namespace BECore::Tests

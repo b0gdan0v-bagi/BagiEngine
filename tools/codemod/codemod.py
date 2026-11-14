@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Moves the `eastl::` and `std::` type names of C++ sources to the BECore type layer (`BECore/Types/`).
 
-    python3 tools/codemod/codemod.py --root <folder> --family <optionals|views|strings|containers|maps|utility|all>
+    python3 tools/codemod/codemod.py --root <folder> --family <optionals|views|strings|containers|maps|utility|fmt|all>
                                      [--dry-run] [--fail-on-change] [--report]
 
 It walks `*.h *.hpp *.inl *.cpp` under `--root`, skips the vendored zones, the type layer and the reflection traits, and works on code
@@ -26,12 +26,12 @@ from typing import Dict, Iterator, List, Optional, Sequence, Set, Tuple
 EXIT_OK, EXIT_CHANGES, EXIT_ERROR = 0, 1, 2
 
 SOURCE_SUFFIXES = {".h", ".hpp", ".inl", ".cpp"}
-FAMILIES = ("optionals", "views", "strings", "containers", "maps", "utility")
+FAMILIES = ("optionals", "views", "strings", "containers", "maps", "utility", "fmt")
 # Folders never walked, at any depth (the vendored zones of the engine and the build and tool folders)
 SKIPPED_FOLDERS = {"EABase", "EnTT", "fmt", "imgui", "nlohmann", "pugixml", "RmlUi", "stb", "tracy", "external", ".venv", ".git", "node_modules", "__pycache__"}
 SKIPPED_FOLDER_PREFIXES = ("build",)
 # Paths (relative to the root, `/` separated) that are skipped: a folder prefix as a segment run, or a file
-SKIPPED_PATH_RUNS = ("src/Widgets/Icons", "BECore/Types")
+SKIPPED_PATH_RUNS = ("src/Widgets/Icons", "BECore/Types", "BECore/Format")
 # The files that name an `eastl::` / `std::` type on purpose (the type layer is above): the reflection traits and the tests that
 # hold the aliases against the types they stand for
 SKIPPED_FILES = (
@@ -271,6 +271,20 @@ VIEW_CALL = re.compile(r"(?<![\w:])(?:::)?(eastl|std)::string_view\s*[({]")
 LOOKUP_TEMPORARY = re.compile(r"\.\s*(?:find|contains|count|at)\s*\(\s*(?:(?:eastl|std|BECore)::)?(?:string|String)\s*[({]")
 BECORE_NAMESPACE = re.compile(r"\bnamespace\s+BECore\b(?:\s*::\s*\w+)*\s*\{")
 USING_BECORE = re.compile(r"\busing\s+namespace\s+BECore\s*;")
+# The plain `fmt::` calls the format layer has a name for; every other `fmt::` name is reported
+FMT_NAMES = {
+    "format": "Format",
+    "format_to": "FormatTo",
+    "format_to_n": "FormatToN",
+    "arg": "FormatArg",
+    "runtime": "RuntimeFormat",
+    "print": "Print",
+}
+FMT_NAME = re.compile(r"(?<![\w:])(?:::)?fmt::(\w+)")
+FMT_VALUE = re.compile(r"\s*::\s*value(?!\w)")
+FMT_USING = re.compile(r"\busing\s+namespace\s+fmt\s*;")
+FMT_INCLUDE = re.compile(r"^[ \t]*#[ \t]*include[ \t]*<fmt/[^>\n]*>", re.MULTILINE)
+FMT_ADVICE = "use the layer's name or mark //-NoStd: <why>"
 
 
 @dataclass
@@ -372,9 +386,43 @@ class Pass:
             self._lookup_temporaries()
         if "utility" in self.families and self.had_eastl_variant:
             self._variant_companions()
+        if "fmt" in self.families:
+            self._fmt_names()
         for name in NAMES:
             if name.family in self.families:
                 self._simple(name)
+
+    def _fmt_names(self) -> None:
+        """The plain `fmt::` calls to the layer's names; any other `fmt::` name and an `#include <fmt/...>` are reported and left."""
+        for m in FMT_NAME.finditer(self.masked):
+            if self.exempt(m.start()):
+                continue
+            name = m.group(1)
+            if name == "is_formattable":
+                if self._is_formattable(m):
+                    continue
+            elif name in FMT_NAMES:
+                self.replace(m, self.alias(FMT_NAMES[name], m.start()), f"fmt::{name} -> {FMT_NAMES[name]}")
+                continue
+            self.note(m.start(), f"fmt::{name}", f"fmt::{name} left: {FMT_ADVICE}")
+        for m in FMT_USING.finditer(self.masked):
+            if not self.exempt(m.start()):
+                self.note(m.start(), "using namespace fmt", f"using namespace fmt left: {FMT_ADVICE}")
+        for m in FMT_INCLUDE.finditer(self.masked):
+            if not self.exempt(m.start()):
+                self.note(m.start(), "#include <fmt/...>", f"{m.group(0).strip()} left: {FMT_ADVICE}")
+
+    def _is_formattable(self, name: re.Match) -> bool:
+        """`fmt::is_formattable<T>::value` -> `Formattable<T>`; False (reported by the caller) for any other shape."""
+        found = self.arguments_after(name.end())
+        if found is None or len(found[0]) != 1:
+            return False
+        value = FMT_VALUE.match(self.masked, found[2] + 1)
+        if not value:
+            return False
+        argument = self.text(found[0][0]).strip()
+        self.edits.append(Edit(name.start(), value.end(), f"{self.alias('Formattable', name.start())}<{argument}>", "fmt::is_formattable<T>::value -> Formattable<T>"))
+        return True
 
     def _simple(self, name: Name) -> None:
         for m in name.pattern.finditer(self.masked):
@@ -646,7 +694,7 @@ def parse_families(text: str) -> List[str]:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Moves eastl:: and std:: type names to the BECore type layer.")
     parser.add_argument("--root", default=".", help="the folder to walk (the engine: .; a game: its src and its tests)")
-    parser.add_argument("--family", required=True, type=parse_families, help="optionals, views, strings, containers, maps, utility, all (or a comma list)")
+    parser.add_argument("--family", required=True, type=parse_families, help="optionals, views, strings, containers, maps, utility, fmt, all (or a comma list)")
     parser.add_argument("--dry-run", action="store_true", help="write nothing, print what would change")
     parser.add_argument("--fail-on-change", action="store_true", help="write nothing; exit 1 when anything would change (the check that a family is done)")
     parser.add_argument("--report", action="store_true", help="list the notes: what the tool found and left")

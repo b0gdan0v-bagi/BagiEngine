@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cmath>
+#include <fmt/format.h>
+
 // The string types of the engine. Code names these, not eastl:: / std: (Types/CLAUDE.md): the implementation is chosen here, once.
 namespace BECore {
 
@@ -56,8 +59,15 @@ namespace BECore {
             const auto result = std::to_chars(digits, digits + sizeof(digits), value);
             return String{digits, static_cast<size_t>(result.ptr - digits)};
         } else {
-            const std::string text = std::to_string(value);
-            return String{text.data(), text.size()};
+            // The sign of a NaN carries no meaning and printf and fmt disagree on it (-nan); it is "nan" here on every platform
+            if (std::isnan(value)) {
+                return String{"nan"};
+            }
+            // std::to_string widens a float to double and writes %f; {:f} writes the same text, into the string's own buffer
+            String text;
+            using Widened = std::conditional_t<std::is_same_v<T, long double>, long double, double>;
+            fmt::format_to(eastl::back_inserter(text), "{:f}", Widened{value});
+            return text;
         }
     }
 

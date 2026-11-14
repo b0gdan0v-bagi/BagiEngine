@@ -49,7 +49,7 @@ namespace BECore {
         }
 
         PoolString GetTypeName() const override {
-            static PoolString typeName = PoolString::Intern(fmt::format("SerializedResource<{}>", ReflectionTraits<T>::name));
+            static PoolString typeName = PoolString::Intern(Format("SerializedResource<{}>", ReflectionTraits<T>::name));
             return typeName;
         }
 
