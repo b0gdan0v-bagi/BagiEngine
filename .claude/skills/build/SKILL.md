@@ -35,7 +35,7 @@ The presets are the engine's. A game includes them through its own `CMakePresets
 | `macos-profile` | macOS | Clang + Ninja, `RelWithDebInfo` with `ENGINE_PROFILER` and `ENGINE_PROFILER_ALLOC` on, no editor, asserts off: the build to measure with (`--trace=<file>`). Only by explicit name |
 | `macos-profile-tracy` | macOS | `macos-profile` plus `ENGINE_PROFILER_TRACY=ON`: the vendored Tracy client is the default backend (a Tracy viewer of the same version connects). Only by explicit name |
 | `macos-profile-editor` | macOS | `macos-profile` plus `BE_WITH_EDITOR=ON`: the editor and its ImGui Profiler panel in an optimized build (Ctrl+Shift+E, then Ctrl+Shift+P). Only by explicit name |
-| `windows-clang-asan` | Windows | Clang + Ninja (through `vs_env.py`), `Debug` build type with the release CRT, AddressSanitizer + UBSan, not yet run on Windows. Only by explicit name or for a QA request: a full build of its own (`.claude/rules/build-project.md`, "Sanitizers") |
+| `windows-clang-asan` | Windows | Clang + Ninja (through `vs_env.py`), `Debug` build type with the static release CRT and a static SDL, AddressSanitizer + UBSan. Only by explicit name or for a QA request: a full build of its own (`.claude/rules/build-project.md`, "Sanitizers") |
 | `macos-asan` | macOS | Clang + Ninja, `Debug` with AddressSanitizer + UBSan on all code, asserts on. Only by explicit name or for a QA request ("run the tests under the sanitizers"): a full build of its own, and the tests take about 3 times as long as in `macos-debug` (`.claude/rules/build-project.md`, "Sanitizers") |
 | `windows-vs2022-{debug,release}` | Windows | Visual Studio 2022, MSVC: only by explicit name |
 | `windows-vs2022-clangcl-{debug,release}` | Windows | Visual Studio 2022, ClangCL |
