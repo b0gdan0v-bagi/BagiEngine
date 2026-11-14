@@ -1,7 +1,9 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
 #include <EASTL/array.h>
 #include <Stress/StressRecorder.h>
+#include <cstdint>
 
 namespace BECore::Stress {
 

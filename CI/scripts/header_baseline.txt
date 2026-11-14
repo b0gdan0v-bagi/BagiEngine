@@ -23,14 +23,3 @@ tests/Fuzz/FuzzMutator.h
 tests/Fuzz/FuzzProbeAccess.h
 tests/Fuzz/FuzzSeeds.h
 tests/Fuzz/FuzzTargets.h
-tools/stress/src/Stress/Components/StressEntitiesComponent.h
-tools/stress/src/Stress/Components/StressRunComponent.h
-tools/stress/src/Stress/Components/StressSpritesComponent.h
-tools/stress/src/Stress/EntityField.h
-tools/stress/src/Stress/RampController.h
-tools/stress/src/Stress/SpriteField.h
-tools/stress/src/Stress/StressHash.h
-tools/stress/src/Stress/StressRecorder.h
-tools/stress/src/Stress/StressSettings.h
-tools/stress/src/Stress/StressState.h
-tools/stress/src/Stress/UiField.h
