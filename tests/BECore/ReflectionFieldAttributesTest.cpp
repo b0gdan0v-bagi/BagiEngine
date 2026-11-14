@@ -77,7 +77,7 @@ namespace BECore::Tests {
             }
         };
 
-        /// Overrides no field hook: a visitor written before BeginField existed
+        /// Overrides no field hook: the defaults of BeginField, EndField and ShowsHidden must be enough to edit a field
         class IncrementingVisitor final : public NullVisitor {
         public:
             using NullVisitor::Visit;

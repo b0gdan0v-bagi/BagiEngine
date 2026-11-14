@@ -18,7 +18,7 @@ namespace BECore {
      * Every reflected field is visited between `BeginField(attributes)` and `EndField()` (see `PropVisit::VisitField`): the
      * brackets nest around a compound's `BeginCompound` / `EndCompound` and the visits of its children, and `EndField`
      * always follows its `BeginField`. All three field hooks have a default, so a visitor that overrides none of them
-     * edits every field as before, except the ones marked `hidden` (see `ShowsHidden`).
+     * edits every field except the ones marked `hidden` (see `ShowsHidden`).
      */
     class IPropertyVisitor {
     public:

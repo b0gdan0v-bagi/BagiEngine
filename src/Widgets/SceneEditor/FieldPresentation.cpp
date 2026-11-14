@@ -1,6 +1,5 @@
 #include "FieldPresentation.h"
 
-
 namespace BECore::FieldPresentation {
 
     Presentation Describe(const FieldAttributes& attributes, NumberKind kind) {
