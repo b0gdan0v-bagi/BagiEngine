@@ -1399,6 +1399,57 @@ def test_a_paired_game_entry_waits_for_an_engine_branch_in_review(game: Path, st
     assert worker.queue_wait(layout, "unknown", table) is None  # the store cannot say: the loop decides
 
 
+def test_list_json_store_says_why_each_queued_entry_waits_and_how_it_waits_for_its_blockers(game: Path, store, fake_claude, monkeypatch, capsys):
+    entries, calls = store
+    script, _log, _sessions = fake_claude
+    store_run = worker.subprocess.run
+    listed = {"in progress,review": lambda: []}  # store_entries (no actor); the queue lookup is added below
+
+    def fake_run(command, *args, **kwargs):
+        if any(str(part).endswith("todo.py") for part in command) and "list" in command:
+            for status, rows in listed.items():
+                if status in command:
+                    return subprocess.CompletedProcess(command, 0, json.dumps(rows()), "")
+        return store_run(command, *args, **kwargs)
+
+    monkeypatch.setattr(worker.subprocess, "run", fake_run)
+    worker.main(["create", "2", "--no-configure"])
+    entries["free"] = open_entry("free")
+    entries["waits"] = open_entry("waits", blocked_by=[{"id": "far", "status": "open"}, {"id": "parent", "status": "review"}])
+    entries["stacked"] = open_entry("stacked", blocked_by=[{"id": "parent", "status": "review"}])
+    entries["parent"] = review("parent", "mahjong", "todo/parent")
+    entries["g"] = open_entry("g", blocked_by=[{"id": "e", "status": "review"}])
+    entries["e"] = review("e", "engine", "todo/e")
+    branch_with(game, "todo/parent", "main", "p.txt", "p\n")
+    branch_with(game / "engine", "todo/e", "games/chess", "e.txt", "e\n")
+    for entry_id in ("free", "waits", "stacked"):
+        worker.main(["queue", "1", "--add", entry_id])
+    worker.main(["queue", "2", "--add", "g"])
+    capsys.readouterr()
+    assert worker.main(["list", "--json", "--store", "--claude", str(script)]) == 0
+    first, second = json.loads(capsys.readouterr().out)["workers"]
+    items = {row["id"]: row for row in first["queueItems"]}
+    assert [row["id"] for row in first["queueItems"]] == ["free", "waits", "stacked"]
+    assert (items["free"]["wait"], items["free"]["blockedBy"], items["free"]["title"], items["free"]["status"]) == (None, [], "Title of free", "open")
+    assert items["waits"]["wait"] == "blocked by far (open), parent (review)"
+    assert [(b["id"], b["kind"]) for b in items["waits"]["blockedBy"]] == [("far", "waits"), ("parent", "stacked")]
+    assert items["stacked"]["wait"] is None and items["stacked"]["blockedBy"][0]["kind"] == "stacked"
+    assert second["queueItems"][0]["wait"] is None and second["queueItems"][0]["blockedBy"][0]["kind"] == "paired"
+    # a slice that reopens its entry is no branch to stack on: the blocked one waits for the merge
+    entries["parent"]["statusNote"] = f"slice 1 of 2, {worker.SLICE_REOPEN}"
+    assert worker.main(["list", "--json", "--store", "--claude", str(script)]) == 0
+    stacked = json.loads(capsys.readouterr().out)["workers"][0]["queueItems"][2]
+    assert stacked["wait"] == "blocked by parent (review)" and stacked["blockedBy"][0]["kind"] == "waits"
+    # without --store the panel gets no items; one list of the store serves every queue when it answers
+    assert worker.main(["list", "--json", "--claude", str(script)]) == 0
+    assert json.loads(capsys.readouterr().out)["workers"][0]["queueItems"] is None
+    shows = len([c for c in calls if c[0] == "show"])
+    listed["open,in progress,review"] = lambda: list(entries.values())
+    assert worker.main(["list", "--json", "--store", "--claude", str(script)]) == 0
+    assert json.loads(capsys.readouterr().out)["workers"][0]["queueItems"][1]["wait"] == "blocked by far (open), parent (review)"
+    assert len([c for c in calls if c[0] == "show"]) == shows
+
+
 def test_kick_starts_only_idle_unpaused_workers_with_a_takeable_head(game: Path, store, fake_claude, monkeypatch, capsys):
     entries, _calls = store
     script, _log, sessions = fake_claude

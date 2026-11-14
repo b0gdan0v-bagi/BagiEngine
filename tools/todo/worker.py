@@ -1493,38 +1493,78 @@ def branch_unmerged(layout: Layout, area: dict, branch: str | None) -> bool:
         and not git_ok("merge-base", "--is-ancestor", branch, area["base"], cwd=repo)
 
 
-def queue_wait(layout: Layout, entry_id: str, table: dict[str, dict]) -> str | None:
-    """Why a queued entry cannot be started now, or None when it can. What the store's JSON allows of the loop's own
-    rule (todo-loop/SKILL.md, step 1, "Stacked branches", "Paired"): an entry not `open` is the loop's to continue (a
-    through slice, a remarks round); an open one is takeable when it is not `blocked`, or when its only open blocker is
-    in `review` with an unmerged branch in this checkout, of the same area (stacked: the blocker not itself stacked, by
-    its note) or of the shared engine while the entry is the game's (paired), and that blocker's note is not a slice that
-    reopens. Busy files are not compared here (the loop does it). An entry the store cannot show is left to the loop."""
-    entry = show_entry(layout, entry_id)
-    if entry is None:
-        return None
-    status = entry.get("status")
-    if status == "closed":
-        return "closed"
-    if status != "open" or not entry.get("blocked"):
-        return None
-    blockers = [b for b in entry.get("blockedBy") or [] if isinstance(b, dict) and b.get("status") != "closed"]
-    named = ", ".join(f"{b.get('id')} ({b.get('status')})" for b in blockers)
-    waits = f"blocked by {named or '?'}"
-    if len(blockers) != 1 or blockers[0].get("status") != "review":
-        return waits
-    parent = show_entry(layout, str(blockers[0].get("id")))
+def blocker_kind(layout: Layout, entry: dict, blocker: dict, table: dict[str, dict], show) -> str:
+    """How an entry waits for one open blocker: `stacked` (a branch of the same area in review, unmerged here, not
+    itself stacked: the entry is cut from it), `paired` (the shared engine's branch in review while the entry is the
+    game's), else `waits` (the blocker must be closed first). A slice that reopens its entry is never stacked on."""
+    if blocker.get("status") != "review":
+        return "waits"
+    parent = show(str(blocker.get("id")))
     own, theirs = table.get(entry.get("area")), table.get((parent or {}).get("area"))
     if parent is None or own is None or theirs is None or parent.get("status") != "review":
-        return waits
+        return "waits"
     note = parent.get("statusNote") or ""
     same = parent.get("area") == entry.get("area")
     stacked = same and "stacked on todo/" not in note
     paired = not same and own["repo"] == "." and layout.shared is not None \
         and (layout.main / theirs["repo"]).resolve() == layout.shared.resolve()
     if (stacked or paired) and SLICE_REOPEN not in note and branch_unmerged(layout, theirs, parent.get("branch")):
-        return None
-    return waits
+        return "stacked" if stacked else "paired"
+    return "waits"
+
+
+def open_blockers(entry: dict) -> list[dict]:
+    return [b for b in entry.get("blockedBy") or [] if isinstance(b, dict) and b.get("status") != "closed"]
+
+
+def queue_relation(layout: Layout, entry_id: str, table: dict[str, dict], show=None) -> dict:
+    """A queued entry as the panel's graph draws it: `{id, title, status, area, wait, blockedBy: [{id, status, title,
+    kind}]}`, `wait` being `queue_wait`'s answer and `kind` `blocker_kind`'s. `show(id)` gives an entry or None (the
+    store by default; `list_json` passes one list read once)."""
+    show = show or (lambda i: show_entry(layout, i))
+    entry = show(entry_id)
+    row = {"id": entry_id, "title": None, "status": None, "area": None, "wait": None, "blockedBy": []}
+    if entry is None:
+        return row
+    status = entry.get("status")
+    blockers = open_blockers(entry)
+    row.update(title=entry.get("title"), status=status, area=entry.get("area"), blockedBy=[
+        {"id": b.get("id"), "status": b.get("status"), "title": b.get("title"), "kind": blocker_kind(layout, entry, b, table, show)} for b in blockers
+    ])
+    if status == "closed":
+        row["wait"] = "closed"
+    elif status == "open" and entry.get("blocked"):
+        named = ", ".join(f"{b.get('id')} ({b.get('status')})" for b in blockers)
+        takeable = len(blockers) == 1 and row["blockedBy"][0]["kind"] in ("stacked", "paired")
+        row["wait"] = None if takeable else f"blocked by {named or '?'}"
+    return row
+
+
+def queue_wait(layout: Layout, entry_id: str, table: dict[str, dict], show=None) -> str | None:
+    """Why a queued entry cannot be started now, or None when it can. What the store's JSON allows of the loop's own
+    rule (todo-loop/SKILL.md, step 1, "Stacked branches", "Paired"): an entry not `open` is the loop's to continue (a
+    through slice, a remarks round); an open one is takeable when it is not `blocked`, or when its only open blocker is
+    in `review` with an unmerged branch in this checkout, of the same area (stacked: the blocker not itself stacked, by
+    its note) or of the shared engine while the entry is the game's (paired), and that blocker's note is not a slice that
+    reopens (`blocker_kind`). Busy files are not compared here (the loop does it). An entry the store cannot show is left
+    to the loop."""
+    return queue_relation(layout, entry_id, table, show)["wait"]
+
+
+def store_lookup(layout: Layout):
+    """`show(id)` over one `todo.py list` of the open, in progress and review entries (what a queue and its blockers
+    are), falling back to `todo.py show` for an id the list has not (a closed one) and keeping each answer."""
+    try:
+        rows = json.loads(todo_cli(layout, "list", "--status", "open,in progress,review", "--json", actor=QUEUE_ACTOR) or "null")
+    except (WorkerError, ValueError):
+        rows = None
+    known = {row["id"]: row for row in rows if isinstance(row, dict) and "id" in row} if isinstance(rows, list) else {}
+
+    def show(entry_id: str) -> dict | None:
+        if entry_id not in known:
+            known[entry_id] = show_entry(layout, entry_id)
+        return known[entry_id]
+    return show
 
 
 def queue_head(layout: Layout, items: list[str]) -> tuple[str | None, list[str]]:
@@ -1964,6 +2004,8 @@ def list_json(layout: Layout, args) -> dict:
     queues = read_queues(layout)
     queue_states = read_queue_state(layout)
     by_branch = {entry["branch"]: entry for entry in entries if entry.get("branch")}
+    table = {row["area"]: row for row in rule_area_table(layout.main)} if args.store else {}
+    show = None
     workers = []
     for k, path in layout.workers():
         game = head_json(path)
@@ -1973,6 +2015,12 @@ def list_json(layout: Layout, args) -> dict:
         entry = next((by_branch[h["branch"]] for h in (engine, game) if h and h["branch"] in by_branch), None)
         limited = limit_hit(session)
         queue_state = queue_state_of(queue_states, f"{WORKER_PREFIX}{k}")
+        items = queues.get(f"{WORKER_PREFIX}{k}", [])
+        if args.store and (items or (entry and open_blockers(entry))):
+            show = show or store_lookup(layout)
+            if entry:
+                for blocker in open_blockers(entry):
+                    blocker["kind"] = blocker_kind(layout, entry, blocker, table, show)
         workers.append({
             "k": k,
             "name": f"{WORKER_PREFIX}{k}",
@@ -1994,6 +2042,9 @@ def list_json(layout: Layout, args) -> dict:
             # the reason a loop or the streak limit paused the queue (`queue --pause`), None while it runs
             "queuePaused": (queue_state["reason"] or "by hand") if queue_state["paused"] else None,
             "queueStreak": queue_state["streak"],
+            # with --store: each queued entry with `wait` (why the panel will not start it now) and its open blockers
+            # with `kind` (`queue_relation`); the held entry's open blockers get `kind` too
+            "queueItems": [queue_relation(layout, i, table, show) for i in items] if args.store else None,
         })
     entry_usage = update_ledger(workers) if args.usage else {}
     usage: dict = {}
