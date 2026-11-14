@@ -559,13 +559,21 @@ def is_skipped_file(relative: str) -> bool:
     return any(("/" + run + "/") in padded or padded.endswith("/" + run) for run in SKIPPED_PATH_RUNS)
 
 
+def path_in_repository(path: Path, repository: Path) -> str:
+    """The path of `path` from `repository`, symlinks resolved; a link that leaves the repository keeps the path it was found under."""
+    try:
+        return path.resolve().relative_to(repository).as_posix()
+    except ValueError:
+        return Path(os.path.abspath(path)).relative_to(repository).as_posix()
+
+
 def walk(root: Path) -> Iterator[Path]:
     repository = repository_of(root)
     for folder, dirs, files in os.walk(root):
         dirs[:] = sorted(d for d in dirs if d not in SKIPPED_FOLDERS and not d.startswith(SKIPPED_FOLDER_PREFIXES))
         for name in sorted(files):
             path = Path(folder) / name
-            if path.suffix in SOURCE_SUFFIXES and not is_skipped_file(path.resolve().relative_to(repository).as_posix()):
+            if path.suffix in SOURCE_SUFFIXES and not is_skipped_file(path_in_repository(path, repository)):
                 yield path
 
 

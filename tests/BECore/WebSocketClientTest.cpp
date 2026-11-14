@@ -179,7 +179,7 @@ namespace BECore::Tests {
             /// The right answer to the request that was read; @p extraBytes follow it in the same send
             void Accept(const String& extraBytes = "") {
                 const String key = RequestHeader("Sec-WebSocket-Key");
-                const String accept = ComputeAcceptKey(String(key.c_str(), key.size()));
+                const String accept = ComputeAcceptKey(key);
                 SendRaw(AcceptResponse(accept) + extraBytes);
             }
 

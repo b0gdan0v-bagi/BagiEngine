@@ -108,7 +108,7 @@ namespace BECore::Tests {
 
         ASSERT_TRUE(client.SendText("hello over tls"));
         const String large(kLargeMessageBytes, 'x');
-        ASSERT_TRUE(client.SendText(String(large.c_str(), large.size())));
+        ASSERT_TRUE(client.SendText(large));
         ASSERT_TRUE(WaitUntil([this] { Pump(); }, [&] { return events.size() >= 3; }));
         EXPECT_EQ(events[1].kind, WebSocketClientEventKind::Text);
         EXPECT_EQ(events[1].text, "hello over tls");

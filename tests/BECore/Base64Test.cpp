@@ -7,13 +7,13 @@ namespace BECore::Tests {
 
         String Encode(StringView text) {
             const String encoded = Base64Encode(Span<const uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), text.size()));
-            return String(encoded.c_str(), encoded.size());
+            return encoded;
         }
 
         String Encode(std::initializer_list<uint8_t> bytes) {
             const Vector<uint8_t> data(bytes);
             const String encoded = Base64Encode(Span<const uint8_t>(data.data(), data.size()));
-            return String(encoded.c_str(), encoded.size());
+            return encoded;
         }
 
     }  // namespace

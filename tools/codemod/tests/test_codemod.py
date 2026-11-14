@@ -375,3 +375,12 @@ def test_a_file_that_is_not_utf8_is_an_error_and_the_rest_goes_on(tmp_path: Path
     (tmp_path / "a.h").write_bytes(b"\xff\xfe eastl::string")
     assert codemod.main(["--root", str(tmp_path), "--family", "strings"]) == 2
     assert (tmp_path / "b.h").read_text() == in_namespace("String a;")
+
+
+def test_a_symlink_that_leaves_the_repository_is_walked_under_its_own_path(tmp_path: Path) -> None:
+    outside = tmp_path / "outside"
+    make_tree(outside, {"linked.h": "eastl::string a;\n"})
+    checkout = tmp_path / "checkout"
+    make_tree(checkout, {".git": "gitdir: elsewhere\n", "src/a.h": "eastl::string a;\n"})
+    (checkout / "src" / "linked.h").symlink_to(outside / "linked.h")
+    assert codemod.run(checkout, ["strings"], write=False).changed_files == ["src/a.h", "src/linked.h"]

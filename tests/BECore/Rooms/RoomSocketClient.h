@@ -36,7 +36,7 @@ namespace BECore::Tests {
 
         void Send(const ClientMessage& message) {
             const String text = SerializeClientMessage(message);
-            _raw.SendText(String(text.c_str(), text.size()));
+            _raw.SendText(text);
         }
 
         void Create(StringView name, StringView game = "fake") {
@@ -148,7 +148,7 @@ namespace BECore::Tests {
         [[nodiscard]] String Types() const {
             String result;
             for (const ReceivedMessage& message : _received) {
-                result += (result.empty() ? "" : ",") + String(message.type.c_str(), message.type.size());
+                result += (result.empty() ? "" : ",") + message.type;
             }
             return result;
         }
