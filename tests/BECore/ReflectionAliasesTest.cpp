@@ -28,6 +28,7 @@ namespace BECore::Tests {
     static_assert(Ser::HasDataAccessor<Map<String, int32_t>>);
     static_assert(Ser::HasDataAccessor<FixedHashMap<String, int32_t, 8>>);
     static_assert(Ser::HasDataAccessor<Optional<int32_t>>);
+    static_assert(Ser::HasDataAccessor<Pair<int32_t, String>>);
 
     // The aliases that are not reflected today: a field of one of them does not compile. Adding support is a decision to make
     // on purpose (the serialized form of a sorted vector, of a view and of a pointer to one object has to be chosen), and this
@@ -36,6 +37,11 @@ namespace BECore::Tests {
     static_assert(!Ser::HasDataAccessor<FlatSet<int32_t>>);
     static_assert(!Ser::HasDataAccessor<Span<int32_t>>);
     static_assert(!Ser::HasDataAccessor<UniquePtr<int32_t>>);
+    static_assert(!Ser::HasDataAccessor<SharedPtr<int32_t>>);
+    static_assert(!Ser::HasDataAccessor<HashSet<int32_t>>);
+    static_assert(!Ser::HasDataAccessor<Set<int32_t>>);
+    static_assert(!Ser::HasDataAccessor<Variant<int32_t, float>>);
+    static_assert(!Ser::HasDataAccessor<Tuple<int32_t, float>>);
 
     TEST(ReflectionAliasesTest, CompileTimeChecks) {
         SUCCEED() << "The static_asserts at the top of this file are the check";
@@ -61,6 +67,7 @@ namespace BECore::Tests {
             }
             state.present = 42;
             state.absent.reset();
+            state.entry = {11, "eleven"};
         }
 
         template <typename State>
@@ -117,6 +124,7 @@ namespace BECore::Tests {
             state.fixedHashed["stale"] = 1;
             state.present.reset();
             state.absent = 5;
+            state.entry = {0, "stale"};
         }
 
         void ExpectFilled(const AliasState& state) {
@@ -143,6 +151,8 @@ namespace BECore::Tests {
             EXPECT_TRUE(state.present.has_value());
             EXPECT_EQ(state.present.value_or(0), 42);
             EXPECT_FALSE(state.absent.has_value());
+            EXPECT_EQ(state.entry.first, 11);
+            EXPECT_EQ(state.entry.second, "eleven");
         }
 
     }  // namespace
@@ -188,6 +198,29 @@ namespace BECore::Tests {
         AliasState loaded;
         ASSERT_NO_FATAL_FAILURE(LoadXml(SaveXml(before), loaded));
         ExpectFilled(loaded);
+    }
+
+    TEST(ReflectionAliasesTest, ThePairIsSavedAsTheEastlPairIs) {
+        const Pair<int32_t, String> aliased{4, "four"};
+        const eastl::pair<int32_t, eastl::string> reference{4, "four"};
+        const auto save = [](const auto& pair) {
+            XmlSerializer serializer;
+            if (serializer.BeginObject("State")) {
+                Ser::Save(serializer, pair, "pair");
+                serializer.EndObject();
+            }
+            return serializer.SaveToString();
+        };
+        const eastl::string xml = save(aliased);
+        EXPECT_EQ(xml, save(reference));
+
+        Pair<int32_t, String> loaded{0, "stale"};
+        XmlDeserializer deserializer;
+        ASSERT_TRUE(deserializer.LoadFromString(xml));
+        ASSERT_TRUE(deserializer.BeginObject("State"));
+        EXPECT_TRUE(Ser::Load(deserializer, loaded, "pair"));
+        deserializer.EndObject();
+        EXPECT_EQ(loaded, aliased);
     }
 
     TEST(ReflectionAliasesTest, SkippedDefaultsOmitEmptyAliasFields) {

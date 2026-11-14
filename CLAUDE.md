@@ -51,7 +51,7 @@ tools/            todo (the todo store), control (control API client, smoke test
 `.clang-format` is the source of truth; run the `clang-format` skill. Naming: `PascalCase` types, methods, namespaces, enum values; `camelCase` locals and parameters; `_camelCase` private members; `T` / `TName` template parameters; `"Key"_intern` for `PoolString` literals.
 
 **DO:**
-- The `BECore` type names (`String`, `StringView`, `Vector`, `SmallVector`, `HashMap`, `Optional`, `UniquePtr`, ...); `eastl::` and `std::` types directly only inside `BECore/Types/` and the reflection traits (`Types/CLAUDE.md`). `PoolString` for identifiers and keys.
+- The `BECore` type names (`String`, `StringView`, `Vector`, `SmallVector`, `HashMap`, `HashSet`, `Pair`, `Variant`, `Optional`, `UniquePtr`, `SharedPtr`, ...); `eastl::` and `std::` types directly only inside `BECore/Types/` and the reflection traits (`Types/CLAUDE.md`). `PoolString` for identifiers and keys.
 - `IntrusivePtr<T>` (never raw `new` / `delete`); `Singleton<T>` for global services; `PassKey<T>` for access control.
 - `CORE_ENUM(Name, Type, Values...)` instead of `enum class`; convert with `EnumUtils<E>`.
 - `ASSERT()` / `EXPECT()` / `FATALERROR()`; they compile out in Release, so no side effects inside.

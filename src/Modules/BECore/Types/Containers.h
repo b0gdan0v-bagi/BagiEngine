@@ -3,7 +3,10 @@
 #include <BECore/Types/Strings.h>
 #include <EASTL/array.h>
 #include <EASTL/fixed_hash_map.h>
+#include <EASTL/hash_set.h>
 #include <EASTL/map.h>
+#include <EASTL/memory.h>
+#include <EASTL/set.h>
 #include <EASTL/vector_map.h>
 #include <EASTL/vector_set.h>
 
@@ -49,6 +52,15 @@ namespace BECore {
     template <typename Key, typename T, typename Compare = DefaultLess<Key>>
     using Map = eastl::map<Key, T, Compare>;
 
+    /// The hash set: a HashMap without values. A String key hashes and compares as HashMap's does, so `find`, `contains`, `count`
+    /// and `erase` take a StringView or a literal without making a String.
+    template <typename Key, typename Hash = DefaultHash<Key>, typename Equal = DefaultEqual<Key>>
+    using HashSet = eastl::hash_set<Key, Hash, Equal>;
+
+    /// The ordered set (a red-black tree); a String key compares by StringView as Map's does. EASTL has no `extract` or `merge`.
+    template <typename Key, typename Compare = DefaultLess<Key>>
+    using Set = eastl::set<Key, Compare>;
+
     /// A hash map with its nodes inside the object (BucketCount: how many buckets; Overflow: whether it may take heap nodes when full).
     template <typename Key, typename T, size_t NodeCount, size_t BucketCount = NodeCount + 1, bool Overflow = true, typename Hash = DefaultHash<Key>, typename Equal = DefaultEqual<Key>>
     using FixedHashMap = eastl::fixed_hash_map<Key, T, NodeCount, BucketCount, Overflow, Hash, Equal>;
@@ -69,5 +81,38 @@ namespace BECore {
     /// The owner of one object (or an array, `UniquePtr<T[]>`); move-only.
     template <typename T, typename Deleter = eastl::default_delete<T>>
     using UniquePtr = eastl::unique_ptr<T, Deleter>;
+
+    /// Makes a `UniquePtr<T>` from the constructor arguments, or a `UniquePtr<T[]>` of n default-initialized elements (`MakeUnique<T[]>(n)`).
+    template <typename T, typename... Args>
+    [[nodiscard]] auto MakeUnique(Args&&... args) {
+        return eastl::make_unique<T>(eastl::forward<Args>(args)...);
+    }
+
+    /// The shared owner of one object, counted. The control block of MakeShared is allocated with the object.
+    template <typename T>
+    using SharedPtr = eastl::shared_ptr<T>;
+
+    template <typename T, typename... Args>
+    [[nodiscard]] SharedPtr<T> MakeShared(Args&&... args) {
+        return eastl::make_shared<T>(eastl::forward<Args>(args)...);
+    }
+
+    /// Two values; the value_type of every EASTL map. Structured bindings work (`auto [a, b] = pair`), `std::tie(a, b) = pair` does not.
+    template <typename A, typename B>
+    using Pair = eastl::pair<A, B>;
+
+    template <typename A, typename B>
+    [[nodiscard]] constexpr auto MakePair(A&& first, B&& second) {
+        return eastl::make_pair(eastl::forward<A>(first), eastl::forward<B>(second));
+    }
+
+    /// One of several types. std::variant, like Optional: the standard one; `std::visit`, `std::get`, `std::get_if`,
+    /// `std::holds_alternative` and `std::monostate` stay spelled `std::`.
+    template <typename... Ts>
+    using Variant = std::variant<Ts...>;
+
+    /// Several values of different types. std::tuple: the reflection traits store fields in one; `std::apply` and `std::get` stay spelled `std::`.
+    template <typename... Ts>
+    using Tuple = std::tuple<Ts...>;
 
 }  // namespace BECore

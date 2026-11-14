@@ -47,6 +47,8 @@ def test_type_and_name(parse, declaration, expected):
     ("BE_REFLECT_FIELD Map<String, Vector<int32_t>> m;", ("m", "Map<String, Vector<int32_t>>"), False),
     ("BE_REFLECT_FIELD FixedHashMap<String, int32_t, 8> m;", ("m", "FixedHashMap<String, int32_t, 8>"), False),
     ("BE_REFLECT_FIELD Optional<int32_t> o;", ("o", "Optional<int32_t>"), False),
+    ("BE_REFLECT_FIELD Pair<int32_t, String> p;", ("p", "Pair<int32_t, String>"), False),
+    ("BE_REFLECT_FIELD Vector<Pair<String, Array<float, 3>>> v;", ("v", "Vector<Pair<String, Array<float, 3>>>"), False),
 ])
 def test_alias_type_and_name(parse, declaration, expected, primitive):
     classes, warnings = parse("struct Foo {\n    BE_CLASS(Foo)\n    " + declaration + "\n};\n")
