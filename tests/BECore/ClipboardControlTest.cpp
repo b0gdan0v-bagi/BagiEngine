@@ -11,6 +11,7 @@ namespace BECore::Tests {
 
     namespace {
 
+        // std: meets std::string until the std::string of this file moves to String
         String MakeRequest(int64_t id, std::string_view method, const Json& params = Json()) {
             Json request = Json::object();
             request["id"] = id;
@@ -21,6 +22,7 @@ namespace BECore::Tests {
             return DumpJson(request);
         }
 
+        // std: meets std::string until the std::string of this file moves to String
         Json TextParams(std::string_view text) {
             Json params = Json::object();
             params["text"] = std::string(text);

@@ -5,7 +5,7 @@ namespace BECore::Tests {
 
     namespace {
 
-        std::string Encode(std::string_view text) {
+        std::string Encode(StringView text) {
             const String encoded = Base64Encode(Span<const uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), text.size()));
             return std::string(encoded.c_str(), encoded.size());
         }

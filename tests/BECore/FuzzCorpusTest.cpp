@@ -44,7 +44,7 @@ namespace BECore::Tests {
             return (result.ec == std::errc() && result.ptr == end) ? value : byDefault;
         }
 
-        uint64_t HashName(std::string_view name) {
+        uint64_t HashName(StringView name) {
             uint64_t value = kFnvOffset;
             for (const char symbol : name) {
                 value = (value ^ static_cast<uint8_t>(symbol)) * kFnvPrime;

@@ -100,6 +100,7 @@ namespace BECore::Tests {
 
         /// The response head of the handshake, and the body when it says Content-Length. Empty when nothing came in time
         std::string ReadHttpResponse() {
+            // std: meets std::string until the std::string of this file moves to String
             constexpr std::string_view kHeadEnd = "\r\n\r\n";
             std::string response;
             size_t bodyExpected = 0;

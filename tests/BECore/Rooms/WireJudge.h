@@ -29,6 +29,7 @@ namespace BECore::Tests {
     }  // namespace WireJudgeDetail
 
     /// Every card id (`c<digit>_<digit>`, a whole token: "c1_20" and "xc1_2" are not ids) that @p text mentions, in order
+    // std: meets std::string until the std::string of this file moves to String
     inline Vector<std::string> FindCardIds(std::string_view text) {
         using namespace WireJudgeDetail;
         constexpr size_t kIdLength = 4;
@@ -47,6 +48,7 @@ namespace BECore::Tests {
     }
 
     /// The card ids @p text names that the client of @p seat (-1: a client that has no seat yet) may not know, in order
+    // std: meets std::string until the std::string of this file moves to String
     inline Vector<std::string> FindLeakedCardIds(std::string_view text, int seat) {
         Vector<std::string> allowedTable;
         if (const auto parsed = ParseJson(FromStd(text)); parsed && parsed->is_object()) {

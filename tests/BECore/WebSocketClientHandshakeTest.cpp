@@ -16,11 +16,13 @@ namespace BECore::Tests {
             std::string statusLine = "HTTP/1.1 101 Switching Protocols";
             Vector<std::string> headers = {"Upgrade: websocket", "Connection: Upgrade", std::string("Sec-WebSocket-Accept: ") + kRfcAccept};
 
+            // std: meets std::string until the std::string of this file moves to String
             Response& Add(std::string_view line) {
                 headers.emplace_back(line);
                 return *this;
             }
 
+            // std: meets std::string until the std::string of this file moves to String
             Response& Remove(std::string_view name) {
                 eastl::erase_if(headers, [&](const std::string& line) { return line.starts_with(name); });
                 return *this;
@@ -40,6 +42,7 @@ namespace BECore::Tests {
             }
         };
 
+        // std: meets std::string until the std::string of this file moves to String
         void ExpectRefused(const Response& response, std::string_view messagePart) {
             const auto result = response.Check();
             ASSERT_FALSE(result.has_value()) << response.Text();

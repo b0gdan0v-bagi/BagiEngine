@@ -24,6 +24,7 @@ namespace BECore::Tests {
         using TestClient = WebSocketTestClient;
         constexpr WebSocketMask kMask = kClientMask;
 
+        // std: meets std::string until the std::string of this file moves to String
         std::string Request(int64_t id, std::string_view method, std::string_view paramsJson = "{}") {
             return "{\"id\":" + std::to_string(id) + ",\"method\":\"" + std::string(method) + "\",\"params\":" + std::string(paramsJson) + "}";
         }

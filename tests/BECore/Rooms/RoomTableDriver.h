@@ -119,6 +119,7 @@ namespace BECore::Tests {
     inline Vector<std::string> LeaksOf(const RoomSocketClient& client) {
         Vector<std::string> leaks;
         for (const ReceivedMessage& message : client.Received()) {
+            // std: meets std::string until the std::string of this file moves to String
             for (std::string& id : FindLeakedCardIds(std::string_view(message.text.c_str(), message.text.size()), client.seat)) {
                 leaks.push_back(std::move(id));
             }

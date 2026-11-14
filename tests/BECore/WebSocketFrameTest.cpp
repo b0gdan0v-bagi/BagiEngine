@@ -19,6 +19,7 @@ namespace BECore::Tests {
             return Span<const uint8_t>(bytes.data(), bytes.size());
         }
 
+        // std: meets std::string until the std::string of this file moves to String
         Span<const uint8_t> TextBytes(std::string_view text) {
             return Span<const uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), text.size());
         }

@@ -12,6 +12,7 @@ namespace BECore::Tests {
             return url ? *url : WebSocketUrl{};
         }
 
+        // std: meets std::string until the std::string of this file moves to String
         void ExpectRefused(StringView text, std::string_view messagePart = {}) {
             const auto url = ParseWebSocketUrl(text);
             ASSERT_FALSE(url.has_value()) << std::string(text.data(), text.size());

@@ -23,6 +23,7 @@ namespace BECore::Tests {
             }
         };
 
+        // std: meets std::string until the std::string of this file moves to String
         StringView View(std::string_view text) {
             return FromStd(text);
         }
@@ -54,6 +55,7 @@ namespace BECore::Tests {
         }
 
         /// A request text built through Json, so that the test data is always valid
+        // std: meets std::string until the std::string of this file moves to String
         String MakeRequest(int64_t id, std::string_view method, const Json& params = Json()) {
             Json request = Json::object();
             request["id"] = id;
@@ -85,6 +87,7 @@ namespace BECore::Tests {
             }
 
             /// Registers a method that records its name in `order` and answers with an empty result
+            // std: meets std::string until the std::string of this file moves to String
             void RegisterRecording(std::string_view method, bool bypassBarrier = false) {
                 const std::string name(method);
                 service.RegisterHandler(
@@ -97,6 +100,7 @@ namespace BECore::Tests {
             }
 
             /// Registers a method that defers its answer by `frames` frames, then records `name-done`
+            // std: meets std::string until the std::string of this file moves to String
             void RegisterDeferring(std::string_view method, uint32_t frames, bool bypassBarrier = false) {
                 const std::string name(method);
                 service.RegisterHandler(

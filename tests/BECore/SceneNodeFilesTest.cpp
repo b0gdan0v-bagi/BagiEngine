@@ -38,7 +38,7 @@ namespace BECore::Tests {
         Vector<std::string> NodeNames(pugi::xml_node root, const char* sceneName) {
             Vector<std::string> names;
             for (pugi::xml_node scene : root.child("scenes").children("scene")) {
-                if (std::string_view{scene.attribute("name").as_string()} != sceneName) {
+                if (StringView{scene.attribute("name").as_string()} != sceneName) {
                     continue;
                 }
                 for (pugi::xml_node node : scene.child("nodes").children("node")) {
@@ -71,7 +71,7 @@ namespace BECore::Tests {
         /// The `<component type="..">` of a `<node>`
         pugi::xml_node ComponentOf(pugi::xml_node node, const char* type) {
             for (pugi::xml_node component : node.child("components").children("component")) {
-                if (std::string_view{component.attribute("type").as_string()} == type) {
+                if (StringView{component.attribute("type").as_string()} == type) {
                     return component;
                 }
             }
@@ -97,7 +97,7 @@ namespace BECore::Tests {
         };
 
         bool Mentions(const String& error, const char* part) {
-            return std::string_view{error.c_str()}.find(part) != std::string_view::npos;
+            return StringView{error.c_str()}.find(part) != StringView::npos;
         }
 
     }  // namespace

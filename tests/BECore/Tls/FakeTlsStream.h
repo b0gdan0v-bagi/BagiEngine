@@ -77,6 +77,7 @@ namespace BECore::Tests {
                 return std::unexpected(SetError(String(("TLS: no handshake answer from " + target + ": " + whyNot).c_str())));
             }
             if (answer != "FAKE-OK") {
+                // std: meets std::string until the std::string of this file moves to String
                 constexpr std::string_view kReject = "FAKE-REJECT ";
                 const std::string reason = answer.rfind(kReject, 0) == 0 ? answer.substr(kReject.size()) : "bad handshake answer: " + answer;
                 return std::unexpected(SetError(String(("TLS: " + reason).c_str())));
@@ -174,6 +175,7 @@ namespace BECore::Tests {
                 ADD_FAILURE() << "no fake TLS hello: " << whyNot;
                 return false;
             }
+            // std: meets std::string until the std::string of this file moves to String
             constexpr std::string_view kHello = "FAKE-HELLO ";
             if (line.rfind(kHello, 0) != 0) {
                 ADD_FAILURE() << "not a fake TLS hello: " << line;

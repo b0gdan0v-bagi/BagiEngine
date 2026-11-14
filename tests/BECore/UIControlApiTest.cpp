@@ -641,6 +641,7 @@ namespace BECore::Tests {
         }
 
         /// Sends a request, runs the frame stage that answers it and returns the whole response
+        // std: meets std::string until the std::string of this file moves to String
         Json Call(std::string_view method, const Json& params = Json()) {
             Json request = Json::object();
             request["id"] = ++_nextId;
@@ -678,6 +679,7 @@ namespace BECore::Tests {
         }
 
         /// The canvas of the result named after a scene node
+        // std: meets std::string until the std::string of this file moves to String
         static const Json* FindCanvas(const Json& result, std::string_view node) {
             const Json* canvases = Member(result, "canvases");
             if (canvases == nullptr || !canvases->is_array()) {
@@ -692,6 +694,7 @@ namespace BECore::Tests {
         }
 
         /// The element of a canvas, searched through the whole tree
+        // std: meets std::string until the std::string of this file moves to String
         static const Json* FindElement(const Json& parent, std::string_view name) {
             const Json* list = Member(parent, parent.contains("elements") ? "elements" : "children");
             if (list == nullptr || !list->is_array()) {

@@ -56,7 +56,7 @@ namespace BECore::Tests {
             if (parsed && (type == RoomMessageTypes::kJoined || type == RoomMessageTypes::kView)) {
                 _log->seat = static_cast<int>(GetJsonInt(*parsed, "seat").value_or(-1));
             }
-            for (const std::string& id : FindLeakedCardIds(std::string_view(text.data(), text.size()), _log->seat)) {
+            for (const std::string& id : FindLeakedCardIds(ToStd(text), _log->seat)) {
                 _log->leaks.push_back(id + " in " + std::string(text.c_str()));
             }
             if (parsed && type == RoomMessageTypes::kLeft) {

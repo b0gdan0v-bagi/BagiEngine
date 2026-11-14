@@ -12,6 +12,7 @@ namespace BECore::Tests {
             return FromStd(text);
         }
 
+        // std: meets std::string until the std::string of this file moves to String
         bool NameIs(const std::string& line, std::string_view name) {
             if (line.size() <= name.size() || line[name.size()] != ':') {
                 return false;
@@ -33,6 +34,7 @@ namespace BECore::Tests {
             };
 
             /// Replaces the header @p name (any case) or adds it
+            // std: meets std::string until the std::string of this file moves to String
             Request& Set(std::string_view name, std::string_view value) {
                 const std::string line = std::string(name) + ": " + std::string(value);
                 for (std::string& existing : headers) {
@@ -45,11 +47,13 @@ namespace BECore::Tests {
                 return *this;
             }
 
+            // std: meets std::string until the std::string of this file moves to String
             Request& Remove(std::string_view name) {
                 eastl::erase_if(headers, [&](const std::string& line) { return NameIs(line, name); });
                 return *this;
             }
 
+            // std: meets std::string until the std::string of this file moves to String
             Request& Add(std::string_view line) {
                 headers.emplace_back(line);
                 return *this;

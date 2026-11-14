@@ -5,6 +5,7 @@ namespace BECore::Tests {
 
     namespace {
 
+        // std: meets std::string until the std::string of this file moves to String
         StringView View(std::string_view text) {
             return FromStd(text);
         }

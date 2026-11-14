@@ -33,6 +33,7 @@ namespace BECore::Tests {
             /// The `type` of every text the client received, in order
             Vector<std::string> types;
 
+            // std: meets std::string until the std::string of this file moves to String
             [[nodiscard]] size_t CountType(std::string_view type) const {
                 return static_cast<size_t>(std::count(types.begin(), types.end(), type));
             }
