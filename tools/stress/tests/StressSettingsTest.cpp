@@ -5,9 +5,9 @@ namespace BECore::Stress::Tests {
 
     namespace {
 
-        using Args = eastl::vector<eastl::string>;
+        using Args = eastl::vector<String>;
 
-        std::expected<StressSettings, eastl::string> Parse(const Args& args) {
+        std::expected<StressSettings, String> Parse(const Args& args) {
             CommandLine line;
             line.Set(args);
             return ParseStressSettings(line);
@@ -17,7 +17,7 @@ namespace BECore::Stress::Tests {
         void ExpectErrorNaming(const Args& args, StringView flag) {
             const auto result = Parse(args);
             ASSERT_FALSE(result.has_value()) << args[0].c_str();
-            EXPECT_TRUE(result.error().find(eastl::string(flag)) != eastl::string::npos) << result.error().c_str();
+            EXPECT_TRUE(result.error().find(String(flag)) != String::npos) << result.error().c_str();
         }
 
     }  // namespace
@@ -116,7 +116,7 @@ namespace BECore::Stress::Tests {
         ExpectErrorNaming({"--stress-measure=wall"}, "--stress-measure");
         ExpectErrorNaming({"--stress-language=de"}, "--stress-language");
         const auto result = Parse({"--stress-scene=3d"});
-        EXPECT_TRUE(result.error().find("sprites, entities, ui") != eastl::string::npos) << result.error().c_str();
+        EXPECT_TRUE(result.error().find("sprites, entities, ui") != String::npos) << result.error().c_str();
     }
 
     TEST(StressSettingsTest, AnEmptyValueIsAnError) {

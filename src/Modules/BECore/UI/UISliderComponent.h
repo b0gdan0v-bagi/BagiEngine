@@ -66,7 +66,7 @@ namespace BECore {
         [[nodiscard]] static float ValueAtX(const Rect& area, float minValue, float maxValue, float step, float canvasX);
 
         /// A value as text, short and exact: at most six significant digits, no trailing zeros, no "-0" ("0.3", "7", "35", "-1.5")
-        [[nodiscard]] static eastl::string FormatValue(float value);
+        [[nodiscard]] static String FormatValue(float value);
 
         /// The variable as a number in `minValue..maxValue`, read now: the minimum when it is unset or malformed
         [[nodiscard]] float GetValue() const;

@@ -44,7 +44,7 @@ namespace BECore::Fuzz {
         };
 
         template <typename T>
-        constexpr bool IsTextType = std::is_same_v<T, eastl::string> || std::is_same_v<T, PoolString>;
+        constexpr bool IsTextType = std::is_same_v<T, String> || std::is_same_v<T, PoolString>;
 
         template <typename T>
         constexpr uint8_t ExpectedTag() {
@@ -55,7 +55,7 @@ namespace BECore::Fuzz {
             }
         }
 
-        StringView TextOf(const eastl::string& value) {
+        StringView TextOf(const String& value) {
             return StringView(value);
         }
 
@@ -178,7 +178,7 @@ namespace BECore::Fuzz {
                 ProbeType<uint64_t>(entry);
                 ProbeType<float>(entry);
                 ProbeType<double>(entry);
-                ProbeType<eastl::string>(entry);
+                ProbeType<String>(entry);
                 ProbeType<PoolString>(entry);
             }
 
@@ -234,7 +234,7 @@ namespace BECore::Fuzz {
         /// A reader that refused its input exposes nothing: every read fails and no scope opens
         void ExpectNothingReadable(BinaryDeserializer& reader) {
             int32_t number = 0;
-            eastl::string text;
+            String text;
             size_t count = 0;
             FUZZ_CHECK(!reader.Read("a", number));
             FUZZ_CHECK(!reader.ReadAttribute("a", text));

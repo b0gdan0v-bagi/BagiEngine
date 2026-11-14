@@ -26,7 +26,7 @@ namespace BECore {
         void OnFlushEvent();
 
         void SetFilename(StringView filename);
-        const eastl::string& GetFilename() const {
+        const String& GetFilename() const {
             return _filename;
         }
 
@@ -38,7 +38,7 @@ namespace BECore {
         }
 
     private:
-        BE_REFLECT_FIELD eastl::string _filename = "engine.log";
+        BE_REFLECT_FIELD String _filename = "engine.log";
         BE_REFLECT_FIELD bool _append = false;
         std::ofstream _file;
         Mutex _mutex{BE_LOCK_SITE("Log file sink")};

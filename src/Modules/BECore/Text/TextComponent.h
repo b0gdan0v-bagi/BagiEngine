@@ -26,7 +26,7 @@ namespace BECore {
         TextComponent() = default;
         ~TextComponent() override = default;
 
-        BE_REFLECT_FIELD eastl::string _text;
+        BE_REFLECT_FIELD String _text;
         BE_REFLECT_FIELD PoolString _fontPath;        ///< a font path; empty: the face of `_fontFamily` and `_fontWeight`. A path wins over them
         BE_REFLECT_FIELD PoolString _fontFamily;      ///< a family of the `families` table of TextConfig.xml; empty is its default family
         BE_REFLECT_FIELD uint16_t _fontWeight = 400;  ///< the CSS weight (400 regular, 700 bold); the nearest face of the family is used

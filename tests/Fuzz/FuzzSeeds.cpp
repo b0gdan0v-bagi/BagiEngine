@@ -166,7 +166,7 @@ namespace BECore::Fuzz {
         FuzzBytes MakeProbeXml() {
             XmlSerializer writer;
             MakeFilledProbe().Serialize(writer);
-            const eastl::string text = writer.SaveToString();
+            const String text = writer.SaveToString();
             return TextBytes(StringView(text));
         }
 
@@ -268,13 +268,13 @@ namespace BECore::Fuzz {
         constexpr StringView kUrlWithABadPort = "ws://host:99999/path";
 
         /// A request head made by the client's own builder
-        eastl::string ProgramRequest(StringView url, StringView origin) {
+        String ProgramRequest(StringView url, StringView origin) {
             const auto parsed = ParseWebSocketUrl(url);
             return BuildClientHandshakeRequest(*parsed, WebSocketInput::kHandshakeKey, origin);
         }
 
         /// A 101 response that also names an extension the request did not ask for: a head with one more header line before the empty line
-        eastl::string WithExtensions(eastl::string response) {
+        String WithExtensions(String response) {
             response.insert(response.size() - 2, "Sec-WebSocket-Extensions: permessage-deflate\r\n");
             return response;
         }
@@ -283,9 +283,9 @@ namespace BECore::Fuzz {
             using enum WebSocketPeer;
             const Optional<WebSocketMask> noMask;
             const Optional<WebSocketMask> mask = kRfcMask;
-            const eastl::string mediumText(kMediumPayloadBytes, 'm');
-            const eastl::string longestShortText(kLongestShortLength, 's');
-            const eastl::string shortestMediumText(kShortestMediumLength, 'p');
+            const String mediumText(kMediumPayloadBytes, 'm');
+            const String longestShortText(kLongestShortLength, 's');
+            const String shortestMediumText(kShortestMediumLength, 'p');
 
             seeds.push_back({kWebSocketFrameFolder, "client-hello.bin", FrameInput(Client, kLimitIndexOf65536, 0, {Frame(WebSocketOpcode::kText, "Hello", mask)})});
             seeds.push_back({kWebSocketFrameFolder, "client-hello-chunked.bin", FrameInput(Client, kLimitIndexOf65536, kChunkPattern, {Frame(WebSocketOpcode::kText, "Hello", mask)})});
@@ -319,7 +319,7 @@ namespace BECore::Fuzz {
             seeds.push_back({kWebSocketHandshakeFolder, "request-health-check.bin", HandshakeInput(HandshakePolicyKind::PublicWithHealthPath, kHealthRequest)});
             seeds.push_back({kWebSocketHandshakeFolder, "request-duplicated-headers.bin", HandshakeInput(HandshakePolicyKind::PublicAnyOrigin, kDuplicatedHeadersRequest)});
             seeds.push_back({kWebSocketHandshakeFolder, "request-long-origin.bin",
-                             HandshakeInput(HandshakePolicyKind::PublicWithOrigins, ProgramRequest(kUrlOfARoom, Format("https://{}.example", eastl::string(kLongOriginLabelBytes, 'a'))))});
+                             HandshakeInput(HandshakePolicyKind::PublicWithOrigins, ProgramRequest(kUrlOfARoom, Format("https://{}.example", String(kLongOriginLabelBytes, 'a'))))});
             seeds.push_back({kWebSocketHandshakeFolder, "response-accept.bin", HandshakeInput(HandshakePolicyKind::Loopback, BuildAcceptResponse(WebSocketInput::kHandshakeKey))});
             seeds.push_back({kWebSocketHandshakeFolder, "response-refusal.bin",
                              HandshakeInput(HandshakePolicyKind::Loopback, BuildRejectResponse(HandshakeError{403, "the Origin 'https://evil.example' is not allowed by this server"}))});

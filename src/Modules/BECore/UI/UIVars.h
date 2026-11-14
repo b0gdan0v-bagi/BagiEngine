@@ -17,7 +17,7 @@ namespace BECore {
         /// A number is written the way Format() writes it ("120", "0.5")
         template <typename T>
         requires std::is_arithmetic_v<T> void Set(PoolString name, T value) {
-            const eastl::string text = Format("{}", value);
+            const String text = Format("{}", value);
             Set(name, StringView(text));
         }
 
@@ -38,13 +38,13 @@ namespace BECore {
         }
 
         /// @p text with every `{name}` replaced by the value of the variable; `{{` and `}}` become one brace. An unclosed `{` stays as it is
-        [[nodiscard]] eastl::string Expand(StringView text) const;
+        [[nodiscard]] String Expand(StringView text) const;
 
         /// True when Expand() could change @p text, so a label skips the work for a plain text
         [[nodiscard]] static bool HasPlaceholders(StringView text);
 
     private:
-        UnorderedPoolMap<eastl::string> _values;
+        UnorderedPoolMap<String> _values;
         uint64_t _version = 0;
     };
 

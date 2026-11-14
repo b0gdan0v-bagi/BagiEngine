@@ -2,26 +2,26 @@
 
 namespace BECore {
 
-    void StagedChanges::Set(const eastl::string& key, pugi::xml_attribute attr, StringView newValue) {
+    void StagedChanges::Set(const String& key, pugi::xml_attribute attr, StringView newValue) {
         auto& entry = _changes[key];
         entry.value.assign(newValue.data(), newValue.size());
         entry.attr = attr;
         entry.textNode = pugi::xml_node{};
     }
 
-    void StagedChanges::SetText(const eastl::string& key, pugi::xml_node textNode, StringView newValue) {
+    void StagedChanges::SetText(const String& key, pugi::xml_node textNode, StringView newValue) {
         auto& entry = _changes[key];
         entry.value.assign(newValue.data(), newValue.size());
         entry.attr = pugi::xml_attribute{};
         entry.textNode = textNode;
     }
 
-    const eastl::string* StagedChanges::Get(const eastl::string& key) const {
+    const String* StagedChanges::Get(const String& key) const {
         const auto it = _changes.find(key);
         return it != _changes.end() ? &it->second.value : nullptr;
     }
 
-    bool StagedChanges::Has(const eastl::string& key) const {
+    bool StagedChanges::Has(const String& key) const {
         return _changes.find(key) != _changes.end();
     }
 
@@ -43,7 +43,7 @@ namespace BECore {
         }
     }
 
-    void StagedChanges::ForEach(eastl::function<void(const eastl::string&, const eastl::string&)> fn) const {
+    void StagedChanges::ForEach(eastl::function<void(const String&, const String&)> fn) const {
         for (const auto& [key, entry] : _changes) {
             fn(key, entry.value);
         }

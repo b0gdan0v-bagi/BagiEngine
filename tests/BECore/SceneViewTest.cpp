@@ -415,7 +415,7 @@ namespace BECore::Tests {
     TEST_F(SceneViewVariantsTest, TheOverrideIsNotSaved) {
         XmlSerializer plain;
         _scene->Serialize(plain);
-        const eastl::string before = plain.SaveToString();
+        const String before = plain.SaveToString();
 
         _scene->SetViewOverride(1);
         DrawAt(900.0f, 600.0f);

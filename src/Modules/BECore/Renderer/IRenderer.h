@@ -31,7 +31,7 @@ namespace BECore {
     };
 
     /// The image, or why it could not be taken
-    using CaptureResult = std::expected<PixelBuffer, eastl::string>;
+    using CaptureResult = std::expected<PixelBuffer, String>;
     using CaptureCallback = std::function<void(CaptureResult)>;
 
     class IRenderer : public RefCounted, public SubscriptionHolder {
@@ -58,7 +58,7 @@ namespace BECore {
         }
 
         // Why GetGpuDevice() is null, for the log line of a caller that wanted 3D (the default is generic, a backend says what it lacks)
-        [[nodiscard]] virtual eastl::string GetNoGpuDeviceReason() const;
+        [[nodiscard]] virtual String GetNoGpuDeviceReason() const;
 
         // How much detail generated geometry (the shadows and glows of UIBoxMesh) should have for this renderer: Full by default, Reduced for the SDL
         // software renderer, where every blended triangle costs a surface and a blit. Not BE_FUNCTION (an engine query, not a control API call).
@@ -239,7 +239,7 @@ namespace BECore {
 
     /// The GPU device of @p renderer, or the renderer's name and why it has none. What a 3D caller uses, so the game logs the error once (LOG_ERROR at
     /// the caller) instead of drawing a blank screen.
-    [[nodiscard]] std::expected<IGpuDevice*, eastl::string> RequireGpuDevice(IRenderer& renderer);
+    [[nodiscard]] std::expected<IGpuDevice*, String> RequireGpuDevice(IRenderer& renderer);
 
     /// Stops a renderer counting its draws for the length of a scope
     class ScopedRenderCountersPause {

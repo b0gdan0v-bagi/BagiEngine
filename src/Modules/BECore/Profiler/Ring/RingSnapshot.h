@@ -17,7 +17,7 @@ namespace BECore {
     /// The zones of one thread, sorted by begin tick (a parent before its children when they begin on the same tick)
     struct RingThread {
         uint32_t threadId = 0;
-        eastl::string name;      // from Profiler::GetThreadName when the snapshot was taken, empty when the thread has none
+        String name;             // from Profiler::GetThreadName when the snapshot was taken, empty when the thread has none
         uint32_t sortIndex = 0;  // Profiler::GetThreadSortIndex, Profiler::kNoSortIndex when none
         eastl::vector<ZoneRecord> zones;
     };

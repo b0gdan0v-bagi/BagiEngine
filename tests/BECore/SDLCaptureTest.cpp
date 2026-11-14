@@ -217,7 +217,7 @@ namespace BECore::Tests {
                 if (!params.is_null()) {
                     request["params"] = params;
                 }
-                service.Post(DumpJson(request), [this](eastl::string text) {
+                service.Post(DumpJson(request), [this](String text) {
                     auto parsed = ParseJson(text);
                     responses.push_back(parsed ? std::move(*parsed) : Json());
                 });

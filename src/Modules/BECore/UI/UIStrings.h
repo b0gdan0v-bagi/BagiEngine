@@ -27,7 +27,7 @@ namespace BECore {
         /// A key that was asked for in a language and found in neither it nor the default language
         struct MissingString {
             PoolString language;
-            eastl::string key;
+            String key;
         };
 
         /// Reads `config/UIStrings.xml` through ConfigManager into the table and logs what LoadFromXml() complains about. A missing config is an empty table, with no log
@@ -60,7 +60,7 @@ namespace BECore {
 
         /// @p text with every `{#key}` replaced (see the class comment). A missing key becomes the key text and is recorded once per language and key. An unclosed `{#`, an
         /// empty `{#}` and a `{{#` stay as written
-        [[nodiscard]] eastl::string Resolve(StringView text);
+        [[nodiscard]] String Resolve(StringView text);
 
         /// True when Resolve() could change @p text: a `{#` that is not part of `{{`
         [[nodiscard]] static bool HasReferences(StringView text);
@@ -85,16 +85,16 @@ namespace BECore {
          *         one language (the first stays), a language with no strings, a `default` that names no language, an unknown element. The rest is loaded. Each problem is one line of at most
          * `UIText::kMaxMessageBytes` (it repeats text of the file, which is cut). An empty node adds nothing
          */
-        eastl::vector<eastl::string> LoadFromXml(const XmlNode& node);
+        eastl::vector<String> LoadFromXml(const XmlNode& node);
 
     private:
         struct Language {
             PoolString id;
-            UnorderedPoolMap<eastl::string> strings;
+            UnorderedPoolMap<String> strings;
         };
 
         [[nodiscard]] const Language* FindLanguage(PoolString language) const;
-        [[nodiscard]] const eastl::string* FindString(const Language* language, StringView key) const;
+        [[nodiscard]] const String* FindString(const Language* language, StringView key) const;
         void RecordMissing(StringView key);
 
         eastl::vector<Language> _languages;

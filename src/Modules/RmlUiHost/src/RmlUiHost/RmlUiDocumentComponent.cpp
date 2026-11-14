@@ -172,7 +172,7 @@ namespace BECore {
         ReloadIfChanged();
     }
 
-    bool RmlUiDocumentComponent::SetMarkup(const eastl::string& markup) {
+    bool RmlUiDocumentComponent::SetMarkup(const String& markup) {
         if (!_context && !CreateContext()) {
             return false;
         }

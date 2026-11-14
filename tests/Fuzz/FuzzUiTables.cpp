@@ -1,11 +1,9 @@
 #include "FuzzTargets.h"
 
-#include <BECore/Config/XmlNode.h>
 #include <BECore/UI/UIStrings.h>
 #include <BECore/UI/UIThemes.h>
 #include <map>
 #include <set>
-#include <string>
 
 namespace BECore::Fuzz {
 
@@ -31,8 +29,8 @@ namespace BECore::Fuzz {
             return false;
         }
 
-        void CheckComplaints(const eastl::vector<eastl::string>& complaints) {
-            for (const eastl::string& complaint : complaints) {
+        void CheckComplaints(const eastl::vector<String>& complaints) {
+            for (const String& complaint : complaints) {
                 FUZZ_CHECK(!complaint.empty());
                 FUZZ_CHECK(complaint.size() <= kMaxComplaintBytes);
                 FUZZ_CHECK(!HasControlCharacter(StringView(complaint)));
@@ -108,9 +106,9 @@ namespace BECore::Fuzz {
                 FUZZ_CHECK(StringView(found->data(), found->size()) == FromStd(text));
                 // A text with no reference resolves to itself, and a reference to this key gives this text
                 if (!UIStrings::HasReferences(*found)) {
-                    const eastl::string expectedText(found->data(), found->size());
+                    const String expectedText(found->data(), found->size());
                     FUZZ_CHECK(table.Resolve(*found) == expectedText);
-                    const eastl::string reference = Format("{{#{}}}", id.second.c_str());
+                    const String reference = Format("{{#{}}}", id.second.c_str());
                     FUZZ_CHECK(table.Resolve(StringView(reference)) == expectedText);
                 }
             }
@@ -239,7 +237,7 @@ namespace BECore::Fuzz {
      */
     void FuzzUiTables(const uint8_t* data, size_t size) {
         // The text in a buffer of its own: pugixml reads a text that looks like UTF-16 or UTF-32 as words
-        const eastl::string text(reinterpret_cast<const char*>(data), size);
+        const String text(reinterpret_cast<const char*>(data), size);
         pugi::xml_document document;
         if (!document.load_buffer(text.data(), text.size())) {
             return;

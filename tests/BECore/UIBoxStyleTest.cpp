@@ -41,7 +41,7 @@ namespace BECore::Tests {
         };
 
         LoadedElement LoadElement(const char* type, const char* attributes) {
-            const eastl::string xml = Format("<root><component><elements><element type=\"{}\" name=\"A\" {}/></elements></component></root>", type, attributes);
+            const String xml = Format("<root><component><elements><element type=\"{}\" name=\"A\" {}/></elements></component></root>", type, attributes);
             XmlDeserializer deserializer;
             EXPECT_TRUE(deserializer.LoadFromString(StringView(xml)));
             LoadedElement loaded;
@@ -55,7 +55,7 @@ namespace BECore::Tests {
             return loaded;
         }
 
-        eastl::string ElementToXml(const UIElement& element) {
+        String ElementToXml(const UIElement& element) {
             XmlSerializer serializer;
             EXPECT_TRUE(serializer.BeginObject("element"));
             element.Serialize(serializer);
@@ -336,7 +336,7 @@ namespace BECore::Tests {
 
     TEST(UIBoxStyleTest, TheShadowTextFormRoundTrips) {
         const UIShadowSpec shadow{1.0f, -2.0f, 6.5f, 0.5f, Color{9, 200, 11, 128}};
-        const eastl::string text = UIText::FormatShadow(shadow);
+        const String text = UIText::FormatShadow(shadow);
         EXPECT_EQ(text, "1,-2,6.5,0.5,#09C80B80");
         const auto back = UIText::ParseShadow(text);
         ASSERT_TRUE(back.has_value());
@@ -365,9 +365,9 @@ namespace BECore::Tests {
         ASSERT_TRUE(serializer.BeginObject("component"));
         canvas->Serialize(serializer);
         serializer.EndObject();
-        const eastl::string xml = serializer.SaveToString();
+        const String xml = serializer.SaveToString();
         for (const char* name : {"cornerRadius=\"4,8,12,0\"", "borderWidth=", "borderColor=", "gradientColor=", "gradientDirection=\"Horizontal\"", "shadow=", "glow=", "highlight="}) {
-            EXPECT_NE(xml.find(name), eastl::string::npos) << name << " in " << xml.c_str();
+            EXPECT_NE(xml.find(name), String::npos) << name << " in " << xml.c_str();
         }
 
         XmlDeserializer deserializer;
@@ -410,9 +410,9 @@ namespace BECore::Tests {
         for (const char* type : {"UIElement", "UIPanel", "UIStack"}) {
             auto element = AbstractFactory<UIElement>::GetInstance().Create(type);
             ASSERT_TRUE(element) << type;
-            const eastl::string xml = ElementToXml(*element);
+            const String xml = ElementToXml(*element);
             for (const char* name : {"cornerRadius", "borderWidth", "borderColor", "gradientColor", "gradientDirection", "shadow", "glow", "highlight"}) {
-                EXPECT_EQ(xml.find(name), eastl::string::npos) << type << " writes " << name << ": " << xml.c_str();
+                EXPECT_EQ(xml.find(name), String::npos) << type << " writes " << name << ": " << xml.c_str();
             }
         }
     }

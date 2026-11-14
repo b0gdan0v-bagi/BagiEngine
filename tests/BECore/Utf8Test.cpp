@@ -78,7 +78,7 @@ namespace BECore::Tests {
     }
 
     TEST(Utf8Test, AppendRoundTripsEveryLength) {
-        eastl::string encoded;
+        String encoded;
         for (const char32_t codePoint : {U'A', char32_t{0x00E9}, char32_t{0x0416}, char32_t{0x2026}, char32_t{0x1F600}}) {
             Utf8::Append(encoded, codePoint);
         }
@@ -91,7 +91,7 @@ namespace BECore::Tests {
     }
 
     TEST(Utf8Test, AppendWritesTheReplacementForANonScalarValue) {
-        eastl::string encoded;
+        String encoded;
         Utf8::Append(encoded, 0xD800);
         Utf8::Append(encoded, 0x110000);
 

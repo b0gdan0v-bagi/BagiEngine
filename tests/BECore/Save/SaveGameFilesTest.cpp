@@ -10,8 +10,8 @@ namespace BECore::Tests {
             return eastl::vector<uint8_t>(values);
         }
 
-        eastl::vector<eastl::string> Names(const eastl::vector<PoolString>& slots) {
-            eastl::vector<eastl::string> names;
+        eastl::vector<String> Names(const eastl::vector<PoolString>& slots) {
+            eastl::vector<String> names;
             for (const PoolString& slot : slots) {
                 names.emplace_back(slot.ToStringView().data(), slot.ToStringView().size());
             }
@@ -158,7 +158,7 @@ namespace BECore::Tests {
         std::filesystem::create_directories(_saves / "sub");
         std::ofstream(_saves / "sub" / "deep.save") << "x";
 
-        const eastl::vector<eastl::string> expected = {"Gamma_2", "a-b", "alpha", "beta"};
+        const eastl::vector<String> expected = {"Gamma_2", "a-b", "alpha", "beta"};
         EXPECT_EQ(Names(service.List()), expected);
     }
 
@@ -198,11 +198,11 @@ namespace BECore::Tests {
         SaveGameService service(_fileSystem);
         ASSERT_TRUE(service.Initialize(_saves));
 
-        const eastl::string tooLong(kMaxSlotNameLength + 1, 'a');
-        const eastl::string longest(kMaxSlotNameLength, 'a');
-        const eastl::string names[] = {"", "../x", "a/b", "a\\b", "a.b", "a b", "x.save", "..", tooLong, "caf\xC3\xA9"};
+        const String tooLong(kMaxSlotNameLength + 1, 'a');
+        const String longest(kMaxSlotNameLength, 'a');
+        const String names[] = {"", "../x", "a/b", "a\\b", "a.b", "a b", "x.save", "..", tooLong, "caf\xC3\xA9"};
 
-        for (const eastl::string& name : names) {
+        for (const String& name : names) {
             SCOPED_TRACE(name.c_str());
             EXPECT_FALSE(SaveGameService::IsValidSlotName(name));
 

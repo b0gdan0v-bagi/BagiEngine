@@ -22,13 +22,13 @@ namespace BECore {
             return port;
         }
 
-        ControlError InvalidSetting(eastl::string message) {
+        ControlError InvalidSetting(String message) {
             return MakeControlError(ControlErrors::kInvalidParams, std::move(message));
         }
 
     }  // namespace
 
-    std::expected<ControlSettings, ControlError> ResolveControlSettings(eastl::span<const eastl::string> args, const ApplicationConfigLoad& file) {
+    std::expected<ControlSettings, ControlError> ResolveControlSettings(eastl::span<const String> args, const ApplicationConfigLoad& file) {
         // The file first, so that the command line overrides it. A bad value is an error even when the API is off or a flag would override it
         for (const DeserializeError& error : file.errors) {
             if (IsControlField(error.path.ToStringView())) {
@@ -44,7 +44,7 @@ namespace BECore {
 
         // The flags are parsed by hand; a later stage replaces this loop with a name to value source
         bool portOnCommandLine = false;
-        for (const eastl::string& arg : args) {
+        for (const String& arg : args) {
             const StringView argument(arg.data(), arg.size());
             if (argument == ControlArguments::kControl) {
                 settings.enabled = true;

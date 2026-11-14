@@ -34,7 +34,7 @@ namespace BECore {
         [[nodiscard]] virtual IntrusivePtr<IGpuBuffer> CreateBuffer(const BufferDesc& desc, eastl::span<const std::byte> initial) = 0;
 
         /// A pipeline of @p desc, or why not: a description that ValidatePipelineDesc() refuses, a shader the backend does not have
-        [[nodiscard]] virtual std::expected<IntrusivePtr<IGpuPipeline>, eastl::string> CreatePipeline(const PipelineDesc& desc) = 0;
+        [[nodiscard]] virtual std::expected<IntrusivePtr<IGpuPipeline>, String> CreatePipeline(const PipelineDesc& desc) = 0;
 
         /// A depth attachment of the given size in pixels (DepthFormat::Depth32Float). Empty for a zero size or when the backend fails.
         [[nodiscard]] virtual IntrusivePtr<IGpuDepthTexture> CreateDepthTexture(uint32_t width, uint32_t height) = 0;

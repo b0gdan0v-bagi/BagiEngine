@@ -25,7 +25,7 @@ namespace BECore {
             Json stages = Json::object();
             for (size_t i = 0; i < kFrameStageCount; ++i) {
                 const StringView name = EnumUtils<FrameStage>::ToString(static_cast<FrameStage>(i));
-                stages[std::string(name.data(), name.size())] = stats.stageMs[i];
+                stages[ToStdString(name)] = stats.stageMs[i];
             }
             frame["stagesMs"] = std::move(stages);
             frame["drawCalls"] = stats.draws.drawCalls;
@@ -37,7 +37,7 @@ namespace BECore {
             Json counters = Json::object();
             for (const FrameCounter& counter : stats.counters) {
                 const StringView name = counter.name.ToStringView();
-                counters[std::string(name.data(), name.size())] = counter.value;
+                counters[ToStdString(name)] = counter.value;
             }
             frame["counters"] = std::move(counters);
             return frame;
@@ -76,7 +76,7 @@ namespace BECore {
             if (text.empty()) {
                 return false;
             }
-            const std::filesystem::path path(std::string(text.data(), text.size()));
+            const std::filesystem::path path(ToStdString(text));
             if (path.is_absolute() || path.has_root_name() || path.has_root_directory()) {
                 return false;
             }
@@ -89,7 +89,7 @@ namespace BECore {
         }
 
         void HandleProfilerDump(ControlCall& call) {
-            eastl::string path(kDefaultTracePath.data(), kDefaultTracePath.size());
+            String path(kDefaultTracePath.data(), kDefaultTracePath.size());
             if (FindJsonMember(call.Params(), "path") != nullptr) {
                 const auto given = GetJsonString(call.Params(), "path");
                 if (!given || !IsSafeRelativePath(*given)) {
@@ -109,6 +109,7 @@ namespace BECore {
                 return;
             }
             Json result = Json::object();
+            // std: a JSON string of nlohmann
             result["path"] = std::string(path.c_str());
             result["dropped"] = recorder.GetDroppedCount();
             call.Reply(std::move(result));

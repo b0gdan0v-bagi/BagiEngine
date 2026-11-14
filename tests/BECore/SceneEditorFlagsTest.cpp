@@ -4,16 +4,15 @@
 #include <BECore/Scene/SceneNodeInstance.h>
 #include <Common/EngineEnvironment.h>
 #include <gtest/gtest.h>
-#include <sstream>
 
 namespace BECore::Tests {
 
     namespace {
 
-        eastl::string Print(const pugi::xml_node& node) {
+        String Print(const pugi::xml_node& node) {
             std::ostringstream out;
             node.print(out);
-            return eastl::string(out.str().c_str());
+            return String(out.str().c_str());
         }
 
     }  // namespace
@@ -59,12 +58,12 @@ namespace BECore::Tests {
     }
 
     TEST_F(SceneEditorFlagsTest, TheFlagsAreInNeitherSerializeNorTheNodeElement) {
-        const eastl::string plainElement = [&] {
+        const String plainElement = [&] {
             pugi::xml_document document;
             AppendNodeElement(document, *_parent);
             return Print(document);
         }();
-        const eastl::string plainSerialized = [&] {
+        const String plainSerialized = [&] {
             XmlSerializer serializer;
             _parent->Serialize(serializer);
             return Print(serializer.GetRootNode());

@@ -17,7 +17,7 @@ namespace BECore::Tests {
 
         BE_REFLECT_FIELD int32_t id = 0;
 
-        static inline eastl::vector<eastl::string> log;
+        static inline eastl::vector<String> log;
     };
 
 }  // namespace BECore::Tests

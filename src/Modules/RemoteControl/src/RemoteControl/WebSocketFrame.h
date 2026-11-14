@@ -67,7 +67,7 @@ namespace BECore {
     /// A client broke the protocol: the connection has to be closed with @p closeCode
     struct WebSocketProtocolError {
         uint16_t closeCode = WebSocketCloseCode::kProtocolError;
-        eastl::string reason;
+        String reason;
     };
 
     /**
@@ -116,7 +116,7 @@ namespace BECore {
         /// Reads the header at the read position: nullopt when it is not complete yet, an error when it is not valid
         [[nodiscard]] std::expected<Optional<FrameHeader>, WebSocketProtocolError> ReadHeader() const;
         [[nodiscard]] std::expected<Optional<WebSocketMessage>, WebSocketProtocolError> Accept(const FrameHeader& header, eastl::vector<uint8_t> payload);
-        [[nodiscard]] std::expected<Optional<WebSocketMessage>, WebSocketProtocolError> Fail(uint16_t closeCode, eastl::string reason);
+        [[nodiscard]] std::expected<Optional<WebSocketMessage>, WebSocketProtocolError> Fail(uint16_t closeCode, String reason);
 
         size_t _maxMessageBytes;
         WebSocketPeer _sender;

@@ -16,8 +16,8 @@ namespace BECore::Tests {
             };
         }
 
-        eastl::string Titles(const eastl::vector<const EditorCommand*>& found) {
-            eastl::string text;
+        String Titles(const eastl::vector<const EditorCommand*>& found) {
+            String text;
             for (const EditorCommand* command : found) {
                 if (!text.empty()) {
                     text += "|";
@@ -27,7 +27,7 @@ namespace BECore::Tests {
             return text;
         }
 
-        eastl::string Filter(StringView query, const eastl::vector<EditorCommand>& commands) {
+        String Filter(StringView query, const eastl::vector<EditorCommand>& commands) {
             return Titles(FilterCommands(query, {commands.data(), commands.size()}));
         }
 

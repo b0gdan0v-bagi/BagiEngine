@@ -404,9 +404,9 @@ namespace BECore::Tests {
     TEST(Renderer3DRenderTest, ARendererWithoutADeviceGetsTheErrorAndNothingIsRecorded) {
         Renderer3DFixture f;
         RecordingRenderer bare;
-        const std::expected<void, eastl::string> result = f.renderer3D.Render(bare, f.scene, PassDesc{});
+        const std::expected<void, String> result = f.renderer3D.Render(bare, f.scene, PassDesc{});
         ASSERT_FALSE(result.has_value());
-        EXPECT_NE(result.error().find("recording renderer has no GPU device"), eastl::string::npos);
+        EXPECT_NE(result.error().find("recording renderer has no GPU device"), String::npos);
         EXPECT_TRUE(f.device->commands.empty());
         EXPECT_EQ(bare.texturesCreated, 0u);
     }

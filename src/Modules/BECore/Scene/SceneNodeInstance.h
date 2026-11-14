@@ -48,6 +48,6 @@ namespace BECore {
      * @param reason Receives why the node cannot be written as a reference
      * @return false when it cannot (no source reference, the file cannot be used, the components do not match, the round trip fails)
      */
-    bool BuildNodeReference(const SceneNode& live, const NodeFileLoader& loader, pugi::xml_node nodesEl, eastl::string& reason);
+    bool BuildNodeReference(const SceneNode& live, const NodeFileLoader& loader, pugi::xml_node nodesEl, String& reason);
 
 }  // namespace BECore

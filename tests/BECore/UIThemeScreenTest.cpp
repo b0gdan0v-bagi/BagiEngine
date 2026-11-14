@@ -147,7 +147,7 @@ namespace BECore::Tests {
         }
 
         /// The elements of a compiled `<ui><elements>...</elements></ui>`, as text to put into another file
-        std::string CompiledElements(const eastl::string& xml) {
+        std::string CompiledElements(const String& xml) {
             const std::string text(xml.c_str(), xml.size());
             const size_t begin = text.find("<elements>");
             const size_t end = text.rfind("</elements>");
@@ -189,7 +189,7 @@ namespace BECore::Tests {
             _manager.Reset();
             UIWebReport report;
             const std::string source = std::string("<style>") + css + "</style>" + kNoteHtml;
-            const eastl::string compiled = UIWebCompiler::Compile(FromStd(source), {}, report);
+            const String compiled = UIWebCompiler::Compile(FromStd(source), {}, report);
             ASSERT_FALSE(report.HasIssues()) << report.issues[0].message.c_str() << " / " << compiled.c_str();
             const std::string note = CompiledElements(compiled);
             ASSERT_FALSE(note.empty()) << compiled.c_str();
@@ -241,8 +241,8 @@ namespace BECore::Tests {
         }
 
         /// Text that its control cuts, one problem to a line (an ellipsis label can shrink, so the validator does not report it)
-        eastl::string ContentProblems() const {
-            eastl::string problems;
+        String ContentProblems() const {
+            String problems;
             UICanvasLayout& layout = _canvas->GetLayout();
             UILayoutContext context = ViewContext();
             context.outputWidth = kViewWidth;
@@ -262,7 +262,7 @@ namespace BECore::Tests {
 
         /// Each text colour against the colour it is drawn on, in the theme that is current and after a draw: one line for every pair under kMinContrast. The channels are the
         /// resolved ones, so a token that fell to magenta is judged as magenta
-        eastl::string LegibilityProblems() {
+        String LegibilityProblems() {
             Draw();
             const Color panel = Find("Card").color;
             const UITextComponent* goText = Find("Action").GetComponent<UITextComponent>();
@@ -275,7 +275,7 @@ namespace BECore::Tests {
                          {"Sound on the card", Find("SoundCaption").GetComponent<UITextComponent>()->textColor, panel},
                          {"Go on its button", goText ? Color(goText->textColor) : Color{}, Find("Action").color},
                          {"Note on its plate", noteText ? Color(noteText->textColor) : Color{}, Find("Note").color}};
-            eastl::string problems;
+            String problems;
             for (const auto& pair : pairs) {
                 const float ratio = ContrastRatio(pair.text, pair.plate);
                 if (ratio < kMinContrast) {
@@ -286,8 +286,8 @@ namespace BECore::Tests {
         }
 
         /// The tokens no theme defined that the last draws met
-        eastl::string MissingTokens() const {
-            eastl::string text;
+        String MissingTokens() const {
+            String text;
             for (const PoolString token : CoreManager::GetUIThemes().GetMissing()) {
                 text += Format("the token '{}' is in no theme\n", token.ToStringView());
             }
@@ -333,9 +333,9 @@ namespace BECore::Tests {
             const char* name = theme.ToStringView().data();
             const auto failures = ValidateCard();
             EXPECT_TRUE(failures.empty()) << name << ": " << DescribeMatrixFailures(failures).c_str();
-            const eastl::string content = ContentProblems();
+            const String content = ContentProblems();
             EXPECT_TRUE(content.empty()) << name << ": " << content.c_str();
-            const eastl::string legibility = LegibilityProblems();
+            const String legibility = LegibilityProblems();
             EXPECT_TRUE(legibility.empty()) << name << ": " << legibility.c_str();
             EXPECT_TRUE(themes.GetMissing().empty()) << name << ": " << MissingTokens().c_str();
         });
@@ -397,10 +397,10 @@ namespace BECore::Tests {
 
     TEST_F(UIThemeScreenTest, ExpectThemesCompleteNamesTheThemeAndTheTokenThatAreMissing) {
         UIThemes& themes = CoreManager::GetUIThemes();
-        const eastl::string problems = MissingThemeTokens(themes);
-        EXPECT_NE(problems.find("theme 'soft' does not define the token 'track'"), eastl::string::npos) << problems.c_str();
-        EXPECT_EQ(problems.find("theme 'dark'"), eastl::string::npos);
-        EXPECT_EQ(problems.find("theme 'light'"), eastl::string::npos);
+        const String problems = MissingThemeTokens(themes);
+        EXPECT_NE(problems.find("theme 'soft' does not define the token 'track'"), String::npos) << problems.c_str();
+        EXPECT_EQ(problems.find("theme 'dark'"), String::npos);
+        EXPECT_EQ(problems.find("theme 'light'"), String::npos);
 
         themes.Set(PoolString::Intern(kSoft), "track", Color{170, 160, 150, 255});
         EXPECT_TRUE(MissingThemeTokens(themes).empty());
@@ -419,10 +419,10 @@ namespace BECore::Tests {
         themes.Set(washed, "text", Color{235, 235, 225, 255});  // the card is 240,240,230
         ASSERT_TRUE(themes.SetTheme(washed));
 
-        const eastl::string problems = LegibilityProblems();
-        EXPECT_NE(problems.find("Title on the card"), eastl::string::npos) << problems.c_str();
-        EXPECT_NE(problems.find("Note on its plate"), eastl::string::npos) << problems.c_str();
-        EXPECT_EQ(problems.find("Go on its button"), eastl::string::npos) << "the button's own text colour is fine";
+        const String problems = LegibilityProblems();
+        EXPECT_NE(problems.find("Title on the card"), String::npos) << problems.c_str();
+        EXPECT_NE(problems.find("Note on its plate"), String::npos) << problems.c_str();
+        EXPECT_EQ(problems.find("Go on its button"), String::npos) << "the button's own text colour is fine";
         EXPECT_TRUE(ContentProblems().empty()) << "the checks are independent: the words fit";
     }
 
@@ -431,8 +431,8 @@ namespace BECore::Tests {
         UIThemes& themes = CoreManager::GetUIThemes();
         ForEachTheme(themes, [&](PoolString) { Draw(); });
         EXPECT_TRUE(ColorsEqual(Find("Note").color, kMissingTokenColor));
-        const eastl::string missing = MissingTokens();
-        EXPECT_NE(missing.find("the token 'notes' is in no theme"), eastl::string::npos) << missing.c_str();
+        const String missing = MissingTokens();
+        EXPECT_NE(missing.find("the token 'notes' is in no theme"), String::npos) << missing.c_str();
         EXPECT_EQ(themes.GetMissing().size(), 1u) << "once, though three themes drew it";
     }
 

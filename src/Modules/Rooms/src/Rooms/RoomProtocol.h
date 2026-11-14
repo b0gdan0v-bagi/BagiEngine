@@ -34,9 +34,9 @@ namespace BECore {
 
     /// `create_room {game, name, options?, public?}`: a new room; the sender takes the lowest seat and is the host
     struct CreateRoomMessage {
-        eastl::string game;
+        String game;
         /// Already sanitised (SanitizePlayerName)
-        eastl::string name;
+        String name;
         /// An object (empty when the client sent none); the game reads it in Start(), untrusted
         Json options = Json::object();
         /// The host's wish that the room is listed for `list_rooms`; absent means false (the code is then known to its members only)
@@ -46,11 +46,11 @@ namespace BECore {
     /// `join_room {code, name}` (a new member) or `join_room {code, token}` (a member returns). Exactly one of name and token is set.
     struct JoinRoomMessage {
         /// Normalised (upper case, NormalizeRoomCode)
-        eastl::string code;
+        String code;
         /// Sanitised; empty for a reconnect
-        eastl::string name;
+        String name;
         /// Well-formed (IsWellFormedToken); empty for a new member
-        eastl::string token;
+        String token;
 
         [[nodiscard]] bool IsReconnect() const {
             return !token.empty();
@@ -79,7 +79,7 @@ namespace BECore {
 
     /// `list_rooms {game}`: the public rooms of one game that a connection in no room could join
     struct ListRoomsMessage {
-        eastl::string game;
+        String game;
     };
 
     using ClientMessage = std::variant<CreateRoomMessage, JoinRoomMessage, ChooseSeatMessage, StartMessage, ActionMessage, LeaveMessage, PingMessage, ListRoomsMessage>;
@@ -106,7 +106,7 @@ namespace BECore {
     [[nodiscard]] StringView GetClientMessageType(const ClientMessage& message);
 
     /// The text a client sends for @p message (the inverse of ParseClientMessage; for clients and tests)
-    [[nodiscard]] eastl::string SerializeClientMessage(const ClientMessage& message);
+    [[nodiscard]] String SerializeClientMessage(const ClientMessage& message);
 
     /**
      * @brief A player name as the server keeps it, or nullopt when it cannot be one.
@@ -115,7 +115,7 @@ namespace BECore {
      * the line and paragraph separators, zero-width and bidirectional control characters, the byte order mark), then the spaces at
      * both ends removed, and kMinNameBytes to kMaxNameBytes bytes left.
      */
-    [[nodiscard]] Optional<eastl::string> SanitizePlayerName(StringView text);
+    [[nodiscard]] Optional<String> SanitizePlayerName(StringView text);
 
     // ---- Server to client -------------------------------------------------------------------------------------------------------
 
@@ -124,15 +124,15 @@ namespace BECore {
         int seat = 0;
         SeatKind kind = SeatKind::Empty;
         /// The name of a human; not sent for the other kinds
-        eastl::string name;
+        String name;
         /// Whether the human's connection is up; not sent for the other kinds
         bool connected = false;
     };
 
     /// What a `lobby` message says, as plain data (the protocol knows nothing of the Room class that fills it)
     struct LobbySnapshot {
-        eastl::string room;
-        eastl::string game;
+        String room;
+        String game;
         RoomPhase phase = RoomPhase::Lobby;
         /// The seat of the host, or -1 when no human is left
         int hostSeat = -1;
@@ -145,9 +145,9 @@ namespace BECore {
     /// One room in a `rooms` message
     struct RoomListing {
         /// The code: the key of `join_room`, public by the host's choice
-        eastl::string room;
+        String room;
         /// The name of the host
-        eastl::string host;
+        String host;
         /// The humans in the room
         int taken = 0;
         /// The seat count of the game
@@ -159,7 +159,7 @@ namespace BECore {
 
     /// What a `rooms` message says: the answer to `list_rooms`, as plain data
     struct RoomListMessage {
-        eastl::string game;
+        String game;
         /// At most RoomLimits::kMaxListedRooms, the oldest room first
         eastl::vector<RoomListing> rooms;
         /// The answer was cut at the cap: more rooms are open
@@ -167,35 +167,35 @@ namespace BECore {
     };
 
     /// `joined {room, player, token, seat, host}`. The token is a secret: this message goes to its owner only.
-    [[nodiscard]] eastl::string MakeJoinedMessage(StringView room, PlayerId player, StringView token, int seat, bool host);
+    [[nodiscard]] String MakeJoinedMessage(StringView room, PlayerId player, StringView token, int seat, bool host);
 
     /// `lobby {room, game, phase, host, seats:[{seat, kind, name?, connected?}], options?}`; to every member when it changes
-    [[nodiscard]] eastl::string MakeLobbyMessage(const LobbySnapshot& lobby);
+    [[nodiscard]] String MakeLobbyMessage(const LobbySnapshot& lobby);
 
     /// `view {room, seat, version, finished, view, actions}`: what the game says the seat sees and may send now (no hidden information
     /// of the others: the game's contract)
-    [[nodiscard]] eastl::string MakeViewMessage(StringView room, int seat, uint64_t version, bool finished, const Json& view, const Json& actions);
+    [[nodiscard]] String MakeViewMessage(StringView room, int seat, uint64_t version, bool finished, const Json& view, const Json& actions);
 
     /// `rooms {game, rooms:[{room, host, taken, seats, started, options?}], more}`: the answer to `list_rooms`
-    [[nodiscard]] eastl::string MakeRoomListMessage(const RoomListMessage& list);
+    [[nodiscard]] String MakeRoomListMessage(const RoomListMessage& list);
 
     /// `error {code, message, ref?}`; @p ref is the type of the message it answers (left out when empty)
-    [[nodiscard]] eastl::string MakeErrorMessage(StringView code, StringView message, StringView ref = {});
+    [[nodiscard]] String MakeErrorMessage(StringView code, StringView message, StringView ref = {});
 
     /// `left {reason}`: the sender is no longer in the room
-    [[nodiscard]] eastl::string MakeLeftMessage(StringView reason);
+    [[nodiscard]] String MakeLeftMessage(StringView reason);
 
     /// `pong {}`
-    [[nodiscard]] eastl::string MakePongMessage();
+    [[nodiscard]] String MakePongMessage();
 
     // ---- Server to client, read by a client -------------------------------------------------------------------------------------
 
     /// `joined`, as the client reads it
     struct JoinedMessage {
-        eastl::string room;
+        String room;
         PlayerId player = 0;
         /// A secret of this player; well-formed (IsWellFormedToken)
-        eastl::string token;
+        String token;
         int seat = 0;
         bool host = false;
     };
@@ -205,7 +205,7 @@ namespace BECore {
 
     /// `view`, as the client reads it. @c view and @c actions are the game's own JSON, kept as the server sent them.
     struct ViewMessage {
-        eastl::string room;
+        String room;
         int seat = 0;
         uint64_t version = 0;
         bool finished = false;
@@ -215,15 +215,15 @@ namespace BECore {
 
     /// `error`
     struct ErrorMessage {
-        eastl::string code;
-        eastl::string message;
+        String code;
+        String message;
         /// The type of the message it answers; empty when the server gave none
-        eastl::string ref;
+        String ref;
     };
 
     /// `left`
     struct LeftMessage {
-        eastl::string reason;
+        String reason;
     };
 
     /// `pong`
@@ -231,7 +231,7 @@ namespace BECore {
 
     /// A message with a good `v` and a `type` this client does not know (a newer server may add some); the client ignores it
     struct UnknownServerMessage {
-        eastl::string type;
+        String type;
     };
 
     using ServerMessage = std::variant<JoinedMessage, LobbyMessage, ViewMessage, ErrorMessage, LeftMessage, PongMessage, RoomListMessage, UnknownServerMessage>;

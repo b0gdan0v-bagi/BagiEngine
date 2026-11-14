@@ -15,7 +15,7 @@ namespace BECore::Tests {
         constexpr int kMaxSteps = 400;
         constexpr int kReplays = 100;
 
-        Json CardAction(const eastl::string& card) {
+        Json CardAction(const String& card) {
             Json action = Json::object();
             action["type"] = "play";
             action["card"] = card.c_str();
@@ -58,10 +58,10 @@ namespace BECore::Tests {
             return 0;
         }
 
-        size_t CountTextsContaining(const TestClient& client, const eastl::string& needle) {
+        size_t CountTextsContaining(const TestClient& client, const String& needle) {
             size_t count = 0;
             for (const ReceivedMessage& message : client.received) {
-                count += message.text.find(needle) != eastl::string::npos ? 1 : 0;
+                count += message.text.find(needle) != String::npos ? 1 : 0;
             }
             return count;
         }
@@ -97,8 +97,8 @@ namespace BECore::Tests {
         harness.Create(hostA, "Ann");
         const ConnectionId hostB = harness.Connect();
         harness.Create(hostB, "Bob");
-        const eastl::string codeB = harness.Client(hostB).roomCode;
-        const eastl::string tokenA = harness.Client(hostA).token;
+        const String codeB = harness.Client(hostB).roomCode;
+        const String tokenA = harness.Client(hostA).token;
         ASSERT_NE(harness.Client(hostA).roomCode, codeB);
 
         // The token of A is a member's, but not of B: the same refusal as for a token nobody has, and a failed join of the address
@@ -121,7 +121,7 @@ namespace BECore::Tests {
 
     TEST(RoomHostileTest, ListingAThousandTimesBetweenGuessesLearnsNoPrivateCodeAndTheCloseAfterWrongCodesStillComes) {
         HubHarness harness;
-        eastl::vector<eastl::string> privateCodes;
+        eastl::vector<String> privateCodes;
         eastl::vector<ConnectionId> members;
         for (int i = 0; i < 3; ++i) {
             const ConnectionId host = harness.Connect();
@@ -140,7 +140,7 @@ namespace BECore::Tests {
             const ConnectionId attacker = harness.Connect("10.0.0.9");
             attackers.push_back(attacker);
             for (int i = 0; i < 100 && !harness.Client(attacker).closed; ++i) {
-                eastl::string guess = Format("{}{}{}{}{}", "ABCDEFGH"[i % 8], "JKLMNPQR"[(i / 8) % 8], "STUVWXYZ"[lists % 8], "23456789"[i % 8], "ABCDEFGH"[(lists / 8) % 8]);
+                String guess = Format("{}{}{}{}{}", "ABCDEFGH"[i % 8], "JKLMNPQR"[(i / 8) % 8], "STUVWXYZ"[lists % 8], "23456789"[i % 8], "ABCDEFGH"[(lists / 8) % 8]);
                 SendRaw(harness, attacker, SerializeClientMessage(ListRoomsMessage{"fake"}));
                 ++lists;
                 if (i % 7 == 6) {
@@ -151,7 +151,7 @@ namespace BECore::Tests {
         }
         EXPECT_GE(lists, 1000);
         for (const ConnectionId attacker : attackers) {
-            for (const eastl::string& code : privateCodes) {
+            for (const String& code : privateCodes) {
                 EXPECT_EQ(CountTextsContaining(harness.Client(attacker), code), 0u) << code.c_str();
             }
             EXPECT_GE(harness.Client(attacker).Count(RoomMessageTypes::kRooms), 1u);
@@ -176,7 +176,7 @@ namespace BECore::Tests {
         harness.Create(hostA, "Ann");
         const ConnectionId hostB = harness.Connect();
         harness.Create(hostB, "Bob");
-        const eastl::string codeB = harness.Client(hostB).roomCode;
+        const String codeB = harness.Client(hostB).roomCode;
         const ConnectionId thief = harness.Connect();
         for (int i = 0; i < RoomLimits::kMaxFailedJoinsInRow; ++i) {
             EXPECT_FALSE(harness.Client(thief).closed);
@@ -188,8 +188,8 @@ namespace BECore::Tests {
     TEST(RoomHostileTest, ATokenIsInNoTextSentToAnotherConnection) {
         HubHarness harness;
         const auto ids = harness.MakeLobby(3);
-        const eastl::string code = harness.Client(ids[0]).roomCode;
-        const eastl::string tokens[] = {harness.Client(ids[0]).token, harness.Client(ids[1]).token, harness.Client(ids[2]).token};
+        const String code = harness.Client(ids[0]).roomCode;
+        const String tokens[] = {harness.Client(ids[0]).token, harness.Client(ids[1]).token, harness.Client(ids[2]).token};
         harness.Start(ids[0]);
 
         // One that drops mid-game, a connection that takes its seat over and a stranger that tries every token against the code
@@ -203,7 +203,7 @@ namespace BECore::Tests {
         harness.JoinByToken(replacement, code, tokens[1]);
         ASSERT_EQ(harness.Client(replacement).Count(RoomMessageTypes::kJoined), 1u);
         EXPECT_EQ(harness.Client(back).closeReason, "replaced");
-        for (const eastl::string& token : tokens) {
+        for (const String& token : tokens) {
             harness.JoinByToken(stranger, "ZZZZZ", token);
         }
         ASSERT_TRUE(PlayToTheEnd(harness, {ids[0], ids[2], replacement}));
@@ -229,8 +229,8 @@ namespace BECore::Tests {
     TEST(RoomHostileTest, AfterLeaveTheConnectionIsSentNothingOfTheRoom) {
         HubHarness harness;
         const auto ids = harness.MakeLobby(3);
-        const eastl::string code = harness.Client(ids[0]).roomCode;
-        const eastl::string token = harness.Client(ids[2]).token;
+        const String code = harness.Client(ids[0]).roomCode;
+        const String token = harness.Client(ids[2]).token;
         harness.Start(ids[0]);
         const ConnectionId leaver = ids[2];
         harness.Leave(leaver);
@@ -252,8 +252,8 @@ namespace BECore::Tests {
     TEST(RoomHostileTest, AfterReplacedTheOldConnectionIsSentNothingMore) {
         HubHarness harness;
         const auto ids = harness.MakeLobby(2);
-        const eastl::string code = harness.Client(ids[0]).roomCode;
-        const eastl::string token = harness.Client(ids[1]).token;
+        const String code = harness.Client(ids[0]).roomCode;
+        const String token = harness.Client(ids[1]).token;
         harness.Start(ids[0]);
         harness.Tick(seconds(1));
 
@@ -273,8 +273,8 @@ namespace BECore::Tests {
     TEST(RoomHostileTest, WhenTheRoomIsClosedNothingOfItReachesTheConnectionsAnyMore) {
         HubHarness harness;
         const auto ids = harness.MakeLobby(2);
-        const eastl::string code = harness.Client(ids[0]).roomCode;
-        const eastl::string token = harness.Client(ids[1]).token;
+        const String code = harness.Client(ids[0]).roomCode;
+        const String token = harness.Client(ids[1]).token;
         harness.Start(ids[0]);
         ASSERT_TRUE(PlayToTheEnd(harness, ids));
 
@@ -302,7 +302,7 @@ namespace BECore::Tests {
         // A room closed because its last human left: the code is free and the one who left hears only its own `left`
         const ConnectionId lone = harness.Connect();
         harness.Create(lone, "Lone");
-        const eastl::string loneCode = harness.Client(lone).roomCode;
+        const String loneCode = harness.Client(lone).roomCode;
         harness.Leave(lone);
         EXPECT_FALSE(harness.Hub().HasRoom(loneCode));
         EXPECT_EQ(harness.Client(lone).Types(), "joined,lobby,left");
@@ -311,7 +311,7 @@ namespace BECore::Tests {
     TEST(RoomHostileTest, ASeatIsSentNoViewBeforeTheStart) {
         HubHarness harness;
         const auto ids = harness.MakeLobby(2);
-        const eastl::string code = harness.Client(ids[0]).roomCode;
+        const String code = harness.Client(ids[0]).roomCode;
         const ConnectionId third = harness.Connect();
         harness.JoinByName(third, code, "Cid");
         harness.Send(ids[1], ChooseSeatMessage{3});
@@ -337,8 +337,8 @@ namespace BECore::Tests {
     TEST(RoomHostileTest, TheHandOfAComputerSeatIsNeverOnTheWireOfAHumanAlsoAfterASeatChangeAndAReconnect) {
         HubHarness harness;
         const auto ids = harness.MakeLobby(2);
-        const eastl::string code = harness.Client(ids[0]).roomCode;
-        const eastl::string token = harness.Client(ids[1]).token;
+        const String code = harness.Client(ids[0]).roomCode;
+        const String token = harness.Client(ids[1]).token;
         // The humans end up on seats 2 and 3; the computers hold 0 and 1
         harness.Send(ids[1], ChooseSeatMessage{3});
         harness.Send(ids[0], ChooseSeatMessage{2});
@@ -431,7 +431,7 @@ namespace BECore::Tests {
     TEST(RoomHostileTest, StartByAGuestOrASecondStartChangesNothing) {
         HubHarness harness;
         const auto ids = harness.MakeLobby(2);
-        const eastl::string code = harness.Client(ids[0]).roomCode;
+        const String code = harness.Client(ids[0]).roomCode;
         const size_t views = harness.Client(ids[0]).Count(RoomMessageTypes::kView);
         for (int i = 0; i < 3; ++i) {
             harness.Start(ids[1]);
@@ -462,13 +462,13 @@ namespace BECore::Tests {
         HubHarness harness;
         const ConnectionId host = harness.Connect();
         harness.Create(host, "Host");
-        const eastl::string code = harness.Client(host).roomCode;
+        const String code = harness.Client(host).roomCode;
 
-        const eastl::string names[] = {"\\u0007bell", "a\\u0000b",  "line\\nbreak", "tab\\tname", "\\u001fus", "\\u007fdel", "c1\\u0085",
-                                       "\\u200Bzero", "\\u202Ertl", "\\u2028sep",   "\\ufeffbom", "   ",       "",           "aaaaaaaaaaaaaaaaaaaaaaaaa",
-                                       "\\ud800lone", "\\udc00low"};
+        const String names[] = {"\\u0007bell", "a\\u0000b",  "line\\nbreak", "tab\\tname", "\\u001fus", "\\u007fdel", "c1\\u0085",
+                                "\\u200Bzero", "\\u202Ertl", "\\u2028sep",   "\\ufeffbom", "   ",       "",           "aaaaaaaaaaaaaaaaaaaaaaaaa",
+                                "\\ud800lone", "\\udc00low"};
         const ConnectionId guest = harness.Connect();
-        for (const eastl::string& name : names) {
+        for (const String& name : names) {
             const size_t errors = harness.Client(guest).Count(RoomMessageTypes::kError);
             SendRaw(harness, guest, Format("{{\"v\":1,\"type\":\"join_room\",\"code\":\"{}\",\"name\":\"{}\"}}", code, name));
             EXPECT_EQ(harness.Client(guest).Count(RoomMessageTypes::kError), errors + 1) << name.c_str();
@@ -498,7 +498,7 @@ namespace BECore::Tests {
                 const Json* seats = FindJsonMember(message.json, "seats");
                 ASSERT_NE(seats, nullptr);
                 for (const Json& seat : *seats) {
-                    const eastl::string name = GetJsonString(seat, "name").value_or(eastl::string());
+                    const String name = GetJsonString(seat, "name").value_or(String());
                     EXPECT_TRUE(name.empty() || name == "Host" || name == "Guest") << name.c_str();
                 }
             }

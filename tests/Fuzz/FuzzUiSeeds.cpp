@@ -1,7 +1,6 @@
 #include "FuzzSeeds.h"
 #include "FuzzUiGeometryInput.h"
 
-#include <limits>
 
 namespace BECore::Fuzz {
 
@@ -154,8 +153,8 @@ div { margin: 1em; width: calc(100% - 4px); opacity: .5; transform: rotate(3deg)
 )xml";
 
         /// Nested groups, each with an id: the depth a document of a screen does not reach
-        eastl::string NestedHtml(size_t depth) {
-            eastl::string html;
+        String NestedHtml(size_t depth) {
+            String html;
             for (size_t i = 0; i < depth; ++i) {
                 html += Format("<div id=\"n{}\" class=\"n\">", i);
             }
@@ -455,13 +454,13 @@ div { margin: 1em; width: calc(100% - 4px); opacity: .5; transform: rotate(3deg)
         seeds.push_back({kWebUiFolder, "theme-tokens.bin", HtmlAndCss(kTokenHtml, kTokenCss)});
         seeds.push_back({kWebUiFolder, "outside-the-subset.bin", HtmlAndCss("<div id=\"a\"><p>text</p></div>", kUnsupportedCss)});
 
-        const eastl::string nested = NestedHtml(kNestingDepth);
+        const String nested = NestedHtml(kNestingDepth);
         seeds.push_back({kWebUiFolder, "deep-nesting.bin", HtmlAndCss(StringView(nested), ".n { padding: 1px; display: flex; }")});
 
-        const eastl::string longValue(kLongTextBytes, 'a');
-        const eastl::string longAttribute = Format("<div id=\"a\" title=\"{}\" class=\"{}\" data-x={}></div>", longValue.c_str(), longValue.c_str(), longValue.c_str());
+        const String longValue(kLongTextBytes, 'a');
+        const String longAttribute = Format("<div id=\"a\" title=\"{}\" class=\"{}\" data-x={}></div>", longValue.c_str(), longValue.c_str(), longValue.c_str());
         seeds.push_back({kWebUiFolder, "long-attributes.bin", HtmlAndCss(StringView(longAttribute), {})});
-        const eastl::string longSelector = Format(".{} {{ width: 1px }} #{} .{}:hover {{ color: red }}", longValue.c_str(), longValue.c_str(), longValue.c_str());
+        const String longSelector = Format(".{} {{ width: 1px }} #{} .{}:hover {{ color: red }}", longValue.c_str(), longValue.c_str(), longValue.c_str());
         seeds.push_back({kWebUiFolder, "long-selectors.bin", HtmlAndCss("<div id=\"a\" class=\"a\"></div>", StringView(longSelector))});
 
         seeds.push_back({kUiTablesFolder, "strings.xml", TextBytes(kStringsXml)});

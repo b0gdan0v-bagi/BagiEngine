@@ -136,7 +136,7 @@ namespace BECore::Tests {
         auto client = Socket::Connect(listener->GetLocalPort());
         ASSERT_TRUE(client.has_value());
 
-        eastl::string peerAddress;
+        String peerAddress;
         auto accepted = listener->Accept(kWaitLimit, &peerAddress);
         ASSERT_TRUE(accepted.has_value());
         EXPECT_EQ(peerAddress, "127.0.0.1");
@@ -160,7 +160,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(first.has_value());
         const auto second = Socket::Listen(first->GetLocalPort(), SocketBind::AnyAddress);
         ASSERT_FALSE(second.has_value());
-        EXPECT_NE(second.error().find("0.0.0.0"), eastl::string::npos);
+        EXPECT_NE(second.error().find("0.0.0.0"), String::npos);
     }
 
     TEST(SocketTest, ConnectByIPv4LiteralAndByNameReachesTheListener) {
@@ -193,13 +193,13 @@ namespace BECore::Tests {
         }
         const auto client = Socket::Connect("127.0.0.1", closedPort, kWaitLimit);
         ASSERT_FALSE(client.has_value());
-        EXPECT_NE(client.error().find(Format("127.0.0.1:{}", closedPort)), eastl::string::npos) << client.error().c_str();
+        EXPECT_NE(client.error().find(Format("127.0.0.1:{}", closedPort)), String::npos) << client.error().c_str();
     }
 
     TEST(SocketTest, ConnectToAnUnresolvableNameIsAnErrorThatNamesTheHost) {
         const auto client = Socket::Connect("nonexistent.invalid", 80, kWaitLimit);
         ASSERT_FALSE(client.has_value());
-        EXPECT_NE(client.error().find("nonexistent.invalid"), eastl::string::npos) << client.error().c_str();
+        EXPECT_NE(client.error().find("nonexistent.invalid"), String::npos) << client.error().c_str();
     }
 
     TEST(SocketTest, ConnectWithTheCancelFlagAlreadySetReturnsCancelledAndConnectsNothing) {
@@ -209,7 +209,7 @@ namespace BECore::Tests {
 
         const auto client = Socket::Connect("127.0.0.1", listener->GetLocalPort(), kWaitLimit, &cancel);
         ASSERT_FALSE(client.has_value());
-        EXPECT_NE(client.error().find("cancelled"), eastl::string::npos) << client.error().c_str();
+        EXPECT_NE(client.error().find("cancelled"), String::npos) << client.error().c_str();
         const auto accepted = listener->Accept(100ms);
         ASSERT_FALSE(accepted.has_value());
         EXPECT_EQ(accepted.error(), SocketError::TimedOut);

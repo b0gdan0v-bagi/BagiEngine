@@ -266,8 +266,8 @@ namespace BECore::Tests {
         ASSERT_TRUE(serializer.BeginObject("variant"));
         variant.Serialize(serializer);
         serializer.EndObject();
-        const eastl::string xml = serializer.SaveToString();
-        EXPECT_NE(xml.find("x=\"5%\""), eastl::string::npos);
+        const String xml = serializer.SaveToString();
+        EXPECT_NE(xml.find("x=\"5%\""), String::npos);
         XmlDeserializer deserializer;
         ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
         UIVariant loaded;
@@ -294,11 +294,11 @@ namespace BECore::Tests {
         ASSERT_TRUE(serializer.BeginObject("variant"));
         variant.Serialize(serializer);
         serializer.EndObject();
-        const eastl::string xml = serializer.SaveToString();
-        EXPECT_NE(xml.find("anchorMin=\"0,0\""), eastl::string::npos) << xml.c_str();
-        EXPECT_NE(xml.find("anchorMax=\"0.35,1\""), eastl::string::npos);
-        EXPECT_NE(xml.find("pivot=\"0.5,0\""), eastl::string::npos);
-        EXPECT_NE(xml.find("margin=\"0\""), eastl::string::npos);
+        const String xml = serializer.SaveToString();
+        EXPECT_NE(xml.find("anchorMin=\"0,0\""), String::npos) << xml.c_str();
+        EXPECT_NE(xml.find("anchorMax=\"0.35,1\""), String::npos);
+        EXPECT_NE(xml.find("pivot=\"0.5,0\""), String::npos);
+        EXPECT_NE(xml.find("margin=\"0\""), String::npos);
         XmlDeserializer deserializer;
         ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
         UIVariant loaded;
@@ -316,10 +316,10 @@ namespace BECore::Tests {
         ASSERT_TRUE(bareSerializer.BeginObject("variant"));
         bare.Serialize(bareSerializer);
         bareSerializer.EndObject();
-        const eastl::string bareXml = bareSerializer.SaveToString();
-        EXPECT_EQ(bareXml.find("anchorM"), eastl::string::npos);
-        EXPECT_EQ(bareXml.find("pivot"), eastl::string::npos);
-        EXPECT_EQ(bareXml.find("margin"), eastl::string::npos);
+        const String bareXml = bareSerializer.SaveToString();
+        EXPECT_EQ(bareXml.find("anchorM"), String::npos);
+        EXPECT_EQ(bareXml.find("pivot"), String::npos);
+        EXPECT_EQ(bareXml.find("margin"), String::npos);
     }
 
     TEST(UIVariantsTest, AMalformedEdgeAnchorOfAnOverrideIsReportedAndLeavesItUnset) {
@@ -350,7 +350,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(serializer.BeginObject("variant"));
         variant.Serialize(serializer);
         serializer.EndObject();
-        const eastl::string xml = serializer.SaveToString();
+        const String xml = serializer.SaveToString();
         XmlDeserializer deserializer;
         ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
         UIVariant loaded;

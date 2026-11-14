@@ -4,10 +4,8 @@
 #include "WireJudge.h"
 
 #include <RoomServer/DemoCardGame.h>
-#include <algorithm>
 #include <memory>
 #include <set>
-#include <string>
 #include <vector>
 
 namespace BECore::Tests {
@@ -181,9 +179,9 @@ namespace BECore::Tests {
         for (int i = 0; i < humans; ++i) {
             auto client = RoomSocketClient::Connect(port);
             ASSERT_TRUE(client.has_value());
-            const eastl::string name = Format("Player{}", i);
+            const String name = Format("Player{}", i);
             if (i == 0) {
-                client->Send(CreateRoomMessage{eastl::string(game), name, options});
+                client->Send(CreateRoomMessage{String(game), name, options});
             } else {
                 client->JoinByName(out.front()->roomCode, name);
             }

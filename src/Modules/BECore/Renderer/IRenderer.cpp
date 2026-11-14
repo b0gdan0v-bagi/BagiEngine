@@ -11,15 +11,15 @@ namespace BECore {
 
     void IRenderer::RequestCapture(CaptureCallback callback) {
         if (callback) {
-            callback(std::unexpected(eastl::string("this renderer backend cannot read its output back")));
+            callback(std::unexpected(String("this renderer backend cannot read its output back")));
         }
     }
 
-    eastl::string IRenderer::GetNoGpuDeviceReason() const {
-        return eastl::string("this renderer backend has no GPU device");
+    String IRenderer::GetNoGpuDeviceReason() const {
+        return String("this renderer backend has no GPU device");
     }
 
-    std::expected<IGpuDevice*, eastl::string> RequireGpuDevice(IRenderer& renderer) {
+    std::expected<IGpuDevice*, String> RequireGpuDevice(IRenderer& renderer) {
         if (IGpuDevice* device = renderer.GetGpuDevice()) {
             return device;
         }

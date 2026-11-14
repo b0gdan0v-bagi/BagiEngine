@@ -57,7 +57,7 @@ namespace BECore {
         PoolString _titleGame;
         bool _titleEditor = false;
         bool _titleApplied = false;
-        eastl::vector<eastl::string> _arguments;
+        eastl::vector<String> _arguments;
 #if BE_WITH_REMOTE_CONTROL
         eastl::unique_ptr<WebSocketServer> _controlServer;
 #endif

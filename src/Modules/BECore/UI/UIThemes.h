@@ -95,7 +95,7 @@ namespace BECore {
          *         colour, a duplicate token in one theme (the first stays), a theme with no colours, a `default` that names no theme, an unknown element. The rest is loaded. Each problem is one line
          * of at most `UIText::kMaxMessageBytes` (it repeats text of the file, which is cut). An empty node adds nothing
          */
-        eastl::vector<eastl::string> LoadFromXml(const XmlNode& node);
+        eastl::vector<String> LoadFromXml(const XmlNode& node);
 
     private:
         struct Theme {

@@ -272,7 +272,7 @@ namespace BECore::Tests {
             request["method"] = std::string(method);
             request["params"] = params;
             Json response;
-            service.Post(DumpJson(request), [&response](eastl::string text) {
+            service.Post(DumpJson(request), [&response](String text) {
                 auto parsed = ParseJson(text);
                 response = parsed ? std::move(*parsed) : Json();
             });

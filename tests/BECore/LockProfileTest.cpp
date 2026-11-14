@@ -1,16 +1,12 @@
 #include <BECore/Control/Json.h>
 #include <BECore/Profiler/Backends/ChromeTraceBackend.h>
-#include <BECore/Profiler/Profile.h>
 #include <BECore/Profiler/ProfilerClock.h>
 #include <BECore/Profiler/Ring/FrameRingBackend.h>
-#include <BECore/Threading/LockGuards.h>
 #include <BECore/Threading/Mutex.h>
 #include <BECore/Threading/SharedMutex.h>
-#include <atomic>
 #include <chrono>
 #include <gtest/gtest.h>
 #include <map>
-#include <string>
 #include <thread>
 #include <vector>
 
@@ -97,7 +93,7 @@ namespace BECore::Tests {
         };
 
         /// The zones named @p name of a Chrome trace, matched B to E per thread; also fails the test when a thread's B and E do not nest
-        std::vector<WaitZone> FindZones(const eastl::string& trace, const char* name) {
+        std::vector<WaitZone> FindZones(const String& trace, const char* name) {
             std::vector<WaitZone> found;
             auto parsed = ParseJson(trace);
             EXPECT_TRUE(parsed.has_value());
@@ -302,7 +298,7 @@ namespace BECore::Tests {
         }
 
         EXPECT_TRUE(FindZones(recorder.WriteJson(), kWaitZoneName).empty());
-        EXPECT_EQ(recorder.WriteJson().find("lock wait"), eastl::string::npos);
+        EXPECT_EQ(recorder.WriteJson().find("lock wait"), String::npos);
     }
 
     TEST(LockProfileTest, AWaitBelowTheThresholdRecordsNothing) {
@@ -438,7 +434,7 @@ namespace BECore::Tests {
             thread.join();
         }
         EXPECT_EQ(counter, kThreads * kRounds);
-        const eastl::string trace = recorder.WriteJson();
+        const String trace = recorder.WriteJson();
         FindZones(trace, kWaitZoneName);  // checks the nesting of every thread
     }
 

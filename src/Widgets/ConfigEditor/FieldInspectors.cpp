@@ -15,9 +15,9 @@ namespace BECore {
         using TextBuf = eastl::array<char, k_textBufSize>;
 
         // Persistent char buffers for InputText fields, keyed by widgetId
-        eastl::unordered_map<eastl::string, TextBuf> s_textBuffers;
+        eastl::unordered_map<String, TextBuf> s_textBuffers;
 
-        char* GetOrCreateTextBuffer(const eastl::string& widgetId, StringView initialValue) {
+        char* GetOrCreateTextBuffer(const String& widgetId, StringView initialValue) {
             auto it = s_textBuffers.find(widgetId);
             if (it == s_textBuffers.end()) {
                 auto& buf = s_textBuffers[widgetId];
@@ -33,19 +33,19 @@ namespace BECore {
         // Per-type renderers
         // -------------------------------------------------------------------------
 
-        InspectorResult RenderBool(const eastl::string& widgetId, StringView currentValue) {
+        InspectorResult RenderBool(const String& widgetId, StringView currentValue) {
             bool value = (currentValue == "true");
-            const eastl::string label = Format("##{}", widgetId);
+            const String label = Format("##{}", widgetId);
             if (ImGui::Checkbox(label.c_str(), &value)) {
-                return {true, value ? eastl::string{"true"} : eastl::string{"false"}};
+                return {true, value ? String{"true"} : String{"false"}};
             }
             return {};
         }
 
-        InspectorResult RenderInt(const eastl::string& widgetId, StringView currentValue) {
+        InspectorResult RenderInt(const String& widgetId, StringView currentValue) {
             int value = 0;
             std::from_chars(currentValue.data(), currentValue.data() + currentValue.size(), value);
-            const eastl::string label = Format("##{}", widgetId);
+            const String label = Format("##{}", widgetId);
             ImGui::SetNextItemWidth(-1.0f);
             const ScopedMonoFont mono;
             if (ImGui::InputInt(label.c_str(), &value, 0, 0)) {
@@ -54,10 +54,10 @@ namespace BECore {
             return {};
         }
 
-        InspectorResult RenderFloat(const eastl::string& widgetId, StringView currentValue) {
+        InspectorResult RenderFloat(const String& widgetId, StringView currentValue) {
             float value = 0.0f;
             std::from_chars(currentValue.data(), currentValue.data() + currentValue.size(), value);
-            const eastl::string label = Format("##{}", widgetId);
+            const String label = Format("##{}", widgetId);
             ImGui::SetNextItemWidth(-1.0f);
             const ScopedMonoFont mono;
             if (ImGui::InputFloat(label.c_str(), &value, 0.0f, 0.0f, "%.6g")) {
@@ -66,7 +66,7 @@ namespace BECore {
             return {};
         }
 
-        InspectorResult RenderEnum(const eastl::string& widgetId, StringView currentValue, const eastl::vector<eastl::string>& options) {
+        InspectorResult RenderEnum(const String& widgetId, StringView currentValue, const eastl::vector<String>& options) {
             if (options.empty()) {
                 return {};
             }
@@ -81,9 +81,9 @@ namespace BECore {
 
             // A value that is not an option (a typo, or a name the code no longer knows) is shown as it is and flagged
             const bool isUnknown = selectedIndex < 0 && !currentValue.empty();
-            const eastl::string preview{currentValue.data(), currentValue.size()};
+            const String preview{currentValue.data(), currentValue.size()};
 
-            const eastl::string label = Format("##{}", widgetId);
+            const String label = Format("##{}", widgetId);
             ImGui::SetNextItemWidth(isUnknown ? -(ImGui::CalcTextSize(k_unknownValueMarker).x + ImGui::GetStyle().ItemSpacing.x) : -1.0f);
 
             InspectorResult result;
@@ -109,13 +109,13 @@ namespace BECore {
             return result;
         }
 
-        InspectorResult RenderFlags(const eastl::string& widgetId, StringView currentValue, const eastl::vector<eastl::string>& options) {
+        InspectorResult RenderFlags(const String& widgetId, StringView currentValue, const eastl::vector<String>& options) {
             if (options.empty()) {
                 return {};
             }
 
             // Parse current active flags from the value string
-            auto isActive = [&](const eastl::string& flag) {
+            auto isActive = [&](const String& flag) {
                 StringView remaining = currentValue;
                 while (!remaining.empty()) {
                     const auto pos = remaining.find('|');
@@ -144,7 +144,7 @@ namespace BECore {
             }
 
             for (size_t i = 0; i < options.size(); ++i) {
-                const eastl::string checkLabel = Format("{}##flag{}", options[i], widgetId);
+                const String checkLabel = Format("{}##flag{}", options[i], widgetId);
                 bool state = checked[i];
                 if (ImGui::Checkbox(checkLabel.c_str(), &state)) {
                     checked[i] = state;
@@ -153,7 +153,7 @@ namespace BECore {
             }
 
             if (anyChanged) {
-                eastl::string result;
+                String result;
                 for (size_t i = 0; i < options.size(); ++i) {
                     if (checked[i]) {
                         if (!result.empty()) {
@@ -167,12 +167,12 @@ namespace BECore {
             return {};
         }
 
-        InspectorResult RenderString(const eastl::string& widgetId, StringView currentValue) {
+        InspectorResult RenderString(const String& widgetId, StringView currentValue) {
             char* buf = GetOrCreateTextBuffer(widgetId, currentValue);
-            const eastl::string label = Format("##{}", widgetId);
+            const String label = Format("##{}", widgetId);
             ImGui::SetNextItemWidth(-1.0f);
             if (ImGui::InputText(label.c_str(), buf, k_textBufSize, ImGuiInputTextFlags_EnterReturnsTrue)) {
-                return {true, eastl::string{buf}};
+                return {true, String{buf}};
             }
             return {};
         }
@@ -183,7 +183,7 @@ namespace BECore {
     // Public API
     // =========================================================================
 
-    InspectorResult RenderFieldInspector(const eastl::string& widgetId, StringView currentValue, const FieldHint& hint) {
+    InspectorResult RenderFieldInspector(const String& widgetId, StringView currentValue, const FieldHint& hint) {
         switch (hint.type) {
             case FieldType::Bool:
                 return RenderBool(widgetId, currentValue);

@@ -34,7 +34,7 @@ namespace BECore::Tests {
         constexpr float kOriginalX = 1.0f;
 
         /// The names of the tree below @p node, depth first, each followed by one dot per level ("A B B1. B1a.. B2. C")
-        void AppendTree(const SceneNode& node, size_t depth, eastl::string& out) {
+        void AppendTree(const SceneNode& node, size_t depth, String& out) {
             for (const auto& child : node.GetChildren()) {
                 if (!out.empty()) {
                     out.append(" ");
@@ -45,8 +45,8 @@ namespace BECore::Tests {
             }
         }
 
-        eastl::string TreeOf(const SceneNode& root) {
-            eastl::string out;
+        String TreeOf(const SceneNode& root) {
+            String out;
             AppendTree(root, 0, out);
             return out;
         }
@@ -94,7 +94,7 @@ namespace BECore::Tests {
             return *node;
         }
 
-        eastl::string Tree() const {
+        String Tree() const {
             return TreeOf(_scene->GetRootNode());
         }
 
@@ -165,7 +165,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(SceneTreeEditTest, IntoItselfOrADescendantIsRefusedAndChangesNothing) {
-        const eastl::string before = Tree();
+        const String before = Tree();
 
         EXPECT_FALSE(_scene->MoveNode(Node("B"), &Node("B")));
         EXPECT_FALSE(_scene->MoveNode(Node("B"), &Node("B1")));
@@ -178,8 +178,8 @@ namespace BECore::Tests {
     TEST_F(SceneTreeEditTest, TheRootAndNodesOfAnotherSceneAreRefused) {
         Scene& other = *_manager->GetSceneByName("Other"_intern);
         SceneNode& foreign = *Find(other.GetRootNode(), "Foreign");
-        const eastl::string before = Tree();
-        const eastl::string otherBefore = TreeOf(other.GetRootNode());
+        const String before = Tree();
+        const String otherBefore = TreeOf(other.GetRootNode());
 
         EXPECT_FALSE(_scene->MoveNode(_scene->GetRootNode(), &Node("B")));
         EXPECT_FALSE(_scene->MoveNode(foreign, &Node("B")));
@@ -262,7 +262,7 @@ namespace BECore::Tests {
 
     TEST_F(SceneTreeEditTest, TheRootAndForeignNodesCannotBeDuplicated) {
         Scene& other = *_manager->GetSceneByName("Other"_intern);
-        const eastl::string before = Tree();
+        const String before = Tree();
 
         EXPECT_FALSE(_scene->DuplicateNode(_scene->GetRootNode()));
         EXPECT_FALSE(_scene->DuplicateNode(*Find(other.GetRootNode(), "Foreign")));

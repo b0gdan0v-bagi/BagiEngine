@@ -28,7 +28,7 @@ namespace BECore {
          * An instance without a mesh is skipped; one without a texture is drawn with a white one, so its tint is its color.
          * @return why nothing was drawn (no device, no size, a pipeline or a resource that could not be made)
          */
-        [[nodiscard]] std::expected<void, eastl::string> Render(IRenderer& renderer, const Scene3D& scene, const PassDesc& base);
+        [[nodiscard]] std::expected<void, String> Render(IRenderer& renderer, const Scene3D& scene, const PassDesc& base);
 
         /// Lets go of the device and what was made on it
         void Reset();
@@ -46,7 +46,7 @@ namespace BECore {
         [[nodiscard]] static PipelineDesc MakeLitPipelineDesc();
 
     private:
-        std::expected<void, eastl::string> Prepare(IRenderer& renderer, IGpuDevice& device, uint32_t width, uint32_t height);
+        std::expected<void, String> Prepare(IRenderer& renderer, IGpuDevice& device, uint32_t width, uint32_t height);
 
         IntrusivePtr<IGpuDevice> _device;
         IntrusivePtr<IGpuPipeline> _pipeline;

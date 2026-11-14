@@ -20,7 +20,7 @@ namespace BECore {
             return (letter >= 'a' && letter <= 'z') || (letter >= 'A' && letter <= 'Z') || (letter >= '0' && letter <= '9') || letter == '-' || letter == '.' || letter == '_';
         }
 
-        std::unexpected<eastl::string> Refuse(eastl::string message) {
+        std::unexpected<String> Refuse(String message) {
             return std::unexpected(std::move(message));
         }
 
@@ -44,7 +44,7 @@ namespace BECore {
 
     }  // namespace
 
-    std::expected<WebSocketUrl, eastl::string> ParseWebSocketUrl(StringView text) {
+    std::expected<WebSocketUrl, String> ParseWebSocketUrl(StringView text) {
         if (text.size() > kMaxWebSocketUrlBytes) {
             return Refuse(Format("the URL is longer than {} bytes", kMaxWebSocketUrlBytes));
         }
@@ -60,7 +60,7 @@ namespace BECore {
             return Refuse("the URL has no scheme (expected ws:// or wss://)");
         }
         WebSocketUrl url;
-        const eastl::string scheme = LowerAscii(text.substr(0, separator));
+        const String scheme = LowerAscii(text.substr(0, separator));
         if (scheme == "wss") {
             url.secure = true;
         } else if (scheme != "ws") {
@@ -103,12 +103,12 @@ namespace BECore {
             url.pathAndQuery = "/";
         } else {
             const StringView tail = rest.substr(authorityEnd);
-            url.pathAndQuery = tail.starts_with('/') ? eastl::string(tail.data(), tail.size()) : Format("/{}", tail);  // `ws://a.com?x` asks for `/?x`
+            url.pathAndQuery = tail.starts_with('/') ? String(tail.data(), tail.size()) : Format("/{}", tail);  // `ws://a.com?x` asks for `/?x`
         }
         return url;
     }
 
-    eastl::string GetHostHeader(const WebSocketUrl& url) {
+    String GetHostHeader(const WebSocketUrl& url) {
         const uint16_t defaultPort = url.secure ? kDefaultSecureWebSocketPort : kDefaultWebSocketPort;
         return url.port == defaultPort ? url.host : Format("{}:{}", url.host, url.port);
     }

@@ -22,8 +22,8 @@ namespace BECore {
             return 0;
         }
 
-        eastl::string ChordText(const EditorCommand& command, const HotkeyMap& hotkeys) {
-            eastl::string text;
+        String ChordText(const EditorCommand& command, const HotkeyMap& hotkeys) {
+            String text;
             if (const Optional<KeyChord> chord = hotkeys.GetChord(command.id)) {
                 text = ToString(*chord);
                 if (!command.rebindable) {
@@ -80,7 +80,7 @@ namespace BECore {
             for (int row = 0; row < count; ++row) {
                 const EditorCommand& command = *matches[static_cast<size_t>(row)];
                 const ImVec2 rowStart = ImGui::GetCursorScreenPos();
-                const eastl::string title(command.title.data(), command.title.size());
+                const String title(command.title.data(), command.title.size());
                 ImGui::PushID(row);
                 if (ImGui::Selectable(title.c_str(), row == _selected)) {
                     chosen = command.id;
@@ -91,7 +91,7 @@ namespace BECore {
                 }
 
                 // The chord, right-aligned on the row
-                const eastl::string chordText = ChordText(command, hotkeys);
+                const String chordText = ChordText(command, hotkeys);
                 if (!chordText.empty()) {
                     const float textWidth = ImGui::CalcTextSize(chordText.c_str()).x;
                     const ImVec2 textPos(rowStart.x + rowWidth - textWidth - ImGui::GetStyle().ItemSpacing.x, rowStart.y);

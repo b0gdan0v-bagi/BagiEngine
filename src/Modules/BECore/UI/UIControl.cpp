@@ -140,7 +140,7 @@ namespace BECore {
             if (image != nullptr && !image->sprite.Empty()) {
                 json["icon"] = MakeJsonString(image->sprite.ToStringView());
             }
-            const eastl::string& tooltip = element.GetTooltipText();
+            const String& tooltip = element.GetTooltipText();
             if (!tooltip.empty()) {
                 json["tooltip"] = MakeJsonString(StringView(tooltip));
             }
@@ -231,7 +231,7 @@ namespace BECore {
         Json DescribeRegions(const UIRegionSet& regions) {
             Json json = Json::object();
             for (const UIRegionSet::Entry& entry : regions) {
-                json[std::string(entry.name.ToStringView().data(), entry.name.ToStringView().size())] = RectToJson(entry.rect);
+                json[ToStdString(entry.name.ToStringView())] = RectToJson(entry.rect);
             }
             return json;
         }
@@ -424,7 +424,7 @@ namespace BECore {
             return false;
         }
 
-        eastl::string DescribeMiss(const ClickTarget& target, PoolString name) {
+        String DescribeMiss(const ClickTarget& target, PoolString name) {
             const auto text = name.ToStringView();
             switch (target.miss) {
                 case ClickMiss::NotInteractive:

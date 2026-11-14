@@ -8,7 +8,7 @@ namespace BECore::Tests {
 
     namespace {
 
-        using Args = eastl::vector<eastl::string>;
+        using Args = eastl::vector<String>;
 
         /// The ApplicationConfig the engine reads from @p xml (the code path of the real start-up, strict values)
         ApplicationConfigLoad LoadFrom(const char* xml) {
@@ -62,7 +62,7 @@ namespace BECore::Tests {
         const auto result = Resolve({}, R"(<root controlPort="70000"/>)");
         ASSERT_FALSE(result.has_value());
         EXPECT_EQ(result.error().code, ControlErrors::kInvalidParams);
-        EXPECT_NE(result.error().message.find("ApplicationConfig: controlPort:"), eastl::string::npos) << result.error().message.c_str();
+        EXPECT_NE(result.error().message.find("ApplicationConfig: controlPort:"), String::npos) << result.error().message.c_str();
     }
 
     TEST(ControlSettingsTest, CommandLineEnables) {
@@ -144,7 +144,7 @@ namespace BECore::Tests {
 
     TEST(ControlSettingsTest, PortThatIsNotAPortIsAnError) {
         for (const char* value : {"abc", "70000", "65536", "-1", "+80", "", "80x", " 80", "8.5"}) {
-            const eastl::string arg = Format("--control-port={}", value);
+            const String arg = Format("--control-port={}", value);
             SCOPED_TRACE(arg.c_str());
             ExpectInvalid(Resolve({"--control", arg}));
         }

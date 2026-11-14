@@ -1,7 +1,6 @@
 // What the UI loaders and the pure geometry do with content that is larger, longer or odder than any real file: the string and theme tables and the numbers of boxes, panels and
 // layouts here, the web front end in UIWebTest.cpp
 
-#include <BECore/Config/XmlNode.h>
 #include <BECore/UI/UIBoxMesh.h>
 #include <BECore/UI/UICanvasLayout.h>
 #include <BECore/UI/UIGeometryBounds.h>
@@ -12,7 +11,6 @@
 #include <BECore/UI/UITidyMessage.h>
 #include <cmath>
 #include <gtest/gtest.h>
-#include <limits>
 
 namespace BECore::Tests {
 
@@ -20,18 +18,18 @@ namespace BECore::Tests {
 
         /// The problems a table gives for the text of a file, each of which must be one short line
         template <typename Table>
-        eastl::vector<eastl::string> Load(Table& table, const std::string& xml) {
+        eastl::vector<String> Load(Table& table, const std::string& xml) {
             pugi::xml_document document;
             EXPECT_TRUE(document.load_buffer(xml.data(), xml.size()));
             return table.LoadFromXml(XmlNode{document.document_element()});
         }
 
-        void ExpectOneShortLine(const eastl::vector<eastl::string>& problems) {
+        void ExpectOneShortLine(const eastl::vector<String>& problems) {
             ASSERT_FALSE(problems.empty());
-            for (const eastl::string& problem : problems) {
+            for (const String& problem : problems) {
                 EXPECT_LE(problem.size(), UIText::kMaxMessageBytes);
-                EXPECT_EQ(problem.find('\n'), eastl::string::npos);
-                EXPECT_EQ(problem.find('\t'), eastl::string::npos);
+                EXPECT_EQ(problem.find('\n'), String::npos);
+                EXPECT_EQ(problem.find('\t'), String::npos);
             }
         }
 
@@ -66,7 +64,7 @@ namespace BECore::Tests {
         const std::string exact(UIText::kMaxMessageBytes, 'e');
         EXPECT_EQ(UIText::TidyMessage(FromStd(exact)).size(), UIText::kMaxMessageBytes);
         const std::string over(UIText::kMaxMessageBytes + 1, 'e');
-        const eastl::string cut = UIText::TidyMessage(FromStd(over));
+        const String cut = UIText::TidyMessage(FromStd(over));
         EXPECT_EQ(cut.size(), UIText::kMaxMessageBytes);
         EXPECT_EQ(cut.substr(cut.size() - 3), "...");
         EXPECT_EQ(UIText::Excerpt(FromStd(over)).size(), UIText::kMaxExcerptBytes);

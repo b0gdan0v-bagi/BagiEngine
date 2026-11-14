@@ -70,7 +70,7 @@ namespace BECore::Stress {
      * A flag that is wrong (a bad or empty value, a value on a bare flag, no value on a valued one) is an error that names the flag;
      * the caller decides what to do with it, nothing is defaulted silently. Flags of other parts of the program are ignored.
      */
-    std::expected<StressSettings, eastl::string> ParseStressSettings(const CommandLine& commandLine);
+    std::expected<StressSettings, String> ParseStressSettings(const CommandLine& commandLine);
 
     /// The spelling of a value on the command line and in the control API: lowercase (`sprites`, `work`, `en`)
     StringView ToFlagValue(StressScene scene);

@@ -19,12 +19,12 @@ namespace BECore::Tests {
 
     TEST(WebPostTest, ARefusalNamesItsCauseOnEveryPlatform) {
         EXPECT_EQ(WebPostStart("matches/x", "", "").error(), "bad path");
-        const eastl::string tooLarge(kWebPostMaxBodyBytes + 1, 'x');
+        const String tooLarge(kWebPostMaxBodyBytes + 1, 'x');
         EXPECT_EQ(WebPostStart(kGoodPath, tooLarge, "").error(), "body too large");
-        const eastl::string longType(kWebPostMaxContentTypeBytes + 1, 't');
+        const String longType(kWebPostMaxContentTypeBytes + 1, 't');
         EXPECT_EQ(WebPostStart(kGoodPath, "", longType).error(), "bad content type");
         // the largest body and an empty one pass the checks and meet only the platform
-        const eastl::string largest(kWebPostMaxBodyBytes, 'x');
+        const String largest(kWebPostMaxBodyBytes, 'x');
         EXPECT_EQ(WebPostStart(kGoodPath, largest, "").error(), "unavailable");
         EXPECT_EQ(WebPostStart(kGoodPath, "", "").error(), "unavailable");
     }
@@ -33,7 +33,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(IsWebPostPathValid(kGoodPath));
         EXPECT_TRUE(IsWebPostPathValid("/"));
         EXPECT_TRUE(IsWebPostPathValid("/a.b/c?d=1"));
-        EXPECT_TRUE(IsWebPostPathValid(eastl::string("/") + eastl::string(kWebPostMaxPathBytes - 1, 'a')));
+        EXPECT_TRUE(IsWebPostPathValid(String("/") + String(kWebPostMaxPathBytes - 1, 'a')));
     }
 
     TEST(WebPostTest, ThePathRuleRefusesAnythingElse) {
@@ -51,7 +51,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(IsWebPostPathValid("/a/../b"));
         EXPECT_FALSE(IsWebPostPathValid("/.."));
         EXPECT_FALSE(IsWebPostPathValid("/\xc3\xa9"));
-        EXPECT_FALSE(IsWebPostPathValid(eastl::string("/") + eastl::string(kWebPostMaxPathBytes, 'a')));
+        EXPECT_FALSE(IsWebPostPathValid(String("/") + String(kWebPostMaxPathBytes, 'a')));
     }
 
     TEST(WebPostTest, PollingNothingOrAnUnknownIdIsFailedAndDoesNotCrash) {

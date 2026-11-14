@@ -104,7 +104,7 @@ namespace BECore::Tests {
             bool Visit(StringView name, PoolString&) override {
                 return Note(name);
             }
-            bool Visit(StringView name, eastl::string&) override {
+            bool Visit(StringView name, String&) override {
                 return Note(name);
             }
             bool VisitEnum(StringView name, const StringView*, size_t, size_t&) override {
@@ -125,7 +125,7 @@ namespace BECore::Tests {
                 return false;
             }
 
-            eastl::vector<eastl::string> _names;
+            eastl::vector<String> _names;
         };
 
         void ExpectColor(const Color& actual, const Color& expected) {
@@ -434,7 +434,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(serializer.BeginObject("component"));
         source->Serialize(serializer);
         serializer.EndObject();
-        const eastl::string text = serializer.SaveToString();
+        const String text = serializer.SaveToString();
 
         XmlDeserializer deserializer;
         ASSERT_TRUE(deserializer.LoadFromString(text)) << text.c_str();

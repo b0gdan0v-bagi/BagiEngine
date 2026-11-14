@@ -48,7 +48,7 @@ namespace BECore {
         // The size of the config: the answer of GetWidth() / GetHeight() while there is no window or SDL cannot tell
         int _width = 0;
         int _height = 0;
-        eastl::string _configuredTitle;
+        String _configuredTitle;
         bool _headless = false;
     };
 

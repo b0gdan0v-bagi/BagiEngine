@@ -19,7 +19,7 @@ namespace BECore {
 
             BE_REFLECT_FIELD int32_t id = 0;
             BE_REFLECT_FIELD float weight = 0.0f;
-            BE_REFLECT_FIELD eastl::string label;
+            BE_REFLECT_FIELD String label;
         };
 
         /// A type that holds its own kind, as a UI tree does: reading it recurses once per level of the document
@@ -47,7 +47,7 @@ namespace BECore {
             return false;
         }
 
-        inline bool Visit(IPropertyVisitor& /*v*/, eastl::vector<eastl::string>& /*words*/, StringView /*key*/) {
+        inline bool Visit(IPropertyVisitor& /*v*/, eastl::vector<String>& /*words*/, StringView /*key*/) {
             return false;
         }
 
@@ -70,13 +70,13 @@ namespace BECore {
             BE_REFLECT_FIELD uint64_t u64 = 0;
             BE_REFLECT_FIELD float f32 = 0.0f;
             BE_REFLECT_FIELD double f64 = 0.0;
-            BE_REFLECT_FIELD eastl::string text;
+            BE_REFLECT_FIELD String text;
             BE_REFLECT_FIELD PoolString name;
             BE_REFLECT_FIELD ProbeMode mode = ProbeMode::Auto;
             BE_REFLECT_FIELD ProbeLeaf leaf;
             BE_REFLECT_FIELD eastl::vector<ProbeLeaf> leaves;
             BE_REFLECT_FIELD eastl::vector<int32_t> numbers;
-            BE_REFLECT_FIELD eastl::vector<eastl::string> words;
+            BE_REFLECT_FIELD eastl::vector<String> words;
             BE_REFLECT_FIELD ProbeNode tree;
         };
 

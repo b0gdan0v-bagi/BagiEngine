@@ -31,7 +31,7 @@ namespace BECore {
      * The proportions are kept and the picture is never scaled up. @p maxSide of 0 means no scaling. Fails for an image
      * that is empty or whose pixels do not fill `width * height * 4` bytes.
      */
-    [[nodiscard]] std::expected<PngImage, eastl::string> EncodePng(const PixelBuffer& image, uint32_t maxSide);
+    [[nodiscard]] std::expected<PngImage, String> EncodePng(const PixelBuffer& image, uint32_t maxSide);
 
     /**
      * @brief Registers the `screenshot` method of the control API in @p service.

@@ -127,7 +127,7 @@ namespace BECore::Tests {
         auto made = device.CreatePipeline(desc);
 
         ASSERT_FALSE(made.has_value());
-        EXPECT_NE(made.error().find("multiple"), eastl::string::npos);
+        EXPECT_NE(made.error().find("multiple"), String::npos);
         EXPECT_EQ(device.pipelinesCreated, 0u);
     }
 
@@ -313,7 +313,7 @@ namespace BECore::Tests {
         f.device.SetConstants(ConstantsSlot::Draw, {tooBig.data(), tooBig.size()});
 
         ASSERT_EQ(f.device.errors.size(), 1u);
-        EXPECT_NE(f.device.errors[0].find("over the limit"), eastl::string::npos);
+        EXPECT_NE(f.device.errors[0].find("over the limit"), String::npos);
         EXPECT_EQ(f.device.CountCommands(GpuCommandKind::SetConstants), 0u);
     }
 
@@ -337,7 +337,7 @@ namespace BECore::Tests {
         f.device.DrawIndexed(kCubeIndexCount, 0, 0);
 
         ASSERT_EQ(f.device.errors.size(), 1u);
-        EXPECT_NE(f.device.errors[0].find("without a pipeline"), eastl::string::npos);
+        EXPECT_NE(f.device.errors[0].find("without a pipeline"), String::npos);
         EXPECT_TRUE(f.device.draws.empty());
     }
 
@@ -417,8 +417,8 @@ namespace BECore::Tests {
         auto required = RequireGpuDevice(renderer);
 
         ASSERT_FALSE(required.has_value());
-        EXPECT_NE(required.error().find("IRenderer"), eastl::string::npos);
-        EXPECT_NE(required.error().find(renderer.GetNoGpuDeviceReason()), eastl::string::npos);
+        EXPECT_NE(required.error().find("IRenderer"), String::npos);
+        EXPECT_NE(required.error().find(renderer.GetNoGpuDeviceReason()), String::npos);
     }
 
     TEST(RendererGpuDeviceTest, RequireGpuDeviceGivesTheDeviceOfTheRenderer) {
@@ -438,8 +438,8 @@ namespace BECore::Tests {
         EXPECT_EQ(renderer->GetGpuDevice(), nullptr);
         auto required = RequireGpuDevice(*renderer);
         ASSERT_FALSE(required.has_value());
-        EXPECT_NE(required.error().find("SDLRendererBackend"), eastl::string::npos);
-        EXPECT_NE(required.error().find("no depth buffer"), eastl::string::npos);
+        EXPECT_NE(required.error().find("SDLRendererBackend"), String::npos);
+        EXPECT_NE(required.error().find("no depth buffer"), String::npos);
     }
 
     TEST(RendererGpuDeviceTest, AGpuDeviceChangesNothingOf2DDrawing) {

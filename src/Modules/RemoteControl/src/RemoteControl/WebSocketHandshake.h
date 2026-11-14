@@ -11,11 +11,11 @@ namespace BECore {
     /// Why a handshake is refused: the HTTP status to answer with and a line for the person who sees it
     struct HandshakeError {
         int httpStatus = 400;
-        eastl::string message;
+        String message;
     };
 
     /// Small helpers for the text of HTTP headers, shared by the server's handshake and the client's (ASCII only)
-    [[nodiscard]] eastl::string LowerAscii(StringView text);
+    [[nodiscard]] String LowerAscii(StringView text);
     [[nodiscard]] bool EqualsIgnoreCase(StringView left, StringView right);
     /// @p text without the spaces and tabs at both ends
     [[nodiscard]] StringView TrimHeaderValue(StringView text);
@@ -26,10 +26,10 @@ namespace BECore {
     inline constexpr size_t kMaxQuotedBytes = 100;
 
     /// @p text as an error message may repeat it: printable ASCII only (anything else is `?`), cut to kMaxQuotedBytes with `...` after
-    [[nodiscard]] eastl::string QuoteForMessage(StringView text);
+    [[nodiscard]] String QuoteForMessage(StringView text);
 
     /// `Sec-WebSocket-Accept` for @p clientKey: base64(SHA-1(key + GUID))
-    [[nodiscard]] eastl::string ComputeAcceptKey(StringView clientKey);
+    [[nodiscard]] String ComputeAcceptKey(StringView clientKey);
 
     /// Who may open a connection. The default is the control API's: a program on this machine, or a page of the loopback
     struct HandshakePolicy {
@@ -40,7 +40,7 @@ namespace BECore {
         /// Public mode: the pages that may connect, each `scheme://host[:port]` (no path; see IsOriginAllowed()). The entry
         /// `*` allows every origin (for development only), `null` allows the `null` origin. An empty list refuses every browser
         /// and admits programs, which send no `Origin`
-        eastl::vector<eastl::string> allowedOrigins;
+        eastl::vector<String> allowedOrigins;
 
         /// Public mode: false refuses a request without `Origin` too, which keeps programs out
         bool allowMissingOrigin = true;
@@ -48,7 +48,7 @@ namespace BECore {
         /// Public mode: the path of a plain `GET` that a hosting platform's health check sends (`/healthz`); IsHealthCheckRequest()
         /// answers it with a 200 instead of a handshake error. Empty is off. Not used when loopbackOnly is true, so the control API
         /// server never answers it
-        eastl::string healthPath;
+        String healthPath;
 
         /// How many proxies in front of this server append to `X-Forwarded-For`; 0 (the default) is no proxy and the header is never
         /// read. With N > 0 the client is the N-th entry from the right (ParseForwardedClientAddress()). Set it only for a server that
@@ -69,7 +69,7 @@ namespace BECore {
      * pick its own address. Empty (the caller keeps the address of the socket) when @p trustedProxyHops is 0, the header is missing,
      * has fewer entries, the head is malformed, or the entry is not a dotted IPv4 or an IPv6 literal of at most kMaxForwardedAddressBytes.
      */
-    [[nodiscard]] eastl::string ParseForwardedClientAddress(StringView requestText, size_t trustedProxyHops);
+    [[nodiscard]] String ParseForwardedClientAddress(StringView requestText, size_t trustedProxyHops);
 
     /**
      * @brief Whether a request that carries the `Origin` header @p origin may connect under @p policy.
@@ -107,7 +107,7 @@ namespace BECore {
      * Status codes: 400 for a malformed request, 403 for a foreign `Host` or `Origin` (the message of a public refusal
      * names the origin, cut to 100 bytes), 426 for another protocol version, 431 for a head over kMaxHandshakeBytes.
      */
-    [[nodiscard]] std::expected<eastl::string, HandshakeError> ParseHandshakeRequest(StringView requestText, const HandshakePolicy& policy = HandshakePolicy{});
+    [[nodiscard]] std::expected<String, HandshakeError> ParseHandshakeRequest(StringView requestText, const HandshakePolicy& policy = HandshakePolicy{});
 
     /**
      * @brief Whether the request head @p requestText is a health check under @p policy: `GET <healthPath>` (an optional
@@ -120,12 +120,12 @@ namespace BECore {
     [[nodiscard]] bool IsHealthCheckRequest(StringView requestText, const HandshakePolicy& policy);
 
     /// The `200 OK` answer to a health check: body `ok`, not cacheable, and the connection is closed after it
-    [[nodiscard]] eastl::string BuildHealthResponse();
+    [[nodiscard]] String BuildHealthResponse();
 
     /// The 101 response that completes the handshake for @p clientKey
-    [[nodiscard]] eastl::string BuildAcceptResponse(StringView clientKey);
+    [[nodiscard]] String BuildAcceptResponse(StringView clientKey);
 
     /// An HTTP error response for @p error (it closes the connection; a 426 names the version the server speaks)
-    [[nodiscard]] eastl::string BuildRejectResponse(const HandshakeError& error);
+    [[nodiscard]] String BuildRejectResponse(const HandshakeError& error);
 
 }  // namespace BECore

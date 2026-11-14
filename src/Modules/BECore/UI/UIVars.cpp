@@ -5,7 +5,7 @@ namespace BECore {
     void UIVars::Set(PoolString name, StringView value) {
         const auto it = _values.find(name);
         if (it == _values.end()) {
-            _values.emplace(name, eastl::string(value.data(), value.size()));
+            _values.emplace(name, String(value.data(), value.size()));
             ++_version;
             return;
         }
@@ -44,8 +44,8 @@ namespace BECore {
         return text.find('{') != StringView::npos || text.find('}') != StringView::npos;
     }
 
-    eastl::string UIVars::Expand(StringView text) const {
-        eastl::string result;
+    String UIVars::Expand(StringView text) const {
+        String result;
         result.reserve(text.size());
         for (size_t i = 0; i < text.size(); ++i) {
             const char c = text[i];

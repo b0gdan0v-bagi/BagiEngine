@@ -22,15 +22,15 @@ namespace BECore::Tests {
             return themes;
         }
 
-        eastl::vector<eastl::string> Load(UIThemes& themes, const char* xml) {
+        eastl::vector<String> Load(UIThemes& themes, const char* xml) {
             auto config = XmlConfig::Create();
             EXPECT_TRUE(config.LoadFromString(xml));
             return themes.LoadFromXml(config.GetRoot());
         }
 
-        bool Mentions(const eastl::vector<eastl::string>& problems, const char* word) {
-            for (const eastl::string& problem : problems) {
-                if (problem.find(word) != eastl::string::npos) {
+        bool Mentions(const eastl::vector<String>& problems, const char* word) {
+            for (const String& problem : problems) {
+                if (problem.find(word) != String::npos) {
                     return true;
                 }
             }

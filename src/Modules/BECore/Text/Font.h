@@ -52,7 +52,7 @@ namespace BECore {
         PoolString GetTypeName() const override;
 
         /// The family name from the font's own name table ("PT Sans"), empty when it has none: what a CSS `font-family` names
-        [[nodiscard]] eastl::string GetFamilyName() const;
+        [[nodiscard]] String GetFamilyName() const;
 
         /// The glyph of @p codePoint, or 0 when the font has none
         [[nodiscard]] uint32_t FindGlyph(char32_t codePoint) const;

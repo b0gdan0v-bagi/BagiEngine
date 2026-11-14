@@ -49,15 +49,15 @@ namespace BECore::Tests {
             return options;
         }
 
-        eastl::string CodeOf(const std::expected<void, ControlError>& result) {
-            return result ? eastl::string("<ok>") : result.error().code;
+        String CodeOf(const std::expected<void, ControlError>& result) {
+            return result ? String("<ok>") : result.error().code;
         }
 
-        eastl::string CodeOf(const std::expected<Json, ControlError>& result) {
-            return result ? eastl::string("<ok>") : result.error().code;
+        String CodeOf(const std::expected<Json, ControlError>& result) {
+            return result ? String("<ok>") : result.error().code;
         }
 
-        Json PlayAction(const eastl::string& card) {
+        Json PlayAction(const String& card) {
             Json action = Json::object();
             action["type"] = "play";
             action["card"] = card.c_str();
@@ -394,7 +394,7 @@ namespace BECore::Tests {
                 Subscribe<LogEvent, &LogRecorder::OnLog>(this);
             }
 
-            const eastl::vector<eastl::string>& Errors() const {
+            const eastl::vector<String>& Errors() const {
                 return _errors;
             }
 
@@ -405,7 +405,7 @@ namespace BECore::Tests {
                 }
             }
 
-            eastl::vector<eastl::string> _errors;
+            eastl::vector<String> _errors;
         };
 
     }  // namespace
@@ -427,8 +427,8 @@ namespace BECore::Tests {
         EXPECT_FALSE(room.StepComputers(kNow));
         LogEvent::Flush();
         ASSERT_EQ(log.Errors().size(), 1u);
-        EXPECT_NE(log.Errors()[0].find("seat 1"), eastl::string::npos) << log.Errors()[0].c_str();
-        EXPECT_EQ(log.Errors()[0].find("ABCDE"), eastl::string::npos) << "the room code is not logged: " << log.Errors()[0].c_str();
+        EXPECT_NE(log.Errors()[0].find("seat 1"), String::npos) << log.Errors()[0].c_str();
+        EXPECT_EQ(log.Errors()[0].find("ABCDE"), String::npos) << "the room code is not logged: " << log.Errors()[0].c_str();
         EXPECT_EQ((*game)->proposals, 1);
         EXPECT_EQ(room.GetGameVersion(), version);
         EXPECT_EQ(room.GetPhase(), RoomPhase::Playing);

@@ -34,7 +34,7 @@ namespace BECore::Tests {
         constexpr int32_t kInnerLayer = 3;
 
         /// The names of the tree below @p node, depth first, each with the number of its ancestors below @p node ("Left Inner. Deep.. Last.")
-        void AppendTree(const SceneNode& node, size_t depth, eastl::string& out) {
+        void AppendTree(const SceneNode& node, size_t depth, String& out) {
             for (const auto& child : node.GetChildren()) {
                 if (!out.empty()) {
                     out.append(" ");
@@ -45,8 +45,8 @@ namespace BECore::Tests {
             }
         }
 
-        eastl::string TreeOf(const SceneNode& root) {
-            eastl::string out;
+        String TreeOf(const SceneNode& root) {
+            String out;
             AppendTree(root, 0, out);
             return out;
         }

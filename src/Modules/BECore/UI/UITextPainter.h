@@ -78,8 +78,8 @@ namespace BECore {
         PoolString _fontPath;      // the path _fontHandle was loaded from, to notice a changed font, family or weight
         FontRequest _fontRequest;  // the request of the last resolve: an unknown family is logged when it changes, not on every frame
         TextLayoutCache _layoutCache;
-        eastl::string _expandedSource;  // the source that _expanded was made from
-        eastl::string _expanded;
+        String _expandedSource;  // the source that _expanded was made from
+        String _expanded;
         uint64_t _expandedVersion = 0;         // the version of UIVars it was made at
         uint64_t _expandedStringsVersion = 0;  // the version of UIStrings it was made at, read only when _expandedUsesStrings
         bool _expandedUsesStrings = false;     // the text holds a `{#key}`

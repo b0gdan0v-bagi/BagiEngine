@@ -28,8 +28,8 @@ namespace BECore::Fuzz {
         }
 
         /// The runs of exactly kTokenLength lower-case hexadecimal digits that are whole words in @p text: what could be a reconnect token
-        eastl::vector<eastl::string> FindTokenLikeWords(StringView text) {
-            eastl::vector<eastl::string> found;
+        eastl::vector<String> FindTokenLikeWords(StringView text) {
+            eastl::vector<String> found;
             for (size_t at = 0; at < text.size();) {
                 if (!IsWordLetter(text[at])) {
                     ++at;
@@ -52,12 +52,12 @@ namespace BECore::Fuzz {
         /// What the target knows of one connection from what the hub sent it and what it sent the hub
         struct ConnectionModel {
             bool open = false;
-            eastl::string lastSent;
-            eastl::string room;  ///< From `joined`, until `left`; empty when none
+            String lastSent;
+            String room;  ///< From `joined`, until `left`; empty when none
             int joinedSeat = -1;
             int viewSeat = -1;  ///< The seat of the last `view` (-1 before the first)
             bool askedForSeat = false;
-            eastl::vector<eastl::string> ownTokens;
+            eastl::vector<String> ownTokens;
         };
 
         /// What the last text of a connection, as the hub read it, said about listing the room: none when it was no create_room
@@ -128,8 +128,8 @@ namespace BECore::Fuzz {
         private:
             HubSink MakeSink() {
                 HubSink sink;
-                sink.send = [this](ConnectionId id, eastl::string text) { Judge(id, text); };
-                sink.close = [this](ConnectionId id, eastl::string reason) {
+                sink.send = [this](ConnectionId id, String text) { Judge(id, text); };
+                sink.close = [this](ConnectionId id, String reason) {
                     FUZZ_CHECK(!reason.empty());
                     ConnectionModel& connection = _connections[id];
                     connection.open = false;
@@ -139,7 +139,7 @@ namespace BECore::Fuzz {
             }
 
             /// Called for every text the hub sends: the properties of a message to one connection
-            void Judge(ConnectionId id, const eastl::string& text) {
+            void Judge(ConnectionId id, const String& text) {
                 ConnectionModel& connection = _connections[id];
 
                 const auto parsed = ParseJson(text);
@@ -161,9 +161,9 @@ namespace BECore::Fuzz {
                 }
 
                 // A secret goes to its owner only: a token in a text is one the connection holds or one it sent itself (an error may repeat what the sender wrote)
-                for (const eastl::string& word : FindTokenLikeWords(text)) {
+                for (const String& word : FindTokenLikeWords(text)) {
                     const bool own = std::find(connection.ownTokens.begin(), connection.ownTokens.end(), word) != connection.ownTokens.end();
-                    FUZZ_CHECK(own || connection.lastSent.find(word) != eastl::string::npos);
+                    FUZZ_CHECK(own || connection.lastSent.find(word) != String::npos);
                 }
 
                 // A card the connection may not know: the judge of the socket scenarios, on the text alone
@@ -171,7 +171,7 @@ namespace BECore::Fuzz {
                 const std::vector<std::string> leaked = Tests::FindLeakedCardIds(std::string_view(text.data(), text.size()), seat);
                 for (const std::string& card : leaked) {
                     // An error that quotes the card the client itself sent tells it nothing
-                    FUZZ_CHECK(*type == RoomMessageTypes::kError && connection.lastSent.find(card.c_str()) != eastl::string::npos);
+                    FUZZ_CHECK(*type == RoomMessageTypes::kError && connection.lastSent.find(card.c_str()) != String::npos);
                 }
             }
 
@@ -185,13 +185,13 @@ namespace BECore::Fuzz {
                 FUZZ_CHECK(*seat >= 0 && *seat < DemoCardGame::kSeatCount);
 
                 // A token names one member of one room, wherever it is told again; only the owner, who sent it, gets it again
-                const eastl::string member = Format("{}/{}", *room, *player);
+                const String member = Format("{}/{}", *room, *player);
                 const auto known = _tokenOwners.find(*token);
                 if (known == _tokenOwners.end()) {
                     _tokenOwners.emplace(*token, member);
                 } else {
                     FUZZ_CHECK(known->second == member);
-                    FUZZ_CHECK(connection.lastSent.find(*token) != eastl::string::npos);
+                    FUZZ_CHECK(connection.lastSent.find(*token) != String::npos);
                 }
                 // The answer to a create_room is the only way a code becomes listable, and only when it asked for it (a code can come round again for a private room)
                 if (const auto listed = AsksToListTheRoom(connection.lastSent)) {
@@ -212,10 +212,10 @@ namespace BECore::Fuzz {
             /// nothing the hub could not offer: the cap, a free seat, a lobby (the demo game lists no started room)
             void OnRooms(const ConnectionModel& connection, const Json& message) {
                 FUZZ_CHECK(connection.room.empty());
-                FUZZ_CHECK(GetJsonString(message, "game") == Optional<eastl::string>("demo"));
+                FUZZ_CHECK(GetJsonString(message, "game") == Optional<String>("demo"));
                 const Json* rooms = FindJsonMember(message, "rooms");
                 FUZZ_CHECK(rooms != nullptr && rooms->is_array() && rooms->size() <= RoomLimits::kMaxListedRooms);
-                eastl::hash_set<eastl::string> seen;
+                eastl::hash_set<String> seen;
                 for (const Json& entry : *rooms) {
                     const auto code = GetJsonString(entry, "room");
                     const auto taken = GetJsonInt(entry, "taken");
@@ -261,8 +261,8 @@ namespace BECore::Fuzz {
             // The registry first (the hub keeps a reference), the hub last
             SeatedGameRegistry _registry;
             eastl::map<ConnectionId, ConnectionModel> _connections;
-            eastl::hash_map<eastl::string, eastl::string> _tokenOwners;
-            eastl::hash_set<eastl::string> _publicRooms;  ///< The codes that were answered to a create_room with "public":true
+            eastl::hash_map<String, String> _tokenOwners;
+            eastl::hash_set<String> _publicRooms;  ///< The codes that were answered to a create_room with "public":true
             RoomTime _now = kStart;
             RoomHub _hub;
         };

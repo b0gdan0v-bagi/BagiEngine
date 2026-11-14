@@ -264,22 +264,22 @@ namespace BECore::Tests {
         }
 
         /// The header text as shown: the chosen caption, else the placeholder
-        eastl::string HeaderText(const UIDropdown& dropdown) {
+        String HeaderText(const UIDropdown& dropdown) {
             const UITextComponent* header = dropdown.GetComponent<UITextComponent>();
-            return header ? eastl::string(header->GetDisplayText(dropdown)) : eastl::string();
+            return header ? String(header->GetDisplayText(dropdown)) : String();
         }
 
-        eastl::string ShownText(const UIElement& element) {
+        String ShownText(const UIElement& element) {
             if (const UITextComponent* caption = element.GetComponent<UITextComponent>()) {
-                return eastl::string(caption->GetDisplayText(element));  // with the owner: a dropdown shows the chosen caption
+                return String(caption->GetDisplayText(element));  // with the owner: a dropdown shows the chosen caption
             }
-            return eastl::string();
+            return String();
         }
 
         /// What is wrong with a laid-out panel in the language that is set now, one problem to a line, nothing when it is right: a control with no rect, text that its control cuts
         /// (the header against the area left of its arrow), and a control that takes a press and is under kRowHeight
-        eastl::string Problems(const UICanvasLayout& layout) {
-            eastl::string problems;
+        String Problems(const UICanvasLayout& layout) {
+            String problems;
             const float scale = layout.GetResolved().scale;
             eastl::vector<const UIElement*> controls;
             CollectControls(*layout.root, controls);
@@ -350,7 +350,7 @@ namespace BECore::Tests {
             strings.Clear();
             auto config = XmlConfig::Create();
             ASSERT_TRUE(config.LoadFromString(FromStd(xml)));
-            const eastl::vector<eastl::string> problems = strings.LoadFromXml(config.GetRoot());
+            const eastl::vector<String> problems = strings.LoadFromXml(config.GetRoot());
             EXPECT_TRUE(problems.empty()) << (problems.empty() ? "" : problems[0].c_str());
             ASSERT_EQ(strings.GetLanguages().size(), 3u);
         }
@@ -461,9 +461,9 @@ namespace BECore::Tests {
         }
 
         /// Problems() on every case of the matrix, in every language: the first lines of the first cases that have any
-        eastl::string ProblemsOnMatrix(UICanvasComponent& canvas) const {
+        String ProblemsOnMatrix(UICanvasComponent& canvas) const {
             constexpr size_t kReported = 4;
-            eastl::string report;
+            String report;
             size_t reported = 0;
             UICanvasLayout& layout = canvas.GetLayout();
             ForEachLanguage([&](PoolString language) {
@@ -473,7 +473,7 @@ namespace BECore::Tests {
                     context.outputHeight = matrixCase.context.outputHeight;
                     context.safeArea = matrixCase.context.safeArea;
                     layout.Update(context);
-                    const eastl::string problems = Problems(layout);
+                    const String problems = Problems(layout);
                     if (!problems.empty() && reported++ < kReported) {
                         report += Format("[{}] {}:\n{}", language.ToStringView(), matrixCase.label.c_str(), problems.c_str());
                     }
@@ -514,11 +514,11 @@ namespace BECore::Tests {
         for (const auto [width, height] : {std::pair{kViewWidth, kViewHeight}, std::pair{kPortraitWidth, kPortraitHeight}}) {
             ASSERT_NO_FATAL_FAILURE(LoadScene(width, height));
             ASSERT_NO_FATAL_FAILURE(Show());
-            const eastl::string closed = ProblemsOnMatrix(*_levels);
+            const String closed = ProblemsOnMatrix(*_levels);
             EXPECT_TRUE(closed.empty()) << width << " closed: " << closed.c_str();
 
             ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
-            const eastl::string open = ProblemsOnMatrix(*_levels);
+            const String open = ProblemsOnMatrix(*_levels);
             EXPECT_TRUE(open.empty()) << width << " open: " << open.c_str();
         }
     }
@@ -599,7 +599,7 @@ namespace BECore::Tests {
     TEST_F(UIDropdownScreenTest, AChoiceIsAnActionTheGameAnswersWithTheVariableAndTheHeaderFollows) {
         ASSERT_NO_FATAL_FAILURE(LoadScene());
         ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
-        EXPECT_EQ(HeaderText(Get<UIDropdown>("Level")), eastl::string("Grandmaster"));
+        EXPECT_EQ(HeaderText(Get<UIDropdown>("Level")), String("Grandmaster"));
 
         ASSERT_TRUE(Click(Find("LevelHard")));
         EXPECT_EQ(_game->CountOf("SetLevel"), 1u);
@@ -608,7 +608,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(Get<UIDropdown>("Level").IsOpen());
 
         Draw();
-        EXPECT_EQ(HeaderText(Get<UIDropdown>("Level")), eastl::string("Hard"));
+        EXPECT_EQ(HeaderText(Get<UIDropdown>("Level")), String("Hard"));
         EXPECT_TRUE(Find("LevelEasy").rect.IsEmpty()) << "closed again";
     }
 
@@ -627,7 +627,7 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](std::string& xml) { Replace(xml, "name=\"LevelEasy\"", "name=\"LevelEasy\" height=\"30\""); }));
         ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
         EXPECT_FALSE(ValidatePanel(*_levels).empty());
-        EXPECT_NE(Problems(_levels->GetLayout()).find("LevelEasy is 30.0 units high"), eastl::string::npos);
+        EXPECT_NE(Problems(_levels->GetLayout()).find("LevelEasy is 30.0 units high"), String::npos);
     }
 
     TEST_F(UIDropdownScreenTest, AWordThatIsTooLongIsReportedByProblemsAndNotByTheValidator) {
@@ -636,8 +636,8 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(LoadStrings(xml));
         ASSERT_NO_FATAL_FAILURE(LoadScene());
         ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
-        const eastl::string problems = ProblemsOnMatrix(*_levels);
-        EXPECT_NE(problems.find("cuts 'Grandmaster of"), eastl::string::npos) << problems.c_str();
+        const String problems = ProblemsOnMatrix(*_levels);
+        EXPECT_NE(problems.find("cuts 'Grandmaster of"), String::npos) << problems.c_str();
         EXPECT_TRUE(ValidatePanel(*_levels).empty()) << "an ellipsis label can shrink: only CheckContent sees it";
     }
 
@@ -658,8 +658,8 @@ namespace BECore::Tests {
     TEST_F(UIDropdownScreenTest, AHeaderWithNoHeightIsReportedByProblems) {
         ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](std::string& xml) { Replace(xml, "height=\"56\" optionHeight=\"56\"", "optionHeight=\"56\""); }));
         ASSERT_NO_FATAL_FAILURE(Show());
-        const eastl::string problems = Problems(_levels->GetLayout());
-        EXPECT_NE(problems.find("Level 'Grandmaster' has an empty rect"), eastl::string::npos) << problems.c_str();
+        const String problems = Problems(_levels->GetLayout());
+        EXPECT_NE(problems.find("Level 'Grandmaster' has an empty rect"), String::npos) << problems.c_str();
     }
 
     // ---- an option with an icon: the same panel, the same findings ------------------------------------------------
@@ -681,7 +681,7 @@ namespace BECore::Tests {
         for (const auto [width, height] : {std::pair{kViewWidth, kViewHeight}, std::pair{kPortraitWidth, kPortraitHeight}}) {
             ASSERT_NO_FATAL_FAILURE(LoadScene(width, height, GiveEasyAnIcon));
             ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
-            const eastl::string open = ProblemsOnMatrix(*_levels);
+            const String open = ProblemsOnMatrix(*_levels);
             EXPECT_TRUE(open.empty()) << width << " open: " << open.c_str();
         }
     }
@@ -693,7 +693,7 @@ namespace BECore::Tests {
         }));
         ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
         EXPECT_FALSE(ValidatePanel(*_levels).empty());
-        EXPECT_NE(Problems(_levels->GetLayout()).find("LevelNovice is 30.0 units high"), eastl::string::npos);
+        EXPECT_NE(Problems(_levels->GetLayout()).find("LevelNovice is 30.0 units high"), String::npos);
 
         eastl::vector<const UIElement*> controls;
         CollectControls(*_levels->GetLayout().root, controls);
@@ -727,7 +727,7 @@ namespace BECore::Tests {
     TEST_F(UIDropdownScreenTest, AChoiceOfAnIconOptionIsAnActionTheGameAnswersAndTheHeaderFollowsInEveryLanguage) {
         ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, GiveEasyAnIcon));
         ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
-        EXPECT_EQ(HeaderText(Get<UIDropdown>("Level")), eastl::string("Grandmaster"));
+        EXPECT_EQ(HeaderText(Get<UIDropdown>("Level")), String("Grandmaster"));
 
         ASSERT_TRUE(Click(Find("LevelEasy")));
         EXPECT_EQ(_game->CountOf("SetLevel"), 1u);
@@ -738,8 +738,7 @@ namespace BECore::Tests {
         Draw();
         EXPECT_TRUE(Find("LevelEasy").rect.IsEmpty()) << "closed again";
         EXPECT_TRUE(Find("LevelEasyCaption").rect.IsEmpty());
-        ForEachLanguage(
-            [&](PoolString language) { EXPECT_EQ(HeaderText(Get<UIDropdown>("Level")), eastl::string(*CoreManager::GetUIStrings().Find("level.easy"))) << language.ToStringView().data(); });
+        ForEachLanguage([&](PoolString language) { EXPECT_EQ(HeaderText(Get<UIDropdown>("Level")), String(*CoreManager::GetUIStrings().Find("level.easy"))) << language.ToStringView().data(); });
     }
 
     TEST_F(UIDropdownScreenTest, APressOutsideAListWithAnIconOptionClosesItAndNothingElseHappens) {

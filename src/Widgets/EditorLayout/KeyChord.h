@@ -27,7 +27,7 @@ namespace BECore {
     };
 
     /// The canonical text of @p chord ("Ctrl+Shift+K"). A chord with a key that has no name gives an empty text.
-    [[nodiscard]] eastl::string ToString(const KeyChord& chord);
+    [[nodiscard]] String ToString(const KeyChord& chord);
 
     /// Reads a chord from @p text: case-insensitive, spaces around a part are ignored, a few aliases are read (Escape,
     /// Return, Comma, Period, Slash). An empty optional for anything else: no key, two keys, a repeated modifier, a

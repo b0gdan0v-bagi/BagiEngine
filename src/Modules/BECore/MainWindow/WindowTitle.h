@@ -18,6 +18,6 @@ namespace BECore {
      * @param gameName GetName() of the active game (empty when there is none)
      * @param editorMode the editor run mode is on
      */
-    eastl::string ComposeWindowTitle(StringView configTitle, StringView gameName, bool editorMode);
+    String ComposeWindowTitle(StringView configTitle, StringView gameName, bool editorMode);
 
 }  // namespace BECore

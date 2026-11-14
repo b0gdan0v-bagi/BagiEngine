@@ -2,12 +2,12 @@
 
 namespace BECore {
 
-    eastl::string ConfigFieldSchema::MakeKey(PoolString configName, StringView attrPath) {
+    String ConfigFieldSchema::MakeKey(PoolString configName, StringView attrPath) {
         return Format("{}|{}", configName.CStr(), attrPath);
     }
 
-    void ConfigFieldSchema::RegisterFlags(PoolString configName, StringView attrPath, eastl::vector<eastl::string> flagNames) {
-        const eastl::string key = MakeKey(configName, attrPath);
+    void ConfigFieldSchema::RegisterFlags(PoolString configName, StringView attrPath, eastl::vector<String> flagNames) {
+        const String key = MakeKey(configName, attrPath);
         FieldHint hint;
         hint.type = FieldType::Flags;
         hint.options = std::move(flagNames);
@@ -15,7 +15,7 @@ namespace BECore {
     }
 
     FieldHint ConfigFieldSchema::Resolve(PoolString configName, StringView attrPath, StringView currentValue) const {
-        const eastl::string key = MakeKey(configName, attrPath);
+        const String key = MakeKey(configName, attrPath);
         if (const auto it = _hints.find(key); it != _hints.end()) {
             return it->second;
         }

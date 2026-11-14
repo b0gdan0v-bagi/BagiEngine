@@ -64,7 +64,7 @@ namespace BECore::Tests {
             return std::abs(a.x - b.x) <= tolerance && std::abs(a.y - b.y) <= tolerance && std::abs(a.w - b.w) <= tolerance && std::abs(a.h - b.h) <= tolerance;
         }
 
-        eastl::string ElementToXml(const UIElement& element) {
+        String ElementToXml(const UIElement& element) {
             XmlSerializer serializer;
             EXPECT_TRUE(serializer.BeginObject("element"));
             element.Serialize(serializer);
@@ -401,7 +401,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(serializer.BeginObject("component"));
         _canvas->Serialize(serializer);
         serializer.EndObject();
-        const eastl::string xml = serializer.SaveToString();
+        const String xml = serializer.SaveToString();
 
         XmlDeserializer deserializer;
         ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
@@ -506,15 +506,15 @@ namespace BECore::Tests {
             serializer.EndObject();
             return serializer.SaveToString();
         };
-        EXPECT_EQ(element(Bar("Unit")).find("partShape"), eastl::string::npos);
+        EXPECT_EQ(element(Bar("Unit")).find("partShape"), String::npos);
         Bar("Unit").partShape = UIPartShape::Round;
-        EXPECT_NE(element(Bar("Unit")).find("partShape=\"Round\""), eastl::string::npos);
+        EXPECT_NE(element(Bar("Unit")).find("partShape=\"Round\""), String::npos);
 
         XmlSerializer serializer;
         ASSERT_TRUE(serializer.BeginObject("component"));
         _canvas->Serialize(serializer);
         serializer.EndObject();
-        const eastl::string xml = serializer.SaveToString();
+        const String xml = serializer.SaveToString();
         XmlDeserializer deserializer;
         ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
         auto loaded = New<UICanvasComponent>();

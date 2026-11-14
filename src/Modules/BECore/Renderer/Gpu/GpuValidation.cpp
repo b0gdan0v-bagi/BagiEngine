@@ -37,7 +37,7 @@ namespace BECore {
 
     GpuValidation ValidatePipelineDesc(const PipelineDesc& desc) {
         if (desc.shader.Empty()) {
-            return std::unexpected(eastl::string("the pipeline has no shader"));
+            return std::unexpected(String("the pipeline has no shader"));
         }
         if (auto frame = ValidateConstantsSize("frame", desc.frameConstantsSize); !frame) {
             return frame;
@@ -49,7 +49,7 @@ namespace BECore {
             return layout;
         }
         if ((desc.depthTest || desc.depthWrite) && desc.depthFormat == DepthFormat::None) {
-            return std::unexpected(eastl::string("the pipeline tests or writes depth but has no depth format"));
+            return std::unexpected(String("the pipeline tests or writes depth but has no depth format"));
         }
         return {};
     }
@@ -68,7 +68,7 @@ namespace BECore {
     GpuValidation ValidatePassDesc(const PassDesc& desc) {
         if (desc.depth) {
             if (desc.depth->texture == nullptr) {
-                return std::unexpected(eastl::string("the pass has a depth attachment without a texture"));
+                return std::unexpected(String("the pass has a depth attachment without a texture"));
             }
             if (desc.depth->clearValue < 0.0f || desc.depth->clearValue > 1.0f) {
                 return std::unexpected(Format("the depth clear value {} is outside 0 to 1", desc.depth->clearValue));

@@ -28,7 +28,7 @@ namespace BECore {
     /// The answer to a read; @c text is not empty only with Ok
     struct ClipboardText {
         ClipboardStatus status = ClipboardStatus::Empty;
-        eastl::string text;
+        String text;
     };
 
     /// Called by Clipboard::Update(), never inside the request

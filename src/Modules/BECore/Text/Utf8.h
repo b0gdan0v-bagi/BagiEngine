@@ -11,7 +11,7 @@ namespace BECore::Utf8 {
     [[nodiscard]] char32_t DecodeNext(StringView text, size_t& pos);
 
     /// Appends @p codePoint as UTF-8; a value that is not a Unicode scalar value appends kReplacement
-    void Append(eastl::string& out, char32_t codePoint);
+    void Append(String& out, char32_t codePoint);
 
     /// The number of code points in @p text (malformed bytes count one each, like DecodeNext)
     [[nodiscard]] size_t CountCodePoints(StringView text);

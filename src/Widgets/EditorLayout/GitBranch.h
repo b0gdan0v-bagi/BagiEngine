@@ -12,7 +12,7 @@ namespace BECore {
      * HEAD, gives its first kShortCommitLength characters; a trailing newline, CR and spaces around the line are ignored. Anything
      * else (garbage, an empty text, a `ref:` to something that is not a branch) gives an empty string.
      */
-    [[nodiscard]] eastl::string ParseGitHead(StringView text);
+    [[nodiscard]] String ParseGitHead(StringView text);
 
     /**
      * @brief The branch (or the short commit id) of the repository that contains @p startDirectory; empty when there is none.
@@ -21,6 +21,6 @@ namespace BECore {
      * (`gitdir: <path>`, the shape in a submodule or a worktree; a relative path is taken from the folder of that file) is followed.
      * Reads only `HEAD`, never throws; a shipped build has no repository above its content and gets an empty string.
      */
-    [[nodiscard]] eastl::string ReadGitBranch(const std::filesystem::path& startDirectory);
+    [[nodiscard]] String ReadGitBranch(const std::filesystem::path& startDirectory);
 
 }  // namespace BECore

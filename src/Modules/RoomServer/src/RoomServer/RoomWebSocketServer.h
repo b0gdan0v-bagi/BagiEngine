@@ -79,11 +79,11 @@ namespace BECore {
             ConnectionId connection = 0;
             /// The text of a message; for `Opened` the client's address (empty when the hub is not to apply per-address rules), so the queue's
             /// byte count covers it
-            eastl::string text;
+            String text;
         };
 
         /// Puts an event in the queue (the reader thread of a connection); waits while the queue is full. False when the server is stopping
-        bool PushEvent(EventKind kind, ConnectionId connection, eastl::string text);
+        bool PushEvent(EventKind kind, ConnectionId connection, String text);
 
         /// What the hub thread knows about the life of one connection
         struct Liveness {
@@ -107,8 +107,8 @@ namespace BECore {
         void CheckLiveness(LivenessMap& liveness, RoomTime now);
 
         /// The HubSink
-        void SendTo(ConnectionId connection, eastl::string text);
-        void CloseConnection(ConnectionId connection, const eastl::string& reason);
+        void SendTo(ConnectionId connection, String text);
+        void CloseConnection(ConnectionId connection, const String& reason);
 
         [[nodiscard]] eastl::shared_ptr<WebSocketConnection> FindConnection(ConnectionId connection);
         [[nodiscard]] RoomTime Now() const;

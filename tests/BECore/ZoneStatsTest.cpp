@@ -42,8 +42,8 @@ namespace BECore::Tests {
             return nullptr;
         }
 
-        eastl::string Names(const eastl::vector<ZoneStatRow>& rows) {
-            eastl::string out;
+        String Names(const eastl::vector<ZoneStatRow>& rows) {
+            String out;
             for (const ZoneStatRow& row : rows) {
                 out.append(row.site->name);
                 out.append(",");

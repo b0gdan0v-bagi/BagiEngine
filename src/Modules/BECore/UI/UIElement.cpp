@@ -98,8 +98,8 @@ namespace BECore {
         return clicker && clicker->disabled;
     }
 
-    const eastl::string& UIElement::GetTooltipText() const {
-        static const eastl::string none;
+    const String& UIElement::GetTooltipText() const {
+        static const String none;
         const UITooltipComponent* tooltip = GetComponent<UITooltipComponent>();
         return tooltip ? tooltip->text : none;
     }

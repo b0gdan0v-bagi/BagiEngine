@@ -39,7 +39,7 @@ namespace BECore {
      * (a build that is not a browser one, or a page without window.bagiWebPost) or "refused" (the page has too many posts in flight).
      * The answer is read with WebPostPoll. Browser main thread only; asserted in Debug.
      */
-    [[nodiscard]] std::expected<WebPostId, eastl::string> WebPostStart(StringView path, StringView body, StringView contentType);
+    [[nodiscard]] std::expected<WebPostId, String> WebPostStart(StringView path, StringView body, StringView contentType);
 
     /**
      * @brief The state of a post: Pending until the answer arrives, then Done with the HTTP status or Failed (network failure) once;

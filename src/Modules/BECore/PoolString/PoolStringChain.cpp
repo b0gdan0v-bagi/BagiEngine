@@ -80,8 +80,8 @@ namespace BECore {
         return *this;
     }
 
-    eastl::string PoolStringChain::Materialize() const {
-        eastl::string result;
+    String PoolStringChain::Materialize() const {
+        String result;
         result.reserve(Size());
 
         switch (_mode) {

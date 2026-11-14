@@ -18,7 +18,7 @@ namespace BECore::Tests {
         constexpr std::chrono::milliseconds kShortTimeout{200};
         constexpr std::chrono::seconds kNeverTimeout{60};  // a timeout the test must not wait for: the thing under test has to end earlier
 
-        [[nodiscard]] std::string ToStd(const eastl::string& text) {
+        [[nodiscard]] std::string ToStd(const String& text) {
             return std::string(text.c_str(), text.size());
         }
 
@@ -183,7 +183,7 @@ namespace BECore::Tests {
             /// The right answer to the request that was read; @p extraBytes follow it in the same send
             void Accept(const std::string& extraBytes = "") {
                 const std::string key = RequestHeader("Sec-WebSocket-Key");
-                const eastl::string accept = ComputeAcceptKey(eastl::string(key.c_str(), key.size()));
+                const String accept = ComputeAcceptKey(String(key.c_str(), key.size()));
                 SendRaw(AcceptResponse(ToStd(accept)) + extraBytes);
             }
 

@@ -10,10 +10,10 @@ namespace BECore {
     /// thread; a sink must not call back into the hub.
     struct HubSink {
         /// A text message for a connection
-        std::function<void(ConnectionId, eastl::string)> send;
+        std::function<void(ConnectionId, String)> send;
         /// The hub is done with the connection: the transport closes it (and need not report it with OnDisconnected, which would be
         /// ignored). The reason is for the log: `rate_limited`, `too_many_failed_joins`, `idle`, `replaced`, `server_full`.
-        std::function<void(ConnectionId, eastl::string)> close;
+        std::function<void(ConnectionId, String)> close;
     };
 
     /**
@@ -74,12 +74,12 @@ namespace BECore {
             /// The bucket of `list_rooms`: a list is cheap, but not free, and it is no join attempt
             RateLimiter listLimiter;
             /// The client's address, empty when unknown
-            eastl::string address;
+            String address;
             RoomTime lastActivity{};
             int rateLimitedInRow = 0;
             int failedJoinsInRow = 0;
             /// The room it is in, empty when none
-            eastl::string roomCode;
+            String roomCode;
             PlayerId player = 0;
             /// What this connection was last sent (0 and false: nothing yet)
             uint64_t sentLobbyRevision = 0;
@@ -97,7 +97,7 @@ namespace BECore {
             /// The connections of the members that are connected, in the order they joined
             eastl::vector<ConnectionId> connections;
             /// The address of the connection that created the room (empty: unknown)
-            eastl::string address;
+            String address;
             /// The last message of a member other than `ping`, or the creation (the lobby timeout)
             RoomTime lastActivity{};
             /// Since when the game is finished (valid when finished is true)
@@ -117,7 +117,7 @@ namespace BECore {
         /// Sends `error`
         void SendError(ConnectionId id, const ControlError& error, StringView ref);
         void SendError(ConnectionId id, StringView code, StringView message, StringView ref);
-        void SendText(ConnectionId id, eastl::string text);
+        void SendText(ConnectionId id, String text);
         /// Sends `error` for a failed join, counts it and closes the connection when the limit is reached. @p spendBudget takes a
         /// token of the failed-join budgets (false for the answer that an empty budget gave).
         void FailJoin(ConnectionId id, Connection& connection, const ControlError& error, RoomTime now, bool spendBudget = true);
@@ -138,10 +138,10 @@ namespace BECore {
         void DropConnection(ConnectionId id, RoomTime now);
         /// DropConnection, then tells the transport to close it
         void CloseConnection(ConnectionId id, StringView reason, RoomTime now);
-        void CloseRoom(const eastl::string& code, StringView reason, RoomTime now);
+        void CloseRoom(const String& code, StringView reason, RoomTime now);
         /// Closes the room when the room says so; true when it did
-        bool CloseIfDone(const eastl::string& code, RoomTime now);
-        [[nodiscard]] eastl::string MakeUnusedRoomCode();
+        bool CloseIfDone(const String& code, RoomTime now);
+        [[nodiscard]] String MakeUnusedRoomCode();
 
         const SeatedGameRegistry& _registry;
         RoomHubSettings _settings;
@@ -155,9 +155,9 @@ namespace BECore {
 
         RateLimiter _serverJoinBudget;
         uint64_t _roomsCreated = 0;
-        eastl::hash_map<eastl::string, AddressState> _addresses;
+        eastl::hash_map<String, AddressState> _addresses;
         eastl::hash_map<ConnectionId, Connection> _connections;
-        eastl::hash_map<eastl::string, eastl::unique_ptr<RoomEntry>> _rooms;
+        eastl::hash_map<String, eastl::unique_ptr<RoomEntry>> _rooms;
     };
 
 }  // namespace BECore

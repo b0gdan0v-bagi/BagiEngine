@@ -24,10 +24,10 @@ namespace BECore {
 
     }  // namespace
 
-    std::expected<void, eastl::string> NativeRoomTransport::Open(StringView url) {
+    std::expected<void, String> NativeRoomTransport::Open(StringView url) {
         WebSocketClientSettings settings;
-        settings.logName = eastl::string(kLogName);
-        settings.threadName = eastl::string(kThreadName);
+        settings.logName = String(kLogName);
+        settings.threadName = String(kThreadName);
         settings.threadOrder = kThreadOrder;
         return _client.Open(url, std::move(settings));
     }

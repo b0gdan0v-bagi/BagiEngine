@@ -2,7 +2,7 @@
 
 namespace BECore {
 
-    eastl::string MakeOkResponse(const Json& id, Json result) {
+    String MakeOkResponse(const Json& id, Json result) {
         Json response = Json::object();
         response["id"] = id;
         response["ok"] = true;
@@ -10,7 +10,7 @@ namespace BECore {
         return DumpJson(response);
     }
 
-    eastl::string MakeErrorResponse(const Json& id, const ControlError& error) {
+    String MakeErrorResponse(const Json& id, const ControlError& error) {
         Json details = Json::object();
         details["code"] = MakeJsonString(error.code);
         details["message"] = MakeJsonString(error.message);
@@ -22,7 +22,7 @@ namespace BECore {
         return DumpJson(response);
     }
 
-    ControlCall::ControlCall(PassKey<ControlService>, eastl::string method, Json id, Json params, ControlReplyFn reply)
+    ControlCall::ControlCall(PassKey<ControlService>, String method, Json id, Json params, ControlReplyFn reply)
         : _method(std::move(method)), _id(std::move(id)), _params(std::move(params)), _reply(std::move(reply)) {}
 
     void ControlCall::Reply(Json result) {
@@ -35,7 +35,7 @@ namespace BECore {
     }
 
     void ControlCall::Fail(StringView code, StringView message) {
-        Fail(MakeControlError(code, eastl::string(message)));
+        Fail(MakeControlError(code, String(message)));
     }
 
     void ControlCall::Fail(const ControlError& error) {

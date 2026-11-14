@@ -11,7 +11,7 @@ namespace BECore::Tests {
     using LeakyFakeSeatedGame = LeakyDemoCardGame;
 
     /// The card ids that @p text mentions and that sit in the hand of a seat other than @p seat in @p game right now
-    [[nodiscard]] inline eastl::vector<eastl::string> FindLeakedCards(const eastl::string& text, int seat, const FakeSeatedGame& game) {
+    [[nodiscard]] inline eastl::vector<String> FindLeakedCards(const String& text, int seat, const FakeSeatedGame& game) {
         return FindHiddenCards(text, seat, game);
     }
 
@@ -21,6 +21,6 @@ namespace BECore::Tests {
      * "Hidden" is judged by the game now: call it right after the message was produced, while the cards are still in the hands
      * (a card that has been played is public, so a check made after the end finds nothing).
      */
-    void ExpectNoLeak(const eastl::string& text, int seat, const FakeSeatedGame& game);
+    void ExpectNoLeak(const String& text, int seat, const FakeSeatedGame& game);
 
 }  // namespace BECore::Tests

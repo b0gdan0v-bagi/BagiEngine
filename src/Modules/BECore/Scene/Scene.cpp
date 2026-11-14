@@ -190,7 +190,7 @@ namespace BECore {
     }
 
     IntrusivePtr<SceneNode> Scene::InstantiateNode(pugi::xml_node reference, const NodeFileLoader& loader, SceneNode* parent, size_t index) {
-        const eastl::string ref = reference.attribute(kNodeRefAttribute.data()).as_string();
+        const String ref = reference.attribute(kNodeRefAttribute.data()).as_string();
         const auto fail = [&](StringView reason) {
             LOG_ERROR(Format("Scene '{}': cannot instantiate '{}': {}", _name.CStr(), ref, reason).c_str());
             return IntrusivePtr<SceneNode>{};
@@ -205,7 +205,7 @@ namespace BECore {
         }
 
         pugi::xml_document expanded;
-        eastl::string error;
+        String error;
         if (!ExpandNodeReference(reference, loader, true, expanded, error)) {
             return fail(error);
         }
@@ -219,7 +219,7 @@ namespace BECore {
 
     IntrusivePtr<SceneNode> Scene::InstantiateNode(StringView ref, SceneNode* parent, size_t index) {
         pugi::xml_document document;
-        document.append_child(kNodeElementName.data()).append_attribute(kNodeRefAttribute.data()).set_value(eastl::string(ref).c_str());
+        document.append_child(kNodeElementName.data()).append_attribute(kNodeRefAttribute.data()).set_value(String(ref).c_str());
         return InstantiateNode(document.document_element(), MakeFileSystemNodeLoader(CoreManager::GetFileSystem()), parent, index);
     }
 
@@ -257,7 +257,7 @@ namespace BECore {
     namespace {
 
         /// The first of `<prefix><postfix>`, `<prefix> 2<postfix>`, `<prefix> 3<postfix>`, ... that no child of @p parent is called
-        PoolString FreeSiblingName(const SceneNode& parent, const eastl::string& prefix, const char* postfix) {
+        PoolString FreeSiblingName(const SceneNode& parent, const String& prefix, const char* postfix) {
             const auto taken = [&parent](PoolString name) {
                 return eastl::any_of(parent.GetChildren().begin(), parent.GetChildren().end(), [name](const IntrusivePtr<SceneNode>& child) { return child->GetName() == name; });
             };
@@ -271,7 +271,7 @@ namespace BECore {
     }  // namespace
 
     PoolString Scene::MakeUniqueSiblingName(const SceneNode& parent, StringView base) const {
-        return FreeSiblingName(parent, eastl::string(base.data(), base.size()), "");
+        return FreeSiblingName(parent, String(base.data(), base.size()), "");
     }
 
     IntrusivePtr<SceneNode> Scene::DuplicateNode(const SceneNode& node) {

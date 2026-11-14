@@ -139,7 +139,7 @@ namespace BECore {
         /// The text area of the header: left of the arrow (`GetHeaderParts`)
         [[nodiscard]] Rect GetComponentArea() const override;
         /// The caption of the chosen option (`UIChoice::GetText`), null when none is chosen: the header then shows the placeholder, the component's own `text`
-        [[nodiscard]] const eastl::string* GetTextOverride() const override;
+        [[nodiscard]] const String* GetTextOverride() const override;
 
     protected:
         /// Resolves the colour fields of this control (UIElement::ApplyTheme): `arrowColor`, after the element's

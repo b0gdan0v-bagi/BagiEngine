@@ -12,7 +12,6 @@
 #include <Common/RecordingRenderer.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
-#include <Events/SubscriptionHolder.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -511,15 +510,15 @@ namespace BECore::Tests {
         ASSERT_TRUE(serializer.BeginObject("element"));
         Get("Still").Serialize(serializer);
         serializer.EndObject();
-        const eastl::string xml = serializer.SaveToString();
-        EXPECT_NE(xml.find("stateLook=\"false\""), eastl::string::npos) << xml.c_str();
+        const String xml = serializer.SaveToString();
+        EXPECT_NE(xml.find("stateLook=\"false\""), String::npos) << xml.c_str();
 
         XmlSerializer plain;
         ASSERT_TRUE(plain.BeginObject("element"));
         Get("Box").Serialize(plain);
         plain.EndObject();
-        const eastl::string plainXml = plain.SaveToString();
-        EXPECT_NE(plainXml.find("stateLook=\"true\""), eastl::string::npos) << plainXml.c_str();
+        const String plainXml = plain.SaveToString();
+        EXPECT_NE(plainXml.find("stateLook=\"true\""), String::npos) << plainXml.c_str();
     }
 
     TEST_F(UIInputClickerTest, ThePictureTakesTheTintOfTheState) {

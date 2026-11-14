@@ -11,11 +11,12 @@ namespace BECore {
         return _document.save_file(path.c_str(), "  ");
     }
 
-    eastl::string XmlSerializer::SaveToString() const {
+    String XmlSerializer::SaveToString() const {
         std::ostringstream oss;
         _document.save(oss, "  ");
+        // std: the text of an std::ostringstream
         std::string stdStr = oss.str();
-        return eastl::string(stdStr.c_str(), stdStr.size());
+        return String(stdStr.c_str(), stdStr.size());
     }
 
     pugi::xml_node XmlSerializer::GetOrCreateChild(StringView name) {
@@ -24,7 +25,7 @@ namespace BECore {
         }
 
         pugi::xml_node parent = _nodeStack.back();
-        std::string nameStr(name.data(), name.size());
+        String nameStr(name);
 
         pugi::xml_node child = parent.child(nameStr.c_str());
         if (!child) {
@@ -39,7 +40,7 @@ namespace BECore {
         }
 
         pugi::xml_node node = _nodeStack.back();
-        std::string nameStr(name.data(), name.size());
+        String nameStr(name);
 
         pugi::xml_attribute attr = node.attribute(nameStr.c_str());
         if (!attr) {
@@ -109,7 +110,7 @@ namespace BECore {
 
     void XmlSerializer::Write(StringView name, StringView value) {
         pugi::xml_node node = GetOrCreateChild(name);
-        std::string valueStr(value.data(), value.size());
+        String valueStr(value);
         node.text().set(valueStr.c_str());
     }
 
@@ -179,7 +180,7 @@ namespace BECore {
 
     void XmlSerializer::WriteAttribute(StringView name, StringView value) {
         pugi::xml_attribute attr = GetOrCreateAttribute(name);
-        std::string valueStr(value.data(), value.size());
+        String valueStr(value);
         attr.set_value(valueStr.c_str());
     }
 
@@ -214,7 +215,7 @@ namespace BECore {
 
         ArrayContext ctx;
         ctx.parentNode = node;
-        ctx.elementName = eastl::string(elementName.data(), elementName.size());
+        ctx.elementName = String(elementName.data(), elementName.size());
         ctx.currentIndex = 0;
         _arrayStack.push_back(eastl::move(ctx));
 
@@ -235,7 +236,7 @@ namespace BECore {
             return false;
         }
         const ArrayContext& ctx = _arrayStack.back();
-        std::string elemName(ctx.elementName.data(), ctx.elementName.size());
+        String elemName(ctx.elementName);
         pugi::xml_node elem = _nodeStack.back().append_child(elemName.c_str());
         _nodeStack.push_back(elem);
         return true;

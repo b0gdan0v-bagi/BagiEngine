@@ -17,11 +17,11 @@ namespace BECore {
     struct RoomTransportEvent {
         RoomTransportEventKind kind = RoomTransportEventKind::Closed;
         /// Text: the message
-        eastl::string text;
+        String text;
         /// Closed: the code of the close, kRoomTransportAbnormalClosure when the connection ended without one
         uint16_t closeCode = kRoomTransportAbnormalClosure;
         /// Closed: why, for the log and for a message to the player
-        eastl::string reason;
+        String reason;
     };
 
     /**
@@ -42,7 +42,7 @@ namespace BECore {
 
         /// Starts connecting to @p url (`ws://host[:port][/path]`, or `wss://` where the platform speaks it). An error is a message for
         /// the log and means no Closed will follow
-        [[nodiscard]] virtual std::expected<void, eastl::string> Open(StringView url) = 0;
+        [[nodiscard]] virtual std::expected<void, String> Open(StringView url) = 0;
 
         /// Queues a text message; false when the connection is not open, is closing, or its queue is full
         virtual bool SendText(StringView text) = 0;

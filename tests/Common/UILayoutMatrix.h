@@ -8,13 +8,13 @@ namespace BECore::Tests {
 
     /// One shape of the output that a screen must survive: a size, a safe area and the user scale
     struct UIMatrixCase {
-        eastl::string label;
+        String label;
         UILayoutContext context;
     };
 
     /// A case of the matrix that left issues
     struct UIMatrixFailure {
-        eastl::string label;
+        String label;
         eastl::vector<UILayoutIssue> issues;
     };
 
@@ -128,7 +128,7 @@ namespace BECore::Tests {
                     context.outputHeight = matrixCase.context.outputHeight;
                     context.safeArea = matrixCase.context.safeArea;
                     context.userScale = userScale;
-                    eastl::string viewName;
+                    String viewName;
                     if (pickView) {
                         const ActiveSceneView view = SceneViewSelector::Pick(views.defaultWidth, views.defaultHeight, views.variants, context.outputWidth, context.outputHeight);
                         context.sceneViewWidth = view.width;
@@ -164,8 +164,8 @@ namespace BECore::Tests {
     }
 
     /// The first failures as text, for `EXPECT_TRUE(failures.empty()) << DescribeMatrixFailures(failures)`
-    inline eastl::string DescribeMatrixFailures(const eastl::vector<UIMatrixFailure>& failures, size_t limit = 8) {
-        eastl::string text = Format("{} case(s) with layout issues:\n", failures.size());
+    inline String DescribeMatrixFailures(const eastl::vector<UIMatrixFailure>& failures, size_t limit = 8) {
+        String text = Format("{} case(s) with layout issues:\n", failures.size());
         for (size_t i = 0; i < failures.size() && i < limit; ++i) {
             text += Format("  {}\n", failures[i].label.c_str());
             for (const UILayoutIssue& issue : failures[i].issues) {

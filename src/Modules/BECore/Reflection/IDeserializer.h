@@ -64,7 +64,7 @@ namespace BECore {
         // String types deserialization (from child elements)
         // =================================================================
 
-        virtual bool Read(StringView name, eastl::string& outValue) = 0;
+        virtual bool Read(StringView name, String& outValue) = 0;
         virtual bool Read(StringView name, PoolString& outValue) = 0;
 
         // =================================================================
@@ -82,7 +82,7 @@ namespace BECore {
         virtual bool ReadAttribute(StringView name, uint64_t& outValue) = 0;
         virtual bool ReadAttribute(StringView name, float& outValue) = 0;
         virtual bool ReadAttribute(StringView name, double& outValue) = 0;
-        virtual bool ReadAttribute(StringView name, eastl::string& outValue) = 0;
+        virtual bool ReadAttribute(StringView name, String& outValue) = 0;
         virtual bool ReadAttribute(StringView name, PoolString& outValue) = 0;
 
         // =================================================================
@@ -138,8 +138,8 @@ namespace BECore {
          *
          * Format: "player.inventory.items[3].name"
          */
-        eastl::string GetCurrentPath(StringView leafKey = {}) const {
-            eastl::string result;
+        String GetCurrentPath(StringView leafKey = {}) const {
+            String result;
             result.reserve(64);
             for (const auto& seg : _pathStack) {
                 if (seg.isArrayIndex) {
@@ -169,7 +169,7 @@ namespace BECore {
          * @param message  Human-readable error description
          */
         void ReportError(StringView key, StringView message) {
-            eastl::string fullPath = GetCurrentPath(key);
+            String fullPath = GetCurrentPath(key);
             AddError(StringView(fullPath), message, 0);
         }
 
@@ -248,7 +248,7 @@ namespace BECore {
 
     private:
         struct PathSegment {
-            eastl::string name;
+            String name;
             bool isArrayIndex = false;
         };
         eastl::vector<PathSegment> _pathStack;

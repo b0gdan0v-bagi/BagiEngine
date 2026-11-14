@@ -59,12 +59,12 @@ namespace BECore {
      * @param error Receives the reason when the file cannot be used
      * @return false when it cannot be read, parsed or is not a node file
      */
-    using NodeFileLoader = eastl::function<bool(StringView ref, pugi::xml_document& out, eastl::string& error)>;
+    using NodeFileLoader = eastl::function<bool(StringView ref, pugi::xml_document& out, String& error)>;
 
     /// The result of an expansion: how many references were replaced and one message per reference that was not
     struct NodeExpansion {
         size_t expanded = 0;
-        eastl::vector<eastl::string> errors;  // each names the scene and the reference
+        eastl::vector<String> errors;  // each names the scene and the reference
 
         bool Ok() const {
             return errors.empty();
@@ -100,7 +100,7 @@ namespace BECore {
      * @param error Receives the reason when the reference is invalid
      * @return false when the reference is invalid or names a component @p node does not have
      */
-    bool ApplyNodeOverrides(pugi::xml_node node, pugi::xml_node reference, eastl::string& error);
+    bool ApplyNodeOverrides(pugi::xml_node node, pugi::xml_node reference, String& error);
 
     /**
      * @brief Expands one `<node ref="..">` element into a copy of its file's `<node>`
@@ -116,7 +116,7 @@ namespace BECore {
      * @param error Receives the reason on failure
      * @return false when the reference cannot be used (invalid, file missing or wrong, invalid override)
      */
-    bool ExpandNodeReference(pugi::xml_node reference, const NodeFileLoader& loader, bool markSource, pugi::xml_document& out, eastl::string& error);
+    bool ExpandNodeReference(pugi::xml_node reference, const NodeFileLoader& loader, bool markSource, pugi::xml_document& out, String& error);
 
     /**
      * @brief Replaces every `scenes/scene/nodes/node[@ref]` of @p configRoot by the node of its file

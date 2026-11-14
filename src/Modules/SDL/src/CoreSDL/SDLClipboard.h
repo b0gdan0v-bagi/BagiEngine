@@ -45,7 +45,7 @@ namespace BECore {
         bool PollRead(ClipboardText& out) override;
 
     private:
-        eastl::string _writeBuffer;  ///< SDL wants a terminated string; kept so a write does not allocate again for the same size
+        String _writeBuffer;  ///< SDL wants a terminated string; kept so a write does not allocate again for the same size
     };
 
     /// The clipboard backend of this platform: the SDL one on the desktop, the page's navigator.clipboard in the browser

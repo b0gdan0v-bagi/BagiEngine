@@ -12,7 +12,7 @@ namespace BECore {
 
     struct LayoutError {
         LayoutErrorKind kind = LayoutErrorKind::ReadFailed;
-        eastl::string detail;  // a sentence for the log or the window, never empty
+        String detail;  // a sentence for the log or the window, never empty
     };
 
     /// True for 1 to 64 characters of [A-Za-z0-9_ -] with no leading or trailing space, that is not a Windows device
@@ -39,7 +39,7 @@ namespace BECore {
         /// Writes @p text under @p name, replacing a layout of the same name. Refuses a bad name and an empty text.
         std::expected<void, LayoutError> Save(StringView name, StringView text);
 
-        [[nodiscard]] std::expected<eastl::string, LayoutError> Load(StringView name) const;
+        [[nodiscard]] std::expected<String, LayoutError> Load(StringView name) const;
 
         /// Removes the layout; NotFound when there is none
         std::expected<void, LayoutError> Delete(StringView name);
@@ -48,7 +48,7 @@ namespace BECore {
 
         /// The names of the saved layouts, sorted. Leftover `.tmp` files, other files, folders and files whose name
         /// is not a valid layout name are left out.
-        [[nodiscard]] eastl::vector<eastl::string> List() const;
+        [[nodiscard]] eastl::vector<String> List() const;
 
     private:
         [[nodiscard]] std::filesystem::path PathOf(StringView name) const;

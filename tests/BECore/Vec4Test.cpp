@@ -13,7 +13,7 @@ namespace BECore::Tests {
     namespace {
 
         struct StepVisitor {
-            eastl::vector<eastl::string> names;
+            eastl::vector<String> names;
 
             bool Visit(const char* name, float& value) {
                 names.push_back(name);

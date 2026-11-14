@@ -4,7 +4,6 @@
 #include <Common/Printers.h>
 #include <RoomClient/RoomClient.h>
 #include <Rooms/RoomErrors.h>
-#include <algorithm>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -171,7 +170,7 @@ namespace BECore::Tests {
     TEST_F(RoomClientHubTest, AClientDroppedMidHandReconnectsInsideTheGraceAndPlaysOn) {
         MakeLobby("cards", 2);
         Player& dropped = *_players[1];
-        const eastl::string token = dropped.client->GetSession().token;
+        const String token = dropped.client->GetSession().token;
         ASSERT_TRUE(_players[0]->client->Start().has_value());
         ASSERT_TRUE(StepUntil([&] { return dropped.client->HasView() && dropped.TableSize() >= 2; }));
         const int seat = dropped.client->GetSeat();
@@ -261,7 +260,7 @@ namespace BECore::Tests {
         MakeLobby("cards", 2, Json::object({{"firstSeat", 0}}));
         Player& away = *_players[1];
         Player& other = *_players[0];
-        const eastl::string token = away.client->GetSession().token;
+        const String token = away.client->GetSession().token;
         ASSERT_TRUE(other.client->Start().has_value());
         // Seat 1 is cut off before the first move and kept away
         World().SetRefusing(true);

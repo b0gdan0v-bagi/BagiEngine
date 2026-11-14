@@ -54,7 +54,7 @@ namespace BECore::Tests {
         }
 
         /// A request text built through Json, so that the test data is always valid
-        eastl::string MakeRequest(int64_t id, std::string_view method, const Json& params = Json()) {
+        String MakeRequest(int64_t id, std::string_view method, const Json& params = Json()) {
             Json request = Json::object();
             request["id"] = id;
             request["method"] = std::string(method);
@@ -74,13 +74,13 @@ namespace BECore::Tests {
             }
 
             ControlReplyFn Collect() {
-                return [this](eastl::string text) {
+                return [this](String text) {
                     auto parsed = ParseJson(text);
                     responses.push_back(parsed ? std::move(*parsed) : Json());
                 };
             }
 
-            void Post(const eastl::string& text) {
+            void Post(const String& text) {
                 service.Post(text, Collect());
             }
 
@@ -278,7 +278,7 @@ namespace BECore::Tests {
 
         for (const Case& testCase : cases) {
             responses.clear();
-            service.Post(eastl::string(testCase.text), Collect());
+            service.Post(String(testCase.text), Collect());
             service.Drain();
 
             ASSERT_EQ(responses.size(), 1u) << testCase.text;
@@ -310,10 +310,10 @@ namespace BECore::Tests {
     }
 
     TEST_F(ControlServiceTest, TooLargeRequestIsRejected) {
-        const eastl::string tooLarge(ControlService::kMaxRequestBytes + 1, ' ');
+        const String tooLarge(ControlService::kMaxRequestBytes + 1, ' ');
         service.Post(tooLarge, Collect());
 
-        const eastl::string atLimit(ControlService::kMaxRequestBytes, ' ');
+        const String atLimit(ControlService::kMaxRequestBytes, ' ');
         service.Post(atLimit, Collect());
 
         service.Drain();
@@ -326,7 +326,7 @@ namespace BECore::Tests {
         RegisterRecording("ping");
         // A request is copied while it is handled, and that recurses once per level: 15000 levels overflow the stack of a debug build
         const auto nested = [](size_t levels) {
-            eastl::string text = R"({"id":7,"method":"ping","params":{"a":)";
+            String text = R"({"id":7,"method":"ping","params":{"a":)";
             text.append(levels, '[');
             text.append(levels, ']');
             text += "}}";
@@ -451,7 +451,7 @@ namespace BECore::Tests {
                     Json params = Json::object();
                     params["thread"] = thread;
                     params["seq"] = seq;
-                    service.Post(MakeRequest(seq, "seq", params), [&replies](eastl::string) { ++replies; });
+                    service.Post(MakeRequest(seq, "seq", params), [&replies](String) { ++replies; });
                 }
             });
         }
@@ -689,7 +689,7 @@ namespace BECore::Tests {
 
     TEST_F(ControlServiceTest, PublishSendsAnEventToTheSink) {
         std::vector<std::string> pushed;
-        service.SetEventSink([&](const eastl::string& text) { pushed.emplace_back(text.c_str(), text.size()); });
+        service.SetEventSink([&](const String& text) { pushed.emplace_back(text.c_str(), text.size()); });
 
         Json data = Json::object();
         data["version"] = 3;
@@ -934,7 +934,7 @@ namespace BECore::Tests {
 
     TEST_F(ControlServiceTest, WaitForRequestsWakesWhenAnotherThreadPosts) {
         RegisterRecording("hello");
-        std::thread client([this] { service.Post(MakeRequest(1, "hello"), [](eastl::string) {}); });
+        std::thread client([this] { service.Post(MakeRequest(1, "hello"), [](String) {}); });
 
         const auto start = std::chrono::steady_clock::now();
         service.WaitForRequests(std::chrono::seconds(30));
@@ -1328,7 +1328,7 @@ namespace BECore::Tests {
 
         ControlService& core = CoreManager::GetControlService();
         std::vector<Json> coreResponses;
-        core.Post(MakeRequest(1, "ping"), [&](eastl::string text) {
+        core.Post(MakeRequest(1, "ping"), [&](String text) {
             auto parsed = ParseJson(text);
             coreResponses.push_back(parsed ? std::move(*parsed) : Json());
         });

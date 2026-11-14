@@ -246,7 +246,7 @@ namespace BECore {
         if (!target || !_tooltip.IsShown(target)) {
             return;
         }
-        const eastl::string& tooltipText = target->GetTooltipText();
+        const String& tooltipText = target->GetTooltipText();
         if (!_tooltipPlate) {
             _tooltipPlate = New<UIElement>();
             _tooltipPlate->active.fontSize = UITooltip::kFontSize;

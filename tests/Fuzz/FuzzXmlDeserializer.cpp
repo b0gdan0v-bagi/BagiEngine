@@ -181,7 +181,7 @@ namespace BECore::Fuzz {
             CheckRead<uint64_t>(reader, name, asAttribute, text, strict);
             CheckRead<float>(reader, name, asAttribute, text, strict);
             CheckRead<double>(reader, name, asAttribute, text, strict);
-            CheckRead<eastl::string>(reader, name, asAttribute, text, strict);
+            CheckRead<String>(reader, name, asAttribute, text, strict);
             CheckRead<PoolString>(reader, name, asAttribute, text, strict);
         }
 

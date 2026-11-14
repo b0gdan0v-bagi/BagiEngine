@@ -32,7 +32,7 @@ namespace BECore::Tests {
         struct Response {
             bool ok = false;
             int64_t id = -1;
-            eastl::string errorCode;
+            String errorCode;
             Json json;
         };
 
@@ -145,7 +145,7 @@ namespace BECore::Tests {
         const auto result = other.Start(port);
         ASSERT_FALSE(result.has_value());
         EXPECT_EQ(result.error().code, RemoteControlErrors::kListenFailed);
-        EXPECT_NE(result.error().message.find("127.0.0.1"), eastl::string::npos);
+        EXPECT_NE(result.error().message.find("127.0.0.1"), String::npos);
         EXPECT_FALSE(other.IsRunning());
         otherService.Shutdown();
     }

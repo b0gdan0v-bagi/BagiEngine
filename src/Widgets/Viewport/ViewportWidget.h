@@ -129,11 +129,11 @@ namespace BECore {
         Optional<int32_t> _forcedView;   // the index of the forced view variant, -1 the default, nullopt Auto
         PoolString _forcedViewScene;     // the scene the choice was made for
         bool _editingSize = false;       // a custom W / H field is being typed in: the shape is applied live, the editor is told when the field is left
-        eastl::string _sizePreview;
+        String _sizePreview;
         PreviewShape _sizePreviewShape;  // the shape _sizePreview was made for
         bool _sizePreviewValid = false;
-        eastl::string _viewPreview;  // the view combo's text of a forced variant
-        int _viewPreviewRow = -1;    // the row and the name _viewPreview was made for
+        String _viewPreview;       // the view combo's text of a forced variant
+        int _viewPreviewRow = -1;  // the row and the name _viewPreview was made for
         PoolString _viewPreviewName;
         bool _gridEnabled = false;
         int32_t _gridStep = 0;

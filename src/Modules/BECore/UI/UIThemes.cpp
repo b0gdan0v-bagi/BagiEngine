@@ -27,7 +27,7 @@ namespace BECore {
         if (!configs.HasConfig(ConfigName)) {
             return;
         }
-        for (const eastl::string& problem : LoadFromXml(configs.GetConfig(ConfigName))) {
+        for (const String& problem : LoadFromXml(configs.GetConfig(ConfigName))) {
             LOG_WARNING("UIThemes: {}"_format(problem.c_str()));
         }
     }
@@ -181,8 +181,8 @@ namespace BECore {
         ++_version;
     }
 
-    eastl::vector<eastl::string> UIThemes::LoadFromXml(const XmlNode& node) {
-        eastl::vector<eastl::string> problems;
+    eastl::vector<String> UIThemes::LoadFromXml(const XmlNode& node) {
+        eastl::vector<String> problems;
         if (!node) {
             return problems;
         }
@@ -252,7 +252,7 @@ namespace BECore {
             }
         }
         // The messages repeat ids, keys and values of the file
-        for (eastl::string& problem : problems) {
+        for (String& problem : problems) {
             problem = UIText::TidyMessage(StringView(problem));
         }
         return problems;

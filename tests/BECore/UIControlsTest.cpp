@@ -153,7 +153,7 @@ namespace BECore::Tests {
             eastl::vector<PoolString> _values;
         };
 
-        eastl::string ElementToXml(const UIElement& element) {
+        String ElementToXml(const UIElement& element) {
             XmlSerializer serializer;
             EXPECT_TRUE(serializer.BeginObject("element"));
             element.Serialize(serializer);
@@ -364,7 +364,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(serializer.BeginObject("component"));
         _canvas->Serialize(serializer);
         serializer.EndObject();
-        const eastl::string xml = serializer.SaveToString();
+        const String xml = serializer.SaveToString();
 
         XmlDeserializer deserializer;
         ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
@@ -549,8 +549,8 @@ namespace BECore::Tests {
                 ASSERT_TRUE(serializer.BeginObject("component"));
                 canvas->Serialize(serializer);
                 serializer.EndObject();
-                const eastl::string xml = serializer.SaveToString();
-                EXPECT_EQ(xml.find("@tok") != eastl::string::npos, tokens) << type << ": " << xml.c_str();
+                const String xml = serializer.SaveToString();
+                EXPECT_EQ(xml.find("@tok") != String::npos, tokens) << type << ": " << xml.c_str();
 
                 XmlDeserializer deserializer;
                 ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
@@ -932,19 +932,19 @@ namespace BECore::Tests {
     TEST_F(UIControlsTest, TheTextEffectsAreTwoAttributesAndAreWrittenOnlyWhenSet) {
         auto& title = El("Title");
         auto& text = Text("Title");
-        const eastl::string plain = ElementToXml(title);
-        EXPECT_EQ(plain.find("textOutline"), eastl::string::npos);
-        EXPECT_EQ(plain.find("textShadow"), eastl::string::npos);
+        const String plain = ElementToXml(title);
+        EXPECT_EQ(plain.find("textOutline"), String::npos);
+        EXPECT_EQ(plain.find("textShadow"), String::npos);
 
         text.textEffects = MakeEffects();
-        const eastl::string styled = ElementToXml(title);
-        EXPECT_NE(styled.find("textOutline=\"1.5,#0A141EC8\""), eastl::string::npos) << styled.c_str();
-        EXPECT_NE(styled.find("textShadow=\"2,2,#28323CA0\""), eastl::string::npos) << styled.c_str();
+        const String styled = ElementToXml(title);
+        EXPECT_NE(styled.find("textOutline=\"1.5,#0A141EC8\""), String::npos) << styled.c_str();
+        EXPECT_NE(styled.find("textShadow=\"2,2,#28323CA0\""), String::npos) << styled.c_str();
     }
 
     TEST_F(UIControlsTest, TheTextEffectsComeFromAFileAndAMalformedOneIsReported) {
         const auto load = [](const char* attributes, bool& hadErrors) {
-            const eastl::string xml = Format("<root><element type=\"UIElement\"><components><component type=\"UITextComponent\" {}/></components></element></root>", attributes);
+            const String xml = Format("<root><element type=\"UIElement\"><components><component type=\"UITextComponent\" {}/></components></element></root>", attributes);
             XmlDeserializer deserializer;
             EXPECT_TRUE(deserializer.LoadFromString(StringView(xml)));
             auto element = AbstractFactory<UIElement>::GetInstance().Create("UIElement");

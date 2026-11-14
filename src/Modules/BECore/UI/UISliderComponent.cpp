@@ -54,7 +54,7 @@ namespace BECore {
         return static_cast<float>(std::clamp(value, low, high));
     }
 
-    eastl::string UISliderComponent::FormatValue(float value) {
+    String UISliderComponent::FormatValue(float value) {
         if (!std::isfinite(value)) {
             return "0";
         }
@@ -69,8 +69,8 @@ namespace BECore {
         if (result.ec != std::errc{}) {
             return "0";
         }
-        eastl::string text(buffer, result.ptr);
-        if (text.find('.') != eastl::string::npos) {
+        String text(buffer, result.ptr);
+        if (text.find('.') != String::npos) {
             while (text.back() == '0') {
                 text.pop_back();
             }
@@ -78,7 +78,7 @@ namespace BECore {
                 text.pop_back();
             }
         }
-        return text == "-0" ? eastl::string("0") : text;
+        return text == "-0" ? String("0") : text;
     }
 
     float UISliderComponent::GetValue() const {

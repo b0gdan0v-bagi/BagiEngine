@@ -42,8 +42,8 @@ namespace BECore {
             return std::nullopt;
         }
 
-        eastl::string Lowercase(StringView text) {
-            eastl::string result(text.data(), text.size());
+        String Lowercase(StringView text) {
+            String result(text.data(), text.size());
             for (char& c : result) {
                 c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
             }
@@ -68,9 +68,9 @@ namespace BECore {
         return InRange(aspect, minAspect, maxAspect) && InRange(bounds.w, minWidth, maxWidth) && InRange(bounds.h, minHeight, maxHeight);
     }
 
-    eastl::string UIVariantCondition::ToText() const {
-        eastl::string text;
-        const auto append = [&text](const eastl::string& part) { text += text.empty() ? part : Format("{}{}", ConditionSeparator, part); };
+    String UIVariantCondition::ToText() const {
+        String text;
+        const auto append = [&text](const String& part) { text += text.empty() ? part : Format("{}{}", ConditionSeparator, part); };
         if (orientation != UIOrientation::Any) {
             append(Format("{}{}{}", OrientationKey, ConditionValueSeparator, Lowercase(EnumUtils<UIOrientation>::ToString(orientation))));
         }
@@ -82,7 +82,7 @@ namespace BECore {
         return text;
     }
 
-    std::expected<UIVariantCondition, eastl::string> UIVariantCondition::FromText(StringView text) {
+    std::expected<UIVariantCondition, String> UIVariantCondition::FromText(StringView text) {
         UIVariantCondition condition;
         for (const StringView rawPart : StringUtils::Split(UIText::Trim(text), ConditionSeparator)) {
             const StringView part = UIText::Trim(rawPart);

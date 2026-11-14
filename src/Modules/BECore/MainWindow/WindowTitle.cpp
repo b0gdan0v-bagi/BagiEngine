@@ -8,8 +8,8 @@ namespace BECore {
 
     }  // namespace
 
-    eastl::string ComposeWindowTitle(StringView configTitle, StringView gameName, bool editorMode) {
-        eastl::string title;
+    String ComposeWindowTitle(StringView configTitle, StringView gameName, bool editorMode) {
+        String title;
         if (editorMode) {
             if (!gameName.empty()) {
                 title.append(gameName.data(), gameName.size());

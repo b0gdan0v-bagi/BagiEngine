@@ -15,8 +15,8 @@ namespace BECore::Tests {
         using Fuzz::ProbeState;
 
         /// "<a><a>...<a/>...</a></a>" nested @p depth deep
-        eastl::string NestedXml(size_t depth, const char* tag) {
-            eastl::string xml;
+        String NestedXml(size_t depth, const char* tag) {
+            String xml;
             for (size_t i = 0; i < depth; ++i) {
                 xml += "<";
                 xml += tag;
@@ -31,8 +31,8 @@ namespace BECore::Tests {
         }
 
         /// A <tree> of ProbeNode nested @p depth levels: every level is a `children` array with one `item`
-        eastl::string NestedProbeTree(size_t depth) {
-            eastl::string xml = "<root><tree id=\"1\">";
+        String NestedProbeTree(size_t depth) {
+            String xml = "<root><tree id=\"1\">";
             for (size_t i = 0; i < depth; ++i) {
                 xml += "<children><item id=\"2\">";
             }
@@ -79,7 +79,7 @@ namespace BECore::Tests {
     // ---------------------------------------------------------------------------------------------
 
     TEST(ReaderLimitsTest, XmlStringOverTheLimitIsRefused) {
-        eastl::string big = "<root>";
+        String big = "<root>";
         big.append(ReaderLimits::kMaxXmlDocumentBytes, ' ');
         big += "</root>";
 
@@ -152,7 +152,7 @@ namespace BECore::Tests {
 
     TEST(ReaderLimitsTest, XmlNestingStopsAtTheLimit) {
         XmlDeserializer reader;
-        const eastl::string xml = NestedXml(ReaderLimits::kMaxXmlNesting + 20, "a");
+        const String xml = NestedXml(ReaderLimits::kMaxXmlNesting + 20, "a");
         ASSERT_TRUE(reader.LoadFromString(xml));
 
         // The root is the first entry of the stack
@@ -189,7 +189,7 @@ namespace BECore::Tests {
 
     TEST(ReaderLimitsTest, XmlArrayOverTheLimitIsRefused) {
         const auto listOf = [](size_t items) {
-            eastl::string xml = "<root><list>";
+            String xml = "<root><list>";
             for (size_t i = 0; i < items; ++i) {
                 xml += "<i/>";
             }
@@ -217,7 +217,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(reader.LoadFromString("<root/>"));
 
         int32_t value = 0;
-        const eastl::string longName(ReaderLimits::kMaxErrorTextBytes * 4, 'n');
+        const String longName(ReaderLimits::kMaxErrorTextBytes * 4, 'n');
         for (size_t i = 0; i < ReaderLimits::kMaxRecordedErrors * 4; ++i) {
             reader.Read(StringView(longName), value);
         }
@@ -234,8 +234,8 @@ namespace BECore::Tests {
     }
 
     TEST(ReaderLimitsTest, XmlStrictErrorQuotesAShortPieceOfTheValue) {
-        const eastl::string junk(1000, 'z');
-        const eastl::string xml = "<root a=\"" + junk + "\"/>";
+        const String junk(1000, 'z');
+        const String xml = "<root a=\"" + junk + "\"/>";
         XmlDeserializer reader;
         reader.SetStrictValues(true);
         ASSERT_TRUE(reader.LoadFromString(xml));

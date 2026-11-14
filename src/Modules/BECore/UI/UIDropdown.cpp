@@ -125,7 +125,7 @@ namespace BECore {
         return GetHeaderParts(rect).text;
     }
 
-    const eastl::string* UIDropdown::GetTextOverride() const {
+    const String* UIDropdown::GetTextOverride() const {
         const UIElement* chosen = FindChosenOption();
         return chosen ? &UIChoice::GetText(*chosen) : nullptr;
     }

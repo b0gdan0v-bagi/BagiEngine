@@ -202,13 +202,13 @@ namespace BECore {
 
         /// The text a `UITextComponent` of this element shows instead of its own `text`, null for none (the default). A dropdown answers the caption of the chosen option, so the authored `text`
         /// (its placeholder) stays what a file holds. It must not allocate: the component asks on every draw and every check
-        [[nodiscard]] virtual const eastl::string* GetTextOverride() const {
+        [[nodiscard]] virtual const String* GetTextOverride() const {
             return nullptr;
         }
 
         /// The text of the tooltip the canvas shows after a hover or a long touch press, empty for none: the `UITooltipComponent` text (a control with a tooltip of its own overrides it); it may hold
         /// `{#key}` and `{var}`
-        [[nodiscard]] virtual const eastl::string& GetTooltipText() const;
+        [[nodiscard]] virtual const String& GetTooltipText() const;
 
         /**
          * Draws one part of a control (a track, a fill, a thumb) in @p area with @p fill. `Square` is the plain `DrawFilledRect` of the part, the call the control always made.

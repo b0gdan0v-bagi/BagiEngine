@@ -30,7 +30,7 @@ namespace BECore {
         }
 
         std::filesystem::path ToPath(StringView text) {
-            return std::filesystem::path(std::string(text.data(), text.size()));
+            return std::filesystem::path(ToStdString(text));
         }
 
         /// The folder with HEAD for the `.git` entry @p gitEntry of @p repositoryRoot; empty when it is neither a folder nor a gitdir file
@@ -60,33 +60,33 @@ namespace BECore {
 
     }  // namespace
 
-    eastl::string ParseGitHead(StringView text) {
+    String ParseGitHead(StringView text) {
         const StringView line = Trim(text);
         if (line.starts_with(kBranchRefPrefix)) {
             const StringView name = line.substr(kBranchRefPrefix.size());
-            return eastl::string(name.data(), name.size());
+            return String(name.data(), name.size());
         }
         if (IsHexId(line)) {
-            return eastl::string(line.data(), kShortCommitLength);
+            return String(line.data(), kShortCommitLength);
         }
         return {};
     }
 
-    eastl::string ReadGitBranch(const std::filesystem::path& startDirectory) {
+    String ReadGitBranch(const std::filesystem::path& startDirectory) {
         std::error_code ec;
         std::filesystem::path directory = std::filesystem::absolute(startDirectory, ec).lexically_normal();
         if (ec) {
             return {};
         }
         while (true) {
-            const std::filesystem::path gitEntry = directory / std::string(kGitEntryName.data(), kGitEntryName.size());
+            const std::filesystem::path gitEntry = directory / ToStdString(kGitEntryName);
             if (std::filesystem::exists(gitEntry, ec)) {
                 const std::filesystem::path gitDirectory = ResolveGitDirectory(gitEntry, directory);
                 if (gitDirectory.empty()) {
                     return {};
                 }
-                const auto head = ReadTextFile(gitDirectory / std::string(kHeadFileName.data(), kHeadFileName.size()));
-                return head ? ParseGitHead(*head) : eastl::string();
+                const auto head = ReadTextFile(gitDirectory / ToStdString(kHeadFileName));
+                return head ? ParseGitHead(*head) : String();
             }
             const std::filesystem::path parent = directory.parent_path();
             if (parent.empty() || parent == directory) {

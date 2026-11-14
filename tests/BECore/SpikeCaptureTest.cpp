@@ -3,11 +3,8 @@
 #include <BECore/Profiler/Ring/FrozenTrace.h>
 #include <BECore/Profiler/Ring/SpikeCapture.h>
 #include <Common/TempPath.h>
-#include <filesystem>
-#include <fstream>
 #include <gtest/gtest.h>
 #include <map>
-#include <sstream>
 
 namespace BECore::Tests {
 
@@ -66,7 +63,7 @@ namespace BECore::Tests {
             return snapshot;
         }
 
-        std::string Text(const eastl::string& text) {
+        std::string Text(const String& text) {
             return std::string(text.data(), text.size());
         }
 
@@ -75,7 +72,7 @@ namespace BECore::Tests {
             return value ? Text(*value) : std::string();
         }
 
-        Json ParseTrace(const eastl::string& trace) {
+        Json ParseTrace(const String& trace) {
             auto parsed = ParseJson(trace);
             EXPECT_TRUE(parsed.has_value()) << Text(trace);
             return parsed ? *parsed : Json::object();
@@ -368,7 +365,7 @@ namespace BECore::Tests {
 
         const auto refused = WriteFrozenTraceFile(StringView((path / "no" / "such" / "dir.json").string().c_str()), capture.GetSpikes());
         ASSERT_FALSE(refused.has_value());
-        EXPECT_NE(refused.error().find("cannot write"), eastl::string::npos);
+        EXPECT_NE(refused.error().find("cannot write"), String::npos);
     }
 
 }  // namespace BECore::Tests

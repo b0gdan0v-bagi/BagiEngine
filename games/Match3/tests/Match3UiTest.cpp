@@ -330,7 +330,7 @@ namespace BECore::Match3::Tests {
 
         ScoreSomething();
         Draw();
-        const eastl::string expected = Format("Score: {}", Board().GetModel().GetScore());
+        const String expected = Format("Score: {}", Board().GetModel().GetScore());
         EXPECT_EQ(score->GetDisplayText(), StringView(expected));
     }
 
@@ -456,7 +456,7 @@ namespace BECore::Match3::Tests {
         Draw();
         EXPECT_TRUE(Board().IsAnimating()) << "a draw of the same version keeps the run";
         auto score = Canvas("Match3Scene", "Hud")->GetRoot().FindByName(PoolString::Intern("Score"))->GetComponent<UITextComponent>();
-        const eastl::string expected = Format("Score: {}", elsewhere.GetScore());
+        const String expected = Format("Score: {}", elsewhere.GetScore());
         EXPECT_EQ(score->GetDisplayText(), StringView(expected)) << "the score shows at once";
     }
 

@@ -75,7 +75,7 @@ namespace BECore {
         ProfilerTimelinePanel _timeline;
         ProfilerZoneTablePanel _zoneTable;
         ProfilerSpikePanel _spikePanel;
-        eastl::string _traceMessage;
+        String _traceMessage;
         char _tracePath[256] = "trace.json";
     };
 

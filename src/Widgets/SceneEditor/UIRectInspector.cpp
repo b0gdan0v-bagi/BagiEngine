@@ -177,7 +177,7 @@ namespace BECore {
                 }
                 for (const PoolString& name : choices) {
                     const bool published = canvas.GetRegions().Find(name) != nullptr;
-                    const eastl::string label = Format("{}{}", name.CStr(), published ? "" : " (not published)");
+                    const String label = Format("{}{}", name.CStr(), published ? "" : " (not published)");
                     if (ImGui::Selectable(label.c_str(), name == spec.region)) {
                         spec.region = name;
                         changed = true;
@@ -295,7 +295,7 @@ namespace BECore {
         // ---- Preset ----
         const UIAnchorPreset* current = UIAnchorPresets::Match(spec);
         ImGui::BeginDisabled(!hasBox);
-        const eastl::string presetLabel = Format("Anchor: {}##preset_button", current ? UIAnchorPresets::Name(*current) : "Custom");
+        const String presetLabel = Format("Anchor: {}##preset_button", current ? UIAnchorPresets::Name(*current) : "Custom");
         if (ImGui::Button(presetLabel.c_str())) {
             ImGui::OpenPopup("##anchor_presets");
         }

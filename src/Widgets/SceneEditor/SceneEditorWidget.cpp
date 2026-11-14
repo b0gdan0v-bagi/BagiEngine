@@ -479,11 +479,11 @@ namespace BECore {
 
         // An instance of a node file is saved as its <node ref> with the overrides; one that cannot be goes inline and is told here
         const NodeFileLoader loader = MakeFileSystemNodeLoader(CoreManager::GetFileSystem());
-        eastl::vector<eastl::string> notes;
+        eastl::vector<String> notes;
         if (!WriteSceneToConfig(xmlRoot.GetPugiNode(), *scene, &loader, &notes)) {  // <SceneManager>
             return;
         }
-        for (const eastl::string& note : notes) {
+        for (const String& note : notes) {
             LOG_WARNING(Format("SceneEditor: scene '{}': {}", scene->GetName().CStr(), note.c_str()).c_str());
         }
 

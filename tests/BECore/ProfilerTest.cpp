@@ -1,14 +1,11 @@
 #include <BECore/Control/Json.h>
 #include <BECore/Profiler/Backends/ChromeTraceBackend.h>
-#include <BECore/Profiler/Profile.h>
 #include <BECore/Profiler/ProfilerClock.h>
 #include <BECore/Profiler/ProfilerSettings.h>
 #include <BECore/Profiler/ScopedTrace.h>
 #include <Common/TempPath.h>
 #include <chrono>
 #include <cstdio>
-#include <filesystem>
-#include <fstream>
 #include <gtest/gtest.h>
 #include <map>
 #include <thread>
@@ -17,7 +14,7 @@ namespace BECore::Tests {
 
     namespace {
 
-        using Args = eastl::vector<eastl::string>;
+        using Args = eastl::vector<String>;
 
         constexpr ProfilerBuild kFullBuild{.profiler = true, .tracy = true};
         constexpr ProfilerBuild kChromeOnlyBuild{.profiler = true, .tracy = false};
@@ -26,7 +23,7 @@ namespace BECore::Tests {
         constexpr ProfileSite kOuterSite{"Outer", "Test", "ProfilerTest.cpp", 1, 0};
         constexpr ProfileSite kInnerSite{"Inner \"quoted\"\\", "Test", "C:\\dir\\ProfilerTest.cpp", 2, 0};
 
-        std::string Text(const eastl::string& text) {
+        std::string Text(const String& text) {
             return std::string(text.data(), text.size());
         }
 
@@ -36,7 +33,7 @@ namespace BECore::Tests {
         }
 
         /// The events of a trace, parsed back (fails the test when the JSON is not valid)
-        Json ParseEvents(const eastl::string& trace) {
+        Json ParseEvents(const String& trace) {
             auto parsed = ParseJson(trace);
             EXPECT_TRUE(parsed.has_value()) << Text(trace);
             if (!parsed) {
@@ -132,7 +129,7 @@ namespace BECore::Tests {
     TEST(ProfilerSettingsTest, TracyNotBuiltIsAnError) {
         const auto settings = ResolveProfilerSettings(Args{"--profiler=tracy"}, kChromeOnlyBuild);
         ASSERT_FALSE(settings.has_value());
-        EXPECT_NE(settings.error().find("ENGINE_PROFILER_TRACY"), eastl::string::npos);
+        EXPECT_NE(settings.error().find("ENGINE_PROFILER_TRACY"), String::npos);
     }
 
     TEST(ProfilerSettingsTest, AnyFlagWithoutTheProfilerIsAnError) {
@@ -140,7 +137,7 @@ namespace BECore::Tests {
         for (const Args& args : {Args{"--trace=t.json"}, Args{"--profiler=none"}}) {
             const auto settings = ResolveProfilerSettings(args, kNoProfilerBuild);
             ASSERT_FALSE(settings.has_value());
-            EXPECT_NE(settings.error().find("ENGINE_PROFILER=ON"), eastl::string::npos);
+            EXPECT_NE(settings.error().find("ENGINE_PROFILER=ON"), String::npos);
         }
     }
 
@@ -248,7 +245,7 @@ namespace BECore::Tests {
     TEST(ChromeTraceBackendTest, WriteFileReportsAnUnwritablePath) {
         ChromeTraceBackend recorder;
         const std::filesystem::path missing = TestTempDirectory("profiler") / "no-such-folder" / "trace.json";
-        const auto written = recorder.WriteFile(eastl::string(missing.string().c_str()));
+        const auto written = recorder.WriteFile(String(missing.string().c_str()));
         ASSERT_FALSE(written.has_value());
         EXPECT_FALSE(written.error().empty());
     }
@@ -330,13 +327,13 @@ namespace BECore::Tests {
         std::filesystem::create_directories(folder);
         const std::filesystem::path file = folder / "trace.json";
         {
-            ScopedTrace trace(eastl::string(file.string().c_str()));
+            ScopedTrace trace(String(file.string().c_str()));
             EXPECT_EQ(EarlyReturn(false), 2);
         }
         EXPECT_EQ(Profiler::GetBackend(), nullptr);
         std::ifstream stream(file);
         const std::string text((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
-        const Json events = ParseEvents(eastl::string(text.c_str()));
+        const Json events = ParseEvents(String(text.c_str()));
         EXPECT_EQ(CountPhase(events, "B"), 2u);
         ExpectBalanced(events);
         std::filesystem::remove_all(folder);

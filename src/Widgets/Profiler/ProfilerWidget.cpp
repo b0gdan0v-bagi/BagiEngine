@@ -137,7 +137,7 @@ namespace BECore {
             _selectedFrame = clicked;
         }
         // The overlay's text: one place says what a frame cost
-        for (const eastl::string& line : FormatOverlayLines(_history.back(), AllocTracker::GetTotals(), AllocTracker::kEnabled)) {
+        for (const String& line : FormatOverlayLines(_history.back(), AllocTracker::GetTotals(), AllocTracker::kEnabled)) {
             ImGui::TextUnformatted(line.c_str());
         }
     }

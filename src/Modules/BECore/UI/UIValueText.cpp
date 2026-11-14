@@ -101,7 +101,7 @@ namespace BECore::UIText {
         return std::clamp(*value, minValue, maxValue);
     }
 
-    eastl::string FormatLength(const UILength& length) {
+    String FormatLength(const UILength& length) {
         return length.unit == UIUnit::Percent ? Format("{}%", length.value) : Format("{}", length.value);
     }
 
@@ -121,7 +121,7 @@ namespace BECore::UIText {
         return UILength{*value, unit};
     }
 
-    eastl::string FormatFraction2(const Vec2& value) {
+    String FormatFraction2(const Vec2& value) {
         return Format("{},{}", value.x, value.y);
     }
 
@@ -147,7 +147,7 @@ namespace BECore::UIText {
         return Vec2{fractions[0], fractions[1]};
     }
 
-    eastl::string FormatEdges(const UIEdges& edges) {
+    String FormatEdges(const UIEdges& edges) {
         if (edges.left == edges.top && edges.top == edges.right && edges.right == edges.bottom) {
             return Format("{}", edges.left);
         }
@@ -176,7 +176,7 @@ namespace BECore::UIText {
         return UIEdges{*left, *top, *right, *bottom};
     }
 
-    eastl::string FormatCorners(const UICorners& corners) {
+    String FormatCorners(const UICorners& corners) {
         if (corners.topLeft == corners.topRight && corners.topRight == corners.bottomRight && corners.bottomRight == corners.bottomLeft) {
             return Format("{}", corners.topLeft);
         }
@@ -199,7 +199,7 @@ namespace BECore::UIText {
         return parts.size() == 1 ? UICorners::Uniform(radii[0]) : UICorners{radii[0], radii[1], radii[2], radii[3]};
     }
 
-    eastl::string FormatShadow(const UIShadowSpec& shadow, PoolString colorToken) {
+    String FormatShadow(const UIShadowSpec& shadow, PoolString colorToken) {
         if (!colorToken.Empty()) {
             return Format("{},{},{},{},@{}", shadow.offsetX, shadow.offsetY, shadow.blur, shadow.spread, colorToken.ToStringView());
         }
@@ -229,7 +229,7 @@ namespace BECore::UIText {
         return UIShadowSpec{numbers[0], numbers[1], numbers[ShadowBlurIndex], numbers[3], color};
     }
 
-    eastl::string FormatTextOutline(float width, const Color& color, PoolString token) {
+    String FormatTextOutline(float width, const Color& color, PoolString token) {
         if (!token.Empty()) {
             return Format("{},@{}", width, token.ToStringView());
         }
@@ -252,7 +252,7 @@ namespace BECore::UIText {
         return true;
     }
 
-    eastl::string FormatTextShadow(float offsetX, float offsetY, const Color& color, PoolString token) {
+    String FormatTextShadow(float offsetX, float offsetY, const Color& color, PoolString token) {
         if (!token.Empty()) {
             return Format("{},{},@{}", offsetX, offsetY, token.ToStringView());
         }
@@ -284,7 +284,7 @@ namespace BECore::UIText {
         return true;
     }
 
-    eastl::string FormatColor(const Color& color) {
+    String FormatColor(const Color& color) {
         return Format("{},{},{},{}", static_cast<int>(color.r), static_cast<int>(color.g), static_cast<int>(color.b), static_cast<int>(color.a));
     }
 
@@ -318,7 +318,7 @@ namespace BECore::UIText {
         return Color{*r, *g, *b, *a};
     }
 
-    eastl::string FormatColorRef(const Color& color, PoolString token) {
+    String FormatColorRef(const Color& color, PoolString token) {
         if (!token.Empty()) {
             return Format("@{}", token.ToStringView());
         }

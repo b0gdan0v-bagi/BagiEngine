@@ -37,24 +37,24 @@ namespace BECore {
 
         /// The browser throws (and the page dies) on a malformed address, so the plain mistakes are refused here: the scheme, spaces and
         /// control characters. Everything else is the browser's to judge
-        [[nodiscard]] std::expected<void, eastl::string> CheckUrl(StringView url) {
+        [[nodiscard]] std::expected<void, String> CheckUrl(StringView url) {
             if (!StartsWithNoCase(url, "ws://") && !StartsWithNoCase(url, "wss://")) {
-                return std::unexpected(eastl::string("the address must start with ws:// or wss://"));
+                return std::unexpected(String("the address must start with ws:// or wss://"));
             }
             if (url.size() > kMaxUrlBytes) {
-                return std::unexpected(eastl::string("the address is too long"));
+                return std::unexpected(String("the address is too long"));
             }
             for (const char c : url) {
                 const auto byte = static_cast<unsigned char>(c);
                 if (byte <= ' ' || byte == 0x7F) {
-                    return std::unexpected(eastl::string("the address has a space or a control character"));
+                    return std::unexpected(String("the address has a space or a control character"));
                 }
             }
             return {};
         }
 
         /// A reason of at most kMaxCloseReasonBytes bytes, cut so that no UTF-8 sequence is split (a longer one makes the browser throw)
-        [[nodiscard]] eastl::string ClipReason(StringView reason) {
+        [[nodiscard]] String ClipReason(StringView reason) {
             size_t length = std::min(reason.size(), kMaxCloseReasonBytes);
             if (length < reason.size()) {
                 // A continuation byte (10xxxxxx) at the cut belongs to a sequence that started before it
@@ -78,18 +78,18 @@ namespace BECore {
         DeleteSocket();
     }
 
-    std::expected<void, eastl::string> EmscriptenRoomTransport::Open(StringView url) {
+    std::expected<void, String> EmscriptenRoomTransport::Open(StringView url) {
         if (_phase != Phase::Idle) {
-            return std::unexpected(eastl::string("the transport serves one connection"));
+            return std::unexpected(String("the transport serves one connection"));
         }
         if (!emscripten_websocket_is_supported()) {
-            return std::unexpected(eastl::string("transport_unavailable: this browser has no WebSocket"));
+            return std::unexpected(String("transport_unavailable: this browser has no WebSocket"));
         }
         if (auto checked = CheckUrl(url); !checked) {
             return checked;
         }
 
-        const eastl::string address(url.data(), url.size());
+        const String address(url.data(), url.size());
         EmscriptenWebSocketCreateAttributes attributes;
         emscripten_websocket_init_create_attributes(&attributes);
         attributes.url = address.c_str();
@@ -112,7 +112,7 @@ namespace BECore {
             // No Closed follows an Open that fails, so nothing of the connection stays
             DeleteSocket();
             _phase = Phase::Idle;
-            return std::unexpected(eastl::string("the browser did not accept the WebSocket callbacks"));
+            return std::unexpected(String("the browser did not accept the WebSocket callbacks"));
         }
         return {};
     }
@@ -141,7 +141,7 @@ namespace BECore {
                 Abort();
                 return;
             case Phase::Open: {
-                const eastl::string clipped = ClipReason(reason);
+                const String clipped = ClipReason(reason);
                 _phase = Phase::Closing;
                 // The browser's `close` follows when the server has answered; Closed carries what it reports
                 emscripten_websocket_close(_socket, ScriptCloseCode(code), clipped.c_str());
@@ -232,7 +232,7 @@ namespace BECore {
         const bool neverOpened = self->_phase == Phase::Connecting;
         // The browser reports 1006 for a connection that failed or dropped; a close without a status is reported by the library as 1005
         const uint16_t code = event->code == 0 ? kRoomTransportAbnormalClosure : event->code;
-        eastl::string reason(event->reason, strnlen(event->reason, sizeof(event->reason)));
+        String reason(event->reason, strnlen(event->reason, sizeof(event->reason)));
         if (reason.empty() && (code == kRoomTransportAbnormalClosure || code == kNoStatusReceived)) {
             reason = neverOpened ? "connection failed" : "connection lost";
         }

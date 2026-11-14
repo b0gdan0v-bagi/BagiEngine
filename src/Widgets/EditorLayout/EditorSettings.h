@@ -86,7 +86,7 @@ namespace BECore {
         }
 
         /// The error of the last Save call, empty when it succeeded
-        [[nodiscard]] const eastl::string& GetLastSaveError() const {
+        [[nodiscard]] const String& GetLastSaveError() const {
             return _lastSaveError;
         }
         [[nodiscard]] const std::filesystem::path& GetDirectory() const {
@@ -101,7 +101,7 @@ namespace BECore {
         std::filesystem::path _directory;
         EditorPreferences _preferences;
         HotkeyMap _hotkeys;
-        eastl::string _lastSaveError;
+        String _lastSaveError;
 
         // Members of the files that this build does not read, written back on save (JSON objects)
         Json _extraPreferences = Json::object();

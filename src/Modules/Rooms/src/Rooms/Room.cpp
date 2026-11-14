@@ -8,7 +8,7 @@ namespace BECore {
     namespace {
 
         ControlError MakeError(StringView code, StringView message) {
-            return ControlError{eastl::string(code), eastl::string(message)};
+            return ControlError{String(code), String(message)};
         }
 
         /// How many tokens AddMember draws before it gives up (a collision of 128 bits never happens, a constant RandomFn does)
@@ -16,7 +16,7 @@ namespace BECore {
 
     }  // namespace
 
-    Room::Room(eastl::string code, SeatedGameInfo info, RandomFn random, SeatedGameFactory factory, RoomTimings timings)
+    Room::Room(String code, SeatedGameInfo info, RandomFn random, SeatedGameFactory factory, RoomTimings timings)
         : _code(std::move(code)), _info(std::move(info)), _random(std::move(random)), _factory(std::move(factory)), _timings(timings) {}
 
     const Room::Member* Room::FindMember(PlayerId player) const {
@@ -51,7 +51,7 @@ namespace BECore {
     }
 
     std::expected<RoomMemberJoined, ControlError> Room::AddMember(StringView name, RoomTime /*now*/) {
-        Optional<eastl::string> cleanName = SanitizePlayerName(name);
+        Optional<String> cleanName = SanitizePlayerName(name);
         if (!cleanName) {
             return std::unexpected(MakeError(RoomErrors::kBadName, "The name must be 1 to 24 bytes of printable text"));
         }
@@ -64,7 +64,7 @@ namespace BECore {
         }
         const int seat = *freeSeat;
 
-        eastl::string token = GenerateToken(_random);
+        String token = GenerateToken(_random);
         for (int attempt = 1; FindByToken(token); ++attempt) {
             if (attempt >= kMaxTokenAttempts) {
                 return std::unexpected(MakeError(RoomErrors::kInternalError, "No free token could be made"));
@@ -358,13 +358,13 @@ namespace BECore {
     void Room::SetLobbyOptions(const Json& options) {
         Json kept = Json::object();
         if (options.is_object()) {
-            for (const eastl::string& key : _info.publicOptions) {
+            for (const String& key : _info.publicOptions) {
                 if (kept.size() >= RoomLimits::kMaxLobbyOptions) {
                     break;
                 }
                 const Json* value = FindJsonMember(options, key);
                 if (value != nullptr && (value->is_boolean() || value->is_number_integer())) {
-                    kept[std::string(key.data(), key.size())] = *value;
+                    kept[ToStdString(key)] = *value;
                 }
             }
         }

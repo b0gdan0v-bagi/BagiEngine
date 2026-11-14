@@ -72,16 +72,16 @@ namespace BECore {
                    || codePoint == 0xFEFF;                                       // byte order mark
         }
 
-        [[nodiscard]] std::unexpected<ControlError> Fail(StringView code, eastl::string message) {
+        [[nodiscard]] std::unexpected<ControlError> Fail(StringView code, String message) {
             return std::unexpected(MakeControlError(code, std::move(message)));
         }
 
-        [[nodiscard]] std::unexpected<ControlError> BadMessage(eastl::string message) {
+        [[nodiscard]] std::unexpected<ControlError> BadMessage(String message) {
             return Fail(RoomErrors::kBadMessage, std::move(message));
         }
 
         /// A string member that must be there
-        [[nodiscard]] std::expected<eastl::string, ControlError> RequireString(const Json& root, StringView key) {
+        [[nodiscard]] std::expected<String, ControlError> RequireString(const Json& root, StringView key) {
             auto value = GetJsonString(root, key);
             if (!value) {
                 return BadMessage(Format("'{}' must be a string", key));
@@ -89,7 +89,7 @@ namespace BECore {
             return std::move(*value);
         }
 
-        [[nodiscard]] std::expected<eastl::string, ControlError> RequireName(const Json& root) {
+        [[nodiscard]] std::expected<String, ControlError> RequireName(const Json& root) {
             auto raw = GetJsonString(root, "name");
             if (!raw) {
                 return BadMessage("'name' must be a string");
@@ -102,7 +102,7 @@ namespace BECore {
         }
 
         /// The `game` member of `create_room` and `list_rooms`: a string of 1 to kMaxGameNameBytes bytes
-        [[nodiscard]] std::expected<eastl::string, ControlError> RequireGameName(const Json& root) {
+        [[nodiscard]] std::expected<String, ControlError> RequireGameName(const Json& root) {
             auto game = RequireString(root, "game");
             if (!game) {
                 return std::unexpected(game.error());
@@ -385,7 +385,7 @@ namespace BECore {
             if (!room) {
                 return std::unexpected(room.error());
             }
-            if (NormalizeRoomCode(*room) != Optional<eastl::string>(*room)) {
+            if (NormalizeRoomCode(*room) != Optional<String>(*room)) {
                 return BadMessage("a room of 'rooms' has no well-formed code");
             }
             listing.room = std::move(*room);
@@ -585,7 +585,7 @@ namespace BECore {
                           message);
     }
 
-    eastl::string SerializeClientMessage(const ClientMessage& message) {
+    String SerializeClientMessage(const ClientMessage& message) {
         Json root = MakeEnvelope(GetClientMessageType(message));
         std::visit(overload{
                        [&](const CreateRoomMessage& m) {
@@ -618,7 +618,7 @@ namespace BECore {
         return DumpJson(root);
     }
 
-    Optional<eastl::string> SanitizePlayerName(StringView text) {
+    Optional<String> SanitizePlayerName(StringView text) {
         for (size_t pos = 0; pos < text.size();) {
             const auto decoded = DecodeUtf8(text, pos);
             if (!decoded || IsForbiddenInName(decoded->codePoint)) {
@@ -639,10 +639,10 @@ namespace BECore {
         if (length < RoomLimits::kMinNameBytes || length > RoomLimits::kMaxNameBytes) {
             return std::nullopt;
         }
-        return eastl::string(text.data() + first, length);
+        return String(text.data() + first, length);
     }
 
-    eastl::string MakeJoinedMessage(StringView room, PlayerId player, StringView token, int seat, bool host) {
+    String MakeJoinedMessage(StringView room, PlayerId player, StringView token, int seat, bool host) {
         Json root = MakeEnvelope(RoomMessageTypes::kJoined);
         root["room"] = MakeJsonString(room);
         root["player"] = player;
@@ -652,7 +652,7 @@ namespace BECore {
         return DumpJson(root);
     }
 
-    eastl::string MakeLobbyMessage(const LobbySnapshot& lobby) {
+    String MakeLobbyMessage(const LobbySnapshot& lobby) {
         Json root = MakeEnvelope(RoomMessageTypes::kLobby);
         root["room"] = MakeJsonString(lobby.room);
         root["game"] = MakeJsonString(lobby.game);
@@ -676,7 +676,7 @@ namespace BECore {
         return DumpJson(root);
     }
 
-    eastl::string MakeRoomListMessage(const RoomListMessage& list) {
+    String MakeRoomListMessage(const RoomListMessage& list) {
         Json root = MakeEnvelope(RoomMessageTypes::kRooms);
         root["game"] = MakeJsonString(list.game);
         Json rooms = Json::array();
@@ -697,7 +697,7 @@ namespace BECore {
         return DumpJson(root);
     }
 
-    eastl::string MakeViewMessage(StringView room, int seat, uint64_t version, bool finished, const Json& view, const Json& actions) {
+    String MakeViewMessage(StringView room, int seat, uint64_t version, bool finished, const Json& view, const Json& actions) {
         Json root = MakeEnvelope(RoomMessageTypes::kView);
         root["room"] = MakeJsonString(room);
         root["seat"] = seat;
@@ -708,7 +708,7 @@ namespace BECore {
         return DumpJson(root);
     }
 
-    eastl::string MakeErrorMessage(StringView code, StringView message, StringView ref) {
+    String MakeErrorMessage(StringView code, StringView message, StringView ref) {
         Json root = MakeEnvelope(RoomMessageTypes::kError);
         root["code"] = MakeJsonString(code);
         root["message"] = MakeJsonString(message);
@@ -718,13 +718,13 @@ namespace BECore {
         return DumpJson(root);
     }
 
-    eastl::string MakeLeftMessage(StringView reason) {
+    String MakeLeftMessage(StringView reason) {
         Json root = MakeEnvelope(RoomMessageTypes::kLeft);
         root["reason"] = MakeJsonString(reason);
         return DumpJson(root);
     }
 
-    eastl::string MakePongMessage() {
+    String MakePongMessage() {
         return DumpJson(MakeEnvelope(RoomMessageTypes::kPong));
     }
 

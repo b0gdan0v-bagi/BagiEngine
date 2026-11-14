@@ -46,7 +46,7 @@ namespace BECore {
                 return false;
             }
             unreadable = true;
-            const std::expected<eastl::string, eastl::string> text = ReadTextFile(path);
+            const std::expected<String, String> text = ReadTextFile(path);
             if (!text) {
                 LOG_WARNING(Format("Editor settings: {}; using the defaults", text.error()));
                 return false;
@@ -118,7 +118,7 @@ namespace BECore {
             if (!object.contains(ToStdString(key))) {
                 return;
             }
-            const Optional<eastl::string> name = GetJsonString(object, key);
+            const Optional<String> name = GetJsonString(object, key);
             const Optional<TEnum> parsed = name ? EnumUtils<TEnum>::Cast(StringView(name->data(), name->size())) : std::nullopt;
             if (parsed) {
                 value = *parsed;
@@ -146,7 +146,7 @@ namespace BECore {
 
             // The device is stored by name, so a table that changed between builds never gives another device
             if (object.contains(ToStdString(kPreviewDeviceKey))) {
-                const Optional<eastl::string> name = GetJsonString(object, kPreviewDeviceKey);
+                const Optional<String> name = GetJsonString(object, kPreviewDeviceKey);
                 if (!name) {
                     WarnWrongType(kPreferencesFileName, kPreviewDeviceKey, "a device name");
                 } else if (!name->empty()) {
@@ -174,7 +174,7 @@ namespace BECore {
             if (!object.contains(ToStdString(key))) {
                 return;
             }
-            const Optional<eastl::string> name = GetJsonString(object, key);
+            const Optional<String> name = GetJsonString(object, key);
             const StringView text = name ? StringView(name->data(), name->size()) : StringView();
             if (text == kInputModePlayName) {
                 mode = ViewportInputMode::Play;
@@ -191,6 +191,7 @@ namespace BECore {
             const auto devices = UIPreview::GetDevices();
             const bool hasDevice = shape.device >= 0 && static_cast<size_t>(shape.device) < devices.size();
             object[ToStdString(kPreviewAspectKey)] = ToStdString(EnumUtils<ViewportAspect>::ToString(shape.aspect));
+            // std: a JSON string of nlohmann
             object[ToStdString(kPreviewDeviceKey)] = hasDevice ? ToStdString(devices[static_cast<size_t>(shape.device)].name) : std::string();
             object[ToStdString(kPreviewCustomKey)] = shape.custom;
             object[ToStdString(kPreviewCustomWidthKey)] = shape.customWidth;
@@ -315,12 +316,13 @@ namespace BECore {
         };
         eastl::vector<Override> overrides;
         for (const auto& [key, value] : bindings->items()) {
-            const eastl::string id(key.c_str(), key.size());
+            const String id(key.c_str(), key.size());
             const PoolString commandId = PoolString::Intern(StringView(id));
             if (!value.is_string()) {
                 LOG_WARNING(Format("Editor settings: the hotkey of '{}' is not a text; dropped", id));
                 continue;
             }
+            // std: nlohmann's string
             const std::string& text = value.get_ref<const std::string&>();
             const EditorCommand* command = FindEditorCommand(commandId);
             if (command == nullptr) {
@@ -356,7 +358,7 @@ namespace BECore {
             if (result.status == AssignStatus::Assigned) {
                 continue;
             }
-            const eastl::string chordText = ToString(*entry.chord);
+            const String chordText = ToString(*entry.chord);
             if (result.status == AssignStatus::Conflict) {
                 LOG_WARNING(Format("Editor settings: {} for '{}' is already used by '{}'; dropped", chordText, entry.id.ToStringView(), result.otherCommandId.ToStringView()));
             } else {
@@ -388,8 +390,9 @@ namespace BECore {
             unreadable = false;
         }
 
+        // std: nlohmann's dump
         const std::string text = content.dump(kJsonIndent, ' ', false, Json::error_handler_t::replace) + "\n";
-        const std::expected<void, eastl::string> written = WriteTextFileAtomically(path, FromStd(text));
+        const std::expected<void, String> written = WriteTextFileAtomically(path, FromStd(text));
         if (!written) {
             _lastSaveError = written.error();
             LOG_ERROR(Format("Editor settings: {}", _lastSaveError));
@@ -416,8 +419,8 @@ namespace BECore {
                 continue;
             }
             const Optional<KeyChord> chord = _hotkeys.GetChord(command.id);
-            const eastl::string text = chord ? ToString(*chord) : eastl::string();
-            bindings[ToStdString(command.id.ToStringView())] = std::string(text.c_str(), text.size());
+            const String text = chord ? ToString(*chord) : String();
+            bindings[ToStdString(command.id.ToStringView())] = ToStdString(text);
         }
         Json content = _extraHotkeys;
         content[ToStdString(kVersionKey)] = kFileVersion;

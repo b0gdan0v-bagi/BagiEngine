@@ -23,7 +23,7 @@ namespace BECore::Tests {
 
     namespace {
 
-        using Log = eastl::vector<eastl::string>;
+        using Log = eastl::vector<String>;
 
         /// Game mode has widget 1, Editor mode has widgets 2 and 3
         constexpr const char* kGameXml = R"(<root><widgets><widget type="LifecycleWidget" id="1"/></widgets></root>)";

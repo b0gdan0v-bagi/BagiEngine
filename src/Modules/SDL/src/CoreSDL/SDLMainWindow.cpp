@@ -71,7 +71,7 @@ namespace BECore {
 #endif
 
         // The first title; Application sets the composed one once the game is known
-        const eastl::string firstTitle = ComposeWindowTitle(windowConfig._title, {}, false);
+        const String firstTitle = ComposeWindowTitle(windowConfig._title, {}, false);
         _window = SDL_CreateWindow(firstTitle.c_str(), windowConfig._width, windowConfig._height, flags);
         if (!_window) {
             return false;
@@ -140,7 +140,7 @@ namespace BECore {
         if (_window == nullptr) {
             return;
         }
-        const eastl::string text(title.data(), title.size());  // SDL wants a terminated string
+        const String text(title.data(), title.size());  // SDL wants a terminated string
         SDL_SetWindowTitle(_window, text.c_str());
     }
 

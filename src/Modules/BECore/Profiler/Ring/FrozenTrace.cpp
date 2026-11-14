@@ -22,7 +22,7 @@ namespace BECore {
 
         struct ThreadLane {
             uint32_t threadId = 0;
-            eastl::string name;
+            String name;
             uint32_t sortIndex = Profiler::kNoSortIndex;
             eastl::vector<ThreadZone> zones;
         };
@@ -42,7 +42,7 @@ namespace BECore {
 
     }  // namespace
 
-    eastl::string WriteFrozenTraceJson(const eastl::vector<FrozenFrame>& frames) {
+    String WriteFrozenTraceJson(const eastl::vector<FrozenFrame>& frames) {
         uint64_t start = frames.empty() ? 0 : frames[0].beginTicks;
         uint64_t truncated = 0;
         eastl::vector<ThreadLane> lanes;
@@ -60,7 +60,7 @@ namespace BECore {
             return ticks > start ? static_cast<double>(ticks - start) * nanosecondsPerTick / kNanosecondsPerMicrosecond : 0.0;
         };
 
-        eastl::string out;
+        String out;
         out.append("{\"traceEvents\":[");
         bool first = true;
         const auto beginEvent = [&out, &first] {
@@ -125,9 +125,9 @@ namespace BECore {
         return out;
     }
 
-    std::expected<void, eastl::string> WriteFrozenTraceFile(StringView path, const eastl::vector<FrozenFrame>& frames) {
-        const eastl::string text = WriteFrozenTraceJson(frames);
-        const eastl::string fileName(path.data(), path.size());
+    std::expected<void, String> WriteFrozenTraceFile(StringView path, const eastl::vector<FrozenFrame>& frames) {
+        const String text = WriteFrozenTraceJson(frames);
+        const String fileName(path.data(), path.size());
         std::FILE* file = std::fopen(fileName.c_str(), "wb");
         if (file == nullptr) {
             return std::unexpected(Format("cannot write '{}': {}", fileName, std::strerror(errno)));

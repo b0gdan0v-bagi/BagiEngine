@@ -21,9 +21,9 @@ namespace BECore {
         }
 
         /// The effective settings, for the log of the platform (nothing secret is in them)
-        eastl::string DescribeSettings(const RoomServerArgs& args, uint16_t port) {
-            eastl::string origins;
-            for (const eastl::string& origin : args.origins) {
+        String DescribeSettings(const RoomServerArgs& args, uint16_t port) {
+            String origins;
+            for (const String& origin : args.origins) {
                 origins += origins.empty() ? "" : ", ";
                 origins += origin;
             }

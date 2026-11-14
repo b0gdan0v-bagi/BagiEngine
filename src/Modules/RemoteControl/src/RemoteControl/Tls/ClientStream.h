@@ -25,8 +25,8 @@ namespace BECore {
         /// (MakeTlsStream() when it is empty) with the handshake. @p cancel is read from this thread and set from another: the
         /// connect or the handshake then ends within Socket::kWakeInterval. @p handshakeDeadline is only for TLS (the caller waits
         /// for the opening answer by its own clock); @p connectTimeout is the TCP connect's. The error names host:port
-        [[nodiscard]] static std::expected<ClientStream, eastl::string> Connect(const WebSocketUrl& url, const TlsClientOptions& tls, std::chrono::milliseconds connectTimeout,
-                                                                                std::chrono::steady_clock::time_point handshakeDeadline, const std::atomic<bool>* cancel);
+        [[nodiscard]] static std::expected<ClientStream, String> Connect(const WebSocketUrl& url, const TlsClientOptions& tls, std::chrono::milliseconds connectTimeout,
+                                                                         std::chrono::steady_clock::time_point handshakeDeadline, const std::atomic<bool>* cancel);
 
         [[nodiscard]] bool SendAll(eastl::span<const uint8_t> data);
         [[nodiscard]] std::expected<size_t, SocketError> Receive(eastl::span<uint8_t> buffer);
@@ -36,7 +36,7 @@ namespace BECore {
         [[nodiscard]] bool IsValid() const;
 
         /// Why the last call that failed failed, when the stream can tell (TLS: the certificate, the name ...); "" for a plain socket
-        [[nodiscard]] eastl::string GetLastError() const;
+        [[nodiscard]] String GetLastError() const;
 
     private:
         Socket _socket;                      // `ws`

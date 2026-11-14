@@ -133,7 +133,7 @@ namespace BECore::Stress::Tests {
                 continue;
             }
             ASSERT_EQ(KindOf(i), UiLabelKind::Key) << i;
-            const eastl::string expected = eastl::string("{#") + eastl::string(KeyOf(i).data(), KeyOf(i).size()) + "}";
+            const String expected = String("{#") + String(KeyOf(i).data(), KeyOf(i).size()) + "}";
             EXPECT_EQ(TextOf(i), StringView(expected));
             if (eastl::find(keys.begin(), keys.end(), KeyOf(i)) == keys.end()) {
                 keys.push_back(KeyOf(i));

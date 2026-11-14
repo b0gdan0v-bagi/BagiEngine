@@ -45,13 +45,13 @@ namespace BECore::Tests {
             return count;
         }
 
-        bool Contains(const eastl::vector<eastl::string>& options, StringView value) {
+        bool Contains(const eastl::vector<String>& options, StringView value) {
             return eastl::find(options.begin(), options.end(), value) != options.end();
         }
 
-        eastl::string TypeNameOf(const ILogSink& sink) {
+        String TypeNameOf(const ILogSink& sink) {
             const StringView name = sink.GetTypeMeta().typeName;
-            return eastl::string{name.data(), name.size()};
+            return String{name.data(), name.size()};
         }
 
     }  // namespace
@@ -101,7 +101,7 @@ namespace BECore::Tests {
         bool LoadTemplate(XmlDocument& document) const {
             const std::string firstLog = FirstLogPath().generic_string();
             const std::string engineLog = EngineLogPath().generic_string();
-            const eastl::string xml = Format(R"(<?xml version="1.0" encoding="UTF-8"?>
+            const String xml = Format(R"(<?xml version="1.0" encoding="UTF-8"?>
 <root>
     <!-- Logger Sinks Configuration -->
     <sinks>
@@ -116,7 +116,7 @@ namespace BECore::Tests {
     </sinks>
 </root>
 )",
-                                             kOutputPriority, firstLog, kFilePriority, engineLog);
+                                      kOutputPriority, firstLog, kFilePriority, engineLog);
             return document.LoadFromString(StringView{xml.c_str(), xml.size()});
         }
 
@@ -132,7 +132,7 @@ namespace BECore::Tests {
             }
 
             StagedChanges staged;
-            staged.Set(eastl::string{kFirstSinkTypeKey.data(), kFirstSinkTypeKey.size()}, sinks.front().attribute("type"), type);
+            staged.Set(String{kFirstSinkTypeKey.data(), kFirstSinkTypeKey.size()}, sinks.front().attribute("type"), type);
             staged.ApplyTo(edited.GetRoot().GetPugiNode());
 
             return edited.SaveToFile(SavedPath()) && saved.LoadFromFile(SavedPath());
@@ -158,7 +158,7 @@ namespace BECore::Tests {
         const size_t enabledSinks = CountEnabledSinks(original);
         ASSERT_EQ(enabledSinks, 2u);
 
-        for (const eastl::string& option : offered.options) {
+        for (const String& option : offered.options) {
             SCOPED_TRACE(option.c_str());
 
             XmlDocument edited;
@@ -192,7 +192,7 @@ namespace BECore::Tests {
         const eastl::vector<pugi::xml_node> originalSinks = SinkElements(original);
         ASSERT_EQ(originalSinks.size(), 3u);
 
-        for (const eastl::string& option : offered.options) {
+        for (const String& option : offered.options) {
             SCOPED_TRACE(option.c_str());
 
             XmlDocument edited;

@@ -69,12 +69,12 @@ namespace BECore {
         template <>
         struct DataAccessor<UIColor> {
             static void Save(ISerializer& s, const UIColor& value, StringView key) {
-                const eastl::string text = UIText::FormatColorRef(value, value.token);
+                const String text = UIText::FormatColorRef(value, value.token);
                 s.WriteAttribute(key, StringView(text));
             }
 
             static bool Load(IDeserializer& d, UIColor& value, StringView key) {
-                eastl::string text;
+                String text;
                 if (!d.ReadAttribute(key, text)) {
                     return false;
                 }

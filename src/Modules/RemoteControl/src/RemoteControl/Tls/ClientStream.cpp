@@ -2,8 +2,8 @@
 
 namespace BECore {
 
-    std::expected<ClientStream, eastl::string> ClientStream::Connect(const WebSocketUrl& url, const TlsClientOptions& tls, std::chrono::milliseconds connectTimeout,
-                                                                     std::chrono::steady_clock::time_point handshakeDeadline, const std::atomic<bool>* cancel) {
+    std::expected<ClientStream, String> ClientStream::Connect(const WebSocketUrl& url, const TlsClientOptions& tls, std::chrono::milliseconds connectTimeout,
+                                                              std::chrono::steady_clock::time_point handshakeDeadline, const std::atomic<bool>* cancel) {
         ClientStream stream;
         if (!url.secure) {
             auto connected = Socket::Connect(url.host, url.port, connectTimeout, cancel);
@@ -64,8 +64,8 @@ namespace BECore {
         return _tls ? _tls->IsValid() : _socket.IsValid();
     }
 
-    eastl::string ClientStream::GetLastError() const {
-        return _tls ? _tls->GetLastError() : eastl::string();
+    String ClientStream::GetLastError() const {
+        return _tls ? _tls->GetLastError() : String();
     }
 
 }  // namespace BECore

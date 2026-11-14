@@ -28,7 +28,7 @@ namespace BECore {
             return !key.empty() && key.find('}') == StringView::npos;
         }
 
-        eastl::string Describe(StringView what, StringView detail) {
+        String Describe(StringView what, StringView detail) {
             return Format("{}: {}", what, detail);
         }
 
@@ -39,7 +39,7 @@ namespace BECore {
         if (!configs.HasConfig(ConfigName)) {
             return;
         }
-        for (const eastl::string& problem : LoadFromXml(configs.GetConfig(ConfigName))) {
+        for (const String& problem : LoadFromXml(configs.GetConfig(ConfigName))) {
             LOG_WARNING("UIStrings: {}"_format(problem.c_str()));
         }
     }
@@ -53,7 +53,7 @@ namespace BECore {
         return nullptr;
     }
 
-    const eastl::string* UIStrings::FindString(const Language* language, StringView key) const {
+    const String* UIStrings::FindString(const Language* language, StringView key) const {
         if (!language) {
             return nullptr;
         }
@@ -88,7 +88,7 @@ namespace BECore {
 
         const auto it = target->strings.find(pooledKey);
         if (it == target->strings.end()) {
-            target->strings.emplace(pooledKey, eastl::string(text.data(), text.size()));
+            target->strings.emplace(pooledKey, String(text.data(), text.size()));
         } else if (StringView(it->second) == text) {
             return true;
         } else {
@@ -128,7 +128,7 @@ namespace BECore {
     Optional<StringView> UIStrings::Find(StringView key) const {
         const PoolString current = GetLanguage();
         for (const PoolString language : {current, _default}) {
-            if (const eastl::string* text = FindString(FindLanguage(language), key)) {
+            if (const String* text = FindString(FindLanguage(language), key)) {
                 return StringView(text->data(), text->size());
             }
         }
@@ -158,11 +158,11 @@ namespace BECore {
                 return;
             }
         }
-        _missing.push_back(MissingString{language, eastl::string(key.data(), key.size())});
+        _missing.push_back(MissingString{language, String(key.data(), key.size())});
     }
 
-    eastl::string UIStrings::Resolve(StringView text) {
-        eastl::string result;
+    String UIStrings::Resolve(StringView text) {
+        String result;
         result.reserve(text.size());
         for (size_t i = 0; i < text.size(); ++i) {
             const char c = text[i];
@@ -201,8 +201,8 @@ namespace BECore {
         ++_version;
     }
 
-    eastl::vector<eastl::string> UIStrings::LoadFromXml(const XmlNode& node) {
-        eastl::vector<eastl::string> problems;
+    eastl::vector<String> UIStrings::LoadFromXml(const XmlNode& node) {
+        eastl::vector<String> problems;
         if (!node) {
             return problems;
         }
@@ -269,7 +269,7 @@ namespace BECore {
             }
         }
         // The messages repeat ids, keys and values of the file
-        for (eastl::string& problem : problems) {
+        for (String& problem : problems) {
             problem = UIText::TidyMessage(StringView(problem));
         }
         return problems;

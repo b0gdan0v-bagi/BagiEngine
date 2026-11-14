@@ -33,10 +33,10 @@ namespace BECore::Match3 {
         /// Score; not negative
         BE_REFLECT_FIELD int32_t score = 0;
         /// The board row by row (row 0 on top), one letter per gem as in the control API's `get_state` (`ROYGBP`, no empty cell): 64 characters
-        BE_REFLECT_FIELD eastl::string board;
+        BE_REFLECT_FIELD String board;
         /// The state of the random generator as std::mt19937 writes it to a stream: 624 numbers in the standard's form (MSVC, libc++), libstdc++ adds the position, so a save moves between
         /// implementations that write the same form
-        BE_REFLECT_FIELD eastl::string rng;
+        BE_REFLECT_FIELD String rng;
     };
 
     /// Save the game as the slot (`CaptureState` inside the envelope of kMatch3SaveSchema); the errors of SaveGameService::Save

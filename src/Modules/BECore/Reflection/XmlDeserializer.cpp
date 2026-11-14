@@ -96,7 +96,7 @@ namespace BECore {
             return pugi::xml_node();
         }
 
-        std::string nameStr(name.data(), name.size());
+        String nameStr(name);
         return _nodeStack.back().child(nameStr.c_str());
     }
 
@@ -105,7 +105,7 @@ namespace BECore {
             return pugi::xml_attribute();
         }
 
-        std::string nameStr(name.data(), name.size());
+        String nameStr(name);
         return _nodeStack.back().attribute(nameStr.c_str());
     }
 
@@ -410,7 +410,7 @@ namespace BECore {
         return true;
     }
 
-    bool XmlDeserializer::Read(StringView name, eastl::string& outValue) {
+    bool XmlDeserializer::Read(StringView name, String& outValue) {
         pugi::xml_node node = GetChild(name);
         if (!node) {
             ReportError(name, "Element not found");
@@ -418,7 +418,7 @@ namespace BECore {
         }
 
         const char* text = node.text().as_string();
-        outValue = eastl::string(text);
+        outValue = String(text);
         return true;
     }
 
@@ -594,14 +594,14 @@ namespace BECore {
         return true;
     }
 
-    bool XmlDeserializer::ReadAttribute(StringView name, eastl::string& outValue) {
+    bool XmlDeserializer::ReadAttribute(StringView name, String& outValue) {
         pugi::xml_attribute attr = GetAttribute(name);
         if (!attr) {
             return false;
         }
 
         const char* text = attr.as_string();
-        outValue = eastl::string(text);
+        outValue = String(text);
         return true;
     }
 

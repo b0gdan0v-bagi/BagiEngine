@@ -164,13 +164,13 @@ namespace BECore {
     }
 
     void UIVariant::Serialize(ISerializer& s) const {
-        const eastl::string text = when.ToText();
+        const String text = when.ToText();
         s.WriteAttribute("when", StringView(text));
         SaveItems(s, overrides, OverridesKey, OverrideItem);
     }
 
     void UIVariant::Deserialize(IDeserializer& d) {
-        eastl::string text;
+        String text;
         if (d.ReadAttribute("when", text)) {
             const auto condition = UIVariantCondition::FromText(StringView(text));
             if (condition) {

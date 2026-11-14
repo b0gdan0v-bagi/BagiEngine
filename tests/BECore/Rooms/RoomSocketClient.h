@@ -35,25 +35,25 @@ namespace BECore::Tests {
         }
 
         void Send(const ClientMessage& message) {
-            const eastl::string text = SerializeClientMessage(message);
+            const String text = SerializeClientMessage(message);
             _raw.SendText(std::string(text.c_str(), text.size()));
         }
 
         void Create(StringView name, StringView game = "fake") {
-            Send(CreateRoomMessage{eastl::string(game), eastl::string(name), Json::object()});
+            Send(CreateRoomMessage{String(game), String(name), Json::object()});
         }
 
         void JoinByName(StringView code, StringView name) {
             JoinRoomMessage message;
-            message.code = eastl::string(code);
-            message.name = eastl::string(name);
+            message.code = String(code);
+            message.name = String(name);
             Send(message);
         }
 
         void JoinByToken(StringView code, StringView token) {
             JoinRoomMessage message;
-            message.code = eastl::string(code);
-            message.token = eastl::string(token);
+            message.code = String(code);
+            message.token = String(token);
             Send(message);
         }
 
@@ -82,12 +82,12 @@ namespace BECore::Tests {
                 return std::nullopt;
             }
             ReceivedMessage message;
-            message.text = eastl::string(frame->payload.data(), frame->payload.size());
+            message.text = String(frame->payload.data(), frame->payload.size());
             auto parsed = ParseJson(message.text);
             EXPECT_TRUE(parsed.has_value()) << "the server sent text that is not JSON: " << frame->payload;
             if (parsed) {
                 message.json = std::move(*parsed);
-                message.type = GetJsonString(message.json, "type").value_or(eastl::string());
+                message.type = GetJsonString(message.json, "type").value_or(String());
             }
             _received.push_back(message);
             ++_cursor;
@@ -154,8 +154,8 @@ namespace BECore::Tests {
         }
 
         /// What the client learned from `joined`
-        eastl::string roomCode;
-        eastl::string token;
+        String roomCode;
+        String token;
         int seat = -1;
 
     private:

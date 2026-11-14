@@ -20,7 +20,7 @@ namespace BECore {
         if (!name.Empty()) {
             Ser::DataAccessor<PoolString>::Save(s, name, "name");
         }
-        const eastl::string text = when.ToText();
+        const String text = when.ToText();
         s.WriteAttribute("when", StringView(text));
         Ser::DataAccessor<float>::Save(s, width, "width");
         Ser::DataAccessor<float>::Save(s, height, "height");
@@ -30,7 +30,7 @@ namespace BECore {
         Ser::Load(d, name, "name");
         Ser::Load(d, width, "width");
         Ser::Load(d, height, "height");
-        eastl::string text;
+        String text;
         if (d.ReadAttribute("when", text)) {
             const auto condition = UIVariantCondition::FromText(StringView(text));
             if (!condition) {

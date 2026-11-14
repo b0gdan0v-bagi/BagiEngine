@@ -46,7 +46,7 @@ namespace BECore::Tests {
             eastl::vector<SDL_MouseWheelEvent> wheels;
             eastl::vector<SDLEvents::KeyDownEvent> keyDowns;
             eastl::vector<SDLEvents::KeyUpEvent> keyUps;
-            eastl::vector<eastl::string> texts;
+            eastl::vector<String> texts;
             eastl::vector<SDL_EventType> windowEvents;
             int safeAreaChanges = 0;
             eastl::vector<SDLEvents::DisplayOrientationChangedEvent> orientations;
@@ -479,7 +479,7 @@ namespace BECore::Tests {
         _provider.ProcessEvents();
 
         ASSERT_EQ(recorder.texts.size(), 1u);
-        EXPECT_EQ(recorder.texts[0], eastl::string("a\xD0\x96"));
+        EXPECT_EQ(recorder.texts[0], String("a\xD0\x96"));
     }
 
     TEST_F(SDLEventsProviderTest, ImGuiKeepsKeysAndTextWhileItWantsTheKeyboard) {
@@ -651,7 +651,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(pastes.pastes.empty());  // the answer comes from Clipboard::Update()
         CoreManager::GetClipboard().Update();
 
-        EXPECT_EQ(pastes.pastes, (eastl::vector<eastl::string>{"ABC"}));
+        EXPECT_EQ(pastes.pastes, (eastl::vector<String>{"ABC"}));
         ASSERT_EQ(keys.keyDowns.size(), 1u);
         EXPECT_EQ(keys.keyDowns[0].key, SDLK_V);
     }

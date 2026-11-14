@@ -110,7 +110,7 @@ namespace BECore {
             return 0;
         }
 
-        [[nodiscard]] eastl::string Materialize() const;
+        [[nodiscard]] String Materialize() const;
         [[nodiscard]] PoolString MaterializeToPoolString() const;
 
         [[nodiscard]] constexpr bool IsSingle() const {

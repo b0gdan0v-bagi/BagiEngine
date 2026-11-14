@@ -82,11 +82,11 @@ namespace BECore {
     struct RoomClientEvent {
         RoomClientEventKind kind = RoomClientEventKind::Closed;
         /// Error: the code. Left: the reason. Closed: why it ended for good (RoomClientCloseReasons or an error code of the server), empty for an ordinary close
-        eastl::string code;
+        String code;
         /// Error: the server's text. Closed, ConnectionLost: the reason of the close
-        eastl::string message;
+        String message;
         /// Error: the type of the message it answers; empty when the server gave none
-        eastl::string ref;
+        String ref;
         /// Closed, ConnectionLost: the code of the close
         uint16_t closeCode = kRoomTransportAbnormalClosure;
         /// ConnectionLost: the client will reconnect by itself
@@ -96,9 +96,9 @@ namespace BECore {
     /// What it takes to come back into a room after the client was closed: plain data the game can save. **The token is the player's
     /// secret** (whoever has it takes the seat); the server keeps it only while the player has not left.
     struct RoomSession {
-        eastl::string url;
-        eastl::string room;
-        eastl::string token;
+        String url;
+        String room;
+        String token;
 
         [[nodiscard]] bool IsValid() const {
             return !room.empty() && !token.empty();
@@ -200,7 +200,7 @@ namespace BECore {
         }
 
         /// The code of the room; empty when not in one
-        [[nodiscard]] const eastl::string& GetRoom() const {
+        [[nodiscard]] const String& GetRoom() const {
             return _room;
         }
 
@@ -266,9 +266,9 @@ namespace BECore {
 
     private:
         /// @p awaitsJoin: the request is a `create_room` / `join_room` (its answer is `joined` or `error`); a `list_rooms` is not
-        [[nodiscard]] std::expected<void, ControlError> BeginRequest(StringView url, eastl::string firstMessage, bool awaitsJoin = true);
+        [[nodiscard]] std::expected<void, ControlError> BeginRequest(StringView url, String firstMessage, bool awaitsJoin = true);
         /// Makes and opens a transport for @p url; @p firstMessage goes out when it opens
-        [[nodiscard]] std::expected<void, ControlError> StartConnection(StringView url, eastl::string firstMessage, bool awaitsJoin = true);
+        [[nodiscard]] std::expected<void, ControlError> StartConnection(StringView url, String firstMessage, bool awaitsJoin = true);
         [[nodiscard]] std::expected<void, ControlError> RequireRoom() const;
         std::expected<void, ControlError> SendToServer(const ClientMessage& message);
 
@@ -307,9 +307,9 @@ namespace BECore {
         /// A transport that was told to close: polled until its Closed, then freed
         eastl::unique_ptr<IRoomTransport> _retired;
         RoomClientState _state = RoomClientState::Disconnected;
-        eastl::string _url;
+        String _url;
         /// Sent when the transport opens
-        eastl::string _firstMessage;
+        String _firstMessage;
         /// Whether the first message is a join (sets _awaitingJoin when it goes out)
         bool _firstMessageAwaitsJoin = true;
         /// A create_room or join_room was sent and has no answer (`joined` or `error`) yet
@@ -329,9 +329,9 @@ namespace BECore {
         Optional<RoomTime> _retryAt;
         int _failedAttempts = 0;
         /// Why the connection will end for good when the transport's Closed arrives (`replaced`); the code of that Closed event
-        eastl::string _endReason;
+        String _endReason;
 
-        eastl::string _room;
+        String _room;
         PlayerId _player = 0;
         int _seat = -1;
         int _seatBeforeRequest = -1;

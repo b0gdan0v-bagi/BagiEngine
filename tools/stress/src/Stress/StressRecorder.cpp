@@ -26,7 +26,7 @@ namespace BECore::Stress {
         }
 
         /// A `"key":value` member (a number written by FormatNumber); the keys are added in sorted order by the caller
-        void AddMember(eastl::string& line, StringView key, const eastl::string& value) {
+        void AddMember(String& line, StringView key, const String& value) {
             if (!line.empty()) {
                 line += ',';
             }
@@ -36,20 +36,20 @@ namespace BECore::Stress {
             line += value;
         }
 
-        void AddNumber(eastl::string& line, StringView key, double value) {
+        void AddNumber(String& line, StringView key, double value) {
             AddMember(line, key, FormatNumber(value));
         }
 
-        void AddInteger(eastl::string& line, StringView key, uint32_t value) {
+        void AddInteger(String& line, StringView key, uint32_t value) {
             AddMember(line, key, Format("{}", value));
         }
 
-        void AddBool(eastl::string& line, StringView key, bool value) {
+        void AddBool(String& line, StringView key, bool value) {
             AddMember(line, key, value ? "true" : "false");
         }
 
-        void AddText(eastl::string& line, StringView key, StringView value) {
-            eastl::string quoted("\"");
+        void AddText(String& line, StringView key, StringView value) {
+            String quoted("\"");
             quoted.append(value.data(), value.size());
             quoted += '"';
             AddMember(line, key, quoted);
@@ -134,12 +134,12 @@ namespace BECore::Stress {
         return summary;
     }
 
-    eastl::string FormatNumber(double value) {
-        return std::isfinite(value) ? Format("{:.{}f}", value, kDecimals) : eastl::string("0");
+    String FormatNumber(double value) {
+        return std::isfinite(value) ? Format("{:.{}f}", value, kDecimals) : String("0");
     }
 
-    eastl::string FormatJsonLine(const StressSummary& summary, const StressRunContext& context) {
-        eastl::string line;
+    String FormatJsonLine(const StressSummary& summary, const StressRunContext& context) {
+        String line;
         line.reserve(kLineReserve);
         // Sorted by key (byte order, so `allocBytesPerFrame` < `allocTracking` < `allocsPerFrame`): a reader can diff two lines
         AddNumber(line, "allocBytesPerFrame", summary.allocBytesPerFrame);

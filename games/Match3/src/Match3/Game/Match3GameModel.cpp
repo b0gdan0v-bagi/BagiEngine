@@ -129,12 +129,13 @@ namespace BECore::Match3 {
 
         std::ostringstream rng;
         rng << _rng;
+        // std: the text of an std::ostringstream
         const std::string text = rng.str();
         state.rng.assign(text.data(), text.size());
         return state;
     }
 
-    std::expected<void, eastl::string> Match3GameModel::RestoreState(const Match3SaveState& state) {
+    std::expected<void, String> Match3GameModel::RestoreState(const Match3SaveState& state) {
         // Everything is built on the side first, so a refused state changes nothing
         if (state.board.size() != kBoardCellCount) {
             return std::unexpected(Format("the board has {} characters, {} are needed", state.board.size(), kBoardCellCount));
@@ -148,7 +149,7 @@ namespace BECore::Match3 {
             board.Set(Cell::FromIndex(static_cast<int>(index)), gem);
         }
         if (MatchFinder::HasAnyMatch(board)) {
-            return std::unexpected(eastl::string("the board has a match on it, a saved board is always settled"));
+            return std::unexpected(String("the board has a match on it, a saved board is always settled"));
         }
         if (state.score < 0) {
             return std::unexpected(Format("the score {} is negative", state.score));
@@ -156,22 +157,23 @@ namespace BECore::Match3 {
 
         // The text has to be what operator<< writes for the generator it reads as: the round trip also refuses a leading zero or a position out of range
         if (!LooksLikeGeneratorText(StringView(state.rng))) {
-            return std::unexpected(eastl::string("the random generator text is not the text of a std::mt19937"));
+            return std::unexpected(String("the random generator text is not the text of a std::mt19937"));
         }
+        // std: an std::istringstream reads it
         const std::string rngText(state.rng.data(), state.rng.size());
         std::istringstream in(rngText);
         std::mt19937 rng;
         in >> rng;
         if (!in) {
-            return std::unexpected(eastl::string("the random generator text cannot be read"));
+            return std::unexpected(String("the random generator text cannot be read"));
         }
         std::ostringstream written;
         written << rng;
         if (written.str() != rngText) {
-            return std::unexpected(eastl::string("the random generator text is not the state of a generator (not the one that operator<< writes)"));
+            return std::unexpected(String("the random generator text is not the state of a generator (not the one that operator<< writes)"));
         }
         if (IsDegenerateGenerator(rng)) {
-            return std::unexpected(eastl::string("the random generator is degenerate: it gives only zeros"));
+            return std::unexpected(String("the random generator is degenerate: it gives only zeros"));
         }
 
         _board = board;

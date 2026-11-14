@@ -3,7 +3,6 @@
 #include <BECore/Reflection/XmlSerializer.h>
 #include <Common/Printers.h>
 #include <gtest/gtest.h>
-#include <limits>
 
 namespace BECore::Tests {
 
@@ -12,7 +11,7 @@ namespace BECore::Tests {
         constexpr float kNaN = std::numeric_limits<float>::quiet_NaN();
         constexpr float kInfinity = std::numeric_limits<float>::infinity();
 
-        eastl::string SaveEffect(const ParticleEffect& effect) {
+        String SaveEffect(const ParticleEffect& effect) {
             XmlSerializer serializer;
             if (serializer.BeginObject("effect")) {
                 effect.Serialize(serializer);
@@ -146,7 +145,7 @@ namespace BECore::Tests {
 
     TEST(ParticleEffectTest, RoundTripKeepsEveryField) {
         const ParticleEffect original = MakeChangedEffect();
-        const eastl::string xml = SaveEffect(original);
+        const String xml = SaveEffect(original);
 
         ParticleEffect loaded;
         eastl::vector<DeserializeError> errors;

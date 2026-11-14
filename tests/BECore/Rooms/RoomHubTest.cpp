@@ -19,15 +19,15 @@ namespace BECore::Tests {
             return 0;
         }
 
-        size_t CountTextsContaining(const TestClient& client, const eastl::string& needle) {
+        size_t CountTextsContaining(const TestClient& client, const String& needle) {
             size_t count = 0;
             for (const ReceivedMessage& message : client.received) {
-                count += message.text.find(needle) != eastl::string::npos ? 1 : 0;
+                count += message.text.find(needle) != String::npos ? 1 : 0;
             }
             return count;
         }
 
-        Json CardAction(const eastl::string& card) {
+        Json CardAction(const String& card) {
             Json action = Json::object();
             action["type"] = "play";
             action["card"] = card.c_str();
@@ -53,7 +53,7 @@ namespace BECore::Tests {
 
         const ConnectionId guest = harness.Connect();
         // The code is accepted in lower case
-        eastl::string lower = ann.roomCode;
+        String lower = ann.roomCode;
         for (char& c : lower) {
             c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
         }
@@ -67,9 +67,9 @@ namespace BECore::Tests {
         const Json* seats = FindJsonMember(ann.Last(RoomMessageTypes::kLobby)->json, "seats");
         ASSERT_NE(seats, nullptr);
         ASSERT_EQ(seats->size(), 4u);
-        EXPECT_EQ(GetJsonString((*seats)[1], "kind").value_or(eastl::string()), "human");
-        EXPECT_EQ(GetJsonString((*seats)[1], "name").value_or(eastl::string()), "Bob");
-        EXPECT_EQ(GetJsonString((*seats)[2], "kind").value_or(eastl::string()), "empty");
+        EXPECT_EQ(GetJsonString((*seats)[1], "kind").value_or(String()), "human");
+        EXPECT_EQ(GetJsonString((*seats)[1], "name").value_or(String()), "Bob");
+        EXPECT_EQ(GetJsonString((*seats)[2], "kind").value_or(String()), "empty");
     }
 
     TEST(RoomHubTest, TheLobbyShowsEveryMemberThePublicOptionsOfTheRoomAndNothingElse) {
@@ -166,7 +166,7 @@ namespace BECore::Tests {
 
         // A full lobby
         const auto ids = harness.MakeLobby(4);
-        const eastl::string code = harness.Client(ids[0]).roomCode;
+        const String code = harness.Client(ids[0]).roomCode;
         harness.JoinByName(stranger, code, "Late");
         EXPECT_EQ(harness.Client(stranger).LastErrorCode(), RoomErrors::kRoomFull);
         harness.Send(ids[1], ChooseSeatMessage{0});
@@ -273,7 +273,7 @@ namespace BECore::Tests {
         harness.SendText(second, "{\"v\":1,\"type\":\"join_room\",\"code\":\"I0I0I\",\"name\":\"Mal\"}");
         harness.SendText(second, "{\"v\":1,\"type\":\"join_room\",\"code\":\"ZZZZZ\",\"token\":\"nope\"}");
         EXPECT_EQ(harness.Client(second).LastErrorCode(), RoomErrors::kBadToken);
-        harness.JoinByToken(second, "ZZZZZ", eastl::string(RoomLimits::kTokenLength, 'a'));
+        harness.JoinByToken(second, "ZZZZZ", String(RoomLimits::kTokenLength, 'a'));
         harness.JoinByName(second, "ZZZZZ", "Mal");
         EXPECT_FALSE(harness.Client(second).closed);
         harness.JoinByName(second, "ZZZZZ", "Mal");
@@ -284,7 +284,7 @@ namespace BECore::Tests {
         HubHarness harness;
         const ConnectionId host = harness.Connect();
         harness.Create(host, "Ann");
-        const eastl::string code = harness.Client(host).roomCode;
+        const String code = harness.Client(host).roomCode;
         const ConnectionId guest = harness.Connect();
         for (int i = 0; i < 4; ++i) {
             harness.JoinByName(guest, "ZZZZZ", "Bob");
@@ -305,7 +305,7 @@ namespace BECore::Tests {
         const ConnectionId id = harness.Connect();
         const TestClient& client = harness.Client(id);
 
-        harness.SendText(id, eastl::string(RoomLimits::kMaxMessageBytes + 1, 'x'));
+        harness.SendText(id, String(RoomLimits::kMaxMessageBytes + 1, 'x'));
         EXPECT_EQ(client.LastErrorCode(), RoomErrors::kMessageTooLarge);
         harness.SendText(id, "");
         EXPECT_EQ(client.LastErrorCode(), RoomErrors::kBadMessage);
@@ -314,7 +314,7 @@ namespace BECore::Tests {
         const char withNul[] = "{\"v\":1,\"type\":\"ping\"}\0{\"x\":1}";
         harness.SendText(id, StringView(withNul, sizeof(withNul) - 1));
         EXPECT_EQ(client.LastErrorCode(), RoomErrors::kBadMessage);
-        harness.SendText(id, eastl::string(5000, '['));
+        harness.SendText(id, String(5000, '['));
         EXPECT_EQ(client.LastErrorCode(), RoomErrors::kBadMessage);
         EXPECT_EQ(client.Count(RoomMessageTypes::kPong), 0u);
         EXPECT_FALSE(client.closed);
@@ -326,7 +326,7 @@ namespace BECore::Tests {
         HubHarness harness;
         const ConnectionId id = harness.Connect();
         harness.Create(id, "Ann");
-        const eastl::string code = harness.Client(id).roomCode;
+        const String code = harness.Client(id).roomCode;
         harness.Create(id, "Ann");
         EXPECT_EQ(harness.Client(id).LastErrorCode(), RoomErrors::kAlreadyInRoom);
         harness.JoinByName(id, code, "Ann");
@@ -393,7 +393,7 @@ namespace BECore::Tests {
             EXPECT_EQ(lobby->GetInt("host"), 1);
             const Json* seats = FindJsonMember(lobby->json, "seats");
             ASSERT_NE(seats, nullptr);
-            EXPECT_EQ(GetJsonString((*seats)[0], "kind").value_or(eastl::string()), "empty");
+            EXPECT_EQ(GetJsonString((*seats)[0], "kind").value_or(String()), "empty");
         }
         EXPECT_EQ(harness.Hub().GetRoomCount(), 1u);
         // The new host can start
@@ -407,7 +407,7 @@ namespace BECore::Tests {
         const ConnectionId a = harness.Connect();
         const ConnectionId b = harness.Connect();
         harness.Create(a, "Ann");
-        const eastl::string code = harness.Client(a).roomCode;
+        const String code = harness.Client(a).roomCode;
         harness.Create(b, "Bob");
         EXPECT_EQ(harness.Client(b).LastErrorCode(), RoomErrors::kInternalError);
         EXPECT_EQ(harness.Hub().GetRoomCount(), 1u);
@@ -439,8 +439,8 @@ namespace BECore::Tests {
         HubHarness harness;
         const auto ids = harness.MakeLobby(2);
         const TestClient& old = harness.Client(ids[1]);
-        const eastl::string code = old.roomCode;
-        const eastl::string token = old.token;
+        const String code = old.roomCode;
+        const String token = old.token;
 
         const ConnectionId fresh = harness.Connect();
         harness.JoinByToken(fresh, code, token);
@@ -454,8 +454,8 @@ namespace BECore::Tests {
         // Still two members: the seat did not move and nobody was added
         const Json* seats = FindJsonMember(now.Last(RoomMessageTypes::kLobby)->json, "seats");
         ASSERT_NE(seats, nullptr);
-        EXPECT_EQ(GetJsonString((*seats)[1], "name").value_or(eastl::string()), "P1");
-        EXPECT_EQ(GetJsonString((*seats)[2], "kind").value_or(eastl::string()), "empty");
+        EXPECT_EQ(GetJsonString((*seats)[1], "name").value_or(String()), "P1");
+        EXPECT_EQ(GetJsonString((*seats)[2], "kind").value_or(String()), "empty");
         EXPECT_EQ(harness.Hub().GetConnectionCount(), 2u);
 
         // The old connection's disconnect later changes nothing
@@ -464,7 +464,7 @@ namespace BECore::Tests {
 
         // A wrong token is refused
         const ConnectionId thief = harness.Connect();
-        harness.JoinByToken(thief, code, eastl::string(RoomLimits::kTokenLength, 'a'));
+        harness.JoinByToken(thief, code, String(RoomLimits::kTokenLength, 'a'));
         EXPECT_EQ(harness.Client(thief).LastErrorCode(), RoomErrors::kBadToken);
         EXPECT_EQ(harness.Client(thief).roomCode, "");
     }
@@ -472,7 +472,7 @@ namespace BECore::Tests {
     TEST(RoomHubTest, AGameWithComputersRunsToTheEndAndTheRoomIsClosedLater) {
         HubHarness harness;
         const auto ids = harness.MakeLobby(2);
-        const eastl::string code = harness.Client(ids[0]).roomCode;
+        const String code = harness.Client(ids[0]).roomCode;
         for (const ConnectionId id : ids) {
             harness.Client(id).Clear();
         }
@@ -483,8 +483,8 @@ namespace BECore::Tests {
         }
         const Json* seats = FindJsonMember(harness.Client(ids[0]).Last(RoomMessageTypes::kLobby)->json, "seats");
         ASSERT_NE(seats, nullptr);
-        EXPECT_EQ(GetJsonString((*seats)[2], "kind").value_or(eastl::string()), "computer");
-        EXPECT_EQ(GetJsonString((*seats)[3], "kind").value_or(eastl::string()), "computer");
+        EXPECT_EQ(GetJsonString((*seats)[2], "kind").value_or(String()), "computer");
+        EXPECT_EQ(GetJsonString((*seats)[3], "kind").value_or(String()), "computer");
 
         bool finished = false;
         for (int step = 0; step < 200 && !finished; ++step) {
@@ -519,8 +519,8 @@ namespace BECore::Tests {
     TEST(RoomHubTest, ADroppedPlayerReturnsWithTheToken) {
         HubHarness harness;
         const auto ids = harness.MakeLobby(2);
-        const eastl::string code = harness.Client(ids[0]).roomCode;
-        const eastl::string token = harness.Client(ids[1]).token;
+        const String code = harness.Client(ids[0]).roomCode;
+        const String token = harness.Client(ids[1]).token;
         harness.Start(ids[0]);
         harness.Client(ids[0]).Clear();
 
@@ -549,7 +549,7 @@ namespace BECore::Tests {
     TEST(RoomHubTest, ARoomWhoseHumansAreAllAwayIsClosedAfterTheTimeout) {
         HubHarness harness;
         const auto ids = harness.MakeLobby(2);
-        const eastl::string code = harness.Client(ids[0]).roomCode;
+        const String code = harness.Client(ids[0]).roomCode;
         harness.Start(ids[0]);
         harness.Disconnect(ids[0]);
         harness.Disconnect(ids[1]);
@@ -598,7 +598,7 @@ namespace BECore::Tests {
         harness.Create(second, "B");
         harness.Create(third, "C");
         EXPECT_EQ(harness.Client(third).LastErrorCode(), RoomErrors::kTooManyRooms);
-        EXPECT_NE(harness.Client(third).Last(RoomMessageTypes::kError)->GetString("message").find("your address"), eastl::string::npos);
+        EXPECT_NE(harness.Client(third).Last(RoomMessageTypes::kError)->GetString("message").find("your address"), String::npos);
         EXPECT_EQ(harness.Hub().GetRoomCount(), 2u);
 
         // Another address, and a connection with no address, are not counted
@@ -648,7 +648,7 @@ namespace BECore::Tests {
         HubHarness harness(settings);
         const ConnectionId host = harness.Connect("10.0.0.9");
         harness.Create(host, "Ann");
-        const eastl::string code = harness.Client(host).roomCode;
+        const String code = harness.Client(host).roomCode;
 
         // Five guesses close a connection, and the next one starts at zero: the budget of the address is what counts
         const ConnectionId one = harness.Connect("10.0.0.1");
@@ -662,9 +662,9 @@ namespace BECore::Tests {
 
         // The budget is empty: the answer is the same for a code that exists and for one that does not
         harness.JoinByName(two, "YYYYY", "Mal");
-        const eastl::string absent = harness.Client(two).Last(RoomMessageTypes::kError)->text;
+        const String absent = harness.Client(two).Last(RoomMessageTypes::kError)->text;
         harness.JoinByName(two, code, "Mal");
-        const eastl::string present = harness.Client(two).Last(RoomMessageTypes::kError)->text;
+        const String present = harness.Client(two).Last(RoomMessageTypes::kError)->text;
         EXPECT_EQ(harness.Client(two).LastErrorCode(), RoomErrors::kRateLimited);
         EXPECT_EQ(absent, present);
         EXPECT_EQ(harness.Client(two).roomCode, "");
@@ -701,7 +701,7 @@ namespace BECore::Tests {
         HubHarness harness(settings);
         const ConnectionId host = harness.Connect("10.0.0.99");
         harness.Create(host, "Ann");
-        const eastl::string code = harness.Client(host).roomCode;
+        const String code = harness.Client(host).roomCode;
         for (int i = 0; i < 6; ++i) {
             const ConnectionId guesser = harness.Connect(Format("10.0.1.{}", i).c_str());
             harness.JoinByName(guesser, "ZZZZZ", "Mal");
@@ -730,7 +730,7 @@ namespace BECore::Tests {
         HubHarness harness;
         const ConnectionId host = harness.Connect("10.0.0.9");
         harness.Create(host, "Ann");
-        eastl::string typo = harness.Client(host).roomCode;
+        String typo = harness.Client(host).roomCode;
         typo[0] = typo[0] == 'A' ? 'B' : 'A';
         const ConnectionId guest = harness.Connect("10.0.0.1");
         harness.JoinByName(guest, typo, "Bob");
@@ -746,8 +746,8 @@ namespace BECore::Tests {
         HubHarness harness(settings);
         const auto ids = harness.MakeLobby(2);
         harness.Start(ids[0]);
-        const eastl::string code = harness.Client(ids[1]).roomCode;
-        const eastl::string token = harness.Client(ids[1]).token;
+        const String code = harness.Client(ids[1]).roomCode;
+        const String token = harness.Client(ids[1]).token;
         harness.Disconnect(ids[1]);
         for (int i = 0; i < 2; ++i) {
             const ConnectionId guesser = harness.Connect("10.0.5.1");
@@ -755,9 +755,9 @@ namespace BECore::Tests {
         }
         // Empty now: a wrong token to this room and any join to an unknown room are the same answer
         const ConnectionId thief = harness.Connect("10.0.5.2");
-        harness.JoinByToken(thief, code, eastl::string(RoomLimits::kTokenLength, 'a'));
+        harness.JoinByToken(thief, code, String(RoomLimits::kTokenLength, 'a'));
         EXPECT_EQ(harness.Client(thief).LastErrorCode(), RoomErrors::kRateLimited);
-        harness.JoinByToken(thief, "ZZZZZ", eastl::string(RoomLimits::kTokenLength, 'a'));
+        harness.JoinByToken(thief, "ZZZZZ", String(RoomLimits::kTokenLength, 'a'));
         EXPECT_EQ(harness.Client(thief).LastErrorCode(), RoomErrors::kRateLimited);
         // The member itself returns
         const ConnectionId back = harness.Connect("10.0.5.3");

@@ -7,12 +7,12 @@ namespace BECore {
 
     namespace {
 
-        [[nodiscard]] std::unexpected<ControlError> Fail(StringView code, eastl::string message) {
+        [[nodiscard]] std::unexpected<ControlError> Fail(StringView code, String message) {
             return std::unexpected(MakeControlError(code, std::move(message)));
         }
 
         /// The message that takes a seat back: `join_room` with the token and no name
-        [[nodiscard]] eastl::string MakeResumeMessage(const eastl::string& room, const eastl::string& token) {
+        [[nodiscard]] String MakeResumeMessage(const String& room, const String& token) {
             JoinRoomMessage message;
             message.code = room;
             message.token = token;
@@ -27,8 +27,8 @@ namespace BECore {
 
     std::expected<void, ControlError> RoomClient::Host(StringView url, StringView game, StringView name, const Json& options, bool isPublic) {
         CreateRoomMessage message;
-        message.game = eastl::string(game);
-        message.name = eastl::string(name);
+        message.game = String(game);
+        message.name = String(name);
         message.options = options;
         message.isPublic = isPublic;
         return BeginRequest(url, SerializeClientMessage(message));
@@ -36,7 +36,7 @@ namespace BECore {
 
     std::expected<void, ControlError> RoomClient::ListRooms(StringView url, StringView game) {
         ListRoomsMessage message;
-        message.game = eastl::string(game);
+        message.game = String(game);
         return BeginRequest(url, SerializeClientMessage(message), false);
     }
 
@@ -48,11 +48,11 @@ namespace BECore {
         }
         JoinRoomMessage message;
         message.code = *normalized;
-        message.name = eastl::string(name);
+        message.name = String(name);
         return BeginRequest(url, SerializeClientMessage(message));
     }
 
-    std::expected<void, ControlError> RoomClient::BeginRequest(StringView url, eastl::string firstMessage, bool awaitsJoin) {
+    std::expected<void, ControlError> RoomClient::BeginRequest(StringView url, String firstMessage, bool awaitsJoin) {
         if (_state == RoomClientState::Connected && !_awaitingJoin && url == _url) {
             // The connection that is open serves the request
             _awaitingJoin = awaitsJoin;
@@ -73,7 +73,7 @@ namespace BECore {
         return {};
     }
 
-    std::expected<void, ControlError> RoomClient::StartConnection(StringView url, eastl::string firstMessage, bool awaitsJoin) {
+    std::expected<void, ControlError> RoomClient::StartConnection(StringView url, String firstMessage, bool awaitsJoin) {
         eastl::unique_ptr<IRoomTransport> transport = _settings.transportFactory ? _settings.transportFactory() : MakeDefaultRoomTransport();
         if (!transport) {
             return Fail(RoomClientErrors::kTransportUnavailable, "there is no way to connect to a room server in this build");
@@ -85,7 +85,7 @@ namespace BECore {
         // An older connection that is still closing is not waited for
         _retired.reset();
         _transport = std::move(transport);
-        _url = eastl::string(url);
+        _url = String(url);
         _firstMessage = std::move(firstMessage);
         _firstMessageAwaitsJoin = awaitsJoin;
         _transportOpened = false;
@@ -526,9 +526,9 @@ namespace BECore {
         }
         RoomClientEvent& event = _events.emplace_back();
         event.kind = kind;
-        event.code = eastl::string(code);
-        event.message = eastl::string(message);
-        event.ref = eastl::string(ref);
+        event.code = String(code);
+        event.message = String(message);
+        event.ref = String(ref);
         event.closeCode = closeCode;
         event.willRetry = willRetry;
     }

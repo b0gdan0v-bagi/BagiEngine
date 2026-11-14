@@ -16,18 +16,18 @@ namespace BECore {
         }
 
         /// The first error of the deserializer for a message, or a fallback when it recorded none.
-        eastl::string FirstError(const IDeserializer& deserializer) {
+        String FirstError(const IDeserializer& deserializer) {
             const auto& errors = deserializer.GetErrors();
             if (errors.empty()) {
                 return "unknown error";
             }
-            return eastl::string(errors.front().errorMessage.ToStringView());
+            return String(errors.front().errorMessage.ToStringView());
         }
 
     }  // namespace
 
-    std::expected<eastl::unique_ptr<IDeserializer>, eastl::string> OpenDeserializer(StringView virtualPath) {
-        using Error = std::unexpected<eastl::string>;
+    std::expected<eastl::unique_ptr<IDeserializer>, String> OpenDeserializer(StringView virtualPath) {
+        using Error = std::unexpected<String>;
 
         if (EndsWith(virtualPath, kXmlExtension)) {
             auto deserializer = eastl::make_unique<XmlDeserializer>();
@@ -60,8 +60,8 @@ namespace BECore {
     void LogDeserializeErrors(StringView configName, eastl::span<const DeserializeError> errors) {
         for (const DeserializeError& error : errors) {
             // A document that fails to parse has no path, and the line is 0 where the format has none (binary)
-            const eastl::string path = error.path.ToStringView().empty() ? eastl::string{} : Format("{}: ", error.path.ToStringView());
-            const eastl::string line = error.line != 0 ? Format(" (line {})", error.line) : eastl::string{};
+            const String path = error.path.ToStringView().empty() ? String{} : Format("{}: ", error.path.ToStringView());
+            const String line = error.line != 0 ? Format(" (line {})", error.line) : String{};
             LOG_ERROR(Format("Config '{}': {}{}{}", configName, path, error.errorMessage.ToStringView(), line).c_str());
         }
     }

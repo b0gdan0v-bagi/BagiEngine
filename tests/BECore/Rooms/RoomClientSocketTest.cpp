@@ -10,10 +10,8 @@
 #include <RoomServer/DemoCardGame.h>
 #include <RoomServer/RoomWebSocketServer.h>
 #include <Rooms/RoomErrors.h>
-#include <algorithm>
 #include <gtest/gtest.h>
 #include <memory>
-#include <string>
 #include <vector>
 
 namespace BECore::Tests {
@@ -57,7 +55,7 @@ namespace BECore::Tests {
                 }
             }
 
-            std::expected<void, eastl::string> Open(StringView url) override {
+            std::expected<void, String> Open(StringView url) override {
                 return _inner->Open(url);
             }
 
@@ -79,7 +77,7 @@ namespace BECore::Tests {
                 }
                 if (event.kind == RoomTransportEventKind::Text) {
                     const auto parsed = ParseJson(event.text);
-                    _tap.types.push_back(parsed ? std::string(GetJsonString(*parsed, "type").value_or(eastl::string()).c_str()) : std::string("?"));
+                    _tap.types.push_back(parsed ? std::string(GetJsonString(*parsed, "type").value_or(String()).c_str()) : std::string("?"));
                 }
                 return true;
             }
@@ -251,7 +249,7 @@ namespace BECore::Tests {
             SeatedGameRegistry registry;
             std::unique_ptr<RoomWebSocketServer> server;
             uint16_t port = 0;
-            eastl::string url;
+            String url;
             std::vector<std::unique_ptr<Player>> players;
         };
 
@@ -304,7 +302,7 @@ namespace BECore::Tests {
         StartServer(std::move(settings));
         ASSERT_NO_FATAL_FAILURE(MakeTable("cards", 2));
         Player& cut = *players[1];
-        const eastl::string token = cut.client->GetSession().token;
+        const String token = cut.client->GetSession().token;
         const int seat = cut.client->GetSeat();
         ASSERT_TRUE(players[0]->client->Start().has_value());
         ASSERT_TRUE(WaitFor([&] { return cut.TableSize() >= 1; }));
@@ -335,7 +333,7 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(MakeTable("cards", 2, Json::object({{"firstSeat", 0}}), slowReturn));
         Player& host = *players[0];
         Player& away = *players[1];
-        const eastl::string token = away.client->GetSession().token;
+        const String token = away.client->GetSession().token;
         away.autoplay = false;
         ASSERT_TRUE(host.client->Start().has_value());
         ASSERT_TRUE(WaitFor([&] { return away.client->HasView(); }));
@@ -438,13 +436,13 @@ namespace BECore::Tests {
         ASSERT_TRUE(WaitFor([&] { return player.client->GetState() == RoomClientState::Disconnected; }, kShortLimit)) << "the TLS handshake never ended";
         ASSERT_EQ(player.Count(Kind::Closed), 1u);
         EXPECT_EQ(player.Find(Kind::Closed)->closeCode, kRoomTransportAbnormalClosure);
-        EXPECT_NE(player.Find(Kind::Closed)->message.find("TLS"), eastl::string::npos) << player.Find(Kind::Closed)->message.c_str();
+        EXPECT_NE(player.Find(Kind::Closed)->message.find("TLS"), String::npos) << player.Find(Kind::Closed)->message.c_str();
     }
 
     TEST_F(RoomClientSocketTest, AWrongPortGivesAClosedEventAndNoHang) {
         // A port that was in use a moment ago and now has nobody on it
         StartServer();
-        const eastl::string deadUrl = url;
+        const String deadUrl = url;
         server->Stop();
         server.reset();
 

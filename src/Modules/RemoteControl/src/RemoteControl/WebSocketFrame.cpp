@@ -43,7 +43,7 @@ namespace BECore {
             return value;
         }
 
-        std::unexpected<WebSocketProtocolError> Violation(uint16_t closeCode, eastl::string reason) {
+        std::unexpected<WebSocketProtocolError> Violation(uint16_t closeCode, String reason) {
             return std::unexpected(WebSocketProtocolError{closeCode, std::move(reason)});
         }
 
@@ -97,7 +97,7 @@ namespace BECore {
         _buffer.insert(_buffer.end(), bytes.begin(), bytes.end());
     }
 
-    std::expected<Optional<WebSocketMessage>, WebSocketProtocolError> WebSocketFrameParser::Fail(uint16_t closeCode, eastl::string reason) {
+    std::expected<Optional<WebSocketMessage>, WebSocketProtocolError> WebSocketFrameParser::Fail(uint16_t closeCode, String reason) {
         _error = WebSocketProtocolError{closeCode, std::move(reason)};
         _buffer.clear();
         _buffer.set_capacity(0);

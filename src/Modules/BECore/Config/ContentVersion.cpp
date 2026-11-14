@@ -12,7 +12,7 @@ namespace BECore {
         return rootName == kSceneConfigRootName || rootName == kNodeFileRootName;
     }
 
-    std::expected<uint32_t, eastl::string> GetContentVersion(pugi::xml_node root) {
+    std::expected<uint32_t, String> GetContentVersion(pugi::xml_node root) {
         const pugi::xml_attribute attribute = root.attribute(kContentVersionAttribute.data());
         if (!attribute) {
             return kUnversionedContentVersion;
@@ -27,8 +27,8 @@ namespace BECore {
         return version;
     }
 
-    std::expected<void, eastl::string> CheckContentVersion(pugi::xml_node root, StringView what) {
-        const std::expected<uint32_t, eastl::string> version = GetContentVersion(root);
+    std::expected<void, String> CheckContentVersion(pugi::xml_node root, StringView what) {
+        const std::expected<uint32_t, String> version = GetContentVersion(root);
         if (!version) {
             return std::unexpected(Format("{}: {}", what, version.error()));
         }

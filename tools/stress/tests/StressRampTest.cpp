@@ -1,6 +1,5 @@
 #include <BECore/Control/Json.h>
 #include <Stress/RampController.h>
-#include <functional>
 #include <gtest/gtest.h>
 
 /**
@@ -259,7 +258,7 @@ namespace BECore::Stress::Tests {
         context.atlases = 4;
         context.manualClock = true;
 
-        const eastl::string line = FormatRampLine(result, StressMeasure::Cpu, context);
+        const String line = FormatRampLine(result, StressMeasure::Cpu, context);
 
         const auto parsed = ParseJson(line);
         ASSERT_TRUE(parsed.has_value()) << line.c_str();
@@ -278,11 +277,11 @@ namespace BECore::Stress::Tests {
 
         // The keys are in byte order, one object on one line starting with a brace
         EXPECT_EQ(line.front(), '{');
-        EXPECT_EQ(line.find('\n'), eastl::string::npos);
-        eastl::vector<eastl::string> keys;
-        for (size_t at = line.find('"'); at != eastl::string::npos;) {
+        EXPECT_EQ(line.find('\n'), String::npos);
+        eastl::vector<String> keys;
+        for (size_t at = line.find('"'); at != String::npos;) {
             const size_t end = line.find('"', at + 1);
-            if (end != eastl::string::npos && end + 1 < line.size() && line[end + 1] == ':') {
+            if (end != String::npos && end + 1 < line.size() && line[end + 1] == ':') {
                 keys.push_back(line.substr(at + 1, end - at - 1));
             }
             at = line.find('"', end + 1);

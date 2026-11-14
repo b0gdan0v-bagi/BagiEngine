@@ -17,7 +17,7 @@ namespace BECore::Tests {
         constexpr Color Green{51, 170, 102, 255};
         constexpr Color DarkGreen{0, 90, 40, 255};
 
-        eastl::string ElementToXml(const UIElement& element) {
+        String ElementToXml(const UIElement& element) {
             XmlSerializer serializer;
             EXPECT_TRUE(serializer.BeginObject("element"));
             element.Serialize(serializer);
@@ -27,7 +27,7 @@ namespace BECore::Tests {
 
         /// The element of @p type that the attributes (and the @p body between its tags) make, and whether the deserializer reported an error
         IntrusivePtr<UIElement> Load(const char* type, const char* attributes, bool& hadErrors, const char* body = "") {
-            const eastl::string xml = Format("<root><element type=\"{}\" {}>{}</element></root>", type, attributes, body);
+            const String xml = Format("<root><element type=\"{}\" {}>{}</element></root>", type, attributes, body);
             XmlDeserializer deserializer;
             EXPECT_TRUE(deserializer.LoadFromString(StringView(xml)));
             auto element = AbstractFactory<UIElement>::GetInstance().Create(type);
@@ -81,10 +81,10 @@ namespace BECore::Tests {
         EXPECT_FALSE(panel->spriteTint.HasToken());
         EXPECT_EQ(panel->spriteTint.g, 2);
 
-        const eastl::string xml = ElementToXml(*panel);
-        EXPECT_NE(xml.find("color=\"@panel\""), eastl::string::npos) << xml.c_str();
-        EXPECT_NE(xml.find("borderColor=\"@line\""), eastl::string::npos) << "a token whose channels are transparent is still written: " << xml.c_str();
-        EXPECT_NE(xml.find("spriteTint=\"1,2,3,4\""), eastl::string::npos) << xml.c_str();
+        const String xml = ElementToXml(*panel);
+        EXPECT_NE(xml.find("color=\"@panel\""), String::npos) << xml.c_str();
+        EXPECT_NE(xml.find("borderColor=\"@line\""), String::npos) << "a token whose channels are transparent is still written: " << xml.c_str();
+        EXPECT_NE(xml.find("spriteTint=\"1,2,3,4\""), String::npos) << xml.c_str();
     }
 
     TEST_F(UIThemeColorTest, ABadTokenIsReportedLikeABadColorAndTheOldValueKept) {
@@ -124,11 +124,11 @@ namespace BECore::Tests {
         EXPECT_EQ(text->textEffects.shadowColor.token, "drop"_intern);
         EXPECT_FLOAT_EQ(text->textEffects.shadowOffsetY, 3.0f);
 
-        const eastl::string xml = ElementToXml(*element);
-        EXPECT_NE(xml.find("shadow=\"0,2,4,0,@shade\""), eastl::string::npos) << xml.c_str();
-        EXPECT_NE(xml.find("glow=\"0,0,6,1,#0A141E28\""), eastl::string::npos) << xml.c_str();
-        EXPECT_NE(xml.find("textOutline=\"2,@edge\""), eastl::string::npos) << xml.c_str();
-        EXPECT_NE(xml.find("textShadow=\"1,3,@drop\""), eastl::string::npos) << xml.c_str();
+        const String xml = ElementToXml(*element);
+        EXPECT_NE(xml.find("shadow=\"0,2,4,0,@shade\""), String::npos) << xml.c_str();
+        EXPECT_NE(xml.find("glow=\"0,0,6,1,#0A141E28\""), String::npos) << xml.c_str();
+        EXPECT_NE(xml.find("textOutline=\"2,@edge\""), String::npos) << xml.c_str();
+        EXPECT_NE(xml.find("textShadow=\"1,3,@drop\""), String::npos) << xml.c_str();
     }
 
     TEST_F(UIThemeColorTest, ALiteralOverAShadowTokenDropsIt) {
@@ -263,9 +263,9 @@ namespace BECore::Tests {
         ASSERT_TRUE(serializer.BeginObject("element"));
         box.Serialize(serializer);
         serializer.EndObject();
-        const eastl::string xml = serializer.SaveToString();
+        const String xml = serializer.SaveToString();
 
-        EXPECT_NE(xml.find("highlight=\"@none\""), eastl::string::npos) << xml.c_str();
+        EXPECT_NE(xml.find("highlight=\"@none\""), String::npos) << xml.c_str();
         EXPECT_FALSE(box.HasEffect());
     }
 

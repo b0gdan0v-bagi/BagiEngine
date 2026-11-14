@@ -84,8 +84,8 @@ namespace BECore {
             return true;
         }
 
-        eastl::string NormalizeQuery(StringView query) {
-            eastl::string normalized;
+        String NormalizeQuery(StringView query) {
+            String normalized;
             for (const char c : query) {
                 if (c != ' ') {
                     normalized.push_back(ToLowerAscii(c));
@@ -97,7 +97,7 @@ namespace BECore {
     }  // namespace
 
     eastl::vector<const EditorCommand*> FilterCommands(StringView query, eastl::span<const EditorCommand> commands) {
-        const eastl::string normalized = NormalizeQuery(query);
+        const String normalized = NormalizeQuery(query);
 
         eastl::vector<const EditorCommand*> result;
         if (normalized.empty()) {

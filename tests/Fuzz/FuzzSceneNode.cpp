@@ -21,7 +21,7 @@ namespace BECore::Fuzz {
 
         /// A loader that serves the node file of the input under kNodeRef and nothing else
         NodeFileLoader MakeInputLoader(StringView nodeText) {
-            return [nodeText](StringView ref, pugi::xml_document& out, eastl::string& error) {
+            return [nodeText](StringView ref, pugi::xml_document& out, String& error) {
                 if (ref != kNodeRef) {
                     error = "no such node file";
                     return false;
@@ -57,8 +57,8 @@ namespace BECore::Fuzz {
         const auto* begin = reinterpret_cast<const char*>(data);
         const char* separator = size == 0 ? nullptr : static_cast<const char*>(std::memchr(begin, '\0', size));
         // Each text in a buffer of its own, as the loaders have it (a file is read into one): pugixml reads a text that looks like UTF-16 or UTF-32 as words
-        eastl::string sceneText(kReferenceScene);
-        eastl::string nodeText(begin, size);
+        String sceneText(kReferenceScene);
+        String nodeText(begin, size);
         if (separator != nullptr) {
             const auto sceneSize = static_cast<size_t>(separator - begin);
             sceneText.assign(begin, sceneSize);

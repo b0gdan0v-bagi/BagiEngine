@@ -47,9 +47,9 @@ namespace BECore {
             return "This shortcut cannot be used";
         }
 
-        eastl::string TitleOf(PoolString commandId) {
+        String TitleOf(PoolString commandId) {
             const EditorCommand* command = FindEditorCommand(commandId);
-            return command ? eastl::string(command->title.data(), command->title.size()) : eastl::string(commandId.ToStringView());
+            return command ? String(command->title.data(), command->title.size()) : String(commandId.ToStringView());
         }
 
     }  // namespace
@@ -108,7 +108,7 @@ namespace BECore {
             settings.SetPreferences(preferences);
         }
         if (commit) {
-            _preferencesError = settings.SavePreferences() ? eastl::string() : settings.GetLastSaveError();
+            _preferencesError = settings.SavePreferences() ? String() : settings.GetLastSaveError();
         }
         if (!_preferencesError.empty()) {
             ImGui::TextColored(GetImGuiPalette().warning, "Not saved: %s", _preferencesError.c_str());
@@ -212,7 +212,7 @@ namespace BECore {
             return;
         }
 
-        const eastl::string title = TitleOf(_rebindCommand);
+        const String title = TitleOf(_rebindCommand);
         HotkeyMap& hotkeys = settings.GetHotkeys();
         bool close = false;
 

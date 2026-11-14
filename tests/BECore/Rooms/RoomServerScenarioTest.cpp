@@ -169,8 +169,8 @@ namespace BECore::Tests {
         RoomSocketClient& host = *clients[0];
         RoomSocketClient& guest = *clients[1];
         ASSERT_EQ(guest.seat, kGuestSeat);
-        const eastl::string code = guest.roomCode;
-        const eastl::string token = guest.token;
+        const String code = guest.roomCode;
+        const String token = guest.token;
         host.Start();
 
         {
@@ -411,7 +411,7 @@ namespace BECore::Tests {
         for (const auto& client : playing) {
             ExpectAllTwelveCardsPlayed(*client);
             for (const ReceivedMessage& message : client->Received()) {
-                EXPECT_EQ(message.text.find(closed->roomCode), eastl::string::npos) << "the code of a private room reached another room: " << message.text.c_str();
+                EXPECT_EQ(message.text.find(closed->roomCode), String::npos) << "the code of a private room reached another room: " << message.text.c_str();
             }
         }
         ExpectCleanWire(playing);

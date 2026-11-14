@@ -59,13 +59,13 @@ namespace BECore {
         _device = {};
     }
 
-    std::expected<void, eastl::string> Renderer3D::Prepare(IRenderer& renderer, IGpuDevice& device, uint32_t width, uint32_t height) {
+    std::expected<void, String> Renderer3D::Prepare(IRenderer& renderer, IGpuDevice& device, uint32_t width, uint32_t height) {
         if (_device.Get() != &device) {
             Reset();
             _device = IntrusivePtr<IGpuDevice>(&device);
         }
         if (!_pipeline) {
-            std::expected<IntrusivePtr<IGpuPipeline>, eastl::string> pipeline = device.CreatePipeline(MakeLitPipelineDesc());
+            std::expected<IntrusivePtr<IGpuPipeline>, String> pipeline = device.CreatePipeline(MakeLitPipelineDesc());
             if (!pipeline) {
                 return std::unexpected(Format("Renderer3D: the lit pipeline was refused: {}", pipeline.error()));
             }
@@ -81,14 +81,14 @@ namespace BECore {
             const std::array<uint8_t, kWhitePixelBytes> pixel = {kWhiteByte, kWhiteByte, kWhiteByte, kWhiteByte};
             _white = renderer.CreateTexture(pixel.data(), 1, 1);
             if (!_white) {
-                return std::unexpected(eastl::string("Renderer3D: no white texture"));
+                return std::unexpected(String("Renderer3D: no white texture"));
             }
         }
         return {};
     }
 
-    std::expected<void, eastl::string> Renderer3D::Render(IRenderer& renderer, const Scene3D& scene, const PassDesc& base) {
-        std::expected<IGpuDevice*, eastl::string> device = RequireGpuDevice(renderer);
+    std::expected<void, String> Renderer3D::Render(IRenderer& renderer, const Scene3D& scene, const PassDesc& base) {
+        std::expected<IGpuDevice*, String> device = RequireGpuDevice(renderer);
         if (!device) {
             return std::unexpected(device.error());
         }
@@ -96,9 +96,9 @@ namespace BECore {
         const float width = base.target ? static_cast<float>(base.target->GetWidth()) : renderer.GetOutputWidth();
         const float height = base.target ? static_cast<float>(base.target->GetHeight()) : renderer.GetOutputHeight();
         if (width < 1.0f || height < 1.0f) {
-            return std::unexpected(eastl::string("Renderer3D: the target has no size"));
+            return std::unexpected(String("Renderer3D: the target has no size"));
         }
-        if (std::expected<void, eastl::string> prepared = Prepare(renderer, **device, static_cast<uint32_t>(width), static_cast<uint32_t>(height)); !prepared) {
+        if (std::expected<void, String> prepared = Prepare(renderer, **device, static_cast<uint32_t>(width), static_cast<uint32_t>(height)); !prepared) {
             return prepared;
         }
 

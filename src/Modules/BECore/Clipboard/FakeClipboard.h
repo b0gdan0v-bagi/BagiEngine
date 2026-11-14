@@ -61,7 +61,7 @@ namespace BECore {
             _content.assign(content.data(), content.size());
         }
 
-        [[nodiscard]] const eastl::string& Content() const {
+        [[nodiscard]] const String& Content() const {
             return _content;
         }
 
@@ -93,8 +93,8 @@ namespace BECore {
         }
 
     private:
-        eastl::string _content;
-        eastl::vector<eastl::string> _pasted;
+        String _content;
+        eastl::vector<String> _pasted;
         bool _available = true;
         bool _refuse = false;
         int _deferredPolls = 0;
@@ -110,7 +110,7 @@ namespace BECore {
             Subscribe<ClipboardEvents::PasteEvent, &PasteRecorder::OnPaste>(this);
         }
 
-        eastl::vector<eastl::string> pastes;
+        eastl::vector<String> pastes;
 
     private:
         void OnPaste(const ClipboardEvents::PasteEvent& event) {

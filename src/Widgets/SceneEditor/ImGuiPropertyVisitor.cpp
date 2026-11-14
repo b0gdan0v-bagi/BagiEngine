@@ -94,7 +94,7 @@ namespace BECore {
         return false;
     }
 
-    bool ImGuiPropertyVisitor::Visit(StringView name, eastl::string& value) {
+    bool ImGuiPropertyVisitor::Visit(StringView name, String& value) {
         char label[128];
         MakeLabel(label, sizeof(label), name, _idCounter++);
 

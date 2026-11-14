@@ -45,7 +45,7 @@ namespace BECore {
         static constexpr int kProtocolVersion = 1;
 
         using Handler = std::function<void(ControlCall&)>;
-        using EventSink = std::function<void(const eastl::string&)>;
+        using EventSink = std::function<void(const String&)>;
         using FrameEndHook = std::function<void()>;
 
         ControlService();
@@ -131,7 +131,7 @@ namespace BECore {
             bool bypassBarrier = false;
         };
         struct HookEntry {
-            eastl::string name;
+            String name;
             FrameEndHook hook;
         };
 
@@ -148,7 +148,7 @@ namespace BECore {
 
         // Main thread only
         eastl::deque<eastl::unique_ptr<Request>> _inbox;  // taken from _queue, in order, waiting for the barrier
-        eastl::hash_map<eastl::string, HandlerEntry> _handlers;
+        eastl::hash_map<String, HandlerEntry> _handlers;
         eastl::unique_ptr<ControlCall> _pending;
         uint32_t _pendingFramesLeft = 0;
         double _pendingSeconds = kDefaultStepSeconds;

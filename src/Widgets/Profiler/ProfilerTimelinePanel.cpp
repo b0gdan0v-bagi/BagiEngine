@@ -184,7 +184,7 @@ namespace BECore {
             const RingThread& thread = snapshot.threads[_lanes[laneIndex].threadIndex];
             const float headerTop = lanesTop + LaneTop(_lanes, laneIndex, rowHeight, headerHeight);
             const float laneTop = headerTop + headerHeight;
-            const eastl::string title = thread.name.empty() ? Format("Thread {}", thread.threadId) : thread.name;
+            const String title = thread.name.empty() ? Format("Thread {}", thread.threadId) : thread.name;
             drawList->AddText(ImVec2(origin.x + kLabelPadding, headerTop), kHeaderColor, title.c_str());
             for (const ZoneRecord& zone : thread.zones) {
                 if (static_cast<double>(zone.endTicks) < _view.BeginTicks() || static_cast<double>(zone.beginTicks) > _view.EndTicks() || !IsVisible(zone, pixelsPerTick)) {

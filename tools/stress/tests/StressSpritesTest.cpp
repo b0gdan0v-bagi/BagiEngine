@@ -27,7 +27,7 @@ namespace BECore::Stress::Tests {
 
     class StressSpritesTest : public StressSceneFixture {
     protected:
-        void StartSprites(const eastl::vector<eastl::string>& arguments = {}) {
+        void StartSprites(const eastl::vector<String>& arguments = {}) {
             StartGame(arguments);
             ASSERT_EQ(_manager->GetActiveScene()->GetName(), "StressSprites"_intern);
         }

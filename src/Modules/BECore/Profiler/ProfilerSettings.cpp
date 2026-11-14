@@ -24,13 +24,13 @@ namespace BECore {
 
     }  // namespace
 
-    std::expected<ProfilerSettings, eastl::string> ResolveProfilerSettings(eastl::span<const eastl::string> args, ProfilerBuild build) {
+    std::expected<ProfilerSettings, String> ResolveProfilerSettings(eastl::span<const String> args, ProfilerBuild build) {
         using namespace ProfilerArguments;
 
         Optional<ProfilerBackendKind> asked;
-        eastl::string tracePath;
+        String tracePath;
         bool anyFlag = false;
-        for (const eastl::string& arg : args) {
+        for (const String& arg : args) {
             const StringView argument(arg.data(), arg.size());
             if (argument.starts_with(kTracePrefix)) {
                 anyFlag = true;
@@ -51,7 +51,7 @@ namespace BECore {
         }
 
         if (anyFlag && !build.profiler) {
-            return std::unexpected(eastl::string("the profiler is not in this build: configure with ENGINE_PROFILER=ON (preset macos-profile)"));
+            return std::unexpected(String("the profiler is not in this build: configure with ENGINE_PROFILER=ON (preset macos-profile)"));
         }
 
         ProfilerSettings settings;

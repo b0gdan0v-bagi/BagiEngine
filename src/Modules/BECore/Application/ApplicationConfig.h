@@ -30,9 +30,9 @@ namespace BECore {
     struct ApplicationConfig {
         BE_CLASS(ApplicationConfig)
 
-        BE_REFLECT_FIELD eastl::string _type;
-        BE_REFLECT_FIELD eastl::string _renderer;
-        BE_REFLECT_FIELD eastl::string _path;
+        BE_REFLECT_FIELD String _type;
+        BE_REFLECT_FIELD String _renderer;
+        BE_REFLECT_FIELD String _path;
         BE_REFLECT_FIELD RunMode _mode = RunMode::Editor;
         BE_REFLECT_FIELD bool _control = false;
         BE_REFLECT_FIELD uint16_t _controlPort = kDefaultControlPort;

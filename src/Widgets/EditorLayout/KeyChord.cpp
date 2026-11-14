@@ -72,19 +72,19 @@ namespace BECore {
             return std::nullopt;
         }
 
-        eastl::string KeyToString(ImGuiKey key) {
+        String KeyToString(ImGuiKey key) {
             if (InRange(key, ImGuiKey_A, kLetterCount)) {
-                return eastl::string(1, static_cast<char>('A' + (key - ImGuiKey_A)));
+                return String(1, static_cast<char>('A' + (key - ImGuiKey_A)));
             }
             if (InRange(key, ImGuiKey_0, kDigitCount)) {
-                return eastl::string(1, static_cast<char>('0' + (key - ImGuiKey_0)));
+                return String(1, static_cast<char>('0' + (key - ImGuiKey_0)));
             }
             if (IsFunctionKey(key)) {
                 return Format("F{}", key - ImGuiKey_F1 + 1);
             }
             for (const NamedKey& named : kNamedKeys) {
                 if (named.key == key) {
-                    return eastl::string(named.name.data(), named.name.size());
+                    return String(named.name.data(), named.name.size());
                 }
             }
             return {};
@@ -136,12 +136,12 @@ namespace BECore {
         return chord;
     }
 
-    eastl::string ToString(const KeyChord& chord) {
-        eastl::string keyText = KeyToString(chord.key);
+    String ToString(const KeyChord& chord) {
+        String keyText = KeyToString(chord.key);
         if (keyText.empty()) {
             return {};
         }
-        eastl::string text;
+        String text;
         if ((chord.mods & kChordModCtrl) != 0) {
             text += "Ctrl+";
         }

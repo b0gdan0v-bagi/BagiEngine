@@ -24,7 +24,7 @@ namespace BECore {
     [[nodiscard]] std::expected<Json, ControlError> ParseJson(StringView text);
 
     /// Compact JSON text of @p value. Invalid UTF-8 in a string is replaced, not fatal.
-    [[nodiscard]] eastl::string DumpJson(const Json& value);
+    [[nodiscard]] String DumpJson(const Json& value);
 
     /// A JSON string value holding @p text
     [[nodiscard]] Json MakeJsonString(StringView text);
@@ -33,7 +33,7 @@ namespace BECore {
     [[nodiscard]] const Json* FindJsonMember(const Json& object, StringView key);
 
     /// A string member; nullopt when it is absent or not a string
-    [[nodiscard]] Optional<eastl::string> GetJsonString(const Json& object, StringView key);
+    [[nodiscard]] Optional<String> GetJsonString(const Json& object, StringView key);
 
     /// An integer member; nullopt when it is absent, not an integer (1.5 and "3" are not) or does not fit int64_t
     [[nodiscard]] Optional<int64_t> GetJsonInt(const Json& object, StringView key);

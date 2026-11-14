@@ -7,10 +7,10 @@ namespace BECore {
     class ControlService;
 
     /// The response text of a successful call: {"id":..,"ok":true,"result":..}
-    [[nodiscard]] eastl::string MakeOkResponse(const Json& id, Json result);
+    [[nodiscard]] String MakeOkResponse(const Json& id, Json result);
 
     /// The response text of a failed call: {"id":..,"ok":false,"error":{"code":..,"message":..}}
-    [[nodiscard]] eastl::string MakeErrorResponse(const Json& id, const ControlError& error);
+    [[nodiscard]] String MakeErrorResponse(const Json& id, const ControlError& error);
 
     /**
      * @brief One request being handled: its parameters and the way to answer it.
@@ -23,13 +23,13 @@ namespace BECore {
     public:
         using DoneFn = std::function<void(ControlCall&)>;
 
-        ControlCall(PassKey<ControlService>, eastl::string method, Json id, Json params, ControlReplyFn reply);
+        ControlCall(PassKey<ControlService>, String method, Json id, Json params, ControlReplyFn reply);
 
         ControlCall(const ControlCall&) = delete;
         ControlCall& operator=(const ControlCall&) = delete;
 
         /// The method name as the client sent it
-        [[nodiscard]] const eastl::string& GetMethod() const {
+        [[nodiscard]] const String& GetMethod() const {
             return _method;
         }
 
@@ -71,7 +71,7 @@ namespace BECore {
     private:
         friend class ControlService;
 
-        eastl::string _method;
+        String _method;
         Json _id;
         Json _params;
         ControlReplyFn _reply;

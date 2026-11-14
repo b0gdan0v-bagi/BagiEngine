@@ -32,13 +32,13 @@ namespace BECore {
             constexpr StringView kForwardedFor = "x-forwarded-for";
         }  // namespace HeaderNames
 
-        using Headers = eastl::hash_map<eastl::string, eastl::string>;
+        using Headers = eastl::hash_map<String, String>;
 
         char AsciiLower(char letter) {
             return (letter >= 'A' && letter <= 'Z') ? static_cast<char>(letter - 'A' + 'a') : letter;
         }
 
-        HandshakeError Refuse(int status, eastl::string message) {
+        HandshakeError Refuse(int status, String message) {
             return HandshakeError{status, std::move(message)};
         }
 
@@ -89,9 +89,9 @@ namespace BECore {
 
         /// An origin split into the parts that are compared: `scheme://host[:port]`
         struct ParsedOrigin {
-            eastl::string scheme;  // lower case
-            eastl::string host;    // lower case, `[v6]` keeps its brackets
-            int port = kNoPort;    // the port written, or the default of the scheme, or kNoPort
+            String scheme;       // lower case
+            String host;         // lower case, `[v6]` keeps its brackets
+            int port = kNoPort;  // the port written, or the default of the scheme, or kNoPort
         };
 
         bool IsSchemeCharacter(char letter, bool first) {
@@ -232,12 +232,12 @@ namespace BECore {
                 if (colon == StringView::npos || colon == 0) {
                     return Refuse(400, "a header line has no name or no colon");
                 }
-                const eastl::string name = LowerAscii(line.substr(0, colon));
+                const String name = LowerAscii(line.substr(0, colon));
                 const StringView value = TrimHeaderValue(line.substr(colon + 1));
 
                 auto found = headers.find(name);
                 if (found == headers.end()) {
-                    headers.emplace(name, eastl::string(value.data(), value.size()));
+                    headers.emplace(name, String(value.data(), value.size()));
                 } else if (name == HeaderNames::kUpgrade || name == HeaderNames::kConnection || name == HeaderNames::kForwardedFor) {
                     found->second.append(",");
                     found->second.append(value.data(), value.size());
@@ -248,8 +248,8 @@ namespace BECore {
             return std::nullopt;
         }
 
-        const eastl::string* FindHeader(const Headers& headers, StringView name) {
-            const auto found = headers.find(eastl::string(name.data(), name.size()));
+        const String* FindHeader(const Headers& headers, StringView name) {
+            const auto found = headers.find(String(name.data(), name.size()));
             return found == headers.end() ? nullptr : &found->second;
         }
 
@@ -317,8 +317,8 @@ namespace BECore {
 
     }  // namespace
 
-    eastl::string LowerAscii(StringView text) {
-        eastl::string lowered;
+    String LowerAscii(StringView text) {
+        String lowered;
         lowered.reserve(text.size());
         for (const char letter : text) {
             lowered.push_back(AsciiLower(letter));
@@ -330,8 +330,8 @@ namespace BECore {
         return left.size() == right.size() && std::equal(left.begin(), left.end(), right.begin(), [](char a, char b) { return AsciiLower(a) == AsciiLower(b); });
     }
 
-    eastl::string QuoteForMessage(StringView text) {
-        eastl::string quoted;
+    String QuoteForMessage(StringView text) {
+        String quoted;
         quoted.reserve(std::min(text.size(), kMaxQuotedBytes) + 3);
         for (const char letter : text.substr(0, kMaxQuotedBytes)) {
             quoted.push_back(letter >= ' ' && letter <= '~' ? letter : '?');
@@ -367,8 +367,8 @@ namespace BECore {
         return false;
     }
 
-    eastl::string ComputeAcceptKey(StringView clientKey) {
-        eastl::string joined(clientKey.data(), clientKey.size());
+    String ComputeAcceptKey(StringView clientKey) {
+        String joined(clientKey.data(), clientKey.size());
         joined.append(kWebSocketGuid.data(), kWebSocketGuid.size());
         const Sha1Digest digest = Sha1(eastl::span<const uint8_t>(reinterpret_cast<const uint8_t*>(joined.data()), joined.size()));
         return Base64Encode(eastl::span<const uint8_t>(digest.data(), digest.size()));
@@ -380,7 +380,7 @@ namespace BECore {
         }
         const bool isNull = EqualsIgnoreCase(origin, kNullOrigin);
         const Optional<ParsedOrigin> parsed = isNull ? std::nullopt : ParseOrigin(origin);
-        for (const eastl::string& entry : policy.allowedOrigins) {
+        for (const String& entry : policy.allowedOrigins) {
             const StringView allowed(entry.data(), entry.size());
             if (allowed == kAnyOrigin) {
                 return true;
@@ -402,7 +402,7 @@ namespace BECore {
         return false;
     }
 
-    std::expected<eastl::string, HandshakeError> ParseHandshakeRequest(StringView requestText, const HandshakePolicy& policy) {
+    std::expected<String, HandshakeError> ParseHandshakeRequest(StringView requestText, const HandshakePolicy& policy) {
         if (requestText.size() > kMaxHandshakeBytes) {
             return std::unexpected(Refuse(431, "the request head is too long"));
         }
@@ -425,14 +425,14 @@ namespace BECore {
         }
 
         // Who is asking comes first: a refusal for a foreign page says nothing about the protocol
-        const eastl::string* host = FindHeader(headers, HeaderNames::kHost);
+        const String* host = FindHeader(headers, HeaderNames::kHost);
         if (host == nullptr) {
             return std::unexpected(Refuse(400, "the Host header is missing"));
         }
         if (policy.loopbackOnly && !IsLoopbackAuthority(*host)) {
             return std::unexpected(Refuse(403, Format("the Host '{}' is not the loopback", QuoteForMessage(*host))));
         }
-        if (const eastl::string* origin = FindHeader(headers, HeaderNames::kOrigin)) {
+        if (const String* origin = FindHeader(headers, HeaderNames::kOrigin)) {
             if (!IsOriginAllowed(*origin, policy)) {
                 if (policy.loopbackOnly) {
                     return std::unexpected(Refuse(403, Format("the Origin '{}' is not a page of the loopback", QuoteForMessage(*origin))));
@@ -443,26 +443,26 @@ namespace BECore {
             return std::unexpected(Refuse(403, "this server accepts only requests that carry an Origin header"));
         }
 
-        const eastl::string* upgrade = FindHeader(headers, HeaderNames::kUpgrade);
+        const String* upgrade = FindHeader(headers, HeaderNames::kUpgrade);
         if (upgrade == nullptr || !HeaderHasToken(*upgrade, "websocket")) {
             return std::unexpected(Refuse(400, "expected 'Upgrade: websocket'"));
         }
-        const eastl::string* connection = FindHeader(headers, HeaderNames::kConnection);
+        const String* connection = FindHeader(headers, HeaderNames::kConnection);
         if (connection == nullptr || !HeaderHasToken(*connection, "upgrade")) {
             return std::unexpected(Refuse(400, "expected 'Connection: Upgrade'"));
         }
-        const eastl::string* version = FindHeader(headers, HeaderNames::kVersion);
+        const String* version = FindHeader(headers, HeaderNames::kVersion);
         if (version == nullptr || *version != kSupportedVersion) {
             return std::unexpected(Refuse(426, "this server speaks WebSocket version 13"));
         }
-        const eastl::string* key = FindHeader(headers, HeaderNames::kKey);
+        const String* key = FindHeader(headers, HeaderNames::kKey);
         if (key == nullptr || !IsClientKey(*key)) {
             return std::unexpected(Refuse(400, "'Sec-WebSocket-Key' is missing or is not 16 bytes in base64"));
         }
         return *key;
     }
 
-    eastl::string ParseForwardedClientAddress(StringView requestText, size_t trustedProxyHops) {
+    String ParseForwardedClientAddress(StringView requestText, size_t trustedProxyHops) {
         if (trustedProxyHops == 0 || requestText.size() > kMaxHandshakeBytes) {
             return {};
         }
@@ -474,7 +474,7 @@ namespace BECore {
         if (ReadHeaders(requestText.substr(requestLineEnd + 1), headers)) {
             return {};
         }
-        const eastl::string* list = FindHeader(headers, HeaderNames::kForwardedFor);
+        const String* list = FindHeader(headers, HeaderNames::kForwardedFor);
         if (list == nullptr) {
             return {};
         }
@@ -530,15 +530,15 @@ namespace BECore {
         return FindHeader(headers, HeaderNames::kUpgrade) == nullptr;
     }
 
-    eastl::string BuildHealthResponse() {
+    String BuildHealthResponse() {
         return Format("HTTP/1.1 200 OK\r\nConnection: close\r\nCache-Control: no-store\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}", kHealthBody.size(), kHealthBody);
     }
 
-    eastl::string BuildAcceptResponse(StringView clientKey) {
+    String BuildAcceptResponse(StringView clientKey) {
         return Format("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {}\r\n\r\n", ComputeAcceptKey(clientKey));
     }
 
-    eastl::string BuildRejectResponse(const HandshakeError& error) {
+    String BuildRejectResponse(const HandshakeError& error) {
         const StringView versionHeader = (error.httpStatus == 426) ? "Sec-WebSocket-Version: 13\r\n" : "";
         return Format("HTTP/1.1 {} {}\r\nConnection: close\r\n{}Content-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}", error.httpStatus, ReasonPhrase(error.httpStatus), versionHeader,
                       error.message.size(), error.message);

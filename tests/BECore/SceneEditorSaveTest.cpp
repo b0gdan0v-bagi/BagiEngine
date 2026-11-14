@@ -70,8 +70,8 @@ namespace BECore::Tests {
         }
 
         /// The `name` of every `<scene>` of @p configRoot in file order, joined with commas ("Menu,Game,Credits")
-        eastl::string SceneOrder(pugi::xml_node configRoot) {
-            eastl::string order;
+        String SceneOrder(pugi::xml_node configRoot) {
+            String order;
             for (pugi::xml_node el = configRoot.child("scenes").child("scene"); el; el = el.next_sibling("scene")) {
                 if (!order.empty()) {
                     order.append(",");
@@ -89,11 +89,11 @@ namespace BECore::Tests {
             return count;
         }
 
-        eastl::string Print(pugi::xml_node node) {
+        String Print(pugi::xml_node node) {
             std::ostringstream stream;
             node.print(stream, "  ");
             const std::string text = stream.str();
-            return eastl::string{text.c_str(), text.size()};
+            return String{text.c_str(), text.size()};
         }
 
         /// True when @p node or something below it has an attribute called @p name
@@ -154,20 +154,20 @@ namespace BECore::Tests {
         }
 
         /// The element in the compact form, for comparing a node with the text it should have
-        eastl::string Raw(pugi::xml_node node) {
+        String Raw(pugi::xml_node node) {
             std::ostringstream stream;
             node.print(stream, "", pugi::format_raw);
             const std::string text = stream.str();
-            return eastl::string{text.c_str(), text.size()};
+            return String{text.c_str(), text.size()};
         }
 
         /// The components of @p node as text: type and serialized fields, in order
-        eastl::vector<eastl::string> ComponentTexts(const SceneNode& node) {
-            eastl::vector<eastl::string> texts;
+        eastl::vector<String> ComponentTexts(const SceneNode& node) {
+            eastl::vector<String> texts;
             for (const auto& component : node.GetComponents()) {
                 XmlSerializer serializer;
                 component->Serialize(serializer);
-                eastl::string text = component->GetTypeMeta().typeName.data();
+                String text = component->GetTypeMeta().typeName.data();
                 text.append(":");
                 text.append(Raw(serializer.GetRootNode()));
                 texts.push_back(text);
@@ -200,7 +200,7 @@ namespace BECore::Tests {
 </scenes></SceneManager>)";
 
         /// The names of the tree below @p node, depth first, each followed by one dot per level ("Left Inner. Deep.. Last. Right")
-        void AppendTree(const SceneNode& node, size_t depth, eastl::string& out) {
+        void AppendTree(const SceneNode& node, size_t depth, String& out) {
             for (const auto& child : node.GetChildren()) {
                 if (!out.empty()) {
                     out.append(" ");
@@ -211,8 +211,8 @@ namespace BECore::Tests {
             }
         }
 
-        eastl::string TreeOf(const SceneNode& root) {
-            eastl::string out;
+        String TreeOf(const SceneNode& root) {
+            String out;
             AppendTree(root, 0, out);
             return out;
         }
@@ -447,8 +447,8 @@ namespace BECore::Tests {
 
     TEST_F(SceneEditorSaveTest, TheOtherScenesAreKeptVerbatim) {
         ASSERT_NO_FATAL_FAILURE(LoadScenes());
-        const eastl::string menuBefore = Print(FindSceneElement(ConfigRoot(), "Menu"));
-        const eastl::string creditsBefore = Print(FindSceneElement(ConfigRoot(), "Credits"));
+        const String menuBefore = Print(FindSceneElement(ConfigRoot(), "Menu"));
+        const String creditsBefore = Print(FindSceneElement(ConfigRoot(), "Credits"));
         ASSERT_FALSE(menuBefore.empty());
         ASSERT_FALSE(creditsBefore.empty());
 
@@ -496,8 +496,8 @@ namespace BECore::Tests {
         pugi::xml_node scenes = ConfigRoot().child("scenes");
         ASSERT_TRUE(scenes.remove_child(FindSceneElement(ConfigRoot(), "Game")));
         ASSERT_EQ(SceneOrder(ConfigRoot()), "Menu,Credits");
-        const eastl::string menuBefore = Print(FindSceneElement(ConfigRoot(), "Menu"));
-        const eastl::string creditsBefore = Print(FindSceneElement(ConfigRoot(), "Credits"));
+        const String menuBefore = Print(FindSceneElement(ConfigRoot(), "Menu"));
+        const String creditsBefore = Print(FindSceneElement(ConfigRoot(), "Credits"));
 
         ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), *_manager->GetActiveScene()));
 
@@ -601,7 +601,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(FindSceneElement(ConfigRoot(), "Plain").child("viewVariants"));
 
         // Saving again gives the same document, and the file loads back with the same views
-        const eastl::string once = Print(ConfigRoot());
+        const String once = Print(ConfigRoot());
         ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), GetScene("Responsive")));
         EXPECT_EQ(Print(ConfigRoot()), once);
 
@@ -651,7 +651,7 @@ namespace BECore::Tests {
         Scene& game = *_manager->GetActiveScene();
 
         ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), game));
-        const eastl::string once = Print(ConfigRoot());
+        const String once = Print(ConfigRoot());
         ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), game));
 
         EXPECT_EQ(Print(ConfigRoot()), once);
@@ -718,13 +718,13 @@ namespace BECore::Tests {
 
         NodeFileLoader _loader;
         XmlDocument _reloadedDocument;
-        eastl::vector<eastl::string> _notes;
+        eastl::vector<String> _notes;
     };
 
     TEST_F(SceneEditorSaveReferencesTest, AnUntouchedSplitSceneKeepsItsReferences) {
         ASSERT_NO_FATAL_FAILURE(LoadSplitScenes());
         constexpr size_t kReferenceIndices[] = {0, 2, 3};
-        eastl::vector<eastl::string> before;
+        eastl::vector<String> before;
         for (const size_t index : kReferenceIndices) {
             before.push_back(Raw(SavedNode(ConfigRoot(), "Main", index)));
         }
@@ -828,8 +828,8 @@ namespace BECore::Tests {
         ASSERT_TRUE(Save(GetScene("Main")));
 
         ASSERT_EQ(_notes.size(), 1u);
-        EXPECT_NE(_notes[0].find("node 'Box'"), eastl::string::npos) << _notes[0].c_str();
-        EXPECT_NE(_notes[0].find("written inline"), eastl::string::npos) << _notes[0].c_str();
+        EXPECT_NE(_notes[0].find("node 'Box'"), String::npos) << _notes[0].c_str();
+        EXPECT_NE(_notes[0].find("written inline"), String::npos) << _notes[0].c_str();
         const pugi::xml_node saved = SavedNode(ConfigRoot(), "Main", 0);
         EXPECT_FALSE(saved.attribute("ref"));
         EXPECT_STREQ(saved.attribute("name").as_string(), "Box");
@@ -869,7 +869,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(Save(GetScene("Main")));
 
         ASSERT_EQ(_notes.size(), 1u);
-        EXPECT_NE(_notes[0].find("node 'Panel'"), eastl::string::npos) << _notes[0].c_str();
+        EXPECT_NE(_notes[0].find("node 'Panel'"), String::npos) << _notes[0].c_str();
         const pugi::xml_node panel = SavedNode(ConfigRoot(), "Main", 3);
         EXPECT_FALSE(panel.attribute("ref"));
         EXPECT_TRUE(panel.child("components").find_child_by_attribute("type", "UICanvasComponent").child("elements"));
@@ -878,7 +878,7 @@ namespace BECore::Tests {
 
     TEST_F(SceneEditorSaveReferencesTest, TheOtherScenesKeepTheirReferencesVerbatim) {
         ASSERT_NO_FATAL_FAILURE(LoadSplitScenes());
-        const eastl::string otherBefore = Print(FindSceneElement(ConfigRoot(), "Other"));
+        const String otherBefore = Print(FindSceneElement(ConfigRoot(), "Other"));
         const pugi::xml_node otherEl = FindSceneElement(ConfigRoot(), "Other");
         otherEl.parent().insert_child_before(pugi::node_comment, otherEl).set_value(kCreditsComment);
 
@@ -894,7 +894,7 @@ namespace BECore::Tests {
         Child("Main", 0).GetComponent<TransformComponent>()->_x = kEditedX;
 
         ASSERT_TRUE(Save(GetScene("Main")));
-        const eastl::string once = Print(ConfigRoot());
+        const String once = Print(ConfigRoot());
         ASSERT_TRUE(Save(GetScene("Main")));
 
         EXPECT_EQ(Print(ConfigRoot()), once);
@@ -960,7 +960,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(inner->GetComponent<TransformComponent>());
         EXPECT_FLOAT_EQ(inner->GetComponent<TransformComponent>()->_x, kMovedX);
         // A second save of the reloaded scene writes the same document
-        const eastl::string once = Print(ConfigRoot());
+        const String once = Print(ConfigRoot());
         ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), main));
         EXPECT_EQ(Print(ConfigRoot()), once);
     }
@@ -969,7 +969,7 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(LoadOwnScenes(kNestedScenesXml));
         Scene& main = GetScene("Main");
         ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), main));
-        const eastl::string plain = Print(ConfigRoot());
+        const String plain = Print(ConfigRoot());
 
         // Tree: Left (Inner (Deep), Last), Right
         ASSERT_FALSE(main.GetRootNode().GetChildren().empty());
@@ -991,8 +991,8 @@ namespace BECore::Tests {
         ASSERT_TRUE(Save(GetScene("Main")));
 
         ASSERT_EQ(_notes.size(), 1u);
-        EXPECT_NE(_notes[0].find("node 'Box'"), eastl::string::npos) << _notes[0].c_str();
-        EXPECT_NE(_notes[0].find("it has child nodes"), eastl::string::npos) << _notes[0].c_str();
+        EXPECT_NE(_notes[0].find("node 'Box'"), String::npos) << _notes[0].c_str();
+        EXPECT_NE(_notes[0].find("it has child nodes"), String::npos) << _notes[0].c_str();
         const pugi::xml_node saved = SavedNode(ConfigRoot(), "Main", 0);
         EXPECT_FALSE(saved.attribute("ref"));
         EXPECT_STREQ(saved.child("children").first_child().attribute("name").as_string(), "Kid");
@@ -1016,8 +1016,8 @@ namespace BECore::Tests {
         ASSERT_TRUE(Save(main));
 
         ASSERT_EQ(_notes.size(), 1u);
-        EXPECT_NE(_notes[0].find("node 'Box'"), eastl::string::npos) << _notes[0].c_str();
-        EXPECT_NE(_notes[0].find("nested"), eastl::string::npos) << _notes[0].c_str();
+        EXPECT_NE(_notes[0].find("node 'Box'"), String::npos) << _notes[0].c_str();
+        EXPECT_NE(_notes[0].find("nested"), String::npos) << _notes[0].c_str();
         const pugi::xml_node nested = SavedNode(ConfigRoot(), "Main", 1).child("children").first_child();
         EXPECT_FALSE(nested.attribute("ref"));
         EXPECT_STREQ(nested.attribute("name").as_string(), "Box");

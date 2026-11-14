@@ -172,8 +172,8 @@ namespace BECore::Tests {
         IGpuDevice* GetGpuDevice() override {
             return _gpuDevice.Get();
         }
-        eastl::string GetNoGpuDeviceReason() const override {
-            return eastl::string("the recording renderer has no GPU device set");
+        String GetNoGpuDeviceReason() const override {
+            return String("the recording renderer has no GPU device set");
         }
 
         void ClearCalls() {

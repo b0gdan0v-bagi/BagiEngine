@@ -58,7 +58,7 @@ namespace BECore::UIWebText {
         Optional<Color> ParseHexColor(StringView digits) {
             if (digits.size() == ShortHexLength || digits.size() == ShortHexAlphaLength) {
                 // #rgb and #rgba: each digit is doubled
-                eastl::string expanded;
+                String expanded;
                 for (const char c : digits) {
                     expanded.push_back(c);
                     expanded.push_back(c);
@@ -112,7 +112,7 @@ namespace BECore::UIWebText {
 
         Optional<Color> ParseFunctionColor(StringView arguments) {
             // "r, g, b" "r, g, b, a" "r g b" "r g b / a"
-            eastl::string normalized;
+            String normalized;
             for (const char c : arguments) {
                 normalized.push_back(c == '/' ? ',' : c);
             }
@@ -155,13 +155,13 @@ namespace BECore::UIWebText {
                 if (text.back() != ')') {
                     return std::nullopt;
                 }
-                const eastl::string name = ToLower(TrimSpace(text.substr(0, open)));
+                const String name = ToLower(TrimSpace(text.substr(0, open)));
                 if (name != RgbName && name != RgbaName) {
                     return std::nullopt;
                 }
                 return ParseFunctionColor(text.substr(open + 1, text.size() - open - 2));
             }
-            const eastl::string lower = ToLower(text);
+            const String lower = ToLower(text);
             for (const NamedColor& named : NamedColors) {
                 if (named.name == lower) {
                     return named.color;
@@ -186,7 +186,7 @@ namespace BECore::UIWebText {
         };
 
         Optional<GradientDirectionWord> ParseGradientDirection(StringView text) {
-            eastl::string normalized;
+            String normalized;
             for (const StringView word : SplitWords(text)) {
                 if (!normalized.empty()) {
                     normalized.push_back(' ');
@@ -278,8 +278,8 @@ namespace BECore::UIWebText {
         return text;
     }
 
-    eastl::string ToLower(StringView text) {
-        eastl::string result;
+    String ToLower(StringView text) {
+        String result;
         result.reserve(text.size());
         for (const char c : text) {
             result.push_back((c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c);
@@ -358,7 +358,7 @@ namespace BECore::UIWebText {
         return UIText::ParseFiniteFloat(text);
     }
 
-    eastl::string FormatWebColor(const WebColor& color) {
+    String FormatWebColor(const WebColor& color) {
         return UIText::FormatColorRef(color, color.token);
     }
 
@@ -387,7 +387,7 @@ namespace BECore::UIWebText {
         return WebColor{*literal};
     }
 
-    Optional<eastl::string> ParseUrl(StringView text) {
+    Optional<String> ParseUrl(StringView text) {
         text = TrimSpace(text);
         if (text.size() < UrlName.size() + 2 || ToLower(text.substr(0, UrlName.size())) != UrlName || text[UrlName.size()] != '(' || text.back() != ')') {
             return std::nullopt;
@@ -396,7 +396,7 @@ namespace BECore::UIWebText {
         if (inner.size() >= 2 && (inner.front() == '"' || inner.front() == '\'') && inner.back() == inner.front()) {
             inner = inner.substr(1, inner.size() - 2);
         }
-        return eastl::string(inner);
+        return String(inner);
     }
 
     Optional<UICorners> ParseCornerRadii(StringView text) {
@@ -430,7 +430,7 @@ namespace BECore::UIWebText {
         Optional<WebColor> color;
         Optional<bool> solid;
         for (const StringView word : SplitWords(text)) {
-            const eastl::string lower = ToLower(word);
+            const String lower = ToLower(word);
             if (lower == SolidKeyword || lower == NoneKeyword) {
                 if (solid) {
                     return std::nullopt;

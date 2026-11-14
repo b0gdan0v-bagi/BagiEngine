@@ -88,7 +88,7 @@ namespace BECore {
         constexpr const char* kHeightTooltip = "The height of the image in pixels";
 
         // The icon and the name of a device in the size combo
-        eastl::string DeviceLabel(const PreviewDevice& device) {
+        String DeviceLabel(const PreviewDevice& device) {
             return Format("{} {} ({}x{})", device.width >= kTabletMinWidth ? ICON_LC_TABLET : ICON_LC_SMARTPHONE, device.name, device.width, device.height);
         }
 
@@ -102,7 +102,7 @@ namespace BECore {
         }
 
         // The label of the current shape in the size combo
-        eastl::string SizeLabel(const PreviewShape& shape) {
+        String SizeLabel(const PreviewShape& shape) {
             if (shape.custom) {
                 return kCustomLabel;
             }

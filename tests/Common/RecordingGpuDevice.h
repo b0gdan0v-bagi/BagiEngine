@@ -117,7 +117,7 @@ namespace BECore::Tests {
             return New<RecordedGpuBuffer>(desc, initial);
         }
 
-        std::expected<IntrusivePtr<IGpuPipeline>, eastl::string> CreatePipeline(const PipelineDesc& desc) override {
+        std::expected<IntrusivePtr<IGpuPipeline>, String> CreatePipeline(const PipelineDesc& desc) override {
             if (GpuValidation valid = ValidatePipelineDesc(desc); !valid) {
                 return std::unexpected(valid.error());
             }
@@ -334,7 +334,7 @@ namespace BECore::Tests {
 
         eastl::vector<GpuCommand> commands;
         eastl::vector<RecordedDraw> draws;
-        eastl::vector<eastl::string> errors;  ///< one reason per call that broke a rule
+        eastl::vector<String> errors;  ///< one reason per call that broke a rule
         uint32_t buffersCreated = 0;
         uint32_t pipelinesCreated = 0;
         uint32_t depthTexturesCreated = 0;
@@ -353,7 +353,7 @@ namespace BECore::Tests {
             Rect scissor;
         };
 
-        void Fail(eastl::string reason) {
+        void Fail(String reason) {
             errors.push_back(std::move(reason));
         }
 

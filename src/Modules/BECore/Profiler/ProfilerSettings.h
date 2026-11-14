@@ -24,7 +24,7 @@ namespace BECore {
 
     struct ProfilerSettings {
         ProfilerBackendKind backend = ProfilerBackendKind::None;
-        eastl::string tracePath;  // not empty: the Chrome trace is written there when the application ends
+        String tracePath;  // not empty: the Chrome trace is written there when the application ends
     };
 
     /**
@@ -43,6 +43,6 @@ namespace BECore {
      * @param args Command line without the program name
      * @param build What the build contains; tests pass another one
      */
-    [[nodiscard]] std::expected<ProfilerSettings, eastl::string> ResolveProfilerSettings(eastl::span<const eastl::string> args, ProfilerBuild build = kProfilerBuild);
+    [[nodiscard]] std::expected<ProfilerSettings, String> ResolveProfilerSettings(eastl::span<const String> args, ProfilerBuild build = kProfilerBuild);
 
 }  // namespace BECore

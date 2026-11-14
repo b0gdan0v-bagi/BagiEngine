@@ -108,7 +108,7 @@ namespace BECore::Tests {
             bool Visit(StringView, PoolString&) override {
                 return false;
             }
-            bool Visit(StringView, eastl::string&) override {
+            bool Visit(StringView, String&) override {
                 return false;
             }
 
@@ -520,7 +520,7 @@ namespace BECore::Tests {
         UIThemes& themes = CoreManager::GetUIThemes();
         themes.Clear();  // a table of numbered tokens, a different colour in each of two themes
         for (int i = 0; i < kTableTokens; ++i) {
-            const eastl::string name = Format("t{}", i);
+            const String name = Format("t{}", i);
             themes.Set("first"_intern, StringView(name), TableColor(i, false));
             themes.Set("second"_intern, StringView(name), TableColor(i, true));
         }
@@ -528,16 +528,16 @@ namespace BECore::Tests {
 
         for (const ControlColors& control : AllControlColors()) {
             ASSERT_LE(control.fields.size(), static_cast<size_t>(kTableTokens));
-            eastl::string attributes;
+            String attributes;
             for (size_t i = 0; i < control.fields.size(); ++i) {
                 const ColorField& field = control.fields[i];
-                const eastl::string value = Format("{}@t{}", field.prefix, i);
+                const String value = Format("{}@t{}", field.prefix, i);
                 attributes += Format(" {}=\"{}\"", field.attribute, value);
             }
-            const eastl::string where = Format("{}{}{}", control.type, control.component ? " + " : "", control.component ? control.component : "");
-            const eastl::string xml = control.component
-                                          ? Format("<root><element type=\"{}\"><components><component type=\"{}\"{}/></components></element></root>", control.type, control.component, attributes)
-                                          : Format("<root><element type=\"{}\"{}/></root>", control.type, attributes);
+            const String where = Format("{}{}{}", control.type, control.component ? " + " : "", control.component ? control.component : "");
+            const String xml = control.component
+                                   ? Format("<root><element type=\"{}\"><components><component type=\"{}\"{}/></components></element></root>", control.type, control.component, attributes)
+                                   : Format("<root><element type=\"{}\"{}/></root>", control.type, attributes);
 
             XmlDeserializer deserializer;
             ASSERT_TRUE(deserializer.LoadFromString(StringView(xml))) << where.c_str();

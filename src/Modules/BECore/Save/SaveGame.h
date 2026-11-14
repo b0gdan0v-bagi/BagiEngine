@@ -31,7 +31,7 @@ namespace BECore {
     /// A failed save game call: the kind to branch on and a sentence for the log (never empty)
     struct SaveError {
         SaveErrorKind kind = SaveErrorKind::NotInitialized;
-        eastl::string detail;
+        String detail;
     };
 
     /// What a game writes into a save and reads back: its id and the version of its state schema
@@ -46,7 +46,7 @@ namespace BECore {
 
     /// What a save file says about itself, without its state (SaveGameService::Peek, and the result of Load)
     struct SaveInfo {
-        eastl::string game;
+        String game;
         uint32_t version = 0;
     };
 

@@ -76,8 +76,8 @@ namespace BECore {
         const ViewTransform sceneView = renderer.GetViewTransform();
         renderer.SetViewTransform(ViewTransform{});
 
-        eastl::string text;
-        for (const eastl::string& line : FormatOverlayLines(*last, AllocTracker::GetTotals(), AllocTracker::kEnabled)) {
+        String text;
+        for (const String& line : FormatOverlayLines(*last, AllocTracker::GetTotals(), AllocTracker::kEnabled)) {
             text.append(line);
             text.push_back('\n');
         }

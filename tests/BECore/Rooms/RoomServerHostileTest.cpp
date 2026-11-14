@@ -268,7 +268,7 @@ namespace BECore::Tests {
         const uint16_t port = StartServer(settings);
         Clients table;
         ASSERT_NO_FATAL_FAILURE(OpenTable(port, "cards", kHumansOfAPair, table));
-        const eastl::string realCode = table[0]->roomCode;
+        const String realCode = table[0]->roomCode;
 
         // Each socket has its own 5 guesses; the address has 8 in all
         int wrong = 0;
@@ -277,7 +277,7 @@ namespace BECore::Tests {
             auto guesser = RoomSocketClient::Connect(port);
             ASSERT_TRUE(guesser.has_value());
             for (int guess = 0; guess < kGuessesPerSocket; ++guess) {
-                const eastl::string code = Format("ZZZ{}{}", socket + 2, guess + 2);
+                const String code = Format("ZZZ{}{}", socket + 2, guess + 2);
                 ASSERT_NE(code, realCode);
                 guesser->JoinByName(code, "Mal");
                 const auto answer = guesser->WaitFor(RoomMessageTypes::kError);

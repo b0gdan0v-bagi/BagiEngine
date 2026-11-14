@@ -12,7 +12,7 @@ namespace BECore {
     }  // namespace
 
     struct ControlService::Request {
-        eastl::string method;
+        String method;
         Json id;
         Json params = Json::object();
         Optional<ControlError> error;  // found while parsing; answered when the request's turn comes
@@ -89,7 +89,7 @@ namespace BECore {
     }
 
     void ControlService::RegisterHandler(StringView method, Handler handler, bool bypassBarrier) {
-        _handlers[eastl::string(method)] = HandlerEntry{std::move(handler), bypassBarrier};
+        _handlers[String(method)] = HandlerEntry{std::move(handler), bypassBarrier};
     }
 
     void ControlService::SetEventSink(EventSink sink) {
@@ -113,7 +113,7 @@ namespace BECore {
                 return;
             }
         }
-        _frameEndHooks.push_back(HookEntry{eastl::string(name), std::move(hook)});
+        _frameEndHooks.push_back(HookEntry{String(name), std::move(hook)});
     }
 
     bool ControlService::BypassesBarrier(const Request& request) const {
@@ -150,7 +150,7 @@ namespace BECore {
 
         const auto entry = _handlers.find(request.method);
         if (entry == _handlers.end()) {
-            const eastl::string name = request.method.substr(0, kMaxEchoedMethodLength);
+            const String name = request.method.substr(0, kMaxEchoedMethodLength);
             request.reply(MakeErrorResponse(request.id, MakeControlError(ControlErrors::kUnknownMethod, Format("unknown method '{}'", name))));
             return;
         }

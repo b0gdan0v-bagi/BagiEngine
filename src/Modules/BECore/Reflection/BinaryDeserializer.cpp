@@ -264,7 +264,7 @@ namespace BECore {
         return ReadScalar(name, outValue, true);
     }
 
-    bool BinaryDeserializer::Read(StringView name, eastl::string& outValue) {
+    bool BinaryDeserializer::Read(StringView name, String& outValue) {
         StringView text;
         if (!ReadStringView(name, true, text)) {
             return false;
@@ -330,7 +330,7 @@ namespace BECore {
         return ReadScalar(name, outValue, false);
     }
 
-    bool BinaryDeserializer::ReadAttribute(StringView name, eastl::string& outValue) {
+    bool BinaryDeserializer::ReadAttribute(StringView name, String& outValue) {
         StringView text;
         if (!ReadStringView(name, false, text)) {
             return false;

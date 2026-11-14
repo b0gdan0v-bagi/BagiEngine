@@ -28,7 +28,7 @@ namespace BECore::Fuzz {
             return id != nullptr && (id->is_string() || id->is_number_integer()) ? *id : Json();
         }
 
-        void CheckReply(const eastl::string& reply, const Json& expectedId) {
+        void CheckReply(const String& reply, const Json& expectedId) {
             const auto parsed = ParseJson(reply);
             FUZZ_CHECK(parsed.has_value() && parsed->is_object());
             const Json* id = FindJsonMember(*parsed, "id");
@@ -57,7 +57,7 @@ namespace BECore::Fuzz {
             return;
         }
         const bool oversize = data[0] == kOversizeMarker;
-        eastl::string text(reinterpret_cast<const char*>(data), size);
+        String text(reinterpret_cast<const char*>(data), size);
         if (oversize) {
             text.resize(ControlService::kMaxRequestBytes + 1, ' ');
         }
@@ -66,8 +66,8 @@ namespace BECore::Fuzz {
         RegisterControlBuiltins(service);
         RegisterGameControl(service);
 
-        eastl::vector<eastl::string> replies;
-        service.Post(text, [&replies](eastl::string reply) { replies.push_back(std::move(reply)); });
+        eastl::vector<String> replies;
+        service.Post(text, [&replies](String reply) { replies.push_back(std::move(reply)); });
         service.Drain();
         for (int frame = 0; frame < kFramesToWait && replies.empty(); ++frame) {
             service.EndFrame();
@@ -79,7 +79,7 @@ namespace BECore::Fuzz {
         if (oversize) {
             const auto parsed = ParseJson(replies[0]);
             const Json* error = FindJsonMember(*parsed, "error");
-            FUZZ_CHECK(error != nullptr && GetJsonString(*error, "code") == Optional<eastl::string>(eastl::string(ControlErrors::kRequestTooLarge)));
+            FUZZ_CHECK(error != nullptr && GetJsonString(*error, "code") == Optional<String>(String(ControlErrors::kRequestTooLarge)));
         }
     }
 

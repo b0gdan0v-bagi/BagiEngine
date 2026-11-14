@@ -4,7 +4,6 @@
 #include "TestRandom.h"
 
 #include <BECore/Logger/LogEvent.h>
-#include <Events/SubscriptionHolder.h>
 #include <RoomServer/RoomWebSocketServer.h>
 #include <Rooms/RoomErrors.h>
 #include <gtest/gtest.h>
@@ -143,8 +142,8 @@ namespace BECore::Tests {
         EXPECT_EQ(lobby->type, RoomMessageTypes::kLobby);
         EXPECT_EQ(client->token.size(), RoomLimits::kTokenLength);
         EXPECT_EQ(client->roomCode.size(), RoomLimits::kRoomCodeLength);
-        EXPECT_NE(joined->text.find(client->token), eastl::string::npos);
-        EXPECT_EQ(lobby->text.find(client->token), eastl::string::npos) << "the token is for its owner only";
+        EXPECT_NE(joined->text.find(client->token), String::npos);
+        EXPECT_EQ(lobby->text.find(client->token), String::npos) << "the token is for its owner only";
     }
 
     TEST_F(RoomWebSocketServerTest, SecondClientJoinsByCodeAndBothSeeTheLobby) {
@@ -893,7 +892,7 @@ namespace BECore::Tests {
         const auto refused = fifth->WaitFor(RoomMessageTypes::kError);
         ASSERT_TRUE(refused.has_value());
         EXPECT_EQ(refused->GetString("code"), RoomErrors::kTooManyRooms);
-        EXPECT_NE(refused->GetString("message").find("your address"), eastl::string::npos);
+        EXPECT_NE(refused->GetString("message").find("your address"), String::npos);
 
         for (RoomSocketClient& host : hosts) {
             RoundTrip(host);

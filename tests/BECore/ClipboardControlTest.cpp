@@ -11,7 +11,7 @@ namespace BECore::Tests {
 
     namespace {
 
-        eastl::string MakeRequest(int64_t id, std::string_view method, const Json& params = Json()) {
+        String MakeRequest(int64_t id, std::string_view method, const Json& params = Json()) {
             Json request = Json::object();
             request["id"] = id;
             request["method"] = std::string(method);
@@ -56,8 +56,8 @@ namespace BECore::Tests {
             return *_fake;
         }
 
-        void Post(const eastl::string& text) {
-            service.Post(text, [this](eastl::string reply) {
+        void Post(const String& text) {
+            service.Post(text, [this](String reply) {
                 auto parsed = ParseJson(reply);
                 responses.push_back(parsed ? std::move(*parsed) : Json());
             });
@@ -182,7 +182,7 @@ namespace BECore::Tests {
 
         ASSERT_EQ(responses.size(), 1u);
         EXPECT_EQ(ErrorCode(0), "");
-        EXPECT_EQ(recorder.pastes, (eastl::vector<eastl::string>{"ABC"}));
+        EXPECT_EQ(recorder.pastes, (eastl::vector<String>{"ABC"}));
     }
 
     TEST_F(ClipboardControlTest, PasteOfAnEmptyClipboardEmitsNothing) {

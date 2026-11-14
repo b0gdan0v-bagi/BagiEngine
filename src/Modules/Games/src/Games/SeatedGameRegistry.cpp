@@ -6,13 +6,13 @@ namespace BECore {
         if (info.name.empty() || info.seatCount < 1 || !factory) {
             return false;
         }
-        const eastl::string key = info.name;
+        const String key = info.name;
         _games[key] = Entry{std::move(info), std::move(factory)};
         return true;
     }
 
     Optional<SeatedGameInfo> SeatedGameRegistry::Find(StringView name) const {
-        const auto it = _games.find(eastl::string(name));
+        const auto it = _games.find(String(name));
         if (it == _games.end()) {
             return std::nullopt;
         }
@@ -20,7 +20,7 @@ namespace BECore {
     }
 
     eastl::unique_ptr<ISeatedGame> SeatedGameRegistry::Create(StringView name) const {
-        const auto it = _games.find(eastl::string(name));
+        const auto it = _games.find(String(name));
         if (it == _games.end()) {
             return nullptr;
         }

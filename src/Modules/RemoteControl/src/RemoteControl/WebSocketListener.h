@@ -37,13 +37,13 @@ namespace BECore {
         std::chrono::milliseconds handshakeTimeout{5000};
 
         /// The prefix of the log lines
-        eastl::string logName = "WebSocket";
+        String logName = "WebSocket";
 
         /// The text of the 503 a refused client gets
-        eastl::string busyMessage = "the server has too many connections";
+        String busyMessage = "the server has too many connections";
 
         /// The names of the threads in the profiler: `<threadName> accept`, `reader` and `writer`, sorted from `threadOrder`
-        eastl::string threadName = "WebSocket";
+        String threadName = "WebSocket";
         uint32_t threadOrder = 200;
     };
 
@@ -105,8 +105,8 @@ namespace BECore {
         using ConnectionPtr = WebSocketHandler::ConnectionPtr;
 
         void AcceptLoop();
-        void AddConnection(Socket socket, eastl::string peerAddress);
-        bool AdmitByClientAddress(WebSocketConnection& connection, const eastl::string& clientAddress);
+        void AddConnection(Socket socket, String peerAddress);
+        bool AdmitByClientAddress(WebSocketConnection& connection, const String& clientAddress);
         void ReapFinishedConnections();
         void RunConnection(const ConnectionPtr& connection);
         void ReadMessages(const ConnectionPtr& connection, eastl::vector<uint8_t> pendingBytes);

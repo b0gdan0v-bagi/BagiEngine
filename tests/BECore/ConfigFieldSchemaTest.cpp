@@ -15,7 +15,7 @@ namespace BECore::Tests {
         constexpr StringView kSinkTypePath = "sink/@type";
         constexpr StringView kSinkMinLevelPath = "sink/@minLevel";
 
-        bool Contains(const eastl::vector<eastl::string>& options, StringView value) {
+        bool Contains(const eastl::vector<String>& options, StringView value) {
             return eastl::find(options.begin(), options.end(), value) != options.end();
         }
 
@@ -52,7 +52,7 @@ namespace BECore::Tests {
         const FieldHint hint = schema.Resolve(kLoggerConfig, kSinkTypePath, "ConsoleSink");
         EXPECT_EQ(hint.type, FieldType::Enum);
 
-        const eastl::vector<eastl::string> expected{"ConsoleSink", "FileSink", "OutputSink"};
+        const eastl::vector<String> expected{"ConsoleSink", "FileSink", "OutputSink"};
         EXPECT_EQ(hint.options, expected);
 
         // The names of the removed hand-written enum are not class names, the loader would drop them
@@ -67,7 +67,7 @@ namespace BECore::Tests {
 
         const FieldHint hint = schema.Resolve(kLoggerConfig, kSinkTypePath, "");
         ASSERT_FALSE(hint.options.empty());
-        for (const eastl::string& option : hint.options) {
+        for (const String& option : hint.options) {
             const auto sink = AbstractFactory<ILogSink>::GetInstance().Create(StringView{option.c_str(), option.size()});
             EXPECT_TRUE(sink) << option.c_str();
         }
@@ -87,10 +87,10 @@ namespace BECore::Tests {
         for (const XmlNode& sink : sinks) {
             const auto type = sink.GetAttribute("type");
             ASSERT_TRUE(type.has_value());
-            EXPECT_TRUE(Contains(types.options, *type)) << "type: " << eastl::string{type->data(), type->size()}.c_str();
+            EXPECT_TRUE(Contains(types.options, *type)) << "type: " << String{type->data(), type->size()}.c_str();
 
             if (const auto minLevel = sink.GetAttribute("minLevel")) {
-                EXPECT_TRUE(Contains(levels.options, *minLevel)) << "minLevel: " << eastl::string{minLevel->data(), minLevel->size()}.c_str();
+                EXPECT_TRUE(Contains(levels.options, *minLevel)) << "minLevel: " << String{minLevel->data(), minLevel->size()}.c_str();
             }
         }
     }
@@ -104,14 +104,14 @@ namespace BECore::Tests {
         const ConfigFieldSchema& schema = ConfigFieldSchema::GetInstance();
         const FieldHint types = schema.Resolve(kLoggerConfig, kSinkTypePath, "ConsoleSink");
         EXPECT_EQ(types.type, FieldType::Enum);
-        const eastl::vector<eastl::string> expectedTypes{"ConsoleSink", "FileSink", "OutputSink"};
+        const eastl::vector<String> expectedTypes{"ConsoleSink", "FileSink", "OutputSink"};
         EXPECT_EQ(types.options, expectedTypes);
 
         const FieldHint levels = schema.Resolve(kLoggerConfig, kSinkMinLevelPath, "Debug");
         EXPECT_EQ(levels.type, FieldType::Enum);
         EXPECT_EQ(levels.options.size(), EnumUtils<LogLevel>::Count());
         for (const StringView name : EnumUtils<LogLevel>::Names()) {
-            EXPECT_TRUE(Contains(levels.options, name)) << eastl::string{name.data(), name.size()}.c_str();
+            EXPECT_TRUE(Contains(levels.options, name)) << String{name.data(), name.size()}.c_str();
         }
     }
 

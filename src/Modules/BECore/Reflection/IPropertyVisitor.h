@@ -27,7 +27,7 @@ namespace BECore {
         virtual bool Visit(StringView name, float& value) = 0;
         virtual bool Visit(StringView name, double& value) = 0;
         virtual bool Visit(StringView name, PoolString& value) = 0;
-        virtual bool Visit(StringView name, eastl::string& value) = 0;
+        virtual bool Visit(StringView name, String& value) = 0;
 
         /**
          * @brief Visit a reflected enum field with a combo selector

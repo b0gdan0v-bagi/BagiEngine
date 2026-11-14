@@ -51,7 +51,7 @@ namespace BECore {
                     return;
                 }
 
-                const eastl::string name(active->game->GetName().ToStringView());
+                const String name(active->game->GetName().ToStringView());
                 const uint64_t version = active->control->GetStateVersion();
                 if (_seen && _seen->game == name && _seen->version == version) {
                     return;
@@ -71,7 +71,7 @@ namespace BECore {
 
         private:
             struct Seen {
-                eastl::string game;
+                String game;
                 uint64_t version = 0;
             };
 

@@ -18,7 +18,7 @@ namespace BECore::Tests {
         constexpr StringView kRoom = "ABCDE";
         constexpr StringView kToken = "00112233445566778899aabbccddeeff";
 
-        eastl::string Lobby(int hostSeat = 0, RoomPhase phase = RoomPhase::Lobby) {
+        String Lobby(int hostSeat = 0, RoomPhase phase = RoomPhase::Lobby) {
             LobbySnapshot lobby;
             lobby.room = kRoom;
             lobby.game = "cards";
@@ -35,7 +35,7 @@ namespace BECore::Tests {
             return Json::object({{"type", "play"}, {"card", 4}});
         }
 
-        eastl::string View(uint64_t version, int seat = 0, bool finished = false) {
+        String View(uint64_t version, int seat = 0, bool finished = false) {
             Json view = Json::object({{"hand", Json::array({1, 2, 3})}});
             return MakeViewMessage(kRoom, seat, version, finished, view, Json::array({OneAction()}));
         }
@@ -690,7 +690,7 @@ namespace BECore::Tests {
         const size_t sent = link.sent.size();
         for (int i = 0; i < 40; ++i) {
             Advance(seconds(5));
-            Receive(link, i % 2 == 0 ? eastl::string(MakePongMessage()) : View(static_cast<uint64_t>(i) + 1));
+            Receive(link, i % 2 == 0 ? String(MakePongMessage()) : View(static_cast<uint64_t>(i) + 1));
         }
         EXPECT_EQ(link.sent.size(), sent);
         EXPECT_EQ(_client->GetState(), RoomClientState::InRoom);
@@ -1051,7 +1051,7 @@ namespace BECore::Tests {
     // ---- Resume -------------------------------------------------------------------------------------------------------------------
 
     TEST_F(RoomClientTest, ASessionThatCannotBeOneIsRefusedWithoutAConnection) {
-        RoomSession session{eastl::string(kUrl), eastl::string(kRoom), eastl::string(kToken)};
+        RoomSession session{String(kUrl), String(kRoom), String(kToken)};
         RoomSession noRoom = session;
         noRoom.room.clear();
         RoomSession noToken = session;
@@ -1073,7 +1073,7 @@ namespace BECore::Tests {
 
     TEST_F(RoomClientTest, ResumeConnectsAndJoinsByTokenAndAnswersWithResumed) {
         RoomClient& fresh = *_client;
-        const RoomSession session{eastl::string(kUrl), "abcde", eastl::string(kToken)};
+        const RoomSession session{String(kUrl), "abcde", String(kToken)};
         ASSERT_TRUE(fresh.Resume(session).has_value());
         EXPECT_EQ(fresh.GetState(), RoomClientState::Reconnecting);
         EXPECT_EQ(fresh.GetRoom(), kRoom);
@@ -1107,7 +1107,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(RoomClientTest, ResumeWithAStaleSessionEndsWithRoomGone) {
-        const RoomSession session{eastl::string(kUrl), eastl::string(kRoom), eastl::string(kToken)};
+        const RoomSession session{String(kUrl), String(kRoom), String(kToken)};
         ASSERT_TRUE(_client->Resume(session).has_value());
         FakeLink& link = _transports.Last();
         link.PushOpened();
@@ -1123,7 +1123,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(RoomClientTest, ResumeRetriesWhenTheServerIsNotThereYet) {
-        const RoomSession session{eastl::string(kUrl), eastl::string(kRoom), eastl::string(kToken)};
+        const RoomSession session{String(kUrl), String(kRoom), String(kToken)};
         ASSERT_TRUE(_client->Resume(session).has_value());
         Pump();
         Lose(_transports.Last(), kRoomTransportAbnormalClosure, "connection refused");
@@ -1143,7 +1143,7 @@ namespace BECore::Tests {
 
     TEST_F(RoomClientTest, ResumeThatCannotStartIsAnErrorOfTheCommand) {
         _transports.FailNextOpen("tls_unsupported: use the browser build");
-        const RoomSession session{"wss://example.org", eastl::string(kRoom), eastl::string(kToken)};
+        const RoomSession session{"wss://example.org", String(kRoom), String(kToken)};
         const auto resumed = _client->Resume(session);
         ASSERT_FALSE(resumed.has_value());
         EXPECT_EQ(resumed.error().code, RoomClientErrors::kConnectFailed);
@@ -1155,7 +1155,7 @@ namespace BECore::Tests {
 
     namespace {
 
-        eastl::string RoomsAnswer(bool more = false) {
+        String RoomsAnswer(bool more = false) {
             RoomListMessage list;
             list.game = "cards";
             RoomListing first;
@@ -1335,7 +1335,7 @@ namespace BECore::Tests {
         link.PushOpened();
         Pump();
         ASSERT_EQ(link.sent.size(), 1u);
-        EXPECT_NE(link.sent[0].find("\"public\":true"), eastl::string::npos);
+        EXPECT_NE(link.sent[0].find("\"public\":true"), String::npos);
         const auto parsed = SentParsed(link, 0);
         const auto* create = AsSent<CreateRoomMessage>(parsed);
         ASSERT_NE(create, nullptr);
@@ -1348,7 +1348,7 @@ namespace BECore::Tests {
         link.PushOpened();
         Pump();
         ASSERT_EQ(link.sent.size(), 1u);
-        EXPECT_EQ(link.sent[0].find("public"), eastl::string::npos);
+        EXPECT_EQ(link.sent[0].find("public"), String::npos);
     }
 
     // ---- Allocations --------------------------------------------------------------------------------------------------------------

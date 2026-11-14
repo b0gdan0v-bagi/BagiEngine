@@ -87,13 +87,13 @@ namespace BECore::Tests {
         }
 
         /// The names of the nodes that pass the filter, in tree order
-        eastl::string Matches(StringView query, StringView type) {
-            eastl::string out;
+        String Matches(StringView query, StringView type) {
+            String out;
             Collect(Root(), query, type, out);
             return out;
         }
 
-        void Collect(const SceneNode& node, StringView query, StringView type, eastl::string& out) {
+        void Collect(const SceneNode& node, StringView query, StringView type, String& out) {
             for (const auto& child : node.GetChildren()) {
                 if (NodeMatchesFilter(*child, query, type)) {
                     out.append(out.empty() ? "" : " ");
@@ -104,16 +104,16 @@ namespace BECore::Tests {
         }
 
         /// Applies a drop that CanDrop allows with Scene::MoveNode and returns the tree as text
-        eastl::string DropAndShow(const char* dragged, const char* target, DropPlace place) {
+        String DropAndShow(const char* dragged, const char* target, DropPlace place) {
             EXPECT_TRUE(CanDrop(Node(dragged), Node(target), place));
             const DropTarget resolved = ResolveDrop(Node(dragged), Node(target), place);
             EXPECT_TRUE(_scene->MoveNode(Node(dragged), resolved.parent, resolved.index));
-            eastl::string out;
+            String out;
             Show(Root(), 0, out);
             return out;
         }
 
-        void Show(const SceneNode& node, size_t depth, eastl::string& out) {
+        void Show(const SceneNode& node, size_t depth, String& out) {
             for (const auto& child : node.GetChildren()) {
                 out.append(out.empty() ? "" : " ");
                 out.append(child->GetName().CStr());
@@ -262,8 +262,8 @@ namespace BECore::Tests {
         EXPECT_TRUE(ValidateName("  two words  "));
         EXPECT_FALSE(ValidateName(""));
         EXPECT_FALSE(ValidateName("   \t "));
-        EXPECT_TRUE(ValidateName(eastl::string(kMaxNodeNameLength, 'x')));
-        EXPECT_FALSE(ValidateName(eastl::string(kMaxNodeNameLength + 1, 'x')));
+        EXPECT_TRUE(ValidateName(String(kMaxNodeNameLength, 'x')));
+        EXPECT_FALSE(ValidateName(String(kMaxNodeNameLength + 1, 'x')));
     }
 
     TEST_F(HierarchyModelTest, TheComponentTypesAreSortedWithoutRepeats) {

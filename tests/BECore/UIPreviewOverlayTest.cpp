@@ -198,8 +198,8 @@ namespace BECore::Tests {
                     }
                     ++touchIssues;
                     const TouchMark* mark = Find(marks, issue.element);
-                    ASSERT_NE(mark, nullptr) << eastl::string(issue.element.ToStringView()).c_str();
-                    EXPECT_TRUE(mark->tooSmall) << eastl::string(issue.element.ToStringView()).c_str();
+                    ASSERT_NE(mark, nullptr) << String(issue.element.ToStringView()).c_str();
+                    EXPECT_TRUE(mark->tooSmall) << String(issue.element.ToStringView()).c_str();
                 }
                 EXPECT_EQ(tooSmall, touchIssues);
             }

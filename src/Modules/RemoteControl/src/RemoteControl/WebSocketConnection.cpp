@@ -10,7 +10,7 @@ namespace BECore {
 
     }  // namespace
 
-    WebSocketConnection::WebSocketConnection(WebSocketConnectionId id, Socket socket, eastl::string peerAddress, WebSocketConnectionSettings settings)
+    WebSocketConnection::WebSocketConnection(WebSocketConnectionId id, Socket socket, String peerAddress, WebSocketConnectionSettings settings)
         : _id(id), _peerAddress(std::move(peerAddress)), _settings(std::move(settings)), _socket(std::move(socket)) {}
 
     bool WebSocketConnection::IsOpen() const {
@@ -18,7 +18,7 @@ namespace BECore {
         return _open && !_closing && !_aborted;
     }
 
-    eastl::string WebSocketConnection::GetClientAddress() const {
+    String WebSocketConnection::GetClientAddress() const {
         LockGuard lock(_mutex);
         return _clientAddress.empty() ? _peerAddress : _clientAddress;
     }
@@ -28,7 +28,7 @@ namespace BECore {
         return !_clientAddress.empty();
     }
 
-    void WebSocketConnection::SetClientAddress(eastl::string address) {
+    void WebSocketConnection::SetClientAddress(String address) {
         LockGuard lock(_mutex);
         _clientAddress = std::move(address);
     }
@@ -69,7 +69,7 @@ namespace BECore {
                 break;
             }
             if (received.size() > kMaxHandshakeBytes) {
-                const eastl::string response = BuildRejectResponse(HandshakeError{kHeaderTooLarge, "the request head is too long"});
+                const String response = BuildRejectResponse(HandshakeError{kHeaderTooLarge, "the request head is too long"});
                 (void)_socket.SendAll(AsBytes(response));
                 return false;
             }
@@ -85,13 +85,13 @@ namespace BECore {
         const auto key = ParseHandshakeRequest(head, policy);
         if (!key) {
             LOG_WARNING("{}: a connection was refused: {}"_format(_settings.logName, key.error().message));
-            const eastl::string response = BuildRejectResponse(key.error());
+            const String response = BuildRejectResponse(key.error());
             (void)_socket.SendAll(AsBytes(response));
             return false;
         }
 
         if (policy.trustedProxyHops != 0) {
-            eastl::string clientAddress = ParseForwardedClientAddress(head, policy.trustedProxyHops);
+            String clientAddress = ParseForwardedClientAddress(head, policy.trustedProxyHops);
             if (clientAddress.empty()) {
                 clientAddress = _peerAddress;  // no usable entry: the proxy's own address, which is all there is to tell
             }
@@ -103,7 +103,7 @@ namespace BECore {
             }
         }
 
-        const eastl::string response = BuildAcceptResponse(*key);
+        const String response = BuildAcceptResponse(*key);
         if (!_socket.SendAll(AsBytes(response))) {
             return false;
         }

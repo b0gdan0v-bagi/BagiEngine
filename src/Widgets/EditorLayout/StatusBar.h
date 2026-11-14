@@ -46,9 +46,9 @@ namespace BECore {
 
         PoolString _seenGame;
         PoolString _seenScene;
-        eastl::string _game;
-        eastl::string _scene;
-        eastl::string _branch;
+        String _game;
+        String _scene;
+        String _branch;
     };
 
 }  // namespace BECore

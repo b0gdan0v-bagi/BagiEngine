@@ -38,7 +38,7 @@ namespace BECore {
             uint64_t statsVersion = 0;
             ZoneStatColumn column = ZoneStatColumn::Total;
             bool ascending = false;
-            eastl::string filter;
+            String filter;
             bool valid = false;
             bool operator==(const RowsKey&) const = default;
         };

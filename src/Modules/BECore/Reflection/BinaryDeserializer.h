@@ -71,7 +71,7 @@ namespace BECore {
         bool Read(StringView name, uint64_t& outValue) override;
         bool Read(StringView name, float& outValue) override;
         bool Read(StringView name, double& outValue) override;
-        bool Read(StringView name, eastl::string& outValue) override;
+        bool Read(StringView name, String& outValue) override;
         bool Read(StringView name, PoolString& outValue) override;
 
         // Binary has no attributes: these read the same entries as Read(), but a missing entry is not an error
@@ -86,7 +86,7 @@ namespace BECore {
         bool ReadAttribute(StringView name, uint64_t& outValue) override;
         bool ReadAttribute(StringView name, float& outValue) override;
         bool ReadAttribute(StringView name, double& outValue) override;
-        bool ReadAttribute(StringView name, eastl::string& outValue) override;
+        bool ReadAttribute(StringView name, String& outValue) override;
         bool ReadAttribute(StringView name, PoolString& outValue) override;
 
         bool BeginObject(StringView name) override;

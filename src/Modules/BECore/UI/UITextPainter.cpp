@@ -42,7 +42,7 @@ namespace BECore {
             if (_expandedUsesStrings) {
                 // Strings first, variables second: a translation may hold `{score}`, and a string is not resolved again
                 const size_t missingBefore = strings.GetMissing().size();
-                const eastl::string resolved = strings.Resolve(source);
+                const String resolved = strings.Resolve(source);
                 const auto& missing = strings.GetMissing();
                 for (size_t i = missingBefore; i < missing.size(); ++i) {
                     LOG_WARNING("UIText: no string '{}' in the language '{}' or the default one"_format(missing[i].key.c_str(), missing[i].language.ToStringView()));

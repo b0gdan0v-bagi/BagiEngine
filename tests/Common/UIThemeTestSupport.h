@@ -20,8 +20,8 @@ namespace BECore::Tests {
 
     /// What is missing in the table, one problem to a line: a theme that does not define a token another theme defines (it would show the default theme's colour: allowed, but a game
     /// that wants every theme complete says so with ExpectThemesComplete). Empty when every theme defines every token the table knows
-    inline eastl::string MissingThemeTokens(const UIThemes& themes) {
-        eastl::string problems;
+    inline String MissingThemeTokens(const UIThemes& themes) {
+        String problems;
         for (const PoolString theme : themes.GetThemes()) {
             for (const PoolString token : themes.GetTokens()) {
                 if (!themes.HasToken(theme, token.ToStringView())) {
@@ -34,7 +34,7 @@ namespace BECore::Tests {
 
     /// Every theme defines every token the table knows; the failure names the theme and the token
     inline void ExpectThemesComplete(const UIThemes& themes) {
-        const eastl::string problems = MissingThemeTokens(themes);
+        const String problems = MissingThemeTokens(themes);
         EXPECT_TRUE(problems.empty()) << problems.c_str();
     }
 

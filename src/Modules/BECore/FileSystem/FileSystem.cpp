@@ -210,8 +210,9 @@ namespace BECore {
         files.erase(eastl::unique(files.begin(), files.end()), files.end());
 
         for (const auto& relativePath : files) {
-            eastl::string virtualPath(mountPoint.ToStringView().data(), mountPoint.ToStringView().size());
+            String virtualPath(mountPoint.ToStringView().data(), mountPoint.ToStringView().size());
             virtualPath += "/";
+            // std: the text of a std::filesystem::path
             const std::string relStr = relativePath.string();
             virtualPath.append(relStr.data(), relStr.size());
 

@@ -111,7 +111,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(AnyLabelEndsWith(failures, "view Portrait"));
         EXPECT_FALSE(AnyLabelEndsWith(failures, "view default")) << "the landscape view holds the band";
         for (const UIMatrixFailure& failure : failures) {
-            EXPECT_NE(failure.label.find("view Portrait"), eastl::string::npos) << failure.label.c_str();
+            EXPECT_NE(failure.label.find("view Portrait"), String::npos) << failure.label.c_str();
             ASSERT_FALSE(failure.issues.empty());
             EXPECT_EQ(failure.issues[0].kind, UILayoutIssueKind::OutsideCanvas);
         }

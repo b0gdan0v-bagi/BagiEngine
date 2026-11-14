@@ -10,7 +10,7 @@ namespace BECore::UIText {
         constexpr uint8_t FirstPrintable = 0x20;
         constexpr uint8_t DeleteCharacter = 0x7F;
 
-        eastl::string Tidy(StringView text, size_t maxBytes) {
+        String Tidy(StringView text, size_t maxBytes) {
             size_t length = text.size();
             if (length > maxBytes) {
                 length = maxBytes - CutMark.size();
@@ -19,7 +19,7 @@ namespace BECore::UIText {
                     --length;
                 }
             }
-            eastl::string result(text.data(), length);
+            String result(text.data(), length);
             for (char& c : result) {
                 const auto byte = static_cast<uint8_t>(c);
                 if (byte < FirstPrintable || byte == DeleteCharacter) {
@@ -34,11 +34,11 @@ namespace BECore::UIText {
 
     }  // namespace
 
-    eastl::string TidyMessage(StringView text) {
+    String TidyMessage(StringView text) {
         return Tidy(text, kMaxMessageBytes);
     }
 
-    eastl::string Excerpt(StringView text) {
+    String Excerpt(StringView text) {
         return Tidy(text, kMaxExcerptBytes);
     }
 

@@ -43,7 +43,7 @@ namespace BECore::Tests {
         for (const ImGuiKey key : keys) {
             for (uint8_t mods = 0; mods <= (kChordModCtrl | kChordModAlt | kChordModShift); ++mods) {
                 const KeyChord chord = Chord(key, mods);
-                const eastl::string text = ToString(chord);
+                const String text = ToString(chord);
                 ASSERT_FALSE(text.empty()) << static_cast<int>(key);
                 EXPECT_EQ(ParseKeyChord(text), chord) << text.c_str();
             }
@@ -55,7 +55,7 @@ namespace BECore::Tests {
             if (!command.defaultChord) {
                 continue;
             }
-            const eastl::string text = ToString(*command.defaultChord);
+            const String text = ToString(*command.defaultChord);
             EXPECT_EQ(ParseKeyChord(text), command.defaultChord) << command.id.CStr();
         }
     }

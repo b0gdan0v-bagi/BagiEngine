@@ -3,7 +3,6 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/LogEvent.h>
 #include <BECore/Text/FontAtlasLibrary.h>
-#include <Events/SubscriptionHolder.h>
 
 namespace BECore::Tests {
 
@@ -41,7 +40,7 @@ namespace BECore::Tests {
     /// Counts the warnings with @p part in the text that LogEvent::Flush() delivers while it lives
     class WarningCounter : public SubscriptionHolder {
     public:
-        explicit WarningCounter(eastl::string part) : _part(eastl::move(part)) {
+        explicit WarningCounter(String part) : _part(eastl::move(part)) {
             Subscribe<LogEvent, &WarningCounter::OnLog>(this);
         }
 
@@ -59,7 +58,7 @@ namespace BECore::Tests {
             }
         }
 
-        eastl::string _part;
+        String _part;
         size_t _count = 0;
     };
 

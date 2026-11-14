@@ -331,15 +331,15 @@ namespace BECore::Tests {
             }
         }
 
-        eastl::string ShownText(const UIElement& element) {
+        String ShownText(const UIElement& element) {
             const UITextComponent* text = element.GetComponent<UITextComponent>();
-            return text ? eastl::string(text->GetDisplayText()) : eastl::string();
+            return text ? String(text->GetDisplayText()) : String();
         }
 
         /// What is wrong with a laid-out panel, one problem to a line, nothing when it is right: a control that is not shown at all (an empty rect: a segment without a
         /// `height`), text that its control cuts (the validator does not see it for an ellipsis label), and a segment under kSegmentHeight
-        eastl::string Problems(const UICanvasLayout& layout) {
-            eastl::string problems;
+        String Problems(const UICanvasLayout& layout) {
+            String problems;
             const float scale = layout.GetResolved().scale;
             eastl::vector<const UIElement*> controls;
             CollectControls(*layout.root, controls);
@@ -497,9 +497,9 @@ namespace BECore::Tests {
         }
 
         /// Problems() on every case of the matrix: the first lines of the first cases that have any
-        eastl::string ProblemsOnMatrix(UICanvasComponent& canvas) const {
+        String ProblemsOnMatrix(UICanvasComponent& canvas) const {
             constexpr size_t kReported = 4;
-            eastl::string report;
+            String report;
             size_t reported = 0;
             UICanvasLayout& layout = canvas.GetLayout();
             for (const UIMatrixCase& matrixCase : UILayoutMatrix()) {
@@ -508,7 +508,7 @@ namespace BECore::Tests {
                 context.outputHeight = matrixCase.context.outputHeight;
                 context.safeArea = matrixCase.context.safeArea;
                 layout.Update(context);
-                const eastl::string problems = Problems(layout);
+                const String problems = Problems(layout);
                 if (!problems.empty() && reported++ < kReported) {
                     report += Format("{}:\n{}", matrixCase.label.c_str(), problems.c_str());
                 }
@@ -552,11 +552,11 @@ namespace BECore::Tests {
     TEST_F(UISelectorScreenTest, NoWordOfAnyGroupIsCutOnAnyCaseOfTheMatrix) {
         // The validator does not see an ellipsis, so every control is asked for the text it shows, and a segment must keep 8 units of air each side
         ASSERT_NO_FATAL_FAILURE(LoadScene());
-        const eastl::string landscape = ProblemsOnMatrix(*_selector);
+        const String landscape = ProblemsOnMatrix(*_selector);
         EXPECT_TRUE(landscape.empty()) << landscape.c_str();
 
         ASSERT_NO_FATAL_FAILURE(LoadScene(kPortraitWidth, kPortraitHeight));
-        const eastl::string portrait = ProblemsOnMatrix(*_selector);
+        const String portrait = ProblemsOnMatrix(*_selector);
         EXPECT_TRUE(portrait.empty()) << portrait.c_str();
     }
 
@@ -825,8 +825,8 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight,
                                           [](std::string& xml) { Replace(xml, R"(name="EngineOwn" flex="1" height="56" fontSize="24")", R"(name="EngineOwn" flex="1" height="56" fontSize="44")"); }));
         EXPECT_FALSE(HasIssue(ValidatePanel(*_selector), UILayoutIssueKind::TextDoesNotFit)) << "an ellipsis label can shrink: the validator does not report it";
-        const eastl::string problems = ProblemsOnMatrix(*_selector);
-        EXPECT_NE(problems.find("EngineOwn cuts 'Own engine'"), eastl::string::npos) << problems.c_str();
+        const String problems = ProblemsOnMatrix(*_selector);
+        EXPECT_NE(problems.find("EngineOwn cuts 'Own engine'"), String::npos) << problems.c_str();
     }
 
     TEST_F(UISelectorScreenTest, ALongerWordInTheNarrowestWindowIsCaught) {
@@ -834,8 +834,8 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](std::string& xml) { Replace(xml, R"(text="Medium")", R"(text="Intermediate")"); }));
         UICanvasLayout& layout = _selector->GetLayout();
         LayOutInTheNarrowestWindow(layout);
-        const eastl::string problems = Problems(layout);
-        EXPECT_NE(problems.find("LevelMedium cuts 'Intermediate'"), eastl::string::npos) << problems.c_str();
+        const String problems = Problems(layout);
+        EXPECT_NE(problems.find("LevelMedium cuts 'Intermediate'"), String::npos) << problems.c_str();
         layout.Invalidate();
     }
 
@@ -843,7 +843,7 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](std::string& xml) { Replace(xml, R"(name="LevelMax" flex="1" height="56")", R"(name="LevelMax" flex="1" height="40")"); }));
         const auto failures = ValidatePanel(*_selector);
         EXPECT_TRUE(HasIssue(failures, UILayoutIssueKind::TouchTargetTooSmall)) << DescribeMatrixFailures(failures).c_str();
-        EXPECT_NE(ProblemsOnMatrix(*_selector).find("LevelMax is 40.0 units high"), eastl::string::npos);
+        EXPECT_NE(ProblemsOnMatrix(*_selector).find("LevelMax is 40.0 units high"), String::npos);
     }
 
     TEST_F(UISelectorScreenTest, ASegmentWithoutAnExplicitHeightHasNoRectAndIsCaughtHere) {
@@ -854,8 +854,8 @@ namespace BECore::Tests {
         Draw();
         EXPECT_NEAR(El("LevelHard").rect.h, 0.0f, 0.01f);
         UICanvasLayout& layout = _selector->GetLayout();
-        const eastl::string problems = Problems(layout);
-        EXPECT_NE(problems.find("LevelHard 'Hard' has an empty rect"), eastl::string::npos) << problems.c_str();
+        const String problems = Problems(layout);
+        EXPECT_NE(problems.find("LevelHard 'Hard' has an empty rect"), String::npos) << problems.c_str();
     }
 
 }  // namespace BECore::Tests

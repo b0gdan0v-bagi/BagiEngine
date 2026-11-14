@@ -70,7 +70,7 @@ namespace BECore::Utf8 {
         return codePoint;
     }
 
-    void Append(eastl::string& out, char32_t codePoint) {
+    void Append(String& out, char32_t codePoint) {
         if (!IsScalarValue(codePoint)) {
             codePoint = kReplacement;
         }

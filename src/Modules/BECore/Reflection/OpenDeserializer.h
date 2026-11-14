@@ -16,7 +16,7 @@ namespace BECore {
      * @return The deserializer positioned at the root of the file, or a message when the extension is not supported,
      *         the path does not resolve or the file does not load.
      */
-    std::expected<eastl::unique_ptr<IDeserializer>, eastl::string> OpenDeserializer(StringView virtualPath);
+    std::expected<eastl::unique_ptr<IDeserializer>, String> OpenDeserializer(StringView virtualPath);
 
     /**
      * @brief Write every error the deserializer collected to the log, one LOG_ERROR per error.

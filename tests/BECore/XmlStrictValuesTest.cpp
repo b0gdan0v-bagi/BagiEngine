@@ -11,7 +11,7 @@ namespace BECore::Tests {
         public:
             AttributeCase(StringView text, bool strict) {
                 _deserializer.SetStrictValues(strict);
-                const eastl::string xml = "<root a=\"" + eastl::string(text.data(), text.size()) + "\"/>";
+                const String xml = "<root a=\"" + String(text.data(), text.size()) + "\"/>";
                 EXPECT_TRUE(_deserializer.LoadFromString(StringView(xml)));
             }
 
@@ -278,7 +278,7 @@ namespace BECore::Tests {
         XmlDeserializer deserializer;
         deserializer.SetStrictValues(true);
         ASSERT_TRUE(deserializer.LoadFromString("<root s=\"12abc\"/>"));
-        eastl::string text;
+        String text;
         EXPECT_TRUE(deserializer.ReadAttribute("s", text));
         EXPECT_EQ(text, "12abc");
         EXPECT_FALSE(deserializer.HasErrors());

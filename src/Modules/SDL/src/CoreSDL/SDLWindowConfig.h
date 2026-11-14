@@ -12,10 +12,10 @@ namespace BECore {
         BE_CLASS(SDLWindowConfig)
 
         /// Empty: the title is composed from the active game (ComposeWindowTitle); a game's own config may set one
-        BE_REFLECT_FIELD eastl::string _title;
+        BE_REFLECT_FIELD String _title;
         BE_REFLECT_FIELD int _width = 800;
         BE_REFLECT_FIELD int _height = 600;
-        BE_REFLECT_FIELD eastl::string _windowFlags;
+        BE_REFLECT_FIELD String _windowFlags;
     };
 
 }  // namespace BECore

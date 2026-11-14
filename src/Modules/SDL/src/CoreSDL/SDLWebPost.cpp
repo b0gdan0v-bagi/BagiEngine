@@ -84,15 +84,15 @@ namespace BECore {
     }
 #endif
 
-    std::expected<WebPostId, eastl::string> WebPostStart(StringView path, StringView body, StringView contentType) {
+    std::expected<WebPostId, String> WebPostStart(StringView path, StringView body, StringView contentType) {
         if (!IsWebPostPathValid(path)) {
-            return std::unexpected(eastl::string("bad path"));
+            return std::unexpected(String("bad path"));
         }
         if (body.size() > kWebPostMaxBodyBytes) {
-            return std::unexpected(eastl::string("body too large"));
+            return std::unexpected(String("body too large"));
         }
         if (contentType.size() > kWebPostMaxContentTypeBytes) {
-            return std::unexpected(eastl::string("bad content type"));
+            return std::unexpected(String("bad content type"));
         }
 #ifdef __EMSCRIPTEN__
         if (!WebPostIsAvailable()) {
@@ -101,16 +101,16 @@ namespace BECore {
                 logged = true;
                 LOG_WARNING("[SDLWebPost] the page has no window.bagiWebPost (a custom shell?): nothing can be posted");
             }
-            return std::unexpected(eastl::string("unavailable"));
+            return std::unexpected(String("unavailable"));
         }
         // The sizes are bounded above, so they fit an int
         const int id = PostFromPage(path.data(), static_cast<int>(path.size()), body.data(), static_cast<int>(body.size()), contentType.data(), static_cast<int>(contentType.size()));
         if (id <= 0) {
-            return std::unexpected(eastl::string("refused"));
+            return std::unexpected(String("refused"));
         }
         return static_cast<WebPostId>(id);
 #else
-        return std::unexpected(eastl::string("unavailable"));
+        return std::unexpected(String("unavailable"));
 #endif
     }
 

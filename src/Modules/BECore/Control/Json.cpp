@@ -35,13 +35,14 @@ namespace BECore {
         return parsed;
     }
 
-    eastl::string DumpJson(const Json& value) {
+    String DumpJson(const Json& value) {
+        // std: nlohmann's dump
         const std::string text = value.dump(-1, ' ', false, Json::error_handler_t::replace);
-        return eastl::string(text.c_str(), text.size());
+        return String(text.c_str(), text.size());
     }
 
     Json MakeJsonString(StringView text) {
-        return Json(std::string(text.data(), text.size()));
+        return Json(ToStdString(text));
     }
 
     const Json* FindJsonMember(const Json& object, StringView key) {
@@ -52,13 +53,14 @@ namespace BECore {
         return it == object.end() ? nullptr : &*it;
     }
 
-    Optional<eastl::string> GetJsonString(const Json& object, StringView key) {
+    Optional<String> GetJsonString(const Json& object, StringView key) {
         const Json* member = FindJsonMember(object, key);
         if (member == nullptr || !member->is_string()) {
             return std::nullopt;
         }
+        // std: nlohmann's string
         const std::string& text = member->get_ref<const std::string&>();
-        return eastl::string(text.c_str(), text.size());
+        return String(text.c_str(), text.size());
     }
 
     Optional<int64_t> GetJsonInt(const Json& object, StringView key) {

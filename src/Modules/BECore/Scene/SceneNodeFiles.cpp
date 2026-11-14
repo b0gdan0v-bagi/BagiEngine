@@ -39,7 +39,7 @@ namespace BECore {
         }
 
         /// A field written in both spellings in one override has no single winner; empty when fine, else the reason
-        eastl::string CheckFieldSpelling(pugi::xml_node source, StringView type) {
+        String CheckFieldSpelling(pugi::xml_node source, StringView type) {
             for (pugi::xml_attribute attr = source.first_attribute(); attr; attr = attr.next_attribute()) {
                 if (StringView{attr.name()} != kComponentTypeAttribute && source.child(attr.name())) {
                     return Format("component '{}': field '{}' is written both as an attribute and as an element", type, attr.name());
@@ -49,7 +49,7 @@ namespace BECore {
         }
 
         /// Checks the whole reference element and looks every component up in @p node, changing nothing
-        bool CollectOverrides(pugi::xml_node node, pugi::xml_node reference, eastl::vector<ComponentOverride>& overrides, eastl::string& error) {
+        bool CollectOverrides(pugi::xml_node node, pugi::xml_node reference, eastl::vector<ComponentOverride>& overrides, String& error) {
             for (pugi::xml_attribute attr = reference.first_attribute(); attr; attr = attr.next_attribute()) {
                 const StringView name = attr.name();
                 if (name != kNodeRefAttribute && !IsNodeOverrideAttribute(name)) {
@@ -150,10 +150,10 @@ namespace BECore {
 
         /// Parses @p file into @p out and checks that its document element is a node that is not a reference itself and, when
         /// @p versionLabel is not empty, that its content version is the engine's (the label names the file in the message)
-        bool ReadNodeFile(const std::filesystem::path& file, pugi::xml_document& out, eastl::string& error, StringView versionLabel = {}) {
+        bool ReadNodeFile(const std::filesystem::path& file, pugi::xml_document& out, String& error, StringView versionLabel = {}) {
             std::error_code ec;
             if (file.empty() || !std::filesystem::is_regular_file(file, ec)) {
-                error = ec ? Format("the node file cannot be read: {}", ec.message()) : eastl::string{"the node file does not exist"};
+                error = ec ? Format("the node file cannot be read: {}", ec.message()) : String{"the node file does not exist"};
                 return false;
             }
             const pugi::xml_parse_result parsed = out.load_file(file.c_str());
@@ -201,7 +201,7 @@ namespace BECore {
                     }
 
                     pugi::xml_document expanded;
-                    eastl::string error;
+                    String error;
                     if (ExpandNodeReference(el, loader, markSource, expanded, error)) {
                         nodesEl.insert_copy_before(expanded.document_element(), el);
                         ++result.expanded;
@@ -235,7 +235,7 @@ namespace BECore {
         return segmentLength != 0;
     }
 
-    bool ApplyNodeOverrides(pugi::xml_node node, pugi::xml_node reference, eastl::string& error) {
+    bool ApplyNodeOverrides(pugi::xml_node node, pugi::xml_node reference, String& error) {
         eastl::vector<ComponentOverride> overrides;
         if (!CollectOverrides(node, reference, overrides, error)) {
             return false;
@@ -252,9 +252,9 @@ namespace BECore {
         return true;
     }
 
-    bool ExpandNodeReference(pugi::xml_node reference, const NodeFileLoader& loader, bool markSource, pugi::xml_document& out, eastl::string& error) {
+    bool ExpandNodeReference(pugi::xml_node reference, const NodeFileLoader& loader, bool markSource, pugi::xml_document& out, String& error) {
         out.reset();
-        const eastl::string ref = reference.attribute(kNodeRefAttribute.data()).as_string();
+        const String ref = reference.attribute(kNodeRefAttribute.data()).as_string();
         if (!IsValidNodeRef(ref)) {
             error = "not a valid reference (segments of letters, digits, '_' and '-' separated by '/')";
             return false;
@@ -291,7 +291,7 @@ namespace BECore {
     }
 
     NodeFileLoader MakeDirectoryNodeLoader(std::filesystem::path baseDirectory) {
-        return [baseDirectory = eastl::move(baseDirectory)](StringView ref, pugi::xml_document& out, eastl::string& error) {
+        return [baseDirectory = eastl::move(baseDirectory)](StringView ref, pugi::xml_document& out, String& error) {
             if (!IsValidNodeRef(ref)) {
                 error = "not a valid reference";
                 return false;
@@ -301,12 +301,12 @@ namespace BECore {
     }
 
     NodeFileLoader MakeFileSystemNodeLoader(const FileSystem& fs) {
-        return [&fs](StringView ref, pugi::xml_document& out, eastl::string& error) {
+        return [&fs](StringView ref, pugi::xml_document& out, String& error) {
             if (!IsValidNodeRef(ref)) {
                 error = "not a valid reference";
                 return false;
             }
-            const eastl::string virtualPath = Format("{}/{}{}", kNodeFilesMountPoint, ref, kNodeFileExtension);
+            const String virtualPath = Format("{}/{}{}", kNodeFilesMountPoint, ref, kNodeFileExtension);
             return ReadNodeFile(fs.ResolvePath(virtualPath), out, error, virtualPath);
         };
     }

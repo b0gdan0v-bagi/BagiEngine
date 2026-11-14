@@ -10,7 +10,7 @@ namespace BECore::Stress {
         constexpr StringView kSetCount = "set_count";
         constexpr StringView kSetLanguage = "set_language";
 
-        std::unexpected<ControlError> InvalidParams(eastl::string message) {
+        std::unexpected<ControlError> InvalidParams(String message) {
             return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, std::move(message)));
         }
 
@@ -53,7 +53,7 @@ namespace BECore::Stress {
         Json DescribeAction(StringView type, StringView key, Json value) {
             Json action = Json::object();
             action["type"] = MakeJsonString(type);
-            action[std::string(key.data(), key.size())] = std::move(value);
+            action[ToStdString(key)] = std::move(value);
             return action;
         }
 

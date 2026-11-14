@@ -26,7 +26,7 @@ namespace BECore {
 
             BE_REFLECT_FIELD int32_t id = 0;
             BE_REFLECT_FIELD float weight = 0.0f;
-            BE_REFLECT_FIELD eastl::string label;
+            BE_REFLECT_FIELD String label;
         };
 
     }  // namespace SaveTestData
@@ -51,7 +51,7 @@ namespace BECore {
             BE_REFLECT_FIELD int64_t ticks = 0;
             BE_REFLECT_FIELD float speed = 1.5f;
             BE_REFLECT_FIELD bool hardcore = false;
-            BE_REFLECT_FIELD eastl::string title;
+            BE_REFLECT_FIELD String title;
             BE_REFLECT_FIELD PoolString hero;
             BE_REFLECT_FIELD Difficulty difficulty = Difficulty::Normal;
             BE_REFLECT_FIELD Point position;
@@ -67,7 +67,7 @@ namespace BECore {
             BE_REFLECT_FIELD int64_t ticks = 0;
             BE_REFLECT_FIELD float speed = 1.5f;
             BE_REFLECT_FIELD bool hardcore = false;
-            BE_REFLECT_FIELD eastl::string title;
+            BE_REFLECT_FIELD String title;
             BE_REFLECT_FIELD PoolString hero;
             BE_REFLECT_FIELD Difficulty difficulty = Difficulty::Normal;
             BE_REFLECT_FIELD Point position;

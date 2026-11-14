@@ -18,7 +18,7 @@ namespace BECore {
 
         // CON, PRN, AUX, NUL, COM1..COM9, LPT1..LPT9: names that Windows opens as a device whatever the extension
         bool IsDeviceName(StringView name) {
-            eastl::string upper;
+            String upper;
             for (const char c : name) {
                 upper.push_back(ToUpperAscii(c));
             }
@@ -34,12 +34,12 @@ namespace BECore {
             return false;
         }
 
-        LayoutError MakeLayoutError(LayoutErrorKind kind, eastl::string detail) {
+        LayoutError MakeLayoutError(LayoutErrorKind kind, String detail) {
             return LayoutError{kind, std::move(detail)};
         }
 
         std::filesystem::path ToPath(StringView text) {
-            return std::filesystem::path(std::string(text.data(), text.size()));
+            return std::filesystem::path(ToStdString(text));
         }
 
     }  // namespace
@@ -60,7 +60,7 @@ namespace BECore {
 
     std::filesystem::path LayoutStore::PathOf(StringView name) const {
         std::filesystem::path path = _folder / ToPath(name);
-        path += std::string(kLayoutExtension.data(), kLayoutExtension.size());
+        path += ToStdString(kLayoutExtension);
         return path;
     }
 
@@ -71,14 +71,14 @@ namespace BECore {
         if (text.empty()) {
             return std::unexpected(MakeLayoutError(LayoutErrorKind::EmptyText, "A layout with no text would not load back"));
         }
-        const std::expected<void, eastl::string> written = WriteTextFileAtomically(PathOf(name), text);
+        const std::expected<void, String> written = WriteTextFileAtomically(PathOf(name), text);
         if (!written) {
             return std::unexpected(MakeLayoutError(LayoutErrorKind::WriteFailed, written.error()));
         }
         return {};
     }
 
-    std::expected<eastl::string, LayoutError> LayoutStore::Load(StringView name) const {
+    std::expected<String, LayoutError> LayoutStore::Load(StringView name) const {
         if (!IsValidLayoutName(name)) {
             return std::unexpected(MakeLayoutError(LayoutErrorKind::InvalidName, Format("'{}' is not a valid layout name", name)));
         }
@@ -87,7 +87,7 @@ namespace BECore {
         if (!std::filesystem::exists(path, ec)) {
             return std::unexpected(MakeLayoutError(LayoutErrorKind::NotFound, Format("There is no layout '{}'", name)));
         }
-        std::expected<eastl::string, eastl::string> text = ReadTextFile(path);
+        std::expected<String, String> text = ReadTextFile(path);
         if (!text) {
             return std::unexpected(MakeLayoutError(LayoutErrorKind::ReadFailed, text.error()));
         }
@@ -116,8 +116,8 @@ namespace BECore {
         return std::filesystem::is_regular_file(PathOf(name), ec);
     }
 
-    eastl::vector<eastl::string> LayoutStore::List() const {
-        eastl::vector<eastl::string> names;
+    eastl::vector<String> LayoutStore::List() const {
+        eastl::vector<String> names;
         std::error_code ec;
         std::filesystem::directory_iterator it(_folder, ec);
         if (ec) {
@@ -125,12 +125,13 @@ namespace BECore {
         }
         for (const std::filesystem::directory_entry& entry : it) {
             std::error_code entryError;
-            if (!entry.is_regular_file(entryError) || entry.path().extension() != std::string(kLayoutExtension.data(), kLayoutExtension.size())) {
+            if (!entry.is_regular_file(entryError) || entry.path().extension() != ToStdString(kLayoutExtension)) {
                 continue;
             }
+            // std: the text of a std::filesystem::path
             const std::string stem = entry.path().stem().string();
             if (IsValidLayoutName(FromStd(stem))) {
-                names.push_back(eastl::string(stem.c_str(), stem.size()));
+                names.push_back(String(stem.c_str(), stem.size()));
             }
         }
         std::sort(names.begin(), names.end());

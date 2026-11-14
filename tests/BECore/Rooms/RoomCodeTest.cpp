@@ -47,7 +47,7 @@ namespace BECore::Tests {
         const RandomFn random = MakeSequence(1);
         eastl::hash_map<char, int> seen;
         for (int i = 0; i < 3000; ++i) {
-            const eastl::string code = GenerateRoomCode(random);
+            const String code = GenerateRoomCode(random);
             ASSERT_EQ(code.size(), RoomLimits::kRoomCodeLength) << code.c_str();
             for (const char c : code) {
                 ASSERT_TRUE(IsInAlphabet(c)) << code.c_str();
@@ -100,7 +100,7 @@ namespace BECore::Tests {
 
     TEST(RoomCodeTest, NormalizeNeverFailsOnAnyByte) {
         for (int byte = 0; byte < 256; ++byte) {
-            eastl::string text = "ABCD";
+            String text = "ABCD";
             text.push_back(static_cast<char>(byte));
             const bool isLowerCase = byte >= 'a' && byte <= 'z';
             const bool expected = IsInAlphabet(static_cast<char>(isLowerCase ? byte - 'a' + 'A' : byte));
@@ -111,7 +111,7 @@ namespace BECore::Tests {
     TEST(RoomCodeTest, GeneratedCodesNormaliseToThemselves) {
         const RandomFn random = MakeSequence(3);
         for (int i = 0; i < 200; ++i) {
-            const eastl::string code = GenerateRoomCode(random);
+            const String code = GenerateRoomCode(random);
             EXPECT_EQ(NormalizeRoomCode(code), code);
         }
     }
@@ -119,7 +119,7 @@ namespace BECore::Tests {
     TEST(RoomCodeTest, TokenIs32LowerCaseHexCharacters) {
         const RandomFn random = MakeSequence(11);
         for (int i = 0; i < 100; ++i) {
-            const eastl::string token = GenerateToken(random);
+            const String token = GenerateToken(random);
             EXPECT_EQ(token.size(), RoomLimits::kTokenLength);
             EXPECT_TRUE(IsWellFormedToken(token)) << token.c_str();
         }
@@ -132,7 +132,7 @@ namespace BECore::Tests {
 
     TEST(RoomCodeTest, TokensDiffer) {
         const RandomFn random = MakeSequence(21);
-        eastl::hash_map<eastl::string, int> seen;
+        eastl::hash_map<String, int> seen;
         for (int i = 0; i < 500; ++i) {
             ++seen[GenerateToken(random)];
         }

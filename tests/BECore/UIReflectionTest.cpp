@@ -107,7 +107,7 @@ namespace BECore::Tests {
             EXPECT_TRUE(expected._variants == actual._variants);
         }
 
-        eastl::string ToXml(const UICanvasComponent& canvas, bool skipDefaults) {
+        String ToXml(const UICanvasComponent& canvas, bool skipDefaults) {
             XmlSerializer serializer;
             serializer.SetSkipDefaults(skipDefaults);
             EXPECT_TRUE(serializer.BeginObject("component"));
@@ -116,7 +116,7 @@ namespace BECore::Tests {
             return serializer.SaveToString();
         }
 
-        IntrusivePtr<UICanvasComponent> FromXml(const eastl::string& xml, bool expectClean = true) {
+        IntrusivePtr<UICanvasComponent> FromXml(const String& xml, bool expectClean = true) {
             XmlDeserializer deserializer;
             EXPECT_TRUE(deserializer.LoadFromString(StringView(xml)));
             auto canvas = New<UICanvasComponent>();
@@ -230,7 +230,7 @@ namespace BECore::Tests {
     TEST(UIReflectionTest, ANestedTreeSavesAndLoadsBack) {
         for (const bool skipDefaults : {false, true}) {
             const auto canvas = MakeCanvas();
-            const eastl::string xml = ToXml(*canvas, skipDefaults);
+            const String xml = ToXml(*canvas, skipDefaults);
             const auto loaded = FromXml(xml);
 
             ASSERT_NO_FATAL_FAILURE(ExpectSameCanvas(*canvas, *loaded)) << "skipDefaults " << skipDefaults;
@@ -239,22 +239,22 @@ namespace BECore::Tests {
     }
 
     TEST(UIReflectionTest, TheFileIsFlatAndReadable) {
-        const eastl::string xml = ToXml(*MakeCanvas(), true);
+        const String xml = ToXml(*MakeCanvas(), true);
 
         // Style properties are attributes of the element itself, lengths and colors are one attribute each
-        EXPECT_NE(xml.find("<element"), eastl::string::npos) << xml.c_str();
-        EXPECT_NE(xml.find("type=\"UIElement\""), eastl::string::npos);
-        EXPECT_NE(xml.find("width=\"35.5%\""), eastl::string::npos);
-        EXPECT_NE(xml.find("color=\"0,0,0,160\""), eastl::string::npos);
-        EXPECT_NE(xml.find("margin=\"1,2,3,4\""), eastl::string::npos);
-        EXPECT_NE(xml.find("padding=\"5\""), eastl::string::npos);
-        EXPECT_NE(xml.find("when=\"orientation:portrait;minAspect:0.5;maxHeight:2000\""), eastl::string::npos);
-        EXPECT_NE(xml.find("<children"), eastl::string::npos);
-        EXPECT_EQ(xml.find("<style"), eastl::string::npos);
-        EXPECT_EQ(xml.find("<color"), eastl::string::npos);
+        EXPECT_NE(xml.find("<element"), String::npos) << xml.c_str();
+        EXPECT_NE(xml.find("type=\"UIElement\""), String::npos);
+        EXPECT_NE(xml.find("width=\"35.5%\""), String::npos);
+        EXPECT_NE(xml.find("color=\"0,0,0,160\""), String::npos);
+        EXPECT_NE(xml.find("margin=\"1,2,3,4\""), String::npos);
+        EXPECT_NE(xml.find("padding=\"5\""), String::npos);
+        EXPECT_NE(xml.find("when=\"orientation:portrait;minAspect:0.5;maxHeight:2000\""), String::npos);
+        EXPECT_NE(xml.find("<children"), String::npos);
+        EXPECT_EQ(xml.find("<style"), String::npos);
+        EXPECT_EQ(xml.find("<color"), String::npos);
         // Defaults stay out
-        EXPECT_EQ(xml.find("spacing=\"0\""), eastl::string::npos);
-        EXPECT_EQ(xml.find("aspectMode=\"Fit\""), eastl::string::npos);
+        EXPECT_EQ(xml.find("spacing=\"0\""), String::npos);
+        EXPECT_EQ(xml.find("aspectMode=\"Fit\""), String::npos);
     }
 
     TEST(UIReflectionTest, ABinaryStreamCarriesTheSameTree) {
@@ -278,22 +278,22 @@ namespace BECore::Tests {
     }
 
     TEST(UIReflectionTest, AnOffsetIsALengthInUnitsOrPercentAndAPlainNumberSavesAsBefore) {
-        const eastl::string xml = "<root><component><elements><element type=\"UIElement\" name=\"A\" x=\"12\" y=\"5%\"/></elements></component></root>";
+        const String xml = "<root><component><elements><element type=\"UIElement\" name=\"A\" x=\"12\" y=\"5%\"/></elements></component></root>";
         const auto canvas = FromXml(xml);
 
         ASSERT_EQ(canvas->_elements.size(), 1u);
         EXPECT_EQ(canvas->_elements[0]->style.rect.x, UILength::Px(12.0f));
         EXPECT_EQ(canvas->_elements[0]->style.rect.y, UILength::Percent(5.0f));
-        const eastl::string saved = ToXml(*canvas, true);
-        EXPECT_NE(saved.find("x=\"12\""), eastl::string::npos);
-        EXPECT_NE(saved.find("y=\"5%\""), eastl::string::npos);
+        const String saved = ToXml(*canvas, true);
+        EXPECT_NE(saved.find("x=\"12\""), String::npos);
+        EXPECT_NE(saved.find("y=\"5%\""), String::npos);
     }
 
     TEST(UIReflectionTest, EdgeAnchorsAndAPivotLoadFromAFileAndSaveOnlyWhenSet) {
-        const eastl::string xml = "<root><component><elements>"
-                                  "<element type=\"UIElement\" name=\"Bar\" anchorMin=\"10%,0.5\" anchorMax=\"0.9,0.5\" pivot=\"0.5,0\" y=\"-5%\"/>"
-                                  "<element type=\"UIElement\" name=\"Plain\" anchor=\"Top\" x=\"4\"/>"
-                                  "</elements></component></root>";
+        const String xml = "<root><component><elements>"
+                           "<element type=\"UIElement\" name=\"Bar\" anchorMin=\"10%,0.5\" anchorMax=\"0.9,0.5\" pivot=\"0.5,0\" y=\"-5%\"/>"
+                           "<element type=\"UIElement\" name=\"Plain\" anchor=\"Top\" x=\"4\"/>"
+                           "</elements></component></root>";
         const auto canvas = FromXml(xml);
 
         ASSERT_EQ(canvas->_elements.size(), 2u);
@@ -306,30 +306,30 @@ namespace BECore::Tests {
         const UIRectSpec& plain = canvas->_elements[1]->style.rect;
         EXPECT_FALSE(plain.anchorMin || plain.anchorMax || plain.pivot);
 
-        const eastl::string saved = ToXml(*canvas, true);
-        EXPECT_NE(saved.find("anchorMin=\"0.1,0.5\""), eastl::string::npos) << saved.c_str();  // written as plain numbers
-        EXPECT_NE(saved.find("anchorMax=\"0.9,0.5\""), eastl::string::npos);
-        EXPECT_NE(saved.find("pivot=\"0.5,0\""), eastl::string::npos);
+        const String saved = ToXml(*canvas, true);
+        EXPECT_NE(saved.find("anchorMin=\"0.1,0.5\""), String::npos) << saved.c_str();  // written as plain numbers
+        EXPECT_NE(saved.find("anchorMax=\"0.9,0.5\""), String::npos);
+        EXPECT_NE(saved.find("pivot=\"0.5,0\""), String::npos);
         const auto again = FromXml(saved);
         ASSERT_NO_FATAL_FAILURE(ExpectSameElements(canvas->_elements, again->_elements));
         EXPECT_EQ(ToXml(*again, true), saved);
 
         // A file that never names them gets none of them back: its second save is its first
-        const eastl::string legacy = ToXml(*MakeCanvas(), true);
-        EXPECT_EQ(legacy.find("anchorMin"), eastl::string::npos);
-        EXPECT_EQ(legacy.find("anchorMax"), eastl::string::npos);
-        EXPECT_EQ(legacy.find("pivot"), eastl::string::npos);
+        const String legacy = ToXml(*MakeCanvas(), true);
+        EXPECT_EQ(legacy.find("anchorMin"), String::npos);
+        EXPECT_EQ(legacy.find("anchorMax"), String::npos);
+        EXPECT_EQ(legacy.find("pivot"), String::npos);
         // A value equal to the shorthand's is still a choice of the author: a set field is written, even a zero one
         auto zero = New<UICanvasComponent>();
         auto element = MakeElement("Zero");
         element->style.rect.pivot = Vec2{0.0f, 0.0f};
         zero->_elements.push_back(element);
-        EXPECT_NE(ToXml(*zero, true).find("pivot=\"0,0\""), eastl::string::npos);
+        EXPECT_NE(ToXml(*zero, true).find("pivot=\"0,0\""), String::npos);
     }
 
     TEST(UIReflectionTest, AMalformedEdgeAnchorIsReportedAndLeavesTheOtherFieldsAlone) {
         for (const char* attribute : {"anchorMin=\"1\"", "anchorMax=\"a,b\"", "pivot=\"nan,0\"", "anchorMin=\"1,2,3\""}) {
-            const eastl::string xml = eastl::string("<root><component><elements><element type=\"UIElement\" name=\"A\" x=\"5\" ") + attribute + "/></elements></component></root>";
+            const String xml = String("<root><component><elements><element type=\"UIElement\" name=\"A\" x=\"5\" ") + attribute + "/></elements></component></root>";
             XmlDeserializer deserializer;
             ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
             auto canvas = New<UICanvasComponent>();
@@ -346,8 +346,8 @@ namespace BECore::Tests {
     }
 
     TEST(UIReflectionTest, AMalformedValueIsReportedAndLeavesTheDefault) {
-        const eastl::string xml = "<root><component><elements><element type=\"UIElement\" name=\"A\" width=\"wide\" color=\"1,2\" margin=\"1,2\" x=\"5\"/></elements>"
-                                  "<variants><variant when=\"orientation:sideways\"/></variants></component></root>";
+        const String xml = "<root><component><elements><element type=\"UIElement\" name=\"A\" width=\"wide\" color=\"1,2\" margin=\"1,2\" x=\"5\"/></elements>"
+                           "<variants><variant when=\"orientation:sideways\"/></variants></component></root>";
         const auto canvas = FromXml(xml, false);
 
         ASSERT_EQ(canvas->_elements.size(), 1u);
@@ -462,7 +462,7 @@ namespace BECore::Tests {
     TEST_F(UIReflectionSceneTest, ASceneSavesItsCanvasBack) {
         const auto canvas = Canvas();
         ASSERT_TRUE(canvas);
-        const eastl::string xml = ToXml(*canvas, true);
+        const String xml = ToXml(*canvas, true);
         const auto loaded = FromXml(xml);
         ExpectSameCanvas(*canvas, *loaded);
         EXPECT_EQ(ToXml(*loaded, true), xml);
@@ -485,8 +485,8 @@ namespace BECore::Tests {
         canvas->_extendToOutput = true;
 
         for (const bool skipDefaults : {false, true}) {
-            const eastl::string xml = ToXml(*canvas, skipDefaults);
-            EXPECT_NE(xml.find("extendToOutput=\"true\""), eastl::string::npos);
+            const String xml = ToXml(*canvas, skipDefaults);
+            EXPECT_NE(xml.find("extendToOutput=\"true\""), String::npos);
             EXPECT_TRUE(FromXml(xml)->_extendToOutput);
         }
 

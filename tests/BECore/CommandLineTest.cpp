@@ -6,7 +6,7 @@ namespace BECore::Tests {
 
     namespace {
 
-        using Args = eastl::vector<eastl::string>;
+        using Args = eastl::vector<String>;
 
         CommandLine Make(const Args& args) {
             CommandLine line;

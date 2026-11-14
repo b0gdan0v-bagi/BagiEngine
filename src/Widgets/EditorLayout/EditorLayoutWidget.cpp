@@ -234,11 +234,11 @@ namespace BECore {
         const bool hasStore = _layouts.has_value();
 
         if (ImGui::BeginMenu("Layouts", hasStore)) {
-            const eastl::vector<eastl::string> names = _layouts->List();
+            const eastl::vector<String> names = _layouts->List();
             if (names.empty()) {
                 ImGui::TextDisabled("No saved layouts");
             }
-            for (const eastl::string& name : names) {
+            for (const String& name : names) {
                 if (ImGui::MenuItem(name.c_str())) {
                     QueueLayout(name);
                 }
@@ -249,11 +249,11 @@ namespace BECore {
         CommandMenuItem(kViewSaveLayout, "Save Layout As...", hasStore);
 
         if (ImGui::BeginMenu("Delete Layout", hasStore)) {
-            const eastl::vector<eastl::string> names = _layouts->List();
+            const eastl::vector<String> names = _layouts->List();
             if (names.empty()) {
                 ImGui::TextDisabled("No saved layouts");
             }
-            for (const eastl::string& name : names) {
+            for (const String& name : names) {
                 if (ImGui::MenuItem(name.c_str())) {
                     if (const auto result = _layouts->Delete(name); !result) {
                         LOG_WARNING(Format("Editor: cannot delete layout '{}': {}", name, result.error().detail));
@@ -345,7 +345,7 @@ namespace BECore {
     }
 
     void EditorLayoutWidget::CommandMenuItem(PoolString id, const char* label, bool enabled) {
-        eastl::string chordText;
+        String chordText;
         if (_settings) {
             if (const Optional<KeyChord> chord = _settings->GetHotkeys().GetChord(id)) {
                 chordText = ToString(*chord);
@@ -356,7 +356,7 @@ namespace BECore {
         }
     }
 
-    void EditorLayoutWidget::QueueLayout(const eastl::string& name) {
+    void EditorLayoutWidget::QueueLayout(const String& name) {
         const auto text = _layouts->Load(name);
         if (!text) {
             LOG_WARNING(Format("Editor: cannot load layout '{}': {}", name, text.error().detail));
@@ -370,7 +370,7 @@ namespace BECore {
         _pendingLayoutText = *text;
     }
 
-    std::expected<void, eastl::string> EditorLayoutWidget::SaveCurrentLayout(StringView name) {
+    std::expected<void, String> EditorLayoutWidget::SaveCurrentLayout(StringView name) {
         size_t size = 0;
         const char* text = ImGui::SaveIniSettingsToMemory(&size);
         // SaveIniSettingsToMemory cancels the pending write of imgui.ini

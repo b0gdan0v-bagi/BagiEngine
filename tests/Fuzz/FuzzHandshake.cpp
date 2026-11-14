@@ -47,7 +47,7 @@ namespace BECore::Fuzz {
                 default:  // PublicWithHealthPath
                     policy.loopbackOnly = false;
                     policy.allowedOrigins = {"https://good.example"};
-                    policy.healthPath = eastl::string(kHealthPath.data(), kHealthPath.size());
+                    policy.healthPath = String(kHealthPath.data(), kHealthPath.size());
                     break;
             }
             return policy;
@@ -66,19 +66,19 @@ namespace BECore::Fuzz {
             if (!parsed.has_value()) {
                 FUZZ_CHECK(IsKnownRefusalStatus(parsed.error().httpStatus));
                 FUZZ_CHECK(IsTidyMessage(parsed.error().message));
-                const eastl::string reject = BuildRejectResponse(parsed.error());
+                const String reject = BuildRejectResponse(parsed.error());
                 FUZZ_CHECK(StringView(reject).starts_with("HTTP/1.1 "));
                 FUZZ_CHECK(!CheckServerHandshakeResponse(reject, WebSocketInput::kHandshakeKey).has_value());  // a refusal is never an accepted answer
                 return;
             }
 
             // An accepted request: the accept response that the server builds for its key is the one a client of that key accepts, and no other key does
-            const eastl::string key = *parsed;
+            const String key = *parsed;
             FUZZ_CHECK(key.size() == 24);
             FUZZ_CHECK(!isHealthCheck);
-            const eastl::string accept = BuildAcceptResponse(key);
+            const String accept = BuildAcceptResponse(key);
             FUZZ_CHECK(CheckServerHandshakeResponse(accept, key).has_value());
-            eastl::string otherKey = key;
+            String otherKey = key;
             otherKey[0] = (otherKey[0] == 'A') ? 'B' : 'A';
             FUZZ_CHECK(!CheckServerHandshakeResponse(accept, otherKey).has_value());
         }
@@ -91,7 +91,7 @@ namespace BECore::Fuzz {
                 return;
             }
             // Accepted: nothing but a well-formed 101 for this key can be, so the answer must name the right accept value
-            const eastl::string accept = ComputeAcceptKey(WebSocketInput::kHandshakeKey);
+            const String accept = ComputeAcceptKey(WebSocketInput::kHandshakeKey);
             FUZZ_CHECK(text.find(accept.c_str()) != StringView::npos);
             FUZZ_CHECK(text.starts_with("HTTP/1.1 101"));
         }
@@ -108,8 +108,8 @@ namespace BECore::Fuzz {
             FUZZ_CHECK(url.port >= 1);
             FUZZ_CHECK(!url.pathAndQuery.empty() && url.pathAndQuery[0] == '/');
 
-            const eastl::string hostHeader = GetHostHeader(url);
-            const eastl::string again = Format("{}://{}{}", url.secure ? "wss" : "ws", hostHeader, url.pathAndQuery);
+            const String hostHeader = GetHostHeader(url);
+            const String again = Format("{}://{}{}", url.secure ? "wss" : "ws", hostHeader, url.pathAndQuery);
             const auto reparsed = ParseWebSocketUrl(again);
             FUZZ_CHECK(reparsed.has_value());
             FUZZ_CHECK(reparsed->secure == url.secure);
@@ -118,7 +118,7 @@ namespace BECore::Fuzz {
             FUZZ_CHECK(reparsed->pathAndQuery == url.pathAndQuery);
 
             // The request a client makes for it is one a public server admits (no Origin is written), and it carries the key through
-            const eastl::string request = BuildClientHandshakeRequest(url, WebSocketInput::kHandshakeKey);
+            const String request = BuildClientHandshakeRequest(url, WebSocketInput::kHandshakeKey);
             HandshakePolicy open;
             open.loopbackOnly = false;
             const auto accepted = ParseHandshakeRequest(request, open);

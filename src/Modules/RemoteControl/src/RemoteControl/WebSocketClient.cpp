@@ -38,7 +38,7 @@ namespace BECore {
         }
     }
 
-    std::expected<void, eastl::string> WebSocketClient::Open(StringView url, WebSocketClientSettings settings) {
+    std::expected<void, String> WebSocketClient::Open(StringView url, WebSocketClientSettings settings) {
         auto parsed = ParseWebSocketUrl(url);
         if (!parsed) {
             return std::unexpected(parsed.error());
@@ -51,7 +51,7 @@ namespace BECore {
             {
                 LockGuard lock(_mutex);
                 if (_state != WebSocketClientState::Ended) {
-                    return std::unexpected(eastl::string("the previous connection has not ended yet"));
+                    return std::unexpected(String("the previous connection has not ended yet"));
                 }
             }
             _reader.join();  // the reader only has to leave its function; the writer was joined before the state became Ended
@@ -167,9 +167,9 @@ namespace BECore {
         _inboxSpace.notify_all();
     }
 
-    eastl::string WebSocketClient::WithStreamError(StringView what) const {
-        const eastl::string detail = _stream.GetLastError();
-        return detail.empty() ? eastl::string(what.data(), what.size()) : Format("{}: {}", what, detail);
+    String WebSocketClient::WithStreamError(StringView what) const {
+        const String detail = _stream.GetLastError();
+        return detail.empty() ? String(what.data(), what.size()) : Format("{}: {}", what, detail);
     }
 
     void WebSocketClient::SetEndLocked(uint16_t code, StringView reason) {
@@ -221,7 +221,7 @@ namespace BECore {
         {
             LockGuard lock(_mutex);
             closed.closeCode = _endSet ? _endCode : WebSocketCloseCode::kAbnormalClosure;
-            closed.reason = _endSet ? _endReason : eastl::string("the connection ended");
+            closed.reason = _endSet ? _endReason : String("the connection ended");
             _inboxBytes += EventBytes(closed);
             _inbox.push_back(closed);
             _state = WebSocketClientState::Ended;
@@ -252,8 +252,8 @@ namespace BECore {
     }
 
     bool WebSocketClient::Handshake(eastl::vector<uint8_t>& pendingBytes) {
-        const eastl::string key = GenerateClientKey(_random);
-        const eastl::string request = BuildClientHandshakeRequest(_url, key, _settings.origin);
+        const String key = GenerateClientKey(_random);
+        const String request = BuildClientHandshakeRequest(_url, key, _settings.origin);
         if (!_stream.SendAll(AsBytes(request))) {
             SetEnd(WebSocketCloseCode::kAbnormalClosure, WithStreamError("sending the opening request failed"));
             return false;
@@ -353,7 +353,7 @@ namespace BECore {
             if (!received) {
                 // An Abort() has set its reason before it shut the socket down, and the first reason stays
                 SetEnd(WebSocketCloseCode::kAbnormalClosure,
-                       received.error() == SocketError::Closed ? eastl::string("the server closed the connection without a close frame") : WithStreamError("the connection failed"));
+                       received.error() == SocketError::Closed ? String("the server closed the connection without a close frame") : WithStreamError("the connection failed"));
                 return;
             }
             _bytesReceived.fetch_add(*received, std::memory_order_relaxed);

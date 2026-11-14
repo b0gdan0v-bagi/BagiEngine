@@ -9,7 +9,7 @@ namespace BECore::Tests {
 
     namespace {
 
-        eastl::string Resolve(UIStrings& strings, const char* text) {
+        String Resolve(UIStrings& strings, const char* text) {
             return strings.Resolve(text);
         }
 
@@ -22,15 +22,15 @@ namespace BECore::Tests {
             return strings;
         }
 
-        eastl::vector<eastl::string> Load(UIStrings& strings, const char* xml) {
+        eastl::vector<String> Load(UIStrings& strings, const char* xml) {
             auto config = XmlConfig::Create();
             EXPECT_TRUE(config.LoadFromString(xml));
             return strings.LoadFromXml(config.GetRoot());
         }
 
-        bool Mentions(const eastl::vector<eastl::string>& problems, const char* word) {
-            for (const eastl::string& problem : problems) {
-                if (problem.find(word) != eastl::string::npos) {
+        bool Mentions(const eastl::vector<String>& problems, const char* word) {
+            for (const String& problem : problems) {
+                if (problem.find(word) != String::npos) {
                     return true;
                 }
             }

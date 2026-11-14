@@ -73,8 +73,8 @@ namespace BECore {
         return _path;
     }
 
-    eastl::string Font::GetFamilyName() const {
-        eastl::string family;
+    String Font::GetFamilyName() const {
+        String family;
         if (!_impl) {
             return family;
         }

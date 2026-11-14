@@ -6,13 +6,13 @@ namespace BECore::Tests {
     namespace {
 
         std::string Encode(std::string_view text) {
-            const eastl::string encoded = Base64Encode(eastl::span<const uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), text.size()));
+            const String encoded = Base64Encode(eastl::span<const uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), text.size()));
             return std::string(encoded.c_str(), encoded.size());
         }
 
         std::string Encode(std::initializer_list<uint8_t> bytes) {
             const eastl::vector<uint8_t> data(bytes);
-            const eastl::string encoded = Base64Encode(eastl::span<const uint8_t>(data.data(), data.size()));
+            const String encoded = Base64Encode(eastl::span<const uint8_t>(data.data(), data.size()));
             return std::string(encoded.c_str(), encoded.size());
         }
 
@@ -36,7 +36,7 @@ namespace BECore::Tests {
     }
 
     TEST(Base64Test, EmptyInputGivesAnEmptyString) {
-        const eastl::string encoded = Base64Encode(eastl::span<const uint8_t>());
+        const String encoded = Base64Encode(eastl::span<const uint8_t>());
 
         EXPECT_TRUE(encoded.empty());
     }
@@ -47,12 +47,12 @@ namespace BECore::Tests {
             data.push_back(static_cast<uint8_t>(value));
         }
 
-        const eastl::string encoded = Base64Encode(eastl::span<const uint8_t>(data.data(), data.size()));
+        const String encoded = Base64Encode(eastl::span<const uint8_t>(data.data(), data.size()));
 
         EXPECT_EQ(encoded.size(), (256 + 2) / 3 * 4);
-        EXPECT_EQ(encoded.substr(0, 8), eastl::string("AAECAwQF"));
-        EXPECT_EQ(encoded.substr(encoded.size() - 8, 4), eastl::string("/P3+"));  // bytes 252, 253, 254
-        EXPECT_EQ(encoded.substr(encoded.size() - 4), eastl::string("/w=="));     // the last byte, 255, with padding
+        EXPECT_EQ(encoded.substr(0, 8), String("AAECAwQF"));
+        EXPECT_EQ(encoded.substr(encoded.size() - 8, 4), String("/P3+"));  // bytes 252, 253, 254
+        EXPECT_EQ(encoded.substr(encoded.size() - 4), String("/w=="));     // the last byte, 255, with padding
     }
 
 }  // namespace BECore::Tests

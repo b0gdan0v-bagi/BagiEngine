@@ -21,9 +21,9 @@ namespace {
     constexpr int kExitUsage = 2;
 
     struct ProbeArgs {
-        eastl::string url;
-        eastl::string game = "cards";
-        eastl::string name = "Probe";
+        String url;
+        String game = "cards";
+        String name = "Probe";
     };
 
     void PrintUsage() {
@@ -42,7 +42,7 @@ namespace {
                 std::fprintf(stderr, "BagiRoomClientProbe: unknown argument or a missing value: %s\n", argv[i]);
                 return false;
             }
-            const eastl::string value = argv[++i];
+            const String value = argv[++i];
             if (flag == "--url") {
                 args.url = value;
             } else if (flag == "--game") {
@@ -58,7 +58,7 @@ namespace {
         return true;
     }
 
-    int Fail(const eastl::string& message) {
+    int Fail(const String& message) {
         std::printf("PROBE FAILED %s\n", message.c_str());
         std::fflush(stdout);
         return kExitFailed;

@@ -30,7 +30,7 @@ namespace BECore::Tests {
         public:
             struct Entry {
                 LogLevel level = LogLevel::Debug;
-                eastl::string message;
+                String message;
             };
 
             LogRecorder() {
@@ -57,7 +57,7 @@ namespace BECore::Tests {
 
         private:
             void OnLog(const LogEvent& event) {
-                _entries.push_back({event.level, eastl::string(event.message.data(), event.message.size())});
+                _entries.push_back({event.level, String(event.message.data(), event.message.size())});
             }
 
             eastl::vector<Entry> _entries;

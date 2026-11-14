@@ -170,7 +170,7 @@ namespace BECore {
             Optional<float> right;
             Optional<float> top;
             Optional<float> bottom;
-            eastl::string anchor;
+            String anchor;
             Optional<UILength> width;
             Optional<UILength> height;
             Optional<UILength> minWidth;
@@ -178,16 +178,16 @@ namespace BECore {
             Optional<UILength> minHeight;
             Optional<UILength> maxHeight;
             Optional<float> aspectRatio;
-            eastl::string objectFit;
+            String objectFit;
             Optional<UIEdges> margin;
             Optional<UIEdges> padding;
             Optional<float> gap;
             Optional<float> flexGrow;
-            eastl::string flexDirection;
+            String flexDirection;
             Optional<bool> wrapChildren;
-            eastl::string alignItems;
+            String alignItems;
             Optional<UIWebText::WebColor> background;
-            eastl::string sprite;
+            String sprite;
             Optional<UIWebText::GradientSpec> gradient;
             Optional<UICorners> cornerRadius;
             Optional<float> borderWidth;
@@ -200,14 +200,14 @@ namespace BECore {
             Optional<bool> pointerEvents;
             Optional<UIWebText::WebColor> textColor;
             Optional<float> fontSize;
-            eastl::string fontPath;
-            eastl::string fontFamily;  ///< a name of the `families` table of TextConfig.xml, which the compiler does not know: a name nobody registered is the label's warning at run time
+            String fontPath;
+            String fontFamily;  ///< a name of the `families` table of TextConfig.xml, which the compiler does not know: a name nobody registered is the label's warning at run time
             Optional<int> fontWeight;
             Optional<TextOutlineValue> textOutline;
             Optional<TextShadowValue> textShadow;
-            eastl::string textAlign;
-            eastl::string verticalAlign;
-            eastl::string textOverflow;
+            String textAlign;
+            String verticalAlign;
+            String textOverflow;
             Optional<bool> textFit;
             Optional<float> minFontSize;
             Optional<bool> wrapText;
@@ -223,12 +223,12 @@ namespace BECore {
             Optional<std::pair<float, float>> transitionSlide;
             Optional<bool> transitionInput;
             /// Set by a handler that applied a value with a caveat (a blurred shadow drawn hard): the check of the declarations reports it, the value still counts
-            eastl::string note;
+            String note;
         };
 
         /// A CSS time: `.2s` or `200ms`, not negative
         Optional<float> ParseTime(StringView text) {
-            const eastl::string lower = UIWebText::ToLower(UIWebText::TrimSpace(text));
+            const String lower = UIWebText::ToLower(UIWebText::TrimSpace(text));
             float scale = 1.0f;
             StringView number = lower;
             if (number.size() > 2 && number.substr(number.size() - 2) == "ms") {
@@ -283,7 +283,7 @@ namespace BECore {
             if (!r.note.empty()) {
                 r.note += "; ";
             }
-            r.note += eastl::string(text);
+            r.note += String(text);
         }
 
         /// `transition`: `<property> <time> [<easing>] [<delay>]` entries, comma separated. A delay, an easing the engine has no curve for and a property it does not animate are
@@ -300,10 +300,10 @@ namespace BECore {
                 Optional<float> duration;
                 Optional<float> delay;
                 Optional<EaseType> ease;
-                eastl::string property;
+                String property;
                 bool understood = true;
                 for (const StringView word : UIWebText::SplitWords(entry)) {
-                    const eastl::string lower = UIWebText::ToLower(word);
+                    const String lower = UIWebText::ToLower(word);
                     if (const auto time = ParseTime(lower)) {
                         (duration ? delay : duration) = *time;
                     } else if (const auto curve = ParseEase(lower)) {
@@ -373,7 +373,7 @@ namespace BECore {
         }
 
         bool ParseSize(StringView value, Optional<UILength>& out) {
-            const eastl::string lower = UIWebText::ToLower(value);
+            const String lower = UIWebText::ToLower(value);
             if (lower == "auto" || lower == "none") {
                 out.reset();
                 return true;
@@ -408,11 +408,11 @@ namespace BECore {
         }
 
         /// "top-left" to "TopLeft"; empty when it is not an anchor name
-        eastl::string AnchorName(StringView value) {
+        String AnchorName(StringView value) {
             static const std::pair<StringView, const char*> Names[] = {
                 {"top-left", "TopLeft"},       {"top", "Top"},       {"top-right", "TopRight"},       {"left", "Left"},      {"center", "Center"}, {"right", "Right"},
                 {"bottom-left", "BottomLeft"}, {"bottom", "Bottom"}, {"bottom-right", "BottomRight"}, {"stretch", "Stretch"}};
-            const eastl::string lower = UIWebText::ToLower(value);
+            const String lower = UIWebText::ToLower(value);
             for (const auto& [css, name] : Names) {
                 if (lower == css) {
                     return name;
@@ -423,7 +423,7 @@ namespace BECore {
 
         /// `flex`: the first number is the grow factor (`1`, `1 1 0`, `2 0 100px`); `auto` is 1, `none` is 0
         bool ParseFlexGrow(StringView value, Optional<float>& out) {
-            const eastl::string lower = UIWebText::ToLower(value);
+            const String lower = UIWebText::ToLower(value);
             if (lower == "none") {
                 out = 0.0f;
                 return true;
@@ -494,7 +494,7 @@ namespace BECore {
         const PropertyHandler PropertyHandlers[] = {
             {"display",
              [](Resolved& r, StringView v) {
-                 const eastl::string lower = UIWebText::ToLower(v);
+                 const String lower = UIWebText::ToLower(v);
                  if (lower == "none") {
                      r.displayNone = true;
                  } else if (lower == "flex" || lower == "inline-flex") {
@@ -510,7 +510,7 @@ namespace BECore {
              }},
             {"visibility",
              [](Resolved& r, StringView v) {
-                 const eastl::string lower = UIWebText::ToLower(v);
+                 const String lower = UIWebText::ToLower(v);
                  if (lower != "visible" && lower != "hidden") {
                      return false;
                  }
@@ -535,7 +535,7 @@ namespace BECore {
              }},
             {"anchor",
              [](Resolved& r, StringView v) {
-                 eastl::string name = AnchorName(v);
+                 String name = AnchorName(v);
                  if (name.empty()) {
                      return false;
                  }
@@ -565,7 +565,7 @@ namespace BECore {
              }},
             {"object-fit",
              [](Resolved& r, StringView v) {
-                 const eastl::string lower = UIWebText::ToLower(v);
+                 const String lower = UIWebText::ToLower(v);
                  if (!IsOneOf(lower, {"contain", "cover", "fill", "none", "scale-down"})) {
                      return false;
                  }
@@ -625,7 +625,7 @@ namespace BECore {
             {"flex-grow", [](Resolved& r, StringView v) { return ParseFlexGrow(v, r.flexGrow); }},
             {"flex-direction",
              [](Resolved& r, StringView v) {
-                 const eastl::string lower = UIWebText::ToLower(v);
+                 const String lower = UIWebText::ToLower(v);
                  if (lower == "row") {
                      r.flexDirection = "Horizontal";
                  } else if (lower == "column") {
@@ -637,7 +637,7 @@ namespace BECore {
              }},
             {"flex-wrap",
              [](Resolved& r, StringView v) {
-                 const eastl::string lower = UIWebText::ToLower(v);
+                 const String lower = UIWebText::ToLower(v);
                  if (lower != "wrap" && lower != "nowrap") {
                      return false;
                  }
@@ -646,7 +646,7 @@ namespace BECore {
              }},
             {"align-items",
              [](Resolved& r, StringView v) {
-                 const eastl::string lower = UIWebText::ToLower(v);
+                 const String lower = UIWebText::ToLower(v);
                  if (lower == "flex-start" || lower == "start") {
                      r.alignItems = "Start";
                  } else if (lower == "center") {
@@ -690,7 +690,7 @@ namespace BECore {
                  // A color, a url and a linear-gradient, in any order; the repeat and position words that mean nothing here are skipped
                  Resolved parsed;
                  for (const StringView word : UIWebText::SplitWords(v)) {
-                     const eastl::string lower = UIWebText::ToLower(word);
+                     const String lower = UIWebText::ToLower(word);
                      if (lower == "none" || lower == "no-repeat" || lower == "center") {
                          continue;
                      }
@@ -751,7 +751,7 @@ namespace BECore {
              }},
             {"border-style",
              [](Resolved& r, StringView v) {
-                 const eastl::string lower = UIWebText::ToLower(UIWebText::TrimSpace(v));
+                 const String lower = UIWebText::ToLower(UIWebText::TrimSpace(v));
                  if (lower != "solid" && lower != "none") {
                      return false;
                  }
@@ -769,7 +769,7 @@ namespace BECore {
             {"border-image-slice",
              [](Resolved& r, StringView v) {
                  // Plain numbers in pixels of the sprite (CSS says "pixels" for a bare number); `fill` is the only keyword and is the behavior of a sliced panel anyway
-                 eastl::string cleaned;
+                 String cleaned;
                  for (const StringView word : UIWebText::SplitWords(v)) {
                      if (UIWebText::ToLower(word) == "fill") {
                          continue;
@@ -786,7 +786,7 @@ namespace BECore {
              }},
             {"pointer-events",
              [](Resolved& r, StringView v) {
-                 const eastl::string lower = UIWebText::ToLower(v);
+                 const String lower = UIWebText::ToLower(v);
                  if (lower == "none") {
                      r.pointerEvents = false;
                  } else if (lower == "auto" || lower == "all") {
@@ -823,7 +823,7 @@ namespace BECore {
              }},
             {"-be-transition-input",
              [](Resolved& r, StringView v) {
-                 const eastl::string lower = UIWebText::ToLower(UIWebText::TrimSpace(v));
+                 const String lower = UIWebText::ToLower(UIWebText::TrimSpace(v));
                  if (lower != "allow" && lower != "block") {
                      return false;
                  }
@@ -861,15 +861,15 @@ namespace BECore {
                  r.fontPath.clear();
                  r.fontFamily.clear();
                  if (first.find('/') != StringView::npos || first.find('.') != StringView::npos) {
-                     r.fontPath = eastl::string(first);
+                     r.fontPath = String(first);
                  } else if (!IsOneOf(UIWebText::ToLower(first), {"sans-serif", "serif", "monospace", "system-ui", "cursive", "fantasy"})) {
-                     r.fontFamily = eastl::string(first);
+                     r.fontFamily = String(first);
                  }
                  return true;
              }},
             {"font-weight",
              [](Resolved& r, StringView v) {
-                 const eastl::string lower = UIWebText::ToLower(UIWebText::TrimSpace(v));
+                 const String lower = UIWebText::ToLower(UIWebText::TrimSpace(v));
                  if (lower == "normal") {
                      r.fontWeight = FontWeightNormal;
                  } else if (lower == "bold") {
@@ -944,7 +944,7 @@ namespace BECore {
              }},
             {"text-align",
              [](Resolved& r, StringView v) {
-                 const eastl::string lower = UIWebText::ToLower(v);
+                 const String lower = UIWebText::ToLower(v);
                  if (lower == "left" || lower == "start") {
                      r.textAlign = "Left";
                  } else if (lower == "center") {
@@ -958,7 +958,7 @@ namespace BECore {
              }},
             {"vertical-align",
              [](Resolved& r, StringView v) {
-                 const eastl::string lower = UIWebText::ToLower(v);
+                 const String lower = UIWebText::ToLower(v);
                  if (lower == "top") {
                      r.verticalAlign = "Top";
                  } else if (lower == "middle") {
@@ -972,7 +972,7 @@ namespace BECore {
              }},
             {"text-overflow",
              [](Resolved& r, StringView v) {
-                 const eastl::string lower = UIWebText::ToLower(v);
+                 const String lower = UIWebText::ToLower(v);
                  if (lower == "ellipsis") {
                      r.textOverflow = "Ellipsis";
                  } else if (lower == "clip") {
@@ -984,7 +984,7 @@ namespace BECore {
              }},
             {"-be-text-fit",
              [](Resolved& r, StringView v) {
-                 const eastl::string lower = UIWebText::ToLower(v);
+                 const String lower = UIWebText::ToLower(v);
                  if (lower != "shrink" && lower != "none") {
                      return false;
                  }
@@ -1010,7 +1010,7 @@ namespace BECore {
              }},
             {"-be-shape",
              [](Resolved& r, StringView v) {
-                 const eastl::string lower = UIWebText::ToLower(UIWebText::TrimSpace(v));
+                 const String lower = UIWebText::ToLower(UIWebText::TrimSpace(v));
                  if (lower != "square" && lower != "round") {
                      return false;
                  }
@@ -1051,7 +1051,7 @@ namespace BECore {
              }},
             {"white-space",
              [](Resolved& r, StringView v) {
-                 const eastl::string lower = UIWebText::ToLower(v);
+                 const String lower = UIWebText::ToLower(v);
                  if (lower != "normal" && lower != "nowrap") {
                      return false;
                  }
@@ -1110,17 +1110,17 @@ namespace BECore {
         /// The attributes of one `<element>` in the order they are written; setting a key again replaces its value in place
         class Attrs {
         public:
-            void Set(StringView key, eastl::string value) {
+            void Set(StringView key, String value) {
                 for (auto& entry : _entries) {
                     if (entry.first == key) {
                         entry.second = std::move(value);
                         return;
                     }
                 }
-                _entries.emplace_back(eastl::string(key), std::move(value));
+                _entries.emplace_back(String(key), std::move(value));
             }
 
-            [[nodiscard]] const eastl::string* Find(StringView key) const {
+            [[nodiscard]] const String* Find(StringView key) const {
                 for (const auto& entry : _entries) {
                     if (entry.first == key) {
                         return &entry.second;
@@ -1129,15 +1129,15 @@ namespace BECore {
                 return nullptr;
             }
 
-            [[nodiscard]] const eastl::vector<std::pair<eastl::string, eastl::string>>& Entries() const {
+            [[nodiscard]] const eastl::vector<std::pair<String, String>>& Entries() const {
                 return _entries;
             }
 
         private:
-            eastl::vector<std::pair<eastl::string, eastl::string>> _entries;
+            eastl::vector<std::pair<String, String>> _entries;
         };
 
-        eastl::string Number(float value) {
+        String Number(float value) {
             return Format("{}", value + 0.0f);  // + 0 turns -0 into 0
         }
 
@@ -1163,10 +1163,10 @@ namespace BECore {
         struct WebNode {
             int html = UIHtmlNode::NoNode;
             WebKind kind = WebKind::Group;
-            eastl::string name;
+            String name;
             int parent = -1;
             eastl::vector<int> children;
-            eastl::string text;
+            String text;
         };
 
         enum class CascadeState { None, Hover, Active, Disabled, Checked };
@@ -1196,7 +1196,7 @@ namespace BECore {
                 _document = UIHtmlParser::Parse(html, report);
             }
 
-            eastl::string Run() {
+            String Run() {
                 CollectStyles();
                 CheckDeclarations();
 
@@ -1215,7 +1215,7 @@ namespace BECore {
         private:
             struct Override {
                 int node = -1;
-                eastl::vector<std::pair<eastl::string, eastl::string>> values;
+                eastl::vector<std::pair<String, String>> values;
             };
 
             struct VariantOutput {
@@ -1239,19 +1239,19 @@ namespace BECore {
                     } else if (node.tag == "link") {
                         ReadLink(node);
                     }
-                    if (const eastl::string* style = node.FindAttribute("style")) {
+                    if (const String* style = node.FindAttribute("style")) {
                         _inlineStyles[i] = UICssParser::ParseDeclarations(*style, node.line, UICssDeclaration::HtmlSource, _report);
                     }
                 }
             }
 
             void ReadLink(const UIHtmlNode& link) {
-                const eastl::string* rel = link.FindAttribute("rel");
-                const eastl::string* href = link.FindAttribute("href");
+                const String* rel = link.FindAttribute("rel");
+                const String* href = link.FindAttribute("href");
                 if (rel == nullptr || href == nullptr || UIWebText::ToLower(*rel) != "stylesheet") {
                     return;
                 }
-                Optional<eastl::string> css = _loader ? _loader(*href) : std::nullopt;
+                Optional<String> css = _loader ? _loader(*href) : std::nullopt;
                 if (!css) {
                     _report.AddOnce(HtmlSource, link.line, Format("the style sheet '{}' cannot be read", href->c_str()));
                     return;
@@ -1299,12 +1299,11 @@ namespace BECore {
                 if (result == ApplyResult::Applied || result == ApplyResult::Ignored) {
                     return;
                 }
-                const bool hasVar = UIWebText::ToLower(declaration.value).find("var(") != eastl::string::npos;
-                const eastl::string message = result == ApplyResult::UnknownProperty ? Format("property '{}' is not supported", UIText::Excerpt(declaration.property).c_str())
-                                              : hasVar
-                                                  ? Format("'{}: {}': var() is read only as var(--name) of a theme token, with no fallback value, where a color is read",
-                                                           UIText::Excerpt(declaration.property).c_str(), UIText::Excerpt(declaration.value).c_str())
-                                                  : Format("'{}: {}' is not understood or not supported", UIText::Excerpt(declaration.property).c_str(), UIText::Excerpt(declaration.value).c_str());
+                const bool hasVar = UIWebText::ToLower(declaration.value).find("var(") != String::npos;
+                const String message = result == ApplyResult::UnknownProperty ? Format("property '{}' is not supported", UIText::Excerpt(declaration.property).c_str())
+                                       : hasVar                               ? Format("'{}: {}': var() is read only as var(--name) of a theme token, with no fallback value, where a color is read",
+                                                                                       UIText::Excerpt(declaration.property).c_str(), UIText::Excerpt(declaration.value).c_str())
+                                                : Format("'{}: {}' is not understood or not supported", UIText::Excerpt(declaration.property).c_str(), UIText::Excerpt(declaration.value).c_str());
                 if (_report.AddOnce(SourceOf(declaration), declaration.line, message)) {
                     ++_report.declarationsUnsupported;
                 }
@@ -1318,12 +1317,12 @@ namespace BECore {
                     return false;
                 }
                 if (!compound.id.empty()) {
-                    const eastl::string* id = element.FindAttribute("id");
+                    const String* id = element.FindAttribute("id");
                     if (id == nullptr || *id != compound.id) {
                         return false;
                     }
                 }
-                return std::all_of(compound.classes.begin(), compound.classes.end(), [&](const eastl::string& className) { return element.HasClass(className); });
+                return std::all_of(compound.classes.begin(), compound.classes.end(), [&](const String& className) { return element.HasClass(className); });
             }
 
             /// Which (part of the selector, level above the element) pairs were tried and did not match. A selector is `a b c` and an ancestor chain is a path, so the same pair is
@@ -1464,7 +1463,7 @@ namespace BECore {
             // ---- the tree ----
 
             /// The text of an element and of the inline elements in it: white space collapsed, a `<br>` a line break
-            void GatherText(int node, eastl::string& out) const {
+            void GatherText(int node, String& out) const {
                 for (const int child : _document.nodes[node].children) {
                     const UIHtmlNode& html = _document.nodes[child];
                     if (!html.IsElement()) {
@@ -1477,8 +1476,8 @@ namespace BECore {
                 }
             }
 
-            [[nodiscard]] static eastl::string CollapseWhitespace(const eastl::string& raw) {
-                eastl::string result;
+            [[nodiscard]] static String CollapseWhitespace(const String& raw) {
+                String result;
                 bool pendingSpace = false;
                 for (const char c : raw) {
                     if (c == LineBreakMarker) {
@@ -1553,8 +1552,8 @@ namespace BECore {
             }
 
             /// The kind a `data-widget` value names (not case sensitive); nothing for a name that is not a widget
-            [[nodiscard]] static Optional<WebKind> WidgetKindOf(const eastl::string& widget) {
-                const eastl::string lower = UIWebText::ToLower(widget);
+            [[nodiscard]] static Optional<WebKind> WidgetKindOf(const String& widget) {
+                const String lower = UIWebText::ToLower(widget);
                 for (const WidgetName& entry : WidgetNames) {
                     if (lower == entry.name) {
                         return entry.kind;
@@ -1565,7 +1564,7 @@ namespace BECore {
 
             /// The widget an element is, when it says `data-widget` with a name we know and is not a button or an image (those keep their own kind and the attribute is reported)
             [[nodiscard]] static Optional<WebKind> WidgetOf(const UIHtmlNode& html) {
-                const eastl::string* widget = html.FindAttribute(WidgetAttribute);
+                const String* widget = html.FindAttribute(WidgetAttribute);
                 if (widget == nullptr || html.tag == "button" || html.tag == "img") {
                     return std::nullopt;
                 }
@@ -1574,7 +1573,7 @@ namespace BECore {
 
             /// A number in an attribute: nothing when there is no attribute or it is not a number that is at least @p minimum
             [[nodiscard]] static Optional<float> ReadNumber(const UIHtmlNode& html, StringView attribute, float minimum = -FLT_MAX) {
-                const eastl::string* text = html.FindAttribute(attribute);
+                const String* text = html.FindAttribute(attribute);
                 if (text == nullptr) {
                     return std::nullopt;
                 }
@@ -1584,7 +1583,7 @@ namespace BECore {
 
             /// The icon and the tooltip of a button: `data-icon`, `data-icon-position` and `title` anywhere else, or with a value that is not understood, are reported
             void CheckIconAttributes(const UIHtmlNode& html, WebKind kind) {
-                const auto report = [&](eastl::string message) { _report.AddOnce(HtmlSource, html.line, std::move(message)); };
+                const auto report = [&](String message) { _report.AddOnce(HtmlSource, html.line, std::move(message)); };
                 const bool button = kind == WebKind::Button;
                 if (!button) {
                     if (html.HasAttribute("data-icon")) {
@@ -1598,11 +1597,11 @@ namespace BECore {
                     }
                     return;
                 }
-                const eastl::string* icon = html.FindAttribute("data-icon");
+                const String* icon = html.FindAttribute("data-icon");
                 if (icon != nullptr && icon->empty()) {
                     report("data-icon needs the name of a sprite: no icon is drawn");
                 }
-                if (const eastl::string* position = html.FindAttribute("data-icon-position")) {
+                if (const String* position = html.FindAttribute("data-icon-position")) {
                     if (icon == nullptr || icon->empty()) {
                         report("data-icon-position has no effect without data-icon");
                     }
@@ -1615,8 +1614,8 @@ namespace BECore {
             }
 
             /// The placement a `data-icon-position` names
-            [[nodiscard]] static const char* IconPlacementOf(const eastl::string& position) {
-                const eastl::string lower = UIWebText::ToLower(UIWebText::TrimSpace(position));
+            [[nodiscard]] static const char* IconPlacementOf(const String& position) {
+                const String lower = UIWebText::ToLower(UIWebText::TrimSpace(position));
                 if (lower == "left") {
                     return "Left";
                 }
@@ -1626,9 +1625,9 @@ namespace BECore {
             /// `data-widget` and the `data-*` attributes of the widgets outside the places that understand them are reported, never dropped in silence
             void CheckWidgetAttributes(int htmlIndex, WebKind kind) {
                 const UIHtmlNode& html = _document.nodes[htmlIndex];
-                const auto report = [&](eastl::string message) { _report.AddOnce(HtmlSource, html.line, std::move(message)); };
+                const auto report = [&](String message) { _report.AddOnce(HtmlSource, html.line, std::move(message)); };
                 const bool widget = IsWidgetKind(kind);
-                if (const eastl::string* name = html.FindAttribute(WidgetAttribute)) {
+                if (const String* name = html.FindAttribute(WidgetAttribute)) {
                     if (!widget) {
                         report(WidgetKindOf(*name) ? Format("data-widget=\"{}\" on a <{}> is left out: it belongs on a <div>", name->c_str(), html.tag.c_str())
                                                    : Format("data-widget=\"{}\" is not supported (the widgets are \"segmented\", \"toggle\", \"slider\" and \"progress\")", name->c_str()));
@@ -1708,7 +1707,7 @@ namespace BECore {
                     GatherText(htmlIndex, node.text);
                     node.text = CollapseWhitespace(node.text);
                 }
-                if (const eastl::string* id = html.FindAttribute("id")) {
+                if (const String* id = html.FindAttribute("id")) {
                     node.name = *id;
                     if (!id->empty() && !_usedNames.insert(*id).second) {
                         _report.AddOnce(HtmlSource, html.line, Format("the id '{}' is used twice: a variant finds the first element only", id->c_str()));
@@ -1781,7 +1780,7 @@ namespace BECore {
                         }
                         break;
                     case WebKind::Image:
-                        if (const eastl::string* src = html.FindAttribute("src")) {
+                        if (const String* src = html.FindAttribute("src")) {
                             attrs.Set("sprite", *src);
                         }
                         AddImageFit(attrs, r, report);
@@ -1798,10 +1797,10 @@ namespace BECore {
                         AddText(attrs, r, node, html, report);
                         AddBind(attrs, html);
                         AddAction(attrs, html);
-                        if (const eastl::string* on = html.FindAttribute("data-on")) {
+                        if (const String* on = html.FindAttribute("data-on")) {
                             attrs.Set("onValue", *on);
                         }
-                        if (const eastl::string* off = html.FindAttribute("data-off")) {
+                        if (const String* off = html.FindAttribute("data-off")) {
                             attrs.Set("offValue", *off);
                         }
                         AddDisabled(attrs, html);
@@ -1881,14 +1880,14 @@ namespace BECore {
             }
 
             static void AddBind(Attrs& attrs, const UIHtmlNode& html) {
-                if (const eastl::string* bind = html.FindAttribute("data-bind")) {
+                if (const String* bind = html.FindAttribute("data-bind")) {
                     attrs.Set("bind", *bind);
                 }
             }
 
             /// `data-action`, or `action` as on a button
             static void AddAction(Attrs& attrs, const UIHtmlNode& html) {
-                const eastl::string* action = html.FindAttribute("data-action");
+                const String* action = html.FindAttribute("data-action");
                 if (action == nullptr) {
                     action = html.FindAttribute("action");
                 }
@@ -2012,7 +2011,7 @@ namespace BECore {
                 }
             }
 
-            static void Note(UIWebReport* report, eastl::string message) {
+            static void Note(UIWebReport* report, String message) {
                 if (report != nullptr) {
                     report->AddOnce(CssSource, 0, std::move(message));
                 }
@@ -2020,7 +2019,7 @@ namespace BECore {
 
             static void AddPosition(Attrs& attrs, const Resolved& r, UIWebReport* report) {
                 const bool allSides = r.left && r.top && r.right && r.bottom;
-                eastl::string anchor = r.anchor;
+                String anchor = r.anchor;
                 if (anchor.empty()) {
                     if (allSides) {
                         anchor = "Stretch";
@@ -2100,7 +2099,7 @@ namespace BECore {
                     return;
                 }
                 // CSS lays a flex container out as a row unless it says otherwise; the stack is a column unless it says otherwise
-                const eastl::string direction = r.flexDirection.empty() ? eastl::string("Horizontal") : r.flexDirection;
+                const String direction = r.flexDirection.empty() ? String("Horizontal") : r.flexDirection;
                 if (direction != "Vertical") {
                     attrs.Set("direction", direction);
                 }
@@ -2161,7 +2160,7 @@ namespace BECore {
                 }
                 if (node.kind == WebKind::Button) {
                     AddAction(attrs, html);
-                    if (const eastl::string* value = html.FindAttribute("data-value")) {
+                    if (const String* value = html.FindAttribute("data-value")) {
                         attrs.Set("value", *value);
                     }
                     AddDisabled(attrs, html);
@@ -2172,7 +2171,7 @@ namespace BECore {
             /// The icon, its placement and its colour, and the tooltip of a button; each only when set (a bad placement was reported when the node was added; a colour without an icon is reported
             /// here). A button has no placement: its icon is always left of the caption
             static void AddIcon(Attrs& attrs, const Resolved& r, const UIHtmlNode& html, UIWebReport* report) {
-                const eastl::string* icon = html.FindAttribute("data-icon");
+                const String* icon = html.FindAttribute("data-icon");
                 if (icon != nullptr && !icon->empty()) {
                     attrs.Set("icon", *icon);
                     if (r.iconColor) {
@@ -2181,7 +2180,7 @@ namespace BECore {
                 } else if (r.iconColor) {
                     Note(report, "-be-icon-color has no effect on a button without data-icon");
                 }
-                if (const eastl::string* tooltip = html.FindAttribute("title"); tooltip != nullptr && !tooltip->empty()) {
+                if (const String* tooltip = html.FindAttribute("title"); tooltip != nullptr && !tooltip->empty()) {
                     attrs.Set("tooltip", *tooltip);
                 }
             }
@@ -2221,8 +2220,8 @@ namespace BECore {
                 entry.node = index;
                 auto consider = [&](StringView key) {
                     const OverridableKey* overridable = FindOverridable(key);
-                    const eastl::string* before = base.Find(key);
-                    const eastl::string* after = changed.Find(key);
+                    const String* before = base.Find(key);
+                    const String* after = changed.Find(key);
                     const StringView beforeText = before ? StringView(*before) : (overridable ? overridable->defaultValue : StringView());
                     const StringView afterText = after ? StringView(*after) : (overridable ? overridable->defaultValue : StringView());
                     if (beforeText == afterText) {
@@ -2230,10 +2229,10 @@ namespace BECore {
                     }
                     if (overridable == nullptr) {
                         _report.AddOnce(_sheet.sources[media.sourceId], media.line,
-                                        Format("@media changes '{}': a variant can change only visibility, anchor, offset, size, direction and font size", eastl::string(key).c_str()));
+                                        Format("@media changes '{}': a variant can change only visibility, anchor, offset, size, direction and font size", String(key).c_str()));
                         return;
                     }
-                    entry.values.emplace_back(eastl::string(key), eastl::string(afterText));
+                    entry.values.emplace_back(String(key), String(afterText));
                 };
                 for (const auto& [key, value] : base.Entries()) {
                     consider(key);
@@ -2263,7 +2262,7 @@ namespace BECore {
                         const Attrs stateAttrs = BuildAttrs(static_cast<int>(i), styles, nullptr);
                         Attrs& base = _baseAttrs[i];
                         for (const auto& [key, value] : stateAttrs.Entries()) {
-                            const eastl::string* before = base.Find(key);
+                            const String* before = base.Find(key);
                             if (before != nullptr && *before == value) {
                                 continue;
                             }
@@ -2287,12 +2286,12 @@ namespace BECore {
 
             // ---- the output ----
 
-            [[nodiscard]] eastl::string UniqueName(const eastl::string& tag) {
+            [[nodiscard]] String UniqueName(const String& tag) {
                 // The names tried before are taken (an id of the document may be `div-7`), so counting goes on where the last call stopped: one call per element must not
                 // start at 1 again
                 int& suffix = _nextNameSuffix[tag];
                 while (true) {
-                    eastl::string candidate = Format("{}-{}", tag.c_str(), ++suffix);
+                    String candidate = Format("{}-{}", tag.c_str(), ++suffix);
                     if (_usedNames.insert(candidate).second) {
                         return candidate;
                     }
@@ -2302,13 +2301,13 @@ namespace BECore {
             /// A button with an icon and a text: the icon is left of the caption, in a child each
             [[nodiscard]] bool IsIconLeft(int index) const {
                 const Attrs& attrs = _baseAttrs[index];
-                const eastl::string* text = attrs.Find("text");
+                const String* text = attrs.Find("text");
                 return attrs.Find("icon") != nullptr && text != nullptr && !text->empty();
             }
 
             static void AddComponentAttribute(pugi::xml_node component, const Attrs& attrs, StringView key) {
-                if (const eastl::string* value = attrs.Find(key)) {
-                    component.append_attribute(eastl::string(key).c_str()) = value->c_str();
+                if (const String* value = attrs.Find(key)) {
+                    component.append_attribute(String(key).c_str()) = value->c_str();
                 }
             }
 
@@ -2348,7 +2347,7 @@ namespace BECore {
                     }
                     const auto* centring = std::find_if(std::begin(defaults), std::end(defaults), [&](const ButtonTextDefault& entry) { return entry.key == key; });
                     if (!colorOnly && centring != std::end(defaults)) {
-                        component.append_attribute(eastl::string(key).c_str()) = eastl::string(centring->value).c_str();
+                        component.append_attribute(String(key).c_str()) = String(centring->value).c_str();
                     }
                 }
             }
@@ -2362,7 +2361,7 @@ namespace BECore {
                 pugi::xml_node element = children.append_child("element");
                 element.append_attribute("type") = "UIElement";
                 if (!node.name.empty()) {
-                    element.append_attribute("name") = Format("{}{}", node.name.c_str(), eastl::string(suffix).c_str()).c_str();
+                    element.append_attribute("name") = Format("{}{}", node.name.c_str(), String(suffix).c_str()).c_str();
                 }
                 ++_report.elements;
                 return element;
@@ -2416,7 +2415,7 @@ namespace BECore {
                 for (const StringView key : ClickerKeys) {
                     AddComponentAttribute(clicker, attrs, key);
                 }
-                if (const eastl::string* tooltip = attrs.Find("tooltip")) {
+                if (const String* tooltip = attrs.Find("tooltip")) {
                     pugi::xml_node component = components.append_child("component");
                     component.append_attribute("type") = "UITooltipComponent";
                     component.append_attribute("text") = tooltip->c_str();
@@ -2427,7 +2426,7 @@ namespace BECore {
                 }
 
                 // The tint of the icon is `-be-icon-color`, else the colour of the text
-                const eastl::string* tint = attrs.Find("iconTint") != nullptr ? attrs.Find("iconTint") : attrs.Find("textColor");
+                const String* tint = attrs.Find("iconTint") != nullptr ? attrs.Find("iconTint") : attrs.Find("textColor");
                 pugi::xml_node children = element.append_child("children");
                 pugi::xml_node icon = AppendPartChild(children, node, IconSuffix);
                 if (iconLeft) {
@@ -2448,7 +2447,7 @@ namespace BECore {
                     pugi::xml_node caption = AppendPartChild(children, node, CaptionSuffix);
                     caption.append_attribute("flex") = "1";
                     caption.append_attribute("height") = "100%";
-                    if (const eastl::string* fontSize = attrs.Find("fontSize")) {
+                    if (const String* fontSize = attrs.Find("fontSize")) {
                         caption.append_attribute("fontSize") = fontSize->c_str();
                     }
                     AddTextComponent(caption.append_child("components"), attrs, false);
@@ -2501,7 +2500,7 @@ namespace BECore {
                 pugi::xml_node caption = AppendPartChild(children, node, CaptionSuffix);
                 caption.append_attribute("flex") = "1";
                 caption.append_attribute("height") = "100%";
-                if (const eastl::string* fontSize = attrs.Find("fontSize")) {
+                if (const String* fontSize = attrs.Find("fontSize")) {
                     caption.append_attribute("fontSize") = fontSize->c_str();
                 }
                 pugi::xml_node captionComponents = caption.append_child("components");
@@ -2600,7 +2599,7 @@ namespace BECore {
                 }
             }
 
-            [[nodiscard]] eastl::string Write(const eastl::vector<VariantOutput>& variants) {
+            [[nodiscard]] String Write(const eastl::vector<VariantOutput>& variants) {
                 // An element a variant names needs a name to be found by
                 for (const VariantOutput& variant : variants) {
                     for (const Override& entry : variant.overrides) {
@@ -2622,7 +2621,7 @@ namespace BECore {
                     pugi::xml_node variantsNode = ui.append_child("variants");
                     for (const VariantOutput& variant : variants) {
                         pugi::xml_node variantNode = variantsNode.append_child("variant");
-                        const eastl::string when = variant.when.ToText();
+                        const String when = variant.when.ToText();
                         if (!when.empty()) {
                             variantNode.append_attribute("when") = when.c_str();
                         }
@@ -2637,7 +2636,7 @@ namespace BECore {
                                 if (captionHolds && key == "fontSize") {
                                     if (!captionSet) {
                                         captionSet = overrides.append_child("set");
-                                        captionSet.append_attribute("element") = Format("{}{}", _nodes[entry.node].name.c_str(), eastl::string(CaptionSuffix).c_str()).c_str();
+                                        captionSet.append_attribute("element") = Format("{}{}", _nodes[entry.node].name.c_str(), String(CaptionSuffix).c_str()).c_str();
                                     }
                                     captionSet.append_attribute(key.c_str()) = value.c_str();
                                 } else {
@@ -2652,7 +2651,7 @@ namespace BECore {
                 }
 
                 struct StringWriter : pugi::xml_writer {
-                    eastl::string text;
+                    String text;
                     void write(const void* data, size_t size) override {
                         text.append(static_cast<const char*>(data), size);
                     }
@@ -2668,14 +2667,14 @@ namespace BECore {
             eastl::vector<eastl::vector<UICssDeclaration>> _inlineStyles;
             eastl::vector<WebNode> _nodes;
             eastl::vector<Attrs> _baseAttrs;
-            eastl::hash_set<eastl::string> _usedNames;
-            eastl::hash_map<eastl::string, int> _nextNameSuffix;  ///< per tag, where UniqueName goes on counting
+            eastl::hash_set<String> _usedNames;
+            eastl::hash_map<String, int> _nextNameSuffix;  ///< per tag, where UniqueName goes on counting
             size_t _cascadeWork = 0;
         };
 
     }  // namespace
 
-    eastl::string UIWebCompiler::Compile(StringView html, const StylesheetLoader& loadStylesheet, UIWebReport& report) {
+    String UIWebCompiler::Compile(StringView html, const StylesheetLoader& loadStylesheet, UIWebReport& report) {
         return Compiler(html, loadStylesheet, report).Run();
     }
 

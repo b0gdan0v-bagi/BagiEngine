@@ -236,7 +236,7 @@ namespace BECore::Tests {
         TlsConnectParams params = ParamsFor(server);
         params.cancel = &cancel;
         std::atomic<bool> ended{false};
-        std::expected<void, eastl::string> connected;
+        std::expected<void, String> connected;
         std::thread connecting([&] {
             connected = stream.Connect(params);
             ended = true;

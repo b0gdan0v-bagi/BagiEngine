@@ -161,7 +161,7 @@ namespace BECore {
         }
         eastl::vector<ZoneStatRow> kept;
         for (const ZoneStatRow& row : rows) {
-            const eastl::string place = Format("{}:{}", row.site->file, row.site->line);
+            const String place = Format("{}:{}", row.site->file, row.site->line);
             if (ContainsIgnoreCase(row.site->name, text) || ContainsIgnoreCase(place, text)) {
                 kept.push_back(row);
             }

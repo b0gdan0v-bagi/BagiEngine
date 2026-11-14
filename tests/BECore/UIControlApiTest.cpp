@@ -560,7 +560,7 @@ namespace BECore::Tests {
             eastl::vector<PoolString> _values;
         };
 
-        std::string Text(const eastl::string& text) {
+        std::string Text(const String& text) {
             return std::string(text.c_str(), text.size());
         }
 
@@ -649,7 +649,7 @@ namespace BECore::Tests {
                 request["params"] = params;
             }
             Json response;
-            _service.Post(DumpJson(request), [&response](eastl::string text) {
+            _service.Post(DumpJson(request), [&response](String text) {
                 auto parsed = ParseJson(text);
                 response = parsed ? std::move(*parsed) : Json();
             });

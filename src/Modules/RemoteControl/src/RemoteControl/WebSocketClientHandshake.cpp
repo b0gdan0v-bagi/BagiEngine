@@ -21,7 +21,7 @@ namespace BECore {
             constexpr StringView kProtocol = "sec-websocket-protocol";
         }  // namespace HeaderNames
 
-        std::unexpected<eastl::string> Refuse(eastl::string message) {
+        std::unexpected<String> Refuse(String message) {
             return std::unexpected(std::move(message));
         }
 
@@ -46,7 +46,7 @@ namespace BECore {
 
     }  // namespace
 
-    eastl::string GenerateClientKey(std::random_device& random) {
+    String GenerateClientKey(std::random_device& random) {
         std::array<uint8_t, kClientKeyBytes> bytes{};
         for (uint8_t& byte : bytes) {
             byte = static_cast<uint8_t>(random());
@@ -54,8 +54,8 @@ namespace BECore {
         return Base64Encode(eastl::span<const uint8_t>(bytes.data(), bytes.size()));
     }
 
-    eastl::string BuildClientHandshakeRequest(const WebSocketUrl& url, StringView key, StringView origin) {
-        eastl::string request =
+    String BuildClientHandshakeRequest(const WebSocketUrl& url, StringView key, StringView origin) {
+        String request =
             Format("GET {} HTTP/1.1\r\nHost: {}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: {}\r\nSec-WebSocket-Version: 13\r\n", url.pathAndQuery, GetHostHeader(url), key);
         if (!origin.empty()) {
             request.append(Format("Origin: {}\r\n", origin));
@@ -64,7 +64,7 @@ namespace BECore {
         return request;
     }
 
-    std::expected<void, eastl::string> CheckServerHandshakeResponse(StringView responseHead, StringView key) {
+    std::expected<void, String> CheckServerHandshakeResponse(StringView responseHead, StringView key) {
         if (responseHead.size() > kMaxHandshakeBytes) {
             return Refuse("the server's answer is too long");
         }
@@ -73,7 +73,7 @@ namespace BECore {
         bool isStatusLine = true;
         bool hasUpgrade = false;
         bool hasConnection = false;
-        Optional<eastl::string> accept;
+        Optional<String> accept;
         while (!lines.empty()) {
             const size_t end = lines.find('\n');
             StringView line = lines.substr(0, end);
@@ -99,7 +99,7 @@ namespace BECore {
             if (colon == StringView::npos || colon == 0) {
                 return Refuse("a header line of the answer has no name or no colon");
             }
-            const eastl::string name = LowerAscii(line.substr(0, colon));
+            const String name = LowerAscii(line.substr(0, colon));
             const StringView value = TrimHeaderValue(line.substr(colon + 1));
             if (name == HeaderNames::kUpgrade) {
                 hasUpgrade = hasUpgrade || HeaderHasToken(value, "websocket");
@@ -109,7 +109,7 @@ namespace BECore {
                 if (accept) {
                     return Refuse("the answer repeats 'Sec-WebSocket-Accept'");
                 }
-                accept = eastl::string(value.data(), value.size());
+                accept = String(value.data(), value.size());
             } else if (name == HeaderNames::kExtensions || name == HeaderNames::kProtocol) {
                 return Refuse(Format("the server answered with '{}', which the request did not ask for", name));
             }

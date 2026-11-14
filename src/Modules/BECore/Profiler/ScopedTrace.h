@@ -23,13 +23,13 @@ namespace BECore {
         /// Writes the trace now (the destructor writes it again); false with the reason in GetError() when it cannot
         bool Write();
 
-        [[nodiscard]] const eastl::string& GetError() const {
+        [[nodiscard]] const String& GetError() const {
             return _error;
         }
 
     private:
-        eastl::string _path;
-        eastl::string _error;
+        String _path;
+        String _error;
         IProfilerBackend* _previous = nullptr;
     };
 

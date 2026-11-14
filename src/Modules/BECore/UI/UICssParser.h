@@ -14,8 +14,8 @@ namespace BECore {
     struct UICssDeclaration {
         static constexpr uint32_t HtmlSource = 0xFFFFFFFFu;  ///< `sourceId` of a declaration from a `style=""` attribute
 
-        eastl::string property;  ///< lower case
-        eastl::string value;
+        String property;  ///< lower case
+        String value;
         bool important = false;
         uint32_t line = 0;
         uint32_t sourceId = 0;  ///< index into UICssSheet::sources
@@ -24,9 +24,9 @@ namespace BECore {
     /// `tag#id.class.class:hover`, with the combinator that joins it to the compound on its left
     struct UICssCompound {
         UICssCombinator combinator = UICssCombinator::None;
-        eastl::string tag;  ///< lower case; empty matches any element
-        eastl::string id;
-        eastl::vector<eastl::string> classes;
+        String tag;  ///< lower case; empty matches any element
+        String id;
+        eastl::vector<String> classes;
         UICssPseudo pseudo = UICssPseudo::None;  ///< only on the last compound of a selector
     };
 
@@ -50,7 +50,7 @@ namespace BECore {
     };
 
     struct UICssSheet {
-        eastl::vector<eastl::string> sources;  ///< "css" or "css:<href>", for the issues
+        eastl::vector<String> sources;  ///< "css" or "css:<href>", for the issues
         eastl::vector<UICssRule> rules;
         eastl::vector<UICssMedia> medias;
     };

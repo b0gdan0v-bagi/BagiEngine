@@ -5,16 +5,16 @@
 namespace BECore {
 
     struct UIHtmlAttribute {
-        eastl::string name;  ///< lower case
-        eastl::string value;
+        String name;  ///< lower case
+        String value;
     };
 
     /// A node of a parsed HTML document: an element (`tag` is set) or a piece of text. Nodes refer to each other by index into UIHtmlDocument::nodes
     struct UIHtmlNode {
         static constexpr int NoNode = -1;
 
-        eastl::string tag;   ///< lower case; empty for a text node and for the document node
-        eastl::string text;  ///< a text node: its characters with the entities decoded (the text of `<style>` is raw)
+        String tag;   ///< lower case; empty for a text node and for the document node
+        String text;  ///< a text node: its characters with the entities decoded (the text of `<style>` is raw)
         eastl::vector<UIHtmlAttribute> attributes;
         int parent = NoNode;
         eastl::vector<int> children;
@@ -25,7 +25,7 @@ namespace BECore {
         }
 
         /// The value of the attribute, null when there is none
-        [[nodiscard]] const eastl::string* FindAttribute(StringView name) const;
+        [[nodiscard]] const String* FindAttribute(StringView name) const;
         [[nodiscard]] bool HasAttribute(StringView name) const {
             return FindAttribute(name) != nullptr;
         }

@@ -1,6 +1,5 @@
 #include "FuzzTargets.h"
 
-#include <BECore/Config/XmlNode.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/UI/UIScreenContent.h>
 #include <BECore/UI/UIWebCompiler.h>
@@ -76,15 +75,15 @@ namespace BECore::Fuzz {
         const auto* begin = reinterpret_cast<const char*>(data);
         const char* separator = size == 0 ? nullptr : static_cast<const char*>(std::memchr(begin, '\0', size));
         const size_t htmlSize = separator != nullptr ? static_cast<size_t>(separator - begin) : size;
-        const eastl::string html(begin, htmlSize);
-        const eastl::string css = separator != nullptr ? eastl::string(separator + 1, size - htmlSize - 1) : eastl::string();
+        const String html(begin, htmlSize);
+        const String css = separator != nullptr ? String(separator + 1, size - htmlSize - 1) : String();
 
-        const UIWebCompiler::StylesheetLoader loader = [&css](StringView) { return Optional<eastl::string>(css); };
+        const UIWebCompiler::StylesheetLoader loader = [&css](StringView) { return Optional<String>(css); };
 
         UIWebReport report;
-        const eastl::string xml = UIWebCompiler::Compile(StringView(html), loader, report);
+        const String xml = UIWebCompiler::Compile(StringView(html), loader, report);
         UIWebReport again;
-        const eastl::string xmlAgain = UIWebCompiler::Compile(StringView(html), loader, again);
+        const String xmlAgain = UIWebCompiler::Compile(StringView(html), loader, again);
         FUZZ_CHECK(xml == xmlAgain);
         FUZZ_CHECK(SameReport(report, again));
         CheckReport(report, std::max(CountLines(StringView(html)), CountLines(StringView(css))));

@@ -112,7 +112,7 @@ namespace BECore {
 
     bool RmlUiFontEngine::AddFace(Rml::String family, Rml::Style::FontStyle style, Rml::Style::FontWeight weight, IntrusivePtr<Font> font) {
         if (family.empty()) {
-            const eastl::string name = font->GetFamilyName();
+            const String name = font->GetFamilyName();
             family.assign(name.data(), name.size());
         }
         if (family.empty()) {

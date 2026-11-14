@@ -121,7 +121,7 @@ namespace BECore::Match3 {
          *
          * @return the reason when the state is refused
          */
-        [[nodiscard]] std::expected<void, eastl::string> RestoreState(const Match3SaveState& state);
+        [[nodiscard]] std::expected<void, String> RestoreState(const Match3SaveState& state);
 
         /**
          * @brief Would TrySwap(a, b) commit? Does not change the model (it tries the swap on a copy of the board).

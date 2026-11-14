@@ -1,7 +1,6 @@
 #pragma once
 
 #include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
-#include <EASTL/span.h>
 #include <Stress/StressSettings.h>
 
 namespace BECore::Stress {
@@ -89,7 +88,7 @@ namespace BECore::Stress {
     };
 
     /// A number as a plain decimal (`12.3457`, never `1e-05`, `nan` or `inf`: a value that is not finite is 0)
-    eastl::string FormatNumber(double value);
+    String FormatNumber(double value);
 
     /**
      * @brief The one JSON line of a fixed run, no newline: the keys sorted (as `headless_frames.py` writes with `sort_keys`), numbers as plain
@@ -97,6 +96,6 @@ namespace BECore::Stress {
      *        `cpuMsP50`, `cpuMsP99`, `workMsP50`, `workMsP99`, `cpuMs`, `workMs`, `drawCalls`, `triangles`, `textureSwitches`, `allocsPerFrame`,
      *        `allocBytesPerFrame`. Written by hand: the app does not link nlohmann/json.
      */
-    eastl::string FormatJsonLine(const StressSummary& summary, const StressRunContext& context);
+    String FormatJsonLine(const StressSummary& summary, const StressRunContext& context);
 
 }  // namespace BECore::Stress

@@ -13,7 +13,7 @@ namespace BECore {
             return z ^ (z >> 31);
         }
 
-        std::unexpected<ControlError> Fail(StringView code, eastl::string message) {
+        std::unexpected<ControlError> Fail(StringView code, String message) {
             return std::unexpected(MakeControlError(code, std::move(message)));
         }
 
@@ -21,7 +21,7 @@ namespace BECore {
             return seat >= 0 && seat < DemoCardGame::kSeatCount;
         }
 
-        const eastl::vector<eastl::string> kNoCards;
+        const eastl::vector<String> kNoCards;
 
     }  // namespace
 
@@ -68,7 +68,7 @@ namespace BECore {
         Json view = Json::object();
         view["seat"] = seat;
         Json hand = Json::array();
-        for (const eastl::string& card : _hands[seat]) {
+        for (const String& card : _hands[seat]) {
             hand.push_back(card.c_str());
         }
         view["hand"] = hand;
@@ -96,7 +96,7 @@ namespace BECore {
         }
         Json actions = Json::array();
         if (CanAct(seat)) {
-            for (const eastl::string& card : _hands[seat]) {
+            for (const String& card : _hands[seat]) {
                 Json action = Json::object();
                 action["type"] = "play";
                 action["card"] = card.c_str();
@@ -144,8 +144,8 @@ namespace BECore {
         if (!CanAct(seat) || _hands[seat].empty()) {
             return std::nullopt;
         }
-        const eastl::string* lowest = &_hands[seat].front();
-        for (const eastl::string& card : _hands[seat]) {
+        const String* lowest = &_hands[seat].front();
+        for (const String& card : _hands[seat]) {
             if (card < *lowest) {
                 lowest = &card;
             }
@@ -164,7 +164,7 @@ namespace BECore {
         return _version;
     }
 
-    const eastl::vector<eastl::string>& DemoCardGame::GetHand(int seat) const {
+    const eastl::vector<String>& DemoCardGame::GetHand(int seat) const {
         return IsSeatInRange(seat) ? _hands[seat] : kNoCards;
     }
 
@@ -184,7 +184,7 @@ namespace BECore {
         Json allHands = Json::array();
         for (int other = 0; other < kSeatCount; ++other) {
             Json hand = Json::array();
-            for (const eastl::string& card : GetHand(other)) {
+            for (const String& card : GetHand(other)) {
                 hand.push_back(card.c_str());
             }
             allHands.push_back(hand);
@@ -193,15 +193,15 @@ namespace BECore {
         return view;
     }
 
-    eastl::vector<eastl::string> FindHiddenCards(const eastl::string& text, int seat, const DemoCardGame& game) {
-        eastl::vector<eastl::string> leaked;
+    eastl::vector<String> FindHiddenCards(const String& text, int seat, const DemoCardGame& game) {
+        eastl::vector<String> leaked;
         for (int other = 0; other < DemoCardGame::kSeatCount; ++other) {
             if (other == seat) {
                 continue;
             }
-            for (const eastl::string& card : game.GetHand(other)) {
+            for (const String& card : game.GetHand(other)) {
                 // "c1_2" must not match inside a longer id such as "c1_20"
-                for (auto at = text.find(card); at != eastl::string::npos; at = text.find(card, at + 1)) {
+                for (auto at = text.find(card); at != String::npos; at = text.find(card, at + 1)) {
                     const size_t end = at + card.size();
                     if (end >= text.size() || text[end] < '0' || text[end] > '9') {
                         leaked.push_back(card);

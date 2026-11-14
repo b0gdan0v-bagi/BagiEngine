@@ -64,7 +64,7 @@ namespace BECore {
         }
 
         // Build the message
-        eastl::string message;
+        String message;
 
         if (event.expression) {
             if (event.message) {

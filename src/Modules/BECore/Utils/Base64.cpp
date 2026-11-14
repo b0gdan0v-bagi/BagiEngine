@@ -12,8 +12,8 @@ namespace BECore {
 
     }  // namespace
 
-    eastl::string Base64Encode(eastl::span<const uint8_t> data) {
-        eastl::string encoded;
+    String Base64Encode(eastl::span<const uint8_t> data) {
+        String encoded;
         encoded.reserve((data.size() + kGroupBytes - 1) / kGroupBytes * kGroupChars);
 
         size_t index = 0;

@@ -9,7 +9,7 @@ namespace BECore::Tests {
 
         constexpr int kMaxSteps = 400;
 
-        Json CardAction(const eastl::string& card) {
+        Json CardAction(const String& card) {
             Json action = Json::object();
             action["type"] = "play";
             action["card"] = card.c_str();
@@ -93,8 +93,8 @@ namespace BECore::Tests {
     TEST(RoomsScenarioTest, AHumanDropsMidHandAndReturnsWithTheToken) {
         HubHarness harness;
         const auto ids = harness.MakeLobby(2);
-        const eastl::string code = harness.Client(ids[0]).roomCode;
-        const eastl::string token = harness.Client(ids[1]).token;
+        const String code = harness.Client(ids[0]).roomCode;
+        const String token = harness.Client(ids[1]).token;
         harness.Start(ids[0]);
         const FakeSeatedGame* game = harness.GetGame(code);
         ASSERT_NE(game, nullptr);
@@ -153,8 +153,8 @@ namespace BECore::Tests {
         HubHarness harness;
         const auto roomA = harness.MakeLobby(2);
         const auto roomB = harness.MakeLobby(2);
-        const eastl::string codeA = harness.Client(roomA[0]).roomCode;
-        const eastl::string codeB = harness.Client(roomB[0]).roomCode;
+        const String codeA = harness.Client(roomA[0]).roomCode;
+        const String codeB = harness.Client(roomB[0]).roomCode;
         ASSERT_NE(codeA, codeB);
         harness.Start(roomA[0]);
         harness.Start(roomB[0]);
@@ -182,7 +182,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(PlayToTheEnd(harness, all));
         EXPECT_EQ(harness.GetLeakCount(), 0u);
         for (const ConnectionId id : all) {
-            const eastl::string& own = harness.Client(id).roomCode;
+            const String& own = harness.Client(id).roomCode;
             for (const ReceivedMessage& message : harness.Client(id).received) {
                 if (message.type == RoomMessageTypes::kView || message.type == RoomMessageTypes::kLobby) {
                     EXPECT_EQ(message.GetString("room"), own);
@@ -262,16 +262,16 @@ namespace BECore::Tests {
             HubHarness harness;
             const RandomFn random = MakeSequence(seed * 7919);
             ConnectionId slots[kSlots] = {};
-            eastl::vector<eastl::pair<eastl::string, eastl::string>> knownTokens;
+            eastl::vector<eastl::pair<String, String>> knownTokens;
 
             const auto pick = [&](uint64_t count) { return random() % count; };
-            const auto anyCode = [&]() -> eastl::string {
+            const auto anyCode = [&]() -> String {
                 for (const ConnectionId slot : slots) {
                     if (slot != 0 && !harness.Client(slot).roomCode.empty() && pick(2) == 0) {
                         return harness.Client(slot).roomCode;
                     }
                 }
-                return pick(2) == 0 ? eastl::string("ABCDE") : eastl::string("zz");
+                return pick(2) == 0 ? String("ABCDE") : String("zz");
             };
 
             for (int step = 0; step < 500; ++step) {
@@ -291,7 +291,7 @@ namespace BECore::Tests {
 
                 switch (pick(13)) {
                     case 0: {
-                        eastl::string bytes;
+                        String bytes;
                         const uint64_t length = pick(120);
                         for (uint64_t i = 0; i < length; ++i) {
                             bytes.push_back(static_cast<char>(pick(256)));
@@ -300,7 +300,7 @@ namespace BECore::Tests {
                         break;
                     }
                     case 1: {
-                        const eastl::string valid = SerializeClientMessage(ClientMessage{ChooseSeatMessage{static_cast<int64_t>(pick(5))}});
+                        const String valid = SerializeClientMessage(ClientMessage{ChooseSeatMessage{static_cast<int64_t>(pick(5))}});
                         harness.SendText(id, StringView(valid.data(), static_cast<size_t>(pick(valid.size() + 1))));
                         break;
                     }
@@ -315,7 +315,7 @@ namespace BECore::Tests {
                             const auto& [code, token] = knownTokens[static_cast<size_t>(pick(knownTokens.size()))];
                             harness.JoinByToken(id, pick(4) == 0 ? anyCode() : code, token);
                         } else {
-                            harness.JoinByToken(id, anyCode(), eastl::string(RoomLimits::kTokenLength, 'f'));
+                            harness.JoinByToken(id, anyCode(), String(RoomLimits::kTokenLength, 'f'));
                         }
                         break;
                     }

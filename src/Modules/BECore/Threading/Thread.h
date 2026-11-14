@@ -28,7 +28,7 @@ namespace BECore {
             }
 
         private:
-            eastl::string _name;
+            String _name;
             uint32_t _sortIndex;
             TBody _body;
         };

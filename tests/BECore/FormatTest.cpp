@@ -9,7 +9,7 @@ namespace BECore::Tests {
     static_assert(fmt::is_formattable<double>::value, "double should be formattable");
     static_assert(fmt::is_formattable<bool>::value, "bool should be formattable");
     static_assert(fmt::is_formattable<const char*>::value, "const char* should be formattable");
-    static_assert(fmt::is_formattable<eastl::string>::value, "eastl::string should be formattable");
+    static_assert(fmt::is_formattable<String>::value, "eastl::string should be formattable");
     static_assert(fmt::is_formattable<StringView>::value, "eastl::string_view should be formattable");
 
     TEST(FormatTest, CompileTimeChecks) {
@@ -29,13 +29,13 @@ namespace BECore::Tests {
     }
 
     TEST(FormatTest, EastlTypes) {
-        eastl::string name = "Bagi";
+        String name = "Bagi";
         StringView suffix = "Engine";
         EXPECT_EQ(BECore::Format("Welcome to {}{}", name, suffix), "Welcome to BagiEngine");
     }
 
     TEST(FormatTest, FormatTo) {
-        eastl::fixed_string<char, 64> buffer;
+        FixedString<64> buffer;
         BECore::FormatTo(eastl::back_inserter(buffer), "Buffer: {}", 123);
         EXPECT_TRUE(buffer == StringView("Buffer: 123"));
     }
@@ -48,7 +48,7 @@ namespace BECore::Tests {
         EXPECT_EQ("{} + {} = {}"_format(2, 3, 5), "2 + 3 = 5");
         EXPECT_EQ("Formatted: {:03d}"_format(7), "Formatted: 007");
 
-        eastl::string name = "Test";
+        String name = "Test";
         EXPECT_EQ("Name: {}"_format(name), "Name: Test");
     }
 

@@ -546,7 +546,7 @@ namespace BECore::Tests {
 
         for (const char* aspect : {"16:9 ", "16:10 ", "3:2 ", "4:3 ", "1:1 ", "21:9 ", "32:9 ", "9:16 ", "9:19.5 ", "3:4 "}) {
             for (const char* safe : {"no insets", "notch", "side insets"}) {
-                const bool found = std::any_of(cases.begin(), cases.end(), [&](const UIMatrixCase& c) { return c.label.find(aspect) == 0 && c.label.find(safe) != eastl::string::npos; });
+                const bool found = std::any_of(cases.begin(), cases.end(), [&](const UIMatrixCase& c) { return c.label.find(aspect) == 0 && c.label.find(safe) != String::npos; });
                 EXPECT_TRUE(found) << aspect << " " << safe;
             }
         }

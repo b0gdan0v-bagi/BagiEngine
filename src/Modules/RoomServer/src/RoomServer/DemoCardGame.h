@@ -37,7 +37,7 @@ namespace BECore {
         uint64_t GetStateVersion() const override;
 
         /// Test access to the truth, not part of the contract: the cards @p seat still holds (empty for a seat out of range)
-        [[nodiscard]] const eastl::vector<eastl::string>& GetHand(int seat) const;
+        [[nodiscard]] const eastl::vector<String>& GetHand(int seat) const;
         /// The seat whose turn it is (-1 before Start and after the end)
         [[nodiscard]] int GetTurn() const;
         [[nodiscard]] int GetPlayCount() const;
@@ -45,10 +45,10 @@ namespace BECore {
     private:
         [[nodiscard]] bool CanAct(int seat) const;
 
-        eastl::vector<eastl::string> _hands[kSeatCount];
+        eastl::vector<String> _hands[kSeatCount];
         struct Play {
             int seat = 0;
-            eastl::string card;
+            String card;
         };
         eastl::vector<Play> _table;
         int _turn = -1;
@@ -63,6 +63,6 @@ namespace BECore {
     };
 
     /// The card ids that @p text mentions and that sit in the hand of a seat other than @p seat in @p game right now
-    [[nodiscard]] eastl::vector<eastl::string> FindHiddenCards(const eastl::string& text, int seat, const DemoCardGame& game);
+    [[nodiscard]] eastl::vector<String> FindHiddenCards(const String& text, int seat, const DemoCardGame& game);
 
 }  // namespace BECore

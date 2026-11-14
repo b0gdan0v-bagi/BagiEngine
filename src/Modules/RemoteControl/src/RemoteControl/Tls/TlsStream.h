@@ -48,7 +48,7 @@ namespace BECore {
         virtual ~ITlsStream() = default;
 
         /// Connects and does the handshake. The error is a message for the log and for the player and names host:port
-        [[nodiscard]] virtual std::expected<void, eastl::string> Connect(const TlsConnectParams& params) = 0;
+        [[nodiscard]] virtual std::expected<void, String> Connect(const TlsConnectParams& params) = 0;
 
         /// Sends all of @p data; false when the stream is gone
         [[nodiscard]] virtual bool SendAll(eastl::span<const uint8_t> data) = 0;
@@ -68,7 +68,7 @@ namespace BECore {
         [[nodiscard]] virtual bool IsValid() const = 0;
 
         /// Why the last call that failed failed ("" before any failure); a copy, so any thread may ask
-        [[nodiscard]] virtual eastl::string GetLastError() const = 0;
+        [[nodiscard]] virtual String GetLastError() const = 0;
     };
 
     using TlsStreamFactory = eastl::function<eastl::unique_ptr<ITlsStream>()>;

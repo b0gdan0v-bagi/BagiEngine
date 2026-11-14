@@ -69,7 +69,7 @@ namespace BECore {
             return text.substr(first, text.find_last_not_of(kBlanks) - first + 1);
         }
 
-        std::expected<int64_t, eastl::string> ParseNumber(StringView name, StringView text, int64_t min, int64_t max) {
+        std::expected<int64_t, String> ParseNumber(StringView name, StringView text, int64_t min, int64_t max) {
             int64_t value = 0;
             const char* begin = text.data();
             const char* end = text.data() + text.size();
@@ -83,7 +83,7 @@ namespace BECore {
             return value;
         }
 
-        std::expected<std::chrono::milliseconds, eastl::string> ParseMilliseconds(StringView name, StringView text, int64_t max = kMaxMillisecondsLimit) {
+        std::expected<std::chrono::milliseconds, String> ParseMilliseconds(StringView name, StringView text, int64_t max = kMaxMillisecondsLimit) {
             const auto value = ParseNumber(name, text, 0, max);
             if (!value) {
                 return std::unexpected(value.error());
@@ -104,7 +104,7 @@ namespace BECore {
         }
 
         /// Sets one value of @p args; @p name (a flag or a variable) is what the error message names, so both ways in share the ranges
-        std::expected<void, eastl::string> ApplyOption(RoomServerArgs& args, Option option, StringView name, StringView value) {
+        std::expected<void, String> ApplyOption(RoomServerArgs& args, Option option, StringView name, StringView value) {
             switch (option) {
                 case Option::Bind:
                     if (value == "loopback") {
@@ -181,7 +181,7 @@ namespace BECore {
 
     }  // namespace
 
-    std::expected<RoomServerArgs, eastl::string> ParseRoomServerArgs(int argc, const char* const* argv, RoomServerArgs base) {
+    std::expected<RoomServerArgs, String> ParseRoomServerArgs(int argc, const char* const* argv, RoomServerArgs base) {
         RoomServerArgs args = std::move(base);
         bool hasFlagOrigins = false;
         for (int i = 1; i < argc; ++i) {
@@ -216,7 +216,7 @@ namespace BECore {
         return args;
     }
 
-    std::expected<RoomServerArgs, eastl::string> ReadRoomServerEnvironment(const RoomServerEnvironmentLookup& lookup) {
+    std::expected<RoomServerArgs, String> ReadRoomServerEnvironment(const RoomServerEnvironmentLookup& lookup) {
         RoomServerArgs args;
         const auto read = [&lookup](const char* name) -> StringView {
             const char* text = lookup(name);
@@ -258,7 +258,7 @@ namespace BECore {
         return args;
     }
 
-    std::expected<RoomServerArgs, eastl::string> LoadRoomServerArgs(int argc, const char* const* argv) {
+    std::expected<RoomServerArgs, String> LoadRoomServerArgs(int argc, const char* const* argv) {
         auto environment = ReadRoomServerEnvironment([](const char* name) { return std::getenv(name); });
         if (!environment) {
             return std::unexpected(environment.error());
@@ -266,7 +266,7 @@ namespace BECore {
         return ParseRoomServerArgs(argc, argv, std::move(*environment));
     }
 
-    eastl::string GetRoomServerUsage() {
+    String GetRoomServerUsage() {
         const RoomServerArgs defaults;
         return Format("Usage: BagiRoomServer [options]\n"
                       "  --port N                 TCP port, 0 picks a free one (default {})\n"

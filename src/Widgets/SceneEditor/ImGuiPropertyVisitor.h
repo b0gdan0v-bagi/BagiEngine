@@ -33,7 +33,7 @@ namespace BECore {
         bool Visit(StringView name, float& value) override;
         bool Visit(StringView name, double& value) override;
         bool Visit(StringView name, PoolString& value) override;
-        bool Visit(StringView name, eastl::string& value) override;
+        bool Visit(StringView name, String& value) override;
 
         bool VisitEnum(StringView name, const StringView* enumNames, size_t enumCount, size_t& selectedIndex) override;
 

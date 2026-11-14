@@ -135,7 +135,7 @@ namespace BECore::Tests::MigrationTwin {
         }
     };
 
-    inline std::string Text(const eastl::string& text) {
+    inline std::string Text(const String& text) {
         return std::string(text.c_str(), text.size());
     }
 
@@ -304,7 +304,7 @@ namespace BECore::Tests::MigrationTwin {
             request["id"] = ++_nextId;
             request["method"] = "ui_tree";
             Json response;
-            _service.Post(DumpJson(request), [&response](eastl::string text) {
+            _service.Post(DumpJson(request), [&response](String text) {
                 auto parsed = ParseJson(text);
                 response = parsed ? std::move(*parsed) : Json();
             });

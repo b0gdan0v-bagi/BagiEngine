@@ -71,7 +71,7 @@ namespace BECore::Tests {
 </components></node>)";
 
         // Read through the file-system loader, which refuses a node file that is not at the current content version
-        eastl::string CurrentNode(const char* name) {
+        String CurrentNode(const char* name) {
             return Format("<node name=\"{}\" contentVersion=\"{}\"/>", name, kContentVersion);
         }
 
@@ -159,7 +159,7 @@ namespace BECore::Tests {
             return out.str();
         }
 
-        std::string Text(const eastl::string& text) {
+        std::string Text(const String& text) {
             return std::string(text.c_str(), text.size());
         }
 
@@ -274,7 +274,7 @@ namespace BECore::Tests {
             request["id"] = 1;
             request["method"] = "ui_tree";
             std::string answer;
-            _service.Post(DumpJson(request), [&answer](eastl::string text) { answer = Text(text); });
+            _service.Post(DumpJson(request), [&answer](String text) { answer = Text(text); });
             _service.Drain();
             EngineEnvironment::UseSceneManager({});
             return answer;

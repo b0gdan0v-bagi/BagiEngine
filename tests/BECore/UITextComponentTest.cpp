@@ -162,9 +162,9 @@ namespace BECore::Tests {
             serializer.EndObject();
             return serializer.SaveToString();
         };
-        const eastl::string xml = toXml(Get("Cap"));
-        EXPECT_NE(xml.find("hoverTextColor"), eastl::string::npos) << xml.c_str();
-        EXPECT_NE(xml.find("textOutline"), eastl::string::npos) << xml.c_str();
+        const String xml = toXml(Get("Cap"));
+        EXPECT_NE(xml.find("hoverTextColor"), String::npos) << xml.c_str();
+        EXPECT_NE(xml.find("textOutline"), String::npos) << xml.c_str();
 
         XmlDeserializer deserializer;
         ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));

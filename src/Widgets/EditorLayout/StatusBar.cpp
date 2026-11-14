@@ -75,7 +75,7 @@ namespace BECore {
         }
 
         /// Copies @p name into @p target only when it is not the one seen last, so a steady frame does not touch the heap
-        void CopyIfChanged(PoolString name, PoolString& seen, eastl::string& target) {
+        void CopyIfChanged(PoolString name, PoolString& seen, String& target) {
             if (name == seen) {
                 return;
             }

@@ -174,7 +174,7 @@ namespace BECore::Tests {
         Board().Update();
         Board().Update();
 
-        EXPECT_EQ(recorder.pastes, (eastl::vector<eastl::string>{"ABC"}));
+        EXPECT_EQ(recorder.pastes, (eastl::vector<String>{"ABC"}));
     }
 
     TEST_F(ClipboardTest, ARequestPasteOnEmptyOrRefusedEmitsNothing) {
@@ -196,7 +196,7 @@ namespace BECore::Tests {
 
         Board().Update();
 
-        EXPECT_EQ(recorder.pastes, (eastl::vector<eastl::string>{"from the page"}));
+        EXPECT_EQ(recorder.pastes, (eastl::vector<String>{"from the page"}));
     }
 
     TEST_F(ClipboardTest, APasteTheBackendAnnouncesComesEvenWhenTheApiIsNotAvailable) {
@@ -206,7 +206,7 @@ namespace BECore::Tests {
 
         Board().Update();
 
-        EXPECT_EQ(recorder.pastes, (eastl::vector<eastl::string>{"from the page"}));
+        EXPECT_EQ(recorder.pastes, (eastl::vector<String>{"from the page"}));
     }
 
     TEST_F(ClipboardTest, AnnouncedPastesAreDroppedWhilePaused) {
@@ -229,15 +229,15 @@ namespace BECore::Tests {
         Board().RequestPaste();
         Board().Update();
 
-        EXPECT_EQ(recorder.pastes, (eastl::vector<eastl::string>{"kept"}));
+        EXPECT_EQ(recorder.pastes, (eastl::vector<String>{"kept"}));
     }
 
     TEST_F(ClipboardTest, ATextOverTheLimitIsRefused) {
-        const eastl::string tooLong(kMaxClipboardBytes + 1, 'x');
+        const String tooLong(kMaxClipboardBytes + 1, 'x');
         EXPECT_FALSE(Board().SetText(tooLong));
         EXPECT_EQ(Fake().WriteCount(), 0);
 
-        const eastl::string exact(kMaxClipboardBytes, 'x');
+        const String exact(kMaxClipboardBytes, 'x');
         EXPECT_TRUE(Board().SetText(exact));
 
         Fake().SetContent(tooLong);

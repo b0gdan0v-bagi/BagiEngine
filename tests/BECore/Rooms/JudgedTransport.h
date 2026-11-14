@@ -22,7 +22,7 @@ namespace BECore::Tests {
     public:
         JudgedTransport(eastl::unique_ptr<IRoomTransport> inner, std::shared_ptr<WireJudgeLog> log) : _inner(std::move(inner)), _log(std::move(log)) {}
 
-        std::expected<void, eastl::string> Open(StringView url) override {
+        std::expected<void, String> Open(StringView url) override {
             return _inner->Open(url);
         }
 
@@ -49,10 +49,10 @@ namespace BECore::Tests {
         }
 
     private:
-        void Judge(const eastl::string& text) {
+        void Judge(const String& text) {
             ++_log->texts;
             const auto parsed = ParseJson(text);
-            const eastl::string type = parsed ? GetJsonString(*parsed, "type").value_or(eastl::string()) : eastl::string();
+            const String type = parsed ? GetJsonString(*parsed, "type").value_or(String()) : String();
             if (parsed && (type == RoomMessageTypes::kJoined || type == RoomMessageTypes::kView)) {
                 _log->seat = static_cast<int>(GetJsonInt(*parsed, "seat").value_or(-1));
             }

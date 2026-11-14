@@ -39,9 +39,9 @@ namespace BECore::Tests {
             size_t outside = 0;
             size_t tooSmall = 0;
             size_t overflowing = 0;
-            eastl::vector<eastl::string> examples;
+            eastl::vector<String> examples;
 
-            void Note(eastl::string text) {
+            void Note(String text) {
                 if (examples.size() < 8) {
                     examples.push_back(std::move(text));
                 }
@@ -51,10 +51,10 @@ namespace BECore::Tests {
                 return rectMismatches + outside + tooSmall + overflowing;
             }
 
-            [[nodiscard]] eastl::string Describe() const {
-                eastl::string text =
+            [[nodiscard]] String Describe() const {
+                String text =
                     Format("{} cases: {} rects differ from the XML, {} outside the content, {} under the touch size, {} overflowing\n", cases, rectMismatches, outside, tooSmall, overflowing);
-                for (const eastl::string& example : examples) {
+                for (const String& example : examples) {
                     text += Format("  {}\n", example);
                 }
                 return text;
@@ -89,7 +89,7 @@ namespace BECore::Tests {
             _manager->SetActiveScene("S"_intern);
             auto doc = _manager->GetSceneByName("S"_intern)->GetRootNode().GetChildren()[0]->GetComponent<RmlUiDocumentComponent>();
             EXPECT_TRUE(doc);
-            EXPECT_TRUE(doc && doc->SetMarkup(eastl::string(screen.rml)));
+            EXPECT_TRUE(doc && doc->SetMarkup(String(screen.rml)));
             return doc;
         }
 

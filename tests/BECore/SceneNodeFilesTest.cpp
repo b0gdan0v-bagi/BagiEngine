@@ -96,7 +96,7 @@ namespace BECore::Tests {
             R"(<node ref="nodes/Hud"><components><component type="QuadRendererComponent" color="1,2,3,4"><color r="1"/></component></components></node>)",
         };
 
-        bool Mentions(const eastl::string& error, const char* part) {
+        bool Mentions(const String& error, const char* part) {
             return std::string_view{error.c_str()}.find(part) != std::string_view::npos;
         }
 
@@ -303,8 +303,8 @@ namespace BECore::Tests {
     }
 
     TEST_F(SceneNodeFilesTest, CustomLoaderIsAsked) {
-        eastl::vector<eastl::string> asked;
-        const NodeFileLoader loader = [&asked](StringView ref, pugi::xml_document& out, eastl::string& error) {
+        eastl::vector<String> asked;
+        const NodeFileLoader loader = [&asked](StringView ref, pugi::xml_document& out, String& error) {
             asked.emplace_back(ref);
             if (ref == "known") {
                 return static_cast<bool>(out.load_string(R"(<node name="Known"/>)"));
@@ -328,7 +328,7 @@ namespace BECore::Tests {
         const NodeFileLoader loader = MakeDirectoryNodeLoader(_dir);
 
         pugi::xml_document out;
-        eastl::string error;
+        String error;
         EXPECT_TRUE(loader("deep/er/Leaf", out, error)) << error.c_str();
         EXPECT_STREQ(out.document_element().attribute("name").as_string(), "Leaf");
 
@@ -358,7 +358,7 @@ namespace BECore::Tests {
 
         pugi::xml_document shared;
         pugi::xml_document only;
-        eastl::string error;
+        String error;
         ASSERT_TRUE(loader("nodes/Shared", shared, error)) << error.c_str();
         ASSERT_TRUE(loader("nodes/Only", only, error)) << error.c_str();
         EXPECT_STREQ(shared.document_element().attribute("name").as_string(), "FromGame");
@@ -426,7 +426,7 @@ namespace BECore::Tests {
         const NodeFileLoader loader = MakeFileSystemNodeLoader(fs);
 
         pugi::xml_document doc;
-        eastl::string error;
+        String error;
         EXPECT_FALSE(loader("nodes/Old", doc, error));
         EXPECT_TRUE(Mentions(error, "config/nodes/Old.xml: content version")) << error.c_str();
         EXPECT_TRUE(Mentions(error, "migrate.py")) << error.c_str();
@@ -693,7 +693,7 @@ namespace BECore::Tests {
         pugi::xml_document reference = Parse(R"(<node ref="nodes/Hud" name="Right" layer="2"><components>
   <component type="TransformComponent" x="7"/>
 </components></node>)");
-        eastl::string error;
+        String error;
 
         ASSERT_TRUE(ApplyNodeOverrides(file.document_element(), reference.document_element(), error)) << error.c_str();
 
@@ -712,7 +712,7 @@ namespace BECore::Tests {
             pugi::xml_document file = Parse(kHudNode);
             const std::string before = Saved(file);
             pugi::xml_document reference = Parse(text);
-            eastl::string error;
+            String error;
 
             EXPECT_FALSE(ApplyNodeOverrides(file.document_element(), reference.document_element(), error));
             EXPECT_FALSE(error.empty());
@@ -724,7 +724,7 @@ namespace BECore::Tests {
         pugi::xml_document reference = Parse(R"(<node ref="nodes/Hud" name="Late" layer="1"><components>
   <component type="TransformComponent" x="99"/><component type="Nothing"/>
 </components></node>)");
-        eastl::string error;
+        String error;
         EXPECT_FALSE(ApplyNodeOverrides(file.document_element(), reference.document_element(), error));
         EXPECT_EQ(Saved(file), before);
     }
@@ -732,7 +732,7 @@ namespace BECore::Tests {
     TEST_F(SceneNodeFilesTest, NodeFileWithoutComponentsHasNoComponentToOverride) {
         pugi::xml_document file = Parse(R"(<node name="Bare"/>)");
         pugi::xml_document reference = Parse(R"(<node ref="x"><components><component type="TransformComponent" x="1"/></components></node>)");
-        eastl::string error;
+        String error;
 
         EXPECT_FALSE(ApplyNodeOverrides(file.document_element(), reference.document_element(), error));
         EXPECT_TRUE(Mentions(error, "no component 'TransformComponent'")) << error.c_str();
@@ -743,7 +743,7 @@ namespace BECore::Tests {
     TEST_F(SceneNodeFilesTest, ExpandNodeReferenceGivesTheFilesNode) {
         pugi::xml_document reference = Parse(R"(<node ref="nodes/Hud"/>)");
         pugi::xml_document out;
-        eastl::string error;
+        String error;
 
         ASSERT_TRUE(ExpandNodeReference(reference.document_element(), MakeDirectoryNodeLoader(_dir), false, out, error)) << error.c_str();
 
@@ -765,7 +765,7 @@ namespace BECore::Tests {
 
         pugi::xml_document reference = Parse(kReference);
         pugi::xml_document out;
-        eastl::string error;
+        String error;
         ASSERT_TRUE(ExpandNodeReference(reference.document_element(), MakeDirectoryNodeLoader(_dir), false, out, error)) << error.c_str();
 
         EXPECT_EQ(Saved(out.document_element()), Saved(FirstNode(scene)));
@@ -780,7 +780,7 @@ namespace BECore::Tests {
         for (pugi::xml_document* reference : {&missing, &invalidRef, &noRef}) {
             pugi::xml_document out;
             out.append_child("stale");
-            eastl::string error;
+            String error;
             EXPECT_FALSE(ExpandNodeReference(reference->document_element(), MakeDirectoryNodeLoader(_dir), true, out, error));
             EXPECT_FALSE(error.empty());
             EXPECT_FALSE(out.document_element());
@@ -790,7 +790,7 @@ namespace BECore::Tests {
             SCOPED_TRACE(text);
             pugi::xml_document reference = Parse(text);
             pugi::xml_document out;
-            eastl::string error;
+            String error;
             EXPECT_FALSE(ExpandNodeReference(reference.document_element(), MakeDirectoryNodeLoader(_dir), false, out, error));
             EXPECT_FALSE(error.empty());
             EXPECT_FALSE(out.document_element());
@@ -798,13 +798,13 @@ namespace BECore::Tests {
     }
 
     TEST_F(SceneNodeFilesTest, ExpandNodeReferenceReportsTheLoadersReason) {
-        const NodeFileLoader loader = [](StringView, pugi::xml_document&, eastl::string& error) {
+        const NodeFileLoader loader = [](StringView, pugi::xml_document&, String& error) {
             error = "the loader says no";
             return false;
         };
         pugi::xml_document reference = Parse(R"(<node ref="nodes/Hud"/>)");
         pugi::xml_document out;
-        eastl::string error;
+        String error;
 
         EXPECT_FALSE(ExpandNodeReference(reference.document_element(), loader, false, out, error));
         EXPECT_TRUE(Mentions(error, "the loader says no")) << error.c_str();
@@ -816,7 +816,7 @@ namespace BECore::Tests {
         pugi::xml_document reference = Parse(R"(<node ref="nodes/Stamped" name="Own"><components><component type="TransformComponent" x="9"/></components></node>)");
         pugi::xml_document plain;
         pugi::xml_document marked;
-        eastl::string error;
+        String error;
         ASSERT_TRUE(ExpandNodeReference(reference.document_element(), MakeDirectoryNodeLoader(_dir), false, plain, error)) << error.c_str();
         ASSERT_TRUE(ExpandNodeReference(reference.document_element(), MakeDirectoryNodeLoader(_dir), true, marked, error)) << error.c_str();
 

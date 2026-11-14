@@ -7,12 +7,12 @@
 
 namespace BECore {
 
-    const eastl::string& UITextComponent::ShownText(const UIElement& owner, const eastl::string& own) {
-        const eastl::string* replacement = owner.GetTextOverride();
+    const String& UITextComponent::ShownText(const UIElement& owner, const String& own) {
+        const String* replacement = owner.GetTextOverride();
         return replacement ? *replacement : own;
     }
 
-    UITextParams UITextComponent::MakeParams(float fontSize, const eastl::string& shown) const {
+    UITextParams UITextComponent::MakeParams(float fontSize, const String& shown) const {
         UITextParams params;
         params.text = StringView(shown);
         params.font = font;
@@ -70,7 +70,7 @@ namespace BECore {
     }
 
     StringView UITextComponent::GetDisplayText(const UIElement& owner) const {
-        const eastl::string& shown = ShownText(owner, text);
+        const String& shown = ShownText(owner, text);
         return _painter.GetDisplayText(StringView(shown));
     }
 

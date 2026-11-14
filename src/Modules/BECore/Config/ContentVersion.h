@@ -36,7 +36,7 @@ namespace BECore {
      * @return the number (no attribute is kUnversionedContentVersion), or the reason when the attribute is not a
      * non-negative whole number: a malformed value is neither older nor newer than the engine
      */
-    std::expected<uint32_t, eastl::string> GetContentVersion(pugi::xml_node root);
+    std::expected<uint32_t, String> GetContentVersion(pugi::xml_node root);
 
     /**
      * @brief Ok when the version of @p root is kContentVersion, else the sentence a loader logs
@@ -47,6 +47,6 @@ namespace BECore {
      *
      * @param what Names the file in the message
      */
-    std::expected<void, eastl::string> CheckContentVersion(pugi::xml_node root, StringView what);
+    std::expected<void, String> CheckContentVersion(pugi::xml_node root, StringView what);
 
 }  // namespace BECore

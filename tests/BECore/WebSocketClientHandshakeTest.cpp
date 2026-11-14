@@ -34,7 +34,7 @@ namespace BECore::Tests {
                 return text + "\r\n";
             }
 
-            [[nodiscard]] std::expected<void, eastl::string> Check() const {
+            [[nodiscard]] std::expected<void, String> Check() const {
                 const std::string text = Text();
                 return CheckServerHandshakeResponse(FromStd(text), kRfcKey);
             }
@@ -55,7 +55,7 @@ namespace BECore::Tests {
     }  // namespace
 
     TEST(WebSocketClientHandshakeTest, RequestTextByteForByte) {
-        const eastl::string request = BuildClientHandshakeRequest(Url("ws://example.com:8080/rooms?x=1"), kRfcKey);
+        const String request = BuildClientHandshakeRequest(Url("ws://example.com:8080/rooms?x=1"), kRfcKey);
         EXPECT_EQ(request, "GET /rooms?x=1 HTTP/1.1\r\n"
                            "Host: example.com:8080\r\n"
                            "Upgrade: websocket\r\n"
@@ -67,8 +67,8 @@ namespace BECore::Tests {
 
     TEST(WebSocketClientHandshakeTest, RequestHasAnOriginOnlyWhenOneIsGiven) {
         const WebSocketUrl url = Url("wss://example.com");
-        EXPECT_EQ(BuildClientHandshakeRequest(url, kRfcKey).find("Origin"), eastl::string::npos);
-        const eastl::string withOrigin = BuildClientHandshakeRequest(url, kRfcKey, "https://game.example.com");
+        EXPECT_EQ(BuildClientHandshakeRequest(url, kRfcKey).find("Origin"), String::npos);
+        const String withOrigin = BuildClientHandshakeRequest(url, kRfcKey, "https://game.example.com");
         EXPECT_EQ(withOrigin, "GET / HTTP/1.1\r\n"
                               "Host: example.com\r\n"
                               "Upgrade: websocket\r\n"
@@ -82,7 +82,7 @@ namespace BECore::Tests {
     TEST(WebSocketClientHandshakeTest, TheServerParserAcceptsTheRequestOfTheClient) {
         HandshakePolicy policy;
         policy.loopbackOnly = false;
-        const eastl::string request = BuildClientHandshakeRequest(Url("ws://example.com/x"), kRfcKey);
+        const String request = BuildClientHandshakeRequest(Url("ws://example.com/x"), kRfcKey);
         const auto key = ParseHandshakeRequest(StringView(request.data(), request.size() - 2), policy);  // the head ends with the empty line, which the reader drops
         ASSERT_TRUE(key.has_value()) << key.error().message.c_str();
         EXPECT_EQ(*key, kRfcKey);
@@ -90,13 +90,13 @@ namespace BECore::Tests {
 
     TEST(WebSocketClientHandshakeTest, ClientKeyIs16BytesInBase64AndDiffersBetweenDraws) {
         std::random_device random;
-        const eastl::string first = GenerateClientKey(random);
-        const eastl::string second = GenerateClientKey(random);
+        const String first = GenerateClientKey(random);
+        const String second = GenerateClientKey(random);
         EXPECT_EQ(first.size(), 24u);
         EXPECT_TRUE(first.substr(22) == "==");
         EXPECT_NE(first, second);
         // The server's own check of the shape accepts it
-        const eastl::string request = BuildClientHandshakeRequest(Url("ws://a.com"), first);
+        const String request = BuildClientHandshakeRequest(Url("ws://a.com"), first);
         EXPECT_TRUE(ParseHandshakeRequest(StringView(request.data(), request.size() - 2), HandshakePolicy{.loopbackOnly = false}).has_value());
     }
 
@@ -107,7 +107,7 @@ namespace BECore::Tests {
     }
 
     TEST(WebSocketClientHandshakeTest, TheServersOwnAnswerPasses) {
-        const eastl::string answer = BuildAcceptResponse(kRfcKey);
+        const String answer = BuildAcceptResponse(kRfcKey);
         const auto result = CheckServerHandshakeResponse(StringView(answer), kRfcKey);
         EXPECT_TRUE(result.has_value()) << result.error().c_str();
     }

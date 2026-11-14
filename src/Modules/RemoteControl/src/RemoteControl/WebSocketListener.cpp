@@ -11,15 +11,15 @@ namespace BECore {
 
         /// Answers a client that cannot be served now. The request is read first: closing a socket with unread data
         /// makes the system reset the connection, and the client could lose the answer
-        void RejectBusy(Socket socket, const eastl::string& message) {
+        void RejectBusy(Socket socket, const String& message) {
             socket.SetReceiveTimeout(kBusyDrainTimeout);
             std::array<uint8_t, kMaxHandshakeBytes> discarded;
             (void)socket.Receive(eastl::span<uint8_t>(discarded.data(), discarded.size()));
-            const eastl::string response = BuildRejectResponse(HandshakeError{kServiceUnavailable, message});
+            const String response = BuildRejectResponse(HandshakeError{kServiceUnavailable, message});
             (void)socket.SendAll(AsBytes(response));
         }
 
-        [[nodiscard]] eastl::string MakeThreadName(const WebSocketListenerSettings& settings, StringView role) {
+        [[nodiscard]] String MakeThreadName(const WebSocketListenerSettings& settings, StringView role) {
             return Format("{} {}", settings.threadName, role);
         }
 
@@ -89,7 +89,7 @@ namespace BECore {
 
     void WebSocketListener::AcceptLoop() {
         while (!_stopping) {
-            eastl::string peerAddress;
+            String peerAddress;
             auto accepted = _listener.Accept(kAcceptPollInterval, &peerAddress);
             ReapFinishedConnections();
             if (accepted) {
@@ -103,7 +103,7 @@ namespace BECore {
         }
     }
 
-    void WebSocketListener::AddConnection(Socket socket, eastl::string peerAddress) {
+    void WebSocketListener::AddConnection(Socket socket, String peerAddress) {
         bool perAddressLimit = false;
         {
             LockGuard lock(_connectionsMutex);
@@ -139,7 +139,7 @@ namespace BECore {
         RejectBusy(std::move(socket), _settings.busyMessage);
     }
 
-    bool WebSocketListener::AdmitByClientAddress(WebSocketConnection& connection, const eastl::string& clientAddress) {
+    bool WebSocketListener::AdmitByClientAddress(WebSocketConnection& connection, const String& clientAddress) {
         // Counting the others and setting the address are one step under the lock, so two clients of one address that shake hands at
         // the same moment cannot both pass a limit of one. A connection that has not been admitted yet (still shaking hands, or just
         // refused) has no client address and counts for nobody
@@ -180,7 +180,7 @@ namespace BECore {
         eastl::vector<uint8_t> pendingBytes;
         AdmitClientFn admit;
         if (_settings.policy.trustedProxyHops != 0) {
-            admit = [this, &connection](const eastl::string& clientAddress) { return AdmitByClientAddress(*connection, clientAddress); };
+            admit = [this, &connection](const String& clientAddress) { return AdmitByClientAddress(*connection, clientAddress); };
         }
         if (connection->Handshake(_settings.policy, _settings.handshakeTimeout, pendingBytes, admit)) {
             LOG_INFO("{}: a client connected"_format(_settings.logName));

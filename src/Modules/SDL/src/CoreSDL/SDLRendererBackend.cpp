@@ -293,8 +293,8 @@ namespace BECore {
 
     void SDLRendererBackend::UnsetRenderTarget() {}
 
-    eastl::string SDLRendererBackend::GetNoGpuDeviceReason() const {
-        return eastl::string("the SDL 2D renderer has no depth buffer and no shaders (use a renderer with a GPU device)");
+    String SDLRendererBackend::GetNoGpuDeviceReason() const {
+        return String("the SDL 2D renderer has no depth buffer and no shaders (use a renderer with a GPU device)");
     }
 
     float SDLRendererBackend::GetOutputWidth() const {
@@ -336,7 +336,7 @@ namespace BECore {
     void SDLRendererBackend::RequestCapture(CaptureCallback callback) {
         if (_captureCallback) {
             CaptureCallback superseded = std::move(_captureCallback);
-            superseded(std::unexpected(eastl::string("the capture was replaced by a newer request")));
+            superseded(std::unexpected(String("the capture was replaced by a newer request")));
         }
         _captureCallback = std::move(callback);
     }

@@ -9,7 +9,7 @@ namespace BECore {
     }
 
     bool RmlUiSystemInterface::LogMessage(Rml::Log::Type type, const Rml::String& message) {
-        const eastl::string line = "RmlUi: {}"_format(FromStd(message));
+        const String line = "RmlUi: {}"_format(FromStd(message));
         switch (type) {
             case Rml::Log::LT_ERROR:
             case Rml::Log::LT_ASSERT:

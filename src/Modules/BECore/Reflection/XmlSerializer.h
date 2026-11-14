@@ -50,7 +50,7 @@ namespace BECore {
          * @brief Get XML as string
          * @return XML content as string
          */
-        eastl::string SaveToString() const;
+        String SaveToString() const;
 
         // =================================================================
         // ISerializer interface - Write methods
@@ -120,7 +120,7 @@ namespace BECore {
         // For array iteration
         struct ArrayContext {
             pugi::xml_node parentNode;
-            eastl::string elementName;
+            String elementName;
             size_t currentIndex = 0;
         };
         eastl::vector<ArrayContext> _arrayStack;

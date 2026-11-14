@@ -36,7 +36,7 @@ namespace BECore {
         void UnsetRenderTarget() override;
 
         /// The SDL 2D renderer has no GPU device (GetGpuDevice() stays null): no depth buffer and no shaders, so no 3D
-        eastl::string GetNoGpuDeviceReason() const override;
+        String GetNoGpuDeviceReason() const override;
 
         float GetOutputWidth() const override;
         float GetOutputHeight() const override;

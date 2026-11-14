@@ -315,7 +315,7 @@ namespace BECore {
 
         // Copies `outgoing` into @p out in two steps (the size, then the bytes into a buffer sized here), so no function is exported.
         // @return false, with @p out empty, when the text is longer than kMaxClipboardBytes
-        bool CopyOutgoing(eastl::string& out) {
+        bool CopyOutgoing(String& out) {
             out.clear();
             const int bytes = EM_ASM_INT({ return lengthBytesUTF8(window.bagiClipboard.outgoing); });
             const bool fits = bytes >= 0 && static_cast<size_t>(bytes) <= kMaxClipboardBytes;
@@ -397,7 +397,7 @@ namespace BECore {
             bool _reading = false;
             bool _warnedWrite = false;
             bool _warnedRead = false;
-            eastl::string _text;  ///< the text being moved from the page, kept so a read does not allocate for the same size again
+            String _text;  ///< the text being moved from the page, kept so a read does not allocate for the same size again
         };
 
         /// Installs the page state once (the listeners are added a single time per page) and returns the backend over it

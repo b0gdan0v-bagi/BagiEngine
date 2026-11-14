@@ -124,7 +124,7 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(first.attribute("height").as_float(), 1280.0f);
         EXPECT_FALSE(list.last_child().attribute("name"));
 
-        eastl::string text;
+        String text;
         {
             std::ostringstream stream;
             serializer.GetRootNode().print(stream);

@@ -9,7 +9,7 @@ namespace BECore::UIWebText {
     /// @p text without its leading and trailing white space (spaces, tabs and line breaks)
     [[nodiscard]] StringView TrimSpace(StringView text);
 
-    [[nodiscard]] eastl::string ToLower(StringView text);
+    [[nodiscard]] String ToLower(StringView text);
 
     /// The parts of @p text between @p separator characters that are outside parentheses and quotes, trimmed. Empty parts are kept
     [[nodiscard]] eastl::vector<StringView> SplitTopLevel(StringView text, char separator);
@@ -39,14 +39,14 @@ namespace BECore::UIWebText {
     };
 
     /// The attribute text of @p color: `@name` for a token, else `r,g,b,a`
-    [[nodiscard]] eastl::string FormatWebColor(const WebColor& color);
+    [[nodiscard]] String FormatWebColor(const WebColor& color);
 
     /// A CSS color: `#rgb`, `#rrggbb`, `#rrggbbaa`, `rgb()` / `rgba()` (commas or spaces, alpha as a number 0 to 1 or a percent), `transparent` and a few names; or `var(--name)`
     /// with a legal token name (`UIThemes::IsValidToken`) and **no fallback value**, which is a token. Nothing for anything else (`var(--name, red)` included)
     [[nodiscard]] Optional<WebColor> ParseColor(StringView text);
 
     /// The content of `url(...)` with its quotes removed; nullopt when @p text is not a url
-    [[nodiscard]] Optional<eastl::string> ParseUrl(StringView text);
+    [[nodiscard]] Optional<String> ParseUrl(StringView text);
 
     /// The corners of a `border-radius` value: one to four px lengths in the CSS order (one for all, two for top-left+bottom-right and top-right+bottom-left, three,
     /// four) as a `UICorners`. `%`, other units, a `/` (elliptical corners) and a negative length give nullopt

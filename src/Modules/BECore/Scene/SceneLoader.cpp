@@ -17,7 +17,7 @@ namespace BECore {
         pugi::xml_document expanded;
         expanded.append_copy(configRoot.GetPugiNode());
         const NodeExpansion expansion = ExpandNodeReferences(expanded.document_element(), loader, true);
-        for (const eastl::string& error : expansion.errors) {
+        for (const String& error : expansion.errors) {
             LOG_ERROR(Format("Config '{}': {}", configName, error).c_str());
         }
 

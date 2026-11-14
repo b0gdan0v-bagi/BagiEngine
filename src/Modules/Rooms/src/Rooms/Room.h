@@ -11,7 +11,7 @@ namespace BECore {
     struct RoomMemberJoined {
         PlayerId player = 0;
         /// The reconnect secret: goes to its owner only
-        eastl::string token;
+        String token;
         int seat = 0;
     };
 
@@ -31,7 +31,7 @@ namespace BECore {
     class Room {
     public:
         /// @param factory Makes the game at Start(); a room made without one can only stay in the lobby (Start gives `internal_error`).
-        Room(eastl::string code, SeatedGameInfo info, RandomFn random, SeatedGameFactory factory = {}, RoomTimings timings = {});
+        Room(String code, SeatedGameInfo info, RandomFn random, SeatedGameFactory factory = {}, RoomTimings timings = {});
 
         /**
          * @brief A new member takes the lowest free seat. The first member is the host.
@@ -168,7 +168,7 @@ namespace BECore {
             return _members.size();
         }
 
-        [[nodiscard]] const eastl::string& GetCode() const {
+        [[nodiscard]] const String& GetCode() const {
             return _code;
         }
 
@@ -179,8 +179,8 @@ namespace BECore {
     private:
         struct Member {
             PlayerId id = 0;
-            eastl::string name;
-            eastl::string token;
+            String name;
+            String token;
             int seat = 0;
             /// Whether the connection of the member is up (always true in the lobby: a dropped connection removes the member)
             bool connected = true;
@@ -196,7 +196,7 @@ namespace BECore {
         void PassHost();
         void BumpLobbyRevision();
 
-        eastl::string _code;
+        String _code;
         SeatedGameInfo _info;
         RandomFn _random;
         SeatedGameFactory _factory;

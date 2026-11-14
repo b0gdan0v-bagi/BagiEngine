@@ -11,19 +11,19 @@ namespace BECore {
 
         /// What a component serializes to, as text: the type and the XML of its fields in the compact form
         struct SerializedComponent {
-            eastl::string type;
+            String type;
             pugi::xml_document fields;  // the document element holds the attributes and child elements of the fields
         };
 
         struct StringWriter : pugi::xml_writer {
-            eastl::string text;
+            String text;
 
             void write(const void* data, size_t size) override {
                 text.append(static_cast<const char*>(data), size);
             }
         };
 
-        eastl::string Printed(pugi::xml_node node) {
+        String Printed(pugi::xml_node node) {
             StringWriter writer;
             node.print(writer, "", pugi::format_raw);
             return writer.text;
@@ -48,9 +48,9 @@ namespace BECore {
         /// One field of a serialized component: its attribute and the text of its child elements of that name
         struct FieldState {
             bool hasAttribute = false;
-            eastl::string attribute;
+            String attribute;
             bool hasChildren = false;
-            eastl::string children;
+            String children;
 
             bool operator==(const FieldState& other) const {
                 return hasAttribute == other.hasAttribute && attribute == other.attribute && hasChildren == other.hasChildren && children == other.children;
@@ -70,15 +70,15 @@ namespace BECore {
             return state;
         }
 
-        void AddName(eastl::vector<eastl::string>& names, const char* name) {
+        void AddName(eastl::vector<String>& names, const char* name) {
             if (eastl::find(names.begin(), names.end(), name) == names.end()) {
                 names.push_back(name);
             }
         }
 
         /// The names of the fields of both sides: their attributes and their child elements
-        eastl::vector<eastl::string> FieldNames(pugi::xml_node liveFields, pugi::xml_node baseFields) {
-            eastl::vector<eastl::string> names;
+        eastl::vector<String> FieldNames(pugi::xml_node liveFields, pugi::xml_node baseFields) {
+            eastl::vector<String> names;
             for (const pugi::xml_node fields : {liveFields, baseFields}) {
                 for (pugi::xml_attribute attr = fields.first_attribute(); attr; attr = attr.next_attribute()) {
                     AddName(names, attr.name());
@@ -93,8 +93,8 @@ namespace BECore {
         }
 
         /// Writes the fields of @p live that differ from @p base into @p componentEl. False when a field is written in both spellings
-        bool WriteFieldOverrides(pugi::xml_node live, pugi::xml_node base, pugi::xml_node componentEl, eastl::string& reason) {
-            for (const eastl::string& name : FieldNames(live, base)) {
+        bool WriteFieldOverrides(pugi::xml_node live, pugi::xml_node base, pugi::xml_node componentEl, String& reason) {
+            for (const String& name : FieldNames(live, base)) {
                 const FieldState liveField = ReadField(live, name.c_str());
                 if (liveField == ReadField(base, name.c_str())) {
                     continue;
@@ -181,8 +181,8 @@ namespace BECore {
         }
     }
 
-    bool BuildNodeReference(const SceneNode& live, const NodeFileLoader& loader, pugi::xml_node nodesEl, eastl::string& reason) {
-        const eastl::string ref = live.GetSourceRef().CStr();
+    bool BuildNodeReference(const SceneNode& live, const NodeFileLoader& loader, pugi::xml_node nodesEl, String& reason) {
+        const String ref = live.GetSourceRef().CStr();
         if (ref.empty()) {
             reason = "the node has no node file";
             return false;
@@ -241,7 +241,7 @@ namespace BECore {
 
         // Whatever is written must load back as the live node
         pugi::xml_document reloaded;
-        eastl::string error;
+        String error;
         if (!ExpandNodeReference(refEl, loader, false, reloaded, error)) {
             reason = Format("the reference does not expand again: {}", error);
             return false;

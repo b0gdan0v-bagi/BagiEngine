@@ -69,7 +69,7 @@ namespace BECore::Tests {
 body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color: white; pointer-events: none; }
 )";
 
-        eastl::string Document(const char* body, const char* style = "") {
+        String Document(const char* body, const char* style = "") {
             return Format("<rml><head><style>{}{}</style></head><body>{}</body></rml>", kStyle, style, body);
         }
 
@@ -202,10 +202,10 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
 
         /// A scene with one RmlUiDocumentComponent whose `source` is @p source (a real path), drawn in the output of the fixture's renderer
         IntrusivePtr<RmlUiDocumentComponent> OpenFile(const std::filesystem::path& source) {
-            const eastl::string scene = Format(R"(<SceneManager><scenes><scene type="Scene" name="File"><nodes><node name="Doc"><components>
+            const String scene = Format(R"(<SceneManager><scenes><scene type="Scene" name="File"><nodes><node name="Doc"><components>
   <component type="RmlUiDocumentComponent" space="Screen" scaleMode="ConstantPixelSize" source="{}"/>
 </components></node></nodes></scene></scenes></SceneManager>)",
-                                               source.generic_string());
+                                        source.generic_string());
             XmlDeserializer deserializer;
             EXPECT_TRUE(deserializer.LoadFromString(scene));
             _fileManager = New<SceneManager>();
@@ -632,10 +632,10 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
         std::ofstream(directory / "menu.rml") << R"(<rml><head><link type="text/rcss" href="menu.rcss"/></head><body><div id="box"></div></body></rml>)";
         std::ofstream(directory / "menu.rcss") << "body { width: 100%; height: 100%; } #box { position: absolute; left: 12dp; top: 34dp; width: 56dp; height: 78dp; background-color: #123456; }";
 
-        const eastl::string scene = Format(R"(<SceneManager><scenes><scene type="Scene" name="File"><nodes><node name="Doc"><components>
+        const String scene = Format(R"(<SceneManager><scenes><scene type="Scene" name="File"><nodes><node name="Doc"><components>
   <component type="RmlUiDocumentComponent" space="Screen" scaleMode="ConstantPixelSize" source="{}"/>
 </components></node></nodes></scene></scenes></SceneManager>)",
-                                           (directory / "menu.rml").generic_string());
+                                    (directory / "menu.rml").generic_string());
         XmlDeserializer deserializer;
         ASSERT_TRUE(deserializer.LoadFromString(scene));
         auto manager = New<SceneManager>();
@@ -663,7 +663,7 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
 
         constexpr const char* kBoxDocument = R"(<rml><head><link type="text/rcss" href="menu.rcss"/></head><body><div id="box"></div></body></rml>)";
 
-        eastl::string BoxStyle(int left) {
+        String BoxStyle(int left) {
             return Format("body {{ width: 100%; height: 100%; }} #box {{ position: absolute; left: {}dp; top: 34dp; width: 56dp; height: 78dp; background-color: #123456; }}", left);
         }
 
@@ -843,7 +843,7 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
     }
 
     TEST_F(RmlUiHostTest, AMissingFileLeavesTheComponentWithoutADocument) {
-        const eastl::string scene = R"(<SceneManager><scenes><scene type="Scene" name="Missing"><nodes><node name="Doc"><components>
+        const String scene = R"(<SceneManager><scenes><scene type="Scene" name="Missing"><nodes><node name="Doc"><components>
   <component type="RmlUiDocumentComponent" source="assets/ui/does-not-exist.rml"/>
 </components></node></nodes></scene></scenes></SceneManager>)";
         XmlDeserializer deserializer;

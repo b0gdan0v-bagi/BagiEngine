@@ -29,7 +29,7 @@ namespace BECore {
 
     private:
         const Font* _font = nullptr;
-        eastl::string _text;
+        String _text;
         TextLayoutOptions _options;
         TextLayoutResult _layout;
         uint32_t _layoutCount = 0;

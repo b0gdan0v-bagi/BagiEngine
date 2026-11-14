@@ -37,8 +37,8 @@ namespace BECore::Tests {
         }
 
         /// The `type` of every <widget> in the config named @p configName, in file order
-        eastl::vector<eastl::string> WidgetTypes(PoolString configName) {
-            eastl::vector<eastl::string> types;
+        eastl::vector<String> WidgetTypes(PoolString configName) {
+            eastl::vector<String> types;
             const XmlNode widgets = CoreManager::GetConfigManager().GetConfig(configName).GetChild("widgets");
             for (const XmlNode widget : widgets.Children()) {
                 if (const auto type = widget.ParseAttribute<StringView>("type")) {
@@ -159,15 +159,15 @@ namespace BECore::Tests {
     TEST_F(WidgetListTest, GameModeConfigListsTheClearScreenSceneRenderAndOverlayWidgetsInOrder) {
         const auto types = WidgetTypes(GetWidgetsConfigName(RunMode::Game));
 
-        const eastl::vector<eastl::string> expected{"ClearScreenWidget", "SceneRenderWidget", "ProfilerOverlayWidget"};
+        const eastl::vector<String> expected{"ClearScreenWidget", "SceneRenderWidget", "ProfilerOverlayWidget"};
         EXPECT_EQ(types, expected);
     }
 
     TEST_F(WidgetListTest, EditorModeConfigListsTheEditorWidgetsInOrder) {
         const auto types = WidgetTypes(GetWidgetsConfigName(RunMode::Editor));
 
-        const eastl::vector<eastl::string> expected{"ImGuiWidget",        "EditorLayoutWidget", "ViewportWidget",      "ClearScreenWidget",
-                                                    "ConfigEditorWidget", "SceneEditorWidget",  "TextureEditorWidget", "ProfilerWidget"};
+        const eastl::vector<String> expected{"ImGuiWidget",        "EditorLayoutWidget", "ViewportWidget",      "ClearScreenWidget",
+                                             "ConfigEditorWidget", "SceneEditorWidget",  "TextureEditorWidget", "ProfilerWidget"};
         EXPECT_EQ(types, expected);
     }
 

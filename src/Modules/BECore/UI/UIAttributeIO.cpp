@@ -8,16 +8,16 @@ namespace BECore::UIAttr {
 
     namespace {
 
-        void WriteText(ISerializer& s, StringView key, const eastl::string& text) {
+        void WriteText(ISerializer& s, StringView key, const String& text) {
             s.WriteAttribute(key, StringView(text));
         }
 
         /// The text of an attribute, or false when there is none
-        bool ReadText(IDeserializer& d, StringView key, eastl::string& text) {
+        bool ReadText(IDeserializer& d, StringView key, String& text) {
             return d.ReadAttribute(key, text);
         }
 
-        void ReportMalformed(IDeserializer& d, StringView key, const eastl::string& text) {
+        void ReportMalformed(IDeserializer& d, StringView key, const String& text) {
             d.ReportError(key, StringView(Format("Invalid value: '{}'", text).c_str()));
         }
 
@@ -28,7 +28,7 @@ namespace BECore::UIAttr {
     }
 
     bool ReadLength(IDeserializer& d, StringView key, UILength& out) {
-        eastl::string text;
+        String text;
         if (!ReadText(d, key, text)) {
             return false;
         }
@@ -46,7 +46,7 @@ namespace BECore::UIAttr {
     }
 
     bool ReadEdges(IDeserializer& d, StringView key, UIEdges& out) {
-        eastl::string text;
+        String text;
         if (!ReadText(d, key, text)) {
             return false;
         }
@@ -70,7 +70,7 @@ namespace BECore::UIAttr {
     }
 
     void ReadOptionalVec2Fraction(IDeserializer& d, StringView key, Optional<Vec2>& out) {
-        eastl::string text;
+        String text;
         if (!ReadText(d, key, text)) {
             return;
         }
@@ -100,7 +100,7 @@ namespace BECore::UIAttr {
     }
 
     bool ReadCorners(IDeserializer& d, StringView key, UICorners& out) {
-        eastl::string text;
+        String text;
         if (!ReadText(d, key, text)) {
             return false;
         }
@@ -118,7 +118,7 @@ namespace BECore::UIAttr {
     }
 
     bool ReadShadow(IDeserializer& d, StringView key, UIShadowSpec& out, PoolString& colorToken) {
-        eastl::string text;
+        String text;
         if (!ReadText(d, key, text)) {
             return false;
         }
@@ -138,7 +138,7 @@ namespace BECore::UIAttr {
     }
 
     bool ReadTextOutline(IDeserializer& d, StringView key, float& width, UIColor& color) {
-        eastl::string text;
+        String text;
         if (!ReadText(d, key, text)) {
             return false;
         }
@@ -159,7 +159,7 @@ namespace BECore::UIAttr {
     }
 
     bool ReadTextShadow(IDeserializer& d, StringView key, float& offsetX, float& offsetY, UIColor& color) {
-        eastl::string text;
+        String text;
         if (!ReadText(d, key, text)) {
             return false;
         }

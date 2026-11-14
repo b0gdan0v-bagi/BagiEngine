@@ -13,7 +13,7 @@ namespace BECore {
             return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-';
         }
 
-        std::unexpected<SaveError> MakeError(SaveErrorKind kind, eastl::string detail) {
+        std::unexpected<SaveError> MakeError(SaveErrorKind kind, String detail) {
             return std::unexpected(SaveError{kind, std::move(detail)});
         }
 
@@ -32,9 +32,9 @@ namespace BECore {
         constexpr StringView kEnvelopeState = "state";
 
         /// The first error the deserializer recorded as a sentence, or @p fallback when it recorded none
-        eastl::string FirstErrorOr(const IDeserializer& deserializer, StringView fallback) {
+        String FirstErrorOr(const IDeserializer& deserializer, StringView fallback) {
             if (!deserializer.HasErrors()) {
-                return eastl::string(fallback);
+                return String(fallback);
             }
             const DeserializeError& error = deserializer.GetErrors().front();
             return Format("{} (at '{}')", error.errorMessage.ToStringView(), error.path.ToStringView());
@@ -93,13 +93,14 @@ namespace BECore {
     }
 
     std::filesystem::path SaveGameService::MakePath(StringView slot, StringView suffix) const {
+        // std: a std::filesystem path is built from it
         std::string name = ToStdString(slot);
         name.append(suffix.data(), suffix.size());
         return _directory / name;
     }
 
     std::filesystem::path SaveGameService::ResolveSlot(StringView slot) const {
-        const eastl::string virtualPath = Format("{}/{}{}", kSaveMountPoint, slot, kSaveExtension);
+        const String virtualPath = Format("{}/{}{}", kSaveMountPoint, slot, kSaveExtension);
         std::filesystem::path resolved = _fileSystem.ResolvePath(virtualPath);
 
         // ResolvePath falls back to the content roots and the working directory: a file of the same relative path there is not a save
@@ -126,7 +127,7 @@ namespace BECore {
         const std::filesystem::path target = MakePath(slot, kSaveExtension);
         const std::filesystem::path temp = MakePath(slot, Format("{}{}", kSaveExtension, kSaveTempExtension));
 
-        auto fail = [&](eastl::string detail) {
+        auto fail = [&](String detail) {
             std::error_code ignored;
             std::filesystem::remove(temp, ignored);
             return MakeError(SaveErrorKind::WriteFailed, std::move(detail));
@@ -282,7 +283,7 @@ namespace BECore {
         }
 
         const StringView extensions[] = {kSaveExtension};
-        const eastl::string prefix = Format("{}/", kSaveMountPoint);
+        const String prefix = Format("{}/", kSaveMountPoint);
         for (const PoolString& file : _fileSystem.EnumerateFiles(PoolString::Intern(kSaveMountPoint), extensions)) {
             // "saves/<slot>.save": a file in a subfolder or with a name that is not a slot name is not a save of this service
             StringView name = file.ToStringView();

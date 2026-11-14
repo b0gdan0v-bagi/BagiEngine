@@ -75,7 +75,7 @@ namespace BECore::Tests {
 
     TEST(ApplicationConfigTest, BadControlPortIsReportedUnderItsNameAndKeepsTheDefault) {
         for (const char* value : {"abc", "70000", "65536", "-1", ""}) {
-            const eastl::string xml = Format("<root controlPort=\"{}\"/>", value);
+            const String xml = Format("<root controlPort=\"{}\"/>", value);
             SCOPED_TRACE(xml.c_str());
             const auto load = Load(StringView(xml));
             EXPECT_EQ(load.config._controlPort, kDefaultControlPort);
@@ -86,7 +86,7 @@ namespace BECore::Tests {
     TEST(ApplicationConfigTest, BadBooleanIsReportedUnderItsNameAndKeepsTheDefault) {
         for (const StringView name : {ApplicationConfigFields::kControl, ApplicationConfigFields::kManualClock, ApplicationConfigFields::kHeadless}) {
             for (const char* value : {"yes", "True", "2", ""}) {
-                const eastl::string xml = Format("<root {}=\"{}\"/>", name, value);
+                const String xml = Format("<root {}=\"{}\"/>", name, value);
                 SCOPED_TRACE(xml.c_str());
                 const auto load = Load(StringView(xml));
                 EXPECT_FALSE(load.config._control || load.config._manualClock || load.config._headless);

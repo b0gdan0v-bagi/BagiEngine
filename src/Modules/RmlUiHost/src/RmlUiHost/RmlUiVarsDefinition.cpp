@@ -15,7 +15,7 @@ namespace BECore {
         if (address.name.empty()) {
             return {};
         }
-        const eastl::string name(address.name.data(), address.name.size());
+        const String name(address.name.data(), address.name.size());
         auto found = _names.find(name);
         if (found == _names.end()) {
             found = _names.emplace(name, PoolString::Intern(name)).first;

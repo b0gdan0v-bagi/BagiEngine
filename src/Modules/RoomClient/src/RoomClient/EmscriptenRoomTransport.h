@@ -28,7 +28,7 @@ namespace BECore {
         EmscriptenRoomTransport(const EmscriptenRoomTransport&) = delete;
         EmscriptenRoomTransport& operator=(const EmscriptenRoomTransport&) = delete;
 
-        [[nodiscard]] std::expected<void, eastl::string> Open(StringView url) override;
+        [[nodiscard]] std::expected<void, String> Open(StringView url) override;
         bool SendText(StringView text) override;
         void Close(uint16_t code, StringView reason) override;
         void Abort() override;
@@ -63,7 +63,7 @@ namespace BECore {
         size_t _head = 0;
         size_t _count = 0;
         /// The NUL-terminated copy of the text being sent (the API takes a C string); a member so it keeps its capacity
-        eastl::string _sendBuffer;
+        String _sendBuffer;
     };
 
 }  // namespace BECore
