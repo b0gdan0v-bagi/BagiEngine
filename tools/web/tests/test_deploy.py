@@ -78,13 +78,13 @@ class DeployTestCase(unittest.TestCase):
 
 class DryRunTest(DeployTestCase):
     def test_a_dry_run_prints_the_three_steps_and_returns_0(self):
-        code, out, err, runner = self.run_script("--game", "BagiMatch3", "--dry-run")
+        code, out, err, runner = self.run_script("--game", "BagiStress", "--dry-run")
         self.assertEqual(code, 0, err)
         lines = [line for line in out.splitlines() if line.startswith("+ ")]
         self.assertEqual(len(lines), 3, out)
         self.assertIn("cmake --preset web-release", lines[0])
-        self.assertIn("cmake --build --preset web-release --target BagiMatch3", lines[1])
-        self.assertRegex(lines[2].replace('"', "").replace("'", ""), r"package\.py .*web-release[\\/]bin.* .*dist.* --game BagiMatch3")
+        self.assertIn("cmake --build --preset web-release --target BagiStress", lines[1])
+        self.assertRegex(lines[2].replace('"', "").replace("'", ""), r"package\.py .*web-release[\\/]bin.* .*dist.* --game BagiStress")
         self.assertEqual(runner.calls, [])
 
     def test_a_dry_run_changes_nothing_on_disk(self):
@@ -109,9 +109,9 @@ class DryRunTest(DeployTestCase):
         self.assertIn("--preset web-debug --target BagiMahjong", out)
         self.assertIn(f"package.py {build} {dist} --game BagiMahjong", out.replace("'", ""))
 
-    def test_the_default_game_is_bagimatch3(self):
+    def test_the_default_game_is_bagistress(self):
         _, out, _, _ = self.run_script("--dry-run")
-        self.assertIn("--target BagiMatch3", out)
+        self.assertIn("--target BagiStress", out)
 
     def test_the_default_is_the_threaded_page_in_build_web_release_bin(self):
         _, out, _, _ = self.run_script("--dry-run")
@@ -135,7 +135,7 @@ class DryRunTest(DeployTestCase):
                 self.assertEqual(code, 0, err)
                 lines = [line for line in out.splitlines() if line.startswith("+ ")]
                 self.assertIn(f"cmake --preset {expected}", lines[0])
-                self.assertIn(f"cmake --build --preset {expected} --target BagiMatch3", lines[1])
+                self.assertIn(f"cmake --build --preset {expected} --target BagiStress", lines[1])
                 self.assertRegex(lines[2].replace('"', "").replace("'", ""), rf"package\.py .*[\\/]build[\\/]{expected}[\\/]bin ")
                 self.assertEqual(runner.calls, [])
 
@@ -153,7 +153,7 @@ class DryRunTest(DeployTestCase):
         app.write_text("{}", encoding="utf-8")
         _, out, _, _ = self.run_script("--dry-run", "--single-thread")
         package_line = next(line for line in out.splitlines() if "package.py" in line).replace("'", "").replace('"', "")
-        self.assertIn(f"--game BagiMatch3 --app {app.resolve()}", package_line)
+        self.assertIn(f"--game BagiStress --app {app.resolve()}", package_line)
         self.assertTrue(package_line.rstrip().endswith("--single-thread"), package_line)
 
     def test_an_app_option_of_the_command_line_wins_over_the_file_of_the_game(self):
@@ -228,7 +228,7 @@ class RunTest(DeployTestCase):
         (dist / "index.html").write_bytes(b"<html></html>")
 
     def test_a_run_without_deploy_runs_the_three_commands_in_the_source_folder(self):
-        code, _, err, runner = self.run_script("--game", "BagiMatch3")
+        code, _, err, runner = self.run_script("--game", "BagiStress")
         self.assertEqual(code, 0, err)
         self.assertEqual([call[0][0] for call in runner.calls[:2]], ["cmake", "cmake"])
         self.assertEqual(len(runner.calls), 3)
@@ -239,7 +239,7 @@ class RunTest(DeployTestCase):
         dist = self.source / "dist"
         dist.mkdir()
         (dist / "index.html").write_bytes(b"<html></html>")
-        (dist / "BagiMatch3.wasm").write_bytes(b"wasm")
+        (dist / "BagiStress.wasm").write_bytes(b"wasm")
         code, _, err, runner = self.run_script("--deploy", "--service", "bagi-web", which=have_railway)
         self.assertEqual(code, 0, err)
         command, cwd = runner.calls[-1]
@@ -247,7 +247,7 @@ class RunTest(DeployTestCase):
         self.assertEqual(command, [RAILWAY_PATH, "up", str(cwd), "--path-as-root", "--service", "bagi-web", "--detach"])
         for name in ("Dockerfile", "serve.py"):
             self.assertEqual((cwd / name).read_bytes(), (TOOLS_WEB / name).read_bytes(), name)
-        self.assertEqual((cwd / "dist" / "BagiMatch3.wasm").read_bytes(), b"wasm")
+        self.assertEqual((cwd / "dist" / "BagiStress.wasm").read_bytes(), b"wasm")
 
     def test_a_second_stage_replaces_the_old_dist_copy(self):
         dist = self.source / "dist"

@@ -154,7 +154,7 @@ def get_changed_files(project_root: Path, ignore_patterns: list[str]) -> list[Pa
 
 def get_all_source_files(project_root: Path, ignore_patterns: list[str]) -> list[Path]:
     result = []
-    for top in ("src", "config", "games"):
+    for top in ("src", "config", "tools/stress"):
         top_path = project_root / top
         if not top_path.is_dir():
             continue

@@ -7,7 +7,7 @@
 # No line is added without a finding behind it.
 
 # SDL_image's miniz (external/SDL_image/src/miniz.h:2619, the PNG encoder behind IMG_SavePNG_IO; seen in EncodePngTest,
-# ScreenshotControlTest and BagiMatch3ControlSmoke): "runtime error: applying zero offset to null pointer" (a null pointer plus 0 on an
+# ScreenshotControlTest and the control smokes): "runtime error: applying zero offset to null pointer" (a null pointer plus 0 on an
 # empty buffer). Vendored code in external/, which nobody edits here; the encoded PNG is not affected.
 [pointer-overflow]
 src:*/SDL_image/src/miniz.h

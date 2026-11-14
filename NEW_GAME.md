@@ -1,6 +1,6 @@
 # A new game in a repository of its own
 
-How to set up a game that lives in its own git repository and carries this engine as the git submodule `engine/`. The model is the repository **BagiEngine-Chess** (the first one done this way). The files to copy from it are named below. This guide is written for an agent that does the setup with the owner. What a game is (the `IGame`, the CMake functions, the scene, the config) is in [src/Modules/Games/CLAUDE.md](src/Modules/Games/CLAUDE.md), "Adding a game". This file covers the repository around it: git, the identity of the commits, the submodule, the shared skills and the todo store.
+Adding a game is making a repository like **BagiEngine-Chess**: it lives in its own git repository and carries this engine as the git submodule `engine/`. The files to copy from Chess are named below. This guide is written for an agent that does the setup with the owner. What a game is (the `IGame`, the CMake functions, the scene, the config) is in [src/Modules/Games/CLAUDE.md](src/Modules/Games/CLAUDE.md), "Adding a game". This file covers the repository around it: git, the identity of the commits, the submodule, the shared skills and the todo store.
 
 Names used below: `<Name>` is the game in CamelCase (`Chess`). The executable is `Bagi<Name>`, the module `<Name>Module` and the tests `<Name>Tests`. `<area>` is the id of the game in the todo store, in lower case (`chess`). `<repo>` is the repository name (`BagiEngine-<Name>`).
 
@@ -60,7 +60,7 @@ If a commit was already made with the wrong identity, stop and tell the owner. A
 
 ## 3. The files of the game
 
-Copy them from BagiEngine-Chess (or from `games/Match3/` of this repository) and replace the names:
+Copy them from BagiEngine-Chess and replace the names:
 
 | File | What it holds |
 |------|---------------|
@@ -149,4 +149,4 @@ ctest --preset macos-debug
 
 ## What stays in the engine
 
-Nothing in the engine names the new game: no code, CMake or config outside `games/` ([CLAUDE.md](CLAUDE.md), "Engine and games"). The only engine change is the branch `games/<area>`. When the game needs something from the engine, that is an entry of the area `engine`, worked from the game's checkout in a `todo/<id>` branch cut from `games/<area>`.
+Nothing in the engine names a game: no code, CMake or config, and there is no `games/` folder ([CLAUDE.md](CLAUDE.md), "Engine and games"). The only engine change is the branch `games/<area>`. When the game needs something from the engine, that is an entry of the area `engine`, worked from the game's checkout in a `todo/<id>` branch cut from `games/<area>`.

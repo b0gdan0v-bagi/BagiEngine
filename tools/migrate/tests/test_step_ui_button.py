@@ -42,7 +42,7 @@ def id_of(path: Path) -> str:
 
 def test_every_fixture_is_a_pair_or_a_failure_and_the_cases_are_there():
     names = {id_of(p) for p in BEFORE_FILES}
-    for case in ("mahjong_hints_button", "mahjong_hand_over_action", "mahjong_setup", "match3_menu_hud", "blocker", "text_attributes", "disabled_tooltip", "with_children", "already_composed", "icon_attributes_without_icon", "long_caption", "icon_only", "icon_text"):
+    for case in ("mahjong_hints_button", "mahjong_hand_over_action", "mahjong_setup", "game_menu_hud", "blocker", "text_attributes", "disabled_tooltip", "with_children", "already_composed", "icon_attributes_without_icon", "long_caption", "icon_only", "icon_text"):
         assert case in names
     assert {id_of(p) for p in FAILURES} == {"fail_icon_above", "fail_icon_with_children", "fail_icon_variant_font_size", "fail_set_text", "fail_interactive_off", "fail_has_components"}
     assert not list(FIXTURES.glob("fail_*.after.xml"))
@@ -114,7 +114,7 @@ def test_the_tool_migrates_a_game_with_the_real_steps_and_stamps_every_file(tmp_
     nodes.mkdir(parents=True)
     (nodes / "Hints.xml").write_bytes((FIXTURES / "mahjong_hints_button.before.xml").read_bytes())
     (nodes / "Done.xml").write_bytes((TESTS_DIR / "fixtures" / "ui_group" / "already_composed.after.xml").read_bytes())
-    (game / "config" / "SceneConfig.xml").write_bytes((FIXTURES / "match3_menu_hud.before.xml").read_bytes())
+    (game / "config" / "SceneConfig.xml").write_bytes((FIXTURES / "game_menu_hud.before.xml").read_bytes())
     assert migrate.main([str(game), "--check"]) == 1
     capsys.readouterr()
     assert migrate.main([str(game)]) == 0

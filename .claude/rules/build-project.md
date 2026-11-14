@@ -28,10 +28,10 @@ Fields the `build` skill reads. A game fills every row.
 
 | Field | Meaning | Engine value |
 |-------|---------|--------------|
-| Product | the executable (target name; the file is `build/<preset>/bin/<name>[.exe]`) | `BagiMatch3` |
-| Tests | the gtest targets; the argument `tests` builds exactly these (`--target <tests>`) | `BagiEngineTests Match3Tests StressTests` |
+| Product | the executable (target name; the file is `build/<preset>/bin/<name>[.exe]`) | `BagiStress` |
+| Tests | the gtest targets; the argument `tests` builds exactly these (`--target <tests>`) | `BagiEngineTests StressTests` |
 | Default build | what `cmake --build --preset <p>` with no `--target` builds | every target: the product and the test executables |
-| Source paths | the paths of `git status --porcelain -- <paths>` (a configure trigger) and of the `BE_CLASS` / `BE_EVENT` / `BE_REFLECT_FIELD` search | `src tests games` |
+| Source paths | the paths of `git status --porcelain -- <paths>` (a configure trigger) and of the `BE_CLASS` / `BE_EVENT` / `BE_REFLECT_FIELD` search | `src tests tools/stress` |
 | Extra configure triggers | cases besides the common ones (below) that need `cmake --preset <p>` | a change of `BE_WITH_EDITOR` (`-DBE_WITH_EDITOR=...`, or a switch between a preset with and without the editor): the set of runtime and test sources changes (see "Gotchas") |
 | Extra failure hints | cause and fix for a configure, compile or link failure that is specific to this repository | see "Failure hints" |
 | Extra gotchas | facts about the output, the tests or the run that hold only here | see "Gotchas" |
@@ -46,7 +46,7 @@ Engine:
 
 - `glslc not found`: install the Vulkan SDK or set `VULKAN_SDK` in `CMakeUserPresets.json` (see "Local overrides").
 - A missing submodule (`external/*` not found): `git submodule update --init`. The tests need `external/googletest`: `git submodule update --init external/googletest`.
-- Web, `cmake --preset` (the generate step, not `cmake --build`) reports `Impossible to link target 'BagiMatch3' because the link item 'BECoreModule' ... has already occurred with the feature 'WHOLE_ARCHIVE'`: the Emscripten toolchain defines the `WHOLE_ARCHIVE` link feature without attributes; `cmake/BagiWeb.cmake` sets `CMAKE_LINK_LIBRARY_WHOLE_ARCHIVE_ATTRIBUTES` (`OVERRIDE=DEFAULT`) on the web.
+- Web, `cmake --preset` (the generate step, not `cmake --build`) reports `Impossible to link target '<Game>' because the link item 'BECoreModule' ... has already occurred with the feature 'WHOLE_ARCHIVE'`: the Emscripten toolchain defines the `WHOLE_ARCHIVE` link feature without attributes; `cmake/BagiWeb.cmake` sets `CMAKE_LINK_LIBRARY_WHOLE_ARCHIVE_ATTRIBUTES` (`OVERRIDE=DEFAULT`) on the web.
 - Web, `error: Unknown platform` / `Unknown processor` / `Unknown endianness` from `EABase/config/eaplatform.h`, or `atomic macro not implemented` in EASTL: EABase has no Emscripten branch. `cmake/BagiPlatformOptions.cmake` defines `EA_PLATFORM_SAMSUNG_TV` on the web (its one branch that takes the platform from a definition).
 - Web, `call to consteval function 'fmt::basic_format_string<...>::basic_format_string<FMT_COMPILE_STRING, 0>' is not a constant expression`: the Clang of emsdk 4.0.23 (22) evaluates a string literal twice as two objects, and `FMT_STRING()` of the vendored fmt 11.0.2 subtracts pointers into both. The fmt library target is compiled as C++17 on the web (`cmake/BagiEngine.cmake`); engine code must not include `<fmt/chrono.h>` (seen: its `write_fractional_seconds` uses `FMT_STRING`; `fmt/std.h`, `color.h` and `xchar.h` use it in headers too): format a `std::tm` by its fields, as the log sinks do.
 - Web, `error: invalid instruction` on `asm("BKPT 10")` in `EASTL/source/assert.cpp`: the EASTL debug break; `EASTL_DEBUG_BREAK_OVERRIDE=__builtin_trap` is defined on the web. The same message on `asm("yield")` or `asm("dmb ish")` means code that uses `eastl::atomic` or `eastl::cpu_pause()`: use `std::atomic` (EASTL's ARM versions are inline assembly, `TaskSystem/CLAUDE.md`, "Browser").
@@ -65,12 +65,12 @@ Engine:
 - The option `BE_WITH_EDITOR` (`AUTO` by default: the editor panels are built in Debug and left out of a single-config Release; `ON` / `OFF`; presets `macos-release-editor`, `windows-msvc-release-editor`; `cmake/CLAUDE.md`, "The editor option") is a cache variable, so changing it is a configure (`cmake --preset <p> -DBE_WITH_EDITOR=ON`) and then a rebuild of everything that carries the definition (every engine and game target): sources are chosen at configure time and the definition `BE_WITH_EDITOR` is on every target. A Debug build ignores `OFF` with a configure WARNING. A configure prints `Editor: ENABLED` or `DISABLED`; `grep -c ViewportWidget build/<p>/compile_commands.json` is 0 in a build without the editor. Run `cmake --preset <p>` again without the flag afterwards, or the cache keeps the value.
 - **`BE_WITH_EDITOR` inside one preset.** Each preset has its own `build/<preset>/lib`, so Debug and Release never mix. But `ninja` does not notice that a library was built with the other `BE_WITH_EDITOR`: the editor sources are in one and not in the other. After flipping that option in a build folder, delete `build/<preset>/lib/*.a` (on Windows the `lib` folder) before building; a stale `libRuntimeModule.a` / `libBECoreModule.a` alone is not enough. Symptoms of a mix: link errors for editor classes, or crashes and dozens of failures in `BagiEngineTests`.
 - **The web build needs the SDK once per checkout.** `external/emsdk` is a submodule at the tag `4.0.23`; `python CI/scripts/setup_emsdk.py` installs and activates that SDK into it (about 2 GB, a few minutes, idempotent: a second run prints that it is installed and does no network access; `--force` installs again). Nothing is written outside the checkout (no `--permanent`, no registry), and `git status` stays clean. The `web-*` presets find it through `${fileDir}` with no `EMSDK` in the environment; they need only `ninja` on PATH (no Visual Studio environment). A worker folder (a git worktree with its own `engine/`) that builds the web installs its own SDK, another 2 GB; one that never builds the web pays nothing. Build the web in one checkout. The default web presets are **threaded** (`-pthread`, a pool of Web Workers, `SDL_PTHREADS=ON`: the page needs cross-origin isolation, `tools/web/CLAUDE.md`); `web-release-single-thread` / `web-debug-single-thread` build the page without threads into `build/web-release-single-thread/bin` (or `web-debug-single-thread`), so the two configurations do not share a `lib/`.
-- **The web build, end to end** (run on Windows 11 with emsdk 4.0.23; details and numbers in `tools/web/CLAUDE.md`): `python CI/scripts/setup_emsdk.py` (once per checkout, background), `cmake --preset web-release`, `cmake --build --preset web-release --target BagiMatch3` (background, about 2 minutes from scratch), `python tools/web/package.py build/web-release/bin dist`, `python tools/web/serve.py --root dist` for a person (http://localhost:8080; sends the COOP / COEP headers of a threaded page), and for the check the Playwright venv in `build/web-venv` and `build/web-venv/Scripts/python tools/web/tests/web_smoke.py --dist dist --expect-console "Initialized with \d+ worker threads"` (`bin/python` on macOS and Linux; exit 0 passes, 77 means Playwright or the browser is missing; the recipe and the other runs are in `tools/web/CLAUDE.md`). Build the single-thread page with `web-release-single-thread` into `build/web-release-single-thread/bin` and package it with `--single-thread`. The smoke needs a browser, so it is not a ctest and the loop does not run it.
+- **The web build, end to end** (run on Windows 11 with emsdk 4.0.23; details and numbers in `tools/web/CLAUDE.md`): `python CI/scripts/setup_emsdk.py` (once per checkout, background), `cmake --preset web-release`, `cmake --build --preset web-release --target <Game>` (background, about 2 minutes from scratch), `python tools/web/package.py build/web-release/bin dist`, `python tools/web/serve.py --root dist` for a person (http://localhost:8080; sends the COOP / COEP headers of a threaded page), and for the check the Playwright venv in `build/web-venv` and `build/web-venv/Scripts/python tools/web/tests/web_smoke.py --dist dist --expect-console "Initialized with \d+ worker threads"` (`bin/python` on macOS and Linux; exit 0 passes, 77 means Playwright or the browser is missing; the recipe and the other runs are in `tools/web/CLAUDE.md`). Build the single-thread page with `web-release-single-thread` into `build/web-release-single-thread/bin` and package it with `--single-thread`. The smoke needs a browser, so it is not a ctest and the loop does not run it.
 - The game runs the runtime `ITest`s at startup (`CoreManager::OnApplicationPreInit`) and opens a window, so it is never started to check a build. The gtest executables open no window.
 
 ### Tests
 
-Engine: `ctest --preset <p>` runs every gtest in its own process (`BagiEngineTests`, `Match3Tests`, `StressTests`) and `BagiMatch3ControlSmoke` and `BagiStressControlSmoke`, Python scripts that start the game `--headless` and play it over the control API. The smoke test is skipped (exit code 77) when the executable is not built. A `--target` list without the product (what the argument `tests` builds) builds no game, so add the product to run the smoke test. The Python tools have pytest tests of their own, not part of ctest: `.venv/bin/python -m pytest tools/control/tests tools/perf/tests`.
+Engine: `ctest --preset <p>` runs every gtest in its own process (`BagiEngineTests`, `StressTests`), `BagiStressControlSmoke` and `BagiStressScenario.*`, Python scripts that start `BagiStress` `--headless` and play it over the control API. The smoke test is skipped (exit code 77) when the executable is not built. A `--target` list without the product (what the argument `tests` builds) builds no game, so add the product to run the smoke test. The Python tools have pytest tests of their own, not part of ctest: `.venv/bin/python -m pytest tools/control/tests tools/perf/tests`.
 
 **Parallel run.** `ctest --preset <p>` runs 8 tests at once (`execution.jobs` 8 in `test-base` of `CMakePresets.json`; the game repositories get it through the included presets). `-j1` runs them one at a time, `-jN` sets another number; `CTEST_PARALLEL_LEVEL` does **not** override a preset. The smoke test takes the `bagi_control_smoke` lock (no other smoke test beside it; unit tests run beside it). Do not start several `ctest`s in one build folder at the same moment right after a build (`gtest_discover_tests` rewrites `<Exe>[1]_tests.cmake` and two writers corrupt it: delete `build/<p>/**/<Exe>*_tests.cmake` and run `ctest -N` once). Rules for a test that runs beside others: `.claude/rules/tests-module.md`.
 
@@ -97,11 +97,11 @@ A CI job takes these commands when the entry `no-ci` is done.
 
 Findings land in `build/<preset>/fuzz-artifacts/`, never in the repository; the script prints how to minimize one and add it as `fix-<what>`. Running all of `BagiEngineTests` under the sanitizers is the next paragraph.
 
-**Sanitizers** (`cmake/CLAUDE.md`, "Sanitizers and fuzzing"). `macos-asan` builds the whole engine, vendored code and SDL included, with AddressSanitizer + UBSan on the ordinary Debug toolchain (Apple clang, asserts and expects ON: an assertion is a finding too); `macos-fuzz` is RelWithDebInfo on Homebrew LLVM with libFuzzer, and its corpus test runs in both. A report stops the process (`-fno-sanitize-recover`), so it fails its test; the Match3 control smoke fails when the game it starts reports. By explicit name or for a QA request only:
+**Sanitizers** (`cmake/CLAUDE.md`, "Sanitizers and fuzzing"). `macos-asan` builds the whole engine, vendored code and SDL included, with AddressSanitizer + UBSan on the ordinary Debug toolchain (Apple clang, asserts and expects ON: an assertion is a finding too); `macos-fuzz` is RelWithDebInfo on Homebrew LLVM with libFuzzer, and its corpus test runs in both. A report stops the process (`-fno-sanitize-recover`), so it fails its test; a control smoke fails when the game it starts reports. By explicit name or for a QA request only:
 
 ```bash
 cmake --preset macos-asan
-cmake --build --preset macos-asan --target BagiEngineTests Match3Tests BagiMatch3   # no target: also the room server and its probe; about 8 minutes from scratch
+cmake --build --preset macos-asan --target BagiEngineTests StressTests BagiStress   # no target: also the room server and its probe; about 8 minutes from scratch
 ctest --preset macos-asan                                                          # the engine set: about 150 to 220 s at -j8 (macos-debug: about 70 s)
 ```
 
@@ -111,20 +111,20 @@ Windows, `windows-clang-asan` (LLVM on `PATH`; **not yet run on Windows**: the o
 
 ```bash
 python CI/scripts/vs_env.py cmake --preset windows-clang-asan
-python CI/scripts/vs_env.py cmake --build --preset windows-clang-asan --target BagiEngineTests Match3Tests BagiMatch3
+python CI/scripts/vs_env.py cmake --build --preset windows-clang-asan --target BagiEngineTests StressTests BagiStress
 ctest --preset windows-clang-asan
 ```
 
 On the first run look at: a link error on `__ubsan_handle_*` (link the `clang_rt.ubsan_standalone` library of the compiler's resource dir); the configure message that the ASan DLL is not found; a `pointer-overflow` report in `miniz.h` (the ignore list's glob did not match the Windows path); a start failure if the mixin `asan-windows-crt` is switched to the debug CRT. A CI job takes these commands with the other sanitizer commands when the entry `no-ci` is done.
 
-Timings, `ctest --preset macos-debug` on a warm Debug build, 2026-11-08, Apple M4 Pro (14 cores), **shared with other todo-loop workers** (load average about 5 to 12 before each run, so the numbers move by a few seconds between runs; read them as a factor, not as a benchmark). Wall time of three runs per row, interleaved:
+Timings, `ctest --preset macos-debug` on a warm Debug build, Mahjong row 2026-11-08, Apple M4 Pro (14 cores), **shared with other todo-loop workers** (load average about 5 to 12 before each run, so the numbers move by a few seconds between runs; read them as a factor, not as a benchmark). Wall time of three runs, interleaved (the engine row: one run per column, taken after the games left the engine):
 
 | Set | `-j1` | `-j4` | `-j8` (preset) | `-j14` |
 |-----|-------|-------|----------------|--------|
-| Engine: `BagiEngineTests` + `Match3Tests` + `BagiMatch3ControlSmoke` (1455 tests) | 86.0 / 86.0 / 80.9 s (min 80.9, median 86.0) | 21.6 / 20.2 / 20.4 s (median 20.4) | 12.2 / 10.3 / 10.3 s (median 10.3) | 8.5 / 7.7 / 7.8 s (median 7.8) |
+| Engine: `BagiEngineTests` + `StressTests` + `BagiStressControlSmoke` + `BagiStressScenario.*` (4385 tests, 3 disabled), re-measured 2026-11-14, one run each | 472 s | | 73 s (the first run after the build) | |
 | Mahjong: `MahjongTests` + `BagiMahjongControlSmoke` (630 tests, a game repository) | 49.7 / 50.1 / 49.7 s (median 49.7) | | 8.1 / 8.4 / 7.7 s (median 8.1) | |
 
-About 6 (Mahjong set) to 8 (engine set) times faster with 8 jobs. 14 jobs (all cores) is a further 25 % on this machine but leaves nothing for other work and does not suit a smaller one, so the preset keeps 8. Stability: `ctest --preset macos-debug --repeat until-fail:10` passed 10 times in a row on the engine set (14550 test runs, 106 s) and on the Mahjong set (6300 runs, 74 s); the serial reference `-j1 --repeat until-fail:3` on the engine set passed 3 times (239 s).
+About 6 to 8 times faster with 8 jobs (Mahjong set 6, engine set 6.5). 14 jobs (all cores) was a further 25 % on this machine on the old engine set (1455 tests, 7.8 s against 10.3 s) but leaves nothing for other work and does not suit a smaller one, so the preset keeps 8. Stability, measured on that old set and on the Mahjong set: `ctest --preset macos-debug --repeat until-fail:10` passed 10 times in a row (14550 and 6300 test runs); not repeated for the 4385 tests.
 
 ### Local overrides
 
@@ -172,7 +172,7 @@ Fields the `clang-format` skill reads (the `strip-pch-includes` skill uses `Pyth
 |-------|---------|--------------|
 | Python | the interpreter `<py>`. The two scripts use only the standard library, so no venv is needed; `uv run python` also works. A repository may name its venv interpreter instead (a game on Windows: `engine\.venv\Scripts\python`) | `python3` (Windows: `python`) |
 | `<engine>` and `<R>` | the values of the two terms for the default run | `.` and `.` (so `--root .`, which is also the scripts' default here) |
-| Format scope | the folders `--all` covers (also for `strip-pch-includes`) | `src/`, `config/`, `games/`. The engine's own `tests/` is **not** covered by `--all` (`--changed` formats it) |
+| Format scope | the folders `--all` covers (also for `strip-pch-includes`) | `src/`, `config/`. The engine's own `tests/` is **not** covered by `--all` (`--changed` formats it) |
 | Ignore file | the `.clang-format-ignore` in the root of `<R>`: required, one path or prefix per line, `#` comments, not merged with a default | `external/`, `build/`, `.venv/`, the vendored modules under `src/Modules/` (EABase, EnTT, fmt, imgui, nlohmann, pugixml, RmlUi, tracy, Vulkan), `src/Modules/BECore/pch.h`, `src/Modules/BECore/Assert/StackTrace.cpp`. `BECore` itself is project code and is formatted |
 | `--root` | never left out where it matters | a default in the engine repository; **required in a game**, because without it the scripts format the engine |
 | Launcher | whether a GUI runs the same scripts | yes, see "Launcher" |
@@ -196,7 +196,7 @@ Fields the `strip-pch-includes` skill reads (it shares `Python`, `Format scope` 
 |-------|---------|--------------|
 | PCH | the header whose includes are dropped from sources; always the engine's, relative to `<engine>` | `src/Modules/BECore/pch.h` (the script's default) |
 | Strip example dir | a bounded folder of `<R>` for the dry run and the first real pass | `src/Widgets` (also `src/Modules/BECore`, which the script does not exclude) |
-| After a pass | what to build and run to validate the scope | `cmake --build --preset <p>` (the `build` skill), then `ctest --preset <p>`; `BagiEngineTests` for engine code, `Match3Tests` for code under `games/Match3`, `StressTests` for `tools/stress` |
+| After a pass | what to build and run to validate the scope | `cmake --build --preset <p>` (the `build` skill), then `ctest --preset <p>`; `BagiEngineTests` for engine code, `StressTests` for `tools/stress` |
 
 The commands, written with the engine values:
 

@@ -148,11 +148,11 @@ namespace BECore::Tests {
         IntrusivePtrAtomic<SceneManager> _manager;
     };
 
-    TEST_F(RmlUiSdlTest, TheMatch3MenuIsDrawnWithItsColorsAndText) {
+    TEST_F(RmlUiSdlTest, TheGameMenuIsDrawnWithItsColorsAndText) {
         auto doc = Load(RmlUiScreens::kScreens[0]);
 
         const PixelBuffer image = DrawFrame();
-        MaybeSavePng(image, "rmlui-match3-menu");
+        MaybeSavePng(image, "rmlui-game-menu");
 
         ASSERT_FALSE(image.rgba.empty());
         const Rect play = BoxOf(*doc, "Play");
@@ -179,7 +179,7 @@ namespace BECore::Tests {
             CoreManager::GetUIVars().Set("seed"_intern, 1337);
 
             const PixelBuffer image = DrawFrame();
-            MaybeSavePng(image, "rmlui-match3-hud");
+            MaybeSavePng(image, "rmlui-game-hud");
 
             ASSERT_FALSE(image.rgba.empty());
             const Rect reset = BoxOf(*doc, "Reset");

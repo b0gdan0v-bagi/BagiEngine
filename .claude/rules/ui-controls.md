@@ -47,7 +47,7 @@ The elements and variants are reflected fields of `UICanvasComponent`, so a scre
           <components><component type="UITextComponent" text="{#hud.score}: {score}"/></components>
         </element>
         <element type="UIElement" name="Reset" anchor="BottomRight" x="-12" y="-10" width="96" height="48">
-          <components><component type="UITextComponent" text="{#hud.reset}" align="Center" verticalAlign="Center" wrap="false"/><component type="UIInputClicker" action="Match3Reset"/></components>
+          <components><component type="UITextComponent" text="{#hud.reset}" align="Center" verticalAlign="Center" wrap="false"/><component type="UIInputClicker" action="GameReset"/></components>
         </element>
       </children>
     </element>
