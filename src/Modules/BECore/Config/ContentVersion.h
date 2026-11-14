@@ -15,31 +15,29 @@ namespace BECore {
      * format before versions. The engine reads exactly kContentVersion: an older file is rewritten by
      * `tools/migrate/migrate.py` (`tools/migrate/CLAUDE.md`), a newer one needs a newer engine.
      *
-     * Pure pugixml, no engine services. `tools/migrate/steps/` holds the same number as the highest `to_version` of its
-     * engine track; a pytest compares the two.
+     * Pure pugixml, no engine services. The highest `to_version` of the engine track of `tools/migrate/steps/` must equal
+     * kContentVersion (a pytest compares them).
      */
 
-    /// The version of the content format this engine reads; bumped by every change that needs a migration step
+    /// Bumped by every change that needs a migration step (`tools/migrate/CLAUDE.md`)
     inline constexpr uint32_t kContentVersion = 5;
 
-    /// The version of a file that has no `contentVersion`
+    /// What a file without `contentVersion` is
     inline constexpr uint32_t kUnversionedContentVersion = 1;
 
-    /// Attribute of the root element that holds the version
     inline constexpr StringView kContentVersionAttribute = "contentVersion";
 
-    /// Root elements of the files that carry a version
+    /// The root elements of content files; a new one is added with the step that first rewrites such a file
     inline constexpr StringView kSceneConfigRootName = "SceneManager";
     inline constexpr StringView kNodeFileRootName = "node";
 
-    /// True when a file whose root element is called @p rootName is a content file
     bool IsContentRoot(StringView rootName);
 
     /**
      * @brief The version of the content file whose root element is @p root
      *
-     * @return the number (no attribute is kUnversionedContentVersion), or the reason when the attribute is not a
-     * non-negative whole number: a malformed value is neither older nor newer than the engine
+     * @return The number, or the reason when the attribute is not a non-negative whole number: a malformed value is
+     * neither older nor newer than the engine
      */
     std::expected<uint32_t, String> GetContentVersion(pugi::xml_node root);
 

@@ -13,52 +13,32 @@
 namespace BECore {
 
     /**
-     * @brief Lightweight wrapper for pugi::xml_node
+     * @brief A copyable handle over a pugi::xml_node
      *
-     * Value type (8-16 bytes) that wraps pugi::xml_node handle.
-     * Does NOT own the underlying XML data - lifetime tied to the XmlDocument.
-     * Cheap to copy and pass by value.
+     * Owns nothing: it is valid only while its XmlDocument is alive and not reloaded.
      */
     class XmlNode {
     public:
         XmlNode() = default;
         explicit XmlNode(pugi::xml_node node) : _node(node) {}
 
-        /**
-         * @brief Get child node by name
-         * @param name Name of the child element
-         * @return XmlNode wrapping the child, or empty node if not found
-         */
+        /// An empty node when there is no such child
         XmlNode GetChild(StringView name) const {
             return XmlNode{_node.child(name.data())};
         }
 
-        /**
-         * @brief Check if node is empty
-         * @return True if node is empty/invalid
-         */
         bool IsEmpty() const {
             return _node.empty();
         }
 
-        /**
-         * @brief Check if node is valid
-         * @return True if node has content
-         */
         explicit operator bool() const {
             return !_node.empty();
         }
 
-        /**
-         * @brief Inverse validity check
-         */
         bool operator!() const {
             return _node.empty();
         }
 
-        /**
-         * @brief Iterator for child nodes
-         */
         class Iterator {
         public:
             using iterator_category = std::forward_iterator_tag;
@@ -86,9 +66,6 @@ namespace BECore {
             pugi::xml_node_iterator _it;
         };
 
-        /**
-         * @brief Range for iterating child nodes
-         */
         struct ChildrenRange {
             pugi::xml_node parentNode;
 
@@ -101,27 +78,15 @@ namespace BECore {
             }
         };
 
-        /**
-         * @brief Get range of all child nodes
-         * @return ChildrenRange for range-based for loop
-         */
         ChildrenRange Children() const {
             return ChildrenRange{_node};
         }
 
-        /**
-         * @brief Get node name
-         * @return Name of the element
-         */
         StringView Name() const {
             return StringView(_node.name());
         }
 
-        /**
-         * @brief Get attribute value as string
-         * @param name Attribute name
-         * @return Attribute value or nullopt if not found
-         */
+        /// nullopt when the attribute is missing
         Optional<StringView> GetAttribute(StringView name) const {
             auto attr = _node.attribute(name.data());
             if (!attr) {
@@ -131,10 +96,8 @@ namespace BECore {
         }
 
         /**
-         * @brief Parse attribute as specific type
-         * @tparam T Type to parse (int, float, bool, string_view, enum, Color)
-         * @param name Attribute name
-         * @return Parsed value or nullopt if not found or parse failed
+         * @brief The attribute parsed as T: integer, float, bool (`true`/`false`/`1`/`0`), StringView, enum or Color
+         * @return nullopt when the attribute is missing or does not parse
          */
         template <typename T>
         Optional<T> ParseAttribute(StringView name) const {
@@ -172,10 +135,6 @@ namespace BECore {
             return std::nullopt;
         }
 
-        /**
-         * @brief Get underlying pugi::xml_node for internal use
-         * @return pugi::xml_node handle
-         */
         pugi::xml_node GetPugiNode() const {
             return _node;
         }

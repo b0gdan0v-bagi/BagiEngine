@@ -15,116 +15,57 @@ namespace BECore {
     class IDeserializer;
 
     /**
-     * @brief Manager for loading and caching all XML configurations
+     * @brief Loads and caches every XML config of the `config` mount layers by file stem
      *
-     * Scans config/ directory recursively and loads all XML files in parallel
-     * using TaskManager. Provides centralized access to all configs by name.
-     *
-     * @note Access via CoreManager::GetConfigManager()
-     *
-     * @example
-     * // Get config by name (without extension)
-     * auto rootNode = CoreManager::GetConfigManager().GetConfig("LoggerConfig"_intern);
-     * if (rootNode) {
-     *     // Use config...
-     * }
+     * Reached through CoreManager::GetConfigManager(). Every accessor asserts that Initialize() ran. Layering and the
+     * editor calls: `Config/CLAUDE.md`.
      */
     class ConfigManager {
     public:
         ConfigManager() = default;
         ~ConfigManager() = default;
 
-        // Non-copyable, non-movable
         ConfigManager(const ConfigManager&) = delete;
         ConfigManager& operator=(const ConfigManager&) = delete;
         ConfigManager(ConfigManager&&) = delete;
         ConfigManager& operator=(ConfigManager&&) = delete;
 
-        /**
-         * @brief Initialize - scan and load all XML files from config/
-         *
-         * Uses TaskManager for parallel loading.
-         * Blocks until all configs are loaded.
-         * Safe to call multiple times - subsequent calls are no-ops.
-         */
+        /// Scans every layer, loads the files in parallel and blocks until done; a second call is a no-op
         void Initialize();
 
-        /**
-         * @brief Get loaded config by name (without extension)
-         * @param name Config name (e.g., "LoggerConfig")
-         * @return Root XmlNode or invalid node if not found
-         */
+        /// The root of a loaded config by name (file stem), or an invalid node when the name is unknown
         XmlNode GetConfig(PoolString name) const;
 
-        /**
-         * @brief Get loaded config by name (without extension) — string_view overload
-         * @param name Config name as string_view; avoids PoolString interning overhead
-         * @return Root XmlNode or invalid node if not found
-         */
+        /// The StringView overloads avoid interning the name
         XmlNode GetConfig(StringView name) const;
 
         /**
          * @brief Get an IDeserializer positioned at the root of a loaded config
          *
-         * The one way to read a named config through the reflection: the caller does not pick XmlDeserializer itself,
-         * so a config may later come from another format. The deserializer reads the cached document, so it must not
-         * outlive a ReloadConfig of that config.
-         * @param name Config name (without extension)
+         * The one way to read a named config through the reflection: the caller does not pick XmlDeserializer itself.
+         * The deserializer reads the cached document, so it must not outlive a ReloadConfig of that config.
          * @return The deserializer, or nullptr if the config is unknown
          */
         UniquePtr<IDeserializer> CreateDeserializer(PoolString name) const;
 
-        /**
-         * @brief Get an IDeserializer over a loaded config — string_view overload
-         * @param name Config name as string_view; avoids PoolString interning overhead
-         * @return The deserializer, or nullptr if the config is unknown
-         */
+        /// As above, without interning the name
         UniquePtr<IDeserializer> CreateDeserializer(StringView name) const;
 
-        /**
-         * @brief Check if config exists
-         * @param name Config name (without extension)
-         * @return True if config is loaded
-         */
         bool HasConfig(PoolString name) const;
-
-        /**
-         * @brief Check if config exists — string_view overload
-         * @param name Config name as string_view
-         * @return True if config is loaded
-         */
         bool HasConfig(StringView name) const;
 
-        /**
-         * @brief Get number of loaded configs
-         */
         size_t GetConfigCount() const;
 
-        /**
-         * @brief Get sorted list of all loaded config names
-         * @return Vector of config names (without extension)
-         */
+        /// Sorted by name
         Vector<PoolString> GetAllConfigNames() const;
 
-        /**
-         * @brief Get the on-disk file path for a loaded config
-         * @param name Config name (without extension)
-         * @return File path, or empty path if not found
-         */
+        /// The file the config was loaded from (the layer that won), or an empty path when the name is unknown
         std::filesystem::path GetConfigFilePath(PoolString name) const;
 
-        /**
-         * @brief Save a config's XmlDocument back to its original file
-         * @param name Config name (without extension)
-         * @return True if saved successfully
-         */
+        /// Writes the cached document back to the file it was loaded from
         bool SaveConfig(PoolString name);
 
-        /**
-         * @brief Reload a config from disk, replacing the cached document
-         * @param name Config name (without extension)
-         * @return True if reloaded successfully
-         */
+        /// Replaces the cached document with the file's current content; an XmlNode taken before is stale after it
         bool ReloadConfig(PoolString name);
 
     private:
@@ -133,18 +74,8 @@ namespace BECore {
             std::filesystem::path filePath;
         };
 
-        /**
-         * @brief Scan directory and collect XML files to load
-         * @param dir Directory to scan
-         * @param filesToLoad Output vector of (path, name) pairs
-         */
         void ScanDirectory(const std::filesystem::path& dir, Vector<Pair<std::filesystem::path, PoolString>>& filesToLoad) const;
 
-        /**
-         * @brief Load single config file asynchronously
-         * @param path Physical path to XML file
-         * @param name Config name (stem without extension)
-         */
         Task<void> LoadConfigAsync(std::filesystem::path path, PoolString name);
 
         Mutex _writeMutex{BE_LOCK_SITE("Config write")};
