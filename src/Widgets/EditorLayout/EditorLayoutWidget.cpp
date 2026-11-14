@@ -282,7 +282,7 @@ namespace BECore {
             if (!command.rebindable) {
                 continue;
             }
-            const std::optional<KeyChord> chord = hotkeys.GetChord(command.id);
+            const Optional<KeyChord> chord = hotkeys.GetChord(command.id);
             const ImGuiInputFlags flags = command.repeats ? ImGuiInputFlags_RouteGlobal | ImGuiInputFlags_Repeat : ImGuiInputFlags_RouteGlobal;
             if (chord && ImGui::Shortcut(chord->ToImGui(), flags)) {
                 EditorCommandEvent::Emit(command.id);
@@ -347,7 +347,7 @@ namespace BECore {
     void EditorLayoutWidget::CommandMenuItem(PoolString id, const char* label, bool enabled) {
         eastl::string chordText;
         if (_settings) {
-            if (const std::optional<KeyChord> chord = _settings->GetHotkeys().GetChord(id)) {
+            if (const Optional<KeyChord> chord = _settings->GetHotkeys().GetChord(id)) {
                 chordText = ToString(*chord);
             }
         }

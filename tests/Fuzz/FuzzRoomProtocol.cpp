@@ -129,13 +129,13 @@ namespace BECore::Fuzz {
             // What the server stores about a sender is clean: a name the sanitizer would keep as it is, a code and a token of the right shape
             if (const auto* create = std::get_if<CreateRoomMessage>(&*parsed)) {
                 FUZZ_CHECK(!create->game.empty() && create->game.size() <= RoomLimits::kMaxGameNameBytes);
-                FUZZ_CHECK(SanitizePlayerName(create->name) == std::optional<eastl::string>(create->name));
+                FUZZ_CHECK(SanitizePlayerName(create->name) == Optional<eastl::string>(create->name));
                 FUZZ_CHECK(create->options.is_object());
             } else if (const auto* join = std::get_if<JoinRoomMessage>(&*parsed)) {
                 FUZZ_CHECK(join->code.size() == RoomLimits::kRoomCodeLength);
                 FUZZ_CHECK(join->name.empty() != join->token.empty());
                 FUZZ_CHECK(join->token.empty() || join->token.size() == RoomLimits::kTokenLength);
-                FUZZ_CHECK(join->name.empty() || SanitizePlayerName(join->name) == std::optional<eastl::string>(join->name));
+                FUZZ_CHECK(join->name.empty() || SanitizePlayerName(join->name) == Optional<eastl::string>(join->name));
             } else if (const auto* action = std::get_if<ActionMessage>(&*parsed)) {
                 FUZZ_CHECK(action->action.is_object());
             } else if (const auto* list = std::get_if<ListRoomsMessage>(&*parsed)) {
@@ -175,7 +175,7 @@ namespace BECore::Fuzz {
         void CheckRoomList(const RoomListMessage& list) {
             FUZZ_CHECK(list.rooms.size() <= RoomLimits::kMaxListedRooms);
             for (const RoomListing& listing : list.rooms) {
-                FUZZ_CHECK(NormalizeRoomCode(listing.room) == std::optional<eastl::string>(listing.room));
+                FUZZ_CHECK(NormalizeRoomCode(listing.room) == Optional<eastl::string>(listing.room));
                 FUZZ_CHECK(listing.seats >= 1 && static_cast<size_t>(listing.seats) <= RoomLimits::kMaxLobbySeats);
                 FUZZ_CHECK(listing.taken >= 0 && listing.taken <= listing.seats);
                 FUZZ_CHECK(listing.options.is_object() && listing.options.size() <= RoomLimits::kMaxLobbyOptions);

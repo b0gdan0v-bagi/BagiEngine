@@ -9,7 +9,7 @@ namespace BECore {
             return prefix.substr(0, prefix.size() - 1);
         }
 
-        std::optional<ProfilerBackendKind> ParseBackend(eastl::string_view value) {
+        Optional<ProfilerBackendKind> ParseBackend(eastl::string_view value) {
             if (value == ProfilerArguments::kNone) {
                 return ProfilerBackendKind::None;
             }
@@ -27,7 +27,7 @@ namespace BECore {
     std::expected<ProfilerSettings, eastl::string> ResolveProfilerSettings(eastl::span<const eastl::string> args, ProfilerBuild build) {
         using namespace ProfilerArguments;
 
-        std::optional<ProfilerBackendKind> asked;
+        Optional<ProfilerBackendKind> asked;
         eastl::string tracePath;
         bool anyFlag = false;
         for (const eastl::string& arg : args) {

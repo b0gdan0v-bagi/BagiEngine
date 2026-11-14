@@ -125,10 +125,10 @@ namespace BECore {
         PreviewShape _shape;
         SafeAreaSimulation _safeAreaSimulation = SafeAreaSimulation::None;
         PreviewOverlays _overlays;
-        PreviewSettings _storedPreview;      // the choice the editor last stored (applied from a preferences event, or sent by us)
-        std::optional<int32_t> _forcedView;  // the index of the forced view variant, -1 the default, nullopt Auto
-        PoolString _forcedViewScene;         // the scene the choice was made for
-        bool _editingSize = false;           // a custom W / H field is being typed in: the shape is applied live, the editor is told when the field is left
+        PreviewSettings _storedPreview;  // the choice the editor last stored (applied from a preferences event, or sent by us)
+        Optional<int32_t> _forcedView;   // the index of the forced view variant, -1 the default, nullopt Auto
+        PoolString _forcedViewScene;     // the scene the choice was made for
+        bool _editingSize = false;       // a custom W / H field is being typed in: the shape is applied live, the editor is told when the field is left
         eastl::string _sizePreview;
         PreviewShape _sizePreviewShape;  // the shape _sizePreview was made for
         bool _sizePreviewValid = false;

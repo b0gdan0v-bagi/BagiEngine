@@ -18,7 +18,7 @@ namespace BECore::Fuzz {
         /// What a parser returned for a whole stream: the messages in order and the first error
         struct Outcome {
             eastl::vector<WebSocketMessage> messages;
-            std::optional<WebSocketProtocolError> error;
+            Optional<WebSocketProtocolError> error;
         };
 
         /// Takes every message that is ready; stops at "more bytes" or at the error (and remembers the first one only)
@@ -96,7 +96,7 @@ namespace BECore::Fuzz {
 
         /// The messages as the other role would send them: the frames of a client are masked, those of a server are not
         eastl::vector<uint8_t> EncodeForOtherRole(const eastl::vector<WebSocketMessage>& messages, WebSocketPeer sender) {
-            const std::optional<WebSocketMask> mask = (sender == WebSocketPeer::Client) ? std::nullopt : std::optional<WebSocketMask>(kReencodeMask);
+            const Optional<WebSocketMask> mask = (sender == WebSocketPeer::Client) ? std::nullopt : Optional<WebSocketMask>(kReencodeMask);
             eastl::vector<uint8_t> stream;
             for (const WebSocketMessage& message : messages) {
                 eastl::vector<uint8_t> payload;

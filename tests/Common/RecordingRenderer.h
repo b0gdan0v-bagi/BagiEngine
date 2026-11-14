@@ -52,8 +52,8 @@ namespace BECore::Tests {
         Rect rect;    ///< the destination in output pixels, after the view transform; for geometry the box around its vertices
         Color color;  ///< the fill color of a rect, the tint of a texture, the color of the first vertex of geometry
         const ITexture* texture = nullptr;
-        std::optional<Rect> source;              ///< the source rect of a texture draw, as it was passed
-        std::optional<Rect> clip;                ///< the clip in effect for this call
+        Optional<Rect> source;                   ///< the source rect of a texture draw, as it was passed
+        Optional<Rect> clip;                     ///< the clip in effect for this call
         BlendMode blend = BlendMode::Alpha;      ///< the blend mode in effect for this call
         eastl::vector<GeometryVertex> vertices;  ///< geometry: the vertices with their positions in output pixels (translation and view transform applied)
         eastl::vector<int> indices;              ///< geometry: the indices as they were passed

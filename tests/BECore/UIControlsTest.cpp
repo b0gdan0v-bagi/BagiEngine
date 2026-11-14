@@ -239,7 +239,7 @@ namespace BECore::Tests {
         }
 
         /// The color of the filled rect that was drawn exactly on the element's rect, in the last draw
-        std::optional<Color> FillOf(const UIElement& element) const {
+        Optional<Color> FillOf(const UIElement& element) const {
             for (const DrawCall& call : _renderer->calls) {
                 if (call.kind == DrawKind::Rect && Near(call.rect, element.rect)) {
                     return call.color;
@@ -1550,10 +1550,10 @@ namespace BECore::Tests {
             const Rect bar{ok.rect.x, ok.rect.y + ok.rect.h - UIStateLook::kSelectedBarHeight, ok.rect.w, UIStateLook::kSelectedBarHeight};  // the rect is laid out by the first draw
             for (const DrawCall& call : _renderer->calls) {
                 if (call.kind == DrawKind::Rect && Near(call.rect, bar)) {
-                    return std::optional<Color>(call.color);
+                    return Optional<Color>(call.color);
                 }
             }
-            return std::optional<Color>();
+            return Optional<Color>();
         };
 
         Draw();

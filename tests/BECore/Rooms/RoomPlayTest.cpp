@@ -379,7 +379,7 @@ namespace BECore::Tests {
         /// A game whose computer proposes an action the game itself refuses (a bug of an adapter)
         class StubbornGame : public FakeSeatedGame {
         public:
-            std::optional<Json> ChooseComputerAction(int seat) const override {
+            Optional<Json> ChooseComputerAction(int seat) const override {
                 ++proposals;
                 return PlayAction(Format("c{}_0", (seat + 1) % kSeatCount));
             }

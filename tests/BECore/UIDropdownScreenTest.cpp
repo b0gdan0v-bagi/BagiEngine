@@ -487,7 +487,7 @@ namespace BECore::Tests {
         IntrusivePtrAtomic<SceneManager> _manager;
         IntrusivePtr<UICanvasComponent> _hud;
         IntrusivePtr<UICanvasComponent> _levels;
-        std::optional<LevelsGame> _game;
+        Optional<LevelsGame> _game;
     };
 
     // ---- the size matrix, once per language, closed and open ------------------------------------------------------------

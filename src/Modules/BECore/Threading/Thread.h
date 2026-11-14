@@ -1,10 +1,6 @@
 #pragma once
 
-#include <EASTL/string.h>
-#include <cstdint>
 #include <thread>
-#include <type_traits>
-#include <utility>
 
 namespace BECore {
 

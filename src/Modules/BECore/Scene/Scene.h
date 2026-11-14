@@ -79,7 +79,7 @@ namespace BECore {
          * one Draw() and clears it right after, so Game mode, other passes and Update() never see it. Setting it changes nothing by itself;
          * the next Draw() picks, and bumps the version and announces the change like any other pick.
          */
-        void SetViewOverride(std::optional<int32_t> index);
+        void SetViewOverride(Optional<int32_t> index);
 
         /**
          * @brief Map a mouse position in render output pixels (window or viewport-local) to scene units.
@@ -199,8 +199,8 @@ namespace BECore {
         ViewTransform _viewTransform;   // fit of the view to the output, set by Draw(), read by ScreenToScene*
         int32_t _activeViewIndex = -1;  // index in _viewVariants, -1 the default view; set by Draw()
         uint32_t _viewVersion = 0;
-        uint32_t _announcedViewVersion = 0;    // the version Update() last sent SceneViewChangedEvent for
-        std::optional<int32_t> _viewOverride;  // a tool's forced view, see SetViewOverride(); never saved
+        uint32_t _announcedViewVersion = 0;  // the version Update() last sent SceneViewChangedEvent for
+        Optional<int32_t> _viewOverride;     // a tool's forced view, see SetViewOverride(); never saved
         bool _active = false;
     };
 

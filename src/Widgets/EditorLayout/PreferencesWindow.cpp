@@ -15,7 +15,7 @@ namespace BECore {
         constexpr float kPopupWidthEms = 28.0f;
 
         // The keys a chord can name, read in the frame the user presses one
-        std::optional<KeyChord> ReadPressedChord() {
+        Optional<KeyChord> ReadPressedChord() {
             for (int index = ImGuiKey_NamedKey_BEGIN; index < ImGuiKey_NamedKey_END; ++index) {
                 const ImGuiKey key = static_cast<ImGuiKey>(index);
                 if (!IsNamedKey(key) || !ImGui::IsKeyPressed(key, false)) {
@@ -136,7 +136,7 @@ namespace BECore {
                 ImGui::TextUnformatted(command.title.data(), command.title.data() + command.title.size());
 
                 ImGui::TableNextColumn();
-                const std::optional<KeyChord> chord = hotkeys.GetChord(command.id);
+                const Optional<KeyChord> chord = hotkeys.GetChord(command.id);
                 if (chord) {
                     ImGui::TextUnformatted(ToString(*chord).c_str());
                 } else {
@@ -242,7 +242,7 @@ namespace BECore {
             ImGui::PopItemFlag();
 
             // The frame that opened the popup may still carry the key that activated the Rebind button
-            const std::optional<KeyChord> pressed = ImGui::IsWindowAppearing() ? std::nullopt : ReadPressedChord();
+            const Optional<KeyChord> pressed = ImGui::IsWindowAppearing() ? std::nullopt : ReadPressedChord();
             if (pressed) {
                 if (pressed->key == ImGuiKey_Escape && pressed->mods == 0) {
                     close = true;

@@ -61,7 +61,7 @@ namespace BECore::Fuzz {
         };
 
         /// What the last text of a connection, as the hub read it, said about listing the room: none when it was no create_room
-        std::optional<bool> AsksToListTheRoom(eastl::string_view lastSent) {
+        Optional<bool> AsksToListTheRoom(eastl::string_view lastSent) {
             const auto parsed = ParseClientMessage(lastSent, kMaxMessageBytes);
             const auto* create = parsed ? std::get_if<CreateRoomMessage>(&*parsed) : nullptr;
             if (create == nullptr) {
@@ -144,7 +144,7 @@ namespace BECore::Fuzz {
 
                 const auto parsed = ParseJson(text);
                 FUZZ_CHECK(parsed.has_value() && parsed->is_object());
-                FUZZ_CHECK(GetJsonInt(*parsed, "v") == std::optional<int64_t>(kRoomProtocolVersion));
+                FUZZ_CHECK(GetJsonInt(*parsed, "v") == Optional<int64_t>(kRoomProtocolVersion));
                 const auto type = GetJsonString(*parsed, "type");
                 FUZZ_CHECK(type.has_value() && !type->empty());
 
@@ -212,7 +212,7 @@ namespace BECore::Fuzz {
             /// nothing the hub could not offer: the cap, a free seat, a lobby (the demo game lists no started room)
             void OnRooms(const ConnectionModel& connection, const Json& message) {
                 FUZZ_CHECK(connection.room.empty());
-                FUZZ_CHECK(GetJsonString(message, "game") == std::optional<eastl::string>("demo"));
+                FUZZ_CHECK(GetJsonString(message, "game") == Optional<eastl::string>("demo"));
                 const Json* rooms = FindJsonMember(message, "rooms");
                 FUZZ_CHECK(rooms != nullptr && rooms->is_array() && rooms->size() <= RoomLimits::kMaxListedRooms);
                 eastl::hash_set<eastl::string> seen;
@@ -227,7 +227,7 @@ namespace BECore::Fuzz {
                     FUZZ_CHECK(*seats == DemoCardGame::kSeatCount);
                     FUZZ_CHECK(*taken >= 0 && *taken < *seats);
                     FUZZ_CHECK(GetJsonString(entry, "host").has_value());
-                    FUZZ_CHECK(GetJsonBool(entry, "started") == std::optional<bool>(false));
+                    FUZZ_CHECK(GetJsonBool(entry, "started") == Optional<bool>(false));
                 }
             }
 

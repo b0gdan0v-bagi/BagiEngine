@@ -107,7 +107,7 @@ namespace BECore {
         return PoolString(Storage::Instance().GetOrAdd(str));
     }
 
-    std::optional<PoolString> PoolString::Find(eastl::string_view str) {
+    Optional<PoolString> PoolString::Find(eastl::string_view str) {
         if (const Entry* entry = Storage::Instance().Find(str)) {
             return PoolString(entry);
         }

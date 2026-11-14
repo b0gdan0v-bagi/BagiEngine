@@ -115,7 +115,7 @@ namespace BECore {
      * the line and paragraph separators, zero-width and bidirectional control characters, the byte order mark), then the spaces at
      * both ends removed, and kMinNameBytes to kMaxNameBytes bytes left.
      */
-    [[nodiscard]] std::optional<eastl::string> SanitizePlayerName(eastl::string_view text);
+    [[nodiscard]] Optional<eastl::string> SanitizePlayerName(eastl::string_view text);
 
     // ---- Server to client -------------------------------------------------------------------------------------------------------
 

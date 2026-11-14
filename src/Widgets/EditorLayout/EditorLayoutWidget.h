@@ -70,8 +70,8 @@ namespace BECore {
         /// Writes the current dock layout under @p name; the error is a sentence for the popup
         std::expected<void, eastl::string> SaveCurrentLayout(eastl::string_view name);
 
-        std::optional<EditorSettings> _settings;
-        std::optional<LayoutStore> _layouts;  // none when the system gives no per-user folder
+        Optional<EditorSettings> _settings;
+        Optional<LayoutStore> _layouts;  // none when the system gives no per-user folder
 
         EditorPlayModel _playModel;
         MainToolbar _toolbar;

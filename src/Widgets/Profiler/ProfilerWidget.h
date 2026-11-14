@@ -66,11 +66,11 @@ namespace BECore {
         bool _ringRequested = false;  // what this widget asked of Profiler::SetRingEnabled
         eastl::vector<FrameStats> _history;
         RingSnapshot _snapshot;
-        uint64_t _snapshotVersion = 0;           // counts the snapshots taken, so the zone table knows when its rows are stale
-        std::optional<uint64_t> _selectedFrame;  // a RingFrame::index
+        uint64_t _snapshotVersion = 0;      // counts the snapshots taken, so the zone table knows when its rows are stale
+        Optional<uint64_t> _selectedFrame;  // a RingFrame::index
         SpikeCapture _spikes;
-        std::optional<uint64_t> _openedSpike;  // the frameIndex of the spike the timeline shows, none: the live ring
-        RingSnapshot _spikeSnapshot;           // that spike as a snapshot
+        Optional<uint64_t> _openedSpike;  // the frameIndex of the spike the timeline shows, none: the live ring
+        RingSnapshot _spikeSnapshot;      // that spike as a snapshot
         ProfilerFramePlot _framePlot;
         ProfilerTimelinePanel _timeline;
         ProfilerZoneTablePanel _zoneTable;

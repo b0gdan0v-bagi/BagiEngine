@@ -145,7 +145,7 @@ namespace BECore::Tests {
         std::filesystem::path _base;
         std::filesystem::path _saves;
         FileSystem _fileSystem;
-        std::optional<SaveGameService> _service;
+        Optional<SaveGameService> _service;
     };
 
     TEST_F(SaveGameTest, StateRoundTripsFieldByField) {

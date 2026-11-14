@@ -11,7 +11,6 @@
 #include <Common/TempPath.h>
 #include <EASTL/algorithm.h>
 #include <EASTL/map.h>
-#include <EASTL/optional.h>
 #include <Generated/ReflectionTest.gen.hpp>
 
 // =========================================================================
@@ -486,15 +485,15 @@ namespace BECore::Tests {
         }
         {
             SCOPED_TRACE("eastl::optional with value");
-            ExpectBinaryRoundTrip(eastl::optional<int32_t>(77), eastl::optional<int32_t>{});
+            ExpectBinaryRoundTrip(Optional<int32_t>(77), Optional<int32_t>{});
         }
         {
             SCOPED_TRACE("eastl::optional without value: the key is absent and loading resets the target");
-            ExpectBinaryRoundTrip(eastl::optional<int32_t>{}, eastl::optional<int32_t>(55));
+            ExpectBinaryRoundTrip(Optional<int32_t>{}, Optional<int32_t>(55));
         }
         {
             SCOPED_TRACE("std::optional with value");
-            ExpectBinaryRoundTrip(std::optional<int32_t>(123), std::optional<int32_t>{});
+            ExpectBinaryRoundTrip(Optional<int32_t>(123), Optional<int32_t>{});
         }
         {
             SCOPED_TRACE("empty eastl::vector");
@@ -1383,10 +1382,10 @@ namespace BECore::Tests {
         // eastl::optional with a value
         {
             SCOPED_TRACE("eastl::optional with value");
-            const eastl::optional<int32_t> original = 77;
+            const Optional<int32_t> original = 77;
             const eastl::string xml = SaveToXml("OptTest", "value", original);
 
-            eastl::optional<int32_t> loaded;
+            Optional<int32_t> loaded;
             ASSERT_NO_FATAL_FAILURE(LoadFromXml(xml, "OptTest", "value", loaded));
 
             ASSERT_TRUE(loaded.has_value());
@@ -1396,10 +1395,10 @@ namespace BECore::Tests {
         // eastl::optional without a value (absent key -> nullopt)
         {
             SCOPED_TRACE("eastl::optional without value");
-            const eastl::optional<int32_t> original;
+            const Optional<int32_t> original;
             const eastl::string xml = SaveToXml("OptEmptyTest", "value", original);
 
-            eastl::optional<int32_t> loaded = 55;  // pre-set to non-null to verify the reset
+            Optional<int32_t> loaded = 55;  // pre-set to non-null to verify the reset
             ASSERT_NO_FATAL_FAILURE(LoadFromXml(xml, "OptEmptyTest", "value", loaded));
 
             EXPECT_FALSE(loaded.has_value()) << "should be nullopt after loading an absent key";
@@ -1408,10 +1407,10 @@ namespace BECore::Tests {
         // std::optional with a value
         {
             SCOPED_TRACE("std::optional with value");
-            const std::optional<int32_t> original = 123;
+            const Optional<int32_t> original = 123;
             const eastl::string xml = SaveToXml("StdOptTest", "value", original);
 
-            std::optional<int32_t> loaded;
+            Optional<int32_t> loaded;
             ASSERT_NO_FATAL_FAILURE(LoadFromXml(xml, "StdOptTest", "value", loaded));
 
             ASSERT_TRUE(loaded.has_value());

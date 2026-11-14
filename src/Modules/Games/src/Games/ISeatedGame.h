@@ -80,7 +80,7 @@ namespace BECore {
          *
          * It has to be accepted by PerformSeatAction() for the same seat.
          */
-        [[nodiscard]] virtual std::optional<Json> ChooseComputerAction(int seat) const = 0;
+        [[nodiscard]] virtual Optional<Json> ChooseComputerAction(int seat) const = 0;
 
         /// True once the game is over; then no seat has an action
         [[nodiscard]] virtual bool IsFinished() const = 0;

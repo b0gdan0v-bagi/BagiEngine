@@ -49,7 +49,7 @@ namespace BECore {
 
     }  // namespace
 
-    eastl::vector<uint8_t> EncodeFrame(uint8_t opcode, eastl::span<const uint8_t> payload, std::optional<WebSocketMask> mask, bool fin) {
+    eastl::vector<uint8_t> EncodeFrame(uint8_t opcode, eastl::span<const uint8_t> payload, Optional<WebSocketMask> mask, bool fin) {
         eastl::vector<uint8_t> frame;
         frame.push_back(static_cast<uint8_t>((fin ? kFinBit : 0) | (opcode & kOpcodeMask)));
 
@@ -74,11 +74,11 @@ namespace BECore {
         return frame;
     }
 
-    eastl::vector<uint8_t> EncodeTextFrame(eastl::string_view text, std::optional<WebSocketMask> mask) {
+    eastl::vector<uint8_t> EncodeTextFrame(eastl::string_view text, Optional<WebSocketMask> mask) {
         return EncodeFrame(WebSocketOpcode::kText, eastl::span<const uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), text.size()), mask);
     }
 
-    eastl::vector<uint8_t> EncodeCloseFrame(uint16_t code, eastl::string_view reason, std::optional<WebSocketMask> mask) {
+    eastl::vector<uint8_t> EncodeCloseFrame(uint16_t code, eastl::string_view reason, Optional<WebSocketMask> mask) {
         eastl::vector<uint8_t> payload;
         AppendBigEndian(payload, code, kCloseCodeSize);
         const size_t reasonSize = std::min(reason.size(), kMaxControlPayload - kCloseCodeSize);
@@ -97,7 +97,7 @@ namespace BECore {
         _buffer.insert(_buffer.end(), bytes.begin(), bytes.end());
     }
 
-    std::expected<std::optional<WebSocketMessage>, WebSocketProtocolError> WebSocketFrameParser::Fail(uint16_t closeCode, eastl::string reason) {
+    std::expected<Optional<WebSocketMessage>, WebSocketProtocolError> WebSocketFrameParser::Fail(uint16_t closeCode, eastl::string reason) {
         _error = WebSocketProtocolError{closeCode, std::move(reason)};
         _buffer.clear();
         _buffer.set_capacity(0);
@@ -108,7 +108,7 @@ namespace BECore {
         return std::unexpected(*_error);
     }
 
-    std::expected<std::optional<WebSocketMessage>, WebSocketProtocolError> WebSocketFrameParser::Pop() {
+    std::expected<Optional<WebSocketMessage>, WebSocketProtocolError> WebSocketFrameParser::Pop() {
         if (_error) {
             return std::unexpected(*_error);
         }
@@ -120,13 +120,13 @@ namespace BECore {
                 return Fail(header.error().closeCode, header.error().reason);
             }
             if (!header->has_value()) {
-                return std::optional<WebSocketMessage>();
+                return Optional<WebSocketMessage>();
             }
 
             const FrameHeader& frame = **header;
             const size_t frameSize = frame.headerSize + static_cast<size_t>(frame.payloadLength);
             if (_buffer.size() - _readPosition < frameSize) {
-                return std::optional<WebSocketMessage>();
+                return Optional<WebSocketMessage>();
             }
 
             eastl::vector<uint8_t> payload(static_cast<size_t>(frame.payloadLength));
@@ -143,11 +143,11 @@ namespace BECore {
         }
     }
 
-    std::expected<std::optional<WebSocketFrameParser::FrameHeader>, WebSocketProtocolError> WebSocketFrameParser::ReadHeader() const {
+    std::expected<Optional<WebSocketFrameParser::FrameHeader>, WebSocketProtocolError> WebSocketFrameParser::ReadHeader() const {
         const uint8_t* data = _buffer.data() + _readPosition;
         const size_t available = _buffer.size() - _readPosition;
         if (available < 2) {
-            return std::optional<FrameHeader>();
+            return Optional<FrameHeader>();
         }
 
         FrameHeader header;
@@ -181,7 +181,7 @@ namespace BECore {
         if (lengthCode == kLength16Marker || lengthCode == kLength64Marker) {
             const size_t lengthBytes = (lengthCode == kLength16Marker) ? 2 : 8;
             if (available < position + lengthBytes) {
-                return std::optional<FrameHeader>();
+                return Optional<FrameHeader>();
             }
             header.payloadLength = ReadBigEndian(data + position, lengthBytes);
             position += lengthBytes;
@@ -194,16 +194,16 @@ namespace BECore {
 
         if (isMasked) {
             if (available < position + kMaskSize) {
-                return std::optional<FrameHeader>();
+                return Optional<FrameHeader>();
             }
             std::memcpy(header.mask.data(), data + position, kMaskSize);
             position += kMaskSize;
         }  // an unmasked frame keeps the all-zero key, which leaves the payload as it is
         header.headerSize = position;
-        return std::optional<FrameHeader>(header);
+        return Optional<FrameHeader>(header);
     }
 
-    std::expected<std::optional<WebSocketMessage>, WebSocketProtocolError> WebSocketFrameParser::Accept(const FrameHeader& header, eastl::vector<uint8_t> payload) {
+    std::expected<Optional<WebSocketMessage>, WebSocketProtocolError> WebSocketFrameParser::Accept(const FrameHeader& header, eastl::vector<uint8_t> payload) {
         WebSocketMessage message;
         switch (header.opcode) {
             case WebSocketOpcode::kContinuation:
@@ -212,13 +212,13 @@ namespace BECore {
                 }
                 _fragments.insert(_fragments.end(), payload.begin(), payload.end());
                 if (!header.fin) {
-                    return std::optional<WebSocketMessage>();
+                    return Optional<WebSocketMessage>();
                 }
                 message.kind = _fragmentKind;
                 message.payload = std::move(_fragments);
                 _fragments.clear();
                 _inFragmentedMessage = false;
-                return std::optional<WebSocketMessage>(std::move(message));
+                return Optional<WebSocketMessage>(std::move(message));
 
             case WebSocketOpcode::kText:
             case WebSocketOpcode::kBinary:
@@ -230,16 +230,16 @@ namespace BECore {
                     _inFragmentedMessage = true;
                     _fragmentKind = message.kind;
                     _fragments = std::move(payload);
-                    return std::optional<WebSocketMessage>();
+                    return Optional<WebSocketMessage>();
                 }
                 message.payload = std::move(payload);
-                return std::optional<WebSocketMessage>(std::move(message));
+                return Optional<WebSocketMessage>(std::move(message));
 
             case WebSocketOpcode::kPing:
             case WebSocketOpcode::kPong:
                 message.kind = (header.opcode == WebSocketOpcode::kPing) ? WebSocketMessageKind::Ping : WebSocketMessageKind::Pong;
                 message.payload = std::move(payload);
-                return std::optional<WebSocketMessage>(std::move(message));
+                return Optional<WebSocketMessage>(std::move(message));
 
             default:  // WebSocketOpcode::kClose: ReadHeader() has let no other opcode through
                 message.kind = WebSocketMessageKind::Close;
@@ -254,7 +254,7 @@ namespace BECore {
                     message.closeCode = code;
                     message.payload.assign(payload.begin() + kCloseCodeSize, payload.end());
                 }
-                return std::optional<WebSocketMessage>(std::move(message));
+                return Optional<WebSocketMessage>(std::move(message));
         }
     }
 

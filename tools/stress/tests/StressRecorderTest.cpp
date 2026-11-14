@@ -214,9 +214,9 @@ namespace BECore::Stress::Tests {
         EXPECT_EQ(GetJsonInt(*parsed, "frames").value_or(0), 100);
         EXPECT_EQ(GetJsonInt(*parsed, "warmup").value_or(0), 30);
         EXPECT_EQ(GetJsonInt(*parsed, "atlases").value_or(0), 8);
-        EXPECT_EQ(GetJsonBool(*parsed, "interleave"), std::optional(true));
-        EXPECT_EQ(GetJsonBool(*parsed, "manualClock"), std::optional(true));
-        EXPECT_EQ(GetJsonBool(*parsed, "allocTracking"), std::optional(false));
+        EXPECT_EQ(GetJsonBool(*parsed, "interleave"), Optional(true));
+        EXPECT_EQ(GetJsonBool(*parsed, "manualClock"), Optional(true));
+        EXPECT_EQ(GetJsonBool(*parsed, "allocTracking"), Optional(false));
         EXPECT_DOUBLE_EQ(GetJsonNumber(*parsed, "workMsP50").value_or(0.0), 50.0);
         EXPECT_DOUBLE_EQ(GetJsonNumber(*parsed, "workMsP99").value_or(0.0), 99.0);
         EXPECT_DOUBLE_EQ(GetJsonNumber(*parsed, "workMs").value_or(0.0), 50.5);

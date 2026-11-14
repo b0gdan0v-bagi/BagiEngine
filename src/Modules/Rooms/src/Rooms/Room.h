@@ -108,7 +108,7 @@ namespace BECore {
         [[nodiscard]] bool ShouldClose(RoomTime now) const;
 
         /// The member that has @p token. Compares in time that does not depend on how much of the token is right. Untrusted input.
-        [[nodiscard]] std::optional<PlayerId> FindByToken(eastl::string_view token) const;
+        [[nodiscard]] Optional<PlayerId> FindByToken(eastl::string_view token) const;
 
         /**
          * @brief Moves a member of a room in the lobby to a free seat.
@@ -120,9 +120,9 @@ namespace BECore {
         [[nodiscard]] std::expected<void, ControlError> ChooseSeat(PlayerId player, int64_t seat);
 
         [[nodiscard]] bool IsHost(PlayerId player) const;
-        [[nodiscard]] std::optional<int> GetSeatOf(PlayerId player) const;
+        [[nodiscard]] Optional<int> GetSeatOf(PlayerId player) const;
         /// The player on @p seat, or nullopt when nobody is
-        [[nodiscard]] std::optional<PlayerId> GetPlayerAt(int seat) const;
+        [[nodiscard]] Optional<PlayerId> GetPlayerAt(int seat) const;
         [[nodiscard]] bool HasMember(PlayerId player) const;
 
         /// What a `lobby` message says now
@@ -190,7 +190,7 @@ namespace BECore {
 
         [[nodiscard]] const Member* FindMember(PlayerId player) const;
         [[nodiscard]] Member* FindMember(PlayerId player);
-        [[nodiscard]] std::optional<int> FindLowestFreeSeat() const;
+        [[nodiscard]] Optional<int> FindLowestFreeSeat() const;
         void EraseMember(PlayerId player);
         void FinishIfDone();
         void PassHost();

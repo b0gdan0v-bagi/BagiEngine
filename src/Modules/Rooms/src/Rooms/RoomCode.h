@@ -14,7 +14,7 @@ namespace BECore {
      * @return nullopt when the text is not kRoomCodeLength characters of the alphabet once upper-cased (so `abcde` is `ABCDE`,
      *         but a code with `I`, `O`, `0` or `1`, spaces, or the wrong length is nothing). Never throws or asserts on any bytes.
      */
-    [[nodiscard]] std::optional<eastl::string> NormalizeRoomCode(eastl::string_view text);
+    [[nodiscard]] Optional<eastl::string> NormalizeRoomCode(eastl::string_view text);
 
     /// A new reconnect token: 128 bits from two words of @p random as kTokenLength lower-case hexadecimal characters. The token is
     /// a secret: it goes to its owner only.

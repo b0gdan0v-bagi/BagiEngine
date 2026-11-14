@@ -14,14 +14,14 @@ namespace BECore {
 
         /// Writes an optional property as an attribute even when it equals T{} (an override "x is 0" must survive); Ser::Save would drop it under skip-defaults
         template <typename T>
-        void SaveOptional(ISerializer& s, eastl::string_view key, const std::optional<T>& value) {
+        void SaveOptional(ISerializer& s, eastl::string_view key, const Optional<T>& value) {
             if (value) {
                 Ser::DataAccessor<T>::Save(s, *value, key);
             }
         }
 
         template <typename T>
-        void LoadOptional(IDeserializer& d, eastl::string_view key, std::optional<T>& out) {
+        void LoadOptional(IDeserializer& d, eastl::string_view key, Optional<T>& out) {
             T value{};
             if (Ser::DataAccessor<T>::Load(d, value, key)) {
                 out = value;

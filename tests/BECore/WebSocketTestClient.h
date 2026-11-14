@@ -68,7 +68,7 @@ namespace BECore::Tests {
     class WebSocketTestClient {
     public:
         /// Connects to 127.0.0.1:@p port (no handshake yet). @p pump runs while the client waits
-        static std::optional<WebSocketTestClient> Open(uint16_t port, WaitPump pump = {}) {
+        static Optional<WebSocketTestClient> Open(uint16_t port, WaitPump pump = {}) {
             auto socket = Socket::Connect(port);
             if (!socket) {
                 ADD_FAILURE() << "connect failed: " << socket.error().c_str();
@@ -129,7 +129,7 @@ namespace BECore::Tests {
         }
 
         /// The next complete frame of the server, nullopt when none came yet
-        std::optional<ServerFrame> TryReadFrame() {
+        Optional<ServerFrame> TryReadFrame() {
             if (const auto frame = ParseBuffered()) {
                 return frame;
             }
@@ -138,8 +138,8 @@ namespace BECore::Tests {
         }
 
         /// Waits up to @p limit for the next frame
-        std::optional<ServerFrame> WaitForFrame(std::chrono::milliseconds limit = kClientWaitLimit) {
-            std::optional<ServerFrame> frame;
+        Optional<ServerFrame> WaitForFrame(std::chrono::milliseconds limit = kClientWaitLimit) {
+            Optional<ServerFrame> frame;
             WaitUntil(
                 _pump,
                 [&] {
@@ -187,7 +187,7 @@ namespace BECore::Tests {
         }
 
         /// The frames of a server are not masked
-        std::optional<ServerFrame> ParseBuffered() {
+        Optional<ServerFrame> ParseBuffered() {
             if (_buffer.size() < 2) {
                 return std::nullopt;
             }

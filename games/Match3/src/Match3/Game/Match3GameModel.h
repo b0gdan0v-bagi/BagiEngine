@@ -1,6 +1,5 @@
 #pragma once
 
-#include <EASTL/optional.h>
 #include <Match3/Game/CascadeTrace.h>
 #include <Match3/Game/Match3Board.h>
 #include <Match3/Game/Match3Types.h>
@@ -67,7 +66,7 @@ namespace BECore::Match3 {
         [[nodiscard]] bool HasSelection() const noexcept {
             return _selected.has_value();
         }
-        [[nodiscard]] eastl::optional<Cell> GetSelected() const noexcept {
+        [[nodiscard]] Optional<Cell> GetSelected() const noexcept {
             return _selected;
         }
 
@@ -166,8 +165,8 @@ namespace BECore::Match3 {
         void RefillTop(CascadeStep* step);
 
         Match3Board _board;
-        eastl::optional<Cell> _selected;
-        eastl::optional<SwapTrace> _lastSwap;
+        Optional<Cell> _selected;
+        Optional<SwapTrace> _lastSwap;
         int _score = 0;
         uint32_t _seed = 0;
         uint64_t _version = 0;

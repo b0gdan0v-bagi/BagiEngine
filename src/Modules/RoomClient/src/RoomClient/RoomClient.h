@@ -321,13 +321,13 @@ namespace BECore {
         // The clocks, all against the `now` of Poll(); an empty one is armed by the next Poll(), since a command knows no time
         RoomTime _now{};
         /// Since when the transport has been opening
-        std::optional<RoomTime> _connectStart;
+        Optional<RoomTime> _connectStart;
         /// The last time anything came from the server, and whether a `ping` since then is still unanswered
         RoomTime _lastReceived{};
         bool _pingOutstanding = false;
         /// Reconnecting: when the connection was first lost, when the next attempt is due (empty while one is under way), how many failed
-        std::optional<RoomTime> _lostAt;
-        std::optional<RoomTime> _retryAt;
+        Optional<RoomTime> _lostAt;
+        Optional<RoomTime> _retryAt;
         int _failedAttempts = 0;
         /// Why the connection will end for good when the transport's Closed arrives (`replaced`); the code of that Closed event
         eastl::string _endReason;

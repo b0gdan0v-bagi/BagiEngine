@@ -25,7 +25,7 @@ namespace BECore {
         }
 
         /// The port in @p digits, nullopt when it is not 1..65535
-        std::optional<uint16_t> ParsePort(eastl::string_view digits) {
+        Optional<uint16_t> ParsePort(eastl::string_view digits) {
             if (digits.empty() || digits.size() > kMaxPortDigits) {
                 return std::nullopt;
             }
@@ -82,7 +82,7 @@ namespace BECore {
         const size_t colon = authority.find(':');
         if (colon != eastl::string_view::npos) {
             host = authority.substr(0, colon);
-            const std::optional<uint16_t> port = ParsePort(authority.substr(colon + 1));
+            const Optional<uint16_t> port = ParsePort(authority.substr(colon + 1));
             if (!port) {
                 return Refuse("the port has to be a number from 1 to 65535");
             }

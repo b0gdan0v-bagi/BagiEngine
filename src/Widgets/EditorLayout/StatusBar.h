@@ -37,11 +37,11 @@ namespace BECore {
         char _frameMsText[kTextSize] = {};
 
         uint64_t _allocCount = 0;
-        std::optional<uint64_t> _shownAllocCount;
+        Optional<uint64_t> _shownAllocCount;
         char _allocText[kTextSize] = {};
 
         ControlServerStatus _controlStatus;
-        std::optional<ControlServerStatus> _shownControlStatus;
+        Optional<ControlServerStatus> _shownControlStatus;
         char _controlText[kTextSize] = {};
 
         PoolString _seenGame;

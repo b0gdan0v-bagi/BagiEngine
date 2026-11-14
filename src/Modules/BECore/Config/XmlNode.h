@@ -112,7 +112,7 @@ namespace BECore {
          * @param name Attribute name
          * @return Attribute value or nullopt if not found
          */
-        std::optional<eastl::string_view> GetAttribute(eastl::string_view name) const {
+        Optional<eastl::string_view> GetAttribute(eastl::string_view name) const {
             auto attr = _node.attribute(name.data());
             if (!attr) {
                 return std::nullopt;
@@ -127,7 +127,7 @@ namespace BECore {
          * @return Parsed value or nullopt if not found or parse failed
          */
         template <typename T>
-        std::optional<T> ParseAttribute(eastl::string_view name) const {
+        Optional<T> ParseAttribute(eastl::string_view name) const {
             auto attrOpt = GetAttribute(name);
 
             if (!attrOpt)

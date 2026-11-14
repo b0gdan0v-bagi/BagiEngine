@@ -56,7 +56,7 @@ namespace BECore {
         [[nodiscard]] bool HasLanguage(PoolString language) const;
 
         /// The text of @p key in the current language, else in the default language, else nothing. Does not record a miss
-        [[nodiscard]] std::optional<eastl::string_view> Find(eastl::string_view key) const;
+        [[nodiscard]] Optional<eastl::string_view> Find(eastl::string_view key) const;
 
         /// @p text with every `{#key}` replaced (see the class comment). A missing key becomes the key text and is recorded once per language and key. An unclosed `{#`, an
         /// empty `{#}` and a `{{#` stay as written

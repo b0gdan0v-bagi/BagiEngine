@@ -150,7 +150,7 @@ namespace BECore::Tests {
 
             /// Presents the frame and returns what was on the back buffer
             PixelBuffer PresentAndRead() {
-                std::optional<CaptureResult> captured;
+                Optional<CaptureResult> captured;
                 renderer->RequestCapture([&captured](CaptureResult result) { captured = std::move(result); });
                 renderer->Present();
                 if (!captured || !captured->has_value()) {
@@ -243,7 +243,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(SDLCaptureTest, CaptureReadsWhatWasDrawn) {
-        std::optional<CaptureResult> captured;
+        Optional<CaptureResult> captured;
         DrawFrame();
         renderer->RequestCapture([&captured](CaptureResult result) { captured = std::move(result); });
         renderer->Present();
@@ -273,8 +273,8 @@ namespace BECore::Tests {
     }
 
     TEST_F(SDLCaptureTest, NewerRequestReplacesTheOlderOne) {
-        std::optional<CaptureResult> first;
-        std::optional<CaptureResult> second;
+        Optional<CaptureResult> first;
+        Optional<CaptureResult> second;
         DrawFrame();
         renderer->RequestCapture([&first](CaptureResult result) { first = std::move(result); });
         renderer->RequestCapture([&second](CaptureResult result) { second = std::move(result); });
@@ -294,7 +294,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(SDLCaptureTest, CaptureStillWorksWhenThePresentComesFromTheRenderEvent) {
-        std::optional<CaptureResult> captured;
+        Optional<CaptureResult> captured;
         DrawFrame();
         renderer->RequestCapture([&captured](CaptureResult result) { captured = std::move(result); });
         RenderEvents::RenderPresentEvent::Emit();
@@ -887,7 +887,7 @@ namespace BECore::Tests {
 
     TEST(RendererCaptureDefaultTest, ARendererThatCannotReadItsOutputAnswersWithAnError) {
         BlindRenderer renderer;
-        std::optional<CaptureResult> captured;
+        Optional<CaptureResult> captured;
 
         renderer.RequestCapture([&captured](CaptureResult result) { captured = std::move(result); });
 

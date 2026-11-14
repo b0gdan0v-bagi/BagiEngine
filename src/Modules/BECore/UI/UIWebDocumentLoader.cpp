@@ -13,7 +13,7 @@ namespace BECore {
         constexpr eastl::string_view HtmlExtension = ".ui.html";
         constexpr eastl::string_view CurrentDirectoryPrefix = "./";
 
-        std::optional<eastl::string> ReadVirtualFile(eastl::string_view virtualPath) {
+        Optional<eastl::string> ReadVirtualFile(eastl::string_view virtualPath) {
             const std::filesystem::path resolved = CoreManager::GetFileSystem().ResolvePath(virtualPath);
             if (resolved.empty()) {
                 return std::nullopt;

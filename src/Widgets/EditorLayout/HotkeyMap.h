@@ -31,7 +31,7 @@ namespace BECore {
         HotkeyMap();
 
         /// The chord of @p commandId; empty when it is unbound or unknown
-        [[nodiscard]] std::optional<KeyChord> GetChord(PoolString commandId) const;
+        [[nodiscard]] Optional<KeyChord> GetChord(PoolString commandId) const;
 
         /// The command that holds @p chord, or an empty PoolString
         [[nodiscard]] PoolString Find(const KeyChord& chord) const;
@@ -59,7 +59,7 @@ namespace BECore {
     private:
         struct Binding {
             PoolString id;
-            std::optional<KeyChord> chord;
+            Optional<KeyChord> chord;
         };
 
         Binding* FindBinding(PoolString commandId);

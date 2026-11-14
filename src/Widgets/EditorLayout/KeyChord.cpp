@@ -59,7 +59,7 @@ namespace BECore {
             return InRange(key, ImGuiKey_F1, kFunctionKeyCount);
         }
 
-        std::optional<uint8_t> ParseModifier(eastl::string_view token) {
+        Optional<uint8_t> ParseModifier(eastl::string_view token) {
             if (EqualsNoCase(token, "Ctrl")) {
                 return kChordModCtrl;
             }
@@ -90,7 +90,7 @@ namespace BECore {
             return {};
         }
 
-        std::optional<ImGuiKey> ParseKey(eastl::string_view token) {
+        Optional<ImGuiKey> ParseKey(eastl::string_view token) {
             if (token.size() == 1) {
                 const char c = ToLowerAscii(token[0]);
                 if (c >= 'a' && c <= 'z') {
@@ -155,7 +155,7 @@ namespace BECore {
         return text;
     }
 
-    std::optional<KeyChord> ParseKeyChord(eastl::string_view text) {
+    Optional<KeyChord> ParseKeyChord(eastl::string_view text) {
         KeyChord chord;
         bool hasKey = false;
         size_t start = 0;
@@ -165,12 +165,12 @@ namespace BECore {
             if (token.empty()) {
                 return std::nullopt;
             }
-            if (const std::optional<uint8_t> mod = ParseModifier(token)) {
+            if (const Optional<uint8_t> mod = ParseModifier(token)) {
                 if (hasKey || (chord.mods & *mod) != 0) {
                     return std::nullopt;
                 }
                 chord.mods |= *mod;
-            } else if (const std::optional<ImGuiKey> key = ParseKey(token); key && !hasKey) {
+            } else if (const Optional<ImGuiKey> key = ParseKey(token); key && !hasKey) {
                 chord.key = *key;
                 hasKey = true;
             } else {

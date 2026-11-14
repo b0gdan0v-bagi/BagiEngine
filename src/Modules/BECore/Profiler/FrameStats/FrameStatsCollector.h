@@ -34,7 +34,7 @@ namespace BECore {
             return stageMs[+stage];
         }
         /// The value of the counter @p name this frame, nullopt when nobody set it
-        [[nodiscard]] std::optional<double> FindCounter(PoolString name) const;
+        [[nodiscard]] Optional<double> FindCounter(PoolString name) const;
     };
 
     /**

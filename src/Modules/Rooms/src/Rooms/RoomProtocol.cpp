@@ -22,7 +22,7 @@ namespace BECore {
 
         /// Reads one strictly valid UTF-8 character at @p pos; nullopt for a bad lead byte, a missing or bad continuation byte,
         /// an overlong form, a surrogate or a value above U+10FFFF
-        [[nodiscard]] std::optional<DecodedChar> DecodeUtf8(eastl::string_view text, size_t pos) {
+        [[nodiscard]] Optional<DecodedChar> DecodeUtf8(eastl::string_view text, size_t pos) {
             const auto byteAt = [&](size_t index) { return static_cast<unsigned char>(text[index]); };
             const unsigned char lead = byteAt(pos);
             size_t length = 0;
@@ -216,7 +216,7 @@ namespace BECore {
 
         // ---- Reading the server's messages ----
 
-        [[nodiscard]] std::optional<RoomPhase> ParsePhaseName(eastl::string_view name) {
+        [[nodiscard]] Optional<RoomPhase> ParsePhaseName(eastl::string_view name) {
             for (const RoomPhase phase : {RoomPhase::Lobby, RoomPhase::Playing, RoomPhase::Finished}) {
                 if (GetPhaseName(phase) == name) {
                     return phase;
@@ -225,7 +225,7 @@ namespace BECore {
             return std::nullopt;
         }
 
-        [[nodiscard]] std::optional<SeatKind> ParseSeatKindName(eastl::string_view name) {
+        [[nodiscard]] Optional<SeatKind> ParseSeatKindName(eastl::string_view name) {
             for (const SeatKind kind : {SeatKind::Human, SeatKind::Computer, SeatKind::Empty}) {
                 if (GetSeatKindName(kind) == name) {
                     return kind;
@@ -385,7 +385,7 @@ namespace BECore {
             if (!room) {
                 return std::unexpected(room.error());
             }
-            if (NormalizeRoomCode(*room) != std::optional<eastl::string>(*room)) {
+            if (NormalizeRoomCode(*room) != Optional<eastl::string>(*room)) {
                 return BadMessage("a room of 'rooms' has no well-formed code");
             }
             listing.room = std::move(*room);
@@ -618,7 +618,7 @@ namespace BECore {
         return DumpJson(root);
     }
 
-    std::optional<eastl::string> SanitizePlayerName(eastl::string_view text) {
+    Optional<eastl::string> SanitizePlayerName(eastl::string_view text) {
         for (size_t pos = 0; pos < text.size();) {
             const auto decoded = DecodeUtf8(text, pos);
             if (!decoded || IsForbiddenInName(decoded->codePoint)) {

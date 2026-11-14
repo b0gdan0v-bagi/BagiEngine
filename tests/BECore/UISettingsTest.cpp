@@ -153,7 +153,7 @@ namespace BECore::Tests {
         const MetricsWindow window;  // density 2, safe area {0, 20, 1000, 480} in window units
 
         environment.SetPixelDensityOverride(1.0f);
-        EXPECT_EQ(environment.GetPixelDensityOverride(), std::optional<float>(1.0f));
+        EXPECT_EQ(environment.GetPixelDensityOverride(), Optional<float>(1.0f));
         UILayoutContext context = environment.MakeContext(&window, 1000.0f, 500.0f);
         EXPECT_FLOAT_EQ(context.pixelDensity, 1.0f);
         EXPECT_FLOAT_EQ(context.displayScale, 1.5f);  // only the density is replaced

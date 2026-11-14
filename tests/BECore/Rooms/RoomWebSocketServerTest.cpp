@@ -74,7 +74,7 @@ namespace BECore::Tests {
             }
 
             /// A host that created a room: the client with `joined` and `lobby` read
-            std::optional<RoomSocketClient> MakeHost(uint16_t port, eastl::string_view name = "Host") {
+            Optional<RoomSocketClient> MakeHost(uint16_t port, eastl::string_view name = "Host") {
                 auto host = RoomSocketClient::Connect(port);
                 if (!host) {
                     return std::nullopt;
@@ -501,7 +501,7 @@ namespace BECore::Tests {
         std::this_thread::sleep_for(150ms);
 
         auto late = RoomSocketClient::Connect(port);
-        std::optional<ServerFrame> close;
+        Optional<ServerFrame> close;
         if (late) {
             close = late->WaitForClose();
         }
@@ -612,7 +612,7 @@ namespace BECore::Tests {
         /// Moves the clock on by kClockStep at a time until a ping reaches @p client, and tells how far it moved; nullopt when no ping came
         /// within @p limit of clock time. The hub thread looks at the clock on its own schedule, so a test cannot know which step it
         /// notices a silence at: it asks how long the silence had to be
-        std::optional<std::chrono::milliseconds> AdvanceUntilPing(ManualClock& clock, RoomSocketClient& client, std::chrono::milliseconds limit = 3 * kPingInterval) {
+        Optional<std::chrono::milliseconds> AdvanceUntilPing(ManualClock& clock, RoomSocketClient& client, std::chrono::milliseconds limit = 3 * kPingInterval) {
             std::chrono::milliseconds advanced{0};
             while (advanced < limit) {
                 clock.Advance(kClockStep);

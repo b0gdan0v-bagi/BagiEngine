@@ -167,9 +167,9 @@ namespace BECore::Stress::Tests {
         EXPECT_EQ(GetJsonString(*parsed, "scene").value_or(""), "entities");
         EXPECT_EQ(GetJsonInt(*parsed, "count").value_or(0), kCount);
         EXPECT_EQ(GetJsonInt(*parsed, "warmup").value_or(0), kWarmup);
-        EXPECT_EQ(GetJsonBool(*parsed, "interleave"), std::optional(true));
+        EXPECT_EQ(GetJsonBool(*parsed, "interleave"), Optional(true));
         EXPECT_EQ(GetJsonInt(*parsed, "atlases").value_or(0), 2);
-        EXPECT_EQ(GetJsonBool(*parsed, "manualClock"), std::optional(false));
+        EXPECT_EQ(GetJsonBool(*parsed, "manualClock"), Optional(false));
     }
 
     TEST_F(StressRunTest, TheWorkTimeLeavesOutThePresent) {
@@ -308,9 +308,9 @@ namespace BECore::Stress::Tests {
         ASSERT_TRUE(parsed.has_value()) << _lines[0].c_str();
         EXPECT_EQ(GetJsonString(*parsed, "mode").value_or(""), "ramp");
         EXPECT_EQ(GetJsonString(*parsed, "scene").value_or(""), "entities");
-        EXPECT_EQ(GetJsonBool(*parsed, "capped"), std::optional(false));
-        EXPECT_EQ(GetJsonBool(*parsed, "aborted"), std::optional(false));
-        EXPECT_EQ(GetJsonBool(*parsed, "verified"), std::optional(true));
+        EXPECT_EQ(GetJsonBool(*parsed, "capped"), Optional(false));
+        EXPECT_EQ(GetJsonBool(*parsed, "aborted"), Optional(false));
+        EXPECT_EQ(GetJsonBool(*parsed, "verified"), Optional(true));
         const int64_t found = GetJsonInt(*parsed, "objectsAt60fps").value_or(0);
         EXPECT_LE(found, 301);
         EXPECT_GE(found, 290);

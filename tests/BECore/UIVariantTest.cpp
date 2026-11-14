@@ -244,9 +244,9 @@ namespace BECore::Tests {
 
         EXPECT_FALSE(style.visible);
         EXPECT_EQ(style.rect.anchor, UIAnchor::BottomLeft);
-        EXPECT_EQ(style.rect.anchorMin, std::optional<Vec2>(Vec2{0.1f, 0.2f}));
-        EXPECT_EQ(style.rect.anchorMax, std::optional<Vec2>(Vec2{0.9f, 0.8f}));
-        EXPECT_EQ(style.rect.pivot, std::optional<Vec2>(Vec2{0.0f, 1.0f}));
+        EXPECT_EQ(style.rect.anchorMin, Optional<Vec2>(Vec2{0.1f, 0.2f}));
+        EXPECT_EQ(style.rect.anchorMax, Optional<Vec2>(Vec2{0.9f, 0.8f}));
+        EXPECT_EQ(style.rect.pivot, Optional<Vec2>(Vec2{0.0f, 1.0f}));
         EXPECT_EQ(style.rect.margin, (UIEdges{1.0f, 2.0f, 3.0f, 4.0f}));
         EXPECT_FLOAT_EQ(style.rect.x.value, 1.0f);
         EXPECT_FLOAT_EQ(style.rect.y.value, 2.0f);
@@ -335,7 +335,7 @@ namespace BECore::Tests {
         ASSERT_EQ(loaded.overrides.size(), 1u);
         EXPECT_FALSE(loaded.overrides[0].anchorMin);
         EXPECT_FALSE(loaded.overrides[0].margin);
-        EXPECT_EQ(loaded.overrides[0].pivot, std::optional<Vec2>(Vec2{0.5f, 0.5f}));
+        EXPECT_EQ(loaded.overrides[0].pivot, Optional<Vec2>(Vec2{0.5f, 0.5f}));
     }
 
     TEST(UIVariantsTest, ARegionOfAnOverrideSurvivesTheFileRoundTrip) {
@@ -361,7 +361,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(deserializer.HasErrors());
         EXPECT_TRUE(loaded == variant);
         ASSERT_EQ(loaded.overrides.size(), 2u);
-        EXPECT_EQ(loaded.overrides[0].region, std::optional<PoolString>{"table.plate.2"_intern});
+        EXPECT_EQ(loaded.overrides[0].region, Optional<PoolString>{"table.plate.2"_intern});
         EXPECT_TRUE(loaded.overrides[1].region.has_value()) << "region=\"\" is an override that clears, not an absent one";
         EXPECT_TRUE(loaded.overrides[1].region->Empty());
     }

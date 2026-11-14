@@ -134,7 +134,7 @@ namespace BECore::Tests {
         PixelBuffer DrawFrame() {
             _renderer->Clear(kBackground);
             _manager->DrawAll();
-            std::optional<CaptureResult> captured;
+            Optional<CaptureResult> captured;
             _renderer->RequestCapture([&captured](CaptureResult result) { captured = std::move(result); });
             _renderer->Present();
             if (!captured || !captured->has_value()) {

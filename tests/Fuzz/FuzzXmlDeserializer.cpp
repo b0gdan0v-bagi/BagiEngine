@@ -50,7 +50,7 @@ namespace BECore::Fuzz {
         /// What the strict reader has to say about a text, worked out here from the grammar and not from the reader's code:
         /// true (a value of T, and @p expected holds it), false (not a value of T) or nothing (a float that has the shape of a number: the reader decides)
         template <typename T>
-        std::optional<bool> StrictVerdict(eastl::string_view text, T& expected) {
+        Optional<bool> StrictVerdict(eastl::string_view text, T& expected) {
             text = Trim(text);
             if constexpr (std::is_same_v<T, bool>) {
                 if (text == "true" || text == "1") {
@@ -136,7 +136,7 @@ namespace BECore::Fuzz {
             if constexpr (std::is_arithmetic_v<T>) {
                 if (strict) {
                     T expected{};
-                    const std::optional<bool> verdict = StrictVerdict(text, expected);
+                    const Optional<bool> verdict = StrictVerdict(text, expected);
                     if (verdict.has_value()) {
                         FUZZ_CHECK(ok == *verdict);
                         if (ok) {

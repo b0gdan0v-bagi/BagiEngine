@@ -81,7 +81,7 @@ namespace BECore {
         _view.FitTo(frame.beginTicks, frame.endTicks);
     }
 
-    void ProfilerTimelinePanel::Draw(const RingSnapshot& snapshot, std::optional<uint64_t> selectedFrame) {
+    void ProfilerTimelinePanel::Draw(const RingSnapshot& snapshot, Optional<uint64_t> selectedFrame) {
         if (snapshot.frames.empty()) {
             ImGui::TextUnformatted("No frame in the ring yet");
             return;
@@ -89,7 +89,7 @@ namespace BECore {
         const TickRange extent = SnapshotExtent(snapshot);
         _view.SetExtent(extent.begin, extent.end, snapshot.nanosecondsPerTick);
 
-        const std::optional<size_t> selectedPosition = FramePosition(snapshot, selectedFrame);
+        const Optional<size_t> selectedPosition = FramePosition(snapshot, selectedFrame);
         const RingFrame* selected = selectedPosition ? &snapshot.frames[*selectedPosition] : nullptr;
         const RingFrame& frame = selected != nullptr ? *selected : snapshot.frames.back();
         if (selectedFrame != _shownSelection) {

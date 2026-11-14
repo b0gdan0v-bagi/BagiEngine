@@ -11,7 +11,7 @@ namespace BECore {
         return true;
     }
 
-    std::optional<SeatedGameInfo> SeatedGameRegistry::Find(eastl::string_view name) const {
+    Optional<SeatedGameInfo> SeatedGameRegistry::Find(eastl::string_view name) const {
         const auto it = _games.find(eastl::string(name));
         if (it == _games.end()) {
             return std::nullopt;

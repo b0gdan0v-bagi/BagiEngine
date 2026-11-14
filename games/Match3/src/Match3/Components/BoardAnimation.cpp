@@ -4,13 +4,13 @@
 
 namespace BECore::Match3 {
 
-    eastl::optional<Rect> ClipToBoard(const Rect& rect, const Rect& board) {
+    Optional<Rect> ClipToBoard(const Rect& rect, const Rect& board) {
         const float left = eastl::max(rect.x, board.x);
         const float top = eastl::max(rect.y, board.y);
         const float right = eastl::min(rect.x + rect.w, board.x + board.w);
         const float bottom = eastl::min(rect.y + rect.h, board.y + board.h);
         if (right <= left || bottom <= top) {
-            return eastl::nullopt;
+            return std::nullopt;
         }
         return Rect{left, top, right - left, bottom - top};
     }

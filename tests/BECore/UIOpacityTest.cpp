@@ -150,9 +150,9 @@ namespace BECore::Tests {
         }
 
         /// The alpha of the one Rect call of the last frame that has the position and the size of @p name (the elements of the screen differ in size where they share a corner)
-        std::optional<uint8_t> AlphaOf(const char* name) const {
+        Optional<uint8_t> AlphaOf(const char* name) const {
             const Rect rect = Get(name).rect;
-            std::optional<uint8_t> alpha;
+            Optional<uint8_t> alpha;
             for (const DrawCall& call : _renderer->calls) {
                 if (call.kind == DrawKind::Rect && std::abs(call.rect.x - rect.x) < 1e-3f && std::abs(call.rect.y - rect.y) < 1e-3f && std::abs(call.rect.w - rect.w) < 1e-3f) {
                     EXPECT_FALSE(alpha.has_value()) << name << " is drawn once";

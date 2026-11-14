@@ -19,13 +19,13 @@ namespace BECore {
         /// "x,y" (UIText::FormatFraction2): an anchor or a pivot
         void WriteVec2Fraction(ISerializer& s, eastl::string_view key, const Vec2& value);
         /// Writes the attribute only when the optional holds a value
-        void WriteOptionalVec2Fraction(ISerializer& s, eastl::string_view key, const std::optional<Vec2>& value);
+        void WriteOptionalVec2Fraction(ISerializer& s, eastl::string_view key, const Optional<Vec2>& value);
         /// Sets @p out when the attribute is there and well formed; otherwise leaves it as it was (a malformed one is reported to @p d)
-        void ReadOptionalVec2Fraction(IDeserializer& d, eastl::string_view key, std::optional<Vec2>& out);
+        void ReadOptionalVec2Fraction(IDeserializer& d, eastl::string_view key, Optional<Vec2>& out);
 
         /// Writes the attribute only when the optional holds edges (even equal to the default: an override "margin is 0" must survive)
-        void WriteOptionalEdges(ISerializer& s, eastl::string_view key, const std::optional<UIEdges>& edges);
-        void ReadOptionalEdges(IDeserializer& d, eastl::string_view key, std::optional<UIEdges>& out);
+        void WriteOptionalEdges(ISerializer& s, eastl::string_view key, const Optional<UIEdges>& edges);
+        void ReadOptionalEdges(IDeserializer& d, eastl::string_view key, Optional<UIEdges>& out);
 
         void WriteCorners(ISerializer& s, eastl::string_view key, const UICorners& corners);
         bool ReadCorners(IDeserializer& d, eastl::string_view key, UICorners& out);
@@ -45,9 +45,9 @@ namespace BECore {
         bool ReadTextShadow(IDeserializer& d, eastl::string_view key, float& offsetX, float& offsetY, UIColor& color);
 
         /// Writes the attribute only when the optional holds a length
-        void WriteOptionalLength(ISerializer& s, eastl::string_view key, const std::optional<UILength>& length);
+        void WriteOptionalLength(ISerializer& s, eastl::string_view key, const Optional<UILength>& length);
         /// Sets @p out when the attribute is there and well formed; otherwise leaves it as it was
-        void ReadOptionalLength(IDeserializer& d, eastl::string_view key, std::optional<UILength>& out);
+        void ReadOptionalLength(IDeserializer& d, eastl::string_view key, Optional<UILength>& out);
 
     }  // namespace UIAttr
 

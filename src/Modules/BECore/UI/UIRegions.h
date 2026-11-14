@@ -1,6 +1,5 @@
 #pragma once
 
-#include <BECore/Math/Rect.h>
 
 namespace BECore {
 

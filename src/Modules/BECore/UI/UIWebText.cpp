@@ -46,7 +46,7 @@ namespace BECore::UIWebText {
             {"cyan", {0, 255, 255, 255}},   {"magenta", {255, 0, 255, 255}}, {"lime", {0, 255, 0, 255}},       {"navy", {0, 0, 128, 255}},
         };
 
-        std::optional<unsigned char> ParseHexDigits(eastl::string_view digits) {
+        Optional<unsigned char> ParseHexDigits(eastl::string_view digits) {
             unsigned int value = 0;
             const auto [end, error] = std::from_chars(digits.data(), digits.data() + digits.size(), value, HexBase);
             if (error != std::errc{} || end != digits.data() + digits.size()) {
@@ -55,7 +55,7 @@ namespace BECore::UIWebText {
             return static_cast<unsigned char>(value);
         }
 
-        std::optional<Color> ParseHexColor(eastl::string_view digits) {
+        Optional<Color> ParseHexColor(eastl::string_view digits) {
             if (digits.size() == ShortHexLength || digits.size() == ShortHexAlphaLength) {
                 // #rgb and #rgba: each digit is doubled
                 eastl::string expanded;
@@ -71,7 +71,7 @@ namespace BECore::UIWebText {
             const auto r = ParseHexDigits(digits.substr(0, 2));
             const auto g = ParseHexDigits(digits.substr(2, 2));
             const auto b = ParseHexDigits(digits.substr(4, 2));
-            const auto a = digits.size() == LongHexAlphaLength ? ParseHexDigits(digits.substr(6, 2)) : std::optional<unsigned char>{OpaqueAlpha};
+            const auto a = digits.size() == LongHexAlphaLength ? ParseHexDigits(digits.substr(6, 2)) : Optional<unsigned char>{OpaqueAlpha};
             if (!r || !g || !b || !a) {
                 return std::nullopt;
             }
@@ -79,7 +79,7 @@ namespace BECore::UIWebText {
         }
 
         /// A channel as a number 0 to 255 or a percent
-        std::optional<unsigned char> ParseChannel(eastl::string_view text) {
+        Optional<unsigned char> ParseChannel(eastl::string_view text) {
             text = TrimSpace(text);
             bool percent = false;
             if (!text.empty() && text.back() == '%') {
@@ -95,7 +95,7 @@ namespace BECore::UIWebText {
         }
 
         /// An alpha as a number 0 to 1 or a percent
-        std::optional<unsigned char> ParseAlpha(eastl::string_view text) {
+        Optional<unsigned char> ParseAlpha(eastl::string_view text) {
             text = TrimSpace(text);
             bool percent = false;
             if (!text.empty() && text.back() == '%') {
@@ -110,7 +110,7 @@ namespace BECore::UIWebText {
             return static_cast<unsigned char>(std::clamp(unit * ByteMax + 0.5f, 0.0f, ByteMax));
         }
 
-        std::optional<Color> ParseFunctionColor(eastl::string_view arguments) {
+        Optional<Color> ParseFunctionColor(eastl::string_view arguments) {
             // "r, g, b" "r, g, b, a" "r g b" "r g b / a"
             eastl::string normalized;
             for (const char c : arguments) {
@@ -135,14 +135,14 @@ namespace BECore::UIWebText {
             const auto r = ParseChannel(parts[0]);
             const auto g = ParseChannel(parts[1]);
             const auto b = ParseChannel(parts[2]);
-            const auto a = parts.size() == 4 ? ParseAlpha(parts[3]) : std::optional<unsigned char>{OpaqueAlpha};
+            const auto a = parts.size() == 4 ? ParseAlpha(parts[3]) : Optional<unsigned char>{OpaqueAlpha};
             if (!r || !g || !b || !a) {
                 return std::nullopt;
             }
             return Color{*r, *g, *b, *a};
         }
 
-        std::optional<Color> ParseLiteralColor(eastl::string_view text) {
+        Optional<Color> ParseLiteralColor(eastl::string_view text) {
             text = TrimSpace(text);
             if (text.empty()) {
                 return std::nullopt;
@@ -171,7 +171,7 @@ namespace BECore::UIWebText {
         }
 
         /// A px length that is a finite number
-        std::optional<float> ParseLength(eastl::string_view text) {
+        Optional<float> ParseLength(eastl::string_view text) {
             const auto value = ParsePixels(text);
             if (!value || !std::isfinite(*value)) {
                 return std::nullopt;
@@ -185,7 +185,7 @@ namespace BECore::UIWebText {
             bool swap = false;
         };
 
-        std::optional<GradientDirectionWord> ParseGradientDirection(eastl::string_view text) {
+        Optional<GradientDirectionWord> ParseGradientDirection(eastl::string_view text) {
             eastl::string normalized;
             for (const eastl::string_view word : SplitWords(text)) {
                 if (!normalized.empty()) {
@@ -230,9 +230,9 @@ namespace BECore::UIWebText {
             PoolString token;
         };
 
-        std::optional<ShadowLayer> ParseShadowLayer(eastl::string_view text) {
+        Optional<ShadowLayer> ParseShadowLayer(eastl::string_view text) {
             eastl::vector<float> lengths;
-            std::optional<WebColor> color;
+            Optional<WebColor> color;
             for (const eastl::string_view word : SplitWords(text)) {
                 if (ToLower(word) == InsetKeyword) {
                     return std::nullopt;
@@ -350,7 +350,7 @@ namespace BECore::UIWebText {
         return words;
     }
 
-    std::optional<float> ParsePixels(eastl::string_view text) {
+    Optional<float> ParsePixels(eastl::string_view text) {
         text = TrimSpace(text);
         if (text.size() > 2 && text.substr(text.size() - 2) == "px") {
             text.remove_suffix(2);
@@ -362,7 +362,7 @@ namespace BECore::UIWebText {
         return UIText::FormatColorRef(color, color.token);
     }
 
-    std::optional<WebColor> ParseColor(eastl::string_view text) {
+    Optional<WebColor> ParseColor(eastl::string_view text) {
         text = TrimSpace(text);
         constexpr eastl::string_view varName = "var";
         const size_t open = text.find('(');
@@ -387,7 +387,7 @@ namespace BECore::UIWebText {
         return WebColor{*literal};
     }
 
-    std::optional<eastl::string> ParseUrl(eastl::string_view text) {
+    Optional<eastl::string> ParseUrl(eastl::string_view text) {
         text = TrimSpace(text);
         if (text.size() < UrlName.size() + 2 || ToLower(text.substr(0, UrlName.size())) != UrlName || text[UrlName.size()] != '(' || text.back() != ')') {
             return std::nullopt;
@@ -399,7 +399,7 @@ namespace BECore::UIWebText {
         return eastl::string(inner);
     }
 
-    std::optional<UICorners> ParseCornerRadii(eastl::string_view text) {
+    Optional<UICorners> ParseCornerRadii(eastl::string_view text) {
         const auto words = SplitWords(text);
         if (words.empty() || words.size() > MaxCornerValues) {
             return std::nullopt;
@@ -425,10 +425,10 @@ namespace BECore::UIWebText {
         }
     }
 
-    std::optional<BorderSpec> ParseBorder(eastl::string_view text) {
-        std::optional<float> width;
-        std::optional<WebColor> color;
-        std::optional<bool> solid;
+    Optional<BorderSpec> ParseBorder(eastl::string_view text) {
+        Optional<float> width;
+        Optional<WebColor> color;
+        Optional<bool> solid;
         for (const eastl::string_view word : SplitWords(text)) {
             const eastl::string lower = ToLower(word);
             if (lower == SolidKeyword || lower == NoneKeyword) {
@@ -460,7 +460,7 @@ namespace BECore::UIWebText {
         return border;
     }
 
-    std::optional<GradientSpec> ParseLinearGradient(eastl::string_view text) {
+    Optional<GradientSpec> ParseLinearGradient(eastl::string_view text) {
         text = TrimSpace(text);
         if (text.size() <= GradientName.size() + 2 || ToLower(text.substr(0, GradientName.size())) != GradientName || text[GradientName.size()] != '(' || text.back() != ')') {
             return std::nullopt;
@@ -491,7 +491,7 @@ namespace BECore::UIWebText {
         return gradient;
     }
 
-    std::optional<BoxShadows> ParseBoxShadows(eastl::string_view text) {
+    Optional<BoxShadows> ParseBoxShadows(eastl::string_view text) {
         text = TrimSpace(text);
         BoxShadows shadows;
         if (ToLower(text) == NoneKeyword) {

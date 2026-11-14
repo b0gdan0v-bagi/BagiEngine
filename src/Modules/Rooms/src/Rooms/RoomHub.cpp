@@ -248,7 +248,7 @@ namespace BECore {
             SendError(id, RoomErrors::kAlreadyInRoom, "You are already in a room: leave it first", ref);
             return;
         }
-        const std::optional<SeatedGameInfo> info = _registry.Find(message.game);
+        const Optional<SeatedGameInfo> info = _registry.Find(message.game);
         if (!info) {
             SendError(id, RoomErrors::kUnknownGame, "No such game", ref);
             return;
@@ -299,7 +299,7 @@ namespace BECore {
             SendError(id, RoomErrors::kAlreadyInRoom, "You are already in a room: leave it first", ref);
             return;
         }
-        const std::optional<SeatedGameInfo> info = _registry.Find(message.game);
+        const Optional<SeatedGameInfo> info = _registry.Find(message.game);
         if (!info) {
             SendError(id, RoomErrors::kUnknownGame, "No such game", ref);
             return;
@@ -353,7 +353,7 @@ namespace BECore {
         Room& room = *entry->room;
 
         if (message.IsReconnect()) {
-            const std::optional<PlayerId> player = room.FindByToken(message.token);
+            const Optional<PlayerId> player = room.FindByToken(message.token);
             if (!player) {
                 FailJoin(id, connection, ControlError{eastl::string(RoomErrors::kBadToken), "The token is not a member's of this room"}, now);
                 return;
@@ -462,7 +462,7 @@ namespace BECore {
         Room& room = *entry.room;
         const auto view = room.GetSeatView(connection.player);
         const auto actions = room.GetSeatActions(connection.player);
-        const std::optional<int> seat = room.GetSeatOf(connection.player);
+        const Optional<int> seat = room.GetSeatOf(connection.player);
         if (!view || !actions || !seat) {
             return;
         }
@@ -495,7 +495,7 @@ namespace BECore {
                 SendText(id, lobbyText);
             }
             if (started) {
-                const std::optional<int> seat = room.GetSeatOf(connection.player);
+                const Optional<int> seat = room.GetSeatOf(connection.player);
                 if (seat && (!connection.sentView || connection.sentGameVersion != room.GetGameVersion() || connection.sentSeat != *seat)) {
                     ResendView(id, connection, entry);
                 }

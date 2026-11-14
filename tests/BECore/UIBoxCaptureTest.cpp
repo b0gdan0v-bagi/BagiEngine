@@ -115,7 +115,7 @@ namespace BECore::Tests {
                     element->DrawSelf(*renderer);
                 }
                 renderer->SetViewTransform({});
-                std::optional<CaptureResult> captured;
+                Optional<CaptureResult> captured;
                 renderer->RequestCapture([&captured](CaptureResult result) { captured = std::move(result); });
                 renderer->Present();
                 if (!captured || !captured->has_value()) {

@@ -76,7 +76,7 @@ namespace BECore {
             };
 
             ControlService& _service;
-            std::optional<Seen> _seen;
+            Optional<Seen> _seen;
         };
 
         void HandleListGames(ControlCall& call) {

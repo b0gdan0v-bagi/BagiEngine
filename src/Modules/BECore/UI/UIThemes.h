@@ -60,7 +60,7 @@ namespace BECore {
         [[nodiscard]] bool HasTheme(PoolString theme) const;
 
         /// The colour of @p token in the current theme, else in the default theme, else nothing. Records nothing
-        [[nodiscard]] std::optional<Color> Find(eastl::string_view token) const;
+        [[nodiscard]] Optional<Color> Find(eastl::string_view token) const;
 
         /**
          * @brief Writes into @p color the channels of its token: the colour of Find(), else kMissingTokenColor with the token recorded in GetMissing() and logged, once per token.
@@ -104,7 +104,7 @@ namespace BECore {
         };
 
         [[nodiscard]] const Theme* FindTheme(PoolString theme) const;
-        [[nodiscard]] static std::optional<Color> FindColor(const Theme* theme, eastl::string_view token);
+        [[nodiscard]] static Optional<Color> FindColor(const Theme* theme, eastl::string_view token);
 
         eastl::vector<Theme> _themes;
         eastl::vector<PoolString> _themeIds;

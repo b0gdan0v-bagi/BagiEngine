@@ -48,11 +48,11 @@ namespace BECore {
             return changed;
         }
 
-        bool VisitOptionalVec2(IPropertyVisitor& v, eastl::string_view key, std::optional<Vec2>& value) {
+        bool VisitOptionalVec2(IPropertyVisitor& v, eastl::string_view key, Optional<Vec2>& value) {
             return value && VisitVec2(v, key, *value);
         }
 
-        bool VisitOptionalLength(IPropertyVisitor& v, eastl::string_view key, std::optional<UILength>& length) {
+        bool VisitOptionalLength(IPropertyVisitor& v, eastl::string_view key, Optional<UILength>& length) {
             return length && VisitLength(v, key, *length);
         }
 

@@ -32,7 +32,7 @@ namespace BECore {
         std::expected<Json, ControlError> GetSeatView(int seat) const override;
         std::expected<Json, ControlError> GetSeatActions(int seat) const override;
         std::expected<Json, ControlError> PerformSeatAction(int seat, const Json& action) override;
-        std::optional<Json> ChooseComputerAction(int seat) const override;
+        Optional<Json> ChooseComputerAction(int seat) const override;
         bool IsFinished() const override;
         uint64_t GetStateVersion() const override;
 

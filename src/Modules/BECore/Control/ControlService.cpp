@@ -15,7 +15,7 @@ namespace BECore {
         eastl::string method;
         Json id;
         Json params = Json::object();
-        std::optional<ControlError> error;  // found while parsing; answered when the request's turn comes
+        Optional<ControlError> error;  // found while parsing; answered when the request's turn comes
         ControlReplyFn reply;
     };
 

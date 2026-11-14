@@ -2,7 +2,7 @@
 
 namespace BECore {
 
-    std::optional<ShelfPacker::Slot> ShelfPacker::Pack(uint32_t width, uint32_t height) {
+    Optional<ShelfPacker::Slot> ShelfPacker::Pack(uint32_t width, uint32_t height) {
         if (width == 0 || height == 0 || width > _width || height > _height) {
             return std::nullopt;
         }

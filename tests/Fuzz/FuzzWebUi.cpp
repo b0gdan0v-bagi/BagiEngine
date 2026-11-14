@@ -79,7 +79,7 @@ namespace BECore::Fuzz {
         const eastl::string html(begin, htmlSize);
         const eastl::string css = separator != nullptr ? eastl::string(separator + 1, size - htmlSize - 1) : eastl::string();
 
-        const UIWebCompiler::StylesheetLoader loader = [&css](eastl::string_view) { return std::optional<eastl::string>(css); };
+        const UIWebCompiler::StylesheetLoader loader = [&css](eastl::string_view) { return Optional<eastl::string>(css); };
 
         UIWebReport report;
         const eastl::string xml = UIWebCompiler::Compile(eastl::string_view(html.data(), html.size()), loader, report);

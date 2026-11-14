@@ -24,7 +24,7 @@ namespace BECore {
 
         eastl::string ChordText(const EditorCommand& command, const HotkeyMap& hotkeys) {
             eastl::string text;
-            if (const std::optional<KeyChord> chord = hotkeys.GetChord(command.id)) {
+            if (const Optional<KeyChord> chord = hotkeys.GetChord(command.id)) {
                 text = ToString(*chord);
                 if (!command.rebindable) {
                     text.append(kFixedSuffix.data(), kFixedSuffix.size());

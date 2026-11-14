@@ -32,7 +32,7 @@ namespace BECore {
     /// Reads a chord from @p text: case-insensitive, spaces around a part are ignored, a few aliases are read (Escape,
     /// Return, Comma, Period, Slash). An empty optional for anything else: no key, two keys, a repeated modifier, a
     /// modifier after the key, an unknown name. Never asserts.
-    [[nodiscard]] std::optional<KeyChord> ParseKeyChord(eastl::string_view text);
+    [[nodiscard]] Optional<KeyChord> ParseKeyChord(eastl::string_view text);
 
     /// True when ImGui key @p key has a name in the chord text (a key that ToString and ParseKeyChord handle)
     [[nodiscard]] bool IsNamedKey(ImGuiKey key);

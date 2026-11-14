@@ -1,10 +1,7 @@
 #pragma once
 
-#include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/Reflection/IPropertyVisitor.h>
 #include <BECore/Reflection/SerializationTraits.h>
-#include <BECore/Utils/EnumUtils.h>
-#include <EASTL/vector.h>
 #include <cstdio>
 
 namespace BECore {

@@ -93,7 +93,7 @@ namespace BECore {
             if (!object.contains(ToStdString(key))) {
                 return;
             }
-            if (const std::optional<bool> read = GetJsonBool(object, key)) {
+            if (const Optional<bool> read = GetJsonBool(object, key)) {
                 value = *read;
             } else {
                 WarnWrongType(kPreferencesFileName, key, "true or false");
@@ -105,7 +105,7 @@ namespace BECore {
             if (!object.contains(ToStdString(key))) {
                 return;
             }
-            if (const std::optional<int64_t> read = GetJsonInt(object, key)) {
+            if (const Optional<int64_t> read = GetJsonInt(object, key)) {
                 value = static_cast<uint32_t>(std::clamp<int64_t>(*read, kMinPreviewSide, kMaxPreviewSide));
             } else {
                 WarnWrongType(kPreferencesFileName, key, "an integer");
@@ -118,8 +118,8 @@ namespace BECore {
             if (!object.contains(ToStdString(key))) {
                 return;
             }
-            const std::optional<eastl::string> name = GetJsonString(object, key);
-            const std::optional<TEnum> parsed = name ? EnumUtils<TEnum>::Cast(eastl::string_view(name->data(), name->size())) : std::nullopt;
+            const Optional<eastl::string> name = GetJsonString(object, key);
+            const Optional<TEnum> parsed = name ? EnumUtils<TEnum>::Cast(eastl::string_view(name->data(), name->size())) : std::nullopt;
             if (parsed) {
                 value = *parsed;
             } else {
@@ -146,7 +146,7 @@ namespace BECore {
 
             // The device is stored by name, so a table that changed between builds never gives another device
             if (object.contains(ToStdString(kPreviewDeviceKey))) {
-                const std::optional<eastl::string> name = GetJsonString(object, kPreviewDeviceKey);
+                const Optional<eastl::string> name = GetJsonString(object, kPreviewDeviceKey);
                 if (!name) {
                     WarnWrongType(kPreferencesFileName, kPreviewDeviceKey, "a device name");
                 } else if (!name->empty()) {
@@ -174,7 +174,7 @@ namespace BECore {
             if (!object.contains(ToStdString(key))) {
                 return;
             }
-            const std::optional<eastl::string> name = GetJsonString(object, key);
+            const Optional<eastl::string> name = GetJsonString(object, key);
             const eastl::string_view text = name ? eastl::string_view(name->data(), name->size()) : eastl::string_view();
             if (text == kInputModePlayName) {
                 mode = ViewportInputMode::Play;
@@ -257,21 +257,21 @@ namespace BECore {
 
         EditorPreferences preferences;
         if (content.contains(ToStdString(kFontScaleKey))) {
-            if (const std::optional<double> scale = GetJsonNumber(content, kFontScaleKey)) {
+            if (const Optional<double> scale = GetJsonNumber(content, kFontScaleKey)) {
                 preferences.fontScale = static_cast<float>(*scale);
             } else {
                 WarnWrongType(kPreferencesFileName, kFontScaleKey, "a number");
             }
         }
         if (content.contains(ToStdString(kViewportGridKey))) {
-            if (const std::optional<bool> grid = GetJsonBool(content, kViewportGridKey)) {
+            if (const Optional<bool> grid = GetJsonBool(content, kViewportGridKey)) {
                 preferences.viewportGrid = *grid;
             } else {
                 WarnWrongType(kPreferencesFileName, kViewportGridKey, "true or false");
             }
         }
         if (content.contains(ToStdString(kViewportGridStepKey))) {
-            if (const std::optional<int64_t> step = GetJsonInt(content, kViewportGridStepKey)) {
+            if (const Optional<int64_t> step = GetJsonInt(content, kViewportGridStepKey)) {
                 preferences.viewportGridStep = static_cast<int32_t>(std::clamp<int64_t>(*step, kMinViewportGridStep, kMaxViewportGridStep));
             } else {
                 WarnWrongType(kPreferencesFileName, kViewportGridStepKey, "an integer");
@@ -311,7 +311,7 @@ namespace BECore {
 
         struct Override {
             PoolString id;
-            std::optional<KeyChord> chord;
+            Optional<KeyChord> chord;
         };
         eastl::vector<Override> overrides;
         for (const auto& [key, value] : bindings->items()) {
@@ -336,7 +336,7 @@ namespace BECore {
                 overrides.push_back({commandId, std::nullopt});
                 continue;
             }
-            const std::optional<KeyChord> chord = ParseKeyChord(eastl::string_view(text.data(), text.size()));
+            const Optional<KeyChord> chord = ParseKeyChord(eastl::string_view(text.data(), text.size()));
             if (!chord) {
                 LOG_WARNING(Format("Editor settings: '{}' is not a chord ({}); dropped", text.c_str(), id));
                 continue;
@@ -415,7 +415,7 @@ namespace BECore {
             if (!command.rebindable || _hotkeys.IsDefault(command.id)) {
                 continue;
             }
-            const std::optional<KeyChord> chord = _hotkeys.GetChord(command.id);
+            const Optional<KeyChord> chord = _hotkeys.GetChord(command.id);
             const eastl::string text = chord ? ToString(*chord) : eastl::string();
             bindings[ToStdString(command.id.ToStringView())] = std::string(text.c_str(), text.size());
         }

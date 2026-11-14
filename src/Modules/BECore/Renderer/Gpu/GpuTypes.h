@@ -128,7 +128,7 @@ namespace BECore {
         IRenderTarget* target = nullptr;  ///< null is the back buffer
         PassLoadOp colorLoadOp = PassLoadOp::Clear;
         Color clearColor{0, 0, 0, 255};
-        std::optional<PassDepth> depth;  ///< none: no depth attachment
+        Optional<PassDepth> depth;  ///< none: no depth attachment
         PoolString debugName;
     };
 

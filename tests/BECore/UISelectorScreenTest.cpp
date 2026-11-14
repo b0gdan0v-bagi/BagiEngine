@@ -530,7 +530,7 @@ namespace BECore::Tests {
         IntrusivePtrAtomic<SceneManager> _manager;
         IntrusivePtr<UICanvasComponent> _hud;
         IntrusivePtr<UICanvasComponent> _selector;
-        std::optional<SelectorGame> _game;
+        Optional<SelectorGame> _game;
     };
 
     // ---- the size matrix --------------------------------------------------------------------------------------------------

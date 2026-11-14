@@ -21,9 +21,9 @@ namespace BECore::Tests {
         /// The anchors a grid of specs walks through: the ten shorthands and edge anchors (a stretched axis beside a point, both stretched, a pivot of its own)
         struct AnchorCase {
             UIAnchor anchor = UIAnchor::TopLeft;
-            std::optional<Vec2> min;
-            std::optional<Vec2> max;
-            std::optional<Vec2> pivot;
+            Optional<Vec2> min;
+            Optional<Vec2> max;
+            Optional<Vec2> pivot;
         };
 
         std::vector<AnchorCase> AnchorCases() {
@@ -264,25 +264,25 @@ namespace BECore::Tests {
     // ---- the unit switch and the region choices ----------------------------------------------------------------------------
 
     TEST(UIRectEditTest, ConvertUnitKeepsTheLaidOutNumberBothWays) {
-        const std::optional<UILength> percent = UIRectEdit::ConvertUnit(UILength::Px(100.0f), UIUnit::Percent, 400.0f);
+        const Optional<UILength> percent = UIRectEdit::ConvertUnit(UILength::Px(100.0f), UIUnit::Percent, 400.0f);
         ASSERT_TRUE(percent.has_value());
         EXPECT_EQ(percent->unit, UIUnit::Percent);
         EXPECT_NEAR(percent->value, 25.0f, 1e-4f);
 
-        const std::optional<UILength> back = UIRectEdit::ConvertUnit(*percent, UIUnit::Pixels, 400.0f);
+        const Optional<UILength> back = UIRectEdit::ConvertUnit(*percent, UIUnit::Pixels, 400.0f);
         ASSERT_TRUE(back.has_value());
         EXPECT_EQ(back->unit, UIUnit::Pixels);
         EXPECT_NEAR(back->value, 100.0f, 1e-3f);
 
         EXPECT_EQ(UIRectEdit::ConvertUnit(UILength::Px(7.0f), UIUnit::Pixels, 400.0f), UILength::Px(7.0f));
-        const std::optional<UILength> negative = UIRectEdit::ConvertUnit(UILength::Px(-20.0f), UIUnit::Percent, 200.0f);
+        const Optional<UILength> negative = UIRectEdit::ConvertUnit(UILength::Px(-20.0f), UIUnit::Percent, 200.0f);
         ASSERT_TRUE(negative.has_value());
         EXPECT_NEAR(negative->value, -10.0f, 1e-4f);
     }
 
     TEST(UIRectEditTest, ConvertUnitAgainstAZeroExtent) {
         EXPECT_FALSE(UIRectEdit::ConvertUnit(UILength::Px(50.0f), UIUnit::Percent, 0.0f).has_value());  // the number would be lost
-        const std::optional<UILength> toPixels = UIRectEdit::ConvertUnit(UILength::Percent(50.0f), UIUnit::Pixels, 0.0f);
+        const Optional<UILength> toPixels = UIRectEdit::ConvertUnit(UILength::Percent(50.0f), UIUnit::Pixels, 0.0f);
         ASSERT_TRUE(toPixels.has_value());
         EXPECT_EQ(toPixels->value, 0.0f);  // a percent of nothing is nothing, in any unit
     }

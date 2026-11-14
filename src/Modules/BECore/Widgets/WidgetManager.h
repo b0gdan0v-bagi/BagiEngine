@@ -74,7 +74,7 @@ namespace BECore {
         RunMode _mode = RunMode::Game;
         WidgetLoader _loader;
         // Not under BE_WITH_EDITOR: the layout of a class must not depend on the define, or objects built in a mixed build crash
-        std::optional<RunMode> _pendingMode;
+        Optional<RunMode> _pendingMode;
     };
 
 }  // namespace BECore

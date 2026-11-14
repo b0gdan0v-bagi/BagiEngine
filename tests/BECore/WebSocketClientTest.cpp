@@ -191,7 +191,7 @@ namespace BECore::Tests {
                 Send(eastl::vector<uint8_t>(bytes.data(), bytes.data() + bytes.size()));
             }
 
-            void SendFrame(uint8_t opcode, const std::string& payload, std::optional<WebSocketMask> mask = std::nullopt) {
+            void SendFrame(uint8_t opcode, const std::string& payload, Optional<WebSocketMask> mask = std::nullopt) {
                 Send(EncodeFrame(opcode, eastl::span<const uint8_t>(reinterpret_cast<const uint8_t*>(payload.data()), payload.size()), mask));
             }
 
@@ -204,8 +204,8 @@ namespace BECore::Tests {
             }
 
             /// The next frame of the client (masked frames are expected; the key is kept), nullopt when none came in @p limit
-            std::optional<ClientFrame> ReadFrame(std::chrono::milliseconds limit = kClientWaitLimit) {
-                std::optional<ClientFrame> frame;
+            Optional<ClientFrame> ReadFrame(std::chrono::milliseconds limit = kClientWaitLimit) {
+                Optional<ClientFrame> frame;
                 WaitUntil(
                     {},
                     [&] {
@@ -255,7 +255,7 @@ namespace BECore::Tests {
                 }
             }
 
-            std::optional<ClientFrame> ParseBuffered() {
+            Optional<ClientFrame> ParseBuffered() {
                 if (_buffer.size() < 2) {
                     return std::nullopt;
                 }

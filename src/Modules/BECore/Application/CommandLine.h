@@ -20,7 +20,7 @@ namespace BECore {
 
         /// The value of the first `--name=value` (the part after the first `=`, empty allowed); nullopt when there is none.
         /// `--name` alone has no value, and `--namesake=1` is not `--name`. The view is valid until the next Set()
-        std::optional<eastl::string_view> FindValue(eastl::string_view name) const;
+        Optional<eastl::string_view> FindValue(eastl::string_view name) const;
 
         /// Whether the bare `--name` is among the arguments (`--name=value` is not a flag)
         bool HasFlag(eastl::string_view name) const;

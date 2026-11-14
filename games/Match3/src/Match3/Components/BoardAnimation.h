@@ -2,7 +2,6 @@
 
 #include <BECore/Animation/ScopedTween.h>
 #include <BECore/Animation/Timeline.h>
-#include <EASTL/optional.h>
 #include <Match3/Game/CascadeTrace.h>
 
 namespace BECore {
@@ -31,7 +30,7 @@ namespace BECore::Match3 {
      *        outside). Axis-aligned, in any one unit: scene units for the component. The refilled gems start above the board, and the renderer's
      *        clip rect works in output pixels, so the component clips the rects of those gems with this.
      */
-    [[nodiscard]] eastl::optional<Rect> ClipToBoard(const Rect& rect, const Rect& board);
+    [[nodiscard]] Optional<Rect> ClipToBoard(const Rect& rect, const Rect& board);
 
     /**
      * @brief The tweens of ONE swap, as one `Timeline` played on a `TweenManager`: the swap slides, then per round of the cascade the matched gems

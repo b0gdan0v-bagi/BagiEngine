@@ -2,8 +2,6 @@
 
 #include <BECore/Profiler/IProfilerBackend.h>
 #include <BECore/Threading/LockSite.h>
-#include <atomic>
-#include <cstdint>
 
 /**
  * @file LockHooks.h

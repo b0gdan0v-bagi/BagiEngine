@@ -79,7 +79,7 @@ namespace BECore::Fuzz {
         if (oversize) {
             const auto parsed = ParseJson(replies[0]);
             const Json* error = FindJsonMember(*parsed, "error");
-            FUZZ_CHECK(error != nullptr && GetJsonString(*error, "code") == std::optional<eastl::string>(eastl::string(ControlErrors::kRequestTooLarge)));
+            FUZZ_CHECK(error != nullptr && GetJsonString(*error, "code") == Optional<eastl::string>(eastl::string(ControlErrors::kRequestTooLarge)));
         }
     }
 

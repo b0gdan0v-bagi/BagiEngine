@@ -161,8 +161,8 @@ namespace BECore::Tests {
         }
 
         /// The union of the glyph draws (every other texture draw) that start inside @p within
-        std::optional<Rect> GlyphBounds(const Rect& within) const {
-            std::optional<Rect> bounds;
+        Optional<Rect> GlyphBounds(const Rect& within) const {
+            Optional<Rect> bounds;
             for (const DrawCall& call : _renderer->calls) {
                 if (call.kind != DrawKind::Texture || call.texture == _icon.Get() || !Inside({call.rect.x, call.rect.y, 0.0f, 0.0f}, within)) {
                     continue;

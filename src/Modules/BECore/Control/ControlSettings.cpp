@@ -13,7 +13,7 @@ namespace BECore {
         }
 
         /// The whole of @p text (the value of --control-port=N) as a port; nullopt for an empty text, a sign, a trailing character or a number above 65535
-        std::optional<uint16_t> ParsePort(eastl::string_view text) {
+        Optional<uint16_t> ParsePort(eastl::string_view text) {
             uint16_t port = 0;
             const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), port);
             if (error != std::errc{} || end != text.data() + text.size()) {

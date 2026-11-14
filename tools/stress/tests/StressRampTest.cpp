@@ -268,13 +268,13 @@ namespace BECore::Stress::Tests {
         EXPECT_EQ(GetJsonString(*parsed, "measure").value_or(""), "cpu");
         EXPECT_EQ(GetJsonInt(*parsed, "objectsAt60fps").value_or(0), 4321);
         EXPECT_DOUBLE_EQ(GetJsonNumber(*parsed, "budgetMs").value_or(0.0), 16.6);
-        EXPECT_EQ(GetJsonBool(*parsed, "capped"), std::optional(false));
-        EXPECT_EQ(GetJsonBool(*parsed, "aborted"), std::optional(false));
-        EXPECT_EQ(GetJsonBool(*parsed, "verified"), std::optional(true));
+        EXPECT_EQ(GetJsonBool(*parsed, "capped"), Optional(false));
+        EXPECT_EQ(GetJsonBool(*parsed, "aborted"), Optional(false));
+        EXPECT_EQ(GetJsonBool(*parsed, "verified"), Optional(true));
         EXPECT_EQ(GetJsonInt(*parsed, "steps").value_or(0), 17);
         EXPECT_EQ(GetJsonInt(*parsed, "settleFrames").value_or(0), kSettleFrames);
         EXPECT_EQ(GetJsonInt(*parsed, "measureFrames").value_or(0), kMeasureFrames);
-        EXPECT_EQ(GetJsonBool(*parsed, "manualClock"), std::optional(true));
+        EXPECT_EQ(GetJsonBool(*parsed, "manualClock"), Optional(true));
 
         // The keys are in byte order, one object on one line starting with a brace
         EXPECT_EQ(line.front(), '{');

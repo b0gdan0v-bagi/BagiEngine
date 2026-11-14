@@ -124,7 +124,7 @@ namespace BECore {
         return {_viewVariants.data(), _viewVariants.size()};
     }
 
-    void Scene::SetViewOverride(std::optional<int32_t> index) {
+    void Scene::SetViewOverride(Optional<int32_t> index) {
         _viewOverride = index;
     }
 

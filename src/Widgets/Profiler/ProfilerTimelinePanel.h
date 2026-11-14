@@ -22,7 +22,7 @@ namespace BECore {
         void ShowZone(const ZoneRecord& zone);
 
         /// @p selectedFrame is a RingFrame::index of @p snapshot, none for the newest frame
-        void Draw(const RingSnapshot& snapshot, std::optional<uint64_t> selectedFrame);
+        void Draw(const RingSnapshot& snapshot, Optional<uint64_t> selectedFrame);
 
     private:
         void DrawToolbar(const RingSnapshot& snapshot, const RingFrame& frame, bool hasSelection);
@@ -34,7 +34,7 @@ namespace BECore {
         eastl::vector<TimelineLane> _lanes;
         bool _follow = true;
         bool _fitRequested = false;
-        std::optional<uint64_t> _shownSelection;
+        Optional<uint64_t> _shownSelection;
         const ProfileSite* _markedSite = nullptr;  // the call ShowZone marked: its site and begin tick
         uint64_t _markedBeginTicks = 0;
     };

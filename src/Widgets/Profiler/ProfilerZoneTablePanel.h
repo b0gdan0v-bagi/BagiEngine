@@ -20,7 +20,7 @@ namespace BECore {
          * @param selectedFrame a RingFrame::index; "the selected frame" is the newest frame when none is selected
          * @return The site whose "Timeline" button was pressed this frame, nullptr otherwise
          */
-        [[nodiscard]] const ProfileSite* Draw(const RingSnapshot& snapshot, uint64_t version, std::optional<uint64_t> selectedFrame);
+        [[nodiscard]] const ProfileSite* Draw(const RingSnapshot& snapshot, uint64_t version, Optional<uint64_t> selectedFrame);
 
     private:
         enum class Window : int { SelectedFrame, RecentFrames, AllFrames };
@@ -43,7 +43,7 @@ namespace BECore {
             bool operator==(const RowsKey&) const = default;
         };
 
-        void RefreshRows(const RingSnapshot& snapshot, uint64_t version, std::optional<uint64_t> selectedFrame);
+        void RefreshRows(const RingSnapshot& snapshot, uint64_t version, Optional<uint64_t> selectedFrame);
 
         Window _window = Window::SelectedFrame;
         ZoneStatColumn _sortColumn = ZoneStatColumn::Total;

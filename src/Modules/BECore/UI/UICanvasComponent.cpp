@@ -193,7 +193,7 @@ namespace BECore {
             return;
         }
         const ScopedOpacity opacity(renderer, element.opacity);  // the element and its subtree, nested by multiplying
-        std::optional<ScopedTransitionDraw> transitionDraw;
+        Optional<ScopedTransitionDraw> transitionDraw;
         if (const UITransitionComponent* transition = element.GetComponent<UITransitionComponent>()) {
             const double now = CoreManager::GetTime().GetTotalTime();
             if (transition->run.IsTransitioning(now)) {
@@ -385,7 +385,7 @@ namespace BECore {
         renderer->SetViewTransform(_layout.GetResolved().transform);
         {
             const ScopedOpacity opacity(*renderer, _opacity);  // the tooltip plate stays outside
-            std::optional<ScopedTransitionDraw> transitionDraw;
+            Optional<ScopedTransitionDraw> transitionDraw;
             if (_transition.IsTransitioning(now)) {
                 transitionDraw.emplace(*renderer, UITransition::Evaluate(spec, _transition.Progress(now)), CentreOf(_layout.GetResolved().bounds));
             }

@@ -126,7 +126,7 @@ namespace BECore {
         return {std::move(all.spec), all.exact};
     }
 
-    std::optional<UILength> UIRectEdit::ConvertUnit(const UILength& length, UIUnit unit, float parentExtent) {
+    Optional<UILength> UIRectEdit::ConvertUnit(const UILength& length, UIUnit unit, float parentExtent) {
         if (length.unit == unit) {
             return length;
         }

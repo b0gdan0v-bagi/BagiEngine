@@ -16,7 +16,7 @@ namespace BECore {
         _arguments.assign(arguments.begin(), arguments.end());
     }
 
-    std::optional<eastl::string_view> CommandLine::FindValue(eastl::string_view name) const {
+    Optional<eastl::string_view> CommandLine::FindValue(eastl::string_view name) const {
         for (const eastl::string& argument : _arguments) {
             const eastl::string_view view = AsView(argument);
             if (view.size() > name.size() && view.starts_with(name) && view[name.size()] == kValueSeparator) {

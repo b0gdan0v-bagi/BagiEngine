@@ -384,7 +384,7 @@ namespace BECore {
         }
 
         /// Looks for the element to click. A candidate that cannot be clicked is remembered only until a better miss or a hit turns up
-        bool FindClickable(const eastl::vector<CanvasEntry>& canvases, PoolString name, std::optional<PoolString> onlyNode, float at, ClickTarget& target, bool& anyNamed) {
+        bool FindClickable(const eastl::vector<CanvasEntry>& canvases, PoolString name, Optional<PoolString> onlyNode, float at, ClickTarget& target, bool& anyNamed) {
             anyNamed = false;
             for (const CanvasEntry& entry : canvases) {
                 if (onlyNode && entry.node != *onlyNode) {
@@ -460,7 +460,7 @@ namespace BECore {
                 call.Fail(ControlErrors::kInvalidParams, "'name' has to be the name of an element");
                 return;
             }
-            std::optional<PoolString> onlyNode;
+            Optional<PoolString> onlyNode;
             if (FindJsonMember(call.Params(), "canvas") != nullptr) {
                 const auto nodeText = GetJsonString(call.Params(), "canvas");
                 if (!nodeText) {

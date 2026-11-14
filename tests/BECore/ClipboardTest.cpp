@@ -54,7 +54,7 @@ namespace BECore::Tests {
 
     private:
         IntrusivePtr<FakeClipboard> _fake;
-        std::optional<ScopedClipboardBackend> _scope;
+        Optional<ScopedClipboardBackend> _scope;
     };
 
     TEST_F(ClipboardTest, ATextWrittenIsReadBack) {

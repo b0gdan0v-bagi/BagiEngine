@@ -47,7 +47,7 @@ namespace BECore::Tests {
             return events != nullptr ? *events : Json::array();
         }
 
-        size_t CountPhase(const Json& events, const char* phase, std::optional<int64_t> tid = std::nullopt) {
+        size_t CountPhase(const Json& events, const char* phase, Optional<int64_t> tid = std::nullopt) {
             size_t count = 0;
             for (const Json& event : events) {
                 if (Member(event, "ph") == phase && (!tid || GetJsonInt(event, "tid") == tid)) {

@@ -33,15 +33,15 @@ namespace BECore {
     [[nodiscard]] const Json* FindJsonMember(const Json& object, eastl::string_view key);
 
     /// A string member; nullopt when it is absent or not a string
-    [[nodiscard]] std::optional<eastl::string> GetJsonString(const Json& object, eastl::string_view key);
+    [[nodiscard]] Optional<eastl::string> GetJsonString(const Json& object, eastl::string_view key);
 
     /// An integer member; nullopt when it is absent, not an integer (1.5 and "3" are not) or does not fit int64_t
-    [[nodiscard]] std::optional<int64_t> GetJsonInt(const Json& object, eastl::string_view key);
+    [[nodiscard]] Optional<int64_t> GetJsonInt(const Json& object, eastl::string_view key);
 
     /// A number member (integer or floating point); nullopt when it is absent or not a number
-    [[nodiscard]] std::optional<double> GetJsonNumber(const Json& object, eastl::string_view key);
+    [[nodiscard]] Optional<double> GetJsonNumber(const Json& object, eastl::string_view key);
 
     /// A boolean member; nullopt when it is absent or not a boolean
-    [[nodiscard]] std::optional<bool> GetJsonBool(const Json& object, eastl::string_view key);
+    [[nodiscard]] Optional<bool> GetJsonBool(const Json& object, eastl::string_view key);
 
 }  // namespace BECore

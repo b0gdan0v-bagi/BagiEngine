@@ -57,7 +57,7 @@ namespace BECore {
             }
 
             // The renderer fills it when the frame is presented; the answer is built at the end of that frame
-            auto capture = eastl::make_shared<std::optional<CaptureResult>>();
+            auto capture = eastl::make_shared<Optional<CaptureResult>>();
             renderer->RequestCapture([capture](CaptureResult result) { *capture = std::move(result); });
             if (*capture && !**capture) {  // refused at once: this backend cannot capture
                 call.Fail(ScreenshotErrors::kCaptureFailed, (*capture)->error());

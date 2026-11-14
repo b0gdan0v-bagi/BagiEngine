@@ -180,7 +180,7 @@ namespace BECore::Tests {
         const Vec3 a{1.0f, 2.0f, 3.0f};
         const Vec3 b{-4.0f, 0.5f, 2.0f};
         EXPECT_NEAR((view.TransformPoint(a) - view.TransformPoint(b)).Length(), (a - b).Length(), 1e-4f);
-        const std::optional<Mat4> inverse = view.Inverse();
+        const Optional<Mat4> inverse = view.Inverse();
         ASSERT_TRUE(inverse.has_value());
         ExpectMatNear(*inverse * view, Mat4::Identity(), 1e-4f);
     }
@@ -241,14 +241,14 @@ namespace BECore::Tests {
     }
 
     TEST(Mat4Test, InverseOfTranslationAndScale) {
-        const std::optional<Mat4> inverse = (Mat4::Translation(Vec3(1.0f, 2.0f, 3.0f)) * Mat4::Scale(Vec3(2.0f, 4.0f, 8.0f))).Inverse();
+        const Optional<Mat4> inverse = (Mat4::Translation(Vec3(1.0f, 2.0f, 3.0f)) * Mat4::Scale(Vec3(2.0f, 4.0f, 8.0f))).Inverse();
         ASSERT_TRUE(inverse.has_value());
         ExpectVecNear(inverse->TransformPoint(Vec3(3.0f, 6.0f, 11.0f)), Vec3(1.0f, 1.0f, 1.0f));
     }
 
     TEST(Mat4Test, InverseOfTrsTimesItselfIsIdentity) {
         const Mat4 m = TestTrs();
-        const std::optional<Mat4> inverse = m.Inverse();
+        const Optional<Mat4> inverse = m.Inverse();
         ASSERT_TRUE(inverse.has_value());
         ExpectMatNear(m * *inverse, Mat4::Identity(), 1e-4f);
         ExpectMatNear(*inverse * m, Mat4::Identity(), 1e-4f);
@@ -256,7 +256,7 @@ namespace BECore::Tests {
 
     TEST(Mat4Test, InverseOfPerspectiveTimesItselfIsIdentity) {
         const Mat4 m = Mat4::Perspective(1.0f, 16.0f / 9.0f, 0.1f, 100.0f);
-        const std::optional<Mat4> inverse = m.Inverse();
+        const Optional<Mat4> inverse = m.Inverse();
         ASSERT_TRUE(inverse.has_value());
         ExpectMatNear(m * *inverse, Mat4::Identity(), 1e-4f);
         // A clip-space point goes back to the view-space point it came from
@@ -266,7 +266,7 @@ namespace BECore::Tests {
 
     TEST(Mat4Test, InverseOfOrthographicTimesItselfIsIdentity) {
         const Mat4 m = Mat4::Orthographic(-4.0f, 4.0f, -3.0f, 3.0f, 0.1f, 50.0f);
-        const std::optional<Mat4> inverse = m.Inverse();
+        const Optional<Mat4> inverse = m.Inverse();
         ASSERT_TRUE(inverse.has_value());
         ExpectMatNear(m * *inverse, Mat4::Identity(), 1e-4f);
     }
@@ -274,14 +274,14 @@ namespace BECore::Tests {
     TEST(Mat4Test, InverseNeedsPivoting) {
         // A zero in the first pivot: a swap of two axes plus a translation
         const Mat4 m = Mat4::FromColumns({0.0f, 1.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f, 0.0f}, {5.0f, 6.0f, 7.0f, 1.0f});
-        const std::optional<Mat4> inverse = m.Inverse();
+        const Optional<Mat4> inverse = m.Inverse();
         ASSERT_TRUE(inverse.has_value());
         ExpectMatNear(m * *inverse, Mat4::Identity());
     }
 
     TEST(Mat4Test, InverseOfASmallUniformScaleExists) {
         const Mat4 m = Mat4::Scale(Vec3(0.01f, 0.01f, 0.01f));
-        const std::optional<Mat4> inverse = m.Inverse();
+        const Optional<Mat4> inverse = m.Inverse();
         ASSERT_TRUE(inverse.has_value());
         ExpectVecNear(inverse->TransformPoint(Vec3(0.01f, 0.02f, 0.03f)), Vec3(1.0f, 2.0f, 3.0f), 1e-4f);
     }

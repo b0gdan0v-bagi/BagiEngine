@@ -38,7 +38,7 @@ namespace BECore {
          * @param parentExtent the extent of the axis the length is on (a width for `x` and `width`, a height for `y` and `height`)
          * @return nullopt when units cannot become percent because the extent is 0 (a unit value would be lost)
          */
-        [[nodiscard]] static std::optional<UILength> ConvertUnit(const UILength& length, UIUnit unit, float parentExtent);
+        [[nodiscard]] static Optional<UILength> ConvertUnit(const UILength& length, UIUnit unit, float parentExtent);
 
         /// The names a region picker offers: the published regions in the order of publishing, then @p current when it is named but not published
         [[nodiscard]] static eastl::vector<PoolString> RegionChoices(const UIRegionSet& regions, PoolString current);

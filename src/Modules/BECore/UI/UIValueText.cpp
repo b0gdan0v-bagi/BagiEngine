@@ -35,7 +35,7 @@ namespace BECore::UIText {
             return true;
         }
 
-        std::optional<unsigned char> ParseByte(eastl::string_view text) {
+        Optional<unsigned char> ParseByte(eastl::string_view text) {
             text = Trim(text);
             unsigned int value = 0;
             const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
@@ -45,7 +45,7 @@ namespace BECore::UIText {
             return static_cast<unsigned char>(value);
         }
 
-        std::optional<unsigned char> ParseHexByte(eastl::string_view text) {
+        Optional<unsigned char> ParseHexByte(eastl::string_view text) {
             unsigned int value = 0;
             const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value, HexBase);
             if (error != std::errc{} || end != text.data() + text.size()) {
@@ -66,7 +66,7 @@ namespace BECore::UIText {
         return text;
     }
 
-    std::optional<float> ParseFloat(eastl::string_view text) {
+    Optional<float> ParseFloat(eastl::string_view text) {
         text = Trim(text);
         float value = 0.0f;
         const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
@@ -76,7 +76,7 @@ namespace BECore::UIText {
         return value;
     }
 
-    std::optional<float> ParseFiniteFloat(eastl::string_view text) {
+    Optional<float> ParseFiniteFloat(eastl::string_view text) {
         const auto value = ParseFloat(text);
         if (!value || !std::isfinite(*value)) {
             return std::nullopt;
@@ -105,7 +105,7 @@ namespace BECore::UIText {
         return length.unit == UIUnit::Percent ? Format("{}%", length.value) : Format("{}", length.value);
     }
 
-    std::optional<UILength> ParseLength(eastl::string_view text) {
+    Optional<UILength> ParseLength(eastl::string_view text) {
         text = Trim(text);
         UIUnit unit = UIUnit::Pixels;
         if (!text.empty() && text.back() == PercentSign) {
@@ -125,7 +125,7 @@ namespace BECore::UIText {
         return Format("{},{}", value.x, value.y);
     }
 
-    std::optional<Vec2> ParseFraction2(eastl::string_view text) {
+    Optional<Vec2> ParseFraction2(eastl::string_view text) {
         const auto parts = StringUtils::Split(Trim(text), ',');
         if (parts.size() != FractionPartCount) {
             return std::nullopt;
@@ -154,7 +154,7 @@ namespace BECore::UIText {
         return Format("{},{},{},{}", edges.left, edges.top, edges.right, edges.bottom);
     }
 
-    std::optional<UIEdges> ParseEdges(eastl::string_view text) {
+    Optional<UIEdges> ParseEdges(eastl::string_view text) {
         const auto parts = StringUtils::Split(Trim(text), ',');
         if (parts.size() == 1) {
             const auto all = ParseFloat(parts[0]);
@@ -183,7 +183,7 @@ namespace BECore::UIText {
         return Format("{},{},{},{}", corners.topLeft, corners.topRight, corners.bottomRight, corners.bottomLeft);
     }
 
-    std::optional<UICorners> ParseCorners(eastl::string_view text) {
+    Optional<UICorners> ParseCorners(eastl::string_view text) {
         const auto parts = StringUtils::Split(Trim(text), ',');
         if (parts.size() != 1 && parts.size() != CornerCount) {
             return std::nullopt;
@@ -207,7 +207,7 @@ namespace BECore::UIText {
                       static_cast<int>(shadow.color.b), static_cast<int>(shadow.color.a));
     }
 
-    std::optional<UIShadowSpec> ParseShadow(eastl::string_view text, PoolString* colorToken) {
+    Optional<UIShadowSpec> ParseShadow(eastl::string_view text, PoolString* colorToken) {
         text = Trim(text);
         float numbers[ShadowNumberCount] = {};
         for (float& number : numbers) {
@@ -288,7 +288,7 @@ namespace BECore::UIText {
         return Format("{},{},{},{}", static_cast<int>(color.r), static_cast<int>(color.g), static_cast<int>(color.b), static_cast<int>(color.a));
     }
 
-    std::optional<Color> ParseColor(eastl::string_view text) {
+    Optional<Color> ParseColor(eastl::string_view text) {
         text = Trim(text);
         if (!text.empty() && text.front() == '#') {
             text.remove_prefix(1);
@@ -298,7 +298,7 @@ namespace BECore::UIText {
             const auto r = ParseHexByte(text.substr(0, 2));
             const auto g = ParseHexByte(text.substr(2, 2));
             const auto b = ParseHexByte(text.substr(4, 2));
-            const auto a = text.size() == HexRgbaLength ? ParseHexByte(text.substr(6, 2)) : std::optional<unsigned char>{OpaqueAlpha};
+            const auto a = text.size() == HexRgbaLength ? ParseHexByte(text.substr(6, 2)) : Optional<unsigned char>{OpaqueAlpha};
             if (!r || !g || !b || !a) {
                 return std::nullopt;
             }
@@ -325,7 +325,7 @@ namespace BECore::UIText {
         return FormatColor(color);
     }
 
-    std::optional<ColorRef> ParseColorRef(eastl::string_view text) {
+    Optional<ColorRef> ParseColorRef(eastl::string_view text) {
         text = Trim(text);
         if (!text.empty() && text.front() == TokenSign) {
             const eastl::string_view name = text.substr(1);

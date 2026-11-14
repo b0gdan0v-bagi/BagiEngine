@@ -2,7 +2,6 @@
 
 #include <BECore/Profiler/ProfileSite.h>
 #include <cstddef>
-#include <cstdint>
 
 namespace BECore {
 

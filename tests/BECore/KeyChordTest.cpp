@@ -21,7 +21,7 @@ namespace BECore::Tests {
     }
 
     TEST(KeyChordTest, ParseReadsAnyCase) {
-        const std::optional<KeyChord> chord = ParseKeyChord("cTRL+shift+k");
+        const Optional<KeyChord> chord = ParseKeyChord("cTRL+shift+k");
         ASSERT_TRUE(chord.has_value());
         EXPECT_EQ(*chord, Chord(ImGuiKey_K, kChordModCtrl | kChordModShift));
 

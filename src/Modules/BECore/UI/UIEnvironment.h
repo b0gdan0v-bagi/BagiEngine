@@ -28,18 +28,18 @@ namespace BECore {
         void SetUserScale(float scale);
 
         /// The safe area in output pixels that replaces the window's, or nothing to ask the window again
-        void SetSafeAreaOverride(std::optional<Rect> safeArea) {
+        void SetSafeAreaOverride(Optional<Rect> safeArea) {
             _safeAreaOverride = safeArea;
         }
-        [[nodiscard]] const std::optional<Rect>& GetSafeAreaOverride() const {
+        [[nodiscard]] const Optional<Rect>& GetSafeAreaOverride() const {
             return _safeAreaOverride;
         }
 
         /// The pixel density (output pixels per window unit) that replaces the window's, or nothing to ask the window again; a value that is not positive is ignored
-        void SetPixelDensityOverride(std::optional<float> density) {
+        void SetPixelDensityOverride(Optional<float> density) {
             _pixelDensityOverride = density;
         }
-        [[nodiscard]] const std::optional<float>& GetPixelDensityOverride() const {
+        [[nodiscard]] const Optional<float>& GetPixelDensityOverride() const {
             return _pixelDensityOverride;
         }
 
@@ -52,8 +52,8 @@ namespace BECore {
 
     private:
         UISettings _settings;
-        std::optional<Rect> _safeAreaOverride;
-        std::optional<float> _pixelDensityOverride;
+        Optional<Rect> _safeAreaOverride;
+        Optional<float> _pixelDensityOverride;
     };
 
 }  // namespace BECore

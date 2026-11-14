@@ -270,7 +270,7 @@ namespace BECore {
         if (!_renderer) {
             return;
         }
-        const std::optional<Rect> clip = GetClipRect();
+        const Optional<Rect> clip = GetClipRect();
         if (!clip) {
             SDL_SetRenderClipRect(_renderer, nullptr);
             return;

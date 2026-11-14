@@ -414,7 +414,7 @@ namespace BECore {
 
     bool VulkanRendererBackend::ResolveScissor(VkRect2D& scissor) const {
         scissor = VkRect2D{{0, 0}, _currentExtent};
-        const std::optional<Rect> clip = GetClipRect();
+        const Optional<Rect> clip = GetClipRect();
         if (!clip) {
             return true;
         }

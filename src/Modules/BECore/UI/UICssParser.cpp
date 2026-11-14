@@ -86,7 +86,7 @@ namespace BECore {
             return text.size();
         }
 
-        std::optional<UICssPseudo> ParsePseudo(eastl::string_view name) {
+        Optional<UICssPseudo> ParsePseudo(eastl::string_view name) {
             if (name == "hover") {
                 return UICssPseudo::Hover;
             }
@@ -103,7 +103,7 @@ namespace BECore {
         }
 
         /// Reads one selector. On failure @p why says what is outside the subset
-        std::optional<UICssSelector> ParseSelector(eastl::string_view text, eastl::string& why) {
+        Optional<UICssSelector> ParseSelector(eastl::string_view text, eastl::string& why) {
             if (text.size() > UICssParser::kMaxSelectorBytes) {
                 why = Format("a selector longer than {} bytes", UICssParser::kMaxSelectorBytes);
                 return std::nullopt;
@@ -212,7 +212,7 @@ namespace BECore {
         }
 
         /// "16/9", "16 / 9" or "1.5"
-        std::optional<float> ParseRatio(eastl::string_view text) {
+        Optional<float> ParseRatio(eastl::string_view text) {
             const size_t slash = text.find('/');
             if (slash == eastl::string_view::npos) {
                 return UIText::ParseFiniteFloat(text);
@@ -226,7 +226,7 @@ namespace BECore {
         }
 
         /// One media query: `screen and (orientation: portrait) and (min-width: 600px)`. On failure @p why says what is outside the subset
-        std::optional<UIVariantCondition> ParseMediaQuery(eastl::string_view query, eastl::string& why) {
+        Optional<UIVariantCondition> ParseMediaQuery(eastl::string_view query, eastl::string& why) {
             UIVariantCondition condition;
             for (const eastl::string_view word : UIWebText::SplitWords(query)) {
                 const eastl::string lower = UIWebText::ToLower(word);
@@ -257,7 +257,7 @@ namespace BECore {
                     continue;
                 }
                 const bool isAspect = name == "aspect-ratio" || name == "min-aspect-ratio" || name == "max-aspect-ratio";
-                const std::optional<float> number = isAspect ? ParseRatio(value) : UIWebText::ParsePixels(value);
+                const Optional<float> number = isAspect ? ParseRatio(value) : UIWebText::ParsePixels(value);
                 if (!number) {
                     why = Format("the value '{}' of '{}'", eastl::string(value).c_str(), name.c_str());
                     return std::nullopt;

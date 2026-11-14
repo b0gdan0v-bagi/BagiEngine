@@ -1,6 +1,5 @@
 #pragma once
 
-#include <BECore/PoolString/PoolString.h>
 #include <Events/EventBase.h>
 
 namespace BECore::InputEvents {

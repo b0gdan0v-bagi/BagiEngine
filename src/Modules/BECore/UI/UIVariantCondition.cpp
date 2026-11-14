@@ -33,7 +33,7 @@ namespace BECore {
             return true;
         }
 
-        std::optional<UIOrientation> ParseOrientation(eastl::string_view text) {
+        Optional<UIOrientation> ParseOrientation(eastl::string_view text) {
             for (const UIOrientation orientation : EnumUtils<UIOrientation>::Values()) {
                 if (EqualsIgnoreCase(text, EnumUtils<UIOrientation>::ToString(orientation))) {
                     return orientation;

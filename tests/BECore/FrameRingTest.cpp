@@ -543,7 +543,7 @@ namespace BECore::Tests {
         Profiler::SetRingEnabled(true);
         const size_t before = CountInRing(kSwitchedSite);
         {
-            std::optional<ProfileZone> zone;
+            Optional<ProfileZone> zone;
             zone.emplace(kSwitchedSite);
             Profiler::SetRingEnabled(false);
             zone.reset();  // ends on the fan-out it began on, not on the bare recorder
@@ -559,7 +559,7 @@ namespace BECore::Tests {
         Profiler::SetBackend(&recorder);
         const size_t before = CountInRing(kPrimaryOnlySite);
         {
-            std::optional<ProfileZone> zone;
+            Optional<ProfileZone> zone;
             zone.emplace(kPrimaryOnlySite);
             Profiler::SetRingEnabled(true);
             zone.reset();

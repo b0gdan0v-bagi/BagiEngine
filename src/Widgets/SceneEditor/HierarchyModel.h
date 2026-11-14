@@ -2,7 +2,6 @@
 
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneNode.h>
-#include <BECore/Utils/EnumUtils.h>
 
 namespace BECore::HierarchyModel {
 

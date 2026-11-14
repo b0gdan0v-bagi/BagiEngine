@@ -595,8 +595,8 @@ namespace BECore::Tests {
         }
 
         /// The one textured draw of the last frame, none when there was no picture
-        std::optional<DrawCall> Picture() const {
-            std::optional<DrawCall> found;
+        Optional<DrawCall> Picture() const {
+            Optional<DrawCall> found;
             for (const DrawCall& call : _renderer->calls) {
                 if (call.kind == DrawKind::Texture) {
                     EXPECT_FALSE(found.has_value()) << "more than one picture";

@@ -187,7 +187,7 @@ namespace BECore {
         }
 
         /// Safe cast from eastl::string_view to enum (returns nullopt on failure)
-        static constexpr std::optional<Enum> Cast(eastl::string_view str) noexcept {
+        static constexpr Optional<Enum> Cast(eastl::string_view str) noexcept {
             auto result = FromString(str);
             if (result == Tok().ErrorValue()) {
                 return std::nullopt;
@@ -196,12 +196,12 @@ namespace BECore {
         }
 
         /// Safe cast from std::string_view to enum (returns nullopt on failure)
-        static constexpr std::optional<Enum> Cast(std::string_view str) noexcept {
+        static constexpr Optional<Enum> Cast(std::string_view str) noexcept {
             return Cast(eastl::string_view{str.data(), str.size()});
         }
 
         /// Safe cast from const char* to enum (returns nullopt on failure)
-        static constexpr std::optional<Enum> Cast(const char* str) noexcept {
+        static constexpr Optional<Enum> Cast(const char* str) noexcept {
             return Cast(eastl::string_view{str});
         }
 

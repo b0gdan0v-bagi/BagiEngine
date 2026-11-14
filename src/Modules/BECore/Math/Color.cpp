@@ -2,7 +2,7 @@
 
 namespace BECore {
 
-    std::optional<Color> Color::ParseColorFromString(eastl::string_view data) {
+    Optional<Color> Color::ParseColorFromString(eastl::string_view data) {
         if (data.empty()) {
             return {};
         }

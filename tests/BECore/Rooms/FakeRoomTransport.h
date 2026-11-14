@@ -11,7 +11,7 @@ namespace BECore::Tests {
     struct FakeLink {
         eastl::string url;
         /// Set before Open() to make it fail
-        std::optional<eastl::string> openError;
+        Optional<eastl::string> openError;
         bool openCalled = false;
         /// What the client sent, in order
         eastl::vector<eastl::string> sent;
@@ -163,7 +163,7 @@ namespace BECore::Tests {
 
     private:
         eastl::vector<std::shared_ptr<FakeLink>> _links;
-        std::optional<eastl::string> _nextOpenError;
+        Optional<eastl::string> _nextOpenError;
         bool _unavailable = false;
     };
 

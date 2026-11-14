@@ -78,7 +78,7 @@ namespace BECore::Stress {
     eastl::string_view ToFlagValue(StressLanguage language);
 
     /// The value as the flag and the control API spell it (any case); nullopt for anything else
-    std::optional<StressScene> ParseScene(eastl::string_view text);
-    std::optional<StressLanguage> ParseLanguage(eastl::string_view text);
+    Optional<StressScene> ParseScene(eastl::string_view text);
+    Optional<StressLanguage> ParseLanguage(eastl::string_view text);
 
 }  // namespace BECore::Stress

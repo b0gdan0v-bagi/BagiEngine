@@ -33,7 +33,7 @@ namespace BECore {
         return code;
     }
 
-    std::optional<eastl::string> NormalizeRoomCode(eastl::string_view text) {
+    Optional<eastl::string> NormalizeRoomCode(eastl::string_view text) {
         if (text.size() != RoomLimits::kRoomCodeLength) {
             return std::nullopt;
         }

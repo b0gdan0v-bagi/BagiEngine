@@ -36,7 +36,7 @@ namespace BECore::Tests {
 
             float width = stretch ? area.w : spec.width.Resolve(parent.w);
             float height = stretch ? area.h : spec.height.Resolve(parent.h);
-            const auto clamp = [](float extent, float parentExtent, const std::optional<UILength>& minimum, const std::optional<UILength>& maximum) {
+            const auto clamp = [](float extent, float parentExtent, const Optional<UILength>& minimum, const Optional<UILength>& maximum) {
                 if (maximum) {
                     extent = std::min(extent, maximum->Resolve(parentExtent));
                 }
@@ -143,8 +143,8 @@ namespace BECore::Tests {
         const UILength offsets[] = {UILength::Px(0.0f), UILength::Px(-12.5f), UILength::Percent(5.0f)};
         const UIEdges margins[] = {{}, {10.0f, 20.0f, 30.0f, 40.0f}, {400.0f, 0.0f, 400.0f, 300.0f}};
         struct Limits {
-            std::optional<UILength> minimum;
-            std::optional<UILength> maximum;
+            Optional<UILength> minimum;
+            Optional<UILength> maximum;
         };
         const Limits limits[] = {{}, {UILength::Px(50.0f), std::nullopt}, {std::nullopt, UILength::Percent(20.0f)}, {UILength::Px(200.0f), UILength::Px(100.0f)}};
         struct Aspect {

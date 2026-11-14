@@ -53,7 +53,7 @@ namespace BECore {
         return nullptr;
     }
 
-    std::optional<Color> UIThemes::FindColor(const Theme* theme, eastl::string_view token) {
+    Optional<Color> UIThemes::FindColor(const Theme* theme, eastl::string_view token) {
         if (!theme) {
             return std::nullopt;
         }
@@ -139,7 +139,7 @@ namespace BECore {
         return FindTheme(theme) != nullptr;
     }
 
-    std::optional<Color> UIThemes::Find(eastl::string_view token) const {
+    Optional<Color> UIThemes::Find(eastl::string_view token) const {
         const PoolString current = GetTheme();
         for (const PoolString theme : {current, _default}) {
             if (const auto color = FindColor(FindTheme(theme), token)) {

@@ -154,10 +154,10 @@ namespace BECore {
 
         /// A `transition` value: the seconds of each kind of change it names (not set: not named) and the easing of the fade and the slide
         struct TransitionValue {
-            std::optional<float> fade;            ///< `opacity`
-            std::optional<float> transform;       ///< `transform`: the scale and the slide of `-be-transition-scale` / `-be-transition-slide`
+            Optional<float> fade;                 ///< `opacity`
+            Optional<float> transform;            ///< `transform`: the scale and the slide of `-be-transition-scale` / `-be-transition-slide`
             bool transformFirst = false;          ///< `transform` is named before `opacity`: its time is the shared duration
-            std::optional<float> state;           ///< `background-color`, `color`, `border-color`, `all`: the look of a state
+            Optional<float> state;                ///< `background-color`, `color`, `border-color`, `all`: the look of a state
             EaseType ease = EaseType::QuadInOut;  ///< CSS's default easing is `ease`
         };
 
@@ -166,68 +166,68 @@ namespace BECore {
             bool displayNone = false;
             bool visibilityHidden = false;
             bool flex = false;
-            std::optional<float> left;
-            std::optional<float> right;
-            std::optional<float> top;
-            std::optional<float> bottom;
+            Optional<float> left;
+            Optional<float> right;
+            Optional<float> top;
+            Optional<float> bottom;
             eastl::string anchor;
-            std::optional<UILength> width;
-            std::optional<UILength> height;
-            std::optional<UILength> minWidth;
-            std::optional<UILength> maxWidth;
-            std::optional<UILength> minHeight;
-            std::optional<UILength> maxHeight;
-            std::optional<float> aspectRatio;
+            Optional<UILength> width;
+            Optional<UILength> height;
+            Optional<UILength> minWidth;
+            Optional<UILength> maxWidth;
+            Optional<UILength> minHeight;
+            Optional<UILength> maxHeight;
+            Optional<float> aspectRatio;
             eastl::string objectFit;
-            std::optional<UIEdges> margin;
-            std::optional<UIEdges> padding;
-            std::optional<float> gap;
-            std::optional<float> flexGrow;
+            Optional<UIEdges> margin;
+            Optional<UIEdges> padding;
+            Optional<float> gap;
+            Optional<float> flexGrow;
             eastl::string flexDirection;
-            std::optional<bool> wrapChildren;
+            Optional<bool> wrapChildren;
             eastl::string alignItems;
-            std::optional<UIWebText::WebColor> background;
+            Optional<UIWebText::WebColor> background;
             eastl::string sprite;
-            std::optional<UIWebText::GradientSpec> gradient;
-            std::optional<UICorners> cornerRadius;
-            std::optional<float> borderWidth;
-            std::optional<UIWebText::WebColor> borderColor;
+            Optional<UIWebText::GradientSpec> gradient;
+            Optional<UICorners> cornerRadius;
+            Optional<float> borderWidth;
+            Optional<UIWebText::WebColor> borderColor;
             bool borderHidden = false;  ///< `border-style: none`
-            std::optional<UIWebText::BoxShadows> shadows;
-            std::optional<UIWebText::WebColor> highlight;
-            std::optional<UIPartShape> partShape;
-            std::optional<UIEdges> slice;
-            std::optional<bool> pointerEvents;
-            std::optional<UIWebText::WebColor> textColor;
-            std::optional<float> fontSize;
+            Optional<UIWebText::BoxShadows> shadows;
+            Optional<UIWebText::WebColor> highlight;
+            Optional<UIPartShape> partShape;
+            Optional<UIEdges> slice;
+            Optional<bool> pointerEvents;
+            Optional<UIWebText::WebColor> textColor;
+            Optional<float> fontSize;
             eastl::string fontPath;
             eastl::string fontFamily;  ///< a name of the `families` table of TextConfig.xml, which the compiler does not know: a name nobody registered is the label's warning at run time
-            std::optional<int> fontWeight;
-            std::optional<TextOutlineValue> textOutline;
-            std::optional<TextShadowValue> textShadow;
+            Optional<int> fontWeight;
+            Optional<TextOutlineValue> textOutline;
+            Optional<TextShadowValue> textShadow;
             eastl::string textAlign;
             eastl::string verticalAlign;
             eastl::string textOverflow;
-            std::optional<bool> textFit;
-            std::optional<float> minFontSize;
-            std::optional<bool> wrapText;
-            std::optional<float> lineHeightRatio;
-            std::optional<float> lineHeightPixels;
-            std::optional<UIWebText::WebColor> trackColor;
-            std::optional<UIWebText::WebColor> fillColor;
-            std::optional<UIWebText::WebColor> thumbColor;
-            std::optional<UIWebText::WebColor> iconColor;
-            std::optional<float> opacity;
-            std::optional<TransitionValue> transition;
-            std::optional<float> transitionScale;
-            std::optional<std::pair<float, float>> transitionSlide;
-            std::optional<bool> transitionInput;
+            Optional<bool> textFit;
+            Optional<float> minFontSize;
+            Optional<bool> wrapText;
+            Optional<float> lineHeightRatio;
+            Optional<float> lineHeightPixels;
+            Optional<UIWebText::WebColor> trackColor;
+            Optional<UIWebText::WebColor> fillColor;
+            Optional<UIWebText::WebColor> thumbColor;
+            Optional<UIWebText::WebColor> iconColor;
+            Optional<float> opacity;
+            Optional<TransitionValue> transition;
+            Optional<float> transitionScale;
+            Optional<std::pair<float, float>> transitionSlide;
+            Optional<bool> transitionInput;
             /// Set by a handler that applied a value with a caveat (a blurred shadow drawn hard): the check of the declarations reports it, the value still counts
             eastl::string note;
         };
 
         /// A CSS time: `.2s` or `200ms`, not negative
-        std::optional<float> ParseTime(eastl::string_view text) {
+        Optional<float> ParseTime(eastl::string_view text) {
             const eastl::string lower = UIWebText::ToLower(UIWebText::TrimSpace(text));
             float scale = 1.0f;
             eastl::string_view number = lower;
@@ -247,7 +247,7 @@ namespace BECore {
         }
 
         /// The CSS easings the engine has a curve for: `ease` is the quadratic in-out, the others the quadratic or the line
-        std::optional<EaseType> ParseEase(eastl::string_view word) {
+        Optional<EaseType> ParseEase(eastl::string_view word) {
             static const std::pair<eastl::string_view, EaseType> Names[] = {
                 {"linear", EaseType::Linear}, {"ease", EaseType::QuadInOut}, {"ease-in", EaseType::QuadIn}, {"ease-out", EaseType::QuadOut}, {"ease-in-out", EaseType::QuadInOut}};
             for (const auto& [name, ease] : Names) {
@@ -259,7 +259,7 @@ namespace BECore {
         }
 
         /// `opacity`: a number or a percentage, 0 to 1
-        bool ParseOpacity(eastl::string_view value, std::optional<float>& out) {
+        bool ParseOpacity(eastl::string_view value, Optional<float>& out) {
             eastl::string_view text = UIWebText::TrimSpace(value);
             float scale = 1.0f;
             if (!text.empty() && text.back() == '%') {
@@ -297,9 +297,9 @@ namespace BECore {
             bool any = false;
             bool easeSet = false;
             for (const eastl::string_view entry : UIWebText::SplitTopLevel(value, ',')) {
-                std::optional<float> duration;
-                std::optional<float> delay;
-                std::optional<EaseType> ease;
+                Optional<float> duration;
+                Optional<float> delay;
+                Optional<EaseType> ease;
                 eastl::string property;
                 bool understood = true;
                 for (const eastl::string_view word : UIWebText::SplitWords(entry)) {
@@ -317,10 +317,10 @@ namespace BECore {
                 if (property.empty()) {
                     property = "all";  // CSS: no property is all of them
                 }
-                std::optional<float>* target = property == "opacity"                                                     ? &parsed.fade
-                                               : property == "transform"                                                 ? &parsed.transform
-                                               : IsOneOf(property, {"background-color", "color", "border-color", "all"}) ? &parsed.state
-                                                                                                                         : nullptr;
+                Optional<float>* target = property == "opacity"                                                     ? &parsed.fade
+                                          : property == "transform"                                                 ? &parsed.transform
+                                          : IsOneOf(property, {"background-color", "color", "border-color", "all"}) ? &parsed.state
+                                                                                                                    : nullptr;
                 // The colour properties share the one state duration; the others are named once
                 const bool repeated = target != nullptr && *target && target != &parsed.state;
                 if (!understood || !duration || target == nullptr || repeated) {
@@ -359,7 +359,7 @@ namespace BECore {
             return true;
         }
 
-        bool ParseOffset(eastl::string_view value, std::optional<float>& out) {
+        bool ParseOffset(eastl::string_view value, Optional<float>& out) {
             if (UIWebText::ToLower(value) == "auto") {
                 out.reset();
                 return true;
@@ -372,7 +372,7 @@ namespace BECore {
             return true;
         }
 
-        bool ParseSize(eastl::string_view value, std::optional<UILength>& out) {
+        bool ParseSize(eastl::string_view value, Optional<UILength>& out) {
             const eastl::string lower = UIWebText::ToLower(value);
             if (lower == "auto" || lower == "none") {
                 out.reset();
@@ -387,7 +387,7 @@ namespace BECore {
         }
 
         /// The one to four values of a CSS box shorthand (top right bottom left) as edges
-        std::optional<UIEdges> ParseBox(eastl::string_view value) {
+        Optional<UIEdges> ParseBox(eastl::string_view value) {
             const auto words = UIWebText::SplitWords(value);
             if (words.empty() || words.size() > BoxValueMax) {
                 return std::nullopt;
@@ -422,7 +422,7 @@ namespace BECore {
         }
 
         /// `flex`: the first number is the grow factor (`1`, `1 1 0`, `2 0 100px`); `auto` is 1, `none` is 0
-        bool ParseFlexGrow(eastl::string_view value, std::optional<float>& out) {
+        bool ParseFlexGrow(eastl::string_view value, Optional<float>& out) {
             const eastl::string lower = UIWebText::ToLower(value);
             if (lower == "none") {
                 out = 0.0f;
@@ -460,7 +460,7 @@ namespace BECore {
         }
 
         /// A border width: one px length, not negative
-        std::optional<float> ParseBorderWidth(eastl::string_view value) {
+        Optional<float> ParseBorderWidth(eastl::string_view value) {
             const auto width = UIWebText::ParsePixels(value);
             if (!width || !std::isfinite(*width) || *width < 0.0f) {
                 return std::nullopt;
@@ -556,7 +556,7 @@ namespace BECore {
                  }
                  const size_t slash = v.find('/');
                  const auto numerator = UIText::ParseFiniteFloat(slash == eastl::string_view::npos ? v : v.substr(0, slash));
-                 const auto denominator = slash == eastl::string_view::npos ? std::optional<float>{1.0f} : UIText::ParseFiniteFloat(v.substr(slash + 1));
+                 const auto denominator = slash == eastl::string_view::npos ? Optional<float>{1.0f} : UIText::ParseFiniteFloat(v.substr(slash + 1));
                  if (!numerator || !denominator || *denominator <= 0.0f || *numerator <= 0.0f) {
                      return false;
                  }
@@ -704,7 +704,7 @@ namespace BECore {
                      }
                  }
                  // The shorthand resets what it does not name
-                 r.background = parsed.background ? parsed.background : std::optional<UIWebText::WebColor>{Color{0, 0, 0, 0}};
+                 r.background = parsed.background ? parsed.background : Optional<UIWebText::WebColor>{Color{0, 0, 0, 0}};
                  r.sprite = parsed.sprite;
                  r.gradient = parsed.gradient;
                  return true;
@@ -730,7 +730,7 @@ namespace BECore {
                  }
                  r.borderHidden = false;
                  r.borderWidth = border->width;
-                 r.borderColor = border->none ? std::optional<UIWebText::WebColor>{} : std::optional<UIWebText::WebColor>{border->color};
+                 r.borderColor = border->none ? Optional<UIWebText::WebColor>{} : Optional<UIWebText::WebColor>{border->color};
                  return true;
              }},
             {"border-width",
@@ -897,7 +897,7 @@ namespace BECore {
                  }
                  float numbers[TextShadowMaxNumbers] = {};
                  size_t numberCount = 0;
-                 std::optional<UIWebText::WebColor> color;
+                 Optional<UIWebText::WebColor> color;
                  for (const eastl::string_view word : UIWebText::SplitWords(shadows[0])) {
                      if (const auto pixels = UIWebText::ParsePixels(word)) {
                          if (numberCount == TextShadowMaxNumbers) {
@@ -1251,7 +1251,7 @@ namespace BECore {
                 if (rel == nullptr || href == nullptr || UIWebText::ToLower(*rel) != "stylesheet") {
                     return;
                 }
-                std::optional<eastl::string> css = _loader ? _loader(*href) : std::nullopt;
+                Optional<eastl::string> css = _loader ? _loader(*href) : std::nullopt;
                 if (!css) {
                     _report.AddOnce(HtmlSource, link.line, Format("the style sheet '{}' cannot be read", href->c_str()));
                     return;
@@ -1420,7 +1420,7 @@ namespace BECore {
                         if (rule.media != -1 && rule.media != media) {
                             continue;
                         }
-                        std::optional<uint32_t> specificity;
+                        Optional<uint32_t> specificity;
                         for (const UICssSelector& selector : rule.selectors) {
                             const UICssPseudo pseudo = selector.compounds.back().pseudo;
                             if (pseudo != UICssPseudo::None && pseudo != ToPseudo(state)) {
@@ -1553,7 +1553,7 @@ namespace BECore {
             }
 
             /// The kind a `data-widget` value names (not case sensitive); nothing for a name that is not a widget
-            [[nodiscard]] static std::optional<WebKind> WidgetKindOf(const eastl::string& widget) {
+            [[nodiscard]] static Optional<WebKind> WidgetKindOf(const eastl::string& widget) {
                 const eastl::string lower = UIWebText::ToLower(widget);
                 for (const WidgetName& entry : WidgetNames) {
                     if (lower == entry.name) {
@@ -1564,7 +1564,7 @@ namespace BECore {
             }
 
             /// The widget an element is, when it says `data-widget` with a name we know and is not a button or an image (those keep their own kind and the attribute is reported)
-            [[nodiscard]] static std::optional<WebKind> WidgetOf(const UIHtmlNode& html) {
+            [[nodiscard]] static Optional<WebKind> WidgetOf(const UIHtmlNode& html) {
                 const eastl::string* widget = html.FindAttribute(WidgetAttribute);
                 if (widget == nullptr || html.tag == "button" || html.tag == "img") {
                     return std::nullopt;
@@ -1573,7 +1573,7 @@ namespace BECore {
             }
 
             /// A number in an attribute: nothing when there is no attribute or it is not a number that is at least @p minimum
-            [[nodiscard]] static std::optional<float> ReadNumber(const UIHtmlNode& html, eastl::string_view attribute, float minimum = -FLT_MAX) {
+            [[nodiscard]] static Optional<float> ReadNumber(const UIHtmlNode& html, eastl::string_view attribute, float minimum = -FLT_MAX) {
                 const eastl::string* text = html.FindAttribute(attribute);
                 if (text == nullptr) {
                     return std::nullopt;
@@ -1685,7 +1685,7 @@ namespace BECore {
 
                 bool hasText = false;
                 const bool onlyText = HoldsOnlyText(htmlIndex, hasText);
-                const std::optional<WebKind> widget = WidgetOf(html);
+                const Optional<WebKind> widget = WidgetOf(html);
                 if (widget) {
                     node.kind = *widget;
                     if (node.kind == WebKind::Segmented && !Resolve(base[htmlIndex]).flex) {
@@ -1985,7 +1985,7 @@ namespace BECore {
                 if (!r.textColor) {
                     return;
                 }
-                const auto given = [](const std::optional<UIWebText::WebColor>& color) { return color && color->IsVisible(); };
+                const auto given = [](const Optional<UIWebText::WebColor>& color) { return color && color->IsVisible(); };
                 if (r.textColor->IsToken()) {
                     if (!given(r.trackColor)) {
                         Note(report, "a toggle whose text color is a theme token needs -be-track-color: its off track cannot be derived from a token");

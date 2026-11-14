@@ -8,19 +8,19 @@ namespace BECore {
     /// The properties of one named element that a variant replaces; an unset one is left as it is
     struct UIElementOverride {
         PoolString element;
-        std::optional<bool> visible;
-        std::optional<UIAnchor> anchor;
-        std::optional<Vec2> anchorMin;
-        std::optional<Vec2> anchorMax;
-        std::optional<Vec2> pivot;
-        std::optional<UILength> x;
-        std::optional<UILength> y;
-        std::optional<UILength> width;
-        std::optional<UILength> height;
-        std::optional<UIEdges> margin;     ///< stretched axes only (UIRectSpec::margin)
-        std::optional<PoolString> region;  ///< an empty name clears the region of the element
-        std::optional<UIStackDirection> direction;
-        std::optional<float> fontSize;
+        Optional<bool> visible;
+        Optional<UIAnchor> anchor;
+        Optional<Vec2> anchorMin;
+        Optional<Vec2> anchorMax;
+        Optional<Vec2> pivot;
+        Optional<UILength> x;
+        Optional<UILength> y;
+        Optional<UILength> width;
+        Optional<UILength> height;
+        Optional<UIEdges> margin;     ///< stretched axes only (UIRectSpec::margin)
+        Optional<PoolString> region;  ///< an empty name clears the region of the element
+        Optional<UIStackDirection> direction;
+        Optional<float> fontSize;
 
         void ApplyTo(UIElementStyle& style) const;
 

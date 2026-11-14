@@ -26,7 +26,7 @@ namespace BECore {
         }
 
         /// The status code of "HTTP/1.1 101 Switching Protocols", nullopt when the line is not of that shape
-        std::optional<int> ParseStatus(eastl::string_view line) {
+        Optional<int> ParseStatus(eastl::string_view line) {
             if (!line.starts_with(kStatusLinePrefix)) {
                 return std::nullopt;
             }
@@ -73,7 +73,7 @@ namespace BECore {
         bool isStatusLine = true;
         bool hasUpgrade = false;
         bool hasConnection = false;
-        std::optional<eastl::string> accept;
+        Optional<eastl::string> accept;
         while (!lines.empty()) {
             const size_t end = lines.find('\n');
             eastl::string_view line = lines.substr(0, end);
@@ -83,7 +83,7 @@ namespace BECore {
             }
             if (isStatusLine) {
                 isStatusLine = false;
-                const std::optional<int> status = ParseStatus(line);
+                const Optional<int> status = ParseStatus(line);
                 if (!status) {
                     return Refuse("the server's answer is not an HTTP/1.1 response");
                 }

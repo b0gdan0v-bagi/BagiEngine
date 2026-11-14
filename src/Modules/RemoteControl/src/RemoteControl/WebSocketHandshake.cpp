@@ -133,7 +133,7 @@ namespace BECore {
         }
 
         /// Parses `scheme://host[:port]` with an optional single trailing `/`; nullopt for anything else
-        std::optional<ParsedOrigin> ParseOrigin(eastl::string_view text) {
+        Optional<ParsedOrigin> ParseOrigin(eastl::string_view text) {
             const size_t separator = text.find(kSchemeSeparator);
             if (separator == eastl::string_view::npos || separator == 0) {
                 return std::nullopt;
@@ -213,7 +213,7 @@ namespace BECore {
         }
 
         /// Reads the header lines after the request line into @p headers (names in lower case); a repeated header is joined only for the list headers
-        std::optional<HandshakeError> ReadHeaders(eastl::string_view lines, Headers& headers) {
+        Optional<HandshakeError> ReadHeaders(eastl::string_view lines, Headers& headers) {
             while (!lines.empty()) {
                 const size_t end = lines.find('\n');
                 eastl::string_view line = lines.substr(0, end);
@@ -379,7 +379,7 @@ namespace BECore {
             return IsLoopbackOrigin(origin);
         }
         const bool isNull = EqualsIgnoreCase(origin, kNullOrigin);
-        const std::optional<ParsedOrigin> parsed = isNull ? std::nullopt : ParseOrigin(origin);
+        const Optional<ParsedOrigin> parsed = isNull ? std::nullopt : ParseOrigin(origin);
         for (const eastl::string& entry : policy.allowedOrigins) {
             const eastl::string_view allowed(entry.data(), entry.size());
             if (allowed == kAnyOrigin) {
@@ -394,7 +394,7 @@ namespace BECore {
             if (!parsed) {
                 continue;  // only `*` can admit an origin that is not well formed
             }
-            const std::optional<ParsedOrigin> entryOrigin = ParseOrigin(allowed);
+            const Optional<ParsedOrigin> entryOrigin = ParseOrigin(allowed);
             if (entryOrigin && SameOrigin(*parsed, *entryOrigin)) {
                 return true;
             }

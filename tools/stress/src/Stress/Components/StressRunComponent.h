@@ -72,7 +72,7 @@ namespace BECore::Stress {
 
         PoolString _counterName = "Stress objects"_intern;
         StressRecorder _recorder;
-        std::optional<RampController> _ramp;  // made at the first update of a ramp run
+        Optional<RampController> _ramp;  // made at the first update of a ramp run
         LineSink _sink;
         uint64_t _seenVersion = 0;    // the StressState version of the last update; 0 is never a version
         uint64_t _firstMeasured = 0;  // the first frame id a sample is taken of

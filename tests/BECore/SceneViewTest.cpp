@@ -381,7 +381,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(SceneViewVariantsTest, NulloptAndAnIndexOutOfRangeBehaveAsAuto) {
-        for (const std::optional<int32_t> override : {std::optional<int32_t>{}, std::optional<int32_t>{2}, std::optional<int32_t>{-2}, std::optional<int32_t>{100}}) {
+        for (const Optional<int32_t> override : {Optional<int32_t>{}, Optional<int32_t>{2}, Optional<int32_t>{-2}, Optional<int32_t>{100}}) {
             _scene->SetViewOverride(override);
             DrawAt(900.0f, 600.0f);
             EXPECT_EQ(_scene->GetActiveView().index, -1);

@@ -323,7 +323,7 @@ namespace BECore::Tests {
         }
 
         /// The colour of the bar of the selected-state look drawn at the foot of the rect of @p name in the last draw, none when there was no bar
-        std::optional<Color> BarColorOf(const char* name) const {
+        Optional<Color> BarColorOf(const char* name) const {
             const UIElement& element = Element(name);
             const Rect bar{element.rect.x, element.rect.y + element.rect.h - UIStateLook::kSelectedBarHeight, element.rect.w, UIStateLook::kSelectedBarHeight};
             for (const DrawCall& call : _renderer->calls) {

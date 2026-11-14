@@ -96,7 +96,7 @@ namespace BECore::Tests {
             }
 
             /// A client that finished the handshake
-            std::optional<WebSocketTestClient> Connect(uint16_t port, const std::string& extraHeaders = "") {
+            Optional<WebSocketTestClient> Connect(uint16_t port, const std::string& extraHeaders = "") {
                 auto client = WebSocketTestClient::Open(port);
                 if (client && !client->Handshake(port, extraHeaders)) {
                     ADD_FAILURE() << "the handshake was not accepted";

@@ -22,7 +22,7 @@ namespace BECore::Stress {
 
         /// The index of @p text in @p names (any case), or nullopt
         template <size_t N>
-        std::optional<size_t> IndexOf(const eastl::string_view (&names)[N], eastl::string_view text) {
+        Optional<size_t> IndexOf(const eastl::string_view (&names)[N], eastl::string_view text) {
             for (size_t i = 0; i < N; ++i) {
                 if (EqualsIgnoreCase(names[i], text)) {
                     return i;
@@ -32,7 +32,7 @@ namespace BECore::Stress {
         }
 
         /// The whole of @p text as a number; nullopt for an empty text, a sign, a trailing character or a number that does not fit
-        std::optional<uint32_t> ParseNumber(eastl::string_view text) {
+        Optional<uint32_t> ParseNumber(eastl::string_view text) {
             uint32_t value = 0;
             const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
             if (error != std::errc{} || end != text.data() + text.size()) {
@@ -46,10 +46,10 @@ namespace BECore::Stress {
         }
 
         /// Reads the number of a valued flag into @p target when the flag is there; an error when it is wrong
-        std::optional<eastl::string> ReadNumber(const CommandLine& line, eastl::string_view flag, uint32_t minimum, uint32_t maximum, uint32_t& target) {
+        Optional<eastl::string> ReadNumber(const CommandLine& line, eastl::string_view flag, uint32_t minimum, uint32_t maximum, uint32_t& target) {
             const auto value = line.FindValue(flag);
             if (!value) {
-                return line.HasFlag(flag) ? std::optional(FlagError(flag, "needs a value")) : std::nullopt;
+                return line.HasFlag(flag) ? Optional(FlagError(flag, "needs a value")) : std::nullopt;
             }
             const auto number = ParseNumber(*value);
             if (!number || *number < minimum || *number > maximum) {
@@ -60,16 +60,16 @@ namespace BECore::Stress {
         }
 
         /// The error of a bare flag that was given a value (`--stress-ramp=1`), or nullopt
-        std::optional<eastl::string> CheckBareFlag(const CommandLine& line, eastl::string_view flag) {
-            return line.FindValue(flag) ? std::optional(FlagError(flag, "is a flag without a value")) : std::nullopt;
+        Optional<eastl::string> CheckBareFlag(const CommandLine& line, eastl::string_view flag) {
+            return line.FindValue(flag) ? Optional(FlagError(flag, "is a flag without a value")) : std::nullopt;
         }
 
         /// Reads the choice of a valued flag into @p target when the flag is there; an error when it is wrong
         template <typename E, size_t N>
-        std::optional<eastl::string> ReadChoice(const CommandLine& line, eastl::string_view flag, const eastl::string_view (&names)[N], E& target) {
+        Optional<eastl::string> ReadChoice(const CommandLine& line, eastl::string_view flag, const eastl::string_view (&names)[N], E& target) {
             const auto value = line.FindValue(flag);
             if (!value) {
-                return line.HasFlag(flag) ? std::optional(FlagError(flag, "needs a value")) : std::nullopt;
+                return line.HasFlag(flag) ? Optional(FlagError(flag, "needs a value")) : std::nullopt;
             }
             const auto index = IndexOf(names, *value);
             if (!index) {
@@ -89,7 +89,7 @@ namespace BECore::Stress {
     std::expected<StressSettings, eastl::string> ParseStressSettings(const CommandLine& commandLine) {
         StressSettings settings;
 
-        const std::optional<eastl::string> errors[] = {
+        const Optional<eastl::string> errors[] = {
             ReadChoice(commandLine, StressFlags::kScene, kSceneNames, settings.scene),
             ReadNumber(commandLine, StressFlags::kCount, 1, kMaxCount, settings.count),
             ReadNumber(commandLine, StressFlags::kFrames, 1, kMaxFrames, settings.frames),
@@ -124,14 +124,14 @@ namespace BECore::Stress {
         return kLanguageNames[static_cast<size_t>(language)];
     }
 
-    std::optional<StressScene> ParseScene(eastl::string_view text) {
+    Optional<StressScene> ParseScene(eastl::string_view text) {
         const auto index = IndexOf(kSceneNames, text);
-        return index ? std::optional(static_cast<StressScene>(*index)) : std::nullopt;
+        return index ? Optional(static_cast<StressScene>(*index)) : std::nullopt;
     }
 
-    std::optional<StressLanguage> ParseLanguage(eastl::string_view text) {
+    Optional<StressLanguage> ParseLanguage(eastl::string_view text) {
         const auto index = IndexOf(kLanguageNames, text);
-        return index ? std::optional(static_cast<StressLanguage>(*index)) : std::nullopt;
+        return index ? Optional(static_cast<StressLanguage>(*index)) : std::nullopt;
     }
 
 }  // namespace BECore::Stress

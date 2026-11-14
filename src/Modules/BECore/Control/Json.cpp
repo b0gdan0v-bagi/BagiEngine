@@ -52,7 +52,7 @@ namespace BECore {
         return it == object.end() ? nullptr : &*it;
     }
 
-    std::optional<eastl::string> GetJsonString(const Json& object, eastl::string_view key) {
+    Optional<eastl::string> GetJsonString(const Json& object, eastl::string_view key) {
         const Json* member = FindJsonMember(object, key);
         if (member == nullptr || !member->is_string()) {
             return std::nullopt;
@@ -61,7 +61,7 @@ namespace BECore {
         return eastl::string(text.c_str(), text.size());
     }
 
-    std::optional<int64_t> GetJsonInt(const Json& object, eastl::string_view key) {
+    Optional<int64_t> GetJsonInt(const Json& object, eastl::string_view key) {
         const Json* member = FindJsonMember(object, key);
         if (member == nullptr || !member->is_number_integer()) {
             return std::nullopt;
@@ -76,7 +76,7 @@ namespace BECore {
         return member->get<int64_t>();
     }
 
-    std::optional<double> GetJsonNumber(const Json& object, eastl::string_view key) {
+    Optional<double> GetJsonNumber(const Json& object, eastl::string_view key) {
         const Json* member = FindJsonMember(object, key);
         if (member == nullptr || !member->is_number()) {
             return std::nullopt;
@@ -84,7 +84,7 @@ namespace BECore {
         return member->get<double>();
     }
 
-    std::optional<bool> GetJsonBool(const Json& object, eastl::string_view key) {
+    Optional<bool> GetJsonBool(const Json& object, eastl::string_view key) {
         const Json* member = FindJsonMember(object, key);
         if (member == nullptr || !member->is_boolean()) {
             return std::nullopt;

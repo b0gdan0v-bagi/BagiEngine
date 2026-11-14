@@ -91,7 +91,7 @@ namespace BECore::Tests {
 
     private:
         IntrusivePtr<FakeClipboard> _fake;
-        std::optional<ScopedClipboardBackend> _scope;
+        Optional<ScopedClipboardBackend> _scope;
     };
 
     TEST_F(ClipboardControlTest, SetThenGetGivesTheTextBack) {
@@ -101,7 +101,7 @@ namespace BECore::Tests {
 
         ASSERT_EQ(responses.size(), 2u);
         ASSERT_NE(ResultOf(0), nullptr);
-        EXPECT_EQ(GetJsonBool(*ResultOf(0), "ok"), std::optional<bool>(true));
+        EXPECT_EQ(GetJsonBool(*ResultOf(0), "ok"), Optional<bool>(true));
         EXPECT_EQ(Fake().Content(), "room 4711");
         ASSERT_NE(ResultOf(1), nullptr);
         EXPECT_EQ(StringOf(ResultOf(1), "status"), "ok");
@@ -149,7 +149,7 @@ namespace BECore::Tests {
         ASSERT_EQ(responses.size(), 2u);
         EXPECT_EQ(StringOf(ResultOf(0), "status"), "unavailable");
         ASSERT_NE(ResultOf(1), nullptr);
-        EXPECT_EQ(GetJsonBool(*ResultOf(1), "ok"), std::optional<bool>(false));
+        EXPECT_EQ(GetJsonBool(*ResultOf(1), "ok"), Optional<bool>(false));
     }
 
     TEST_F(ClipboardControlTest, AGetThatNeverArrivesFailsWithATimeout) {

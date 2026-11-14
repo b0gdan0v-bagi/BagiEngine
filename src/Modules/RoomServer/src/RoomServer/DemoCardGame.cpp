@@ -140,7 +140,7 @@ namespace BECore {
         return outcome;
     }
 
-    std::optional<Json> DemoCardGame::ChooseComputerAction(int seat) const {
+    Optional<Json> DemoCardGame::ChooseComputerAction(int seat) const {
         if (!CanAct(seat) || _hands[seat].empty()) {
             return std::nullopt;
         }

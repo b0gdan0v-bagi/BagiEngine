@@ -63,13 +63,13 @@ namespace BECore::UIAttr {
         WriteText(s, key, UIText::FormatFraction2(value));
     }
 
-    void WriteOptionalVec2Fraction(ISerializer& s, eastl::string_view key, const std::optional<Vec2>& value) {
+    void WriteOptionalVec2Fraction(ISerializer& s, eastl::string_view key, const Optional<Vec2>& value) {
         if (value) {
             WriteVec2Fraction(s, key, *value);
         }
     }
 
-    void ReadOptionalVec2Fraction(IDeserializer& d, eastl::string_view key, std::optional<Vec2>& out) {
+    void ReadOptionalVec2Fraction(IDeserializer& d, eastl::string_view key, Optional<Vec2>& out) {
         eastl::string text;
         if (!ReadText(d, key, text)) {
             return;
@@ -82,13 +82,13 @@ namespace BECore::UIAttr {
         out = *value;
     }
 
-    void WriteOptionalEdges(ISerializer& s, eastl::string_view key, const std::optional<UIEdges>& edges) {
+    void WriteOptionalEdges(ISerializer& s, eastl::string_view key, const Optional<UIEdges>& edges) {
         if (edges) {
             WriteEdges(s, key, *edges);
         }
     }
 
-    void ReadOptionalEdges(IDeserializer& d, eastl::string_view key, std::optional<UIEdges>& out) {
+    void ReadOptionalEdges(IDeserializer& d, eastl::string_view key, Optional<UIEdges>& out) {
         UIEdges edges;
         if (ReadEdges(d, key, edges)) {
             out = edges;
@@ -177,13 +177,13 @@ namespace BECore::UIAttr {
         return true;
     }
 
-    void WriteOptionalLength(ISerializer& s, eastl::string_view key, const std::optional<UILength>& length) {
+    void WriteOptionalLength(ISerializer& s, eastl::string_view key, const Optional<UILength>& length) {
         if (length) {
             WriteLength(s, key, *length);
         }
     }
 
-    void ReadOptionalLength(IDeserializer& d, eastl::string_view key, std::optional<UILength>& out) {
+    void ReadOptionalLength(IDeserializer& d, eastl::string_view key, Optional<UILength>& out) {
         UILength length;
         if (ReadLength(d, key, length)) {
             out = length;

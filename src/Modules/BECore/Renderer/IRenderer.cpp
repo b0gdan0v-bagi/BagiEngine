@@ -123,7 +123,7 @@ namespace BECore {
         OnClipRectChanged();
     }
 
-    std::optional<Rect> IRenderer::GetClipRect() const {
+    Optional<Rect> IRenderer::GetClipRect() const {
         if (_clipStack.empty()) {
             return std::nullopt;
         }

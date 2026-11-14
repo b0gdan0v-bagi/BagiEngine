@@ -27,7 +27,7 @@ namespace BECore::Tests {
             return std::string(message.GetText().data(), message.GetText().size());
         }
 
-        using PopResult = std::expected<std::optional<WebSocketMessage>, WebSocketProtocolError>;
+        using PopResult = std::expected<Optional<WebSocketMessage>, WebSocketProtocolError>;
 
         /// The next message, which the test expects to be there
         WebSocketMessage PopMessage(WebSocketFrameParser& parser) {

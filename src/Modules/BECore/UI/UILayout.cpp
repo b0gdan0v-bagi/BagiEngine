@@ -19,7 +19,7 @@ namespace BECore {
             return {Bound(edges.left), Bound(edges.top), Bound(edges.right), Bound(edges.bottom)};
         }
 
-        float ClampExtent(float extent, float parentExtent, const std::optional<UILength>& minimum, const std::optional<UILength>& maximum) {
+        float ClampExtent(float extent, float parentExtent, const Optional<UILength>& minimum, const Optional<UILength>& maximum) {
             extent = Bound(extent);
             if (maximum) {
                 extent = std::min(extent, ResolveLength(*maximum, parentExtent));
@@ -59,15 +59,15 @@ namespace BECore {
             }
         }
 
-        void Replace(Vec2& value, const std::optional<Vec2>& explicitValue) {
+        void Replace(Vec2& value, const Optional<Vec2>& explicitValue) {
             if (explicitValue) {
                 ReplaceFinite(value.x, explicitValue->x);
                 ReplaceFinite(value.y, explicitValue->y);
             }
         }
 
-        AxisSize ResolveAxisSize(float origin, float extent, float anchorMin, float anchorMax, float marginStart, float marginEnd, const UILength& length, const std::optional<UILength>& minimum,
-                                 const std::optional<UILength>& maximum) {
+        AxisSize ResolveAxisSize(float origin, float extent, float anchorMin, float anchorMax, float marginStart, float marginEnd, const UILength& length, const Optional<UILength>& minimum,
+                                 const Optional<UILength>& maximum) {
             AxisSize axis;
             axis.stretched = anchorMin < anchorMax;
             float size;
@@ -99,7 +99,7 @@ namespace BECore {
             float main = 0.0f;   // the size along the stack's direction
             float cross = 0.0f;  // the size across it
             float flex = 0.0f;
-            std::optional<UILength> minMain, maxMain, minCross, maxCross;
+            Optional<UILength> minMain, maxMain, minCross, maxCross;
         };
 
         struct Line {

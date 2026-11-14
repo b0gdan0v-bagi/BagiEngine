@@ -232,12 +232,12 @@ namespace BECore::Fuzz {
             return bytes;
         }
 
-        FuzzBytes Frame(uint8_t opcode, eastl::string_view payload, std::optional<WebSocketMask> mask, bool fin = true) {
+        FuzzBytes Frame(uint8_t opcode, eastl::string_view payload, Optional<WebSocketMask> mask, bool fin = true) {
             const eastl::vector<uint8_t> frame = EncodeFrame(opcode, PayloadOf(payload), mask, fin);
             return FuzzBytes(frame.begin(), frame.end());
         }
 
-        FuzzBytes CloseFrame(uint16_t code, eastl::string_view reason, std::optional<WebSocketMask> mask) {
+        FuzzBytes CloseFrame(uint16_t code, eastl::string_view reason, Optional<WebSocketMask> mask) {
             const eastl::vector<uint8_t> frame = EncodeCloseFrame(code, reason, mask);
             return FuzzBytes(frame.begin(), frame.end());
         }
@@ -281,8 +281,8 @@ namespace BECore::Fuzz {
 
         void AddWebSocketSeeds(eastl::vector<FuzzSeedFile>& seeds) {
             using enum WebSocketPeer;
-            const std::optional<WebSocketMask> noMask;
-            const std::optional<WebSocketMask> mask = kRfcMask;
+            const Optional<WebSocketMask> noMask;
+            const Optional<WebSocketMask> mask = kRfcMask;
             const eastl::string mediumText(kMediumPayloadBytes, 'm');
             const eastl::string longestShortText(kLongestShortLength, 's');
             const eastl::string shortestMediumText(kShortestMediumLength, 'p');

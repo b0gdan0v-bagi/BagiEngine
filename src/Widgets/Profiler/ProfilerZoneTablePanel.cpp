@@ -33,7 +33,7 @@ namespace BECore {
 
     }  // namespace
 
-    void ProfilerZoneTablePanel::RefreshRows(const RingSnapshot& snapshot, uint64_t version, std::optional<uint64_t> selectedFrame) {
+    void ProfilerZoneTablePanel::RefreshRows(const RingSnapshot& snapshot, uint64_t version, Optional<uint64_t> selectedFrame) {
         StatsKey key;
         key.version = version;
         key.window = _window;
@@ -74,7 +74,7 @@ namespace BECore {
         }
     }
 
-    const ProfileSite* ProfilerZoneTablePanel::Draw(const RingSnapshot& snapshot, uint64_t version, std::optional<uint64_t> selectedFrame) {
+    const ProfileSite* ProfilerZoneTablePanel::Draw(const RingSnapshot& snapshot, uint64_t version, Optional<uint64_t> selectedFrame) {
         int window = static_cast<int>(_window);
         ImGui::SetNextItemWidth(kWindowComboWidth);
         if (ImGui::Combo("Window", &window, kWindowLabels)) {

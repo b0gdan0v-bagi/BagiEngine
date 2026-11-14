@@ -75,7 +75,7 @@ namespace BECore::Tests {
         }
 
         /// The bar of a selected element: the one Rect call in the bottom strip of the button
-        std::optional<Rect> BarOf(const eastl::vector<DrawCall>& calls) {
+        Optional<Rect> BarOf(const eastl::vector<DrawCall>& calls) {
             for (const DrawCall& call : calls) {
                 if (call.kind == DrawKind::Rect && call.rect.h <= UIStateLook::kSelectedBarHeight + 0.01f) {
                     return call.rect;

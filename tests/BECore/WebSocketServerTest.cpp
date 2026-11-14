@@ -77,12 +77,12 @@ namespace BECore::Tests {
                 return port.value_or(0);
             }
 
-            std::optional<TestClient> OpenClient(uint16_t port) {
+            Optional<TestClient> OpenClient(uint16_t port) {
                 return TestClient::Open(port, [this] { service.Drain(); });
             }
 
             /// A connected client that finished the handshake
-            std::optional<TestClient> Connect(uint16_t port) {
+            Optional<TestClient> Connect(uint16_t port) {
                 auto client = OpenClient(port);
                 if (client && !client->Handshake(port)) {
                     ADD_FAILURE() << "the handshake was not accepted";

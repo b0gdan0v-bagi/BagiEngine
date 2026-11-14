@@ -171,7 +171,7 @@ namespace BECore {
 
         // The current clip in output pixels, or nothing when no rect is pushed. A pushed rect that does not overlap
         // the one before it leaves an empty clip, which hides everything (see IsClipEmpty()).
-        [[nodiscard]] std::optional<Rect> GetClipRect() const;
+        [[nodiscard]] Optional<Rect> GetClipRect() const;
         [[nodiscard]] bool IsClipEmpty() const;
         [[nodiscard]] size_t GetClipDepth() const {
             return _clipStack.size();

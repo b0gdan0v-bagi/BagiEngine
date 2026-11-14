@@ -14,7 +14,7 @@ namespace BECore {
 
     }  // namespace
 
-    std::optional<double> FrameStats::FindCounter(PoolString name) const {
+    Optional<double> FrameStats::FindCounter(PoolString name) const {
         for (const FrameCounter& counter : counters) {
             if (counter.name == name) {
                 return counter.value;

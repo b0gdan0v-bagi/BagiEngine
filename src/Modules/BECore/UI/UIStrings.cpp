@@ -125,7 +125,7 @@ namespace BECore {
         return FindLanguage(language) != nullptr;
     }
 
-    std::optional<eastl::string_view> UIStrings::Find(eastl::string_view key) const {
+    Optional<eastl::string_view> UIStrings::Find(eastl::string_view key) const {
         const PoolString current = GetLanguage();
         for (const PoolString language : {current, _default}) {
             if (const eastl::string* text = FindString(FindLanguage(language), key)) {

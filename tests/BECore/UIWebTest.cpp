@@ -2559,7 +2559,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(variant.overrides[0].element.ToStringView(), "a");
         ASSERT_TRUE(variant.overrides[0].width);
         EXPECT_EQ(variant.overrides[0].width->unit, UIUnit::Percent);
-        EXPECT_EQ(variant.overrides[0].visible, std::optional<bool>(false));
+        EXPECT_EQ(variant.overrides[0].visible, Optional<bool>(false));
         EXPECT_FALSE(variant.overrides[0].height) << "unchanged properties are not overridden";
         // The second div has no id: the compile names it so that the variant can find it
         EXPECT_FALSE(variant.overrides[1].element.ToStringView().empty());
@@ -2569,7 +2569,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
     TEST_F(UIWebTest, AMediaBlockCanUndoWhatTheBaseDid) {
         const auto compiled = Compile(R"(<div id="a"></div>)", "#a { display: none; width: 10px; height: 10px } @media (min-width: 800px) { #a { display: block } }");
         ASSERT_EQ(compiled->content.variants.size(), 1u);
-        EXPECT_EQ(compiled->content.variants[0].overrides.at(0).visible, std::optional<bool>(true));
+        EXPECT_EQ(compiled->content.variants[0].overrides.at(0).visible, Optional<bool>(true));
         // The base screen has it hidden; wide enough (in canvas units: the scale is kept at 0.7 or more, so 480 px are 685 units), the variant shows it
         LaidOut web(compiled->content);
         web.At(480.0f, 270.0f);
@@ -2641,7 +2641,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         const std::string html = R"(<link rel="stylesheet" href="a.css"><link rel="stylesheet" href="missing.css"><div id="x" class="k"></div><style>.k { height: 9px }</style>)";
         const eastl::string xml = UIWebCompiler::Compile(
             eastl::string_view(html.data(), html.size()),
-            [&](eastl::string_view href) -> std::optional<eastl::string> {
+            [&](eastl::string_view href) -> Optional<eastl::string> {
                 asked.push_back(eastl::string(href));
                 if (href == "a.css") {
                     return eastl::string(".k { width: 7px; height: 1px }");
@@ -2979,7 +2979,7 @@ button:checked { background: var(--panel); }
         CompiledWithSheet CompileWithSheet(const std::string& html, const std::string& css) {
             CompiledWithSheet result;
             const std::string source = "<link rel=\"stylesheet\" href=\"a.css\">" + html;
-            const UIWebCompiler::StylesheetLoader loader = [&css](eastl::string_view) { return std::optional<eastl::string>(eastl::string(css.data(), css.size())); };
+            const UIWebCompiler::StylesheetLoader loader = [&css](eastl::string_view) { return Optional<eastl::string>(eastl::string(css.data(), css.size())); };
             result.xml = UIWebCompiler::Compile(eastl::string_view(source.data(), source.size()), loader, result.report);
             return result;
         }
