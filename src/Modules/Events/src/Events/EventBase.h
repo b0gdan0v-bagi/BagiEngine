@@ -9,6 +9,12 @@ namespace BECore {
 
     struct BaseEvent {
         virtual ~BaseEvent() = default;
+
+    protected:
+        // PassKey<BaseEvent> can be made by BaseEvent only, so the CRTP base registers through here.
+        static void RegisterQueueUpdate(EventsQueueRegistry::UpdateFunction update) {
+            EventsQueueRegistry::Register(std::move(update), {});
+        }
     };
 
     // CRTP базовый класс для статических методов событий с индивидуальным dispatcher'ом
@@ -69,7 +75,7 @@ namespace BECore {
             static bool registered = false;
             if (!registered) {
                 registered = true;
-                EventsQueueRegistry::Register([]() { Derived::Update(); }, {});
+                RegisterQueueUpdate([]() { Derived::Update(); });
             }
         }
     };
