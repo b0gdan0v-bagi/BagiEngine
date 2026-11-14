@@ -114,21 +114,49 @@ def test_run_print_only_prints(game: Path, capsys):
 
 # --- background sessions, against a fake `claude` that records its calls ---------------------------
 
-FAKE_CLAUDE = """#!/bin/sh
-log="$FAKE_CLAUDE_LOG"
-if [ "$1" = agents ]; then cat "$FAKE_CLAUDE_SESSIONS" 2>/dev/null || echo '[]'; exit 0; fi
-if [ "$1" = stop ]; then echo "stop $2" >> "$log"; echo "stopped $2"; exit 0; fi
-echo "bg cwd=$(pwd) jobs=$CMAKE_BUILD_PARALLEL_LEVEL args=$*" >> "$log"
-if [ -n "$FAKE_CLAUDE_UNTRUSTED" ]; then echo "Workspace not trusted. Run claude once and accept the trust prompt"; exit 1; fi
-echo "backgrounded · abcd1234 · $3"
+# The fake `claude` is a Python script, so it runs on Windows too (a `#!/bin/sh` script cannot be started there): on POSIX the
+# file itself with a shebang to this interpreter, on Windows a `.cmd` beside it that hands its arguments to it
+FAKE_CLAUDE = """import os
+import sys
+from pathlib import Path
+
+args = sys.argv[1:]
+
+
+def append(line):
+    with open(os.environ["FAKE_CLAUDE_LOG"], "a", encoding="utf-8") as log:
+        log.write(line + "\\n")
+
+
+if args[:1] == ["agents"]:
+    try:
+        print(Path(os.environ["FAKE_CLAUDE_SESSIONS"]).read_text())
+    except OSError:
+        print("[]")
+    sys.exit(0)
+if args[:1] == ["stop"]:
+    append(f"stop {args[1]}")
+    print(f"stopped {args[1]}")
+    sys.exit(0)
+append(f"bg cwd={Path.cwd().as_posix()} jobs={os.environ.get('CMAKE_BUILD_PARALLEL_LEVEL', '')} args={' '.join(args)}")
+if os.environ.get("FAKE_CLAUDE_UNTRUSTED"):
+    print("Workspace not trusted. Run claude once and accept the trust prompt")
+    sys.exit(1)
+print(f"backgrounded · abcd1234 · {args[2] if len(args) > 2 else ''}")
 """
 
 
 @pytest.fixture
 def fake_claude(tmp_path: Path, monkeypatch) -> tuple[Path, Path, Path]:
-    script = tmp_path / "fake-claude"
-    script.write_text(FAKE_CLAUDE)
-    script.chmod(0o755)
+    source = tmp_path / "fake-claude.py"
+    if os.name == "nt":
+        source.write_text(FAKE_CLAUDE, encoding="utf-8")
+        script = tmp_path / "fake-claude.cmd"
+        script.write_text(f'@"{sys.executable}" "%~dp0fake-claude.py" %*\n', encoding="utf-8")
+    else:
+        script = tmp_path / "fake-claude"
+        script.write_text(f"#!{sys.executable}\n{FAKE_CLAUDE}", encoding="utf-8")
+        script.chmod(0o755)
     log = tmp_path / "claude.log"
     sessions = tmp_path / "sessions.json"
     monkeypatch.setenv("FAKE_CLAUDE_LOG", str(log))
