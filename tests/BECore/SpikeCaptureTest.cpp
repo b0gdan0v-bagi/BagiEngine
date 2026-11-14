@@ -64,18 +64,14 @@ namespace BECore::Tests {
             return snapshot;
         }
 
-        String Text(const String& text) {
-            return String(text.data(), text.size());
-        }
-
         String Member(const Json& event, const char* key) {
             const auto value = GetJsonString(event, key);
-            return value ? Text(*value) : String();
+            return value ? *value : String();
         }
 
         Json ParseTrace(const String& trace) {
             auto parsed = ParseJson(trace);
-            EXPECT_TRUE(parsed.has_value()) << Text(trace);
+            EXPECT_TRUE(parsed.has_value()) << trace;
             return parsed ? *parsed : Json::object();
         }
 
@@ -360,7 +356,7 @@ namespace BECore::Tests {
         std::ifstream in(path, std::ios::binary);
         std::stringstream content;
         content << in.rdbuf();
-        EXPECT_EQ(FromStdString(content.str()), Text(WriteFrozenTraceJson(capture.GetSpikes())));
+        EXPECT_EQ(FromStdString(content.str()), WriteFrozenTraceJson(capture.GetSpikes()));
         in.close();
         std::filesystem::remove(path);
 

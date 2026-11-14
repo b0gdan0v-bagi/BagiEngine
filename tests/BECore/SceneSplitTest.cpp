@@ -158,10 +158,6 @@ namespace BECore::Tests {
             return FromStdString(out.str());
         }
 
-        String Text(const String& text) {
-            return String(text.c_str(), text.size());
-        }
-
         const Json* Member(const Json& object, StringView key) {
             return FindJsonMember(object, key);
         }
@@ -273,7 +269,7 @@ namespace BECore::Tests {
             request["id"] = 1;
             request["method"] = "ui_tree";
             String answer;
-            _service.Post(DumpJson(request), [&answer](String text) { answer = Text(text); });
+            _service.Post(DumpJson(request), [&answer](String text) { answer = text; });
             _service.Drain();
             EngineEnvironment::UseSceneManager({});
             return answer;
@@ -286,7 +282,7 @@ namespace BECore::Tests {
             options.minTouchSize = CoreManager::GetUIEnvironment().GetSettings().minTouchSize;
             for (const auto& node : Main(manager).GetRootNode().GetChildren()) {
                 if (const auto canvas = node->GetComponent<UICanvasComponent>()) {
-                    all += String(node->GetName().CStr()) + ":" + Text(DescribeMatrixFailures(ValidateOnMatrix(canvas->GetLayout(), options), 100)) + "\n";
+                    all += String(node->GetName().CStr()) + ":" + DescribeMatrixFailures(ValidateOnMatrix(canvas->GetLayout(), options), 100) + "\n";
                 }
             }
             return all;

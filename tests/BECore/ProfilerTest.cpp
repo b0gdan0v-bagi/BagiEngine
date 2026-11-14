@@ -24,19 +24,15 @@ namespace BECore::Tests {
         constexpr ProfileSite kOuterSite{"Outer", "Test", "ProfilerTest.cpp", 1, 0};
         constexpr ProfileSite kInnerSite{"Inner \"quoted\"\\", "Test", "C:\\dir\\ProfilerTest.cpp", 2, 0};
 
-        String Text(const String& text) {
-            return String(text.data(), text.size());
-        }
-
         String Member(const Json& event, const char* key) {
             const auto value = GetJsonString(event, key);
-            return value ? Text(*value) : String();
+            return value ? *value : String();
         }
 
         /// The events of a trace, parsed back (fails the test when the JSON is not valid)
         Json ParseEvents(const String& trace) {
             auto parsed = ParseJson(trace);
-            EXPECT_TRUE(parsed.has_value()) << Text(trace);
+            EXPECT_TRUE(parsed.has_value()) << trace;
             if (!parsed) {
                 return Json::array();
             }
@@ -120,7 +116,7 @@ namespace BECore::Tests {
         for (const Args& args : {Args{"--trace"}, Args{"--trace="}, Args{"--profiler"}, Args{"--profiler="}, Args{"--profiler=perfetto"}, Args{"--trace=t.json", "--profiler=none"},
                                  Args{"--trace=t.json", "--profiler=tracy"}}) {
             const auto settings = ResolveProfilerSettings(args, kFullBuild);
-            EXPECT_FALSE(settings.has_value()) << Text(args.front());
+            EXPECT_FALSE(settings.has_value()) << args.front();
             if (!settings) {
                 EXPECT_FALSE(settings.error().empty());
             }

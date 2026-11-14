@@ -113,10 +113,6 @@ namespace BECore::Tests {
             co_return;
         }
 
-        String Text(const String& text) {
-            return String(text.data(), text.size());
-        }
-
     }  // namespace
 
     /// The tests that go through the real TaskManager need the engine core services
@@ -224,14 +220,14 @@ namespace BECore::Tests {
                 continue;
             }
             if (*phase == "C") {
-                counters.push_back(Text(*name));
+                counters.push_back(*name);
             }
             const Json* args = FindJsonMember(event, "args");
             if (args == nullptr) {
                 continue;
             }
             if (*name == "thread_name") {
-                names.emplace_back(Text(*GetJsonString(*args, "name")), GetJsonInt(event, "tid").value_or(-1));
+                names.emplace_back(*GetJsonString(*args, "name"), GetJsonInt(event, "tid").value_or(-1));
             } else if (*name == "thread_sort_index") {
                 sortIndexes.emplace_back(GetJsonInt(event, "tid").value_or(-1), GetJsonInt(*args, "sort_index").value_or(-1));
             }

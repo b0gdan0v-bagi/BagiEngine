@@ -560,13 +560,9 @@ namespace BECore::Tests {
             Vector<PoolString> _values;
         };
 
-        String Text(const String& text) {
-            return String(text.c_str(), text.size());
-        }
-
         String StringMember(const Json& object, StringView key) {
             const auto value = GetJsonString(object, key);
-            return value ? Text(*value) : String("<missing>");
+            return value ? *value : String("<missing>");
         }
 
         double NumberMember(const Json& object, StringView key) {
@@ -844,7 +840,7 @@ namespace BECore::Tests {
         // Every element of the other scenes has the default style too
         Show("Main");
         const Json main = Call("ui_tree");
-        EXPECT_EQ(Text(DumpJson(main)).find("\"box\""), String::npos);
+        EXPECT_EQ(DumpJson(main).find("\"box\""), String::npos);
     }
 
     TEST_F(UIControlApiTest, AnElementWithEveryBoxFieldReportsThemAll) {
