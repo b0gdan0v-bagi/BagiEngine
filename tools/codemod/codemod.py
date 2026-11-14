@@ -45,7 +45,8 @@ SKIPPED_FILES = (
 )
 EASTL_OPTIONAL_HEADER = re.compile(r"^[ \t]*#[ \t]*include[ \t]*<EASTL/optional\.h>[ \t]*\r?\n", re.MULTILINE)
 EASTL_OPTIONAL_LEFT = re.compile(r"(?<![\w:])(?:::)?eastl::(?:optional|nullopt|nullopt_t|make_optional|in_place|in_place_t|in_place_type|in_place_index|bad_optional_access)\b")
-STD_MARKER = re.compile(r"//\s*std:")
+# `// std: reason`, not an ordinary comment that starts with a `std::` name
+STD_MARKER = re.compile(r"//\s*std:(?!:)")
 MAX_PASSES = 8
 
 # ---- blanking comments and literals ------------------------------------------------------------------------------------------
@@ -540,8 +541,18 @@ def transform(source: str, families: Set[str]) -> Tuple[str, List[str], List[Not
 # ---- the walk -----------------------------------------------------------------------------------------------------------------
 
 
+def repository_of(root: Path) -> Path:
+    """The nearest folder at or above `root` with a `.git` (a folder, or a file in a submodule); `root` itself when there is none."""
+    resolved = root.resolve()
+    for folder in (resolved, *resolved.parents):
+        if (folder / ".git").exists():
+            return folder
+    return resolved
+
+
 def is_skipped_file(relative: str) -> bool:
-    """`relative` is the path of the file from the filesystem root or from `--root`: `--root tests` must skip the twin tests too."""
+    """`relative` is the path of the file from its repository: `--root tests` must skip the twin tests too, and a folder above the
+    checkout must not skip anything."""
     padded = "/" + relative.lstrip("/")
     if any(padded.endswith("/" + name) for name in SKIPPED_FILES):
         return True
@@ -549,11 +560,12 @@ def is_skipped_file(relative: str) -> bool:
 
 
 def walk(root: Path) -> Iterator[Path]:
+    repository = repository_of(root)
     for folder, dirs, files in os.walk(root):
         dirs[:] = sorted(d for d in dirs if d not in SKIPPED_FOLDERS and not d.startswith(SKIPPED_FOLDER_PREFIXES))
         for name in sorted(files):
             path = Path(folder) / name
-            if path.suffix in SOURCE_SUFFIXES and not is_skipped_file(path.resolve().as_posix()):
+            if path.suffix in SOURCE_SUFFIXES and not is_skipped_file(path.resolve().relative_to(repository).as_posix()):
                 yield path
 
 

@@ -113,6 +113,11 @@ def test_the_std_marker_keeps_its_line_and_the_next() -> None:
     assert convert(source) == in_namespace("std::string a;  // std: file path\n// std: the api takes it\nstd::string b;\nString c;\neastl::string d;  // std: kept\n")
 
 
+def test_a_comment_that_starts_with_a_std_name_is_no_marker() -> None:
+    source = in_namespace("// std::function needs a copyable callable and std::random_device is not\nstd::string a;\nstd::string b;  // std: api\n")
+    assert convert(source) == in_namespace("// std::function needs a copyable callable and std::random_device is not\nString a;\nstd::string b;  // std: api\n")
+
+
 def test_a_trailing_marker_after_code_covers_its_own_line_only() -> None:
     source = in_namespace("std::string a;  // std: file path\nstd::string b;\n  // std: the next line\nstd::string c;\nstd::string d;\n")
     assert convert(source) == in_namespace("std::string a;  // std: file path\nString b;\n  // std: the next line\nstd::string c;\nString d;\n")
@@ -313,9 +318,16 @@ def test_a_tests_folder_is_walked_like_any_other(tmp_path: Path) -> None:
 
 
 def test_the_twin_tests_are_skipped_from_any_root(tmp_path: Path) -> None:
-    make_tree(tmp_path, {"tests/BECore/TypesTest.cpp": "std::string a;\n", "tests/BECore/ReflectionAliasesTest.cpp": "std::pair<int, int> a;\n"})
+    make_tree(tmp_path, {".git": "gitdir: elsewhere\n", "tests/BECore/TypesTest.cpp": "std::string a;\n", "tests/BECore/ReflectionAliasesTest.cpp": "std::pair<int, int> a;\n"})
     for root in (tmp_path, tmp_path / "tests", tmp_path / "tests" / "BECore"):
         assert codemod.run(root, ["strings", "utility"], write=False).changed_files == []
+
+
+def test_a_folder_above_the_repository_skips_nothing(tmp_path: Path) -> None:
+    checkout = tmp_path / "BECore" / "Types" / "checkout"
+    make_tree(checkout, {".git": "gitdir: elsewhere\n", "src/a.h": "eastl::string a;\n", "src/pch.h": "eastl::string a;\n"})
+    assert codemod.run(checkout, ["strings"], write=False).changed_files == ["src/a.h"]
+    assert codemod.run(checkout / "src", ["strings"], write=False).changed_files == ["a.h"]
 
 
 def test_main_dry_run_writes_nothing(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
