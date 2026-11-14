@@ -19,7 +19,7 @@ ResourceManager (CoreManager::GetResourceManager())
 IResource (RefCounted, BE_CLASS(IResource, FACTORY_BASE))
     ├── XmlResource
     ├── Font
-    └── SerializedResource<T>   (reflected types)
+    └── SerializedResource<T>   (reflected types; no loader fills it, `LoadSerialized` returns by value)
 ```
 
 - `ResourceState` (`CORE_ENUM`): `Unloaded` → `Loading` → `Loaded` or `Failed`.
