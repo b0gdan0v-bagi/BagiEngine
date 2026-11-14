@@ -9,7 +9,7 @@ namespace BECore {
      *
      * The generator reads the attributes from the source text and writes one constexpr `FieldAttributes` per field into
      * `ReflectionTraits<T>::fields` (`FieldInfo::attributes`). A field with no `BE_FIELD_ATTRS` has `FieldAttributes{}`.
-     * The inspector (`ImGuiPropertyVisitor`) uses them; `range` and `required` are metadata until a load checks them.
+     * The inspector (`ImGuiPropertyVisitor`) uses them; a load that has diagnostics on (`IDeserializer::SetDiagnostics`) checks `range` and `required` (`Ser::Load`).
      *
      * @note Plain data: no allocation, no dependency on a UI library. `tooltip` points at a string literal.
      */
@@ -26,7 +26,7 @@ namespace BECore {
         bool readOnly = false;
         /// `hidden`: the property visitor skips the field unless it asks for hidden ones (`IPropertyVisitor::ShowsHidden`)
         bool hidden = false;
-        /// `required`: a file that loads the field is expected to name it
+        /// `required`: a load reports a scope that does not name the field
         bool required = false;
 
         constexpr bool operator==(const FieldAttributes&) const = default;

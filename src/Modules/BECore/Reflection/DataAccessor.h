@@ -3,6 +3,7 @@
 #include <BECore/Format/Format.h>
 #include <BECore/Reflection/AbstractFactory.h>
 #include <BECore/Reflection/FactoryTraits.h>
+#include <BECore/Reflection/FieldAttributes.h>
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Reflection/ISerializer.h>
 #include <BECore/Reflection/SerializationTraits.h>
@@ -888,6 +889,49 @@ namespace BECore {
         bool Load(IDeserializer& d, T& value, eastl::string_view key) {
             static_assert(HasDataAccessor<T>, "The type has no Ser::DataAccessor: it is not a reflected type (see Reflection/DataAccessor.h)");
             return DataAccessor<T>::Load(d, value, key);
+        }
+
+        namespace Detail {
+
+            /// A number as the largest type of its kind, so that a finding reads it as the number it is (an int8_t is not a character)
+            template <typename T>
+            auto AsReportedNumber(T value) {
+                if constexpr (std::is_floating_point_v<T>) {
+                    return static_cast<double>(value);
+                } else if constexpr (std::is_signed_v<T>) {
+                    return static_cast<int64_t>(value);
+                } else {
+                    return static_cast<uint64_t>(value);
+                }
+            }
+
+        }  // namespace Detail
+
+        /**
+         * @brief Load a field that has attributes: the plain Load, then the checks of `required` and `range`
+         *
+         * The checks run only when d.GetDiagnostics() is not Off, and only report (IDeserializer::ReportFinding): the field keeps
+         * what was read, and the result is that of the plain Load. `required` reports a key the scope does not have (IDeserializer::HasKey);
+         * `range` reports a number that was read and lies outside [rangeMin, rangeMax], a NaN included. bool is not a number here.
+         */
+        template <typename T>
+        bool Load(IDeserializer& d, T& value, eastl::string_view key, const FieldAttributes& attributes) {
+            const bool loaded = Load(d, value, key);
+            if (d.GetDiagnostics() == DiagnosticsMode::Off) {
+                return loaded;
+            }
+            if (attributes.required && !d.HasKey(key)) {
+                d.ReportFinding(key, "Required field is missing");
+            }
+            if constexpr (std::is_arithmetic_v<T> && !std::is_same_v<T, bool>) {
+                if (loaded && attributes.hasRange) {
+                    const double number = static_cast<double>(value);
+                    if (!(number >= attributes.rangeMin && number <= attributes.rangeMax)) {
+                        d.ReportFinding(key, Format("Value {} is outside the range [{}, {}]", Detail::AsReportedNumber(value), attributes.rangeMin, attributes.rangeMax));
+                    }
+                }
+            }
+            return loaded;
         }
 
     }  // namespace Ser
