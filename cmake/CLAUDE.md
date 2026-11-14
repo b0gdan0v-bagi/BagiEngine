@@ -47,12 +47,17 @@ Per-machine settings go in `CMakeUserPresets.json` (git-ignored). Without preset
 | wall time | 35 s | 38.5 and 37.7 s |
 | slowest TUs | `ContentMigrationAfterTest` 3.4 s, `ControlServiceTest` 3.1 | the same, 3.3 to 3.6 and 3.1 to 3.2 |
 
-Slices 2 and 3 (standalone headers: a header names what it uses) saved no compile time: B0 is 7 to 9 % above the origin, more than N, and the cause was not isolated (the origin was taken on another day). What costs, at B0 (s, TUs): `CoreManager.h` 33 (156), `gtest/gtest.h` 31 (237), `EngineEnvironment.h` 11 (88), `Printers.h` 10 (140), `Control/Json.h` with `nlohmann/json.hpp` 10 (60); `entt::basic_dispatcher<>::trigger<FlushLogsEvent>` 40 and `EventBase<FlushLogsEvent>::Emit` 23 and `entt::locator<meta_ctx>::value_or` 35 (562 TUs each, from the inline `Logger::Fatal`), `nlohmann::basic_json<>::parse<const char*>` 10 (60). The Frontend is 83 % of the compile time and template instantiation is the largest part of it, not header parsing.
+Slices 2 and 3 (standalone headers: a header names what it uses) saved no compile time: B0 is 7 to 9 % above the origin, more than N, and the cause was not isolated (the origin was taken on another day). What costs, at B0 (s, TUs): `CoreManager.h` 33 (156), `gtest/gtest.h` 31 (237), `EngineEnvironment.h` 11 (88), `Printers.h` 10 (140), `Control/Json.h` with `nlohmann/json.hpp` 10 (60); `entt::basic_dispatcher<>::trigger<FlushLogsEvent>` 40 and `EventBase<FlushLogsEvent>::Emit` 23 and `entt::locator<meta_ctx>::value_or` 35 (562 TUs each, from the inline `Logger::Fatal`), `nlohmann::basic_json<>::parse<const char*>` 10 (60). The Frontend is 83 % of the compile time and template instantiation is the largest part of it, not header parsing. **The noise is larger than two builds said**: four builds of two states ran from 507.6 to 533.1 s.
+
+**Where the EnTT and format rows come from:** `Assert/CRTDebugHook.cpp`, which includes nothing but the PCH, spends 0.33 s in `PerformPendingInstantiations` (the whole `entt::locator<meta_ctx>` / `meta_type_node` chain, `fmt::formatter<std::string_view>::format`, `std::__format::__retarget_buffer<wchar_t>`). Clang writes the instantiations still pending at the end of the PCH into it and **does them again in every TU that loads it**; no header of the engine is the cause, so moving `Logger::Fatal` out of line moved only the dispatcher rows (`trigger<FlushLogsEvent>` 40 s, `EventBase<FlushLogsEvent>::Emit` 23 s, which then fell to zero) and the chain stayed. Clang's `-fpch-instantiate-templates` makes the PCH do them once (the probe row: `InstantiateFunction` 245 s to 96 s, `ReadAST` 8.2 to 8.6 s).
 
 Steps of slice 4 (CPU total of the build after the step; "kept" rows are commits `WP k/9`):
 
 | step | CPU s | tests CPU s | wall s | kept or dropped |
 |---|---|---|---|---|
+| `Logger::Fatal` out of line (A1, twice) | 507.6, 532.3 (B0 mean 526.8) | 292.8, 310.9 (B0 298.9) | 37.0, 38.5 | dropped: mean 520.0 is 6.8 s (1.3 %) below B0, the rule needs 25.2 |
+| next hub by the numbers (WP 3) | | | | not done: every row of 100+ TUs and 5.3+ s is replayed from the PCH, not from a header (below) |
+| probe, not committed: `-fpch-instantiate-templates` on the B0 tree | 409.0 | 247.4 | 30.6 | 118 s (22 %) below B0; 4396 engine tests pass; needs its own step |
 
 ## Sanitizers and fuzzing
 
