@@ -32,7 +32,7 @@ namespace BECore {
         using format_string = fmt::format_string<Args...>;
 
         /**
-         * @brief Форматирует строку и возвращает String. Короткий результат не выделяет память, кроме самой строки.
+         * @brief Formats a string and returns a String. A short result allocates nothing but the string itself.
          */
         template <typename... Args>
         [[nodiscard]] inline String Format(format_string<Args...> fmt, Args&&... args) {
@@ -42,7 +42,7 @@ namespace BECore {
         }
 
         /**
-         * @brief Дописывает отформатированный текст в конец существующей строки (одно место для формата в строку).
+         * @brief Appends the formatted text to the end of an existing string (one place for formatting into a string).
          */
         template <typename... Args>
         inline void AppendFormat(String& out, format_string<Args...> fmt, Args&&... args) {

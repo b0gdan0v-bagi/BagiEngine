@@ -1,6 +1,5 @@
 #pragma once
 
-
 // The string types of the engine. Code names these, not eastl:: / std: (Types/CLAUDE.md): the implementation is chosen here, once.
 namespace BECore {
 

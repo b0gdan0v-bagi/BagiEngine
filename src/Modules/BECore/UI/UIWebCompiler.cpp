@@ -1301,8 +1301,8 @@ namespace BECore {
                 }
                 const bool hasVar = UIWebText::ToLower(declaration.value).find("var(") != String::npos;
                 const String message = result == ApplyResult::UnknownProperty ? Format("property '{}' is not supported", UIText::Excerpt(declaration.property).c_str())
-                                       : hasVar                               ? Format("'{}: {}': var() is read only as var(--name) of a theme token, with no fallback value, where a color is read",
-                                                                                       UIText::Excerpt(declaration.property).c_str(), UIText::Excerpt(declaration.value).c_str())
+                                       : hasVar ? Format("'{}: {}': var() is read only as var(--name) of a theme token, with no fallback value, where a color is read",
+                                                         UIText::Excerpt(declaration.property).c_str(), UIText::Excerpt(declaration.value).c_str())
                                                 : Format("'{}: {}' is not understood or not supported", UIText::Excerpt(declaration.property).c_str(), UIText::Excerpt(declaration.value).c_str());
                 if (_report.AddOnce(SourceOf(declaration), declaration.line, message)) {
                     ++_report.declarationsUnsupported;
