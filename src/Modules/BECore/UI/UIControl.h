@@ -6,9 +6,9 @@ namespace BECore {
 
     /// Error codes of `ui_tree` and `ui_click` (the protocol part that is not shared with other methods; the common ones are in ControlErrors)
     namespace UIControlErrors {
-        inline constexpr eastl::string_view kNoScene = "no_scene";
-        inline constexpr eastl::string_view kNotFound = "not_found";
-        inline constexpr eastl::string_view kNotClickable = "not_clickable";
+        inline constexpr StringView kNoScene = "no_scene";
+        inline constexpr StringView kNotFound = "not_found";
+        inline constexpr StringView kNotClickable = "not_clickable";
     }  // namespace UIControlErrors
 
     /**

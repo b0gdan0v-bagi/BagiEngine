@@ -42,8 +42,8 @@ namespace BECore::Stress::Tests {
         }
 
         /// The keys of a one-level JSON line in the order they are written
-        eastl::vector<eastl::string> KeysInOrder(const eastl::string& line) {
-            eastl::vector<eastl::string> keys;
+        Vector<String> KeysInOrder(const String& line) {
+            Vector<String> keys;
             const std::string text(line.c_str(), line.size());
             const std::regex key("\"([A-Za-z0-9]+)\":");
             for (auto it = std::sregex_iterator(text.begin(), text.end(), key); it != std::sregex_iterator(); ++it) {
@@ -186,9 +186,9 @@ namespace BECore::Stress::Tests {
     }
 
     TEST(StressRecorderTest, TheLineIsOneJsonObjectWithEveryKeyInSortedOrder) {
-        const eastl::string line = FormatJsonLine(RecorderOf(100).Summarize(), Context());
+        const String line = FormatJsonLine(RecorderOf(100).Summarize(), Context());
 
-        EXPECT_EQ(line.find('\n'), eastl::string::npos);
+        EXPECT_EQ(line.find('\n'), String::npos);
         EXPECT_EQ(line.front(), '{');
         EXPECT_EQ(line.back(), '}');
         const auto parsed = ParseJson(line);
@@ -199,7 +199,7 @@ namespace BECore::Stress::Tests {
             EXPECT_NE(FindJsonMember(*parsed, key), nullptr) << key;
         }
 
-        const eastl::vector<eastl::string> written = KeysInOrder(line);
+        const Vector<String> written = KeysInOrder(line);
         ASSERT_EQ(written.size(), std::size(kKeys));
         for (size_t i = 0; i < written.size(); ++i) {
             EXPECT_EQ(written[i], kKeys[i]) << "the keys are written sorted";
@@ -214,9 +214,9 @@ namespace BECore::Stress::Tests {
         EXPECT_EQ(GetJsonInt(*parsed, "frames").value_or(0), 100);
         EXPECT_EQ(GetJsonInt(*parsed, "warmup").value_or(0), 30);
         EXPECT_EQ(GetJsonInt(*parsed, "atlases").value_or(0), 8);
-        EXPECT_EQ(GetJsonBool(*parsed, "interleave"), std::optional(true));
-        EXPECT_EQ(GetJsonBool(*parsed, "manualClock"), std::optional(true));
-        EXPECT_EQ(GetJsonBool(*parsed, "allocTracking"), std::optional(false));
+        EXPECT_EQ(GetJsonBool(*parsed, "interleave"), Optional(true));
+        EXPECT_EQ(GetJsonBool(*parsed, "manualClock"), Optional(true));
+        EXPECT_EQ(GetJsonBool(*parsed, "allocTracking"), Optional(false));
         EXPECT_DOUBLE_EQ(GetJsonNumber(*parsed, "workMsP50").value_or(0.0), 50.0);
         EXPECT_DOUBLE_EQ(GetJsonNumber(*parsed, "workMsP99").value_or(0.0), 99.0);
         EXPECT_DOUBLE_EQ(GetJsonNumber(*parsed, "workMs").value_or(0.0), 50.5);

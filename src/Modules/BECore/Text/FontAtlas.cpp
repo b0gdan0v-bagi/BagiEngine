@@ -48,8 +48,8 @@ namespace BECore {
         return _pages[static_cast<size_t>(page)].Get();
     }
 
-    bool FontAtlas::PrepareCodePoints(IRenderer& renderer, eastl::span<const GlyphRange> ranges) {
-        eastl::vector<uint32_t> glyphs;
+    bool FontAtlas::PrepareCodePoints(IRenderer& renderer, Span<const GlyphRange> ranges) {
+        Vector<uint32_t> glyphs;
         for (const GlyphRange& range : ranges) {
             for (char32_t codePoint = range.first; codePoint <= range.last; ++codePoint) {
                 if (const uint32_t glyph = _font->FindGlyph(codePoint); glyph != 0) {
@@ -60,9 +60,9 @@ namespace BECore {
         return Prepare(renderer, glyphs);
     }
 
-    bool FontAtlas::Prepare(IRenderer& renderer, eastl::span<const uint32_t> glyphs) {
+    bool FontAtlas::Prepare(IRenderer& renderer, Span<const uint32_t> glyphs) {
         BE_PROFILE_SCOPE("FontAtlas::Prepare");
-        eastl::vector<uint32_t> missing;
+        Vector<uint32_t> missing;
         for (const uint32_t glyph : glyphs) {
             if (_glyphs.find(glyph) == _glyphs.end()) {
                 missing.push_back(glyph);
@@ -75,7 +75,7 @@ namespace BECore {
         missing.erase(eastl::unique(missing.begin(), missing.end()), missing.end());
 
         bool ok = true;
-        eastl::vector<Pending> pending;
+        Vector<Pending> pending;
         for (const uint32_t glyph : missing) {
             GlyphBitmap bitmap = _font->RasterizeGlyph(glyph, static_cast<float>(_pixelSize));
             if (_outlinePixels > 0) {
@@ -98,7 +98,7 @@ namespace BECore {
         return ok;
     }
 
-    void FontAtlas::BuildPages(IRenderer& renderer, eastl::vector<Pending>& pending, bool& ok) {
+    void FontAtlas::BuildPages(IRenderer& renderer, Vector<Pending>& pending, bool& ok) {
         BE_PROFILE_SCOPE("FontAtlas::BuildPages");
         while (!pending.empty()) {
             // Aim at a page just big enough; grow it while the glyphs do not fit and it is smaller than a full page
@@ -109,8 +109,8 @@ namespace BECore {
             const auto wanted = static_cast<uint32_t>(std::ceil(std::sqrt(static_cast<double>(area) * kPackingSlack)));
             uint32_t side = std::min(NextPowerOfTwo(wanted), _pageSize);
 
-            eastl::vector<Placed> placed;
-            eastl::vector<size_t> left;
+            Vector<Placed> placed;
+            Vector<size_t> left;
             while (true) {
                 placed.clear();
                 left.clear();
@@ -130,7 +130,7 @@ namespace BECore {
 
             const uint32_t width = side;
             const uint32_t height = side;
-            eastl::vector<uint8_t> pixels(static_cast<size_t>(width) * height * kBytesPerPixel, kWhite);
+            Vector<uint8_t> pixels(static_cast<size_t>(width) * height * kBytesPerPixel, kWhite);
             for (size_t i = 3; i < pixels.size(); i += kBytesPerPixel) {
                 pixels[i] = 0;  // white, fully transparent: a border that never tints its neighbour
             }
@@ -165,7 +165,7 @@ namespace BECore {
                 _glyphs[item.glyph] = glyph;
             }
 
-            eastl::vector<Pending> remainder;
+            Vector<Pending> remainder;
             for (const size_t index : left) {
                 remainder.push_back(std::move(pending[index]));
             }

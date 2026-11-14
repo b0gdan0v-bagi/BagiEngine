@@ -86,7 +86,7 @@ namespace BECore::Tests {
         }
 
         bool IsRound(const UILayoutIssue& issue) {
-            const eastl::string_view name = issue.element.ToStringView();
+            const StringView name = issue.element.ToStringView();
             return name.size() == 6 && name.substr(0, 5) == "Round";
         }
 
@@ -115,7 +115,7 @@ namespace BECore::Tests {
         void Load(float side) {
             XmlDeserializer deserializer;
             const std::string xml = BarXml(side);
-            ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+            ASSERT_TRUE(deserializer.LoadFromString(FromStd(xml)));
             _manager = New<SceneManager>();
             _manager->Deserialize(deserializer);
             ASSERT_FALSE(deserializer.HasErrors());
@@ -129,7 +129,7 @@ namespace BECore::Tests {
             _bar->UpdateLayout(1280.0f, 720.0f);  // the reflected fields of the component reach the layout on its first update
         }
 
-        eastl::vector<UIMatrixFailure> OnMatrix() const {
+        Vector<UIMatrixFailure> OnMatrix() const {
             UILayoutValidatorOptions options;
             options.minTouchSize = kTouchSize;
             UILayoutContext context;
@@ -154,7 +154,7 @@ namespace BECore::Tests {
         const auto failures = OnMatrix();
         ASSERT_FALSE(failures.empty()) << "a round button of 40 units is under the touch size of 48 however big its icon is";
 
-        eastl::vector<PoolString> reported;
+        Vector<PoolString> reported;
         for (const UIMatrixFailure& failure : failures) {
             for (const UILayoutIssue& issue : failure.issues) {
                 EXPECT_EQ(issue.kind, UILayoutIssueKind::TouchTargetTooSmall) << failure.label.c_str() << " " << issue.element.CStr();

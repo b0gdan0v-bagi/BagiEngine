@@ -39,7 +39,7 @@ namespace BECore {
             if (complete) {
                 return;
             }
-            eastl::vector<uint32_t> glyphs;
+            Vector<uint32_t> glyphs;
             glyphs.reserve(layout.glyphs.size());
             for (const PositionedGlyph& positioned : layout.glyphs) {
                 glyphs.push_back(positioned.glyph);

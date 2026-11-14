@@ -4,7 +4,7 @@
 
 namespace BECore {
 
-    using GpuValidation = std::expected<void, eastl::string>;
+    using GpuValidation = std::expected<void, String>;
 
     /// The rules every IGpuDevice applies to a description, so the backends and the test double agree: the constant sizes (each at most
     /// kMaxConstantsBytes, a multiple of kConstantsAlignment), a vertex layout that fits its stride with distinct locations, depth state only

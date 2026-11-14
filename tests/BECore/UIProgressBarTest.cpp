@@ -64,7 +64,7 @@ namespace BECore::Tests {
             return std::abs(a.x - b.x) <= tolerance && std::abs(a.y - b.y) <= tolerance && std::abs(a.w - b.w) <= tolerance && std::abs(a.h - b.h) <= tolerance;
         }
 
-        eastl::string ElementToXml(const UIElement& element) {
+        String ElementToXml(const UIElement& element) {
             XmlSerializer serializer;
             EXPECT_TRUE(serializer.BeginObject("element"));
             element.Serialize(serializer);
@@ -171,8 +171,8 @@ namespace BECore::Tests {
         }
 
         /// The rect calls of the last draw that lie inside @p area, in order
-        eastl::vector<DrawCall> RectsIn(const Rect& area) const {
-            eastl::vector<DrawCall> found;
+        Vector<DrawCall> RectsIn(const Rect& area) const {
+            Vector<DrawCall> found;
             for (const DrawCall& call : _renderer->calls) {
                 if (call.kind == DrawKind::Rect && call.rect.x >= area.x - 1e-2f && call.rect.y >= area.y - 1e-2f && call.rect.x + call.rect.w <= area.x + area.w + 1e-2f &&
                     call.rect.y + call.rect.h <= area.y + area.h + 1e-2f) {
@@ -401,10 +401,10 @@ namespace BECore::Tests {
         ASSERT_TRUE(serializer.BeginObject("component"));
         _canvas->Serialize(serializer);
         serializer.EndObject();
-        const eastl::string xml = serializer.SaveToString();
+        const String xml = serializer.SaveToString();
 
         XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+        ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
         auto loaded = New<UICanvasComponent>();
         ASSERT_TRUE(deserializer.BeginObject("component"));
         loaded->Deserialize(deserializer);
@@ -506,17 +506,17 @@ namespace BECore::Tests {
             serializer.EndObject();
             return serializer.SaveToString();
         };
-        EXPECT_EQ(element(Bar("Unit")).find("partShape"), eastl::string::npos);
+        EXPECT_EQ(element(Bar("Unit")).find("partShape"), String::npos);
         Bar("Unit").partShape = UIPartShape::Round;
-        EXPECT_NE(element(Bar("Unit")).find("partShape=\"Round\""), eastl::string::npos);
+        EXPECT_NE(element(Bar("Unit")).find("partShape=\"Round\""), String::npos);
 
         XmlSerializer serializer;
         ASSERT_TRUE(serializer.BeginObject("component"));
         _canvas->Serialize(serializer);
         serializer.EndObject();
-        const eastl::string xml = serializer.SaveToString();
+        const String xml = serializer.SaveToString();
         XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+        ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
         auto loaded = New<UICanvasComponent>();
         ASSERT_TRUE(deserializer.BeginObject("component"));
         loaded->Deserialize(deserializer);

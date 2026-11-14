@@ -11,7 +11,7 @@ namespace BECore::Tests {
     namespace {
 
         /// The shape of the Chess game's config/TextureLibrary.xml: a header comment, two rows of the atlas
-        constexpr eastl::string_view kChessShaped = R"(<?xml version="1.0"?>
+        constexpr StringView kChessShaped = R"(<?xml version="1.0"?>
 <!--
   Sprite atlas, a 3x2 grid. Cell width 116.67, cell height 190.5.
 -->
@@ -30,7 +30,7 @@ namespace BECore::Tests {
 </root>)";
 
         /// Reads @p xml (the text of a whole config file) into @p library; the errors go to @p errors when given
-        void LoadInto(TextureLibrary& library, eastl::string_view xml, eastl::vector<DeserializeError>* errors = nullptr) {
+        void LoadInto(TextureLibrary& library, StringView xml, Vector<DeserializeError>* errors = nullptr) {
             XmlDeserializer deserializer;
             ASSERT_TRUE(deserializer.LoadFromString(xml)) << xml.data();
             library.Load(deserializer);
@@ -51,7 +51,7 @@ namespace BECore::Tests {
 
     TEST(TextureLibraryTest, LoadsTheChessShapedFileInOrder) {
         TextureLibrary library;
-        eastl::vector<DeserializeError> errors;
+        Vector<DeserializeError> errors;
         ASSERT_NO_FATAL_FAILURE(LoadInto(library, kChessShaped, &errors));
         EXPECT_TRUE(errors.empty());
 
@@ -124,10 +124,10 @@ namespace BECore::Tests {
     }
 
     TEST(TextureLibraryTest, NoSpritesGivesAnEmptyLibraryWithoutErrors) {
-        for (const eastl::string_view xml : {eastl::string_view("<root/>"), eastl::string_view("<root><sprites/></root>"), eastl::string_view("<root><other/></root>")}) {
+        for (const StringView xml : {StringView("<root/>"), StringView("<root><sprites/></root>"), StringView("<root><other/></root>")}) {
             TextureLibrary library;
             library.AddOrUpdate(MakeEntry("Old", "old.png", Rect(1, 2, 3, 4)));
-            eastl::vector<DeserializeError> errors;
+            Vector<DeserializeError> errors;
             ASSERT_NO_FATAL_FAILURE(LoadInto(library, xml, &errors));
             EXPECT_TRUE(library.GetAll().empty()) << xml.data();
             EXPECT_TRUE(errors.empty()) << xml.data();

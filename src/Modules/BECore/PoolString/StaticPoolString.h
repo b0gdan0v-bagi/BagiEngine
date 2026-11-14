@@ -9,7 +9,7 @@ namespace BECore {
                 for (size_t i = 0; i < N; ++i)
                     data[i] = str[i];
             }
-            constexpr eastl::string_view View() const noexcept {
+            constexpr StringView View() const noexcept {
                 return {data, N - 1};
             }
         };
@@ -34,7 +34,7 @@ namespace BECore {
 
         constexpr bool operator==(const PoolString& other) const noexcept {
             if consteval {
-                return BECore::String::GetHash(Str.View()) == other.HashValue();
+                return BECore::StringUtils::GetHash(Str.View()) == other.HashValue();
             }
             return ToPoolString() == other;
         }
@@ -63,10 +63,10 @@ namespace BECore {
         }
 
         [[nodiscard]] consteval uint64_t HashValue() const noexcept {
-            return BECore::String::GetHash(Str.View());
+            return BECore::StringUtils::GetHash(Str.View());
         }
 
-        [[nodiscard]] constexpr eastl::string_view View() const noexcept {
+        [[nodiscard]] constexpr StringView View() const noexcept {
             return Str.View();
         }
     };

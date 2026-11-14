@@ -71,7 +71,7 @@ namespace BECore::Tests {
 </components></node>)";
 
         // Read through the file-system loader, which refuses a node file that is not at the current content version
-        eastl::string CurrentNode(const char* name) {
+        String CurrentNode(const char* name) {
             return Format("<node name=\"{}\" contentVersion=\"{}\"/>", name, kContentVersion);
         }
 
@@ -159,17 +159,17 @@ namespace BECore::Tests {
             return out.str();
         }
 
-        std::string Text(const eastl::string& text) {
+        std::string Text(const String& text) {
             return std::string(text.c_str(), text.size());
         }
 
-        const Json* Member(const Json& object, eastl::string_view key) {
+        const Json* Member(const Json& object, StringView key) {
             return FindJsonMember(object, key);
         }
 
         /// GetDrawRank of every child of the scene root, in scene order
-        eastl::vector<int32_t> DrawRanks(BECore::Scene& scene) {
-            eastl::vector<int32_t> ranks;
+        Vector<int32_t> DrawRanks(BECore::Scene& scene) {
+            Vector<int32_t> ranks;
             for (const auto& node : scene.GetRootNode().GetChildren()) {
                 ranks.push_back(scene.GetDrawRank(*node));
             }
@@ -274,7 +274,7 @@ namespace BECore::Tests {
             request["id"] = 1;
             request["method"] = "ui_tree";
             std::string answer;
-            _service.Post(DumpJson(request), [&answer](eastl::string text) { answer = Text(text); });
+            _service.Post(DumpJson(request), [&answer](String text) { answer = Text(text); });
             _service.Drain();
             EngineEnvironment::UseSceneManager({});
             return answer;
@@ -307,7 +307,7 @@ namespace BECore::Tests {
         EXPECT_EQ(NodeNamesOf(Main(split)), (std::vector<std::string>{"Board", "Hud", "Menu"}));
         ExpectSameScene(Main(inlined), Main(split));
         // The draw order is by layer, then scene order: Board (0) first, Menu (5), Hud (10) last; the ranks count the root node too
-        EXPECT_EQ(DrawRanks(Main(split)), (eastl::vector<int32_t>{1, 3, 2}));
+        EXPECT_EQ(DrawRanks(Main(split)), (Vector<int32_t>{1, 3, 2}));
     }
 
     TEST_F(SceneSplitTest, ALoadedNodeKnowsItsNodeFile) {
@@ -455,7 +455,7 @@ namespace BECore::Tests {
         ExpectSameScene(Main(inlined), Main(split));
         EXPECT_EQ(NodeNamesOf(Main(split)), (std::vector<std::string>{"PanelA", "PanelB", "PanelC"}));
         // The layers decide the draw order: PanelC (1), PanelB (2), PanelA (7); the ranks count the root node too
-        EXPECT_EQ(DrawRanks(Main(split)), (eastl::vector<int32_t>{3, 2, 1}));
+        EXPECT_EQ(DrawRanks(Main(split)), (Vector<int32_t>{3, 2, 1}));
 
         const auto& nodes = Main(split).GetRootNode().GetChildren();
         EXPECT_EQ(nodes[0]->GetLayer(), 7);

@@ -106,13 +106,13 @@ namespace BECore {
         void Step(TweenHandle& tween, float dt);
         void ReleaseCallbacks(TweenHandle& tween);
         void ResumeWaiters(TweenHandle& tween);
-        void CancelAllIn(const eastl::vector<IntrusivePtr<TweenHandle>>& list);
+        void CancelAllIn(const Vector<IntrusivePtr<TweenHandle>>& list);
         void EndWalk();
 
-        eastl::vector<IntrusivePtr<TweenHandle>> _tweens;   // in start order; a finished one stays until the walk ends
-        eastl::vector<IntrusivePtr<TweenHandle>> _pending;  // started while a walk is on: merged when it ends
-        TweenHandle* _stepping = nullptr;                   // the tween whose setter runs now: its callback must not be destroyed under it
-        bool _walking = false;                              // Advance or CancelAll runs: the lists must not move
+        Vector<IntrusivePtr<TweenHandle>> _tweens;   // in start order; a finished one stays until the walk ends
+        Vector<IntrusivePtr<TweenHandle>> _pending;  // started while a walk is on: merged when it ends
+        TweenHandle* _stepping = nullptr;            // the tween whose setter runs now: its callback must not be destroyed under it
+        bool _walking = false;                       // Advance or CancelAll runs: the lists must not move
     };
 
 }  // namespace BECore

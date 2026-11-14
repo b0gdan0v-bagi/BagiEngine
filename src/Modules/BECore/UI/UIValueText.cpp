@@ -8,7 +8,7 @@ namespace BECore::UIText {
     namespace {
 
         constexpr char PercentSign = '%';
-        constexpr eastl::string_view PixelsSuffix = "px";
+        constexpr StringView PixelsSuffix = "px";
         constexpr size_t FractionPartCount = 2;
         constexpr float PercentDivisor = 100.0f;
         constexpr size_t RgbaPartCount = 4;
@@ -23,7 +23,7 @@ namespace BECore::UIText {
         constexpr char TokenSign = '@';
 
         /// A colour text of a composite attribute: a literal, or a token when @p token is given. Without @p token a "@name" is refused
-        bool ParseColorPart(eastl::string_view text, Color& color, PoolString* token) {
+        bool ParseColorPart(StringView text, Color& color, PoolString* token) {
             const auto parsed = ParseColorRef(text);
             if (!parsed || (!parsed->token.Empty() && !token)) {
                 return false;
@@ -35,7 +35,7 @@ namespace BECore::UIText {
             return true;
         }
 
-        std::optional<unsigned char> ParseByte(eastl::string_view text) {
+        Optional<unsigned char> ParseByte(StringView text) {
             text = Trim(text);
             unsigned int value = 0;
             const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
@@ -45,7 +45,7 @@ namespace BECore::UIText {
             return static_cast<unsigned char>(value);
         }
 
-        std::optional<unsigned char> ParseHexByte(eastl::string_view text) {
+        Optional<unsigned char> ParseHexByte(StringView text) {
             unsigned int value = 0;
             const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value, HexBase);
             if (error != std::errc{} || end != text.data() + text.size()) {
@@ -56,7 +56,7 @@ namespace BECore::UIText {
 
     }  // namespace
 
-    eastl::string_view Trim(eastl::string_view text) {
+    StringView Trim(StringView text) {
         while (!text.empty() && (text.front() == ' ' || text.front() == '\t')) {
             text.remove_prefix(1);
         }
@@ -66,7 +66,7 @@ namespace BECore::UIText {
         return text;
     }
 
-    std::optional<float> ParseFloat(eastl::string_view text) {
+    Optional<float> ParseFloat(StringView text) {
         text = Trim(text);
         float value = 0.0f;
         const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
@@ -76,7 +76,7 @@ namespace BECore::UIText {
         return value;
     }
 
-    std::optional<float> ParseFiniteFloat(eastl::string_view text) {
+    Optional<float> ParseFiniteFloat(StringView text) {
         const auto value = ParseFloat(text);
         if (!value || !std::isfinite(*value)) {
             return std::nullopt;
@@ -93,7 +93,7 @@ namespace BECore::UIText {
         return static_cast<float>(std::clamp(fraction, 0.0, 1.0));
     }
 
-    float ValueInRange(eastl::string_view text, float minValue, float maxValue) {
+    float ValueInRange(StringView text, float minValue, float maxValue) {
         const auto value = ParseFiniteFloat(text);
         if (!value || !std::isfinite(minValue) || !std::isfinite(maxValue) || maxValue <= minValue) {
             return minValue;
@@ -101,11 +101,11 @@ namespace BECore::UIText {
         return std::clamp(*value, minValue, maxValue);
     }
 
-    eastl::string FormatLength(const UILength& length) {
+    String FormatLength(const UILength& length) {
         return length.unit == UIUnit::Percent ? Format("{}%", length.value) : Format("{}", length.value);
     }
 
-    std::optional<UILength> ParseLength(eastl::string_view text) {
+    Optional<UILength> ParseLength(StringView text) {
         text = Trim(text);
         UIUnit unit = UIUnit::Pixels;
         if (!text.empty() && text.back() == PercentSign) {
@@ -121,18 +121,18 @@ namespace BECore::UIText {
         return UILength{*value, unit};
     }
 
-    eastl::string FormatFraction2(const Vec2& value) {
+    String FormatFraction2(const Vec2& value) {
         return Format("{},{}", value.x, value.y);
     }
 
-    std::optional<Vec2> ParseFraction2(eastl::string_view text) {
-        const auto parts = String::Split(Trim(text), ',');
+    Optional<Vec2> ParseFraction2(StringView text) {
+        const auto parts = StringUtils::Split(Trim(text), ',');
         if (parts.size() != FractionPartCount) {
             return std::nullopt;
         }
         float fractions[FractionPartCount] = {};
         for (size_t i = 0; i < FractionPartCount; ++i) {
-            eastl::string_view part = Trim(parts[i]);
+            StringView part = Trim(parts[i]);
             float divisor = 1.0f;
             if (!part.empty() && part.back() == PercentSign) {
                 part.remove_suffix(1);
@@ -147,15 +147,15 @@ namespace BECore::UIText {
         return Vec2{fractions[0], fractions[1]};
     }
 
-    eastl::string FormatEdges(const UIEdges& edges) {
+    String FormatEdges(const UIEdges& edges) {
         if (edges.left == edges.top && edges.top == edges.right && edges.right == edges.bottom) {
             return Format("{}", edges.left);
         }
         return Format("{},{},{},{}", edges.left, edges.top, edges.right, edges.bottom);
     }
 
-    std::optional<UIEdges> ParseEdges(eastl::string_view text) {
-        const auto parts = String::Split(Trim(text), ',');
+    Optional<UIEdges> ParseEdges(StringView text) {
+        const auto parts = StringUtils::Split(Trim(text), ',');
         if (parts.size() == 1) {
             const auto all = ParseFloat(parts[0]);
             if (!all) {
@@ -176,15 +176,15 @@ namespace BECore::UIText {
         return UIEdges{*left, *top, *right, *bottom};
     }
 
-    eastl::string FormatCorners(const UICorners& corners) {
+    String FormatCorners(const UICorners& corners) {
         if (corners.topLeft == corners.topRight && corners.topRight == corners.bottomRight && corners.bottomRight == corners.bottomLeft) {
             return Format("{}", corners.topLeft);
         }
         return Format("{},{},{},{}", corners.topLeft, corners.topRight, corners.bottomRight, corners.bottomLeft);
     }
 
-    std::optional<UICorners> ParseCorners(eastl::string_view text) {
-        const auto parts = String::Split(Trim(text), ',');
+    Optional<UICorners> ParseCorners(StringView text) {
+        const auto parts = StringUtils::Split(Trim(text), ',');
         if (parts.size() != 1 && parts.size() != CornerCount) {
             return std::nullopt;
         }
@@ -199,7 +199,7 @@ namespace BECore::UIText {
         return parts.size() == 1 ? UICorners::Uniform(radii[0]) : UICorners{radii[0], radii[1], radii[2], radii[3]};
     }
 
-    eastl::string FormatShadow(const UIShadowSpec& shadow, PoolString colorToken) {
+    String FormatShadow(const UIShadowSpec& shadow, PoolString colorToken) {
         if (!colorToken.Empty()) {
             return Format("{},{},{},{},@{}", shadow.offsetX, shadow.offsetY, shadow.blur, shadow.spread, colorToken.ToStringView());
         }
@@ -207,12 +207,12 @@ namespace BECore::UIText {
                       static_cast<int>(shadow.color.b), static_cast<int>(shadow.color.a));
     }
 
-    std::optional<UIShadowSpec> ParseShadow(eastl::string_view text, PoolString* colorToken) {
+    Optional<UIShadowSpec> ParseShadow(StringView text, PoolString* colorToken) {
         text = Trim(text);
         float numbers[ShadowNumberCount] = {};
         for (float& number : numbers) {
             const size_t comma = text.find(',');
-            if (comma == eastl::string_view::npos) {
+            if (comma == StringView::npos) {
                 return std::nullopt;
             }
             const auto parsed = ParseFiniteFloat(text.substr(0, comma));
@@ -229,17 +229,17 @@ namespace BECore::UIText {
         return UIShadowSpec{numbers[0], numbers[1], numbers[ShadowBlurIndex], numbers[3], color};
     }
 
-    eastl::string FormatTextOutline(float width, const Color& color, PoolString token) {
+    String FormatTextOutline(float width, const Color& color, PoolString token) {
         if (!token.Empty()) {
             return Format("{},@{}", width, token.ToStringView());
         }
         return Format("{},#{:02X}{:02X}{:02X}{:02X}", width, static_cast<int>(color.r), static_cast<int>(color.g), static_cast<int>(color.b), static_cast<int>(color.a));
     }
 
-    bool ParseTextOutline(eastl::string_view text, float& width, Color& color, PoolString* token) {
+    bool ParseTextOutline(StringView text, float& width, Color& color, PoolString* token) {
         text = Trim(text);
         const size_t comma = text.find(',');
-        if (comma == eastl::string_view::npos) {
+        if (comma == StringView::npos) {
             return false;
         }
         const auto parsedWidth = ParseFiniteFloat(text.substr(0, comma));
@@ -252,19 +252,19 @@ namespace BECore::UIText {
         return true;
     }
 
-    eastl::string FormatTextShadow(float offsetX, float offsetY, const Color& color, PoolString token) {
+    String FormatTextShadow(float offsetX, float offsetY, const Color& color, PoolString token) {
         if (!token.Empty()) {
             return Format("{},{},@{}", offsetX, offsetY, token.ToStringView());
         }
         return Format("{},{},#{:02X}{:02X}{:02X}{:02X}", offsetX, offsetY, static_cast<int>(color.r), static_cast<int>(color.g), static_cast<int>(color.b), static_cast<int>(color.a));
     }
 
-    bool ParseTextShadow(eastl::string_view text, float& offsetX, float& offsetY, Color& color, PoolString* token) {
+    bool ParseTextShadow(StringView text, float& offsetX, float& offsetY, Color& color, PoolString* token) {
         text = Trim(text);
         float numbers[TextShadowNumberCount] = {};
         for (float& number : numbers) {
             const size_t comma = text.find(',');
-            if (comma == eastl::string_view::npos) {
+            if (comma == StringView::npos) {
                 return false;
             }
             const auto parsed = ParseFiniteFloat(text.substr(0, comma));
@@ -284,11 +284,11 @@ namespace BECore::UIText {
         return true;
     }
 
-    eastl::string FormatColor(const Color& color) {
+    String FormatColor(const Color& color) {
         return Format("{},{},{},{}", static_cast<int>(color.r), static_cast<int>(color.g), static_cast<int>(color.b), static_cast<int>(color.a));
     }
 
-    std::optional<Color> ParseColor(eastl::string_view text) {
+    Optional<Color> ParseColor(StringView text) {
         text = Trim(text);
         if (!text.empty() && text.front() == '#') {
             text.remove_prefix(1);
@@ -298,13 +298,13 @@ namespace BECore::UIText {
             const auto r = ParseHexByte(text.substr(0, 2));
             const auto g = ParseHexByte(text.substr(2, 2));
             const auto b = ParseHexByte(text.substr(4, 2));
-            const auto a = text.size() == HexRgbaLength ? ParseHexByte(text.substr(6, 2)) : std::optional<unsigned char>{OpaqueAlpha};
+            const auto a = text.size() == HexRgbaLength ? ParseHexByte(text.substr(6, 2)) : Optional<unsigned char>{OpaqueAlpha};
             if (!r || !g || !b || !a) {
                 return std::nullopt;
             }
             return Color{*r, *g, *b, *a};
         }
-        const auto parts = String::Split(text, ',');
+        const auto parts = StringUtils::Split(text, ',');
         if (parts.size() != RgbaPartCount) {
             return std::nullopt;
         }
@@ -318,17 +318,17 @@ namespace BECore::UIText {
         return Color{*r, *g, *b, *a};
     }
 
-    eastl::string FormatColorRef(const Color& color, PoolString token) {
+    String FormatColorRef(const Color& color, PoolString token) {
         if (!token.Empty()) {
             return Format("@{}", token.ToStringView());
         }
         return FormatColor(color);
     }
 
-    std::optional<ColorRef> ParseColorRef(eastl::string_view text) {
+    Optional<ColorRef> ParseColorRef(StringView text) {
         text = Trim(text);
         if (!text.empty() && text.front() == TokenSign) {
-            const eastl::string_view name = text.substr(1);
+            const StringView name = text.substr(1);
             if (!UIThemes::IsValidToken(name)) {
                 return std::nullopt;
             }

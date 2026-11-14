@@ -12,13 +12,13 @@ namespace BECore {
             return color.a > 0;
         }
 
-        void SaveColorIfSet(ISerializer& s, const UIColor& color, eastl::string_view key) {
+        void SaveColorIfSet(ISerializer& s, const UIColor& color, StringView key) {
             if (!(color == UIColor{})) {  // a token with transparent channels (not resolved yet, or an invisible theme colour) is set
                 Ser::DataAccessor<UIColor>::Save(s, color, key);
             }
         }
 
-        bool VisitCorners(IPropertyVisitor& v, eastl::string_view key, UICorners& corners) {
+        bool VisitCorners(IPropertyVisitor& v, StringView key, UICorners& corners) {
             bool changed = false;
             if (v.BeginCompound(key)) {
                 changed |= PropVisit::Visit(v, corners.topLeft, "topLeft");
@@ -41,7 +41,7 @@ namespace BECore {
         }
 
         /// An edit of the colour in the inspector leaves the token, as for a UIColor field (PropVisit::Visit of UIColor)
-        bool VisitShadow(IPropertyVisitor& v, eastl::string_view key, UIShadowSpec& shadow, PoolString& token) {
+        bool VisitShadow(IPropertyVisitor& v, StringView key, UIShadowSpec& shadow, PoolString& token) {
             bool changed = false;
             if (v.BeginCompound(key)) {
                 changed |= PropVisit::Visit(v, shadow.offsetX, "offsetX");

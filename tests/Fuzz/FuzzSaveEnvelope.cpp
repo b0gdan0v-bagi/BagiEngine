@@ -8,10 +8,10 @@ namespace BECore::Fuzz {
 
     namespace {
 
-        constexpr eastl::string_view kSlot = "fuzz";
+        constexpr StringView kSlot = "fuzz";
 
         /// The game the loads below belong to; a seed of another game is a refusal
-        constexpr eastl::string_view kGame = "FuzzGame";
+        constexpr StringView kGame = "FuzzGame";
         constexpr SaveSchema kSchema{kGame, 3, 2};
 
         /// The slot folder of the process, made on the first input and removed when the process ends normally
@@ -52,7 +52,7 @@ namespace BECore::Fuzz {
             return kind == SaveErrorKind::Corrupt || kind == SaveErrorKind::WrongGame || kind == SaveErrorKind::VersionTooNew || kind == SaveErrorKind::VersionTooOld;
         }
 
-        void CheckSlot(SaveGameService& service, const eastl::vector<uint8_t>& bytes) {
+        void CheckSlot(SaveGameService& service, const Vector<uint8_t>& bytes) {
             FUZZ_CHECK(service.WriteSlot(kSlot, bytes).has_value());
 
             // The same file as read back: what the service stores is what it was given
@@ -81,7 +81,7 @@ namespace BECore::Fuzz {
                 FUZZ_CHECK(peek.has_value());
                 FUZZ_CHECK(loaded->game == peek->game);
                 FUZZ_CHECK(loaded->version == peek->version);
-                FUZZ_CHECK(eastl::string_view(loaded->game.data(), loaded->game.size()) == kGame);
+                FUZZ_CHECK(StringView(loaded->game) == kGame);
                 FUZZ_CHECK(loaded->version >= kSchema.minVersion && loaded->version <= kSchema.version);
             } else {
                 FUZZ_CHECK(IsFileContentError(loaded.error().kind));
@@ -112,18 +112,18 @@ namespace BECore::Fuzz {
 
     void FuzzSaveEnvelope(const uint8_t* data, size_t size) {
         SaveGameService& service = Workspace().Service();
-        CheckSlot(service, eastl::vector<uint8_t>(data, data + size));
+        CheckSlot(service, Vector<uint8_t>(data, data + size));
 
-        const eastl::vector<uint8_t> repaired = WithTrueBinaryHeader(data, size);
+        const Vector<uint8_t> repaired = WithTrueBinaryHeader(data, size);
         if (!repaired.empty()) {
             CheckSlot(service, repaired);
         }
     }
 
-    eastl::vector<uint8_t> MakeSaveFileBytes(eastl::string_view game, uint32_t version) {
+    Vector<uint8_t> MakeSaveFileBytes(StringView game, uint32_t version) {
         const std::string tag = Format("{:08x}", std::random_device{}()).c_str();
         const std::filesystem::path directory = std::filesystem::temp_directory_path() / ("BagiFuzzSeed_" + tag);
-        eastl::vector<uint8_t> bytes;
+        Vector<uint8_t> bytes;
         {
             FileSystem fileSystem;
             SaveGameService service(fileSystem);

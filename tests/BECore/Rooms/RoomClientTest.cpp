@@ -14,11 +14,11 @@ namespace BECore::Tests {
         using std::chrono::milliseconds;
         using std::chrono::seconds;
 
-        constexpr eastl::string_view kUrl = "ws://127.0.0.1:9000";
-        constexpr eastl::string_view kRoom = "ABCDE";
-        constexpr eastl::string_view kToken = "00112233445566778899aabbccddeeff";
+        constexpr StringView kUrl = "ws://127.0.0.1:9000";
+        constexpr StringView kRoom = "ABCDE";
+        constexpr StringView kToken = "00112233445566778899aabbccddeeff";
 
-        eastl::string Lobby(int hostSeat = 0, RoomPhase phase = RoomPhase::Lobby) {
+        String Lobby(int hostSeat = 0, RoomPhase phase = RoomPhase::Lobby) {
             LobbySnapshot lobby;
             lobby.room = kRoom;
             lobby.game = "cards";
@@ -35,7 +35,7 @@ namespace BECore::Tests {
             return Json::object({{"type", "play"}, {"card", 4}});
         }
 
-        eastl::string View(uint64_t version, int seat = 0, bool finished = false) {
+        String View(uint64_t version, int seat = 0, bool finished = false) {
             Json view = Json::object({{"hand", Json::array({1, 2, 3})}});
             return MakeViewMessage(kRoom, seat, version, finished, view, Json::array({OneAction()}));
         }
@@ -66,19 +66,19 @@ namespace BECore::Tests {
             }
 
             /// The connection breaks while in the room
-            void Lose(FakeLink& link, uint16_t code = kRoomTransportAbnormalClosure, eastl::string_view reason = "connection lost") {
+            void Lose(FakeLink& link, uint16_t code = kRoomTransportAbnormalClosure, StringView reason = "connection lost") {
                 link.PushClosed(code, reason);
                 Pump();
             }
 
             /// The kinds of the events since the last Forget(), then forgets them
-            [[nodiscard]] eastl::vector<RoomClientEventKind> TakeKinds() {
+            [[nodiscard]] Vector<RoomClientEventKind> TakeKinds() {
                 auto kinds = Kinds();
                 _events.clear();
                 return kinds;
             }
 
-            void Receive(FakeLink& link, eastl::string_view text) {
+            void Receive(FakeLink& link, StringView text) {
                 link.PushText(text);
                 Pump();
             }
@@ -96,8 +96,8 @@ namespace BECore::Tests {
             }
 
             /// The kinds of the events so far, in order
-            [[nodiscard]] eastl::vector<RoomClientEventKind> Kinds() const {
-                eastl::vector<RoomClientEventKind> kinds;
+            [[nodiscard]] Vector<RoomClientEventKind> Kinds() const {
+                Vector<RoomClientEventKind> kinds;
                 for (const RoomClientEvent& event : _events) {
                     kinds.push_back(event.kind);
                 }
@@ -116,7 +116,7 @@ namespace BECore::Tests {
             ManualClock _clock;
             FakeTransports _transports;
             std::unique_ptr<RoomClient> _client;
-            eastl::vector<RoomClientEvent> _events;
+            Vector<RoomClientEvent> _events;
         };
 
         using Kind = RoomClientEventKind;
@@ -196,7 +196,7 @@ namespace BECore::Tests {
         EXPECT_EQ(_client->GetView(), Json::object({{"hand", Json::array({1, 2, 3})}}));
         EXPECT_EQ(_client->GetActions(), Json::array({OneAction()}));
 
-        const eastl::vector<RoomClientEventKind> expected = {Kind::Connected, Kind::Joined, Kind::LobbyChanged, Kind::ViewChanged};
+        const Vector<RoomClientEventKind> expected = {Kind::Connected, Kind::Joined, Kind::LobbyChanged, Kind::ViewChanged};
         EXPECT_EQ(Kinds(), expected);
     }
 
@@ -344,7 +344,7 @@ namespace BECore::Tests {
         link.PushText(View(9));
         Pump();
 
-        const eastl::vector<RoomClientEventKind> expected = {Kind::Error, Kind::ViewChanged};
+        const Vector<RoomClientEventKind> expected = {Kind::Error, Kind::ViewChanged};
         EXPECT_EQ(Kinds(), expected);
         EXPECT_EQ(_events[0].code, RoomErrors::kStaleAction);
         EXPECT_EQ(_events[0].ref, RoomMessageTypes::kAction);
@@ -437,7 +437,7 @@ namespace BECore::Tests {
         Pump();
         EXPECT_EQ(_client->GetState(), RoomClientState::Connected);
         EXPECT_FALSE(_client->HasView());
-        const eastl::vector<RoomClientEventKind> expected = {Kind::Connected};
+        const Vector<RoomClientEventKind> expected = {Kind::Connected};
         EXPECT_EQ(Kinds(), expected);
     }
 
@@ -510,7 +510,7 @@ namespace BECore::Tests {
         link.PushText(MakeLeftMessage("room_finished"));
         link.PushClosed(1000, "bye");
         Pump();
-        const eastl::vector<RoomClientEventKind> expected = {Kind::ViewChanged, Kind::Left, Kind::Closed};
+        const Vector<RoomClientEventKind> expected = {Kind::ViewChanged, Kind::Left, Kind::Closed};
         EXPECT_EQ(Kinds(), expected);
     }
 
@@ -611,7 +611,7 @@ namespace BECore::Tests {
         link.PushText(View(2));
         link.PushText(Lobby(0));
         Pump();
-        const eastl::vector<RoomClientEventKind> expected = {Kind::LobbyChanged, Kind::ViewChanged, Kind::LobbyChanged};
+        const Vector<RoomClientEventKind> expected = {Kind::LobbyChanged, Kind::ViewChanged, Kind::LobbyChanged};
         EXPECT_EQ(Kinds(), expected);
         EXPECT_EQ(_client->GetViewVersion(), 2u);
         EXPECT_EQ(_client->GetLobby().hostSeat, 0);
@@ -651,7 +651,7 @@ namespace BECore::Tests {
         link.PushText(View(1));
         Pump();
         EXPECT_EQ(_events.size(), taken + 1);
-        eastl::vector<RoomClientEvent> again;
+        Vector<RoomClientEvent> again;
         _client->DrainEvents(again);
         EXPECT_TRUE(again.empty());
     }
@@ -690,7 +690,7 @@ namespace BECore::Tests {
         const size_t sent = link.sent.size();
         for (int i = 0; i < 40; ++i) {
             Advance(seconds(5));
-            Receive(link, i % 2 == 0 ? eastl::string(MakePongMessage()) : View(static_cast<uint64_t>(i) + 1));
+            Receive(link, i % 2 == 0 ? String(MakePongMessage()) : View(static_cast<uint64_t>(i) + 1));
         }
         EXPECT_EQ(link.sent.size(), sent);
         EXPECT_EQ(_client->GetState(), RoomClientState::InRoom);
@@ -799,7 +799,7 @@ namespace BECore::Tests {
         EXPECT_EQ(_client->GetViewVersion(), 9u);
         EXPECT_EQ(_client->GetLobby().phase, RoomPhase::Playing);
         EXPECT_EQ(_client->GetSession().token, kToken);
-        const eastl::vector<RoomClientEventKind> expected = {Kind::Resumed, Kind::LobbyChanged, Kind::ViewChanged};
+        const Vector<RoomClientEventKind> expected = {Kind::Resumed, Kind::LobbyChanged, Kind::ViewChanged};
         EXPECT_EQ(Kinds(), expected);
         EXPECT_TRUE(first.destroyed);
 
@@ -887,7 +887,7 @@ namespace BECore::Tests {
     // ---- Where it stops -----------------------------------------------------------------------------------------------------------
 
     TEST_F(RoomClientTest, ATokenThatTheServerRefusesEndsItForGood) {
-        for (const eastl::string_view code : {RoomErrors::kBadToken, RoomErrors::kUnknownRoom}) {
+        for (const StringView code : {RoomErrors::kBadToken, RoomErrors::kUnknownRoom}) {
             MakeClient({});
             _events.clear();
             FakeLink& first = EnterAsHost();
@@ -934,7 +934,7 @@ namespace BECore::Tests {
         link.PushClosed(1000, "replaced");
         Pump();
         EXPECT_EQ(_client->GetState(), RoomClientState::Disconnected);
-        const eastl::vector<RoomClientEventKind> expected = {Kind::Left, Kind::Closed};
+        const Vector<RoomClientEventKind> expected = {Kind::Left, Kind::Closed};
         EXPECT_EQ(Kinds(), expected);
         EXPECT_EQ(_events[0].code, "replaced");
         EXPECT_EQ(_events[1].code, RoomClientCloseReasons::kReplaced);
@@ -944,7 +944,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(RoomClientTest, ACloseForBreakingTheLimitsIsNotRetried) {
-        for (const eastl::string_view reason : {"rate_limited", "too_many_failed_joins"}) {
+        for (const StringView reason : {"rate_limited", "too_many_failed_joins"}) {
             MakeClient({});
             FakeLink& link = EnterAsHost();
             _events.clear();
@@ -1051,7 +1051,7 @@ namespace BECore::Tests {
     // ---- Resume -------------------------------------------------------------------------------------------------------------------
 
     TEST_F(RoomClientTest, ASessionThatCannotBeOneIsRefusedWithoutAConnection) {
-        RoomSession session{eastl::string(kUrl), eastl::string(kRoom), eastl::string(kToken)};
+        RoomSession session{String(kUrl), String(kRoom), String(kToken)};
         RoomSession noRoom = session;
         noRoom.room.clear();
         RoomSession noToken = session;
@@ -1073,7 +1073,7 @@ namespace BECore::Tests {
 
     TEST_F(RoomClientTest, ResumeConnectsAndJoinsByTokenAndAnswersWithResumed) {
         RoomClient& fresh = *_client;
-        const RoomSession session{eastl::string(kUrl), "abcde", eastl::string(kToken)};
+        const RoomSession session{String(kUrl), "abcde", String(kToken)};
         ASSERT_TRUE(fresh.Resume(session).has_value());
         EXPECT_EQ(fresh.GetState(), RoomClientState::Reconnecting);
         EXPECT_EQ(fresh.GetRoom(), kRoom);
@@ -1101,13 +1101,13 @@ namespace BECore::Tests {
         EXPECT_EQ(fresh.GetPlayer(), 2u);
         EXPECT_FALSE(fresh.IsHost());
         EXPECT_TRUE(fresh.HasView());
-        const eastl::vector<RoomClientEventKind> expected = {Kind::Resumed, Kind::LobbyChanged, Kind::ViewChanged};
+        const Vector<RoomClientEventKind> expected = {Kind::Resumed, Kind::LobbyChanged, Kind::ViewChanged};
         EXPECT_EQ(Kinds(), expected);
         EXPECT_EQ(fresh.GetSession().url, kUrl);
     }
 
     TEST_F(RoomClientTest, ResumeWithAStaleSessionEndsWithRoomGone) {
-        const RoomSession session{eastl::string(kUrl), eastl::string(kRoom), eastl::string(kToken)};
+        const RoomSession session{String(kUrl), String(kRoom), String(kToken)};
         ASSERT_TRUE(_client->Resume(session).has_value());
         FakeLink& link = _transports.Last();
         link.PushOpened();
@@ -1123,7 +1123,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(RoomClientTest, ResumeRetriesWhenTheServerIsNotThereYet) {
-        const RoomSession session{eastl::string(kUrl), eastl::string(kRoom), eastl::string(kToken)};
+        const RoomSession session{String(kUrl), String(kRoom), String(kToken)};
         ASSERT_TRUE(_client->Resume(session).has_value());
         Pump();
         Lose(_transports.Last(), kRoomTransportAbnormalClosure, "connection refused");
@@ -1143,7 +1143,7 @@ namespace BECore::Tests {
 
     TEST_F(RoomClientTest, ResumeThatCannotStartIsAnErrorOfTheCommand) {
         _transports.FailNextOpen("tls_unsupported: use the browser build");
-        const RoomSession session{"wss://example.org", eastl::string(kRoom), eastl::string(kToken)};
+        const RoomSession session{"wss://example.org", String(kRoom), String(kToken)};
         const auto resumed = _client->Resume(session);
         ASSERT_FALSE(resumed.has_value());
         EXPECT_EQ(resumed.error().code, RoomClientErrors::kConnectFailed);
@@ -1155,7 +1155,7 @@ namespace BECore::Tests {
 
     namespace {
 
-        eastl::string RoomsAnswer(bool more = false) {
+        String RoomsAnswer(bool more = false) {
             RoomListMessage list;
             list.game = "cards";
             RoomListing first;
@@ -1194,7 +1194,7 @@ namespace BECore::Tests {
 
         _events.clear();
         Receive(link, RoomsAnswer(true));
-        EXPECT_EQ(Kinds(), (eastl::vector<RoomClientEventKind>{Kind::RoomList}));
+        EXPECT_EQ(Kinds(), (Vector<RoomClientEventKind>{Kind::RoomList}));
         const RoomListMessage& rooms = _client->GetRoomList();
         EXPECT_EQ(rooms.game, "cards");
         ASSERT_EQ(rooms.rooms.size(), 2u);
@@ -1335,7 +1335,7 @@ namespace BECore::Tests {
         link.PushOpened();
         Pump();
         ASSERT_EQ(link.sent.size(), 1u);
-        EXPECT_NE(link.sent[0].find("\"public\":true"), eastl::string::npos);
+        EXPECT_NE(link.sent[0].find("\"public\":true"), String::npos);
         const auto parsed = SentParsed(link, 0);
         const auto* create = AsSent<CreateRoomMessage>(parsed);
         ASSERT_NE(create, nullptr);
@@ -1348,7 +1348,7 @@ namespace BECore::Tests {
         link.PushOpened();
         Pump();
         ASSERT_EQ(link.sent.size(), 1u);
-        EXPECT_EQ(link.sent[0].find("public"), eastl::string::npos);
+        EXPECT_EQ(link.sent[0].find("public"), String::npos);
     }
 
     // ---- Allocations --------------------------------------------------------------------------------------------------------------

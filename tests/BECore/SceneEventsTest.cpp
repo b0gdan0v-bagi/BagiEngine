@@ -130,7 +130,7 @@ namespace BECore::Tests {
                 Subscribe<SceneEvents::SceneViewChangedEvent, &ViewChangeRecorder::OnChanged>(this);
             }
 
-            eastl::vector<SceneEvents::SceneViewChangedEvent> events;
+            Vector<SceneEvents::SceneViewChangedEvent> events;
 
         private:
             void OnChanged(const SceneEvents::SceneViewChangedEvent& e) {
@@ -163,7 +163,7 @@ namespace BECore::Tests {
                 Subscribe<InputEvents::ActionEvent, &ActionRecorder::OnAction>(this);
             }
 
-            eastl::vector<PoolString> actions;
+            Vector<PoolString> actions;
 
         private:
             void OnAction(const InputEvents::ActionEvent& e) {

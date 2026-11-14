@@ -20,17 +20,17 @@ namespace BECore::Tests {
     /// Wraps a transport and runs the wire judge (WireJudge.h) on every text it delivers, before the client sees it
     class JudgedTransport final : public IRoomTransport {
     public:
-        JudgedTransport(eastl::unique_ptr<IRoomTransport> inner, std::shared_ptr<WireJudgeLog> log) : _inner(std::move(inner)), _log(std::move(log)) {}
+        JudgedTransport(UniquePtr<IRoomTransport> inner, std::shared_ptr<WireJudgeLog> log) : _inner(std::move(inner)), _log(std::move(log)) {}
 
-        std::expected<void, eastl::string> Open(eastl::string_view url) override {
+        std::expected<void, String> Open(StringView url) override {
             return _inner->Open(url);
         }
 
-        bool SendText(eastl::string_view text) override {
+        bool SendText(StringView text) override {
             return _inner->SendText(text);
         }
 
-        void Close(uint16_t code, eastl::string_view reason) override {
+        void Close(uint16_t code, StringView reason) override {
             _inner->Close(code, reason);
         }
 
@@ -49,10 +49,10 @@ namespace BECore::Tests {
         }
 
     private:
-        void Judge(const eastl::string& text) {
+        void Judge(const String& text) {
             ++_log->texts;
             const auto parsed = ParseJson(text);
-            const eastl::string type = parsed ? GetJsonString(*parsed, "type").value_or(eastl::string()) : eastl::string();
+            const String type = parsed ? GetJsonString(*parsed, "type").value_or(String()) : String();
             if (parsed && (type == RoomMessageTypes::kJoined || type == RoomMessageTypes::kView)) {
                 _log->seat = static_cast<int>(GetJsonInt(*parsed, "seat").value_or(-1));
             }
@@ -64,13 +64,13 @@ namespace BECore::Tests {
             }
         }
 
-        eastl::unique_ptr<IRoomTransport> _inner;
+        UniquePtr<IRoomTransport> _inner;
         std::shared_ptr<WireJudgeLog> _log;
     };
 
     /// A factory whose transports are judged
     [[nodiscard]] inline RoomTransportFactory MakeJudgedFactory(RoomTransportFactory inner, std::shared_ptr<WireJudgeLog> log) {
-        return [inner = std::move(inner), log = std::move(log)]() -> eastl::unique_ptr<IRoomTransport> {
+        return [inner = std::move(inner), log = std::move(log)]() -> UniquePtr<IRoomTransport> {
             auto transport = inner();
             if (!transport) {
                 return nullptr;

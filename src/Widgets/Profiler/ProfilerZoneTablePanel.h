@@ -20,7 +20,7 @@ namespace BECore {
          * @param selectedFrame a RingFrame::index; "the selected frame" is the newest frame when none is selected
          * @return The site whose "Timeline" button was pressed this frame, nullptr otherwise
          */
-        [[nodiscard]] const ProfileSite* Draw(const RingSnapshot& snapshot, uint64_t version, std::optional<uint64_t> selectedFrame);
+        [[nodiscard]] const ProfileSite* Draw(const RingSnapshot& snapshot, uint64_t version, Optional<uint64_t> selectedFrame);
 
     private:
         enum class Window : int { SelectedFrame, RecentFrames, AllFrames };
@@ -38,12 +38,12 @@ namespace BECore {
             uint64_t statsVersion = 0;
             ZoneStatColumn column = ZoneStatColumn::Total;
             bool ascending = false;
-            eastl::string filter;
+            String filter;
             bool valid = false;
             bool operator==(const RowsKey&) const = default;
         };
 
-        void RefreshRows(const RingSnapshot& snapshot, uint64_t version, std::optional<uint64_t> selectedFrame);
+        void RefreshRows(const RingSnapshot& snapshot, uint64_t version, Optional<uint64_t> selectedFrame);
 
         Window _window = Window::SelectedFrame;
         ZoneStatColumn _sortColumn = ZoneStatColumn::Total;
@@ -52,8 +52,8 @@ namespace BECore {
         StatsKey _statsKey;
         RowsKey _rowsKey;
         uint64_t _statsVersion = 0;  // counts the times the statistics were computed, so the rows know theirs is stale
-        eastl::vector<ZoneStatRow> _stats;
-        eastl::vector<ZoneStatRow> _rows;  // _stats filtered and sorted
+        Vector<ZoneStatRow> _stats;
+        Vector<ZoneStatRow> _rows;  // _stats filtered and sorted
     };
 
 }  // namespace BECore

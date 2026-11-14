@@ -1,17 +1,18 @@
 #pragma once
 
-#include <BECore/PoolString/PoolString.h>
-#include <BECore/Utils/Singleton.h>
 #include <EASTL/unordered_set.h>
-#include <EASTL/vector.h>
 
 namespace BECore {
 
     class ActionsLibrary : public Singleton<ActionsLibrary> {
     public:
-        const eastl::vector<PoolString>& GetAll() const { return _entries; }
+        const Vector<PoolString>& GetAll() const {
+            return _entries;
+        }
 
-        bool Contains(PoolString name) const { return _index.count(name) > 0; }
+        bool Contains(PoolString name) const {
+            return _index.count(name) > 0;
+        }
 
         void Add(PoolString name) {
             if (name.Empty() || Contains(name)) {
@@ -30,7 +31,7 @@ namespace BECore {
         }
 
     private:
-        eastl::vector<PoolString> _entries;
+        Vector<PoolString> _entries;
         eastl::unordered_set<PoolString> _index;
     };
 

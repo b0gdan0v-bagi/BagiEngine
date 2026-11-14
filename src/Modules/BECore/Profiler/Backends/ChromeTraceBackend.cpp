@@ -161,13 +161,13 @@ namespace BECore {
         return _dropped.load(std::memory_order_relaxed);
     }
 
-    eastl::string ChromeTraceBackend::WriteJson() const {
+    String ChromeTraceBackend::WriteJson() const {
         constexpr int kPid = 1;
         const uint64_t start = _startTicks.load(std::memory_order_relaxed);
         const auto timestamp = [start](uint64_t ticks) { return ticks > start ? ProfilerClock::ToNanoseconds(ticks - start) / kNanosecondsPerMicrosecond : 0.0; };
 
         std::lock_guard lock(_registryMutex);  // against MarkTraceStart and a buffer being registered; recording threads never take it
-        eastl::string out;
+        String out;
         out.append("{\"traceEvents\":[");
         bool first = true;
         const auto beginEvent = [&out, &first] {
@@ -175,7 +175,7 @@ namespace BECore {
             first = false;
         };
 
-        eastl::vector<const ProfileSite*> open;
+        Vector<const ProfileSite*> open;
         const uint32_t bufferCount = _bufferCount.load(std::memory_order_acquire);
         for (uint32_t i = 0; i < bufferCount; ++i) {
             const ThreadBuffer& buffer = *_buffers[i];
@@ -246,9 +246,9 @@ namespace BECore {
         return out;
     }
 
-    std::expected<void, eastl::string> ChromeTraceBackend::WriteFile(eastl::string_view path) const {
-        const eastl::string text = WriteJson();
-        const eastl::string fileName(path.data(), path.size());
+    std::expected<void, String> ChromeTraceBackend::WriteFile(StringView path) const {
+        const String text = WriteJson();
+        const String fileName(path.data(), path.size());
         std::FILE* file = std::fopen(fileName.c_str(), "wb");
         if (file == nullptr) {
             return std::unexpected(Format("cannot write '{}': {}", fileName, std::strerror(errno)));

@@ -10,10 +10,8 @@
 #include <RoomServer/DemoCardGame.h>
 #include <RoomServer/RoomWebSocketServer.h>
 #include <Rooms/RoomErrors.h>
-#include <algorithm>
 #include <gtest/gtest.h>
 #include <memory>
-#include <string>
 #include <vector>
 
 namespace BECore::Tests {
@@ -46,7 +44,7 @@ namespace BECore::Tests {
         /// Records what a client's transport receives and lets the test abort the live connection
         class TappedTransport final : public IRoomTransport {
         public:
-            TappedTransport(eastl::unique_ptr<IRoomTransport> inner, Tap& tap) : _inner(std::move(inner)), _tap(tap) {
+            TappedTransport(UniquePtr<IRoomTransport> inner, Tap& tap) : _inner(std::move(inner)), _tap(tap) {
                 _tap.current = this;
                 ++_tap.connections;
             }
@@ -57,15 +55,15 @@ namespace BECore::Tests {
                 }
             }
 
-            std::expected<void, eastl::string> Open(eastl::string_view url) override {
+            std::expected<void, String> Open(StringView url) override {
                 return _inner->Open(url);
             }
 
-            bool SendText(eastl::string_view text) override {
+            bool SendText(StringView text) override {
                 return _inner->SendText(text);
             }
 
-            void Close(uint16_t code, eastl::string_view reason) override {
+            void Close(uint16_t code, StringView reason) override {
                 _inner->Close(code, reason);
             }
 
@@ -79,13 +77,13 @@ namespace BECore::Tests {
                 }
                 if (event.kind == RoomTransportEventKind::Text) {
                     const auto parsed = ParseJson(event.text);
-                    _tap.types.push_back(parsed ? std::string(GetJsonString(*parsed, "type").value_or(eastl::string()).c_str()) : std::string("?"));
+                    _tap.types.push_back(parsed ? std::string(GetJsonString(*parsed, "type").value_or(String()).c_str()) : std::string("?"));
                 }
                 return true;
             }
 
         private:
-            eastl::unique_ptr<IRoomTransport> _inner;
+            UniquePtr<IRoomTransport> _inner;
             Tap& _tap;
         };
 
@@ -98,7 +96,7 @@ namespace BECore::Tests {
         /// A human at the table: a RoomClient on the native transport, judged on the wire, that plays the first action it is offered
         struct Player {
             explicit Player(RoomClientSettings settings = {}) : judge(std::make_shared<WireJudgeLog>()) {
-                settings.transportFactory = [this]() -> eastl::unique_ptr<IRoomTransport> {
+                settings.transportFactory = [this]() -> UniquePtr<IRoomTransport> {
                     auto native = MakeDefaultRoomTransport();
                     if (!native) {
                         return nullptr;
@@ -159,7 +157,7 @@ namespace BECore::Tests {
             Tap tap;
             std::shared_ptr<WireJudgeLog> judge;
             std::unique_ptr<RoomClient> client;
-            eastl::vector<RoomClientEvent> events;
+            Vector<RoomClientEvent> events;
             bool autoplay = true;
             bool acted = false;
             uint64_t actedVersion = 0;
@@ -223,7 +221,7 @@ namespace BECore::Tests {
             }
 
             /// The first player hosts a room of @p game, the others join it; everybody is in the room afterwards, nobody has started
-            void MakeTable(eastl::string_view game, size_t humans, const Json& options = Json::object(), RoomClientSettings guestSettings = MakeClientSettings()) {
+            void MakeTable(StringView game, size_t humans, const Json& options = Json::object(), RoomClientSettings guestSettings = MakeClientSettings()) {
                 Player& host = AddPlayer();
                 ASSERT_TRUE(host.client->Host(url, game, "P0", options).has_value());
                 ASSERT_TRUE(WaitFor([&] { return host.client->IsInRoom(); }, kShortLimit));
@@ -251,7 +249,7 @@ namespace BECore::Tests {
             SeatedGameRegistry registry;
             std::unique_ptr<RoomWebSocketServer> server;
             uint16_t port = 0;
-            eastl::string url;
+            String url;
             std::vector<std::unique_ptr<Player>> players;
         };
 
@@ -304,7 +302,7 @@ namespace BECore::Tests {
         StartServer(std::move(settings));
         ASSERT_NO_FATAL_FAILURE(MakeTable("cards", 2));
         Player& cut = *players[1];
-        const eastl::string token = cut.client->GetSession().token;
+        const String token = cut.client->GetSession().token;
         const int seat = cut.client->GetSeat();
         ASSERT_TRUE(players[0]->client->Start().has_value());
         ASSERT_TRUE(WaitFor([&] { return cut.TableSize() >= 1; }));
@@ -335,7 +333,7 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(MakeTable("cards", 2, Json::object({{"firstSeat", 0}}), slowReturn));
         Player& host = *players[0];
         Player& away = *players[1];
-        const eastl::string token = away.client->GetSession().token;
+        const String token = away.client->GetSession().token;
         away.autoplay = false;
         ASSERT_TRUE(host.client->Start().has_value());
         ASSERT_TRUE(WaitFor([&] { return away.client->HasView(); }));
@@ -438,13 +436,13 @@ namespace BECore::Tests {
         ASSERT_TRUE(WaitFor([&] { return player.client->GetState() == RoomClientState::Disconnected; }, kShortLimit)) << "the TLS handshake never ended";
         ASSERT_EQ(player.Count(Kind::Closed), 1u);
         EXPECT_EQ(player.Find(Kind::Closed)->closeCode, kRoomTransportAbnormalClosure);
-        EXPECT_NE(player.Find(Kind::Closed)->message.find("TLS"), eastl::string::npos) << player.Find(Kind::Closed)->message.c_str();
+        EXPECT_NE(player.Find(Kind::Closed)->message.find("TLS"), String::npos) << player.Find(Kind::Closed)->message.c_str();
     }
 
     TEST_F(RoomClientSocketTest, AWrongPortGivesAClosedEventAndNoHang) {
         // A port that was in use a moment ago and now has nobody on it
         StartServer();
-        const eastl::string deadUrl = url;
+        const String deadUrl = url;
         server->Stop();
         server.reset();
 

@@ -11,7 +11,7 @@ namespace BECore::Tests {
 
     namespace {
 
-        eastl::string MakeRequest(int64_t id, std::string_view method, const Json& params = Json()) {
+        String MakeRequest(int64_t id, std::string_view method, const Json& params = Json()) {
             Json request = Json::object();
             request["id"] = id;
             request["method"] = std::string(method);
@@ -27,7 +27,7 @@ namespace BECore::Tests {
             return params;
         }
 
-        std::string StringOf(const Json* object, eastl::string_view key) {
+        std::string StringOf(const Json* object, StringView key) {
             if (object == nullptr) {
                 return {};
             }
@@ -56,8 +56,8 @@ namespace BECore::Tests {
             return *_fake;
         }
 
-        void Post(const eastl::string& text) {
-            service.Post(text, [this](eastl::string reply) {
+        void Post(const String& text) {
+            service.Post(text, [this](String reply) {
                 auto parsed = ParseJson(reply);
                 responses.push_back(parsed ? std::move(*parsed) : Json());
             });
@@ -91,7 +91,7 @@ namespace BECore::Tests {
 
     private:
         IntrusivePtr<FakeClipboard> _fake;
-        std::optional<ScopedClipboardBackend> _scope;
+        Optional<ScopedClipboardBackend> _scope;
     };
 
     TEST_F(ClipboardControlTest, SetThenGetGivesTheTextBack) {
@@ -101,7 +101,7 @@ namespace BECore::Tests {
 
         ASSERT_EQ(responses.size(), 2u);
         ASSERT_NE(ResultOf(0), nullptr);
-        EXPECT_EQ(GetJsonBool(*ResultOf(0), "ok"), std::optional<bool>(true));
+        EXPECT_EQ(GetJsonBool(*ResultOf(0), "ok"), Optional<bool>(true));
         EXPECT_EQ(Fake().Content(), "room 4711");
         ASSERT_NE(ResultOf(1), nullptr);
         EXPECT_EQ(StringOf(ResultOf(1), "status"), "ok");
@@ -149,7 +149,7 @@ namespace BECore::Tests {
         ASSERT_EQ(responses.size(), 2u);
         EXPECT_EQ(StringOf(ResultOf(0), "status"), "unavailable");
         ASSERT_NE(ResultOf(1), nullptr);
-        EXPECT_EQ(GetJsonBool(*ResultOf(1), "ok"), std::optional<bool>(false));
+        EXPECT_EQ(GetJsonBool(*ResultOf(1), "ok"), Optional<bool>(false));
     }
 
     TEST_F(ClipboardControlTest, AGetThatNeverArrivesFailsWithATimeout) {
@@ -182,7 +182,7 @@ namespace BECore::Tests {
 
         ASSERT_EQ(responses.size(), 1u);
         EXPECT_EQ(ErrorCode(0), "");
-        EXPECT_EQ(recorder.pastes, (eastl::vector<eastl::string>{"ABC"}));
+        EXPECT_EQ(recorder.pastes, (Vector<String>{"ABC"}));
     }
 
     TEST_F(ClipboardControlTest, PasteOfAnEmptyClipboardEmitsNothing) {

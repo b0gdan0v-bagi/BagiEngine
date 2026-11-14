@@ -15,7 +15,7 @@ namespace BECore::Stress::Tests {
 
         constexpr uint32_t kCount = 2000;
 
-        size_t TextureSwitches(const eastl::vector<DrawCall>& calls) {
+        size_t TextureSwitches(const Vector<DrawCall>& calls) {
             size_t switches = 0;
             for (size_t i = 1; i < calls.size(); ++i) {
                 switches += calls[i].texture != calls[i - 1].texture;
@@ -27,7 +27,7 @@ namespace BECore::Stress::Tests {
 
     class StressSpritesTest : public StressSceneFixture {
     protected:
-        void StartSprites(const eastl::vector<eastl::string>& arguments = {}) {
+        void StartSprites(const Vector<String>& arguments = {}) {
             StartGame(arguments);
             ASSERT_EQ(_manager->GetActiveScene()->GetName(), "StressSprites"_intern);
         }
@@ -77,7 +77,7 @@ namespace BECore::Stress::Tests {
         StartSprites();
         SetCount(100);
         Update();
-        eastl::vector<const SceneNode*> first;
+        Vector<const SceneNode*> first;
         for (size_t i = 0; i < 10; ++i) {
             first.push_back(Field().GetChildren()[i].Get());
         }

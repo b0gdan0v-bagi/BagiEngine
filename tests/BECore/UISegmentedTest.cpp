@@ -234,11 +234,11 @@ namespace BECore::Tests {
                 _values.push_back(event.value);
             }
 
-            eastl::vector<PoolString> _actions;
-            eastl::vector<PoolString> _values;
+            Vector<PoolString> _actions;
+            Vector<PoolString> _values;
         };
 
-        eastl::string ElementToXml(const UIElement& element) {
+        String ElementToXml(const UIElement& element) {
             XmlSerializer serializer;
             EXPECT_TRUE(serializer.BeginObject("element"));
             element.Serialize(serializer);
@@ -323,7 +323,7 @@ namespace BECore::Tests {
         }
 
         /// The colour of the bar of the selected-state look drawn at the foot of the rect of @p name in the last draw, none when there was no bar
-        std::optional<Color> BarColorOf(const char* name) const {
+        Optional<Color> BarColorOf(const char* name) const {
             const UIElement& element = Element(name);
             const Rect bar{element.rect.x, element.rect.y + element.rect.h - UIStateLook::kSelectedBarHeight, element.rect.w, UIStateLook::kSelectedBarHeight};
             for (const DrawCall& call : _renderer->calls) {
@@ -613,10 +613,10 @@ namespace BECore::Tests {
         ASSERT_TRUE(serializer.BeginObject("component"));
         _canvas->Serialize(serializer);
         serializer.EndObject();
-        const eastl::string xml = serializer.SaveToString();
+        const String xml = serializer.SaveToString();
 
         XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+        ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
         auto loaded = New<UICanvasComponent>();
         ASSERT_TRUE(deserializer.BeginObject("component"));
         loaded->Deserialize(deserializer);

@@ -16,7 +16,7 @@ namespace BECore::Match3::Tests {
 
     namespace {
 
-        constexpr eastl::string_view kSlot = "damaged";
+        constexpr StringView kSlot = "damaged";
 
         /// Mutations of the sweep, and the most one input gets stacked
         constexpr int kSweepCount = 3000;
@@ -47,7 +47,7 @@ namespace BECore::Match3::Tests {
         };
 
         /// One change of the bytes: a flipped bit, a byte or a 4-byte number at an edge value, a block inserted, deleted or doubled, a cut
-        void Mutate(eastl::vector<uint8_t>& bytes, SweepRandom& random) {
+        void Mutate(Vector<uint8_t>& bytes, SweepRandom& random) {
             constexpr uint8_t kEdgeBytes[] = {0x00, 0x7F, 0x80, 0xFF};
             constexpr size_t kWordSize = 4;
             constexpr size_t kMostBlockBytes = 16;
@@ -194,7 +194,7 @@ namespace BECore::Match3::Tests {
         int refused = 0;
         int accepted = 0;
         for (int round = 0; round < kSweepCount; ++round) {
-            eastl::vector<uint8_t> bytes = *original;
+            Vector<uint8_t> bytes = *original;
             const size_t stacked = 1 + random.Below(kMostStackedMutations);
             for (size_t i = 0; i < stacked; ++i) {
                 Mutate(bytes, random);

@@ -79,8 +79,8 @@ namespace BECore {
 
         /// The elements and variants written inline in the scene file (`<elements><element type="UIPanel" .../></elements>`, `<variants>`). Initialize() hands them to
         /// the layout; they stay here as the part of the screen that is saved back. Elements added in code are not in this list
-        BE_REFLECT_FIELD eastl::vector<IntrusivePtrNonAtomic<UIElement>> _elements;  // not the IntrusivePtr alias: the generator looks for the long name to find a factory field
-        BE_REFLECT_FIELD eastl::vector<UIVariant> _variants;
+        BE_REFLECT_FIELD Vector<IntrusivePtrNonAtomic<UIElement>> _elements;  // not the IntrusivePtr alias: the generator looks for the long name to find a factory field
+        BE_REFLECT_FIELD Vector<UIVariant> _variants;
 
         void Initialize() override;
         void OnAttached() override;

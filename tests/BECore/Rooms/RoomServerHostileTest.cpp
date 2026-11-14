@@ -48,8 +48,8 @@ namespace BECore::Tests {
             return text;
         }
 
-        eastl::vector<uint8_t> Fragment(uint8_t opcode, const std::string& payload, bool fin) {
-            return EncodeFrame(opcode, eastl::span<const uint8_t>(reinterpret_cast<const uint8_t*>(payload.data()), payload.size()), kClientMask, fin);
+        Vector<uint8_t> Fragment(uint8_t opcode, const std::string& payload, bool fin) {
+            return EncodeFrame(opcode, Span<const uint8_t>(reinterpret_cast<const uint8_t*>(payload.data()), payload.size()), kClientMask, fin);
         }
 
         class RoomServerHostileTest : public ::testing::Test {
@@ -117,7 +117,7 @@ namespace BECore::Tests {
         client->Send(AsBytes(Fragment(WebSocketOpcode::kContinuation, piece, false)));
         const auto third = Fragment(WebSocketOpcode::kContinuation, piece, true);
         const size_t headerBytes = third.size() - kFragmentBytes;
-        client->Send(eastl::span<const uint8_t>(third.data(), headerBytes));
+        client->Send(Span<const uint8_t>(third.data(), headerBytes));
 
         const auto close = ReadUntilClose(*client);
         ASSERT_TRUE(close.has_value()) << "the message was held until its last byte";
@@ -145,9 +145,9 @@ namespace BECore::Tests {
         auto client = RoomSocketClient::Connect(port);
         ASSERT_TRUE(client.has_value());
         const std::string text = PingText();
-        const auto frame = EncodeTextFrame(eastl::string_view(text.data(), text.size()), kClientMask);
+        const auto frame = EncodeTextFrame(FromStd(text), kClientMask);
         for (size_t i = 0; i < frame.size(); ++i) {
-            client->Raw().Send(eastl::span<const uint8_t>(frame.data() + i, 1));
+            client->Raw().Send(Span<const uint8_t>(frame.data() + i, 1));
         }
         const auto pong = client->WaitFor(RoomMessageTypes::kPong);
         ASSERT_TRUE(pong.has_value());
@@ -180,7 +180,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(client.has_value());
         ASSERT_TRUE(client->Handshake(port));
         const std::string text = PingText();
-        client->Send(AsBytes(EncodeTextFrame(eastl::string_view(text.data(), text.size()))));
+        client->Send(AsBytes(EncodeTextFrame(FromStd(text))));
         const auto close = ReadUntilClose(*client);
         ASSERT_TRUE(close.has_value());
         EXPECT_EQ(CloseCodeOf(*close), WebSocketCloseCode::kProtocolError);
@@ -268,7 +268,7 @@ namespace BECore::Tests {
         const uint16_t port = StartServer(settings);
         Clients table;
         ASSERT_NO_FATAL_FAILURE(OpenTable(port, "cards", kHumansOfAPair, table));
-        const eastl::string realCode = table[0]->roomCode;
+        const String realCode = table[0]->roomCode;
 
         // Each socket has its own 5 guesses; the address has 8 in all
         int wrong = 0;
@@ -277,7 +277,7 @@ namespace BECore::Tests {
             auto guesser = RoomSocketClient::Connect(port);
             ASSERT_TRUE(guesser.has_value());
             for (int guess = 0; guess < kGuessesPerSocket; ++guess) {
-                const eastl::string code = Format("ZZZ{}{}", socket + 2, guess + 2);
+                const String code = Format("ZZZ{}{}", socket + 2, guess + 2);
                 ASSERT_NE(code, realCode);
                 guesser->JoinByName(code, "Mal");
                 const auto answer = guesser->WaitFor(RoomMessageTypes::kError);

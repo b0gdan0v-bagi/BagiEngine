@@ -11,20 +11,21 @@ namespace BECore {
         return _document.save_file(path.c_str(), "  ");
     }
 
-    eastl::string XmlSerializer::SaveToString() const {
+    String XmlSerializer::SaveToString() const {
         std::ostringstream oss;
         _document.save(oss, "  ");
+        // std: the text of an std::ostringstream
         std::string stdStr = oss.str();
-        return eastl::string(stdStr.c_str(), stdStr.size());
+        return String(stdStr.c_str(), stdStr.size());
     }
 
-    pugi::xml_node XmlSerializer::GetOrCreateChild(eastl::string_view name) {
+    pugi::xml_node XmlSerializer::GetOrCreateChild(StringView name) {
         if (_nodeStack.empty()) {
             return pugi::xml_node();
         }
 
         pugi::xml_node parent = _nodeStack.back();
-        std::string nameStr(name.data(), name.size());
+        String nameStr(name);
 
         pugi::xml_node child = parent.child(nameStr.c_str());
         if (!child) {
@@ -33,13 +34,13 @@ namespace BECore {
         return child;
     }
 
-    pugi::xml_attribute XmlSerializer::GetOrCreateAttribute(eastl::string_view name) {
+    pugi::xml_attribute XmlSerializer::GetOrCreateAttribute(StringView name) {
         if (_nodeStack.empty()) {
             return pugi::xml_attribute();
         }
 
         pugi::xml_node node = _nodeStack.back();
-        std::string nameStr(name.data(), name.size());
+        String nameStr(name);
 
         pugi::xml_attribute attr = node.attribute(nameStr.c_str());
         if (!attr) {
@@ -52,68 +53,68 @@ namespace BECore {
     // Write methods (child elements)
     // =============================================================================
 
-    void XmlSerializer::Write(eastl::string_view name, bool value) {
+    void XmlSerializer::Write(StringView name, bool value) {
         pugi::xml_node node = GetOrCreateChild(name);
         node.text().set(value ? "true" : "false");
     }
 
-    void XmlSerializer::Write(eastl::string_view name, int8_t value) {
+    void XmlSerializer::Write(StringView name, int8_t value) {
         pugi::xml_node node = GetOrCreateChild(name);
         node.text().set(static_cast<int32_t>(value));
     }
 
-    void XmlSerializer::Write(eastl::string_view name, uint8_t value) {
+    void XmlSerializer::Write(StringView name, uint8_t value) {
         pugi::xml_node node = GetOrCreateChild(name);
         node.text().set(static_cast<unsigned int>(value));
     }
 
-    void XmlSerializer::Write(eastl::string_view name, int16_t value) {
+    void XmlSerializer::Write(StringView name, int16_t value) {
         pugi::xml_node node = GetOrCreateChild(name);
         node.text().set(static_cast<int>(value));
     }
 
-    void XmlSerializer::Write(eastl::string_view name, uint16_t value) {
+    void XmlSerializer::Write(StringView name, uint16_t value) {
         pugi::xml_node node = GetOrCreateChild(name);
         node.text().set(static_cast<unsigned int>(value));
     }
 
-    void XmlSerializer::Write(eastl::string_view name, int32_t value) {
+    void XmlSerializer::Write(StringView name, int32_t value) {
         pugi::xml_node node = GetOrCreateChild(name);
         node.text().set(value);
     }
 
-    void XmlSerializer::Write(eastl::string_view name, uint32_t value) {
+    void XmlSerializer::Write(StringView name, uint32_t value) {
         pugi::xml_node node = GetOrCreateChild(name);
         node.text().set(value);
     }
 
-    void XmlSerializer::Write(eastl::string_view name, int64_t value) {
+    void XmlSerializer::Write(StringView name, int64_t value) {
         pugi::xml_node node = GetOrCreateChild(name);
         node.text().set(static_cast<long long>(value));
     }
 
-    void XmlSerializer::Write(eastl::string_view name, uint64_t value) {
+    void XmlSerializer::Write(StringView name, uint64_t value) {
         pugi::xml_node node = GetOrCreateChild(name);
         node.text().set(static_cast<unsigned long long>(value));
     }
 
-    void XmlSerializer::Write(eastl::string_view name, float value) {
+    void XmlSerializer::Write(StringView name, float value) {
         pugi::xml_node node = GetOrCreateChild(name);
         node.text().set(value);
     }
 
-    void XmlSerializer::Write(eastl::string_view name, double value) {
+    void XmlSerializer::Write(StringView name, double value) {
         pugi::xml_node node = GetOrCreateChild(name);
         node.text().set(value);
     }
 
-    void XmlSerializer::Write(eastl::string_view name, eastl::string_view value) {
+    void XmlSerializer::Write(StringView name, StringView value) {
         pugi::xml_node node = GetOrCreateChild(name);
-        std::string valueStr(value.data(), value.size());
+        String valueStr(value);
         node.text().set(valueStr.c_str());
     }
 
-    void XmlSerializer::Write(eastl::string_view name, const PoolString& value) {
+    void XmlSerializer::Write(StringView name, const PoolString& value) {
         pugi::xml_node node = GetOrCreateChild(name);
         node.text().set(value.ToStringView().data());
     }
@@ -122,68 +123,68 @@ namespace BECore {
     // WriteAttribute methods (XML attributes)
     // =============================================================================
 
-    void XmlSerializer::WriteAttribute(eastl::string_view name, bool value) {
+    void XmlSerializer::WriteAttribute(StringView name, bool value) {
         pugi::xml_attribute attr = GetOrCreateAttribute(name);
         attr.set_value(value ? "true" : "false");
     }
 
-    void XmlSerializer::WriteAttribute(eastl::string_view name, int8_t value) {
+    void XmlSerializer::WriteAttribute(StringView name, int8_t value) {
         pugi::xml_attribute attr = GetOrCreateAttribute(name);
         attr.set_value(static_cast<int>(value));
     }
 
-    void XmlSerializer::WriteAttribute(eastl::string_view name, uint8_t value) {
+    void XmlSerializer::WriteAttribute(StringView name, uint8_t value) {
         pugi::xml_attribute attr = GetOrCreateAttribute(name);
         attr.set_value(static_cast<unsigned int>(value));
     }
 
-    void XmlSerializer::WriteAttribute(eastl::string_view name, int16_t value) {
+    void XmlSerializer::WriteAttribute(StringView name, int16_t value) {
         pugi::xml_attribute attr = GetOrCreateAttribute(name);
         attr.set_value(static_cast<int>(value));
     }
 
-    void XmlSerializer::WriteAttribute(eastl::string_view name, uint16_t value) {
+    void XmlSerializer::WriteAttribute(StringView name, uint16_t value) {
         pugi::xml_attribute attr = GetOrCreateAttribute(name);
         attr.set_value(static_cast<unsigned int>(value));
     }
 
-    void XmlSerializer::WriteAttribute(eastl::string_view name, int32_t value) {
+    void XmlSerializer::WriteAttribute(StringView name, int32_t value) {
         pugi::xml_attribute attr = GetOrCreateAttribute(name);
         attr.set_value(value);
     }
 
-    void XmlSerializer::WriteAttribute(eastl::string_view name, uint32_t value) {
+    void XmlSerializer::WriteAttribute(StringView name, uint32_t value) {
         pugi::xml_attribute attr = GetOrCreateAttribute(name);
         attr.set_value(value);
     }
 
-    void XmlSerializer::WriteAttribute(eastl::string_view name, int64_t value) {
+    void XmlSerializer::WriteAttribute(StringView name, int64_t value) {
         pugi::xml_attribute attr = GetOrCreateAttribute(name);
         attr.set_value(static_cast<long long>(value));
     }
 
-    void XmlSerializer::WriteAttribute(eastl::string_view name, uint64_t value) {
+    void XmlSerializer::WriteAttribute(StringView name, uint64_t value) {
         pugi::xml_attribute attr = GetOrCreateAttribute(name);
         attr.set_value(static_cast<unsigned long long>(value));
     }
 
-    void XmlSerializer::WriteAttribute(eastl::string_view name, float value) {
+    void XmlSerializer::WriteAttribute(StringView name, float value) {
         pugi::xml_attribute attr = GetOrCreateAttribute(name);
         attr.set_value(value);
     }
 
-    void XmlSerializer::WriteAttribute(eastl::string_view name, double value) {
+    void XmlSerializer::WriteAttribute(StringView name, double value) {
         pugi::xml_attribute attr = GetOrCreateAttribute(name);
         attr.set_value(value);
     }
 
-    void XmlSerializer::WriteAttribute(eastl::string_view name, eastl::string_view value) {
+    void XmlSerializer::WriteAttribute(StringView name, StringView value) {
         pugi::xml_attribute attr = GetOrCreateAttribute(name);
-        std::string valueStr(value.data(), value.size());
+        String valueStr(value);
         attr.set_value(valueStr.c_str());
     }
 
-    void XmlSerializer::WriteAttribute(eastl::string_view name, const PoolString& value) {
+    void XmlSerializer::WriteAttribute(StringView name, const PoolString& value) {
         pugi::xml_attribute attr = GetOrCreateAttribute(name);
         attr.set_value(value.ToStringView().data());
     }
@@ -192,7 +193,7 @@ namespace BECore {
     // Object nesting
     // =============================================================================
 
-    bool XmlSerializer::BeginObject(eastl::string_view name) {
+    bool XmlSerializer::BeginObject(StringView name) {
         pugi::xml_node node = GetOrCreateChild(name);
         _nodeStack.push_back(node);
         return true;
@@ -208,13 +209,13 @@ namespace BECore {
     // Array support
     // =============================================================================
 
-    bool XmlSerializer::BeginArray(eastl::string_view name, eastl::string_view elementName, size_t& count) {
+    bool XmlSerializer::BeginArray(StringView name, StringView elementName, size_t& count) {
         pugi::xml_node node = GetOrCreateChild(name);
         _nodeStack.push_back(node);
 
         ArrayContext ctx;
         ctx.parentNode = node;
-        ctx.elementName = eastl::string(elementName.data(), elementName.size());
+        ctx.elementName = String(elementName.data(), elementName.size());
         ctx.currentIndex = 0;
         _arrayStack.push_back(eastl::move(ctx));
 
@@ -235,7 +236,7 @@ namespace BECore {
             return false;
         }
         const ArrayContext& ctx = _arrayStack.back();
-        std::string elemName(ctx.elementName.data(), ctx.elementName.size());
+        String elemName(ctx.elementName);
         pugi::xml_node elem = _nodeStack.back().append_child(elemName.c_str());
         _nodeStack.push_back(elem);
         return true;

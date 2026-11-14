@@ -15,8 +15,8 @@ namespace BECore::Stress {
 
         /// The sorted values of one field of the samples
         template <typename Field>
-        eastl::vector<double> SortedOf(const eastl::vector<StressSample>& samples, Field field) {
-            eastl::vector<double> values;
+        Vector<double> SortedOf(const Vector<StressSample>& samples, Field field) {
+            Vector<double> values;
             values.reserve(samples.size());
             for (const StressSample& sample : samples) {
                 values.push_back(sample.*field);
@@ -26,7 +26,7 @@ namespace BECore::Stress {
         }
 
         /// A `"key":value` member (a number written by FormatNumber); the keys are added in sorted order by the caller
-        void AddMember(eastl::string& line, eastl::string_view key, const eastl::string& value) {
+        void AddMember(String& line, StringView key, const String& value) {
             if (!line.empty()) {
                 line += ',';
             }
@@ -36,20 +36,20 @@ namespace BECore::Stress {
             line += value;
         }
 
-        void AddNumber(eastl::string& line, eastl::string_view key, double value) {
+        void AddNumber(String& line, StringView key, double value) {
             AddMember(line, key, FormatNumber(value));
         }
 
-        void AddInteger(eastl::string& line, eastl::string_view key, uint32_t value) {
+        void AddInteger(String& line, StringView key, uint32_t value) {
             AddMember(line, key, Format("{}", value));
         }
 
-        void AddBool(eastl::string& line, eastl::string_view key, bool value) {
+        void AddBool(String& line, StringView key, bool value) {
             AddMember(line, key, value ? "true" : "false");
         }
 
-        void AddText(eastl::string& line, eastl::string_view key, eastl::string_view value) {
-            eastl::string quoted("\"");
+        void AddText(String& line, StringView key, StringView value) {
+            String quoted("\"");
             quoted.append(value.data(), value.size());
             quoted += '"';
             AddMember(line, key, quoted);
@@ -70,7 +70,7 @@ namespace BECore::Stress {
         return sample;
     }
 
-    double NearestRank(eastl::span<const double> sorted, double fraction) {
+    double NearestRank(Span<const double> sorted, double fraction) {
         if (sorted.empty()) {
             return 0.0;
         }
@@ -134,12 +134,12 @@ namespace BECore::Stress {
         return summary;
     }
 
-    eastl::string FormatNumber(double value) {
-        return std::isfinite(value) ? Format("{:.{}f}", value, kDecimals) : eastl::string("0");
+    String FormatNumber(double value) {
+        return std::isfinite(value) ? Format("{:.{}f}", value, kDecimals) : String("0");
     }
 
-    eastl::string FormatJsonLine(const StressSummary& summary, const StressRunContext& context) {
-        eastl::string line;
+    String FormatJsonLine(const StressSummary& summary, const StressRunContext& context) {
+        String line;
         line.reserve(kLineReserve);
         // Sorted by key (byte order, so `allocBytesPerFrame` < `allocTracking` < `allocsPerFrame`): a reader can diff two lines
         AddNumber(line, "allocBytesPerFrame", summary.allocBytesPerFrame);

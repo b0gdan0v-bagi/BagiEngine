@@ -19,7 +19,7 @@ namespace BECore {
 
         ImGuiFonts activeFonts;
 
-        bool ReadFontFile(const char* virtualPath, eastl::vector<uint8_t>& bytes) {
+        bool ReadFontFile(const char* virtualPath, Vector<uint8_t>& bytes) {
             bytes.clear();
             const auto realPath = CoreManager::GetFileSystem().ResolvePath(virtualPath);
             std::ifstream file(realPath, std::ios::binary | std::ios::ate);
@@ -47,7 +47,7 @@ namespace BECore {
             return config;
         }
 
-        ImFont* AddFontSource(ImGuiIO& io, eastl::vector<uint8_t>& bytes, float size, const ImFontConfig& config, const ImWchar* ranges) {
+        ImFont* AddFontSource(ImGuiIO& io, Vector<uint8_t>& bytes, float size, const ImFontConfig& config, const ImWchar* ranges) {
             return io.Fonts->AddFontFromMemoryTTF(bytes.data(), static_cast<int>(bytes.size()), size, &config, ranges);
         }
 

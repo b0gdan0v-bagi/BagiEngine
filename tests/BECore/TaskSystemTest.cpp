@@ -694,7 +694,7 @@ namespace BECore::Tests {
         constexpr int kHandlesPerThread = 5000;
         std::atomic<int> running{kThreads};
 
-        eastl::vector<std::thread> threads;
+        Vector<std::thread> threads;
         for (int i = 0; i < kThreads; ++i) {
             threads.emplace_back([&running] {
                 for (int n = 0; n < kHandlesPerThread; ++n) {

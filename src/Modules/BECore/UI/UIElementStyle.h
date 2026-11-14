@@ -35,11 +35,11 @@ namespace BECore {
         /// A field of edges is one attribute in a file: "8" or "left,top,right,bottom"
         template <>
         struct DataAccessor<UIEdges> {
-            static void Save(ISerializer& s, const UIEdges& value, eastl::string_view key) {
+            static void Save(ISerializer& s, const UIEdges& value, StringView key) {
                 UIAttr::WriteEdges(s, key, value);
             }
 
-            static bool Load(IDeserializer& d, UIEdges& value, eastl::string_view key) {
+            static bool Load(IDeserializer& d, UIEdges& value, StringView key) {
                 return UIAttr::ReadEdges(d, key, value);
             }
         };
@@ -47,11 +47,11 @@ namespace BECore {
         /// The style is flat in a file: it reads and writes the attributes of the object the serializer is in, so there is no @p key element
         template <>
         struct DataAccessor<UIElementStyle> {
-            static void Save(ISerializer& s, const UIElementStyle& value, eastl::string_view /*key*/) {
+            static void Save(ISerializer& s, const UIElementStyle& value, StringView /*key*/) {
                 value.Serialize(s);
             }
 
-            static bool Load(IDeserializer& d, UIElementStyle& value, eastl::string_view /*key*/) {
+            static bool Load(IDeserializer& d, UIElementStyle& value, StringView /*key*/) {
                 value.Deserialize(d);
                 return true;
             }

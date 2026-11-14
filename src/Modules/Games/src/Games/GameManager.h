@@ -32,7 +32,7 @@ namespace BECore {
             return _active.Get();
         }
 
-        const eastl::vector<IntrusivePtr<IGame>>& GetAll() const {
+        const Vector<IntrusivePtr<IGame>>& GetAll() const {
             return _games;
         }
 
@@ -42,7 +42,7 @@ namespace BECore {
 
         IntrusivePtr<IGame> FindGame(PoolString name) const;
 
-        eastl::vector<IntrusivePtr<IGame>> _games;
+        Vector<IntrusivePtr<IGame>> _games;
         IntrusivePtr<IGame> _active;
     };
 

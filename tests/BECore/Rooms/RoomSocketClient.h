@@ -14,7 +14,7 @@ namespace BECore::Tests {
     class RoomSocketClient {
     public:
         /// Opens a connection and performs the handshake; nullopt (and a test failure) when the server does not switch protocols
-        static std::optional<RoomSocketClient> Connect(uint16_t port, const std::string& extraHeaders = "") {
+        static Optional<RoomSocketClient> Connect(uint16_t port, const std::string& extraHeaders = "") {
             auto raw = WebSocketTestClient::Open(port);
             if (!raw) {
                 return std::nullopt;
@@ -35,25 +35,25 @@ namespace BECore::Tests {
         }
 
         void Send(const ClientMessage& message) {
-            const eastl::string text = SerializeClientMessage(message);
+            const String text = SerializeClientMessage(message);
             _raw.SendText(std::string(text.c_str(), text.size()));
         }
 
-        void Create(eastl::string_view name, eastl::string_view game = "fake") {
-            Send(CreateRoomMessage{eastl::string(game), eastl::string(name), Json::object()});
+        void Create(StringView name, StringView game = "fake") {
+            Send(CreateRoomMessage{String(game), String(name), Json::object()});
         }
 
-        void JoinByName(eastl::string_view code, eastl::string_view name) {
+        void JoinByName(StringView code, StringView name) {
             JoinRoomMessage message;
-            message.code = eastl::string(code);
-            message.name = eastl::string(name);
+            message.code = String(code);
+            message.name = String(name);
             Send(message);
         }
 
-        void JoinByToken(eastl::string_view code, eastl::string_view token) {
+        void JoinByToken(StringView code, StringView token) {
             JoinRoomMessage message;
-            message.code = eastl::string(code);
-            message.token = eastl::string(token);
+            message.code = String(code);
+            message.token = String(token);
             Send(message);
         }
 
@@ -67,7 +67,7 @@ namespace BECore::Tests {
 
         /// The next message the server sent that this client has not looked at yet; nullopt when none came in @p limit, or when the
         /// server sent something that is not a text frame (a close frame is then in GetCloseFrame())
-        std::optional<ReceivedMessage> Next(std::chrono::milliseconds limit = kClientWaitLimit) {
+        Optional<ReceivedMessage> Next(std::chrono::milliseconds limit = kClientWaitLimit) {
             if (_cursor < _received.size()) {
                 return _received[_cursor++];
             }
@@ -82,12 +82,12 @@ namespace BECore::Tests {
                 return std::nullopt;
             }
             ReceivedMessage message;
-            message.text = eastl::string(frame->payload.data(), frame->payload.size());
+            message.text = String(frame->payload.data(), frame->payload.size());
             auto parsed = ParseJson(message.text);
             EXPECT_TRUE(parsed.has_value()) << "the server sent text that is not JSON: " << frame->payload;
             if (parsed) {
                 message.json = std::move(*parsed);
-                message.type = GetJsonString(message.json, "type").value_or(eastl::string());
+                message.type = GetJsonString(message.json, "type").value_or(String());
             }
             _received.push_back(message);
             ++_cursor;
@@ -100,7 +100,7 @@ namespace BECore::Tests {
         }
 
         /// Reads forward until a message of @p type arrives (the ones in between stay in Received()); nullopt when none does
-        std::optional<ReceivedMessage> WaitFor(eastl::string_view type, std::chrono::milliseconds limit = kClientWaitLimit) {
+        Optional<ReceivedMessage> WaitFor(StringView type, std::chrono::milliseconds limit = kClientWaitLimit) {
             const auto deadline = std::chrono::steady_clock::now() + limit;
             while (std::chrono::steady_clock::now() < deadline) {
                 const auto message = Next(std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now()));
@@ -115,7 +115,7 @@ namespace BECore::Tests {
         }
 
         /// Reads forward until the server's close frame arrives (the messages before it are kept); nullopt when none does
-        std::optional<ServerFrame> WaitForClose(std::chrono::milliseconds limit = kClientWaitLimit) {
+        Optional<ServerFrame> WaitForClose(std::chrono::milliseconds limit = kClientWaitLimit) {
             const auto deadline = std::chrono::steady_clock::now() + limit;
             while (!_closeFrame && std::chrono::steady_clock::now() < deadline) {
                 if (!Next(std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now())) && !_closeFrame) {
@@ -131,7 +131,7 @@ namespace BECore::Tests {
         }
 
         /// The close frame the server sent, once Next() met it
-        [[nodiscard]] const std::optional<ServerFrame>& GetCloseFrame() const {
+        [[nodiscard]] const Optional<ServerFrame>& GetCloseFrame() const {
             return _closeFrame;
         }
 
@@ -154,8 +154,8 @@ namespace BECore::Tests {
         }
 
         /// What the client learned from `joined`
-        eastl::string roomCode;
-        eastl::string token;
+        String roomCode;
+        String token;
         int seat = -1;
 
     private:
@@ -164,7 +164,7 @@ namespace BECore::Tests {
         WebSocketTestClient _raw;
         std::vector<ReceivedMessage> _received;
         size_t _cursor = 0;
-        std::optional<ServerFrame> _closeFrame;
+        Optional<ServerFrame> _closeFrame;
         size_t _maskedFrames = 0;
         size_t _binaryFrames = 0;
     };

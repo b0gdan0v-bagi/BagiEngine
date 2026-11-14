@@ -52,7 +52,7 @@ namespace BECore {
             return false;
         }
 
-        eastl::vector<const char*> extensions(sdlExts, sdlExts + sdlExtCount);
+        Vector<const char*> extensions(sdlExts, sdlExts + sdlExtCount);
 
         VkApplicationInfo appInfo{};
         appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -79,7 +79,7 @@ namespace BECore {
             return false;
         }
 
-        eastl::vector<VkPhysicalDevice> devices(count);
+        Vector<VkPhysicalDevice> devices(count);
         vkEnumeratePhysicalDevices(_instance, &count, devices.data());
 
         // Prefer discrete GPU; fall back to the first suitable device
@@ -116,7 +116,7 @@ namespace BECore {
         const uint32_t gfx = _queueFamilies.graphicsFamily;
         const uint32_t present = _queueFamilies.presentFamily;
 
-        eastl::vector<VkDeviceQueueCreateInfo> queueInfos;
+        Vector<VkDeviceQueueCreateInfo> queueInfos;
         const float priority = 1.0f;
 
         VkDeviceQueueCreateInfo queueInfo{};
@@ -157,7 +157,7 @@ namespace BECore {
 
         uint32_t count = 0;
         vkGetPhysicalDeviceQueueFamilyProperties(device, &count, nullptr);
-        eastl::vector<VkQueueFamilyProperties> families(count);
+        Vector<VkQueueFamilyProperties> families(count);
         vkGetPhysicalDeviceQueueFamilyProperties(device, &count, families.data());
 
         for (uint32_t i = 0; i < count; ++i) {
@@ -187,7 +187,7 @@ namespace BECore {
         // Check required extensions
         uint32_t extCount = 0;
         vkEnumerateDeviceExtensionProperties(device, nullptr, &extCount, nullptr);
-        eastl::vector<VkExtensionProperties> available(extCount);
+        Vector<VkExtensionProperties> available(extCount);
         vkEnumerateDeviceExtensionProperties(device, nullptr, &extCount, available.data());
 
         for (const char* required : kDeviceExtensions) {

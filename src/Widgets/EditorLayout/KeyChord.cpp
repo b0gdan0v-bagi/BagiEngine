@@ -6,7 +6,7 @@ namespace BECore {
 
         struct NamedKey {
             ImGuiKey key;
-            eastl::string_view name;
+            StringView name;
         };
 
         // Keys with a fixed name; letters, digits and F1..F12 are laid out in ImGuiKey in a row and named by their offset
@@ -29,7 +29,7 @@ namespace BECore {
             return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;
         }
 
-        bool EqualsNoCase(eastl::string_view lhs, eastl::string_view rhs) {
+        bool EqualsNoCase(StringView lhs, StringView rhs) {
             if (lhs.size() != rhs.size()) {
                 return false;
             }
@@ -41,7 +41,7 @@ namespace BECore {
             return true;
         }
 
-        eastl::string_view Trim(eastl::string_view text) {
+        StringView Trim(StringView text) {
             while (!text.empty() && text.front() == ' ') {
                 text.remove_prefix(1);
             }
@@ -59,7 +59,7 @@ namespace BECore {
             return InRange(key, ImGuiKey_F1, kFunctionKeyCount);
         }
 
-        std::optional<uint8_t> ParseModifier(eastl::string_view token) {
+        Optional<uint8_t> ParseModifier(StringView token) {
             if (EqualsNoCase(token, "Ctrl")) {
                 return kChordModCtrl;
             }
@@ -72,25 +72,25 @@ namespace BECore {
             return std::nullopt;
         }
 
-        eastl::string KeyToString(ImGuiKey key) {
+        String KeyToString(ImGuiKey key) {
             if (InRange(key, ImGuiKey_A, kLetterCount)) {
-                return eastl::string(1, static_cast<char>('A' + (key - ImGuiKey_A)));
+                return String(1, static_cast<char>('A' + (key - ImGuiKey_A)));
             }
             if (InRange(key, ImGuiKey_0, kDigitCount)) {
-                return eastl::string(1, static_cast<char>('0' + (key - ImGuiKey_0)));
+                return String(1, static_cast<char>('0' + (key - ImGuiKey_0)));
             }
             if (IsFunctionKey(key)) {
                 return Format("F{}", key - ImGuiKey_F1 + 1);
             }
             for (const NamedKey& named : kNamedKeys) {
                 if (named.key == key) {
-                    return eastl::string(named.name.data(), named.name.size());
+                    return String(named.name.data(), named.name.size());
                 }
             }
             return {};
         }
 
-        std::optional<ImGuiKey> ParseKey(eastl::string_view token) {
+        Optional<ImGuiKey> ParseKey(StringView token) {
             if (token.size() == 1) {
                 const char c = ToLowerAscii(token[0]);
                 if (c >= 'a' && c <= 'z') {
@@ -136,12 +136,12 @@ namespace BECore {
         return chord;
     }
 
-    eastl::string ToString(const KeyChord& chord) {
-        eastl::string keyText = KeyToString(chord.key);
+    String ToString(const KeyChord& chord) {
+        String keyText = KeyToString(chord.key);
         if (keyText.empty()) {
             return {};
         }
-        eastl::string text;
+        String text;
         if ((chord.mods & kChordModCtrl) != 0) {
             text += "Ctrl+";
         }
@@ -155,28 +155,28 @@ namespace BECore {
         return text;
     }
 
-    std::optional<KeyChord> ParseKeyChord(eastl::string_view text) {
+    Optional<KeyChord> ParseKeyChord(StringView text) {
         KeyChord chord;
         bool hasKey = false;
         size_t start = 0;
         while (true) {
             const size_t plus = text.find('+', start);
-            const eastl::string_view token = Trim(text.substr(start, plus == eastl::string_view::npos ? eastl::string_view::npos : plus - start));
+            const StringView token = Trim(text.substr(start, plus == StringView::npos ? StringView::npos : plus - start));
             if (token.empty()) {
                 return std::nullopt;
             }
-            if (const std::optional<uint8_t> mod = ParseModifier(token)) {
+            if (const Optional<uint8_t> mod = ParseModifier(token)) {
                 if (hasKey || (chord.mods & *mod) != 0) {
                     return std::nullopt;
                 }
                 chord.mods |= *mod;
-            } else if (const std::optional<ImGuiKey> key = ParseKey(token); key && !hasKey) {
+            } else if (const Optional<ImGuiKey> key = ParseKey(token); key && !hasKey) {
                 chord.key = *key;
                 hasKey = true;
             } else {
                 return std::nullopt;
             }
-            if (plus == eastl::string_view::npos) {
+            if (plus == StringView::npos) {
                 break;
             }
             start = plus + 1;

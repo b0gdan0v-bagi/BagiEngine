@@ -12,17 +12,17 @@ namespace BECore {
     }  // namespace
 
     struct ControlService::Request {
-        eastl::string method;
+        String method;
         Json id;
         Json params = Json::object();
-        std::optional<ControlError> error;  // found while parsing; answered when the request's turn comes
+        Optional<ControlError> error;  // found while parsing; answered when the request's turn comes
         ControlReplyFn reply;
     };
 
     ControlService::ControlService() = default;
     ControlService::~ControlService() = default;
 
-    void ControlService::ParseRequest(eastl::string_view text, Request& request) {
+    void ControlService::ParseRequest(StringView text, Request& request) {
         if (text.size() > kMaxRequestBytes) {
             request.error = MakeControlError(ControlErrors::kRequestTooLarge, Format("the request is {} bytes, the limit is {}", text.size(), kMaxRequestBytes));
             return;
@@ -71,7 +71,7 @@ namespace BECore {
         request.params = *params;
     }
 
-    void ControlService::Post(eastl::string_view requestText, ControlReplyFn reply) {
+    void ControlService::Post(StringView requestText, ControlReplyFn reply) {
         auto request = eastl::make_unique<Request>();
         request->reply = std::move(reply);
         ParseRequest(requestText, *request);
@@ -88,15 +88,15 @@ namespace BECore {
         request->reply(MakeErrorResponse(request->id, MakeControlError(ControlErrors::kShuttingDown, "the application is shutting down")));
     }
 
-    void ControlService::RegisterHandler(eastl::string_view method, Handler handler, bool bypassBarrier) {
-        _handlers[eastl::string(method)] = HandlerEntry{std::move(handler), bypassBarrier};
+    void ControlService::RegisterHandler(StringView method, Handler handler, bool bypassBarrier) {
+        _handlers[String(method)] = HandlerEntry{std::move(handler), bypassBarrier};
     }
 
     void ControlService::SetEventSink(EventSink sink) {
         _eventSink = std::move(sink);
     }
 
-    void ControlService::Publish(eastl::string_view event, const Json& data) {
+    void ControlService::Publish(StringView event, const Json& data) {
         if (!_eventSink) {
             return;
         }
@@ -106,14 +106,14 @@ namespace BECore {
         _eventSink(DumpJson(message));
     }
 
-    void ControlService::SetFrameEndHook(eastl::string_view name, FrameEndHook hook) {
+    void ControlService::SetFrameEndHook(StringView name, FrameEndHook hook) {
         for (HookEntry& entry : _frameEndHooks) {
             if (entry.name == name) {
                 entry.hook = std::move(hook);
                 return;
             }
         }
-        _frameEndHooks.push_back(HookEntry{eastl::string(name), std::move(hook)});
+        _frameEndHooks.push_back(HookEntry{String(name), std::move(hook)});
     }
 
     bool ControlService::BypassesBarrier(const Request& request) const {
@@ -135,7 +135,7 @@ namespace BECore {
                 ++it;  // held back; the requests that bypass the barrier may still follow
                 continue;
             }
-            eastl::unique_ptr<Request> request = std::move(*it);
+            UniquePtr<Request> request = std::move(*it);
             it = _inbox.erase(it);
             Process(*request);
         }
@@ -150,7 +150,7 @@ namespace BECore {
 
         const auto entry = _handlers.find(request.method);
         if (entry == _handlers.end()) {
-            const eastl::string name = request.method.substr(0, kMaxEchoedMethodLength);
+            const String name = request.method.substr(0, kMaxEchoedMethodLength);
             request.reply(MakeErrorResponse(request.id, MakeControlError(ControlErrors::kUnknownMethod, Format("unknown method '{}'", name))));
             return;
         }
@@ -162,7 +162,7 @@ namespace BECore {
         Settle(std::move(call));
     }
 
-    void ControlService::Settle(eastl::unique_ptr<ControlCall> call) {
+    void ControlService::Settle(UniquePtr<ControlCall> call) {
         if (call->IsAnswered()) {
             return;
         }
@@ -209,7 +209,7 @@ namespace BECore {
             return;
         }
 
-        eastl::unique_ptr<ControlCall> call = std::move(_pending);
+        UniquePtr<ControlCall> call = std::move(_pending);
         const ControlCall::DoneFn done = std::move(call->_done);
         call->_done = nullptr;
         if (done) {
@@ -231,11 +231,11 @@ namespace BECore {
         const ControlError error = MakeControlError(ControlErrors::kShuttingDown, "the application is shutting down");
 
         if (_pending) {
-            eastl::unique_ptr<ControlCall> call = std::move(_pending);
+            UniquePtr<ControlCall> call = std::move(_pending);
             call->Fail(error);
         }
         while (!_inbox.empty()) {
-            eastl::unique_ptr<Request> request = std::move(_inbox.front());
+            UniquePtr<Request> request = std::move(_inbox.front());
             _inbox.pop_front();
             request->reply(MakeErrorResponse(request->id, error));
         }

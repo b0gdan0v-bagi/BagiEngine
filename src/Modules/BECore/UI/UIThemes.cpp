@@ -8,9 +8,9 @@ namespace BECore {
 
     namespace {
 
-        constexpr eastl::string_view ConfigName = "UIThemes";
-        constexpr eastl::string_view ThemeElement = "theme";
-        constexpr eastl::string_view ColorElement = "color";
+        constexpr StringView ConfigName = "UIThemes";
+        constexpr StringView ThemeElement = "theme";
+        constexpr StringView ColorElement = "color";
 
         bool IsLetter(char c) {
             return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
@@ -27,12 +27,12 @@ namespace BECore {
         if (!configs.HasConfig(ConfigName)) {
             return;
         }
-        for (const eastl::string& problem : LoadFromXml(configs.GetConfig(ConfigName))) {
+        for (const String& problem : LoadFromXml(configs.GetConfig(ConfigName))) {
             LOG_WARNING("UIThemes: {}"_format(problem.c_str()));
         }
     }
 
-    bool UIThemes::IsValidToken(eastl::string_view token) {
+    bool UIThemes::IsValidToken(StringView token) {
         if (token.empty() || !IsLetter(token.front())) {
             return false;
         }
@@ -53,7 +53,7 @@ namespace BECore {
         return nullptr;
     }
 
-    std::optional<Color> UIThemes::FindColor(const Theme* theme, eastl::string_view token) {
+    Optional<Color> UIThemes::FindColor(const Theme* theme, StringView token) {
         if (!theme) {
             return std::nullopt;
         }
@@ -68,7 +68,7 @@ namespace BECore {
         return it->second;
     }
 
-    bool UIThemes::Set(PoolString theme, eastl::string_view token, const Color& color) {
+    bool UIThemes::Set(PoolString theme, StringView token, const Color& color) {
         if (theme.Empty() || !IsValidToken(token)) {
             return false;
         }
@@ -139,7 +139,7 @@ namespace BECore {
         return FindTheme(theme) != nullptr;
     }
 
-    std::optional<Color> UIThemes::Find(eastl::string_view token) const {
+    Optional<Color> UIThemes::Find(StringView token) const {
         const PoolString current = GetTheme();
         for (const PoolString theme : {current, _default}) {
             if (const auto color = FindColor(FindTheme(theme), token)) {
@@ -167,7 +167,7 @@ namespace BECore {
         LOG_WARNING("UIThemes: the token '@{}' is in no theme, drawn in magenta"_format(color.token.ToStringView()));
     }
 
-    bool UIThemes::HasToken(PoolString theme, eastl::string_view token) const {
+    bool UIThemes::HasToken(PoolString theme, StringView token) const {
         return FindColor(FindTheme(theme), token).has_value();
     }
 
@@ -181,14 +181,14 @@ namespace BECore {
         ++_version;
     }
 
-    eastl::vector<eastl::string> UIThemes::LoadFromXml(const XmlNode& node) {
-        eastl::vector<eastl::string> problems;
+    Vector<String> UIThemes::LoadFromXml(const XmlNode& node) {
+        Vector<String> problems;
         if (!node) {
             return problems;
         }
 
         for (const XmlNode child : node.Children()) {
-            const eastl::string_view name = child.Name();
+            const StringView name = child.Name();
             if (name.empty()) {
                 continue;  // a comment or text
             }
@@ -204,7 +204,7 @@ namespace BECore {
             const PoolString theme = PoolString::Intern(*id);
             size_t loaded = 0;
             for (const XmlNode entry : child.Children()) {
-                const eastl::string_view entryName = entry.Name();
+                const StringView entryName = entry.Name();
                 if (entryName.empty()) {
                     continue;
                 }
@@ -252,8 +252,8 @@ namespace BECore {
             }
         }
         // The messages repeat ids, keys and values of the file
-        for (eastl::string& problem : problems) {
-            problem = UIText::TidyMessage(eastl::string_view(problem.data(), problem.size()));
+        for (String& problem : problems) {
+            problem = UIText::TidyMessage(StringView(problem));
         }
         return problems;
     }

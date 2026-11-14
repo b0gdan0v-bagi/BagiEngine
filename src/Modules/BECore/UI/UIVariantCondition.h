@@ -22,10 +22,10 @@ namespace BECore {
         [[nodiscard]] bool Matches(const Rect& bounds) const;
 
         /// The set parts as "name:value" separated by ';' (`orientation:portrait;minAspect:1.5`), in the order of the fields; empty when nothing is set
-        [[nodiscard]] eastl::string ToText() const;
+        [[nodiscard]] String ToText() const;
 
         /// Reads the form of ToText(); the names and `portrait` / `landscape` / `any` are case-insensitive. The error names the part that was not understood
-        [[nodiscard]] static std::expected<UIVariantCondition, eastl::string> FromText(eastl::string_view text);
+        [[nodiscard]] static std::expected<UIVariantCondition, String> FromText(StringView text);
 
         [[nodiscard]] bool operator==(const UIVariantCondition&) const = default;
     };

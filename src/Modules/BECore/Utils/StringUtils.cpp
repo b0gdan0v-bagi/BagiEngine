@@ -1,8 +1,8 @@
-#include "String.h"
+#include "StringUtils.h"
 
 namespace BECore {
 
-    String::SmallStrVector String::Split(eastl::string_view str, char delimiter) {
+    StringUtils::SmallStrVector StringUtils::Split(StringView str, char delimiter) {
         SmallStrVector result;
 
         if (str.empty()) {
@@ -12,7 +12,7 @@ namespace BECore {
         size_t start = 0;
         size_t pos = 0;
 
-        while ((pos = str.find(delimiter, start)) != std::string::npos) {
+        while ((pos = str.find(delimiter, start)) != String::npos) {
             result.push_back(str.substr(start, pos - start));
             start = pos + 1;
         }

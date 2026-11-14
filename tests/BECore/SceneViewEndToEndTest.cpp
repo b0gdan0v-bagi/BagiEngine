@@ -113,7 +113,7 @@ namespace BECore::Tests {
         }
 
         /// The matrix over the views the scene declares, with the bar row kept off the view
-        eastl::vector<UIMatrixFailure> RunMatrix(const char* sceneName) {
+        Vector<UIMatrixFailure> RunMatrix(const char* sceneName) {
             Draw(sceneName);  // the canvas takes its parameters from the component on a draw
             const Scene& scene = GetScene(sceneName);
             UIMatrixViews views{kViewWidth, kViewHeight, scene.GetViewVariants()};

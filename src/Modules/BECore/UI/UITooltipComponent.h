@@ -17,7 +17,7 @@ namespace BECore {
         UITooltipComponent() = default;
         ~UITooltipComponent() override = default;
 
-        BE_REFLECT_FIELD eastl::string text;  ///< empty: no tooltip
+        BE_REFLECT_FIELD String text;  ///< empty: no tooltip
     };
 
 }  // namespace BECore

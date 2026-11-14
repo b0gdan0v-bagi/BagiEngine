@@ -17,11 +17,11 @@ namespace BECore {
     struct RoomTransportEvent {
         RoomTransportEventKind kind = RoomTransportEventKind::Closed;
         /// Text: the message
-        eastl::string text;
+        String text;
         /// Closed: the code of the close, kRoomTransportAbnormalClosure when the connection ended without one
         uint16_t closeCode = kRoomTransportAbnormalClosure;
         /// Closed: why, for the log and for a message to the player
-        eastl::string reason;
+        String reason;
     };
 
     /**
@@ -42,13 +42,13 @@ namespace BECore {
 
         /// Starts connecting to @p url (`ws://host[:port][/path]`, or `wss://` where the platform speaks it). An error is a message for
         /// the log and means no Closed will follow
-        [[nodiscard]] virtual std::expected<void, eastl::string> Open(eastl::string_view url) = 0;
+        [[nodiscard]] virtual std::expected<void, String> Open(StringView url) = 0;
 
         /// Queues a text message; false when the connection is not open, is closing, or its queue is full
-        virtual bool SendText(eastl::string_view text) = 0;
+        virtual bool SendText(StringView text) = 0;
 
         /// Starts the closing handshake with @p code and @p reason; Closed follows. During the connect it is the same as Abort()
-        virtual void Close(uint16_t code, eastl::string_view reason) = 0;
+        virtual void Close(uint16_t code, StringView reason) = 0;
 
         /// Ends the connection now, without a close frame; Closed (kRoomTransportAbnormalClosure) still follows
         virtual void Abort() = 0;
@@ -59,9 +59,9 @@ namespace BECore {
     };
 
     /// Makes a transport for one connection; RoomClient asks for a new one for every connection
-    using RoomTransportFactory = std::function<eastl::unique_ptr<IRoomTransport>()>;
+    using RoomTransportFactory = std::function<UniquePtr<IRoomTransport>()>;
 
     /// The transport of this platform, or nullptr where there is none (a build without sockets that is not the browser)
-    [[nodiscard]] eastl::unique_ptr<IRoomTransport> MakeDefaultRoomTransport();
+    [[nodiscard]] UniquePtr<IRoomTransport> MakeDefaultRoomTransport();
 
 }  // namespace BECore

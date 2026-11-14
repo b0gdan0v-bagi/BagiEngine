@@ -39,8 +39,8 @@ namespace BECore {
                 return;
             }
 
-            eastl::vector<UIElement*> visible;
-            eastl::vector<UIRectSpec> specs;
+            Vector<UIElement*> visible;
+            Vector<UIRectSpec> specs;
             for (const auto& child : parent.children) {
                 if (child->active.visible) {
                     visible.push_back(child.Get());
@@ -51,7 +51,7 @@ namespace BECore {
             }
 
             if (parent.layout == UILayoutKind::Stack) {
-                eastl::vector<Rect> rects;
+                Vector<Rect> rects;
                 UILayout::LayoutStack(parent.rect, parent.active.stack, specs, rects);
                 for (size_t i = 0; i < visible.size(); ++i) {
                     visible[i]->rect = rects[i];

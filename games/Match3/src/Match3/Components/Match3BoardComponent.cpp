@@ -206,7 +206,7 @@ namespace BECore::Match3 {
 
         const Match3Board before = _model.GetBoard();
         const uint64_t versionBefore = _model.GetVersion();
-        const eastl::optional<Cell> selected = _model.GetSelected();
+        const Optional<Cell> selected = _model.GetSelected();
         _model.OnCellClicked(cell);
 
         const SwapTrace* trace = _model.GetLastSwap();

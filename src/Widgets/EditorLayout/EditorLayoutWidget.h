@@ -66,12 +66,12 @@ namespace BECore {
         void CommandMenuItem(PoolString id, const char* label, bool enabled = true);
 
         /// Reads the layout @p name and keeps its text until the next ImGuiNewFrameEvent
-        void QueueLayout(const eastl::string& name);
+        void QueueLayout(const String& name);
         /// Writes the current dock layout under @p name; the error is a sentence for the popup
-        std::expected<void, eastl::string> SaveCurrentLayout(eastl::string_view name);
+        std::expected<void, String> SaveCurrentLayout(StringView name);
 
-        std::optional<EditorSettings> _settings;
-        std::optional<LayoutStore> _layouts;  // none when the system gives no per-user folder
+        Optional<EditorSettings> _settings;
+        Optional<LayoutStore> _layouts;  // none when the system gives no per-user folder
 
         EditorPlayModel _playModel;
         MainToolbar _toolbar;
@@ -80,9 +80,9 @@ namespace BECore {
         CommandPalette _palette;
         PreferencesWindow _preferencesWindow;
 
-        eastl::string _pendingLayoutText;  // a named layout waiting for the next frame start
+        String _pendingLayoutText;  // a named layout waiting for the next frame start
         char _layoutNameBuffer[kMaxLayoutNameLength + 1] = {};
-        eastl::string _saveLayoutError;
+        String _saveLayoutError;
         bool _openSaveLayoutPopup = false;
 
         bool _preferencesAnnounced = false;

@@ -50,7 +50,7 @@ namespace BECore {
          * @param node The pugixml node to render
          * @param nodePath Unique path string used as key for staged changes
          */
-        void RenderXmlNode(pugi::xml_node node, const eastl::string& nodePath);
+        void RenderXmlNode(pugi::xml_node node, const String& nodePath);
 
         /**
          * @brief Render the reload confirmation popup

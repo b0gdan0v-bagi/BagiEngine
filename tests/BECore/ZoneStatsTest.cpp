@@ -33,7 +33,7 @@ namespace BECore::Tests {
             return snapshot;
         }
 
-        const ZoneStatRow* FindRow(const eastl::vector<ZoneStatRow>& rows, const ProfileSite& site) {
+        const ZoneStatRow* FindRow(const Vector<ZoneStatRow>& rows, const ProfileSite& site) {
             for (const ZoneStatRow& row : rows) {
                 if (row.site == &site) {
                     return &row;
@@ -42,8 +42,8 @@ namespace BECore::Tests {
             return nullptr;
         }
 
-        eastl::string Names(const eastl::vector<ZoneStatRow>& rows) {
-            eastl::string out;
+        String Names(const Vector<ZoneStatRow>& rows) {
+            String out;
             for (const ZoneStatRow& row : rows) {
                 out.append(row.site->name);
                 out.append(",");
@@ -178,8 +178,8 @@ namespace BECore::Tests {
     namespace {
 
         /// Rows with distinct values in every column: Parent is the largest of every number, Other the smallest, Child in between
-        eastl::vector<ZoneStatRow> MakeSortableRows() {
-            eastl::vector<ZoneStatRow> rows(3);
+        Vector<ZoneStatRow> MakeSortableRows() {
+            Vector<ZoneStatRow> rows(3);
             rows[0] = {.site = &kChildSite, .calls = 2, .totalMs = 20, .selfMs = 10, .meanMs = 5, .maxMs = 7, .p95Ms = 6, .allocCount = 20, .allocBytes = 0};
             rows[1] = {.site = &kParentSite, .calls = 3, .totalMs = 30, .selfMs = 15, .meanMs = 6, .maxMs = 8, .p95Ms = 7, .allocCount = 30, .allocBytes = 0};
             rows[2] = {.site = &kOtherSite, .calls = 1, .totalMs = 10, .selfMs = 5, .meanMs = 4, .maxMs = 6, .p95Ms = 5, .allocCount = 10, .allocBytes = 0};

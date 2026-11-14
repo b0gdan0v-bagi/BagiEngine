@@ -163,7 +163,7 @@ namespace BECore::Tests {
 
         /// Gives a sprite a texture of the given size made by the renderer, as a test has no other way to make one draw
         void GiveTexture(const IntrusivePtr<SpriteRendererComponent>& sprite, uint32_t width, uint32_t height) {
-            const eastl::vector<uint8_t> pixels(static_cast<size_t>(width) * height * 4, 255);
+            const Vector<uint8_t> pixels(static_cast<size_t>(width) * height * 4, 255);
             IntrusivePtr<ITexture> texture = _renderer->CreateTexture(pixels.data(), width, height);
             ASSERT_TRUE(texture);
             sprite->SetTexture(texture);

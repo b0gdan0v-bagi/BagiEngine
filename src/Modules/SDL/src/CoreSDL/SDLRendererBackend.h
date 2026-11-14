@@ -29,14 +29,14 @@ namespace BECore {
         /// A transformed texture is drawn with SDL_RenderTextureRotated; the rect keeps the geometry default of IRenderer
         void DrawTransformedTexture(ITexture& texture, const Rect* srcRect, float dstX, float dstY, float dstW, float dstH, const Color& tint, const DrawTransform& transform) override;
         IntrusivePtr<ITexture> CreateTexture(const uint8_t* rgba, uint32_t width, uint32_t height) override;
-        void DrawGeometry(ITexture* texture, eastl::span<const GeometryVertex> vertices, eastl::span<const int> indices, float translateX, float translateY) override;
+        void DrawGeometry(ITexture* texture, Span<const GeometryVertex> vertices, Span<const int> indices, float translateX, float translateY) override;
 
         IntrusivePtr<IRenderTarget> CreateRenderTarget(uint32_t width, uint32_t height) override;
         void SetRenderTarget(IRenderTarget* target) override;
         void UnsetRenderTarget() override;
 
         /// The SDL 2D renderer has no GPU device (GetGpuDevice() stays null): no depth buffer and no shaders, so no 3D
-        eastl::string GetNoGpuDeviceReason() const override;
+        String GetNoGpuDeviceReason() const override;
 
         float GetOutputWidth() const override;
         float GetOutputHeight() const override;
@@ -65,9 +65,9 @@ namespace BECore {
         bool _software = false;  // SDL's own software renderer: every blended triangle costs a surface and a blit
 
         // Scratch of DrawGeometry(): the vertices in the planar layout SDL_RenderGeometryRaw takes, kept between calls so a draw does not allocate
-        eastl::vector<float> _geometryPositions;
-        eastl::vector<float> _geometryColors;
-        eastl::vector<float> _geometryTexCoords;
+        Vector<float> _geometryPositions;
+        Vector<float> _geometryColors;
+        Vector<float> _geometryTexCoords;
 
         void OnImGuiInit();
         void OnImGuiShutdown();

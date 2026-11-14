@@ -62,7 +62,7 @@ namespace BECore::Tests {
                 Subscribe<InputEvents::ActionEvent, &ActionRecorder::OnAction>(this);
             }
 
-            eastl::vector<PoolString> actions;
+            Vector<PoolString> actions;
 
         private:
             void OnAction(const InputEvents::ActionEvent& e) {
@@ -334,7 +334,7 @@ namespace BECore::Tests {
     // The override a tool (the editor viewport) sets around one pass
 
     TEST_F(SceneViewVariantsTest, TheVariantsAreListedInTheOrderOfTheFile) {
-        const eastl::span<const SceneViewVariant> variants = _scene->GetViewVariants();
+        const Span<const SceneViewVariant> variants = _scene->GetViewVariants();
         ASSERT_EQ(variants.size(), 2u);
         EXPECT_EQ(variants[0].name, "Portrait"_intern);
         EXPECT_EQ(variants[1].name, "Wide"_intern);
@@ -381,7 +381,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(SceneViewVariantsTest, NulloptAndAnIndexOutOfRangeBehaveAsAuto) {
-        for (const std::optional<int32_t> override : {std::optional<int32_t>{}, std::optional<int32_t>{2}, std::optional<int32_t>{-2}, std::optional<int32_t>{100}}) {
+        for (const Optional<int32_t> override : {Optional<int32_t>{}, Optional<int32_t>{2}, Optional<int32_t>{-2}, Optional<int32_t>{100}}) {
             _scene->SetViewOverride(override);
             DrawAt(900.0f, 600.0f);
             EXPECT_EQ(_scene->GetActiveView().index, -1);
@@ -415,7 +415,7 @@ namespace BECore::Tests {
     TEST_F(SceneViewVariantsTest, TheOverrideIsNotSaved) {
         XmlSerializer plain;
         _scene->Serialize(plain);
-        const eastl::string before = plain.SaveToString();
+        const String before = plain.SaveToString();
 
         _scene->SetViewOverride(1);
         DrawAt(900.0f, 600.0f);

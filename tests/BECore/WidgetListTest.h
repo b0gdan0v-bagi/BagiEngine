@@ -34,7 +34,7 @@ namespace BECore::Tests {
         bool Run() override {
             return true;
         }
-        eastl::string_view GetName() override {
+        StringView GetName() override {
             return GetStaticTypeName();
         }
 

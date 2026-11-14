@@ -30,7 +30,7 @@ namespace BECore {
         void SyncChildren();
 
         /// The value of the bound variable, the one a segment must have to be selected; empty when `bind` is empty or the variable is not set
-        [[nodiscard]] eastl::string_view GetSelectedValue() const;
+        [[nodiscard]] StringView GetSelectedValue() const;
     };
 
 }  // namespace BECore

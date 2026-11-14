@@ -169,7 +169,7 @@ namespace BECore {
         }
 
         const pugi::xml_node pugiRoot = rootNode.GetPugiNode();
-        RenderXmlNode(pugiRoot, eastl::string(rootNode.Name().data(), rootNode.Name().size()));
+        RenderXmlNode(pugiRoot, String(rootNode.Name().data(), rootNode.Name().size()));
 
         ImGui::EndChild();
 
@@ -220,7 +220,7 @@ namespace BECore {
     // XML tree rendering
     // =========================================================================
 
-    void ConfigEditorWidget::RenderXmlNode(pugi::xml_node node, const eastl::string& nodePath) {
+    void ConfigEditorWidget::RenderXmlNode(pugi::xml_node node, const String& nodePath) {
         if (node.type() != pugi::node_element) {
             return;
         }
@@ -249,7 +249,7 @@ namespace BECore {
                         ImGui::TableNextRow();
 
                         // Column 0: attribute name with staged indicator
-                        const eastl::string attrKey = Format("{}@{}", nodePath, attr.name());
+                        const String attrKey = Format("{}@{}", nodePath, attr.name());
                         const bool isStaged = _staged.Has(attrKey);
 
                         ImGui::TableSetColumnIndex(0);
@@ -262,11 +262,11 @@ namespace BECore {
                         // Column 1: type-appropriate inspector
                         ImGui::TableSetColumnIndex(1);
 
-                        const eastl::string_view domValue{attr.value()};
-                        const eastl::string* stagedPtr = _staged.Get(attrKey);
-                        const eastl::string_view currentValue = stagedPtr ? eastl::string_view{*stagedPtr} : domValue;
+                        const StringView domValue{attr.value()};
+                        const String* stagedPtr = _staged.Get(attrKey);
+                        const StringView currentValue = stagedPtr ? StringView{*stagedPtr} : domValue;
 
-                        const eastl::string schemaPath = Format("{}/@{}", node.name(), attr.name());
+                        const String schemaPath = Format("{}/@{}", node.name(), attr.name());
                         const FieldHint hint = schema.Resolve(_selectedConfig, schemaPath, currentValue);
 
                         const auto result = RenderFieldInspector(attrKey, currentValue, hint);
@@ -283,13 +283,13 @@ namespace BECore {
             size_t childIndex = 0;
             for (auto child = node.first_child(); child; child = child.next_sibling()) {
                 if (child.type() == pugi::node_element) {
-                    const eastl::string childPath = Format("{}/{}[{}]", nodePath, child.name(), childIndex);
+                    const String childPath = Format("{}/{}[{}]", nodePath, child.name(), childIndex);
                     RenderXmlNode(child, childPath);
                     ++childIndex;
                 } else if (child.type() == pugi::node_pcdata) {
-                    const eastl::string textKey = Format("{}#text", nodePath);
-                    const eastl::string* stagedPtr = _staged.Get(textKey);
-                    const eastl::string_view currentValue = stagedPtr ? eastl::string_view{*stagedPtr} : eastl::string_view{child.value()};
+                    const String textKey = Format("{}#text", nodePath);
+                    const String* stagedPtr = _staged.Get(textKey);
+                    const StringView currentValue = stagedPtr ? StringView{*stagedPtr} : StringView{child.value()};
 
                     const FieldHint stringHint{FieldType::String};
                     const auto result = RenderFieldInspector(textKey, currentValue, stringHint);

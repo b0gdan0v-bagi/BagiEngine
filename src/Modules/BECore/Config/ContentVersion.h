@@ -21,14 +21,14 @@ namespace BECore {
     inline constexpr uint32_t kUnversionedContentVersion = 1;
 
     /// Attribute of the root element that holds the version
-    inline constexpr eastl::string_view kContentVersionAttribute = "contentVersion";
+    inline constexpr StringView kContentVersionAttribute = "contentVersion";
 
     /// Root elements of the files that carry a version
-    inline constexpr eastl::string_view kSceneConfigRootName = "SceneManager";
-    inline constexpr eastl::string_view kNodeFileRootName = "node";
+    inline constexpr StringView kSceneConfigRootName = "SceneManager";
+    inline constexpr StringView kNodeFileRootName = "node";
 
     /// True when a file whose root element is called @p rootName is a content file
-    bool IsContentRoot(eastl::string_view rootName);
+    bool IsContentRoot(StringView rootName);
 
     /**
      * @brief The version of the content file whose root element is @p root
@@ -36,7 +36,7 @@ namespace BECore {
      * @return the number (no attribute is kUnversionedContentVersion), or the reason when the attribute is not a
      * non-negative whole number: a malformed value is neither older nor newer than the engine
      */
-    std::expected<uint32_t, eastl::string> GetContentVersion(pugi::xml_node root);
+    std::expected<uint32_t, String> GetContentVersion(pugi::xml_node root);
 
     /**
      * @brief Ok when the version of @p root is kContentVersion, else the sentence a loader logs
@@ -47,6 +47,6 @@ namespace BECore {
      *
      * @param what Names the file in the message
      */
-    std::expected<void, eastl::string> CheckContentVersion(pugi::xml_node root, eastl::string_view what);
+    std::expected<void, String> CheckContentVersion(pugi::xml_node root, StringView what);
 
 }  // namespace BECore

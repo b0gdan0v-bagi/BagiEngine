@@ -13,20 +13,20 @@ namespace BECore {
         static consteval auto enumName() {
 #if defined(__clang__)
             // Clang (including ClangCL on Windows): auto Impl::enumName() [EnumVal = align::CM]
-            constexpr std::string_view sv{__PRETTY_FUNCTION__};
+            constexpr std::string_view sv{__PRETTY_FUNCTION__};  // std: eastl::string_view::find_last_of is not constexpr
             constexpr auto last = sv.find_last_of("]");
 #elif defined(_MSC_VER)
             // MSVC: auto __cdecl Impl::enumName<align::CM>(void)
-            constexpr std::string_view sv{__FUNCSIG__};  // NOLINT(clang-diagnostic-language-extension-token)
+            constexpr std::string_view sv{__FUNCSIG__};  // std: as above  // NOLINT(clang-diagnostic-language-extension-token)
             constexpr size_t last = sv.find_last_of(">");
 #else
             // GCC: consteval auto Impl::enumName() [with auto EnumVal = align::CM]
-            constexpr std::string_view sv{__PRETTY_FUNCTION__};
+            constexpr std::string_view sv{__PRETTY_FUNCTION__};  // std: eastl::string_view::find_last_of is not constexpr
             constexpr auto last = sv.find_last_of("]");
 #endif
             constexpr size_t first = sv.find_last_of(':', last) + 1;
-            std::array<char, last - first + 1> buf{};  // +1 '\0' terminated c_str
-            ranges::copy(std::string_view{sv.data() + first, last - first}, buf.begin());
+            std::array<char, last - first + 1> buf{};                                      // +1 '\0' terminated c_str
+            ranges::copy(std::string_view{sv.data() + first, last - first}, buf.begin());  // std: as above
             return buf;
         }
 
@@ -34,27 +34,27 @@ namespace BECore {
         inline constexpr auto ENameArr{enumName<EnumVal>()};
 
         template <auto EnumVal>
-        inline constexpr eastl::string_view EnumName{ENameArr<EnumVal>.data(), ENameArr<EnumVal>.size() - 1};
+        inline constexpr StringView EnumName{ENameArr<EnumVal>.data(), ENameArr<EnumVal>.size() - 1};
 
         template <typename Enum, auto... Enums>
         class Tokenizer {
             static constexpr size_t Count = sizeof...(Enums);
 
             struct Data {
-                eastl::string_view name;
+                StringView name;
                 Enum value;
             };
 
-            static constexpr eastl::array<Data, Count> tokens{Data{EnumName<Enums>, Enums}...};
-            static constexpr eastl::array<eastl::string_view, Count> names{EnumName<Enums>...};
-            static constexpr eastl::array<Enum, Count> values{Enums...};
+            static constexpr Array<Data, Count> tokens{Data{EnumName<Enums>, Enums}...};
+            static constexpr Array<StringView, Count> names{EnumName<Enums>...};
+            static constexpr Array<Enum, Count> values{Enums...};
 
             using Ty = std::underlying_type_t<Enum>;
             static constexpr Enum errorValue{static_cast<Enum>(std::numeric_limits<Ty>::max())};
 
             // Runtime PoolString cache
             struct RuntimeCache {
-                eastl::array<PoolString, Count> poolStrings{};
+                Array<PoolString, Count> poolStrings{};
                 std::once_flag initFlag{};
 
                 void Initialize() {
@@ -73,9 +73,9 @@ namespace BECore {
         public:
             static constexpr size_t EnumCount = Count;
 
-            static constexpr eastl::string_view ToString(Enum e) noexcept {
+            static constexpr StringView ToString(Enum e) noexcept {
                 auto it = ranges::find(tokens, e, &Data::value);
-                return it == tokens.end() ? eastl::string_view{} : it->name;
+                return it == tokens.end() ? StringView{} : it->name;
             }
 
             static PoolString ToPoolString(Enum e) noexcept {
@@ -88,7 +88,7 @@ namespace BECore {
                 return PoolString{};
             }
 
-            static constexpr Enum ToEnum(eastl::string_view str) noexcept {
+            static constexpr Enum ToEnum(StringView str) noexcept {
                 auto it = ranges::find(tokens, str, &Data::name);
                 return it == tokens.end() ? errorValue : it->value;
             }
@@ -108,17 +108,17 @@ namespace BECore {
             }
 
             // Access to the cached PoolString array
-            static const eastl::array<PoolString, Count>& GetPoolStrings() noexcept {
+            static const Array<PoolString, Count>& GetPoolStrings() noexcept {
                 return GetCache().poolStrings;
             }
 
             // Access to compile-time string_view array
-            static constexpr const eastl::array<eastl::string_view, Count>& GetNames() noexcept {
+            static constexpr const Array<StringView, Count>& GetNames() noexcept {
                 return names;
             }
 
             // Access to compile-time values array
-            static constexpr const eastl::array<Enum, Count>& GetValues() noexcept {
+            static constexpr const Array<Enum, Count>& GetValues() noexcept {
                 return values;
             }
         };
@@ -157,7 +157,7 @@ namespace BECore {
         }
 
         /// Convert enum to string_view (constexpr)
-        static constexpr eastl::string_view ToString(Enum e) noexcept {
+        static constexpr StringView ToString(Enum e) noexcept {
             return Tok().ToString(e);
         }
 
@@ -167,18 +167,18 @@ namespace BECore {
         }
 
         /// Parse eastl::string_view to enum
-        static constexpr Enum FromString(eastl::string_view str) noexcept {
+        static constexpr Enum FromString(StringView str) noexcept {
             return Tok().ToEnum(str);
         }
 
         /// Parse std::string_view to enum
-        static constexpr Enum FromString(std::string_view str) noexcept {
-            return Tok().ToEnum(eastl::string_view{str.data(), str.size()});
+        static constexpr Enum FromString(std::string_view str) noexcept {  // std: the callers that hold a std view
+            return Tok().ToEnum(FromStd(str));
         }
 
         /// Parse const char* to enum
         static constexpr Enum FromString(const char* str) noexcept {
-            return Tok().ToEnum(eastl::string_view{str});
+            return Tok().ToEnum(StringView{str});
         }
 
         /// Parse PoolString to enum
@@ -187,7 +187,7 @@ namespace BECore {
         }
 
         /// Safe cast from eastl::string_view to enum (returns nullopt on failure)
-        static constexpr std::optional<Enum> Cast(eastl::string_view str) noexcept {
+        static constexpr Optional<Enum> Cast(StringView str) noexcept {
             auto result = FromString(str);
             if (result == Tok().ErrorValue()) {
                 return std::nullopt;
@@ -196,13 +196,13 @@ namespace BECore {
         }
 
         /// Safe cast from std::string_view to enum (returns nullopt on failure)
-        static constexpr std::optional<Enum> Cast(std::string_view str) noexcept {
-            return Cast(eastl::string_view{str.data(), str.size()});
+        static constexpr Optional<Enum> Cast(std::string_view str) noexcept {  // std: the callers that hold a std view
+            return Cast(FromStd(str));
         }
 
         /// Safe cast from const char* to enum (returns nullopt on failure)
-        static constexpr std::optional<Enum> Cast(const char* str) noexcept {
-            return Cast(eastl::string_view{str});
+        static constexpr Optional<Enum> Cast(const char* str) noexcept {
+            return Cast(StringView{str});
         }
 
         /// Get all enum names as constexpr array
@@ -252,10 +252,10 @@ namespace BECore::Detail {
  * only for enum types that support EnumUtils::ToString().
  */
 template <typename Enum>
-struct fmt::formatter<Enum, std::enable_if_t<BECore::Detail::HasEnumUtils<Enum>::value, char>> : fmt::formatter<std::string_view> {
+struct fmt::formatter<Enum, std::enable_if_t<BECore::Detail::HasEnumUtils<Enum>::value, char>> : fmt::formatter<std::string_view> {  // std: fmt formats std::string_view
     auto format(Enum e, fmt::format_context& ctx) const -> decltype(ctx.out()) {
         auto sv = BECore::EnumUtils<Enum>::ToString(e);
-        return fmt::formatter<std::string_view>::format(std::string_view(sv.data(), sv.size()), ctx);
+        return fmt::formatter<std::string_view>::format(BECore::ToStd(sv), ctx);  // std: fmt
     }
 };
 

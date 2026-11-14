@@ -26,7 +26,7 @@ namespace BECore {
             const QuadRendererComponent* quad = nullptr;
             const SpriteRendererComponent* sprite = nullptr;
             for (const auto& component : node.GetComponents()) {
-                const eastl::string_view typeName = component->GetTypeMeta().typeName;
+                const StringView typeName = component->GetTypeMeta().typeName;
                 if (!transform && typeName == TransformComponent::GetStaticTypeName()) {
                     transform = static_cast<const TransformComponent*>(component.Get());
                 } else if (!quad && typeName == QuadRendererComponent::GetStaticTypeName()) {

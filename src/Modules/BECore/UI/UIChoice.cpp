@@ -7,8 +7,8 @@ namespace BECore::UIChoice {
 
     namespace {
 
-        const eastl::string& EmptyText() {
-            static const eastl::string none;
+        const String& EmptyText() {
+            static const String none;
             return none;
         }
 
@@ -39,7 +39,7 @@ namespace BECore::UIChoice {
         return clicker ? clicker->value : PoolString{};
     }
 
-    const eastl::string& GetText(const UIElement& element) {
+    const String& GetText(const UIElement& element) {
         if (const UITextComponent* own = element.GetComponent<UITextComponent>()) {
             return own->text;
         }

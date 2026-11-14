@@ -3,8 +3,6 @@
 #include <BECore/Scene/IComponent.h>
 #include <Stress/RampController.h>
 #include <Stress/StressRecorder.h>
-#include <functional>
-#include <optional>
 
 namespace BECore::SceneEvents {
     struct SceneUpdateEvent;
@@ -35,7 +33,7 @@ namespace BECore::Stress {
         BE_CLASS(StressRunComponent)
     public:
         /// Where the JSON line goes: a line without its newline
-        using LineSink = std::function<void(const eastl::string&)>;
+        using LineSink = std::function<void(const String&)>;
 
         StressRunComponent() = default;
         ~StressRunComponent() override = default;
@@ -67,12 +65,12 @@ namespace BECore::Stress {
         /// Prints the line of the run and asks the application to quit
         void FinishFixed(const StressGame& game);
         void FinishRamp(const StressGame& game);
-        void Print(const eastl::string& line) const;
+        void Print(const String& line) const;
         static bool IsManualClock();
 
         PoolString _counterName = "Stress objects"_intern;
         StressRecorder _recorder;
-        std::optional<RampController> _ramp;  // made at the first update of a ramp run
+        Optional<RampController> _ramp;  // made at the first update of a ramp run
         LineSink _sink;
         uint64_t _seenVersion = 0;    // the StressState version of the last update; 0 is never a version
         uint64_t _firstMeasured = 0;  // the first frame id a sample is taken of

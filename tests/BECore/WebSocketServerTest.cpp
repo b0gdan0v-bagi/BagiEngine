@@ -32,13 +32,13 @@ namespace BECore::Tests {
         struct Response {
             bool ok = false;
             int64_t id = -1;
-            eastl::string errorCode;
+            String errorCode;
             Json json;
         };
 
         Response ParseResponse(const std::string& text) {
             Response response;
-            auto parsed = ParseJson(eastl::string_view(text.data(), text.size()));
+            auto parsed = ParseJson(FromStd(text));
             if (!parsed) {
                 ADD_FAILURE() << "the response is not JSON: " << text;
                 return response;
@@ -77,12 +77,12 @@ namespace BECore::Tests {
                 return port.value_or(0);
             }
 
-            std::optional<TestClient> OpenClient(uint16_t port) {
+            Optional<TestClient> OpenClient(uint16_t port) {
                 return TestClient::Open(port, [this] { service.Drain(); });
             }
 
             /// A connected client that finished the handshake
-            std::optional<TestClient> Connect(uint16_t port) {
+            Optional<TestClient> Connect(uint16_t port) {
                 auto client = OpenClient(port);
                 if (client && !client->Handshake(port)) {
                     ADD_FAILURE() << "the handshake was not accepted";
@@ -145,7 +145,7 @@ namespace BECore::Tests {
         const auto result = other.Start(port);
         ASSERT_FALSE(result.has_value());
         EXPECT_EQ(result.error().code, RemoteControlErrors::kListenFailed);
-        EXPECT_NE(result.error().message.find("127.0.0.1"), eastl::string::npos);
+        EXPECT_NE(result.error().message.find("127.0.0.1"), String::npos);
         EXPECT_FALSE(other.IsRunning());
         otherService.Shutdown();
     }
@@ -210,10 +210,10 @@ namespace BECore::Tests {
         ASSERT_TRUE(client.has_value());
 
         constexpr int kRequests = 50;
-        eastl::vector<uint8_t> batch;
+        Vector<uint8_t> batch;
         for (int id = 1; id <= kRequests; ++id) {
             const std::string text = Request(id, "echo", "{\"n\":" + std::to_string(id) + "}");
-            const auto frame = EncodeTextFrame(eastl::string_view(text.data(), text.size()), kMask);
+            const auto frame = EncodeTextFrame(FromStd(text), kMask);
             batch.insert(batch.end(), frame.begin(), frame.end());
         }
         client->Send(AsBytes(batch));
@@ -318,7 +318,7 @@ namespace BECore::Tests {
 
         // Only the header of a frame that announces more than the limit: the server must not wait for the payload
         const uint64_t length = ControlService::kMaxRequestBytes + 1;
-        eastl::vector<uint8_t> header = {0x81, 0xFF};
+        Vector<uint8_t> header = {0x81, 0xFF};
         for (int shift = 56; shift >= 0; shift -= 8) {
             header.push_back(static_cast<uint8_t>(length >> shift));
         }
@@ -405,7 +405,7 @@ namespace BECore::Tests {
     TEST_F(WebSocketServerTest, FifthConnectionIsRefusedAsBusy) {
         const uint16_t port = StartServer();
 
-        eastl::vector<TestClient> clients;
+        Vector<TestClient> clients;
         for (size_t i = 0; i < WebSocketServer::kMaxConnections; ++i) {
             auto client = Connect(port);
             ASSERT_TRUE(client.has_value());
@@ -460,7 +460,7 @@ namespace BECore::Tests {
             const auto frame = client->WaitForFrame();
             ASSERT_TRUE(frame.has_value());
             EXPECT_EQ(frame->opcode, WebSocketOpcode::kText);
-            const auto event = ParseJson(eastl::string_view(frame->payload.data(), frame->payload.size()));
+            const auto event = ParseJson(FromStd(frame->payload));
             ASSERT_TRUE(event.has_value());
             EXPECT_EQ(GetJsonString(*event, "event").value_or(""), "state_changed");
             const Json* eventData = FindJsonMember(*event, "data");

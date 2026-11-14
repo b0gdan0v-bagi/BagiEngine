@@ -64,7 +64,7 @@ namespace BECore {
             const bool entered = ImGui::InputText("##rename", state.renameBuffer, sizeof(state.renameBuffer), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
             // Enter commits; Escape and a click elsewhere end the field without a change. The name is interned only here
             if (entered && HierarchyModel::ValidateName(state.renameBuffer)) {
-                node.SetName(PoolString::Intern(eastl::string_view(state.renameBuffer)));
+                node.SetName(PoolString::Intern(StringView(state.renameBuffer)));
                 state.dirty = true;
             }
             if (entered || ImGui::IsItemDeactivated()) {
@@ -243,7 +243,7 @@ namespace BECore {
             if (ImGui::Selectable("Any component", state.componentType.empty())) {
                 state.componentType = {};
             }
-            for (const eastl::string_view type : state.componentTypes) {
+            for (const StringView type : state.componentTypes) {
                 if (ImGui::Selectable(type.data(), type == state.componentType)) {
                     state.componentType = type;
                 }

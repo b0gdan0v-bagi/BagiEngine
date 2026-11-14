@@ -10,7 +10,7 @@ namespace BECore::Tests {
     namespace {
 
         /// Always the same words, in order, then the last one again
-        RandomFn MakeFixed(eastl::vector<uint64_t> words) {
+        RandomFn MakeFixed(Vector<uint64_t> words) {
             auto index = eastl::make_shared<size_t>(0);
             return [words = std::move(words), index]() -> uint64_t {
                 const size_t at = *index < words.size() ? (*index)++ : words.size() - 1;
@@ -19,7 +19,7 @@ namespace BECore::Tests {
         }
 
         bool IsInAlphabet(char c) {
-            return RoomLimits::kRoomCodeAlphabet.find(c) != eastl::string_view::npos;
+            return RoomLimits::kRoomCodeAlphabet.find(c) != StringView::npos;
         }
 
     }  // namespace
@@ -33,9 +33,9 @@ namespace BECore::Tests {
     }
 
     TEST(RoomCodeTest, AlphabetHasNoAmbiguousCharacters) {
-        const eastl::string_view alphabet = RoomLimits::kRoomCodeAlphabet;
+        const StringView alphabet = RoomLimits::kRoomCodeAlphabet;
         for (const char c : {'I', 'O', '0', '1', 'i', 'o', 'l'}) {
-            EXPECT_EQ(alphabet.find(c), eastl::string_view::npos) << c;
+            EXPECT_EQ(alphabet.find(c), StringView::npos) << c;
         }
         for (const char c : alphabet) {
             EXPECT_TRUE((c >= 'A' && c <= 'Z') || (c >= '2' && c <= '9')) << c;
@@ -45,9 +45,9 @@ namespace BECore::Tests {
 
     TEST(RoomCodeTest, GeneratedCodesHaveTheLengthAndTheAlphabet) {
         const RandomFn random = MakeSequence(1);
-        eastl::hash_map<char, int> seen;
+        HashMap<char, int> seen;
         for (int i = 0; i < 3000; ++i) {
-            const eastl::string code = GenerateRoomCode(random);
+            const String code = GenerateRoomCode(random);
             ASSERT_EQ(code.size(), RoomLimits::kRoomCodeLength) << code.c_str();
             for (const char c : code) {
                 ASSERT_TRUE(IsInAlphabet(c)) << code.c_str();
@@ -95,12 +95,12 @@ namespace BECore::Tests {
         EXPECT_FALSE(NormalizeRoomCode(" ABCD").has_value());
         EXPECT_FALSE(NormalizeRoomCode("ABCD-").has_value());
         EXPECT_FALSE(NormalizeRoomCode("ABC\xC3\x89").has_value());
-        EXPECT_FALSE(NormalizeRoomCode(eastl::string_view("ABC\0E", 5)).has_value());
+        EXPECT_FALSE(NormalizeRoomCode(StringView("ABC\0E", 5)).has_value());
     }
 
     TEST(RoomCodeTest, NormalizeNeverFailsOnAnyByte) {
         for (int byte = 0; byte < 256; ++byte) {
-            eastl::string text = "ABCD";
+            String text = "ABCD";
             text.push_back(static_cast<char>(byte));
             const bool isLowerCase = byte >= 'a' && byte <= 'z';
             const bool expected = IsInAlphabet(static_cast<char>(isLowerCase ? byte - 'a' + 'A' : byte));
@@ -111,7 +111,7 @@ namespace BECore::Tests {
     TEST(RoomCodeTest, GeneratedCodesNormaliseToThemselves) {
         const RandomFn random = MakeSequence(3);
         for (int i = 0; i < 200; ++i) {
-            const eastl::string code = GenerateRoomCode(random);
+            const String code = GenerateRoomCode(random);
             EXPECT_EQ(NormalizeRoomCode(code), code);
         }
     }
@@ -119,7 +119,7 @@ namespace BECore::Tests {
     TEST(RoomCodeTest, TokenIs32LowerCaseHexCharacters) {
         const RandomFn random = MakeSequence(11);
         for (int i = 0; i < 100; ++i) {
-            const eastl::string token = GenerateToken(random);
+            const String token = GenerateToken(random);
             EXPECT_EQ(token.size(), RoomLimits::kTokenLength);
             EXPECT_TRUE(IsWellFormedToken(token)) << token.c_str();
         }
@@ -132,7 +132,7 @@ namespace BECore::Tests {
 
     TEST(RoomCodeTest, TokensDiffer) {
         const RandomFn random = MakeSequence(21);
-        eastl::hash_map<eastl::string, int> seen;
+        HashMap<String, int> seen;
         for (int i = 0; i < 500; ++i) {
             ++seen[GenerateToken(random)];
         }
@@ -155,7 +155,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(IsWellFormedToken("0123456789ABCDEF0123456789ABCDEF"));
         EXPECT_FALSE(IsWellFormedToken("0123456789abcdef0123456789abcdeg"));
         EXPECT_FALSE(IsWellFormedToken("0123456789abcdef0123456789abcde "));
-        EXPECT_FALSE(IsWellFormedToken(eastl::string_view("0123456789abcdef0123456789abcd\0e", 32)));
+        EXPECT_FALSE(IsWellFormedToken(StringView("0123456789abcdef0123456789abcd\0e", 32)));
     }
 
 }  // namespace BECore::Tests

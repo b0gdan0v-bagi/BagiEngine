@@ -27,7 +27,7 @@ namespace BECore {
          * @param xmlContent XML content as string
          * @return True if successfully loaded
          */
-        bool LoadFromString(eastl::string_view xmlContent);
+        bool LoadFromString(StringView xmlContent);
 
         /**
          * @brief Save XML to file

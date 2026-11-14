@@ -110,7 +110,7 @@ namespace BECore::ScenePick {
             if (maxX < box.x0 || minX > box.x1 || maxY < box.y0 || minY > box.y1) {
                 return false;
             }
-            const eastl::array<Vec2, 4> boxCorners{Vec2{box.x0, box.y0}, Vec2{box.x1, box.y0}, Vec2{box.x1, box.y1}, Vec2{box.x0, box.y1}};
+            const Array<Vec2, 4> boxCorners{Vec2{box.x0, box.y0}, Vec2{box.x1, box.y0}, Vec2{box.x1, box.y1}, Vec2{box.x0, box.y1}};
             constexpr size_t kEdgeAxes = 2;  // a quad is a parallelogram: its first two edges give both normals
             for (size_t edge = 0; edge < kEdgeAxes; ++edge) {
                 const Vec2 direction{quad[edge + 1].x - quad[edge].x, quad[edge + 1].y - quad[edge].y};
@@ -182,7 +182,7 @@ namespace BECore::ScenePick {
         return best.hit;
     }
 
-    void PickInRect(Scene& scene, float x0, float y0, float x1, float y1, eastl::vector<SceneNode*>& out) {
+    void PickInRect(Scene& scene, float x0, float y0, float x1, float y1, Vector<SceneNode*>& out) {
         out.clear();
         const Box box{std::min(x0, x1), std::min(y0, y1), std::max(x0, x1), std::max(y0, y1)};
         auto collect = [&](SceneNode& node) {

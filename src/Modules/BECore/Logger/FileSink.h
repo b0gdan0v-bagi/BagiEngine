@@ -18,15 +18,15 @@ namespace BECore {
             return _file.is_open();
         }
 
-        void Write(LogLevel level, eastl::string_view message) override;
+        void Write(LogLevel level, StringView message) override;
 
     private:
         void OnLogEvent(const LogEvent& event);
 
         void OnFlushEvent();
 
-        void SetFilename(eastl::string_view filename);
-        const eastl::string& GetFilename() const {
+        void SetFilename(StringView filename);
+        const String& GetFilename() const {
             return _filename;
         }
 
@@ -38,7 +38,7 @@ namespace BECore {
         }
 
     private:
-        BE_REFLECT_FIELD eastl::string _filename = "engine.log";
+        BE_REFLECT_FIELD String _filename = "engine.log";
         BE_REFLECT_FIELD bool _append = false;
         std::ofstream _file;
         Mutex _mutex{BE_LOCK_SITE("Log file sink")};

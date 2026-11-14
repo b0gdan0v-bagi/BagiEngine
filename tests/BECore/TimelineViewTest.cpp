@@ -33,7 +33,7 @@ namespace BECore::Tests {
             return ZoneRecord{.site = &site, .beginTicks = begin, .endTicks = end, .depth = depth};
         }
 
-        std::vector<uint32_t> ThreadIds(const RingSnapshot& snapshot, const eastl::vector<TimelineLane>& lanes) {
+        std::vector<uint32_t> ThreadIds(const RingSnapshot& snapshot, const Vector<TimelineLane>& lanes) {
             std::vector<uint32_t> ids;
             for (const TimelineLane& lane : lanes) {
                 ids.push_back(snapshot.threads[lane.threadIndex].threadId);

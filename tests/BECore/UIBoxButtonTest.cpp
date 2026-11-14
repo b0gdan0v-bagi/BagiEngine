@@ -68,14 +68,14 @@ namespace BECore::Tests {
                                                        << "," << int(expected.g) << "," << int(expected.b) << "," << int(expected.a);
         }
 
-        eastl::vector<DrawCall> Draw(UIElement& element) {
+        Vector<DrawCall> Draw(UIElement& element) {
             RecordingRenderer renderer;
             element.DrawSelf(renderer);
             return renderer.calls;
         }
 
         /// The bar of a selected element: the one Rect call in the bottom strip of the button
-        std::optional<Rect> BarOf(const eastl::vector<DrawCall>& calls) {
+        Optional<Rect> BarOf(const Vector<DrawCall>& calls) {
             for (const DrawCall& call : calls) {
                 if (call.kind == DrawKind::Rect && call.rect.h <= UIStateLook::kSelectedBarHeight + 0.01f) {
                     return call.rect;
@@ -225,7 +225,7 @@ namespace BECore::Tests {
     TEST_F(UIBoxButtonSegmentedTest, SegmentedStillMarksOneStyledSegmentSelected) {
         auto group = New<UISegmented>();
         group->bind = PoolString::Intern("boxButtonChoice");
-        eastl::vector<IntrusivePtr<UIElement>> segments;
+        Vector<IntrusivePtr<UIElement>> segments;
         for (const char* value : {"one", "two", "three"}) {
             auto segment = MakeElement(State::Normal);
             segment->GetComponent<UIInputClicker>()->value = PoolString::Intern(value);

@@ -25,7 +25,7 @@ namespace BECore {
          * taken together with it; @p selectedFrame (a RingFrame::index) is outlined.
          * @return The RingFrame::index of the frame that was clicked, none when the click missed or the bar has no frame in the ring
          */
-        [[nodiscard]] std::optional<uint64_t> Draw(const eastl::vector<FrameStats>& history, const RingSnapshot& snapshot, std::optional<uint64_t> selectedFrame);
+        [[nodiscard]] Optional<uint64_t> Draw(const Vector<FrameStats>& history, const RingSnapshot& snapshot, Optional<uint64_t> selectedFrame);
 
         [[nodiscard]] double GetBudgetMs() const;
 
@@ -37,23 +37,23 @@ namespace BECore {
          * collector's frame (EndFrame) and then marks the ring's frame (BE_PROFILE_FRAME), once each per frame, and an idle pass of a manual
          * clock does neither; the panel takes the history and the snapshot in the same Update, so both end at the same frame.
          */
-        [[nodiscard]] static std::optional<size_t> RingFramePosition(size_t barIndex, size_t barCount, size_t ringFrameCount);
+        [[nodiscard]] static Optional<size_t> RingFramePosition(size_t barIndex, size_t barCount, size_t ringFrameCount);
 
     private:
         enum class Budget : int { Fps60, Fps30, Custom };
         enum class BarMode : int { FrameTime, StageSplit };
 
         void DrawStageLegend() const;
-        void DrawCounters(const eastl::vector<FrameStats>& history, const RingSnapshot& snapshot, std::optional<uint64_t> selectedFrame);
+        void DrawCounters(const Vector<FrameStats>& history, const RingSnapshot& snapshot, Optional<uint64_t> selectedFrame);
 
         Budget _budget = Budget::Fps60;
         float _customBudgetMs = 20.0f;
         BarMode _barMode = BarMode::FrameTime;
 
         // Kept as members so a steady panel allocates nothing: the names are rebuilt when the newest frame number moves
-        eastl::vector<PoolString> _counterNames;
-        eastl::vector<PoolString> _pickedCounters;
-        eastl::vector<float> _counterValues;
+        Vector<PoolString> _counterNames;
+        Vector<PoolString> _pickedCounters;
+        Vector<float> _counterValues;
         uint64_t _counterNamesFrame = 0;
     };
 

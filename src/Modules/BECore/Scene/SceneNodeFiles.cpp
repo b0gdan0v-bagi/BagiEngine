@@ -7,17 +7,17 @@ namespace BECore {
     namespace {
 
         // Same form as the names in the header: string_view over a literal, so `.data()` is null-terminated for pugixml
-        constexpr eastl::string_view kScenesElement = "scenes";
-        constexpr eastl::string_view kSceneElement = "scene";
-        constexpr eastl::string_view kNodesElement = "nodes";
-        constexpr eastl::string_view kSceneNameAttribute = "name";
+        constexpr StringView kScenesElement = "scenes";
+        constexpr StringView kSceneElement = "scene";
+        constexpr StringView kNodesElement = "nodes";
+        constexpr StringView kSceneNameAttribute = "name";
         constexpr char kRefSeparator = '/';
 
         bool IsRefChar(char c) {
             return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-';
         }
 
-        bool IsNodeOverrideAttribute(eastl::string_view name) {
+        bool IsNodeOverrideAttribute(StringView name) {
             return std::find(kNodeOverrideAttributes.begin(), kNodeOverrideAttributes.end(), name) != kNodeOverrideAttributes.end();
         }
 
@@ -28,10 +28,10 @@ namespace BECore {
         };
 
         /// The `<component type="@p type">` of @p node, empty when there is none
-        pugi::xml_node FindComponent(pugi::xml_node node, eastl::string_view type) {
+        pugi::xml_node FindComponent(pugi::xml_node node, StringView type) {
             const pugi::xml_node components = node.child(kComponentsElementName.data());
             for (pugi::xml_node component = components.child(kComponentElementName.data()); component; component = component.next_sibling(kComponentElementName.data())) {
-                if (eastl::string_view{component.attribute(kComponentTypeAttribute.data()).as_string()} == type) {
+                if (StringView{component.attribute(kComponentTypeAttribute.data()).as_string()} == type) {
                     return component;
                 }
             }
@@ -39,9 +39,9 @@ namespace BECore {
         }
 
         /// A field written in both spellings in one override has no single winner; empty when fine, else the reason
-        eastl::string CheckFieldSpelling(pugi::xml_node source, eastl::string_view type) {
+        String CheckFieldSpelling(pugi::xml_node source, StringView type) {
             for (pugi::xml_attribute attr = source.first_attribute(); attr; attr = attr.next_attribute()) {
-                if (eastl::string_view{attr.name()} != kComponentTypeAttribute && source.child(attr.name())) {
+                if (StringView{attr.name()} != kComponentTypeAttribute && source.child(attr.name())) {
                     return Format("component '{}': field '{}' is written both as an attribute and as an element", type, attr.name());
                 }
             }
@@ -49,9 +49,9 @@ namespace BECore {
         }
 
         /// Checks the whole reference element and looks every component up in @p node, changing nothing
-        bool CollectOverrides(pugi::xml_node node, pugi::xml_node reference, eastl::vector<ComponentOverride>& overrides, eastl::string& error) {
+        bool CollectOverrides(pugi::xml_node node, pugi::xml_node reference, Vector<ComponentOverride>& overrides, String& error) {
             for (pugi::xml_attribute attr = reference.first_attribute(); attr; attr = attr.next_attribute()) {
-                const eastl::string_view name = attr.name();
+                const StringView name = attr.name();
                 if (name != kNodeRefAttribute && !IsNodeOverrideAttribute(name)) {
                     error = Format("attribute '{}' is not supported on a node reference", name);
                     return false;
@@ -63,7 +63,7 @@ namespace BECore {
                 if (child.type() != pugi::node_element) {
                     continue;
                 }
-                if (eastl::string_view{child.name()} != kComponentsElementName) {
+                if (StringView{child.name()} != kComponentsElementName) {
                     error = Format("element '{}' is not supported inside a node reference", child.name());
                     return false;
                 }
@@ -78,17 +78,17 @@ namespace BECore {
                 if (source.type() != pugi::node_element) {
                     continue;
                 }
-                if (eastl::string_view{source.name()} != kComponentElementName) {
+                if (StringView{source.name()} != kComponentElementName) {
                     error = Format("element '{}' is not supported inside '{}'", source.name(), kComponentsElementName);
                     return false;
                 }
-                const eastl::string_view type = source.attribute(kComponentTypeAttribute.data()).as_string();
+                const StringView type = source.attribute(kComponentTypeAttribute.data()).as_string();
                 if (type.empty()) {
                     error = Format("a '{}' of a node reference has no '{}'", kComponentElementName, kComponentTypeAttribute);
                     return false;
                 }
                 for (const ComponentOverride& seen : overrides) {
-                    if (eastl::string_view{seen.source.attribute(kComponentTypeAttribute.data()).as_string()} == type) {
+                    if (StringView{seen.source.attribute(kComponentTypeAttribute.data()).as_string()} == type) {
                         error = Format("component '{}' is overridden twice", type);
                         return false;
                     }
@@ -118,7 +118,7 @@ namespace BECore {
         /// Writes the override's fields over @p target; each field is replaced whole, in the spelling of the override
         void MergeComponent(pugi::xml_node target, pugi::xml_node source) {
             for (pugi::xml_attribute attr = source.first_attribute(); attr; attr = attr.next_attribute()) {
-                if (eastl::string_view{attr.name()} == kComponentTypeAttribute) {
+                if (StringView{attr.name()} == kComponentTypeAttribute) {
                     continue;
                 }
                 while (target.remove_child(attr.name())) {
@@ -150,10 +150,10 @@ namespace BECore {
 
         /// Parses @p file into @p out and checks that its document element is a node that is not a reference itself and, when
         /// @p versionLabel is not empty, that its content version is the engine's (the label names the file in the message)
-        bool ReadNodeFile(const std::filesystem::path& file, pugi::xml_document& out, eastl::string& error, eastl::string_view versionLabel = {}) {
+        bool ReadNodeFile(const std::filesystem::path& file, pugi::xml_document& out, String& error, StringView versionLabel = {}) {
             std::error_code ec;
             if (file.empty() || !std::filesystem::is_regular_file(file, ec)) {
-                error = ec ? Format("the node file cannot be read: {}", ec.message()) : eastl::string{"the node file does not exist"};
+                error = ec ? Format("the node file cannot be read: {}", ec.message()) : String{"the node file does not exist"};
                 return false;
             }
             const pugi::xml_parse_result parsed = out.load_file(file.c_str());
@@ -162,7 +162,7 @@ namespace BECore {
                 return false;
             }
             const pugi::xml_node root = out.document_element();
-            if (eastl::string_view{root.name()} != kNodeElementName) {
+            if (StringView{root.name()} != kNodeElementName) {
                 error = Format("the document element of the node file is '{}', not '{}'", root.name(), kNodeElementName);
                 return false;
             }
@@ -179,16 +179,16 @@ namespace BECore {
             return true;
         }
 
-        std::filesystem::path FileOf(const std::filesystem::path& baseDirectory, eastl::string_view ref) {
-            return baseDirectory / (std::filesystem::path(std::string_view(ref.data(), ref.size())) += kNodeFileExtension.data());
+        std::filesystem::path FileOf(const std::filesystem::path& baseDirectory, StringView ref) {
+            return baseDirectory / (std::filesystem::path(ToStd(ref)) += kNodeFileExtension.data());
         }
 
-        void Fail(NodeExpansion& result, eastl::string_view scene, eastl::string_view ref, eastl::string_view reason) {
+        void Fail(NodeExpansion& result, StringView scene, StringView ref, StringView reason) {
             result.errors.push_back(Format("scene '{}': node reference '{}': {}", scene, ref, reason));
         }
 
         void ExpandScene(pugi::xml_node sceneEl, const NodeFileLoader& loader, bool markSource, NodeExpansion& result) {
-            const eastl::string_view sceneName = sceneEl.attribute(kSceneNameAttribute.data()).as_string();
+            const StringView sceneName = sceneEl.attribute(kSceneNameAttribute.data()).as_string();
 
             for (pugi::xml_node nodesEl = sceneEl.child(kNodesElement.data()); nodesEl; nodesEl = nodesEl.next_sibling(kNodesElement.data())) {
                 pugi::xml_node next;
@@ -201,7 +201,7 @@ namespace BECore {
                     }
 
                     pugi::xml_document expanded;
-                    eastl::string error;
+                    String error;
                     if (ExpandNodeReference(el, loader, markSource, expanded, error)) {
                         nodesEl.insert_copy_before(expanded.document_element(), el);
                         ++result.expanded;
@@ -215,7 +215,7 @@ namespace BECore {
 
     }  // namespace
 
-    bool IsValidNodeRef(eastl::string_view ref) {
+    bool IsValidNodeRef(StringView ref) {
         if (ref.empty()) {
             return false;
         }
@@ -235,13 +235,13 @@ namespace BECore {
         return segmentLength != 0;
     }
 
-    bool ApplyNodeOverrides(pugi::xml_node node, pugi::xml_node reference, eastl::string& error) {
-        eastl::vector<ComponentOverride> overrides;
+    bool ApplyNodeOverrides(pugi::xml_node node, pugi::xml_node reference, String& error) {
+        Vector<ComponentOverride> overrides;
         if (!CollectOverrides(node, reference, overrides, error)) {
             return false;
         }
 
-        for (const eastl::string_view name : kNodeOverrideAttributes) {
+        for (const StringView name : kNodeOverrideAttributes) {
             if (const pugi::xml_attribute attr = reference.attribute(name.data())) {
                 SetAttribute(node, name.data(), attr.value());
             }
@@ -252,9 +252,9 @@ namespace BECore {
         return true;
     }
 
-    bool ExpandNodeReference(pugi::xml_node reference, const NodeFileLoader& loader, bool markSource, pugi::xml_document& out, eastl::string& error) {
+    bool ExpandNodeReference(pugi::xml_node reference, const NodeFileLoader& loader, bool markSource, pugi::xml_document& out, String& error) {
         out.reset();
-        const eastl::string ref = reference.attribute(kNodeRefAttribute.data()).as_string();
+        const String ref = reference.attribute(kNodeRefAttribute.data()).as_string();
         if (!IsValidNodeRef(ref)) {
             error = "not a valid reference (segments of letters, digits, '_' and '-' separated by '/')";
             return false;
@@ -291,7 +291,7 @@ namespace BECore {
     }
 
     NodeFileLoader MakeDirectoryNodeLoader(std::filesystem::path baseDirectory) {
-        return [baseDirectory = eastl::move(baseDirectory)](eastl::string_view ref, pugi::xml_document& out, eastl::string& error) {
+        return [baseDirectory = eastl::move(baseDirectory)](StringView ref, pugi::xml_document& out, String& error) {
             if (!IsValidNodeRef(ref)) {
                 error = "not a valid reference";
                 return false;
@@ -301,12 +301,12 @@ namespace BECore {
     }
 
     NodeFileLoader MakeFileSystemNodeLoader(const FileSystem& fs) {
-        return [&fs](eastl::string_view ref, pugi::xml_document& out, eastl::string& error) {
+        return [&fs](StringView ref, pugi::xml_document& out, String& error) {
             if (!IsValidNodeRef(ref)) {
                 error = "not a valid reference";
                 return false;
             }
-            const eastl::string virtualPath = Format("{}/{}{}", kNodeFilesMountPoint, ref, kNodeFileExtension);
+            const String virtualPath = Format("{}/{}{}", kNodeFilesMountPoint, ref, kNodeFileExtension);
             return ReadNodeFile(fs.ResolvePath(virtualPath), out, error, virtualPath);
         };
     }

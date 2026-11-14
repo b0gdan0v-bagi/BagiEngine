@@ -111,7 +111,7 @@ namespace BECore::Stress {
         ApplicationEvents::QuitEvent::Emit();
     }
 
-    void StressRunComponent::Print(const eastl::string& line) const {
+    void StressRunComponent::Print(const String& line) const {
         if (_sink) {
             _sink(line);
             return;

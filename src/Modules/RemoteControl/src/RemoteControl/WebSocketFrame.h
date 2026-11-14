@@ -39,25 +39,25 @@ namespace BECore {
      * A server sends its frames unmasked. @p mask is for clients and tests: a frame with a key is masked, as a
      * client's frames have to be. @p fin false starts or continues a fragmented message.
      */
-    [[nodiscard]] eastl::vector<uint8_t> EncodeFrame(uint8_t opcode, eastl::span<const uint8_t> payload, std::optional<WebSocketMask> mask = std::nullopt, bool fin = true);
+    [[nodiscard]] Vector<uint8_t> EncodeFrame(uint8_t opcode, Span<const uint8_t> payload, Optional<WebSocketMask> mask = std::nullopt, bool fin = true);
 
     /// A text frame holding @p text
-    [[nodiscard]] eastl::vector<uint8_t> EncodeTextFrame(eastl::string_view text, std::optional<WebSocketMask> mask = std::nullopt);
+    [[nodiscard]] Vector<uint8_t> EncodeTextFrame(StringView text, Optional<WebSocketMask> mask = std::nullopt);
 
     /// A close frame with @p code and @p reason (the reason is cut to fit a control frame)
-    [[nodiscard]] eastl::vector<uint8_t> EncodeCloseFrame(uint16_t code, eastl::string_view reason = {}, std::optional<WebSocketMask> mask = std::nullopt);
+    [[nodiscard]] Vector<uint8_t> EncodeCloseFrame(uint16_t code, StringView reason = {}, Optional<WebSocketMask> mask = std::nullopt);
 
     CORE_ENUM(WebSocketMessageKind, uint8_t, Text, Binary, Ping, Pong, Close)
 
     /// A complete message of the peer: a text or binary message put together from its fragments, or a control frame
     struct WebSocketMessage {
         WebSocketMessageKind kind = WebSocketMessageKind::Text;
-        eastl::vector<uint8_t> payload;                              // Close: the reason, without the code
+        Vector<uint8_t> payload;                                     // Close: the reason, without the code
         uint16_t closeCode = WebSocketCloseCode::kNoStatusReceived;  // Close only
 
         /// The payload as text (Text, Ping, Pong and the reason of a Close)
-        [[nodiscard]] eastl::string_view GetText() const {
-            return eastl::string_view(reinterpret_cast<const char*>(payload.data()), payload.size());
+        [[nodiscard]] StringView GetText() const {
+            return StringView(reinterpret_cast<const char*>(payload.data()), payload.size());
         }
     };
 
@@ -67,7 +67,7 @@ namespace BECore {
     /// A client broke the protocol: the connection has to be closed with @p closeCode
     struct WebSocketProtocolError {
         uint16_t closeCode = WebSocketCloseCode::kProtocolError;
-        eastl::string reason;
+        String reason;
     };
 
     /**
@@ -93,10 +93,10 @@ namespace BECore {
         /// @p sender is who sent the bytes that are fed
         explicit WebSocketFrameParser(size_t maxMessageBytes = ControlService::kMaxRequestBytes, WebSocketPeer sender = WebSocketPeer::Client) : _maxMessageBytes(maxMessageBytes), _sender(sender) {}
 
-        void Feed(eastl::span<const uint8_t> bytes);
+        void Feed(Span<const uint8_t> bytes);
 
         /// The next complete message, nullopt when more bytes are needed
-        [[nodiscard]] std::expected<std::optional<WebSocketMessage>, WebSocketProtocolError> Pop();
+        [[nodiscard]] std::expected<Optional<WebSocketMessage>, WebSocketProtocolError> Pop();
 
         /// The bytes the parser holds for a frame or a message that is not complete: the unread part of what was fed plus the fragments so far. At most
         /// the limit and one frame header once Pop() has returned nullopt
@@ -114,19 +114,19 @@ namespace BECore {
         };
 
         /// Reads the header at the read position: nullopt when it is not complete yet, an error when it is not valid
-        [[nodiscard]] std::expected<std::optional<FrameHeader>, WebSocketProtocolError> ReadHeader() const;
-        [[nodiscard]] std::expected<std::optional<WebSocketMessage>, WebSocketProtocolError> Accept(const FrameHeader& header, eastl::vector<uint8_t> payload);
-        [[nodiscard]] std::expected<std::optional<WebSocketMessage>, WebSocketProtocolError> Fail(uint16_t closeCode, eastl::string reason);
+        [[nodiscard]] std::expected<Optional<FrameHeader>, WebSocketProtocolError> ReadHeader() const;
+        [[nodiscard]] std::expected<Optional<WebSocketMessage>, WebSocketProtocolError> Accept(const FrameHeader& header, Vector<uint8_t> payload);
+        [[nodiscard]] std::expected<Optional<WebSocketMessage>, WebSocketProtocolError> Fail(uint16_t closeCode, String reason);
 
         size_t _maxMessageBytes;
         WebSocketPeer _sender;
-        eastl::vector<uint8_t> _buffer;
+        Vector<uint8_t> _buffer;
         size_t _readPosition = 0;  // what is before it has been consumed; Feed() drops it
-        std::optional<WebSocketProtocolError> _error;
+        Optional<WebSocketProtocolError> _error;
 
         bool _inFragmentedMessage = false;
         WebSocketMessageKind _fragmentKind = WebSocketMessageKind::Text;
-        eastl::vector<uint8_t> _fragments;
+        Vector<uint8_t> _fragments;
     };
 
 }  // namespace BECore

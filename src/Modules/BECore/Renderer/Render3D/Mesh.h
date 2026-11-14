@@ -16,8 +16,8 @@ namespace BECore {
             if (data.vertices.empty() || data.indices.empty()) {
                 return {};
             }
-            const eastl::span<const std::byte> vertexBytes = AsBytes(data.vertices);
-            const eastl::span<const std::byte> indexBytes = AsBytes(data.indices);
+            const Span<const std::byte> vertexBytes = AsBytes(data.vertices);
+            const Span<const std::byte> indexBytes = AsBytes(data.indices);
             IntrusivePtr<IGpuBuffer> vertexBuffer = device.CreateBuffer(BufferDesc{BufferUsage::Vertex, static_cast<uint32_t>(vertexBytes.size()), debugName}, vertexBytes);
             IntrusivePtr<IGpuBuffer> indexBuffer = device.CreateBuffer(BufferDesc{BufferUsage::Index, static_cast<uint32_t>(indexBytes.size()), debugName}, indexBytes);
             if (!vertexBuffer || !indexBuffer) {
@@ -42,7 +42,7 @@ namespace BECore {
 
     private:
         template <typename T>
-        [[nodiscard]] static eastl::span<const std::byte> AsBytes(const eastl::vector<T>& values) {
+        [[nodiscard]] static Span<const std::byte> AsBytes(const Vector<T>& values) {
             return {reinterpret_cast<const std::byte*>(values.data()), values.size() * sizeof(T)};
         }
 

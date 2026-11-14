@@ -9,7 +9,7 @@ namespace BECore {
      */
     struct InspectorResult {
         bool changed = false;
-        eastl::string newValue;
+        String newValue;
     };
 
     /**
@@ -28,7 +28,7 @@ namespace BECore {
      * @param hint Field type hint with optional enum/flag options
      * @return InspectorResult with changed=true and newValue when the user commits a change
      */
-    InspectorResult RenderFieldInspector(const eastl::string& widgetId, eastl::string_view currentValue, const FieldHint& hint);
+    InspectorResult RenderFieldInspector(const String& widgetId, StringView currentValue, const FieldHint& hint);
 
     /**
      * @brief Clear persistent InputText buffers used by the String inspector

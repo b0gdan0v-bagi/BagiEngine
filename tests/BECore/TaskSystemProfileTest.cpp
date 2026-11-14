@@ -1,7 +1,6 @@
 #include <BECore/Control/Json.h>
 #include <BECore/Profiler/Backends/ChromeTraceBackend.h>
 #include <BECore/Profiler/IProfilerBackend.h>
-#include <BECore/Profiler/Profile.h>
 #include <Common/EngineEnvironment.h>
 #include <TaskSystem/Awaitables.h>
 #include <TaskSystem/Task.h>
@@ -9,12 +8,8 @@
 #include <TaskSystem/TaskLabel.h>
 #include <TaskSystem/TaskManager.h>
 #include <TaskSystem/ThreadPool.h>
-#include <algorithm>
-#include <atomic>
 #include <chrono>
 #include <gtest/gtest.h>
-#include <mutex>
-#include <string>
 #include <thread>
 #include <vector>
 
@@ -118,7 +113,7 @@ namespace BECore::Tests {
             co_return;
         }
 
-        std::string Text(const eastl::string& text) {
+        std::string Text(const String& text) {
             return std::string(text.data(), text.size());
         }
 
@@ -219,8 +214,8 @@ namespace BECore::Tests {
         const Json* events = FindJsonMember(*parsed, "traceEvents");
         ASSERT_NE(events, nullptr);
 
-        std::vector<std::pair<std::string, int64_t>> names;       // thread name, tid
-        std::vector<std::pair<int64_t, int64_t>> sortIndexes;     // tid, sort index
+        std::vector<std::pair<std::string, int64_t>> names;    // thread name, tid
+        std::vector<std::pair<int64_t, int64_t>> sortIndexes;  // tid, sort index
         std::vector<std::string> counters;
         for (const Json& event : *events) {
             const auto name = GetJsonString(event, "name");

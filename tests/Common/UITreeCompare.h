@@ -26,7 +26,7 @@ namespace BECore::Tests {
     }
 
     /// The same for the lists of elements under a canvas root
-    inline void ExpectSameElements(const eastl::vector<IntrusivePtrNonAtomic<UIElement>>& expected, const eastl::vector<IntrusivePtrNonAtomic<UIElement>>& actual) {
+    inline void ExpectSameElements(const Vector<IntrusivePtrNonAtomic<UIElement>>& expected, const Vector<IntrusivePtrNonAtomic<UIElement>>& actual) {
         ASSERT_EQ(expected.size(), actual.size());
         for (size_t i = 0; i < expected.size(); ++i) {
             ExpectSameTree(*expected[i], *actual[i]);

@@ -19,7 +19,7 @@ namespace BECore {
             return {Bound(edges.left), Bound(edges.top), Bound(edges.right), Bound(edges.bottom)};
         }
 
-        float ClampExtent(float extent, float parentExtent, const std::optional<UILength>& minimum, const std::optional<UILength>& maximum) {
+        float ClampExtent(float extent, float parentExtent, const Optional<UILength>& minimum, const Optional<UILength>& maximum) {
             extent = Bound(extent);
             if (maximum) {
                 extent = std::min(extent, ResolveLength(*maximum, parentExtent));
@@ -59,15 +59,15 @@ namespace BECore {
             }
         }
 
-        void Replace(Vec2& value, const std::optional<Vec2>& explicitValue) {
+        void Replace(Vec2& value, const Optional<Vec2>& explicitValue) {
             if (explicitValue) {
                 ReplaceFinite(value.x, explicitValue->x);
                 ReplaceFinite(value.y, explicitValue->y);
             }
         }
 
-        AxisSize ResolveAxisSize(float origin, float extent, float anchorMin, float anchorMax, float marginStart, float marginEnd, const UILength& length, const std::optional<UILength>& minimum,
-                                 const std::optional<UILength>& maximum) {
+        AxisSize ResolveAxisSize(float origin, float extent, float anchorMin, float anchorMax, float marginStart, float marginEnd, const UILength& length, const Optional<UILength>& minimum,
+                                 const Optional<UILength>& maximum) {
             AxisSize axis;
             axis.stretched = anchorMin < anchorMax;
             float size;
@@ -99,7 +99,7 @@ namespace BECore {
             float main = 0.0f;   // the size along the stack's direction
             float cross = 0.0f;  // the size across it
             float flex = 0.0f;
-            std::optional<UILength> minMain, maxMain, minCross, maxCross;
+            Optional<UILength> minMain, maxMain, minCross, maxCross;
         };
 
         struct Line {
@@ -150,7 +150,7 @@ namespace BECore {
                           ResolveAxisPosition(axisY, parent.y, parent.h, anchors.min.y, anchors.pivot.y, ResolveLength(spec.y, parent.h)), axisX.size, axisY.size});
     }
 
-    void UILayout::LayoutStack(const Rect& parent, const UIStackSpec& givenStack, eastl::span<const UIRectSpec> children, eastl::vector<Rect>& rects) {
+    void UILayout::LayoutStack(const Rect& parent, const UIStackSpec& givenStack, Span<const UIRectSpec> children, Vector<Rect>& rects) {
         rects.assign(children.size(), Rect{});
         if (children.empty()) {
             return;
@@ -164,7 +164,7 @@ namespace BECore {
         const float crossExtent = vertical ? content.w : content.h;
 
         // The sizes of the children as their specs give them, before flex and stretch
-        eastl::vector<ChildSize> sizes(children.size());
+        Vector<ChildSize> sizes(children.size());
         for (size_t i = 0; i < children.size(); ++i) {
             const UIRectSpec& spec = children[i];
             ChildSize& size = sizes[i];
@@ -194,7 +194,7 @@ namespace BECore {
         }
 
         // Lines: one, or as many as the main axis needs when the stack wraps
-        eastl::vector<Line> lines;
+        Vector<Line> lines;
         lines.push_back({0, 0});
         float lineMain = 0.0f;
         for (size_t i = 0; i < sizes.size(); ++i) {

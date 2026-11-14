@@ -29,26 +29,25 @@ namespace BECore {
         return fontSize > 0.0f ? fontSize : kDefaultFontSize;
     }
 
-    eastl::string_view UITextPainter::GetDisplayText(eastl::string_view source) {
+    StringView UITextPainter::GetDisplayText(StringView source) {
         if (!UIVars::HasPlaceholders(source)) {
             return source;
         }
         const UIVars& variables = CoreManager::GetUIVars();
         UIStrings& strings = CoreManager::GetUIStrings();
         // A text that names no string does not depend on the string table, so a language switch leaves it alone
-        const bool stale = eastl::string_view(_expandedSource.data(), _expandedSource.size()) != source || _expandedVersion != variables.GetVersion() ||
-                           (_expandedUsesStrings && _expandedStringsVersion != strings.GetVersion());
+        const bool stale = StringView(_expandedSource) != source || _expandedVersion != variables.GetVersion() || (_expandedUsesStrings && _expandedStringsVersion != strings.GetVersion());
         if (stale) {
             _expandedUsesStrings = UIStrings::HasReferences(source);
             if (_expandedUsesStrings) {
                 // Strings first, variables second: a translation may hold `{score}`, and a string is not resolved again
                 const size_t missingBefore = strings.GetMissing().size();
-                const eastl::string resolved = strings.Resolve(source);
+                const String resolved = strings.Resolve(source);
                 const auto& missing = strings.GetMissing();
                 for (size_t i = missingBefore; i < missing.size(); ++i) {
                     LOG_WARNING("UIText: no string '{}' in the language '{}' or the default one"_format(missing[i].key.c_str(), missing[i].language.ToStringView()));
                 }
-                _expanded = variables.Expand(eastl::string_view(resolved.data(), resolved.size()));
+                _expanded = variables.Expand(StringView(resolved));
                 _expandedStringsVersion = strings.GetVersion();
             } else {
                 _expanded = variables.Expand(source);
@@ -56,7 +55,7 @@ namespace BECore {
             _expandedSource.assign(source.data(), source.size());
             _expandedVersion = variables.GetVersion();
         }
-        return eastl::string_view(_expanded.data(), _expanded.size());
+        return StringView(_expanded);
     }
 
     Font* UITextPainter::ResolveFont(const UITextParams& params) {
@@ -86,7 +85,7 @@ namespace BECore {
     }
 
     void UITextPainter::Draw(IRenderer& renderer, const UITextParams& params, const Rect& area, const Color& color, const Color& fullColor) {
-        const eastl::string_view shown = GetDisplayText(params.text);
+        const StringView shown = GetDisplayText(params.text);
         if (shown.empty() || area.IsEmpty() || color.a == 0) {
             return;
         }
@@ -134,7 +133,7 @@ namespace BECore {
     }
 
     Vec2 UITextPainter::Measure(const UITextParams& params, float maxWidth, float scale) {
-        const eastl::string_view shown = GetDisplayText(params.text);
+        const StringView shown = GetDisplayText(params.text);
         Font* resolved = shown.empty() ? nullptr : ResolveFont(params);
         if (!resolved || maxWidth <= 0.0f || scale <= 0.0f) {
             return {};
@@ -146,7 +145,7 @@ namespace BECore {
 
     UIContentFit UITextPainter::Check(const UITextParams& params, float width, float height, float scale) {
         UIContentFit fit;
-        const eastl::string_view shown = GetDisplayText(params.text);
+        const StringView shown = GetDisplayText(params.text);
         Font* resolved = shown.empty() ? nullptr : ResolveFont(params);
         if (!resolved || width <= 0.0f || height <= 0.0f || scale <= 0.0f) {
             return fit;

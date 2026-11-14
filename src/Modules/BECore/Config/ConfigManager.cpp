@@ -29,9 +29,9 @@ namespace BECore {
         }
 
         // Сканируем слои для поиска XML файлов
-        eastl::vector<eastl::pair<std::filesystem::path, PoolString>> filesToLoad;
+        Vector<eastl::pair<std::filesystem::path, PoolString>> filesToLoad;
         for (const auto& layer : layers) {
-            eastl::vector<eastl::pair<std::filesystem::path, PoolString>> layerFiles;
+            Vector<eastl::pair<std::filesystem::path, PoolString>> layerFiles;
             ScanDirectory(layer, layerFiles);
 
             for (auto& layerFile : layerFiles) {
@@ -80,7 +80,7 @@ namespace BECore {
 
     namespace {
 
-        eastl::unique_ptr<IDeserializer> MakeDeserializer(const XmlNode& root) {
+        UniquePtr<IDeserializer> MakeDeserializer(const XmlNode& root) {
             if (!root) {
                 return nullptr;
             }
@@ -93,11 +93,11 @@ namespace BECore {
 
     }  // namespace
 
-    eastl::unique_ptr<IDeserializer> ConfigManager::CreateDeserializer(PoolString name) const {
+    UniquePtr<IDeserializer> ConfigManager::CreateDeserializer(PoolString name) const {
         return MakeDeserializer(GetConfig(name));
     }
 
-    eastl::unique_ptr<IDeserializer> ConfigManager::CreateDeserializer(eastl::string_view name) const {
+    UniquePtr<IDeserializer> ConfigManager::CreateDeserializer(StringView name) const {
         return MakeDeserializer(GetConfig(name));
     }
 
@@ -106,7 +106,7 @@ namespace BECore {
         return _configs.find(name) != _configs.end();
     }
 
-    XmlNode ConfigManager::GetConfig(eastl::string_view name) const {
+    XmlNode ConfigManager::GetConfig(StringView name) const {
         ASSERT(_initialized.load(std::memory_order_acquire));
         auto it = _configs.Find(name);
         if (it != _configs.end() && it->second.doc) {
@@ -115,7 +115,7 @@ namespace BECore {
         return XmlNode();
     }
 
-    bool ConfigManager::HasConfig(eastl::string_view name) const {
+    bool ConfigManager::HasConfig(StringView name) const {
         ASSERT(_initialized.load(std::memory_order_acquire));
         return _configs.Find(name) != _configs.end();
     }
@@ -125,9 +125,9 @@ namespace BECore {
         return _configs.size();
     }
 
-    eastl::vector<PoolString> ConfigManager::GetAllConfigNames() const {
+    Vector<PoolString> ConfigManager::GetAllConfigNames() const {
         ASSERT(_initialized.load(std::memory_order_acquire));
-        eastl::vector<PoolString> names;
+        Vector<PoolString> names;
         names.reserve(_configs.size());
         for (const auto& [name, entry] : _configs) {
             names.push_back(name);
@@ -200,7 +200,7 @@ namespace BECore {
         return true;
     }
 
-    void ConfigManager::ScanDirectory(const std::filesystem::path& dir, eastl::vector<eastl::pair<std::filesystem::path, PoolString>>& filesToLoad) const {
+    void ConfigManager::ScanDirectory(const std::filesystem::path& dir, Vector<eastl::pair<std::filesystem::path, PoolString>>& filesToLoad) const {
         // filesystem может бросать исключения, но exceptions отключены
         // Просто пропускаем ошибки
         for (const auto& entry : std::filesystem::recursive_directory_iterator(dir)) {
@@ -208,7 +208,7 @@ namespace BECore {
                 // Используем stem (имя без расширения) как ключ
                 auto stemStr = entry.path().stem().string();
                 // Конвертируем std::string в eastl::string_view через c_str()
-                auto name = PoolString::Intern(eastl::string_view(stemStr.c_str(), stemStr.length()));
+                auto name = PoolString::Intern(StringView(stemStr.c_str(), stemStr.length()));
                 filesToLoad.push_back({entry.path(), name});
 
                 LOG_DEBUG(Format("[ConfigManager] Found config: {} -> {}", stemStr, entry.path().string()).c_str());

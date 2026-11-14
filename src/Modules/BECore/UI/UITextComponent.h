@@ -31,7 +31,7 @@ namespace BECore {
         UITextComponent() = default;
         ~UITextComponent() override = default;
 
-        BE_REFLECT_FIELD eastl::string text;
+        BE_REFLECT_FIELD String text;
         BE_REFLECT_FIELD PoolString font;            ///< a font path; empty: the face of `fontFamily` and `fontWeight`. A path wins over them
         BE_REFLECT_FIELD PoolString fontFamily;      ///< a family of the `families` table of TextConfig.xml; empty is its default family
         BE_REFLECT_FIELD uint16_t fontWeight = 400;  ///< the CSS weight (400 regular, 700 bold); the nearest face of the family is used
@@ -58,10 +58,10 @@ namespace BECore {
         [[nodiscard]] Color GetStateColor(const UIStateLook::State& state) const;
 
         /// The text as it is shown, with its `{#key}` and `{name}` expanded (`UITextPainter::GetDisplayText`)
-        [[nodiscard]] eastl::string_view GetDisplayText() const;
+        [[nodiscard]] StringView GetDisplayText() const;
 
         /// The same for the text @p owner shows: its `GetTextOverride()` when it has one, else `text` (a dropdown's header shows the chosen option's caption)
-        [[nodiscard]] eastl::string_view GetDisplayText(const UIElement& owner) const;
+        [[nodiscard]] StringView GetDisplayText(const UIElement& owner) const;
 
         /// The size the shown text takes when wrapped at @p maxWidth canvas units, at the font size of @p owner; see `UITextPainter::Measure`
         [[nodiscard]] Vec2 MeasureText(const UIElement& owner, float maxWidth, float scale) const;
@@ -76,8 +76,8 @@ namespace BECore {
 
     private:
         /// @p shown is the text to lay out: `text`, or the override of the owner (`ShownText`)
-        [[nodiscard]] UITextParams MakeParams(float fontSize, const eastl::string& shown) const;
-        [[nodiscard]] static const eastl::string& ShownText(const UIElement& owner, const eastl::string& own);
+        [[nodiscard]] UITextParams MakeParams(float fontSize, const String& shown) const;
+        [[nodiscard]] static const String& ShownText(const UIElement& owner, const String& own);
 
         mutable UITextPainter _painter;
         UIBlend<Color> _colorBlend;  ///< runtime: the colour as it is shown while a state change eases (`UIElement::GetStateDuration`)

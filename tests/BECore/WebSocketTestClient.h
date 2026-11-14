@@ -33,12 +33,12 @@ namespace BECore::Tests {
         return false;
     }
 
-    inline eastl::span<const uint8_t> AsBytes(const std::string& text) {
-        return eastl::span<const uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), text.size());
+    inline Span<const uint8_t> AsBytes(const std::string& text) {
+        return Span<const uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), text.size());
     }
 
-    inline eastl::span<const uint8_t> AsBytes(const eastl::vector<uint8_t>& bytes) {
-        return eastl::span<const uint8_t>(bytes.data(), bytes.size());
+    inline Span<const uint8_t> AsBytes(const Vector<uint8_t>& bytes) {
+        return Span<const uint8_t>(bytes.data(), bytes.size());
     }
 
     /// The opening handshake of the RFC for a server on @p port; @p host replaces the `Host` header value when it is not empty
@@ -68,7 +68,7 @@ namespace BECore::Tests {
     class WebSocketTestClient {
     public:
         /// Connects to 127.0.0.1:@p port (no handshake yet). @p pump runs while the client waits
-        static std::optional<WebSocketTestClient> Open(uint16_t port, WaitPump pump = {}) {
+        static Optional<WebSocketTestClient> Open(uint16_t port, WaitPump pump = {}) {
             auto socket = Socket::Connect(port);
             if (!socket) {
                 ADD_FAILURE() << "connect failed: " << socket.error().c_str();
@@ -81,7 +81,7 @@ namespace BECore::Tests {
             return client;
         }
 
-        void Send(eastl::span<const uint8_t> bytes) {
+        void Send(Span<const uint8_t> bytes) {
             EXPECT_TRUE(_socket.SendAll(bytes));
         }
 
@@ -90,12 +90,12 @@ namespace BECore::Tests {
         }
 
         /// Sends without a test failure when the server has ended the connection (a client that is being dropped); false then
-        [[nodiscard]] bool TrySend(eastl::span<const uint8_t> bytes) {
+        [[nodiscard]] bool TrySend(Span<const uint8_t> bytes) {
             return _socket.SendAll(bytes);
         }
 
         void SendText(const std::string& text) {
-            Send(AsBytes(EncodeTextFrame(eastl::string_view(text.data(), text.size()), kClientMask)));
+            Send(AsBytes(EncodeTextFrame(FromStd(text), kClientMask)));
         }
 
         /// The response head of the handshake, and the body when it says Content-Length. Empty when nothing came in time
@@ -129,7 +129,7 @@ namespace BECore::Tests {
         }
 
         /// The next complete frame of the server, nullopt when none came yet
-        std::optional<ServerFrame> TryReadFrame() {
+        Optional<ServerFrame> TryReadFrame() {
             if (const auto frame = ParseBuffered()) {
                 return frame;
             }
@@ -138,8 +138,8 @@ namespace BECore::Tests {
         }
 
         /// Waits up to @p limit for the next frame
-        std::optional<ServerFrame> WaitForFrame(std::chrono::milliseconds limit = kClientWaitLimit) {
-            std::optional<ServerFrame> frame;
+        Optional<ServerFrame> WaitForFrame(std::chrono::milliseconds limit = kClientWaitLimit) {
+            Optional<ServerFrame> frame;
             WaitUntil(
                 _pump,
                 [&] {
@@ -174,7 +174,7 @@ namespace BECore::Tests {
         void FillBuffer() {
             std::array<uint8_t, 4096> chunk;
             for (int i = 0; i < kMaxChunksPerFill; ++i) {
-                const auto received = _socket.Receive(eastl::span<uint8_t>(chunk.data(), chunk.size()));
+                const auto received = _socket.Receive(Span<uint8_t>(chunk.data(), chunk.size()));
                 if (!received) {
                     if (received.error() != SocketError::TimedOut) {
                         _ended = true;
@@ -187,7 +187,7 @@ namespace BECore::Tests {
         }
 
         /// The frames of a server are not masked
-        std::optional<ServerFrame> ParseBuffered() {
+        Optional<ServerFrame> ParseBuffered() {
             if (_buffer.size() < 2) {
                 return std::nullopt;
             }
@@ -217,7 +217,7 @@ namespace BECore::Tests {
 
         Socket _socket;
         WaitPump _pump;
-        eastl::vector<uint8_t> _buffer;
+        Vector<uint8_t> _buffer;
         bool _ended = false;
     };
 

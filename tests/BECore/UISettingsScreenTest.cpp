@@ -266,7 +266,7 @@ namespace BECore::Tests {
         }
 
         /// The number of characters (code points) of a UTF-8 text: the length of a word, whatever the language
-        size_t Characters(eastl::string_view text) {
+        size_t Characters(StringView text) {
             size_t count = 0;
             for (const char c : text) {
                 if ((static_cast<unsigned char>(c) & 0xC0u) != 0x80u) {
@@ -309,11 +309,11 @@ namespace BECore::Tests {
                 return _values.empty() ? PoolString{} : _values.back();
             }
             /// The values that came with @p action, in order
-            eastl::vector<eastl::string> ValuesOf(const char* action) const {
-                eastl::vector<eastl::string> values;
+            Vector<String> ValuesOf(const char* action) const {
+                Vector<String> values;
                 for (size_t i = 0; i < _actions.size(); ++i) {
                     if (_actions[i] == PoolString::Intern(action)) {
-                        values.push_back(eastl::string(_values[i].ToStringView()));
+                        values.push_back(String(_values[i].ToStringView()));
                     }
                 }
                 return values;
@@ -339,8 +339,8 @@ namespace BECore::Tests {
             }
 
             Scene& _scene;
-            eastl::vector<PoolString> _actions;
-            eastl::vector<PoolString> _values;
+            Vector<PoolString> _actions;
+            Vector<PoolString> _values;
         };
 
         /// A button is an element with a clicker and a text: its text keeps `kButtonAir` from each edge of its fill
@@ -349,7 +349,7 @@ namespace BECore::Tests {
         }
 
         /// Every control of the tree that shows text or takes a press, depth first (the root itself is the canvas and has none)
-        void CollectControls(const UIElement& element, eastl::vector<const UIElement*>& found) {
+        void CollectControls(const UIElement& element, Vector<const UIElement*>& found) {
             if (element.GetComponent<UITextComponent>() || element.IsInteractive()) {
                 found.push_back(&element);
             }
@@ -358,18 +358,18 @@ namespace BECore::Tests {
             }
         }
 
-        eastl::string ShownText(const UIElement& element) {
+        String ShownText(const UIElement& element) {
             const UITextComponent* text = element.GetComponent<UITextComponent>();
-            return text ? eastl::string(text->GetDisplayText()) : eastl::string();
+            return text ? String(text->GetDisplayText()) : String();
         }
 
         /// What is wrong with a laid-out panel in the language that is set now, one problem to a line, nothing when it is right: a control that is not shown at all (an empty
         /// rect), text that its control cuts (the validator does not see it for an ellipsis text; the caption of a toggle is asked in the room the switch leaves it), and a control
         /// that takes a press and is under kRowHeight
-        eastl::string Problems(const UICanvasLayout& layout) {
-            eastl::string problems;
+        String Problems(const UICanvasLayout& layout) {
+            String problems;
             const float scale = layout.GetResolved().scale;
-            eastl::vector<const UIElement*> controls;
+            Vector<const UIElement*> controls;
             CollectControls(*layout.root, controls);
             for (const UIElement* control : controls) {
                 if (control->rect.IsEmpty()) {
@@ -391,7 +391,7 @@ namespace BECore::Tests {
             return problems;
         }
 
-        bool HasIssue(const eastl::vector<UIMatrixFailure>& failures, UILayoutIssueKind kind) {
+        bool HasIssue(const Vector<UIMatrixFailure>& failures, UILayoutIssueKind kind) {
             for (const auto& failure : failures) {
                 for (const UILayoutIssue& issue : failure.issues) {
                     if (issue.kind == kind) {
@@ -407,7 +407,7 @@ namespace BECore::Tests {
         void ForEachLanguage(Check&& check) {
             UIStrings& strings = CoreManager::GetUIStrings();
             const PoolString saved = strings.GetLanguage();
-            const eastl::vector<PoolString> languages = strings.GetLanguages();
+            const Vector<PoolString> languages = strings.GetLanguages();
             for (const PoolString language : languages) {
                 ASSERT_TRUE(strings.SetLanguage(language)) << language.ToStringView().data();
                 check(language);
@@ -449,7 +449,7 @@ namespace BECore::Tests {
             strings.Clear();
             auto config = XmlConfig::Create();
             ASSERT_TRUE(config.LoadFromString(xml));
-            const eastl::vector<eastl::string> problems = strings.LoadFromXml(config.GetRoot());
+            const Vector<String> problems = strings.LoadFromXml(config.GetRoot());
             EXPECT_TRUE(problems.empty()) << (problems.empty() ? "" : problems[0].c_str());
             ASSERT_EQ(strings.GetLanguages().size(), 3u);
         }
@@ -468,7 +468,7 @@ namespace BECore::Tests {
             _settings.Reset();
             XmlDeserializer deserializer;
             const std::string xml = SceneXml(viewWidth, viewHeight, edit);
-            ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+            ASSERT_TRUE(deserializer.LoadFromString(FromStd(xml)));
             _manager = New<SceneManager>();
             _manager->Deserialize(deserializer);
             ASSERT_FALSE(deserializer.HasErrors());
@@ -576,10 +576,10 @@ namespace BECore::Tests {
         }
 
         /// The panel on the whole matrix with the options of the game, once for every language: the findings of the validator, each case named with its language
-        eastl::vector<UIMatrixFailure> ValidatePanel(UICanvasComponent& canvas) const {
+        Vector<UIMatrixFailure> ValidatePanel(UICanvasComponent& canvas) const {
             UILayoutValidatorOptions options;
             options.minTouchSize = CoreManager::GetUIEnvironment().GetSettings().minTouchSize;
-            eastl::vector<UIMatrixFailure> all;
+            Vector<UIMatrixFailure> all;
             ForEachLanguage([&](PoolString language) {
                 for (UIMatrixFailure& failure : ValidateOnMatrix(canvas.GetLayout(), options, ViewContext())) {
                     failure.label = Format("[{}] {}", language.ToStringView(), failure.label.c_str());
@@ -590,9 +590,9 @@ namespace BECore::Tests {
         }
 
         /// Problems() on every case of the matrix, in every language: the first lines of the first cases that have any
-        eastl::string ProblemsOnMatrix(UICanvasComponent& canvas) const {
+        String ProblemsOnMatrix(UICanvasComponent& canvas) const {
             constexpr size_t kReported = 4;
-            eastl::string report;
+            String report;
             size_t reported = 0;
             UICanvasLayout& layout = canvas.GetLayout();
             ForEachLanguage([&](PoolString language) {
@@ -602,7 +602,7 @@ namespace BECore::Tests {
                     context.outputHeight = matrixCase.context.outputHeight;
                     context.safeArea = matrixCase.context.safeArea;
                     layout.Update(context);
-                    const eastl::string problems = Problems(layout);
+                    const String problems = Problems(layout);
                     if (!problems.empty() && reported++ < kReported) {
                         report += Format("[{}] {}:\n{}", language.ToStringView(), matrixCase.label.c_str(), problems.c_str());
                     }
@@ -622,12 +622,12 @@ namespace BECore::Tests {
         }
 
         /// Problems() in the narrowest window, in every language
-        eastl::string ProblemsInTheNarrowestWindow(UICanvasComponent& canvas) const {
-            eastl::string report;
+        String ProblemsInTheNarrowestWindow(UICanvasComponent& canvas) const {
+            String report;
             UICanvasLayout& layout = canvas.GetLayout();
             ForEachLanguage([&](PoolString language) {
                 LayOutInTheNarrowestWindow(layout);
-                const eastl::string problems = Problems(layout);
+                const String problems = Problems(layout);
                 if (!problems.empty()) {
                     report += Format("[{}] {}", language.ToStringView(), problems.c_str());
                 }
@@ -640,7 +640,7 @@ namespace BECore::Tests {
         IntrusivePtrAtomic<SceneManager> _manager;
         IntrusivePtr<UICanvasComponent> _hud;
         IntrusivePtr<UICanvasComponent> _settings;
-        std::optional<SettingsGame> _game;
+        Optional<SettingsGame> _game;
     };
 
     // ---- the size matrix, once per language ------------------------------------------------------------------------------
@@ -661,13 +661,13 @@ namespace BECore::Tests {
 
     TEST_F(UISettingsScreenTest, NoWordIsCutOnAnyCaseOfTheMatrixInAnyLanguage) {
         ASSERT_NO_FATAL_FAILURE(LoadScene());
-        const eastl::string landscape = ProblemsOnMatrix(*_settings);
+        const String landscape = ProblemsOnMatrix(*_settings);
         EXPECT_TRUE(landscape.empty()) << landscape.c_str();
-        const eastl::string hud = ProblemsOnMatrix(*_hud);
+        const String hud = ProblemsOnMatrix(*_hud);
         EXPECT_TRUE(hud.empty()) << hud.c_str();
 
         ASSERT_NO_FATAL_FAILURE(LoadScene(kPortraitWidth, kPortraitHeight));
-        const eastl::string portrait = ProblemsOnMatrix(*_settings);
+        const String portrait = ProblemsOnMatrix(*_settings);
         EXPECT_TRUE(portrait.empty()) << portrait.c_str();
     }
 
@@ -680,7 +680,7 @@ namespace BECore::Tests {
         EXPECT_NEAR(layout.GetResolved().scale, scale, 0.01f);
         EXPECT_NEAR(layout.root->rect.w, kNarrowestWidth * (1.0f - 2.0f * UIPreview::kSideInsetShare) / scale, 0.5f) << "the safe area, in view units: about 689";
 
-        const eastl::string problems = ProblemsInTheNarrowestWindow(*_settings);
+        const String problems = ProblemsInTheNarrowestWindow(*_settings);
         EXPECT_TRUE(problems.empty()) << problems.c_str();
 
         LayOutInTheNarrowestWindow(layout);
@@ -902,7 +902,7 @@ namespace BECore::Tests {
         }
         EXPECT_TRUE(CoreManager::GetUIInput().DispatchMouseButtonUp(Button(XAt(0.7f), y, false)));
 
-        const eastl::vector<eastl::string> values = _game->ValuesOf("SettingsVolume");
+        const Vector<String> values = _game->ValuesOf("SettingsVolume");
         const char* const expected[] = {"0.3", "0.4", "0.5", "0.6", "0.7"};
         ASSERT_EQ(values.size(), 5u);
         for (size_t i = 0; i < 5; ++i) {
@@ -923,7 +923,7 @@ namespace BECore::Tests {
         CoreManager::GetUIInput().DispatchMouseMotion(Motion(-100.0f, y + 300.0f, SDL_BUTTON_LMASK));
         CoreManager::GetUIInput().DispatchMouseButtonUp(Button(-100.0f, y + 300.0f, false));
 
-        const eastl::vector<eastl::string> values = _game->ValuesOf("SettingsVolume");
+        const Vector<String> values = _game->ValuesOf("SettingsVolume");
         ASSERT_EQ(values.size(), 3u);
         EXPECT_EQ(values[0], "0.5");
         EXPECT_EQ(values[1], "1") << "past the end: the maximum, written without a decimal point";
@@ -996,7 +996,7 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(LoadScene());
         ASSERT_NO_FATAL_FAILURE(Show());
         const char* const names[] = {"Title", "SoundCaption", "MusicCaption", "DownloadCaption", "LanguageCaption", "Ok"};
-        eastl::vector<eastl::string> english;
+        Vector<String> english;
         for (const char* name : names) {
             english.push_back(ShownText(*_settings->GetRoot().FindByName(PoolString::Intern(name))));
         }
@@ -1004,7 +1004,7 @@ namespace BECore::Tests {
             ASSERT_TRUE(CoreManager::GetUIStrings().SetLanguage(PoolString::Intern(id)));
             Draw();
             for (size_t i = 0; i < english.size(); ++i) {
-                const eastl::string shown = ShownText(*_settings->GetRoot().FindByName(PoolString::Intern(names[i])));
+                const String shown = ShownText(*_settings->GetRoot().FindByName(PoolString::Intern(names[i])));
                 EXPECT_NE(shown, english[i]) << id << " " << names[i];
                 EXPECT_FALSE(shown.empty()) << id << " " << names[i];
             }
@@ -1037,7 +1037,7 @@ namespace BECore::Tests {
         EXPECT_NEAR(El("Volume").rect.h, 30.0f, 0.01f);
         const auto failures = ValidatePanel(*_settings);
         EXPECT_TRUE(HasIssue(failures, UILayoutIssueKind::TouchTargetTooSmall)) << DescribeMatrixFailures(failures).c_str();
-        EXPECT_NE(ProblemsOnMatrix(*_settings).find("Volume is 30.0 units high"), eastl::string::npos);
+        EXPECT_NE(ProblemsOnMatrix(*_settings).find("Volume is 30.0 units high"), String::npos);
     }
 
     TEST_F(UISettingsScreenTest, ASliderWithoutAnExplicitHeightHasNoRectAndIsCaughtHere) {
@@ -1045,20 +1045,20 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(Show());
         EXPECT_NEAR(El("Volume").rect.h, 0.0f, 0.01f);
         UICanvasLayout& layout = _settings->GetLayout();
-        const eastl::string problems = Problems(layout);
-        EXPECT_NE(problems.find("Volume '' has an empty rect"), eastl::string::npos) << problems.c_str();
+        const String problems = Problems(layout);
+        EXPECT_NE(problems.find("Volume '' has an empty rect"), String::npos) << problems.c_str();
     }
 
     TEST_F(UISettingsScreenTest, AToggleCaptionTooLongForItsAreaIsCaughtByTheFitCheckAndNotByTheValidator) {
         const auto lengthen = [](std::string& xml) { Replace(xml, R"(text="{#settings.sound}")", R"(text="Sound effects, music and every other noise of the game")"); };
         ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, lengthen));
         EXPECT_FALSE(HasIssue(ValidatePanel(*_settings), UILayoutIssueKind::TextDoesNotFit)) << "an ellipsis label can shrink: the validator does not report it";
-        const eastl::string matrix = ProblemsOnMatrix(*_settings);
-        EXPECT_NE(matrix.find("SoundCaption cuts 'Sound effects"), eastl::string::npos) << matrix.c_str();
+        const String matrix = ProblemsOnMatrix(*_settings);
+        EXPECT_NE(matrix.find("SoundCaption cuts 'Sound effects"), String::npos) << matrix.c_str();
 
         UICanvasLayout& layout = _settings->GetLayout();
         LayOutInTheNarrowestWindow(layout);
-        EXPECT_NE(Problems(layout).find("SoundCaption cuts 'Sound effects"), eastl::string::npos);
+        EXPECT_NE(Problems(layout).find("SoundCaption cuts 'Sound effects"), String::npos);
         layout.Invalidate();
     }
 
@@ -1071,10 +1071,10 @@ namespace BECore::Tests {
         table.replace(at, original.size(), R"(text="Geräuscheffekte und Klangeinstellungen des Spiels")");
         ASSERT_NO_FATAL_FAILURE(LoadStrings(table.c_str()));
         ASSERT_NO_FATAL_FAILURE(LoadScene());
-        const eastl::string problems = ProblemsInTheNarrowestWindow(*_settings);
-        EXPECT_NE(problems.find("[de] SoundCaption cuts 'Geräuscheffekte und"), eastl::string::npos) << problems.c_str();
-        EXPECT_EQ(problems.find("[en]"), eastl::string::npos) << "English and Russian are fine: the failure names its language";
-        EXPECT_EQ(problems.find("[ru]"), eastl::string::npos);
+        const String problems = ProblemsInTheNarrowestWindow(*_settings);
+        EXPECT_NE(problems.find("[de] SoundCaption cuts 'Geräuscheffekte und"), String::npos) << problems.c_str();
+        EXPECT_EQ(problems.find("[en]"), String::npos) << "English and Russian are fine: the failure names its language";
+        EXPECT_EQ(problems.find("[ru]"), String::npos);
     }
 
     TEST_F(UISettingsScreenTest, AKeyMissingEverywhereShowsTheKeyInTheLongLanguageAndTheFitCheckStillMeasuresIt) {
@@ -1088,8 +1088,8 @@ namespace BECore::Tests {
 
         UICanvasLayout& layout = _settings->GetLayout();
         LayOutInTheNarrowestWindow(layout);
-        const eastl::string problems = Problems(layout);
-        EXPECT_NE(problems.find("SoundCaption cuts 'settings.sound.effects.volume.and.noise.of.the.game.and.of.the.menu'"), eastl::string::npos) << problems.c_str();
+        const String problems = Problems(layout);
+        EXPECT_NE(problems.find("SoundCaption cuts 'settings.sound.effects.volume.and.noise.of.the.game.and.of.the.menu'"), String::npos) << problems.c_str();
         layout.Invalidate();
     }
 

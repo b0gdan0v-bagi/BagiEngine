@@ -92,9 +92,9 @@ namespace BECore {
         PoolString _resolvedSpriteId;  ///< the `spriteId` and `texturePath` the texture was loaded for
         PoolString _resolvedTexturePath;
         bool _resolved = false;
-        int32_t _reservedParticles = 0;           ///< the pool size reserved so far
-        eastl::vector<GeometryVertex> _vertices;  ///< scratch of `OnDraw`, reserved with the pool
-        eastl::vector<int> _indices;
+        int32_t _reservedParticles = 0;    ///< the pool size reserved so far
+        Vector<GeometryVertex> _vertices;  ///< scratch of `OnDraw`, reserved with the pool
+        Vector<int> _indices;
     };
 
 }  // namespace BECore

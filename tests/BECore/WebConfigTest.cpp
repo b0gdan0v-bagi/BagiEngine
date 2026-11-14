@@ -76,7 +76,7 @@ namespace BECore::Tests {
         EXPECT_TRUE((flags & SDL_WINDOW_RESIZABLE) != 0) << flagsText;
         EXPECT_TRUE((flags & SDL_WINDOW_HIGH_PIXEL_DENSITY) != 0) << flagsText;
         EXPECT_TRUE((flags & SDL_WINDOW_VULKAN) == 0) << flagsText;
-        EXPECT_EQ(eastl::string_view(flagsText).find("SDL_WINDOW_VULKAN"), eastl::string_view::npos);
+        EXPECT_EQ(StringView(flagsText).find("SDL_WINDOW_VULKAN"), StringView::npos);
         EXPECT_GT(window.attribute("width").as_int(), 0);
         EXPECT_GT(window.attribute("height").as_int(), 0);
     }
@@ -100,7 +100,7 @@ namespace BECore::Tests {
         pugi::xml_document document;
         bool consoleChecked = false;
         for (const pugi::xml_node sink : FirstChildOfRoot(document, "LoggerConfig.xml", "sinks").children("sink")) {
-            const eastl::string_view type = sink.attribute("type").as_string();
+            const StringView type = sink.attribute("type").as_string();
             if (type == "ConsoleSink") {
                 EXPECT_TRUE(sink.attribute("enabled").as_bool(true));
                 EXPECT_TRUE(sink.attribute("colorEnabled")) << "colorEnabled must be spelled out";

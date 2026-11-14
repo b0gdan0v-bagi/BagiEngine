@@ -10,10 +10,10 @@ namespace BECore {
     /// thread; a sink must not call back into the hub.
     struct HubSink {
         /// A text message for a connection
-        std::function<void(ConnectionId, eastl::string)> send;
+        std::function<void(ConnectionId, String)> send;
         /// The hub is done with the connection: the transport closes it (and need not report it with OnDisconnected, which would be
         /// ignored). The reason is for the log: `rate_limited`, `too_many_failed_joins`, `idle`, `replaced`, `server_full`.
-        std::function<void(ConnectionId, eastl::string)> close;
+        std::function<void(ConnectionId, String)> close;
     };
 
     /**
@@ -40,10 +40,10 @@ namespace BECore {
         /// A transport connection opened. Over the connection limit it is closed at once (`server_full`).
         /// @param address The client's address as an opaque string, empty when unknown (then no per-address rule applies to the
         /// connection). It is only compared, never logged or sent.
-        void OnConnected(ConnectionId connection, RoomTime now, eastl::string_view address = {});
+        void OnConnected(ConnectionId connection, RoomTime now, StringView address = {});
 
         /// A text message of a connection (untrusted, any bytes). An unknown connection is ignored.
-        void OnMessage(ConnectionId connection, eastl::string_view text, RoomTime now);
+        void OnMessage(ConnectionId connection, StringView text, RoomTime now);
 
         /// The connection dropped. In a lobby its member is removed; in a game the member is marked away (the grace, then a
         /// computer). An unknown connection (one the hub closed itself) is ignored.
@@ -66,7 +66,7 @@ namespace BECore {
             return _connections.size();
         }
 
-        [[nodiscard]] bool HasRoom(eastl::string_view code) const;
+        [[nodiscard]] bool HasRoom(StringView code) const;
 
     private:
         struct Connection {
@@ -74,12 +74,12 @@ namespace BECore {
             /// The bucket of `list_rooms`: a list is cheap, but not free, and it is no join attempt
             RateLimiter listLimiter;
             /// The client's address, empty when unknown
-            eastl::string address;
+            String address;
             RoomTime lastActivity{};
             int rateLimitedInRow = 0;
             int failedJoinsInRow = 0;
             /// The room it is in, empty when none
-            eastl::string roomCode;
+            String roomCode;
             PlayerId player = 0;
             /// What this connection was last sent (0 and false: nothing yet)
             uint64_t sentLobbyRevision = 0;
@@ -89,15 +89,15 @@ namespace BECore {
         };
 
         struct RoomEntry {
-            eastl::unique_ptr<Room> room;
+            UniquePtr<Room> room;
             /// The order of creation (the hub counts up), so a list is oldest first whatever the hash order
             uint64_t creation = 0;
             /// The `options` of `create_room`, handed to the game at `start`
             Json options = Json::object();
             /// The connections of the members that are connected, in the order they joined
-            eastl::vector<ConnectionId> connections;
+            Vector<ConnectionId> connections;
             /// The address of the connection that created the room (empty: unknown)
-            eastl::string address;
+            String address;
             /// The last message of a member other than `ping`, or the creation (the lobby timeout)
             RoomTime lastActivity{};
             /// Since when the game is finished (valid when finished is true)
@@ -115,9 +115,9 @@ namespace BECore {
         void HandleList(ConnectionId id, Connection& connection, const ListRoomsMessage& message, RoomTime now);
 
         /// Sends `error`
-        void SendError(ConnectionId id, const ControlError& error, eastl::string_view ref);
-        void SendError(ConnectionId id, eastl::string_view code, eastl::string_view message, eastl::string_view ref);
-        void SendText(ConnectionId id, eastl::string text);
+        void SendError(ConnectionId id, const ControlError& error, StringView ref);
+        void SendError(ConnectionId id, StringView code, StringView message, StringView ref);
+        void SendText(ConnectionId id, String text);
         /// Sends `error` for a failed join, counts it and closes the connection when the limit is reached. @p spendBudget takes a
         /// token of the failed-join budgets (false for the answer that an empty budget gave).
         void FailJoin(ConnectionId id, Connection& connection, const ControlError& error, RoomTime now, bool spendBudget = true);
@@ -125,23 +125,23 @@ namespace BECore {
         [[nodiscard]] bool JoinBudgetOpen(const Connection& connection, RoomTime now) const;
         void SpendJoinBudget(const Connection& connection, RoomTime now);
         /// Rooms that still exist and were created from @p address
-        [[nodiscard]] size_t CountRoomsOf(eastl::string_view address) const;
+        [[nodiscard]] size_t CountRoomsOf(StringView address) const;
 
         /// Sends `lobby` and `view` to every connection of the room whose copy is out of date
         void Flush(RoomEntry& entry, RoomTime now);
         /// Sends the current view to one member again (after `stale_action`)
         void ResendView(ConnectionId id, Connection& connection, RoomEntry& entry);
 
-        RoomEntry* FindRoom(eastl::string_view code);
+        RoomEntry* FindRoom(StringView code);
         void Detach(ConnectionId id, Connection& connection);
         /// Forgets the connection: its member is removed (lobby) or marked away (game), then the room is closed or flushed
         void DropConnection(ConnectionId id, RoomTime now);
         /// DropConnection, then tells the transport to close it
-        void CloseConnection(ConnectionId id, eastl::string_view reason, RoomTime now);
-        void CloseRoom(const eastl::string& code, eastl::string_view reason, RoomTime now);
+        void CloseConnection(ConnectionId id, StringView reason, RoomTime now);
+        void CloseRoom(const String& code, StringView reason, RoomTime now);
         /// Closes the room when the room says so; true when it did
-        bool CloseIfDone(const eastl::string& code, RoomTime now);
-        [[nodiscard]] eastl::string MakeUnusedRoomCode();
+        bool CloseIfDone(const String& code, RoomTime now);
+        [[nodiscard]] String MakeUnusedRoomCode();
 
         const SeatedGameRegistry& _registry;
         RoomHubSettings _settings;
@@ -155,9 +155,9 @@ namespace BECore {
 
         RateLimiter _serverJoinBudget;
         uint64_t _roomsCreated = 0;
-        eastl::hash_map<eastl::string, AddressState> _addresses;
-        eastl::hash_map<ConnectionId, Connection> _connections;
-        eastl::hash_map<eastl::string, eastl::unique_ptr<RoomEntry>> _rooms;
+        HashMap<String, AddressState> _addresses;
+        HashMap<ConnectionId, Connection> _connections;
+        HashMap<String, UniquePtr<RoomEntry>> _rooms;
     };
 
 }  // namespace BECore

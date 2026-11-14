@@ -37,9 +37,9 @@ namespace BECore {
         constexpr ImU32 kMarkerColor = IM_COL32(255, 255, 255, 200);
 
         // One fixed color per segment of ExclusiveStage
-        constexpr eastl::array<ImU32, kExclusiveStageCount> kStageColors{IM_COL32(90, 140, 220, 255), IM_COL32(60, 200, 210, 255),  IM_COL32(220, 130, 60, 255),
-                                                                         IM_COL32(230, 200, 70, 255), IM_COL32(170, 100, 210, 255), IM_COL32(130, 130, 130, 255)};
-        constexpr eastl::array<const char*, kExclusiveStageCount> kStageNames{"Update", "Scene update", "Render", "Scene draw", "Present", "Other"};
+        constexpr Array<ImU32, kExclusiveStageCount> kStageColors{IM_COL32(90, 140, 220, 255), IM_COL32(60, 200, 210, 255),  IM_COL32(220, 130, 60, 255),
+                                                                  IM_COL32(230, 200, 70, 255), IM_COL32(170, 100, 210, 255), IM_COL32(130, 130, 130, 255)};
+        constexpr Array<const char*, kExclusiveStageCount> kStageNames{"Update", "Scene update", "Render", "Scene draw", "Present", "Other"};
 
         const char* const kBarModeLabels = "Frame time\0"
                                            "Stage split\0";
@@ -74,7 +74,7 @@ namespace BECore {
         return static_cast<double>(_customBudgetMs);
     }
 
-    std::optional<size_t> ProfilerFramePlot::RingFramePosition(size_t barIndex, size_t barCount, size_t ringFrameCount) {
+    Optional<size_t> ProfilerFramePlot::RingFramePosition(size_t barIndex, size_t barCount, size_t ringFrameCount) {
         if (barIndex >= barCount) {
             return std::nullopt;
         }
@@ -85,7 +85,7 @@ namespace BECore {
         return ringFrameCount - 1 - fromNewest;
     }
 
-    std::optional<uint64_t> ProfilerFramePlot::Draw(const eastl::vector<FrameStats>& history, const RingSnapshot& snapshot, std::optional<uint64_t> selectedFrame) {
+    Optional<uint64_t> ProfilerFramePlot::Draw(const Vector<FrameStats>& history, const RingSnapshot& snapshot, Optional<uint64_t> selectedFrame) {
         int budgetChoice = static_cast<int>(_budget);
         ImGui::SetNextItemWidth(kBudgetComboWidth);
         if (ImGui::Combo("Budget", &budgetChoice, kBudgetLabels)) {
@@ -122,10 +122,10 @@ namespace BECore {
 
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         drawList->AddRectFilled(origin, ImVec2(origin.x + size.x, bottom), kBackgroundColor);
-        const std::optional<size_t> selectedPosition = FramePosition(snapshot, selectedFrame);
+        const Optional<size_t> selectedPosition = FramePosition(snapshot, selectedFrame);
         for (size_t bar = 0; bar < barCount; ++bar) {
             const float x = origin.x + static_cast<float>(bar) * barWidth;
-            eastl::array<double, kExclusiveStageCount> stages{};
+            Array<double, kExclusiveStageCount> stages{};
             if (_barMode == BarMode::StageSplit) {
                 stages = ExclusiveStageMs(history[bar]);
             }
@@ -145,7 +145,7 @@ namespace BECore {
             } else {
                 drawList->AddRectFilled(min, max, BarColor(history[bar].frameMs, budgetMs));
             }
-            const std::optional<size_t> position = RingFramePosition(bar, barCount, snapshot.frames.size());
+            const Optional<size_t> position = RingFramePosition(bar, barCount, snapshot.frames.size());
             if (position && selectedPosition && *position == *selectedPosition) {
                 drawList->AddRect(ImVec2(min.x - 1.0f, min.y - 1.0f), ImVec2(max.x + 1.0f, max.y), kSelectedColor);
             }
@@ -153,13 +153,13 @@ namespace BECore {
         drawList->AddLine(ImVec2(origin.x, yOf(budgetMs)), ImVec2(origin.x + size.x, yOf(budgetMs)), kBudgetLineColor);
         drawList->AddLine(ImVec2(origin.x, yOf(budgetMs * kOverBudgetFactor)), ImVec2(origin.x + size.x, yOf(budgetMs * kOverBudgetFactor)), kDoubleLineColor);
 
-        std::optional<uint64_t> result;
+        Optional<uint64_t> result;
         if (hovered && barCount > 0 && barWidth > 0.0f) {
             const float mouseX = ImGui::GetMousePos().x - origin.x;
             const size_t bar = eastl::min(static_cast<size_t>(eastl::max(mouseX, 0.0f) / barWidth), barCount - 1);
             const float x = origin.x + static_cast<float>(bar) * barWidth;
             drawList->AddRectFilled(ImVec2(x, origin.y), ImVec2(x + barWidth, bottom), kHoverColor);
-            const std::optional<size_t> position = RingFramePosition(bar, barCount, snapshot.frames.size());
+            const Optional<size_t> position = RingFramePosition(bar, barCount, snapshot.frames.size());
             ImGui::SetTooltip("Frame %llu: %.2f ms (cpu %.2f ms)%s%s", static_cast<unsigned long long>(history[bar].frame), history[bar].frameMs, history[bar].cpuMs,
                               history[bar].paused ? "\npaused: the game stood still" : "", position ? "" : "\nnot in the ring");
             if (clicked && position) {
@@ -187,7 +187,7 @@ namespace BECore {
         }
     }
 
-    void ProfilerFramePlot::DrawCounters(const eastl::vector<FrameStats>& history, const RingSnapshot& snapshot, std::optional<uint64_t> selectedFrame) {
+    void ProfilerFramePlot::DrawCounters(const Vector<FrameStats>& history, const RingSnapshot& snapshot, Optional<uint64_t> selectedFrame) {
         if (!ImGui::CollapsingHeader("Counters")) {
             return;
         }
@@ -219,7 +219,7 @@ namespace BECore {
                 }
             }
         }
-        const std::optional<size_t> selectedPosition = FramePosition(snapshot, selectedFrame);
+        const Optional<size_t> selectedPosition = FramePosition(snapshot, selectedFrame);
         for (const PoolString& name : _pickedCounters) {
             _counterValues.clear();
             for (const FrameStats& frame : history) {
@@ -234,7 +234,7 @@ namespace BECore {
             // The marker of the selected frame: the plot spreads its points over the width
             if (selectedPosition && _counterValues.size() > 1) {
                 for (size_t bar = 0; bar < _counterValues.size(); ++bar) {
-                    const std::optional<size_t> position = RingFramePosition(bar, _counterValues.size(), snapshot.frames.size());
+                    const Optional<size_t> position = RingFramePosition(bar, _counterValues.size(), snapshot.frames.size());
                     if (position && *position == *selectedPosition) {
                         const float x = origin.x + width * static_cast<float>(bar) / static_cast<float>(_counterValues.size() - 1);
                         ImGui::GetWindowDrawList()->AddLine(ImVec2(x, origin.y), ImVec2(x, origin.y + kCounterGraphHeight), kMarkerColor);

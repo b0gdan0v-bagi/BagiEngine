@@ -22,7 +22,7 @@ namespace BECore::Utf8 {
 
     }  // namespace
 
-    char32_t DecodeNext(eastl::string_view text, size_t& pos) {
+    char32_t DecodeNext(StringView text, size_t& pos) {
         if (pos >= text.size()) {
             return 0;
         }
@@ -70,7 +70,7 @@ namespace BECore::Utf8 {
         return codePoint;
     }
 
-    void Append(eastl::string& out, char32_t codePoint) {
+    void Append(String& out, char32_t codePoint) {
         if (!IsScalarValue(codePoint)) {
             codePoint = kReplacement;
         }
@@ -92,7 +92,7 @@ namespace BECore::Utf8 {
         }
     }
 
-    size_t CountCodePoints(eastl::string_view text) {
+    size_t CountCodePoints(StringView text) {
         size_t count = 0;
         size_t pos = 0;
         while (pos < text.size()) {

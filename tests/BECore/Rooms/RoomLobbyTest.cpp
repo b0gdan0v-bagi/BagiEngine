@@ -15,14 +15,14 @@ namespace BECore::Tests {
             return Room("ABCDE", SeatedGameInfo{"fake", seatCount}, MakeSequence(7));
         }
 
-        RoomMemberJoined Join(Room& room, eastl::string_view name) {
+        RoomMemberJoined Join(Room& room, StringView name) {
             auto joined = room.AddMember(name, kNow);
             EXPECT_TRUE(joined.has_value());
             return joined ? *joined : RoomMemberJoined{};
         }
 
-        eastl::string CodeOf(const std::expected<void, ControlError>& result) {
-            return result ? eastl::string("<ok>") : result.error().code;
+        String CodeOf(const std::expected<void, ControlError>& result) {
+            return result ? String("<ok>") : result.error().code;
         }
 
     }  // namespace
@@ -202,14 +202,14 @@ namespace BECore::Tests {
         EXPECT_FALSE(room.FindByToken("0123456789abcdef0123456789abcdef").has_value());
 
         // Near misses: one character changed (first, last), a prefix, one character too many
-        eastl::string first = a.token;
+        String first = a.token;
         first[0] = first[0] == '0' ? '1' : '0';
-        eastl::string last = a.token;
+        String last = a.token;
         last[last.size() - 1] = last[last.size() - 1] == '0' ? '1' : '0';
         EXPECT_FALSE(room.FindByToken(first).has_value());
         EXPECT_FALSE(room.FindByToken(last).has_value());
-        EXPECT_FALSE(room.FindByToken(eastl::string_view(a.token.data(), a.token.size() - 1)).has_value());
-        EXPECT_FALSE(room.FindByToken(eastl::string(a.token) + "0").has_value());
+        EXPECT_FALSE(room.FindByToken(StringView(a.token.data(), a.token.size() - 1)).has_value());
+        EXPECT_FALSE(room.FindByToken(String(a.token) + "0").has_value());
     }
 
     TEST(RoomLobbyTest, ARemovedMembersTokenNoLongerWorks) {
@@ -238,7 +238,7 @@ namespace BECore::Tests {
         EXPECT_EQ(lobby.seats[2].name, "Ann");
         EXPECT_EQ(lobby.seats[3].kind, SeatKind::Empty);
         // It is a valid lobby message
-        const eastl::string text = MakeLobbyMessage(lobby);
+        const String text = MakeLobbyMessage(lobby);
         EXPECT_TRUE(ParseJson(text).has_value());
     }
 

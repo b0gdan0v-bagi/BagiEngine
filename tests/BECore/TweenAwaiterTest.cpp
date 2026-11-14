@@ -32,8 +32,8 @@ namespace BECore::Tests {
 
         /// What the coroutines of a test write down
         struct Log {
-            eastl::vector<int> order;  // the ids of the coroutines that continued, in the order they did
-            eastl::vector<TweenResult> results;
+            Vector<int> order;  // the ids of the coroutines that continued, in the order they did
+            Vector<TweenResult> results;
             float watchedAtResume = -1.0f;
         };
 
@@ -90,7 +90,7 @@ namespace BECore::Tests {
         }
 
         /// `co_await Wait(a); write 1; co_await Wait(b); write 2`
-        Task<void> Sequence(TweenManager& tweens, eastl::vector<int>& values) {
+        Task<void> Sequence(TweenManager& tweens, Vector<int>& values) {
             co_await tweens.Wait(kQuarterSecond);
             values.push_back(1);
             co_await tweens.Wait(kHalfSecond);
@@ -116,7 +116,7 @@ namespace BECore::Tests {
         }
         tweens.Advance(kQuarterSecond);
 
-        EXPECT_EQ(log.order, (eastl::vector<int>{1}));
+        EXPECT_EQ(log.order, (Vector<int>{1}));
         ASSERT_EQ(log.results.size(), 1u);
         EXPECT_EQ(log.results[0], TweenResult::Completed);
         EXPECT_TRUE(task.IsDone());
@@ -138,7 +138,7 @@ namespace BECore::Tests {
             EXPECT_TRUE(log.order.empty()) << framesPerSecond;
             tweens.Advance(frameTime);
 
-            EXPECT_EQ(log.order, (eastl::vector<int>{1})) << framesPerSecond;
+            EXPECT_EQ(log.order, (Vector<int>{1})) << framesPerSecond;
             EXPECT_EQ(log.watchedAtResume, kTo) << framesPerSecond;  // the setter ran before the coroutine continued
         }
     }
@@ -153,7 +153,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(log.order.empty());
 
         tweens.Advance(kOneSecond);  // one second of game time in an instant
-        EXPECT_EQ(log.order, (eastl::vector<int>{1}));
+        EXPECT_EQ(log.order, (Vector<int>{1}));
     }
 
     TEST(TweenAwaiterTest, DrivenByTheFrameTimeOfATimeObject) {
@@ -171,23 +171,23 @@ namespace BECore::Tests {
         time.Advance(1.0 / kFramesInASecond);
         tweens.Advance(time.GetDeltaTime());
 
-        EXPECT_EQ(log.order, (eastl::vector<int>{1}));
+        EXPECT_EQ(log.order, (Vector<int>{1}));
         EXPECT_EQ(log.results[0], TweenResult::Completed);
     }
 
     TEST(TweenAwaiterTest, CancelResumesTheWaiterWithCancelled) {
         TweenManager tweens;
         Log log;
-        eastl::vector<int> events;
+        Vector<int> events;
         const auto handle = tweens.Start<float>(0.0f, kTo, Settings(kOneSecond), {}, [&events] { events.push_back(-1); }, [&events] { events.push_back(-2); });
         Task<void> task = AwaitHandle(handle, log, 1);
         task.Resume();
 
         handle->Cancel();
 
-        EXPECT_EQ(log.order, (eastl::vector<int>{1}));
+        EXPECT_EQ(log.order, (Vector<int>{1}));
         EXPECT_EQ(log.results[0], TweenResult::Cancelled);
-        EXPECT_EQ(events, (eastl::vector<int>{-2}));  // the cancel callback ran, the completion did not
+        EXPECT_EQ(events, (Vector<int>{-2}));  // the cancel callback ran, the completion did not
         EXPECT_TRUE(task.IsDone());
     }
 
@@ -200,13 +200,13 @@ namespace BECore::Tests {
 
         tweens.Advance(kQuarterSecond);
 
-        EXPECT_EQ(log.order, (eastl::vector<int>{0, 1}));
+        EXPECT_EQ(log.order, (Vector<int>{0, 1}));
     }
 
     TEST(TweenAwaiterTest, CancelAllResumesEveryWaiterWithCancelledInStartOrder) {
         TweenManager tweens;
         Log log;
-        eastl::vector<Task<void>> tasks;
+        Vector<Task<void>> tasks;
         for (int id = 0; id < kWaiterCount; ++id) {
             tasks.push_back(AwaitHandle(StartSilent(tweens, kOneSecond), log, id));
             tasks.back().Resume();
@@ -214,7 +214,7 @@ namespace BECore::Tests {
 
         tweens.CancelAll();
 
-        EXPECT_EQ(log.order, (eastl::vector<int>{0, 1, 2}));
+        EXPECT_EQ(log.order, (Vector<int>{0, 1, 2}));
         for (const TweenResult result : log.results) {
             EXPECT_EQ(result, TweenResult::Cancelled);
         }
@@ -231,7 +231,7 @@ namespace BECore::Tests {
             EXPECT_TRUE(log.order.empty());
         }  // the destructor cancels the tween and the coroutine continues in there
 
-        EXPECT_EQ(log.order, (eastl::vector<int>{1}));
+        EXPECT_EQ(log.order, (Vector<int>{1}));
         EXPECT_EQ(log.results[0], TweenResult::Cancelled);
     }
 
@@ -254,7 +254,7 @@ namespace BECore::Tests {
         Task<void> second = AwaitHandle(cancelled, log, 2);
         first.Resume();
         second.Resume();  // both run to the end at once, no Advance
-        EXPECT_EQ(log.order, (eastl::vector<int>{1, 2}));
+        EXPECT_EQ(log.order, (Vector<int>{1, 2}));
         EXPECT_EQ(log.results[0], TweenResult::Completed);
         EXPECT_EQ(log.results[1], TweenResult::Cancelled);
     }
@@ -278,7 +278,7 @@ namespace BECore::Tests {
         Task<void> task = AwaitHandle(handle, log, 1);
         task.Resume();
 
-        EXPECT_EQ(log.order, (eastl::vector<int>{1}));
+        EXPECT_EQ(log.order, (Vector<int>{1}));
         EXPECT_EQ(log.results[0], TweenResult::Cancelled);
     }
 
@@ -352,7 +352,7 @@ namespace BECore::Tests {
 
         tweens.Advance(kQuarterSecond);
 
-        EXPECT_EQ(log.order, (eastl::vector<int>{1}));  // the second frame was destroyed by the first before its turn
+        EXPECT_EQ(log.order, (Vector<int>{1}));  // the second frame was destroyed by the first before its turn
         EXPECT_FALSE(second.IsValid());
     }
 
@@ -367,7 +367,7 @@ namespace BECore::Tests {
 
         tweens.Advance(kQuarterSecond);
 
-        EXPECT_EQ(log.order, (eastl::vector<int>{1}));
+        EXPECT_EQ(log.order, (Vector<int>{1}));
         EXPECT_FALSE(second.IsDone());
     }
 
@@ -375,7 +375,7 @@ namespace BECore::Tests {
         TweenManager tweens;
         Log log;
         const auto handle = StartSilent(tweens, kQuarterSecond);
-        eastl::vector<Task<void>> tasks;
+        Vector<Task<void>> tasks;
         for (int id = kWaiterCount; id > 0; --id) {
             tasks.push_back(AwaitHandle(handle, log, id));
             tasks.back().Resume();
@@ -383,7 +383,7 @@ namespace BECore::Tests {
 
         tweens.Advance(kQuarterSecond);
 
-        EXPECT_EQ(log.order, (eastl::vector<int>{3, 2, 1}));
+        EXPECT_EQ(log.order, (Vector<int>{3, 2, 1}));
     }
 
     TEST(TweenAwaiterTest, AChainOfThreeTakesOneAdvancePerLinkAndDropsTheLeftOverTime) {
@@ -393,12 +393,12 @@ namespace BECore::Tests {
         task.Resume();  // starts the first link
 
         tweens.Advance(kOneSecond);  // four times the link: the left over is dropped, and the second link starts inside
-        EXPECT_EQ(log.order, (eastl::vector<int>{0}));
+        EXPECT_EQ(log.order, (Vector<int>{0}));
         tweens.Advance(kOneSecond);
-        EXPECT_EQ(log.order, (eastl::vector<int>{0, 1}));
+        EXPECT_EQ(log.order, (Vector<int>{0, 1}));
         EXPECT_FALSE(task.IsDone());
         tweens.Advance(kOneSecond);
-        EXPECT_EQ(log.order, (eastl::vector<int>{0, 1, 2}));
+        EXPECT_EQ(log.order, (Vector<int>{0, 1, 2}));
         EXPECT_TRUE(task.IsDone());
     }
 
@@ -414,7 +414,7 @@ namespace BECore::Tests {
 
         tweens.Advance(kQuarterSecond);
 
-        EXPECT_EQ(log.order, (eastl::vector<int>{1, 2}));  // the cancelled tween resumed its own waiter inside the cancel
+        EXPECT_EQ(log.order, (Vector<int>{1, 2}));  // the cancelled tween resumed its own waiter inside the cancel
         ASSERT_EQ(log.results.size(), 1u);
         EXPECT_EQ(log.results[0], TweenResult::Cancelled);
         EXPECT_TRUE(slow->IsCancelled());
@@ -431,7 +431,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(log.order.empty());
         tweens.Advance(kQuarterSecond);
 
-        EXPECT_EQ(log.order, (eastl::vector<int>{1}));
+        EXPECT_EQ(log.order, (Vector<int>{1}));
         EXPECT_EQ(log.results[0], TweenResult::Completed);
     }
 
@@ -453,18 +453,18 @@ namespace BECore::Tests {
 
     TEST(TweenAwaiterTest, ASequenceOfWaitsWritesItsValuesInOrder) {
         TweenManager tweens;
-        eastl::vector<int> values;
+        Vector<int> values;
         Task<void> task = Sequence(tweens, values);
         task.Resume();
         EXPECT_TRUE(values.empty());
 
         tweens.Advance(kQuarterSecond);
-        EXPECT_EQ(values, (eastl::vector<int>{1}));
+        EXPECT_EQ(values, (Vector<int>{1}));
         tweens.Advance(kQuarterSecond);
-        EXPECT_EQ(values, (eastl::vector<int>{1}));
+        EXPECT_EQ(values, (Vector<int>{1}));
         tweens.Advance(kQuarterSecond);
 
-        EXPECT_EQ(values, (eastl::vector<int>{1, 2}));
+        EXPECT_EQ(values, (Vector<int>{1, 2}));
         EXPECT_TRUE(task.IsDone());
     }
 
@@ -476,7 +476,7 @@ namespace BECore::Tests {
 
         tweens.Advance(kQuarterSecond);
 
-        EXPECT_EQ(log.order, (eastl::vector<int>{1}));
+        EXPECT_EQ(log.order, (Vector<int>{1}));
         EXPECT_EQ(log.results[0], TweenResult::Completed);
     }
 

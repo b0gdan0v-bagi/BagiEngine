@@ -15,7 +15,7 @@ namespace BECore::Tests {
         constexpr uint32_t kBytesPerPixel = 4;
         const Color kRed{kOpaque, 0, 0, kOpaque};
         const Color kTint{10, 20, 30, 40};
-        const eastl::vector<int> kExpectedIndices = {0, 1, 2, 2, 1, 3};
+        const Vector<int> kExpectedIndices = {0, 1, 2, 2, 1, 3};
 
         void ExpectPoint(const Vec2& point, float x, float y) {
             EXPECT_NEAR(point.x, x, kTolerance);
@@ -37,7 +37,7 @@ namespace BECore::Tests {
         }
 
         IntrusivePtr<ITexture> MakeTexture(RecordingRenderer& renderer, uint32_t width, uint32_t height) {
-            const eastl::vector<uint8_t> pixels(static_cast<size_t>(width) * height * kBytesPerPixel, kOpaque);
+            const Vector<uint8_t> pixels(static_cast<size_t>(width) * height * kBytesPerPixel, kOpaque);
             return renderer.CreateTexture(pixels.data(), width, height);
         }
 
@@ -229,7 +229,7 @@ namespace BECore::Tests {
 
     TEST(RendererTransformTest, ATextureWithoutSizeDrawsNothing) {
         RecordingRenderer renderer;
-        const IntrusivePtr<ITexture> texture = New<RecordedTexture>(eastl::vector<uint8_t>{}, 0u, 0u);
+        const IntrusivePtr<ITexture> texture = New<RecordedTexture>(Vector<uint8_t>{}, 0u, 0u);
 
         renderer.DrawTransformedTexture(*texture, nullptr, 0.0f, 0.0f, 10.0f, 10.0f, kTint, DrawTransform{45.0f, 5.0f, 5.0f});
 

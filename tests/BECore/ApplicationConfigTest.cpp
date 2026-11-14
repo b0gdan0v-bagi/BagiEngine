@@ -9,14 +9,14 @@ namespace BECore::Tests {
 
     namespace {
 
-        ApplicationConfigLoad Load(eastl::string_view xml) {
+        ApplicationConfigLoad Load(StringView xml) {
             XmlDeserializer deserializer;
             EXPECT_TRUE(deserializer.LoadFromString(xml)) << xml.data();
             return LoadApplicationConfig(deserializer);
         }
 
         /// True when exactly one error was reported and it is under @p path
-        bool HasOnlyErrorAt(const ApplicationConfigLoad& load, eastl::string_view path) {
+        bool HasOnlyErrorAt(const ApplicationConfigLoad& load, StringView path) {
             return load.errors.size() == 1 && load.errors[0].path.ToStringView() == path;
         }
 
@@ -69,26 +69,26 @@ namespace BECore::Tests {
             const auto load = Load(xml);
             EXPECT_EQ(load.config._mode, RunMode::Editor);
             ASSERT_TRUE(HasOnlyErrorAt(load, "mode"));
-            EXPECT_NE(load.errors[0].errorMessage.ToStringView().find("Invalid enum value"), eastl::string_view::npos);
+            EXPECT_NE(load.errors[0].errorMessage.ToStringView().find("Invalid enum value"), StringView::npos);
         }
     }
 
     TEST(ApplicationConfigTest, BadControlPortIsReportedUnderItsNameAndKeepsTheDefault) {
         for (const char* value : {"abc", "70000", "65536", "-1", ""}) {
-            const eastl::string xml = Format("<root controlPort=\"{}\"/>", value);
+            const String xml = Format("<root controlPort=\"{}\"/>", value);
             SCOPED_TRACE(xml.c_str());
-            const auto load = Load(eastl::string_view(xml.data(), xml.size()));
+            const auto load = Load(StringView(xml));
             EXPECT_EQ(load.config._controlPort, kDefaultControlPort);
             EXPECT_TRUE(HasOnlyErrorAt(load, ApplicationConfigFields::kControlPort));
         }
     }
 
     TEST(ApplicationConfigTest, BadBooleanIsReportedUnderItsNameAndKeepsTheDefault) {
-        for (const eastl::string_view name : {ApplicationConfigFields::kControl, ApplicationConfigFields::kManualClock, ApplicationConfigFields::kHeadless}) {
+        for (const StringView name : {ApplicationConfigFields::kControl, ApplicationConfigFields::kManualClock, ApplicationConfigFields::kHeadless}) {
             for (const char* value : {"yes", "True", "2", ""}) {
-                const eastl::string xml = Format("<root {}=\"{}\"/>", name, value);
+                const String xml = Format("<root {}=\"{}\"/>", name, value);
                 SCOPED_TRACE(xml.c_str());
-                const auto load = Load(eastl::string_view(xml.data(), xml.size()));
+                const auto load = Load(StringView(xml));
                 EXPECT_FALSE(load.config._control || load.config._manualClock || load.config._headless);
                 EXPECT_TRUE(HasOnlyErrorAt(load, name));
             }

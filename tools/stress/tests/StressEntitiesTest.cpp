@@ -74,7 +74,7 @@ namespace BECore::Stress::Tests {
     TEST_F(StressEntitiesTest, GrowAddsOnlyAndShrinkCancelsTheTailsTweens) {
         StartEntities(100);
         Update();
-        eastl::vector<const SceneNode*> first;
+        Vector<const SceneNode*> first;
         for (size_t i = 0; i < 10; ++i) {
             first.push_back(Field().GetChildren()[i].Get());
         }
@@ -105,7 +105,7 @@ namespace BECore::Stress::Tests {
         StartEntities(50);
         Update();
         Tweens().Advance(kStep);  // the first step writes the positions
-        eastl::vector<std::pair<float, float>> before;
+        Vector<std::pair<float, float>> before;
         for (size_t i = 0; i < 50; ++i) {
             before.emplace_back(Transform(i)._x, Transform(i)._y);
         }

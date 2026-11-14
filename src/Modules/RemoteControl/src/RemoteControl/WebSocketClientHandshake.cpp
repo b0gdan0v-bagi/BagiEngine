@@ -9,28 +9,28 @@ namespace BECore {
     namespace {
 
         constexpr size_t kClientKeyBytes = 16;
-        constexpr eastl::string_view kStatusLinePrefix = "HTTP/1.1 ";
+        constexpr StringView kStatusLinePrefix = "HTTP/1.1 ";
         constexpr size_t kStatusCodeDigits = 3;
         constexpr int kStatusSwitchingProtocols = 101;
 
         namespace HeaderNames {
-            constexpr eastl::string_view kUpgrade = "upgrade";
-            constexpr eastl::string_view kConnection = "connection";
-            constexpr eastl::string_view kAccept = "sec-websocket-accept";
-            constexpr eastl::string_view kExtensions = "sec-websocket-extensions";
-            constexpr eastl::string_view kProtocol = "sec-websocket-protocol";
+            constexpr StringView kUpgrade = "upgrade";
+            constexpr StringView kConnection = "connection";
+            constexpr StringView kAccept = "sec-websocket-accept";
+            constexpr StringView kExtensions = "sec-websocket-extensions";
+            constexpr StringView kProtocol = "sec-websocket-protocol";
         }  // namespace HeaderNames
 
-        std::unexpected<eastl::string> Refuse(eastl::string message) {
+        std::unexpected<String> Refuse(String message) {
             return std::unexpected(std::move(message));
         }
 
         /// The status code of "HTTP/1.1 101 Switching Protocols", nullopt when the line is not of that shape
-        std::optional<int> ParseStatus(eastl::string_view line) {
+        Optional<int> ParseStatus(StringView line) {
             if (!line.starts_with(kStatusLinePrefix)) {
                 return std::nullopt;
             }
-            const eastl::string_view rest = line.substr(kStatusLinePrefix.size());
+            const StringView rest = line.substr(kStatusLinePrefix.size());
             if (rest.size() < kStatusCodeDigits || (rest.size() > kStatusCodeDigits && rest[kStatusCodeDigits] != ' ')) {
                 return std::nullopt;
             }
@@ -46,16 +46,16 @@ namespace BECore {
 
     }  // namespace
 
-    eastl::string GenerateClientKey(std::random_device& random) {
+    String GenerateClientKey(std::random_device& random) {
         std::array<uint8_t, kClientKeyBytes> bytes{};
         for (uint8_t& byte : bytes) {
             byte = static_cast<uint8_t>(random());
         }
-        return Base64Encode(eastl::span<const uint8_t>(bytes.data(), bytes.size()));
+        return Base64Encode(Span<const uint8_t>(bytes.data(), bytes.size()));
     }
 
-    eastl::string BuildClientHandshakeRequest(const WebSocketUrl& url, eastl::string_view key, eastl::string_view origin) {
-        eastl::string request =
+    String BuildClientHandshakeRequest(const WebSocketUrl& url, StringView key, StringView origin) {
+        String request =
             Format("GET {} HTTP/1.1\r\nHost: {}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: {}\r\nSec-WebSocket-Version: 13\r\n", url.pathAndQuery, GetHostHeader(url), key);
         if (!origin.empty()) {
             request.append(Format("Origin: {}\r\n", origin));
@@ -64,26 +64,26 @@ namespace BECore {
         return request;
     }
 
-    std::expected<void, eastl::string> CheckServerHandshakeResponse(eastl::string_view responseHead, eastl::string_view key) {
+    std::expected<void, String> CheckServerHandshakeResponse(StringView responseHead, StringView key) {
         if (responseHead.size() > kMaxHandshakeBytes) {
             return Refuse("the server's answer is too long");
         }
 
-        eastl::string_view lines = responseHead;
+        StringView lines = responseHead;
         bool isStatusLine = true;
         bool hasUpgrade = false;
         bool hasConnection = false;
-        std::optional<eastl::string> accept;
+        Optional<String> accept;
         while (!lines.empty()) {
             const size_t end = lines.find('\n');
-            eastl::string_view line = lines.substr(0, end);
-            lines = (end == eastl::string_view::npos) ? eastl::string_view() : lines.substr(end + 1);
+            StringView line = lines.substr(0, end);
+            lines = (end == StringView::npos) ? StringView() : lines.substr(end + 1);
             if (line.ends_with('\r')) {
                 line.remove_suffix(1);
             }
             if (isStatusLine) {
                 isStatusLine = false;
-                const std::optional<int> status = ParseStatus(line);
+                const Optional<int> status = ParseStatus(line);
                 if (!status) {
                     return Refuse("the server's answer is not an HTTP/1.1 response");
                 }
@@ -96,11 +96,11 @@ namespace BECore {
                 break;  // the end of the head
             }
             const size_t colon = line.find(':');
-            if (colon == eastl::string_view::npos || colon == 0) {
+            if (colon == StringView::npos || colon == 0) {
                 return Refuse("a header line of the answer has no name or no colon");
             }
-            const eastl::string name = LowerAscii(line.substr(0, colon));
-            const eastl::string_view value = TrimHeaderValue(line.substr(colon + 1));
+            const String name = LowerAscii(line.substr(0, colon));
+            const StringView value = TrimHeaderValue(line.substr(colon + 1));
             if (name == HeaderNames::kUpgrade) {
                 hasUpgrade = hasUpgrade || HeaderHasToken(value, "websocket");
             } else if (name == HeaderNames::kConnection) {
@@ -109,7 +109,7 @@ namespace BECore {
                 if (accept) {
                     return Refuse("the answer repeats 'Sec-WebSocket-Accept'");
                 }
-                accept = eastl::string(value.data(), value.size());
+                accept = String(value.data(), value.size());
             } else if (name == HeaderNames::kExtensions || name == HeaderNames::kProtocol) {
                 return Refuse(Format("the server answered with '{}', which the request did not ask for", name));
             }

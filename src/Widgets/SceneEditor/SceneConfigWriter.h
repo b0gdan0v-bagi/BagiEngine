@@ -33,6 +33,6 @@ namespace BECore {
      * @param notes Receives a line `node 'X': written inline, <reason>` for every instance written inline; may be null
      * @return false when @p configRoot is not a valid node (nothing is written); true when the element was written
      */
-    bool WriteSceneToConfig(pugi::xml_node configRoot, Scene& scene, const NodeFileLoader* loader = nullptr, eastl::vector<eastl::string>* notes = nullptr);
+    bool WriteSceneToConfig(pugi::xml_node configRoot, Scene& scene, const NodeFileLoader* loader = nullptr, Vector<String>* notes = nullptr);
 
 }  // namespace BECore

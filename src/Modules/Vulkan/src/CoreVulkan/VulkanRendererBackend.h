@@ -55,7 +55,7 @@ namespace BECore {
         void DrawFilledRect(float x, float y, float w, float h, const Color& color) override;
         using IRenderer::DrawTexture;
         void DrawTexture(ITexture& texture, const Rect* srcRect, float dstX, float dstY, float dstW, float dstH, const Color& tint) override;
-        void DrawGeometry(ITexture* texture, eastl::span<const GeometryVertex> vertices, eastl::span<const int> indices, float translateX, float translateY) override;
+        void DrawGeometry(ITexture* texture, Span<const GeometryVertex> vertices, Span<const int> indices, float translateX, float translateY) override;
         IntrusivePtr<ITexture> CreateTexture(const uint8_t* rgba, uint32_t width, uint32_t height) override;
 
         IntrusivePtr<IRenderTarget> CreateRenderTarget(uint32_t width, uint32_t height) override;
@@ -174,12 +174,12 @@ namespace BECore {
         bool _blendWarned = false;
 
         VkCommandPool _commandPool = VK_NULL_HANDLE;
-        eastl::vector<VkCommandBuffer> _commandBuffers;
+        Vector<VkCommandBuffer> _commandBuffers;
 
         // One set of sync objects per in-flight frame
-        eastl::vector<VkSemaphore> _imageAvailableSemaphores;
-        eastl::vector<VkSemaphore> _renderFinishedSemaphores;
-        eastl::vector<VkFence> _inFlightFences;
+        Vector<VkSemaphore> _imageAvailableSemaphores;
+        Vector<VkSemaphore> _renderFinishedSemaphores;
+        Vector<VkFence> _inFlightFences;
 
         uint32_t _currentFrame = 0;
         uint32_t _currentImageIndex = 0;

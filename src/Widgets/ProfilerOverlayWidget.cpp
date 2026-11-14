@@ -76,8 +76,8 @@ namespace BECore {
         const ViewTransform sceneView = renderer.GetViewTransform();
         renderer.SetViewTransform(ViewTransform{});
 
-        eastl::string text;
-        for (const eastl::string& line : FormatOverlayLines(*last, AllocTracker::GetTotals(), AllocTracker::kEnabled)) {
+        String text;
+        for (const String& line : FormatOverlayLines(*last, AllocTracker::GetTotals(), AllocTracker::kEnabled)) {
             text.append(line);
             text.push_back('\n');
         }
@@ -103,7 +103,7 @@ namespace BECore {
         // One bar per frame, the newest on the right; the line is the frame budget
         const float barsBottom = 2.0f * _margin + layout.height + _margin + kBarsHeight;
         const float msPerPixel = (_budgetMs * kBudgetsShown) / kBarsHeight;
-        const eastl::vector<FrameStats> history = CoreManager::GetFrameStats().GetHistory(kBars);
+        const Vector<FrameStats> history = CoreManager::GetFrameStats().GetHistory(kBars);
         float x = 2.0f * _margin + (kBars - history.size()) * kBarWidth;
         for (const FrameStats& frame : history) {
             const float barHeight = std::min(kBarsHeight, static_cast<float>(frame.frameMs) / msPerPixel);

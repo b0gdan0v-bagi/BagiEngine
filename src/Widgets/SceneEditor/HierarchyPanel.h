@@ -17,14 +17,14 @@ namespace BECore {
         char renameBuffer[HierarchyModel::kMaxNodeNameLength + 1] = {};
         bool renameFocus = false;  ///< the text field takes the keyboard focus on its first frame
         HierarchyModel::Operation pending;
-        SceneNode* revealNode = nullptr;      ///< opened on the next walk, so a moved, copied or added node is seen
-        eastl::vector<SceneNode*> openNodes;  ///< opened on the next walk (a reveal request: the ancestors of the node); kept as a member for its capacity
-        SceneNode* scrollTo = nullptr;        ///< the row scrolls into view on the next walk
+        SceneNode* revealNode = nullptr;  ///< opened on the next walk, so a moved, copied or added node is seen
+        Vector<SceneNode*> openNodes;     ///< opened on the next walk (a reveal request: the ancestors of the node); kept as a member for its capacity
+        SceneNode* scrollTo = nullptr;    ///< the row scrolls into view on the next walk
 
         // The filter: matches stay with their ancestors, the rest is hidden
         char searchBuffer[HierarchyModel::kMaxNodeNameLength + 1] = {};
-        eastl::string_view componentType;                  ///< empty = any; a name from ClassMeta, which lives as long as the program
-        eastl::vector<eastl::string_view> componentTypes;  ///< what the type combo offers, made again each time it opens
+        StringView componentType;           ///< empty = any; a name from ClassMeta, which lives as long as the program
+        Vector<StringView> componentTypes;  ///< what the type combo offers, made again each time it opens
         bool typeComboOpen = false;
         bool focusSearch = false;       ///< Ctrl+F: the search box takes the keyboard focus
         SceneNode* dragNode = nullptr;  ///< the node being dragged, once found alive in the tree (the payload holds only a pointer)

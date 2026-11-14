@@ -57,7 +57,7 @@ namespace BECore {
         };
 
         struct FrameSlot {
-            eastl::vector<Chunk> chunks;
+            Vector<Chunk> chunks;
             // The chunk the next piece comes from; the ones before it are full for this frame
             size_t current = 0;
         };
@@ -65,7 +65,7 @@ namespace BECore {
         bool CreateChunk(FrameSlot& slot, VkDeviceSize minCapacity);
 
         const VulkanDevice* _device = nullptr;
-        eastl::vector<FrameSlot> _slots;
+        Vector<FrameSlot> _slots;
     };
 
 }  // namespace BECore

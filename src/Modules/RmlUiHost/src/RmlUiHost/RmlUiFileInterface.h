@@ -38,17 +38,17 @@ namespace BECore {
         void BeginRecording();
 
         /// @return the files opened since BeginRecording(), each once, in the order they were opened
-        [[nodiscard]] eastl::vector<RmlUiFileStamp> EndRecording();
+        [[nodiscard]] Vector<RmlUiFileStamp> EndRecording();
 
     private:
         struct OpenFile {
-            eastl::vector<char> bytes;
+            Vector<char> bytes;
             size_t position = 0;
         };
 
-        eastl::hash_map<Rml::FileHandle, OpenFile> _files;
+        HashMap<Rml::FileHandle, OpenFile> _files;
         Rml::FileHandle _nextHandle = 1;
-        eastl::vector<RmlUiFileStamp> _recorded;
+        Vector<RmlUiFileStamp> _recorded;
         bool _isRecording = false;
     };
 

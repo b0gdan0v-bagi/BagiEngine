@@ -11,7 +11,7 @@ namespace BECore {
     CORE_ENUM(ClipboardStatus, uint8_t, Ok, Empty, Refused, Unavailable)
 
     /// `ok`, `empty`, `refused` or `unavailable`: the word of the control API
-    constexpr eastl::string_view ToString(ClipboardStatus status) {
+    constexpr StringView ToString(ClipboardStatus status) {
         switch (status) {
             case ClipboardStatus::Ok:
                 return "ok";
@@ -28,7 +28,7 @@ namespace BECore {
     /// The answer to a read; @c text is not empty only with Ok
     struct ClipboardText {
         ClipboardStatus status = ClipboardStatus::Empty;
-        eastl::string text;
+        String text;
     };
 
     /// Called by Clipboard::Update(), never inside the request

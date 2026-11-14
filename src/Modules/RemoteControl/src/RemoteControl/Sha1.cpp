@@ -66,7 +66,7 @@ namespace BECore {
 
     }  // namespace
 
-    Sha1Digest Sha1(eastl::span<const uint8_t> data) {
+    Sha1Digest Sha1(Span<const uint8_t> data) {
         State state = kInitialState;
 
         const size_t fullBlocks = data.size() / kBlockSize;

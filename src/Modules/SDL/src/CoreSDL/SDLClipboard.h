@@ -32,7 +32,7 @@ namespace BECore {
     bool IsGestureReadFresh(double nowMs, double startedMs, double windowMs);
 
     /// The answer for a code and a text; the text is kept only for Ok
-    ClipboardText MakeWebClipboardText(int code, eastl::string_view text);
+    ClipboardText MakeWebClipboardText(int code, StringView text);
 
     /// The desktop clipboard: SDL_SetClipboardText / SDL_GetClipboardText. A read finishes at once (PollRead is true on the first call)
     class SDLClipboardBackend : public IClipboardBackend {
@@ -40,12 +40,12 @@ namespace BECore {
         /// True once SDL video is initialised: before that SDL has no clipboard
         [[nodiscard]] bool IsAvailable() const override;
 
-        bool WriteText(eastl::string_view text) override;
+        bool WriteText(StringView text) override;
         void BeginRead() override;
         bool PollRead(ClipboardText& out) override;
 
     private:
-        eastl::string _writeBuffer;  ///< SDL wants a terminated string; kept so a write does not allocate again for the same size
+        String _writeBuffer;  ///< SDL wants a terminated string; kept so a write does not allocate again for the same size
     };
 
     /// The clipboard backend of this platform: the SDL one on the desktop, the page's navigator.clipboard in the browser

@@ -6,11 +6,11 @@ namespace BECore {
 
     struct LogEvent : EventBase<LogEvent> {
         LogLevel level;
-        eastl::string_view message;
+        StringView message;
 
-        LogEvent(LogLevel level, eastl::string_view message) : level(level), message(message) {}
+        LogEvent(LogLevel level, StringView message) : level(level), message(message) {}
 
-        static void Emit(LogLevel level, eastl::string_view message);
+        static void Emit(LogLevel level, StringView message);
 
         /**
          * @brief Drain the global log ring buffer and dispatch all pending entries to subscribers.

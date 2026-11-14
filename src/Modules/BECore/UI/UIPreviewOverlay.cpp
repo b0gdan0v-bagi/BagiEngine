@@ -8,7 +8,7 @@ namespace BECore {
         constexpr float kTouchTolerance = 0.01f;
         constexpr float kMinPixelDensity = 1e-3f;
 
-        void CollectTouchTargets(const UIElement& element, const UICanvasResolved& resolved, float minTouchSize, float pixelDensity, eastl::vector<TouchMark>& marks) {
+        void CollectTouchTargets(const UIElement& element, const UICanvasResolved& resolved, float minTouchSize, float pixelDensity, Vector<TouchMark>& marks) {
             if (!element.active.visible) {
                 return;
             }
@@ -33,8 +33,8 @@ namespace BECore {
         return ViewTransform::Fit(viewWidth, viewHeight, outputWidth, outputHeight).ToOutput(0.0f, 0.0f, viewWidth, viewHeight);
     }
 
-    eastl::vector<TouchMark> UIPreviewOverlay::TouchTargets(const UICanvasLayout& canvas, float minTouchSize, float pixelDensity) {
-        eastl::vector<TouchMark> marks;
+    Vector<TouchMark> UIPreviewOverlay::TouchTargets(const UICanvasLayout& canvas, float minTouchSize, float pixelDensity) {
+        Vector<TouchMark> marks;
         if (!canvas.HasLayout() || !canvas.root) {
             return marks;
         }
@@ -44,8 +44,8 @@ namespace BECore {
         return marks;
     }
 
-    eastl::vector<RegionMark> UIPreviewOverlay::RegionMarks(const UICanvasLayout& canvas) {
-        eastl::vector<RegionMark> marks;
+    Vector<RegionMark> UIPreviewOverlay::RegionMarks(const UICanvasLayout& canvas) {
+        Vector<RegionMark> marks;
         if (!canvas.HasLayout()) {
             return marks;
         }

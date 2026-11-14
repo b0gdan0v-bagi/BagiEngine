@@ -12,7 +12,7 @@ namespace BECore::Tests {
         constexpr float kLandscapeHeight = 720.0f;
 
         /// A scene of 1280 x 720 with a 720 x 1280 view for the tall outputs
-        eastl::vector<SceneViewVariant> PortraitVariants() {
+        Vector<SceneViewVariant> PortraitVariants() {
             SceneViewVariant portrait;
             portrait.name = "Portrait"_intern;
             portrait.when.orientation = UIOrientation::Portrait;
@@ -21,7 +21,7 @@ namespace BECore::Tests {
             return {portrait};
         }
 
-        UIMatrixViews ViewsOf(const eastl::vector<SceneViewVariant>& variants) {
+        UIMatrixViews ViewsOf(const Vector<SceneViewVariant>& variants) {
             return {kLandscapeWidth, kLandscapeHeight, {variants.data(), variants.size()}};
         }
 
@@ -79,10 +79,10 @@ namespace BECore::Tests {
             return context;
         }
 
-        bool AnyLabelEndsWith(const eastl::vector<UIMatrixFailure>& failures, const char* tail) {
-            const eastl::string_view want(tail);
+        bool AnyLabelEndsWith(const Vector<UIMatrixFailure>& failures, const char* tail) {
+            const StringView want(tail);
             for (const UIMatrixFailure& failure : failures) {
-                const eastl::string_view label(failure.label.data(), failure.label.size());
+                const StringView label(failure.label.data(), failure.label.size());
                 if (label.size() >= want.size() && label.substr(label.size() - want.size()) == want) {
                     return true;
                 }
@@ -111,7 +111,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(AnyLabelEndsWith(failures, "view Portrait"));
         EXPECT_FALSE(AnyLabelEndsWith(failures, "view default")) << "the landscape view holds the band";
         for (const UIMatrixFailure& failure : failures) {
-            EXPECT_NE(failure.label.find("view Portrait"), eastl::string::npos) << failure.label.c_str();
+            EXPECT_NE(failure.label.find("view Portrait"), String::npos) << failure.label.c_str();
             ASSERT_FALSE(failure.issues.empty());
             EXPECT_EQ(failure.issues[0].kind, UILayoutIssueKind::OutsideCanvas);
         }
@@ -124,7 +124,7 @@ namespace BECore::Tests {
 
         EXPECT_TRUE(failures.empty()) << DescribeMatrixFailures(failures).c_str();
         // And a declaration with no variants is the default view in every case
-        const eastl::vector<SceneViewVariant> none;
+        const Vector<SceneViewVariant> none;
         EXPECT_TRUE(ValidateOnMatrix(canvas, {}, {}, ViewsOf(none)).empty());
     }
 

@@ -1,8 +1,6 @@
 #include "FuzzSeeds.h"
 #include "FuzzUiGeometryInput.h"
 
-#include <limits>
-
 namespace BECore::Fuzz {
 
     namespace {
@@ -17,13 +15,13 @@ namespace BECore::Fuzz {
         /// The length of the long attribute and the long selector seeds
         constexpr size_t kLongTextBytes = 4096;
 
-        FuzzBytes TextBytes(eastl::string_view text) {
+        FuzzBytes TextBytes(StringView text) {
             const auto* begin = reinterpret_cast<const uint8_t*>(text.data());
             return FuzzBytes(begin, begin + text.size());
         }
 
         /// The input of FuzzWebUi: the html, a NUL byte, the style sheet
-        FuzzBytes HtmlAndCss(eastl::string_view html, eastl::string_view css) {
+        FuzzBytes HtmlAndCss(StringView html, StringView css) {
             FuzzBytes bytes = TextBytes(html);
             bytes.push_back(0);
             const FuzzBytes cssBytes = TextBytes(css);
@@ -33,13 +31,13 @@ namespace BECore::Fuzz {
 
         // The screens of tests/BECore/UIWebTest.cpp (the HUD of the plan's sketch, the Match3 menu and HUD, the settings panel), as a game writes them
 
-        constexpr eastl::string_view kHudHtml = R"xml(<link rel="stylesheet" href="hud.css">
+        constexpr StringView kHudHtml = R"xml(<link rel="stylesheet" href="hud.css">
 <div id="Hud" class="hud">
   <span id="Score">Score: {score}</span>
   <button id="Reset" data-action="Match3Reset">Reset</button>
 </div>)xml";
 
-        constexpr eastl::string_view kHudCss = R"xml(.hud    { anchor: top-left; left: 16px; top: 16px; width: 220px; height: 96px; background: #000000A0; }
+        constexpr StringView kHudCss = R"xml(.hud    { anchor: top-left; left: 16px; top: 16px; width: 220px; height: 96px; background: #000000A0; }
 #Score  { left: 12px; top: 10px; width: 150px; height: 32px; font-size: 28px; }
 #Reset  { anchor: bottom-right; right: 12px; bottom: 10px; width: 96px; height: 48px; font-size: 24px; }
 button  { background: rgb(40, 90, 60); }
@@ -47,27 +45,27 @@ button:hover { background: #3a6; }
 @media (orientation: portrait) { .hud { anchor: top; left: 0; width: 90%; } }
 )xml";
 
-        constexpr eastl::string_view kMenuHtml = R"xml(<div id="Column">
+        constexpr StringView kMenuHtml = R"xml(<div id="Column">
   <h1 id="Title">Match 3</h1>
   <button id="Play" data-action="Match3Play">Play</button>
   <button id="Quit" data-action="Match3Quit">Quit</button>
 </div>)xml";
 
-        constexpr eastl::string_view kMenuCss = R"xml(#Column { anchor: center; display: flex; flex-direction: column; align-items: stretch; gap: 16px; width: 90%; max-width: 320px; height: 232px; }
+        constexpr StringView kMenuCss = R"xml(#Column { anchor: center; display: flex; flex-direction: column; align-items: stretch; gap: 16px; width: 90%; max-width: 320px; height: 232px; }
 #Title  { height: 88px; font-size: 56px; text-align: center; vertical-align: middle; }
 button  { height: 56px; font-size: 28px; }
 #Play   { background: rgb(40, 90, 60); }
 #Quit   { background: rgb(90, 50, 50); }
 )xml";
 
-        constexpr eastl::string_view kMatch3HudHtml = R"xml(<span id="Score">Score: {score}</span>
+        constexpr StringView kMatch3HudHtml = R"xml(<span id="Score">Score: {score}</span>
 <div id="Buttons">
   <button id="Reset" data-action="Match3Reset">Reset</button>
   <button id="Menu" data-action="Match3Menu">Menu</button>
 </div>
 <span id="Seed">seed {seed}</span>)xml";
 
-        constexpr eastl::string_view kMatch3HudCss = R"xml(#Score   { left: 96px; top: 12px; width: 250px; height: 40px; font-size: 28px; vertical-align: middle; }
+        constexpr StringView kMatch3HudCss = R"xml(#Score   { left: 96px; top: 12px; width: 250px; height: 40px; font-size: 28px; vertical-align: middle; }
 #Buttons { anchor: top-right; right: 96px; top: 12px; width: 260px; height: 48px; display: flex; gap: 12px; align-items: stretch; }
 button   { width: 124px; height: 48px; font-size: 24px; }
 #Reset   { background: rgb(40, 90, 60); }
@@ -75,7 +73,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
 #Seed    { left: 96px; bottom: 26px; width: 300px; height: 24px; font-size: 16px; color: rgb(190, 190, 190); }
 )xml";
 
-        constexpr eastl::string_view kSettingsHtml = R"xml(<div id="Plate">
+        constexpr StringView kSettingsHtml = R"xml(<div id="Plate">
   <span id="Title">{#settings.title}</span>
   <div id="Sound" data-widget="toggle" data-bind="soundOn" data-action="SettingsSound">{#settings.sound}</div>
   <div id="MusicRow" class="row centered">
@@ -95,7 +93,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
   <button id="Ok" data-action="SettingsClose" data-icon="check" title="{#settings.ok}">{#settings.ok}</button>
 </div>)xml";
 
-        constexpr eastl::string_view kSettingsCss =
+        constexpr StringView kSettingsCss =
             R"xml(#Plate    { anchor: center; display: flex; flex-direction: column; align-items: stretch; gap: 12px; padding: 16px; width: 94%; max-width: 640px; height: 416px; background: rgb(36, 40, 52); }
 #Title    { height: 44px; font-size: 30px; text-align: center; }
 #Sound    { height: 56px; font-size: 24px; vertical-align: middle; -be-track-color: #445566; -be-thumb-color: #ffffff; }
@@ -115,7 +113,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
 
         // One form of the markup or the style each, the places where a hand-written reader is most likely to go wrong
 
-        constexpr eastl::string_view kStyleBlockHtml = R"xml(<style>
+        constexpr StringView kStyleBlockHtml = R"xml(<style>
   .card { anchor: center; width: 200px; height: 120px; background: linear-gradient(to right, #112233, #445566); border: 2px solid #ffffff; border-radius: 12px 4px; box-shadow: 0 4px 8px #00000080, 0 0 12px #ffcc00; }
   .card:hover { background: #3a6; }
   /* a comment */
@@ -124,10 +122,10 @@ button   { width: 124px; height: 48px; font-size: 24px; }
 </style>
 <div class="card" id="card"><span id="t">Title</span></div>)xml";
 
-        constexpr eastl::string_view kStyleAttributesHtml =
+        constexpr StringView kStyleAttributesHtml =
             R"xml(<div id="a" style="left: 10px; top: 4px; width: 100px; height: 40px; background: #fff !important"><span id="b" style="color: red; font-size: 12px;;">x</span><img id="c" src="Gem" style="width: 32px; height: 32px"></div>)xml";
 
-        constexpr eastl::string_view kMediaCss = R"xml(.a { width: 10px; height: 10px; }
+        constexpr StringView kMediaCss = R"xml(.a { width: 10px; height: 10px; }
 @media (orientation: portrait) { .a { width: 90%; anchor: top; } .missing { width: 1px; } }
 @media (min-width: 100px) and (max-width: 200px), (min-height: 5px) { .a { height: 20px; display: none; } }
 @media (orientation: square) { .a { width: 1px; } }
@@ -136,28 +134,26 @@ button   { width: 124px; height: 48px; font-size: 24px; }
 @media (orientation: portrait) { @media (orientation: landscape) { .a { width: 2px; } } }
 )xml";
 
-        constexpr eastl::string_view kEntitiesHtml =
-            "<div id=\"e\" title=\"a &amp; b &lt; c &gt; d &quot;q&quot; &apos;s&apos; &nbsp; &unknown; &#65; &#x41; &#X41;\">&amp;&lt;&gt; &#0; &#xD800; &#x10FFFF; "
-            "&#x110000; &#4294967295; &#99999999999; &#; &#x; &# ; &amp</div>";
+        constexpr StringView kEntitiesHtml = "<div id=\"e\" title=\"a &amp; b &lt; c &gt; d &quot;q&quot; &apos;s&apos; &nbsp; &unknown; &#65; &#x41; &#X41;\">&amp;&lt;&gt; &#0; &#xD800; &#x10FFFF; "
+                                             "&#x110000; &#4294967295; &#99999999999; &#; &#x; &# ; &amp</div>";
 
-        constexpr eastl::string_view kUnclosedHtml = "<div id=\"a\"><span id=\"b\">text</div><p id=\"c\"";
-        constexpr eastl::string_view kStrayEndTagHtml = "</div></span><div id=\"a\"></p></div></div>";
-        constexpr eastl::string_view kBrokenMarkupHtml = "<!DOCTYPE html><?xml version=\"1\"?><!-- never closed <div id=a <b =x /> <1> < > <div id=\"\" class=\"a b\" hidden data-x='y'>";
-        constexpr eastl::string_view kUnknownTagsHtml =
-            "<table><tr><td id=\"x\">cell</td></tr></table><custom-tag id=\"y\">z</custom-tag><svg><path d=\"M0 0\"/></svg><script>var a = '<div>';</script>";
-        constexpr eastl::string_view kTokenHtml = R"xml(<div id="a"></div><div id="b"></div>)xml";
-        constexpr eastl::string_view kTokenCss = R"xml(#a { background: var(--panel); border: 1px solid var(--line); box-shadow: 0 2px 4px var(--shade); }
+        constexpr StringView kUnclosedHtml = "<div id=\"a\"><span id=\"b\">text</div><p id=\"c\"";
+        constexpr StringView kStrayEndTagHtml = "</div></span><div id=\"a\"></p></div></div>";
+        constexpr StringView kBrokenMarkupHtml = "<!DOCTYPE html><?xml version=\"1\"?><!-- never closed <div id=a <b =x /> <1> < > <div id=\"\" class=\"a b\" hidden data-x='y'>";
+        constexpr StringView kUnknownTagsHtml = "<table><tr><td id=\"x\">cell</td></tr></table><custom-tag id=\"y\">z</custom-tag><svg><path d=\"M0 0\"/></svg><script>var a = '<div>';</script>";
+        constexpr StringView kTokenHtml = R"xml(<div id="a"></div><div id="b"></div>)xml";
+        constexpr StringView kTokenCss = R"xml(#a { background: var(--panel); border: 1px solid var(--line); box-shadow: 0 2px 4px var(--shade); }
 #b { background: var(--bad name); color: var(--a, red); --own: 1px; }
 )xml";
-        constexpr eastl::string_view kUnsupportedCss =
+        constexpr StringView kUnsupportedCss =
             R"xml(a[href] { color: red; } div + p { x: y } div ~ p { x: y } p::before { x: y } p:first-child { x: y } @import url(a.css); @font-face { src: url(a); }
 @keyframes k { from { left: 0 } to { left: 9px } }
 div { margin: 1em; width: calc(100% - 4px); opacity: .5; transform: rotate(3deg); width: 5vw; z-index: 3; }
 )xml";
 
         /// Nested groups, each with an id: the depth a document of a screen does not reach
-        eastl::string NestedHtml(size_t depth) {
-            eastl::string html;
+        String NestedHtml(size_t depth) {
+            String html;
             for (size_t i = 0; i < depth; ++i) {
                 html += Format("<div id=\"n{}\" class=\"n\">", i);
             }
@@ -170,7 +166,7 @@ div { margin: 1em; width: calc(100% - 4px); opacity: .5; transform: rotate(3deg)
 
         // The files of the string and theme tables, in the shape the games ship them
 
-        constexpr eastl::string_view kStringsXml = R"xml(<?xml version="1.0" encoding="UTF-8"?>
+        constexpr StringView kStringsXml = R"xml(<?xml version="1.0" encoding="UTF-8"?>
 <UIStrings default="en">
     <language id="en">
         <string key="lang.en" text="English"/>
@@ -188,7 +184,7 @@ div { margin: 1em; width: calc(100% - 4px); opacity: .5; transform: rotate(3deg)
     </language>
 </UIStrings>)xml";
 
-        constexpr eastl::string_view kStringsWithFaultsXml = R"xml(<UIStrings default="de">
+        constexpr StringView kStringsWithFaultsXml = R"xml(<UIStrings default="de">
     <language id="en">
         <string key="a" text="one"/>
         <string key="a" text="two"/>
@@ -205,7 +201,7 @@ div { margin: 1em; width: calc(100% - 4px); opacity: .5; transform: rotate(3deg)
     <country id="en"/>
 </UIStrings>)xml";
 
-        constexpr eastl::string_view kThemesXml = R"xml(<?xml version="1.0" encoding="UTF-8"?>
+        constexpr StringView kThemesXml = R"xml(<?xml version="1.0" encoding="UTF-8"?>
 <UIThemes default="light">
     <theme id="light">
         <color name="panel" value="#f0f0e6"/>
@@ -220,7 +216,7 @@ div { margin: 1em; width: calc(100% - 4px); opacity: .5; transform: rotate(3deg)
     </theme>
 </UIThemes>)xml";
 
-        constexpr eastl::string_view kThemesWithFaultsXml = R"xml(<UIThemes default="missing">
+        constexpr StringView kThemesWithFaultsXml = R"xml(<UIThemes default="missing">
     <theme id="a">
         <color name="x" value="#fff"/>
         <color name="x" value="#000"/>
@@ -378,7 +374,7 @@ div { margin: 1em; width: calc(100% - 4px); opacity: .5; transform: rotate(3deg)
             return bytes;
         }
 
-        void AddGeometrySeeds(eastl::vector<FuzzSeedFile>& seeds) {
+        void AddGeometrySeeds(Vector<FuzzSeedFile>& seeds) {
             const RoundCase screen = ScreenRound();
             seeds.push_back({kUiGeometryFolder, "screen.bin", WriteRounds({screen})});
 
@@ -441,7 +437,7 @@ div { margin: 1em; width: calc(100% - 4px); opacity: .5; transform: rotate(3deg)
 
     }  // namespace
 
-    void AddUiSeeds(eastl::vector<FuzzSeedFile>& seeds) {
+    void AddUiSeeds(Vector<FuzzSeedFile>& seeds) {
         seeds.push_back({kWebUiFolder, "hud-with-link.bin", HtmlAndCss(kHudHtml, kHudCss)});
         seeds.push_back({kWebUiFolder, "menu.bin", HtmlAndCss(kMenuHtml, kMenuCss)});
         seeds.push_back({kWebUiFolder, "match3-hud.bin", HtmlAndCss(kMatch3HudHtml, kMatch3HudCss)});
@@ -457,14 +453,14 @@ div { margin: 1em; width: calc(100% - 4px); opacity: .5; transform: rotate(3deg)
         seeds.push_back({kWebUiFolder, "theme-tokens.bin", HtmlAndCss(kTokenHtml, kTokenCss)});
         seeds.push_back({kWebUiFolder, "outside-the-subset.bin", HtmlAndCss("<div id=\"a\"><p>text</p></div>", kUnsupportedCss)});
 
-        const eastl::string nested = NestedHtml(kNestingDepth);
-        seeds.push_back({kWebUiFolder, "deep-nesting.bin", HtmlAndCss(eastl::string_view(nested.data(), nested.size()), ".n { padding: 1px; display: flex; }")});
+        const String nested = NestedHtml(kNestingDepth);
+        seeds.push_back({kWebUiFolder, "deep-nesting.bin", HtmlAndCss(StringView(nested), ".n { padding: 1px; display: flex; }")});
 
-        const eastl::string longValue(kLongTextBytes, 'a');
-        const eastl::string longAttribute = Format("<div id=\"a\" title=\"{}\" class=\"{}\" data-x={}></div>", longValue.c_str(), longValue.c_str(), longValue.c_str());
-        seeds.push_back({kWebUiFolder, "long-attributes.bin", HtmlAndCss(eastl::string_view(longAttribute.data(), longAttribute.size()), {})});
-        const eastl::string longSelector = Format(".{} {{ width: 1px }} #{} .{}:hover {{ color: red }}", longValue.c_str(), longValue.c_str(), longValue.c_str());
-        seeds.push_back({kWebUiFolder, "long-selectors.bin", HtmlAndCss("<div id=\"a\" class=\"a\"></div>", eastl::string_view(longSelector.data(), longSelector.size()))});
+        const String longValue(kLongTextBytes, 'a');
+        const String longAttribute = Format("<div id=\"a\" title=\"{}\" class=\"{}\" data-x={}></div>", longValue.c_str(), longValue.c_str(), longValue.c_str());
+        seeds.push_back({kWebUiFolder, "long-attributes.bin", HtmlAndCss(StringView(longAttribute), {})});
+        const String longSelector = Format(".{} {{ width: 1px }} #{} .{}:hover {{ color: red }}", longValue.c_str(), longValue.c_str(), longValue.c_str());
+        seeds.push_back({kWebUiFolder, "long-selectors.bin", HtmlAndCss("<div id=\"a\" class=\"a\"></div>", StringView(longSelector))});
 
         seeds.push_back({kUiTablesFolder, "strings.xml", TextBytes(kStringsXml)});
         seeds.push_back({kUiTablesFolder, "strings-with-faults.xml", TextBytes(kStringsWithFaultsXml)});

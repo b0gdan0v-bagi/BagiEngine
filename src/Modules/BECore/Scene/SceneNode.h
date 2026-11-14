@@ -35,13 +35,13 @@ namespace BECore {
 
         /// True when @p ancestor is above this node (its parent, the parent's parent, ...); a node is not its own ancestor
         bool IsDescendantOf(const SceneNode& ancestor) const;
-        const eastl::vector<IntrusivePtr<SceneNode>>& GetChildren() const;
+        const Vector<IntrusivePtr<SceneNode>>& GetChildren() const;
         IntrusivePtr<SceneNode> AddChild(PoolString name);
         void RemoveChild(SceneNode* child);
 
         void AddComponent(IntrusivePtr<IComponent> component);
         void RemoveComponent(PoolString typeName);
-        IntrusivePtr<IComponent> GetComponent(eastl::string_view typeName) const;
+        IntrusivePtr<IComponent> GetComponent(StringView typeName) const;
 
         template <typename T>
         IntrusivePtr<T> GetComponent() const {
@@ -84,7 +84,7 @@ namespace BECore {
         bool HasEditorFlag(EditorFlags flag) const;
 
         entt::entity GetEntity() const;
-        const eastl::vector<IntrusivePtr<IComponent>>& GetComponents() const;
+        const Vector<IntrusivePtr<IComponent>>& GetComponents() const;
 
     private:
         friend class Scene;
@@ -98,8 +98,8 @@ namespace BECore {
         Scene* _scene = nullptr;
         SceneNode* _parent = nullptr;
         EditorFlags _editorFlags = EditorFlags::None;
-        BE_REFLECT_FIELD eastl::vector<IntrusivePtr<IComponent>> _components;
-        BE_REFLECT_FIELD eastl::vector<IntrusivePtr<SceneNode>> _children;
+        BE_REFLECT_FIELD Vector<IntrusivePtr<IComponent>> _components;
+        BE_REFLECT_FIELD Vector<IntrusivePtr<SceneNode>> _children;
     };
 
 }  // namespace BECore

@@ -39,7 +39,7 @@ namespace BECore {
     Font::Font() = default;
     Font::~Font() = default;
 
-    IntrusivePtr<Font> Font::CreateFromMemory(PoolString name, eastl::vector<uint8_t> data) {
+    IntrusivePtr<Font> Font::CreateFromMemory(PoolString name, Vector<uint8_t> data) {
         auto font = New<Font>();
         if (data.empty()) {
             font->SetFailed(name);
@@ -73,8 +73,8 @@ namespace BECore {
         return _path;
     }
 
-    eastl::string Font::GetFamilyName() const {
-        eastl::string family;
+    String Font::GetFamilyName() const {
+        String family;
         if (!_impl) {
             return family;
         }

@@ -51,7 +51,7 @@ namespace BECore {
         // The sides of env(safe-area-inset-*), in the order of the CSS shorthand
         constexpr size_t kInsetSides = 4;
         enum InsetSide : size_t { InsetTop, InsetRight, InsetBottom, InsetLeft };
-        using Insets = eastl::array<double, kInsetSides>;
+        using Insets = Array<double, kInsetSides>;
 
         // The insets of the page as of the last change; the safe area is derived from them on demand. One window per page.
         Insets lastInsets{};

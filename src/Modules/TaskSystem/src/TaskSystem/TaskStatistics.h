@@ -110,7 +110,7 @@ namespace BECore {
         // Formatted output
         // =================================================================
 
-        eastl::string ToString() const {
+        String ToString() const {
             auto snapshot = GetSnapshot();
             return "[TaskStatistics] Scheduled: {}, Completed: {}, Cancelled: {}, Failed: {}, AvgDuration: {:.2f}ms"_format(
                 snapshot.totalTasksScheduled, snapshot.totalTasksCompleted, snapshot.totalTasksCancelled, snapshot.totalTasksFailed, snapshot.averageTaskDurationMs);

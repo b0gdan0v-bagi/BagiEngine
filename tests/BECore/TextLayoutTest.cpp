@@ -18,8 +18,8 @@ namespace BECore::Tests {
         }
 
         /// The code points of one line, in order
-        eastl::vector<char32_t> LineText(const TextLayoutResult& result, size_t line) {
-            eastl::vector<char32_t> text;
+        Vector<char32_t> LineText(const TextLayoutResult& result, size_t line) {
+            Vector<char32_t> text;
             const TextLine& textLine = result.lines[line];
             for (uint32_t i = 0; i < textLine.glyphCount; ++i) {
                 text.push_back(result.glyphs[textLine.firstGlyph + i].codePoint);
@@ -27,8 +27,8 @@ namespace BECore::Tests {
             return text;
         }
 
-        eastl::vector<char32_t> Codes(const char32_t* text) {
-            eastl::vector<char32_t> codes;
+        Vector<char32_t> Codes(const char32_t* text) {
+            Vector<char32_t> codes;
             for (; *text != 0; ++text) {
                 codes.push_back(*text);
             }
@@ -51,12 +51,12 @@ namespace BECore::Tests {
             options.fontSize = kSize;
         }
 
-        TextLayoutResult Layout(eastl::string_view text) const {
+        TextLayoutResult Layout(StringView text) const {
             return TextLayout::Layout(*font, text, options);
         }
 
         /// The width of the text on one line without any limit
-        float WidthOf(eastl::string_view text) const {
+        float WidthOf(StringView text) const {
             TextLayoutOptions unlimited;
             unlimited.fontSize = options.fontSize;
             return TextLayout::Layout(*font, text, unlimited).width;
@@ -272,7 +272,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(TextLayoutTest, DamagedUtf8DoesNotStopTheLayout) {
-        const TextLayoutResult result = Layout(eastl::string_view("a\xD0z", 3));
+        const TextLayoutResult result = Layout(StringView("a\xD0z", 3));
 
         EXPECT_EQ(result.glyphs.size(), 3u);
     }
@@ -430,7 +430,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(TextLayoutTest, AFontThatFailedToLoadLaysOutNothing) {
-        auto broken = Font::CreateFromMemory("broken"_intern, eastl::vector<uint8_t>(64, 0x41));
+        auto broken = Font::CreateFromMemory("broken"_intern, Vector<uint8_t>(64, 0x41));
 
         const TextLayoutResult result = TextLayout::Layout(*broken, "text", options);
 

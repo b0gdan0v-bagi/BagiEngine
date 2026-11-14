@@ -122,7 +122,7 @@ namespace BECore::Tests {
             _canvas = _manager->GetSceneByName(PoolString::Intern("Main"))->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
             ASSERT_TRUE(_canvas);
 
-            const eastl::vector<uint8_t> pixels(static_cast<size_t>(kIconPixels) * kIconPixels * 4, 200);
+            const Vector<uint8_t> pixels(static_cast<size_t>(kIconPixels) * kIconPixels * 4, 200);
             _icon = _renderer->CreateTexture(pixels.data(), kIconPixels, kIconPixels);
             for (const char* name : {"OnlyIcon", "LeftIcon", "LongIcon"}) {
                 Get(name).GetComponent<UIImageComponent>()->GetSprite().SetTexture(_icon);
@@ -150,8 +150,8 @@ namespace BECore::Tests {
         }
 
         /// The draws of the icon texture (there is one icon texture for all the buttons)
-        eastl::vector<DrawCall> IconCalls() const {
-            eastl::vector<DrawCall> found;
+        Vector<DrawCall> IconCalls() const {
+            Vector<DrawCall> found;
             for (const DrawCall& call : _renderer->calls) {
                 if (call.kind == DrawKind::Texture && call.texture == _icon.Get()) {
                     found.push_back(call);
@@ -161,8 +161,8 @@ namespace BECore::Tests {
         }
 
         /// The union of the glyph draws (every other texture draw) that start inside @p within
-        std::optional<Rect> GlyphBounds(const Rect& within) const {
-            std::optional<Rect> bounds;
+        Optional<Rect> GlyphBounds(const Rect& within) const {
+            Optional<Rect> bounds;
             for (const DrawCall& call : _renderer->calls) {
                 if (call.kind != DrawKind::Texture || call.texture == _icon.Get() || !Inside({call.rect.x, call.rect.y, 0.0f, 0.0f}, within)) {
                     continue;

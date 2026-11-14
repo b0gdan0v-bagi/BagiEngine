@@ -68,64 +68,64 @@ namespace BECore::Tests {
         /// Remembers the name of every field and group an inspector would show
         class NameRecorder : public IPropertyVisitor {
         public:
-            bool Visit(eastl::string_view name, bool&) override {
+            bool Visit(StringView name, bool&) override {
                 return Note(name);
             }
-            bool Visit(eastl::string_view name, int8_t&) override {
+            bool Visit(StringView name, int8_t&) override {
                 return Note(name);
             }
-            bool Visit(eastl::string_view name, uint8_t&) override {
+            bool Visit(StringView name, uint8_t&) override {
                 return Note(name);
             }
-            bool Visit(eastl::string_view name, int16_t&) override {
+            bool Visit(StringView name, int16_t&) override {
                 return Note(name);
             }
-            bool Visit(eastl::string_view name, uint16_t&) override {
+            bool Visit(StringView name, uint16_t&) override {
                 return Note(name);
             }
-            bool Visit(eastl::string_view name, int32_t&) override {
+            bool Visit(StringView name, int32_t&) override {
                 return Note(name);
             }
-            bool Visit(eastl::string_view name, uint32_t&) override {
+            bool Visit(StringView name, uint32_t&) override {
                 return Note(name);
             }
-            bool Visit(eastl::string_view name, int64_t&) override {
+            bool Visit(StringView name, int64_t&) override {
                 return Note(name);
             }
-            bool Visit(eastl::string_view name, uint64_t&) override {
+            bool Visit(StringView name, uint64_t&) override {
                 return Note(name);
             }
-            bool Visit(eastl::string_view name, float&) override {
+            bool Visit(StringView name, float&) override {
                 return Note(name);
             }
-            bool Visit(eastl::string_view name, double&) override {
+            bool Visit(StringView name, double&) override {
                 return Note(name);
             }
-            bool Visit(eastl::string_view name, PoolString&) override {
+            bool Visit(StringView name, PoolString&) override {
                 return Note(name);
             }
-            bool Visit(eastl::string_view name, eastl::string&) override {
+            bool Visit(StringView name, String&) override {
                 return Note(name);
             }
-            bool VisitEnum(eastl::string_view name, const eastl::string_view*, size_t, size_t&) override {
+            bool VisitEnum(StringView name, const StringView*, size_t, size_t&) override {
                 return Note(name);
             }
-            bool BeginCompound(eastl::string_view name) override {
+            bool BeginCompound(StringView name) override {
                 Note(name);
                 return true;
             }
 
-            [[nodiscard]] bool Has(eastl::string_view name) const {
+            [[nodiscard]] bool Has(StringView name) const {
                 return eastl::find(_names.begin(), _names.end(), name) != _names.end();
             }
 
         private:
-            bool Note(eastl::string_view name) {
+            bool Note(StringView name) {
                 _names.emplace_back(name.data(), name.size());
                 return false;
             }
 
-            eastl::vector<eastl::string> _names;
+            Vector<String> _names;
         };
 
         void ExpectColor(const Color& actual, const Color& expected) {
@@ -193,10 +193,10 @@ namespace BECore::Tests {
         }
 
         /// The geometry draw calls of one draw pass of the active scene
-        eastl::vector<DrawCall> Draw() {
+        Vector<DrawCall> Draw() {
             _renderer->ClearCalls();
             _manager->DrawAll();
-            eastl::vector<DrawCall> geometry;
+            Vector<DrawCall> geometry;
             for (const DrawCall& call : _renderer->calls) {
                 if (call.kind == DrawKind::Geometry) {
                     geometry.push_back(call);
@@ -337,7 +337,7 @@ namespace BECore::Tests {
 
     TEST_F(ParticleEmitterComponentTest, ASpriteOfTheLibraryGivesTexturedGeometryWithItsUVs) {
         auto emitter = Emitter("Spark");
-        const eastl::vector<uint8_t> pixels(static_cast<size_t>(kTextureSize) * kTextureSize * kBytesPerPixel, 255);
+        const Vector<uint8_t> pixels(static_cast<size_t>(kTextureSize) * kTextureSize * kBytesPerPixel, 255);
         auto texture = _renderer->CreateTexture(pixels.data(), kTextureSize, kTextureSize);
         emitter->SetTexture(texture);
         Frame();
@@ -434,7 +434,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(serializer.BeginObject("component"));
         source->Serialize(serializer);
         serializer.EndObject();
-        const eastl::string text = serializer.SaveToString();
+        const String text = serializer.SaveToString();
 
         XmlDeserializer deserializer;
         ASSERT_TRUE(deserializer.LoadFromString(text)) << text.c_str();

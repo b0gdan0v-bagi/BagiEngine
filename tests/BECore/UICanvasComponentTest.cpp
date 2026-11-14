@@ -171,8 +171,8 @@ namespace BECore::Tests {
                 ++clicks;
             }
 
-            eastl::vector<std::pair<float, float>> presses;
-            eastl::vector<std::pair<float, float>> drags;
+            Vector<std::pair<float, float>> presses;
+            Vector<std::pair<float, float>> drags;
             int clicks = 0;
         };
 

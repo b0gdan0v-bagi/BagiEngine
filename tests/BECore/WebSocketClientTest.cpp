@@ -18,7 +18,7 @@ namespace BECore::Tests {
         constexpr std::chrono::milliseconds kShortTimeout{200};
         constexpr std::chrono::seconds kNeverTimeout{60};  // a timeout the test must not wait for: the thing under test has to end earlier
 
-        [[nodiscard]] std::string ToStd(const eastl::string& text) {
+        [[nodiscard]] std::string ToStd(const String& text) {
             return std::string(text.c_str(), text.size());
         }
 
@@ -183,16 +183,16 @@ namespace BECore::Tests {
             /// The right answer to the request that was read; @p extraBytes follow it in the same send
             void Accept(const std::string& extraBytes = "") {
                 const std::string key = RequestHeader("Sec-WebSocket-Key");
-                const eastl::string accept = ComputeAcceptKey(eastl::string(key.c_str(), key.size()));
+                const String accept = ComputeAcceptKey(String(key.c_str(), key.size()));
                 SendRaw(AcceptResponse(ToStd(accept)) + extraBytes);
             }
 
             void SendRaw(const std::string& bytes) {
-                Send(eastl::vector<uint8_t>(bytes.data(), bytes.data() + bytes.size()));
+                Send(Vector<uint8_t>(bytes.data(), bytes.data() + bytes.size()));
             }
 
-            void SendFrame(uint8_t opcode, const std::string& payload, std::optional<WebSocketMask> mask = std::nullopt) {
-                Send(EncodeFrame(opcode, eastl::span<const uint8_t>(reinterpret_cast<const uint8_t*>(payload.data()), payload.size()), mask));
+            void SendFrame(uint8_t opcode, const std::string& payload, Optional<WebSocketMask> mask = std::nullopt) {
+                Send(EncodeFrame(opcode, Span<const uint8_t>(reinterpret_cast<const uint8_t*>(payload.data()), payload.size()), mask));
             }
 
             void SendText(const std::string& text) {
@@ -200,12 +200,12 @@ namespace BECore::Tests {
             }
 
             void SendClose(uint16_t code, const std::string& reason) {
-                Send(EncodeCloseFrame(code, eastl::string_view(reason.data(), reason.size())));
+                Send(EncodeCloseFrame(code, FromStd(reason)));
             }
 
             /// The next frame of the client (masked frames are expected; the key is kept), nullopt when none came in @p limit
-            std::optional<ClientFrame> ReadFrame(std::chrono::milliseconds limit = kClientWaitLimit) {
-                std::optional<ClientFrame> frame;
+            Optional<ClientFrame> ReadFrame(std::chrono::milliseconds limit = kClientWaitLimit) {
+                Optional<ClientFrame> frame;
                 WaitUntil(
                     {},
                     [&] {
@@ -231,17 +231,17 @@ namespace BECore::Tests {
             }
 
         private:
-            void Send(eastl::vector<uint8_t> bytes) {
+            void Send(Vector<uint8_t> bytes) {
                 if (_fakeTls) {
                     FakeTlsMask(bytes.data(), bytes.size());
                 }
-                EXPECT_TRUE(_peer.SendAll(eastl::span<const uint8_t>(bytes.data(), bytes.size())));
+                EXPECT_TRUE(_peer.SendAll(Span<const uint8_t>(bytes.data(), bytes.size())));
             }
 
             void Fill() {
                 std::array<uint8_t, 4096> chunk;
                 for (int i = 0; i < 1024; ++i) {
-                    const auto received = _peer.Receive(eastl::span<uint8_t>(chunk.data(), chunk.size()));
+                    const auto received = _peer.Receive(Span<uint8_t>(chunk.data(), chunk.size()));
                     if (!received) {
                         if (received.error() != SocketError::TimedOut) {
                             _ended = true;
@@ -255,7 +255,7 @@ namespace BECore::Tests {
                 }
             }
 
-            std::optional<ClientFrame> ParseBuffered() {
+            Optional<ClientFrame> ParseBuffered() {
                 if (_buffer.size() < 2) {
                     return std::nullopt;
                 }
@@ -407,7 +407,7 @@ namespace BECore::Tests {
         constexpr int kCount = 100;
         for (int i = 0; i < kCount; ++i) {
             const std::string text = "message " + std::to_string(i);
-            ASSERT_TRUE(session.client.SendText(eastl::string_view(text.data(), text.size())));
+            ASSERT_TRUE(session.client.SendText(FromStd(text)));
         }
         ASSERT_TRUE(session.WaitForCount(WebSocketClientEventKind::Text, kCount));
 
@@ -438,7 +438,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(session.client.Open(server.Url().c_str()).has_value());
         ASSERT_TRUE(server.AcceptAndReadRequest());
 
-        const eastl::vector<uint8_t> frame = EncodeTextFrame("first");
+        const Vector<uint8_t> frame = EncodeTextFrame("first");
         server.Accept(std::string(reinterpret_cast<const char*>(frame.data()), frame.size()));
         ASSERT_TRUE(session.WaitForCount(WebSocketClientEventKind::Text, 1));
         EXPECT_EQ(session.Texts().front(), "first");
@@ -740,7 +740,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(connection != nullptr);
         for (int i = 0; i < kMessages; ++i) {
             const std::string text = std::to_string(i) + ":" + std::string(kMessageBytes, 'x');
-            ASSERT_TRUE(connection->QueueText(eastl::string_view(text.data(), text.size())));
+            ASSERT_TRUE(connection->QueueText(FromStd(text)));
         }
 
         // Nothing is polled: the reader stops after a few messages and the bytes it took stay far below what was sent
@@ -981,7 +981,7 @@ namespace BECore::Tests {
         const std::string text(100 * 1024, 'x');
         bool refused = false;
         for (int i = 0; i < 2000 && !refused; ++i) {
-            refused = !session.client.SendText(eastl::string_view(text.data(), text.size()));
+            refused = !session.client.SendText(FromStd(text));
             if (!refused && i % 16 == 15) {
                 std::this_thread::sleep_for(1ms);  // let the writer run, a queue that is merely not drained yet is no proof
             }
@@ -1275,7 +1275,7 @@ namespace BECore::Tests {
         ScriptedServer server;
         Session session;
         WebSocketClientSettings settings = QuickSettings();
-        settings.tls.factory = [] { return eastl::unique_ptr<ITlsStream>(); };
+        settings.tls.factory = [] { return UniquePtr<ITlsStream>(); };
         ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), settings).has_value());
         session.ExpectSingleClosed();
         EXPECT_EQ(session.Closed().closeCode, WebSocketCloseCode::kAbnormalClosure);

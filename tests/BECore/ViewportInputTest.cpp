@@ -9,7 +9,6 @@
 #include <Common/RecordingRenderer.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
-#include <Events/SubscriptionHolder.h>
 #include <Widgets/SceneEditor/SceneSelection.h>
 #include <Widgets/Viewport/ViewportInput.h>
 #include <gtest/gtest.h>
@@ -49,8 +48,8 @@ namespace BECore::Tests {
             }
 
             int actions = 0;
-            eastl::vector<SDL_MouseButtonEvent> downs;
-            eastl::vector<SDL_MouseButtonEvent> ups;
+            Vector<SDL_MouseButtonEvent> downs;
+            Vector<SDL_MouseButtonEvent> ups;
             int motions = 0;
             int wheels = 0;
 
@@ -150,7 +149,7 @@ namespace BECore::Tests {
         IntrusivePtrAtomic<SceneManager> _manager;
         ViewportPointer _pointer;
         ViewportPointer::EditClickSink _sink;
-        eastl::vector<ViewportEditClickEvent> _editClicks;
+        Vector<ViewportEditClickEvent> _editClicks;
         Recorder _recorder;
     };
 
@@ -340,15 +339,15 @@ namespace BECore::Tests {
     }
 
     TEST_F(ViewportInputTest, MotionCarriesTheHeldButtonsInItsState) {
-        eastl::vector<SDL_MouseMotionEvent> motions;
+        Vector<SDL_MouseMotionEvent> motions;
         struct MotionCatcher : SubscriptionHolder {
-            explicit MotionCatcher(eastl::vector<SDL_MouseMotionEvent>& out) : _out(out) {
+            explicit MotionCatcher(Vector<SDL_MouseMotionEvent>& out) : _out(out) {
                 Subscribe<SDLEvents::MouseMotionEvent, &MotionCatcher::OnMotion>(this);
             }
             void OnMotion(const SDLEvents::MouseMotionEvent& event) {
                 _out.push_back(event.motion);
             }
-            eastl::vector<SDL_MouseMotionEvent>& _out;
+            Vector<SDL_MouseMotionEvent>& _out;
         } catcher(motions);
 
         Send(Press(kGroundX, kGroundY), ViewportInputMode::Play);

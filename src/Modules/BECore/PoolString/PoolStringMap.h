@@ -28,10 +28,10 @@ namespace BECore {
     // Хешер, поддерживающий разные типы
     struct PoolStringHasher {
         size_t operator()(const PoolString& s) const {
-            return eastl::hash<eastl::string_view>{}(s.ToStringView());
+            return eastl::hash<StringView>{}(s.ToStringView());
         }
-        size_t operator()(const eastl::string_view& s) const {
-            return eastl::hash<eastl::string_view>{}(s);
+        size_t operator()(const StringView& s) const {
+            return eastl::hash<StringView>{}(s);
         }
     };
 
@@ -39,10 +39,10 @@ namespace BECore {
         bool operator()(const PoolString& a, const PoolString& b) const {
             return a.ToStringView() == b.ToStringView();
         }
-        bool operator()(const PoolString& a, const eastl::string_view& b) const {
+        bool operator()(const PoolString& a, const StringView& b) const {
             return a.ToStringView() == b;
         }
-        bool operator()(const eastl::string_view& a, const PoolString& b) const {
+        bool operator()(const StringView& a, const PoolString& b) const {
             return a == b.ToStringView();
         }
     };
@@ -73,9 +73,9 @@ namespace BECore {
 
     // Класс-обёртка для unordered_map с методом Find
     template <typename T>
-    class UnorderedPoolMap : public eastl::unordered_map<PoolString, T, PoolStringHasher, PoolStringEquality> {
+    class UnorderedPoolMap : public HashMap<PoolString, T, PoolStringHasher, PoolStringEquality> {
     public:
-        using Base = eastl::unordered_map<PoolString, T, PoolStringHasher, PoolStringEquality>;
+        using Base = HashMap<PoolString, T, PoolStringHasher, PoolStringEquality>;
         using Base::Base;
 
         // Гетерогенный поиск без необходимости указывать функторы
@@ -91,9 +91,9 @@ namespace BECore {
 
     // Класс-обёртка для map с методом Find
     template <typename T>
-    class PoolMap : public eastl::map<PoolString, T, eastl::less<PoolString>> {
+    class PoolMap : public Map<PoolString, T, eastl::less<PoolString>> {
     public:
-        using Base = eastl::map<PoolString, T, eastl::less<PoolString>>;
+        using Base = Map<PoolString, T, eastl::less<PoolString>>;
         using Base::Base;
 
         // Гетерогенный поиск без необходимости указывать компаратор
@@ -115,10 +115,10 @@ namespace eastl {
         constexpr bool operator()(const BECore::PoolString& lhs, const BECore::PoolString& rhs) const noexcept {
             return lhs == rhs;
         }
-        constexpr bool operator()(const BECore::PoolString& lhs, const eastl::string_view& rhs) const noexcept {
+        constexpr bool operator()(const BECore::PoolString& lhs, const BECore::StringView& rhs) const noexcept {
             return lhs.ToStringView() == rhs;
         }
-        constexpr bool operator()(const eastl::string_view& lhs, const BECore::PoolString& rhs) const noexcept {
+        constexpr bool operator()(const BECore::StringView& lhs, const BECore::PoolString& rhs) const noexcept {
             return lhs == rhs.ToStringView();
         }
     };
@@ -147,10 +147,10 @@ namespace eastl {
         constexpr bool operator()(const BECore::PoolString& lhs, const BECore::PoolString& rhs) const noexcept {
             return lhs.ToStringView() < rhs.ToStringView();
         }
-        constexpr bool operator()(const BECore::PoolString& lhs, const eastl::string_view& rhs) const noexcept {
+        constexpr bool operator()(const BECore::PoolString& lhs, const BECore::StringView& rhs) const noexcept {
             return lhs.ToStringView() < rhs;
         }
-        constexpr bool operator()(const eastl::string_view& lhs, const BECore::PoolString& rhs) const noexcept {
+        constexpr bool operator()(const BECore::StringView& lhs, const BECore::PoolString& rhs) const noexcept {
             return lhs < rhs.ToStringView();
         }
     };

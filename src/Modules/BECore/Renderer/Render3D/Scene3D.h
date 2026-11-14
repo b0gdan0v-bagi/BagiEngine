@@ -19,7 +19,7 @@ namespace BECore {
         Camera3D camera;
         DirectionalLight light;
         Ambient ambient;
-        eastl::vector<MeshInstance> instances;
+        Vector<MeshInstance> instances;
     };
 
 }  // namespace BECore

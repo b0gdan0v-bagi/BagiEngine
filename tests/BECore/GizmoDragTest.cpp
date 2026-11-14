@@ -52,16 +52,15 @@ namespace BECore::Tests {
         }
 
         /// One whole drag in one update: press at @p from, pointer at @p to; the result is a copy
-        eastl::vector<Item> Drag(Tool tool, Space space, Handle handle, eastl::span<const Item> items, Vec2 from, Vec2 to, const SnapSettings& snap = {}, bool snapModifier = false,
-                                 bool keepAspect = false) {
+        Vector<Item> Drag(Tool tool, Space space, Handle handle, Span<const Item> items, Vec2 from, Vec2 to, const SnapSettings& snap = {}, bool snapModifier = false, bool keepAspect = false) {
             GizmoDrag drag;
             drag.Begin(tool, space, handle, items, from, snap);
-            const eastl::span<const Item> result = drag.Update(to, snapModifier, keepAspect);
+            const Span<const Item> result = drag.Update(to, snapModifier, keepAspect);
             return {result.begin(), result.end()};
         }
 
-        eastl::vector<Item> DragOne(Tool tool, Handle handle, const Item& item, Vec2 from, Vec2 to, const SnapSettings& snap = {}, bool snapModifier = false, bool keepAspect = false,
-                                    Space space = Space::World) {
+        Vector<Item> DragOne(Tool tool, Handle handle, const Item& item, Vec2 from, Vec2 to, const SnapSettings& snap = {}, bool snapModifier = false, bool keepAspect = false,
+                             Space space = Space::World) {
             const Item items[] = {item};
             return Drag(tool, space, handle, items, from, to, snap, snapModifier, keepAspect);
         }

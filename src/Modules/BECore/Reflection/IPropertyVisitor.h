@@ -15,19 +15,19 @@ namespace BECore {
     public:
         virtual ~IPropertyVisitor() = default;
 
-        virtual bool Visit(eastl::string_view name, bool& value) = 0;
-        virtual bool Visit(eastl::string_view name, int8_t& value) = 0;
-        virtual bool Visit(eastl::string_view name, uint8_t& value) = 0;
-        virtual bool Visit(eastl::string_view name, int16_t& value) = 0;
-        virtual bool Visit(eastl::string_view name, uint16_t& value) = 0;
-        virtual bool Visit(eastl::string_view name, int32_t& value) = 0;
-        virtual bool Visit(eastl::string_view name, uint32_t& value) = 0;
-        virtual bool Visit(eastl::string_view name, int64_t& value) = 0;
-        virtual bool Visit(eastl::string_view name, uint64_t& value) = 0;
-        virtual bool Visit(eastl::string_view name, float& value) = 0;
-        virtual bool Visit(eastl::string_view name, double& value) = 0;
-        virtual bool Visit(eastl::string_view name, PoolString& value) = 0;
-        virtual bool Visit(eastl::string_view name, eastl::string& value) = 0;
+        virtual bool Visit(StringView name, bool& value) = 0;
+        virtual bool Visit(StringView name, int8_t& value) = 0;
+        virtual bool Visit(StringView name, uint8_t& value) = 0;
+        virtual bool Visit(StringView name, int16_t& value) = 0;
+        virtual bool Visit(StringView name, uint16_t& value) = 0;
+        virtual bool Visit(StringView name, int32_t& value) = 0;
+        virtual bool Visit(StringView name, uint32_t& value) = 0;
+        virtual bool Visit(StringView name, int64_t& value) = 0;
+        virtual bool Visit(StringView name, uint64_t& value) = 0;
+        virtual bool Visit(StringView name, float& value) = 0;
+        virtual bool Visit(StringView name, double& value) = 0;
+        virtual bool Visit(StringView name, PoolString& value) = 0;
+        virtual bool Visit(StringView name, String& value) = 0;
 
         /**
          * @brief Visit a reflected enum field with a combo selector
@@ -40,7 +40,7 @@ namespace BECore {
          * Default implementation returns false (no-op). Override in subclasses to provide
          * UI (e.g. ImGui::BeginCombo) for selecting enum values.
          */
-        virtual bool VisitEnum(eastl::string_view name, const eastl::string_view* enumNames, size_t enumCount, size_t& selectedIndex) {
+        virtual bool VisitEnum(StringView name, const StringView* enumNames, size_t enumCount, size_t& selectedIndex) {
             return false;
         }
 
@@ -48,7 +48,7 @@ namespace BECore {
          * @brief Begin a compound field group (e.g. tree node in ImGui)
          * @return true if the group is open (children should be visited)
          */
-        virtual bool BeginCompound(eastl::string_view name) {
+        virtual bool BeginCompound(StringView name) {
             return true;
         }
 

@@ -18,7 +18,7 @@ namespace BECore {
     struct PixelBuffer {
         uint32_t width = 0;
         uint32_t height = 0;
-        eastl::vector<uint8_t> rgba;
+        Vector<uint8_t> rgba;
     };
 
     /// One corner of a triangle for IRenderer::DrawGeometry()
@@ -31,7 +31,7 @@ namespace BECore {
     };
 
     /// The image, or why it could not be taken
-    using CaptureResult = std::expected<PixelBuffer, eastl::string>;
+    using CaptureResult = std::expected<PixelBuffer, String>;
     using CaptureCallback = std::function<void(CaptureResult)>;
 
     class IRenderer : public RefCounted, public SubscriptionHolder {
@@ -58,7 +58,7 @@ namespace BECore {
         }
 
         // Why GetGpuDevice() is null, for the log line of a caller that wanted 3D (the default is generic, a backend says what it lacks)
-        [[nodiscard]] virtual eastl::string GetNoGpuDeviceReason() const;
+        [[nodiscard]] virtual String GetNoGpuDeviceReason() const;
 
         // How much detail generated geometry (the shadows and glows of UIBoxMesh) should have for this renderer: Full by default, Reduced for the SDL
         // software renderer, where every blended triangle costs a surface and a blit. Not BE_FUNCTION (an engine query, not a control API call).
@@ -88,7 +88,7 @@ namespace BECore {
         // straight and blended over the target. An index past the vertices ends the draw.
         // Not BE_FUNCTION (spans). The default logs once and draws nothing, for a backend without the primitive (the SDL and the Vulkan backends both have it,
         // .claude/rules/rendering-module.md).
-        virtual void DrawGeometry(ITexture* texture, eastl::span<const GeometryVertex> vertices, eastl::span<const int> indices, float translateX, float translateY);
+        virtual void DrawGeometry(ITexture* texture, Span<const GeometryVertex> vertices, Span<const int> indices, float translateX, float translateY);
 
         // Draws a rect rotated about @p transform's pivot (absolute, in the units of the call). An identity transform is DrawFilledRect() unchanged;
         // otherwise the default builds the four rotated corners (MakeTransformedQuad()) and draws them through DrawGeometry(), which applies the view
@@ -171,7 +171,7 @@ namespace BECore {
 
         // The current clip in output pixels, or nothing when no rect is pushed. A pushed rect that does not overlap
         // the one before it leaves an empty clip, which hides everything (see IsClipEmpty()).
-        [[nodiscard]] std::optional<Rect> GetClipRect() const;
+        [[nodiscard]] Optional<Rect> GetClipRect() const;
         [[nodiscard]] bool IsClipEmpty() const;
         [[nodiscard]] size_t GetClipDepth() const {
             return _clipStack.size();
@@ -231,7 +231,7 @@ namespace BECore {
         BlendMode _blendMode = BlendMode::Alpha;
         float _opacity = 1.0f;
         // Each entry is already intersected with the one below it
-        eastl::vector<Rect> _clipStack;
+        Vector<Rect> _clipStack;
         RenderCounters _counters;
         const ITexture* _lastCountedTexture = nullptr;  // compared only, never dereferenced
         int _countersPaused = 0;
@@ -239,7 +239,7 @@ namespace BECore {
 
     /// The GPU device of @p renderer, or the renderer's name and why it has none. What a 3D caller uses, so the game logs the error once (LOG_ERROR at
     /// the caller) instead of drawing a blank screen.
-    [[nodiscard]] std::expected<IGpuDevice*, eastl::string> RequireGpuDevice(IRenderer& renderer);
+    [[nodiscard]] std::expected<IGpuDevice*, String> RequireGpuDevice(IRenderer& renderer);
 
     /// Stops a renderer counting its draws for the length of a scope
     class ScopedRenderCountersPause {

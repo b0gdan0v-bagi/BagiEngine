@@ -9,7 +9,7 @@ namespace BECore {
 
     namespace {
 
-        constexpr eastl::string_view kTimeoutCode = "clipboard_timeout";
+        constexpr StringView kTimeoutCode = "clipboard_timeout";
 
         /// A call that waits, frame by frame, for the clipboard: @c isDone is asked at the end of each frame, @c finish answers
         struct Waiting {

@@ -7,8 +7,8 @@ namespace BECore {
 
     namespace {
 
-        ControlError MakeError(eastl::string_view code, eastl::string_view message) {
-            return ControlError{eastl::string(code), eastl::string(message)};
+        ControlError MakeError(StringView code, StringView message) {
+            return ControlError{String(code), String(message)};
         }
 
         /// How many tokens AddMember draws before it gives up (a collision of 128 bits never happens, a constant RandomFn does)
@@ -16,7 +16,7 @@ namespace BECore {
 
     }  // namespace
 
-    Room::Room(eastl::string code, SeatedGameInfo info, RandomFn random, SeatedGameFactory factory, RoomTimings timings)
+    Room::Room(String code, SeatedGameInfo info, RandomFn random, SeatedGameFactory factory, RoomTimings timings)
         : _code(std::move(code)), _info(std::move(info)), _random(std::move(random)), _factory(std::move(factory)), _timings(timings) {}
 
     const Room::Member* Room::FindMember(PlayerId player) const {
@@ -37,7 +37,7 @@ namespace BECore {
         return nullptr;
     }
 
-    std::optional<int> Room::FindLowestFreeSeat() const {
+    Optional<int> Room::FindLowestFreeSeat() const {
         for (int seat = 0; seat < _info.seatCount; ++seat) {
             if (!GetPlayerAt(seat)) {
                 return seat;
@@ -50,21 +50,21 @@ namespace BECore {
         ++_lobbyRevision;
     }
 
-    std::expected<RoomMemberJoined, ControlError> Room::AddMember(eastl::string_view name, RoomTime /*now*/) {
-        std::optional<eastl::string> cleanName = SanitizePlayerName(name);
+    std::expected<RoomMemberJoined, ControlError> Room::AddMember(StringView name, RoomTime /*now*/) {
+        Optional<String> cleanName = SanitizePlayerName(name);
         if (!cleanName) {
             return std::unexpected(MakeError(RoomErrors::kBadName, "The name must be 1 to 24 bytes of printable text"));
         }
         if (_phase != RoomPhase::Lobby) {
             return std::unexpected(MakeError(RoomErrors::kGameStarted, "The game has started: only a member can return, with the token"));
         }
-        const std::optional<int> freeSeat = FindLowestFreeSeat();
+        const Optional<int> freeSeat = FindLowestFreeSeat();
         if (!freeSeat) {
             return std::unexpected(MakeError(RoomErrors::kRoomFull, "The room is full"));
         }
         const int seat = *freeSeat;
 
-        eastl::string token = GenerateToken(_random);
+        String token = GenerateToken(_random);
         for (int attempt = 1; FindByToken(token); ++attempt) {
             if (attempt >= kMaxTokenAttempts) {
                 return std::unexpected(MakeError(RoomErrors::kInternalError, "No free token could be made"));
@@ -137,7 +137,7 @@ namespace BECore {
         if (_phase != RoomPhase::Lobby) {
             return std::unexpected(MakeError(RoomErrors::kGameStarted, "The game has already started"));
         }
-        eastl::unique_ptr<ISeatedGame> game = _factory ? _factory() : nullptr;
+        UniquePtr<ISeatedGame> game = _factory ? _factory() : nullptr;
         if (!game || game->GetSeatCount() != _info.seatCount) {
             return std::unexpected(MakeError(RoomErrors::kInternalError, "The game could not be created"));
         }
@@ -219,7 +219,7 @@ namespace BECore {
         return true;
     }
 
-    std::expected<void, ControlError> Room::MarkReturned(PlayerId player, eastl::string_view token) {
+    std::expected<void, ControlError> Room::MarkReturned(PlayerId player, StringView token) {
         Member* member = FindMember(player);
         if (!member) {
             return std::unexpected(MakeError(RoomErrors::kNotInRoom, "You are not in this room"));
@@ -241,7 +241,7 @@ namespace BECore {
         if (_phase == RoomPhase::Lobby || seat < 0 || seat >= _info.seatCount) {
             return false;
         }
-        const std::optional<PlayerId> player = GetPlayerAt(seat);
+        const Optional<PlayerId> player = GetPlayerAt(seat);
         if (!player) {
             return true;
         }
@@ -257,7 +257,7 @@ namespace BECore {
             if (!IsSeatComputerControlled(seat, now)) {
                 continue;
             }
-            const std::optional<Json> action = _game->ChooseComputerAction(seat);
+            const Optional<Json> action = _game->ChooseComputerAction(seat);
             if (!action) {
                 continue;
             }
@@ -288,10 +288,10 @@ namespace BECore {
         return true;
     }
 
-    std::optional<PlayerId> Room::FindByToken(eastl::string_view token) const {
+    Optional<PlayerId> Room::FindByToken(StringView token) const {
         // Every member is compared over the whole length of the longer text, with no early exit, so the time says nothing about
         // how many characters are right or which member is nearly right
-        std::optional<PlayerId> found;
+        Optional<PlayerId> found;
         for (const Member& member : _members) {
             const size_t length = std::max(member.token.size(), token.size());
             unsigned difference = member.token.size() != token.size() ? 1u : 0u;
@@ -334,7 +334,7 @@ namespace BECore {
         return player != 0 && player == _host;
     }
 
-    std::optional<int> Room::GetSeatOf(PlayerId player) const {
+    Optional<int> Room::GetSeatOf(PlayerId player) const {
         const Member* member = FindMember(player);
         if (!member) {
             return std::nullopt;
@@ -342,7 +342,7 @@ namespace BECore {
         return member->seat;
     }
 
-    std::optional<PlayerId> Room::GetPlayerAt(int seat) const {
+    Optional<PlayerId> Room::GetPlayerAt(int seat) const {
         for (const Member& member : _members) {
             if (member.seat == seat) {
                 return member.id;
@@ -358,13 +358,13 @@ namespace BECore {
     void Room::SetLobbyOptions(const Json& options) {
         Json kept = Json::object();
         if (options.is_object()) {
-            for (const eastl::string& key : _info.publicOptions) {
+            for (const String& key : _info.publicOptions) {
                 if (kept.size() >= RoomLimits::kMaxLobbyOptions) {
                     break;
                 }
                 const Json* value = FindJsonMember(options, key);
                 if (value != nullptr && (value->is_boolean() || value->is_number_integer())) {
-                    kept[std::string(key.data(), key.size())] = *value;
+                    kept[ToStdString(key)] = *value;
                 }
             }
         }
@@ -384,7 +384,7 @@ namespace BECore {
         for (int seat = 0; seat < _info.seatCount; ++seat) {
             LobbySeat entry;
             entry.seat = seat;
-            const std::optional<PlayerId> player = GetPlayerAt(seat);
+            const Optional<PlayerId> player = GetPlayerAt(seat);
             if (player) {
                 const Member* member = FindMember(*player);
                 entry.kind = SeatKind::Human;

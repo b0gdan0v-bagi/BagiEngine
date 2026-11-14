@@ -7,14 +7,14 @@
 
 namespace BECore {
 
-    const eastl::string& UITextComponent::ShownText(const UIElement& owner, const eastl::string& own) {
-        const eastl::string* replacement = owner.GetTextOverride();
+    const String& UITextComponent::ShownText(const UIElement& owner, const String& own) {
+        const String* replacement = owner.GetTextOverride();
         return replacement ? *replacement : own;
     }
 
-    UITextParams UITextComponent::MakeParams(float fontSize, const eastl::string& shown) const {
+    UITextParams UITextComponent::MakeParams(float fontSize, const String& shown) const {
         UITextParams params;
-        params.text = eastl::string_view(shown.data(), shown.size());
+        params.text = StringView(shown);
         params.font = font;
         params.fontFamily = fontFamily;
         params.fontWeight = fontWeight;
@@ -65,13 +65,13 @@ namespace BECore {
         return _painter.Check(MakeParams(owner.active.fontSize, ShownText(owner, text)), width, height, scale);
     }
 
-    eastl::string_view UITextComponent::GetDisplayText() const {
-        return _painter.GetDisplayText(eastl::string_view(text.data(), text.size()));
+    StringView UITextComponent::GetDisplayText() const {
+        return _painter.GetDisplayText(StringView(text));
     }
 
-    eastl::string_view UITextComponent::GetDisplayText(const UIElement& owner) const {
-        const eastl::string& shown = ShownText(owner, text);
-        return _painter.GetDisplayText(eastl::string_view(shown.data(), shown.size()));
+    StringView UITextComponent::GetDisplayText(const UIElement& owner) const {
+        const String& shown = ShownText(owner, text);
+        return _painter.GetDisplayText(StringView(shown));
     }
 
     Vec2 UITextComponent::MeasureText(const UIElement& owner, float maxWidth, float scale) const {

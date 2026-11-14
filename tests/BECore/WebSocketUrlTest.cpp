@@ -6,13 +6,13 @@ namespace BECore::Tests {
 
     namespace {
 
-        WebSocketUrl MustParse(eastl::string_view text) {
+        WebSocketUrl MustParse(StringView text) {
             auto url = ParseWebSocketUrl(text);
             EXPECT_TRUE(url.has_value()) << std::string(text.data(), text.size()) << ": " << (url ? "" : url.error().c_str());
             return url ? *url : WebSocketUrl{};
         }
 
-        void ExpectRefused(eastl::string_view text, std::string_view messagePart = {}) {
+        void ExpectRefused(StringView text, std::string_view messagePart = {}) {
             const auto url = ParseWebSocketUrl(text);
             ASSERT_FALSE(url.has_value()) << std::string(text.data(), text.size());
             if (!messagePart.empty()) {
@@ -101,7 +101,7 @@ namespace BECore::Tests {
         ExpectRefused(" ws://a.com/");
         ExpectRefused("ws://a.com/\tx");
         ExpectRefused("ws://a.com/\r\nHost: evil");
-        ExpectRefused(eastl::string_view("ws://a.com/\0x", 13));
+        ExpectRefused(StringView("ws://a.com/\0x", 13));
         ExpectRefused("ws://a.com/\x7F");
         ExpectRefused("ws://\xD0\xBF.com/");
         ExpectRefused("ws://a.com/\xD0\xBF");
@@ -109,17 +109,17 @@ namespace BECore::Tests {
 
     TEST(WebSocketUrlTest, RefusesAUrlOverTheLimit) {
         const std::string longPath = "ws://a.com/" + std::string(kMaxWebSocketUrlBytes, 'a');
-        ExpectRefused(eastl::string_view(longPath.data(), longPath.size()));
+        ExpectRefused(FromStd(longPath));
         std::string atLimit = "ws://a.com/";
         atLimit.append(kMaxWebSocketUrlBytes - atLimit.size(), 'a');
-        EXPECT_EQ(MustParse(eastl::string_view(atLimit.data(), atLimit.size())).pathAndQuery.size(), kMaxWebSocketUrlBytes - 10);
+        EXPECT_EQ(MustParse(FromStd(atLimit)).pathAndQuery.size(), kMaxWebSocketUrlBytes - 10);
     }
 
     TEST(WebSocketUrlTest, RefusesAHostLongerThanADnsName) {
         const std::string atLimit = "ws://" + std::string(kMaxWebSocketHostBytes, 'a') + "/x";
-        EXPECT_EQ(MustParse(eastl::string_view(atLimit.data(), atLimit.size())).host.size(), kMaxWebSocketHostBytes);
+        EXPECT_EQ(MustParse(FromStd(atLimit)).host.size(), kMaxWebSocketHostBytes);
         const std::string overLimit = "ws://" + std::string(kMaxWebSocketHostBytes + 1, 'a') + ":9/x";
-        ExpectRefused(eastl::string_view(overLimit.data(), overLimit.size()), "host is longer");
+        ExpectRefused(FromStd(overLimit), "host is longer");
     }
 
     TEST(WebSocketUrlTest, HostHeaderLeavesOutTheDefaultPortOfTheScheme) {

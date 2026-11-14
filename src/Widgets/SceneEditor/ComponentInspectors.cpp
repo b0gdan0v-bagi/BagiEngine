@@ -19,8 +19,8 @@ namespace BECore {
 
     namespace {
 
-        eastl::unordered_map<uint64_t, InspectorFunc>& GetRegistry() {
-            static eastl::unordered_map<uint64_t, InspectorFunc> reg;
+        HashMap<uint64_t, InspectorFunc>& GetRegistry() {
+            static HashMap<uint64_t, InspectorFunc> reg;
             return reg;
         }
 
@@ -73,12 +73,12 @@ namespace BECore {
                 ImGui::BeginDisabled();
             }
 
-            static eastl::vector<PoolString> cachedAssets;
+            static Vector<PoolString> cachedAssets;
             static bool assetsLoaded = false;
 
             if (!assetsLoaded) {
-                static const eastl::string_view extensions[] = {".png", ".jpg", ".jpeg", ".bmp"};
-                cachedAssets = CoreManager::GetFileSystem().EnumerateFiles("assets"_intern, eastl::span<const eastl::string_view>(extensions));
+                static const StringView extensions[] = {".png", ".jpg", ".jpeg", ".bmp"};
+                cachedAssets = CoreManager::GetFileSystem().EnumerateFiles("assets"_intern, Span<const StringView>(extensions));
                 assetsLoaded = true;
             }
 

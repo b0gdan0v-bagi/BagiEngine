@@ -39,7 +39,7 @@ namespace BECore {
         return true;
     }
 
-    bool XmlDeserializer::LoadFromVirtualPath(eastl::string_view virtualPath) {
+    bool XmlDeserializer::LoadFromVirtualPath(StringView virtualPath) {
         auto realPath = CoreManager::GetFileSystem().ResolvePath(virtualPath);
         if (realPath.empty()) {
             AddError("", "Failed to resolve virtual path", 0);
@@ -48,7 +48,7 @@ namespace BECore {
         return LoadFromFile(realPath);
     }
 
-    bool XmlDeserializer::LoadFromString(eastl::string_view xmlContent) {
+    bool XmlDeserializer::LoadFromString(StringView xmlContent) {
         ResetDocument();
 
         if (xmlContent.size() > ReaderLimits::kMaxXmlDocumentBytes) {
@@ -83,7 +83,7 @@ namespace BECore {
         return true;
     }
 
-    bool XmlDeserializer::IsNestedTooDeep(eastl::string_view name) {
+    bool XmlDeserializer::IsNestedTooDeep(StringView name) {
         if (_nodeStack.size() < ReaderLimits::kMaxXmlNesting) {
             return false;
         }
@@ -91,25 +91,25 @@ namespace BECore {
         return true;
     }
 
-    pugi::xml_node XmlDeserializer::GetChild(eastl::string_view name) const {
+    pugi::xml_node XmlDeserializer::GetChild(StringView name) const {
         if (_nodeStack.empty()) {
             return pugi::xml_node();
         }
 
-        std::string nameStr(name.data(), name.size());
+        String nameStr(name);
         return _nodeStack.back().child(nameStr.c_str());
     }
 
-    pugi::xml_attribute XmlDeserializer::GetAttribute(eastl::string_view name) const {
+    pugi::xml_attribute XmlDeserializer::GetAttribute(StringView name) const {
         if (_nodeStack.empty()) {
             return pugi::xml_attribute();
         }
 
-        std::string nameStr(name.data(), name.size());
+        String nameStr(name);
         return _nodeStack.back().attribute(nameStr.c_str());
     }
 
-    void XmlDeserializer::AddError(eastl::string_view path, eastl::string_view message, int32_t line) {
+    void XmlDeserializer::AddError(StringView path, StringView message, int32_t line) {
         StoreError(_errors, path, message, line);
     }
 
@@ -122,7 +122,7 @@ namespace BECore {
             return c == ' ' || c == '\t' || c == '\n' || c == '\r';
         }
 
-        eastl::string_view TrimAsciiSpaces(eastl::string_view text) {
+        StringView TrimAsciiSpaces(StringView text) {
             while (!text.empty() && IsAsciiSpace(text.front())) {
                 text.remove_prefix(1);
             }
@@ -133,7 +133,7 @@ namespace BECore {
         }
 
         // A leading '+' is accepted (pugixml takes one); std::from_chars does not take one
-        eastl::string_view DropPlusSign(eastl::string_view text) {
+        StringView DropPlusSign(StringView text) {
             if (!text.empty() && text.front() == kPlus) {
                 text.remove_prefix(1);
                 // "+-1" and "++1" stay malformed
@@ -146,7 +146,7 @@ namespace BECore {
 
         enum class ParseStatus { Ok, Malformed, OutOfRange };
 
-        ParseStatus ParseBoolText(eastl::string_view text, bool& outValue) {
+        ParseStatus ParseBoolText(StringView text, bool& outValue) {
             text = TrimAsciiSpaces(text);
             if (text == "true" || text == "1") {
                 outValue = true;
@@ -160,7 +160,7 @@ namespace BECore {
         }
 
         template <typename T>
-        ParseStatus ParseNumberText(eastl::string_view text, T& outValue) {
+        ParseStatus ParseNumberText(StringView text, T& outValue) {
             text = DropPlusSign(TrimAsciiSpaces(text));
             if (text.empty()) {
                 return ParseStatus::Malformed;
@@ -186,7 +186,7 @@ namespace BECore {
         }
 
         template <typename T>
-        ParseStatus ParseText(eastl::string_view text, T& outValue) {
+        ParseStatus ParseText(StringView text, T& outValue) {
             if constexpr (std::is_same_v<T, bool>) {
                 return ParseBoolText(text, outValue);
             } else {
@@ -208,20 +208,20 @@ namespace BECore {
     }  // namespace
 
     template <typename T>
-    bool XmlDeserializer::ApplyStrictText(eastl::string_view name, eastl::string_view text, T& outValue) {
+    bool XmlDeserializer::ApplyStrictText(StringView name, StringView text, T& outValue) {
         const ParseStatus status = ParseText(text, outValue);
         if (status == ParseStatus::Ok) {
             return true;
         }
         const char* const reason = status == ParseStatus::OutOfRange ? " (out of range)" : "";
-        const eastl::string_view quoted = CutText(text, ReaderLimits::kMaxQuotedValueBytes);
+        const StringView quoted = CutText(text, ReaderLimits::kMaxQuotedValueBytes);
         const char* const cut = quoted.size() < text.size() ? "..." : "";
         ReportError(name, Format("Invalid {} value '{}{}'{}", KindName<T>(), quoted, cut, reason));
         return false;
     }
 
     template <typename T>
-    bool XmlDeserializer::ReadStrictAttribute(eastl::string_view name, T& outValue) {
+    bool XmlDeserializer::ReadStrictAttribute(StringView name, T& outValue) {
         pugi::xml_attribute attr = GetAttribute(name);
         if (!attr) {
             // As in the lenient read: a missing attribute is no error
@@ -231,7 +231,7 @@ namespace BECore {
     }
 
     template <typename T>
-    bool XmlDeserializer::ReadStrictElement(eastl::string_view name, T& outValue) {
+    bool XmlDeserializer::ReadStrictElement(StringView name, T& outValue) {
         pugi::xml_node node = GetChild(name);
         if (!node) {
             ReportError(name, "Element not found");
@@ -244,7 +244,7 @@ namespace BECore {
     // Read methods (child elements)
     // =============================================================================
 
-    bool XmlDeserializer::Read(eastl::string_view name, bool& outValue) {
+    bool XmlDeserializer::Read(StringView name, bool& outValue) {
         if (_strictValues) {
             return ReadStrictElement(name, outValue);
         }
@@ -255,12 +255,12 @@ namespace BECore {
             return false;
         }
 
-        eastl::string_view text = node.text().as_string();
+        StringView text = node.text().as_string();
         outValue = (text == "true" || text == "1");
         return true;
     }
 
-    bool XmlDeserializer::Read(eastl::string_view name, int8_t& outValue) {
+    bool XmlDeserializer::Read(StringView name, int8_t& outValue) {
         if (_strictValues) {
             return ReadStrictElement(name, outValue);
         }
@@ -275,7 +275,7 @@ namespace BECore {
         return true;
     }
 
-    bool XmlDeserializer::Read(eastl::string_view name, uint8_t& outValue) {
+    bool XmlDeserializer::Read(StringView name, uint8_t& outValue) {
         if (_strictValues) {
             return ReadStrictElement(name, outValue);
         }
@@ -290,7 +290,7 @@ namespace BECore {
         return true;
     }
 
-    bool XmlDeserializer::Read(eastl::string_view name, int16_t& outValue) {
+    bool XmlDeserializer::Read(StringView name, int16_t& outValue) {
         if (_strictValues) {
             return ReadStrictElement(name, outValue);
         }
@@ -305,7 +305,7 @@ namespace BECore {
         return true;
     }
 
-    bool XmlDeserializer::Read(eastl::string_view name, uint16_t& outValue) {
+    bool XmlDeserializer::Read(StringView name, uint16_t& outValue) {
         if (_strictValues) {
             return ReadStrictElement(name, outValue);
         }
@@ -320,7 +320,7 @@ namespace BECore {
         return true;
     }
 
-    bool XmlDeserializer::Read(eastl::string_view name, int32_t& outValue) {
+    bool XmlDeserializer::Read(StringView name, int32_t& outValue) {
         if (_strictValues) {
             return ReadStrictElement(name, outValue);
         }
@@ -335,7 +335,7 @@ namespace BECore {
         return true;
     }
 
-    bool XmlDeserializer::Read(eastl::string_view name, uint32_t& outValue) {
+    bool XmlDeserializer::Read(StringView name, uint32_t& outValue) {
         if (_strictValues) {
             return ReadStrictElement(name, outValue);
         }
@@ -350,7 +350,7 @@ namespace BECore {
         return true;
     }
 
-    bool XmlDeserializer::Read(eastl::string_view name, int64_t& outValue) {
+    bool XmlDeserializer::Read(StringView name, int64_t& outValue) {
         if (_strictValues) {
             return ReadStrictElement(name, outValue);
         }
@@ -365,7 +365,7 @@ namespace BECore {
         return true;
     }
 
-    bool XmlDeserializer::Read(eastl::string_view name, uint64_t& outValue) {
+    bool XmlDeserializer::Read(StringView name, uint64_t& outValue) {
         if (_strictValues) {
             return ReadStrictElement(name, outValue);
         }
@@ -380,7 +380,7 @@ namespace BECore {
         return true;
     }
 
-    bool XmlDeserializer::Read(eastl::string_view name, float& outValue) {
+    bool XmlDeserializer::Read(StringView name, float& outValue) {
         if (_strictValues) {
             return ReadStrictElement(name, outValue);
         }
@@ -395,7 +395,7 @@ namespace BECore {
         return true;
     }
 
-    bool XmlDeserializer::Read(eastl::string_view name, double& outValue) {
+    bool XmlDeserializer::Read(StringView name, double& outValue) {
         if (_strictValues) {
             return ReadStrictElement(name, outValue);
         }
@@ -410,7 +410,7 @@ namespace BECore {
         return true;
     }
 
-    bool XmlDeserializer::Read(eastl::string_view name, eastl::string& outValue) {
+    bool XmlDeserializer::Read(StringView name, String& outValue) {
         pugi::xml_node node = GetChild(name);
         if (!node) {
             ReportError(name, "Element not found");
@@ -418,11 +418,11 @@ namespace BECore {
         }
 
         const char* text = node.text().as_string();
-        outValue = eastl::string(text);
+        outValue = String(text);
         return true;
     }
 
-    bool XmlDeserializer::Read(eastl::string_view name, PoolString& outValue) {
+    bool XmlDeserializer::Read(StringView name, PoolString& outValue) {
         pugi::xml_node node = GetChild(name);
         if (!node) {
             ReportError(name, "Element not found");
@@ -430,7 +430,7 @@ namespace BECore {
         }
 
         const char* text = node.text().as_string();
-        outValue = PoolString::Intern(eastl::string_view{text});
+        outValue = PoolString::Intern(StringView{text});
         return true;
     }
 
@@ -438,7 +438,7 @@ namespace BECore {
     // ReadAttribute methods (XML attributes)
     // =============================================================================
 
-    bool XmlDeserializer::ReadAttribute(eastl::string_view name, bool& outValue) {
+    bool XmlDeserializer::ReadAttribute(StringView name, bool& outValue) {
         if (_strictValues) {
             return ReadStrictAttribute(name, outValue);
         }
@@ -449,12 +449,12 @@ namespace BECore {
             return false;
         }
 
-        eastl::string_view text = attr.as_string();
+        StringView text = attr.as_string();
         outValue = (text == "true" || text == "1");
         return true;
     }
 
-    bool XmlDeserializer::ReadAttribute(eastl::string_view name, int8_t& outValue) {
+    bool XmlDeserializer::ReadAttribute(StringView name, int8_t& outValue) {
         if (_strictValues) {
             return ReadStrictAttribute(name, outValue);
         }
@@ -468,7 +468,7 @@ namespace BECore {
         return true;
     }
 
-    bool XmlDeserializer::ReadAttribute(eastl::string_view name, uint8_t& outValue) {
+    bool XmlDeserializer::ReadAttribute(StringView name, uint8_t& outValue) {
         if (_strictValues) {
             return ReadStrictAttribute(name, outValue);
         }
@@ -482,7 +482,7 @@ namespace BECore {
         return true;
     }
 
-    bool XmlDeserializer::ReadAttribute(eastl::string_view name, int16_t& outValue) {
+    bool XmlDeserializer::ReadAttribute(StringView name, int16_t& outValue) {
         if (_strictValues) {
             return ReadStrictAttribute(name, outValue);
         }
@@ -496,7 +496,7 @@ namespace BECore {
         return true;
     }
 
-    bool XmlDeserializer::ReadAttribute(eastl::string_view name, uint16_t& outValue) {
+    bool XmlDeserializer::ReadAttribute(StringView name, uint16_t& outValue) {
         if (_strictValues) {
             return ReadStrictAttribute(name, outValue);
         }
@@ -510,7 +510,7 @@ namespace BECore {
         return true;
     }
 
-    bool XmlDeserializer::ReadAttribute(eastl::string_view name, int32_t& outValue) {
+    bool XmlDeserializer::ReadAttribute(StringView name, int32_t& outValue) {
         if (_strictValues) {
             return ReadStrictAttribute(name, outValue);
         }
@@ -524,7 +524,7 @@ namespace BECore {
         return true;
     }
 
-    bool XmlDeserializer::ReadAttribute(eastl::string_view name, uint32_t& outValue) {
+    bool XmlDeserializer::ReadAttribute(StringView name, uint32_t& outValue) {
         if (_strictValues) {
             return ReadStrictAttribute(name, outValue);
         }
@@ -538,7 +538,7 @@ namespace BECore {
         return true;
     }
 
-    bool XmlDeserializer::ReadAttribute(eastl::string_view name, int64_t& outValue) {
+    bool XmlDeserializer::ReadAttribute(StringView name, int64_t& outValue) {
         if (_strictValues) {
             return ReadStrictAttribute(name, outValue);
         }
@@ -552,7 +552,7 @@ namespace BECore {
         return true;
     }
 
-    bool XmlDeserializer::ReadAttribute(eastl::string_view name, uint64_t& outValue) {
+    bool XmlDeserializer::ReadAttribute(StringView name, uint64_t& outValue) {
         if (_strictValues) {
             return ReadStrictAttribute(name, outValue);
         }
@@ -566,7 +566,7 @@ namespace BECore {
         return true;
     }
 
-    bool XmlDeserializer::ReadAttribute(eastl::string_view name, float& outValue) {
+    bool XmlDeserializer::ReadAttribute(StringView name, float& outValue) {
         if (_strictValues) {
             return ReadStrictAttribute(name, outValue);
         }
@@ -580,7 +580,7 @@ namespace BECore {
         return true;
     }
 
-    bool XmlDeserializer::ReadAttribute(eastl::string_view name, double& outValue) {
+    bool XmlDeserializer::ReadAttribute(StringView name, double& outValue) {
         if (_strictValues) {
             return ReadStrictAttribute(name, outValue);
         }
@@ -594,25 +594,25 @@ namespace BECore {
         return true;
     }
 
-    bool XmlDeserializer::ReadAttribute(eastl::string_view name, eastl::string& outValue) {
+    bool XmlDeserializer::ReadAttribute(StringView name, String& outValue) {
         pugi::xml_attribute attr = GetAttribute(name);
         if (!attr) {
             return false;
         }
 
         const char* text = attr.as_string();
-        outValue = eastl::string(text);
+        outValue = String(text);
         return true;
     }
 
-    bool XmlDeserializer::ReadAttribute(eastl::string_view name, PoolString& outValue) {
+    bool XmlDeserializer::ReadAttribute(StringView name, PoolString& outValue) {
         pugi::xml_attribute attr = GetAttribute(name);
         if (!attr) {
             return false;
         }
 
         const char* text = attr.as_string();
-        outValue = PoolString::Intern(eastl::string_view{text});
+        outValue = PoolString::Intern(StringView{text});
         return true;
     }
 
@@ -620,7 +620,7 @@ namespace BECore {
     // Object nesting
     // =============================================================================
 
-    bool XmlDeserializer::BeginObject(eastl::string_view name) {
+    bool XmlDeserializer::BeginObject(StringView name) {
         pugi::xml_node node = GetChild(name);
         if (!node) {
             return false;
@@ -644,7 +644,7 @@ namespace BECore {
     // Array support
     // =============================================================================
 
-    bool XmlDeserializer::BeginArray(eastl::string_view name, eastl::string_view elementName, size_t& count) {
+    bool XmlDeserializer::BeginArray(StringView name, StringView elementName, size_t& count) {
         pugi::xml_node node = GetChild(name);
         if (!node || IsNestedTooDeep(name)) {
             return false;
@@ -705,7 +705,7 @@ namespace BECore {
         return !_errors.empty();
     }
 
-    const eastl::vector<DeserializeError>& XmlDeserializer::GetErrors() const {
+    const Vector<DeserializeError>& XmlDeserializer::GetErrors() const {
         return _errors;
     }
 

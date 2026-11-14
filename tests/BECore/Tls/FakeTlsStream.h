@@ -2,7 +2,6 @@
 
 #include <RemoteControl/Tls/TlsStream.h>
 #include <gtest/gtest.h>
-#include <string>
 
 namespace BECore::Tests {
 
@@ -38,7 +37,7 @@ namespace BECore::Tests {
                 }
                 socket.SetReceiveTimeout(std::min(left, Socket::kWakeInterval));
                 uint8_t byte = 0;
-                const auto received = socket.Receive(eastl::span<uint8_t>(&byte, 1));
+                const auto received = socket.Receive(Span<uint8_t>(&byte, 1));
                 if (!received) {
                     if (received.error() == SocketError::TimedOut) {
                         continue;
@@ -61,7 +60,7 @@ namespace BECore::Tests {
             Close();
         }
 
-        std::expected<void, eastl::string> Connect(const TlsConnectParams& params) override {
+        std::expected<void, String> Connect(const TlsConnectParams& params) override {
             const std::string target = std::string(params.host.data(), params.host.size()) + ":" + std::to_string(params.port);
             auto connected = Socket::Connect(params.host, params.port, params.connectTimeout, params.cancel);
             if (!connected) {
@@ -69,18 +68,18 @@ namespace BECore::Tests {
             }
             Socket socket = std::move(*connected);
             const std::string hello = "FAKE-HELLO " + std::string(params.host.data(), params.host.size()) + " " + std::to_string(params.additionalTrustAnchorsDer.size()) + "\n";
-            if (!socket.SendAll(BECore::AsBytes(eastl::string_view(hello.data(), hello.size())))) {
-                return std::unexpected(SetError(eastl::string(("TLS: sending the hello to " + target + " failed").c_str())));
+            if (!socket.SendAll(BECore::AsBytes(FromStd(hello)))) {
+                return std::unexpected(SetError(String(("TLS: sending the hello to " + target + " failed").c_str())));
             }
             std::string answer;
             std::string whyNot;
             if (!FakeTlsDetail::ReadLine(socket, answer, params.handshakeDeadline, params.cancel, whyNot)) {
-                return std::unexpected(SetError(eastl::string(("TLS: no handshake answer from " + target + ": " + whyNot).c_str())));
+                return std::unexpected(SetError(String(("TLS: no handshake answer from " + target + ": " + whyNot).c_str())));
             }
             if (answer != "FAKE-OK") {
                 constexpr std::string_view kReject = "FAKE-REJECT ";
                 const std::string reason = answer.rfind(kReject, 0) == 0 ? answer.substr(kReject.size()) : "bad handshake answer: " + answer;
-                return std::unexpected(SetError(eastl::string(("TLS: " + reason).c_str())));
+                return std::unexpected(SetError(String(("TLS: " + reason).c_str())));
             }
             socket.SetReceiveTimeout(std::chrono::milliseconds::zero());
             std::lock_guard<std::mutex> lock(_mutex);
@@ -89,21 +88,21 @@ namespace BECore::Tests {
             return {};
         }
 
-        bool SendAll(eastl::span<const uint8_t> data) override {
+        bool SendAll(Span<const uint8_t> data) override {
             if (!_valid) {
                 SetError("TLS: not connected");
                 return false;
             }
-            eastl::vector<uint8_t> masked(data.begin(), data.end());
+            Vector<uint8_t> masked(data.begin(), data.end());
             FakeTlsMask(masked.data(), masked.size());
-            const bool sent = _socket.SendAll(eastl::span<const uint8_t>(masked.data(), masked.size()));
+            const bool sent = _socket.SendAll(Span<const uint8_t>(masked.data(), masked.size()));
             if (!sent) {
                 SetError("TLS: sending failed");
             }
             return sent;
         }
 
-        std::expected<size_t, SocketError> Receive(eastl::span<uint8_t> buffer) override {
+        std::expected<size_t, SocketError> Receive(Span<uint8_t> buffer) override {
             if (!_valid) {
                 SetError("TLS: not connected");
                 return std::unexpected(SocketError::Failed);
@@ -136,14 +135,14 @@ namespace BECore::Tests {
             return _valid;
         }
 
-        eastl::string GetLastError() const override {
+        String GetLastError() const override {
             std::lock_guard<std::mutex> lock(_mutex);
             return _lastError;
         }
 
     private:
         /// Remembers @p text for GetLastError() and gives it back
-        eastl::string SetError(eastl::string text) {
+        String SetError(String text) {
             std::lock_guard<std::mutex> lock(_mutex);
             _lastError = text;
             return text;
@@ -152,12 +151,12 @@ namespace BECore::Tests {
         Socket _socket;  // published by Connect() before any other thread has the stream
         std::atomic<bool> _valid{false};
         mutable std::mutex _mutex;  // guards _lastError (Receive and SendAll fail on different threads)
-        eastl::string _lastError;
+        String _lastError;
     };
 
     /// A factory that gives a FakeTlsStream
     [[nodiscard]] inline TlsStreamFactory FakeTlsFactory() {
-        return [] { return eastl::unique_ptr<ITlsStream>(eastl::make_unique<FakeTlsStream>()); };
+        return [] { return UniquePtr<ITlsStream>(eastl::make_unique<FakeTlsStream>()); };
     }
 
     /// The server's end of the fake handshake and of the "encryption", for a hand-written server on an accepted Socket
@@ -187,7 +186,7 @@ namespace BECore::Tests {
             hello = true;
 
             const std::string answer = rejectReason.empty() ? "FAKE-OK\n" : "FAKE-REJECT " + rejectReason + "\n";
-            EXPECT_TRUE(peer.SendAll(BECore::AsBytes(eastl::string_view(answer.data(), answer.size()))));
+            EXPECT_TRUE(peer.SendAll(BECore::AsBytes(FromStd(answer))));
             return rejectReason.empty();
         }
     };

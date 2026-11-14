@@ -108,7 +108,7 @@ namespace BECore::Tests {
         ASSERT_FALSE(devices.empty());
         for (size_t i = 0; i < devices.size(); ++i) {
             const PreviewDevice& device = devices[i];
-            SCOPED_TRACE(eastl::string(device.name).c_str());
+            SCOPED_TRACE(String(device.name).c_str());
             EXPECT_FALSE(device.name.empty());
             EXPECT_GT(device.width, 0u);
             EXPECT_GT(device.height, device.width);  // portrait
@@ -284,7 +284,7 @@ namespace BECore::Tests {
 
     TEST(UIPreviewTest, EveryDeviceSafeAreaStaysInsideTheOutputAndIsNeverEmpty) {
         const PreviewDevice huge{"huge", 100, 200, 10000.0f, 10000.0f};
-        eastl::vector<const PreviewDevice*> devices{&huge};
+        Vector<const PreviewDevice*> devices{&huge};
         for (const PreviewDevice& device : UIPreview::GetDevices()) {
             devices.push_back(&device);
         }

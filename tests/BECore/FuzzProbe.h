@@ -19,7 +19,7 @@ namespace BECore {
 
             BE_REFLECT_FIELD int32_t id = 0;
             BE_REFLECT_FIELD float weight = 0.0f;
-            BE_REFLECT_FIELD eastl::string label;
+            BE_REFLECT_FIELD String label;
         };
 
         /// A type that holds its own kind, as a UI tree does: reading it recurses once per level of the document
@@ -27,7 +27,7 @@ namespace BECore {
             BE_CLASS(ProbeNode)
 
             BE_REFLECT_FIELD int32_t id = 0;
-            BE_REFLECT_FIELD eastl::vector<ProbeNode> children;
+            BE_REFLECT_FIELD Vector<ProbeNode> children;
         };
 
     }  // namespace FuzzProbeData
@@ -35,19 +35,19 @@ namespace BECore {
     namespace PropVisit {
 
         /// The property visitor has no general support for a vector of structs or of values by value (the inspector shows none): the fuzz targets edit none
-        inline bool Visit(IPropertyVisitor& /*v*/, eastl::vector<FuzzProbeData::ProbeLeaf>& /*leaves*/, eastl::string_view /*key*/) {
+        inline bool Visit(IPropertyVisitor& /*v*/, Vector<FuzzProbeData::ProbeLeaf>& /*leaves*/, StringView /*key*/) {
             return false;
         }
 
-        inline bool Visit(IPropertyVisitor& /*v*/, eastl::vector<FuzzProbeData::ProbeNode>& /*children*/, eastl::string_view /*key*/) {
+        inline bool Visit(IPropertyVisitor& /*v*/, Vector<FuzzProbeData::ProbeNode>& /*children*/, StringView /*key*/) {
             return false;
         }
 
-        inline bool Visit(IPropertyVisitor& /*v*/, eastl::vector<int32_t>& /*numbers*/, eastl::string_view /*key*/) {
+        inline bool Visit(IPropertyVisitor& /*v*/, Vector<int32_t>& /*numbers*/, StringView /*key*/) {
             return false;
         }
 
-        inline bool Visit(IPropertyVisitor& /*v*/, eastl::vector<eastl::string>& /*words*/, eastl::string_view /*key*/) {
+        inline bool Visit(IPropertyVisitor& /*v*/, Vector<String>& /*words*/, StringView /*key*/) {
             return false;
         }
 
@@ -70,13 +70,13 @@ namespace BECore {
             BE_REFLECT_FIELD uint64_t u64 = 0;
             BE_REFLECT_FIELD float f32 = 0.0f;
             BE_REFLECT_FIELD double f64 = 0.0;
-            BE_REFLECT_FIELD eastl::string text;
+            BE_REFLECT_FIELD String text;
             BE_REFLECT_FIELD PoolString name;
             BE_REFLECT_FIELD ProbeMode mode = ProbeMode::Auto;
             BE_REFLECT_FIELD ProbeLeaf leaf;
-            BE_REFLECT_FIELD eastl::vector<ProbeLeaf> leaves;
-            BE_REFLECT_FIELD eastl::vector<int32_t> numbers;
-            BE_REFLECT_FIELD eastl::vector<eastl::string> words;
+            BE_REFLECT_FIELD Vector<ProbeLeaf> leaves;
+            BE_REFLECT_FIELD Vector<int32_t> numbers;
+            BE_REFLECT_FIELD Vector<String> words;
             BE_REFLECT_FIELD ProbeNode tree;
         };
 

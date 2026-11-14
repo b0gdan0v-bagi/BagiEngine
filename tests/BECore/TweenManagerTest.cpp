@@ -27,7 +27,7 @@ namespace BECore::Tests {
 
         /// A float tween from 0 to kTo that records every value it was given
         struct Recorder {
-            eastl::vector<float> values;
+            Vector<float> values;
             int completed = 0;
             int cancelled = 0;
 
@@ -193,7 +193,7 @@ namespace BECore::Tests {
 
     TEST(TweenManagerTest, CompletionRunsOnceAfterTheLastValueAndNothingMoreAfterIt) {
         TweenManager tweens;
-        eastl::vector<int> log;  // 0 is a value, 1 the completion
+        Vector<int> log;  // 0 is a value, 1 the completion
         tweens.Start<float>(0.0f, kTo, Settings(kHalfSecond), [&log](const float&) { log.push_back(0); }, [&log] { log.push_back(1); });
 
         tweens.Advance(kQuarterSecond);
@@ -201,7 +201,7 @@ namespace BECore::Tests {
         tweens.Advance(kOneSecond);
         tweens.Advance(kOneSecond);
 
-        const eastl::vector<int> expected{0, 0, 1};
+        const Vector<int> expected{0, 0, 1};
         EXPECT_EQ(log, expected);
     }
 
@@ -363,20 +363,20 @@ namespace BECore::Tests {
 
     TEST(TweenManagerTest, TweensCompleteInTheOrderTheyWereStarted) {
         TweenManager tweens;
-        eastl::vector<int> order;
+        Vector<int> order;
         for (int id = 0; id < 3; ++id) {
             tweens.Start<float>(0.0f, kTo, Settings(kQuarterSecond), [](const float&) {}, [&order, id] { order.push_back(id); });
         }
 
         tweens.Advance(kQuarterSecond);
 
-        const eastl::vector<int> expected{0, 1, 2};
+        const Vector<int> expected{0, 1, 2};
         EXPECT_EQ(order, expected);
     }
 
     TEST(TweenManagerTest, StartOrderBeatsFinishOrderWithinOneAdvanceAndTimeBeatsStartOrderAcrossThem) {
         TweenManager tweens;
-        eastl::vector<char> order;
+        Vector<char> order;
         // A starts first but waits longer: B finishes in an earlier Advance
         tweens.Start<float>(0.0f, kTo, Settings(kQuarterSecond, kHalfSecond), [](const float&) {}, [&] { order.push_back('A'); });
         tweens.Start<float>(0.0f, kTo, Settings(kQuarterSecond, 0.0f), [](const float&) {}, [&] { order.push_back('B'); });
@@ -385,7 +385,7 @@ namespace BECore::Tests {
         tweens.Advance(kQuarterSecond);
         tweens.Advance(kQuarterSecond);
 
-        const eastl::vector<char> expected{'B', 'A'};
+        const Vector<char> expected{'B', 'A'};
         EXPECT_EQ(order, expected);
     }
 
@@ -412,15 +412,15 @@ namespace BECore::Tests {
 
     TEST(TweenManagerTest, CancelAllCancelsWithCallbacksInStartOrder) {
         TweenManager tweens;
-        eastl::vector<int> order;
-        eastl::vector<IntrusivePtr<TweenHandle>> handles;
+        Vector<int> order;
+        Vector<IntrusivePtr<TweenHandle>> handles;
         for (int id = 0; id < 3; ++id) {
             handles.push_back(tweens.Start<float>(0.0f, kTo, Settings(kOneSecond), [](const float&) {}, {}, [&order, id] { order.push_back(id); }));
         }
 
         tweens.CancelAll();
 
-        const eastl::vector<int> expected{0, 1, 2};
+        const Vector<int> expected{0, 1, 2};
         EXPECT_EQ(order, expected);
         EXPECT_EQ(tweens.GetActiveCount(), 0u);
         for (const auto& handle : handles) {
@@ -518,7 +518,7 @@ namespace BECore::Tests {
 
     TEST(TweenManagerTest, CancelAllFromACompletionCallbackCancelsTheRestOfTheWalkAndThePending) {
         TweenManager tweens;
-        eastl::vector<int> cancelOrder;
+        Vector<int> cancelOrder;
         int laterSetterCalls = 0;
         Recorder started;  // started by the callback before it calls CancelAll: it sits in the pending list
         IntrusivePtr<TweenHandle> startedHandle;
@@ -528,14 +528,14 @@ namespace BECore::Tests {
                 startedHandle = started.Start(tweens, Settings(kQuarterSecond));
                 tweens.CancelAll();
             });
-        eastl::vector<IntrusivePtr<TweenHandle>> later;
+        Vector<IntrusivePtr<TweenHandle>> later;
         for (int id = 1; id <= kLaterTweenCount; ++id) {
             later.push_back(tweens.Start<float>(0.0f, kTo, Settings(kOneSecond), [&](const float&) { ++laterSetterCalls; }, {}, [&cancelOrder, id] { cancelOrder.push_back(id); }));
         }
 
         tweens.Advance(kQuarterSecond);
 
-        const eastl::vector<int> expected{1, 2};
+        const Vector<int> expected{1, 2};
         EXPECT_EQ(cancelOrder, expected);  // in start order
         EXPECT_EQ(laterSetterCalls, 0);
         EXPECT_EQ(completing->GetState(), TweenState::Completed);  // it finished before CancelAll, which leaves it alone
@@ -661,7 +661,7 @@ namespace BECore::Tests {
     TEST(TweenManagerTest, TenThousandTweensFinishInStartOrder) {
         constexpr int kCount = 10000;
         TweenManager tweens;
-        eastl::vector<int> order;
+        Vector<int> order;
         order.reserve(kCount);
         for (int id = 0; id < kCount; ++id) {
             tweens.Start<float>(0.0f, kTo, Settings(kQuarterSecond), [](const float&) {}, [&order, id] { order.push_back(id); });

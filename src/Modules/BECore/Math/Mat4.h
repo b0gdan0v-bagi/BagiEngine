@@ -101,7 +101,7 @@ namespace BECore {
          * Singular means a pivot below `kSingularTolerance` times the largest element, which is what a determinant near zero looks like
          * without depending on the overall scale of the matrix (a uniform scale of 0.01 is still invertible).
          */
-        [[nodiscard]] std::optional<Mat4> Inverse() const {
+        [[nodiscard]] Optional<Mat4> Inverse() const {
             double a[kDimension][kDimension];
             double inverse[kDimension][kDimension];
             double largest = 0.0;

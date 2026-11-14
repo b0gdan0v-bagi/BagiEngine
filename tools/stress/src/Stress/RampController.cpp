@@ -21,17 +21,17 @@ namespace BECore::Stress {
             return std::max<uint32_t>(1, static_cast<uint32_t>(static_cast<double>(lo) * kRampPrecision));
         }
 
-        void AddBool(eastl::string& line, eastl::string_view key, bool value) {
+        void AddBool(String& line, StringView key, bool value) {
             line += '"';
             line.append(key.data(), key.size());
             line += value ? "\":true," : "\":false,";
         }
 
-        void AddInteger(eastl::string& line, eastl::string_view key, uint32_t value) {
+        void AddInteger(String& line, StringView key, uint32_t value) {
             line += Format("\"{}\":{},", key, value);
         }
 
-        void AddText(eastl::string& line, eastl::string_view key, eastl::string_view value) {
+        void AddText(String& line, StringView key, StringView value) {
             line += Format("\"{}\":\"{}\",", key, value);
         }
 
@@ -61,7 +61,7 @@ namespace BECore::Stress {
 
         // The step is over: its verdict is the percentile of the measured frames, on a sorted copy (no allocation)
         ++_result.steps;
-        eastl::array<double, kMeasureFrames> sorted = _window;
+        Array<double, kMeasureFrames> sorted = _window;
         eastl::sort(sorted.begin(), sorted.end());
         OnStepEnd(NearestRank(sorted, kRampPercentile) <= kRampBudgetMs);
         return {_count, _phase == Phase::Done};
@@ -129,8 +129,8 @@ namespace BECore::Stress {
         _result.verified = verified;
     }
 
-    eastl::string FormatRampLine(const RampResult& result, StressMeasure measure, const RampRunContext& context) {
-        eastl::string line;
+    String FormatRampLine(const RampResult& result, StressMeasure measure, const RampRunContext& context) {
+        String line;
         line.reserve(kLineReserve);
         // Sorted by key, byte order, as the fixed run's line is
         AddBool(line, "aborted", result.aborted);

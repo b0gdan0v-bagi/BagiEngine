@@ -34,7 +34,7 @@ namespace BECore::Fuzz {
      * Any change of the length breaks the payload size of a binary stream, and the load stops at the header, before the checks that matter: a target
      * that reads a binary stream feeds the repaired bytes too. Empty when there is no room for a header.
      */
-    eastl::vector<uint8_t> WithTrueBinaryHeader(const uint8_t* data, size_t size);
+    Vector<uint8_t> WithTrueBinaryHeader(const uint8_t* data, size_t size);
 
     // =============================================================================
     // The targets (one file each, tests/Fuzz/Fuzz<Name>.cpp)
@@ -79,6 +79,6 @@ namespace BECore::Fuzz {
     void FuzzUiGeometry(const uint8_t* data, size_t size);
 
     /// A save file as the seeds make it: the bytes SaveGameService::Save writes for the probe state under the given game id and schema version
-    eastl::vector<uint8_t> MakeSaveFileBytes(eastl::string_view game, uint32_t version);
+    Vector<uint8_t> MakeSaveFileBytes(StringView game, uint32_t version);
 
 }  // namespace BECore::Fuzz

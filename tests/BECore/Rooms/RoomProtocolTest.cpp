@@ -7,23 +7,23 @@ namespace BECore::Tests {
 
     namespace {
 
-        constexpr eastl::string_view kPlainPing = R"({"v":1,"type":"ping"})";
+        constexpr StringView kPlainPing = R"({"v":1,"type":"ping"})";
 
-        eastl::string ErrorCodeOf(const std::expected<ClientMessage, ControlError>& parsed) {
-            return parsed ? eastl::string("<ok>") : parsed.error().code;
+        String ErrorCodeOf(const std::expected<ClientMessage, ControlError>& parsed) {
+            return parsed ? String("<ok>") : parsed.error().code;
         }
 
-        eastl::string ErrorCodeOfText(eastl::string_view text, size_t maxBytes = RoomLimits::kMaxMessageBytes) {
+        String ErrorCodeOfText(StringView text, size_t maxBytes = RoomLimits::kMaxMessageBytes) {
             return ErrorCodeOf(ParseClientMessage(text, maxBytes));
         }
 
-        eastl::string Repeat(char c, size_t count) {
-            return eastl::string(count, c);
+        String Repeat(char c, size_t count) {
+            return String(count, c);
         }
 
         /// A message of @p type with the members of @p members (a JSON object text without braces, may be empty)
-        eastl::string Message(eastl::string_view type, eastl::string_view members = {}) {
-            eastl::string text = Format(R"({{"v":1,"type":"{}")", type);
+        String Message(StringView type, StringView members = {}) {
+            String text = Format(R"({{"v":1,"type":"{}")", type);
             if (!members.empty()) {
                 text.append(",");
                 text.append(members.data(), members.size());
@@ -32,7 +32,7 @@ namespace BECore::Tests {
             return text;
         }
 
-        Json ParseOrNull(const eastl::string& text) {
+        Json ParseOrNull(const String& text) {
             auto parsed = ParseJson(text);
             return parsed ? *parsed : Json();
         }
@@ -47,7 +47,7 @@ namespace BECore::Tests {
 
         struct BadInput {
             const char* label;
-            eastl::string text;
+            String text;
             const char* code;
         };
 
@@ -82,7 +82,7 @@ namespace BECore::Tests {
 
     TEST(RoomProtocolTest, CreateRoomOptionsMustBeAnObject) {
         for (const char* options : {"null", "[]", "[1]", "\"x\"", "5", "true", "1.5"}) {
-            const eastl::string text = Message("create_room", Format(R"("game":"g","name":"Bob","options":{})", options));
+            const String text = Message("create_room", Format(R"("game":"g","name":"Bob","options":{})", options));
             EXPECT_EQ(ErrorCodeOfText(text), RoomErrors::kBadMessage) << options;
         }
     }
@@ -148,7 +148,7 @@ namespace BECore::Tests {
 
     TEST(RoomProtocolTest, CreateRoomPublicOfAnotherTypeIsBadMessage) {
         for (const char* value : {"\"true\"", "\"\"", "1", "0", "null", "[]", "[true]", "{}", "1.5"}) {
-            const eastl::string text = Message("create_room", Format(R"("game":"g","name":"Bob","public":{})", value));
+            const String text = Message("create_room", Format(R"("game":"g","name":"Bob","public":{})", value));
             EXPECT_EQ(ErrorCodeOfText(text), RoomErrors::kBadMessage) << value;
         }
     }
@@ -177,7 +177,7 @@ namespace BECore::Tests {
     }
 
     TEST(RoomProtocolTest, ListRoomsNeedsAGameOfTheRightSize) {
-        const eastl::vector<eastl::string> bad = {
+        const Vector<String> bad = {
             Message("list_rooms"),
             Message("list_rooms", R"("game":"")"),
             Message("list_rooms", Format(R"("game":"{}")", Repeat('g', RoomLimits::kMaxGameNameBytes + 1))),
@@ -185,21 +185,21 @@ namespace BECore::Tests {
             Message("list_rooms", R"("game":null)"),
             Message("list_rooms", R"("game":["g"])"),
         };
-        for (const eastl::string& text : bad) {
+        for (const String& text : bad) {
             EXPECT_EQ(ErrorCodeOfText(text), RoomErrors::kBadMessage) << text.c_str();
         }
     }
 
     TEST(RoomProtocolTest, TheSizeAndNulRulesApplyToTheNewTypes) {
-        const eastl::string list = Message("list_rooms", R"("game":"g")");
+        const String list = Message("list_rooms", R"("game":"g")");
         EXPECT_EQ(ErrorCodeOfText(list, list.size()), "<ok>");
         EXPECT_EQ(ErrorCodeOfText(list, list.size() - 1), RoomErrors::kMessageTooLarge);
-        eastl::string withNul = list;
+        String withNul = list;
         withNul.insert(withNul.size() - 1, 1, '\0');
         EXPECT_EQ(ErrorCodeOfText(withNul), RoomErrors::kBadMessage);
-        const eastl::string create = Message("create_room", R"("game":"g","name":"Bob","public":true)");
+        const String create = Message("create_room", R"("game":"g","name":"Bob","public":true)");
         EXPECT_EQ(ErrorCodeOfText(create, create.size() - 1), RoomErrors::kMessageTooLarge);
-        eastl::string nulAfter = list;
+        String nulAfter = list;
         nulAfter.append(1, '\0');
         nulAfter.append(kPlainPing.data(), kPlainPing.size());
         EXPECT_EQ(ErrorCodeOfText(nulAfter), RoomErrors::kBadMessage);
@@ -226,11 +226,11 @@ namespace BECore::Tests {
         action.action = Json::object();
         action.action["type"] = "play";
 
-        const eastl::vector<ClientMessage> messages = {
+        const Vector<ClientMessage> messages = {
             create, publicCreate, joinByName, reconnect, ChooseSeatMessage{2}, StartMessage{}, action, LeaveMessage{}, PingMessage{}, ListRoomsMessage{"mahjong"},
         };
         for (const ClientMessage& original : messages) {
-            const eastl::string text = SerializeClientMessage(original);
+            const String text = SerializeClientMessage(original);
             const auto parsed = ParseClientMessage(text);
             ASSERT_TRUE(parsed.has_value()) << text.c_str();
             EXPECT_EQ(parsed->index(), original.index()) << text.c_str();
@@ -253,22 +253,22 @@ namespace BECore::Tests {
     // ---- Client messages: malformed input -----------------------------------------------------------------------------------------
 
     TEST(RoomProtocolTest, MalformedInputGivesTheStableCodeAndNeverAborts) {
-        const eastl::string bomb = Repeat('[', RoomLimits::kMaxMessageBytes);
-        eastl::string balancedBomb = Repeat('[', RoomLimits::kMaxMessageBytes / 2);
+        const String bomb = Repeat('[', RoomLimits::kMaxMessageBytes);
+        String balancedBomb = Repeat('[', RoomLimits::kMaxMessageBytes / 2);
         balancedBomb.append(RoomLimits::kMaxMessageBytes / 2, ']');
-        eastl::string bombInsideAMember = R"({"v":1,"type":"ping","x":)";
+        String bombInsideAMember = R"({"v":1,"type":"ping","x":)";
         const size_t depth = (RoomLimits::kMaxMessageBytes - bombInsideAMember.size() - 1) / 2;
         bombInsideAMember.append(depth, '[');
         bombInsideAMember.append(depth, ']');
         bombInsideAMember.append("}");
         ASSERT_LE(bombInsideAMember.size(), RoomLimits::kMaxMessageBytes);
 
-        const eastl::string tooLong = Message("ping", Format(R"("pad":"{}")", Repeat('x', RoomLimits::kMaxMessageBytes)));
-        const eastl::string invalidUtf8 = Format("{{\"v\":1,\"type\":\"ping\",\"pad\":\"{}\"}}", "\xC3\x28");
-        const eastl::string overlong = Format("{{\"v\":1,\"type\":\"ping\",\"pad\":\"{}\"}}", "\xC0\xAF");
-        const eastl::string nulByte = eastl::string("{\"v\":1,\"type\":\"ping\"}\0garbage", 24);
+        const String tooLong = Message("ping", Format(R"("pad":"{}")", Repeat('x', RoomLimits::kMaxMessageBytes)));
+        const String invalidUtf8 = Format("{{\"v\":1,\"type\":\"ping\",\"pad\":\"{}\"}}", "\xC3\x28");
+        const String overlong = Format("{{\"v\":1,\"type\":\"ping\",\"pad\":\"{}\"}}", "\xC0\xAF");
+        const String nulByte = String("{\"v\":1,\"type\":\"ping\"}\0garbage", 24);
 
-        const eastl::vector<BadInput> table = {
+        const Vector<BadInput> table = {
             {"empty", "", "bad_message"},
             {"spaces", "   ", "bad_message"},
             {"not json", "hello", "bad_message"},
@@ -363,7 +363,7 @@ namespace BECore::Tests {
             {"action: action string", Message("action", R"("version":1,"action":"play")"), "bad_message"},
         };
         for (const BadInput& input : table) {
-            EXPECT_EQ(ErrorCodeOfText(input.text), eastl::string(input.code)) << input.label;
+            EXPECT_EQ(ErrorCodeOfText(input.text), String(input.code)) << input.label;
         }
         // Nesting is bounded whatever member it is in (see TheNestingDepthIsBounded): `options` and `action` are copied, and that recurses
         EXPECT_EQ(ErrorCodeOfText(bombInsideAMember), "bad_message");
@@ -371,8 +371,8 @@ namespace BECore::Tests {
 
     TEST(RoomProtocolTest, TheNestingDepthIsBounded) {
         // A message of 16 KiB can nest 8000 levels; copying `options` or `action` (the hub keeps the first until the start) recurses once per level on the reader thread
-        const auto deep = [](eastl::string_view prefix, size_t levels) {
-            eastl::string text(prefix.data(), prefix.size());
+        const auto deep = [](StringView prefix, size_t levels) {
+            String text(prefix.data(), prefix.size());
             text.append(levels, '[');
             text.append(levels, ']');
             text += "}}";
@@ -380,9 +380,9 @@ namespace BECore::Tests {
         };
         // The message object and the member are two levels of their own
         constexpr size_t kOwnLevels = 2;
-        const eastl::string createPrefix = R"({"v":1,"type":"create_room","game":"demo","name":"Ann","options":{"a":)";
-        const eastl::string actionPrefix = R"({"v":1,"type":"action","version":1,"action":{"a":)";
-        for (const eastl::string& prefix : {createPrefix, actionPrefix}) {
+        const String createPrefix = R"({"v":1,"type":"create_room","game":"demo","name":"Ann","options":{"a":)";
+        const String actionPrefix = R"({"v":1,"type":"action","version":1,"action":{"a":)";
+        for (const String& prefix : {createPrefix, actionPrefix}) {
             EXPECT_EQ(ErrorCodeOfText(deep(prefix, RoomLimits::kMaxClientJsonDepth - kOwnLevels)), "<ok>") << prefix.c_str();
             EXPECT_EQ(ErrorCodeOfText(deep(prefix, RoomLimits::kMaxClientJsonDepth - kOwnLevels + 1)), "bad_message") << prefix.c_str();
             EXPECT_EQ(ErrorCodeOfText(deep(prefix, 7000)), "bad_message") << prefix.c_str();
@@ -401,9 +401,9 @@ namespace BECore::Tests {
 
     TEST(RoomProtocolTest, EveryByteValueAsAMessageNeverAborts) {
         for (int byte = 0; byte < 256; ++byte) {
-            const eastl::string one(1, static_cast<char>(byte));
+            const String one(1, static_cast<char>(byte));
             EXPECT_FALSE(ParseClientMessage(one).has_value()) << byte;
-            const eastl::string inside = Format("{{\"v\":1,\"type\":\"join_room\",\"code\":\"{}\",\"name\":\"{}\"}}", one, one);
+            const String inside = Format("{{\"v\":1,\"type\":\"join_room\",\"code\":\"{}\",\"name\":\"{}\"}}", one, one);
             const auto parsedInside = ParseClientMessage(inside);
             EXPECT_TRUE(parsedInside.has_value() || !parsedInside.error().code.empty()) << byte;
         }
@@ -427,7 +427,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(SanitizePlayerName(Repeat('a', RoomLimits::kMaxNameBytes + 1)).has_value());
         EXPECT_FALSE(SanitizePlayerName("a\tb").has_value());
         EXPECT_FALSE(SanitizePlayerName("\tab").has_value());
-        EXPECT_FALSE(SanitizePlayerName(eastl::string_view("a\0b", 3)).has_value());
+        EXPECT_FALSE(SanitizePlayerName(StringView("a\0b", 3)).has_value());
         // Invalid UTF-8: a lone continuation byte, a truncated sequence, an overlong form, a surrogate, a value above U+10FFFF
         EXPECT_FALSE(SanitizePlayerName("\x80").has_value());
         EXPECT_FALSE(SanitizePlayerName("ab\xC3").has_value());
@@ -501,7 +501,7 @@ namespace BECore::Tests {
         for (const auto& [phase, name] : {std::pair{RoomPhase::Lobby, "lobby"}, std::pair{RoomPhase::Playing, "playing"}, std::pair{RoomPhase::Finished, "finished"}}) {
             lobby.phase = phase;
             const Json message = ParseOrNull(MakeLobbyMessage(lobby));
-            EXPECT_EQ(GetJsonString(message, "phase"), eastl::string(name));
+            EXPECT_EQ(GetJsonString(message, "phase"), String(name));
             EXPECT_EQ(GetJsonInt(message, "host"), -1);
         }
     }
@@ -511,7 +511,7 @@ namespace BECore::Tests {
         lobby.room = "ABCDE";
         lobby.game = "fake";
         lobby.seats.push_back(LobbySeat{0, SeatKind::Human, "bad\xC3\x28name", true});
-        const eastl::string text = MakeLobbyMessage(lobby);
+        const String text = MakeLobbyMessage(lobby);
         const auto parsed = ParseJson(text);
         ASSERT_TRUE(parsed.has_value()) << text.c_str();
         const Json* seats = FindJsonMember(*parsed, "seats");
@@ -566,7 +566,7 @@ namespace BECore::Tests {
     }
 
     TEST(RoomProtocolTest, EveryServerMessageCarriesTheVersionAndAType) {
-        const eastl::vector<eastl::string> messages = {
+        const Vector<String> messages = {
             MakeJoinedMessage("ABCDE", 1, "t", 0, false),
             MakeLobbyMessage(LobbySnapshot{}),
             MakeViewMessage("ABCDE", 0, 0, false, Json::object(), Json::array()),
@@ -575,7 +575,7 @@ namespace BECore::Tests {
             MakePongMessage(),
             MakeRoomListMessage(RoomListMessage{}),
         };
-        for (const eastl::string& text : messages) {
+        for (const String& text : messages) {
             const Json message = ParseOrNull(text);
             EXPECT_EQ(GetJsonInt(message, "v"), kRoomProtocolVersion) << text.c_str();
             EXPECT_TRUE(GetJsonString(message, "type").has_value()) << text.c_str();
@@ -596,7 +596,7 @@ namespace BECore::Tests {
 
     namespace {
 
-        constexpr eastl::string_view kToken = "00112233445566778899aabbccddeeff";
+        constexpr StringView kToken = "00112233445566778899aabbccddeeff";
 
         template <typename T>
         const T* ServerAs(const std::expected<ServerMessage, ControlError>& parsed) {
@@ -606,17 +606,17 @@ namespace BECore::Tests {
             return std::get_if<T>(&*parsed);
         }
 
-        eastl::string ServerErrorCodeOf(eastl::string_view text, size_t maxBytes = RoomLimits::kMaxServerMessageBytes) {
+        String ServerErrorCodeOf(StringView text, size_t maxBytes = RoomLimits::kMaxServerMessageBytes) {
             const auto parsed = ParseServerMessage(text, maxBytes);
-            return parsed ? eastl::string("<ok>") : parsed.error().code;
+            return parsed ? String("<ok>") : parsed.error().code;
         }
 
         /// A `lobby` message with @p seats as the JSON text of the array
-        eastl::string LobbyWith(eastl::string_view members) {
+        String LobbyWith(StringView members) {
             return Message("lobby", members);
         }
 
-        constexpr eastl::string_view kGoodLobbyMembers = R"("room":"ABCDE","game":"g","phase":"lobby","host":0,"seats":[])";
+        constexpr StringView kGoodLobbyMembers = R"("room":"ABCDE","game":"g","phase":"lobby","host":0,"seats":[])";
 
     }  // namespace
 
@@ -680,7 +680,7 @@ namespace BECore::Tests {
         EXPECT_EQ(MakeLobbyMessage(*read), MakeLobbyMessage(lobby));
 
         // A reader keeps only booleans and integers; options that are not an object are a bad message
-        const eastl::string mixed = R"({"v":1,"type":"lobby","room":"ABCDE","game":"fake","phase":"lobby","host":0,"seats":[],"options":{"a":true,"b":2,"c":"text","d":1.5,"e":[1]}})";
+        const String mixed = R"({"v":1,"type":"lobby","room":"ABCDE","game":"fake","phase":"lobby","host":0,"seats":[],"options":{"a":true,"b":2,"c":"text","d":1.5,"e":[1]}})";
         const auto mixedParsed = ParseServerMessage(mixed);
         const auto* kept = ServerAs<LobbyMessage>(mixedParsed);
         ASSERT_NE(kept, nullptr);
@@ -688,7 +688,7 @@ namespace BECore::Tests {
         expected["a"] = true;
         expected["b"] = 2;
         EXPECT_EQ(kept->options, expected);
-        const eastl::string notAnObject = R"({"v":1,"type":"lobby","room":"ABCDE","game":"fake","phase":"lobby","host":0,"seats":[],"options":[1]})";
+        const String notAnObject = R"({"v":1,"type":"lobby","room":"ABCDE","game":"fake","phase":"lobby","host":0,"seats":[],"options":[1]})";
         EXPECT_FALSE(ParseServerMessage(notAnObject).has_value());
     }
 
@@ -768,26 +768,26 @@ namespace BECore::Tests {
     }
 
     TEST(RoomProtocolTest, ParseServerMessageRefusesWhatIsNotAWellFormedMessage) {
-        const eastl::string goodJoined = Format(R"("room":"ABCDE","player":1,"token":"{}","seat":0,"host":false)", kToken);
-        const eastl::string goodView = R"("room":"ABCDE","seat":0,"version":1,"finished":false,"view":{},"actions":[])";
-        const eastl::string bomb = Repeat('[', RoomLimits::kMaxServerMessageBytes);
-        eastl::string balancedBomb = Repeat('[', RoomLimits::kMaxServerMessageBytes / 2);
+        const String goodJoined = Format(R"("room":"ABCDE","player":1,"token":"{}","seat":0,"host":false)", kToken);
+        const String goodView = R"("room":"ABCDE","seat":0,"version":1,"finished":false,"view":{},"actions":[])";
+        const String bomb = Repeat('[', RoomLimits::kMaxServerMessageBytes);
+        String balancedBomb = Repeat('[', RoomLimits::kMaxServerMessageBytes / 2);
         balancedBomb.append(RoomLimits::kMaxServerMessageBytes / 2, ']');
-        const eastl::string nulByte = eastl::string("{\"v\":1,\"type\":\"pong\"}\0garbage", 24);
-        const eastl::string invalidUtf8 = Format("{{\"v\":1,\"type\":\"left\",\"reason\":\"{}\"}}", "\xC3\x28");
+        const String nulByte = String("{\"v\":1,\"type\":\"pong\"}\0garbage", 24);
+        const String invalidUtf8 = Format("{{\"v\":1,\"type\":\"left\",\"reason\":\"{}\"}}", "\xC3\x28");
         // Valid JSON in the size limit, nested far deeper than a game's view is: the copy of "view" or "actions" would recurse
         const size_t bombDepth = (RoomLimits::kMaxServerMessageBytes - 256) / 2;
-        const auto bombIn = [&](eastl::string_view member, size_t levels) {
-            eastl::string open = Repeat('[', levels);
+        const auto bombIn = [&](StringView member, size_t levels) {
+            String open = Repeat('[', levels);
             open.append(levels, ']');
-            const eastl::string others = member == "view" ? R"("actions":[])" : R"("view":{})";
+            const String others = member == "view" ? R"("actions":[])" : R"("view":{})";
             return Message("view", Format(R"("room":"ABCDE","seat":0,"version":1,"finished":false,{},"{}":{})", others, member, open));
         };
-        const eastl::string bombInsideView = bombIn("view", bombDepth);
-        const eastl::string bombInsideActions = bombIn("actions", bombDepth);
-        const eastl::string justOverTheDepth = bombIn("view", RoomLimits::kMaxServerJsonDepth);
+        const String bombInsideView = bombIn("view", bombDepth);
+        const String bombInsideActions = bombIn("actions", bombDepth);
+        const String justOverTheDepth = bombIn("view", RoomLimits::kMaxServerJsonDepth);
 
-        const eastl::vector<BadInput> table = {
+        const Vector<BadInput> table = {
             {"empty", "", "bad_message"},
             {"not json", "hello", "bad_message"},
             {"truncated", R"({"v":1,"type":"pong")", "bad_message"},
@@ -859,7 +859,7 @@ namespace BECore::Tests {
             {"left: reason number", Message("left", R"("reason":1)"), "bad_message"},
         };
         for (const BadInput& input : table) {
-            EXPECT_EQ(ServerErrorCodeOf(input.text), eastl::string(input.code)) << input.label;
+            EXPECT_EQ(ServerErrorCodeOf(input.text), String(input.code)) << input.label;
         }
         // The same members, well formed, pass
         EXPECT_EQ(ServerErrorCodeOf(Message("joined", goodJoined)), "<ok>");
@@ -871,7 +871,7 @@ namespace BECore::Tests {
     }
 
     TEST(RoomProtocolTest, ParseServerMessageBoundsTheSeatsOfALobby) {
-        eastl::string seats = "[";
+        String seats = "[";
         for (size_t seat = 0; seat <= RoomLimits::kMaxLobbySeats; ++seat) {
             seats.append(seat == 0 ? "" : ",");
             seats.append(Format(R"({{"seat":{},"kind":"empty"}})", seat));
@@ -881,12 +881,12 @@ namespace BECore::Tests {
     }
 
     TEST(RoomProtocolTest, ParseServerMessageChecksTheSizeFirst) {
-        const eastl::string pong = MakePongMessage();
+        const String pong = MakePongMessage();
         EXPECT_EQ(ServerErrorCodeOf(pong, pong.size()), "<ok>");
         EXPECT_EQ(ServerErrorCodeOf(pong, pong.size() - 1), RoomErrors::kMessageTooLarge);
         EXPECT_EQ(ServerErrorCodeOf(Repeat('x', RoomLimits::kMaxServerMessageBytes + 1)), RoomErrors::kMessageTooLarge);
         // A view of almost a megabyte is read, a byte more is not
-        eastl::string big = Message("pong", Format(R"("pad":"{}")", ""));
+        String big = Message("pong", Format(R"("pad":"{}")", ""));
         big.erase(big.size() - 1);
         big.append(R"(,"pad":")");
         const size_t padding = RoomLimits::kMaxServerMessageBytes - big.size() - 2;
@@ -900,9 +900,9 @@ namespace BECore::Tests {
 
     TEST(RoomProtocolTest, ParseServerMessageNeverAbortsOnAnyByte) {
         for (int byte = 0; byte < 256; ++byte) {
-            const eastl::string one(1, static_cast<char>(byte));
+            const String one(1, static_cast<char>(byte));
             EXPECT_FALSE(ParseServerMessage(one).has_value()) << byte;
-            const eastl::string inside = Format("{{\"v\":1,\"type\":\"error\",\"code\":\"{}\",\"message\":\"{}\"}}", one, one);
+            const String inside = Format("{{\"v\":1,\"type\":\"error\",\"code\":\"{}\",\"message\":\"{}\"}}", one, one);
             const auto parsed = ParseServerMessage(inside);
             EXPECT_TRUE(parsed.has_value() || !parsed.error().code.empty()) << byte;
         }
@@ -926,7 +926,7 @@ namespace BECore::Tests {
         }
         Json view = Json::object();
         view["hand"] = hand;
-        const eastl::string text = MakeViewMessage("ABCDE", 0, 5, false, view, Json::array());
+        const String text = MakeViewMessage("ABCDE", 0, 5, false, view, Json::array());
         ASSERT_GT(text.size(), RoomLimits::kMaxMessageBytes);
         ASSERT_LT(text.size(), RoomLimits::kMaxServerMessageBytes);
         const auto parsedView = ParseServerMessage(text);
@@ -939,7 +939,7 @@ namespace BECore::Tests {
 
     namespace {
 
-        RoomListing MakeListing(eastl::string_view code, int taken, int seats) {
+        RoomListing MakeListing(StringView code, int taken, int seats) {
             RoomListing listing;
             listing.room = code;
             listing.host = "Ann";
@@ -949,11 +949,11 @@ namespace BECore::Tests {
         }
 
         /// A `rooms` entry as JSON text with the members of @p members
-        eastl::string RoomsWith(eastl::string_view entries, eastl::string_view more = "false") {
+        String RoomsWith(StringView entries, StringView more = "false") {
             return Message("rooms", Format(R"("game":"g","rooms":[{}],"more":{})", entries, more));
         }
 
-        constexpr eastl::string_view kGoodEntry = R"({"room":"ABCDE","host":"Ann","taken":1,"seats":4,"started":false})";
+        constexpr StringView kGoodEntry = R"({"room":"ABCDE","host":"Ann","taken":1,"seats":4,"started":false})";
 
     }  // namespace
 
@@ -969,7 +969,7 @@ namespace BECore::Tests {
         list.rooms.push_back(second);
         list.more = true;
 
-        const eastl::string text = MakeRoomListMessage(list);
+        const String text = MakeRoomListMessage(list);
         const Json json = ParseOrNull(text);
         EXPECT_EQ(GetJsonString(json, "type"), "rooms");
         EXPECT_EQ(GetJsonInt(json, "v"), 1);
@@ -1003,7 +1003,7 @@ namespace BECore::Tests {
 
     TEST(RoomProtocolTest, RoomsMessageReadsTheCapAndRefusesOneMore) {
         const auto entries = [](size_t count) {
-            eastl::string text;
+            String text;
             for (size_t i = 0; i < count; ++i) {
                 text.append(i == 0 ? "" : ",");
                 text.append(kGoodEntry.data(), kGoodEntry.size());
@@ -1030,10 +1030,10 @@ namespace BECore::Tests {
     }
 
     TEST(RoomProtocolTest, RoomsMessageRefusesWhatIsNotAWellFormedList) {
-        const auto entryWith = [](eastl::string_view room, eastl::string_view host, eastl::string_view taken, eastl::string_view seats, eastl::string_view started, eastl::string_view extra = {}) {
+        const auto entryWith = [](StringView room, StringView host, StringView taken, StringView seats, StringView started, StringView extra = {}) {
             return Format(R"({{"room":{},"host":{},"taken":{},"seats":{},"started":{}{}}})", room, host, taken, seats, started, extra);
         };
-        const auto bad = [&](const char* label, const eastl::string& entry) { EXPECT_EQ(ServerErrorCodeOf(RoomsWith(entry)), "bad_message") << label; };
+        const auto bad = [&](const char* label, const String& entry) { EXPECT_EQ(ServerErrorCodeOf(RoomsWith(entry)), "bad_message") << label; };
         EXPECT_EQ(ServerErrorCodeOf(RoomsWith(entryWith("\"ABCDE\"", "\"Ann\"", "4", "4", "false"))), "<ok>");
         EXPECT_EQ(ServerErrorCodeOf(RoomsWith(entryWith("\"ABCDE\"", "\"Ann\"", "0", "1", "true"))), "<ok>");
         EXPECT_EQ(ServerErrorCodeOf(RoomsWith(entryWith("\"ABCDE\"", "\"Ann\"", "1", "64", "false"))), "<ok>");
@@ -1061,7 +1061,7 @@ namespace BECore::Tests {
         bad("an entry that is an array", "[]");
         bad("a missing host", R"({"room":"ABCDE","taken":1,"seats":4,"started":false})");
         bad("a missing seats", R"({"room":"ABCDE","host":"Ann","taken":1,"started":false})");
-        eastl::string tooManyOptions = R"(,"options":{)";
+        String tooManyOptions = R"(,"options":{)";
         for (size_t i = 0; i <= RoomLimits::kMaxLobbyOptions; ++i) {
             tooManyOptions.append(Format(R"({}"o{}":1)", i == 0 ? "" : ",", i));
         }
@@ -1077,17 +1077,16 @@ namespace BECore::Tests {
     }
 
     TEST(RoomProtocolTest, RoomsMessageIgnoresUnknownMembersAndKeepsStringsAsTheyCame) {
-        const eastl::string text =
-            Message("rooms", R"("game":"g","more":false,"extra":{"a":[1]},"rooms":[{"room":"ABCDE","host":"A\u00e9 n","taken":1,"seats":4,"started":false,"since":5,"extra":null}])");
+        const String text = Message("rooms", R"("game":"g","more":false,"extra":{"a":[1]},"rooms":[{"room":"ABCDE","host":"A\u00e9 n","taken":1,"seats":4,"started":false,"since":5,"extra":null}])");
         const auto parsed = ParseServerMessage(text);
         const auto* read = ServerAs<RoomListMessage>(parsed);
         ASSERT_NE(read, nullptr);
         ASSERT_EQ(read->rooms.size(), 1u);
         EXPECT_EQ(read->rooms[0].host, "A\xC3\xA9 n");
         // The size and NUL rules of the reader apply to the new type too
-        const eastl::string rooms = MakeRoomListMessage(RoomListMessage{});
+        const String rooms = MakeRoomListMessage(RoomListMessage{});
         EXPECT_EQ(ServerErrorCodeOf(rooms, rooms.size() - 1), RoomErrors::kMessageTooLarge);
-        eastl::string withNul = rooms;
+        String withNul = rooms;
         withNul.insert(withNul.size() - 1, 1, '\0');
         EXPECT_EQ(ServerErrorCodeOf(withNul), "bad_message");
     }

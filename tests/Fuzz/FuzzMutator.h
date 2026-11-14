@@ -7,7 +7,7 @@ namespace BECore::Fuzz {
     /// The largest input the fuzzers feed to a target (the libFuzzer runs use -max_len with the same number)
     inline constexpr size_t kMaxFuzzInputSize = 64 * 1024;
 
-    using FuzzBytes = eastl::vector<uint8_t>;
+    using FuzzBytes = Vector<uint8_t>;
 
     /**
      * @brief xorshift64*: the generator of the mutator, with an explicit seed

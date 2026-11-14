@@ -15,7 +15,7 @@ namespace BECore {
         void ProcessEvents() const;
 
     private:
-        eastl::vector<IntrusivePtr<IEventsProvider>> _providers;
+        Vector<IntrusivePtr<IEventsProvider>> _providers;
     };
 
 }  // namespace BECore

@@ -19,7 +19,7 @@ namespace BECore {
         return false;
     }
 
-    const eastl::vector<IntrusivePtr<SceneNode>>& SceneNode::GetChildren() const {
+    const Vector<IntrusivePtr<SceneNode>>& SceneNode::GetChildren() const {
         return _children;
     }
 
@@ -71,7 +71,7 @@ namespace BECore {
         }
     }
 
-    IntrusivePtr<IComponent> SceneNode::GetComponent(eastl::string_view typeName) const {
+    IntrusivePtr<IComponent> SceneNode::GetComponent(StringView typeName) const {
         auto it = eastl::find_if(_components.begin(), _components.end(), [&typeName](const IntrusivePtr<IComponent>& comp) { return comp->GetTypeMeta().typeName == typeName; });
 
         if (it != _components.end()) {
@@ -136,7 +136,7 @@ namespace BECore {
         return _entity;
     }
 
-    const eastl::vector<IntrusivePtr<IComponent>>& SceneNode::GetComponents() const {
+    const Vector<IntrusivePtr<IComponent>>& SceneNode::GetComponents() const {
         return _components;
     }
 

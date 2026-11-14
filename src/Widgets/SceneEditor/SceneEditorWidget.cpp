@@ -140,7 +140,7 @@ namespace BECore {
         if (_announcedSelection.Changed(scene, _hierarchy.selected)) {
             SceneNodeSelectedEvent::Emit(scene, _hierarchy.selected);
         }
-        const eastl::span<SceneNode* const> nodes = _selection.Nodes();
+        const Span<SceneNode* const> nodes = _selection.Nodes();
         if (scene != _announcedNodesScene || nodes.size() != _announcedNodes.size() || !eastl::equal(nodes.begin(), nodes.end(), _announcedNodes.begin())) {
             _announcedNodesScene = scene;
             _announcedNodes.assign(nodes.begin(), nodes.end());
@@ -320,7 +320,7 @@ namespace BECore {
         char nameBuffer[256] = {};
         snprintf(nameBuffer, sizeof(nameBuffer), "%s", _hierarchy.selected->GetName().CStr());
         if (ImGui::InputText("##node_name", nameBuffer, sizeof(nameBuffer))) {
-            _hierarchy.selected->SetName(PoolString::Intern(eastl::string_view(nameBuffer)));
+            _hierarchy.selected->SetName(PoolString::Intern(StringView(nameBuffer)));
             _isDirty = true;
         }
 
@@ -407,7 +407,7 @@ namespace BECore {
                     auto* scene = CoreManager::GetSceneManager().GetActiveScene();
                     if (scene) {
                         SceneNode* target = _contextMenuTargetNode ? _contextMenuTargetNode : &scene->GetRootNode();
-                        target->AddChild(PoolString::Intern(eastl::string_view(_nodeNameBuffer)));
+                        target->AddChild(PoolString::Intern(StringView(_nodeNameBuffer)));
                         _hierarchy.revealNode = target;
                         _isDirty = true;
                     }
@@ -479,11 +479,11 @@ namespace BECore {
 
         // An instance of a node file is saved as its <node ref> with the overrides; one that cannot be goes inline and is told here
         const NodeFileLoader loader = MakeFileSystemNodeLoader(CoreManager::GetFileSystem());
-        eastl::vector<eastl::string> notes;
+        Vector<String> notes;
         if (!WriteSceneToConfig(xmlRoot.GetPugiNode(), *scene, &loader, &notes)) {  // <SceneManager>
             return;
         }
-        for (const eastl::string& note : notes) {
+        for (const String& note : notes) {
             LOG_WARNING(Format("SceneEditor: scene '{}': {}", scene->GetName().CStr(), note.c_str()).c_str());
         }
 

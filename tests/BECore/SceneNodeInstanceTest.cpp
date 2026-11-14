@@ -64,10 +64,10 @@ namespace BECore::Tests {
             std::ofstream(path) << text;
         }
 
-        eastl::string Printed(pugi::xml_node node) {
+        String Printed(pugi::xml_node node) {
             std::ostringstream out;
             node.print(out, "", pugi::format_raw);
-            return eastl::string(out.str().c_str());
+            return String(out.str().c_str());
         }
 
         /// The components of @p node as text: type and serialized fields, in order
@@ -117,7 +117,7 @@ namespace BECore::Tests {
         }
 
         /// BuildNodeReference into a fresh `<nodes>`; the result is the printed element that was appended, empty when nothing was
-        bool Build(const SceneNode& node, std::string& result, eastl::string& reason) {
+        bool Build(const SceneNode& node, std::string& result, String& reason) {
             _out.reset();
             pugi::xml_node nodesEl = _out.append_child("nodes");
             const bool built = BuildNodeReference(node, _loader, nodesEl, reason);
@@ -133,7 +133,7 @@ namespace BECore::Tests {
             const pugi::xml_node refEl = _out.child("nodes").first_child();
             ASSERT_TRUE(refEl);
             pugi::xml_document expanded;
-            eastl::string error;
+            String error;
             ASSERT_TRUE(ExpandNodeReference(refEl, _loader, false, expanded, error)) << error.c_str();
             const IntrusivePtr<SceneNode> loaded = DeserializeNode(expanded.document_element(), "round trip");
             EXPECT_EQ(ComponentTexts(*loaded), ComponentTexts(live));
@@ -144,7 +144,7 @@ namespace BECore::Tests {
         /// Build must succeed and give exactly @p expected; the round trip holds
         void ExpectBuilt(const SceneNode& node, const std::string& expected) {
             std::string result;
-            eastl::string reason;
+            String reason;
             ASSERT_TRUE(Build(node, result, reason)) << reason.c_str();
             EXPECT_EQ(result, "<nodes>" + expected + "</nodes>");
             ExpectRoundTrip(node);
@@ -210,7 +210,7 @@ namespace BECore::Tests {
         node.GetComponent<QuadRendererComponent>()->_color = Color{9, 8, 7, 255};
 
         std::string result;
-        eastl::string reason;
+        String reason;
         ASSERT_TRUE(Build(node, result, reason)) << reason.c_str();
         ExpectRoundTrip(node);
         // A field is written once, in one spelling, and a component that did not change is not named
@@ -250,7 +250,7 @@ namespace BECore::Tests {
         canvas->_elements.pop_back();
 
         std::string result;
-        eastl::string reason;
+        String reason;
         ASSERT_TRUE(Build(node, result, reason)) << reason.c_str();
         ExpectRoundTrip(node);
         const pugi::xml_node component = _out.child("nodes").child("node").child("components").child("component");
@@ -266,7 +266,7 @@ namespace BECore::Tests {
         node.GetComponent<UICanvasComponent>()->_elements.clear();
 
         std::string result;
-        eastl::string reason;
+        String reason;
         ASSERT_TRUE(Build(node, result, reason)) << reason.c_str();
 
         // The serializer leaves an empty list out; the baseline has it, so the override is an empty element that replaces the file's list
@@ -278,7 +278,7 @@ namespace BECore::Tests {
         ExpectRoundTrip(node);
         // And it really loads empty
         pugi::xml_document expanded;
-        eastl::string error;
+        String error;
         ASSERT_TRUE(ExpandNodeReference(_out.child("nodes").first_child(), _loader, false, expanded, error)) << error.c_str();
         EXPECT_TRUE(DeserializeNode(expanded.document_element(), "check")->GetComponent<UICanvasComponent>()->_elements.empty());
     }
@@ -288,7 +288,7 @@ namespace BECore::Tests {
         node.AddComponent(BECore::New<ClickableComponent>());
 
         std::string result;
-        eastl::string reason;
+        String reason;
         EXPECT_FALSE(Build(node, result, reason));
         EXPECT_FALSE(reason.empty());
         EXPECT_EQ(result, "<nodes/>");
@@ -299,7 +299,7 @@ namespace BECore::Tests {
         node.RemoveComponent(PoolString::Intern("QuadRendererComponent"));
 
         std::string result;
-        eastl::string reason;
+        String reason;
         EXPECT_FALSE(Build(node, result, reason));
         EXPECT_FALSE(reason.empty());
         EXPECT_EQ(result, "<nodes/>");
@@ -314,7 +314,7 @@ namespace BECore::Tests {
         ASSERT_EQ(node.GetComponents().size(), 2u);
 
         std::string result;
-        eastl::string reason;
+        String reason;
         EXPECT_FALSE(Build(node, result, reason));
         EXPECT_FALSE(reason.empty());
         EXPECT_EQ(result, "<nodes/>");
@@ -325,7 +325,7 @@ namespace BECore::Tests {
         std::filesystem::remove(_dir / "nodes" / "Box.xml");
 
         std::string result;
-        eastl::string reason;
+        String reason;
         EXPECT_FALSE(Build(node, result, reason));
         EXPECT_FALSE(reason.empty());
         EXPECT_EQ(result, "<nodes/>");
@@ -335,7 +335,7 @@ namespace BECore::Tests {
         SceneNode& node = LoadNode(R"(<node name="Own"/>)");
 
         std::string result;
-        eastl::string reason;
+        String reason;
         EXPECT_FALSE(Build(node, result, reason));
         EXPECT_FALSE(reason.empty());
         EXPECT_EQ(result, "<nodes/>");
@@ -361,11 +361,11 @@ namespace BECore::Tests {
         pugi::xml_document out;
         pugi::xml_node nodesEl = out.append_child("nodes");
         nodesEl.append_child("node").append_attribute("name").set_value("First");
-        eastl::string reason;
+        String reason;
 
         ASSERT_TRUE(BuildNodeReference(node, _loader, nodesEl, reason)) << reason.c_str();
 
-        EXPECT_EQ(Printed(nodesEl), eastl::string(R"(<nodes><node name="First"/><node ref="nodes/Box"/></nodes>)"));
+        EXPECT_EQ(Printed(nodesEl), String(R"(<nodes><node name="First"/><node ref="nodes/Box"/></nodes>)"));
     }
 
 }  // namespace BECore::Tests

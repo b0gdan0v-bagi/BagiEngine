@@ -34,7 +34,7 @@ namespace BECore {
          * `tooSmall` is its touch rule: the smaller side, as the user sees it (times the canvas scale, divided by @p pixelDensity), under @p minTouchSize.
          * Empty for a canvas with no layout. The viewport pass runs at density 1, so there @p pixelDensity is 1.
          */
-        [[nodiscard]] static eastl::vector<TouchMark> TouchTargets(const UICanvasLayout& canvas, float minTouchSize, float pixelDensity);
+        [[nodiscard]] static Vector<TouchMark> TouchTargets(const UICanvasLayout& canvas, float minTouchSize, float pixelDensity);
 
         /**
          * @brief Every region published for a canvas that has a layout (`UICanvasLayout::regions`), with the rect in output pixels, in the order of publishing.
@@ -42,7 +42,7 @@ namespace BECore {
          * The rects follow the canvas transform exactly like CanvasBounds: a region partly outside the canvas is not clipped, a zero-sized one gives a zero-sized rect.
          * Empty for a canvas with no layout or no regions.
          */
-        [[nodiscard]] static eastl::vector<RegionMark> RegionMarks(const UICanvasLayout& canvas);
+        [[nodiscard]] static Vector<RegionMark> RegionMarks(const UICanvasLayout& canvas);
 
         /// The bounds of the whole canvas in output pixels
         [[nodiscard]] static Rect CanvasBounds(const UICanvasResolved& resolved);

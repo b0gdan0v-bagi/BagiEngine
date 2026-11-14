@@ -33,7 +33,7 @@ namespace BECore::Tests {
 
         /// Records the steps and the thread of a coroutine that hops to the background twice.
         struct HopLog {
-            eastl::vector<int> steps;
+            Vector<int> steps;
             std::thread::id threadAtEnd;
         };
 
@@ -67,7 +67,7 @@ namespace BECore::Tests {
             }
 
             TaskScheduler _scheduler;
-            eastl::unique_ptr<ThreadPool> _pool;
+            UniquePtr<ThreadPool> _pool;
         };
 
     }  // namespace
@@ -102,7 +102,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(TaskSystemInlineTest, NestedSubmitIsQueuedAndRunsAfterTheCurrentJobInOrder) {
-        eastl::vector<int> order;
+        Vector<int> order;
         size_t pendingInsideJob = 0;
 
         _pool->Submit([&] {
@@ -170,7 +170,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(TaskSystemInlineTest, SchedulerStillReleasesDelayedAndMainThreadTasks) {
-        eastl::vector<int> order;
+        Vector<int> order;
 
         _scheduler.Schedule([&] { order.push_back(1); }, TaskPriority::Normal, ThreadType::MainThread);
         _scheduler.ScheduleDelayed([&] { order.push_back(2); }, std::chrono::nanoseconds(0), TaskPriority::Normal, ThreadType::Background);

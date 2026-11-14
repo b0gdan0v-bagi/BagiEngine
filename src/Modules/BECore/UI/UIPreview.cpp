@@ -38,7 +38,7 @@ namespace BECore {
         return {std::max(static_cast<uint32_t>(width), 1u), std::max(static_cast<uint32_t>(height), 1u)};
     }
 
-    eastl::span<const PreviewDevice> UIPreview::GetDevices() {
+    Span<const PreviewDevice> UIPreview::GetDevices() {
         // Logical points in portrait; the cut-out is the status bar / island / camera hole, the home bar the gesture area
         static constexpr PreviewDevice kDevices[] = {
             {"iPhone SE", 375, 667, 0.0f, 0.0f},    {"iPhone 15", 393, 852, 59.0f, 34.0f},      {"Pixel 8", 412, 915, 32.0f, 16.0f},

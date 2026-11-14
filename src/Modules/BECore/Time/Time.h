@@ -82,7 +82,7 @@ namespace BECore {
     private:
         void AdvanceBy(double seconds);
 
-        std::optional<Clock::time_point> _lastTick;
+        Optional<Clock::time_point> _lastTick;
         double _fixedDeltaTime = kDefaultFixedDeltaTime;
         double _accumulator = 0.0;
         double _totalTime = 0.0;

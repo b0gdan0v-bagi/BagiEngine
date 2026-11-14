@@ -2,7 +2,6 @@
 
 #include <BECore/Animation/ScopedTween.h>
 #include <BECore/Animation/Timeline.h>
-#include <EASTL/optional.h>
 #include <Match3/Game/CascadeTrace.h>
 
 namespace BECore {
@@ -31,7 +30,7 @@ namespace BECore::Match3 {
      *        outside). Axis-aligned, in any one unit: scene units for the component. The refilled gems start above the board, and the renderer's
      *        clip rect works in output pixels, so the component clips the rects of those gems with this.
      */
-    [[nodiscard]] eastl::optional<Rect> ClipToBoard(const Rect& rect, const Rect& board);
+    [[nodiscard]] Optional<Rect> ClipToBoard(const Rect& rect, const Rect& board);
 
     /**
      * @brief The tweens of ONE swap, as one `Timeline` played on a `TweenManager`: the swap slides, then per round of the cascade the matched gems
@@ -81,7 +80,7 @@ namespace BECore::Match3 {
          *        they keep the last frame (every gem on its cell, the matched ones at scale 0) until `Finish` or the next `Start`, which is how a
          *        test reads the exact end state. Empty before the first run and after `Finish`. Draw them only while `IsRunning()`.
          */
-        [[nodiscard]] const eastl::vector<GemSprite>& GetSprites() const {
+        [[nodiscard]] const Vector<GemSprite>& GetSprites() const {
             return _sprites;
         }
 
@@ -91,7 +90,7 @@ namespace BECore::Match3 {
 
     private:
         /// The sprite index on every cell of the board; -1 for no sprite. It follows the gems while the timeline is built
-        using SpriteGrid = eastl::array<int, static_cast<size_t>(kBoardSize) * static_cast<size_t>(kBoardSize)>;
+        using SpriteGrid = Array<int, static_cast<size_t>(kBoardSize) * static_cast<size_t>(kBoardSize)>;
 
         SpriteGrid BeginRun(const Match3Board& before);
         void AddSwap(Timeline& timeline, SpriteGrid& grid, Cell a, Cell b);
@@ -100,7 +99,7 @@ namespace BECore::Match3 {
 
         BoardAnimationSettings _settings;
         eastl::function<void(Cell, GemType)> _clearedSink;
-        eastl::vector<GemSprite> _sprites;  // built before the timeline plays and never resized while it does: the setters write by index
+        Vector<GemSprite> _sprites;  // built before the timeline plays and never resized while it does: the setters write by index
         ScopedTween _play;
     };
 

@@ -13,15 +13,15 @@ namespace BECore::Tests {
 
     /// One message a client received, parsed
     struct ReceivedMessage {
-        eastl::string text;
+        String text;
         Json json;
-        eastl::string type;
+        String type;
 
-        [[nodiscard]] eastl::string GetString(eastl::string_view key) const {
-            return GetJsonString(json, key).value_or(eastl::string());
+        [[nodiscard]] String GetString(StringView key) const {
+            return GetJsonString(json, key).value_or(String());
         }
 
-        [[nodiscard]] int64_t GetInt(eastl::string_view key, int64_t fallback = -1000) const {
+        [[nodiscard]] int64_t GetInt(StringView key, int64_t fallback = -1000) const {
             return GetJsonInt(json, key).value_or(fallback);
         }
     };
@@ -29,17 +29,17 @@ namespace BECore::Tests {
     /// A fake client connection: records everything the hub sent it and whether the hub closed it
     struct TestClient {
         ConnectionId id = 0;
-        eastl::vector<ReceivedMessage> received;
+        Vector<ReceivedMessage> received;
         bool closed = false;
-        eastl::string closeReason;
+        String closeReason;
         /// Learned from the messages: the room it is in and its seat ("" and -1 when none)
-        eastl::string roomCode;
+        String roomCode;
         int seat = -1;
-        eastl::string token;
+        String token;
         /// The last text the client sent: an `error` may repeat what the client itself named (a card it does not hold), which tells it nothing
-        eastl::string lastSent;
+        String lastSent;
 
-        [[nodiscard]] size_t Count(eastl::string_view type) const {
+        [[nodiscard]] size_t Count(StringView type) const {
             size_t count = 0;
             for (const ReceivedMessage& message : received) {
                 count += message.type == type ? 1 : 0;
@@ -48,7 +48,7 @@ namespace BECore::Tests {
         }
 
         /// The last message of the type, or null
-        [[nodiscard]] const ReceivedMessage* Last(eastl::string_view type) const {
+        [[nodiscard]] const ReceivedMessage* Last(StringView type) const {
             for (size_t i = received.size(); i > 0; --i) {
                 if (received[i - 1].type == type) {
                     return &received[i - 1];
@@ -58,14 +58,14 @@ namespace BECore::Tests {
         }
 
         /// The `code` of the last `error` message ("" when none)
-        [[nodiscard]] eastl::string LastErrorCode() const {
+        [[nodiscard]] String LastErrorCode() const {
             const ReceivedMessage* error = Last(RoomMessageTypes::kError);
-            return error ? error->GetString("code") : eastl::string();
+            return error ? error->GetString("code") : String();
         }
 
         /// The types received, in order, as one text ("joined,lobby,view")
-        [[nodiscard]] eastl::string Types() const {
-            eastl::string result;
+        [[nodiscard]] String Types() const {
+            String result;
             for (const ReceivedMessage& message : received) {
                 if (!result.empty()) {
                     result += ",";
@@ -90,8 +90,8 @@ namespace BECore::Tests {
     class HubHarness {
     public:
         explicit HubHarness(RoomHubSettings settings = MakeSettings(), bool leaky = false, RandomFn random = MakeSequence(42)) : _hub(_registry, settings, std::move(random), MakeSink()) {
-            const auto factory = [this, leaky]() -> eastl::unique_ptr<ISeatedGame> {
-                const eastl::string room = _startingRoom;
+            const auto factory = [this, leaky]() -> UniquePtr<ISeatedGame> {
+                const String room = _startingRoom;
                 if (leaky) {
                     return eastl::make_unique<Tracked<LeakyFakeSeatedGame>>(this, room);
                 }
@@ -130,7 +130,7 @@ namespace BECore::Tests {
         }
 
         /// @param address The client's address handed to the hub ("" is unknown: no per-address rule)
-        ConnectionId Connect(eastl::string_view address = {}) {
+        ConnectionId Connect(StringView address = {}) {
             const ConnectionId id = _nextConnection++;
             TestClient client;
             client.id = id;
@@ -148,14 +148,14 @@ namespace BECore::Tests {
         }
 
         /// Every client the harness has made, with everything each was sent
-        [[nodiscard]] const eastl::map<ConnectionId, TestClient>& Clients() const {
+        [[nodiscard]] const Map<ConnectionId, TestClient>& Clients() const {
             return _clients;
         }
 
         /// Sends raw text as if it came from the connection
-        void SendText(ConnectionId id, eastl::string_view text) {
+        void SendText(ConnectionId id, StringView text) {
             _startingRoom = Client(id).roomCode;
-            Client(id).lastSent = eastl::string(text);
+            Client(id).lastSent = String(text);
             _hub.OnMessage(id, text, _now);
         }
 
@@ -163,26 +163,26 @@ namespace BECore::Tests {
             SendText(id, SerializeClientMessage(message));
         }
 
-        void Create(ConnectionId id, eastl::string_view name, eastl::string_view game = "fake", Json options = Json::object(), bool isPublic = false) {
-            Send(id, CreateRoomMessage{eastl::string(game), eastl::string(name), std::move(options), isPublic});
+        void Create(ConnectionId id, StringView name, StringView game = "fake", Json options = Json::object(), bool isPublic = false) {
+            Send(id, CreateRoomMessage{String(game), String(name), std::move(options), isPublic});
         }
 
         /// `list_rooms` for @p game
-        void List(ConnectionId id, eastl::string_view game = "fake") {
-            Send(id, ListRoomsMessage{eastl::string(game)});
+        void List(ConnectionId id, StringView game = "fake") {
+            Send(id, ListRoomsMessage{String(game)});
         }
 
-        void JoinByName(ConnectionId id, eastl::string_view code, eastl::string_view name) {
+        void JoinByName(ConnectionId id, StringView code, StringView name) {
             JoinRoomMessage message;
-            message.code = eastl::string(code);
-            message.name = eastl::string(name);
+            message.code = String(code);
+            message.name = String(name);
             Send(id, message);
         }
 
-        void JoinByToken(ConnectionId id, eastl::string_view code, eastl::string_view token) {
+        void JoinByToken(ConnectionId id, StringView code, StringView token) {
             JoinRoomMessage message;
-            message.code = eastl::string(code);
-            message.token = eastl::string(token);
+            message.code = String(code);
+            message.token = String(token);
             Send(id, message);
         }
 
@@ -199,12 +199,12 @@ namespace BECore::Tests {
         }
 
         /// Creates a room with a host and @p guests more humans; returns the connections (host first). The room is in the lobby.
-        eastl::vector<ConnectionId> MakeLobby(int humans) {
-            eastl::vector<ConnectionId> ids;
+        Vector<ConnectionId> MakeLobby(int humans) {
+            Vector<ConnectionId> ids;
             const ConnectionId host = Connect();
             Create(host, "P0");
             ids.push_back(host);
-            const eastl::string code = Client(host).roomCode;
+            const String code = Client(host).roomCode;
             for (int i = 1; i < humans; ++i) {
                 const ConnectionId guest = Connect();
                 JoinByName(guest, code, Format("P{}", i).c_str());
@@ -214,7 +214,7 @@ namespace BECore::Tests {
         }
 
         /// The live game of a room, or null
-        [[nodiscard]] FakeSeatedGame* GetGame(const eastl::string& room) const {
+        [[nodiscard]] FakeSeatedGame* GetGame(const String& room) const {
             const auto found = _games.find(room);
             return found == _games.end() ? nullptr : found->second;
         }
@@ -249,7 +249,7 @@ namespace BECore::Tests {
         template <typename GameType>
         class Tracked : public GameType {
         public:
-            Tracked(HubHarness* harness, eastl::string room) : _harness(harness), _room(std::move(room)) {
+            Tracked(HubHarness* harness, String room) : _harness(harness), _room(std::move(room)) {
                 _harness->_games[_room] = this;
             }
 
@@ -262,13 +262,13 @@ namespace BECore::Tests {
 
         private:
             HubHarness* _harness;
-            eastl::string _room;
+            String _room;
         };
 
         HubSink MakeSink() {
             HubSink sink;
-            sink.send = [this](ConnectionId id, eastl::string text) { OnSent(id, std::move(text)); };
-            sink.close = [this](ConnectionId id, eastl::string reason) {
+            sink.send = [this](ConnectionId id, String text) { OnSent(id, std::move(text)); };
+            sink.close = [this](ConnectionId id, String reason) {
                 TestClient& client = Client(id);
                 client.closed = true;
                 client.closeReason = std::move(reason);
@@ -276,7 +276,7 @@ namespace BECore::Tests {
             return sink;
         }
 
-        void OnSent(ConnectionId id, eastl::string text) {
+        void OnSent(ConnectionId id, String text) {
             TestClient& client = Client(id);
             ReceivedMessage message;
             message.text = text;
@@ -284,7 +284,7 @@ namespace BECore::Tests {
             EXPECT_TRUE(parsed.has_value()) << "the hub sent text that is not JSON: " << text.c_str();
             if (parsed) {
                 message.json = std::move(*parsed);
-                message.type = GetJsonString(message.json, "type").value_or(eastl::string());
+                message.type = GetJsonString(message.json, "type").value_or(String());
             }
             if (message.type == RoomMessageTypes::kJoined) {
                 client.roomCode = message.GetString("room");
@@ -295,10 +295,10 @@ namespace BECore::Tests {
             }
             // The game of the client's room as it is right now
             if (const FakeSeatedGame* game = GetGame(client.roomCode); game && client.seat >= 0) {
-                eastl::vector<eastl::string> leaked = FindLeakedCards(text, client.seat, *game);
+                Vector<String> leaked = FindLeakedCards(text, client.seat, *game);
                 if (message.type == RoomMessageTypes::kError) {
                     // A refusal that quotes the card the client itself sent ("seat 0 does not hold 'c3_1'") gives away nothing
-                    leaked.erase(eastl::remove_if(leaked.begin(), leaked.end(), [&](const eastl::string& card) { return client.lastSent.find(card) != eastl::string::npos; }), leaked.end());
+                    leaked.erase(eastl::remove_if(leaked.begin(), leaked.end(), [&](const String& card) { return client.lastSent.find(card) != String::npos; }), leaked.end());
                 }
                 if (!leaked.empty()) {
                     ++_leaks;
@@ -315,14 +315,14 @@ namespace BECore::Tests {
         }
 
         // Declaration order matters: the hub (and with it the games) is destroyed before the maps its games unregister from
-        eastl::hash_map<eastl::string, FakeSeatedGame*> _games;
+        HashMap<String, FakeSeatedGame*> _games;
         // A node-based map: a test may hold a TestClient& while other clients connect
-        eastl::map<ConnectionId, TestClient> _clients;
+        Map<ConnectionId, TestClient> _clients;
         SeatedGameRegistry _registry;
         RoomHub _hub;
         RoomTime _now{std::chrono::seconds(1000)};
         ConnectionId _nextConnection = 1;
-        eastl::string _startingRoom;
+        String _startingRoom;
         size_t _leaks = 0;
         bool _failOnLeak = true;
     };

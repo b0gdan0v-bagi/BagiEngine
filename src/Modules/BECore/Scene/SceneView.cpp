@@ -8,7 +8,7 @@ namespace BECore {
 
     namespace {
 
-        constexpr eastl::string_view ViewItem = "view";
+        constexpr StringView ViewItem = "view";
 
         bool IsUsableSize(float width, float height) {
             return std::isfinite(width) && std::isfinite(height) && width > 0.0f && height > 0.0f;
@@ -20,8 +20,8 @@ namespace BECore {
         if (!name.Empty()) {
             Ser::DataAccessor<PoolString>::Save(s, name, "name");
         }
-        const eastl::string text = when.ToText();
-        s.WriteAttribute("when", eastl::string_view(text.data(), text.size()));
+        const String text = when.ToText();
+        s.WriteAttribute("when", StringView(text));
         Ser::DataAccessor<float>::Save(s, width, "width");
         Ser::DataAccessor<float>::Save(s, height, "height");
     }
@@ -30,11 +30,11 @@ namespace BECore {
         Ser::Load(d, name, "name");
         Ser::Load(d, width, "width");
         Ser::Load(d, height, "height");
-        eastl::string text;
+        String text;
         if (d.ReadAttribute("when", text)) {
-            const auto condition = UIVariantCondition::FromText(eastl::string_view(text.data(), text.size()));
+            const auto condition = UIVariantCondition::FromText(StringView(text));
             if (!condition) {
-                d.ReportError("when", eastl::string_view(condition.error().c_str()));
+                d.ReportError("when", StringView(condition.error().c_str()));
                 return false;
             }
             when = *condition;
@@ -42,7 +42,7 @@ namespace BECore {
         return true;
     }
 
-    void Ser::DataAccessor<eastl::vector<SceneViewVariant>>::Save(ISerializer& s, const eastl::vector<SceneViewVariant>& variants, eastl::string_view key) {
+    void Ser::DataAccessor<Vector<SceneViewVariant>>::Save(ISerializer& s, const Vector<SceneViewVariant>& variants, StringView key) {
         if (variants.empty()) {
             return;
         }
@@ -58,7 +58,7 @@ namespace BECore {
         }
     }
 
-    bool Ser::DataAccessor<eastl::vector<SceneViewVariant>>::Load(IDeserializer& d, eastl::vector<SceneViewVariant>& variants, eastl::string_view key) {
+    bool Ser::DataAccessor<Vector<SceneViewVariant>>::Load(IDeserializer& d, Vector<SceneViewVariant>& variants, StringView key) {
         size_t count = 0;
         if (!d.BeginArray(key, ViewItem, count)) {
             return false;
@@ -77,7 +77,7 @@ namespace BECore {
         return true;
     }
 
-    ActiveSceneView SceneViewSelector::Pick(float defaultWidth, float defaultHeight, eastl::span<const SceneViewVariant> variants, float outputWidth, float outputHeight) {
+    ActiveSceneView SceneViewSelector::Pick(float defaultWidth, float defaultHeight, Span<const SceneViewVariant> variants, float outputWidth, float outputHeight) {
         const ActiveSceneView fallback{PoolString{}, defaultWidth, defaultHeight, -1};
         if (!IsUsableSize(outputWidth, outputHeight)) {
             return fallback;

@@ -19,7 +19,7 @@ namespace BECore {
         [[nodiscard]] static float GetHeight();
 
         /// The branch of the engine's repository, read once by the owner; empty leaves it out
-        void SetBranch(eastl::string_view branch);
+        void SetBranch(StringView branch);
 
         void Draw();
 
@@ -37,18 +37,18 @@ namespace BECore {
         char _frameMsText[kTextSize] = {};
 
         uint64_t _allocCount = 0;
-        std::optional<uint64_t> _shownAllocCount;
+        Optional<uint64_t> _shownAllocCount;
         char _allocText[kTextSize] = {};
 
         ControlServerStatus _controlStatus;
-        std::optional<ControlServerStatus> _shownControlStatus;
+        Optional<ControlServerStatus> _shownControlStatus;
         char _controlText[kTextSize] = {};
 
         PoolString _seenGame;
         PoolString _seenScene;
-        eastl::string _game;
-        eastl::string _scene;
-        eastl::string _branch;
+        String _game;
+        String _scene;
+        String _branch;
     };
 
 }  // namespace BECore

@@ -2,8 +2,8 @@
 
 namespace BECore {
 
-    std::expected<ClientStream, eastl::string> ClientStream::Connect(const WebSocketUrl& url, const TlsClientOptions& tls, std::chrono::milliseconds connectTimeout,
-                                                                     std::chrono::steady_clock::time_point handshakeDeadline, const std::atomic<bool>* cancel) {
+    std::expected<ClientStream, String> ClientStream::Connect(const WebSocketUrl& url, const TlsClientOptions& tls, std::chrono::milliseconds connectTimeout,
+                                                              std::chrono::steady_clock::time_point handshakeDeadline, const std::atomic<bool>* cancel) {
         ClientStream stream;
         if (!url.secure) {
             auto connected = Socket::Connect(url.host, url.port, connectTimeout, cancel);
@@ -19,12 +19,12 @@ namespace BECore {
             return std::unexpected(Format("TLS: no stream for {}:{}", url.host, url.port));
         }
         TlsConnectParams params;
-        params.host = eastl::string_view(url.host.data(), url.host.size());
+        params.host = StringView(url.host);
         params.port = url.port;
         params.connectTimeout = connectTimeout;
         params.handshakeDeadline = handshakeDeadline;
         params.cancel = cancel;
-        params.additionalTrustAnchorsDer = eastl::span<const eastl::vector<uint8_t>>(tls.additionalTrustAnchorsDer.data(), tls.additionalTrustAnchorsDer.size());
+        params.additionalTrustAnchorsDer = Span<const Vector<uint8_t>>(tls.additionalTrustAnchorsDer.data(), tls.additionalTrustAnchorsDer.size());
         const auto connected = stream._tls->Connect(params);
         if (!connected) {
             return std::unexpected(connected.error());
@@ -32,11 +32,11 @@ namespace BECore {
         return stream;
     }
 
-    bool ClientStream::SendAll(eastl::span<const uint8_t> data) {
+    bool ClientStream::SendAll(Span<const uint8_t> data) {
         return _tls ? _tls->SendAll(data) : _socket.SendAll(data);
     }
 
-    std::expected<size_t, SocketError> ClientStream::Receive(eastl::span<uint8_t> buffer) {
+    std::expected<size_t, SocketError> ClientStream::Receive(Span<uint8_t> buffer) {
         return _tls ? _tls->Receive(buffer) : _socket.Receive(buffer);
     }
 
@@ -64,8 +64,8 @@ namespace BECore {
         return _tls ? _tls->IsValid() : _socket.IsValid();
     }
 
-    eastl::string ClientStream::GetLastError() const {
-        return _tls ? _tls->GetLastError() : eastl::string();
+    String ClientStream::GetLastError() const {
+        return _tls ? _tls->GetLastError() : String();
     }
 
 }  // namespace BECore

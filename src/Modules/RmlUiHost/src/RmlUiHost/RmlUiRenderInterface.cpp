@@ -60,9 +60,9 @@ namespace BECore {
     }
 
     Rml::TextureHandle RmlUiRenderInterface::LoadTexture(Rml::Vector2i& textureDimensions, const Rml::String& source) {
-        auto loaded = CoreManager::GetResourceManager().Load<ITexture>(eastl::string_view(source.data(), source.size()));
+        auto loaded = CoreManager::GetResourceManager().Load<ITexture>(FromStd(source));
         if (!loaded || loaded->GetState() != ResourceState::Loaded) {
-            LOG_ERROR("RmlUi: cannot load the texture '{}'"_format(eastl::string_view(source.data(), source.size())));
+            LOG_ERROR("RmlUi: cannot load the texture '{}'"_format(FromStd(source)));
             return 0;
         }
         textureDimensions.x = static_cast<int>(loaded->GetWidth());
@@ -80,7 +80,7 @@ namespace BECore {
             return 0;
         }
         // The pixels are premultiplied, the renderer blends straight alpha
-        eastl::vector<uint8_t> pixels(source.begin(), source.end());
+        Vector<uint8_t> pixels(source.begin(), source.end());
         for (size_t i = 0; i < pixels.size(); i += kBytesPerPixel) {
             const int alpha = pixels[i + 3];
             pixels[i] = Straight(pixels[i], alpha);

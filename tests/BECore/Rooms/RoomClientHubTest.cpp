@@ -4,7 +4,6 @@
 #include <Common/Printers.h>
 #include <RoomClient/RoomClient.h>
 #include <Rooms/RoomErrors.h>
-#include <algorithm>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -14,7 +13,7 @@ namespace BECore::Tests {
         using std::chrono::milliseconds;
         using std::chrono::seconds;
 
-        constexpr eastl::string_view kUrl = "ws://hub.test";
+        constexpr StringView kUrl = "ws://hub.test";
         constexpr milliseconds kStep{10};
         constexpr int kMaxSteps = 20000;
         constexpr int kCardsInAHand = DemoCardGame::kTotalPlays;
@@ -63,7 +62,7 @@ namespace BECore::Tests {
             HubClientLinks links;
             std::shared_ptr<WireJudgeLog> judge;
             std::unique_ptr<RoomClient> client;
-            eastl::vector<RoomClientEvent> events;
+            Vector<RoomClientEvent> events;
             bool acted = false;
             uint64_t actedVersion = 0;
         };
@@ -97,7 +96,7 @@ namespace BECore::Tests {
             }
 
             /// The host makes a room of @p game and everybody else joins it; the client of every player is in the room afterwards
-            void MakeLobby(eastl::string_view game, size_t humans, const Json& options = Json::object()) {
+            void MakeLobby(StringView game, size_t humans, const Json& options = Json::object()) {
                 Player& host = AddPlayer();
                 ASSERT_TRUE(host.client->Host(kUrl, game, "P0", options).has_value());
                 ASSERT_TRUE(StepUntil([&] { return host.client->IsInRoom(); }));
@@ -171,7 +170,7 @@ namespace BECore::Tests {
     TEST_F(RoomClientHubTest, AClientDroppedMidHandReconnectsInsideTheGraceAndPlaysOn) {
         MakeLobby("cards", 2);
         Player& dropped = *_players[1];
-        const eastl::string token = dropped.client->GetSession().token;
+        const String token = dropped.client->GetSession().token;
         ASSERT_TRUE(_players[0]->client->Start().has_value());
         ASSERT_TRUE(StepUntil([&] { return dropped.client->HasView() && dropped.TableSize() >= 2; }));
         const int seat = dropped.client->GetSeat();
@@ -261,7 +260,7 @@ namespace BECore::Tests {
         MakeLobby("cards", 2, Json::object({{"firstSeat", 0}}));
         Player& away = *_players[1];
         Player& other = *_players[0];
-        const eastl::string token = away.client->GetSession().token;
+        const String token = away.client->GetSession().token;
         ASSERT_TRUE(other.client->Start().has_value());
         // Seat 1 is cut off before the first move and kept away
         World().SetRefusing(true);

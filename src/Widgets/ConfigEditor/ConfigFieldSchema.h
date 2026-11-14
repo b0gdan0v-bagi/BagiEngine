@@ -10,7 +10,7 @@ namespace BECore {
 
     struct FieldHint {
         FieldType type = FieldType::String;
-        eastl::vector<eastl::string> options;  // enum values or flag names (owned)
+        Vector<String> options;  // enum values or flag names (owned)
     };
 
     /**
@@ -30,8 +30,8 @@ namespace BECore {
          * @param attrPath Path in format "elementName/@attrName"
          */
         template <typename EnumT>
-        void RegisterEnum(PoolString configName, eastl::string_view attrPath) {
-            const eastl::string key = MakeKey(configName, attrPath);
+        void RegisterEnum(PoolString configName, StringView attrPath) {
+            const String key = MakeKey(configName, attrPath);
             FieldHint hint;
             hint.type = FieldType::Enum;
             const auto& names = EnumUtils<EnumT>::Names();
@@ -55,8 +55,8 @@ namespace BECore {
          * @param attrPath Path in format "elementName/@attrName"
          */
         template <typename BaseT>
-        void RegisterFactoryTypes(PoolString configName, eastl::string_view attrPath) {
-            const eastl::string key = MakeKey(configName, attrPath);
+        void RegisterFactoryTypes(PoolString configName, StringView attrPath) {
+            const String key = MakeKey(configName, attrPath);
             FieldHint hint;
             hint.type = FieldType::Enum;
             const auto& metas = AbstractFactory<BaseT>::GetInstance().GetRegisteredTypes();
@@ -74,7 +74,7 @@ namespace BECore {
          * @param attrPath Path in format "elementName/@attrName"
          * @param flagNames List of all possible flag names
          */
-        void RegisterFlags(PoolString configName, eastl::string_view attrPath, eastl::vector<eastl::string> flagNames);
+        void RegisterFlags(PoolString configName, StringView attrPath, Vector<String> flagNames);
 
         /**
          * @brief Resolve a FieldHint for the given attribute
@@ -90,12 +90,12 @@ namespace BECore {
          * @param attrPath Path in format "elementName/@attrName"
          * @param currentValue Current attribute value for heuristic fallback
          */
-        FieldHint Resolve(PoolString configName, eastl::string_view attrPath, eastl::string_view currentValue) const;
+        FieldHint Resolve(PoolString configName, StringView attrPath, StringView currentValue) const;
 
     private:
-        static eastl::string MakeKey(PoolString configName, eastl::string_view attrPath);
+        static String MakeKey(PoolString configName, StringView attrPath);
 
-        eastl::unordered_map<eastl::string, FieldHint> _hints;
+        HashMap<String, FieldHint> _hints;
     };
 
 }  // namespace BECore

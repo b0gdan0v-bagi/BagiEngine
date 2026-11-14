@@ -101,7 +101,7 @@ namespace BECore::Tests {
             }
             const std::string xml = "<root>" + body + "</root>";
             XmlDeserializer deserializer;
-            ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+            ASSERT_TRUE(deserializer.LoadFromString(FromStd(xml)));
             UIScreenContent content;
             content.Deserialize(deserializer);
             ASSERT_FALSE(deserializer.HasErrors());
@@ -151,7 +151,7 @@ namespace BECore::Tests {
             EXPECT_NEAR(rect.h, h, kTolerance);
         }
 
-        bool HasIssue(const eastl::vector<UIMatrixFailure>& failures, UILayoutIssueKind kind) {
+        bool HasIssue(const Vector<UIMatrixFailure>& failures, UILayoutIssueKind kind) {
             for (const auto& failure : failures) {
                 for (const UILayoutIssue& issue : failure.issues) {
                     if (issue.kind == kind) {
@@ -166,8 +166,8 @@ namespace BECore::Tests {
 
         /// The names of the labels and buttons of the laid-out screen whose control cuts its text in the language that is set now (an ellipsis label "can shrink", so the
         /// validator does not see it)
-        eastl::string CutTexts(const UIElement& element, float scale) {
-            eastl::string cut;
+        String CutTexts(const UIElement& element, float scale) {
+            String cut;
             const bool text = element.GetComponent<UITextComponent>() != nullptr;
             if (text && !element.rect.IsEmpty()) {
                 const float air = element.GetComponent<UIInputClicker>() ? kButtonAir : 0.0f;  // a button is a text with a clicker
@@ -187,7 +187,7 @@ namespace BECore::Tests {
         void ForEachLanguage(Check&& check) {
             UIStrings& strings = CoreManager::GetUIStrings();
             const PoolString saved = strings.GetLanguage();
-            const eastl::vector<PoolString> languages = strings.GetLanguages();
+            const Vector<PoolString> languages = strings.GetLanguages();
             for (const PoolString language : languages) {
                 ASSERT_TRUE(strings.SetLanguage(language)) << language.ToStringView().data();
                 check(language);
@@ -211,7 +211,7 @@ namespace BECore::Tests {
 
             auto config = XmlConfig::Create();
             ASSERT_TRUE(config.LoadFromString(kStringsXml));
-            const eastl::vector<eastl::string> problems = CoreManager::GetUIStrings().LoadFromXml(config.GetRoot());
+            const Vector<String> problems = CoreManager::GetUIStrings().LoadFromXml(config.GetRoot());
             EXPECT_TRUE(problems.empty()) << (problems.empty() ? "" : problems[0].c_str());
             ASSERT_EQ(CoreManager::GetUIStrings().GetLanguages().size(), 3u);
         }
@@ -268,7 +268,7 @@ namespace BECore::Tests {
 
         LayOutAt(layout, 480.0f, 480.0f);
 
-        EXPECT_NE(CutTexts(*layout.root, layout.GetResolved().scale).find("Status"), eastl::string::npos);
+        EXPECT_NE(CutTexts(*layout.root, layout.GetResolved().scale).find("Status"), String::npos);
     }
 
     TEST_F(UIEdgeAnchorScreenTest, AnOffsetThatLeavesTheRegionIsCaughtOnTheMatrix) {

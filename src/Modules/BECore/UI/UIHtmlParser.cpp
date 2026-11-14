@@ -6,9 +6,9 @@ namespace BECore {
 
     namespace {
 
-        constexpr eastl::string_view HtmlSource = "html";
-        constexpr eastl::string_view CommentOpen = "<!--";
-        constexpr eastl::string_view CommentClose = "-->";
+        constexpr StringView HtmlSource = "html";
+        constexpr StringView CommentOpen = "<!--";
+        constexpr StringView CommentClose = "-->";
         constexpr int HexBase = 16;
         constexpr int DecimalBase = 10;
         constexpr uint32_t MaxCodePoint = 0x10FFFF;
@@ -18,7 +18,7 @@ namespace BECore {
         const char* const VoidElements[] = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"};
         const char* const RawTextElements[] = {"style", "script"};
 
-        bool IsOneOf(eastl::string_view tag, const char* const* names, size_t count) {
+        bool IsOneOf(StringView tag, const char* const* names, size_t count) {
             for (size_t i = 0; i < count; ++i) {
                 if (tag == names[i]) {
                     return true;
@@ -27,11 +27,11 @@ namespace BECore {
             return false;
         }
 
-        bool IsVoidElement(eastl::string_view tag) {
+        bool IsVoidElement(StringView tag) {
             return IsOneOf(tag, VoidElements, std::size(VoidElements));
         }
 
-        bool IsRawTextElement(eastl::string_view tag) {
+        bool IsRawTextElement(StringView tag) {
             return IsOneOf(tag, RawTextElements, std::size(RawTextElements));
         }
 
@@ -43,7 +43,7 @@ namespace BECore {
             return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
         }
 
-        void AppendCodePoint(eastl::string& out, uint32_t codePoint) {
+        void AppendCodePoint(String& out, uint32_t codePoint) {
             if (codePoint == 0 || codePoint > MaxCodePoint || (codePoint >= FirstSurrogate && codePoint <= LastSurrogate)) {
                 out.push_back('?');
             } else if (codePoint < 0x80) {
@@ -64,8 +64,8 @@ namespace BECore {
         }
 
         /// The text with its entities decoded; one that is not known stays as written
-        eastl::string DecodeEntities(eastl::string_view text) {
-            eastl::string out;
+        String DecodeEntities(StringView text) {
+            String out;
             out.reserve(text.size());
             for (size_t i = 0; i < text.size(); ++i) {
                 if (text[i] != '&') {
@@ -73,11 +73,11 @@ namespace BECore {
                     continue;
                 }
                 const size_t end = text.find(';', i);
-                if (end == eastl::string_view::npos || end - i > 10) {
+                if (end == StringView::npos || end - i > 10) {
                     out.push_back('&');
                     continue;
                 }
-                const eastl::string_view entity = text.substr(i + 1, end - i - 1);
+                const StringView entity = text.substr(i + 1, end - i - 1);
                 bool known = true;
                 if (entity == "amp") {
                     out.push_back('&');
@@ -93,7 +93,7 @@ namespace BECore {
                     AppendCodePoint(out, 0xA0);
                 } else if (!entity.empty() && entity[0] == '#') {
                     const bool hex = entity.size() > 1 && (entity[1] == 'x' || entity[1] == 'X');
-                    const eastl::string_view digits = entity.substr(hex ? 2 : 1);
+                    const StringView digits = entity.substr(hex ? 2 : 1);
                     uint32_t codePoint = 0;
                     const auto [parsedEnd, error] = std::from_chars(digits.data(), digits.data() + digits.size(), codePoint, hex ? HexBase : DecimalBase);
                     known = !digits.empty() && error == std::errc{} && parsedEnd == digits.data() + digits.size();
@@ -114,7 +114,7 @@ namespace BECore {
 
         class Reader {
         public:
-            Reader(eastl::string_view html, UIHtmlDocument& document, UIWebReport& report) : _html(html), _document(document), _report(report) {}
+            Reader(StringView html, UIHtmlDocument& document, UIWebReport& report) : _html(html), _document(document), _report(report) {}
 
             void Run() {
                 UIHtmlNode root;
@@ -145,13 +145,13 @@ namespace BECore {
 
         private:
             /// Reports @p why at the current line and ends the read: the rest of the document is left out
-            void Stop(eastl::string why) {
+            void Stop(String why) {
                 _report.AddOnce(HtmlSource, _line, std::move(why));
                 _pos = _html.size();
                 _stopped = true;
             }
 
-            [[nodiscard]] bool StartsWith(eastl::string_view prefix) const {
+            [[nodiscard]] bool StartsWith(StringView prefix) const {
                 return _html.substr(_pos, prefix.size()) == prefix;
             }
 
@@ -165,12 +165,12 @@ namespace BECore {
 
             void SkipTo(char terminator) {
                 const size_t end = _html.find(terminator, _pos);
-                Advance(end == eastl::string_view::npos ? _html.size() - _pos : end - _pos + 1);
+                Advance(end == StringView::npos ? _html.size() - _pos : end - _pos + 1);
             }
 
             void SkipComment() {
                 const size_t end = _html.find(CommentClose, _pos + CommentOpen.size());
-                Advance(end == eastl::string_view::npos ? _html.size() - _pos : end + CommentClose.size() - _pos);
+                Advance(end == StringView::npos ? _html.size() - _pos : end + CommentClose.size() - _pos);
             }
 
             void SkipSpaces() {
@@ -193,21 +193,21 @@ namespace BECore {
                 return index;
             }
 
-            void AppendText(eastl::string_view raw, bool decode = true) {
+            void AppendText(StringView raw, bool decode = true) {
                 if (raw.empty()) {
                     return;
                 }
                 UIHtmlNode text;
-                text.text = decode ? DecodeEntities(raw) : eastl::string(raw);
+                text.text = decode ? DecodeEntities(raw) : String(raw);
                 text.line = _line;
                 AddNode(std::move(text));
             }
 
             void ReadText() {
                 const size_t end = _html.find('<', _pos);
-                const size_t length = end == eastl::string_view::npos ? _html.size() - _pos : end - _pos;
+                const size_t length = end == StringView::npos ? _html.size() - _pos : end - _pos;
                 const uint32_t startLine = _line;
-                const eastl::string_view raw = _html.substr(_pos, length);
+                const StringView raw = _html.substr(_pos, length);
                 Advance(length);
                 const uint32_t endLine = _line;
                 _line = startLine;
@@ -221,7 +221,7 @@ namespace BECore {
                 while (_pos < _html.size() && IsNameChar(_html[_pos])) {
                     Advance(1);
                 }
-                const eastl::string name = UIWebText::ToLower(_html.substr(nameStart, _pos - nameStart));
+                const String name = UIWebText::ToLower(_html.substr(nameStart, _pos - nameStart));
                 SkipTo('>');
                 // Close the nearest open element of that name
                 for (int node = _current; node != UIHtmlDocument::RootIndex; node = _document.nodes[node].parent) {
@@ -250,7 +250,7 @@ namespace BECore {
                     Stop(Format("elements are nested deeper than {}: the rest of the document is left out", UIHtmlParser::kMaxDepth));
                     return;
                 }
-                const eastl::string tag = element.tag;
+                const String tag = element.tag;
                 const int index = AddNode(std::move(element));
                 if (index == UIHtmlNode::NoNode || selfClosing || IsVoidElement(tag)) {
                     return;
@@ -304,7 +304,7 @@ namespace BECore {
                 }
             }
 
-            eastl::string ReadAttributeValue() {
+            String ReadAttributeValue() {
                 if (_pos >= _html.size()) {
                     return {};
                 }
@@ -312,9 +312,9 @@ namespace BECore {
                 if (quote == '"' || quote == '\'') {
                     Advance(1);
                     const size_t end = _html.find(quote, _pos);
-                    const size_t length = end == eastl::string_view::npos ? _html.size() - _pos : end - _pos;
-                    const eastl::string value = DecodeEntities(_html.substr(_pos, length));
-                    Advance(length + (end == eastl::string_view::npos ? 0 : 1));
+                    const size_t length = end == StringView::npos ? _html.size() - _pos : end - _pos;
+                    const String value = DecodeEntities(_html.substr(_pos, length));
+                    Advance(length + (end == StringView::npos ? 0 : 1));
                     return value;
                 }
                 const size_t start = _pos;
@@ -325,12 +325,12 @@ namespace BECore {
             }
 
             /// The content of `<style>` / `<script>` up to its end tag, as one raw text node
-            void ReadRawText(int element, const eastl::string& tag) {
-                const eastl::string closing = Format("</{}", tag.c_str());
+            void ReadRawText(int element, const String& tag) {
+                const String closing = Format("</{}", tag.c_str());
                 size_t end = _pos;
                 while (true) {
                     end = _html.find('<', end);
-                    if (end == eastl::string_view::npos) {
+                    if (end == StringView::npos) {
                         break;
                     }
                     if (UIWebText::ToLower(_html.substr(end, closing.size())) == closing) {
@@ -338,35 +338,35 @@ namespace BECore {
                     }
                     ++end;
                 }
-                const size_t length = end == eastl::string_view::npos ? _html.size() - _pos : end - _pos;
+                const size_t length = end == StringView::npos ? _html.size() - _pos : end - _pos;
                 const int saved = _current;
                 _current = element;
                 const uint32_t startLine = _line;
-                const eastl::string_view raw = _html.substr(_pos, length);
+                const StringView raw = _html.substr(_pos, length);
                 Advance(length);
                 const uint32_t endLine = _line;
                 _line = startLine;
                 AppendText(raw, false);
                 _line = endLine;
                 _current = saved;
-                if (end != eastl::string_view::npos) {
+                if (end != StringView::npos) {
                     SkipTo('>');
                 }
             }
 
-            eastl::string_view _html;
+            StringView _html;
             UIHtmlDocument& _document;
             UIWebReport& _report;
             size_t _pos = 0;
             uint32_t _line = 1;
             int _current = UIHtmlDocument::RootIndex;
-            bool _stopped = false;            ///< a limit ended the read: what is still open is not "never closed"
-            eastl::vector<uint32_t> _depths;  ///< per node, the number of elements open around it (the document node: 0)
+            bool _stopped = false;     ///< a limit ended the read: what is still open is not "never closed"
+            Vector<uint32_t> _depths;  ///< per node, the number of elements open around it (the document node: 0)
         };
 
     }  // namespace
 
-    const eastl::string* UIHtmlNode::FindAttribute(eastl::string_view name) const {
+    const String* UIHtmlNode::FindAttribute(StringView name) const {
         for (const UIHtmlAttribute& attribute : attributes) {
             if (attribute.name == name) {
                 return &attribute.value;
@@ -375,13 +375,13 @@ namespace BECore {
         return nullptr;
     }
 
-    bool UIHtmlNode::HasClass(eastl::string_view className) const {
-        const eastl::string* value = FindAttribute("class");
+    bool UIHtmlNode::HasClass(StringView className) const {
+        const String* value = FindAttribute("class");
         if (value == nullptr) {
             return false;
         }
         // No list of the words is made: the compile asks this for every element and every class of every rule
-        const eastl::string_view classes(value->data(), value->size());
+        const StringView classes(value->data(), value->size());
         size_t pos = 0;
         while (pos < classes.size()) {
             while (pos < classes.size() && UIWebText::IsSpace(classes[pos])) {
@@ -398,7 +398,7 @@ namespace BECore {
         return false;
     }
 
-    UIHtmlDocument UIHtmlParser::Parse(eastl::string_view html, UIWebReport& report) {
+    UIHtmlDocument UIHtmlParser::Parse(StringView html, UIWebReport& report) {
         UIHtmlDocument document;
         if (html.size() > kMaxDocumentBytes) {
             report.AddOnce(HtmlSource, 1, Format("the document is longer than {} bytes: the rest is left out", kMaxDocumentBytes));

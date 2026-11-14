@@ -11,18 +11,18 @@ namespace BECore {
         /// a constant RandomFn must not hang the server)
         constexpr int kMaxCodeAttempts = 16;
 
-        constexpr eastl::string_view kReasonLeft = "left";
-        constexpr eastl::string_view kReasonReplaced = "replaced";
-        constexpr eastl::string_view kReasonRoomClosed = "room_closed";
-        constexpr eastl::string_view kReasonRoomFinished = "room_finished";
-        constexpr eastl::string_view kReasonLobbyTimeout = "lobby_timeout";
+        constexpr StringView kReasonLeft = "left";
+        constexpr StringView kReasonReplaced = "replaced";
+        constexpr StringView kReasonRoomClosed = "room_closed";
+        constexpr StringView kReasonRoomFinished = "room_finished";
+        constexpr StringView kReasonLobbyTimeout = "lobby_timeout";
 
         /// Tokens per second of a bucket that gives one back per @p refill (none for a refill of zero)
         double RefillRate(std::chrono::milliseconds refill) {
             return refill.count() > 0 ? 1000.0 / static_cast<double>(refill.count()) : 0.0;
         }
 
-        bool IsJoinGuess(eastl::string_view code) {
+        bool IsJoinGuess(StringView code) {
             return code == RoomErrors::kUnknownRoom || code == RoomErrors::kBadToken;
         }
 
@@ -31,28 +31,28 @@ namespace BECore {
     RoomHub::RoomHub(const SeatedGameRegistry& registry, RoomHubSettings settings, RandomFn random, HubSink sink)
         : _registry(registry), _settings(settings), _random(std::move(random)), _sink(std::move(sink)), _serverJoinBudget(settings.serverJoinBurst, RefillRate(settings.serverJoinRefill)) {}
 
-    bool RoomHub::HasRoom(eastl::string_view code) const {
-        return _rooms.find(eastl::string(code)) != _rooms.end();
+    bool RoomHub::HasRoom(StringView code) const {
+        return _rooms.find(code) != _rooms.end();
     }
 
-    RoomHub::RoomEntry* RoomHub::FindRoom(eastl::string_view code) {
-        const auto found = _rooms.find(eastl::string(code));
+    RoomHub::RoomEntry* RoomHub::FindRoom(StringView code) {
+        const auto found = _rooms.find(code);
         return found == _rooms.end() ? nullptr : found->second.get();
     }
 
     // ---- Output --------------------------------------------------------------------------------------------------------------------
 
-    void RoomHub::SendText(ConnectionId id, eastl::string text) {
+    void RoomHub::SendText(ConnectionId id, String text) {
         if (_sink.send) {
             _sink.send(id, std::move(text));
         }
     }
 
-    void RoomHub::SendError(ConnectionId id, eastl::string_view code, eastl::string_view message, eastl::string_view ref) {
+    void RoomHub::SendError(ConnectionId id, StringView code, StringView message, StringView ref) {
         SendText(id, MakeErrorMessage(code, message, ref));
     }
 
-    void RoomHub::SendError(ConnectionId id, const ControlError& error, eastl::string_view ref) {
+    void RoomHub::SendError(ConnectionId id, const ControlError& error, StringView ref) {
         SendText(id, MakeErrorMessage(error.code, error.message, ref));
     }
 
@@ -77,7 +77,7 @@ namespace BECore {
         }
     }
 
-    size_t RoomHub::CountRoomsOf(eastl::string_view address) const {
+    size_t RoomHub::CountRoomsOf(StringView address) const {
         size_t count = 0;
         for (const auto& [code, entry] : _rooms) {
             count += entry->address == address ? 1 : 0;
@@ -97,7 +97,7 @@ namespace BECore {
 
     // ---- Connections ---------------------------------------------------------------------------------------------------------------
 
-    void RoomHub::OnConnected(ConnectionId connection, RoomTime now, eastl::string_view address) {
+    void RoomHub::OnConnected(ConnectionId connection, RoomTime now, StringView address) {
         if (_connections.size() >= _settings.maxConnections || _connections.find(connection) != _connections.end()) {
             if (_sink.close) {
                 _sink.close(connection, "server_full");
@@ -109,7 +109,7 @@ namespace BECore {
         created.listLimiter = RateLimiter(_settings.listBurst, RefillRate(_settings.listRefill));
         created.lastActivity = now;
         if (!address.empty()) {
-            created.address = eastl::string(address);
+            created.address = String(address);
             AddressState& state = _addresses.try_emplace(created.address, AddressState{RateLimiter(_settings.addressJoinBurst, RefillRate(_settings.addressJoinRefill)), 0}).first->second;
             ++state.connections;
         }
@@ -140,7 +140,7 @@ namespace BECore {
         if (found == _connections.end()) {
             return;
         }
-        const eastl::string code = found->second.roomCode;
+        const String code = found->second.roomCode;
         const PlayerId player = found->second.player;
         if (const auto address = _addresses.find(found->second.address); address != _addresses.end() && address->second.connections > 0) {
             --address->second.connections;
@@ -161,16 +161,16 @@ namespace BECore {
         }
     }
 
-    void RoomHub::CloseConnection(ConnectionId id, eastl::string_view reason, RoomTime now) {
+    void RoomHub::CloseConnection(ConnectionId id, StringView reason, RoomTime now) {
         DropConnection(id, now);
         if (_sink.close) {
-            _sink.close(id, eastl::string(reason));
+            _sink.close(id, String(reason));
         }
     }
 
     // ---- Messages ------------------------------------------------------------------------------------------------------------------
 
-    void RoomHub::OnMessage(ConnectionId id, eastl::string_view text, RoomTime now) {
+    void RoomHub::OnMessage(ConnectionId id, StringView text, RoomTime now) {
         const auto found = _connections.find(id);
         if (found == _connections.end()) {
             return;
@@ -232,9 +232,9 @@ namespace BECore {
             message);
     }
 
-    eastl::string RoomHub::MakeUnusedRoomCode() {
+    String RoomHub::MakeUnusedRoomCode() {
         for (int attempt = 0; attempt < kMaxCodeAttempts; ++attempt) {
-            eastl::string code = GenerateRoomCode(_random);
+            String code = GenerateRoomCode(_random);
             if (!HasRoom(code)) {
                 return code;
             }
@@ -243,12 +243,12 @@ namespace BECore {
     }
 
     void RoomHub::HandleCreate(ConnectionId id, Connection& connection, const CreateRoomMessage& message, RoomTime now) {
-        const eastl::string_view ref = RoomMessageTypes::kCreateRoom;
+        const StringView ref = RoomMessageTypes::kCreateRoom;
         if (!connection.roomCode.empty()) {
             SendError(id, RoomErrors::kAlreadyInRoom, "You are already in a room: leave it first", ref);
             return;
         }
-        const std::optional<SeatedGameInfo> info = _registry.Find(message.game);
+        const Optional<SeatedGameInfo> info = _registry.Find(message.game);
         if (!info) {
             SendError(id, RoomErrors::kUnknownGame, "No such game", ref);
             return;
@@ -261,14 +261,14 @@ namespace BECore {
             SendError(id, RoomErrors::kTooManyRooms, "The server has no room for another room", ref);
             return;
         }
-        eastl::string code = MakeUnusedRoomCode();
+        String code = MakeUnusedRoomCode();
         if (code.empty()) {
             SendError(id, RoomErrors::kInternalError, "No free room code could be made", ref);
             return;
         }
 
         const SeatedGameRegistry* registry = &_registry;
-        const eastl::string gameName = info->name;
+        const String gameName = info->name;
         auto entry = eastl::make_unique<RoomEntry>();
         entry->room = eastl::make_unique<Room>(code, *info, _random, [registry, gameName]() { return registry->Create(gameName); }, _settings.timings);
         entry->creation = ++_roomsCreated;
@@ -294,12 +294,12 @@ namespace BECore {
     }
 
     void RoomHub::HandleList(ConnectionId id, Connection& connection, const ListRoomsMessage& message, RoomTime now) {
-        const eastl::string_view ref = RoomMessageTypes::kListRooms;
+        const StringView ref = RoomMessageTypes::kListRooms;
         if (!connection.roomCode.empty()) {
             SendError(id, RoomErrors::kAlreadyInRoom, "You are already in a room: leave it first", ref);
             return;
         }
-        const std::optional<SeatedGameInfo> info = _registry.Find(message.game);
+        const Optional<SeatedGameInfo> info = _registry.Find(message.game);
         if (!info) {
             SendError(id, RoomErrors::kUnknownGame, "No such game", ref);
             return;
@@ -310,7 +310,7 @@ namespace BECore {
             return;
         }
 
-        eastl::vector<const RoomEntry*> found;
+        Vector<const RoomEntry*> found;
         for (const auto& [code, entry] : _rooms) {
             const Room& room = *entry->room;
             const RoomPhase phase = room.GetPhase();
@@ -342,20 +342,20 @@ namespace BECore {
             // comes back with the token of its seat is let in: no guess gets there (128 bits)
             const bool knownMember = message.IsReconnect() && entry && entry->room->FindByToken(message.token).has_value();
             if (!knownMember) {
-                FailJoin(id, connection, ControlError{eastl::string(RoomErrors::kRateLimited), "Too many failed joins: wait a while"}, now, false);
+                FailJoin(id, connection, ControlError{String(RoomErrors::kRateLimited), "Too many failed joins: wait a while"}, now, false);
                 return;
             }
         }
         if (!entry) {
-            FailJoin(id, connection, ControlError{eastl::string(RoomErrors::kUnknownRoom), "No room has this code"}, now);
+            FailJoin(id, connection, ControlError{String(RoomErrors::kUnknownRoom), "No room has this code"}, now);
             return;
         }
         Room& room = *entry->room;
 
         if (message.IsReconnect()) {
-            const std::optional<PlayerId> player = room.FindByToken(message.token);
+            const Optional<PlayerId> player = room.FindByToken(message.token);
             if (!player) {
-                FailJoin(id, connection, ControlError{eastl::string(RoomErrors::kBadToken), "The token is not a member's of this room"}, now);
+                FailJoin(id, connection, ControlError{String(RoomErrors::kBadToken), "The token is not a member's of this room"}, now);
                 return;
             }
             // A second connection with the token of a live one replaces it
@@ -446,7 +446,7 @@ namespace BECore {
             SendError(id, RoomErrors::kNotInRoom, "You are not in a room", RoomMessageTypes::kLeave);
             return;
         }
-        const eastl::string code = connection.roomCode;
+        const String code = connection.roomCode;
         entry->room->Leave(connection.player);
         SendText(id, MakeLeftMessage(kReasonLeft));
         Detach(id, connection);
@@ -462,7 +462,7 @@ namespace BECore {
         Room& room = *entry.room;
         const auto view = room.GetSeatView(connection.player);
         const auto actions = room.GetSeatActions(connection.player);
-        const std::optional<int> seat = room.GetSeatOf(connection.player);
+        const Optional<int> seat = room.GetSeatOf(connection.player);
         if (!view || !actions || !seat) {
             return;
         }
@@ -481,9 +481,9 @@ namespace BECore {
         const LobbySnapshot lobby = room.GetLobbySnapshot();
         const uint64_t revision = room.GetLobbyRevision();
         const bool started = room.GetPhase() != RoomPhase::Lobby;
-        const eastl::string lobbyText = MakeLobbyMessage(lobby);
+        const String lobbyText = MakeLobbyMessage(lobby);
         // Copy: a sink is not allowed to call back, but the loop must not depend on that
-        const eastl::vector<ConnectionId> ids = entry.connections;
+        const Vector<ConnectionId> ids = entry.connections;
         for (const ConnectionId id : ids) {
             const auto found = _connections.find(id);
             if (found == _connections.end()) {
@@ -495,7 +495,7 @@ namespace BECore {
                 SendText(id, lobbyText);
             }
             if (started) {
-                const std::optional<int> seat = room.GetSeatOf(connection.player);
+                const Optional<int> seat = room.GetSeatOf(connection.player);
                 if (seat && (!connection.sentView || connection.sentGameVersion != room.GetGameVersion() || connection.sentSeat != *seat)) {
                     ResendView(id, connection, entry);
                 }
@@ -503,12 +503,12 @@ namespace BECore {
         }
     }
 
-    void RoomHub::CloseRoom(const eastl::string& code, eastl::string_view reason, RoomTime now) {
+    void RoomHub::CloseRoom(const String& code, StringView reason, RoomTime now) {
         const auto found = _rooms.find(code);
         if (found == _rooms.end()) {
             return;
         }
-        const eastl::vector<ConnectionId> ids = found->second->connections;
+        const Vector<ConnectionId> ids = found->second->connections;
         for (const ConnectionId id : ids) {
             const auto connection = _connections.find(id);
             if (connection == _connections.end()) {
@@ -526,7 +526,7 @@ namespace BECore {
         _rooms.erase(found);
     }
 
-    bool RoomHub::CloseIfDone(const eastl::string& code, RoomTime now) {
+    bool RoomHub::CloseIfDone(const String& code, RoomTime now) {
         RoomEntry* entry = FindRoom(code);
         if (!entry || !entry->room->ShouldClose(now)) {
             return false;
@@ -536,7 +536,7 @@ namespace BECore {
     }
 
     void RoomHub::Tick(RoomTime now) {
-        eastl::vector<ConnectionId> idle;
+        Vector<ConnectionId> idle;
         for (const auto& [id, connection] : _connections) {
             if (connection.roomCode.empty() && now - connection.lastActivity >= _settings.idleTimeout) {
                 idle.push_back(id);
@@ -556,11 +556,11 @@ namespace BECore {
             }
         }
 
-        eastl::vector<eastl::string> codes;
+        Vector<String> codes;
         for (const auto& [code, entry] : _rooms) {
             codes.push_back(code);
         }
-        for (const eastl::string& code : codes) {
+        for (const String& code : codes) {
             RoomEntry* entry = FindRoom(code);
             if (!entry) {
                 continue;

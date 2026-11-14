@@ -18,7 +18,7 @@ namespace BECore::Tests {
 
         /// Visits every float of a compound with its name, adds a fixed step and records the names in the order of the visit
         struct StepVisitor {
-            eastl::vector<eastl::string> names;
+            Vector<String> names;
 
             bool Visit(const char* name, float& value) {
                 names.push_back(name);

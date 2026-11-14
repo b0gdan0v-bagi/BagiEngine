@@ -1,6 +1,5 @@
 #include "StressSceneFixture.h"
 
-#include <BECore/Config/XmlConfig.h>
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <Stress/Components/StressUiComponent.h>
@@ -29,15 +28,15 @@ namespace BECore::Stress::Tests {
             ASSERT_TRUE(CoreManager::GetUIStrings().LoadFromXml(config.GetRoot()).empty());
         }
 
-        eastl::string Shown(const UIElement& label) {
+        String Shown(const UIElement& label) {
             const UITextComponent* text = label.GetComponent<UITextComponent>();
             EXPECT_NE(text, nullptr);
-            const eastl::string_view shown = text->GetDisplayText();
-            return eastl::string(shown.data(), shown.size());
+            const StringView shown = text->GetDisplayText();
+            return String(shown.data(), shown.size());
         }
 
-        eastl::vector<eastl::string> ShownByAll(const UIElement& root) {
-            eastl::vector<eastl::string> all;
+        Vector<String> ShownByAll(const UIElement& root) {
+            Vector<String> all;
             for (const auto& label : root.children) {
                 all.push_back(Shown(*label));
             }
@@ -142,11 +141,11 @@ namespace BECore::Stress::Tests {
 
         for (uint32_t i = 0; i < 40; ++i) {
             const UiLabelKind kind = KindOf(i);
-            const eastl::string shown = Shown(*Root().children[i]);
+            const String shown = Shown(*Root().children[i]);
             if (kind == UiLabelKind::English || kind == UiLabelKind::Russian) {
-                EXPECT_EQ(shown, eastl::string(TextOf(i).data(), TextOf(i).size())) << i;
+                EXPECT_EQ(shown, String(TextOf(i).data(), TextOf(i).size())) << i;
             } else {
-                EXPECT_EQ(shown.find('{'), eastl::string::npos) << "expanded: " << i << " " << shown.c_str();
+                EXPECT_EQ(shown.find('{'), String::npos) << "expanded: " << i << " " << shown.c_str();
             }
         }
         EXPECT_EQ(Shown(*Root().children[4]), "Objects: 40");
@@ -156,11 +155,11 @@ namespace BECore::Stress::Tests {
     TEST_F(StressUiTest, ALanguageSwitchRewordsTheKeyLabelsAndNoOther) {
         StartUi(64);
         Update();
-        const eastl::vector<eastl::string> english = ShownByAll(Root());
+        const Vector<String> english = ShownByAll(Root());
 
         StressGame::GetActive()->GetState().SetLanguage(StressLanguage::Ru);
         Update();
-        const eastl::vector<eastl::string> russian = ShownByAll(Root());
+        const Vector<String> russian = ShownByAll(Root());
 
         ASSERT_EQ(english.size(), russian.size());
         size_t changed = 0;
@@ -183,7 +182,7 @@ namespace BECore::Stress::Tests {
     TEST_F(StressUiTest, ALanguageSwitchLeavesTheLabelsAlone) {
         StartUi(64);
         Update();
-        eastl::vector<const UIElement*> before;
+        Vector<const UIElement*> before;
         for (const auto& label : Root().children) {
             before.push_back(label.Get());
         }
@@ -208,7 +207,7 @@ namespace BECore::Stress::Tests {
     TEST_F(StressUiTest, GrowAppendsAndShrinkRemovesTheTailKeepingTheFirstLabels) {
         StartUi(100);
         Update();
-        eastl::vector<const UIElement*> first;
+        Vector<const UIElement*> first;
         for (size_t i = 0; i < 10; ++i) {
             first.push_back(Root().children[i].Get());
         }
@@ -287,7 +286,7 @@ namespace BECore::Stress::Tests {
     TEST_F(StressUiTest, EveryKeyOfTheLabelsIsInBothLanguages) {
         UIStrings& strings = CoreManager::GetUIStrings();
         for (uint32_t i = 0; i < kUiPoolSize * kUiKeyEvery; i += kUiKeyEvery) {
-            const eastl::string_view key = KeyOf(i);
+            const StringView key = KeyOf(i);
             for (const char* language : {"en", "ru"}) {
                 ASSERT_TRUE(strings.SetLanguage(PoolString::Intern(language)));
                 const auto text = strings.Find(key);

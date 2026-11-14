@@ -13,7 +13,6 @@
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
 #include <Events/SceneEvents.h>
-#include <Events/SubscriptionHolder.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -83,7 +82,7 @@ namespace BECore::Tests {
         /// Counts the errors that LogEvent::Flush() delivers while it lives and that have @p part in the text
         class ErrorCounter : public SubscriptionHolder {
         public:
-            explicit ErrorCounter(eastl::string part) : _part(eastl::move(part)) {
+            explicit ErrorCounter(String part) : _part(eastl::move(part)) {
                 Subscribe<LogEvent, &ErrorCounter::OnLog>(this);
             }
 
@@ -94,12 +93,12 @@ namespace BECore::Tests {
 
         private:
             void OnLog(const LogEvent& event) {
-                if (event.level == LogLevel::Error && event.message.find(eastl::string_view(_part.data(), _part.size())) != eastl::string_view::npos) {
+                if (event.level == LogLevel::Error && event.message.find(StringView(_part)) != StringView::npos) {
                     ++_count;
                 }
             }
 
-            eastl::string _part;
+            String _part;
             size_t _count = 0;
         };
 

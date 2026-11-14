@@ -50,8 +50,8 @@ namespace BECore::Stress {
         void Rebuild(uint32_t count, const StressSettings& settings);
         void ApplyRun(Sprite& sprite, uint32_t atlas, const Rect& srcRect, BlendMode blend);
 
-        eastl::vector<Sprite> _sprites;
-        eastl::vector<IntrusivePtr<ITexture>> _atlases;
+        Vector<Sprite> _sprites;
+        Vector<IntrusivePtr<ITexture>> _atlases;
         uint64_t _builtVersion = 0;  // the StressState version the nodes were last brought to; 0 is never a version
         uint32_t _placedCount = 0;   // the count the atlas and blend mode of the nodes follow (the runs depend on it)
         bool _atlasesFailed = false;

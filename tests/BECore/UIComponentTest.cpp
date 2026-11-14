@@ -138,7 +138,7 @@ namespace BECore::Tests {
             return event;
         }
 
-        eastl::string ElementToXml(const UIElement& element) {
+        String ElementToXml(const UIElement& element) {
             XmlSerializer serializer;
             EXPECT_TRUE(serializer.BeginObject("element"));
             element.Serialize(serializer);
@@ -146,10 +146,10 @@ namespace BECore::Tests {
             return serializer.SaveToString();
         }
 
-        eastl::vector<eastl::string> TypeNames(const UIElement& element) {
-            eastl::vector<eastl::string> names;
+        Vector<String> TypeNames(const UIElement& element) {
+            Vector<String> names;
             for (const auto& component : element.components) {
-                names.push_back(eastl::string(component->GetTypeMeta().typeName));
+                names.push_back(String(component->GetTypeMeta().typeName));
             }
             return names;
         }
@@ -209,8 +209,8 @@ namespace BECore::Tests {
             return -1;
         }
 
-        static bool Contains(const eastl::vector<eastl::string>& log, const char* line) {
-            return eastl::find(log.begin(), log.end(), eastl::string(line)) != log.end();
+        static bool Contains(const Vector<String>& log, const char* line) {
+            return eastl::find(log.begin(), log.end(), String(line)) != log.end();
         }
 
         bool PressOn(const UIElement& element) {
@@ -240,11 +240,11 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIComponentTest, TheComponentsSaveAndLoadBackInTheSameOrder) {
-        const eastl::string xml = ElementToXml(Get("Host"));
-        EXPECT_NE(xml.find("<components>"), eastl::string::npos) << xml.c_str();
+        const String xml = ElementToXml(Get("Host"));
+        EXPECT_NE(xml.find("<components>"), String::npos) << xml.c_str();
 
         XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+        ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
         auto loaded = New<UIElement>();
         ASSERT_TRUE(deserializer.BeginObject("element"));
         loaded->Deserialize(deserializer);
@@ -278,9 +278,9 @@ namespace BECore::Tests {
         EXPECT_FALSE(transition->fade);
         EXPECT_TRUE(transition->inputDuringTransition);
 
-        const eastl::string saved = ElementToXml(*loaded);
+        const String saved = ElementToXml(*loaded);
         XmlDeserializer again;
-        ASSERT_TRUE(again.LoadFromString(eastl::string_view(saved.data(), saved.size())));
+        ASSERT_TRUE(again.LoadFromString(StringView(saved)));
         auto reloaded = New<UIElement>();
         ASSERT_TRUE(again.BeginObject("element"));
         reloaded->Deserialize(again);
@@ -294,9 +294,9 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIComponentTest, AnElementWithNoComponentsSavesNoneAndLoadsNone) {
-        const eastl::string xml = ElementToXml(Get("Plain"));
+        const String xml = ElementToXml(Get("Plain"));
         XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+        ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
         auto loaded = New<UIElement>();
         ASSERT_TRUE(deserializer.BeginObject("element"));
         loaded->Deserialize(deserializer);
@@ -314,7 +314,7 @@ namespace BECore::Tests {
         loaded->Deserialize(deserializer);
         deserializer.EndObject();
         ASSERT_TRUE(deserializer.HasErrors());
-        EXPECT_NE(deserializer.GetErrors()[0].errorMessage.ToStringView().find("NoSuchComponent"), eastl::string_view::npos);
+        EXPECT_NE(deserializer.GetErrors()[0].errorMessage.ToStringView().find("NoSuchComponent"), StringView::npos);
     }
 
     // ---- one of each type -------------------------------------------------------------------------------------------------
@@ -387,7 +387,7 @@ namespace BECore::Tests {
         CoreManager::GetUIInput().DispatchMouseMotion(Motion(host.rect.x + 70.0f, host.rect.y + 40.0f, SDL_BUTTON_LMASK));
         EXPECT_TRUE(ReleaseOn(host));
 
-        const eastl::vector<eastl::string> expected{"first press Host", "first drag Host", "first click Host", "second click Host"};
+        const Vector<String> expected{"first press Host", "first drag Host", "first click Host", "second click Host"};
         EXPECT_EQ(UIComponentLog(), expected);
     }
 
@@ -496,7 +496,7 @@ namespace BECore::Tests {
         options.minTouchSize = 48.0f;
         const auto issues = _canvas->GetLayout().Validate(options);
 
-        eastl::vector<PoolString> small;
+        Vector<PoolString> small;
         for (const UILayoutIssue& issue : issues) {
             if (issue.kind == UILayoutIssueKind::TouchTargetTooSmall) {
                 small.push_back(issue.element);
@@ -509,7 +509,7 @@ namespace BECore::Tests {
     TEST_F(UIComponentTest, ThePreviewMarksTheTouchTargetsOfComposedElements) {
         Draw();
         const auto marks = UIPreviewOverlay::TouchTargets(_canvas->GetLayout(), 48.0f, 1.0f);
-        eastl::vector<PoolString> names;
+        Vector<PoolString> names;
         for (const TouchMark& mark : marks) {
             names.push_back(mark.name);
         }
@@ -582,7 +582,7 @@ namespace BECore::Tests {
     protected:
         void SetUp() override {
             UIComponentTest::SetUp();
-            const eastl::vector<uint8_t> pixels(static_cast<size_t>(kPictureSide) * kPictureSide * 4, 200);
+            const Vector<uint8_t> pixels(static_cast<size_t>(kPictureSide) * kPictureSide * 4, 200);
             _texture = _renderer->CreateTexture(pixels.data(), kPictureSide, kPictureSide);
             _image = &Get("Plain").AddComponent<UIImageComponent>();
             _image->GetSprite().SetTexture(_texture);
@@ -595,8 +595,8 @@ namespace BECore::Tests {
         }
 
         /// The one textured draw of the last frame, none when there was no picture
-        std::optional<DrawCall> Picture() const {
-            std::optional<DrawCall> found;
+        Optional<DrawCall> Picture() const {
+            Optional<DrawCall> found;
             for (const DrawCall& call : _renderer->calls) {
                 if (call.kind == DrawKind::Texture) {
                     EXPECT_FALSE(found.has_value()) << "more than one picture";
@@ -769,9 +769,9 @@ namespace BECore::Tests {
         EXPECT_TRUE(ColorsEqual(image->disabledTint, kDisabledTint));
         EXPECT_TRUE(image->stretch);
 
-        const eastl::string saved = ElementToXml(*loaded);
-        EXPECT_NE(saved.find("hoverTint"), eastl::string::npos) << saved.c_str();
-        EXPECT_NE(saved.find("stretch"), eastl::string::npos) << saved.c_str();
+        const String saved = ElementToXml(*loaded);
+        EXPECT_NE(saved.find("hoverTint"), String::npos) << saved.c_str();
+        EXPECT_NE(saved.find("stretch"), String::npos) << saved.c_str();
     }
 
     TEST_F(UIComponentTest, TheToggleAndSwitchComponentsComeFromAFileAndSaveBack) {
@@ -798,12 +798,12 @@ namespace BECore::Tests {
         EXPECT_TRUE(ColorsEqual(thumb->thumbColor, Color(7, 8, 9, 255)));
         EXPECT_EQ(thumb->partShape, UIPartShape::Round);
 
-        const eastl::string saved = ElementToXml(*loaded);
-        EXPECT_NE(saved.find("UIToggleComponent"), eastl::string::npos) << saved.c_str();
-        EXPECT_NE(saved.find("partShape=\"Round\""), eastl::string::npos) << saved.c_str();
+        const String saved = ElementToXml(*loaded);
+        EXPECT_NE(saved.find("UIToggleComponent"), String::npos) << saved.c_str();
+        EXPECT_NE(saved.find("partShape=\"Round\""), String::npos) << saved.c_str();
 
         XmlDeserializer again;
-        ASSERT_TRUE(again.LoadFromString(eastl::string_view(saved.data(), saved.size())));
+        ASSERT_TRUE(again.LoadFromString(StringView(saved)));
         auto reloaded = New<UIElement>();
         ASSERT_TRUE(again.BeginObject("element"));
         reloaded->Deserialize(again);
@@ -848,9 +848,9 @@ namespace BECore::Tests {
         EXPECT_TRUE(loaded->IsInteractive());
         EXPECT_FALSE(loaded->GivesStateLook());
 
-        const eastl::string saved = ElementToXml(*loaded);
+        const String saved = ElementToXml(*loaded);
         XmlDeserializer again;
-        ASSERT_TRUE(again.LoadFromString(eastl::string_view(saved.data(), saved.size())));
+        ASSERT_TRUE(again.LoadFromString(StringView(saved)));
         auto reloaded = New<UIElement>();
         ASSERT_TRUE(again.BeginObject("element"));
         reloaded->Deserialize(again);

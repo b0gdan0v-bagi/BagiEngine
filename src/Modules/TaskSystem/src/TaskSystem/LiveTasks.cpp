@@ -13,7 +13,7 @@ namespace BECore::Detail {
     }
 
     void LiveTasks::AbandonAll() {
-        eastl::vector<IntrusivePtr<RefCountedAtomic>> selfReferences;
+        Vector<IntrusivePtr<RefCountedAtomic>> selfReferences;
 
         {
             LockGuard lock(_mutex);

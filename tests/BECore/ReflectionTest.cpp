@@ -11,7 +11,6 @@
 #include <Common/TempPath.h>
 #include <EASTL/algorithm.h>
 #include <EASTL/map.h>
-#include <EASTL/optional.h>
 #include <Generated/ReflectionTest.gen.hpp>
 
 // =========================================================================
@@ -107,7 +106,7 @@ namespace BECore::Tests {
 
         /// Saves @p value as <objectName> with one @p key entry and returns the XML text.
         template <typename T>
-        eastl::string SaveToXml(eastl::string_view objectName, eastl::string_view key, const T& value) {
+        String SaveToXml(StringView objectName, StringView key, const T& value) {
             XmlSerializer serializer;
             if (serializer.BeginObject(objectName)) {
                 Ser::Save(serializer, value, key);
@@ -118,7 +117,7 @@ namespace BECore::Tests {
 
         /// Loads the @p key entry of <objectName> from @p xml into @p out. Use through ASSERT_NO_FATAL_FAILURE.
         template <typename T>
-        void LoadFromXml(const eastl::string& xml, eastl::string_view objectName, eastl::string_view key, T& out) {
+        void LoadFromXml(const String& xml, StringView objectName, StringView key, T& out) {
             XmlDeserializer deserializer;
             ASSERT_TRUE(deserializer.LoadFromString(xml)) << "Failed to load XML:\n" << xml.c_str();
             if (deserializer.BeginObject(objectName)) {
@@ -128,7 +127,7 @@ namespace BECore::Tests {
         }
 
         /// Serializes a Player into <Player ...> with the given serializer settings.
-        eastl::string SavePlayer(const TestData::Player& player, bool skipDefaults) {
+        String SavePlayer(const TestData::Player& player, bool skipDefaults) {
             XmlSerializer serializer;
             serializer.SetSkipDefaults(skipDefaults);
             if (serializer.BeginObject("Player")) {
@@ -139,7 +138,7 @@ namespace BECore::Tests {
         }
 
         /// Loads a Player from @p xml into @p out. Use through ASSERT_NO_FATAL_FAILURE.
-        void LoadPlayer(const eastl::string& xml, TestData::Player& out) {
+        void LoadPlayer(const String& xml, TestData::Player& out) {
             XmlDeserializer deserializer;
             ASSERT_TRUE(deserializer.LoadFromString(xml)) << "Failed to load XML:\n" << xml.c_str();
             if (deserializer.BeginObject("Player")) {
@@ -159,11 +158,11 @@ namespace BECore::Tests {
         // Binary helpers
         // ---------------------------------------------------------------------
 
-        using ByteBuffer = eastl::vector<uint8_t>;
+        using ByteBuffer = Vector<uint8_t>;
 
         /// Joins the deserializer errors into one line for assertion messages.
-        eastl::string DescribeErrors(const IDeserializer& deserializer) {
-            eastl::string text;
+        String DescribeErrors(const IDeserializer& deserializer) {
+            String text;
             for (const auto& error : deserializer.GetErrors()) {
                 text.append(Format("[{}: {}] ", error.path.CStr(), error.errorMessage.CStr()));
             }
@@ -172,7 +171,7 @@ namespace BECore::Tests {
 
         /// Saves @p value as <objectName> with one @p key entry and returns the binary stream.
         template <typename T>
-        ByteBuffer SaveToBinary(eastl::string_view objectName, eastl::string_view key, const T& value) {
+        ByteBuffer SaveToBinary(StringView objectName, StringView key, const T& value) {
             BinarySerializer serializer;
             if (serializer.BeginObject(objectName)) {
                 Ser::Save(serializer, value, key);
@@ -183,7 +182,7 @@ namespace BECore::Tests {
 
         /// Loads the @p key entry of <objectName> from @p data into @p out. Use through ASSERT_NO_FATAL_FAILURE.
         template <typename T>
-        void LoadFromBinary(const ByteBuffer& data, eastl::string_view objectName, eastl::string_view key, T& out) {
+        void LoadFromBinary(const ByteBuffer& data, StringView objectName, StringView key, T& out) {
             BinaryDeserializer deserializer;
             ASSERT_TRUE(deserializer.LoadFromBuffer(data)) << DescribeErrors(deserializer).c_str();
             ASSERT_TRUE(deserializer.BeginObject(objectName)) << "the object is missing from the binary stream";
@@ -246,19 +245,19 @@ namespace BECore::Tests {
             state.inventory.itemCount = 3;
             state.level = 4;
 
-            eastl::vector<TestData::Player> players(3);
+            Vector<TestData::Player> players(3);
             players[0].name = PoolString::Intern("First");
             players[1].health = 7;
             players[2].isAlive = false;
 
-            const eastl::map<eastl::string, int32_t> scores = {{"alpha", 1}, {"bravo", 2}, {"charlie", 3}};
+            const Map<String, int32_t> scores = {{"alpha", 1}, {"bravo", 2}, {"charlie", 3}};
 
             BinarySerializer serializer;
             if (serializer.BeginObject("Doc")) {
                 Ser::Save(serializer, state, "state");
                 Ser::Save(serializer, players, "players");
                 Ser::Save(serializer, scores, "scores");
-                serializer.Write("title", eastl::string_view("a title"));
+                serializer.Write("title", StringView("a title"));
                 serializer.EndObject();
             }
             return serializer.GetData();
@@ -271,11 +270,11 @@ namespace BECore::Tests {
             }
             TestData::GameState state;
             Ser::Load(deserializer, state, "state");
-            eastl::vector<TestData::Player> players;
+            Vector<TestData::Player> players;
             Ser::Load(deserializer, players, "players");
-            eastl::map<eastl::string, int32_t> scores;
+            Map<String, int32_t> scores;
             Ser::Load(deserializer, scores, "scores");
-            eastl::string title;
+            String title;
             deserializer.ReadAttribute("title", title);
             deserializer.EndObject();
         }
@@ -319,7 +318,7 @@ namespace BECore::Tests {
         player.isAlive = false;
 
         int fieldCount = 0;
-        ForEachField(player, [&](eastl::string_view, auto&) { fieldCount++; });
+        ForEachField(player, [&](StringView, auto&) { fieldCount++; });
 
         EXPECT_EQ(fieldCount, 4) << "ForEachField should visit every reflected field";
     }
@@ -331,7 +330,7 @@ namespace BECore::Tests {
         original.name = PoolString::Intern("Hero");
         original.isAlive = true;
 
-        const eastl::string xml = SavePlayer(original, false);
+        const String xml = SavePlayer(original, false);
 
         TestData::Player loaded;
         loaded.health = 0;
@@ -435,7 +434,7 @@ namespace BECore::Tests {
         state.level = 3;
 
         const ByteBuffer binary = SaveToBinary("Save", "state", state);
-        const eastl::string xml = SaveToXml("Save", "state", state);
+        const String xml = SaveToXml("Save", "state", state);
 
         EXPECT_LT(binary.size(), xml.size()) << "binary " << binary.size() << " bytes, XML " << xml.size() << " bytes";
     }
@@ -443,31 +442,31 @@ namespace BECore::Tests {
     TEST(ReflectionTest, BinaryContainers) {
         {
             SCOPED_TRACE("eastl::map");
-            const eastl::map<eastl::string, int32_t> original = {{"charlie", 3}, {"alpha", 1}, {"bravo", 2}};
-            ExpectBinaryRoundTrip(original, eastl::map<eastl::string, int32_t>{{"stale", 99}});
+            const Map<String, int32_t> original = {{"charlie", 3}, {"alpha", 1}, {"bravo", 2}};
+            ExpectBinaryRoundTrip(original, Map<String, int32_t>{{"stale", 99}});
         }
         {
             SCOPED_TRACE("eastl::unordered_map");
-            const eastl::unordered_map<eastl::string, int32_t> original = {{"zebra", 26}, {"apple", 1}, {"mango", 13}};
-            ExpectBinaryRoundTrip(original, eastl::unordered_map<eastl::string, int32_t>{{"stale", 99}});
+            const HashMap<String, int32_t> original = {{"zebra", 26}, {"apple", 1}, {"mango", 13}};
+            ExpectBinaryRoundTrip(original, HashMap<String, int32_t>{{"stale", 99}});
         }
         {
             SCOPED_TRACE("eastl::fixed_vector");
-            eastl::fixed_vector<int32_t, 8> original;
+            SmallVector<int32_t, 8> original;
             original.push_back(10);
             original.push_back(20);
             original.push_back(30);
-            ExpectBinaryRoundTrip(original, eastl::fixed_vector<int32_t, 8>{99});
+            ExpectBinaryRoundTrip(original, SmallVector<int32_t, 8>{99});
         }
         {
             SCOPED_TRACE("eastl::vector of strings");
-            const eastl::vector<eastl::string> original = {"one", "", "three"};
-            ExpectBinaryRoundTrip(original, eastl::vector<eastl::string>{"stale"});
+            const Vector<String> original = {"one", "", "three"};
+            ExpectBinaryRoundTrip(original, Vector<String>{"stale"});
         }
         {
             SCOPED_TRACE("eastl::array");
-            const eastl::array<float, 3> original = {1.0f, 2.5f, 3.75f};
-            ExpectBinaryRoundTrip(original, eastl::array<float, 3>{});
+            const Array<float, 3> original = {1.0f, 2.5f, 3.75f};
+            ExpectBinaryRoundTrip(original, Array<float, 3>{});
         }
         {
             SCOPED_TRACE("std::array");
@@ -476,37 +475,37 @@ namespace BECore::Tests {
         }
         {
             SCOPED_TRACE("eastl::pair");
-            const eastl::pair<int32_t, eastl::string> original = {42, eastl::string("hello")};
-            ExpectBinaryRoundTrip(original, eastl::pair<int32_t, eastl::string>{0, eastl::string{}});
+            const eastl::pair<int32_t, String> original = {42, String("hello")};
+            ExpectBinaryRoundTrip(original, eastl::pair<int32_t, String>{0, String{}});
         }
         {
             SCOPED_TRACE("std::pair");
-            const std::pair<int32_t, eastl::string> original = {99, eastl::string("world")};
-            ExpectBinaryRoundTrip(original, std::pair<int32_t, eastl::string>{0, eastl::string{}});
+            const std::pair<int32_t, String> original = {99, String("world")};
+            ExpectBinaryRoundTrip(original, std::pair<int32_t, String>{0, String{}});
         }
         {
             SCOPED_TRACE("eastl::optional with value");
-            ExpectBinaryRoundTrip(eastl::optional<int32_t>(77), eastl::optional<int32_t>{});
+            ExpectBinaryRoundTrip(Optional<int32_t>(77), Optional<int32_t>{});
         }
         {
             SCOPED_TRACE("eastl::optional without value: the key is absent and loading resets the target");
-            ExpectBinaryRoundTrip(eastl::optional<int32_t>{}, eastl::optional<int32_t>(55));
+            ExpectBinaryRoundTrip(Optional<int32_t>{}, Optional<int32_t>(55));
         }
         {
             SCOPED_TRACE("std::optional with value");
-            ExpectBinaryRoundTrip(std::optional<int32_t>(123), std::optional<int32_t>{});
+            ExpectBinaryRoundTrip(Optional<int32_t>(123), Optional<int32_t>{});
         }
         {
             SCOPED_TRACE("empty eastl::vector");
-            ExpectBinaryRoundTrip(eastl::vector<int32_t>{}, eastl::vector<int32_t>{1, 2, 3});
+            ExpectBinaryRoundTrip(Vector<int32_t>{}, Vector<int32_t>{1, 2, 3});
         }
     }
 
     TEST(ReflectionTest, BinaryArrayShorterThanTarget) {
-        const eastl::array<int32_t, 2> small = {7, 8};
+        const Array<int32_t, 2> small = {7, 8};
         const ByteBuffer data = SaveToBinary("PartialArr", "values", small);
 
-        eastl::array<int32_t, 4> loaded = {99, 99, 99, 99};
+        Array<int32_t, 4> loaded = {99, 99, 99, 99};
         ASSERT_NO_FATAL_FAILURE(LoadFromBinary(data, "PartialArr", "values", loaded));
 
         EXPECT_EQ(loaded[0], 7);
@@ -519,7 +518,7 @@ namespace BECore::Tests {
         // Array of reflected objects
         {
             SCOPED_TRACE("eastl::vector<Player>");
-            eastl::vector<TestData::Player> original(3);
+            Vector<TestData::Player> original(3);
             original[0].name = PoolString::Intern("First");
             original[1].health = 7;
             original[1].speed = 1.5f;
@@ -527,7 +526,7 @@ namespace BECore::Tests {
 
             const ByteBuffer data = SaveToBinary("Party", "players", original);
 
-            eastl::vector<TestData::Player> loaded(1);
+            Vector<TestData::Player> loaded(1);
             ASSERT_NO_FATAL_FAILURE(LoadFromBinary(data, "Party", "players", loaded));
 
             ASSERT_EQ(loaded.size(), original.size());
@@ -540,7 +539,7 @@ namespace BECore::Tests {
         // Map whose values are reflected objects: "key" and the object's own fields share one element
         {
             SCOPED_TRACE("eastl::map<string, Player>");
-            eastl::map<eastl::string, TestData::Player> original;
+            Map<String, TestData::Player> original;
             original["bob"].health = 10;
             original["bob"].name = PoolString::Intern("Bob");
             original["alice"].health = 20;
@@ -548,7 +547,7 @@ namespace BECore::Tests {
 
             const ByteBuffer data = SaveToBinary("Roster", "players", original);
 
-            eastl::map<eastl::string, TestData::Player> loaded;
+            Map<String, TestData::Player> loaded;
             ASSERT_NO_FATAL_FAILURE(LoadFromBinary(data, "Roster", "players", loaded));
 
             ASSERT_EQ(loaded.size(), original.size());
@@ -561,12 +560,12 @@ namespace BECore::Tests {
     }
 
     TEST(ReflectionTest, BinaryLargeArray) {
-        eastl::vector<int32_t> original;
+        Vector<int32_t> original;
         original.reserve(20000);
         for (int32_t i = 0; i < 20000; ++i) {
             original.push_back(i * 3 - 1000);
         }
-        ExpectBinaryRoundTrip(original, eastl::vector<int32_t>{});
+        ExpectBinaryRoundTrip(original, Vector<int32_t>{});
     }
 
     TEST(ReflectionTest, BinaryScalarTypes) {
@@ -600,26 +599,26 @@ namespace BECore::Tests {
     }
 
     TEST(ReflectionTest, BinaryStrings) {
-        const eastl::string longText(100000, 'x');
+        const String longText(100000, 'x');
         const char embeddedNul[] = {'a', '\0', 'b'};
 
         BinarySerializer serializer;
-        serializer.Write("empty", eastl::string_view(""));
-        serializer.Write("utf8", eastl::string_view("h\xC3\xA9llo w\xC3\xB6rld \xE2\x9C\x93"));
-        serializer.Write("embeddedNul", eastl::string_view(embeddedNul, sizeof(embeddedNul)));
-        serializer.WriteAttribute("long", eastl::string_view(longText.data(), longText.size()));
+        serializer.Write("empty", StringView(""));
+        serializer.Write("utf8", StringView("h\xC3\xA9llo w\xC3\xB6rld \xE2\x9C\x93"));
+        serializer.Write("embeddedNul", StringView(embeddedNul, sizeof(embeddedNul)));
+        serializer.WriteAttribute("long", StringView(longText));
         serializer.Write("pool", PoolString::Intern("Hero"));
         serializer.WriteAttribute("emptyPool", PoolString{});
 
         BinaryDeserializer deserializer;
         ASSERT_TRUE(deserializer.LoadFromBuffer(serializer.GetData())) << DescribeErrors(deserializer).c_str();
 
-        eastl::string text = "stale";
+        String text = "stale";
         ASSERT_TRUE(deserializer.Read("empty", text));
         EXPECT_TRUE(text.empty());
 
         ASSERT_TRUE(deserializer.Read("utf8", text));
-        EXPECT_EQ(text, eastl::string("h\xC3\xA9llo w\xC3\xB6rld \xE2\x9C\x93"));
+        EXPECT_EQ(text, String("h\xC3\xA9llo w\xC3\xB6rld \xE2\x9C\x93"));
 
         ASSERT_TRUE(deserializer.ReadAttribute("embeddedNul", text));
         EXPECT_EQ(text.size(), 3u) << "strings are length-prefixed, an embedded NUL does not end them";
@@ -872,7 +871,7 @@ namespace BECore::Tests {
     TEST(ReflectionTest, BinaryTypeMismatchIsReported) {
         BinarySerializer serializer;
         serializer.Write("number", int32_t{7});
-        serializer.Write("text", eastl::string_view("seven"));
+        serializer.Write("text", StringView("seven"));
 
         BinaryDeserializer deserializer;
         ASSERT_TRUE(deserializer.LoadFromBuffer(serializer.GetData()));
@@ -887,9 +886,9 @@ namespace BECore::Tests {
         int32_t asInt32 = 1;
         EXPECT_FALSE(deserializer.Read("text", asInt32));
 
-        eastl::string asString = "unchanged";
+        String asString = "unchanged";
         EXPECT_FALSE(deserializer.ReadAttribute("number", asString));
-        EXPECT_EQ(asString, eastl::string("unchanged"));
+        EXPECT_EQ(asString, String("unchanged"));
 
         // Unlike a missing optional entry, a mismatch means the data is not what the reader expects: always an error
         ASSERT_EQ(deserializer.GetErrors().size(), 4u) << DescribeErrors(deserializer).c_str();
@@ -1182,7 +1181,7 @@ namespace BECore::Tests {
 
     TEST(ReflectionTest, MethodReflection) {
         int methodCount = 0;
-        eastl::vector<eastl::string_view> methodNames;
+        Vector<StringView> methodNames;
         ForEachMethod<TestData::Player>([&](auto& method) {
             methodCount++;
             methodNames.push_back(method.name);
@@ -1190,7 +1189,7 @@ namespace BECore::Tests {
 
         EXPECT_EQ(methodCount, 4) << "ForEachMethod should visit every reflected method";
 
-        const auto hasName = [&methodNames](eastl::string_view expected) { return eastl::find(methodNames.begin(), methodNames.end(), expected) != methodNames.end(); };
+        const auto hasName = [&methodNames](StringView expected) { return eastl::find(methodNames.begin(), methodNames.end(), expected) != methodNames.end(); };
         EXPECT_TRUE(hasName("TakeDamage"));
         EXPECT_TRUE(hasName("Heal"));
         EXPECT_TRUE(hasName("IsDead"));
@@ -1227,13 +1226,13 @@ namespace BECore::Tests {
         EXPECT_FALSE(DefaultChecker<PoolString>::IsDefault(PoolString::Intern("test")));
 
         // eastl::string
-        EXPECT_TRUE(DefaultChecker<eastl::string>::IsDefault(eastl::string{}));
-        EXPECT_FALSE(DefaultChecker<eastl::string>::IsDefault(eastl::string{"hello"}));
+        EXPECT_TRUE(DefaultChecker<String>::IsDefault(String{}));
+        EXPECT_FALSE(DefaultChecker<String>::IsDefault(String{"hello"}));
 
         // eastl::vector
-        EXPECT_TRUE(DefaultChecker<eastl::vector<int32_t>>::IsDefault(eastl::vector<int32_t>{}));
-        const eastl::vector<int32_t> nonEmptyVec{1, 2, 3};
-        EXPECT_FALSE(DefaultChecker<eastl::vector<int32_t>>::IsDefault(nonEmptyVec));
+        EXPECT_TRUE(DefaultChecker<Vector<int32_t>>::IsDefault(Vector<int32_t>{}));
+        const Vector<int32_t> nonEmptyVec{1, 2, 3};
+        EXPECT_FALSE(DefaultChecker<Vector<int32_t>>::IsDefault(nonEmptyVec));
     }
 
     TEST(ReflectionTest, SkipDefaults) {
@@ -1243,8 +1242,8 @@ namespace BECore::Tests {
         player.name = PoolString{};
         player.isAlive = false;
 
-        const eastl::string fullXml = SavePlayer(player, false);
-        const eastl::string skipXml = SavePlayer(player, true);
+        const String fullXml = SavePlayer(player, false);
+        const String skipXml = SavePlayer(player, true);
 
         EXPECT_LT(skipXml.size(), fullXml.size()) << "skip-defaults XML should be smaller:\n" << skipXml.c_str() << "\nvs\n" << fullXml.c_str();
 
@@ -1263,7 +1262,7 @@ namespace BECore::Tests {
         hero.name = PoolString::Intern("Hero");
         hero.isAlive = true;
 
-        const eastl::string heroXml = SavePlayer(hero, true);
+        const String heroXml = SavePlayer(hero, true);
 
         TestData::Player heroLoaded;
         ASSERT_NO_FATAL_FAILURE(LoadPlayer(heroXml, heroLoaded));
@@ -1271,14 +1270,14 @@ namespace BECore::Tests {
     }
 
     TEST(ReflectionTest, MapSerialization) {
-        eastl::map<eastl::string, int32_t> original;
+        Map<String, int32_t> original;
         original["charlie"] = 3;
         original["alpha"] = 1;
         original["bravo"] = 2;
 
-        const eastl::string xml = SaveToXml("MapTest", "scores", original);
+        const String xml = SaveToXml("MapTest", "scores", original);
 
-        eastl::map<eastl::string, int32_t> loaded;
+        Map<String, int32_t> loaded;
         ASSERT_NO_FATAL_FAILURE(LoadFromXml(xml, "MapTest", "scores", loaded));
 
         ASSERT_EQ(loaded.size(), original.size());
@@ -1290,14 +1289,14 @@ namespace BECore::Tests {
     }
 
     TEST(ReflectionTest, FixedVectorSerialization) {
-        eastl::fixed_vector<int32_t, 8> original;
+        SmallVector<int32_t, 8> original;
         original.push_back(10);
         original.push_back(20);
         original.push_back(30);
 
-        const eastl::string xml = SaveToXml("FVTest", "values", original);
+        const String xml = SaveToXml("FVTest", "values", original);
 
-        eastl::fixed_vector<int32_t, 8> loaded;
+        SmallVector<int32_t, 8> loaded;
         ASSERT_NO_FATAL_FAILURE(LoadFromXml(xml, "FVTest", "values", loaded));
 
         ASSERT_EQ(loaded.size(), original.size());
@@ -1310,10 +1309,10 @@ namespace BECore::Tests {
         // eastl::array
         {
             SCOPED_TRACE("eastl::array");
-            const eastl::array<float, 3> original = {1.0f, 2.5f, 3.75f};
-            const eastl::string xml = SaveToXml("ArrTest", "values", original);
+            const Array<float, 3> original = {1.0f, 2.5f, 3.75f};
+            const String xml = SaveToXml("ArrTest", "values", original);
 
-            eastl::array<float, 3> loaded = {};
+            Array<float, 3> loaded = {};
             ASSERT_NO_FATAL_FAILURE(LoadFromXml(xml, "ArrTest", "values", loaded));
 
             for (size_t i = 0; i < 3; ++i) {
@@ -1325,7 +1324,7 @@ namespace BECore::Tests {
         {
             SCOPED_TRACE("std::array");
             const std::array<float, 3> original = {4.0f, 5.5f, 6.25f};
-            const eastl::string xml = SaveToXml("StdArrTest", "values", original);
+            const String xml = SaveToXml("StdArrTest", "values", original);
 
             std::array<float, 3> loaded = {};
             ASSERT_NO_FATAL_FAILURE(LoadFromXml(xml, "StdArrTest", "values", loaded));
@@ -1338,10 +1337,10 @@ namespace BECore::Tests {
         // Partial load: the XML has fewer elements than the array size
         {
             SCOPED_TRACE("partial load");
-            const eastl::array<int32_t, 2> small = {7, 8};
-            const eastl::string xml = SaveToXml("PartialArr", "values", small);
+            const Array<int32_t, 2> small = {7, 8};
+            const String xml = SaveToXml("PartialArr", "values", small);
 
-            eastl::array<int32_t, 4> loaded = {99, 99, 99, 99};
+            Array<int32_t, 4> loaded = {99, 99, 99, 99};
             ASSERT_NO_FATAL_FAILURE(LoadFromXml(xml, "PartialArr", "values", loaded));
 
             EXPECT_EQ(loaded[0], 7);
@@ -1355,10 +1354,10 @@ namespace BECore::Tests {
         // eastl::pair
         {
             SCOPED_TRACE("eastl::pair");
-            const eastl::pair<int32_t, eastl::string> original = {42, eastl::string("hello")};
-            const eastl::string xml = SaveToXml("PairTest", "entry", original);
+            const eastl::pair<int32_t, String> original = {42, String("hello")};
+            const String xml = SaveToXml("PairTest", "entry", original);
 
-            eastl::pair<int32_t, eastl::string> loaded = {0, eastl::string{}};
+            eastl::pair<int32_t, String> loaded = {0, String{}};
             ASSERT_NO_FATAL_FAILURE(LoadFromXml(xml, "PairTest", "entry", loaded));
 
             EXPECT_EQ(loaded.first, original.first);
@@ -1368,10 +1367,10 @@ namespace BECore::Tests {
         // std::pair
         {
             SCOPED_TRACE("std::pair");
-            const std::pair<int32_t, eastl::string> original = {99, eastl::string("world")};
-            const eastl::string xml = SaveToXml("StdPairTest", "entry", original);
+            const std::pair<int32_t, String> original = {99, String("world")};
+            const String xml = SaveToXml("StdPairTest", "entry", original);
 
-            std::pair<int32_t, eastl::string> loaded = {0, eastl::string{}};
+            std::pair<int32_t, String> loaded = {0, String{}};
             ASSERT_NO_FATAL_FAILURE(LoadFromXml(xml, "StdPairTest", "entry", loaded));
 
             EXPECT_EQ(loaded.first, original.first);
@@ -1383,10 +1382,10 @@ namespace BECore::Tests {
         // eastl::optional with a value
         {
             SCOPED_TRACE("eastl::optional with value");
-            const eastl::optional<int32_t> original = 77;
-            const eastl::string xml = SaveToXml("OptTest", "value", original);
+            const Optional<int32_t> original = 77;
+            const String xml = SaveToXml("OptTest", "value", original);
 
-            eastl::optional<int32_t> loaded;
+            Optional<int32_t> loaded;
             ASSERT_NO_FATAL_FAILURE(LoadFromXml(xml, "OptTest", "value", loaded));
 
             ASSERT_TRUE(loaded.has_value());
@@ -1396,10 +1395,10 @@ namespace BECore::Tests {
         // eastl::optional without a value (absent key -> nullopt)
         {
             SCOPED_TRACE("eastl::optional without value");
-            const eastl::optional<int32_t> original;
-            const eastl::string xml = SaveToXml("OptEmptyTest", "value", original);
+            const Optional<int32_t> original;
+            const String xml = SaveToXml("OptEmptyTest", "value", original);
 
-            eastl::optional<int32_t> loaded = 55;  // pre-set to non-null to verify the reset
+            Optional<int32_t> loaded = 55;  // pre-set to non-null to verify the reset
             ASSERT_NO_FATAL_FAILURE(LoadFromXml(xml, "OptEmptyTest", "value", loaded));
 
             EXPECT_FALSE(loaded.has_value()) << "should be nullopt after loading an absent key";
@@ -1408,10 +1407,10 @@ namespace BECore::Tests {
         // std::optional with a value
         {
             SCOPED_TRACE("std::optional with value");
-            const std::optional<int32_t> original = 123;
-            const eastl::string xml = SaveToXml("StdOptTest", "value", original);
+            const Optional<int32_t> original = 123;
+            const String xml = SaveToXml("StdOptTest", "value", original);
 
-            std::optional<int32_t> loaded;
+            Optional<int32_t> loaded;
             ASSERT_NO_FATAL_FAILURE(LoadFromXml(xml, "StdOptTest", "value", loaded));
 
             ASSERT_TRUE(loaded.has_value());
@@ -1421,7 +1420,7 @@ namespace BECore::Tests {
 
     TEST(ReflectionTest, ErrorReporting) {
         // Nested structure: root > player > inventory. Read a field that doesn't exist inside inventory.
-        constexpr eastl::string_view xml = R"(
+        constexpr StringView xml = R"(
             <root>
               <player>
                 <inventory gold="50"/>
@@ -1446,33 +1445,33 @@ namespace BECore::Tests {
 
         const auto& errors = deserializer.GetErrors();
         ASSERT_FALSE(errors.empty());
-        const eastl::string pathStr = errors[0].path.CStr();
+        const String pathStr = errors[0].path.CStr();
 
         // The path should contain "player" and "inventory"
-        EXPECT_NE(pathStr.find("player"), eastl::string::npos) << "error path '" << pathStr.c_str() << "'";
-        EXPECT_NE(pathStr.find("inventory"), eastl::string::npos) << "error path '" << pathStr.c_str() << "'";
+        EXPECT_NE(pathStr.find("player"), String::npos) << "error path '" << pathStr.c_str() << "'";
+        EXPECT_NE(pathStr.find("inventory"), String::npos) << "error path '" << pathStr.c_str() << "'";
     }
 
     TEST(ReflectionTest, UnorderedMapSortedKeys) {
-        eastl::unordered_map<eastl::string, int32_t> original;
+        HashMap<String, int32_t> original;
         original["zebra"] = 26;
         original["apple"] = 1;
         original["mango"] = 13;
 
-        const eastl::string xml = SaveToXml("MapSortTest", "entries", original);
+        const String xml = SaveToXml("MapSortTest", "entries", original);
 
         // Keys must appear in alphabetical order in the XML text
         const size_t posApple = xml.find("apple");
         const size_t posMango = xml.find("mango");
         const size_t posZebra = xml.find("zebra");
 
-        ASSERT_NE(posApple, eastl::string::npos) << xml.c_str();
-        ASSERT_NE(posMango, eastl::string::npos) << xml.c_str();
-        ASSERT_NE(posZebra, eastl::string::npos) << xml.c_str();
+        ASSERT_NE(posApple, String::npos) << xml.c_str();
+        ASSERT_NE(posMango, String::npos) << xml.c_str();
+        ASSERT_NE(posZebra, String::npos) << xml.c_str();
         EXPECT_TRUE(posApple < posMango && posMango < posZebra) << "keys not sorted: apple=" << posApple << ", mango=" << posMango << ", zebra=" << posZebra;
 
         // The round-trip must still work
-        eastl::unordered_map<eastl::string, int32_t> loaded;
+        HashMap<String, int32_t> loaded;
         ASSERT_NO_FATAL_FAILURE(LoadFromXml(xml, "MapSortTest", "entries", loaded));
 
         ASSERT_EQ(loaded.size(), original.size());

@@ -2,7 +2,7 @@
 
 namespace BECore {
 
-    std::expected<eastl::string, eastl::string> ReadTextFile(const std::filesystem::path& path) {
+    std::expected<String, String> ReadTextFile(const std::filesystem::path& path) {
         std::error_code ec;
         if (!std::filesystem::is_regular_file(path, ec)) {
             return std::unexpected(Format("'{}' is not a file", path.string()));
@@ -16,11 +16,12 @@ namespace BECore {
         if (file.bad()) {
             return std::unexpected(Format("Cannot read '{}'", path.string()));
         }
+        // std: the text of an std::ostringstream
         const std::string text = content.str();
-        return eastl::string(text.c_str(), text.size());
+        return String(text.c_str(), text.size());
     }
 
-    std::expected<void, eastl::string> WriteTextFileAtomically(const std::filesystem::path& path, eastl::string_view text) {
+    std::expected<void, String> WriteTextFileAtomically(const std::filesystem::path& path, StringView text) {
         std::error_code ec;
         if (path.has_parent_path()) {
             std::filesystem::create_directories(path.parent_path(), ec);
@@ -30,8 +31,8 @@ namespace BECore {
         }
 
         std::filesystem::path temp = path;
-        temp += std::string(kTempFileSuffix.data(), kTempFileSuffix.size());
-        auto fail = [&](eastl::string detail) {
+        temp += ToStdString(kTempFileSuffix);
+        auto fail = [&](String detail) {
             std::error_code ignored;
             std::filesystem::remove(temp, ignored);
             return std::unexpected(std::move(detail));

@@ -29,8 +29,8 @@ namespace BECore {
         constinit bool g_fanOutTableFullReported = false;
 
         /// The file Start was asked to write at Finish (main thread only)
-        eastl::string& TracePath() {
-            static eastl::string path;
+        String& TracePath() {
+            static String path;
             return path;
         }
 
@@ -166,7 +166,7 @@ namespace BECore {
         return *ring;
     }
 
-    std::expected<void, eastl::string> Profiler::Start(const ProfilerSettings& settings) {
+    std::expected<void, String> Profiler::Start(const ProfilerSettings& settings) {
         IProfilerBackend* backend = nullptr;
         switch (settings.backend) {
             case ProfilerBackendKind::None:
@@ -179,7 +179,7 @@ namespace BECore {
 #if BE_PROFILER_TRACY
                 backend = &GetTracyBackend();
 #else
-                return std::unexpected(eastl::string("Tracy is not in this build"));
+                return std::unexpected(String("Tracy is not in this build"));
 #endif
                 break;
         }
@@ -190,8 +190,8 @@ namespace BECore {
         return {};
     }
 
-    std::expected<void, eastl::string> Profiler::Finish() {
-        std::expected<void, eastl::string> result;
+    std::expected<void, String> Profiler::Finish() {
+        std::expected<void, String> result;
         if (!TracePath().empty()) {
             result = GetChromeTrace().WriteFile(TracePath());
             TracePath().clear();

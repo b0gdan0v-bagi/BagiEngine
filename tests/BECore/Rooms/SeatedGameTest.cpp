@@ -11,15 +11,15 @@ namespace BECore::Tests {
 
     namespace {
 
-        Json PlayAction(const eastl::string& card) {
+        Json PlayAction(const String& card) {
             Json action = Json::object();
             action["type"] = "play";
             action["card"] = card.c_str();
             return action;
         }
 
-        eastl::string Dump(const std::expected<Json, ControlError>& value) {
-            return value ? DumpJson(*value) : eastl::string("<error>");
+        String Dump(const std::expected<Json, ControlError>& value) {
+            return value ? DumpJson(*value) : String("<error>");
         }
 
         template <typename T>
@@ -59,10 +59,10 @@ namespace BECore::Tests {
 
     TEST(SeatedGameTest, StartDealsThreeUniqueCardsPerSeat) {
         FakeSeatedGame game = MakeStartedGame();
-        eastl::vector<eastl::string> all;
+        Vector<String> all;
         for (int seat = 0; seat < FakeSeatedGame::kSeatCount; ++seat) {
             ASSERT_EQ(game.GetHand(seat).size(), 3u);
-            for (const eastl::string& card : game.GetHand(seat)) {
+            for (const String& card : game.GetHand(seat)) {
                 all.push_back(card);
             }
         }
@@ -205,7 +205,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(actions.has_value());
         EXPECT_NE(std::find(actions->begin(), actions->end(), *chosen), actions->end());
         // the lowest card id of the hand
-        eastl::vector<eastl::string> hand = game.GetHand(0);
+        Vector<String> hand = game.GetHand(0);
         eastl::sort(hand.begin(), hand.end());
         EXPECT_EQ(GetJsonString(*chosen, "card"), hand.front());
         // choosing does not play
@@ -254,12 +254,12 @@ namespace BECore::Tests {
         const auto view = game.GetSeatView(2);
         ASSERT_TRUE(view.has_value());
         ASSERT_TRUE(view->is_object());
-        eastl::vector<eastl::string> keys;
+        Vector<String> keys;
         for (const auto& item : view->items()) {
             keys.push_back(item.key().c_str());
         }
         eastl::sort(keys.begin(), keys.end());
-        const eastl::vector<eastl::string> expected = {"cardCounts", "finished", "hand", "seat", "table", "turn"};
+        const Vector<String> expected = {"cardCounts", "finished", "hand", "seat", "table", "turn"};
         EXPECT_EQ(keys, expected);
         EXPECT_EQ(FindJsonMember(*view, "hand")->size(), 3u);
         const Json* counts = FindJsonMember(*view, "cardCounts");
@@ -290,7 +290,7 @@ namespace BECore::Tests {
     TEST(SeatedGameTest, LeakCheckerCatchesTheLeakyGame) {
         LeakyFakeSeatedGame leaky;
         ASSERT_TRUE(leaky.Start(5, Json::object()).has_value());
-        const eastl::string text = Dump(leaky.GetSeatView(1));
+        const String text = Dump(leaky.GetSeatView(1));
         const auto leaked = FindLeakedCards(text, 1, leaky);
         EXPECT_EQ(leaked.size(), 9u) << "the cards of the other three seats";
         EXPECT_NONFATAL_FAILURE(ExpectNoLeak(text, 1, leaky), "hidden cards");
@@ -298,7 +298,7 @@ namespace BECore::Tests {
         // the same check passes the honest game in the same position
         FakeSeatedGame honest;
         ASSERT_TRUE(honest.Start(5, Json::object()).has_value());
-        const eastl::string honestText = Dump(honest.GetSeatView(1));
+        const String honestText = Dump(honest.GetSeatView(1));
         EXPECT_TRUE(FindLeakedCards(honestText, 1, honest).empty());
         ExpectNoLeak(honestText, 1, honest);
     }
@@ -372,7 +372,7 @@ namespace BECore::Tests {
     TEST(SeatedGameRegistryTest, ClientNamesAreNotInterned) {
         SeatedGameRegistry registry;
         ASSERT_TRUE(registry.Register({"Fake", 4}, [] { return eastl::make_unique<FakeSeatedGame>(); }));
-        const eastl::string name = "NeverInternedGameName_5d1f";
+        const String name = "NeverInternedGameName_5d1f";
         EXPECT_FALSE(PoolString::Find(name.c_str()).has_value());
         EXPECT_FALSE(registry.Find(name).has_value());
         EXPECT_TRUE(registry.Create(name) == nullptr);

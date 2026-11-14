@@ -48,42 +48,42 @@ namespace BECore {
         // Primitive types deserialization (from child elements)
         // =================================================================
 
-        virtual bool Read(eastl::string_view name, bool& outValue) = 0;
-        virtual bool Read(eastl::string_view name, int8_t& outValue) = 0;
-        virtual bool Read(eastl::string_view name, uint8_t& outValue) = 0;
-        virtual bool Read(eastl::string_view name, int16_t& outValue) = 0;
-        virtual bool Read(eastl::string_view name, uint16_t& outValue) = 0;
-        virtual bool Read(eastl::string_view name, int32_t& outValue) = 0;
-        virtual bool Read(eastl::string_view name, uint32_t& outValue) = 0;
-        virtual bool Read(eastl::string_view name, int64_t& outValue) = 0;
-        virtual bool Read(eastl::string_view name, uint64_t& outValue) = 0;
-        virtual bool Read(eastl::string_view name, float& outValue) = 0;
-        virtual bool Read(eastl::string_view name, double& outValue) = 0;
+        virtual bool Read(StringView name, bool& outValue) = 0;
+        virtual bool Read(StringView name, int8_t& outValue) = 0;
+        virtual bool Read(StringView name, uint8_t& outValue) = 0;
+        virtual bool Read(StringView name, int16_t& outValue) = 0;
+        virtual bool Read(StringView name, uint16_t& outValue) = 0;
+        virtual bool Read(StringView name, int32_t& outValue) = 0;
+        virtual bool Read(StringView name, uint32_t& outValue) = 0;
+        virtual bool Read(StringView name, int64_t& outValue) = 0;
+        virtual bool Read(StringView name, uint64_t& outValue) = 0;
+        virtual bool Read(StringView name, float& outValue) = 0;
+        virtual bool Read(StringView name, double& outValue) = 0;
 
         // =================================================================
         // String types deserialization (from child elements)
         // =================================================================
 
-        virtual bool Read(eastl::string_view name, eastl::string& outValue) = 0;
-        virtual bool Read(eastl::string_view name, PoolString& outValue) = 0;
+        virtual bool Read(StringView name, String& outValue) = 0;
+        virtual bool Read(StringView name, PoolString& outValue) = 0;
 
         // =================================================================
         // Attribute deserialization (from XML attributes, inline for binary)
         // =================================================================
 
-        virtual bool ReadAttribute(eastl::string_view name, bool& outValue) = 0;
-        virtual bool ReadAttribute(eastl::string_view name, int8_t& outValue) = 0;
-        virtual bool ReadAttribute(eastl::string_view name, uint8_t& outValue) = 0;
-        virtual bool ReadAttribute(eastl::string_view name, int16_t& outValue) = 0;
-        virtual bool ReadAttribute(eastl::string_view name, uint16_t& outValue) = 0;
-        virtual bool ReadAttribute(eastl::string_view name, int32_t& outValue) = 0;
-        virtual bool ReadAttribute(eastl::string_view name, uint32_t& outValue) = 0;
-        virtual bool ReadAttribute(eastl::string_view name, int64_t& outValue) = 0;
-        virtual bool ReadAttribute(eastl::string_view name, uint64_t& outValue) = 0;
-        virtual bool ReadAttribute(eastl::string_view name, float& outValue) = 0;
-        virtual bool ReadAttribute(eastl::string_view name, double& outValue) = 0;
-        virtual bool ReadAttribute(eastl::string_view name, eastl::string& outValue) = 0;
-        virtual bool ReadAttribute(eastl::string_view name, PoolString& outValue) = 0;
+        virtual bool ReadAttribute(StringView name, bool& outValue) = 0;
+        virtual bool ReadAttribute(StringView name, int8_t& outValue) = 0;
+        virtual bool ReadAttribute(StringView name, uint8_t& outValue) = 0;
+        virtual bool ReadAttribute(StringView name, int16_t& outValue) = 0;
+        virtual bool ReadAttribute(StringView name, uint16_t& outValue) = 0;
+        virtual bool ReadAttribute(StringView name, int32_t& outValue) = 0;
+        virtual bool ReadAttribute(StringView name, uint32_t& outValue) = 0;
+        virtual bool ReadAttribute(StringView name, int64_t& outValue) = 0;
+        virtual bool ReadAttribute(StringView name, uint64_t& outValue) = 0;
+        virtual bool ReadAttribute(StringView name, float& outValue) = 0;
+        virtual bool ReadAttribute(StringView name, double& outValue) = 0;
+        virtual bool ReadAttribute(StringView name, String& outValue) = 0;
+        virtual bool ReadAttribute(StringView name, PoolString& outValue) = 0;
 
         // =================================================================
         // Strict values
@@ -122,7 +122,7 @@ namespace BECore {
          * @brief Get all deserialization errors
          * @return Vector of errors encountered
          */
-        virtual const eastl::vector<DeserializeError>& GetErrors() const = 0;
+        virtual const Vector<DeserializeError>& GetErrors() const = 0;
 
         /**
          * @brief Clear all accumulated errors
@@ -138,8 +138,8 @@ namespace BECore {
          *
          * Format: "player.inventory.items[3].name"
          */
-        eastl::string GetCurrentPath(eastl::string_view leafKey = {}) const {
-            eastl::string result;
+        String GetCurrentPath(StringView leafKey = {}) const {
+            String result;
             result.reserve(64);
             for (const auto& seg : _pathStack) {
                 if (seg.isArrayIndex) {
@@ -168,9 +168,9 @@ namespace BECore {
          * @param key  Leaf key where the error occurred
          * @param message  Human-readable error description
          */
-        void ReportError(eastl::string_view key, eastl::string_view message) {
-            eastl::string fullPath = GetCurrentPath(key);
-            AddError(eastl::string_view(fullPath.data(), fullPath.size()), message, 0);
+        void ReportError(StringView key, StringView message) {
+            String fullPath = GetCurrentPath(key);
+            AddError(StringView(fullPath), message, 0);
         }
 
     protected:
@@ -184,7 +184,7 @@ namespace BECore {
          * @brief Subclasses call this to register a named path segment
          *        (BeginObject, BeginArray)
          */
-        void PushPathSegment(eastl::string_view name) {
+        void PushPathSegment(StringView name) {
             PathSegment seg;
             seg.name.assign(name.data(), name.size());
             seg.isArrayIndex = false;
@@ -224,7 +224,7 @@ namespace BECore {
          *
          * Both readers store it with StoreError().
          */
-        virtual void AddError(eastl::string_view path, eastl::string_view message, int32_t line) = 0;
+        virtual void AddError(StringView path, StringView message, int32_t line) = 0;
 
         /**
          * @brief Forget the open objects and arrays, for a reader that is about to load another document
@@ -239,19 +239,19 @@ namespace BECore {
          * The path and the message are cut to kMaxErrorTextBytes (they are interned into the PoolString table, which is never freed, and
          * they can hold text of the input). The list holds at most kMaxRecordedErrors: the last place says once that the rest were dropped.
          */
-        static void StoreError(eastl::vector<DeserializeError>& errors, eastl::string_view path, eastl::string_view message, int32_t line);
+        static void StoreError(Vector<DeserializeError>& errors, StringView path, StringView message, int32_t line);
 
         /**
          * @brief The first @p maxBytes of @p text, or fewer so that no UTF-8 sequence is split
          */
-        static eastl::string_view CutText(eastl::string_view text, size_t maxBytes);
+        static StringView CutText(StringView text, size_t maxBytes);
 
     private:
         struct PathSegment {
-            eastl::string name;
+            String name;
             bool isArrayIndex = false;
         };
-        eastl::vector<PathSegment> _pathStack;
+        Vector<PathSegment> _pathStack;
     };
 
 }  // namespace BECore

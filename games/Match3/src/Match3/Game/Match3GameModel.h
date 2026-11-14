@@ -1,6 +1,5 @@
 #pragma once
 
-#include <EASTL/optional.h>
 #include <Match3/Game/CascadeTrace.h>
 #include <Match3/Game/Match3Board.h>
 #include <Match3/Game/Match3Types.h>
@@ -67,7 +66,7 @@ namespace BECore::Match3 {
         [[nodiscard]] bool HasSelection() const noexcept {
             return _selected.has_value();
         }
-        [[nodiscard]] eastl::optional<Cell> GetSelected() const noexcept {
+        [[nodiscard]] Optional<Cell> GetSelected() const noexcept {
             return _selected;
         }
 
@@ -122,7 +121,7 @@ namespace BECore::Match3 {
          *
          * @return the reason when the state is refused
          */
-        [[nodiscard]] std::expected<void, eastl::string> RestoreState(const Match3SaveState& state);
+        [[nodiscard]] std::expected<void, String> RestoreState(const Match3SaveState& state);
 
         /**
          * @brief Would TrySwap(a, b) commit? Does not change the model (it tries the swap on a copy of the board).
@@ -135,7 +134,7 @@ namespace BECore::Match3 {
          * @brief Every swap that TrySwap would commit, each pair once: a cell with its right and its lower neighbour
          *        (`first` is the left or upper cell). Row by row, left to right, right neighbour before lower.
          */
-        [[nodiscard]] eastl::vector<eastl::pair<Cell, Cell>> GetLegalSwaps() const;
+        [[nodiscard]] Vector<eastl::pair<Cell, Cell>> GetLegalSwaps() const;
 
         /// True when @p a and @p b are 4-neighbours (they differ by one in exactly one coordinate)
         [[nodiscard]] static bool IsAdjacent(Cell a, Cell b) noexcept;
@@ -161,13 +160,13 @@ namespace BECore::Match3 {
     private:
         [[nodiscard]] GemType RandomGem();
         void GenerateInitialBoard();
-        int ResolveCascade(eastl::vector<CascadeStep>* steps);
+        int ResolveCascade(Vector<CascadeStep>* steps);
         void ApplyGravity(CascadeStep* step);
         void RefillTop(CascadeStep* step);
 
         Match3Board _board;
-        eastl::optional<Cell> _selected;
-        eastl::optional<SwapTrace> _lastSwap;
+        Optional<Cell> _selected;
+        Optional<SwapTrace> _lastSwap;
         int _score = 0;
         uint32_t _seed = 0;
         uint64_t _version = 0;

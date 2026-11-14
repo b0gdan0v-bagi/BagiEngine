@@ -44,6 +44,9 @@
 #include <array>
 #include <limits>
 
+// Types: String, Vector, HashMap, Optional, ... (the engine's names for the eastl:: / std:: types), before everything that uses them
+#include <BECore/Types/Types.h>
+
 // Math
 #include <BECore/Math/Color.h>
 #include <BECore/Math/Rect.h>
@@ -54,7 +57,7 @@
 #include <BECore/Threading/Thread.h>
 
 // Core
-#include <BECore/Utils/String.h>
+#include <BECore/Utils/StringUtils.h>
 #include <BECore/Utils/Singleton.h>
 #include <BECore/Utils/PassKey.h>
 #include <BECore/PoolString/PoolString.h>

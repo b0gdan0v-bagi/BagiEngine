@@ -9,17 +9,17 @@ namespace BECore::Tests {
 
     /// One fake connection, shared by the transport the client owns and the test that plays the server
     struct FakeLink {
-        eastl::string url;
+        String url;
         /// Set before Open() to make it fail
-        std::optional<eastl::string> openError;
+        Optional<String> openError;
         bool openCalled = false;
         /// What the client sent, in order
-        eastl::vector<eastl::string> sent;
+        Vector<String> sent;
         /// SendText() answers this; false plays a connection that is closing
         bool sendOk = true;
         bool closeCalled = false;
         uint16_t closeCode = 0;
-        eastl::string closeReason;
+        String closeReason;
         bool aborted = false;
         /// The transport object was destroyed (the client let go of it)
         bool destroyed = false;
@@ -27,7 +27,7 @@ namespace BECore::Tests {
         bool closeAnswers = true;
 
         /// What the test plays: events the client will poll
-        eastl::vector<RoomTransportEvent> inbox;
+        Vector<RoomTransportEvent> inbox;
         size_t nextEvent = 0;
         bool closedQueued = false;
 
@@ -37,15 +37,15 @@ namespace BECore::Tests {
             inbox.push_back(std::move(event));
         }
 
-        void PushText(eastl::string_view text) {
+        void PushText(StringView text) {
             RoomTransportEvent event;
             event.kind = RoomTransportEventKind::Text;
-            event.text = eastl::string(text);
+            event.text = String(text);
             inbox.push_back(std::move(event));
         }
 
         /// Queues the one Closed of the connection; a second call does nothing
-        void PushClosed(uint16_t code = kRoomTransportAbnormalClosure, eastl::string_view reason = "connection lost") {
+        void PushClosed(uint16_t code = kRoomTransportAbnormalClosure, StringView reason = "connection lost") {
             if (closedQueued) {
                 return;
             }
@@ -53,7 +53,7 @@ namespace BECore::Tests {
             RoomTransportEvent event;
             event.kind = RoomTransportEventKind::Closed;
             event.closeCode = code;
-            event.reason = eastl::string(reason);
+            event.reason = String(reason);
             inbox.push_back(std::move(event));
         }
 
@@ -77,27 +77,27 @@ namespace BECore::Tests {
             _link->destroyed = true;
         }
 
-        std::expected<void, eastl::string> Open(eastl::string_view url) override {
+        std::expected<void, String> Open(StringView url) override {
             _link->openCalled = true;
-            _link->url = eastl::string(url);
+            _link->url = String(url);
             if (_link->openError) {
                 return std::unexpected(*_link->openError);
             }
             return {};
         }
 
-        bool SendText(eastl::string_view text) override {
+        bool SendText(StringView text) override {
             if (!_link->sendOk) {
                 return false;
             }
-            _link->sent.push_back(eastl::string(text));
+            _link->sent.push_back(String(text));
             return true;
         }
 
-        void Close(uint16_t code, eastl::string_view reason) override {
+        void Close(uint16_t code, StringView reason) override {
             _link->closeCalled = true;
             _link->closeCode = code;
-            _link->closeReason = eastl::string(reason);
+            _link->closeReason = String(reason);
             if (_link->closeAnswers) {
                 _link->PushClosed(code, reason);
             }
@@ -126,7 +126,7 @@ namespace BECore::Tests {
     class FakeTransports {
     public:
         [[nodiscard]] RoomTransportFactory Factory() {
-            return [this]() -> eastl::unique_ptr<IRoomTransport> {
+            return [this]() -> UniquePtr<IRoomTransport> {
                 if (_unavailable) {
                     return nullptr;
                 }
@@ -139,8 +139,8 @@ namespace BECore::Tests {
         }
 
         /// The next transport fails to start connecting
-        void FailNextOpen(eastl::string_view message) {
-            _nextOpenError = eastl::string(message);
+        void FailNextOpen(StringView message) {
+            _nextOpenError = String(message);
         }
 
         /// The factory makes no transport
@@ -162,8 +162,8 @@ namespace BECore::Tests {
         }
 
     private:
-        eastl::vector<std::shared_ptr<FakeLink>> _links;
-        std::optional<eastl::string> _nextOpenError;
+        Vector<std::shared_ptr<FakeLink>> _links;
+        Optional<String> _nextOpenError;
         bool _unavailable = false;
     };
 

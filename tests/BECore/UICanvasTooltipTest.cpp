@@ -10,7 +10,6 @@
 #include <Common/RecordingRenderer.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
-#include <Events/SubscriptionHolder.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -140,7 +139,7 @@ namespace BECore::Tests {
             void OnAction(const InputEvents::ActionEvent& event) {
                 _actions.push_back(event.action);
             }
-            eastl::vector<PoolString> _actions;
+            Vector<PoolString> _actions;
         };
 
         bool Inside(const Rect& inner, const Rect& outer) {
@@ -230,8 +229,8 @@ namespace BECore::Tests {
         }
 
         /// The plate of the tooltip in the last frame: the one rect of its colour
-        std::optional<Rect> Plate() const {
-            std::optional<Rect> plate;
+        Optional<Rect> Plate() const {
+            Optional<Rect> plate;
             for (const DrawCall& call : _renderer->calls) {
                 if (call.kind == DrawKind::Rect && ColorsEqual(call.color, UITooltip::kPlateColor)) {
                     EXPECT_FALSE(plate.has_value()) << "one tooltip at a time";

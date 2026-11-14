@@ -12,7 +12,7 @@ namespace BECore {
 
     struct FontFamily {
         PoolString name;
-        eastl::vector<FontFace> faces;
+        Vector<FontFace> faces;
     };
 
     /// An inclusive range of code points
@@ -49,8 +49,8 @@ namespace BECore {
         PoolString defaultFont = "assets/fonts/PT_Sans-Web-Regular.ttf"_intern;
         PoolString defaultFamily = "PT Sans"_intern;
         uint32_t pageSize = 1024;
-        eastl::vector<GlyphRange> preload;
-        eastl::vector<FontFamily> families;
+        Vector<GlyphRange> preload;
+        Vector<FontFamily> families;
 
         /// The values of the shipped TextConfig.xml: Basic Latin, Latin-1, Cyrillic and the general punctuation
         [[nodiscard]] static TextSettings Default();

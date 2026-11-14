@@ -27,7 +27,7 @@ namespace BECore {
         /// A key that was asked for in a language and found in neither it nor the default language
         struct MissingString {
             PoolString language;
-            eastl::string key;
+            String key;
         };
 
         /// Reads `config/UIStrings.xml` through ConfigManager into the table and logs what LoadFromXml() complains about. A missing config is an empty table, with no log
@@ -37,7 +37,7 @@ namespace BECore {
          * @brief Sets the text of @p key in @p language. The first language set is the default one until SetDefaultLanguage() says otherwise
          * @return false and nothing changed when @p key is empty or contains `}`, or @p language is empty. A value equal to the current one changes nothing (and keeps the version)
          */
-        bool Set(PoolString language, eastl::string_view key, eastl::string_view text);
+        bool Set(PoolString language, StringView key, StringView text);
 
         /// The language a key falls back to. Any id: a default with no strings is a table with no fallback
         void SetDefaultLanguage(PoolString language);
@@ -50,23 +50,23 @@ namespace BECore {
         [[nodiscard]] PoolString GetLanguage() const;
 
         /// The languages that have strings, in the order they were first set
-        [[nodiscard]] const eastl::vector<PoolString>& GetLanguages() const {
+        [[nodiscard]] const Vector<PoolString>& GetLanguages() const {
             return _languageIds;
         }
         [[nodiscard]] bool HasLanguage(PoolString language) const;
 
         /// The text of @p key in the current language, else in the default language, else nothing. Does not record a miss
-        [[nodiscard]] std::optional<eastl::string_view> Find(eastl::string_view key) const;
+        [[nodiscard]] Optional<StringView> Find(StringView key) const;
 
         /// @p text with every `{#key}` replaced (see the class comment). A missing key becomes the key text and is recorded once per language and key. An unclosed `{#`, an
         /// empty `{#}` and a `{{#` stay as written
-        [[nodiscard]] eastl::string Resolve(eastl::string_view text);
+        [[nodiscard]] String Resolve(StringView text);
 
         /// True when Resolve() could change @p text: a `{#` that is not part of `{{`
-        [[nodiscard]] static bool HasReferences(eastl::string_view text);
+        [[nodiscard]] static bool HasReferences(StringView text);
 
         /// The keys Resolve() did not find, once per language and key, in the order they were asked for
-        [[nodiscard]] const eastl::vector<MissingString>& GetMissing() const {
+        [[nodiscard]] const Vector<MissingString>& GetMissing() const {
             return _missing;
         }
 
@@ -85,21 +85,21 @@ namespace BECore {
          *         one language (the first stays), a language with no strings, a `default` that names no language, an unknown element. The rest is loaded. Each problem is one line of at most
          * `UIText::kMaxMessageBytes` (it repeats text of the file, which is cut). An empty node adds nothing
          */
-        eastl::vector<eastl::string> LoadFromXml(const XmlNode& node);
+        Vector<String> LoadFromXml(const XmlNode& node);
 
     private:
         struct Language {
             PoolString id;
-            UnorderedPoolMap<eastl::string> strings;
+            UnorderedPoolMap<String> strings;
         };
 
         [[nodiscard]] const Language* FindLanguage(PoolString language) const;
-        [[nodiscard]] const eastl::string* FindString(const Language* language, eastl::string_view key) const;
-        void RecordMissing(eastl::string_view key);
+        [[nodiscard]] const String* FindString(const Language* language, StringView key) const;
+        void RecordMissing(StringView key);
 
-        eastl::vector<Language> _languages;
-        eastl::vector<PoolString> _languageIds;
-        eastl::vector<MissingString> _missing;
+        Vector<Language> _languages;
+        Vector<PoolString> _languageIds;
+        Vector<MissingString> _missing;
         PoolString _default;
         PoolString _current;
         uint64_t _version = 0;

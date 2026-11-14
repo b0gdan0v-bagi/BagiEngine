@@ -59,10 +59,10 @@ namespace BECore {
     struct NodeTransformEditEvent : public EventBase<NodeTransformEditEvent> {
         NodeTransformEditPhase phase = NodeTransformEditPhase::Begin;
         const Scene* scene = nullptr;
-        eastl::span<const NodeTransformEdit> edits;
+        Span<const NodeTransformEdit> edits;
 
         NodeTransformEditEvent() = default;
-        NodeTransformEditEvent(NodeTransformEditPhase editPhase, const Scene* editScene, eastl::span<const NodeTransformEdit> editEdits) : phase(editPhase), scene(editScene), edits(editEdits) {}
+        NodeTransformEditEvent(NodeTransformEditPhase editPhase, const Scene* editScene, Span<const NodeTransformEdit> editEdits) : phase(editPhase), scene(editScene), edits(editEdits) {}
     };
 
 }  // namespace BECore

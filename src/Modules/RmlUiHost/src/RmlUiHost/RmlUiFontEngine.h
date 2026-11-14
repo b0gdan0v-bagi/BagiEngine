@@ -72,7 +72,7 @@ namespace BECore {
 
             ShelfPacker packer;
             uint32_t size = 0;
-            eastl::vector<uint8_t> pixels;
+            Vector<uint8_t> pixels;
             // Set when a texture was made from the pixels: from then on the page takes no more glyphs
             bool sealed = false;
             Rml::CallbackTextureSource source;
@@ -82,8 +82,8 @@ namespace BECore {
             const Face* face = nullptr;
             int size = 0;
             Rml::FontMetrics metrics{};
-            eastl::hash_map<char32_t, Glyph> glyphs;
-            eastl::vector<eastl::unique_ptr<Page>> pages;
+            HashMap<char32_t, Glyph> glyphs;
+            Vector<UniquePtr<Page>> pages;
         };
 
         bool AddFace(Rml::String family, Rml::Style::FontStyle style, Rml::Style::FontWeight weight, IntrusivePtr<Font> font);
@@ -95,8 +95,8 @@ namespace BECore {
         int AppendToPage(Handle& handle, uint32_t width, uint32_t height, ShelfPacker::Slot& slot);
         Page* GetPage(Handle& handle, int index) const;
 
-        eastl::vector<eastl::unique_ptr<Face>> _faces;
-        eastl::vector<eastl::unique_ptr<Handle>> _handles;
+        Vector<UniquePtr<Face>> _faces;
+        Vector<UniquePtr<Handle>> _handles;
         bool _warnedAboutEffects = false;
     };
 

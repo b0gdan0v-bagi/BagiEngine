@@ -1,12 +1,8 @@
 #include <BECore/Control/Json.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Profiler/Backends/ChromeTraceBackend.h>
-#include <BECore/Profiler/Profile.h>
-#include <EASTL/vector.h>
-#include <atomic>
 #include <chrono>
 #include <cstdio>
-#include <cstring>
 #include <gtest/gtest.h>
 #include <new>
 #include <thread>
@@ -107,7 +103,7 @@ namespace BECore::Tests {
     TEST(AllocTrackerTest, AnOverAlignedEastlVectorIsCountedAndFreed) {
         const AllocTotals before = AllocTracker::GetTotals();
         {
-            eastl::vector<Wide> wide(16);
+            Vector<Wide> wide(16);
             EXPECT_EQ(reinterpret_cast<uintptr_t>(wide.data()) % alignof(Wide), 0u);
         }
         const AllocTotals after = AllocTracker::GetTotals();
@@ -160,7 +156,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(parsed.has_value());
         bool found = false;
         for (const Json& event : *FindJsonMember(*parsed, "traceEvents")) {
-            if (GetJsonString(event, "ph") == eastl::string("E")) {
+            if (GetJsonString(event, "ph") == String("E")) {
                 const Json* args = FindJsonMember(event, "args");
                 ASSERT_NE(args, nullptr);
                 EXPECT_EQ(GetJsonInt(*args, "allocs"), 1);

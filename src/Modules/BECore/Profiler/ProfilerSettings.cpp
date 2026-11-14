@@ -5,11 +5,11 @@ namespace BECore {
     namespace {
 
         /// The flag name without its '=' ("--trace" of "--trace=")
-        eastl::string_view BareFlag(eastl::string_view prefix) {
+        StringView BareFlag(StringView prefix) {
             return prefix.substr(0, prefix.size() - 1);
         }
 
-        std::optional<ProfilerBackendKind> ParseBackend(eastl::string_view value) {
+        Optional<ProfilerBackendKind> ParseBackend(StringView value) {
             if (value == ProfilerArguments::kNone) {
                 return ProfilerBackendKind::None;
             }
@@ -24,14 +24,14 @@ namespace BECore {
 
     }  // namespace
 
-    std::expected<ProfilerSettings, eastl::string> ResolveProfilerSettings(eastl::span<const eastl::string> args, ProfilerBuild build) {
+    std::expected<ProfilerSettings, String> ResolveProfilerSettings(Span<const String> args, ProfilerBuild build) {
         using namespace ProfilerArguments;
 
-        std::optional<ProfilerBackendKind> asked;
-        eastl::string tracePath;
+        Optional<ProfilerBackendKind> asked;
+        String tracePath;
         bool anyFlag = false;
-        for (const eastl::string& arg : args) {
-            const eastl::string_view argument(arg.data(), arg.size());
+        for (const String& arg : args) {
+            const StringView argument(arg.data(), arg.size());
             if (argument.starts_with(kTracePrefix)) {
                 anyFlag = true;
                 tracePath.assign(argument.substr(kTracePrefix.size()).data(), argument.size() - kTracePrefix.size());
@@ -40,7 +40,7 @@ namespace BECore {
                 }
             } else if (argument.starts_with(kProfilerPrefix)) {
                 anyFlag = true;
-                const eastl::string_view value = argument.substr(kProfilerPrefix.size());
+                const StringView value = argument.substr(kProfilerPrefix.size());
                 asked = ParseBackend(value);
                 if (!asked) {
                     return std::unexpected(Format("'{}': the profiler is one of {}, {}, {}", argument, kNone, kChrome, kTracy));
@@ -51,7 +51,7 @@ namespace BECore {
         }
 
         if (anyFlag && !build.profiler) {
-            return std::unexpected(eastl::string("the profiler is not in this build: configure with ENGINE_PROFILER=ON (preset macos-profile)"));
+            return std::unexpected(String("the profiler is not in this build: configure with ENGINE_PROFILER=ON (preset macos-profile)"));
         }
 
         ProfilerSettings settings;

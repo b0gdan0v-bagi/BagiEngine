@@ -20,9 +20,9 @@ namespace BECore::Tests {
 
     TEST(NetworkFrameworkErrorsTest, TheChainErrorAdmitsThatItCoversTheNameToo) {
         // The system's own check reports a wrong host name with this code, so the text must not claim more than it knows
-        const eastl::string_view text = DescribeNetworkFailure(NetworkErrorDomain::Tls, errSSLXCertChainInvalid);
-        EXPECT_NE(text.find("certificate"), eastl::string_view::npos);
-        EXPECT_NE(text.find("host name"), eastl::string_view::npos);
+        const StringView text = DescribeNetworkFailure(NetworkErrorDomain::Tls, errSSLXCertChainInvalid);
+        EXPECT_NE(text.find("certificate"), StringView::npos);
+        EXPECT_NE(text.find("host name"), StringView::npos);
     }
 
     TEST(NetworkFrameworkErrorsTest, NetworkAndNameErrorsAreNamedInWords) {

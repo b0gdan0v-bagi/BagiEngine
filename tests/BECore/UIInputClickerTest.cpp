@@ -12,7 +12,6 @@
 #include <Common/RecordingRenderer.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
-#include <Events/SubscriptionHolder.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -129,7 +128,7 @@ namespace BECore::Tests {
             ActionRecorder() {
                 Subscribe<InputEvents::ActionEvent, &ActionRecorder::OnAction>(this);
             }
-            [[nodiscard]] const eastl::vector<Emitted>& All() const {
+            [[nodiscard]] const Vector<Emitted>& All() const {
                 return _actions;
             }
             [[nodiscard]] size_t Total() const {
@@ -140,7 +139,7 @@ namespace BECore::Tests {
             void OnAction(const InputEvents::ActionEvent& event) {
                 _actions.push_back({event.action, event.value});
             }
-            eastl::vector<Emitted> _actions;
+            Vector<Emitted> _actions;
         };
 
     }  // namespace
@@ -168,7 +167,7 @@ namespace BECore::Tests {
             _canvas = _manager->GetSceneByName(PoolString::Intern("Main"))->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
             ASSERT_TRUE(_canvas);
 
-            const eastl::vector<uint8_t> pixels(static_cast<size_t>(kPictureSide) * kPictureSide * 4, 200);
+            const Vector<uint8_t> pixels(static_cast<size_t>(kPictureSide) * kPictureSide * 4, 200);
             _texture = _renderer->CreateTexture(pixels.data(), kPictureSide, kPictureSide);
             Get("Pic").GetComponent<UIImageComponent>()->GetSprite().SetTexture(_texture);
             Get("PicOff").GetComponent<UIImageComponent>()->GetSprite().SetTexture(_texture);
@@ -511,15 +510,15 @@ namespace BECore::Tests {
         ASSERT_TRUE(serializer.BeginObject("element"));
         Get("Still").Serialize(serializer);
         serializer.EndObject();
-        const eastl::string xml = serializer.SaveToString();
-        EXPECT_NE(xml.find("stateLook=\"false\""), eastl::string::npos) << xml.c_str();
+        const String xml = serializer.SaveToString();
+        EXPECT_NE(xml.find("stateLook=\"false\""), String::npos) << xml.c_str();
 
         XmlSerializer plain;
         ASSERT_TRUE(plain.BeginObject("element"));
         Get("Box").Serialize(plain);
         plain.EndObject();
-        const eastl::string plainXml = plain.SaveToString();
-        EXPECT_NE(plainXml.find("stateLook=\"true\""), eastl::string::npos) << plainXml.c_str();
+        const String plainXml = plain.SaveToString();
+        EXPECT_NE(plainXml.find("stateLook=\"true\""), String::npos) << plainXml.c_str();
     }
 
     TEST_F(UIInputClickerTest, ThePictureTakesTheTintOfTheState) {

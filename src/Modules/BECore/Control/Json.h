@@ -18,30 +18,30 @@ namespace BECore {
     /// True when `[` and `{` outside strings nest deeper than @p maxDepth. A scan that builds nothing and does not recurse; it does not judge the syntax (the parser does), only
     /// bounds what the parser may be given. ParseJson itself accepts any depth (it parses and frees without recursion), but copying, comparing and dumping the value recurse once per
     /// level: 20 KB of `[` overflows the stack of a reader thread (512 KB on macOS). A reader of text from outside that keeps or copies the value checks the depth first
-    [[nodiscard]] bool IsJsonNestedDeeperThan(eastl::string_view text, size_t maxDepth);
+    [[nodiscard]] bool IsJsonNestedDeeperThan(StringView text, size_t maxDepth);
 
     /// Parses @p text. Never throws or aborts: text that is not one complete JSON value is a kParseError.
-    [[nodiscard]] std::expected<Json, ControlError> ParseJson(eastl::string_view text);
+    [[nodiscard]] std::expected<Json, ControlError> ParseJson(StringView text);
 
     /// Compact JSON text of @p value. Invalid UTF-8 in a string is replaced, not fatal.
-    [[nodiscard]] eastl::string DumpJson(const Json& value);
+    [[nodiscard]] String DumpJson(const Json& value);
 
     /// A JSON string value holding @p text
-    [[nodiscard]] Json MakeJsonString(eastl::string_view text);
+    [[nodiscard]] Json MakeJsonString(StringView text);
 
     /// The member @p key of @p object, or nullptr when @p object is not an object or has no such member
-    [[nodiscard]] const Json* FindJsonMember(const Json& object, eastl::string_view key);
+    [[nodiscard]] const Json* FindJsonMember(const Json& object, StringView key);
 
     /// A string member; nullopt when it is absent or not a string
-    [[nodiscard]] std::optional<eastl::string> GetJsonString(const Json& object, eastl::string_view key);
+    [[nodiscard]] Optional<String> GetJsonString(const Json& object, StringView key);
 
     /// An integer member; nullopt when it is absent, not an integer (1.5 and "3" are not) or does not fit int64_t
-    [[nodiscard]] std::optional<int64_t> GetJsonInt(const Json& object, eastl::string_view key);
+    [[nodiscard]] Optional<int64_t> GetJsonInt(const Json& object, StringView key);
 
     /// A number member (integer or floating point); nullopt when it is absent or not a number
-    [[nodiscard]] std::optional<double> GetJsonNumber(const Json& object, eastl::string_view key);
+    [[nodiscard]] Optional<double> GetJsonNumber(const Json& object, StringView key);
 
     /// A boolean member; nullopt when it is absent or not a boolean
-    [[nodiscard]] std::optional<bool> GetJsonBool(const Json& object, eastl::string_view key);
+    [[nodiscard]] Optional<bool> GetJsonBool(const Json& object, StringView key);
 
 }  // namespace BECore

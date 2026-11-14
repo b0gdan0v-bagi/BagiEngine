@@ -26,9 +26,9 @@ namespace BECore {
     [[nodiscard]] RandomFn MakeSecureRandom();
 
     /// The wire name of a phase: `lobby`, `playing` or `finished`
-    [[nodiscard]] eastl::string_view GetPhaseName(RoomPhase phase);
+    [[nodiscard]] StringView GetPhaseName(RoomPhase phase);
 
     /// The wire name of a seat kind: `human`, `computer` or `empty`
-    [[nodiscard]] eastl::string_view GetSeatKindName(SeatKind kind);
+    [[nodiscard]] StringView GetSeatKindName(SeatKind kind);
 
 }  // namespace BECore

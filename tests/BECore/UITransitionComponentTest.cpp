@@ -237,9 +237,9 @@ namespace BECore::Tests {
         }
 
         /// The alpha the element was drawn with at its laid-out rect; nothing when it was not drawn there
-        std::optional<uint8_t> AlphaAt(const Rect& rect) const {
+        Optional<uint8_t> AlphaAt(const Rect& rect) const {
             const DrawCall* call = CallAt(rect);
-            return call ? std::optional<uint8_t>(call->color.a) : std::nullopt;
+            return call ? Optional<uint8_t>(call->color.a) : std::nullopt;
         }
 
         void Click(float x, float y) {
@@ -567,9 +567,9 @@ namespace BECore::Tests {
             return found;
         }
 
-        std::optional<uint8_t> AlphaAt(const Rect& rect) const {
+        Optional<uint8_t> AlphaAt(const Rect& rect) const {
             const DrawCall* call = CallAt(rect);
-            return call ? std::optional<uint8_t>(call->color.a) : std::nullopt;
+            return call ? Optional<uint8_t>(call->color.a) : std::nullopt;
         }
 
         void Click(const UIElement& element) {

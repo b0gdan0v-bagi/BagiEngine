@@ -3,7 +3,6 @@
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <Common/Printers.h>
 #include <gtest/gtest.h>
-#include <limits>
 
 namespace BECore::Tests {
 
@@ -156,9 +155,9 @@ namespace BECore::Tests {
         }
 
         // The same picture as geometry
-        eastl::vector<GeometryVertex> fineVertices;
-        eastl::vector<GeometryVertex> coarseVertices;
-        eastl::vector<int> indices;
+        Vector<GeometryVertex> fineVertices;
+        Vector<GeometryVertex> coarseVertices;
+        Vector<int> indices;
         const size_t quads = fine.BuildGeometry(effect, Rect{}, Vec2{}, fineVertices, indices);
         ASSERT_EQ(coarse.BuildGeometry(effect, Rect{}, Vec2{}, coarseVertices, indices), quads);
         for (size_t i = 0; i < quads * 4; ++i) {
@@ -377,8 +376,8 @@ namespace BECore::Tests {
         sim.Play();
         sim.Update(effect, kPointArea, 0.0f);
 
-        eastl::vector<GeometryVertex> vertices;
-        eastl::vector<int> indices;
+        Vector<GeometryVertex> vertices;
+        Vector<int> indices;
         ParticleSimulation::ReserveGeometry(effect.maxParticles, vertices, indices);
         const size_t quads = sim.BuildGeometry(effect, Rect{}, Vec2{}, vertices, indices);
         ASSERT_EQ(quads, 2u);
@@ -411,8 +410,8 @@ namespace BECore::Tests {
         ParticleSimulation sim;
         sim.Play();
         sim.Update(effect, kPointArea, 0.0f);
-        eastl::vector<GeometryVertex> vertices;
-        eastl::vector<int> indices;
+        Vector<GeometryVertex> vertices;
+        Vector<int> indices;
 
         sim.BuildGeometry(effect, Rect(16.0f, 8.0f, 16.0f, 16.0f), Vec2(64.0f, 32.0f), vertices, indices);
         EXPECT_FLOAT_EQ(vertices[0].u, 0.25f);
@@ -438,8 +437,8 @@ namespace BECore::Tests {
         ParticleSimulation sim;
         sim.Play();
         sim.Update(effect, kPointArea, 0.0f);
-        eastl::vector<GeometryVertex> vertices;
-        eastl::vector<int> indices;
+        Vector<GeometryVertex> vertices;
+        Vector<int> indices;
         sim.BuildGeometry(effect, Rect{}, Vec2{}, vertices, indices);
         EXPECT_EQ(vertices[0].color.a, 255);
         Step(sim, effect, kPointArea, kStep, 32);  // age 1 s of a 2 s life
@@ -461,8 +460,8 @@ namespace BECore::Tests {
             ExpectColorEq(sim.GetParticles()[i].tint, kWhite);
         }
 
-        eastl::vector<GeometryVertex> vertices;
-        eastl::vector<int> indices;
+        Vector<GeometryVertex> vertices;
+        Vector<int> indices;
         sim.BuildGeometry(effect, Rect{}, Vec2{}, vertices, indices);
         ExpectColorEq(vertices[0].color, red);         // the first particle: white times red
         ExpectColorEq(vertices[3 * 4].color, kWhite);  // the fourth is not tinted
@@ -548,8 +547,8 @@ namespace BECore::Tests {
         effect.lifetimeMax = 30.0f;
 
         ParticleSimulation sim;
-        eastl::vector<GeometryVertex> vertices;
-        eastl::vector<int> indices;
+        Vector<GeometryVertex> vertices;
+        Vector<int> indices;
         sim.Reserve(effect.maxParticles);
         ParticleSimulation::ReserveGeometry(effect.maxParticles, vertices, indices);
         sim.Play();
@@ -642,8 +641,8 @@ namespace BECore::Tests {
         nan.burstCount = -5;
         ParticleSimulation nanSim;
         nanSim.Play();
-        eastl::vector<GeometryVertex> vertices;
-        eastl::vector<int> indices;
+        Vector<GeometryVertex> vertices;
+        Vector<int> indices;
         for (int i = 0; i < 40; ++i) {
             nanSim.Update(nan, Rect(kNaN, kInfinity, kNaN, 5.0f), kStep);
         }

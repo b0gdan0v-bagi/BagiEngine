@@ -191,7 +191,7 @@ button { width: 56dp; height: 24dp; font-size: 14dp; background-color: rgb(40, 9
         const auto startA = Clock::now();
         {
             XmlDeserializer deserializer;
-            ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+            ASSERT_TRUE(deserializer.LoadFromString(FromStd(xml)));
             contentA.Deserialize(deserializer);
             ASSERT_FALSE(deserializer.HasErrors());
         }
@@ -205,7 +205,7 @@ button { width: 56dp; height: 24dp; font-size: 14dp; background-color: rgb(40, 9
         // ---- B: HTML + CSS compiled to the XML ----
         UIWebReport report;
         const auto startB = Clock::now();
-        const eastl::string compiled = UIWebCompiler::Compile(eastl::string_view(web.data(), web.size()), {}, report);
+        const String compiled = UIWebCompiler::Compile(FromStd(web), {}, report);
         const double compileB = MillisecondsSince(startB);
         UIScreenContent contentB;
         const auto startBLoad = Clock::now();
@@ -232,7 +232,7 @@ button { width: 56dp; height: 24dp; font-size: 14dp; background-color: rgb(40, 9
         ASSERT_TRUE(doc);
         const size_t heapBeforeC = HeapInUse();
         const auto startC = Clock::now();
-        ASSERT_TRUE(doc->SetMarkup(eastl::string(rml.data(), rml.size())));
+        ASSERT_TRUE(doc->SetMarkup(String(rml.data(), rml.size())));
         const double loadC = MillisecondsSince(startC);
         const double firstLayoutC = BestOf(1, [&](int) { doc->UpdateLayout(kOutputWidth, kOutputHeight); });
         const size_t heapAfterC = HeapInUse();

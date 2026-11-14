@@ -47,16 +47,16 @@ namespace BECore {
 
     /// The nodes of @p selected that are alive in @p scene (found in its tree, never dereferenced before) and movable, with their transforms as items, in the order of @p selected. The vectors are
     /// cleared first and keep their capacity
-    void CollectMovable(Scene& scene, eastl::span<SceneNode* const> selected, eastl::vector<SceneNode*>& nodes, eastl::vector<Gizmo::Item>& items);
+    void CollectMovable(Scene& scene, Span<SceneNode* const> selected, Vector<SceneNode*>& nodes, Vector<Gizmo::Item>& items);
 
     /// True when every node is found in the tree of @p scene
-    [[nodiscard]] bool AllAlive(Scene& scene, eastl::span<SceneNode* const> nodes);
+    [[nodiscard]] bool AllAlive(Scene& scene, Span<SceneNode* const> nodes);
 
     /// Writes @p items into the TransformComponents of @p nodes (the same order). Nothing is written, and false returned, when a node is not alive in @p scene or has no transform, or the sizes differ
-    bool WriteItems(Scene& scene, eastl::span<SceneNode* const> nodes, eastl::span<const Gizmo::Item> items);
+    bool WriteItems(Scene& scene, Span<SceneNode* const> nodes, Span<const Gizmo::Item> items);
 
     /// The bounds, in target pixels, of the outlines (ScenePick::SelectionOutlines) of the nodes of @p selected that are alive in @p scene; false when there is none
-    [[nodiscard]] bool SelectionBounds(Scene& scene, eastl::span<SceneNode* const> selected, Rect& bounds);
+    [[nodiscard]] bool SelectionBounds(Scene& scene, Span<SceneNode* const> selected, Rect& bounds);
 
     /// True when @p key went down in this frame, the Viewport window is focused or hovered, and no text is being typed or modifier key held (a bare letter is never a hotkey of the command table, so
     /// the viewport reads it itself)
@@ -87,8 +87,8 @@ namespace BECore {
 
     /// What ViewportGizmos::Update() needs to know about this frame
     struct ViewportGizmoContext {
-        Scene* scene = nullptr;                   ///< the active scene
-        eastl::span<SceneNode* const> selection;  ///< the selected nodes, the primary last
+        Scene* scene = nullptr;            ///< the active scene
+        Span<SceneNode* const> selection;  ///< the selected nodes, the primary last
         const ViewportFrame* frame = nullptr;
         bool editMode = false;  ///< the input mode is Edit: a drag in progress ends cleanly when it is not
         bool enabled = false;   ///< the Edit target owns the pointer and no pan is going: the gizmo is drawn and a press may grab a handle
@@ -107,8 +107,7 @@ namespace BECore {
     class GizmoEditSession {
     public:
         /// Starts the drag and tells @c Begin. False (nothing started) for no nodes, mismatched sizes or Handle::None
-        bool Begin(Scene& scene, eastl::span<SceneNode* const> nodes, eastl::span<const Gizmo::Item> items, Gizmo::Tool tool, Gizmo::Space space, Gizmo::Handle handle, Vec2 point,
-                   const Gizmo::SnapSettings& snap);
+        bool Begin(Scene& scene, Span<SceneNode* const> nodes, Span<const Gizmo::Item> items, Gizmo::Tool tool, Gizmo::Space space, Gizmo::Handle handle, Vec2 point, const Gizmo::SnapSettings& snap);
 
         /// True while the drag can go on in @p activeScene: it is the scene of the drag and every node is still in its tree
         [[nodiscard]] bool CanContinue(Scene* activeScene) const;
@@ -132,7 +131,7 @@ namespace BECore {
         }
 
         /// The items of the last Update() (the start values before the first one)
-        [[nodiscard]] eastl::span<const Gizmo::Item> Current() const {
+        [[nodiscard]] Span<const Gizmo::Item> Current() const {
             return _drag.Current();
         }
 
@@ -142,8 +141,8 @@ namespace BECore {
         Gizmo::GizmoDrag _drag;
         Gizmo::Handle _handle = Gizmo::Handle::None;
         const Scene* _scene = nullptr;  // compared with the active scene, never dereferenced
-        eastl::vector<SceneNode*> _nodes;
-        eastl::vector<NodeTransformEdit> _edits;  // the nodes with their start and current values
+        Vector<SceneNode*> _nodes;
+        Vector<NodeTransformEdit> _edits;  // the nodes with their start and current values
     };
 
     /**
@@ -202,8 +201,8 @@ namespace BECore {
         Gizmo::SnapSettings _snap;
         GizmoEditSession _session;
         Gizmo::Handle _hover = Gizmo::Handle::None;
-        eastl::vector<SceneNode*> _nodes;  // the movable selected nodes of the last hit test
-        eastl::vector<Gizmo::Item> _items;
+        Vector<SceneNode*> _nodes;  // the movable selected nodes of the last hit test
+        Vector<Gizmo::Item> _items;
     };
 
     /// The rubber band: a left drag that began on empty ground of the image ends in a ViewportBoxSelectEvent. The press itself already went out as an edit click (it cleared the selection), so a drag

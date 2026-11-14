@@ -8,11 +8,11 @@ namespace BECore {
 
         constexpr char ConditionSeparator = ';';
         constexpr char ConditionValueSeparator = ':';
-        constexpr eastl::string_view OrientationKey = "orientation";
+        constexpr StringView OrientationKey = "orientation";
 
         /// A range limit of a condition by its name in the text
         struct ConditionLimit {
-            eastl::string_view key;
+            StringView key;
             float UIVariantCondition::* member;
         };
 
@@ -21,7 +21,7 @@ namespace BECore {
             {"maxWidth", &UIVariantCondition::maxWidth},   {"minHeight", &UIVariantCondition::minHeight}, {"maxHeight", &UIVariantCondition::maxHeight},
         };
 
-        bool EqualsIgnoreCase(eastl::string_view a, eastl::string_view b) {
+        bool EqualsIgnoreCase(StringView a, StringView b) {
             if (a.size() != b.size()) {
                 return false;
             }
@@ -33,7 +33,7 @@ namespace BECore {
             return true;
         }
 
-        std::optional<UIOrientation> ParseOrientation(eastl::string_view text) {
+        Optional<UIOrientation> ParseOrientation(StringView text) {
             for (const UIOrientation orientation : EnumUtils<UIOrientation>::Values()) {
                 if (EqualsIgnoreCase(text, EnumUtils<UIOrientation>::ToString(orientation))) {
                     return orientation;
@@ -42,8 +42,8 @@ namespace BECore {
             return std::nullopt;
         }
 
-        eastl::string Lowercase(eastl::string_view text) {
-            eastl::string result(text.data(), text.size());
+        String Lowercase(StringView text) {
+            String result(text.data(), text.size());
             for (char& c : result) {
                 c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
             }
@@ -68,9 +68,9 @@ namespace BECore {
         return InRange(aspect, minAspect, maxAspect) && InRange(bounds.w, minWidth, maxWidth) && InRange(bounds.h, minHeight, maxHeight);
     }
 
-    eastl::string UIVariantCondition::ToText() const {
-        eastl::string text;
-        const auto append = [&text](const eastl::string& part) { text += text.empty() ? part : Format("{}{}", ConditionSeparator, part); };
+    String UIVariantCondition::ToText() const {
+        String text;
+        const auto append = [&text](const String& part) { text += text.empty() ? part : Format("{}{}", ConditionSeparator, part); };
         if (orientation != UIOrientation::Any) {
             append(Format("{}{}{}", OrientationKey, ConditionValueSeparator, Lowercase(EnumUtils<UIOrientation>::ToString(orientation))));
         }
@@ -82,19 +82,19 @@ namespace BECore {
         return text;
     }
 
-    std::expected<UIVariantCondition, eastl::string> UIVariantCondition::FromText(eastl::string_view text) {
+    std::expected<UIVariantCondition, String> UIVariantCondition::FromText(StringView text) {
         UIVariantCondition condition;
-        for (const eastl::string_view rawPart : String::Split(UIText::Trim(text), ConditionSeparator)) {
-            const eastl::string_view part = UIText::Trim(rawPart);
+        for (const StringView rawPart : StringUtils::Split(UIText::Trim(text), ConditionSeparator)) {
+            const StringView part = UIText::Trim(rawPart);
             if (part.empty()) {
                 continue;
             }
             const size_t colon = part.find(ConditionValueSeparator);
-            if (colon == eastl::string_view::npos) {
+            if (colon == StringView::npos) {
                 return std::unexpected(Format("Condition part '{}' has no value", part));
             }
-            const eastl::string_view key = UIText::Trim(part.substr(0, colon));
-            const eastl::string_view value = UIText::Trim(part.substr(colon + 1));
+            const StringView key = UIText::Trim(part.substr(0, colon));
+            const StringView value = UIText::Trim(part.substr(colon + 1));
 
             if (EqualsIgnoreCase(key, OrientationKey)) {
                 const auto parsed = ParseOrientation(value);

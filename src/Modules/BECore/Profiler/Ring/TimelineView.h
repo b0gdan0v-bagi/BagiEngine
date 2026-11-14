@@ -75,10 +75,10 @@ namespace BECore {
      * @brief The threads that have a zone overlapping [beginTicks, endTicks), in the order of the contract: by sort index
      * (threads without one, Profiler::kNoSortIndex, after those with), then by thread id.
      */
-    [[nodiscard]] eastl::vector<TimelineLane> LayoutLanes(const RingSnapshot& snapshot, double beginTicks, double endTicks);
+    [[nodiscard]] Vector<TimelineLane> LayoutLanes(const RingSnapshot& snapshot, double beginTicks, double endTicks);
 
     /// The y of the top of lane @p laneIndex when the lanes are stacked from y = 0, each `rows * rowHeight` high with @p laneGap between
-    [[nodiscard]] float LaneTop(const eastl::vector<TimelineLane>& lanes, size_t laneIndex, float rowHeight, float laneGap);
+    [[nodiscard]] float LaneTop(const Vector<TimelineLane>& lanes, size_t laneIndex, float rowHeight, float laneGap);
 
     /// The one-pixel rule: a zone narrower than a pixel is not drawn (and not hit); the panel merges nothing
     [[nodiscard]] bool IsVisible(const ZoneRecord& zone, double pixelsPerTick);
@@ -87,16 +87,16 @@ namespace BECore {
      * @brief The zone under the point (@p x, @p y) of the lane area (y = 0 is the top of the first lane), or none. The row of a zone
      * is its depth; a point in a gap, below the last row or on a zone that is not visible hits nothing.
      */
-    [[nodiscard]] std::optional<ZoneHit> HitTest(const eastl::vector<TimelineLane>& lanes, const RingSnapshot& snapshot, const TimelineView& view, float x, float y, float rowHeight, float widthPixels,
-                                                 float laneGap = 0.0f);
+    [[nodiscard]] Optional<ZoneHit> HitTest(const Vector<TimelineLane>& lanes, const RingSnapshot& snapshot, const TimelineView& view, float x, float y, float rowHeight, float widthPixels,
+                                            float laneGap = 0.0f);
 
     /// The longest call of @p site on any thread (the first one on a tie)
-    [[nodiscard]] std::optional<ZoneHit> FindWorstCall(const RingSnapshot& snapshot, const ProfileSite* site);
+    [[nodiscard]] Optional<ZoneHit> FindWorstCall(const RingSnapshot& snapshot, const ProfileSite* site);
 
     /// The frame whose interval holds @p tick, nullptr when none does
     [[nodiscard]] const RingFrame* FrameAt(const RingSnapshot& snapshot, uint64_t tick);
 
     /// The position in RingSnapshot::frames of the frame numbered @p frameIndex (RingFrame::index), none when there is none or the ring no longer holds it
-    [[nodiscard]] std::optional<size_t> FramePosition(const RingSnapshot& snapshot, std::optional<uint64_t> frameIndex);
+    [[nodiscard]] Optional<size_t> FramePosition(const RingSnapshot& snapshot, Optional<uint64_t> frameIndex);
 
 }  // namespace BECore

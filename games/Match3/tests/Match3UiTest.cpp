@@ -49,7 +49,7 @@ namespace BECore::Match3::Tests {
         constexpr float kFrame = 1.0f / 32.0f;  // a power of two: the sums of frame times are exact
         constexpr int kMaxFrames = 1000;
 
-        bool SameDraw(const eastl::vector<DrawCall>& a, const eastl::vector<DrawCall>& b) {
+        bool SameDraw(const Vector<DrawCall>& a, const Vector<DrawCall>& b) {
             if (a.size() != b.size()) {
                 return false;
             }
@@ -330,8 +330,8 @@ namespace BECore::Match3::Tests {
 
         ScoreSomething();
         Draw();
-        const eastl::string expected = Format("Score: {}", Board().GetModel().GetScore());
-        EXPECT_EQ(score->GetDisplayText(), eastl::string_view(expected.data(), expected.size()));
+        const String expected = Format("Score: {}", Board().GetModel().GetScore());
+        EXPECT_EQ(score->GetDisplayText(), StringView(expected));
     }
 
     TEST_F(Match3UiTest, ClickingTheResetButtonOnTheScreenResetsTheBoard) {
@@ -399,9 +399,9 @@ namespace BECore::Match3::Tests {
         }
 
         /// The recorded draw of the board in its current state, without the particles of the clear bursts (a batch of geometry)
-        eastl::vector<DrawCall> Drawn() {
+        Vector<DrawCall> Drawn() {
             Draw();
-            eastl::vector<DrawCall> board;
+            Vector<DrawCall> board;
             for (const DrawCall& call : _renderer->calls) {
                 if (call.kind != DrawKind::Geometry) {
                     board.push_back(call);
@@ -456,21 +456,21 @@ namespace BECore::Match3::Tests {
         Draw();
         EXPECT_TRUE(Board().IsAnimating()) << "a draw of the same version keeps the run";
         auto score = Canvas("Match3Scene", "Hud")->GetRoot().FindByName(PoolString::Intern("Score"))->GetComponent<UITextComponent>();
-        const eastl::string expected = Format("Score: {}", elsewhere.GetScore());
-        EXPECT_EQ(score->GetDisplayText(), eastl::string_view(expected.data(), expected.size())) << "the score shows at once";
+        const String expected = Format("Score: {}", elsewhere.GetScore());
+        EXPECT_EQ(score->GetDisplayText(), StringView(expected)) << "the score shows at once";
     }
 
     TEST_F(Match3AnimationTest, AMidWayDrawDiffersFromTheSettledOneAndTheEndEqualsABoardThatNeverAnimated) {
         ClickALegalSwap();
-        const eastl::vector<DrawCall> atStart = Drawn();
+        const Vector<DrawCall> atStart = Drawn();
         AdvanceFrames(5);  // 5/32 s: the swap slide (4/32 s) is done and the matched gems shrink
         ASSERT_TRUE(Board().IsAnimating());
-        const eastl::vector<DrawCall> midWay = Drawn();
+        const Vector<DrawCall> midWay = Drawn();
         EXPECT_FALSE(SameDraw(atStart, midWay)) << "the sprites moved";
 
         Board().SkipAnimation();
         EXPECT_FALSE(Board().IsAnimating());
-        const eastl::vector<DrawCall> settled = Drawn();
+        const Vector<DrawCall> settled = Drawn();
         EXPECT_FALSE(SameDraw(midWay, settled));
 
         // The same seed and swap with the animation switched off draw the same picture
@@ -484,7 +484,7 @@ namespace BECore::Match3::Tests {
     TEST_F(Match3AnimationTest, TheRunEndsOnItsOwnWithTheSettledPicture) {
         ClickALegalSwap();
         Board().SkipAnimation();
-        const eastl::vector<DrawCall> settled = Drawn();
+        const Vector<DrawCall> settled = Drawn();
 
         Emit("Match3Reset");
         ClickALegalSwap();
@@ -580,7 +580,7 @@ namespace BECore::Match3::Tests {
         const auto [a, b] = FindRejectedSwap();
         const Match3Board before = Board().GetModel().GetBoard();
         const uint64_t version = Board().GetModel().GetVersion();
-        const eastl::vector<DrawCall> settled = Drawn();
+        const Vector<DrawCall> settled = Drawn();
 
         Board().ClickCell(a);
         EXPECT_FALSE(Board().IsAnimating()) << "a selection is not a swap";

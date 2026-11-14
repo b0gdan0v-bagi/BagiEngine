@@ -49,9 +49,9 @@ namespace BECore {
 
         /// Typed text, already UTF-8 (SDL sends it only between SDL_StartTextInput and SDL_StopTextInput)
         struct TextInputEvent : public EventBase<TextInputEvent> {
-            eastl::string text;
+            String text;
 
-            explicit TextInputEvent(eastl::string_view t) : text(t.data(), t.size()) {}
+            explicit TextInputEvent(StringView t) : text(t.data(), t.size()) {}
         };
 
         // События окна

@@ -44,7 +44,7 @@ namespace BECore::Gizmo {
     [[nodiscard]] Vec2 TurnAbout(Vec2 point, Vec2 center, float degrees);
 
     /// The corners in the order top left, top right, bottom right, bottom left of the unturned rect
-    using Quad = eastl::array<Vec2, 4>;
+    using Quad = Array<Vec2, 4>;
 
     /// The fields of a TransformComponent that a gizmo moves: scene units, degrees clockwise on the screen, y down, the pivot normalized in the rect
     struct Item {
@@ -66,10 +66,10 @@ namespace BECore::Gizmo {
     [[nodiscard]] Quad TurnedQuad(const Item& item);
 
     /// The axis-aligned bounds of the turned quads of @p items; an empty rect for none
-    [[nodiscard]] Rect Bounds(eastl::span<const Item> items);
+    [[nodiscard]] Rect Bounds(Span<const Item> items);
 
     /// Where a gizmo sits: the pivot point of one item, the centre of the bounds of a group; (0, 0) for none
-    [[nodiscard]] Vec2 Pivot(eastl::span<const Item> items);
+    [[nodiscard]] Vec2 Pivot(Span<const Item> items);
 
     /// Sizes of the gizmo in screen pixels; a handle keeps its size at any zoom through the `unitsPerScreenPixel` of the functions below
     inline constexpr float kArrowLength = 72.0f;      ///< from the centre to the tip of an axis arrow
@@ -87,7 +87,7 @@ namespace BECore::Gizmo {
     };
 
     /// The frame of @p items (empty items give a frame at (0, 0))
-    [[nodiscard]] Frame MakeFrame(eastl::span<const Item> items, Space space);
+    [[nodiscard]] Frame MakeFrame(Span<const Item> items, Space space);
 
     /// The unit vector of the frame's X axis (to the right when unturned) and of its Y axis (down when unturned)
     [[nodiscard]] Vec2 AxisX(const Frame& frame);

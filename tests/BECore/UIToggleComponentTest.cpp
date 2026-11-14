@@ -18,7 +18,6 @@
 #include <Common/UIPartShapeChecks.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
-#include <Events/SubscriptionHolder.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -206,15 +205,15 @@ namespace BECore::Tests {
                 _values.push_back(event.value);
             }
 
-            eastl::vector<PoolString> _actions;
-            eastl::vector<PoolString> _values;
+            Vector<PoolString> _actions;
+            Vector<PoolString> _values;
         };
 
         void SetVar(const char* name, const char* value) {
             CoreManager::GetUIVars().Set(PoolString::Intern(name), value);
         }
 
-        eastl::string ElementToXml(const UIElement& element) {
+        String ElementToXml(const UIElement& element) {
             XmlSerializer serializer;
             EXPECT_TRUE(serializer.BeginObject("element"));
             element.Serialize(serializer);
@@ -278,14 +277,14 @@ namespace BECore::Tests {
         }
 
         UISwitchComponent& Switch(const char* name) const {
-            UISwitchComponent* component = Get((eastl::string(name) + "Switch").c_str()).GetComponent<UISwitchComponent>();
+            UISwitchComponent* component = Get((String(name) + "Switch").c_str()).GetComponent<UISwitchComponent>();
             EXPECT_NE(component, nullptr) << name;
             return *component;
         }
 
         /// The rect of the switch child of row @p name
         const Rect& SwitchRect(const char* name) const {
-            return Get((eastl::string(name) + "Switch").c_str()).rect;
+            return Get((String(name) + "Switch").c_str()).rect;
         }
 
         UISwitchComponent::Parts PartsOf(const char* name) const {
@@ -564,7 +563,7 @@ namespace BECore::Tests {
     TEST_F(UIToggleComponentTest, TheSwitchIsAtTheRightEndAndTheCaptionTakesTheRoomItLeaves) {
         for (const char* name : {"Sound", "Custom", "Off", "Round"}) {
             const Rect& row = Get(name).rect;
-            const Rect& caption = Get((eastl::string(name) + "Caption").c_str()).rect;
+            const Rect& caption = Get((String(name) + "Caption").c_str()).rect;
             const Rect& sw = SwitchRect(name);
             EXPECT_NEAR(sw.h, row.h, kEpsilon) << name;
             EXPECT_NEAR(sw.w, row.h * UISwitchComponent::kAreaAspect, kEpsilon) << name;
@@ -797,10 +796,10 @@ namespace BECore::Tests {
         ASSERT_TRUE(serializer.BeginObject("component"));
         _canvas->Serialize(serializer);
         serializer.EndObject();
-        const eastl::string xml = serializer.SaveToString();
+        const String xml = serializer.SaveToString();
 
         XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+        ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
         auto loaded = New<UICanvasComponent>();
         ASSERT_TRUE(deserializer.BeginObject("component"));
         loaded->Deserialize(deserializer);
@@ -867,8 +866,8 @@ namespace BECore::Tests {
             serializer.EndObject();
             return serializer.SaveToString();
         };
-        EXPECT_EQ(xmlOf(Get("SoundSwitch")).find("partShape"), eastl::string::npos);
-        EXPECT_NE(xmlOf(Get("RoundSwitch")).find("partShape=\"Round\""), eastl::string::npos);
+        EXPECT_EQ(xmlOf(Get("SoundSwitch")).find("partShape"), String::npos);
+        EXPECT_NE(xmlOf(Get("RoundSwitch")).find("partShape=\"Round\""), String::npos);
     }
 
 }  // namespace BECore::Tests

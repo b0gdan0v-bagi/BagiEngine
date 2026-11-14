@@ -59,7 +59,7 @@ namespace BECore {
         [[nodiscard]] static HeaderParts GetHeaderParts(const Rect& header);
 
         /// The strips of the arrow in @p box: the widest at the top for a down arrow, at the bottom for an up arrow
-        [[nodiscard]] static eastl::array<Rect, kArrowRows> GetArrowStrips(const Rect& box, bool pointsUp);
+        [[nodiscard]] static Array<Rect, kArrowRows> GetArrowStrips(const Rect& box, bool pointsUp);
 
         /// The size one option asks for in the list
         struct OptionSize {
@@ -69,14 +69,14 @@ namespace BECore {
 
         /// Where the list is: one rect per option in order, and the column that holds them
         struct PopupGeometry {
-            eastl::vector<Rect> options;
+            Vector<Rect> options;
             Rect list;
             bool above = false;  ///< the list sits over the header, not under it
         };
 
         /// The pure rules of the list. A column as wide as the widest of the header and the options (never wider than @p bounds), directly under @p header, left edges aligned; when it does not
         /// fit below and fits above it goes above the header; when it fits on neither side it is shifted to stay inside @p bounds (a list taller than @p bounds starts at its top edge)
-        [[nodiscard]] static PopupGeometry GetPopupGeometry(const Rect& header, const eastl::vector<OptionSize>& options, const Rect& bounds);
+        [[nodiscard]] static PopupGeometry GetPopupGeometry(const Rect& header, const Vector<OptionSize>& options, const Rect& bounds);
 
         [[nodiscard]] bool IsOpen() const {
             return _open;
@@ -90,7 +90,7 @@ namespace BECore {
         void SyncChildren();
 
         /// The value of the bound variable; empty when `bind` is empty or the variable is not set
-        [[nodiscard]] eastl::string_view GetSelectedValue() const;
+        [[nodiscard]] StringView GetSelectedValue() const;
 
         /// Whether a click on @p option emits `ActionEvent(action, option value)`: not when the dropdown or the option is disabled (`IsDisabled()`), or `action` is empty
         [[nodiscard]] bool EmitsOnChoice(const UIElement& option) const;
@@ -139,7 +139,7 @@ namespace BECore {
         /// The text area of the header: left of the arrow (`GetHeaderParts`)
         [[nodiscard]] Rect GetComponentArea() const override;
         /// The caption of the chosen option (`UIChoice::GetText`), null when none is chosen: the header then shows the placeholder, the component's own `text`
-        [[nodiscard]] const eastl::string* GetTextOverride() const override;
+        [[nodiscard]] const String* GetTextOverride() const override;
 
     protected:
         /// Resolves the colour fields of this control (UIElement::ApplyTheme): `arrowColor`, after the element's

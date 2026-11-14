@@ -62,7 +62,7 @@ namespace BECore {
         }
 
         std::coroutine_handle<> _handle;
-        std::optional<EventType> _receivedEvent;
+        Optional<EventType> _receivedEvent;
         entt::scoped_connection _connection;
     };
 
@@ -89,7 +89,7 @@ namespace BECore {
     class EventAwaiterWithTimeout {
     public:
         using Duration = std::chrono::steady_clock::duration;
-        using Result = std::optional<EventType>;
+        using Result = Optional<EventType>;
 
         explicit EventAwaiterWithTimeout(Duration timeout) : _timeout(timeout) {}
 
@@ -142,7 +142,7 @@ namespace BECore {
         Duration _timeout;
         std::chrono::steady_clock::time_point _startTime;
         std::coroutine_handle<> _handle;
-        std::optional<EventType> _receivedEvent;
+        Optional<EventType> _receivedEvent;
         entt::scoped_connection _connection;
         bool _timedOut = false;
     };

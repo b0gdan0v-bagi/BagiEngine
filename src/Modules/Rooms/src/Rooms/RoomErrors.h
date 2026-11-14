@@ -8,32 +8,32 @@ namespace BECore {
     /// The errors of the game itself (`illegal_action`, `not_your_turn`, `invalid_seat`) are passed on as the game gave them.
     namespace RoomErrors {
         /// Not JSON, not an object, a missing or wrong-typed field, an unknown message type
-        inline constexpr eastl::string_view kBadMessage = "bad_message";
+        inline constexpr StringView kBadMessage = "bad_message";
         /// `v` is not the version of the protocol the server speaks
-        inline constexpr eastl::string_view kUnsupportedVersion = "unsupported_version";
-        inline constexpr eastl::string_view kMessageTooLarge = "message_too_large";
-        inline constexpr eastl::string_view kRateLimited = "rate_limited";
-        inline constexpr eastl::string_view kUnknownGame = "unknown_game";
+        inline constexpr StringView kUnsupportedVersion = "unsupported_version";
+        inline constexpr StringView kMessageTooLarge = "message_too_large";
+        inline constexpr StringView kRateLimited = "rate_limited";
+        inline constexpr StringView kUnknownGame = "unknown_game";
         /// No room has this code (also a code that could not be a code)
-        inline constexpr eastl::string_view kUnknownRoom = "unknown_room";
-        inline constexpr eastl::string_view kRoomFull = "room_full";
-        inline constexpr eastl::string_view kNotInRoom = "not_in_room";
-        inline constexpr eastl::string_view kAlreadyInRoom = "already_in_room";
-        inline constexpr eastl::string_view kNotHost = "not_host";
+        inline constexpr StringView kUnknownRoom = "unknown_room";
+        inline constexpr StringView kRoomFull = "room_full";
+        inline constexpr StringView kNotInRoom = "not_in_room";
+        inline constexpr StringView kAlreadyInRoom = "already_in_room";
+        inline constexpr StringView kNotHost = "not_host";
         /// The room has started: only a member can return to it, by token
-        inline constexpr eastl::string_view kGameStarted = "game_started";
-        inline constexpr eastl::string_view kNotStarted = "not_started";
-        inline constexpr eastl::string_view kSeatTaken = "seat_taken";
-        inline constexpr eastl::string_view kInvalidSeat = SeatedGameErrors::kInvalidSeat;
+        inline constexpr StringView kGameStarted = "game_started";
+        inline constexpr StringView kNotStarted = "not_started";
+        inline constexpr StringView kSeatTaken = "seat_taken";
+        inline constexpr StringView kInvalidSeat = SeatedGameErrors::kInvalidSeat;
         /// `action.version` is not the version of the game now; the current `view` is sent again
-        inline constexpr eastl::string_view kStaleAction = "stale_action";
-        inline constexpr eastl::string_view kIllegalAction = GameControlErrors::kIllegalAction;
-        inline constexpr eastl::string_view kNotYourTurn = SeatedGameErrors::kNotYourTurn;
-        inline constexpr eastl::string_view kBadName = "bad_name";
+        inline constexpr StringView kStaleAction = "stale_action";
+        inline constexpr StringView kIllegalAction = GameControlErrors::kIllegalAction;
+        inline constexpr StringView kNotYourTurn = SeatedGameErrors::kNotYourTurn;
+        inline constexpr StringView kBadName = "bad_name";
         /// The token is not one a room hands out, or no member of the room has it
-        inline constexpr eastl::string_view kBadToken = "bad_token";
-        inline constexpr eastl::string_view kTooManyRooms = "too_many_rooms";
-        inline constexpr eastl::string_view kInternalError = "internal_error";
+        inline constexpr StringView kBadToken = "bad_token";
+        inline constexpr StringView kTooManyRooms = "too_many_rooms";
+        inline constexpr StringView kInternalError = "internal_error";
     }  // namespace RoomErrors
 
 }  // namespace BECore

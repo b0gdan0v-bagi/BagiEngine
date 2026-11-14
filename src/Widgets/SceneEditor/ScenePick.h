@@ -35,18 +35,18 @@ namespace BECore::ScenePick {
      *
      * @param x0,y0,x1,y1 the box in the pixels of the pass that drew the scene last (as for PickAt)
      */
-    void PickInRect(Scene& scene, float x0, float y0, float x1, float y1, eastl::vector<SceneNode*>& out);
+    void PickInRect(Scene& scene, float x0, float y0, float x1, float y1, Vector<SceneNode*>& out);
 
     /// True when (@p x, @p y) lies in @p rect turned by @p rotationDegrees (clockwise on the screen) about the pivot, a point of the rect from 0 to 1 on each axis. The left and top edges belong to
     /// the rect
     bool PointInRotatedRect(const Rect& rect, float rotationDegrees, float pivotX, float pivotY, float x, float y);
 
-    using Quad = eastl::array<Vec2, 4>;  ///< the corners in the order top left, top right, bottom right, bottom left of the unturned rect
+    using Quad = Array<Vec2, 4>;  ///< the corners in the order top left, top right, bottom right, bottom left of the unturned rect
 
     /// The outlines of a selected node: no heap
     struct Outlines {
         static constexpr size_t kMaxQuads = 2;
-        eastl::array<Quad, kMaxQuads> quads;
+        Array<Quad, kMaxQuads> quads;
         size_t count = 0;
     };
 

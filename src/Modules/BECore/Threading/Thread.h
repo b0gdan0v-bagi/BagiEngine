@@ -1,10 +1,6 @@
 #pragma once
 
-#include <EASTL/string.h>
-#include <cstdint>
 #include <thread>
-#include <type_traits>
-#include <utility>
 
 namespace BECore {
 
@@ -32,7 +28,7 @@ namespace BECore {
             }
 
         private:
-            eastl::string _name;
+            String _name;
             uint32_t _sortIndex;
             TBody _body;
         };

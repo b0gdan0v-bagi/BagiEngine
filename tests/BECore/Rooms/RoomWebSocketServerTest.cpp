@@ -4,7 +4,6 @@
 #include "TestRandom.h"
 
 #include <BECore/Logger/LogEvent.h>
-#include <Events/SubscriptionHolder.h>
 #include <RoomServer/RoomWebSocketServer.h>
 #include <Rooms/RoomErrors.h>
 #include <gtest/gtest.h>
@@ -39,9 +38,9 @@ namespace BECore::Tests {
         }
 
         /// Frames of @p count identical text messages in one buffer
-        eastl::vector<uint8_t> RepeatText(const std::string& text, int count) {
-            const auto frame = EncodeTextFrame(eastl::string_view(text.data(), text.size()), kClientMask);
-            eastl::vector<uint8_t> batch;
+        Vector<uint8_t> RepeatText(const std::string& text, int count) {
+            const auto frame = EncodeTextFrame(FromStd(text), kClientMask);
+            Vector<uint8_t> batch;
             batch.reserve(frame.size() * static_cast<size_t>(count));
             for (int i = 0; i < count; ++i) {
                 batch.insert(batch.end(), frame.data(), frame.data() + frame.size());
@@ -74,7 +73,7 @@ namespace BECore::Tests {
             }
 
             /// A host that created a room: the client with `joined` and `lobby` read
-            std::optional<RoomSocketClient> MakeHost(uint16_t port, eastl::string_view name = "Host") {
+            Optional<RoomSocketClient> MakeHost(uint16_t port, StringView name = "Host") {
                 auto host = RoomSocketClient::Connect(port);
                 if (!host) {
                     return std::nullopt;
@@ -143,8 +142,8 @@ namespace BECore::Tests {
         EXPECT_EQ(lobby->type, RoomMessageTypes::kLobby);
         EXPECT_EQ(client->token.size(), RoomLimits::kTokenLength);
         EXPECT_EQ(client->roomCode.size(), RoomLimits::kRoomCodeLength);
-        EXPECT_NE(joined->text.find(client->token), eastl::string::npos);
-        EXPECT_EQ(lobby->text.find(client->token), eastl::string::npos) << "the token is for its owner only";
+        EXPECT_NE(joined->text.find(client->token), String::npos);
+        EXPECT_EQ(lobby->text.find(client->token), String::npos) << "the token is for its owner only";
     }
 
     TEST_F(RoomWebSocketServerTest, SecondClientJoinsByCodeAndBothSeeTheLobby) {
@@ -177,9 +176,9 @@ namespace BECore::Tests {
             {"{\"v\":1,\"type\":\"ping\"}", "pong"}, {"not json", "error"}, {"{\"v\":1,\"type\":\"ping\"}", "pong"}, {"{\"v\":1,\"type\":\"no_such\"}", "error"},
             {"{\"v\":1,\"type\":\"ping\"}", "pong"},
         };
-        eastl::vector<uint8_t> batch;
+        Vector<uint8_t> batch;
         for (const auto& [text, reply] : script) {
-            const auto frame = EncodeTextFrame(eastl::string_view(text.data(), text.size()), kClientMask);
+            const auto frame = EncodeTextFrame(FromStd(text), kClientMask);
             batch.insert(batch.end(), frame.data(), frame.data() + frame.size());
         }
         client->Raw().Send(AsBytes(batch));
@@ -251,7 +250,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(client.has_value());
 
         const uint64_t length = RoomLimits::kMaxMessageBytes + 1;
-        eastl::vector<uint8_t> header = {0x81, 0xFE, static_cast<uint8_t>(length >> 8), static_cast<uint8_t>(length)};
+        Vector<uint8_t> header = {0x81, 0xFE, static_cast<uint8_t>(length >> 8), static_cast<uint8_t>(length)};
         header.insert(header.end(), kClientMask.data(), kClientMask.data() + kClientMask.size());
         client->Raw().Send(AsBytes(header));
 
@@ -327,7 +326,7 @@ namespace BECore::Tests {
 
     TEST_F(RoomWebSocketServerTest, StopWithOpenConnectionsAndMessagesInFlightReturnsPromptly) {
         const uint16_t port = StartServer();
-        eastl::vector<RoomSocketClient> clients;
+        Vector<RoomSocketClient> clients;
         for (int i = 0; i < 6; ++i) {
             auto client = RoomSocketClient::Connect(port);
             ASSERT_TRUE(client.has_value());
@@ -337,7 +336,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(silent.has_value());
 
         // A flood from every client, the hub busy answering it, and Stop() in the middle
-        const eastl::vector<uint8_t> flood = RepeatText("{\"v\":1,\"type\":\"ping\"}", 2000);
+        const Vector<uint8_t> flood = RepeatText("{\"v\":1,\"type\":\"ping\"}", 2000);
         for (RoomSocketClient& client : clients) {
             (void)client.Raw().TrySend(AsBytes(flood));
         }
@@ -365,7 +364,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(slow && fast);
 
         // The slow client asks and never reads the answers: the system's buffers fill, then its queue passes the cap and it is dropped
-        const eastl::vector<uint8_t> chunk = RepeatText("{\"v\":1,\"type\":\"ping\"}", 2000);
+        const Vector<uint8_t> chunk = RepeatText("{\"v\":1,\"type\":\"ping\"}", 2000);
         bool dropped = false;
         for (int round = 0; round < 3000 && !dropped; ++round) {
             dropped = !slow->Raw().TrySend(AsBytes(chunk));
@@ -400,7 +399,7 @@ namespace BECore::Tests {
         void FloodWithoutReading(RoomSocketClient& client) {
             // About 80 bytes of answer for 50 sent, 13 MB in all: above the 4 MB the system lets a send buffer and a receive buffer grow to, together
             constexpr int kChunks = 80;
-            const eastl::vector<uint8_t> chunk = RepeatText("{\"v\":1,\"type\":\"join\",\"room\":\"ZZZZ\",\"name\":\"x\"}", 2000);
+            const Vector<uint8_t> chunk = RepeatText("{\"v\":1,\"type\":\"join\",\"room\":\"ZZZZ\",\"name\":\"x\"}", 2000);
             for (int i = 0; i < kChunks; ++i) {
                 ASSERT_TRUE(client.Raw().TrySend(AsBytes(chunk)));
             }
@@ -501,7 +500,7 @@ namespace BECore::Tests {
         std::this_thread::sleep_for(150ms);
 
         auto late = RoomSocketClient::Connect(port);
-        std::optional<ServerFrame> close;
+        Optional<ServerFrame> close;
         if (late) {
             close = late->WaitForClose();
         }
@@ -542,7 +541,7 @@ namespace BECore::Tests {
     TEST_F(RoomWebSocketServerTest, StopRepeatedWithClientsComingAndGoingNeverHangs) {
         for (int round = 0; round < 5; ++round) {
             const uint16_t port = StartServer(MakeShutdownSettings(300ms));
-            eastl::vector<RoomSocketClient> clients;
+            Vector<RoomSocketClient> clients;
             for (int i = 0; i < 4; ++i) {
                 auto client = RoomSocketClient::Connect(port);
                 ASSERT_TRUE(client.has_value());
@@ -612,7 +611,7 @@ namespace BECore::Tests {
         /// Moves the clock on by kClockStep at a time until a ping reaches @p client, and tells how far it moved; nullopt when no ping came
         /// within @p limit of clock time. The hub thread looks at the clock on its own schedule, so a test cannot know which step it
         /// notices a silence at: it asks how long the silence had to be
-        std::optional<std::chrono::milliseconds> AdvanceUntilPing(ManualClock& clock, RoomSocketClient& client, std::chrono::milliseconds limit = 3 * kPingInterval) {
+        Optional<std::chrono::milliseconds> AdvanceUntilPing(ManualClock& clock, RoomSocketClient& client, std::chrono::milliseconds limit = 3 * kPingInterval) {
             std::chrono::milliseconds advanced{0};
             while (advanced < limit) {
                 clock.Advance(kClockStep);
@@ -893,7 +892,7 @@ namespace BECore::Tests {
         const auto refused = fifth->WaitFor(RoomMessageTypes::kError);
         ASSERT_TRUE(refused.has_value());
         EXPECT_EQ(refused->GetString("code"), RoomErrors::kTooManyRooms);
-        EXPECT_NE(refused->GetString("message").find("your address"), eastl::string::npos);
+        EXPECT_NE(refused->GetString("message").find("your address"), String::npos);
 
         for (RoomSocketClient& host : hosts) {
             RoundTrip(host);

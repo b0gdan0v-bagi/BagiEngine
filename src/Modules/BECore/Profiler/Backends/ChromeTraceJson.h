@@ -3,7 +3,7 @@
 namespace BECore {
 
     /// Appends @p text to @p out as a JSON string literal with its quotes (nullptr is an empty string): the one escaper of every Chrome trace the profiler writes
-    inline void AppendJsonString(eastl::string& out, const char* text) {
+    inline void AppendJsonString(String& out, const char* text) {
         out.push_back('"');
         for (const char* c = text != nullptr ? text : ""; *c != '\0'; ++c) {
             const auto byte = static_cast<unsigned char>(*c);

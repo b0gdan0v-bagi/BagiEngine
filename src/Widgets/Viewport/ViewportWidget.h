@@ -125,21 +125,21 @@ namespace BECore {
         PreviewShape _shape;
         SafeAreaSimulation _safeAreaSimulation = SafeAreaSimulation::None;
         PreviewOverlays _overlays;
-        PreviewSettings _storedPreview;      // the choice the editor last stored (applied from a preferences event, or sent by us)
-        std::optional<int32_t> _forcedView;  // the index of the forced view variant, -1 the default, nullopt Auto
-        PoolString _forcedViewScene;         // the scene the choice was made for
-        bool _editingSize = false;           // a custom W / H field is being typed in: the shape is applied live, the editor is told when the field is left
-        eastl::string _sizePreview;
+        PreviewSettings _storedPreview;  // the choice the editor last stored (applied from a preferences event, or sent by us)
+        Optional<int32_t> _forcedView;   // the index of the forced view variant, -1 the default, nullopt Auto
+        PoolString _forcedViewScene;     // the scene the choice was made for
+        bool _editingSize = false;       // a custom W / H field is being typed in: the shape is applied live, the editor is told when the field is left
+        String _sizePreview;
         PreviewShape _sizePreviewShape;  // the shape _sizePreview was made for
         bool _sizePreviewValid = false;
-        eastl::string _viewPreview;  // the view combo's text of a forced variant
-        int _viewPreviewRow = -1;    // the row and the name _viewPreview was made for
+        String _viewPreview;       // the view combo's text of a forced variant
+        int _viewPreviewRow = -1;  // the row and the name _viewPreview was made for
         PoolString _viewPreviewName;
         bool _gridEnabled = false;
         int32_t _gridStep = 0;
-        const Scene* _selectedScene = nullptr;     // the selection last told by SceneSelectionChangedEvent: a node is never dereferenced before it is found in the active scene
-        eastl::vector<SceneNode*> _selectedNodes;  // in selection order, the primary last
-        ViewportCamera _camera;                    // the editor camera; the image is drawn with it while the input mode is Edit
+        const Scene* _selectedScene = nullptr;  // the selection last told by SceneSelectionChangedEvent: a node is never dereferenced before it is found in the active scene
+        Vector<SceneNode*> _selectedNodes;      // in selection order, the primary last
+        ViewportCamera _camera;                 // the editor camera; the image is drawn with it while the input mode is Edit
         ViewportCameraInput _cameraInput;
         ViewportGizmos _gizmos;
         bool _frameRequested = false;  // viewport.frameSelected, answered in the next Update (it needs the panel size)

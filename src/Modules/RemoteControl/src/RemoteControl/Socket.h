@@ -11,8 +11,8 @@ namespace BECore {
     CORE_ENUM(SocketBind, uint8_t, Loopback, AnyAddress)
 
     /// The bytes of @p text, for SendAll()
-    [[nodiscard]] inline eastl::span<const uint8_t> AsBytes(eastl::string_view text) {
-        return eastl::span<const uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), text.size());
+    [[nodiscard]] inline Span<const uint8_t> AsBytes(StringView text) {
+        return Span<const uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), text.size());
     }
 
     /**
@@ -41,26 +41,26 @@ namespace BECore {
 
         /// Listens on @p port, on 127.0.0.1 only or on every address (@p scope); port 0 lets the system pick a free one
         /// (GetLocalPort() tells which). The error is a message for the log and names the address used
-        [[nodiscard]] static std::expected<Socket, eastl::string> Listen(uint16_t port, SocketBind scope = SocketBind::Loopback);
+        [[nodiscard]] static std::expected<Socket, String> Listen(uint16_t port, SocketBind scope = SocketBind::Loopback);
 
         /// Connects to 127.0.0.1:@p port (a loopback client of tests and tools); see the overload below
-        [[nodiscard]] static std::expected<Socket, eastl::string> Connect(uint16_t port);
+        [[nodiscard]] static std::expected<Socket, String> Connect(uint16_t port);
 
         /// Connects to @p host (a name or an IPv4 literal) and @p port. The name is resolved by the system (blocking, not
         /// bounded by @p timeout); the connection itself waits in slices of kWakeInterval, so an error "cancelled" follows
         /// within one slice after @p cancel (read from this thread, set from another) became true, and "timed out" after
         /// @p timeout. The error is a message for the log and names host:port
-        [[nodiscard]] static std::expected<Socket, eastl::string> Connect(eastl::string_view host, uint16_t port, std::chrono::milliseconds timeout, const std::atomic<bool>* cancel = nullptr);
+        [[nodiscard]] static std::expected<Socket, String> Connect(StringView host, uint16_t port, std::chrono::milliseconds timeout, const std::atomic<bool>* cancel = nullptr);
 
         /// Waits up to @p timeout for a connection: TimedOut when none came, Failed when the socket is broken or was shut down.
         /// @p peerAddress, when given, gets the IPv4 address of the client as dotted text ("?" when it is unknown)
-        [[nodiscard]] std::expected<Socket, SocketError> Accept(std::chrono::milliseconds timeout, eastl::string* peerAddress = nullptr);
+        [[nodiscard]] std::expected<Socket, SocketError> Accept(std::chrono::milliseconds timeout, String* peerAddress = nullptr);
 
         /// Sends all of @p data; false when the connection is gone
-        [[nodiscard]] bool SendAll(eastl::span<const uint8_t> data);
+        [[nodiscard]] bool SendAll(Span<const uint8_t> data);
 
         /// Reads what has arrived, at most @p buffer.size() bytes (always at least one). Closed: the peer closed the connection or ShutdownBoth() was called
-        [[nodiscard]] std::expected<size_t, SocketError> Receive(eastl::span<uint8_t> buffer);
+        [[nodiscard]] std::expected<size_t, SocketError> Receive(Span<uint8_t> buffer);
 
         /// Receive() gives up with TimedOut after @p timeout; zero waits for ever
         bool SetReceiveTimeout(std::chrono::milliseconds timeout);

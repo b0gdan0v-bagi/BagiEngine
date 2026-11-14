@@ -119,9 +119,9 @@ namespace BECore::Tests {
         }
 
         /// The textured draws of the row of Cap in the last frame (the glyphs; the outline is drawn first, in its own colour). Narrow and Shrinking start at y 100
-        eastl::vector<DrawCall> Glyphs() const {
+        Vector<DrawCall> Glyphs() const {
             constexpr float kCapRowBottom = 95.0f;
-            eastl::vector<DrawCall> glyphs;
+            Vector<DrawCall> glyphs;
             for (const DrawCall& call : _renderer->calls) {
                 if (call.kind == DrawKind::Texture && call.rect.y < kCapRowBottom) {
                     glyphs.push_back(call);
@@ -162,12 +162,12 @@ namespace BECore::Tests {
             serializer.EndObject();
             return serializer.SaveToString();
         };
-        const eastl::string xml = toXml(Get("Cap"));
-        EXPECT_NE(xml.find("hoverTextColor"), eastl::string::npos) << xml.c_str();
-        EXPECT_NE(xml.find("textOutline"), eastl::string::npos) << xml.c_str();
+        const String xml = toXml(Get("Cap"));
+        EXPECT_NE(xml.find("hoverTextColor"), String::npos) << xml.c_str();
+        EXPECT_NE(xml.find("textOutline"), String::npos) << xml.c_str();
 
         XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+        ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
         auto loaded = New<UIElement>();
         ASSERT_TRUE(deserializer.BeginObject("element"));
         loaded->Deserialize(deserializer);

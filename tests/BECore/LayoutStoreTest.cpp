@@ -28,9 +28,9 @@ namespace BECore::Tests {
             std::filesystem::path _directory;
         };
 
-        eastl::string Joined(const eastl::vector<eastl::string>& names) {
-            eastl::string text;
-            for (const eastl::string& name : names) {
+        String Joined(const Vector<String>& names) {
+            String text;
+            for (const String& name : names) {
                 if (!text.empty()) {
                     text += "|";
                 }
@@ -45,7 +45,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(IsValidLayoutName("Wide"));
         EXPECT_TRUE(IsValidLayoutName("my layout-2_b"));
         EXPECT_TRUE(IsValidLayoutName("A"));
-        EXPECT_TRUE(IsValidLayoutName(eastl::string(kMaxLayoutNameLength, 'x')));
+        EXPECT_TRUE(IsValidLayoutName(String(kMaxLayoutNameLength, 'x')));
         EXPECT_TRUE(IsValidLayoutName("CONSOLE"));
         EXPECT_TRUE(IsValidLayoutName("COM10"));
         EXPECT_TRUE(IsValidLayoutName("COM"));
@@ -56,7 +56,7 @@ namespace BECore::Tests {
         for (const char* name : bad) {
             EXPECT_FALSE(IsValidLayoutName(name)) << name;
         }
-        EXPECT_FALSE(IsValidLayoutName(eastl::string(kMaxLayoutNameLength + 1, 'x')));
+        EXPECT_FALSE(IsValidLayoutName(String(kMaxLayoutNameLength + 1, 'x')));
     }
 
     TEST_F(LayoutStoreTest, LooksLikeLayoutTextNeedsTheDockTree) {
@@ -68,7 +68,7 @@ namespace BECore::Tests {
 
     TEST_F(LayoutStoreTest, SaveAndLoadRoundTrip) {
         LayoutStore store(_directory);
-        const eastl::string text = "[Window][Viewport]\nPos=1,2\nSize=300,200\n\n[Docking][Data]\n";
+        const String text = "[Window][Viewport]\nPos=1,2\nSize=300,200\n\n[Docking][Data]\n";
         ASSERT_TRUE(store.Save("Wide", text).has_value());
         EXPECT_TRUE(std::filesystem::exists(_directory / "layouts" / "Wide.ini"));
         const auto loaded = store.Load("Wide");

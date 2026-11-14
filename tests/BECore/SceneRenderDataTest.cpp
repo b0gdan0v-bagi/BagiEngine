@@ -201,7 +201,7 @@ namespace BECore::Tests {
         sprite->_srcRect = Rect{1.0f, 2.0f, 3.0f, 4.0f};
         sprite->_fit = SpriteFit::Contain;
         node->AddComponent(sprite);
-        const eastl::vector<uint8_t> pixels(static_cast<size_t>(kTextureWidth) * kTextureHeight * 4, 255);
+        const Vector<uint8_t> pixels(static_cast<size_t>(kTextureWidth) * kTextureHeight * 4, 255);
         IntrusivePtr<ITexture> texture = _renderer->CreateTexture(pixels.data(), kTextureWidth, kTextureHeight);
         ASSERT_TRUE(texture);
         sprite->SetTexture(texture);
@@ -229,7 +229,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(Registry().all_of<SpriteDrawData>(node->GetEntity()));
         EXPECT_EQ(Registry().get<SpriteDrawData>(node->GetEntity()).texture, nullptr);
 
-        const eastl::vector<uint8_t> pixels(static_cast<size_t>(kTextureWidth) * kTextureHeight * 4, 255);
+        const Vector<uint8_t> pixels(static_cast<size_t>(kTextureWidth) * kTextureHeight * 4, 255);
         sprite->SetTexture(_renderer->CreateTexture(pixels.data(), kTextureWidth, kTextureHeight));
         _scene->Draw();
         EXPECT_NE(Registry().get<SpriteDrawData>(node->GetEntity()).texture, nullptr);

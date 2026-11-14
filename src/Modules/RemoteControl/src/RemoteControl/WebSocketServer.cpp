@@ -27,7 +27,7 @@ namespace BECore {
             handler.onClosed = [&clientCount](const WebSocketHandler::ConnectionPtr&) { clientCount.fetch_sub(1, std::memory_order_relaxed); };
             handler.onMessage = [&service](const WebSocketHandler::ConnectionPtr& connection, WebSocketMessage message) {
                 WebSocketHandler::ConnectionPtr target = connection;
-                service.Post(message.GetText(), [target](eastl::string response) { target->QueueText(response); });
+                service.Post(message.GetText(), [target](String response) { target->QueueText(response); });
                 return true;
             };
             return handler;
@@ -51,7 +51,7 @@ namespace BECore {
             return started;
         }
 
-        _service.SetEventSink([this](const eastl::string& text) { _listener.ForEachOpenConnection([&text](WebSocketConnection& connection) { connection.QueueText(text); }); });
+        _service.SetEventSink([this](const String& text) { _listener.ForEachOpenConnection([&text](WebSocketConnection& connection) { connection.QueueText(text); }); });
         LOG_INFO("Control API listening on ws://127.0.0.1:{}"_format(*started));
         return started;
     }

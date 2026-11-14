@@ -96,7 +96,7 @@ namespace BECore {
         eastl::function<void(float)> _apply;  // the eased progress in, the value out (the setter of the typed Start)
         eastl::function<void()> _onComplete;
         eastl::function<void()> _onCancel;
-        eastl::vector<Waiter> _waiters;  // in registration order; resumed (and removed one by one) by the manager when the tween finishes
+        Vector<Waiter> _waiters;  // in registration order; resumed (and removed one by one) by the manager when the tween finishes
     };
 
 }  // namespace BECore

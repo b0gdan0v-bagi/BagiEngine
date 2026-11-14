@@ -12,12 +12,12 @@ namespace BECore {
     public:
         /// What the user asked for this frame; at most one of the fields is set
         struct Result {
-            std::optional<size_t> open;  // the position in SpikeCapture::GetSpikes() of the spike to show in the timeline
-            bool live = false;           // back to the live ring
+            Optional<size_t> open;  // the position in SpikeCapture::GetSpikes() of the spike to show in the timeline
+            bool live = false;      // back to the live ring
         };
 
         /// @p openedFrame is the RingFrame::index of the spike the timeline shows now, none when it shows the live ring
-        [[nodiscard]] Result Draw(SpikeCapture& capture, std::optional<uint64_t> openedFrame);
+        [[nodiscard]] Result Draw(SpikeCapture& capture, Optional<uint64_t> openedFrame);
     };
 
 }  // namespace BECore

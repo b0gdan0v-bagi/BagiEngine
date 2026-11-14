@@ -46,7 +46,7 @@ namespace BECore {
          *
          * @return true on success, false if the buffer is full (entry dropped).
          */
-        bool TryPush(LogLevel level, eastl::string_view message) noexcept {
+        bool TryPush(LogLevel level, StringView message) noexcept {
             size_t pos = _writeHead.load(std::memory_order_relaxed);
 
             for (;;) {

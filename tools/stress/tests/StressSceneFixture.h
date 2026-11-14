@@ -29,7 +29,7 @@ namespace BECore::Stress::Tests {
             return std::filesystem::path(__FILE__).parent_path().parent_path() / "config" / "SceneConfig.xml";
         }
 
-        void StartGame(const eastl::vector<eastl::string>& arguments = {}) {
+        void StartGame(const Vector<String>& arguments = {}) {
             CoreManager::GetCommandLine().Set(arguments);
             _renderer = New<BECore::Tests::RecordingRenderer>();
             CoreManager::GetRendererManager().SetRenderer(_renderer);

@@ -40,7 +40,7 @@ namespace BECore {
         return _backend != nullptr && _backend->IsAvailable();
     }
 
-    bool Clipboard::SetText(eastl::string_view text) {
+    bool Clipboard::SetText(StringView text) {
         if (!IsAvailable() || text.size() > kMaxClipboardBytes) {
             return false;
         }

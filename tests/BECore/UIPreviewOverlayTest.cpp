@@ -51,7 +51,7 @@ namespace BECore::Tests {
             return canvas;
         }
 
-        const TouchMark* Find(const eastl::vector<TouchMark>& marks, PoolString name) {
+        const TouchMark* Find(const Vector<TouchMark>& marks, PoolString name) {
             for (const TouchMark& mark : marks) {
                 if (mark.name == name) {
                     return &mark;
@@ -198,8 +198,8 @@ namespace BECore::Tests {
                     }
                     ++touchIssues;
                     const TouchMark* mark = Find(marks, issue.element);
-                    ASSERT_NE(mark, nullptr) << eastl::string(issue.element.ToStringView()).c_str();
-                    EXPECT_TRUE(mark->tooSmall) << eastl::string(issue.element.ToStringView()).c_str();
+                    ASSERT_NE(mark, nullptr) << String(issue.element.ToStringView()).c_str();
+                    EXPECT_TRUE(mark->tooSmall) << String(issue.element.ToStringView()).c_str();
                 }
                 EXPECT_EQ(tooSmall, touchIssues);
             }

@@ -54,11 +54,11 @@ namespace BECore::Stress::Tests {
         }
 
         /// A fixed run of the entities scene: nothing is drawn, so the only cost is the one the test gives the frame
-        void StartRun(const eastl::vector<eastl::string>& extra = {}) {
-            eastl::vector<eastl::string> arguments = {"--stress-scene=entities", Format("--stress-count={}", kCount), Format("--stress-frames={}", kFrames), Format("--stress-warmup={}", kWarmup)};
+        void StartRun(const Vector<String>& extra = {}) {
+            Vector<String> arguments = {"--stress-scene=entities", Format("--stress-count={}", kCount), Format("--stress-frames={}", kFrames), Format("--stress-warmup={}", kWarmup)};
             arguments.insert(arguments.end(), extra.begin(), extra.end());
             StartGame(arguments);
-            Run().SetLineSink([this](const eastl::string& line) { _lines.push_back(line); });
+            Run().SetLineSink([this](const String& line) { _lines.push_back(line); });
         }
 
         StressRunComponent& Run() const {
@@ -95,11 +95,11 @@ namespace BECore::Stress::Tests {
         }
 
         /// A ramp run of the entities scene with @p extra flags
-        void StartRamp(const eastl::vector<eastl::string>& extra = {}) {
-            eastl::vector<eastl::string> arguments = {"--stress-scene=entities", "--stress-ramp"};
+        void StartRamp(const Vector<String>& extra = {}) {
+            Vector<String> arguments = {"--stress-scene=entities", "--stress-ramp"};
             arguments.insert(arguments.end(), extra.begin(), extra.end());
             StartGame(arguments);
-            Run().SetLineSink([this](const eastl::string& line) { _lines.push_back(line); });
+            Run().SetLineSink([this](const String& line) { _lines.push_back(line); });
         }
 
         /// Frames of the same cost until the run is done or @p limit frames went
@@ -112,7 +112,7 @@ namespace BECore::Stress::Tests {
             return frames;
         }
 
-        eastl::vector<eastl::string> _lines;
+        Vector<String> _lines;
         QuitCounter _quit;
     };
 
@@ -167,9 +167,9 @@ namespace BECore::Stress::Tests {
         EXPECT_EQ(GetJsonString(*parsed, "scene").value_or(""), "entities");
         EXPECT_EQ(GetJsonInt(*parsed, "count").value_or(0), kCount);
         EXPECT_EQ(GetJsonInt(*parsed, "warmup").value_or(0), kWarmup);
-        EXPECT_EQ(GetJsonBool(*parsed, "interleave"), std::optional(true));
+        EXPECT_EQ(GetJsonBool(*parsed, "interleave"), Optional(true));
         EXPECT_EQ(GetJsonInt(*parsed, "atlases").value_or(0), 2);
-        EXPECT_EQ(GetJsonBool(*parsed, "manualClock"), std::optional(false));
+        EXPECT_EQ(GetJsonBool(*parsed, "manualClock"), Optional(false));
     }
 
     TEST_F(StressRunTest, TheWorkTimeLeavesOutThePresent) {
@@ -249,7 +249,7 @@ namespace BECore::Stress::Tests {
     TEST_F(StressRunTest, APlainRunMeasuresNothing) {
         StartGame({"--stress-scene=entities", Format("--stress-count={}", kCount)});
         StressRunComponent& run = Run();
-        run.SetLineSink([this](const eastl::string& line) { _lines.push_back(line); });
+        run.SetLineSink([this](const String& line) { _lines.push_back(line); });
 
         for (uint32_t i = 0; i < 20; ++i) {
             Frame(kFastMs);
@@ -308,9 +308,9 @@ namespace BECore::Stress::Tests {
         ASSERT_TRUE(parsed.has_value()) << _lines[0].c_str();
         EXPECT_EQ(GetJsonString(*parsed, "mode").value_or(""), "ramp");
         EXPECT_EQ(GetJsonString(*parsed, "scene").value_or(""), "entities");
-        EXPECT_EQ(GetJsonBool(*parsed, "capped"), std::optional(false));
-        EXPECT_EQ(GetJsonBool(*parsed, "aborted"), std::optional(false));
-        EXPECT_EQ(GetJsonBool(*parsed, "verified"), std::optional(true));
+        EXPECT_EQ(GetJsonBool(*parsed, "capped"), Optional(false));
+        EXPECT_EQ(GetJsonBool(*parsed, "aborted"), Optional(false));
+        EXPECT_EQ(GetJsonBool(*parsed, "verified"), Optional(true));
         const int64_t found = GetJsonInt(*parsed, "objectsAt60fps").value_or(0);
         EXPECT_LE(found, 301);
         EXPECT_GE(found, 290);
@@ -347,7 +347,7 @@ namespace BECore::Stress::Tests {
         RampFramesUntilDone(0.055);
 
         ASSERT_EQ(_lines.size(), 1u);
-        EXPECT_NE(_lines[0].find("\"mode\":\"ramp\""), eastl::string::npos);
+        EXPECT_NE(_lines[0].find("\"mode\":\"ramp\""), String::npos);
         EXPECT_EQ(_quit.count, 1);
     }
 

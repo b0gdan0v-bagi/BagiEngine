@@ -21,9 +21,9 @@ namespace {
     constexpr int kExitUsage = 2;
 
     struct ProbeArgs {
-        eastl::string url;
-        eastl::string game = "cards";
-        eastl::string name = "Probe";
+        String url;
+        String game = "cards";
+        String name = "Probe";
     };
 
     void PrintUsage() {
@@ -33,7 +33,7 @@ namespace {
     /// Reads the arguments; false (after a message) when they are not usable
     bool ParseArgs(int argc, char* argv[], ProbeArgs& args) {
         for (int i = 1; i < argc; ++i) {
-            const eastl::string_view flag = argv[i];
+            const StringView flag = argv[i];
             if (flag == "--help" || flag == "-h") {
                 PrintUsage();
                 return false;
@@ -42,7 +42,7 @@ namespace {
                 std::fprintf(stderr, "BagiRoomClientProbe: unknown argument or a missing value: %s\n", argv[i]);
                 return false;
             }
-            const eastl::string value = argv[++i];
+            const String value = argv[++i];
             if (flag == "--url") {
                 args.url = value;
             } else if (flag == "--game") {
@@ -58,7 +58,7 @@ namespace {
         return true;
     }
 
-    int Fail(const eastl::string& message) {
+    int Fail(const String& message) {
         std::printf("PROBE FAILED %s\n", message.c_str());
         std::fflush(stdout);
         return kExitFailed;
@@ -83,7 +83,7 @@ int main(int argc, char* argv[]) {
         return Fail(Format("{}: {}", hosted.error().code, hosted.error().message));
     }
 
-    eastl::vector<RoomClientEvent> events;
+    Vector<RoomClientEvent> events;
     bool started = false;
     bool sawView = false;
     uint64_t actedVersion = 0;

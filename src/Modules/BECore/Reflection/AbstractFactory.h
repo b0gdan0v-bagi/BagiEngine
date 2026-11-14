@@ -68,8 +68,8 @@ namespace BECore {
          *
          * @return New instance, or empty pointer if type is not registered.
          */
-        BasePtr Create(eastl::string_view name) const {
-            return FindAndCreate(String::GetHash(name));
+        BasePtr Create(StringView name) const {
+            return FindAndCreate(StringUtils::GetHash(name));
         }
 
         /**
@@ -90,12 +90,12 @@ namespace BECore {
          * Useful for iterating over all registered types, e.g. to
          * instantiate all resource loaders at startup.
          */
-        [[nodiscard]] const eastl::vector<ClassMeta>& GetRegisteredTypes() const {
+        [[nodiscard]] const Vector<ClassMeta>& GetRegisteredTypes() const {
             return _metas;
         }
 
     private:
-        static constexpr eastl::string_view ResolveDebugName() {
+        static constexpr StringView ResolveDebugName() {
             if constexpr (HasReflection<BaseType>) {
                 return ReflectionTraits<BaseType>::name;
             } else {
@@ -112,9 +112,9 @@ namespace BECore {
             return {};
         }
 
-        eastl::string_view _debugName = ResolveDebugName();
-        eastl::hash_map<uint64_t, CreatorFunc> _creators;
-        eastl::vector<ClassMeta> _metas;
+        StringView _debugName = ResolveDebugName();
+        HashMap<uint64_t, CreatorFunc> _creators;
+        Vector<ClassMeta> _metas;
     };
 
 }  // namespace BECore

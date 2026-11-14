@@ -50,45 +50,45 @@ namespace BECore {
          * @brief Get XML as string
          * @return XML content as string
          */
-        eastl::string SaveToString() const;
+        String SaveToString() const;
 
         // =================================================================
         // ISerializer interface - Write methods
         // =================================================================
 
-        void Write(eastl::string_view name, bool value) override;
-        void Write(eastl::string_view name, int8_t value) override;
-        void Write(eastl::string_view name, uint8_t value) override;
-        void Write(eastl::string_view name, int16_t value) override;
-        void Write(eastl::string_view name, uint16_t value) override;
-        void Write(eastl::string_view name, int32_t value) override;
-        void Write(eastl::string_view name, uint32_t value) override;
-        void Write(eastl::string_view name, int64_t value) override;
-        void Write(eastl::string_view name, uint64_t value) override;
-        void Write(eastl::string_view name, float value) override;
-        void Write(eastl::string_view name, double value) override;
-        void Write(eastl::string_view name, eastl::string_view value) override;
-        void Write(eastl::string_view name, const PoolString& value) override;
+        void Write(StringView name, bool value) override;
+        void Write(StringView name, int8_t value) override;
+        void Write(StringView name, uint8_t value) override;
+        void Write(StringView name, int16_t value) override;
+        void Write(StringView name, uint16_t value) override;
+        void Write(StringView name, int32_t value) override;
+        void Write(StringView name, uint32_t value) override;
+        void Write(StringView name, int64_t value) override;
+        void Write(StringView name, uint64_t value) override;
+        void Write(StringView name, float value) override;
+        void Write(StringView name, double value) override;
+        void Write(StringView name, StringView value) override;
+        void Write(StringView name, const PoolString& value) override;
 
         // Attribute serialization (primitives stored as XML attributes)
-        void WriteAttribute(eastl::string_view name, bool value) override;
-        void WriteAttribute(eastl::string_view name, int8_t value) override;
-        void WriteAttribute(eastl::string_view name, uint8_t value) override;
-        void WriteAttribute(eastl::string_view name, int16_t value) override;
-        void WriteAttribute(eastl::string_view name, uint16_t value) override;
-        void WriteAttribute(eastl::string_view name, int32_t value) override;
-        void WriteAttribute(eastl::string_view name, uint32_t value) override;
-        void WriteAttribute(eastl::string_view name, int64_t value) override;
-        void WriteAttribute(eastl::string_view name, uint64_t value) override;
-        void WriteAttribute(eastl::string_view name, float value) override;
-        void WriteAttribute(eastl::string_view name, double value) override;
-        void WriteAttribute(eastl::string_view name, eastl::string_view value) override;
-        void WriteAttribute(eastl::string_view name, const PoolString& value) override;
+        void WriteAttribute(StringView name, bool value) override;
+        void WriteAttribute(StringView name, int8_t value) override;
+        void WriteAttribute(StringView name, uint8_t value) override;
+        void WriteAttribute(StringView name, int16_t value) override;
+        void WriteAttribute(StringView name, uint16_t value) override;
+        void WriteAttribute(StringView name, int32_t value) override;
+        void WriteAttribute(StringView name, uint32_t value) override;
+        void WriteAttribute(StringView name, int64_t value) override;
+        void WriteAttribute(StringView name, uint64_t value) override;
+        void WriteAttribute(StringView name, float value) override;
+        void WriteAttribute(StringView name, double value) override;
+        void WriteAttribute(StringView name, StringView value) override;
+        void WriteAttribute(StringView name, const PoolString& value) override;
 
-        bool BeginObject(eastl::string_view name) override;
+        bool BeginObject(StringView name) override;
         void EndObject() override;
 
-        bool BeginArray(eastl::string_view name, eastl::string_view elementName, size_t& count) override;
+        bool BeginArray(StringView name, StringView elementName, size_t& count) override;
         void EndArray() override;
         bool BeginArrayElement() override;
         void EndArrayElement() override;
@@ -107,23 +107,23 @@ namespace BECore {
         /**
          * @brief Get or create child node with given name
          */
-        pugi::xml_node GetOrCreateChild(eastl::string_view name);
+        pugi::xml_node GetOrCreateChild(StringView name);
 
         /**
          * @brief Get or create attribute on current node
          */
-        pugi::xml_attribute GetOrCreateAttribute(eastl::string_view name);
+        pugi::xml_attribute GetOrCreateAttribute(StringView name);
 
         pugi::xml_document _document;
-        eastl::vector<pugi::xml_node> _nodeStack;
+        Vector<pugi::xml_node> _nodeStack;
 
         // For array iteration
         struct ArrayContext {
             pugi::xml_node parentNode;
-            eastl::string elementName;
+            String elementName;
             size_t currentIndex = 0;
         };
-        eastl::vector<ArrayContext> _arrayStack;
+        Vector<ArrayContext> _arrayStack;
     };
 
 }  // namespace BECore

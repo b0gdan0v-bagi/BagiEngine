@@ -6,9 +6,9 @@ namespace BECore {
 
     /// One thing the web-style front-end could not read or apply
     struct UIWebIssue {
-        eastl::string source;  ///< where it was read: "html", "css" or "css:<href>" (an href is cut as a message is)
-        uint32_t line = 0;     ///< 1-based; 0 when it is not about one line
-        eastl::string message;
+        String source;      ///< where it was read: "html", "css" or "css:<href>" (an href is cut as a message is)
+        uint32_t line = 0;  ///< 1-based; 0 when it is not about one line
+        String message;
     };
 
     /**
@@ -18,7 +18,7 @@ namespace BECore {
      * are the numbers of the decision record ("CSS reach", `src/Modules/BECore/UI/AuthoringDecision.md`).
      */
     struct UIWebReport {
-        eastl::vector<UIWebIssue> issues;
+        Vector<UIWebIssue> issues;
         uint32_t elements = 0;                 ///< elements written
         uint32_t rules = 0;                    ///< rules of the style sheets that were read
         uint32_t mediaBlocks = 0;              ///< `@media` blocks that were read
@@ -34,9 +34,9 @@ namespace BECore {
 
         /// Adds an issue (its message and source go through UIText::TidyMessage). @return false (and adds nothing) when the same issue is already there, so a rule that matches many elements reports
         /// once. Past kMaxIssues the list gets one last issue that says so, and a new issue is counted in issuesDropped and not stored (true: it is not known to be a repeat)
-        bool AddOnce(eastl::string_view source, uint32_t line, eastl::string message) {
-            const eastl::string tidySource = UIText::TidyMessage(source);
-            const eastl::string tidyMessage = UIText::TidyMessage(eastl::string_view(message.data(), message.size()));
+        bool AddOnce(StringView source, uint32_t line, String message) {
+            const String tidySource = UIText::TidyMessage(source);
+            const String tidyMessage = UIText::TidyMessage(StringView(message));
             for (const UIWebIssue& issue : issues) {
                 if (issue.line == line && issue.message == tidyMessage && issue.source == tidySource) {
                     return false;

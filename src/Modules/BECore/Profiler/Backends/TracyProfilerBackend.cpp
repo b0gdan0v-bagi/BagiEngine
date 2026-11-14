@@ -2,13 +2,9 @@
 #include "TracyProfilerBackend.h"
 
 // clang-format off: what Profiler.h takes from the PCH in every other file has to come before it
-#include <EASTL/string.h>
-#include <atomic>
-#include <expected>
 #include <BECore/Profiler/Profiler.h>
 // clang-format on
 #include <cstddef>
-#include <cstring>
 #include <new>
 #include <tracy/TracyC.h>
 

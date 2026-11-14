@@ -7,8 +7,8 @@
 namespace BECore::Tests {
 
     /// What the test components did, in order: "<tag> <hook> <owner name>" (a click adds nothing else). Cleared by the fixture
-    inline eastl::vector<eastl::string>& UIComponentLog() {
-        static eastl::vector<eastl::string> log;
+    inline Vector<String>& UIComponentLog() {
+        static Vector<String> log;
         return log;
     }
 

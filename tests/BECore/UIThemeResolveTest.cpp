@@ -68,47 +68,47 @@ namespace BECore::Tests {
         public:
             explicit GreenEditor(bool editing) : _editing(editing) {}
 
-            bool Visit(eastl::string_view name, uint8_t& value) override {
+            bool Visit(StringView name, uint8_t& value) override {
                 if (_editing && name == "g") {
                     value = kEditedGreen;
                     return true;
                 }
                 return false;
             }
-            bool Visit(eastl::string_view, bool&) override {
+            bool Visit(StringView, bool&) override {
                 return false;
             }
-            bool Visit(eastl::string_view, int8_t&) override {
+            bool Visit(StringView, int8_t&) override {
                 return false;
             }
-            bool Visit(eastl::string_view, int16_t&) override {
+            bool Visit(StringView, int16_t&) override {
                 return false;
             }
-            bool Visit(eastl::string_view, uint16_t&) override {
+            bool Visit(StringView, uint16_t&) override {
                 return false;
             }
-            bool Visit(eastl::string_view, int32_t&) override {
+            bool Visit(StringView, int32_t&) override {
                 return false;
             }
-            bool Visit(eastl::string_view, uint32_t&) override {
+            bool Visit(StringView, uint32_t&) override {
                 return false;
             }
-            bool Visit(eastl::string_view, int64_t&) override {
+            bool Visit(StringView, int64_t&) override {
                 return false;
             }
-            bool Visit(eastl::string_view, uint64_t&) override {
+            bool Visit(StringView, uint64_t&) override {
                 return false;
             }
-            bool Visit(eastl::string_view, float&) override {
+            bool Visit(StringView, float&) override {
                 return false;
             }
-            bool Visit(eastl::string_view, double&) override {
+            bool Visit(StringView, double&) override {
                 return false;
             }
-            bool Visit(eastl::string_view, PoolString&) override {
+            bool Visit(StringView, PoolString&) override {
                 return false;
             }
-            bool Visit(eastl::string_view, eastl::string&) override {
+            bool Visit(StringView, String&) override {
                 return false;
             }
 
@@ -438,7 +438,7 @@ namespace BECore::Tests {
         struct ControlColors {
             const char* type;
             const char* component;
-            eastl::vector<ColorField> fields;
+            Vector<ColorField> fields;
         };
 
         template <typename T>
@@ -457,7 +457,7 @@ namespace BECore::Tests {
         }
 
         // The attributes of every element: its fills and the colours of its box
-        eastl::vector<ColorField> ElementColors() {
+        Vector<ColorField> ElementColors() {
             return {Field<UIElement>("color", &UIElement::color),
                     Field<UIElement>("hoverColor", &UIElement::hoverColor),
                     Field<UIElement>("pressedColor", &UIElement::pressedColor),
@@ -471,22 +471,22 @@ namespace BECore::Tests {
         }
 
         template <typename... Parts>
-        eastl::vector<ColorField> Join(eastl::vector<ColorField> first, Parts... rest) {
+        Vector<ColorField> Join(Vector<ColorField> first, Parts... rest) {
             (first.insert(first.end(), rest.begin(), rest.end()), ...);
             return first;
         }
 
         // THE LIST OF COLOUR FIELDS: a control that gets a new UIColor field (or a new UIBoxStyle / UITextEffects colour) and forgets to resolve it fails only if the field is added here
-        eastl::vector<ControlColors> AllControlColors() {
+        Vector<ControlColors> AllControlColors() {
             return {
                 {"UIElement", nullptr, ElementColors()},
                 {"UIStack", nullptr, ElementColors()},
                 {"UISegmented", nullptr, ElementColors()},
-                {"UIPanel", nullptr, Join(ElementColors(), eastl::vector<ColorField>{Field<UIPanel>("spriteTint", &UIPanel::spriteTint)})},
+                {"UIPanel", nullptr, Join(ElementColors(), Vector<ColorField>{Field<UIPanel>("spriteTint", &UIPanel::spriteTint)})},
                 {"UIProgressBar", nullptr,
-                 Join(ElementColors(), eastl::vector<ColorField>{Field<UIProgressBar>("trackColor", &UIProgressBar::trackColor), Field<UIProgressBar>("fillColor", &UIProgressBar::fillColor)})},
+                 Join(ElementColors(), Vector<ColorField>{Field<UIProgressBar>("trackColor", &UIProgressBar::trackColor), Field<UIProgressBar>("fillColor", &UIProgressBar::fillColor)})},
                 // The header text is a UITextComponent (the rows below)
-                {"UIDropdown", nullptr, Join(ElementColors(), eastl::vector<ColorField>{Field<UIDropdown>("arrowColor", &UIDropdown::arrowColor)})},
+                {"UIDropdown", nullptr, Join(ElementColors(), Vector<ColorField>{Field<UIDropdown>("arrowColor", &UIDropdown::arrowColor)})},
                 {"UIElement",
                  "UIImageComponent",
                  {OfComponent<UIImageComponent>("tint", &UIImageComponent::tint), OfComponent<UIImageComponent>("hoverTint", &UIImageComponent::hoverTint),
@@ -520,27 +520,27 @@ namespace BECore::Tests {
         UIThemes& themes = CoreManager::GetUIThemes();
         themes.Clear();  // a table of numbered tokens, a different colour in each of two themes
         for (int i = 0; i < kTableTokens; ++i) {
-            const eastl::string name = Format("t{}", i);
-            themes.Set("first"_intern, eastl::string_view(name.data(), name.size()), TableColor(i, false));
-            themes.Set("second"_intern, eastl::string_view(name.data(), name.size()), TableColor(i, true));
+            const String name = Format("t{}", i);
+            themes.Set("first"_intern, StringView(name), TableColor(i, false));
+            themes.Set("second"_intern, StringView(name), TableColor(i, true));
         }
         ASSERT_TRUE(themes.SetTheme("first"_intern));
 
         for (const ControlColors& control : AllControlColors()) {
             ASSERT_LE(control.fields.size(), static_cast<size_t>(kTableTokens));
-            eastl::string attributes;
+            String attributes;
             for (size_t i = 0; i < control.fields.size(); ++i) {
                 const ColorField& field = control.fields[i];
-                const eastl::string value = Format("{}@t{}", field.prefix, i);
+                const String value = Format("{}@t{}", field.prefix, i);
                 attributes += Format(" {}=\"{}\"", field.attribute, value);
             }
-            const eastl::string where = Format("{}{}{}", control.type, control.component ? " + " : "", control.component ? control.component : "");
-            const eastl::string xml = control.component
-                                          ? Format("<root><element type=\"{}\"><components><component type=\"{}\"{}/></components></element></root>", control.type, control.component, attributes)
-                                          : Format("<root><element type=\"{}\"{}/></root>", control.type, attributes);
+            const String where = Format("{}{}{}", control.type, control.component ? " + " : "", control.component ? control.component : "");
+            const String xml = control.component
+                                   ? Format("<root><element type=\"{}\"><components><component type=\"{}\"{}/></components></element></root>", control.type, control.component, attributes)
+                                   : Format("<root><element type=\"{}\"{}/></root>", control.type, attributes);
 
             XmlDeserializer deserializer;
-            ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size()))) << where.c_str();
+            ASSERT_TRUE(deserializer.LoadFromString(StringView(xml))) << where.c_str();
             auto element = AbstractFactory<UIElement>::GetInstance().Create(control.type);
             ASSERT_TRUE(element) << where.c_str();
             ASSERT_TRUE(deserializer.BeginObject("element"));

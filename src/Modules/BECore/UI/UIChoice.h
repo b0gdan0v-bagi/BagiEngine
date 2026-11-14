@@ -20,7 +20,7 @@ namespace BECore {
 
         /// The caption of the option: the `UITextComponent::text` of the element or of its first descendant that has one (depth first, never into a
         /// descendant that has a clicker of its own); empty when there is none. The reference stays valid as long as the element and its tree do
-        [[nodiscard]] const eastl::string& GetText(const UIElement& element);
+        [[nodiscard]] const String& GetText(const UIElement& element);
 
     }  // namespace UIChoice
 

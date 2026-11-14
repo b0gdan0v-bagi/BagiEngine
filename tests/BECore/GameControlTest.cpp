@@ -152,7 +152,7 @@ namespace BECore::Tests {
                 }
 
                 Json response;
-                service.Post(DumpJson(request), [&response](eastl::string text) {
+                service.Post(DumpJson(request), [&response](String text) {
                     auto parsed = ParseJson(text);
                     if (parsed) {
                         response = std::move(*parsed);
@@ -203,7 +203,7 @@ namespace BECore::Tests {
         const auto result = control.SetState(Json::object());
 
         ASSERT_FALSE(result.has_value());
-        EXPECT_EQ(result.error().code, eastl::string(GameControlErrors::kUnsupported));
+        EXPECT_EQ(result.error().code, String(GameControlErrors::kUnsupported));
     }
 
     TEST(GameControlDefaultsTest, AGameIsNotControllableByDefault) {
@@ -346,7 +346,7 @@ namespace BECore::Tests {
     TEST_F(GameControlTest, PipelinedActionsRunInOrderBeforeTheStateIsRead) {
         ControlService& service = CoreManager::GetControlService();
         std::vector<Json> responses;
-        auto collect = [&responses](eastl::string text) {
+        auto collect = [&responses](String text) {
             auto parsed = ParseJson(text);
             responses.push_back(parsed ? std::move(*parsed) : Json());
         };
@@ -443,7 +443,7 @@ namespace BECore::Tests {
         class EventCollector {
         public:
             EventCollector() {
-                CoreManager::GetControlService().SetEventSink([this](const eastl::string& text) {
+                CoreManager::GetControlService().SetEventSink([this](const String& text) {
                     auto parsed = ParseJson(text);
                     events.push_back(parsed ? std::move(*parsed) : Json());
                 });

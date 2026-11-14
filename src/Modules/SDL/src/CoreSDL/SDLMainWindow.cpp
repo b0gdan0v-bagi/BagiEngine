@@ -21,7 +21,7 @@ namespace BECore {
     SDLMainWindow::SDLMainWindow() = default;
     SDLMainWindow::~SDLMainWindow() = default;
 
-    bool SDLMainWindow::Initialize(eastl::string_view configPath) {
+    bool SDLMainWindow::Initialize(StringView configPath) {
         BE_PROFILE_SCOPE("SDLMainWindow::Initialize");
 
         // The video driver is read by SDL_Init, so the hint has to come first
@@ -58,7 +58,7 @@ namespace BECore {
 
         SDL_WindowFlags flags = 0;
         if (!windowConfig._windowFlags.empty()) {
-            flags = SDLUtils::ParseWindowFlags(eastl::string_view(windowConfig._windowFlags.data(), windowConfig._windowFlags.size()));
+            flags = SDLUtils::ParseWindowFlags(StringView(windowConfig._windowFlags));
         }
         if (_headless) {
             flags &= ~SDL_WINDOW_VULKAN;  // the dummy driver has no Vulkan surface; the software renderer draws instead
@@ -71,7 +71,7 @@ namespace BECore {
 #endif
 
         // The first title; Application sets the composed one once the game is known
-        const eastl::string firstTitle = ComposeWindowTitle(windowConfig._title, {}, false);
+        const String firstTitle = ComposeWindowTitle(windowConfig._title, {}, false);
         _window = SDL_CreateWindow(firstTitle.c_str(), windowConfig._width, windowConfig._height, flags);
         if (!_window) {
             return false;
@@ -136,11 +136,11 @@ namespace BECore {
         return scale > 0.0f ? scale : IMainWindow::GetDisplayScale();
     }
 
-    void SDLMainWindow::SetTitle(eastl::string_view title) {
+    void SDLMainWindow::SetTitle(StringView title) {
         if (_window == nullptr) {
             return;
         }
-        const eastl::string text(title.data(), title.size());  // SDL wants a terminated string
+        const String text(title.data(), title.size());  // SDL wants a terminated string
         SDL_SetWindowTitle(_window, text.c_str());
     }
 

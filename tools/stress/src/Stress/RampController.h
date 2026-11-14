@@ -102,7 +102,7 @@ namespace BECore::Stress {
         uint32_t _stepDowns = 0;
         uint32_t _settleLeft = kSettleFrames;
         uint32_t _measured = 0;
-        eastl::array<double, kMeasureFrames> _window{};
+        Array<double, kMeasureFrames> _window{};
         RampResult _result;
     };
 
@@ -119,6 +119,6 @@ namespace BECore::Stress {
      * @brief The one JSON line of a ramp, no newline, keys sorted: `scene`, `mode` ("ramp"), `objectsAt60fps`, `budgetMs`, `measure`, `capped`,
      *        `aborted`, `verified`, `steps`, `frames`, `settleFrames`, `measureFrames`, `interleave`, `atlases`, `manualClock`, `allocTracking`.
      */
-    eastl::string FormatRampLine(const RampResult& result, StressMeasure measure, const RampRunContext& context);
+    String FormatRampLine(const RampResult& result, StressMeasure measure, const RampRunContext& context);
 
 }  // namespace BECore::Stress

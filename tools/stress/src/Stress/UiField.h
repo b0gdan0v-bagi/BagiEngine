@@ -46,9 +46,9 @@ namespace BECore::Stress {
 
     /// The text of label @p index, a view of a static table: no allocation, the same on every machine. A `Key` label is `{#stress.label.<k>}`, a `Variable` one names `{count}` or `{last}`
     /// (the variables the scene sets: the count and the index of the last label)
-    eastl::string_view TextOf(uint32_t index);
+    StringView TextOf(uint32_t index);
 
     /// The key of `config/UIStrings.xml` a `Key` label refers to (without the braces), `stress.label.<k>` with k below `kUiPoolSize`
-    eastl::string_view KeyOf(uint32_t index);
+    StringView KeyOf(uint32_t index);
 
 }  // namespace BECore::Stress

@@ -90,7 +90,7 @@ namespace BECore {
     }
 
     void ProfilerWidget::ShowWorstCall(const ProfileSite& site) {
-        const std::optional<ZoneHit> hit = FindWorstCall(_snapshot, &site);
+        const Optional<ZoneHit> hit = FindWorstCall(_snapshot, &site);
         if (!hit) {
             return;
         }
@@ -132,12 +132,12 @@ namespace BECore {
         ImGui::Checkbox("Pause", &_paused);
         ImGui::SameLine();
         ImGui::TextDisabled("(click a bar to open the frame)");
-        if (const std::optional<uint64_t> clicked = _framePlot.Draw(_history, _snapshot, _selectedFrame)) {
+        if (const Optional<uint64_t> clicked = _framePlot.Draw(_history, _snapshot, _selectedFrame)) {
             ShowLive();
             _selectedFrame = clicked;
         }
         // The overlay's text: one place says what a frame cost
-        for (const eastl::string& line : FormatOverlayLines(_history.back(), AllocTracker::GetTotals(), AllocTracker::kEnabled)) {
+        for (const String& line : FormatOverlayLines(_history.back(), AllocTracker::GetTotals(), AllocTracker::kEnabled)) {
             ImGui::TextUnformatted(line.c_str());
         }
     }
@@ -237,12 +237,12 @@ namespace BECore {
     }
 
     void ProfilerWidget::WriteFrozen() {
-        eastl::vector<FrozenFrame> frames = _spikes.GetSpikes();
+        Vector<FrozenFrame> frames = _spikes.GetSpikes();
         if (frames.empty()) {
             // Nothing is frozen: the frame the view is on, the selected one or the newest
             const RingFrame* frame = nullptr;
             if (!_snapshot.frames.empty()) {
-                const std::optional<size_t> position = FramePosition(_snapshot, _selectedFrame);
+                const Optional<size_t> position = FramePosition(_snapshot, _selectedFrame);
                 frame = position ? &_snapshot.frames[*position] : &_snapshot.frames.back();
             }
             if (frame == nullptr) {

@@ -54,7 +54,7 @@ namespace BECore {
         /// Adds one zone of @p site that made @p count allocations of @p bytes (ProfileZone)
         static void AddZone(const ProfileSite& site, uint64_t count, uint64_t bytes);
         /// The zones with statistics, the most bytes first
-        [[nodiscard]] static eastl::vector<ZoneAllocStats> GetZoneStats();
+        [[nodiscard]] static Vector<ZoneAllocStats> GetZoneStats();
         /// Zeroes the zone statistics (the totals stay)
         static void ResetZoneStats();
 

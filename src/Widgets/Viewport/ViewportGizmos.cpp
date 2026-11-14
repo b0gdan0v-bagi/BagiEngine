@@ -120,7 +120,7 @@ namespace BECore {
         return !node.HasEditorFlag(EditorFlags::Locked) && node.GetComponent<TransformComponent>();
     }
 
-    void CollectMovable(Scene& scene, eastl::span<SceneNode* const> selected, eastl::vector<SceneNode*>& nodes, eastl::vector<Gizmo::Item>& items) {
+    void CollectMovable(Scene& scene, Span<SceneNode* const> selected, Vector<SceneNode*>& nodes, Vector<Gizmo::Item>& items) {
         nodes.clear();
         items.clear();
         for (SceneNode* const node : selected) {
@@ -132,11 +132,11 @@ namespace BECore {
         }
     }
 
-    bool AllAlive(Scene& scene, eastl::span<SceneNode* const> nodes) {
+    bool AllAlive(Scene& scene, Span<SceneNode* const> nodes) {
         return eastl::all_of(nodes.begin(), nodes.end(), [&scene](SceneNode* node) { return HierarchyModel::FindNode(scene.GetRootNode(), node) != nullptr; });
     }
 
-    bool WriteItems(Scene& scene, eastl::span<SceneNode* const> nodes, eastl::span<const Gizmo::Item> items) {
+    bool WriteItems(Scene& scene, Span<SceneNode* const> nodes, Span<const Gizmo::Item> items) {
         if (nodes.size() != items.size()) {
             return false;
         }
@@ -153,7 +153,7 @@ namespace BECore {
         return true;
     }
 
-    bool SelectionBounds(Scene& scene, eastl::span<SceneNode* const> selected, Rect& bounds) {
+    bool SelectionBounds(Scene& scene, Span<SceneNode* const> selected, Rect& bounds) {
         Vec2 low{std::numeric_limits<float>::max(), std::numeric_limits<float>::max()};
         Vec2 high{std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest()};
         bool any = false;
@@ -216,7 +216,7 @@ namespace BECore {
         return false;
     }
 
-    bool GizmoEditSession::Begin(Scene& scene, eastl::span<SceneNode* const> nodes, eastl::span<const Gizmo::Item> items, Gizmo::Tool tool, Gizmo::Space space, Gizmo::Handle handle, Vec2 point,
+    bool GizmoEditSession::Begin(Scene& scene, Span<SceneNode* const> nodes, Span<const Gizmo::Item> items, Gizmo::Tool tool, Gizmo::Space space, Gizmo::Handle handle, Vec2 point,
                                  const Gizmo::SnapSettings& snap) {
         if (nodes.size() != items.size()) {
             return false;
@@ -246,7 +246,7 @@ namespace BECore {
         if (!_drag.IsActive()) {
             return;
         }
-        const eastl::span<const Gizmo::Item> result = _drag.Update(point, snapModifier, keepAspect);
+        const Span<const Gizmo::Item> result = _drag.Update(point, snapModifier, keepAspect);
         bool changed = false;
         for (size_t i = 0; i < _edits.size() && i < result.size(); ++i) {
             if (!(_edits[i].after == result[i])) {
@@ -299,7 +299,7 @@ namespace BECore {
     }
 
     void GizmoEditSession::Emit(NodeTransformEditPhase phase) const {
-        NodeTransformEditEvent::Emit(phase, _scene, eastl::span<const NodeTransformEdit>(_edits.data(), _edits.size()));
+        NodeTransformEditEvent::Emit(phase, _scene, Span<const NodeTransformEdit>(_edits.data(), _edits.size()));
     }
 
     void ViewportGizmos::DrawToolButton(const char* icon, const char* tooltip, const char* id, Gizmo::Tool tool) {

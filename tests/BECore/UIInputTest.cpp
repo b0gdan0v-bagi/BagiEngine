@@ -10,7 +10,7 @@ namespace BECore::Tests {
         /// Records what reaches it and answers with a fixed verdict; an optional hook runs inside the call
         class RecordingHandler : public IUIInputHandler {
         public:
-            RecordingHandler(eastl::vector<int>* callLog, int id) : _callLog(callLog), _id(id) {}
+            RecordingHandler(Vector<int>* callLog, int id) : _callLog(callLog), _id(id) {}
 
             bool OnMouseButtonDown(const SDL_MouseButtonEvent& event) override {
                 return Handle(downs, event.x);
@@ -30,13 +30,13 @@ namespace BECore::Tests {
 
             bool consume = false;
             eastl::function<void()> hook;
-            eastl::vector<float> downs;
-            eastl::vector<float> ups;
-            eastl::vector<float> motions;
-            eastl::vector<float> wheels;
+            Vector<float> downs;
+            Vector<float> ups;
+            Vector<float> motions;
+            Vector<float> wheels;
 
         private:
-            bool Handle(eastl::vector<float>& list, float value) {
+            bool Handle(Vector<float>& list, float value) {
                 list.push_back(value);
                 if (_callLog != nullptr) {
                     _callLog->push_back(_id);
@@ -47,7 +47,7 @@ namespace BECore::Tests {
                 return consume;
             }
 
-            eastl::vector<int>* _callLog;
+            Vector<int>* _callLog;
             int _id;
         };
 
@@ -61,10 +61,10 @@ namespace BECore::Tests {
                 Subscribe<SDLEvents::MouseWheelEvent, &GameRecorder::OnWheel>(this);
             }
 
-            eastl::vector<float> downs;
-            eastl::vector<float> ups;
-            eastl::vector<float> motions;
-            eastl::vector<float> wheels;
+            Vector<float> downs;
+            Vector<float> ups;
+            Vector<float> motions;
+            Vector<float> wheels;
 
         private:
             void OnDown(const SDLEvents::MouseButtonDownEvent& event) {
@@ -121,8 +121,8 @@ namespace BECore::Tests {
 
         UIInput _input;
         GameRecorder _game;
-        eastl::vector<int> _callLog;
-        eastl::vector<IUIInputHandler*> _registered;
+        Vector<int> _callLog;
+        Vector<IUIInputHandler*> _registered;
     };
 
     TEST_F(UIInputTest, WithoutHandlersEveryEventReachesTheGame) {
@@ -131,10 +131,10 @@ namespace BECore::Tests {
         EXPECT_FALSE(_input.DispatchMouseMotion(MotionAt(3.0f)));
         EXPECT_FALSE(_input.DispatchMouseWheel(WheelBy(4.0f)));
 
-        EXPECT_EQ(_game.downs, eastl::vector<float>({1.0f}));
-        EXPECT_EQ(_game.ups, eastl::vector<float>({2.0f}));
-        EXPECT_EQ(_game.motions, eastl::vector<float>({3.0f}));
-        EXPECT_EQ(_game.wheels, eastl::vector<float>({4.0f}));
+        EXPECT_EQ(_game.downs, Vector<float>({1.0f}));
+        EXPECT_EQ(_game.ups, Vector<float>({2.0f}));
+        EXPECT_EQ(_game.motions, Vector<float>({3.0f}));
+        EXPECT_EQ(_game.wheels, Vector<float>({4.0f}));
     }
 
     TEST_F(UIInputTest, AHandlerThatDeclinesLeavesTheEventToTheGame) {
@@ -143,8 +143,8 @@ namespace BECore::Tests {
 
         EXPECT_FALSE(_input.DispatchMouseButtonDown(ButtonAt(10.0f)));
 
-        EXPECT_EQ(handler.downs, eastl::vector<float>({10.0f}));
-        EXPECT_EQ(_game.downs, eastl::vector<float>({10.0f}));
+        EXPECT_EQ(handler.downs, Vector<float>({10.0f}));
+        EXPECT_EQ(_game.downs, Vector<float>({10.0f}));
     }
 
     TEST_F(UIInputTest, AConsumedEventDoesNotReachTheGame) {
@@ -177,7 +177,7 @@ namespace BECore::Tests {
 
         _input.DispatchMouseButtonDown(ButtonAt(0.0f));
 
-        EXPECT_EQ(_callLog, eastl::vector<int>({3, 2, 1}));
+        EXPECT_EQ(_callLog, Vector<int>({3, 2, 1}));
     }
 
     TEST_F(UIInputTest, AmongEqualOrdersTheLaterRegisteredIsAskedFirst) {
@@ -188,7 +188,7 @@ namespace BECore::Tests {
 
         _input.DispatchMouseButtonDown(ButtonAt(0.0f));
 
-        EXPECT_EQ(_callLog, eastl::vector<int>({2, 1}));
+        EXPECT_EQ(_callLog, Vector<int>({2, 1}));
     }
 
     TEST_F(UIInputTest, TheWalkStopsAtTheFirstHandlerThatConsumes) {
@@ -202,7 +202,7 @@ namespace BECore::Tests {
 
         EXPECT_TRUE(_input.DispatchMouseButtonDown(ButtonAt(0.0f)));
 
-        EXPECT_EQ(_callLog, eastl::vector<int>({3, 2}));
+        EXPECT_EQ(_callLog, Vector<int>({3, 2}));
         EXPECT_TRUE(back.downs.empty());
         EXPECT_TRUE(_game.downs.empty());
     }
@@ -229,7 +229,7 @@ namespace BECore::Tests {
 
         _input.DispatchMouseButtonDown(ButtonAt(0.0f));
 
-        EXPECT_EQ(_callLog, eastl::vector<int>({2}));
+        EXPECT_EQ(_callLog, Vector<int>({2}));
         EXPECT_FALSE(_input.IsRegistered(lower));
         EXPECT_EQ(_game.downs.size(), 1u);
     }
@@ -244,7 +244,7 @@ namespace BECore::Tests {
         _input.DispatchMouseButtonDown(ButtonAt(0.0f));
         _input.DispatchMouseButtonDown(ButtonAt(0.0f));
 
-        EXPECT_EQ(_callLog, eastl::vector<int>({1, 2, 2}));
+        EXPECT_EQ(_callLog, Vector<int>({1, 2, 2}));
     }
 
     TEST_F(UIInputTest, AHandlerRegisteredInsideTheCallJoinsAfterTheDispatch) {
@@ -262,7 +262,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(_input.IsRegistered(late));
 
         _input.DispatchMouseButtonDown(ButtonAt(0.0f));
-        EXPECT_EQ(_callLog, eastl::vector<int>({1, 2, 1}));
+        EXPECT_EQ(_callLog, Vector<int>({1, 2, 1}));
     }
 
     TEST_F(UIInputTest, AHandlerThatLeavesInsideTheCallBeforeItJoinedNeverRuns) {

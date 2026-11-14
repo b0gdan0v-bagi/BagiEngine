@@ -29,7 +29,7 @@ namespace BECore {
         };
 
         Scalar _scalar;
-        eastl::hash_map<eastl::string, PoolString> _names;  // the node of a hash map keeps its address, which is the pointer RmlUi holds for the variable
+        HashMap<String, PoolString> _names;  // the node of a hash map keeps its address, which is the pointer RmlUi holds for the variable
     };
 
 }  // namespace BECore

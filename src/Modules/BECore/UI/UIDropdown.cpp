@@ -25,8 +25,8 @@ namespace BECore {
         return parts;
     }
 
-    eastl::array<Rect, UIDropdown::kArrowRows> UIDropdown::GetArrowStrips(const Rect& box, bool pointsUp) {
-        eastl::array<Rect, kArrowRows> strips;
+    Array<Rect, UIDropdown::kArrowRows> UIDropdown::GetArrowStrips(const Rect& box, bool pointsUp) {
+        Array<Rect, kArrowRows> strips;
         const float rowHeight = box.h / static_cast<float>(kArrowRows);
         for (int row = 0; row < kArrowRows; ++row) {
             // Row 0 is the top of the box; a down arrow is widest there, an up arrow narrowest
@@ -37,7 +37,7 @@ namespace BECore {
         return strips;
     }
 
-    UIDropdown::PopupGeometry UIDropdown::GetPopupGeometry(const Rect& header, const eastl::vector<OptionSize>& options, const Rect& bounds) {
+    UIDropdown::PopupGeometry UIDropdown::GetPopupGeometry(const Rect& header, const Vector<OptionSize>& options, const Rect& bounds) {
         PopupGeometry geometry;
         float width = header.w;
         float height = 0.0f;
@@ -87,7 +87,7 @@ namespace BECore {
         }
     }
 
-    eastl::string_view UIDropdown::GetSelectedValue() const {
+    StringView UIDropdown::GetSelectedValue() const {
         if (bind.Empty()) {
             return {};
         }
@@ -95,7 +95,7 @@ namespace BECore {
     }
 
     UIElement* UIDropdown::FindChosenOption() const {
-        const eastl::string_view chosen = GetSelectedValue();
+        const StringView chosen = GetSelectedValue();
         if (chosen.empty()) {
             return nullptr;
         }
@@ -125,7 +125,7 @@ namespace BECore {
         return GetHeaderParts(rect).text;
     }
 
-    const eastl::string* UIDropdown::GetTextOverride() const {
+    const String* UIDropdown::GetTextOverride() const {
         const UIElement* chosen = FindChosenOption();
         return chosen ? &UIChoice::GetText(*chosen) : nullptr;
     }
@@ -197,8 +197,8 @@ namespace BECore {
 
     void UIDropdown::LayoutPopup(const Rect& contentBounds) {
         // An option that is not shown takes no room: the layout gives it an empty rect afterwards
-        eastl::vector<UIElement*> shown;
-        eastl::vector<OptionSize> sizes;
+        Vector<UIElement*> shown;
+        Vector<OptionSize> sizes;
         for (const auto& child : children) {
             UIElement* option = child.Get();
             if (!UIChoice::IsOption(*option) || !option->active.visible) {

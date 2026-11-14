@@ -27,8 +27,8 @@ namespace BECore::Match3::Tests {
         }
 
         /// The text of a generator whose 624 words are zero but the first, which is @p first: the state that gives only zeros when @p first is below 2^31
-        eastl::string ZeroGeneratorText(uint32_t first) {
-            eastl::string text = Format("{}", first);
+        String ZeroGeneratorText(uint32_t first) {
+            String text = Format("{}", first);
             for (size_t word = 1; word < std::mt19937::state_size; ++word) {
                 text.append(" 0");
             }

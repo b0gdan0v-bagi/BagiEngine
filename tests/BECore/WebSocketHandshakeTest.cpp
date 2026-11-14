@@ -8,8 +8,8 @@ namespace BECore::Tests {
 
         constexpr const char* kRfcKey = "dGhlIHNhbXBsZSBub25jZQ==";
 
-        eastl::string_view View(const std::string& text) {
-            return eastl::string_view(text.data(), text.size());
+        StringView View(const std::string& text) {
+            return FromStd(text);
         }
 
         bool NameIs(const std::string& line, std::string_view name) {
@@ -64,7 +64,7 @@ namespace BECore::Tests {
             }
         };
 
-        std::expected<eastl::string, HandshakeError> Parse(const Request& request) {
+        std::expected<String, HandshakeError> Parse(const Request& request) {
             const std::string text = request.Text();
             return ParseHandshakeRequest(View(text));
         }
@@ -78,7 +78,7 @@ namespace BECore::Tests {
             return policy;
         }
 
-        std::expected<eastl::string, HandshakeError> Parse(const Request& request, const HandshakePolicy& policy) {
+        std::expected<String, HandshakeError> Parse(const Request& request, const HandshakePolicy& policy) {
             const std::string text = request.Text();
             return ParseHandshakeRequest(View(text), policy);
         }
@@ -87,7 +87,7 @@ namespace BECore::Tests {
             return IsOriginAllowed(origin, policy);
         }
 
-        void ExpectRefused(const std::expected<eastl::string, HandshakeError>& result, int status) {
+        void ExpectRefused(const std::expected<String, HandshakeError>& result, int status) {
             ASSERT_FALSE(result.has_value());
             EXPECT_EQ(result.error().httpStatus, status) << result.error().message.c_str();
             EXPECT_FALSE(result.error().message.empty());
@@ -105,7 +105,7 @@ namespace BECore::Tests {
 
         std::string Forwarded(const Request& request, size_t hops) {
             const std::string text = request.Text();
-            const eastl::string address = ParseForwardedClientAddress(View(text), hops);
+            const String address = ParseForwardedClientAddress(View(text), hops);
             return std::string(address.data(), address.size());
         }
 
@@ -420,14 +420,14 @@ namespace BECore::Tests {
         const HandshakePolicy policy = PublicPolicy({"https://good.example"});
         const auto refused = Parse(Request().Set("Origin", "https://evil.example"), policy);
         ExpectRefused(refused, 403);
-        EXPECT_NE(refused.error().message.find("https://evil.example"), eastl::string::npos);
+        EXPECT_NE(refused.error().message.find("https://evil.example"), String::npos);
 
         const std::string huge = "https://" + std::string(6000, 'a') + ".example";
         const auto cut = Parse(Request().Set("Origin", huge), policy);
         ExpectRefused(cut, 403);
         EXPECT_LT(cut.error().message.size(), 200u);
-        EXPECT_NE(cut.error().message.find(std::string(90, 'a').c_str()), eastl::string::npos);
-        EXPECT_EQ(cut.error().message.find(std::string(150, 'a').c_str()), eastl::string::npos);
+        EXPECT_NE(cut.error().message.find(std::string(90, 'a').c_str()), String::npos);
+        EXPECT_EQ(cut.error().message.find(std::string(150, 'a').c_str()), String::npos);
 
         // Bytes that are not printable ASCII never reach the response
         const auto odd = Parse(Request().Set("Origin", "https://\x01\xC3\xA9.example"), policy);
@@ -619,9 +619,9 @@ namespace BECore::Tests {
     TEST(WebSocketHandshakeTest, QuoteForMessageCutsAndMasks) {
         EXPECT_EQ(QuoteForMessage("plain"), "plain");
         EXPECT_EQ(QuoteForMessage("a\r\nb\x7F\xC3"), "a??b??");
-        const eastl::string cut = QuoteForMessage(View(std::string(500, 'x')));
+        const String cut = QuoteForMessage(View(std::string(500, 'x')));
         EXPECT_EQ(cut.size(), kMaxQuotedBytes + 3);
-        EXPECT_TRUE(eastl::string_view(cut).ends_with("..."));
+        EXPECT_TRUE(StringView(cut).ends_with("..."));
         EXPECT_EQ(QuoteForMessage(View(std::string(kMaxQuotedBytes, 'x'))).size(), kMaxQuotedBytes);
     }
 

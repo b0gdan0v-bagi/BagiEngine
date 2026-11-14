@@ -18,7 +18,7 @@ namespace BECore::Tests {
         ~EngineSmokeTest() override = default;
 
         bool Run() override;
-        eastl::string_view GetName() override {
+        StringView GetName() override {
             return GetStaticTypeName();
         }
     };

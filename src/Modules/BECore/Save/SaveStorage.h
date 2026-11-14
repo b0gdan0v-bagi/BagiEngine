@@ -3,7 +3,7 @@
 namespace BECore {
 
     /// The save folder of a browser build: a folder of the page's virtual file system that the page keeps in the site's IndexedDB (web/saves.js)
-    inline constexpr eastl::string_view kWebSaveDirectory = "/bagi/saves";
+    inline constexpr StringView kWebSaveDirectory = "/bagi/saves";
 
     /**
      * @brief Whether the files of the save folder outlive the program.

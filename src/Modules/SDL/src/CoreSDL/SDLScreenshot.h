@@ -15,14 +15,14 @@ namespace BECore {
 
     /// Error codes of `screenshot` (the parameter errors are ControlErrors::kInvalidParams)
     namespace ScreenshotErrors {
-        inline constexpr eastl::string_view kCaptureFailed = "capture_failed";
+        inline constexpr StringView kCaptureFailed = "capture_failed";
     }  // namespace ScreenshotErrors
 
     /// A picture as a PNG file in memory
     struct PngImage {
         uint32_t width = 0;
         uint32_t height = 0;
-        eastl::vector<uint8_t> bytes;
+        Vector<uint8_t> bytes;
     };
 
     /**
@@ -31,7 +31,7 @@ namespace BECore {
      * The proportions are kept and the picture is never scaled up. @p maxSide of 0 means no scaling. Fails for an image
      * that is empty or whose pixels do not fill `width * height * 4` bytes.
      */
-    [[nodiscard]] std::expected<PngImage, eastl::string> EncodePng(const PixelBuffer& image, uint32_t maxSide);
+    [[nodiscard]] std::expected<PngImage, String> EncodePng(const PixelBuffer& image, uint32_t maxSide);
 
     /**
      * @brief Registers the `screenshot` method of the control API in @p service.

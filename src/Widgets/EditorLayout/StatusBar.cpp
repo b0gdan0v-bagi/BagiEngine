@@ -75,12 +75,12 @@ namespace BECore {
         }
 
         /// Copies @p name into @p target only when it is not the one seen last, so a steady frame does not touch the heap
-        void CopyIfChanged(PoolString name, PoolString& seen, eastl::string& target) {
+        void CopyIfChanged(PoolString name, PoolString& seen, String& target) {
             if (name == seen) {
                 return;
             }
             seen = name;
-            const eastl::string_view view = name.ToStringView();
+            const StringView view = name.ToStringView();
             target.assign(view.data(), view.size());
         }
 
@@ -90,7 +90,7 @@ namespace BECore {
         return ImGui::GetFrameHeight() + ImGui::GetStyle().FramePadding.y * 2.0f;
     }
 
-    void StatusBar::SetBranch(eastl::string_view branch) {
+    void StatusBar::SetBranch(StringView branch) {
         _branch.assign(branch.data(), branch.size());
     }
 

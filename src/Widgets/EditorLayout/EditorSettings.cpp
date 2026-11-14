@@ -11,35 +11,31 @@ namespace BECore {
         constexpr const char* kEditorOrganization = "BagiEngine";
         constexpr const char* kEditorApplication = "Editor";
         constexpr int kJsonIndent = 2;
-        constexpr eastl::string_view kBadFileSuffix = ".bad";
+        constexpr StringView kBadFileSuffix = ".bad";
 
-        constexpr eastl::string_view kVersionKey = "version";
-        constexpr eastl::string_view kFontScaleKey = "fontScale";
-        constexpr eastl::string_view kViewportGridKey = "viewportGrid";
-        constexpr eastl::string_view kViewportGridStepKey = "viewportGridStep";
-        constexpr eastl::string_view kBindingsKey = "bindings";
-        constexpr eastl::string_view kViewportPreviewKey = "viewportPreview";
-        constexpr eastl::string_view kViewportInputModeKey = "viewportInputMode";
-        constexpr eastl::string_view kInputModePlayName = "play";
-        constexpr eastl::string_view kInputModeEditName = "edit";
+        constexpr StringView kVersionKey = "version";
+        constexpr StringView kFontScaleKey = "fontScale";
+        constexpr StringView kViewportGridKey = "viewportGrid";
+        constexpr StringView kViewportGridStepKey = "viewportGridStep";
+        constexpr StringView kBindingsKey = "bindings";
+        constexpr StringView kViewportPreviewKey = "viewportPreview";
+        constexpr StringView kViewportInputModeKey = "viewportInputMode";
+        constexpr StringView kInputModePlayName = "play";
+        constexpr StringView kInputModeEditName = "edit";
 
         // The members of the "viewportPreview" object
-        constexpr eastl::string_view kPreviewAspectKey = "aspect";
-        constexpr eastl::string_view kPreviewDeviceKey = "device";
-        constexpr eastl::string_view kPreviewCustomKey = "custom";
-        constexpr eastl::string_view kPreviewCustomWidthKey = "customWidth";
-        constexpr eastl::string_view kPreviewCustomHeightKey = "customHeight";
-        constexpr eastl::string_view kPreviewRotatedKey = "rotated";
-        constexpr eastl::string_view kPreviewSafeAreaKey = "safeArea";
-        constexpr eastl::string_view kOverlaySafeAreaKey = "overlaySafeArea";
-        constexpr eastl::string_view kOverlayViewBoundsKey = "overlayViewBounds";
-        constexpr eastl::string_view kOverlayCanvasBoundsKey = "overlayCanvasBounds";
-        constexpr eastl::string_view kOverlayTouchTargetsKey = "overlayTouchTargets";
-        constexpr eastl::string_view kOverlayRegionsKey = "overlayRegions";
-
-        std::string ToStdString(eastl::string_view text) {
-            return std::string(text.data(), text.size());
-        }
+        constexpr StringView kPreviewAspectKey = "aspect";
+        constexpr StringView kPreviewDeviceKey = "device";
+        constexpr StringView kPreviewCustomKey = "custom";
+        constexpr StringView kPreviewCustomWidthKey = "customWidth";
+        constexpr StringView kPreviewCustomHeightKey = "customHeight";
+        constexpr StringView kPreviewRotatedKey = "rotated";
+        constexpr StringView kPreviewSafeAreaKey = "safeArea";
+        constexpr StringView kOverlaySafeAreaKey = "overlaySafeArea";
+        constexpr StringView kOverlayViewBoundsKey = "overlayViewBounds";
+        constexpr StringView kOverlayCanvasBoundsKey = "overlayCanvasBounds";
+        constexpr StringView kOverlayTouchTargetsKey = "overlayTouchTargets";
+        constexpr StringView kOverlayRegionsKey = "overlayRegions";
 
         // Reads the file at @p path into @p content. Missing file: false, no warning. A file that cannot be read or
         // parsed, or whose root is not an object: false, one warning, @p unreadable set.
@@ -50,12 +46,12 @@ namespace BECore {
                 return false;
             }
             unreadable = true;
-            const std::expected<eastl::string, eastl::string> text = ReadTextFile(path);
+            const std::expected<String, String> text = ReadTextFile(path);
             if (!text) {
                 LOG_WARNING(Format("Editor settings: {}; using the defaults", text.error()));
                 return false;
             }
-            std::expected<Json, ControlError> parsed = ParseJson(eastl::string_view(text->data(), text->size()));
+            std::expected<Json, ControlError> parsed = ParseJson(StringView(text->data(), text->size()));
             if (!parsed || !parsed->is_object()) {
                 LOG_WARNING(Format("Editor settings: '{}' is not a JSON object; using the defaults", path.string()));
                 return false;
@@ -66,10 +62,10 @@ namespace BECore {
         }
 
         // The members of @p object that are not in @p known
-        Json UnknownMembers(const Json& object, std::initializer_list<eastl::string_view> known) {
+        Json UnknownMembers(const Json& object, std::initializer_list<StringView> known) {
             Json extra = Json::object();
             for (const auto& [key, value] : object.items()) {
-                const bool isKnown = std::ranges::any_of(known, [&](eastl::string_view name) { return key == ToStdString(name); });
+                const bool isKnown = std::ranges::any_of(known, [&](StringView name) { return key == ToStdString(name); });
                 if (!isKnown) {
                     extra[key] = value;
                 }
@@ -77,12 +73,12 @@ namespace BECore {
             return extra;
         }
 
-        void WarnWrongType(eastl::string_view file, eastl::string_view key, eastl::string_view expected) {
+        void WarnWrongType(StringView file, StringView key, StringView expected) {
             LOG_WARNING(Format("Editor settings: '{}' in {} is not {}; using the default", key, file, expected));
         }
 
         // The index of the device called @p name in the table of this build, -1 when there is none
-        int32_t FindDeviceByName(eastl::string_view name) {
+        int32_t FindDeviceByName(StringView name) {
             const auto devices = UIPreview::GetDevices();
             for (size_t i = 0; i < devices.size(); ++i) {
                 if (devices[i].name == name) {
@@ -93,11 +89,11 @@ namespace BECore {
         }
 
         // A bool member of @p object: left in @p value when absent, a warning and left when of another type
-        void ReadBool(const Json& object, eastl::string_view key, bool& value) {
+        void ReadBool(const Json& object, StringView key, bool& value) {
             if (!object.contains(ToStdString(key))) {
                 return;
             }
-            if (const std::optional<bool> read = GetJsonBool(object, key)) {
+            if (const Optional<bool> read = GetJsonBool(object, key)) {
                 value = *read;
             } else {
                 WarnWrongType(kPreferencesFileName, key, "true or false");
@@ -105,11 +101,11 @@ namespace BECore {
         }
 
         // A side of the custom size: clamped into its range like the grid step
-        void ReadSide(const Json& object, eastl::string_view key, uint32_t& value) {
+        void ReadSide(const Json& object, StringView key, uint32_t& value) {
             if (!object.contains(ToStdString(key))) {
                 return;
             }
-            if (const std::optional<int64_t> read = GetJsonInt(object, key)) {
+            if (const Optional<int64_t> read = GetJsonInt(object, key)) {
                 value = static_cast<uint32_t>(std::clamp<int64_t>(*read, kMinPreviewSide, kMaxPreviewSide));
             } else {
                 WarnWrongType(kPreferencesFileName, key, "an integer");
@@ -118,12 +114,12 @@ namespace BECore {
 
         // An enum member of @p object by name
         template <typename TEnum>
-        void ReadEnum(const Json& object, eastl::string_view key, TEnum& value) {
+        void ReadEnum(const Json& object, StringView key, TEnum& value) {
             if (!object.contains(ToStdString(key))) {
                 return;
             }
-            const std::optional<eastl::string> name = GetJsonString(object, key);
-            const std::optional<TEnum> parsed = name ? EnumUtils<TEnum>::Cast(eastl::string_view(name->data(), name->size())) : std::nullopt;
+            const Optional<String> name = GetJsonString(object, key);
+            const Optional<TEnum> parsed = name ? EnumUtils<TEnum>::Cast(StringView(name->data(), name->size())) : std::nullopt;
             if (parsed) {
                 value = *parsed;
             } else {
@@ -150,11 +146,11 @@ namespace BECore {
 
             // The device is stored by name, so a table that changed between builds never gives another device
             if (object.contains(ToStdString(kPreviewDeviceKey))) {
-                const std::optional<eastl::string> name = GetJsonString(object, kPreviewDeviceKey);
+                const Optional<String> name = GetJsonString(object, kPreviewDeviceKey);
                 if (!name) {
                     WarnWrongType(kPreferencesFileName, kPreviewDeviceKey, "a device name");
                 } else if (!name->empty()) {
-                    shape.device = FindDeviceByName(eastl::string_view(name->data(), name->size()));
+                    shape.device = FindDeviceByName(StringView(name->data(), name->size()));
                     if (shape.device < 0) {
                         LOG_WARNING(Format("Editor settings: the preview device '{}' in {} is not known to this build; using the Free shape", *name, kPreferencesFileName));
                         if (!shape.custom) {
@@ -169,17 +165,17 @@ namespace BECore {
         }
 
         // The input mode as it is written in the file: a lower-case word, so the file reads like a setting and not like a C++ name
-        eastl::string_view InputModeName(ViewportInputMode mode) {
+        StringView InputModeName(ViewportInputMode mode) {
             return mode == ViewportInputMode::Edit ? kInputModeEditName : kInputModePlayName;
         }
 
         // The input mode of the file: left in @p mode when absent, a warning and left when the text is not one of the two names
-        void ReadInputMode(const Json& object, eastl::string_view key, ViewportInputMode& mode) {
+        void ReadInputMode(const Json& object, StringView key, ViewportInputMode& mode) {
             if (!object.contains(ToStdString(key))) {
                 return;
             }
-            const std::optional<eastl::string> name = GetJsonString(object, key);
-            const eastl::string_view text = name ? eastl::string_view(name->data(), name->size()) : eastl::string_view();
+            const Optional<String> name = GetJsonString(object, key);
+            const StringView text = name ? StringView(name->data(), name->size()) : StringView();
             if (text == kInputModePlayName) {
                 mode = ViewportInputMode::Play;
             } else if (text == kInputModeEditName) {
@@ -195,6 +191,7 @@ namespace BECore {
             const auto devices = UIPreview::GetDevices();
             const bool hasDevice = shape.device >= 0 && static_cast<size_t>(shape.device) < devices.size();
             object[ToStdString(kPreviewAspectKey)] = ToStdString(EnumUtils<ViewportAspect>::ToString(shape.aspect));
+            // std: a JSON string of nlohmann
             object[ToStdString(kPreviewDeviceKey)] = hasDevice ? ToStdString(devices[static_cast<size_t>(shape.device)].name) : std::string();
             object[ToStdString(kPreviewCustomKey)] = shape.custom;
             object[ToStdString(kPreviewCustomWidthKey)] = shape.customWidth;
@@ -261,21 +258,21 @@ namespace BECore {
 
         EditorPreferences preferences;
         if (content.contains(ToStdString(kFontScaleKey))) {
-            if (const std::optional<double> scale = GetJsonNumber(content, kFontScaleKey)) {
+            if (const Optional<double> scale = GetJsonNumber(content, kFontScaleKey)) {
                 preferences.fontScale = static_cast<float>(*scale);
             } else {
                 WarnWrongType(kPreferencesFileName, kFontScaleKey, "a number");
             }
         }
         if (content.contains(ToStdString(kViewportGridKey))) {
-            if (const std::optional<bool> grid = GetJsonBool(content, kViewportGridKey)) {
+            if (const Optional<bool> grid = GetJsonBool(content, kViewportGridKey)) {
                 preferences.viewportGrid = *grid;
             } else {
                 WarnWrongType(kPreferencesFileName, kViewportGridKey, "true or false");
             }
         }
         if (content.contains(ToStdString(kViewportGridStepKey))) {
-            if (const std::optional<int64_t> step = GetJsonInt(content, kViewportGridStepKey)) {
+            if (const Optional<int64_t> step = GetJsonInt(content, kViewportGridStepKey)) {
                 preferences.viewportGridStep = static_cast<int32_t>(std::clamp<int64_t>(*step, kMinViewportGridStep, kMaxViewportGridStep));
             } else {
                 WarnWrongType(kPreferencesFileName, kViewportGridStepKey, "an integer");
@@ -315,16 +312,17 @@ namespace BECore {
 
         struct Override {
             PoolString id;
-            std::optional<KeyChord> chord;
+            Optional<KeyChord> chord;
         };
-        eastl::vector<Override> overrides;
+        Vector<Override> overrides;
         for (const auto& [key, value] : bindings->items()) {
-            const eastl::string id(key.c_str(), key.size());
-            const PoolString commandId = PoolString::Intern(eastl::string_view(id.data(), id.size()));
+            const String id(key.c_str(), key.size());
+            const PoolString commandId = PoolString::Intern(StringView(id));
             if (!value.is_string()) {
                 LOG_WARNING(Format("Editor settings: the hotkey of '{}' is not a text; dropped", id));
                 continue;
             }
+            // std: nlohmann's string
             const std::string& text = value.get_ref<const std::string&>();
             const EditorCommand* command = FindEditorCommand(commandId);
             if (command == nullptr) {
@@ -340,7 +338,7 @@ namespace BECore {
                 overrides.push_back({commandId, std::nullopt});
                 continue;
             }
-            const std::optional<KeyChord> chord = ParseKeyChord(eastl::string_view(text.data(), text.size()));
+            const Optional<KeyChord> chord = ParseKeyChord(FromStd(text));
             if (!chord) {
                 LOG_WARNING(Format("Editor settings: '{}' is not a chord ({}); dropped", text.c_str(), id));
                 continue;
@@ -360,7 +358,7 @@ namespace BECore {
             if (result.status == AssignStatus::Assigned) {
                 continue;
             }
-            const eastl::string chordText = ToString(*entry.chord);
+            const String chordText = ToString(*entry.chord);
             if (result.status == AssignStatus::Conflict) {
                 LOG_WARNING(Format("Editor settings: {} for '{}' is already used by '{}'; dropped", chordText, entry.id.ToStringView(), result.otherCommandId.ToStringView()));
             } else {
@@ -392,8 +390,9 @@ namespace BECore {
             unreadable = false;
         }
 
+        // std: nlohmann's dump
         const std::string text = content.dump(kJsonIndent, ' ', false, Json::error_handler_t::replace) + "\n";
-        const std::expected<void, eastl::string> written = WriteTextFileAtomically(path, eastl::string_view(text.data(), text.size()));
+        const std::expected<void, String> written = WriteTextFileAtomically(path, FromStd(text));
         if (!written) {
             _lastSaveError = written.error();
             LOG_ERROR(Format("Editor settings: {}", _lastSaveError));
@@ -419,9 +418,9 @@ namespace BECore {
             if (!command.rebindable || _hotkeys.IsDefault(command.id)) {
                 continue;
             }
-            const std::optional<KeyChord> chord = _hotkeys.GetChord(command.id);
-            const eastl::string text = chord ? ToString(*chord) : eastl::string();
-            bindings[ToStdString(command.id.ToStringView())] = std::string(text.c_str(), text.size());
+            const Optional<KeyChord> chord = _hotkeys.GetChord(command.id);
+            const String text = chord ? ToString(*chord) : String();
+            bindings[ToStdString(command.id.ToStringView())] = ToStdString(text);
         }
         Json content = _extraHotkeys;
         content[ToStdString(kVersionKey)] = kFileVersion;

@@ -34,7 +34,7 @@ namespace BECore::Tests {
         }
 
         /// What the clips of a timeline wrote: `(clip id, value)` in the order of the calls
-        using Calls = eastl::vector<eastl::pair<int, float>>;
+        using Calls = Vector<eastl::pair<int, float>>;
 
         /// A sequence of @p kClipCount clips of a quarter second, clip `i` writes to @p calls with its id
         Timeline MakeSequence(Calls& calls) {
@@ -53,8 +53,8 @@ namespace BECore::Tests {
         }
 
         /// The ids of the clips whose last value is exactly the target, in the order of those calls
-        eastl::vector<int> FinishedIds(const Calls& calls) {
-            eastl::vector<int> ids;
+        Vector<int> FinishedIds(const Calls& calls) {
+            Vector<int> ids;
             for (const auto& call : calls) {
                 if (call.second == kTo) {
                     ids.push_back(call.first);
@@ -104,7 +104,7 @@ namespace BECore::Tests {
         }
 
         struct Log {
-            eastl::vector<TweenResult> results;
+            Vector<TweenResult> results;
             int stage = 0;
         };
 
@@ -137,7 +137,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(handle->IsFinished());
         EXPECT_EQ(handle->GetState(), TweenState::Completed);
         EXPECT_EQ(completed, 1);
-        EXPECT_EQ(FinishedIds(calls), (eastl::vector<int>{0, 1, 2, 3}));  // every clip ended on its value, in order
+        EXPECT_EQ(FinishedIds(calls), (Vector<int>{0, 1, 2, 3}));  // every clip ended on its value, in order
         EXPECT_EQ(tweens.GetActiveCount(), 0u);
     }
 
@@ -169,7 +169,7 @@ namespace BECore::Tests {
         tweens.Advance(kQuarterSecond);  // the delay is over exactly now: the timeline starts from its beginning
         tweens.Advance(kOneSecond);
         EXPECT_TRUE(handle->IsFinished());
-        EXPECT_EQ(FinishedIds(calls), (eastl::vector<int>{0, 1, 2, 3}));
+        EXPECT_EQ(FinishedIds(calls), (Vector<int>{0, 1, 2, 3}));
     }
 
     TEST(TimelinePlayTest, CompletionRunsOnceAfterTheLastCall) {
@@ -323,13 +323,13 @@ namespace BECore::Tests {
         tweens.Advance(kQuarterSecond);
         EXPECT_EQ(second, kTo);
         EXPECT_EQ(log.stage, 2);
-        EXPECT_EQ(log.results, (eastl::vector<TweenResult>{TweenResult::Completed, TweenResult::Completed}));
+        EXPECT_EQ(log.results, (Vector<TweenResult>{TweenResult::Completed, TweenResult::Completed}));
         EXPECT_TRUE(task.IsDone());
     }
 
     TEST(TimelinePlayTest, RepeatTwiceTakesTwiceTheTimeAndStartsFromFromAgain) {
         TweenManager tweens;
-        eastl::vector<float> values;
+        Vector<float> values;
         Timeline timeline;
         timeline.Append<float>(0.0f, kTo, Settings(kHalfSecond), [&values](const float& value) { values.push_back(value); }).Repeat(kTwoRepeats);
         ASSERT_EQ(timeline.GetDuration(), kOneSecond);
@@ -343,7 +343,7 @@ namespace BECore::Tests {
 
         EXPECT_TRUE(handle->IsFinished());
         // The first iteration ends on kTo at half a second, the second one starts again from `from` and ends on kTo
-        EXPECT_EQ(values, (eastl::vector<float>{kTo, 0.0f, kHalfOfTo, kTo}));
+        EXPECT_EQ(values, (Vector<float>{kTo, 0.0f, kHalfOfTo, kTo}));
     }
 
     TEST(TimelinePlayTest, ATimelineWithNoLengthCompletesOnTheFirstAdvanceAfterTheDelay) {
@@ -362,7 +362,7 @@ namespace BECore::Tests {
 
     TEST(TimelinePlayTest, TwoFrameRatesOfATimeObjectEndWithTheSameValues) {
         constexpr int kFrameRatesToCompare[] = {kFramesInASecond, kSlowFramesInASecond};
-        eastl::vector<eastl::vector<int>> finishedByRate;
+        Vector<Vector<int>> finishedByRate;
         for (const int framesPerSecond : kFrameRatesToCompare) {
             TweenManager tweens;
             Time time;
@@ -376,13 +376,13 @@ namespace BECore::Tests {
             EXPECT_EQ(calls.back().second, kTo) << framesPerSecond;
             finishedByRate.push_back(FinishedIds(calls));
         }
-        EXPECT_EQ(finishedByRate[0], (eastl::vector<int>{0, 1, 2, 3}));
+        EXPECT_EQ(finishedByRate[0], (Vector<int>{0, 1, 2, 3}));
         EXPECT_EQ(finishedByRate[0], finishedByRate[1]);
     }
 
     TEST(TimelinePlayTest, ManyTimelinesInOneAdvanceFinishInStartOrder) {
         TweenManager tweens;
-        eastl::vector<int> order;
+        Vector<int> order;
         for (int index = 0; index < kManyTimelines; ++index) {
             Timeline timeline;
             timeline.AppendDelay(kQuarterSecond);
@@ -416,7 +416,7 @@ namespace BECore::Tests {
         EXPECT_EQ(cancelled, 1);
         EXPECT_EQ(completed, 0);
         EXPECT_EQ(handle->GetState(), TweenState::Cancelled);
-        EXPECT_EQ(log.results, (eastl::vector<TweenResult>{TweenResult::Cancelled}));
+        EXPECT_EQ(log.results, (Vector<TweenResult>{TweenResult::Cancelled}));
         EXPECT_EQ(tweens.GetActiveCount(), 0u);
     }
 
@@ -434,7 +434,7 @@ namespace BECore::Tests {
         EXPECT_EQ(calls, OnlyTheFirstTween());
         EXPECT_EQ(cancelled, 1);
         EXPECT_TRUE(handle->IsCancelled());
-        EXPECT_EQ(log.results, (eastl::vector<TweenResult>{TweenResult::Cancelled}));
+        EXPECT_EQ(log.results, (Vector<TweenResult>{TweenResult::Cancelled}));
     }
 
     TEST(TimelinePlayTest, AScopedTweenDestroyedInAClipStopsTheStep) {

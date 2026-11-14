@@ -88,7 +88,7 @@ namespace BECore {
         constexpr const char* kHeightTooltip = "The height of the image in pixels";
 
         // The icon and the name of a device in the size combo
-        eastl::string DeviceLabel(const PreviewDevice& device) {
+        String DeviceLabel(const PreviewDevice& device) {
             return Format("{} {} ({}x{})", device.width >= kTabletMinWidth ? ICON_LC_TABLET : ICON_LC_SMARTPHONE, device.name, device.width, device.height);
         }
 
@@ -102,7 +102,7 @@ namespace BECore {
         }
 
         // The label of the current shape in the size combo
-        eastl::string SizeLabel(const PreviewShape& shape) {
+        String SizeLabel(const PreviewShape& shape) {
             if (shape.custom) {
                 return kCustomLabel;
             }
@@ -114,7 +114,7 @@ namespace BECore {
 
         // The canvases of a subtree in the order of the scene (the walk of CollectCanvases in UIControl.cpp), without the subtree of a
         // node hidden in the editor: it draws nothing, so it gets no overlay
-        void CollectCanvases(const SceneNode& node, eastl::vector<IntrusivePtr<UICanvasComponent>>& out) {
+        void CollectCanvases(const SceneNode& node, Vector<IntrusivePtr<UICanvasComponent>>& out) {
             if (node.HasEditorFlag(EditorFlags::Hidden)) {
                 return;
             }
@@ -326,8 +326,7 @@ namespace BECore {
 
             // The gizmo goes before the mouse is forwarded, so a press on a handle is consumed first
             const bool pointerFree = editing && editorTarget && !_cameraInput.IsPanning();
-            const eastl::span<SceneNode* const> selection =
-                activeScene && activeScene == _selectedScene ? eastl::span<SceneNode* const>(_selectedNodes.data(), _selectedNodes.size()) : eastl::span<SceneNode* const>();
+            const Span<SceneNode* const> selection = activeScene && activeScene == _selectedScene ? Span<SceneNode* const>(_selectedNodes.data(), _selectedNodes.size()) : Span<SceneNode* const>();
             const bool gizmoTookPress = _gizmos.Update({activeScene, selection, &frame, editing, pointerFree, imageHovered});
             _boxSelect.Update(frame, activeScene, pointerFree, imageHovered, gizmoTookPress);
 
@@ -448,7 +447,7 @@ namespace BECore {
             // The view the scene drew with last, picked by the size of this image or forced by the combo (read only)
             const ActiveSceneView view = scene->GetActiveView();
             ImGui::SameLine();
-            const eastl::string_view name = view.index < 0 ? eastl::string_view("default") : view.name.ToStringView();
+            const StringView name = view.index < 0 ? StringView("default") : view.name.ToStringView();
             ImGui::TextDisabled("View: %.*s %.0f x %.0f", static_cast<int>(name.size()), name.data(), view.width, view.height);
         }
     }
@@ -465,7 +464,7 @@ namespace BECore {
     }
 
     void ViewportWidget::DrawViewCombo(const Scene& scene) {
-        const eastl::span<const SceneViewVariant> variants = scene.GetViewVariants();
+        const Span<const SceneViewVariant> variants = scene.GetViewVariants();
         if (variants.empty()) {
             return;
         }
@@ -588,13 +587,13 @@ namespace BECore {
         }
 
         if (scene && (_overlays.canvasBounds || _overlays.touchTargets || _overlays.regions)) {
-            eastl::vector<IntrusivePtr<UICanvasComponent>> canvases;
+            Vector<IntrusivePtr<UICanvasComponent>> canvases;
             CollectCanvases(scene->GetRootNode(), canvases);
             const float minTouchSize = CoreManager::GetUIEnvironment().GetSettings().minTouchSize;
             const ImVec2 mouse = ImGui::GetIO().MousePos;
             const TouchMark* hoveredMark = nullptr;
-            eastl::vector<TouchMark> marks;
-            eastl::vector<HoverRegion> regionHits;
+            Vector<TouchMark> marks;
+            Vector<HoverRegion> regionHits;
             for (const auto& canvas : canvases) {
                 const UICanvasLayout& layout = canvas->GetLayout();
                 if (!canvas->_visible || !layout.HasLayout()) {
@@ -614,7 +613,7 @@ namespace BECore {
                         const auto [min, max] = toScreen(mark.rect);
                         fill(mark.rect, kRegionFill);
                         drawList->AddRect(min, max, kRegionColor);
-                        const eastl::string_view name = mark.name.ToStringView();
+                        const StringView name = mark.name.ToStringView();
                         const ImVec2 textSize = ImGui::CalcTextSize(name.data(), name.data() + name.size());
                         if (max.x - min.x >= textSize.x + kRegionLabelInset * 2.0f) {
                             drawList->AddText({min.x + kRegionLabelInset, min.y + kRegionLabelInset}, kRegionColor, name.data(), name.data() + name.size());
@@ -640,7 +639,7 @@ namespace BECore {
                 }
             }
             if (hoveredMark) {
-                const eastl::string_view name = hoveredMark->name.ToStringView();
+                const StringView name = hoveredMark->name.ToStringView();
                 ImGui::SetTooltip("%.*s", static_cast<int>(name.size()), name.data());
             } else if (hovered) {
                 // The smallest region under the pointer, so a region inside another one stays reachable
@@ -653,7 +652,7 @@ namespace BECore {
                     }
                 }
                 if (smallest) {
-                    const eastl::string_view name = smallest->mark.name.ToStringView();
+                    const StringView name = smallest->mark.name.ToStringView();
                     const Rect& rect = smallest->canvasRect;
                     ImGui::SetTooltip("%.*s\nx %g  y %g  w %g  h %g", static_cast<int>(name.size()), name.data(), rect.x, rect.y, rect.w, rect.h);
                 }
@@ -682,7 +681,7 @@ namespace BECore {
             const ImU32 color = index + 1 == _selectedNodes.size() ? primaryColor : otherColor;
             const ScenePick::Outlines outlines = ScenePick::SelectionOutlines(*scene, *node);
             for (size_t i = 0; i < outlines.count; ++i) {
-                eastl::array<ImVec2, 4> corners;
+                Array<ImVec2, 4> corners;
                 for (size_t corner = 0; corner < corners.size(); ++corner) {
                     corners[corner] = frame.ToScreen(outlines.quads[i][corner]);
                 }

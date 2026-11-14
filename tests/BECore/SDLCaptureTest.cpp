@@ -18,7 +18,7 @@ namespace BECore::Tests {
     namespace {
 
         constexpr const char* kWindowConfig = "config/SDLWindowConfig.xml";
-        constexpr eastl::string_view kPngBase64Prefix = "iVBORw0KGgo";  // the 8 bytes of a PNG signature in base64
+        constexpr StringView kPngBase64Prefix = "iVBORw0KGgo";  // the 8 bytes of a PNG signature in base64
 
         using Pixel = std::array<uint8_t, 4>;
 
@@ -72,7 +72,7 @@ namespace BECore::Tests {
         }
 
         /// The size that the IHDR chunk of a PNG file gives (big-endian, at bytes 16 to 23)
-        std::pair<uint32_t, uint32_t> PngSize(const eastl::vector<uint8_t>& png) {
+        std::pair<uint32_t, uint32_t> PngSize(const Vector<uint8_t>& png) {
             const auto read = [&png](size_t at) {
                 return (static_cast<uint32_t>(png[at]) << 24) | (static_cast<uint32_t>(png[at + 1]) << 16) | (static_cast<uint32_t>(png[at + 2]) << 8) | png[at + 3];
             };
@@ -80,7 +80,7 @@ namespace BECore::Tests {
         }
 
         /// The pixels of a PNG file in memory, as the engine's RGBA layout; empty when SDL cannot read it
-        PixelBuffer DecodePng(const eastl::vector<uint8_t>& png) {
+        PixelBuffer DecodePng(const Vector<uint8_t>& png) {
             PixelBuffer image;
             SDL_Surface* loaded = IMG_Load_IO(SDL_IOFromConstMem(png.data(), png.size()), true);
             if (loaded == nullptr) {
@@ -150,7 +150,7 @@ namespace BECore::Tests {
 
             /// Presents the frame and returns what was on the back buffer
             PixelBuffer PresentAndRead() {
-                std::optional<CaptureResult> captured;
+                Optional<CaptureResult> captured;
                 renderer->RequestCapture([&captured](CaptureResult result) { captured = std::move(result); });
                 renderer->Present();
                 if (!captured || !captured->has_value()) {
@@ -217,7 +217,7 @@ namespace BECore::Tests {
                 if (!params.is_null()) {
                     request["params"] = params;
                 }
-                service.Post(DumpJson(request), [this](eastl::string text) {
+                service.Post(DumpJson(request), [this](String text) {
                     auto parsed = ParseJson(text);
                     responses.push_back(parsed ? std::move(*parsed) : Json());
                 });
@@ -243,7 +243,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(SDLCaptureTest, CaptureReadsWhatWasDrawn) {
-        std::optional<CaptureResult> captured;
+        Optional<CaptureResult> captured;
         DrawFrame();
         renderer->RequestCapture([&captured](CaptureResult result) { captured = std::move(result); });
         renderer->Present();
@@ -273,8 +273,8 @@ namespace BECore::Tests {
     }
 
     TEST_F(SDLCaptureTest, NewerRequestReplacesTheOlderOne) {
-        std::optional<CaptureResult> first;
-        std::optional<CaptureResult> second;
+        Optional<CaptureResult> first;
+        Optional<CaptureResult> second;
         DrawFrame();
         renderer->RequestCapture([&first](CaptureResult result) { first = std::move(result); });
         renderer->RequestCapture([&second](CaptureResult result) { second = std::move(result); });
@@ -294,7 +294,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(SDLCaptureTest, CaptureStillWorksWhenThePresentComesFromTheRenderEvent) {
-        std::optional<CaptureResult> captured;
+        Optional<CaptureResult> captured;
         DrawFrame();
         renderer->RequestCapture([&captured](CaptureResult result) { captured = std::move(result); });
         RenderEvents::RenderPresentEvent::Emit();
@@ -410,13 +410,13 @@ namespace BECore::Tests {
 
     TEST_F(SDLCaptureTest, HalfOpacityFadesGeometryOverBlack) {
         const Color white{255, 255, 255, 255};
-        const eastl::vector<GeometryVertex> quad = {
+        const Vector<GeometryVertex> quad = {
             {0.0f, 0.0f, white, 0.0f, 0.0f},
             {100.0f, 0.0f, white, 1.0f, 0.0f},
             {100.0f, 100.0f, white, 1.0f, 1.0f},
             {0.0f, 100.0f, white, 0.0f, 1.0f},
         };
-        const eastl::vector<int> indices = {0, 1, 2, 0, 2, 3};
+        const Vector<int> indices = {0, 1, 2, 0, 2, 3};
         renderer->Clear(Color{0, 0, 0, 255});
 
         renderer->SetOpacity(0.5f);
@@ -429,13 +429,13 @@ namespace BECore::Tests {
     }
 
     TEST_F(SDLCaptureTest, UntexturedGeometryFillsItsTrianglesWithTheVertexColors) {
-        const eastl::vector<GeometryVertex> quad = {
+        const Vector<GeometryVertex> quad = {
             {100.0f, 50.0f, kRed, 0.0f, 0.0f},
             {200.0f, 50.0f, kRed, 1.0f, 0.0f},
             {200.0f, 150.0f, kRed, 1.0f, 1.0f},
             {100.0f, 150.0f, kRed, 0.0f, 1.0f},
         };
-        const eastl::vector<int> indices = {0, 1, 2, 0, 2, 3};
+        const Vector<int> indices = {0, 1, 2, 0, 2, 3};
         renderer->Clear(kBackground);
 
         renderer->DrawGeometry(nullptr, {quad.data(), quad.size()}, {indices.data(), indices.size()}, 20.0f, 10.0f);
@@ -449,13 +449,13 @@ namespace BECore::Tests {
 
     TEST_F(SDLCaptureTest, GeometryBlendsByTheAlphaOfItsVertices) {
         const Color half{255, 0, 0, 128};
-        const eastl::vector<GeometryVertex> quad = {
+        const Vector<GeometryVertex> quad = {
             {0.0f, 0.0f, half, 0.0f, 0.0f},
             {100.0f, 0.0f, half, 1.0f, 0.0f},
             {100.0f, 100.0f, half, 1.0f, 1.0f},
             {0.0f, 100.0f, half, 0.0f, 1.0f},
         };
-        const eastl::vector<int> indices = {0, 1, 2, 0, 2, 3};
+        const Vector<int> indices = {0, 1, 2, 0, 2, 3};
         renderer->Clear(kBackground);
 
         renderer->DrawGeometry(nullptr, {quad.data(), quad.size()}, {indices.data(), indices.size()}, 0.0f, 0.0f);
@@ -470,13 +470,13 @@ namespace BECore::Tests {
         auto texture = MakeSolidTexture(4, 4, Color{255, 255, 255, 255});
         ASSERT_TRUE(texture);
         const Color green{0, 255, 0, 255};
-        const eastl::vector<GeometryVertex> quad = {
+        const Vector<GeometryVertex> quad = {
             {0.0f, 0.0f, green, 0.0f, 0.0f},
             {100.0f, 0.0f, green, 1.0f, 0.0f},
             {100.0f, 100.0f, green, 1.0f, 1.0f},
             {0.0f, 100.0f, green, 0.0f, 1.0f},
         };
-        const eastl::vector<int> indices = {0, 1, 2, 0, 2, 3};
+        const Vector<int> indices = {0, 1, 2, 0, 2, 3};
         renderer->Clear(kBackground);
 
         renderer->DrawGeometry(texture.Get(), {quad.data(), quad.size()}, {indices.data(), indices.size()}, 0.0f, 0.0f);
@@ -487,13 +487,13 @@ namespace BECore::Tests {
     }
 
     TEST_F(SDLCaptureTest, GeometryIsClippedLikeARect) {
-        const eastl::vector<GeometryVertex> quad = {
+        const Vector<GeometryVertex> quad = {
             {0.0f, 0.0f, kRed, 0.0f, 0.0f},
             {200.0f, 0.0f, kRed, 1.0f, 0.0f},
             {200.0f, 200.0f, kRed, 1.0f, 1.0f},
             {0.0f, 200.0f, kRed, 0.0f, 1.0f},
         };
-        const eastl::vector<int> indices = {0, 1, 2, 0, 2, 3};
+        const Vector<int> indices = {0, 1, 2, 0, 2, 3};
         renderer->Clear(kBackground);
 
         renderer->PushClipRect({50.0f, 50.0f, 40.0f, 40.0f});
@@ -508,12 +508,12 @@ namespace BECore::Tests {
     }
 
     TEST_F(SDLCaptureTest, GeometryWithAnIndexOutOfRangeDrawsNothing) {
-        const eastl::vector<GeometryVertex> triangle = {
+        const Vector<GeometryVertex> triangle = {
             {0.0f, 0.0f, kRed, 0.0f, 0.0f},
             {200.0f, 0.0f, kRed, 1.0f, 0.0f},
             {0.0f, 200.0f, kRed, 0.0f, 1.0f},
         };
-        const eastl::vector<int> indices = {0, 1, 7};
+        const Vector<int> indices = {0, 1, 7};
         renderer->Clear(kBackground);
 
         renderer->DrawGeometry(nullptr, {triangle.data(), triangle.size()}, {indices.data(), indices.size()}, 0.0f, 0.0f);
@@ -600,13 +600,13 @@ namespace BECore::Tests {
 
     TEST_F(SDLCaptureTest, AnAddGeometryBrightensTheBackground) {
         const Color color{250, 100, 0, 255};
-        const eastl::vector<GeometryVertex> quad = {
+        const Vector<GeometryVertex> quad = {
             {0.0f, 0.0f, color, 0.0f, 0.0f},
             {40.0f, 0.0f, color, 1.0f, 0.0f},
             {40.0f, 40.0f, color, 1.0f, 1.0f},
             {0.0f, 40.0f, color, 0.0f, 1.0f},
         };
-        const eastl::vector<int> indices = {0, 1, 2, 0, 2, 3};
+        const Vector<int> indices = {0, 1, 2, 0, 2, 3};
         renderer->Clear(kBackground);
 
         renderer->SetBlendMode(BlendMode::Add);
@@ -624,13 +624,13 @@ namespace BECore::Tests {
         auto texture = MakeSolidTexture(4, 4, Color{100, 50, 200, 255});
         ASSERT_TRUE(texture);
         const Color white{255, 255, 255, 255};
-        const eastl::vector<GeometryVertex> quad = {
+        const Vector<GeometryVertex> quad = {
             {0.0f, 0.0f, white, 0.0f, 0.0f},
             {40.0f, 0.0f, white, 1.0f, 0.0f},
             {40.0f, 40.0f, white, 1.0f, 1.0f},
             {0.0f, 40.0f, white, 0.0f, 1.0f},
         };
-        const eastl::vector<int> indices = {0, 1, 2, 0, 2, 3};
+        const Vector<int> indices = {0, 1, 2, 0, 2, 3};
         renderer->Clear(kBackground);
 
         renderer->SetBlendMode(BlendMode::Add);
@@ -887,7 +887,7 @@ namespace BECore::Tests {
 
     TEST(RendererCaptureDefaultTest, ARendererThatCannotReadItsOutputAnswersWithAnError) {
         BlindRenderer renderer;
-        std::optional<CaptureResult> captured;
+        Optional<CaptureResult> captured;
 
         renderer.RequestCapture([&captured](CaptureResult result) { captured = std::move(result); });
 
@@ -997,7 +997,7 @@ namespace BECore::Tests {
         ASSERT_NE(Result(0), nullptr);
         const auto base64 = GetJsonString(*Result(0), "png_base64");
         ASSERT_TRUE(base64.has_value());
-        EXPECT_TRUE(eastl::string_view(base64->data(), base64->size()).starts_with(kPngBase64Prefix));
+        EXPECT_TRUE(StringView(base64->data(), base64->size()).starts_with(kPngBase64Prefix));
         const int64_t width = GetJsonInt(*Result(0), "width").value_or(0);
         const int64_t height = GetJsonInt(*Result(0), "height").value_or(0);
         EXPECT_EQ(width, 1024);  // the window of the engine config is 1920 by 1080, cut to the default 1024

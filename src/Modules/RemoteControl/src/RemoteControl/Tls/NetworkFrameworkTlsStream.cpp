@@ -40,7 +40,7 @@ namespace BECore {
         template <typename T>
         using CfOwned = std::unique_ptr<std::remove_pointer_t<T>, CfReleaser>;
 
-        eastl::string_view TlsVersionName(tls_protocol_version_t version) {
+        StringView TlsVersionName(tls_protocol_version_t version) {
             switch (version) {
                 case tls_protocol_version_TLSv12:
                     return "1.2";
@@ -82,13 +82,13 @@ namespace BECore {
 
             Phase phase = Phase::Idle;
             bool closing = false;  // ShutdownBoth() or Close() was called
-            eastl::string target;  // host:port, for the texts
-            eastl::string failure;
+            String target;         // host:port, for the texts
+            String failure;
             int verifyFailureCode = 0;  // errSec* of our own trust evaluation, which says more than the connection's error
 
             nw_connection_t connection = nullptr;
 
-            eastl::vector<uint8_t> inbox;
+            Vector<uint8_t> inbox;
             size_t inboxRead = 0;
             bool receiveInFlight = false;
             bool endOfStream = false;
@@ -208,7 +208,7 @@ namespace BECore {
 
         /// The trust evaluation of the verify block (additional anchors only): the chain against the system roots plus the anchors,
         /// the validity and the host name, with the SSL policy. Never returns true without evaluating
-        bool EvaluateTrust(StreamState& state, const eastl::string& host, sec_trust_t trust) {
+        bool EvaluateTrust(StreamState& state, const String& host, sec_trust_t trust) {
             CfOwned<SecTrustRef> trustRef(sec_trust_copy_ref(trust));
             CfOwned<CFStringRef> hostName(CFStringCreateWithCString(kCFAllocatorDefault, host.c_str(), kCFStringEncodingUTF8));
             if (!trustRef || !hostName) {
@@ -232,9 +232,9 @@ namespace BECore {
         }
 
         /// The anchors as certificates; an empty result with a non-empty input means a certificate was not valid DER (the caller then refuses to connect)
-        CfOwned<CFArrayRef> MakeAnchors(eastl::span<const eastl::vector<uint8_t>> anchorsDer) {
+        CfOwned<CFArrayRef> MakeAnchors(Span<const Vector<uint8_t>> anchorsDer) {
             CfOwned<CFMutableArrayRef> array(CFArrayCreateMutable(kCFAllocatorDefault, static_cast<CFIndex>(anchorsDer.size()), &kCFTypeArrayCallBacks));
-            for (const eastl::vector<uint8_t>& der : anchorsDer) {
+            for (const Vector<uint8_t>& der : anchorsDer) {
                 CfOwned<CFDataRef> data(CFDataCreate(kCFAllocatorDefault, der.data(), static_cast<CFIndex>(der.size())));
                 CfOwned<SecCertificateRef> certificate(data ? SecCertificateCreateWithData(kCFAllocatorDefault, data.get()) : nullptr);
                 if (!certificate) {
@@ -254,9 +254,9 @@ namespace BECore {
                 Close();
             }
 
-            std::expected<void, eastl::string> Connect(const TlsConnectParams& params) override {
+            std::expected<void, String> Connect(const TlsConnectParams& params) override {
                 const std::shared_ptr<StreamState> state = _state;
-                const eastl::string host(params.host.data(), params.host.size());
+                const String host(params.host.data(), params.host.size());
                 {
                     LockGuard lock(state->mutex);
                     state->target = Format("{}:{}", host, params.port);
@@ -330,7 +330,7 @@ namespace BECore {
                 return WaitUntilReady(*state, params);
             }
 
-            bool SendAll(eastl::span<const uint8_t> data) override {
+            bool SendAll(Span<const uint8_t> data) override {
                 if (data.empty()) {
                     return IsValid();
                 }
@@ -348,7 +348,7 @@ namespace BECore {
                 return state->sendsCompleted >= ticket && !state->sendFailed && !state->closing && state->phase == Phase::Ready;
             }
 
-            std::expected<size_t, SocketError> Receive(eastl::span<uint8_t> buffer) override {
+            std::expected<size_t, SocketError> Receive(Span<uint8_t> buffer) override {
                 if (buffer.empty()) {
                     return std::unexpected(SocketError::Failed);
                 }
@@ -420,14 +420,14 @@ namespace BECore {
                 return _state->phase == Phase::Ready && !_state->closing;
             }
 
-            eastl::string GetLastError() const override {
+            String GetLastError() const override {
                 LockGuard lock(_state->mutex);
                 return _state->failure;
             }
 
         private:
             /// Records @p what as the failure (if none is recorded yet), drops the connection and returns it
-            static std::unexpected<eastl::string> Fail(StreamState& state, const eastl::string& what) {
+            static std::unexpected<String> Fail(StreamState& state, const String& what) {
                 LockGuard lock(state.mutex);
                 if (state.phase != Phase::Failed) {
                     state.phase = Phase::Failed;
@@ -438,7 +438,7 @@ namespace BECore {
             }
 
             /// Waits in slices of Socket::kWakeInterval for the state `ready` (TCP and TLS done) or a failure, the cancel flag, a Close() and the deadline
-            static std::expected<void, eastl::string> WaitUntilReady(StreamState& state, const TlsConnectParams& params) {
+            static std::expected<void, String> WaitUntilReady(StreamState& state, const TlsConnectParams& params) {
                 UniqueLock lock(state.mutex);
                 for (;;) {
                     if (state.closing && state.phase != Phase::Failed && state.phase != Phase::Cancelled) {
@@ -473,7 +473,7 @@ namespace BECore {
                 return {};
             }
 
-            static void LogNegotiatedVersion(nw_connection_t connection, const eastl::string& target) {
+            static void LogNegotiatedVersion(nw_connection_t connection, const String& target) {
                 OsOwned<nw_protocol_definition_t> tlsDefinition(nw_protocol_copy_tls_definition());
                 OsOwned<nw_protocol_metadata_t> metadata(connection != nullptr ? nw_connection_copy_protocol_metadata(connection, tlsDefinition.get()) : nullptr);
                 if (!metadata || !nw_protocol_metadata_is_tls(metadata.get())) {
@@ -490,7 +490,7 @@ namespace BECore {
 
     }  // namespace
 
-    eastl::string_view DescribeNetworkFailure(NetworkErrorDomain domain, int code) {
+    StringView DescribeNetworkFailure(NetworkErrorDomain domain, int code) {
         switch (domain) {
             case NetworkErrorDomain::Posix:
                 switch (code) {
@@ -550,7 +550,7 @@ namespace BECore {
         return true;
     }
 
-    eastl::unique_ptr<ITlsStream> MakeTlsStream() {
+    UniquePtr<ITlsStream> MakeTlsStream() {
         return eastl::make_unique<NetworkFrameworkTlsStream>();
     }
 

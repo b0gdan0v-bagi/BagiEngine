@@ -4,7 +4,7 @@
 
 namespace BECore {
 
-    bool XmlResourceLoader::CanLoad(eastl::string_view extension) const {
+    bool XmlResourceLoader::CanLoad(StringView extension) const {
         return extension == ".xml";
     }
 

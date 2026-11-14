@@ -28,8 +28,8 @@ namespace BECore::Match3::Tests {
         }
 
         /// The gems of the sprites that are visible (scale above zero) and sit exactly on @p cell
-        eastl::vector<GemType> VisibleOn(const eastl::vector<GemSprite>& sprites, Cell cell) {
-            eastl::vector<GemType> gems;
+        Vector<GemType> VisibleOn(const Vector<GemSprite>& sprites, Cell cell) {
+            Vector<GemType> gems;
             for (const GemSprite& sprite : sprites) {
                 if (sprite.scale > 0.0f && SameVec(sprite.position, Vec2{static_cast<float>(cell.col), static_cast<float>(cell.row)})) {
                     gems.push_back(sprite.gem);
@@ -39,11 +39,11 @@ namespace BECore::Match3::Tests {
         }
 
         /// Every cell has exactly one visible sprite, of the gem the board holds there, and no visible sprite is anywhere else on the board
-        void ExpectSpritesShow(const eastl::vector<GemSprite>& sprites, const Match3Board& board, const char* when) {
+        void ExpectSpritesShow(const Vector<GemSprite>& sprites, const Match3Board& board, const char* when) {
             int expected = 0;
             for (int8_t row = 0; row < kBoardSize; ++row) {
                 for (int8_t col = 0; col < kBoardSize; ++col) {
-                    const eastl::vector<GemType> gems = VisibleOn(sprites, Cell{col, row});
+                    const Vector<GemType> gems = VisibleOn(sprites, Cell{col, row});
                     if (board.Get(col, row) == GemType::None) {
                         EXPECT_TRUE(gems.empty()) << when << " cell " << static_cast<int>(col) << "," << static_cast<int>(row);
                         continue;
@@ -377,7 +377,7 @@ namespace BECore::Match3::Tests {
 
     namespace {
 
-        using Cleared = eastl::vector<eastl::pair<Cell, GemType>>;
+        using Cleared = Vector<eastl::pair<Cell, GemType>>;
 
         /// A swap that clears in two rounds or more: the board before it and the model after it
         Swapped FindCascade() {

@@ -74,7 +74,7 @@ namespace BECore {
         bool OnMouseWheel(const SDL_MouseWheelEvent& event) override;
 
         /// Replaces the document with this markup (tests, generated screens). @return false when RmlUi refused it
-        bool SetMarkup(const eastl::string& markup);
+        bool SetMarkup(const String& markup);
 
         /// Loads the document of `source` again now, replacing the one on screen (the data model and the component's fields stay; the state of the old document's elements, such as hover, does not).
         /// The old document stays when the new one cannot be loaded. @return true when a new document is in place; false also for a component without a `source`
@@ -116,7 +116,7 @@ namespace BECore {
         class ActionListener final : public Rml::EventListener {
         public:
             void ProcessEvent(Rml::Event& event) override;
-            eastl::vector<PoolString> pending;
+            Vector<PoolString> pending;
         };
 
         [[nodiscard]] UILayoutContext MakeContext(float outputWidth, float outputHeight) const;
@@ -148,7 +148,7 @@ namespace BECore {
         bool _holdsRuntime = false;
         bool _extendWarned = false;  // the ignored `extendToOutput` of a Screen or World document was reported
 
-        eastl::vector<RmlUiFileStamp> _watched;
+        Vector<RmlUiFileStamp> _watched;
         double _lastPollTime = -std::numeric_limits<double>::infinity();
 
         float _originX = 0.0f;

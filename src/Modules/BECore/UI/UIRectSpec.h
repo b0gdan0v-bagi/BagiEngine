@@ -49,17 +49,17 @@ namespace BECore {
      */
     struct UIRectSpec {
         UIAnchor anchor = UIAnchor::TopLeft;
-        std::optional<Vec2> anchorMin;  ///< the corner of the parent box that the element's top left edge follows; unset is the shorthand's
-        std::optional<Vec2> anchorMax;  ///< the corner that its bottom right edge follows; equal to the min on an axis it is a point
-        std::optional<Vec2> pivot;      ///< the point of the element (fractions of its own size) that sits on the anchor point or centers in the span
-        UILength x;                     ///< the offset from the anchor point on X: units, or a percent of the parent's width
-        UILength y;                     ///< the same on Y, against the parent's height
+        Optional<Vec2> anchorMin;  ///< the corner of the parent box that the element's top left edge follows; unset is the shorthand's
+        Optional<Vec2> anchorMax;  ///< the corner that its bottom right edge follows; equal to the min on an axis it is a point
+        Optional<Vec2> pivot;      ///< the point of the element (fractions of its own size) that sits on the anchor point or centers in the span
+        UILength x;                ///< the offset from the anchor point on X: units, or a percent of the parent's width
+        UILength y;                ///< the same on Y, against the parent's height
         UILength width;
         UILength height;
-        std::optional<UILength> minWidth;
-        std::optional<UILength> maxWidth;
-        std::optional<UILength> minHeight;
-        std::optional<UILength> maxHeight;
+        Optional<UILength> minWidth;
+        Optional<UILength> maxWidth;
+        Optional<UILength> minHeight;
+        Optional<UILength> maxHeight;
         float aspectRatio = 0.0f;  ///< width / height; 0 is off
         UIAspectMode aspectMode = UIAspectMode::Fit;
         UIEdges margin;     ///< stretched axes only: the distance to each edge of the span between the anchors (the parent for Stretch)

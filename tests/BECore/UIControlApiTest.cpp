@@ -556,28 +556,28 @@ namespace BECore::Tests {
                 ++ups;
             }
 
-            eastl::vector<PoolString> _actions;
-            eastl::vector<PoolString> _values;
+            Vector<PoolString> _actions;
+            Vector<PoolString> _values;
         };
 
-        std::string Text(const eastl::string& text) {
+        std::string Text(const String& text) {
             return std::string(text.c_str(), text.size());
         }
 
-        std::string StringMember(const Json& object, eastl::string_view key) {
+        std::string StringMember(const Json& object, StringView key) {
             const auto value = GetJsonString(object, key);
             return value ? Text(*value) : std::string("<missing>");
         }
 
-        double NumberMember(const Json& object, eastl::string_view key) {
+        double NumberMember(const Json& object, StringView key) {
             return GetJsonNumber(object, key).value_or(-12345.0);
         }
 
-        bool BoolMember(const Json& object, eastl::string_view key) {
+        bool BoolMember(const Json& object, StringView key) {
             return GetJsonBool(object, key).value_or(false);
         }
 
-        const Json* Member(const Json& object, eastl::string_view key) {
+        const Json* Member(const Json& object, StringView key) {
             return FindJsonMember(object, key);
         }
 
@@ -649,7 +649,7 @@ namespace BECore::Tests {
                 request["params"] = params;
             }
             Json response;
-            _service.Post(DumpJson(request), [&response](eastl::string text) {
+            _service.Post(DumpJson(request), [&response](String text) {
                 auto parsed = ParseJson(text);
                 response = parsed ? std::move(*parsed) : Json();
             });

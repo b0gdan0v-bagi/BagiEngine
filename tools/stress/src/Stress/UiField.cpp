@@ -15,22 +15,22 @@ namespace BECore::Stress {
         constexpr uint32_t kKeyBraces = 3;  // "{#" before the key and "}" after it
         constexpr uint32_t kVariableVariants = 2;
 
-        constexpr eastl::array<eastl::string_view, kUiPoolSize> kEnglish = {"Hello, stress test",     "The quick brown fox",   "Frame time budget",    "Sixteen point six",
-                                                                            "Draw calls per frame",   "Glyphs from an atlas",  "Text layout cache",    "Sprites and tweens",
-                                                                            "Update and draw",        "Nothing is free",       "Measure, then change", "A label in a grid",
-                                                                            "Wide cells, short text", "Pack my box with jugs", "Jumps over the dog",   "How many fit in a frame"};
+        constexpr Array<StringView, kUiPoolSize> kEnglish = {"Hello, stress test",     "The quick brown fox",   "Frame time budget",    "Sixteen point six",
+                                                             "Draw calls per frame",   "Glyphs from an atlas",  "Text layout cache",    "Sprites and tweens",
+                                                             "Update and draw",        "Nothing is free",       "Measure, then change", "A label in a grid",
+                                                             "Wide cells, short text", "Pack my box with jugs", "Jumps over the dog",   "How many fit in a frame"};
 
-        constexpr eastl::array<eastl::string_view, kUiPoolSize> kRussian = {"Привет, нагрузка",         "Съешь ещё мягких булок", "Бюджет времени кадра", "Шестнадцать и шесть",
-                                                                            "Вызовы отрисовки за кадр", "Глифы из атласа",        "Кеш раскладки текста", "Спрайты и твины",
-                                                                            "Обновление и отрисовка",   "Ничто не бесплатно",     "Сначала измерь",       "Подпись в сетке",
-                                                                            "Широкие ячейки",           "Эй, жлоб, где туз?",     "Прыгает через пса",    "Сколько влезет в кадр"};
+        constexpr Array<StringView, kUiPoolSize> kRussian = {"Привет, нагрузка",         "Съешь ещё мягких булок", "Бюджет времени кадра", "Шестнадцать и шесть",
+                                                             "Вызовы отрисовки за кадр", "Глифы из атласа",        "Кеш раскладки текста", "Спрайты и твины",
+                                                             "Обновление и отрисовка",   "Ничто не бесплатно",     "Сначала измерь",       "Подпись в сетке",
+                                                             "Широкие ячейки",           "Эй, жлоб, где туз?",     "Прыгает через пса",    "Сколько влезет в кадр"};
 
-        constexpr eastl::array<eastl::string_view, kUiPoolSize> kKeys = {
-            "{#stress.label.0}", "{#stress.label.1}", "{#stress.label.2}",  "{#stress.label.3}",  "{#stress.label.4}",  "{#stress.label.5}",  "{#stress.label.6}",  "{#stress.label.7}",
-            "{#stress.label.8}", "{#stress.label.9}", "{#stress.label.10}", "{#stress.label.11}", "{#stress.label.12}", "{#stress.label.13}", "{#stress.label.14}", "{#stress.label.15}"};
+        constexpr Array<StringView, kUiPoolSize> kKeys = {"{#stress.label.0}",  "{#stress.label.1}",  "{#stress.label.2}",  "{#stress.label.3}", "{#stress.label.4}",  "{#stress.label.5}",
+                                                          "{#stress.label.6}",  "{#stress.label.7}",  "{#stress.label.8}",  "{#stress.label.9}", "{#stress.label.10}", "{#stress.label.11}",
+                                                          "{#stress.label.12}", "{#stress.label.13}", "{#stress.label.14}", "{#stress.label.15}"};
 
-        constexpr eastl::array<eastl::string_view, kVariableVariants> kEnglishVariable = {"Objects: {count}", "Last label: {last}"};
-        constexpr eastl::array<eastl::string_view, kVariableVariants> kRussianVariable = {"Объектов: {count}", "Последняя: {last}"};
+        constexpr Array<StringView, kVariableVariants> kEnglishVariable = {"Objects: {count}", "Last label: {last}"};
+        constexpr Array<StringView, kVariableVariants> kRussianVariable = {"Объектов: {count}", "Последняя: {last}"};
 
         uint32_t PoolIndex(uint32_t index, uint64_t salt) {
             return static_cast<uint32_t>(Hash(index, salt) % kUiPoolSize);
@@ -89,7 +89,7 @@ namespace BECore::Stress {
         return IsEven(index) ? UiLabelKind::English : UiLabelKind::Russian;
     }
 
-    eastl::string_view TextOf(uint32_t index) {
+    StringView TextOf(uint32_t index) {
         switch (KindOf(index)) {
             case UiLabelKind::Key:
                 return kKeys[KeyIndex(index)];
@@ -103,8 +103,8 @@ namespace BECore::Stress {
         return kEnglish[0];
     }
 
-    eastl::string_view KeyOf(uint32_t index) {
-        const eastl::string_view text = kKeys[KeyIndex(index)];
+    StringView KeyOf(uint32_t index) {
+        const StringView text = kKeys[KeyIndex(index)];
         return text.substr(kKeyBraces - 1, text.size() - kKeyBraces);  // between "{#" and "}"
     }
 

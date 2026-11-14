@@ -123,7 +123,7 @@ namespace BECore {
             EaseType ease = EaseType::Linear;
             eastl::function<void(float)> apply;  // a tween clip: the eased progress in, the value out
             eastl::function<void()> callback;    // a callback clip
-            eastl::unique_ptr<Timeline> sub;     // a sub-timeline clip
+            UniquePtr<Timeline> sub;             // a sub-timeline clip
             bool done = false;                   // the final call has been made in this iteration
         };
 
@@ -148,7 +148,7 @@ namespace BECore {
         }
 
         eastl::function<bool()> _shouldStop;  // asked after every clip; true ends the `Evaluate` in progress
-        eastl::vector<Clip> _clips;           // in order of start, equal starts in insertion order
+        Vector<Clip> _clips;                  // in order of start, equal starts in insertion order
         size_t _cursor = 0;                   // clips before it are done in this iteration
         float _end = 0.0f;                    // the end of the latest clip: the duration of one iteration
         float _lastStart = 0.0f;              // the start of the last clip added: where `Join` puts the next one

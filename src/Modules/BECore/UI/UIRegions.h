@@ -1,7 +1,5 @@
 #pragma once
 
-#include <BECore/Math/Rect.h>
-
 namespace BECore {
 
     /**
@@ -47,7 +45,7 @@ namespace BECore {
         [[nodiscard]] bool operator==(const UIRegionSet& other) const;
 
     private:
-        eastl::vector<Entry> _entries;
+        Vector<Entry> _entries;
     };
 
 }  // namespace BECore

@@ -71,8 +71,8 @@ namespace BECore {
         void Insert(const Entry& entry);
         void ApplyDeferredChanges();
 
-        eastl::vector<Entry> _entries;
-        eastl::vector<Entry> _registeredDuringDispatch;
+        Vector<Entry> _entries;
+        Vector<Entry> _registeredDuringDispatch;
         int _dispatchDepth = 0;
     };
 

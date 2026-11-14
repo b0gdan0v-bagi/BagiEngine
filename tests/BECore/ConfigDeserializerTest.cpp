@@ -9,7 +9,6 @@
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
 #include <Generated/ConfigDeserializerTest.gen.hpp>
-#include <fstream>
 
 namespace BECore::Tests {
 
@@ -17,7 +16,7 @@ namespace BECore::Tests {
 
         constexpr const char* kMountPoint = "BagiConfigDeserializerTest";
         constexpr int32_t kProbeWidth = 640;
-        constexpr eastl::string_view kProbeTitle = "probe";
+        constexpr StringView kProbeTitle = "probe";
 
         DeserializerProbe MakeProbe() {
             DeserializerProbe probe;
@@ -70,7 +69,7 @@ namespace BECore::Tests {
             ASSERT_TRUE(serializer.SaveToFile(_dir / fileName));
         }
 
-        static eastl::string VirtualPath(const char* fileName) {
+        static String VirtualPath(const char* fileName) {
             return Format("{}/{}", kMountPoint, fileName);
         }
 
@@ -81,24 +80,24 @@ namespace BECore::Tests {
         auto deserializer = CoreManager::GetConfigManager().CreateDeserializer("ApplicationConfig"_intern);
         ASSERT_NE(deserializer, nullptr);
 
-        eastl::string path;
+        String path;
         EXPECT_TRUE(deserializer->ReadAttribute("path", path));
         EXPECT_FALSE(path.empty());
         EXPECT_FALSE(deserializer->HasErrors());
     }
 
     TEST_F(ConfigDeserializerTest, CreateDeserializerStringViewOverloadReadsKnownConfig) {
-        auto deserializer = CoreManager::GetConfigManager().CreateDeserializer(eastl::string_view("ApplicationConfig"));
+        auto deserializer = CoreManager::GetConfigManager().CreateDeserializer(StringView("ApplicationConfig"));
         ASSERT_NE(deserializer, nullptr);
 
-        eastl::string mode;
+        String mode;
         EXPECT_TRUE(deserializer->ReadAttribute("mode", mode));
         EXPECT_FALSE(mode.empty());
     }
 
     TEST_F(ConfigDeserializerTest, CreateDeserializerOfUnknownConfigIsNull) {
         EXPECT_EQ(CoreManager::GetConfigManager().CreateDeserializer("NoSuchConfig"_intern), nullptr);
-        EXPECT_EQ(CoreManager::GetConfigManager().CreateDeserializer(eastl::string_view("NoSuchConfig")), nullptr);
+        EXPECT_EQ(CoreManager::GetConfigManager().CreateDeserializer(StringView("NoSuchConfig")), nullptr);
     }
 
     TEST_F(ConfigDeserializerTest, OpenDeserializerReadsXmlFile) {
@@ -134,7 +133,7 @@ namespace BECore::Tests {
 
         auto opened = OpenDeserializer(VirtualPath("probe.json"));
         ASSERT_FALSE(opened.has_value());
-        EXPECT_NE(opened.error().find(".json"), eastl::string::npos) << opened.error().c_str();
+        EXPECT_NE(opened.error().find(".json"), String::npos) << opened.error().c_str();
     }
 
     TEST_F(ConfigDeserializerTest, OpenDeserializerReportsMissingFiles) {

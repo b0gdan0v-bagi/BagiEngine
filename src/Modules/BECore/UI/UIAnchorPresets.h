@@ -34,7 +34,7 @@ namespace BECore {
         static constexpr uint8_t kStretch = 3;  ///< the row or column index that stretches
 
         /// All sixteen, row by row: the order the grid is drawn in
-        [[nodiscard]] static eastl::span<const UIAnchorPreset> All();
+        [[nodiscard]] static Span<const UIAnchorPreset> All();
 
         /// @return the preset at @p row and @p column (each 0..3)
         [[nodiscard]] static const UIAnchorPreset& At(size_t row, size_t column);

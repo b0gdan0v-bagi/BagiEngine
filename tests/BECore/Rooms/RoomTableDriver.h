@@ -4,10 +4,8 @@
 #include "WireJudge.h"
 
 #include <RoomServer/DemoCardGame.h>
-#include <algorithm>
 #include <memory>
 #include <set>
-#include <string>
 #include <vector>
 
 namespace BECore::Tests {
@@ -22,7 +20,7 @@ namespace BECore::Tests {
     using Clients = std::vector<std::unique_ptr<RoomSocketClient>>;
 
     /// The last message of @p type the client received, or null
-    inline const ReceivedMessage* LastOf(const RoomSocketClient& client, eastl::string_view type) {
+    inline const ReceivedMessage* LastOf(const RoomSocketClient& client, StringView type) {
         const auto& received = client.Received();
         for (size_t i = received.size(); i > 0; --i) {
             if (received[i - 1].type == type) {
@@ -32,7 +30,7 @@ namespace BECore::Tests {
         return nullptr;
     }
 
-    inline size_t CountOf(const RoomSocketClient& client, eastl::string_view type) {
+    inline size_t CountOf(const RoomSocketClient& client, StringView type) {
         return static_cast<size_t>(std::count_if(client.Received().begin(), client.Received().end(), [&](const ReceivedMessage& message) { return message.type == type; }));
     }
 
@@ -153,9 +151,9 @@ namespace BECore::Tests {
     }
 
     /// Frames of @p count identical text messages in one buffer
-    inline eastl::vector<uint8_t> RepeatText(const std::string& text, int count) {
-        const auto frame = EncodeTextFrame(eastl::string_view(text.data(), text.size()), kClientMask);
-        eastl::vector<uint8_t> batch;
+    inline Vector<uint8_t> RepeatText(const std::string& text, int count) {
+        const auto frame = EncodeTextFrame(FromStd(text), kClientMask);
+        Vector<uint8_t> batch;
         for (int i = 0; i < count; ++i) {
             batch.insert(batch.end(), frame.data(), frame.data() + frame.size());
         }
@@ -163,7 +161,7 @@ namespace BECore::Tests {
     }
 
     /// Reads frames until the server's close frame; nullopt when none comes
-    inline std::optional<ServerFrame> ReadUntilClose(WebSocketTestClient& client) {
+    inline Optional<ServerFrame> ReadUntilClose(WebSocketTestClient& client) {
         for (;;) {
             const auto frame = client.WaitForFrame();
             if (!frame) {
@@ -177,13 +175,13 @@ namespace BECore::Tests {
 
     /// A room of @p game with @p humans humans, each on its own socket and each with `joined` and `lobby` read; the first is the host.
     /// @p options go to the game in `create_room`. Not started
-    inline void OpenTable(uint16_t port, eastl::string_view game, int humans, Clients& out, const Json& options = Json::object()) {
+    inline void OpenTable(uint16_t port, StringView game, int humans, Clients& out, const Json& options = Json::object()) {
         for (int i = 0; i < humans; ++i) {
             auto client = RoomSocketClient::Connect(port);
             ASSERT_TRUE(client.has_value());
-            const eastl::string name = Format("Player{}", i);
+            const String name = Format("Player{}", i);
             if (i == 0) {
-                client->Send(CreateRoomMessage{eastl::string(game), name, options});
+                client->Send(CreateRoomMessage{String(game), name, options});
             } else {
                 client->JoinByName(out.front()->roomCode, name);
             }

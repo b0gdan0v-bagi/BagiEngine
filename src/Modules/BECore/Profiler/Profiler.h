@@ -82,9 +82,9 @@ namespace BECore {
         [[nodiscard]] static ChromeTraceBackend& GetChromeTrace();
 
         /// Installs the backend of @p settings and remembers its trace file; the reason when the backend could not start
-        static std::expected<void, eastl::string> Start(const ProfilerSettings& settings);
+        static std::expected<void, String> Start(const ProfilerSettings& settings);
         /// Writes the trace file of Start, when it named one, and uninstalls the backend. Call it when every other thread has ended
-        static std::expected<void, eastl::string> Finish();
+        static std::expected<void, String> Finish();
 
         static constexpr uint32_t kMaxThreads = 256;  // threads beyond it are recorded without a name
         static constexpr uint32_t kNoSortIndex = 0xFFFFFFFFu;

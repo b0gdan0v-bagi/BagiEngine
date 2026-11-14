@@ -414,7 +414,7 @@ namespace BECore {
 
     bool VulkanRendererBackend::ResolveScissor(VkRect2D& scissor) const {
         scissor = VkRect2D{{0, 0}, _currentExtent};
-        const std::optional<Rect> clip = GetClipRect();
+        const Optional<Rect> clip = GetClipRect();
         if (!clip) {
             return true;
         }
@@ -514,7 +514,7 @@ namespace BECore {
         return white ? white->GetDescriptorSet() : VK_NULL_HANDLE;
     }
 
-    void VulkanRendererBackend::DrawGeometry(ITexture* texture, eastl::span<const GeometryVertex> vertices, eastl::span<const int> indices, float translateX, float translateY) {
+    void VulkanRendererBackend::DrawGeometry(ITexture* texture, Span<const GeometryVertex> vertices, Span<const int> indices, float translateX, float translateY) {
         if (!_inSwapchainPass && !_inOffscreenPass) {
             return;
         }

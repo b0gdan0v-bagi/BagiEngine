@@ -96,7 +96,7 @@ namespace BECore::Tests {
             return nullptr;
         }
 
-        void ExpectNodes(const eastl::vector<SceneNode*>& actual, std::initializer_list<const SceneNode*> expected) {
+        void ExpectNodes(const Vector<SceneNode*>& actual, std::initializer_list<const SceneNode*> expected) {
             ASSERT_EQ(actual.size(), expected.size());
             size_t index = 0;
             for (const SceneNode* node : expected) {
@@ -172,12 +172,12 @@ namespace BECore::Tests {
         }
 
         /// The nodes of "Main" that the box touches
-        const eastl::vector<SceneNode*>& PickBox(float x0, float y0, float x1, float y1) {
+        const Vector<SceneNode*>& PickBox(float x0, float y0, float x1, float y1) {
             ScenePick::PickInRect(GetScene("Main"), x0, y0, x1, y1, _picked);
             return _picked;
         }
 
-        eastl::vector<SceneNode*> _picked;
+        Vector<SceneNode*> _picked;
 
         IntrusivePtr<RecordingRenderer> _renderer;
         IntrusivePtrAtomic<SceneManager> _manager;
@@ -324,8 +324,8 @@ namespace BECore::Tests {
     }
 
     TEST_F(ScenePickTest, TheCornersOfTheBoxMayComeInAnyOrder) {
-        const eastl::vector<SceneNode*> forward = PickBox(60.0f, 60.0f, 70.0f, 70.0f);
-        const eastl::vector<SceneNode*> backward = PickBox(70.0f, 70.0f, 60.0f, 60.0f);
+        const Vector<SceneNode*> forward = PickBox(60.0f, 60.0f, 70.0f, 70.0f);
+        const Vector<SceneNode*> backward = PickBox(70.0f, 70.0f, 60.0f, 60.0f);
 
         EXPECT_FALSE(forward.empty());
         EXPECT_TRUE(forward == backward);
@@ -336,7 +336,7 @@ namespace BECore::Tests {
         for (SceneNode* node : PickBox(285.0f, 85.0f, 305.0f, 115.0f)) {
             EXPECT_NE(node, &Node("Main", "Diamond"));
         }
-        const eastl::vector<SceneNode*>& touching = PickBox(285.0f, 120.0f, 305.0f, 140.0f);
+        const Vector<SceneNode*>& touching = PickBox(285.0f, 120.0f, 305.0f, 140.0f);
         EXPECT_NE(eastl::find(touching.begin(), touching.end(), &Node("Main", "Diamond")), touching.end());
     }
 
@@ -363,7 +363,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(ScenePickTest, ABoxSkipsANodeWithATransformOnlyAndAHiddenCanvas) {
-        const eastl::vector<SceneNode*>& plain = PickBox(10.0f, 510.0f, 20.0f, 520.0f);
+        const Vector<SceneNode*>& plain = PickBox(10.0f, 510.0f, 20.0f, 520.0f);
         EXPECT_EQ(eastl::find(plain.begin(), plain.end(), &Node("Main", "Plain")), plain.end());
 
         Node("Main", "Hud").SetEditorFlags(EditorFlags::Hidden);
@@ -372,7 +372,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(ScenePickTest, ANodeWithBothAQuadAndACanvasIsListedOnce) {
-        const eastl::vector<SceneNode*>& both = PickBox(610.0f, 410.0f, 620.0f, 420.0f);
+        const Vector<SceneNode*>& both = PickBox(610.0f, 410.0f, 620.0f, 420.0f);
 
         EXPECT_EQ(eastl::count(both.begin(), both.end(), &Node("Main", "Both")), 1);
     }
@@ -380,7 +380,7 @@ namespace BECore::Tests {
     TEST_F(ScenePickTest, TheBoxIsInOutputPixelsOfTheViewOfTheLastDraw) {
         Draw("Fit");
         Scene& fit = GetScene("Fit");
-        eastl::vector<SceneNode*> picked;
+        Vector<SceneNode*> picked;
 
         ScenePick::PickInRect(fit, 0.0f, 0.0f, 90.0f, 190.0f, picked);
         EXPECT_TRUE(picked.empty());  // the box lies left of and above the node's output rect 100..300 x 200..400

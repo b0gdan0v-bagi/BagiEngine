@@ -71,14 +71,14 @@ namespace BECore::Fuzz {
             return static_cast<ConnectionId>(number) + 1;
         }
 
-        inline void AppendOperation(eastl::vector<uint8_t>& bytes, Op op, uint8_t connection, uint16_t length, eastl::string_view text = {}) {
+        inline void AppendOperation(Vector<uint8_t>& bytes, Op op, uint8_t connection, uint16_t length, StringView text = {}) {
             bytes.push_back(static_cast<uint8_t>(static_cast<uint8_t>(op) | (connection << kConnectionShift)));
             bytes.push_back(static_cast<uint8_t>(length & 0xFF));
             bytes.push_back(static_cast<uint8_t>(length >> 8));
             bytes.insert(bytes.end(), text.begin(), text.end());
         }
 
-        inline void AppendMessage(eastl::vector<uint8_t>& bytes, uint8_t connection, eastl::string_view text) {
+        inline void AppendMessage(Vector<uint8_t>& bytes, uint8_t connection, StringView text) {
             AppendOperation(bytes, Op::Message, connection, static_cast<uint16_t>(text.size()), text);
         }
 

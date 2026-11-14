@@ -14,17 +14,17 @@ namespace BECore::Tests {
     namespace {
 
         const PoolString kLoggerConfig = "LoggerConfig"_intern;
-        constexpr eastl::string_view kSinkTypePath = "sink/@type";
+        constexpr StringView kSinkTypePath = "sink/@type";
 
         // The key the Config Editor gives the `type` attribute of the first sink: "<nodePath>@<attrName>"
-        constexpr eastl::string_view kFirstSinkTypeKey = "root/sinks/sink[0]@type";
+        constexpr StringView kFirstSinkTypeKey = "root/sinks/sink[0]@type";
 
         constexpr int kOutputPriority = 7;
         constexpr int kFilePriority = 100;
 
         /// The `<sink>` elements of a logger config document, in file order
-        eastl::vector<pugi::xml_node> SinkElements(const XmlDocument& document) {
-            eastl::vector<pugi::xml_node> sinks;
+        Vector<pugi::xml_node> SinkElements(const XmlDocument& document) {
+            Vector<pugi::xml_node> sinks;
             const XmlNode sinksNode = document.GetRoot().GetChild("sinks");
             for (const XmlNode child : sinksNode.Children()) {
                 if (child.Name() == "sink") {
@@ -38,20 +38,20 @@ namespace BECore::Tests {
         size_t CountEnabledSinks(const XmlDocument& document) {
             size_t count = 0;
             for (const pugi::xml_node& sink : SinkElements(document)) {
-                if (eastl::string_view{sink.attribute("enabled").as_string("true")} != "false") {
+                if (StringView{sink.attribute("enabled").as_string("true")} != "false") {
                     ++count;
                 }
             }
             return count;
         }
 
-        bool Contains(const eastl::vector<eastl::string>& options, eastl::string_view value) {
+        bool Contains(const Vector<String>& options, StringView value) {
             return eastl::find(options.begin(), options.end(), value) != options.end();
         }
 
-        eastl::string TypeNameOf(const ILogSink& sink) {
-            const eastl::string_view name = sink.GetTypeMeta().typeName;
-            return eastl::string{name.data(), name.size()};
+        String TypeNameOf(const ILogSink& sink) {
+            const StringView name = sink.GetTypeMeta().typeName;
+            return String{name.data(), name.size()};
         }
 
     }  // namespace
@@ -101,7 +101,7 @@ namespace BECore::Tests {
         bool LoadTemplate(XmlDocument& document) const {
             const std::string firstLog = FirstLogPath().generic_string();
             const std::string engineLog = EngineLogPath().generic_string();
-            const eastl::string xml = Format(R"(<?xml version="1.0" encoding="UTF-8"?>
+            const String xml = Format(R"(<?xml version="1.0" encoding="UTF-8"?>
 <root>
     <!-- Logger Sinks Configuration -->
     <sinks>
@@ -116,23 +116,23 @@ namespace BECore::Tests {
     </sinks>
 </root>
 )",
-                                             kOutputPriority, firstLog, kFilePriority, engineLog);
-            return document.LoadFromString(eastl::string_view{xml.c_str(), xml.size()});
+                                      kOutputPriority, firstLog, kFilePriority, engineLog);
+            return document.LoadFromString(StringView{xml.c_str(), xml.size()});
         }
 
         /// Plays the Save button on a fresh copy of the config: stages @p type as the `type` of the first sink, applies it to
         /// the DOM, saves the file and reads it back into @p saved. @p edited receives the document as it was saved.
-        bool SaveEditedType(eastl::string_view type, XmlDocument& edited, XmlDeserializer& saved) const {
+        bool SaveEditedType(StringView type, XmlDocument& edited, XmlDeserializer& saved) const {
             if (!LoadTemplate(edited)) {
                 return false;
             }
-            const eastl::vector<pugi::xml_node> sinks = SinkElements(edited);
+            const Vector<pugi::xml_node> sinks = SinkElements(edited);
             if (sinks.empty()) {
                 return false;
             }
 
             StagedChanges staged;
-            staged.Set(eastl::string{kFirstSinkTypeKey.data(), kFirstSinkTypeKey.size()}, sinks.front().attribute("type"), type);
+            staged.Set(String{kFirstSinkTypeKey.data(), kFirstSinkTypeKey.size()}, sinks.front().attribute("type"), type);
             staged.ApplyTo(edited.GetRoot().GetPugiNode());
 
             return edited.SaveToFile(SavedPath()) && saved.LoadFromFile(SavedPath());
@@ -158,12 +158,12 @@ namespace BECore::Tests {
         const size_t enabledSinks = CountEnabledSinks(original);
         ASSERT_EQ(enabledSinks, 2u);
 
-        for (const eastl::string& option : offered.options) {
+        for (const String& option : offered.options) {
             SCOPED_TRACE(option.c_str());
 
             XmlDocument edited;
             XmlDeserializer saved;
-            ASSERT_TRUE(SaveEditedType(eastl::string_view{option.c_str(), option.size()}, edited, saved));
+            ASSERT_TRUE(SaveEditedType(StringView{option.c_str(), option.size()}, edited, saved));
 
             // The manager goes out of scope with the iteration: its sinks subscribe to the global LogEvent
             const auto manager = New<LoggerManager>();
@@ -189,26 +189,26 @@ namespace BECore::Tests {
 
         XmlDocument original;
         ASSERT_TRUE(LoadTemplate(original));
-        const eastl::vector<pugi::xml_node> originalSinks = SinkElements(original);
+        const Vector<pugi::xml_node> originalSinks = SinkElements(original);
         ASSERT_EQ(originalSinks.size(), 3u);
 
-        for (const eastl::string& option : offered.options) {
+        for (const String& option : offered.options) {
             SCOPED_TRACE(option.c_str());
 
             XmlDocument edited;
             XmlDeserializer saved;
-            ASSERT_TRUE(SaveEditedType(eastl::string_view{option.c_str(), option.size()}, edited, saved));
+            ASSERT_TRUE(SaveEditedType(StringView{option.c_str(), option.size()}, edited, saved));
 
             // In the file: only the `type` of the first sink differs from the copy that was edited
             XmlDocument reloaded;
             ASSERT_TRUE(reloaded.LoadFromFile(SavedPath()));
-            const eastl::vector<pugi::xml_node> reloadedSinks = SinkElements(reloaded);
+            const Vector<pugi::xml_node> reloadedSinks = SinkElements(reloaded);
             ASSERT_EQ(reloadedSinks.size(), originalSinks.size());
             for (size_t i = 0; i < originalSinks.size(); ++i) {
                 size_t attributeCount = 0;
                 for (pugi::xml_attribute attr = originalSinks[i].first_attribute(); attr; attr = attr.next_attribute()) {
                     ++attributeCount;
-                    if (i == 0 && eastl::string_view{attr.name()} == "type") {
+                    if (i == 0 && StringView{attr.name()} == "type") {
                         EXPECT_STREQ(reloadedSinks[i].attribute("type").value(), option.c_str());
                     } else {
                         EXPECT_STREQ(reloadedSinks[i].attribute(attr.name()).value(), attr.value()) << "sink " << i << " attribute " << attr.name();

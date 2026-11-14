@@ -14,7 +14,7 @@ namespace BECore {
             _buckets[idx] = entry;
         }
 
-        T* Find(uint64_t hash, eastl::string_view str) const noexcept {
+        T* Find(uint64_t hash, StringView str) const noexcept {
             const uint32_t idx = static_cast<uint32_t>(hash & (BucketCount - 1));
             for (T* e = _buckets[idx]; e; e = e->nextEntry) {
                 if (e->hash == hash && e->size == str.size()) {
@@ -34,9 +34,9 @@ namespace BECore {
         struct Page {
             static constexpr size_t Size = 128 * 1024;
             alignas(uint64_t) char data[Size];
-            eastl::unique_ptr<Page> prev;
+            UniquePtr<Page> prev;
         };
-        eastl::unique_ptr<Page> _currentPage;
+        UniquePtr<Page> _currentPage;
         size_t _offset = 0;
 
     public:
@@ -49,22 +49,22 @@ namespace BECore {
             _currentPage = eastl::make_unique<Page>();
         }
 
-        const Entry* Find(eastl::string_view str) {
+        const Entry* Find(StringView str) {
             if (str.empty()) {
                 return &Details::g_EmptyEntryStore.header;
             }
 
-            const uint64_t hash = String::GetHash(str);
+            const uint64_t hash = StringUtils::GetHash(str);
             SharedLock lock(_mutex);
             return _table.Find(hash, str);
         }
 
-        const Entry* GetOrAdd(eastl::string_view str) {
+        const Entry* GetOrAdd(StringView str) {
             if (str.empty()) {
                 return &Details::g_EmptyEntryStore.header;
             }
 
-            const uint64_t hash = String::GetHash(str);
+            const uint64_t hash = StringUtils::GetHash(str);
 
             // 1. Поиск под Shared Lock
             {
@@ -103,11 +103,11 @@ namespace BECore {
         }
     };
 
-    PoolString PoolString::Intern(eastl::string_view str) {
+    PoolString PoolString::Intern(StringView str) {
         return PoolString(Storage::Instance().GetOrAdd(str));
     }
 
-    std::optional<PoolString> PoolString::Find(eastl::string_view str) {
+    Optional<PoolString> PoolString::Find(StringView str) {
         if (const Entry* entry = Storage::Instance().Find(str)) {
             return PoolString(entry);
         }

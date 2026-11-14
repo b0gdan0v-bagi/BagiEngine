@@ -430,9 +430,9 @@ namespace BECore::Tests {
             return count;
         }
 
-        size_t CountText(const eastl::string& text, const char* needle) {
+        size_t CountText(const String& text, const char* needle) {
             size_t count = 0;
-            for (size_t at = text.find(needle); at != eastl::string::npos; at = text.find(needle, at + 1)) {
+            for (size_t at = text.find(needle); at != String::npos; at = text.find(needle, at + 1)) {
                 ++count;
             }
             return count;
@@ -543,7 +543,7 @@ namespace BECore::Tests {
         Profiler::SetRingEnabled(true);
         const size_t before = CountInRing(kSwitchedSite);
         {
-            std::optional<ProfileZone> zone;
+            Optional<ProfileZone> zone;
             zone.emplace(kSwitchedSite);
             Profiler::SetRingEnabled(false);
             zone.reset();  // ends on the fan-out it began on, not on the bare recorder
@@ -559,7 +559,7 @@ namespace BECore::Tests {
         Profiler::SetBackend(&recorder);
         const size_t before = CountInRing(kPrimaryOnlySite);
         {
-            std::optional<ProfileZone> zone;
+            Optional<ProfileZone> zone;
             zone.emplace(kPrimaryOnlySite);
             Profiler::SetRingEnabled(true);
             zone.reset();
@@ -578,7 +578,7 @@ namespace BECore::Tests {
         const std::filesystem::path folder = TestTempDirectory("profiler_ring");
         std::filesystem::create_directories(folder);
         {
-            const ScopedTrace trace(eastl::string((folder / "trace.json").string().c_str()));
+            const ScopedTrace trace(String((folder / "trace.json").string().c_str()));
             EXPECT_EQ(Profiler::GetPrimaryBackend(), &Profiler::GetChromeTrace());
             EXPECT_TRUE(Profiler::IsRingEnabled());
         }

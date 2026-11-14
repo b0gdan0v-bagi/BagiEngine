@@ -1,6 +1,5 @@
 #include <BECore/Control/Json.h>
 #include <Stress/RampController.h>
-#include <functional>
 #include <gtest/gtest.h>
 
 /**
@@ -17,13 +16,13 @@ namespace BECore::Stress::Tests {
 
         struct RampRun {
             RampResult result;
-            eastl::vector<uint32_t> counts;  // the count shown for every frame fed, in order
+            Vector<uint32_t> counts;  // the count shown for every frame fed, in order
         };
 
         /// Feeds the controller the cost of every frame it asks for until it is done (or @p frameLimit frames went)
         RampRun Drive(RampController& controller, const CostOf& cost, uint32_t frameLimit = 100000) {
             RampRun run;
-            eastl::hash_map<uint32_t, uint32_t> visits;
+            HashMap<uint32_t, uint32_t> visits;
             uint32_t shown = 0;
             for (uint32_t frame = 0; frame < frameLimit && !controller.IsDone(); ++frame) {
                 const uint32_t count = controller.GetCount();
@@ -53,7 +52,7 @@ namespace BECore::Stress::Tests {
         }
 
         /// One step of a controller shown @p count: the settle frames at @p settleMs and the measured ones from @p window
-        RampNext RunStep(RampController& controller, double settleMs, const eastl::array<double, kMeasureFrames>& window) {
+        RampNext RunStep(RampController& controller, double settleMs, const Array<double, kMeasureFrames>& window) {
             RampNext next;
             for (uint32_t i = 0; i < kSettleFrames; ++i) {
                 next = controller.OnFrame(settleMs);
@@ -64,8 +63,8 @@ namespace BECore::Stress::Tests {
             return next;
         }
 
-        eastl::array<double, kMeasureFrames> Window(double ms, uint32_t outliers) {
-            eastl::array<double, kMeasureFrames> window;
+        Array<double, kMeasureFrames> Window(double ms, uint32_t outliers) {
+            Array<double, kMeasureFrames> window;
             window.fill(ms);
             for (uint32_t i = 0; i < outliers; ++i) {
                 window[kMeasureFrames - 1 - i * 3] = 100.0;
@@ -114,13 +113,13 @@ namespace BECore::Stress::Tests {
 
     TEST(StressRampTest, TheCountGrowsByAHalfAndAtLeastOne) {
         RampController controller(StressMeasure::Work);
-        eastl::vector<uint32_t> shown;
+        Vector<uint32_t> shown;
         shown.push_back(controller.GetCount());
         for (int step = 0; step < 4; ++step) {
             const RampNext next = RunStep(controller, 1.0, Window(1.0, 0));
             shown.push_back(next.count);
         }
-        const eastl::vector<uint32_t> expected = {100, 150, 225, 337, 505};
+        const Vector<uint32_t> expected = {100, 150, 225, 337, 505};
         EXPECT_EQ(shown, expected);
     }
 
@@ -259,7 +258,7 @@ namespace BECore::Stress::Tests {
         context.atlases = 4;
         context.manualClock = true;
 
-        const eastl::string line = FormatRampLine(result, StressMeasure::Cpu, context);
+        const String line = FormatRampLine(result, StressMeasure::Cpu, context);
 
         const auto parsed = ParseJson(line);
         ASSERT_TRUE(parsed.has_value()) << line.c_str();
@@ -268,21 +267,21 @@ namespace BECore::Stress::Tests {
         EXPECT_EQ(GetJsonString(*parsed, "measure").value_or(""), "cpu");
         EXPECT_EQ(GetJsonInt(*parsed, "objectsAt60fps").value_or(0), 4321);
         EXPECT_DOUBLE_EQ(GetJsonNumber(*parsed, "budgetMs").value_or(0.0), 16.6);
-        EXPECT_EQ(GetJsonBool(*parsed, "capped"), std::optional(false));
-        EXPECT_EQ(GetJsonBool(*parsed, "aborted"), std::optional(false));
-        EXPECT_EQ(GetJsonBool(*parsed, "verified"), std::optional(true));
+        EXPECT_EQ(GetJsonBool(*parsed, "capped"), Optional(false));
+        EXPECT_EQ(GetJsonBool(*parsed, "aborted"), Optional(false));
+        EXPECT_EQ(GetJsonBool(*parsed, "verified"), Optional(true));
         EXPECT_EQ(GetJsonInt(*parsed, "steps").value_or(0), 17);
         EXPECT_EQ(GetJsonInt(*parsed, "settleFrames").value_or(0), kSettleFrames);
         EXPECT_EQ(GetJsonInt(*parsed, "measureFrames").value_or(0), kMeasureFrames);
-        EXPECT_EQ(GetJsonBool(*parsed, "manualClock"), std::optional(true));
+        EXPECT_EQ(GetJsonBool(*parsed, "manualClock"), Optional(true));
 
         // The keys are in byte order, one object on one line starting with a brace
         EXPECT_EQ(line.front(), '{');
-        EXPECT_EQ(line.find('\n'), eastl::string::npos);
-        eastl::vector<eastl::string> keys;
-        for (size_t at = line.find('"'); at != eastl::string::npos;) {
+        EXPECT_EQ(line.find('\n'), String::npos);
+        Vector<String> keys;
+        for (size_t at = line.find('"'); at != String::npos;) {
             const size_t end = line.find('"', at + 1);
-            if (end != eastl::string::npos && end + 1 < line.size() && line[end + 1] == ':') {
+            if (end != String::npos && end + 1 < line.size() && line[end + 1] == ':') {
                 keys.push_back(line.substr(at + 1, end - at - 1));
             }
             at = line.find('"', end + 1);

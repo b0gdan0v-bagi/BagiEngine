@@ -7,13 +7,13 @@ namespace BECore {
 
     namespace {
 
-        constexpr eastl::string_view kLogName = "Room server";
-        constexpr eastl::string_view kBusyMessage = "the server is full, try again later";
-        constexpr eastl::string_view kStoppingReason = "server_stopping";
+        constexpr StringView kLogName = "Room server";
+        constexpr StringView kBusyMessage = "the server is full, try again later";
+        constexpr StringView kStoppingReason = "server_stopping";
         constexpr uint32_t kThreadOrder = 210;  // the listener's threads take this and the next two, the hub thread the one after
 
         /// What the client is told when the hub ends its connection
-        uint16_t GetCloseCode(const eastl::string& reason) {
+        uint16_t GetCloseCode(const String& reason) {
             if (reason == RoomErrors::kRateLimited || reason == "too_many_failed_joins") {
                 return WebSocketCloseCode::kPolicyViolation;
             }
@@ -31,8 +31,8 @@ namespace BECore {
             listener.maxConnectionsPerAddress = settings.maxConnectionsPerAddress;
             listener.maxMessageBytes = settings.hub.maxMessageBytes;
             listener.maxOutboxBytes = settings.maxOutboxBytes;
-            listener.logName = eastl::string(kLogName);
-            listener.busyMessage = eastl::string(kBusyMessage);
+            listener.logName = String(kLogName);
+            listener.busyMessage = String(kBusyMessage);
             listener.threadName = "Room";
             listener.threadOrder = kThreadOrder;
             return listener;
@@ -66,10 +66,10 @@ namespace BECore {
             if (draining) {
                 connection->QueueClose(WebSocketCloseCode::kGoingAway, kStoppingReason);
             }
-            PushEvent(EventKind::Opened, connection->GetId(), _passAddress ? connection->GetClientAddress() : eastl::string());
+            PushEvent(EventKind::Opened, connection->GetId(), _passAddress ? connection->GetClientAddress() : String());
         };
         handler.onMessage = [this](const WebSocketHandler::ConnectionPtr& connection, WebSocketMessage message) {
-            return PushEvent(EventKind::Message, connection->GetId(), eastl::string(message.GetText()));
+            return PushEvent(EventKind::Message, connection->GetId(), String(message.GetText()));
         };
         handler.onClosed = [this](const WebSocketHandler::ConnectionPtr& connection) {
             {
@@ -140,7 +140,7 @@ namespace BECore {
     }
 
     void RoomWebSocketServer::DrainConnections() {
-        eastl::vector<eastl::shared_ptr<WebSocketConnection>> open;
+        Vector<eastl::shared_ptr<WebSocketConnection>> open;
         {
             LockGuard lock(_connectionsMutex);
             _draining = true;
@@ -171,7 +171,7 @@ namespace BECore {
         }
     }
 
-    bool RoomWebSocketServer::PushEvent(EventKind kind, ConnectionId connection, eastl::string text) {
+    bool RoomWebSocketServer::PushEvent(EventKind kind, ConnectionId connection, String text) {
         const size_t size = text.size();
         {
             UniqueLock lock(_queueMutex);
@@ -190,8 +190,8 @@ namespace BECore {
         // The hub lives here and nowhere else: only this thread can reach it
         RoomHub hub(_registry, _settings.hub, _random,
                     HubSink{
-                        .send = [this](ConnectionId connection, eastl::string text) { SendTo(connection, std::move(text)); },
-                        .close = [this](ConnectionId connection, eastl::string reason) { CloseConnection(connection, reason); },
+                        .send = [this](ConnectionId connection, String text) { SendTo(connection, std::move(text)); },
+                        .close = [this](ConnectionId connection, String reason) { CloseConnection(connection, reason); },
                     });
 
         LivenessMap liveness;
@@ -284,13 +284,13 @@ namespace BECore {
         }
     }
 
-    void RoomWebSocketServer::SendTo(ConnectionId connection, eastl::string text) {
+    void RoomWebSocketServer::SendTo(ConnectionId connection, String text) {
         if (const auto target = FindConnection(connection)) {
             target->QueueText(text);  // a connection that is closing or dropped takes nothing: the hub learns it from the Closed event
         }
     }
 
-    void RoomWebSocketServer::CloseConnection(ConnectionId connection, const eastl::string& reason) {
+    void RoomWebSocketServer::CloseConnection(ConnectionId connection, const String& reason) {
         if (const auto target = FindConnection(connection)) {
             LOG_INFO("{}: a connection was closed: {}"_format(kLogName, reason));
             target->QueueClose(GetCloseCode(reason), reason);

@@ -14,7 +14,7 @@ namespace BECore {
 
     namespace {
 
-        constexpr eastl::string_view kSdlRendererName = "SDLRendererBackend";
+        constexpr StringView kSdlRendererName = "SDLRendererBackend";
 
     }  // namespace
 
@@ -34,7 +34,7 @@ namespace BECore {
 
         // Headless drawing is the SDL software renderer: the Vulkan backend needs a real surface
         const bool defaultRenderer = options.headless || config._renderer.empty();
-        const eastl::string_view rendererTypeName = defaultRenderer ? kSdlRendererName : eastl::string_view(config._renderer.data(), config._renderer.size());
+        const StringView rendererTypeName = defaultRenderer ? kSdlRendererName : StringView(config._renderer);
         if (options.headless) {
             LOG_INFO("Headless: no window, drawing with {}"_format(rendererTypeName));
         }

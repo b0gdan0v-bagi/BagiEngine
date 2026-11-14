@@ -22,15 +22,15 @@ namespace BECore::Stress {
 
     /// The names of the flags of the command line (the whole spelling, so a message and a test quote it as typed)
     namespace StressFlags {
-        inline constexpr eastl::string_view kScene = "--stress-scene";
-        inline constexpr eastl::string_view kCount = "--stress-count";
-        inline constexpr eastl::string_view kFrames = "--stress-frames";
-        inline constexpr eastl::string_view kWarmup = "--stress-warmup";
-        inline constexpr eastl::string_view kRamp = "--stress-ramp";
-        inline constexpr eastl::string_view kMeasure = "--stress-measure";
-        inline constexpr eastl::string_view kInterleave = "--stress-interleave";
-        inline constexpr eastl::string_view kAtlases = "--stress-atlases";
-        inline constexpr eastl::string_view kLanguage = "--stress-language";
+        inline constexpr StringView kScene = "--stress-scene";
+        inline constexpr StringView kCount = "--stress-count";
+        inline constexpr StringView kFrames = "--stress-frames";
+        inline constexpr StringView kWarmup = "--stress-warmup";
+        inline constexpr StringView kRamp = "--stress-ramp";
+        inline constexpr StringView kMeasure = "--stress-measure";
+        inline constexpr StringView kInterleave = "--stress-interleave";
+        inline constexpr StringView kAtlases = "--stress-atlases";
+        inline constexpr StringView kLanguage = "--stress-language";
     }  // namespace StressFlags
 
     /// What a run is asked to do; the defaults are what a plain `BagiStress` shows
@@ -70,15 +70,15 @@ namespace BECore::Stress {
      * A flag that is wrong (a bad or empty value, a value on a bare flag, no value on a valued one) is an error that names the flag;
      * the caller decides what to do with it, nothing is defaulted silently. Flags of other parts of the program are ignored.
      */
-    std::expected<StressSettings, eastl::string> ParseStressSettings(const CommandLine& commandLine);
+    std::expected<StressSettings, String> ParseStressSettings(const CommandLine& commandLine);
 
     /// The spelling of a value on the command line and in the control API: lowercase (`sprites`, `work`, `en`)
-    eastl::string_view ToFlagValue(StressScene scene);
-    eastl::string_view ToFlagValue(StressMeasure measure);
-    eastl::string_view ToFlagValue(StressLanguage language);
+    StringView ToFlagValue(StressScene scene);
+    StringView ToFlagValue(StressMeasure measure);
+    StringView ToFlagValue(StressLanguage language);
 
     /// The value as the flag and the control API spell it (any case); nullopt for anything else
-    std::optional<StressScene> ParseScene(eastl::string_view text);
-    std::optional<StressLanguage> ParseLanguage(eastl::string_view text);
+    Optional<StressScene> ParseScene(StringView text);
+    Optional<StressLanguage> ParseLanguage(StringView text);
 
 }  // namespace BECore::Stress

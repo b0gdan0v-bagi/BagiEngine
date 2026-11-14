@@ -6,7 +6,7 @@ namespace BECore::Tests {
 
     namespace {
 
-        eastl::string Expand(const UIVars& vars, const char* text) {
+        String Expand(const UIVars& vars, const char* text) {
             return vars.Expand(text);
         }
 

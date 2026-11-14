@@ -10,9 +10,9 @@ namespace BECore::Tests {
 
     namespace {
 
-        bool Contains(const eastl::vector<eastl::string>& lines, const char* text) {
-            for (const eastl::string& line : lines) {
-                if (line.find(text) != eastl::string::npos) {
+        bool Contains(const Vector<String>& lines, const char* text) {
+            for (const String& line : lines) {
+                if (line.find(text) != String::npos) {
                     return true;
                 }
             }
@@ -46,7 +46,7 @@ namespace BECore::Tests {
     TEST(FrameStatsTextTest, TheLinesNameTheFrameTheDrawsAndTheCounters) {
         AllocTotals totals;
         totals.liveBytes = 3 * 1024 * 1024;
-        const eastl::vector<eastl::string> lines = FormatOverlayLines(SampleFrame(), totals, true);
+        const Vector<String> lines = FormatOverlayLines(SampleFrame(), totals, true);
         EXPECT_TRUE(Contains(lines, "Frame 42"));
         EXPECT_TRUE(Contains(lines, "50 fps"));
         EXPECT_TRUE(Contains(lines, "Draw calls 12"));
@@ -64,7 +64,7 @@ namespace BECore::Tests {
     }
 
     TEST(FrameStatsTextTest, WithoutTrackingTheLineSaysSo) {
-        const eastl::vector<eastl::string> lines = FormatOverlayLines(SampleFrame(), AllocTotals{}, false);
+        const Vector<String> lines = FormatOverlayLines(SampleFrame(), AllocTotals{}, false);
         EXPECT_TRUE(Contains(lines, "ENGINE_PROFILER_ALLOC=OFF"));
         EXPECT_FALSE(Contains(lines, "Live"));
     }

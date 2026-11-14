@@ -14,7 +14,7 @@ namespace BECore {
         };
     }
 
-    eastl::string_view GetPhaseName(RoomPhase phase) {
+    StringView GetPhaseName(RoomPhase phase) {
         switch (phase) {
             case RoomPhase::Lobby:
                 return "lobby";
@@ -26,7 +26,7 @@ namespace BECore {
         return "lobby";
     }
 
-    eastl::string_view GetSeatKindName(SeatKind kind) {
+    StringView GetSeatKindName(SeatKind kind) {
         switch (kind) {
             case SeatKind::Human:
                 return "human";

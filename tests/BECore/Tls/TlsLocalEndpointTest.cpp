@@ -2,12 +2,8 @@
 
 #include <RemoteControl/Tls/TlsStream.h>
 #include <RemoteControl/WebSocketClient.h>
-#include <array>
-#include <atomic>
-#include <fstream>
 #include <gtest/gtest.h>
 #include <iterator>
-#include <string>
 #include <thread>
 
 // The real backend of this platform against real TLS servers that tls_local_check.py starts (it puts their ports and the test CA in
@@ -34,14 +30,14 @@ namespace BECore::Tests {
             return value != nullptr ? value : "";
         }
 
-        [[nodiscard]] eastl::vector<uint8_t> ReadFile(const std::string& path) {
+        [[nodiscard]] Vector<uint8_t> ReadFile(const std::string& path) {
             std::ifstream file(path, std::ios::binary);
             const std::vector<char> bytes((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-            return eastl::vector<uint8_t>(reinterpret_cast<const uint8_t*>(bytes.data()), reinterpret_cast<const uint8_t*>(bytes.data()) + bytes.size());
+            return Vector<uint8_t>(reinterpret_cast<const uint8_t*>(bytes.data()), reinterpret_cast<const uint8_t*>(bytes.data()) + bytes.size());
         }
 
-        [[nodiscard]] bool Contains(const eastl::string& text, const char* part) {
-            return text.find(part) != eastl::string::npos;
+        [[nodiscard]] bool Contains(const String& text, const char* part) {
+            return text.find(part) != String::npos;
         }
 
         class TlsLocalEndpointTest : public ::testing::Test {
@@ -56,7 +52,7 @@ namespace BECore::Tests {
                 }
             }
 
-            [[nodiscard]] static eastl::string Url(const char* host, const char* portVariable) {
+            [[nodiscard]] static String Url(const char* host, const char* portVariable) {
                 return Format("wss://{}:{}", host, Env(portVariable));
             }
 
@@ -111,7 +107,7 @@ namespace BECore::Tests {
 
         ASSERT_TRUE(client.SendText("hello over tls"));
         const std::string large(kLargeMessageBytes, 'x');
-        ASSERT_TRUE(client.SendText(eastl::string(large.c_str(), large.size())));
+        ASSERT_TRUE(client.SendText(String(large.c_str(), large.size())));
         ASSERT_TRUE(WaitUntil([this] { Pump(); }, [&] { return events.size() >= 3; }));
         EXPECT_EQ(events[1].kind, WebSocketClientEventKind::Text);
         EXPECT_EQ(events[1].text, "hello over tls");
@@ -166,7 +162,7 @@ namespace BECore::Tests {
         params.port = static_cast<uint16_t>(std::stoi(Env(kEnvPort)));
         params.handshakeDeadline = std::chrono::steady_clock::now() + kClientWaitLimit;
         const auto trusted = ReadFile(Env(kEnvCaFile));
-        params.additionalTrustAnchorsDer = eastl::span<const eastl::vector<uint8_t>>(&trusted, 1);
+        params.additionalTrustAnchorsDer = Span<const Vector<uint8_t>>(&trusted, 1);
         ASSERT_TRUE(stream->Connect(params).has_value()) << stream->GetLastError().c_str();
         ASSERT_TRUE(stream->IsValid());
 
@@ -196,7 +192,7 @@ namespace BECore::Tests {
         params.port = static_cast<uint16_t>(std::stoi(Env(kEnvPort)));
         params.handshakeDeadline = std::chrono::steady_clock::now() + kClientWaitLimit;
         const auto trusted = ReadFile(Env(kEnvCaFile));
-        params.additionalTrustAnchorsDer = eastl::span<const eastl::vector<uint8_t>>(&trusted, 1);
+        params.additionalTrustAnchorsDer = Span<const Vector<uint8_t>>(&trusted, 1);
         ASSERT_TRUE(stream->Connect(params).has_value()) << stream->GetLastError().c_str();
         ASSERT_TRUE(stream->SetReceiveTimeout(kShortPause));
         std::array<uint8_t, 16> buffer{};
@@ -218,7 +214,7 @@ namespace BECore::Tests {
         params.port = static_cast<uint16_t>(std::stoi(Env(kEnvPlainPort)));
         params.handshakeDeadline = std::chrono::steady_clock::now() + kClientWaitLimit;  // the server never answers: only Close() can end it in time
         std::atomic<bool> returned{false};
-        std::expected<void, eastl::string> result;
+        std::expected<void, String> result;
         std::thread connecting([&] {
             result = stream->Connect(params);
             returned = true;
@@ -244,9 +240,9 @@ namespace BECore::Tests {
             params.host = "localhost";
             params.port = static_cast<uint16_t>(std::stoi(Env(kEnvPort)));
             params.handshakeDeadline = std::chrono::steady_clock::now() + kClientWaitLimit;
-            params.additionalTrustAnchorsDer = eastl::span<const eastl::vector<uint8_t>>(&trusted, 1);
+            params.additionalTrustAnchorsDer = Span<const Vector<uint8_t>>(&trusted, 1);
             std::atomic<bool> started{false};
-            std::expected<void, eastl::string> result;
+            std::expected<void, String> result;
             std::thread connecting([&] {
                 started = true;
                 result = stream->Connect(params);

@@ -70,10 +70,10 @@ namespace BECore::Tests {
     }
 
     TEST(EnumUtilsTest, FromString) {
-        EXPECT_EQ(ColorUtils::FromString(eastl::string_view{"Red"}), TestColor::Red);
-        EXPECT_EQ(ColorUtils::FromString(eastl::string_view{"Green"}), TestColor::Green);
-        EXPECT_EQ(ColorUtils::FromString(eastl::string_view{"Blue"}), TestColor::Blue);
-        EXPECT_EQ(ColorUtils::FromString(eastl::string_view{"Yellow"}), TestColor::Yellow);
+        EXPECT_EQ(ColorUtils::FromString(StringView{"Red"}), TestColor::Red);
+        EXPECT_EQ(ColorUtils::FromString(StringView{"Green"}), TestColor::Green);
+        EXPECT_EQ(ColorUtils::FromString(StringView{"Blue"}), TestColor::Blue);
+        EXPECT_EQ(ColorUtils::FromString(StringView{"Yellow"}), TestColor::Yellow);
 
         EXPECT_EQ(ColorUtils::FromString(std::string_view{"Red"}), TestColor::Red);
         EXPECT_EQ(ColorUtils::FromString(std::string_view{"Green"}), TestColor::Green);
@@ -99,7 +99,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(red.has_value());
         EXPECT_EQ(red.value(), TestColor::Red);
 
-        auto green = ColorUtils::Cast(eastl::string_view{"Green"});
+        auto green = ColorUtils::Cast(StringView{"Green"});
         ASSERT_TRUE(green.has_value());
         EXPECT_EQ(green.value(), TestColor::Green);
 

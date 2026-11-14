@@ -2,18 +2,18 @@
 
 namespace BECore {
 
-    std::optional<Color> Color::ParseColorFromString(eastl::string_view data) {
+    Optional<Color> Color::ParseColorFromString(StringView data) {
         if (data.empty()) {
             return {};
         }
 
-        const auto& tokens = BECore::String::Split(data, ',');
+        const auto& tokens = BECore::StringUtils::Split(data, ',');
 
         if (tokens.size() != 4) {
             return {};
         }
 
-        const auto fromStringView = [](eastl::string_view s) -> unsigned char {
+        const auto fromStringView = [](StringView s) -> unsigned char {
             unsigned char result;
             auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.size(), result);
             if (ec == std::errc{}) {

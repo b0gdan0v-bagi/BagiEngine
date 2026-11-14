@@ -15,18 +15,18 @@ namespace BECore::Tests {
     namespace {
 
         /// The `type` of every <widget> in the config named @p configName.
-        eastl::vector<eastl::string> WidgetTypes(PoolString configName) {
-            eastl::vector<eastl::string> types;
+        Vector<String> WidgetTypes(PoolString configName) {
+            Vector<String> types;
             const XmlNode widgets = CoreManager::GetConfigManager().GetConfig(configName).GetChild("widgets");
             for (const XmlNode widget : widgets.Children()) {
-                if (const auto type = widget.ParseAttribute<eastl::string_view>("type")) {
+                if (const auto type = widget.ParseAttribute<StringView>("type")) {
                     types.emplace_back(type->data(), type->size());
                 }
             }
             return types;
         }
 
-        bool Contains(const eastl::vector<eastl::string>& types, const char* name) {
+        bool Contains(const Vector<String>& types, const char* name) {
             return eastl::find(types.begin(), types.end(), name) != types.end();
         }
 

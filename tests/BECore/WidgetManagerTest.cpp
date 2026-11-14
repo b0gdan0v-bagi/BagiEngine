@@ -23,19 +23,19 @@ namespace BECore::Tests {
 
     namespace {
 
-        using Log = eastl::vector<eastl::string>;
+        using Log = Vector<String>;
 
         /// Game mode has widget 1, Editor mode has widgets 2 and 3
         constexpr const char* kGameXml = R"(<root><widgets><widget type="LifecycleWidget" id="1"/></widgets></root>)";
         constexpr const char* kEditorXml = R"(<root><widgets><widget type="LifecycleWidget" id="2"/><widget type="LifecycleWidget" id="3"/></widgets></root>)";
 
         /// Builds the widgets of a mode from the XML above, through WidgetList like the config path does
-        eastl::vector<IntrusivePtr<IWidget>> LoadTestWidgets(RunMode mode) {
+        Vector<IntrusivePtr<IWidget>> LoadTestWidgets(RunMode mode) {
             XmlDeserializer deserializer;
             EXPECT_TRUE(deserializer.LoadFromString(mode == RunMode::Game ? kGameXml : kEditorXml));
             auto list = New<WidgetList>();
             list->Deserialize(deserializer);
-            eastl::vector<IntrusivePtr<IWidget>> widgets;
+            Vector<IntrusivePtr<IWidget>> widgets;
             for (const auto& widget : list->widgets) {
                 widgets.push_back(widget);
             }
@@ -194,7 +194,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(WidgetManagerTest, ANewModeWithNoWidgetsStillDestroysTheOldOnes) {
-        _manager.SetWidgetLoader([](RunMode mode) { return mode == RunMode::Game ? LoadTestWidgets(mode) : eastl::vector<IntrusivePtr<IWidget>>{}; });
+        _manager.SetWidgetLoader([](RunMode mode) { return mode == RunMode::Game ? LoadTestWidgets(mode) : Vector<IntrusivePtr<IWidget>>{}; });
         _manager.CreateWidgets(RunMode::Game);
         LifecycleWidget::log.clear();
 

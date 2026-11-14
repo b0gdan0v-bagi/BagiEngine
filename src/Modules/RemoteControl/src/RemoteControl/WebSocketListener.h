@@ -7,8 +7,8 @@ namespace BECore {
 
     /// Error codes of WebSocketListener::Start() (and of the servers built on it)
     namespace RemoteControlErrors {
-        inline constexpr eastl::string_view kListenFailed = "listen_failed";
-        inline constexpr eastl::string_view kAlreadyRunning = "already_running";
+        inline constexpr StringView kListenFailed = "listen_failed";
+        inline constexpr StringView kAlreadyRunning = "already_running";
     }  // namespace RemoteControlErrors
 
     /// The limits and names of one listener. The defaults suit a small public server; the control server overrides them
@@ -37,13 +37,13 @@ namespace BECore {
         std::chrono::milliseconds handshakeTimeout{5000};
 
         /// The prefix of the log lines
-        eastl::string logName = "WebSocket";
+        String logName = "WebSocket";
 
         /// The text of the 503 a refused client gets
-        eastl::string busyMessage = "the server has too many connections";
+        String busyMessage = "the server has too many connections";
 
         /// The names of the threads in the profiler: `<threadName> accept`, `reader` and `writer`, sorted from `threadOrder`
-        eastl::string threadName = "WebSocket";
+        String threadName = "WebSocket";
         uint32_t threadOrder = 200;
     };
 
@@ -105,11 +105,11 @@ namespace BECore {
         using ConnectionPtr = WebSocketHandler::ConnectionPtr;
 
         void AcceptLoop();
-        void AddConnection(Socket socket, eastl::string peerAddress);
-        bool AdmitByClientAddress(WebSocketConnection& connection, const eastl::string& clientAddress);
+        void AddConnection(Socket socket, String peerAddress);
+        bool AdmitByClientAddress(WebSocketConnection& connection, const String& clientAddress);
         void ReapFinishedConnections();
         void RunConnection(const ConnectionPtr& connection);
-        void ReadMessages(const ConnectionPtr& connection, eastl::vector<uint8_t> pendingBytes);
+        void ReadMessages(const ConnectionPtr& connection, Vector<uint8_t> pendingBytes);
 
         /// Acts on one message of a client; false when the connection has to end
         bool HandleMessage(const ConnectionPtr& connection, WebSocketMessage message);
@@ -123,7 +123,7 @@ namespace BECore {
         WebSocketConnectionId _nextId = 1;  // accept thread only; not reset by Stop(), so an id is never reused
 
         Mutex _connectionsMutex{BE_LOCK_SITE("WebSocket connections")};
-        eastl::vector<ConnectionPtr> _connections;  // guarded by _connectionsMutex
+        Vector<ConnectionPtr> _connections;  // guarded by _connectionsMutex
     };
 
 }  // namespace BECore

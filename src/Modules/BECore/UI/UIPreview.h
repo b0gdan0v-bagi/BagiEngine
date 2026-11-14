@@ -11,8 +11,8 @@ namespace BECore {
 
     /// A device the viewport can show the scene at: its logical size in points, in portrait, and the insets of its cut-out and home bar
     struct PreviewDevice {
-        eastl::string_view name;  ///< the label of the picker and the key under which the choice is stored, unique
-        uint32_t width = 0;       ///< logical points, portrait (width < height)
+        StringView name;     ///< the label of the picker and the key under which the choice is stored, unique
+        uint32_t width = 0;  ///< logical points, portrait (width < height)
         uint32_t height = 0;
         float cutout = 0.0f;   ///< the top inset in portrait, the inset of both sides in landscape (0 for a screen with no cut-out)
         float homeBar = 0.0f;  ///< the bottom inset, portrait and landscape
@@ -84,7 +84,7 @@ namespace BECore {
         [[nodiscard]] static std::pair<uint32_t, uint32_t> FitSize(ViewportAspect aspect, float availableWidth, float availableHeight);
 
         /// The devices of the picker, in portrait, in a fixed order (the index is PreviewShape::device); names are unique
-        [[nodiscard]] static eastl::span<const PreviewDevice> GetDevices();
+        [[nodiscard]] static Span<const PreviewDevice> GetDevices();
 
         /**
          * @brief The target for a shape in an available area (in ImGui units).

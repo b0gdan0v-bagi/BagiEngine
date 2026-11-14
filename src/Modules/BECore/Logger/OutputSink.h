@@ -24,7 +24,7 @@ namespace BECore {
         ~OutputSink() override = default;
 
         void Initialize() override;
-        void Write(LogLevel level, eastl::string_view message) override;
+        void Write(LogLevel level, StringView message) override;
 
     private:
         void OnLogEvent(const LogEvent& event);

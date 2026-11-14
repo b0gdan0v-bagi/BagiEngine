@@ -42,7 +42,7 @@ namespace BECore::Tests {
 
         /// What a compile gives: the XML, the report, the XML read back into the reflected content, and a handle on the XML nodes by element name
         struct Compiled {
-            eastl::string xml;
+            String xml;
             UIWebReport report;
             UIScreenContent content;
             pugi::xml_document document;
@@ -117,7 +117,7 @@ namespace BECore::Tests {
         std::unique_ptr<Compiled> Compile(const std::string& html, const std::string& css = {}) {
             auto compiled = std::make_unique<Compiled>();
             const std::string source = css.empty() ? html : "<style>" + css + "</style>" + html;
-            compiled->xml = UIWebCompiler::Compile(eastl::string_view(source.data(), source.size()), {}, compiled->report);
+            compiled->xml = UIWebCompiler::Compile(FromStd(source), {}, compiled->report);
             EXPECT_TRUE(compiled->document.load_string(compiled->xml.c_str())) << compiled->xml.c_str();
             XmlDeserializer deserializer;
             if (deserializer.LoadFromString(compiled->xml)) {
@@ -131,7 +131,7 @@ namespace BECore::Tests {
         UIScreenContent ReadXml(const std::string& xml) {
             UIScreenContent content;
             XmlDeserializer deserializer;
-            EXPECT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+            EXPECT_TRUE(deserializer.LoadFromString(FromStd(xml)));
             content.Deserialize(deserializer);
             EXPECT_FALSE(deserializer.HasErrors());
             return content;
@@ -1022,8 +1022,8 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         const auto doc = UIHtmlParser::Parse("<div><span>a</div></p><b>", report);
         EXPECT_FALSE(doc.nodes.empty());
         EXPECT_EQ(report.issues.size(), 2u);
-        EXPECT_TRUE(report.issues[0].message.find("</p>") != eastl::string::npos);
-        EXPECT_TRUE(report.issues[1].message.find("<b>") != eastl::string::npos);
+        EXPECT_TRUE(report.issues[0].message.find("</p>") != String::npos);
+        EXPECT_TRUE(report.issues[1].message.find("<b>") != String::npos);
     }
 
     // ---- the CSS reader ------------------------------------------------------------------------------------------------------
@@ -2483,9 +2483,9 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->IssuesMentioning("'-be-highlight: nope'"), 1u);
         EXPECT_EQ(compiled->report.declarationsUnsupported, 6u);
         for (const UIWebIssue& issue : compiled->report.issues) {
-            if (issue.message.find("'box-shadow") != eastl::string::npos) {
+            if (issue.message.find("'box-shadow") != String::npos) {
                 EXPECT_EQ(issue.line, 2u);
-            } else if (issue.message.find("'border-radius") != eastl::string::npos) {
+            } else if (issue.message.find("'border-radius") != String::npos) {
                 EXPECT_EQ(issue.line, 3u);
             }
         }
@@ -2559,7 +2559,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(variant.overrides[0].element.ToStringView(), "a");
         ASSERT_TRUE(variant.overrides[0].width);
         EXPECT_EQ(variant.overrides[0].width->unit, UIUnit::Percent);
-        EXPECT_EQ(variant.overrides[0].visible, std::optional<bool>(false));
+        EXPECT_EQ(variant.overrides[0].visible, Optional<bool>(false));
         EXPECT_FALSE(variant.overrides[0].height) << "unchanged properties are not overridden";
         // The second div has no id: the compile names it so that the variant can find it
         EXPECT_FALSE(variant.overrides[1].element.ToStringView().empty());
@@ -2569,7 +2569,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
     TEST_F(UIWebTest, AMediaBlockCanUndoWhatTheBaseDid) {
         const auto compiled = Compile(R"(<div id="a"></div>)", "#a { display: none; width: 10px; height: 10px } @media (min-width: 800px) { #a { display: block } }");
         ASSERT_EQ(compiled->content.variants.size(), 1u);
-        EXPECT_EQ(compiled->content.variants[0].overrides.at(0).visible, std::optional<bool>(true));
+        EXPECT_EQ(compiled->content.variants[0].overrides.at(0).visible, Optional<bool>(true));
         // The base screen has it hidden; wide enough (in canvas units: the scale is kept at 0.7 or more, so 480 px are 685 units), the variant shows it
         LaidOut web(compiled->content);
         web.At(480.0f, 270.0f);
@@ -2605,10 +2605,10 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->Attr("a", "width"), "10");
         // The line of the declaration is the line of the style text, counted from the <style> tag
         for (const UIWebIssue& issue : compiled->report.issues) {
-            if (issue.message.find("z-index") != eastl::string::npos) {
+            if (issue.message.find("z-index") != String::npos) {
                 EXPECT_EQ(issue.line, 1u);
                 EXPECT_EQ(issue.source, "css");
-            } else if (issue.message.find("2em") != eastl::string::npos) {
+            } else if (issue.message.find("2em") != String::npos) {
                 EXPECT_EQ(issue.line, 2u);
             }
         }
@@ -2637,14 +2637,14 @@ button   { width: 124px; height: 48px; font-size: 24px; }
 
     TEST_F(UIWebTest, StyleSheetsAreReadThroughTheLoader) {
         UIWebReport report;
-        eastl::vector<eastl::string> asked;
+        Vector<String> asked;
         const std::string html = R"(<link rel="stylesheet" href="a.css"><link rel="stylesheet" href="missing.css"><div id="x" class="k"></div><style>.k { height: 9px }</style>)";
-        const eastl::string xml = UIWebCompiler::Compile(
-            eastl::string_view(html.data(), html.size()),
-            [&](eastl::string_view href) -> std::optional<eastl::string> {
-                asked.push_back(eastl::string(href));
+        const String xml = UIWebCompiler::Compile(
+            FromStd(html),
+            [&](StringView href) -> Optional<String> {
+                asked.push_back(String(href));
                 if (href == "a.css") {
-                    return eastl::string(".k { width: 7px; height: 1px }");
+                    return String(".k { width: 7px; height: 1px }");
                 }
                 return std::nullopt;
             },
@@ -2657,7 +2657,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(std::string(element.attribute("height").as_string()), "9") << "the <style> after the <link> comes later in the cascade";
         ASSERT_EQ(report.issues.size(), 1u);
         EXPECT_EQ(report.issues[0].source, "html");
-        EXPECT_TRUE(report.issues[0].message.find("missing.css") != eastl::string::npos);
+        EXPECT_TRUE(report.issues[0].message.find("missing.css") != String::npos);
     }
 
     // ---- as a resource -------------------------------------------------------------------------------------------------------
@@ -2693,7 +2693,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         temp.Write("hud.css", kHudCss);
         const std::string path = temp.Write("hud.ui.html", std::string("<link rel=\"stylesheet\" href=\"hud.css\">") + kHudHtml);
 
-        auto handle = CoreManager::GetResourceManager().Load<UIDocument>(eastl::string_view(path.data(), path.size()));
+        auto handle = CoreManager::GetResourceManager().Load<UIDocument>(FromStd(path));
         ASSERT_TRUE(handle);
         ASSERT_EQ(handle->GetState(), ResourceState::Loaded);
 
@@ -2972,15 +2972,15 @@ button:checked { background: var(--panel); }
 
         /// The XML and the report of a document whose style sheet is the linked file `a.css` (a sheet too large for a <style> element: that is part of the document)
         struct CompiledWithSheet {
-            eastl::string xml;
+            String xml;
             UIWebReport report;
         };
 
         CompiledWithSheet CompileWithSheet(const std::string& html, const std::string& css) {
             CompiledWithSheet result;
             const std::string source = "<link rel=\"stylesheet\" href=\"a.css\">" + html;
-            const UIWebCompiler::StylesheetLoader loader = [&css](eastl::string_view) { return std::optional<eastl::string>(eastl::string(css.data(), css.size())); };
-            result.xml = UIWebCompiler::Compile(eastl::string_view(source.data(), source.size()), loader, result.report);
+            const UIWebCompiler::StylesheetLoader loader = [&css](StringView) { return Optional<String>(String(css.data(), css.size())); };
+            result.xml = UIWebCompiler::Compile(FromStd(source), loader, result.report);
             return result;
         }
 
@@ -3127,7 +3127,7 @@ button:checked { background: var(--panel); }
         ASSERT_TRUE(compiled->report.HasIssues());
         for (const UIWebIssue& issue : compiled->report.issues) {
             EXPECT_LE(issue.message.size(), UIWebReport::kMaxMessageBytes);
-            EXPECT_EQ(issue.message.find('\n'), eastl::string::npos);
+            EXPECT_EQ(issue.message.find('\n'), String::npos);
         }
         // A cut never leaves half of a UTF-8 character: the text is Cyrillic, two bytes a letter, and the cut falls between the two bytes of one
         const auto cyrillic = Compile("<div id=\"a\"></div>", "#a { " + Repeat("\xD0\xB1", 400) + ": 1; }");

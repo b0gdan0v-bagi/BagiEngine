@@ -21,7 +21,7 @@ namespace BECore::Match3 {
 
         /// True for the shape that operator<< gives a std::mt19937: decimal numbers that fit 32 bits with one space between, the 624 of the state as the standard has them (MSVC, libc++) or one more,
         /// the position, as libstdc++ writes. Checked before operator>> reads, which does not defend against other text or against a number out of range
-        bool LooksLikeGeneratorText(eastl::string_view text) noexcept {
+        bool LooksLikeGeneratorText(StringView text) noexcept {
             size_t numbers = 0;
             uint64_t value = 0;
             bool inNumber = false;
@@ -129,12 +129,13 @@ namespace BECore::Match3 {
 
         std::ostringstream rng;
         rng << _rng;
+        // std: the text of an std::ostringstream
         const std::string text = rng.str();
         state.rng.assign(text.data(), text.size());
         return state;
     }
 
-    std::expected<void, eastl::string> Match3GameModel::RestoreState(const Match3SaveState& state) {
+    std::expected<void, String> Match3GameModel::RestoreState(const Match3SaveState& state) {
         // Everything is built on the side first, so a refused state changes nothing
         if (state.board.size() != kBoardCellCount) {
             return std::unexpected(Format("the board has {} characters, {} are needed", state.board.size(), kBoardCellCount));
@@ -148,30 +149,31 @@ namespace BECore::Match3 {
             board.Set(Cell::FromIndex(static_cast<int>(index)), gem);
         }
         if (MatchFinder::HasAnyMatch(board)) {
-            return std::unexpected(eastl::string("the board has a match on it, a saved board is always settled"));
+            return std::unexpected(String("the board has a match on it, a saved board is always settled"));
         }
         if (state.score < 0) {
             return std::unexpected(Format("the score {} is negative", state.score));
         }
 
         // The text has to be what operator<< writes for the generator it reads as: the round trip also refuses a leading zero or a position out of range
-        if (!LooksLikeGeneratorText(eastl::string_view(state.rng.data(), state.rng.size()))) {
-            return std::unexpected(eastl::string("the random generator text is not the text of a std::mt19937"));
+        if (!LooksLikeGeneratorText(StringView(state.rng))) {
+            return std::unexpected(String("the random generator text is not the text of a std::mt19937"));
         }
+        // std: an std::istringstream reads it
         const std::string rngText(state.rng.data(), state.rng.size());
         std::istringstream in(rngText);
         std::mt19937 rng;
         in >> rng;
         if (!in) {
-            return std::unexpected(eastl::string("the random generator text cannot be read"));
+            return std::unexpected(String("the random generator text cannot be read"));
         }
         std::ostringstream written;
         written << rng;
         if (written.str() != rngText) {
-            return std::unexpected(eastl::string("the random generator text is not the state of a generator (not the one that operator<< writes)"));
+            return std::unexpected(String("the random generator text is not the state of a generator (not the one that operator<< writes)"));
         }
         if (IsDegenerateGenerator(rng)) {
-            return std::unexpected(eastl::string("the random generator is degenerate: it gives only zeros"));
+            return std::unexpected(String("the random generator is degenerate: it gives only zeros"));
         }
 
         _board = board;
@@ -194,8 +196,8 @@ namespace BECore::Match3 {
         return MatchFinder::HasAnyMatch(trial);
     }
 
-    eastl::vector<eastl::pair<Cell, Cell>> Match3GameModel::GetLegalSwaps() const {
-        eastl::vector<eastl::pair<Cell, Cell>> swaps;
+    Vector<eastl::pair<Cell, Cell>> Match3GameModel::GetLegalSwaps() const {
+        Vector<eastl::pair<Cell, Cell>> swaps;
         for (int8_t row = 0; row < kBoardSize; ++row) {
             for (int8_t col = 0; col < kBoardSize; ++col) {
                 const Cell from{col, row};
@@ -216,7 +218,7 @@ namespace BECore::Match3 {
         return ResolveCascade(nullptr);
     }
 
-    int Match3GameModel::ResolveCascade(eastl::vector<CascadeStep>* steps) {
+    int Match3GameModel::ResolveCascade(Vector<CascadeStep>* steps) {
         int totalRemoved = 0;
         while (true) {
             const auto matched = MatchFinder::FindMatches(_board);

@@ -12,7 +12,7 @@ namespace BECore {
     class TextLayoutCache {
     public:
         /// The layout of @p utf8 with @p options in @p font. The reference stays valid until the next Get() or Reset()
-        [[nodiscard]] const TextLayoutResult& Get(const Font& font, eastl::string_view utf8, const TextLayoutOptions& options);
+        [[nodiscard]] const TextLayoutResult& Get(const Font& font, StringView utf8, const TextLayoutOptions& options);
 
         /// Forgets the layout: call it when the font was loaded again, since a new font can sit at the address of the old one
         void Reset();
@@ -29,7 +29,7 @@ namespace BECore {
 
     private:
         const Font* _font = nullptr;
-        eastl::string _text;
+        String _text;
         TextLayoutOptions _options;
         TextLayoutResult _layout;
         uint32_t _layoutCount = 0;

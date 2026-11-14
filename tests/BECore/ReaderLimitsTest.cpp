@@ -15,8 +15,8 @@ namespace BECore::Tests {
         using Fuzz::ProbeState;
 
         /// "<a><a>...<a/>...</a></a>" nested @p depth deep
-        eastl::string NestedXml(size_t depth, const char* tag) {
-            eastl::string xml;
+        String NestedXml(size_t depth, const char* tag) {
+            String xml;
             for (size_t i = 0; i < depth; ++i) {
                 xml += "<";
                 xml += tag;
@@ -31,8 +31,8 @@ namespace BECore::Tests {
         }
 
         /// A <tree> of ProbeNode nested @p depth levels: every level is a `children` array with one `item`
-        eastl::string NestedProbeTree(size_t depth) {
-            eastl::string xml = "<root><tree id=\"1\">";
+        String NestedProbeTree(size_t depth) {
+            String xml = "<root><tree id=\"1\">";
             for (size_t i = 0; i < depth; ++i) {
                 xml += "<children><item id=\"2\">";
             }
@@ -51,9 +51,9 @@ namespace BECore::Tests {
             return deepest + 1;
         }
 
-        bool HasErrorContaining(const IDeserializer& reader, eastl::string_view part) {
+        bool HasErrorContaining(const IDeserializer& reader, StringView part) {
             for (const DeserializeError& error : reader.GetErrors()) {
-                if (error.errorMessage.ToStringView().find(part) != eastl::string_view::npos) {
+                if (error.errorMessage.ToStringView().find(part) != StringView::npos) {
                     return true;
                 }
             }
@@ -79,7 +79,7 @@ namespace BECore::Tests {
     // ---------------------------------------------------------------------------------------------
 
     TEST(ReaderLimitsTest, XmlStringOverTheLimitIsRefused) {
-        eastl::string big = "<root>";
+        String big = "<root>";
         big.append(ReaderLimits::kMaxXmlDocumentBytes, ' ');
         big += "</root>";
 
@@ -136,12 +136,12 @@ namespace BECore::Tests {
         // The first bytes of a UTF-16 and of a UTF-32 text: not decoded, and the view into the middle of a buffer is not read as words
         const char utf16[] = "\xFF\xFE<\0r\0/\0>\0";
         const char utf32[] = "\xFF\xFE\0\0<\0\0\0r\0\0\0/\0\0\0>\0\0\0";
-        for (const eastl::string_view text : {eastl::string_view(utf16, sizeof(utf16) - 1), eastl::string_view(utf32, sizeof(utf32) - 1)}) {
-            eastl::vector<char> buffer(text.size() + 1);
+        for (const StringView text : {StringView(utf16, sizeof(utf16) - 1), StringView(utf32, sizeof(utf32) - 1)}) {
+            Vector<char> buffer(text.size() + 1);
             std::memcpy(buffer.data() + 1, text.data(), text.size());
 
             XmlDeserializer reader;
-            EXPECT_FALSE(reader.LoadFromString(eastl::string_view(buffer.data() + 1, text.size())));
+            EXPECT_FALSE(reader.LoadFromString(StringView(buffer.data() + 1, text.size())));
             EXPECT_TRUE(reader.HasErrors());
         }
 
@@ -152,7 +152,7 @@ namespace BECore::Tests {
 
     TEST(ReaderLimitsTest, XmlNestingStopsAtTheLimit) {
         XmlDeserializer reader;
-        const eastl::string xml = NestedXml(ReaderLimits::kMaxXmlNesting + 20, "a");
+        const String xml = NestedXml(ReaderLimits::kMaxXmlNesting + 20, "a");
         ASSERT_TRUE(reader.LoadFromString(xml));
 
         // The root is the first entry of the stack
@@ -189,7 +189,7 @@ namespace BECore::Tests {
 
     TEST(ReaderLimitsTest, XmlArrayOverTheLimitIsRefused) {
         const auto listOf = [](size_t items) {
-            eastl::string xml = "<root><list>";
+            String xml = "<root><list>";
             for (size_t i = 0; i < items; ++i) {
                 xml += "<i/>";
             }
@@ -217,9 +217,9 @@ namespace BECore::Tests {
         ASSERT_TRUE(reader.LoadFromString("<root/>"));
 
         int32_t value = 0;
-        const eastl::string longName(ReaderLimits::kMaxErrorTextBytes * 4, 'n');
+        const String longName(ReaderLimits::kMaxErrorTextBytes * 4, 'n');
         for (size_t i = 0; i < ReaderLimits::kMaxRecordedErrors * 4; ++i) {
-            reader.Read(eastl::string_view(longName.data(), longName.size()), value);
+            reader.Read(StringView(longName), value);
         }
 
         const auto& errors = reader.GetErrors();
@@ -234,8 +234,8 @@ namespace BECore::Tests {
     }
 
     TEST(ReaderLimitsTest, XmlStrictErrorQuotesAShortPieceOfTheValue) {
-        const eastl::string junk(1000, 'z');
-        const eastl::string xml = "<root a=\"" + junk + "\"/>";
+        const String junk(1000, 'z');
+        const String xml = "<root a=\"" + junk + "\"/>";
         XmlDeserializer reader;
         reader.SetStrictValues(true);
         ASSERT_TRUE(reader.LoadFromString(xml));
@@ -243,9 +243,9 @@ namespace BECore::Tests {
         int32_t value = 0;
         EXPECT_FALSE(reader.ReadAttribute("a", value));
         ASSERT_EQ(reader.GetErrors().size(), 1u);
-        const eastl::string_view message = reader.GetErrors()[0].errorMessage.ToStringView();
+        const StringView message = reader.GetErrors()[0].errorMessage.ToStringView();
         EXPECT_LT(message.size(), 100u);
-        EXPECT_NE(message.find("..."), eastl::string_view::npos);
+        EXPECT_NE(message.find("..."), StringView::npos);
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -269,7 +269,7 @@ namespace BECore::Tests {
     TEST(ReaderLimitsTest, BinaryBufferOverTheLimitIsRefused) {
         BinarySerializer writer;
         writer.WriteAttribute("a", int32_t{1});
-        eastl::vector<uint8_t> bytes = writer.GetData();
+        Vector<uint8_t> bytes = writer.GetData();
         bytes.resize(ReaderLimits::kMaxBinaryStreamBytes + 1);
         BinaryFormat::Store<uint32_t>(bytes.data() + BinaryFormat::PayloadSizeOffset, static_cast<uint32_t>(bytes.size() - BinaryFormat::HeaderSize));
 

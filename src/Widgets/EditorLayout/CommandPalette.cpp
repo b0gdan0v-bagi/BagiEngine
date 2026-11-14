@@ -11,7 +11,7 @@ namespace BECore {
         constexpr float kPaletteWidth = 480.0f;
         constexpr float kPaletteListHeight = 240.0f;
         constexpr float kPaletteTopFraction = 0.2f;  // of the viewport height: the popup sits in the upper part, like a search box
-        constexpr eastl::string_view kFixedSuffix = " (fixed)";
+        constexpr StringView kFixedSuffix = " (fixed)";
 
         // Up and Down in a single-line field would otherwise move ImGui's navigation out of it
         int OnQueryKey(ImGuiInputTextCallbackData* data) {
@@ -22,9 +22,9 @@ namespace BECore {
             return 0;
         }
 
-        eastl::string ChordText(const EditorCommand& command, const HotkeyMap& hotkeys) {
-            eastl::string text;
-            if (const std::optional<KeyChord> chord = hotkeys.GetChord(command.id)) {
+        String ChordText(const EditorCommand& command, const HotkeyMap& hotkeys) {
+            String text;
+            if (const Optional<KeyChord> chord = hotkeys.GetChord(command.id)) {
                 text = ToString(*chord);
                 if (!command.rebindable) {
                     text.append(kFixedSuffix.data(), kFixedSuffix.size());
@@ -62,7 +62,7 @@ namespace BECore {
             _selected = 0;
         }
 
-        const eastl::vector<const EditorCommand*> matches = FilterCommands(_query, GetEditorCommands());
+        const Vector<const EditorCommand*> matches = FilterCommands(_query, GetEditorCommands());
         const int count = static_cast<int>(matches.size());
         _selected = MoveSelection(_selected, move, count);
 
@@ -80,7 +80,7 @@ namespace BECore {
             for (int row = 0; row < count; ++row) {
                 const EditorCommand& command = *matches[static_cast<size_t>(row)];
                 const ImVec2 rowStart = ImGui::GetCursorScreenPos();
-                const eastl::string title(command.title.data(), command.title.size());
+                const String title(command.title.data(), command.title.size());
                 ImGui::PushID(row);
                 if (ImGui::Selectable(title.c_str(), row == _selected)) {
                     chosen = command.id;
@@ -91,7 +91,7 @@ namespace BECore {
                 }
 
                 // The chord, right-aligned on the row
-                const eastl::string chordText = ChordText(command, hotkeys);
+                const String chordText = ChordText(command, hotkeys);
                 if (!chordText.empty()) {
                     const float textWidth = ImGui::CalcTextSize(chordText.c_str()).x;
                     const ImVec2 textPos(rowStart.x + rowWidth - textWidth - ImGui::GetStyle().ItemSpacing.x, rowStart.y);

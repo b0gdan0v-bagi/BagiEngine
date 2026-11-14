@@ -17,8 +17,8 @@ namespace BECore::Tests {
         const Color kBlue{0, 0, 255, 255};
 
         struct Mesh {
-            eastl::vector<GeometryVertex> vertices;
-            eastl::vector<int> indices;
+            Vector<GeometryVertex> vertices;
+            Vector<int> indices;
 
             [[nodiscard]] size_t TriangleCount() const {
                 return indices.size() / 3;
@@ -412,7 +412,7 @@ namespace BECore::Tests {
         const Mesh mesh = Shadow(rect, UICorners::Uniform(radius), {0, 0, blur, 0, color}, 2.0f);
         ASSERT_GT(mesh.vertices.size(), 0u);
 
-        eastl::vector<eastl::pair<float, unsigned char>> samples;
+        Vector<eastl::pair<float, unsigned char>> samples;
         for (const GeometryVertex& v : mesh.vertices) {
             samples.push_back({RoundedRectDistance(rect, radius, v.x, v.y), v.color.a});
             EXPECT_EQ(v.color.r, color.r);
@@ -793,7 +793,7 @@ namespace BECore::Tests {
         EXPECT_NEAR(reducedExtent.maxY, fullExtent.maxY, kTolerance);
 
         // Falls monotonically outwards, nothing at the outer ring, the colour's own alpha at the inner one
-        eastl::vector<eastl::pair<float, unsigned char>> samples;
+        Vector<eastl::pair<float, unsigned char>> samples;
         for (const GeometryVertex& v : reduced.vertices) {
             samples.push_back({RoundedRectDistance(rect, radius, v.x, v.y), v.color.a});
         }

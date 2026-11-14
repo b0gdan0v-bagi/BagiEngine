@@ -57,7 +57,7 @@ namespace BECore {
             }
 
             // The renderer fills it when the frame is presented; the answer is built at the end of that frame
-            auto capture = eastl::make_shared<std::optional<CaptureResult>>();
+            auto capture = eastl::make_shared<Optional<CaptureResult>>();
             renderer->RequestCapture([capture](CaptureResult result) { *capture = std::move(result); });
             if (*capture && !**capture) {  // refused at once: this backend cannot capture
                 call.Fail(ScreenshotErrors::kCaptureFailed, (*capture)->error());
@@ -82,14 +82,14 @@ namespace BECore {
                 Json result = Json::object();
                 result["width"] = png->width;
                 result["height"] = png->height;
-                result["png_base64"] = MakeJsonString(Base64Encode(eastl::span<const uint8_t>(png->bytes.data(), png->bytes.size())));
+                result["png_base64"] = MakeJsonString(Base64Encode(Span<const uint8_t>(png->bytes.data(), png->bytes.size())));
                 done.Reply(std::move(result));
             });
         }
 
     }  // namespace
 
-    std::expected<PngImage, eastl::string> EncodePng(const PixelBuffer& image, uint32_t maxSide) {
+    std::expected<PngImage, String> EncodePng(const PixelBuffer& image, uint32_t maxSide) {
         if (image.width == 0 || image.height == 0 || image.rgba.size() != static_cast<size_t>(image.width) * image.height * kBytesPerPixel) {
             return std::unexpected(Format("the {}x{} image has {} bytes of pixels", image.width, image.height, image.rgba.size()));
         }
@@ -126,14 +126,14 @@ namespace BECore {
                 png.bytes.assign(memory, memory + size);
             }
         }
-        const eastl::string failure = saved ? eastl::string() : Format("cannot encode the PNG: {}", SDL_GetError());
+        const String failure = saved ? String() : Format("cannot encode the PNG: {}", SDL_GetError());
         SDL_CloseIO(stream);
 
         if (!saved) {
             return std::unexpected(failure);
         }
         if (png.bytes.empty()) {
-            return std::unexpected(eastl::string("the PNG encoder produced no bytes"));
+            return std::unexpected(String("the PNG encoder produced no bytes"));
         }
         return png;
     }

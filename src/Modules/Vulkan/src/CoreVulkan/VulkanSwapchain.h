@@ -65,20 +65,20 @@ namespace BECore {
             VkSwapchainKHR               swapchain = VK_NULL_HANDLE;
             VkFormat                     format    = VK_FORMAT_UNDEFINED;
             VkExtent2D                   extent    = {};
-            eastl::vector<VkImage>       images;
-            eastl::vector<VkImageView>   imageViews;
-            eastl::vector<VkFramebuffer> framebuffers;
+            Vector<VkImage>       images;
+            Vector<VkImageView>   imageViews;
+            Vector<VkFramebuffer> framebuffers;
         };
 
         bool CreateSwapchain(VulkanDevice& device, VkSurfaceKHR surface, int pixelWidth, int pixelHeight,
-                             std::optional<VkFormat> keepFormat, VkSwapchainKHR oldSwapchain, Chain& out) const;
+                             Optional<VkFormat> keepFormat, VkSwapchainKHR oldSwapchain, Chain& out) const;
         bool CreateImageViews(VulkanDevice& device, Chain& chain) const;
         bool CreateRenderPass(VulkanDevice& device);
         bool CreateFramebuffers(VulkanDevice& device, Chain& chain) const;
         static void DestroyChain(VulkanDevice& device, Chain& chain);
 
-        std::optional<VkSurfaceFormatKHR> ChooseSurfaceFormat(VulkanDevice& device, VkSurfaceKHR surface,
-                                                              std::optional<VkFormat> keepFormat) const;
+        Optional<VkSurfaceFormatKHR> ChooseSurfaceFormat(VulkanDevice& device, VkSurfaceKHR surface,
+                                                              Optional<VkFormat> keepFormat) const;
         VkPresentModeKHR                  ChoosePresentMode(VulkanDevice& device, VkSurfaceKHR surface) const;
 
         VkRenderPass _renderPass = VK_NULL_HANDLE;

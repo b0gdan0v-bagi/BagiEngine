@@ -124,12 +124,12 @@ namespace BECore {
     }
 
     bool VulkanSwapchain::CreateSwapchain(VulkanDevice& device, VkSurfaceKHR surface, int pixelWidth,
-                                          int pixelHeight, std::optional<VkFormat> keepFormat,
+                                          int pixelHeight, Optional<VkFormat> keepFormat,
                                           VkSwapchainKHR oldSwapchain, Chain& out) const {
         VkSurfaceCapabilitiesKHR caps{};
         vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device.GetPhysicalDevice(), surface, &caps);
 
-        const std::optional<VkSurfaceFormatKHR> surfaceFormat = ChooseSurfaceFormat(device, surface, keepFormat);
+        const Optional<VkSurfaceFormatKHR> surfaceFormat = ChooseSurfaceFormat(device, surface, keepFormat);
         if (!surfaceFormat) {
             LOG_ERROR("Vulkan: the surface offers no formats");
             return false;
@@ -282,12 +282,12 @@ namespace BECore {
         return true;
     }
 
-    std::optional<VkSurfaceFormatKHR> VulkanSwapchain::ChooseSurfaceFormat(
-        VulkanDevice& device, VkSurfaceKHR surface, std::optional<VkFormat> keepFormat) const {
+    Optional<VkSurfaceFormatKHR> VulkanSwapchain::ChooseSurfaceFormat(
+        VulkanDevice& device, VkSurfaceKHR surface, Optional<VkFormat> keepFormat) const {
 
         uint32_t count = 0;
         vkGetPhysicalDeviceSurfaceFormatsKHR(device.GetPhysicalDevice(), surface, &count, nullptr);
-        eastl::vector<VkSurfaceFormatKHR> formats(count);
+        Vector<VkSurfaceFormatKHR> formats(count);
         vkGetPhysicalDeviceSurfaceFormatsKHR(device.GetPhysicalDevice(), surface, &count, formats.data());
 
         return VulkanSwapchainPolicy::ChooseSurfaceFormat({formats.data(), formats.size()}, keepFormat);
@@ -298,7 +298,7 @@ namespace BECore {
 
         uint32_t count = 0;
         vkGetPhysicalDeviceSurfacePresentModesKHR(device.GetPhysicalDevice(), surface, &count, nullptr);
-        eastl::vector<VkPresentModeKHR> modes(count);
+        Vector<VkPresentModeKHR> modes(count);
         vkGetPhysicalDeviceSurfacePresentModesKHR(device.GetPhysicalDevice(), surface, &count, modes.data());
 
         // Prefer mailbox (triple-buffered, low latency)

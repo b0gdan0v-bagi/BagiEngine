@@ -14,9 +14,9 @@ namespace BECore {
      * `otherData` holds `frozenFrames` and `dropped` (zones left out of the frames by SpikeCapture::kMaxFrozenZones). An empty list is a valid trace.
      * The time unit of each frame is its own nanosecondsPerTick.
      */
-    [[nodiscard]] eastl::string WriteFrozenTraceJson(const eastl::vector<FrozenFrame>& frames);
+    [[nodiscard]] String WriteFrozenTraceJson(const Vector<FrozenFrame>& frames);
 
     /// Writes WriteFrozenTraceJson to @p path; the error names the file and the reason, as ChromeTraceBackend::WriteFile does
-    [[nodiscard]] std::expected<void, eastl::string> WriteFrozenTraceFile(eastl::string_view path, const eastl::vector<FrozenFrame>& frames);
+    [[nodiscard]] std::expected<void, String> WriteFrozenTraceFile(StringView path, const Vector<FrozenFrame>& frames);
 
 }  // namespace BECore

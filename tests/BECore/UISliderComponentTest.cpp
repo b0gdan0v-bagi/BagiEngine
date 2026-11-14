@@ -16,7 +16,6 @@
 #include <Common/UIPartShapeChecks.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
-#include <Events/SubscriptionHolder.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -171,12 +170,12 @@ namespace BECore::Tests {
             size_t Count(const char* action) const {
                 return static_cast<size_t>(std::count(_actions.begin(), _actions.end(), PoolString::Intern(action)));
             }
-            eastl::string LastValue() const {
-                return _values.empty() ? eastl::string{} : eastl::string(_values.back().ToStringView().data(), _values.back().ToStringView().size());
+            String LastValue() const {
+                return _values.empty() ? String{} : String(_values.back().ToStringView().data(), _values.back().ToStringView().size());
             }
             /// The values of one action, joined with spaces
-            eastl::string Values(const char* action) const {
-                eastl::string joined;
+            String Values(const char* action) const {
+                String joined;
                 for (size_t i = 0; i < _actions.size(); ++i) {
                     if (_actions[i] == PoolString::Intern(action)) {
                         joined += joined.empty() ? "" : " ";
@@ -192,11 +191,11 @@ namespace BECore::Tests {
                 _values.push_back(event.value);
             }
 
-            eastl::vector<PoolString> _actions;
-            eastl::vector<PoolString> _values;
+            Vector<PoolString> _actions;
+            Vector<PoolString> _values;
         };
 
-        eastl::string ElementToXml(const UIElement& element) {
+        String ElementToXml(const UIElement& element) {
             XmlSerializer serializer;
             EXPECT_TRUE(serializer.BeginObject("element"));
             element.Serialize(serializer);
@@ -537,9 +536,9 @@ namespace BECore::Tests {
             const auto& element = Element(name);
             for (int i = 0; i <= 100; ++i) {
                 const float value = slider.ValueAt(element, XAt(name, static_cast<float>(i) / 100.0f));
-                const eastl::string text = UISliderComponent::FormatValue(value);
+                const String text = UISliderComponent::FormatValue(value);
                 EXPECT_LE(text.size(), 9u) << name << " " << text.c_str();
-                CoreManager::GetUIVars().Set(slider.bind, eastl::string_view(text.data(), text.size()));
+                CoreManager::GetUIVars().Set(slider.bind, StringView(text));
                 const float expected = UIText::FractionInRange(value, slider.minValue, slider.maxValue);
                 EXPECT_NEAR(slider.GetFraction(), expected, 1e-6f) << name << " " << text.c_str();
             }
@@ -713,7 +712,7 @@ namespace BECore::Tests {
 
     TEST_F(UISliderComponentTest, ASliderBelowTheTouchSizeIsCaught) {
         UILayoutValidatorOptions options;
-        eastl::vector<PoolString> small;
+        Vector<PoolString> small;
         for (const UILayoutIssue& issue : _canvas->GetLayout().Validate(options)) {
             if (issue.kind == UILayoutIssueKind::TouchTargetTooSmall) {
                 small.push_back(issue.element);
@@ -732,10 +731,10 @@ namespace BECore::Tests {
         ASSERT_TRUE(serializer.BeginObject("component"));
         _canvas->Serialize(serializer);
         serializer.EndObject();
-        const eastl::string xml = serializer.SaveToString();
+        const String xml = serializer.SaveToString();
 
         XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+        ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
         auto loaded = New<UICanvasComponent>();
         ASSERT_TRUE(deserializer.BeginObject("component"));
         loaded->Deserialize(deserializer);
@@ -799,8 +798,8 @@ namespace BECore::Tests {
             serializer.EndObject();
             return serializer.SaveToString();
         };
-        EXPECT_EQ(written(Element("Free")).find("partShape"), eastl::string::npos);
-        EXPECT_NE(written(Element("Round")).find("partShape=\"Round\""), eastl::string::npos);
+        EXPECT_EQ(written(Element("Free")).find("partShape"), String::npos);
+        EXPECT_NE(written(Element("Round")).find("partShape=\"Round\""), String::npos);
     }
 
     // ---- the shape of the parts ----------------------------------------------------------------------------------------------

@@ -10,8 +10,8 @@ namespace BECore {
         constexpr uint32_t IdSpecificity = 1u << 16;
         constexpr uint32_t ClassSpecificity = 1u << 8;
         constexpr uint32_t TagSpecificity = 1u;
-        constexpr eastl::string_view ImportantSuffix = "important";
-        constexpr eastl::string_view HtmlSource = "html";
+        constexpr StringView ImportantSuffix = "important";
+        constexpr StringView HtmlSource = "html";
 
         bool IsIdentChar(char c) {
             return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_';
@@ -20,7 +20,7 @@ namespace BECore {
         /// Line numbers of positions in one text
         class LineIndex {
         public:
-            LineIndex(eastl::string_view text, uint32_t firstLine) : _begin(text.data()), _firstLine(firstLine) {
+            LineIndex(StringView text, uint32_t firstLine) : _begin(text.data()), _firstLine(firstLine) {
                 _newlines.push_back(0);
                 for (size_t i = 0; i < text.size(); ++i) {
                     if (text[i] == '\n') {
@@ -39,17 +39,17 @@ namespace BECore {
         private:
             const char* _begin = nullptr;
             uint32_t _firstLine = 1;
-            eastl::vector<size_t> _newlines;
+            Vector<size_t> _newlines;
         };
 
         /// The text with the comments replaced by spaces (line breaks stay, so line numbers do)
-        eastl::string StripComments(eastl::string_view css) {
-            eastl::string out(css.data(), css.size());
+        String StripComments(StringView css) {
+            String out(css.data(), css.size());
             size_t i = 0;
             while (i + 1 < out.size()) {
                 if (out[i] == '/' && out[i + 1] == '*') {
                     size_t end = out.find("*/", i + 2);
-                    end = end == eastl::string::npos ? out.size() : end + 2;
+                    end = end == String::npos ? out.size() : end + 2;
                     for (size_t j = i; j < end; ++j) {
                         if (out[j] != '\n') {
                             out[j] = ' ';
@@ -64,7 +64,7 @@ namespace BECore {
         }
 
         /// The index of the '}' that closes the '{' at @p open, or the end of the text when there is none
-        size_t FindClosingBrace(eastl::string_view text, size_t open) {
+        size_t FindClosingBrace(StringView text, size_t open) {
             int depth = 0;
             char quote = 0;
             for (size_t i = open; i < text.size(); ++i) {
@@ -86,7 +86,7 @@ namespace BECore {
             return text.size();
         }
 
-        std::optional<UICssPseudo> ParsePseudo(eastl::string_view name) {
+        Optional<UICssPseudo> ParsePseudo(StringView name) {
             if (name == "hover") {
                 return UICssPseudo::Hover;
             }
@@ -103,7 +103,7 @@ namespace BECore {
         }
 
         /// Reads one selector. On failure @p why says what is outside the subset
-        std::optional<UICssSelector> ParseSelector(eastl::string_view text, eastl::string& why) {
+        Optional<UICssSelector> ParseSelector(StringView text, String& why) {
             if (text.size() > UICssParser::kMaxSelectorBytes) {
                 why = Format("a selector longer than {} bytes", UICssParser::kMaxSelectorBytes);
                 return std::nullopt;
@@ -166,21 +166,21 @@ namespace BECore {
                     while (pos < text.size() && IsIdentChar(text[pos])) {
                         ++pos;
                     }
-                    const eastl::string_view name = text.substr(start, pos - start);
+                    const StringView name = text.substr(start, pos - start);
                     if (name.empty()) {
                         why = "an empty name";
                         return std::nullopt;
                     }
                     if (marker == '#') {
-                        compound.id = eastl::string(name);
+                        compound.id = String(name);
                         selector.specificity += IdSpecificity;
                     } else if (marker == '.') {
-                        compound.classes.push_back(eastl::string(name));
+                        compound.classes.push_back(String(name));
                         selector.specificity += ClassSpecificity;
                     } else {
                         const auto pseudo = ParsePseudo(UIWebText::ToLower(name));
                         if (!pseudo) {
-                            why = Format("the pseudo-class ':{}'", eastl::string(name).c_str());
+                            why = Format("the pseudo-class ':{}'", String(name).c_str());
                             return std::nullopt;
                         }
                         compound.pseudo = *pseudo;
@@ -212,9 +212,9 @@ namespace BECore {
         }
 
         /// "16/9", "16 / 9" or "1.5"
-        std::optional<float> ParseRatio(eastl::string_view text) {
+        Optional<float> ParseRatio(StringView text) {
             const size_t slash = text.find('/');
-            if (slash == eastl::string_view::npos) {
+            if (slash == StringView::npos) {
                 return UIText::ParseFiniteFloat(text);
             }
             const auto numerator = UIText::ParseFiniteFloat(text.substr(0, slash));
@@ -226,40 +226,40 @@ namespace BECore {
         }
 
         /// One media query: `screen and (orientation: portrait) and (min-width: 600px)`. On failure @p why says what is outside the subset
-        std::optional<UIVariantCondition> ParseMediaQuery(eastl::string_view query, eastl::string& why) {
+        Optional<UIVariantCondition> ParseMediaQuery(StringView query, String& why) {
             UIVariantCondition condition;
-            for (const eastl::string_view word : UIWebText::SplitWords(query)) {
-                const eastl::string lower = UIWebText::ToLower(word);
+            for (const StringView word : UIWebText::SplitWords(query)) {
+                const String lower = UIWebText::ToLower(word);
                 if (lower == "and" || lower == "screen" || lower == "all") {
                     continue;
                 }
                 if (lower.front() != '(' || lower.back() != ')') {
-                    why = Format("the media query part '{}'", eastl::string(word).c_str());
+                    why = Format("the media query part '{}'", String(word).c_str());
                     return std::nullopt;
                 }
-                const eastl::string_view feature = eastl::string_view(lower).substr(1, lower.size() - 2);
+                const StringView feature = StringView(lower).substr(1, lower.size() - 2);
                 const size_t colon = feature.find(':');
-                if (colon == eastl::string_view::npos) {
-                    why = Format("the media feature '{}' without a value", eastl::string(feature).c_str());
+                if (colon == StringView::npos) {
+                    why = Format("the media feature '{}' without a value", String(feature).c_str());
                     return std::nullopt;
                 }
-                const eastl::string name(UIWebText::TrimSpace(feature.substr(0, colon)));
-                const eastl::string_view value = UIWebText::TrimSpace(feature.substr(colon + 1));
+                const String name(UIWebText::TrimSpace(feature.substr(0, colon)));
+                const StringView value = UIWebText::TrimSpace(feature.substr(colon + 1));
                 if (name == "orientation") {
                     if (value == "portrait") {
                         condition.orientation = UIOrientation::Portrait;
                     } else if (value == "landscape") {
                         condition.orientation = UIOrientation::Landscape;
                     } else {
-                        why = Format("the orientation '{}'", eastl::string(value).c_str());
+                        why = Format("the orientation '{}'", String(value).c_str());
                         return std::nullopt;
                     }
                     continue;
                 }
                 const bool isAspect = name == "aspect-ratio" || name == "min-aspect-ratio" || name == "max-aspect-ratio";
-                const std::optional<float> number = isAspect ? ParseRatio(value) : UIWebText::ParsePixels(value);
+                const Optional<float> number = isAspect ? ParseRatio(value) : UIWebText::ParsePixels(value);
                 if (!number) {
-                    why = Format("the value '{}' of '{}'", eastl::string(value).c_str(), name.c_str());
+                    why = Format("the value '{}' of '{}'", String(value).c_str(), name.c_str());
                     return std::nullopt;
                 }
                 if (name == "min-width") {
@@ -288,9 +288,9 @@ namespace BECore {
             return condition;
         }
 
-        eastl::vector<UICssDeclaration> ReadDeclarations(eastl::string_view body, const LineIndex& lines, uint32_t sourceId, eastl::string_view sourceName, UIWebReport& report) {
-            eastl::vector<UICssDeclaration> declarations;
-            for (const eastl::string_view part : UIWebText::SplitTopLevel(body, ';')) {
+        Vector<UICssDeclaration> ReadDeclarations(StringView body, const LineIndex& lines, uint32_t sourceId, StringView sourceName, UIWebReport& report) {
+            Vector<UICssDeclaration> declarations;
+            for (const StringView part : UIWebText::SplitTopLevel(body, ';')) {
                 if (part.empty()) {
                     continue;
                 }
@@ -299,19 +299,19 @@ namespace BECore {
                     break;
                 }
                 const size_t colon = part.find(':');
-                if (colon == eastl::string_view::npos) {
+                if (colon == StringView::npos) {
                     continue;
                 }
                 UICssDeclaration declaration;
                 declaration.property = UIWebText::ToLower(UIWebText::TrimSpace(part.substr(0, colon)));
-                eastl::string_view value = UIWebText::TrimSpace(part.substr(colon + 1));
+                StringView value = UIWebText::TrimSpace(part.substr(colon + 1));
                 // "... !important", also written "! important"
                 const size_t bang = value.rfind('!');
-                if (bang != eastl::string_view::npos && UIWebText::ToLower(UIWebText::TrimSpace(value.substr(bang + 1))) == ImportantSuffix) {
+                if (bang != StringView::npos && UIWebText::ToLower(UIWebText::TrimSpace(value.substr(bang + 1))) == ImportantSuffix) {
                     declaration.important = true;
                     value = UIWebText::TrimSpace(value.substr(0, bang));
                 }
-                declaration.value = eastl::string(value);
+                declaration.value = String(value);
                 declaration.line = lines.LineOf(part.data());
                 declaration.sourceId = sourceId;
                 if (!declaration.property.empty() && !declaration.value.empty()) {
@@ -323,7 +323,7 @@ namespace BECore {
 
         class SheetReader {
         public:
-            SheetReader(UICssSheet& sheet, eastl::string_view text, uint32_t firstLine, uint32_t sourceId, UIWebReport& report)
+            SheetReader(UICssSheet& sheet, StringView text, uint32_t firstLine, uint32_t sourceId, UIWebReport& report)
                 : _sheet(sheet), _text(text), _lines(text, firstLine), _sourceId(sourceId), _report(report) {}
 
             void ReadRules(size_t begin, size_t end, int media) {
@@ -340,7 +340,7 @@ namespace BECore {
                         continue;
                     }
                     const size_t open = _text.find('{', pos);
-                    if (open == eastl::string_view::npos || open >= end) {
+                    if (open == StringView::npos || open >= end) {
                         Report(pos, "a rule without a body is left out");
                         return;
                     }
@@ -352,12 +352,12 @@ namespace BECore {
 
         private:
             /// Reports @p why at @p pos and ends the read of the sheet: what was read stays, the rest is left out
-            void Stop(size_t pos, eastl::string why) {
+            void Stop(size_t pos, String why) {
                 Report(pos, std::move(why));
                 _stopped = true;
             }
 
-            void Report(size_t pos, eastl::string message) {
+            void Report(size_t pos, String message) {
                 _report.AddOnce(_sheet.sources[_sourceId], _lines.LineOf(_text.data() + std::min(pos, _text.size() - 1)), std::move(message));
             }
 
@@ -366,13 +366,13 @@ namespace BECore {
                 while (nameEnd < end && IsIdentChar(_text[nameEnd])) {
                     ++nameEnd;
                 }
-                const eastl::string name = UIWebText::ToLower(_text.substr(pos + 1, nameEnd - pos - 1));
+                const String name = UIWebText::ToLower(_text.substr(pos + 1, nameEnd - pos - 1));
                 const size_t semicolon = _text.find(';', nameEnd);
                 const size_t open = _text.find('{', nameEnd);
-                const bool hasBlock = open != eastl::string_view::npos && open < end && (semicolon == eastl::string_view::npos || open < semicolon);
+                const bool hasBlock = open != StringView::npos && open < end && (semicolon == StringView::npos || open < semicolon);
                 if (!hasBlock) {
                     Report(pos, Format("@{} is not supported", name.c_str()));
-                    return semicolon == eastl::string_view::npos || semicolon >= end ? end : semicolon + 1;
+                    return semicolon == StringView::npos || semicolon >= end ? end : semicolon + 1;
                 }
                 const size_t close = std::min(FindClosingBrace(_text, open), end);
                 if (name != "media") {
@@ -385,7 +385,7 @@ namespace BECore {
                 return close + 1;
             }
 
-            void ReadMedia(size_t pos, eastl::string_view prelude, size_t open, size_t close) {
+            void ReadMedia(size_t pos, StringView prelude, size_t open, size_t close) {
                 if (_sheet.medias.size() >= UICssParser::kMaxMediaBlocks) {
                     Report(pos, Format("more than {} @media blocks: this one is left out", UICssParser::kMaxMediaBlocks));
                     return;
@@ -393,12 +393,12 @@ namespace BECore {
                 UICssMedia block;
                 block.line = _lines.LineOf(_text.data() + pos);
                 block.sourceId = _sourceId;
-                for (const eastl::string_view query : UIWebText::SplitTopLevel(prelude, ',')) {
+                for (const StringView query : UIWebText::SplitTopLevel(prelude, ',')) {
                     if (block.alternatives.size() >= UICssParser::kMaxMediaAlternatives) {
                         Report(pos, Format("an @media with more than {} queries: the rest are left out", UICssParser::kMaxMediaAlternatives));
                         break;
                     }
-                    eastl::string why;
+                    String why;
                     if (auto condition = ParseMediaQuery(query, why)) {
                         block.alternatives.push_back(*condition);
                     } else {
@@ -414,7 +414,7 @@ namespace BECore {
                 ReadRules(open + 1, close, index);
             }
 
-            void ReadRule(eastl::string_view prelude, eastl::string_view body, int media) {
+            void ReadRule(StringView prelude, StringView body, int media) {
                 const size_t preludePos = static_cast<size_t>(prelude.data() - _text.data());
                 if (_sheet.rules.size() >= UICssParser::kMaxRules) {
                     Stop(preludePos, Format("more than {} rules: the rest of the style sheet is left out", UICssParser::kMaxRules));
@@ -426,12 +426,12 @@ namespace BECore {
                 }
                 UICssRule rule;
                 rule.media = media;
-                for (const eastl::string_view text : UIWebText::SplitTopLevel(prelude, ',')) {
+                for (const StringView text : UIWebText::SplitTopLevel(prelude, ',')) {
                     if (rule.selectors.size() >= UICssParser::kMaxSelectorsPerRule) {
                         Report(preludePos, Format("a rule with more than {} selectors: the rest are left out", UICssParser::kMaxSelectorsPerRule));
                         break;
                     }
-                    eastl::string why;
+                    String why;
                     if (auto selector = ParseSelector(text, why)) {
                         rule.selectors.push_back(std::move(*selector));
                     } else {
@@ -449,7 +449,7 @@ namespace BECore {
             }
 
             UICssSheet& _sheet;
-            eastl::string_view _text;
+            StringView _text;
             LineIndex _lines;
             uint32_t _sourceId;
             UIWebReport& _report;
@@ -458,19 +458,19 @@ namespace BECore {
 
     }  // namespace
 
-    void UICssParser::ParseInto(UICssSheet& sheet, eastl::string_view css, eastl::string_view sourceName, uint32_t firstLine, UIWebReport& report) {
+    void UICssParser::ParseInto(UICssSheet& sheet, StringView css, StringView sourceName, uint32_t firstLine, UIWebReport& report) {
         if (css.size() > kMaxSheetBytes) {
             report.AddOnce(sourceName, firstLine, Format("the style sheet is longer than {} bytes: the rest is left out", kMaxSheetBytes));
             css = css.substr(0, kMaxSheetBytes);
         }
-        const eastl::string text = StripComments(css);
+        const String text = StripComments(css);
         const uint32_t sourceId = static_cast<uint32_t>(sheet.sources.size());
         sheet.sources.push_back(UIText::TidyMessage(sourceName));
         SheetReader(sheet, text, firstLine, sourceId, report).ReadRules(0, text.size(), -1);
     }
 
-    eastl::vector<UICssDeclaration> UICssParser::ParseDeclarations(eastl::string_view text, uint32_t line, uint32_t sourceId, UIWebReport& report) {
-        const eastl::string stripped = StripComments(text);
+    Vector<UICssDeclaration> UICssParser::ParseDeclarations(StringView text, uint32_t line, uint32_t sourceId, UIWebReport& report) {
+        const String stripped = StripComments(text);
         const LineIndex lines(stripped, line);
         return ReadDeclarations(stripped, lines, sourceId, HtmlSource, report);
     }

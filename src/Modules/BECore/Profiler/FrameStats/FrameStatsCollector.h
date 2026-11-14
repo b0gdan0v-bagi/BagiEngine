@@ -19,22 +19,22 @@ namespace BECore {
 
     /// What one frame cost
     struct FrameStats {
-        uint64_t frame = 0;                                // 1, 2, ... in the order the collector saw them
-        bool paused = false;                               // a held frame: the game did not advance (a stepped frame is a game frame)
-        double frameMs = 0.0;                              // from the end of the frame before to the end of this one (the first frame: its cpuMs)
-        double cpuMs = 0.0;                                // from BeginFrame to EndFrame
-        eastl::array<double, kFrameStageCount> stageMs{};  // by FrameStage; SceneUpdate is inside Update, SceneDraw inside Render
+        uint64_t frame = 0;                         // 1, 2, ... in the order the collector saw them
+        bool paused = false;                        // a held frame: the game did not advance (a stepped frame is a game frame)
+        double frameMs = 0.0;                       // from the end of the frame before to the end of this one (the first frame: its cpuMs)
+        double cpuMs = 0.0;                         // from BeginFrame to EndFrame
+        Array<double, kFrameStageCount> stageMs{};  // by FrameStage; SceneUpdate is inside Update, SceneDraw inside Render
         RenderCounters draws;
         uint64_t allocCount = 0;  // the allocations of the frame (ENGINE_PROFILER_ALLOC; 0 without it)
         uint64_t allocBytes = 0;
         uint64_t liveBytes = 0;  // at the end of the frame
-        eastl::fixed_vector<FrameCounter, kMaxFrameCounters, false> counters;
+        FixedVector<FrameCounter, kMaxFrameCounters> counters;
 
         [[nodiscard]] double GetStageMs(FrameStage stage) const {
             return stageMs[+stage];
         }
         /// The value of the counter @p name this frame, nullopt when nobody set it
-        [[nodiscard]] std::optional<double> FindCounter(PoolString name) const;
+        [[nodiscard]] Optional<double> FindCounter(PoolString name) const;
     };
 
     /**
@@ -66,7 +66,7 @@ namespace BECore {
         void EndFrame(const RenderCounters& draws, const AllocTotals& allocs);
 
         /// The last @p count frames (fewer when fewer were seen), the oldest first
-        [[nodiscard]] eastl::vector<FrameStats> GetHistory(size_t count) const;
+        [[nodiscard]] Vector<FrameStats> GetHistory(size_t count) const;
         /// The last finished frame, nullptr before the first
         [[nodiscard]] const FrameStats* GetLast() const;
         [[nodiscard]] uint64_t GetFrameCount() const {
@@ -94,13 +94,13 @@ namespace BECore {
         [[nodiscard]] uint64_t Now() const;
 
         NowFn _now = nullptr;
-        eastl::vector<FrameStats> _ring;  // kFrameHistory entries, the newest at (_frames - 1) % kFrameHistory
+        Vector<FrameStats> _ring;  // kFrameHistory entries, the newest at (_frames - 1) % kFrameHistory
         uint64_t _frames = 0;
         bool _open = false;
         FrameStats _current;
         uint64_t _frameBegin = 0;
         uint64_t _lastFrameEnd = 0;
-        eastl::array<uint64_t, kFrameStageCount> _stageBegin{};
+        Array<uint64_t, kFrameStageCount> _stageBegin{};
         AllocTotals _allocsAtBegin;
     };
 

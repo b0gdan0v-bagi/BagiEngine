@@ -28,7 +28,7 @@ namespace BECore {
     public:
         UICanvasScaleParams params;
         IntrusivePtr<UIElement> root = New<UIElement>();  ///< the canvas itself: its children are the elements; its rect is the content bounds
-        eastl::vector<UIVariant> variants;
+        Vector<UIVariant> variants;
         UIRegionSet regions;  ///< the rectangles the game published, in canvas units; noticed by Update() by themselves, like `params`
         double time = 0.0;    ///< game time of this frame in seconds, for the transitions of the elements; the owner sets it before Update() (it is no part of what makes Update() lay out again)
 
@@ -86,9 +86,9 @@ namespace BECore {
         [[nodiscard]] UIElement* PickElement(float canvasX, float canvasY) const;
 
         /// The elements with `HasPopupChildren()` that are open, in tree order; only visible ones, and a popup inside the children of another is not looked for
-        [[nodiscard]] eastl::vector<UIElement*> OpenPopups() const;
+        [[nodiscard]] Vector<UIElement*> OpenPopups() const;
 
-        [[nodiscard]] eastl::vector<UILayoutIssue> Validate(const UILayoutValidatorOptions& options) const;
+        [[nodiscard]] Vector<UILayoutIssue> Validate(const UILayoutValidatorOptions& options) const;
 
     private:
         UICanvasScaleParams _params;
@@ -101,7 +101,7 @@ namespace BECore {
         bool _variantsChosen = false;
         uint32_t _variantRuns = 0;
         uint32_t _layoutRuns = 0;
-        eastl::vector<IntrusivePtr<UITransitionComponent>> _transitions;  ///< the components found by the last layout, in tree order; kept so a steady frame allocates nothing
+        Vector<IntrusivePtr<UITransitionComponent>> _transitions;  ///< the components found by the last layout, in tree order; kept so a steady frame allocates nothing
     };
 
 }  // namespace BECore

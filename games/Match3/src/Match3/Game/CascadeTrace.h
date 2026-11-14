@@ -25,9 +25,9 @@ namespace BECore::Match3 {
 
     /// One round of the cascade: the matched cells go, the gems above fall, the holes at the top are refilled
     struct CascadeStep {
-        eastl::vector<Cell> removed;
-        eastl::vector<GemFall> falls;  ///< In the order gravity moved them: column by column, in each column the lowest gem first
-        eastl::vector<GemRefill> refills;
+        Vector<Cell> removed;
+        Vector<GemFall> falls;  ///< In the order gravity moved them: column by column, in each column the lowest gem first
+        Vector<GemRefill> refills;
     };
 
     /**
@@ -40,7 +40,7 @@ namespace BECore::Match3 {
         uint64_t version = 0;  ///< The model version this trace belongs to (`Match3GameModel::GetVersion()` after the swap)
         Cell a;
         Cell b;
-        eastl::vector<CascadeStep> steps;
+        Vector<CascadeStep> steps;
     };
 
     /// Apply a trace to the board BEFORE the swap and return the board AFTER it (swap, then step by step)

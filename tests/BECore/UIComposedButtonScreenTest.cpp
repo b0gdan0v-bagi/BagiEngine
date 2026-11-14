@@ -108,7 +108,7 @@ namespace BECore::Tests {
                                        "; background: #283c5a } #Left { left: 70px; top: 10px; width: 200px; height: " + sidePx + "; background: #283c5a }</style>" +
                                        R"(<button id="Icon" data-icon="BarIcon" data-action="IconBar"></button><button id="Left" data-icon="BarIcon" data-action="LeftBar">Go</button>)";
             UIWebReport report;
-            const eastl::string compiled = UIWebCompiler::Compile(eastl::string_view(source.data(), source.size()), {}, report);
+            const String compiled = UIWebCompiler::Compile(FromStd(source), {}, report);
             EXPECT_TRUE(report.issues.empty());
             const std::string xml(compiled.c_str());
             const size_t begin = xml.find("<elements>") + std::string("<elements>").size();
@@ -124,7 +124,7 @@ namespace BECore::Tests {
                 "; background: #283c5a }</style>" +
                 R"(<div id="Seg" data-widget="segmented" data-bind="seg"><button id="SegA" data-value="a" data-icon="BarIcon"></button><button id="SegB" data-value="b" data-icon="BarIcon">Go</button><button id="SegC" data-value="c">Plain</button></div>)";
             UIWebReport report;
-            const eastl::string compiled = UIWebCompiler::Compile(eastl::string_view(source.data(), source.size()), {}, report);
+            const String compiled = UIWebCompiler::Compile(FromStd(source), {}, report);
             EXPECT_TRUE(report.issues.empty());
             const std::string xml(compiled.c_str());
             const size_t begin = xml.find("<elements>") + std::string("<elements>").size();
@@ -155,7 +155,7 @@ namespace BECore::Tests {
             return name;
         }
 
-        bool Reports(const eastl::vector<UIMatrixFailure>& failures, UILayoutIssueKind kind, const char* button) {
+        bool Reports(const Vector<UIMatrixFailure>& failures, UILayoutIssueKind kind, const char* button) {
             for (const UIMatrixFailure& failure : failures) {
                 for (const UILayoutIssue& issue : failure.issues) {
                     if (issue.kind == kind && ButtonOf(issue.element) == button) {
@@ -194,7 +194,7 @@ namespace BECore::Tests {
 
         void LoadXml(const std::string& xml) {
             XmlDeserializer deserializer;
-            ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+            ASSERT_TRUE(deserializer.LoadFromString(FromStd(xml)));
             _manager = New<SceneManager>();
             _manager->Deserialize(deserializer);
             ASSERT_FALSE(deserializer.HasErrors());
@@ -208,7 +208,7 @@ namespace BECore::Tests {
             _bar->UpdateLayout(1280.0f, 720.0f);  // the reflected fields of the component reach the layout on its first update
         }
 
-        eastl::vector<UIMatrixFailure> OnMatrix() const {
+        Vector<UIMatrixFailure> OnMatrix() const {
             UILayoutValidatorOptions options;
             options.minTouchSize = kTouchSize;
             UILayoutContext context;

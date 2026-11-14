@@ -1,6 +1,5 @@
 #pragma once
 
-
 struct ImFont;
 struct ImGuiIO;
 
@@ -24,9 +23,9 @@ namespace BECore {
     /// The bytes of the font files. ImGui reads them for as long as its atlas lives (the sources do not own them), so
     /// they must outlive the ImGui context: destroy the context first.
     struct ImGuiFontBuffers {
-        eastl::vector<uint8_t> ui;
-        eastl::vector<uint8_t> icons;
-        eastl::vector<uint8_t> mono;
+        Vector<uint8_t> ui;
+        Vector<uint8_t> icons;
+        Vector<uint8_t> mono;
     };
 
     /// The two fonts of the editor. A null pointer is a font that could not be loaded; ImGui then keeps its own default.

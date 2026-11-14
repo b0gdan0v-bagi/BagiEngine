@@ -70,7 +70,7 @@ namespace BECore {
         uint32_t GetViewVersion() const;
 
         /// The declared view variants, read only (a tool lists them by name; a variant's index is the one `ActiveSceneView::index` carries)
-        eastl::span<const SceneViewVariant> GetViewVariants() const;
+        Span<const SceneViewVariant> GetViewVariants() const;
 
         /**
          * @brief A tool's override of the pick: nullopt picks by the output as always, -1 forces the default view, `i` forces the variant `i`.
@@ -79,7 +79,7 @@ namespace BECore {
          * one Draw() and clears it right after, so Game mode, other passes and Update() never see it. Setting it changes nothing by itself;
          * the next Draw() picks, and bumps the version and announces the change like any other pick.
          */
-        void SetViewOverride(std::optional<int32_t> index);
+        void SetViewOverride(Optional<int32_t> index);
 
         /**
          * @brief Map a mouse position in render output pixels (window or viewport-local) to scene units.
@@ -147,7 +147,7 @@ namespace BECore {
         IntrusivePtr<SceneNode> InstantiateNode(pugi::xml_node reference, const NodeFileLoader& loader, SceneNode* parent = nullptr, size_t index = kAppend);
 
         /// InstantiateNode() of a reference without overrides (`nodes/MahjongHud`), the node file found through the FileSystem of CoreManager (a game's `config/nodes/X.xml` wins over the engine's)
-        IntrusivePtr<SceneNode> InstantiateNode(eastl::string_view ref, SceneNode* parent = nullptr, size_t index = kAppend);
+        IntrusivePtr<SceneNode> InstantiateNode(StringView ref, SceneNode* parent = nullptr, size_t index = kAppend);
 
         /// InstantiateNode() of a reference element with overrides, the node file found through the FileSystem of CoreManager
         IntrusivePtr<SceneNode> InstantiateNode(const XmlNode& reference, SceneNode* parent = nullptr, size_t index = kAppend);
@@ -176,7 +176,7 @@ namespace BECore {
         IntrusivePtr<SceneNode> DuplicateNode(const SceneNode& node);
 
         /// @p base when no child of @p parent is called so, else `base 2`, `base 3`, ... the first one that is free
-        PoolString MakeUniqueSiblingName(const SceneNode& parent, eastl::string_view base) const;
+        PoolString MakeUniqueSiblingName(const SceneNode& parent, StringView base) const;
 
         /// Clears the editor flags (SceneNode::GetEditorFlags()) of every node of the tree, the root included. The scene editor calls it when it goes away
         void ClearEditorFlags();
@@ -192,15 +192,15 @@ namespace BECore {
         BE_REFLECT_FIELD PoolString _name;
         BE_REFLECT_FIELD float _viewWidth = 0.0f;
         BE_REFLECT_FIELD float _viewHeight = 0.0f;
-        BE_REFLECT_FIELD eastl::vector<SceneViewVariant> _viewVariants;
-        BE_REFLECT_FIELD eastl::vector<IntrusivePtr<SceneNode>> _nodes;
+        BE_REFLECT_FIELD Vector<SceneViewVariant> _viewVariants;
+        BE_REFLECT_FIELD Vector<IntrusivePtr<SceneNode>> _nodes;
         entt::registry _registry;
         IntrusivePtr<SceneNode> _rootNode;
         ViewTransform _viewTransform;   // fit of the view to the output, set by Draw(), read by ScreenToScene*
         int32_t _activeViewIndex = -1;  // index in _viewVariants, -1 the default view; set by Draw()
         uint32_t _viewVersion = 0;
-        uint32_t _announcedViewVersion = 0;    // the version Update() last sent SceneViewChangedEvent for
-        std::optional<int32_t> _viewOverride;  // a tool's forced view, see SetViewOverride(); never saved
+        uint32_t _announcedViewVersion = 0;  // the version Update() last sent SceneViewChangedEvent for
+        Optional<int32_t> _viewOverride;     // a tool's forced view, see SetViewOverride(); never saved
         bool _active = false;
     };
 

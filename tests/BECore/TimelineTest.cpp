@@ -50,14 +50,14 @@ namespace BECore::Tests {
 
         /// What the callbacks saw, in order
         struct Calls {
-            eastl::vector<int> ids;
+            Vector<int> ids;
 
             eastl::function<void()> Callback(int id) {
                 return [this, id] { ids.push_back(id); };
             }
         };
 
-        bool operator==(const eastl::vector<int>& left, std::initializer_list<int> right) {
+        bool operator==(const Vector<int>& left, std::initializer_list<int> right) {
             return left.size() == right.size() && std::equal(left.begin(), left.end(), right.begin());
         }
 

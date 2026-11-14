@@ -54,7 +54,7 @@ namespace BECore {
          * @param name Config name as string_view; avoids PoolString interning overhead
          * @return Root XmlNode or invalid node if not found
          */
-        XmlNode GetConfig(eastl::string_view name) const;
+        XmlNode GetConfig(StringView name) const;
 
         /**
          * @brief Get an IDeserializer positioned at the root of a loaded config
@@ -65,14 +65,14 @@ namespace BECore {
          * @param name Config name (without extension)
          * @return The deserializer, or nullptr if the config is unknown
          */
-        eastl::unique_ptr<IDeserializer> CreateDeserializer(PoolString name) const;
+        UniquePtr<IDeserializer> CreateDeserializer(PoolString name) const;
 
         /**
          * @brief Get an IDeserializer over a loaded config — string_view overload
          * @param name Config name as string_view; avoids PoolString interning overhead
          * @return The deserializer, or nullptr if the config is unknown
          */
-        eastl::unique_ptr<IDeserializer> CreateDeserializer(eastl::string_view name) const;
+        UniquePtr<IDeserializer> CreateDeserializer(StringView name) const;
 
         /**
          * @brief Check if config exists
@@ -86,7 +86,7 @@ namespace BECore {
          * @param name Config name as string_view
          * @return True if config is loaded
          */
-        bool HasConfig(eastl::string_view name) const;
+        bool HasConfig(StringView name) const;
 
         /**
          * @brief Get number of loaded configs
@@ -97,7 +97,7 @@ namespace BECore {
          * @brief Get sorted list of all loaded config names
          * @return Vector of config names (without extension)
          */
-        eastl::vector<PoolString> GetAllConfigNames() const;
+        Vector<PoolString> GetAllConfigNames() const;
 
         /**
          * @brief Get the on-disk file path for a loaded config
@@ -131,7 +131,7 @@ namespace BECore {
          * @param dir Directory to scan
          * @param filesToLoad Output vector of (path, name) pairs
          */
-        void ScanDirectory(const std::filesystem::path& dir, eastl::vector<eastl::pair<std::filesystem::path, PoolString>>& filesToLoad) const;
+        void ScanDirectory(const std::filesystem::path& dir, Vector<eastl::pair<std::filesystem::path, PoolString>>& filesToLoad) const;
 
         /**
          * @brief Load single config file asynchronously

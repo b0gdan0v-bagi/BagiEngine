@@ -8,7 +8,7 @@ namespace BECore::Match3 {
     class Match3GameModel;
 
     /// The id of the game in a save file (`SaveSchema::game`)
-    inline constexpr eastl::string_view kMatch3SaveGame = "Match3";
+    inline constexpr StringView kMatch3SaveGame = "Match3";
 
     /// The version of the state schema that is written now
     inline constexpr uint32_t kMatch3SaveVersion = 1;
@@ -33,14 +33,14 @@ namespace BECore::Match3 {
         /// Score; not negative
         BE_REFLECT_FIELD int32_t score = 0;
         /// The board row by row (row 0 on top), one letter per gem as in the control API's `get_state` (`ROYGBP`, no empty cell): 64 characters
-        BE_REFLECT_FIELD eastl::string board;
+        BE_REFLECT_FIELD String board;
         /// The state of the random generator as std::mt19937 writes it to a stream: 624 numbers in the standard's form (MSVC, libc++), libstdc++ adds the position, so a save moves between
         /// implementations that write the same form
-        BE_REFLECT_FIELD eastl::string rng;
+        BE_REFLECT_FIELD String rng;
     };
 
     /// Save the game as the slot (`CaptureState` inside the envelope of kMatch3SaveSchema); the errors of SaveGameService::Save
-    [[nodiscard]] std::expected<void, SaveError> SaveMatch3(SaveGameService& service, eastl::string_view slot, const Match3GameModel& model);
+    [[nodiscard]] std::expected<void, SaveError> SaveMatch3(SaveGameService& service, StringView slot, const Match3GameModel& model);
 
     /**
      * @brief Load the slot into the game
@@ -50,6 +50,6 @@ namespace BECore::Match3 {
      *
      * @return what the file says (its version) or the errors of SaveGameService::Load
      */
-    [[nodiscard]] std::expected<SaveInfo, SaveError> LoadMatch3(const SaveGameService& service, eastl::string_view slot, Match3GameModel& model);
+    [[nodiscard]] std::expected<SaveInfo, SaveError> LoadMatch3(const SaveGameService& service, StringView slot, Match3GameModel& model);
 
 }  // namespace BECore::Match3

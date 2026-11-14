@@ -39,7 +39,7 @@ namespace BECore {
         return _cache;
     }
 
-    IResourceLoader* ResourceManager::FindLoader(eastl::string_view extension) const {
+    IResourceLoader* ResourceManager::FindLoader(StringView extension) const {
         for (const auto& loader : _loaders) {
             if (loader->CanLoad(extension)) {
                 return loader.Get();
@@ -48,10 +48,10 @@ namespace BECore {
         return nullptr;
     }
 
-    IResourceLoader* ResourceManager::FindLoaderForPath(eastl::string_view path) const {
+    IResourceLoader* ResourceManager::FindLoaderForPath(StringView path) const {
         const size_t nameStart = path.find_last_of("/\\");
-        const eastl::string_view name = nameStart == eastl::string_view::npos ? path : path.substr(nameStart + 1);
-        for (size_t dot = name.find('.'); dot != eastl::string_view::npos; dot = name.find('.', dot + 1)) {
+        const StringView name = nameStart == StringView::npos ? path : path.substr(nameStart + 1);
+        for (size_t dot = name.find('.'); dot != StringView::npos; dot = name.find('.', dot + 1)) {
             if (auto* loader = FindLoader(name.substr(dot))) {
                 return loader;
             }

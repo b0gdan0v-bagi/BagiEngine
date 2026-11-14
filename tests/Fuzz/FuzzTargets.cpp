@@ -24,11 +24,11 @@ namespace BECore::Fuzz {
         return targets;
     }
 
-    eastl::vector<uint8_t> WithTrueBinaryHeader(const uint8_t* data, size_t size) {
+    Vector<uint8_t> WithTrueBinaryHeader(const uint8_t* data, size_t size) {
         if (size < BinaryFormat::HeaderSize) {
             return {};
         }
-        eastl::vector<uint8_t> repaired(data, data + size);
+        Vector<uint8_t> repaired(data, data + size);
         std::memcpy(repaired.data(), BinaryFormat::Magic, sizeof(BinaryFormat::Magic));
         BinaryFormat::Store<uint16_t>(repaired.data() + sizeof(BinaryFormat::Magic), BinaryFormat::CurrentVersion);
         BinaryFormat::Store<uint32_t>(repaired.data() + BinaryFormat::PayloadSizeOffset, static_cast<uint32_t>(size - BinaryFormat::HeaderSize));

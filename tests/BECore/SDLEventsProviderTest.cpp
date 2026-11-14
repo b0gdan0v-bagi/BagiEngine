@@ -18,7 +18,7 @@ namespace BECore::Tests {
                 Subscribe<SDLEvents::MouseButtonDownEvent, &MouseRecorder::OnMouseDown>(this);
             }
 
-            eastl::vector<SDL_MouseButtonEvent> clicks;
+            Vector<SDL_MouseButtonEvent> clicks;
 
         private:
             void OnMouseDown(const SDLEvents::MouseButtonDownEvent& e) {
@@ -41,15 +41,15 @@ namespace BECore::Tests {
                 Subscribe<SDLEvents::DisplayOrientationChangedEvent, &InputRecorder::OnOrientation>(this);
             }
 
-            eastl::vector<SDL_MouseButtonEvent> ups;
-            eastl::vector<SDL_MouseMotionEvent> motions;
-            eastl::vector<SDL_MouseWheelEvent> wheels;
-            eastl::vector<SDLEvents::KeyDownEvent> keyDowns;
-            eastl::vector<SDLEvents::KeyUpEvent> keyUps;
-            eastl::vector<eastl::string> texts;
-            eastl::vector<SDL_EventType> windowEvents;
+            Vector<SDL_MouseButtonEvent> ups;
+            Vector<SDL_MouseMotionEvent> motions;
+            Vector<SDL_MouseWheelEvent> wheels;
+            Vector<SDLEvents::KeyDownEvent> keyDowns;
+            Vector<SDLEvents::KeyUpEvent> keyUps;
+            Vector<String> texts;
+            Vector<SDL_EventType> windowEvents;
             int safeAreaChanges = 0;
-            eastl::vector<SDLEvents::DisplayOrientationChangedEvent> orientations;
+            Vector<SDLEvents::DisplayOrientationChangedEvent> orientations;
 
         private:
             void OnMouseUp(const SDLEvents::MouseButtonUpEvent& e) {
@@ -96,7 +96,7 @@ namespace BECore::Tests {
                 Subscribe<SDLEvents::SDLEventWrapper, &RawRecorder::OnRaw>(this);
             }
 
-            eastl::vector<uint32_t> types;
+            Vector<uint32_t> types;
 
         private:
             void OnRaw(const SDLEvents::SDLEventWrapper& e) {
@@ -126,7 +126,7 @@ namespace BECore::Tests {
         public:
             explicit DensityWindow(float density) : _density(density) {}
 
-            bool Initialize(eastl::string_view /*configPath*/) override {
+            bool Initialize(StringView /*configPath*/) override {
                 return true;
             }
 
@@ -479,7 +479,7 @@ namespace BECore::Tests {
         _provider.ProcessEvents();
 
         ASSERT_EQ(recorder.texts.size(), 1u);
-        EXPECT_EQ(recorder.texts[0], eastl::string("a\xD0\x96"));
+        EXPECT_EQ(recorder.texts[0], String("a\xD0\x96"));
     }
 
     TEST_F(SDLEventsProviderTest, ImGuiKeepsKeysAndTextWhileItWantsTheKeyboard) {
@@ -546,7 +546,7 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(PushEvent(resized));
         _provider.ProcessEvents();
 
-        const eastl::vector<uint32_t> expected = {SDL_EVENT_MOUSE_BUTTON_DOWN, SDL_EVENT_KEY_DOWN, SDL_EVENT_WINDOW_RESIZED};
+        const Vector<uint32_t> expected = {SDL_EVENT_MOUSE_BUTTON_DOWN, SDL_EVENT_KEY_DOWN, SDL_EVENT_WINDOW_RESIZED};
         EXPECT_EQ(raw.types, expected);
         // A viewport resize re-lays the scene while paused
         ASSERT_EQ(recorder.windowEvents.size(), 1u);
@@ -610,7 +610,7 @@ namespace BECore::Tests {
         }
         _provider.ProcessEvents();
 
-        const eastl::vector<SDL_EventType> expected = {SDL_EVENT_WINDOW_RESIZED, SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED, SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED, SDL_EVENT_WINDOW_FOCUS_LOST};
+        const Vector<SDL_EventType> expected = {SDL_EVENT_WINDOW_RESIZED, SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED, SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED, SDL_EVENT_WINDOW_FOCUS_LOST};
         EXPECT_EQ(recorder.windowEvents, expected);
         EXPECT_EQ(recorder.safeAreaChanges, 0);
     }
@@ -651,7 +651,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(pastes.pastes.empty());  // the answer comes from Clipboard::Update()
         CoreManager::GetClipboard().Update();
 
-        EXPECT_EQ(pastes.pastes, (eastl::vector<eastl::string>{"ABC"}));
+        EXPECT_EQ(pastes.pastes, (Vector<String>{"ABC"}));
         ASSERT_EQ(keys.keyDowns.size(), 1u);
         EXPECT_EQ(keys.keyDowns[0].key, SDLK_V);
     }

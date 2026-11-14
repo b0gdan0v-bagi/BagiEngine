@@ -33,7 +33,7 @@ namespace BECore {
      * @return IntrusivePtrAtomic<T> or IntrusivePtrNonAtomic<T> (deduced from T's base).
      */
     template <typename T, typename... Args>
-    auto MakeFromConfig(eastl::string_view configName, Args&&... args) {
+    auto MakeFromConfig(StringView configName, Args&&... args) {
         auto obj = BECore::New<T>(std::forward<Args>(args)...);
         if (auto deserializer = CoreManager::GetConfigManager().CreateDeserializer(configName)) {
             obj->Deserialize(*deserializer);

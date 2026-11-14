@@ -5,8 +5,8 @@ namespace BECore::Tests {
 
     namespace {
 
-        eastl::string_view View(std::string_view text) {
-            return eastl::string_view(text.data(), text.size());
+        StringView View(std::string_view text) {
+            return FromStd(text);
         }
 
         Json SampleObject() {
@@ -40,7 +40,7 @@ namespace BECore::Tests {
         for (const std::string& text : bad) {
             const auto parsed = ParseJson(View(text));
             ASSERT_FALSE(parsed.has_value()) << "input of " << text.size() << " bytes";
-            EXPECT_EQ(parsed.error().code, eastl::string(ControlErrors::kParseError));
+            EXPECT_EQ(parsed.error().code, String(ControlErrors::kParseError));
             EXPECT_FALSE(parsed.error().message.empty());
         }
     }
@@ -135,7 +135,7 @@ namespace BECore::Tests {
     TEST(JsonTest, DumpReplacesInvalidUtf8InsteadOfAborting) {
         const Json text = MakeJsonString("bad \xff byte");
 
-        const eastl::string dumped = DumpJson(text);
+        const String dumped = DumpJson(text);
 
         EXPECT_NE(std::string(dumped.c_str()).find("\xef\xbf\xbd"), std::string::npos);  // U+FFFD
     }
@@ -143,7 +143,7 @@ namespace BECore::Tests {
     TEST(JsonTest, StringsRoundTripThroughDumpAndParse) {
         const std::string original = "quote \" backslash \\ newline \n tab \t unicode \xc3\xa9 \xe2\x82\xac";
 
-        const eastl::string dumped = DumpJson(MakeJsonString(View(original)));
+        const String dumped = DumpJson(MakeJsonString(View(original)));
         const auto parsed = ParseJson(dumped);
 
         ASSERT_TRUE(parsed.has_value());

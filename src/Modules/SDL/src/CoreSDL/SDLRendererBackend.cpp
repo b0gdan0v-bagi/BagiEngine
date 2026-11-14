@@ -211,7 +211,7 @@ namespace BECore {
         return texture;
     }
 
-    void SDLRendererBackend::DrawGeometry(ITexture* texture, eastl::span<const GeometryVertex> vertices, eastl::span<const int> indices, float translateX, float translateY) {
+    void SDLRendererBackend::DrawGeometry(ITexture* texture, Span<const GeometryVertex> vertices, Span<const int> indices, float translateX, float translateY) {
         if (!_renderer || IsClipEmpty() || vertices.empty() || indices.size() < kIndicesPerTriangle) {
             return;
         }
@@ -270,7 +270,7 @@ namespace BECore {
         if (!_renderer) {
             return;
         }
-        const std::optional<Rect> clip = GetClipRect();
+        const Optional<Rect> clip = GetClipRect();
         if (!clip) {
             SDL_SetRenderClipRect(_renderer, nullptr);
             return;
@@ -293,8 +293,8 @@ namespace BECore {
 
     void SDLRendererBackend::UnsetRenderTarget() {}
 
-    eastl::string SDLRendererBackend::GetNoGpuDeviceReason() const {
-        return eastl::string("the SDL 2D renderer has no depth buffer and no shaders (use a renderer with a GPU device)");
+    String SDLRendererBackend::GetNoGpuDeviceReason() const {
+        return String("the SDL 2D renderer has no depth buffer and no shaders (use a renderer with a GPU device)");
     }
 
     float SDLRendererBackend::GetOutputWidth() const {
@@ -336,7 +336,7 @@ namespace BECore {
     void SDLRendererBackend::RequestCapture(CaptureCallback callback) {
         if (_captureCallback) {
             CaptureCallback superseded = std::move(_captureCallback);
-            superseded(std::unexpected(eastl::string("the capture was replaced by a newer request")));
+            superseded(std::unexpected(String("the capture was replaced by a newer request")));
         }
         _captureCallback = std::move(callback);
     }

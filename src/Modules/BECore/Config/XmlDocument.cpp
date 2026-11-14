@@ -23,7 +23,7 @@ namespace BECore {
         return result;
     }
 
-    bool XmlDocument::LoadFromString(eastl::string_view xmlContent) {
+    bool XmlDocument::LoadFromString(StringView xmlContent) {
         if (xmlContent.empty()) {
             return false;
         }

@@ -9,7 +9,7 @@ namespace BECore {
     public:
         /// Builds the widgets of a run mode. The default reads the config named by GetWidgetsConfigName(mode); a test replaces it
         /// (SetWidgetLoader) to get widgets with no config files and no real editor.
-        using WidgetLoader = eastl::function<eastl::vector<IntrusivePtr<IWidget>>(RunMode)>;
+        using WidgetLoader = eastl::function<Vector<IntrusivePtr<IWidget>>(RunMode)>;
 
         WidgetManager() = default;
         /// Destroys the widgets the way DestroyAll does (the last created first), without waiting for the GPU.
@@ -70,11 +70,11 @@ namespace BECore {
 #endif
 
     private:
-        eastl::vector<IntrusivePtr<IWidget>> _widgets;
+        Vector<IntrusivePtr<IWidget>> _widgets;
         RunMode _mode = RunMode::Game;
         WidgetLoader _loader;
         // Not under BE_WITH_EDITOR: the layout of a class must not depend on the define, or objects built in a mixed build crash
-        std::optional<RunMode> _pendingMode;
+        Optional<RunMode> _pendingMode;
     };
 
 }  // namespace BECore

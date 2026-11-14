@@ -7,12 +7,12 @@ namespace BECore {
 
     namespace {
 
-        [[nodiscard]] std::unexpected<ControlError> Fail(eastl::string_view code, eastl::string message) {
+        [[nodiscard]] std::unexpected<ControlError> Fail(StringView code, String message) {
             return std::unexpected(MakeControlError(code, std::move(message)));
         }
 
         /// The message that takes a seat back: `join_room` with the token and no name
-        [[nodiscard]] eastl::string MakeResumeMessage(const eastl::string& room, const eastl::string& token) {
+        [[nodiscard]] String MakeResumeMessage(const String& room, const String& token) {
             JoinRoomMessage message;
             message.code = room;
             message.token = token;
@@ -25,22 +25,22 @@ namespace BECore {
 
     RoomClient::~RoomClient() = default;
 
-    std::expected<void, ControlError> RoomClient::Host(eastl::string_view url, eastl::string_view game, eastl::string_view name, const Json& options, bool isPublic) {
+    std::expected<void, ControlError> RoomClient::Host(StringView url, StringView game, StringView name, const Json& options, bool isPublic) {
         CreateRoomMessage message;
-        message.game = eastl::string(game);
-        message.name = eastl::string(name);
+        message.game = String(game);
+        message.name = String(name);
         message.options = options;
         message.isPublic = isPublic;
         return BeginRequest(url, SerializeClientMessage(message));
     }
 
-    std::expected<void, ControlError> RoomClient::ListRooms(eastl::string_view url, eastl::string_view game) {
+    std::expected<void, ControlError> RoomClient::ListRooms(StringView url, StringView game) {
         ListRoomsMessage message;
-        message.game = eastl::string(game);
+        message.game = String(game);
         return BeginRequest(url, SerializeClientMessage(message), false);
     }
 
-    std::expected<void, ControlError> RoomClient::Join(eastl::string_view url, eastl::string_view code, eastl::string_view name) {
+    std::expected<void, ControlError> RoomClient::Join(StringView url, StringView code, StringView name) {
         const auto normalized = NormalizeRoomCode(code);
         if (!normalized) {
             // A code that cannot exist: the server would count it as a failed guess, so it is not sent
@@ -48,11 +48,11 @@ namespace BECore {
         }
         JoinRoomMessage message;
         message.code = *normalized;
-        message.name = eastl::string(name);
+        message.name = String(name);
         return BeginRequest(url, SerializeClientMessage(message));
     }
 
-    std::expected<void, ControlError> RoomClient::BeginRequest(eastl::string_view url, eastl::string firstMessage, bool awaitsJoin) {
+    std::expected<void, ControlError> RoomClient::BeginRequest(StringView url, String firstMessage, bool awaitsJoin) {
         if (_state == RoomClientState::Connected && !_awaitingJoin && url == _url) {
             // The connection that is open serves the request
             _awaitingJoin = awaitsJoin;
@@ -73,8 +73,8 @@ namespace BECore {
         return {};
     }
 
-    std::expected<void, ControlError> RoomClient::StartConnection(eastl::string_view url, eastl::string firstMessage, bool awaitsJoin) {
-        eastl::unique_ptr<IRoomTransport> transport = _settings.transportFactory ? _settings.transportFactory() : MakeDefaultRoomTransport();
+    std::expected<void, ControlError> RoomClient::StartConnection(StringView url, String firstMessage, bool awaitsJoin) {
+        UniquePtr<IRoomTransport> transport = _settings.transportFactory ? _settings.transportFactory() : MakeDefaultRoomTransport();
         if (!transport) {
             return Fail(RoomClientErrors::kTransportUnavailable, "there is no way to connect to a room server in this build");
         }
@@ -85,7 +85,7 @@ namespace BECore {
         // An older connection that is still closing is not waited for
         _retired.reset();
         _transport = std::move(transport);
-        _url = eastl::string(url);
+        _url = String(url);
         _firstMessage = std::move(firstMessage);
         _firstMessageAwaitsJoin = awaitsJoin;
         _transportOpened = false;
@@ -232,7 +232,7 @@ namespace BECore {
         CheckTimers();
     }
 
-    void RoomClient::DrainEvents(eastl::vector<RoomClientEvent>& out) {
+    void RoomClient::DrainEvents(Vector<RoomClientEvent>& out) {
         if (_events.empty()) {
             return;
         }
@@ -269,7 +269,7 @@ namespace BECore {
         }
     }
 
-    void RoomClient::HandleText(eastl::string_view text) {
+    void RoomClient::HandleText(StringView text) {
         // Any text is life, one that does not parse too
         _lastReceived = _now;
         _pingOutstanding = false;
@@ -344,7 +344,7 @@ namespace BECore {
             // The server refused to take the token back. Whatever the reason, asking again would not change it
             _lastError = MakeControlError(message.code, message.message);
             const bool gone = message.code == RoomErrors::kBadToken || message.code == RoomErrors::kUnknownRoom;
-            GiveUp(gone ? RoomClientCloseReasons::kRoomGone : eastl::string_view(message.code), message.message, gone);
+            GiveUp(gone ? RoomClientCloseReasons::kRoomGone : StringView(message.code), message.message, gone);
             return;
         }
         if (message.ref != RoomMessageTypes::kListRooms) {
@@ -374,7 +374,7 @@ namespace BECore {
         if (_state == RoomClientState::InRoom) {
             _state = RoomClientState::Connected;
         }
-        if (eastl::string_view(message.reason) == RoomClientCloseReasons::kReplaced) {
+        if (StringView(message.reason) == RoomClientCloseReasons::kReplaced) {
             // The server closes this connection next; another device has the seat and this one does not take it back
             _endReason = message.reason;
         }
@@ -400,14 +400,14 @@ namespace BECore {
         _failedAttempts = 0;
     }
 
-    void RoomClient::OnConnectionEnded(uint16_t closeCode, eastl::string_view reason, eastl::string_view endCode) {
+    void RoomClient::OnConnectionEnded(uint16_t closeCode, StringView reason, StringView endCode) {
         const RoomClientState before = _state;
         ResetConnection();
         if (before != RoomClientState::InRoom && before != RoomClientState::Reconnecting) {
             // No room to bring back
             ForgetRoom();
             _state = RoomClientState::Disconnected;
-            Emit(RoomClientEventKind::Closed, endCode.empty() ? eastl::string_view(_endReason) : endCode, reason, {}, closeCode);
+            Emit(RoomClientEventKind::Closed, endCode.empty() ? StringView(_endReason) : endCode, reason, {}, closeCode);
             _endReason.clear();
             return;
         }
@@ -424,7 +424,7 @@ namespace BECore {
             ForgetRoom();
             ClearReconnect();
             _state = RoomClientState::Disconnected;
-            const eastl::string_view code = !policy ? eastl::string_view() : (reason.empty() ? RoomClientCloseReasons::kRateLimited : reason);
+            const StringView code = !policy ? StringView() : (reason.empty() ? RoomClientCloseReasons::kRateLimited : reason);
             Emit(RoomClientEventKind::Closed, code, reason, {}, closeCode);
             return;
         }
@@ -455,7 +455,7 @@ namespace BECore {
         _connectStart = _now;
     }
 
-    void RoomClient::GiveUp(eastl::string_view code, eastl::string_view message, bool forgetSession, uint16_t closeCode) {
+    void RoomClient::GiveUp(StringView code, StringView message, bool forgetSession, uint16_t closeCode) {
         if (_transport) {
             Retire();
         }
@@ -515,7 +515,7 @@ namespace BECore {
         _finished = false;
     }
 
-    void RoomClient::Emit(RoomClientEventKind kind, eastl::string_view code, eastl::string_view message, eastl::string_view ref, uint16_t closeCode, bool willRetry) {
+    void RoomClient::Emit(RoomClientEventKind kind, StringView code, StringView message, StringView ref, uint16_t closeCode, bool willRetry) {
         // The state is in the getters, so a change that is already announced and not yet taken is announced once
         const bool coalesces = kind == RoomClientEventKind::LobbyChanged || kind == RoomClientEventKind::ViewChanged;
         if (coalesces && !_events.empty() && _events.back().kind == kind) {
@@ -526,9 +526,9 @@ namespace BECore {
         }
         RoomClientEvent& event = _events.emplace_back();
         event.kind = kind;
-        event.code = eastl::string(code);
-        event.message = eastl::string(message);
-        event.ref = eastl::string(ref);
+        event.code = String(code);
+        event.message = String(message);
+        event.ref = String(ref);
         event.closeCode = closeCode;
         event.willRetry = willRetry;
     }

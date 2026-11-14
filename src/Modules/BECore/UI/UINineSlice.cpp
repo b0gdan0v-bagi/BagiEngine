@@ -33,7 +33,7 @@ namespace BECore {
 
     }  // namespace
 
-    eastl::array<UINineSlicePiece, UINineSlice::PieceCount> UINineSlice::Compute(const Rect& givenSource, const UIEdges& givenBorder, const Rect& givenDestination) {
+    Array<UINineSlicePiece, UINineSlice::PieceCount> UINineSlice::Compute(const Rect& givenSource, const UIEdges& givenBorder, const Rect& givenDestination) {
         // Numbers of a file: bounded, so no span is infinite or NaN and a piece has either finite numbers or none
         const Rect source = UIBounds::Bound(givenSource);
         const Rect destination = UIBounds::Bound(givenDestination);
@@ -52,7 +52,7 @@ namespace BECore {
         const float destinationRowY[3] = {destination.y, destination.y + destinationRows.start, destination.y + destinationRows.start + destinationRows.middle};
         const float destinationRowH[3] = {destinationRows.start, destinationRows.middle, destinationRows.end};
 
-        eastl::array<UINineSlicePiece, PieceCount> pieces;
+        Array<UINineSlicePiece, PieceCount> pieces;
         for (size_t row = 0; row < 3; ++row) {
             for (size_t column = 0; column < 3; ++column) {
                 UINineSlicePiece& piece = pieces[row * 3 + column];

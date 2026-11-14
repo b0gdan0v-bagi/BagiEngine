@@ -11,19 +11,19 @@ namespace BECore {
 
         /// What a component serializes to, as text: the type and the XML of its fields in the compact form
         struct SerializedComponent {
-            eastl::string type;
+            String type;
             pugi::xml_document fields;  // the document element holds the attributes and child elements of the fields
         };
 
         struct StringWriter : pugi::xml_writer {
-            eastl::string text;
+            String text;
 
             void write(const void* data, size_t size) override {
                 text.append(static_cast<const char*>(data), size);
             }
         };
 
-        eastl::string Printed(pugi::xml_node node) {
+        String Printed(pugi::xml_node node) {
             StringWriter writer;
             node.print(writer, "", pugi::format_raw);
             return writer.text;
@@ -37,8 +37,8 @@ namespace BECore {
         }
 
         /// The components of @p node serialized, in order
-        eastl::vector<SerializedComponent> SerializeComponents(const SceneNode& node) {
-            eastl::vector<SerializedComponent> result(node.GetComponents().size());
+        Vector<SerializedComponent> SerializeComponents(const SceneNode& node) {
+            Vector<SerializedComponent> result(node.GetComponents().size());
             for (size_t i = 0; i < result.size(); ++i) {
                 SerializeComponent(*node.GetComponents()[i], result[i]);
             }
@@ -48,9 +48,9 @@ namespace BECore {
         /// One field of a serialized component: its attribute and the text of its child elements of that name
         struct FieldState {
             bool hasAttribute = false;
-            eastl::string attribute;
+            String attribute;
             bool hasChildren = false;
-            eastl::string children;
+            String children;
 
             bool operator==(const FieldState& other) const {
                 return hasAttribute == other.hasAttribute && attribute == other.attribute && hasChildren == other.hasChildren && children == other.children;
@@ -70,15 +70,15 @@ namespace BECore {
             return state;
         }
 
-        void AddName(eastl::vector<eastl::string>& names, const char* name) {
+        void AddName(Vector<String>& names, const char* name) {
             if (eastl::find(names.begin(), names.end(), name) == names.end()) {
                 names.push_back(name);
             }
         }
 
         /// The names of the fields of both sides: their attributes and their child elements
-        eastl::vector<eastl::string> FieldNames(pugi::xml_node liveFields, pugi::xml_node baseFields) {
-            eastl::vector<eastl::string> names;
+        Vector<String> FieldNames(pugi::xml_node liveFields, pugi::xml_node baseFields) {
+            Vector<String> names;
             for (const pugi::xml_node fields : {liveFields, baseFields}) {
                 for (pugi::xml_attribute attr = fields.first_attribute(); attr; attr = attr.next_attribute()) {
                     AddName(names, attr.name());
@@ -93,8 +93,8 @@ namespace BECore {
         }
 
         /// Writes the fields of @p live that differ from @p base into @p componentEl. False when a field is written in both spellings
-        bool WriteFieldOverrides(pugi::xml_node live, pugi::xml_node base, pugi::xml_node componentEl, eastl::string& reason) {
-            for (const eastl::string& name : FieldNames(live, base)) {
+        bool WriteFieldOverrides(pugi::xml_node live, pugi::xml_node base, pugi::xml_node componentEl, String& reason) {
+            for (const String& name : FieldNames(live, base)) {
                 const FieldState liveField = ReadField(live, name.c_str());
                 if (liveField == ReadField(base, name.c_str())) {
                     continue;
@@ -118,11 +118,11 @@ namespace BECore {
         }
 
         /// True when @p other has the name, the layer and the serialized components of @p live (the round trip check)
-        bool SameAsLive(const SceneNode& live, const eastl::vector<SerializedComponent>& liveComponents, const SceneNode& other) {
+        bool SameAsLive(const SceneNode& live, const Vector<SerializedComponent>& liveComponents, const SceneNode& other) {
             if (live.GetName() != other.GetName() || live.GetLayer() != other.GetLayer()) {
                 return false;
             }
-            const eastl::vector<SerializedComponent> otherComponents = SerializeComponents(other);
+            const Vector<SerializedComponent> otherComponents = SerializeComponents(other);
             if (liveComponents.size() != otherComponents.size()) {
                 return false;
             }
@@ -136,7 +136,7 @@ namespace BECore {
 
     }  // namespace
 
-    IntrusivePtr<SceneNode> DeserializeNode(pugi::xml_node nodeEl, eastl::string_view what) {
+    IntrusivePtr<SceneNode> DeserializeNode(pugi::xml_node nodeEl, StringView what) {
         auto node = New<SceneNode>();
         XmlDeserializer deserializer;
         if (deserializer.LoadFromXmlNode(XmlNode{nodeEl})) {
@@ -181,8 +181,8 @@ namespace BECore {
         }
     }
 
-    bool BuildNodeReference(const SceneNode& live, const NodeFileLoader& loader, pugi::xml_node nodesEl, eastl::string& reason) {
-        const eastl::string ref = live.GetSourceRef().CStr();
+    bool BuildNodeReference(const SceneNode& live, const NodeFileLoader& loader, pugi::xml_node nodesEl, String& reason) {
+        const String ref = live.GetSourceRef().CStr();
         if (ref.empty()) {
             reason = "the node has no node file";
             return false;
@@ -219,8 +219,8 @@ namespace BECore {
             refEl.append_attribute("layer").set_value(live.GetLayer());
         }
 
-        const eastl::vector<SerializedComponent> liveComponents = SerializeComponents(live);
-        const eastl::vector<SerializedComponent> baseComponents = SerializeComponents(*baseline);
+        const Vector<SerializedComponent> liveComponents = SerializeComponents(live);
+        const Vector<SerializedComponent> baseComponents = SerializeComponents(*baseline);
         pugi::xml_node componentsEl;
         for (size_t i = 0; i < liveComponents.size(); ++i) {
             pugi::xml_document overrides;
@@ -241,7 +241,7 @@ namespace BECore {
 
         // Whatever is written must load back as the live node
         pugi::xml_document reloaded;
-        eastl::string error;
+        String error;
         if (!ExpandNodeReference(refEl, loader, false, reloaded, error)) {
             reason = Format("the reference does not expand again: {}", error);
             return false;

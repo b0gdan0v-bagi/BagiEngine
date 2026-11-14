@@ -14,12 +14,12 @@ namespace BECore::Tests {
 
     namespace {
 
-        constexpr eastl::string_view kGame = "TestGame";
+        constexpr StringView kGame = "TestGame";
 
         /// The game as it is now (version 2, reads from 1)
         constexpr SaveSchema kSchema{kGame, 2, 1};
 
-        Item MakeItem(int32_t id, float weight, eastl::string_view label) {
+        Item MakeItem(int32_t id, float weight, StringView label) {
             Item item;
             item.id = id;
             item.weight = weight;
@@ -86,7 +86,7 @@ namespace BECore::Tests {
         }
 
         /// The bytes of a valid save file of GameState
-        eastl::vector<uint8_t> ValidBytes() {
+        Vector<uint8_t> ValidBytes() {
             BinarySerializer serializer;
             serializer.BeginObject("save");
             serializer.WriteAttribute("game", kGame);
@@ -99,14 +99,14 @@ namespace BECore::Tests {
         }
 
         /// A stream with the root object `save` that has the given game and version and, when asked, an empty `state`
-        eastl::vector<uint8_t> EnvelopeBytes(bool withGame, bool withVersion, bool versionIsText, bool withState) {
+        Vector<uint8_t> EnvelopeBytes(bool withGame, bool withVersion, bool versionIsText, bool withState) {
             BinarySerializer serializer;
             serializer.BeginObject("save");
             if (withGame) {
                 serializer.WriteAttribute("game", kGame);
             }
             if (withVersion && versionIsText) {
-                serializer.WriteAttribute("version", eastl::string_view("two"));
+                serializer.WriteAttribute("version", StringView("two"));
             } else if (withVersion) {
                 serializer.WriteAttribute("version", uint32_t{2});
             }
@@ -145,7 +145,7 @@ namespace BECore::Tests {
         std::filesystem::path _base;
         std::filesystem::path _saves;
         FileSystem _fileSystem;
-        std::optional<SaveGameService> _service;
+        Optional<SaveGameService> _service;
     };
 
     TEST_F(SaveGameTest, StateRoundTripsFieldByField) {
@@ -198,7 +198,7 @@ namespace BECore::Tests {
         ExpectFailure(Service().Peek("nothing"), SaveErrorKind::NotFound);
         ExpectFailure(Service().Peek("../x"), SaveErrorKind::InvalidSlotName);
 
-        ASSERT_TRUE(Service().WriteSlot("junk", eastl::vector<uint8_t>(64, 0xAB)).has_value());
+        ASSERT_TRUE(Service().WriteSlot("junk", Vector<uint8_t>(64, 0xAB)).has_value());
         ExpectFailure(Service().Peek("junk"), SaveErrorKind::Corrupt);
     }
 
@@ -258,7 +258,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(SaveGameTest, DamagedFilesAreCorruptAndNeverCrash) {
-        const eastl::vector<uint8_t> valid = ValidBytes();
+        const Vector<uint8_t> valid = ValidBytes();
         ASSERT_GT(valid.size(), BinaryFormat::HeaderSize + 16);
 
         // A valid stream that is not a save: another root object
@@ -268,19 +268,19 @@ namespace BECore::Tests {
         otherRoot.WriteAttribute("version", uint32_t{2});
         otherRoot.EndObject();
 
-        eastl::vector<uint8_t> brokenMagic = valid;
+        Vector<uint8_t> brokenMagic = valid;
         brokenMagic[0] = 'X';
-        const eastl::vector<uint8_t> halfFile(valid.begin(), valid.begin() + static_cast<ptrdiff_t>(valid.size() / 2));
-        const eastl::vector<uint8_t> headerOnly(valid.begin(), valid.begin() + static_cast<ptrdiff_t>(BinaryFormat::HeaderSize));
-        const eastl::vector<uint8_t> oneByteShort(valid.begin(), valid.end() - 1);
-        eastl::vector<uint8_t> garbage;
+        const Vector<uint8_t> halfFile(valid.begin(), valid.begin() + static_cast<ptrdiff_t>(valid.size() / 2));
+        const Vector<uint8_t> headerOnly(valid.begin(), valid.begin() + static_cast<ptrdiff_t>(BinaryFormat::HeaderSize));
+        const Vector<uint8_t> oneByteShort(valid.begin(), valid.end() - 1);
+        Vector<uint8_t> garbage;
         for (size_t i = 0; i < 64; ++i) {
             garbage.push_back(static_cast<uint8_t>(i * 37 + 11));
         }
 
         struct Case {
             const char* name;
-            eastl::vector<uint8_t> bytes;
+            Vector<uint8_t> bytes;
         };
         const Case cases[] = {
             {"empty file", {}},
@@ -322,7 +322,7 @@ namespace BECore::Tests {
 
         // The same size on the way out: the old save stays
         ASSERT_TRUE(Service().WriteSlot("kept", ValidBytes()).has_value());
-        ExpectFailure(Service().WriteSlot("kept", eastl::vector<uint8_t>(ReaderLimits::kMaxBinaryStreamBytes + 1)), SaveErrorKind::WriteFailed);
+        ExpectFailure(Service().WriteSlot("kept", Vector<uint8_t>(ReaderLimits::kMaxBinaryStreamBytes + 1)), SaveErrorKind::WriteFailed);
         GameState loaded;
         EXPECT_TRUE(Service().Load("kept", kSchema, loaded).has_value());
         EXPECT_FALSE(std::filesystem::exists(_saves / "kept.save.tmp"));
@@ -384,7 +384,7 @@ namespace BECore::Tests {
         ExpectFailure(Service().Peek("folder"), SaveErrorKind::ReadFailed);
 
         // Corrupt, WrongGame, VersionTooNew, VersionTooOld
-        ASSERT_TRUE(Service().WriteSlot("junk", eastl::vector<uint8_t>(3, 1)).has_value());
+        ASSERT_TRUE(Service().WriteSlot("junk", Vector<uint8_t>(3, 1)).has_value());
         ExpectFailure(Service().Peek("junk"), SaveErrorKind::Corrupt);
 
         ASSERT_TRUE(Service().Save("slot", SaveSchema{"Other", 5, 5}, MakeState()).has_value());

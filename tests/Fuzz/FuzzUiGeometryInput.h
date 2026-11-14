@@ -52,7 +52,7 @@ namespace BECore::Fuzz::UiGeometryInput {
     /// Writes the fields in the form the Reader reads
     class Writer {
     public:
-        explicit Writer(eastl::vector<uint8_t>& bytes) : _bytes(bytes) {}
+        explicit Writer(Vector<uint8_t>& bytes) : _bytes(bytes) {}
 
         void Float(float& value) {
             uint32_t bits = 0;
@@ -67,7 +67,7 @@ namespace BECore::Fuzz::UiGeometryInput {
         }
 
     private:
-        eastl::vector<uint8_t>& _bytes;
+        Vector<uint8_t>& _bytes;
     };
 
     // =============================================================================

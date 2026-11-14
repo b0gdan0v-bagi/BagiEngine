@@ -137,7 +137,7 @@ namespace BECore {
         EndWalk();
     }
 
-    void TweenManager::CancelAllIn(const eastl::vector<IntrusivePtr<TweenHandle>>& list) {
+    void TweenManager::CancelAllIn(const Vector<IntrusivePtr<TweenHandle>>& list) {
         // By index and to the size at the start: a callback may start a tween, which goes to the end of _pending and never moves _tweens
         const size_t count = list.size();
         for (size_t i = 0; i < count; ++i) {

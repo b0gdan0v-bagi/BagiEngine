@@ -37,7 +37,7 @@ namespace BECore {
 
         /// A room code: 5 characters of this alphabet (32 letters and digits without I, O, 0 and 1), upper case
         inline constexpr size_t kRoomCodeLength = 5;
-        inline constexpr eastl::string_view kRoomCodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+        inline constexpr StringView kRoomCodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
         /// A reconnect token: 128 random bits as lower-case hexadecimal
         inline constexpr size_t kTokenLength = 32;

@@ -68,7 +68,7 @@ namespace BECore {
         /**
          * @brief All entries in insertion order (used by editor for display)
          */
-        [[nodiscard]] const eastl::vector<SpriteEntry>& GetAll() const {
+        [[nodiscard]] const Vector<SpriteEntry>& GetAll() const {
             return _entries;
         }
 
@@ -94,7 +94,7 @@ namespace BECore {
         void Clear();
         void RebuildIndex();
 
-        eastl::vector<SpriteEntry> _entries;
+        Vector<SpriteEntry> _entries;
         UnorderedPoolMap<size_t> _index;
     };
 

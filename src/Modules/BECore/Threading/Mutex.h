@@ -3,7 +3,6 @@
 #include <BECore/Threading/LockHooks.h>
 #include <BECore/Threading/LockOrder.h>
 #include <BECore/Threading/LockSite.h>
-#include <mutex>
 
 namespace BECore {
 

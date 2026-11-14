@@ -10,7 +10,6 @@
 #include <RmlUi/Core.h>
 #include <RmlUiHost/RmlUiDocumentComponent.h>
 #include <SDL3_image/SDL_image.h>
-#include <array>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -126,7 +125,7 @@ namespace BECore::Tests {
             _manager->SetActiveScene("S"_intern);
             auto doc = _manager->GetSceneByName("S"_intern)->GetRootNode().GetChildren()[0]->GetComponent<RmlUiDocumentComponent>();
             EXPECT_TRUE(doc);
-            EXPECT_TRUE(doc && doc->SetMarkup(eastl::string(screen.rml)));
+            EXPECT_TRUE(doc && doc->SetMarkup(String(screen.rml)));
             return doc;
         }
 
@@ -134,7 +133,7 @@ namespace BECore::Tests {
         PixelBuffer DrawFrame() {
             _renderer->Clear(kBackground);
             _manager->DrawAll();
-            std::optional<CaptureResult> captured;
+            Optional<CaptureResult> captured;
             _renderer->RequestCapture([&captured](CaptureResult result) { captured = std::move(result); });
             _renderer->Present();
             if (!captured || !captured->has_value()) {

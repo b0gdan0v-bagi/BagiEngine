@@ -25,7 +25,7 @@ namespace BECore {
 
     }  // namespace
 
-    ProfilerSpikePanel::Result ProfilerSpikePanel::Draw(SpikeCapture& capture, std::optional<uint64_t> openedFrame) {
+    ProfilerSpikePanel::Result ProfilerSpikePanel::Draw(SpikeCapture& capture, Optional<uint64_t> openedFrame) {
         Result result;
         SpikeSettings settings = capture.GetSettings();
         bool changed = false;
@@ -75,7 +75,7 @@ namespace BECore {
         ImGui::SameLine();
         ImGui::Text("%zu frozen", capture.GetSpikes().size());
 
-        const eastl::vector<FrozenFrame>& spikes = capture.GetSpikes();
+        const Vector<FrozenFrame>& spikes = capture.GetSpikes();
         if (ImGui::BeginChild("##spikeList", ImVec2(0.0f, kListHeight), ImGuiChildFlags_Borders)) {
             if (spikes.empty()) {
                 ImGui::TextDisabled("No spike yet");

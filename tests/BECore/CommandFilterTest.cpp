@@ -5,7 +5,7 @@ namespace BECore::Tests {
 
     namespace {
 
-        eastl::vector<EditorCommand> MakeCommands() {
+        Vector<EditorCommand> MakeCommands() {
             return {
                 {PoolString::Intern("file.quit"), "Quit", std::nullopt, true},
                 {PoolString::Intern("view.resetLayout"), "Reset Layout", std::nullopt, true},
@@ -16,8 +16,8 @@ namespace BECore::Tests {
             };
         }
 
-        eastl::string Titles(const eastl::vector<const EditorCommand*>& found) {
-            eastl::string text;
+        String Titles(const Vector<const EditorCommand*>& found) {
+            String text;
             for (const EditorCommand* command : found) {
                 if (!text.empty()) {
                     text += "|";
@@ -27,7 +27,7 @@ namespace BECore::Tests {
             return text;
         }
 
-        eastl::string Filter(eastl::string_view query, const eastl::vector<EditorCommand>& commands) {
+        String Filter(StringView query, const Vector<EditorCommand>& commands) {
             return Titles(FilterCommands(query, {commands.data(), commands.size()}));
         }
 
@@ -53,7 +53,7 @@ namespace BECore::Tests {
     }
 
     TEST(CommandFilterTest, PrefixAndWordStartBeatScatteredMatches) {
-        const eastl::vector<EditorCommand> commands = {
+        const Vector<EditorCommand> commands = {
             {PoolString::Intern("a.scatter"), "Slow Cardigan Yak", std::nullopt, true},
             {PoolString::Intern("b.word"), "Open Layout", std::nullopt, true},
             {PoolString::Intern("c.prefix"), "Layout Reset", std::nullopt, true},
@@ -82,7 +82,7 @@ namespace BECore::Tests {
     }
 
     TEST(CommandFilterTest, TitleMatchBeatsIdMatch) {
-        const eastl::vector<EditorCommand> commands = {
+        const Vector<EditorCommand> commands = {
             {PoolString::Intern("save.thing"), "Open", std::nullopt, true},
             {PoolString::Intern("x.y"), "Save It", std::nullopt, true},
         };
@@ -91,7 +91,7 @@ namespace BECore::Tests {
 
     TEST(CommandFilterTest, TheRealTableAnswersTheDocumentedQueries) {
         const auto commands = GetEditorCommands();
-        const eastl::vector<const EditorCommand*> found = FilterCommands("lay", commands);
+        const Vector<const EditorCommand*> found = FilterCommands("lay", commands);
         ASSERT_GE(found.size(), 2u);
         EXPECT_EQ(found[0]->id, PoolString(EditorCommandIds::kViewResetLayout));
         EXPECT_EQ(found[1]->id, PoolString(EditorCommandIds::kViewSaveLayout));

@@ -23,7 +23,7 @@ namespace BECore::Fuzz {
                 AddBytes(&value, sizeof(T));
             }
 
-            void AddText(eastl::string_view text) {
+            void AddText(StringView text) {
                 Add(text.size());
                 AddBytes(text.data(), text.size());
             }
@@ -116,7 +116,7 @@ namespace BECore::Fuzz {
             hasher.Add(number);
         }
         hasher.Add(state.words.size());
-        for (const eastl::string& word : state.words) {
+        for (const String& word : state.words) {
             hasher.AddText(word);
         }
         AddNode(hasher, state.tree);

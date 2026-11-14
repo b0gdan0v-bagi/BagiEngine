@@ -1,6 +1,5 @@
 #pragma once
 
-
 namespace BECore {
 
     struct ClassMeta;
@@ -8,16 +7,16 @@ namespace BECore {
 
     /// One Lucide icon: its name (kebab case, no prefix, as `ICON=` in `BE_CLASS` writes it) and the glyph in the UI font
     struct IconEntry {
-        eastl::string_view name;
+        StringView name;
         const char* glyph = nullptr;
     };
 
     /// The icons the editor and the engine's components use, sorted by name (a static_assert in IconTable.cpp holds it).
     /// To add one: put a row in its place in IconTable.cpp, `{"name", ICON_LC_NAME}` from Icons/IconsLucide.h.
-    eastl::span<const IconEntry> GetIconTable();
+    Span<const IconEntry> GetIconTable();
 
     /// The glyph of a Lucide name, or null when the table has no such row. Binary search, never allocates.
-    const char* FindIcon(eastl::string_view name);
+    const char* FindIcon(StringView name);
 
     /// The icon of a node without a component that names one (`box`)
     const char* GetNodeIcon();

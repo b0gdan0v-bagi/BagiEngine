@@ -43,11 +43,11 @@ namespace BECore {
         /// Flat in a file, like UIBoxStyle: it reads and writes the attributes of the object the serializer is in
         template <>
         struct DataAccessor<UITextEffects> {
-            static void Save(ISerializer& s, const UITextEffects& value, eastl::string_view /*key*/) {
+            static void Save(ISerializer& s, const UITextEffects& value, StringView /*key*/) {
                 value.Serialize(s);
             }
 
-            static bool Load(IDeserializer& d, UITextEffects& value, eastl::string_view /*key*/) {
+            static bool Load(IDeserializer& d, UITextEffects& value, StringView /*key*/) {
                 value.Deserialize(d);
                 return true;
             }

@@ -148,7 +148,7 @@ namespace BECore {
         }
 
         /// The dotted text of the IPv4 address of @p address
-        eastl::string FormatIPv4(const sockaddr_in& address) {
+        String FormatIPv4(const sockaddr_in& address) {
             std::array<char, INET_ADDRSTRLEN> text{};
             if (inet_ntop(AF_INET, &address.sin_addr, text.data(), static_cast<socklen_t>(text.size())) == nullptr) {
                 return kUnknownPeerAddress;
@@ -156,7 +156,7 @@ namespace BECore {
             return text.data();
         }
 
-        eastl::string DescribeError(eastl::string_view what, int error) {
+        String DescribeError(StringView what, int error) {
             return Format("{} failed (error {})", what, error);
         }
 
@@ -198,16 +198,16 @@ namespace BECore {
         };
 
         /// The text of a getaddrinfo status: gai_strerror on POSIX (its codes are not errno values), the number on Windows
-        eastl::string DescribeResolveError(int status) {
+        String DescribeResolveError(int status) {
 #ifdef PLATFORM_WINDOWS
             return Format("error {}", status);
 #else
-            return eastl::string(gai_strerror(status));
+            return String(gai_strerror(status));
 #endif
         }
 
         /// The IPv4 addresses of @p host with @p port in them, in the order the system prefers
-        std::expected<eastl::vector<sockaddr_in>, eastl::string> ResolveIPv4(const eastl::string& host, uint16_t port) {
+        std::expected<Vector<sockaddr_in>, String> ResolveIPv4(const String& host, uint16_t port) {
             EnsureSocketLibrary();
             addrinfo hints{};
             hints.ai_family = AF_INET;
@@ -218,7 +218,7 @@ namespace BECore {
             if (status != 0 || list == nullptr) {
                 return std::unexpected(Format("cannot resolve host \"{}\" ({})", host, DescribeResolveError(status != 0 ? status : EAI_NONAME)));
             }
-            eastl::vector<sockaddr_in> addresses;
+            Vector<sockaddr_in> addresses;
             for (const addrinfo* item = list.get(); item != nullptr; item = item->ai_next) {
                 if (item->ai_family == AF_INET && item->ai_addrlen >= sizeof(sockaddr_in)) {
                     sockaddr_in address{};
@@ -290,7 +290,7 @@ namespace BECore {
         return *this;
     }
 
-    std::expected<Socket, eastl::string> Socket::Listen(uint16_t port, SocketBind scope) {
+    std::expected<Socket, String> Socket::Listen(uint16_t port, SocketBind scope) {
         const NativeSocket handle = CreateTcpSocket();
         if (handle == kNativeInvalid) {
             return std::unexpected(DescribeError("socket()", LastError()));
@@ -317,22 +317,22 @@ namespace BECore {
         return std::move(socketGuard);
     }
 
-    std::expected<Socket, eastl::string> Socket::Connect(uint16_t port) {
+    std::expected<Socket, String> Socket::Connect(uint16_t port) {
         return Connect("127.0.0.1", port, kLoopbackConnectTimeout);
     }
 
-    std::expected<Socket, eastl::string> Socket::Connect(eastl::string_view host, uint16_t port, std::chrono::milliseconds timeout, const std::atomic<bool>* cancel) {
-        const eastl::string target = Format("{}:{}", host, port);
+    std::expected<Socket, String> Socket::Connect(StringView host, uint16_t port, std::chrono::milliseconds timeout, const std::atomic<bool>* cancel) {
+        const String target = Format("{}:{}", host, port);
         if (cancel != nullptr && cancel->load()) {
             return std::unexpected(Format("connect() to {} cancelled", target));
         }
-        const auto addresses = ResolveIPv4(eastl::string(host), port);
+        const auto addresses = ResolveIPv4(String(host), port);
         if (!addresses) {
             return std::unexpected(addresses.error());
         }
 
         const auto deadline = std::chrono::steady_clock::now() + timeout;
-        eastl::string lastError;
+        String lastError;
         for (const sockaddr_in& address : *addresses) {
             const NativeSocket handle = CreateTcpSocket();
             if (handle == kNativeInvalid) {
@@ -362,7 +362,7 @@ namespace BECore {
         return std::unexpected(lastError);
     }
 
-    std::expected<Socket, SocketError> Socket::Accept(std::chrono::milliseconds timeout, eastl::string* peerAddress) {
+    std::expected<Socket, SocketError> Socket::Accept(std::chrono::milliseconds timeout, String* peerAddress) {
         if (!IsValid()) {
             return std::unexpected(SocketError::Failed);
         }
@@ -383,7 +383,7 @@ namespace BECore {
             if (accepted != kNativeInvalid) {
                 if (peerAddress != nullptr) {
                     const bool known = peer.sin_family == AF_INET && peerSize >= static_cast<decltype(peerSize)>(sizeof(peer));
-                    *peerAddress = known ? FormatIPv4(peer) : eastl::string(kUnknownPeerAddress);
+                    *peerAddress = known ? FormatIPv4(peer) : String(kUnknownPeerAddress);
                 }
 #ifdef PLATFORM_MACOS
                 const int enable = 1;
@@ -401,7 +401,7 @@ namespace BECore {
         }
     }
 
-    bool Socket::SendAll(eastl::span<const uint8_t> data) {
+    bool Socket::SendAll(Span<const uint8_t> data) {
         if (!IsValid()) {
             return false;
         }
@@ -434,7 +434,7 @@ namespace BECore {
         return true;
     }
 
-    std::expected<size_t, SocketError> Socket::Receive(eastl::span<uint8_t> buffer) {
+    std::expected<size_t, SocketError> Socket::Receive(Span<uint8_t> buffer) {
         if (!IsValid() || buffer.empty()) {
             return std::unexpected(SocketError::Failed);
         }

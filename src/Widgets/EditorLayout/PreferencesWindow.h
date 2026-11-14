@@ -40,10 +40,10 @@ namespace BECore {
         PoolString _rebindCommand;    // the command being rebound
         KeyChord _pendingChord;       // Conflict: the chord that another command holds
         PoolString _conflictCommand;  // Conflict: that command
-        eastl::string _refusal;       // Capturing: why the last chord was refused
+        String _refusal;              // Capturing: why the last chord was refused
 
-        eastl::string _preferencesError;  // the last failed save of each file, empty when it worked
-        eastl::string _hotkeysMessage;    // the last failed save or reset of the hotkeys
+        String _preferencesError;  // the last failed save of each file, empty when it worked
+        String _hotkeysMessage;    // the last failed save or reset of the hotkeys
     };
 
 }  // namespace BECore

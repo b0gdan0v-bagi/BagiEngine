@@ -89,7 +89,7 @@ namespace BECore {
 
         /// The words for the person for an SSPI status or a certificate chain policy error; the number goes only to the log.
         /// Pure (mirrors DescribeNetworkFailure of the macOS backend). The result is a string literal
-        eastl::string_view DescribeSecurityFailure(long status) {
+        StringView DescribeSecurityFailure(long status) {
             switch (status) {
                 case SEC_E_UNTRUSTED_ROOT:
                 case CERT_E_UNTRUSTEDROOT:
@@ -133,7 +133,7 @@ namespace BECore {
 
         /// SECBUFFER_EXTRA carry-over: the last @p tailBytes bytes of @p buffer are bytes of the next message that SSPI did not use; they
         /// become the whole buffer (zero drops everything)
-        void KeepTail(eastl::vector<uint8_t>& buffer, size_t tailBytes) {
+        void KeepTail(Vector<uint8_t>& buffer, size_t tailBytes) {
             if (tailBytes >= buffer.size()) {
                 return;
             }
@@ -144,20 +144,20 @@ namespace BECore {
         }
 
         /// @p extra (a SECBUFFER_EXTRA after a call, may be null) tells how much of the end of @p buffer was not consumed
-        void KeepExtra(eastl::vector<uint8_t>& buffer, const SecBuffer* extra) {
+        void KeepExtra(Vector<uint8_t>& buffer, const SecBuffer* extra) {
             KeepTail(buffer, extra != nullptr ? static_cast<size_t>(extra->cbBuffer) : 0);
         }
 
-        eastl::vector<wchar_t> ToWide(const eastl::string& text) {
+        Vector<wchar_t> ToWide(const String& text) {
             const int length = MultiByteToWideChar(CP_UTF8, 0, text.c_str(), -1, nullptr, 0);
-            eastl::vector<wchar_t> wide(static_cast<size_t>(std::max(length, 1)), L'\0');
+            Vector<wchar_t> wide(static_cast<size_t>(std::max(length, 1)), L'\0');
             if (length > 0) {
                 MultiByteToWideChar(CP_UTF8, 0, text.c_str(), -1, wide.data(), length);
             }
             return wide;
         }
 
-        eastl::string_view TlsVersionName(DWORD protocol) {
+        StringView TlsVersionName(DWORD protocol) {
 #ifdef SP_PROT_TLS1_3_CLIENT
             if ((protocol & SP_PROT_TLS1_3_CLIENT) != 0) {
                 return "1.3";
@@ -177,7 +177,7 @@ namespace BECore {
                 Close();
             }
 
-            std::expected<void, eastl::string> Connect(const TlsConnectParams& params) override {
+            std::expected<void, String> Connect(const TlsConnectParams& params) override {
                 Phase expected = Phase::Idle;
                 if (!_phase.compare_exchange_strong(expected, Phase::Connecting)) {
                     return std::unexpected(Format("TLS: stream already used for {}:{}", params.host, params.port));
@@ -225,7 +225,7 @@ namespace BECore {
                 return {};
             }
 
-            bool SendAll(eastl::span<const uint8_t> data) override {
+            bool SendAll(Span<const uint8_t> data) override {
                 if (data.empty()) {
                     return IsValid();
                 }
@@ -236,7 +236,7 @@ namespace BECore {
                 // The records leave in the order they were encrypted (the TLS sequence numbers say so): the send lock covers encrypt and send.
                 // Order of locks everywhere: send, then SSPI, never held while waiting for the socket by the SSPI one
                 LockGuard sendOrder(_sendMutex);
-                eastl::vector<uint8_t> record;
+                Vector<uint8_t> record;
                 size_t offset = 0;
                 while (offset < data.size()) {
                     if (_closing.load()) {
@@ -274,7 +274,7 @@ namespace BECore {
                         std::memmove(record.data() + total, buffers[index].pvBuffer, buffers[index].cbBuffer);
                         total += buffers[index].cbBuffer;
                     }
-                    if (!_socket.SendAll(eastl::span<const uint8_t>(record.data(), total))) {
+                    if (!_socket.SendAll(Span<const uint8_t>(record.data(), total))) {
                         if (!_closing.load()) {
                             SetFailure(Format("TLS: connection lost while sending to {}", _target), 0);
                         }
@@ -285,7 +285,7 @@ namespace BECore {
                 return true;
             }
 
-            std::expected<size_t, SocketError> Receive(eastl::span<uint8_t> buffer) override {
+            std::expected<size_t, SocketError> Receive(Span<uint8_t> buffer) override {
                 if (buffer.empty()) {
                     return std::unexpected(SocketError::Failed);
                 }
@@ -320,7 +320,7 @@ namespace BECore {
                             break;
                     }
                     // A partial record stays in _incoming across a receive timeout; the next call goes on with it
-                    const auto received = _socket.Receive(eastl::span<uint8_t>(chunk, kReceiveChunk));
+                    const auto received = _socket.Receive(Span<uint8_t>(chunk, kReceiveChunk));
                     if (!received) {
                         if (received.error() == SocketError::Failed && !_closing.load()) {
                             SetFailure(Format("TLS: connection reset by {}", _target), 0);
@@ -372,19 +372,19 @@ namespace BECore {
                 return _phase.load() == Phase::Ready && !_closing.load();
             }
 
-            eastl::string GetLastError() const override {
+            String GetLastError() const override {
                 LockGuard lock(_errorMutex);
                 return _failure;
             }
 
         private:
             /// Records @p what as the failure (the first one wins) and returns it as the error of Connect()
-            std::unexpected<eastl::string> FailConnect(const eastl::string& what) {
+            std::unexpected<String> FailConnect(const String& what) {
                 SetFailure(what.find("TLS") == 0 ? what : Format("TLS: {}", what), 0);
                 return std::unexpected(GetLastError());
             }
 
-            void SetFailure(const eastl::string& text, SECURITY_STATUS status) {
+            void SetFailure(const String& text, SECURITY_STATUS status) {
                 {
                     LockGuard lock(_errorMutex);
                     if (_failure.empty()) {
@@ -399,7 +399,7 @@ namespace BECore {
             /// so SCH_CREDENTIALS is tried first (where the SDK has it) and the legacy structure is the fallback of an older Windows.
             /// Without @p manualValidation Schannel validates the chain and the host name itself (the target name passed to
             /// InitializeSecurityContext); no flag turns that off
-            std::expected<void, eastl::string> AcquireCredentials(bool manualValidation) {
+            std::expected<void, String> AcquireCredentials(bool manualValidation) {
                 const DWORD flags = SCH_USE_STRONG_CRYPTO | SCH_CRED_NO_DEFAULT_CREDS | (manualValidation ? SCH_CRED_MANUAL_CRED_VALIDATION : SCH_CRED_AUTO_CRED_VALIDATION);
                 TimeStamp expiry{};
                 SECURITY_STATUS status = SEC_E_INTERNAL_ERROR;
@@ -426,10 +426,10 @@ namespace BECore {
             /// The InitializeSecurityContext loop of Microsoft's Schannel client sample. @p resumed: the context exists and _incoming holds
             /// the handshake message of a renegotiation (DecryptMessage() returned SEC_I_RENEGOTIATE); otherwise this is the first flight.
             /// Ends with SEC_E_OK (the handshake is done; in manual mode the chain is then checked by hand), a failure text, a cancel or the deadline
-            std::expected<void, eastl::string> RunHandshake(const HandshakeLimits& limits, bool resumed) {
+            std::expected<void, String> RunHandshake(const HandshakeLimits& limits, bool resumed) {
                 const bool manualValidation = !_anchors.empty();
                 _socket.SetReceiveTimeout(Socket::kWakeInterval);  // the reads below look at the cancel flag and the deadline between slices
-                const std::expected<void, eastl::string> outcome = HandshakeLoop(limits, resumed, manualValidation);
+                const std::expected<void, String> outcome = HandshakeLoop(limits, resumed, manualValidation);
                 _socket.SetReceiveTimeout(std::chrono::milliseconds(_receiveTimeoutMs.load()));
                 if (!outcome) {
                     return outcome;
@@ -440,7 +440,7 @@ namespace BECore {
                 return {};
             }
 
-            std::expected<void, eastl::string> HandshakeLoop(const HandshakeLimits& limits, bool resumed, bool manualValidation) {
+            std::expected<void, String> HandshakeLoop(const HandshakeLimits& limits, bool resumed, bool manualValidation) {
                 const ULONG requests = kContextRequests | (manualValidation ? ISC_REQ_MANUAL_CRED_VALIDATION : 0);
                 bool first = !resumed;
                 bool needData = false;  // the first flight has nothing to read yet (the answer to it does); a renegotiation starts with its message
@@ -479,12 +479,12 @@ namespace BECore {
                     // A token goes out even with a failure status (it may be an alert); its own failure matters only when the status was fine
                     bool sent = true;
                     if (outBuffer.cbBuffer > 0 && outBuffer.pvBuffer != nullptr) {
-                        sent = SendRaw(eastl::span<const uint8_t>(static_cast<const uint8_t*>(outBuffer.pvBuffer), outBuffer.cbBuffer));
+                        sent = SendRaw(Span<const uint8_t>(static_cast<const uint8_t*>(outBuffer.pvBuffer), outBuffer.cbBuffer));
                     }
 
                     if (status == SEC_E_OK) {
                         KeepExtra(_incoming, FindBuffer(inBuffers, 2, SECBUFFER_EXTRA));  // application data that came with the last flight
-                        return sent ? std::expected<void, eastl::string>() : std::unexpected(Format("TLS: connection lost during the handshake with {}", _target));
+                        return sent ? std::expected<void, String>() : std::unexpected(Format("TLS: connection lost during the handshake with {}", _target));
                     }
                     if (status == SEC_I_CONTINUE_NEEDED) {
                         if (!sent) {
@@ -510,7 +510,7 @@ namespace BECore {
             }
 
             /// Appends what the socket gives to _incoming, in slices of Socket::kWakeInterval that look at the cancel flag, Close() and the deadline
-            std::expected<void, eastl::string> ReadCiphertext(const HandshakeLimits& limits) {
+            std::expected<void, String> ReadCiphertext(const HandshakeLimits& limits) {
                 uint8_t chunk[kReceiveChunk];
                 for (;;) {
                     if (_closing.load() || (limits.cancel != nullptr && limits.cancel->load())) {
@@ -519,7 +519,7 @@ namespace BECore {
                     if (std::chrono::steady_clock::now() >= limits.deadline) {
                         return std::unexpected(Format("TLS: no handshake with {} in time", _target));
                     }
-                    const auto received = _socket.Receive(eastl::span<uint8_t>(chunk, kReceiveChunk));
+                    const auto received = _socket.Receive(Span<uint8_t>(chunk, kReceiveChunk));
                     if (received) {
                         if (_incoming.size() + *received > kMaxIncomingBytes) {
                             return std::unexpected(Format("TLS: {} sent a record that is too large", _target));
@@ -538,7 +538,7 @@ namespace BECore {
             }
 
             /// Sends bytes that are not application data (a handshake token, close_notify), in order with the encrypted records
-            bool SendRaw(eastl::span<const uint8_t> bytes) {
+            bool SendRaw(Span<const uint8_t> bytes) {
                 LockGuard sendOrder(_sendMutex);
                 return _socket.SendAll(bytes);
             }
@@ -632,7 +632,7 @@ namespace BECore {
                 ContextBufferOwned token(outBuffer.pvBuffer);
                 if (status >= 0 && outBuffer.cbBuffer > 0 && outBuffer.pvBuffer != nullptr) {
                     // Best effort: the connection ends either way, so a failed send of the alert is not reported
-                    (void)_socket.SendAll(eastl::span<const uint8_t>(static_cast<const uint8_t*>(outBuffer.pvBuffer), outBuffer.cbBuffer));
+                    (void)_socket.SendAll(Span<const uint8_t>(static_cast<const uint8_t*>(outBuffer.pvBuffer), outBuffer.cbBuffer));
                 }
             }
 
@@ -640,7 +640,7 @@ namespace BECore {
             /// finished the handshake. The roots are the system's "ROOT" store plus the anchors, and nothing else; CertVerifyCertificateChainPolicy with
             /// CERT_CHAIN_POLICY_SSL checks the chain, the validity, the server-auth usage and the host name. Revocation is not looked at here.
             /// THE PART MOST LIKELY TO NEED A FIX at the first run on Windows (the root store handling in particular)
-            std::expected<void, eastl::string> ValidateServerCertificate() {
+            std::expected<void, String> ValidateServerCertificate() {
                 PCCERT_CONTEXT remote = nullptr;
                 if (QueryContextAttributesA(&_context, SECPKG_ATTR_REMOTE_CERT_CONTEXT, &remote) != SEC_E_OK || remote == nullptr) {
                     return std::unexpected(Format("TLS: the server sent no certificate: {}", _target));
@@ -653,7 +653,7 @@ namespace BECore {
                 if (!roots || !anchorStore || !collection) {
                     return std::unexpected(Format("TLS: the certificate stores cannot be opened: {}", _target));
                 }
-                for (const eastl::vector<uint8_t>& der : _anchors) {
+                for (const Vector<uint8_t>& der : _anchors) {
                     if (!CertAddEncodedCertificateToStore(anchorStore.get(), X509_ASN_ENCODING, der.data(), static_cast<DWORD>(der.size()), CERT_STORE_ADD_ALWAYS, nullptr)) {
                         return std::unexpected(Format("TLS: an additional trust anchor is not a certificate: {}", _target));
                     }
@@ -683,7 +683,7 @@ namespace BECore {
                 }
                 const ChainOwned chain(rawChain);
 
-                const eastl::vector<wchar_t> serverName = ToWide(_host);
+                const Vector<wchar_t> serverName = ToWide(_host);
                 SSL_EXTRA_CERT_CHAIN_POLICY_PARA sslParameters = {};
                 sslParameters.cbSize = sizeof(sslParameters);
                 sslParameters.dwAuthType = AUTHTYPE_SERVER;
@@ -717,14 +717,14 @@ namespace BECore {
             Mutex _sspiMutex{BE_LOCK_SITE_LEVEL("TLS SSPI", 30)};                   // a Schannel context is not safe for concurrent calls
             Mutex _sendMutex{BE_LOCK_SITE_LEVEL("TLS send", 20)};                   // the ciphertext leaves in the order it was made
             mutable Mutex _errorMutex{BE_LOCK_SITE("TLS error")};
-            eastl::string _failure;
+            String _failure;
 
             std::atomic<Phase> _phase{Phase::Idle};
             std::atomic<bool> _closing{false};
             std::atomic<std::chrono::milliseconds::rep> _receiveTimeoutMs{0};
 
-            eastl::string _host;
-            eastl::string _target;  // host:port, for the texts
+            String _host;
+            String _target;  // host:port, for the texts
             TlsTrustAnchors _anchors;
 
             Socket _socket;
@@ -735,8 +735,8 @@ namespace BECore {
             SecPkgContext_StreamSizes _sizes = {};
 
             // Touched by the receiving thread only (and by Connect() before there is one)
-            eastl::vector<uint8_t> _incoming;  // ciphertext received and not yet decrypted
-            eastl::vector<uint8_t> _plain;     // decrypted and not yet handed out
+            Vector<uint8_t> _incoming;  // ciphertext received and not yet decrypted
+            Vector<uint8_t> _plain;     // decrypted and not yet handed out
             size_t _plainRead = 0;
         };
 
@@ -746,7 +746,7 @@ namespace BECore {
         return true;
     }
 
-    eastl::unique_ptr<ITlsStream> MakeTlsStream() {
+    UniquePtr<ITlsStream> MakeTlsStream() {
         return eastl::make_unique<SchannelTlsStream>();
     }
 

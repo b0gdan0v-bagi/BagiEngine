@@ -7,13 +7,13 @@ namespace BECore {
     namespace {
 
         /// The paths of the ApplicationConfig fields that are control settings (the names of the attributes)
-        bool IsControlField(eastl::string_view path) {
+        bool IsControlField(StringView path) {
             using namespace ApplicationConfigFields;
             return path == kControl || path == kControlPort || path == kManualClock || path == kHeadless;
         }
 
         /// The whole of @p text (the value of --control-port=N) as a port; nullopt for an empty text, a sign, a trailing character or a number above 65535
-        std::optional<uint16_t> ParsePort(eastl::string_view text) {
+        Optional<uint16_t> ParsePort(StringView text) {
             uint16_t port = 0;
             const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), port);
             if (error != std::errc{} || end != text.data() + text.size()) {
@@ -22,13 +22,13 @@ namespace BECore {
             return port;
         }
 
-        ControlError InvalidSetting(eastl::string message) {
+        ControlError InvalidSetting(String message) {
             return MakeControlError(ControlErrors::kInvalidParams, std::move(message));
         }
 
     }  // namespace
 
-    std::expected<ControlSettings, ControlError> ResolveControlSettings(eastl::span<const eastl::string> args, const ApplicationConfigLoad& file) {
+    std::expected<ControlSettings, ControlError> ResolveControlSettings(Span<const String> args, const ApplicationConfigLoad& file) {
         // The file first, so that the command line overrides it. A bad value is an error even when the API is off or a flag would override it
         for (const DeserializeError& error : file.errors) {
             if (IsControlField(error.path.ToStringView())) {
@@ -44,8 +44,8 @@ namespace BECore {
 
         // The flags are parsed by hand; a later stage replaces this loop with a name to value source
         bool portOnCommandLine = false;
-        for (const eastl::string& arg : args) {
-            const eastl::string_view argument(arg.data(), arg.size());
+        for (const String& arg : args) {
+            const StringView argument(arg.data(), arg.size());
             if (argument == ControlArguments::kControl) {
                 settings.enabled = true;
             } else if (argument == ControlArguments::kManualClock) {
@@ -53,7 +53,7 @@ namespace BECore {
             } else if (argument == ControlArguments::kHeadless) {
                 settings.headless = true;
             } else if (argument.starts_with(ControlArguments::kControlPortPrefix)) {
-                const eastl::string_view value = argument.substr(ControlArguments::kControlPortPrefix.size());
+                const StringView value = argument.substr(ControlArguments::kControlPortPrefix.size());
                 const auto port = ParsePort(value);
                 if (!port) {
                     return std::unexpected(InvalidSetting(Format("'{}' is not a port (0 to 65535)", argument)));

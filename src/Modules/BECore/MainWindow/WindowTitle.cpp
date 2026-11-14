@@ -4,12 +4,12 @@ namespace BECore {
 
     namespace {
 
-        constexpr eastl::string_view kEditorTitleSeparator = " \xE2\x80\x94 ";  // " — "
+        constexpr StringView kEditorTitleSeparator = " \xE2\x80\x94 ";  // " — "
 
     }  // namespace
 
-    eastl::string ComposeWindowTitle(eastl::string_view configTitle, eastl::string_view gameName, bool editorMode) {
-        eastl::string title;
+    String ComposeWindowTitle(StringView configTitle, StringView gameName, bool editorMode) {
+        String title;
         if (editorMode) {
             if (!gameName.empty()) {
                 title.append(gameName.data(), gameName.size());
@@ -18,7 +18,7 @@ namespace BECore {
             title.append(kEditorWindowTitle.data(), kEditorWindowTitle.size());
             return title;
         }
-        const eastl::string_view chosen = !configTitle.empty() ? configTitle : (!gameName.empty() ? gameName : kEngineWindowTitle);
+        const StringView chosen = !configTitle.empty() ? configTitle : (!gameName.empty() ? gameName : kEngineWindowTitle);
         title.assign(chosen.data(), chosen.size());
         return title;
     }

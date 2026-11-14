@@ -1,6 +1,5 @@
 #include <Common/Printers.h>
 #include <Widgets/EditorLayout/StatusBarModel.h>
-#include <limits>
 
 namespace BECore::Tests {
 
@@ -210,7 +209,7 @@ namespace BECore::Tests {
         FormatFps(60, one);
         EXPECT_EQ(one[0], '\0');
 
-        FormatFps(60, eastl::span<char>());  // an empty buffer is left alone
+        FormatFps(60, Span<char>());  // an empty buffer is left alone
     }
 
 }  // namespace BECore::Tests

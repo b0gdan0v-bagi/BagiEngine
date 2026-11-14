@@ -13,8 +13,8 @@ namespace BECore::Match3 {
 
     }  // namespace
 
-    eastl::vector<Cell> MatchFinder::FindMatches(const Match3Board& board) {
-        eastl::vector<Cell> result;
+    Vector<Cell> MatchFinder::FindMatches(const Match3Board& board) {
+        Vector<Cell> result;
         uint64_t marked = 0;
 
         for (int8_t row = 0; row < kBoardSize; ++row) {

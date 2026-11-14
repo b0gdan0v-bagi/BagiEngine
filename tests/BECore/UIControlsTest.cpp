@@ -149,11 +149,11 @@ namespace BECore::Tests {
                 _values.push_back(event.value);
             }
 
-            eastl::vector<PoolString> _actions;
-            eastl::vector<PoolString> _values;
+            Vector<PoolString> _actions;
+            Vector<PoolString> _values;
         };
 
-        eastl::string ElementToXml(const UIElement& element) {
+        String ElementToXml(const UIElement& element) {
             XmlSerializer serializer;
             EXPECT_TRUE(serializer.BeginObject("element"));
             element.Serialize(serializer);
@@ -165,8 +165,8 @@ namespace BECore::Tests {
             return std::abs(a.x - b.x) <= tolerance && std::abs(a.y - b.y) <= tolerance && std::abs(a.w - b.w) <= tolerance && std::abs(a.h - b.h) <= tolerance;
         }
 
-        eastl::vector<uint8_t> GreyPixels(uint32_t width, uint32_t height) {
-            return eastl::vector<uint8_t>(static_cast<size_t>(width) * height * 4, 128);
+        Vector<uint8_t> GreyPixels(uint32_t width, uint32_t height) {
+            return Vector<uint8_t>(static_cast<size_t>(width) * height * 4, 128);
         }
 
     }  // namespace
@@ -239,7 +239,7 @@ namespace BECore::Tests {
         }
 
         /// The color of the filled rect that was drawn exactly on the element's rect, in the last draw
-        std::optional<Color> FillOf(const UIElement& element) const {
+        Optional<Color> FillOf(const UIElement& element) const {
             for (const DrawCall& call : _renderer->calls) {
                 if (call.kind == DrawKind::Rect && Near(call.rect, element.rect)) {
                     return call.color;
@@ -249,9 +249,9 @@ namespace BECore::Tests {
         }
 
         /// The textured draws that sit inside the rect of an element (its glyphs); the calls are in output pixels, so @p scale is the scale of the canvas
-        eastl::vector<DrawCall> GlyphsIn(const UIElement& element, float scale = 1.0f) const {
+        Vector<DrawCall> GlyphsIn(const UIElement& element, float scale = 1.0f) const {
             const Rect box{element.rect.x * scale, element.rect.y * scale, element.rect.w * scale, element.rect.h * scale};
-            eastl::vector<DrawCall> glyphs;
+            Vector<DrawCall> glyphs;
             for (const DrawCall& call : _renderer->calls) {
                 const Rect& r = call.rect;
                 if (call.kind == DrawKind::Texture && r.x >= box.x - 1.0f && r.y >= box.y - 1.0f && r.x + r.w <= box.x + box.w + 1.0f && r.y + r.h <= box.y + box.h + 1.0f) {
@@ -364,10 +364,10 @@ namespace BECore::Tests {
         ASSERT_TRUE(serializer.BeginObject("component"));
         _canvas->Serialize(serializer);
         serializer.EndObject();
-        const eastl::string xml = serializer.SaveToString();
+        const String xml = serializer.SaveToString();
 
         XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+        ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
         auto loaded = New<UICanvasComponent>();
         ASSERT_TRUE(deserializer.BeginObject("component"));
         loaded->Deserialize(deserializer);
@@ -492,7 +492,7 @@ namespace BECore::Tests {
         }
 
         void SetEveryControlField(UIElement& element, bool tokens) {
-            const eastl::string_view typeName = element.GetTypeMeta().typeName;
+            const StringView typeName = element.GetTypeMeta().typeName;
             element.name = PoolString::Intern("Busy");
             element.layout = UILayoutKind::Stack;
             element.color = Paint(tokens, Color{1, 2, 3, 4});
@@ -549,11 +549,11 @@ namespace BECore::Tests {
                 ASSERT_TRUE(serializer.BeginObject("component"));
                 canvas->Serialize(serializer);
                 serializer.EndObject();
-                const eastl::string xml = serializer.SaveToString();
-                EXPECT_EQ(xml.find("@tok") != eastl::string::npos, tokens) << type << ": " << xml.c_str();
+                const String xml = serializer.SaveToString();
+                EXPECT_EQ(xml.find("@tok") != String::npos, tokens) << type << ": " << xml.c_str();
 
                 XmlDeserializer deserializer;
-                ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+                ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
                 auto loaded = New<UICanvasComponent>();
                 ASSERT_TRUE(deserializer.BeginObject("component"));
                 loaded->Deserialize(deserializer);
@@ -917,8 +917,8 @@ namespace BECore::Tests {
             return {kOutlineUnits, kOutlineColor, kShadowUnits, kShadowUnits, kShadowColor};
         }
 
-        eastl::vector<DrawCall> Textures(const RecordingRenderer& renderer) {
-            eastl::vector<DrawCall> textures;
+        Vector<DrawCall> Textures(const RecordingRenderer& renderer) {
+            Vector<DrawCall> textures;
             for (const DrawCall& call : renderer.calls) {
                 if (call.kind == DrawKind::Texture) {
                     textures.push_back(call);
@@ -932,21 +932,21 @@ namespace BECore::Tests {
     TEST_F(UIControlsTest, TheTextEffectsAreTwoAttributesAndAreWrittenOnlyWhenSet) {
         auto& title = El("Title");
         auto& text = Text("Title");
-        const eastl::string plain = ElementToXml(title);
-        EXPECT_EQ(plain.find("textOutline"), eastl::string::npos);
-        EXPECT_EQ(plain.find("textShadow"), eastl::string::npos);
+        const String plain = ElementToXml(title);
+        EXPECT_EQ(plain.find("textOutline"), String::npos);
+        EXPECT_EQ(plain.find("textShadow"), String::npos);
 
         text.textEffects = MakeEffects();
-        const eastl::string styled = ElementToXml(title);
-        EXPECT_NE(styled.find("textOutline=\"1.5,#0A141EC8\""), eastl::string::npos) << styled.c_str();
-        EXPECT_NE(styled.find("textShadow=\"2,2,#28323CA0\""), eastl::string::npos) << styled.c_str();
+        const String styled = ElementToXml(title);
+        EXPECT_NE(styled.find("textOutline=\"1.5,#0A141EC8\""), String::npos) << styled.c_str();
+        EXPECT_NE(styled.find("textShadow=\"2,2,#28323CA0\""), String::npos) << styled.c_str();
     }
 
     TEST_F(UIControlsTest, TheTextEffectsComeFromAFileAndAMalformedOneIsReported) {
         const auto load = [](const char* attributes, bool& hadErrors) {
-            const eastl::string xml = Format("<root><element type=\"UIElement\"><components><component type=\"UITextComponent\" {}/></components></element></root>", attributes);
+            const String xml = Format("<root><element type=\"UIElement\"><components><component type=\"UITextComponent\" {}/></components></element></root>", attributes);
             XmlDeserializer deserializer;
-            EXPECT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+            EXPECT_TRUE(deserializer.LoadFromString(StringView(xml)));
             auto element = AbstractFactory<UIElement>::GetInstance().Create("UIElement");
             EXPECT_TRUE(deserializer.BeginObject("element"));
             element->Deserialize(deserializer);
@@ -1305,7 +1305,7 @@ namespace BECore::Tests {
         frame.GetSprite().SetTexture(_renderer->CreateTexture(GreyPixels(16, 16).data(), 16, 16), Rect{0, 0, 16, 16});
         Draw();
 
-        eastl::vector<DrawCall> pieces;
+        Vector<DrawCall> pieces;
         for (const DrawCall& call : _renderer->calls) {
             // The glyphs of the other controls are textured too, but they are elsewhere
             if (call.kind == DrawKind::Texture && call.rect.x >= 299.0f && call.rect.x <= 400.0f && call.rect.y >= 99.0f && call.rect.y <= 160.0f) {
@@ -1550,10 +1550,10 @@ namespace BECore::Tests {
             const Rect bar{ok.rect.x, ok.rect.y + ok.rect.h - UIStateLook::kSelectedBarHeight, ok.rect.w, UIStateLook::kSelectedBarHeight};  // the rect is laid out by the first draw
             for (const DrawCall& call : _renderer->calls) {
                 if (call.kind == DrawKind::Rect && Near(call.rect, bar)) {
-                    return std::optional<Color>(call.color);
+                    return Optional<Color>(call.color);
                 }
             }
-            return std::optional<Color>();
+            return Optional<Color>();
         };
 
         Draw();

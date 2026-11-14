@@ -199,7 +199,7 @@ namespace BECore::Tests {
     }
 
     TEST(FontLoadTest, DataThatIsNotAFontFails) {
-        const eastl::vector<uint8_t> garbage(256, 0x41);
+        const Vector<uint8_t> garbage(256, 0x41);
 
         auto font = Font::CreateFromMemory("garbage"_intern, garbage);
 

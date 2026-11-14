@@ -11,7 +11,7 @@ namespace BECore {
     struct RoomMemberJoined {
         PlayerId player = 0;
         /// The reconnect secret: goes to its owner only
-        eastl::string token;
+        String token;
         int seat = 0;
     };
 
@@ -31,7 +31,7 @@ namespace BECore {
     class Room {
     public:
         /// @param factory Makes the game at Start(); a room made without one can only stay in the lobby (Start gives `internal_error`).
-        Room(eastl::string code, SeatedGameInfo info, RandomFn random, SeatedGameFactory factory = {}, RoomTimings timings = {});
+        Room(String code, SeatedGameInfo info, RandomFn random, SeatedGameFactory factory = {}, RoomTimings timings = {});
 
         /**
          * @brief A new member takes the lowest free seat. The first member is the host.
@@ -40,7 +40,7 @@ namespace BECore {
          * @return `bad_name`, `game_started` (the room is no longer in the lobby: only a member can return, by token), `room_full`,
          *         `internal_error` (no free token in a bounded number of tries: a broken RandomFn).
          */
-        [[nodiscard]] std::expected<RoomMemberJoined, ControlError> AddMember(eastl::string_view name, RoomTime now);
+        [[nodiscard]] std::expected<RoomMemberJoined, ControlError> AddMember(StringView name, RoomTime now);
 
         /// Removes a member of a room in the lobby: the seat is free again, and when it was the host, the host passes to the human
         /// of the lowest seat. False (and nothing changes) for an unknown player or a room that has started (see Leave).
@@ -83,7 +83,7 @@ namespace BECore {
 
         /// The member returns with its token: control of the seat comes back at once. When no connected human was left to host, the
         /// returning member becomes the host. `not_in_room`, `bad_token`.
-        [[nodiscard]] std::expected<void, ControlError> MarkReturned(PlayerId player, eastl::string_view token);
+        [[nodiscard]] std::expected<void, ControlError> MarkReturned(PlayerId player, StringView token);
 
         /// True when a computer plays @p seat now: nobody holds it, or its player has been away for the grace or longer. Never in the lobby.
         [[nodiscard]] bool IsSeatComputerControlled(int seat, RoomTime now) const;
@@ -108,7 +108,7 @@ namespace BECore {
         [[nodiscard]] bool ShouldClose(RoomTime now) const;
 
         /// The member that has @p token. Compares in time that does not depend on how much of the token is right. Untrusted input.
-        [[nodiscard]] std::optional<PlayerId> FindByToken(eastl::string_view token) const;
+        [[nodiscard]] Optional<PlayerId> FindByToken(StringView token) const;
 
         /**
          * @brief Moves a member of a room in the lobby to a free seat.
@@ -120,9 +120,9 @@ namespace BECore {
         [[nodiscard]] std::expected<void, ControlError> ChooseSeat(PlayerId player, int64_t seat);
 
         [[nodiscard]] bool IsHost(PlayerId player) const;
-        [[nodiscard]] std::optional<int> GetSeatOf(PlayerId player) const;
+        [[nodiscard]] Optional<int> GetSeatOf(PlayerId player) const;
         /// The player on @p seat, or nullopt when nobody is
-        [[nodiscard]] std::optional<PlayerId> GetPlayerAt(int seat) const;
+        [[nodiscard]] Optional<PlayerId> GetPlayerAt(int seat) const;
         [[nodiscard]] bool HasMember(PlayerId player) const;
 
         /// What a `lobby` message says now
@@ -168,7 +168,7 @@ namespace BECore {
             return _members.size();
         }
 
-        [[nodiscard]] const eastl::string& GetCode() const {
+        [[nodiscard]] const String& GetCode() const {
             return _code;
         }
 
@@ -179,8 +179,8 @@ namespace BECore {
     private:
         struct Member {
             PlayerId id = 0;
-            eastl::string name;
-            eastl::string token;
+            String name;
+            String token;
             int seat = 0;
             /// Whether the connection of the member is up (always true in the lobby: a dropped connection removes the member)
             bool connected = true;
@@ -190,21 +190,21 @@ namespace BECore {
 
         [[nodiscard]] const Member* FindMember(PlayerId player) const;
         [[nodiscard]] Member* FindMember(PlayerId player);
-        [[nodiscard]] std::optional<int> FindLowestFreeSeat() const;
+        [[nodiscard]] Optional<int> FindLowestFreeSeat() const;
         void EraseMember(PlayerId player);
         void FinishIfDone();
         void PassHost();
         void BumpLobbyRevision();
 
-        eastl::string _code;
+        String _code;
         SeatedGameInfo _info;
         RandomFn _random;
         SeatedGameFactory _factory;
         RoomTimings _timings;
-        eastl::unique_ptr<ISeatedGame> _game;
+        UniquePtr<ISeatedGame> _game;
         RoomTime _lastComputerMove{};
         RoomPhase _phase = RoomPhase::Lobby;
-        eastl::vector<Member> _members;
+        Vector<Member> _members;
         PlayerId _nextPlayer = 1;
         /// 0 when no human is left
         PlayerId _host = 0;

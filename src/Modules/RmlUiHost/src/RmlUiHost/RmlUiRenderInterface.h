@@ -58,14 +58,14 @@ namespace BECore {
 
     private:
         struct Geometry {
-            eastl::vector<GeometryVertex> vertices;
-            eastl::vector<int> indices;
+            Vector<GeometryVertex> vertices;
+            Vector<int> indices;
         };
 
         void ApplyScissor();
 
-        eastl::hash_map<Rml::CompiledGeometryHandle, Geometry> _geometries;
-        eastl::hash_map<Rml::TextureHandle, IntrusivePtr<ITexture>> _textures;
+        HashMap<Rml::CompiledGeometryHandle, Geometry> _geometries;
+        HashMap<Rml::TextureHandle, IntrusivePtr<ITexture>> _textures;
         Rml::CompiledGeometryHandle _nextGeometry = 1;
         Rml::TextureHandle _nextTexture = 1;
 

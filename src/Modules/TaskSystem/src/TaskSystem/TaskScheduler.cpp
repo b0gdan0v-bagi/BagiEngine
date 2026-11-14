@@ -89,7 +89,7 @@ namespace BECore {
 
     void TaskScheduler::ProcessMainThreadTasks() {
         // Обрабатываем задачи из очереди главного потока
-        eastl::vector<PrioritizedTask> tasksToProcess;
+        Vector<PrioritizedTask> tasksToProcess;
 
         {
             LockGuard lock(_mainThreadMutex);
@@ -111,7 +111,7 @@ namespace BECore {
 
     void TaskScheduler::ProcessDelayedTasks() {
         auto now = Clock::now();
-        eastl::vector<DelayedTask> readyTasks;
+        Vector<DelayedTask> readyTasks;
 
         {
             LockGuard lock(_delayedMutex);

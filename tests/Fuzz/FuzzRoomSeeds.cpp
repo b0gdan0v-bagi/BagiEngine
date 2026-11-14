@@ -13,8 +13,8 @@ namespace BECore::Fuzz {
         constexpr const char* kRoomHubFolder = "room_hub";
         constexpr const char* kControlRequestFolder = "control_request";
 
-        constexpr eastl::string_view kGame = "demo";
-        constexpr eastl::string_view kUnknownCode = "ZZZZZ";
+        constexpr StringView kGame = "demo";
+        constexpr StringView kUnknownCode = "ZZZZZ";
         constexpr size_t kBigOptionsBytes = RoomHubInput::kMaxMessageBytes + 100;
         constexpr uint16_t kPlayPause = 900;
         constexpr uint16_t kLongPause = 40000;
@@ -23,7 +23,7 @@ namespace BECore::Fuzz {
         constexpr int kFailedJoins = 6;
         constexpr int kListFlood = RoomLimits::kListBurst + 2;
 
-        FuzzBytes TextWithHeader(uint8_t header, eastl::string_view text) {
+        FuzzBytes TextWithHeader(uint8_t header, StringView text) {
             FuzzBytes bytes;
             bytes.push_back(header);
             bytes.insert(bytes.end(), text.begin(), text.end());
@@ -34,33 +34,33 @@ namespace BECore::Fuzz {
         // room_protocol: one message per file, made by the builders of the protocol
         // =============================================================================
 
-        void AddRoomProtocolSeeds(eastl::vector<FuzzSeedFile>& seeds) {
+        void AddRoomProtocolSeeds(Vector<FuzzSeedFile>& seeds) {
             using RoomProtocolInput::PackHeader;
             const auto client = [&seeds](const char* name, const ClientMessage& message, size_t limitIndex = 0) {
                 seeds.push_back({kRoomProtocolFolder, name, TextWithHeader(PackHeader(false, limitIndex), SerializeClientMessage(message))});
             };
-            const auto server = [&seeds](const char* name, const eastl::string& text, size_t limitIndex = 0) {
+            const auto server = [&seeds](const char* name, const String& text, size_t limitIndex = 0) {
                 seeds.push_back({kRoomProtocolFolder, name, TextWithHeader(PackHeader(true, limitIndex), text)});
             };
 
             Json options = Json::object();
             options["firstSeat"] = 2;
             options["rules"] = Json::array({"fast", 3, nullptr, true});
-            client("client-create-room.bin", CreateRoomMessage{eastl::string(kGame), "Ann", options});
-            client("client-create-room-name-spaces.bin", CreateRoomMessage{eastl::string(kGame), "   Bob the Builder  ", Json::object()});
-            client("client-create-room-name-utf8.bin", CreateRoomMessage{eastl::string(kGame), "Zo\xC3\xAB \xF0\x9F\x98\x80", Json::object()});
-            client("client-create-room-name-bidi.bin", CreateRoomMessage{eastl::string(kGame), "Mal\xE2\x80\xAEory", Json::object()});
-            client("client-create-room-name-too-long.bin", CreateRoomMessage{eastl::string(kGame), eastl::string(RoomLimits::kMaxNameBytes + 1, 'n'), Json::object()});
-            client("client-create-room-small-limit.bin", CreateRoomMessage{eastl::string(kGame), "Ann", options}, 1);
-            client("client-create-room-public.bin", CreateRoomMessage{eastl::string(kGame), "Ann", options, true});
-            client("client-list-rooms.bin", ListRoomsMessage{eastl::string(kGame)});
+            client("client-create-room.bin", CreateRoomMessage{String(kGame), "Ann", options});
+            client("client-create-room-name-spaces.bin", CreateRoomMessage{String(kGame), "   Bob the Builder  ", Json::object()});
+            client("client-create-room-name-utf8.bin", CreateRoomMessage{String(kGame), "Zo\xC3\xAB \xF0\x9F\x98\x80", Json::object()});
+            client("client-create-room-name-bidi.bin", CreateRoomMessage{String(kGame), "Mal\xE2\x80\xAEory", Json::object()});
+            client("client-create-room-name-too-long.bin", CreateRoomMessage{String(kGame), String(RoomLimits::kMaxNameBytes + 1, 'n'), Json::object()});
+            client("client-create-room-small-limit.bin", CreateRoomMessage{String(kGame), "Ann", options}, 1);
+            client("client-create-room-public.bin", CreateRoomMessage{String(kGame), "Ann", options, true});
+            client("client-list-rooms.bin", ListRoomsMessage{String(kGame)});
             JoinRoomMessage joinByName;
             joinByName.code = "ABCDE";
             joinByName.name = "Cy";
             client("client-join-by-name.bin", joinByName);
             JoinRoomMessage joinByToken;
             joinByToken.code = "ABCDE";
-            joinByToken.token = eastl::string(RoomLimits::kTokenLength, 'a');
+            joinByToken.token = String(RoomLimits::kTokenLength, 'a');
             client("client-join-by-token.bin", joinByToken);
             client("client-choose-seat.bin", ChooseSeatMessage{3});
             client("client-choose-seat-negative.bin", ChooseSeatMessage{-7});
@@ -72,7 +72,7 @@ namespace BECore::Fuzz {
             client("client-leave.bin", LeaveMessage{});
             client("client-ping.bin", PingMessage{});
 
-            server("server-joined.bin", MakeJoinedMessage("ABCDE", 3, eastl::string(RoomLimits::kTokenLength, 'b'), 2, false));
+            server("server-joined.bin", MakeJoinedMessage("ABCDE", 3, String(RoomLimits::kTokenLength, 'b'), 2, false));
             LobbySnapshot lobby;
             lobby.room = "ABCDE";
             lobby.game = kGame;
@@ -110,7 +110,7 @@ namespace BECore::Fuzz {
         class Recorder {
         public:
             Recorder() : _hub(_registry, RoomHubInput::MakeSettings(), RoomHubInput::MakeRandom(), MakeSink()) {
-                _registry.Register(SeatedGameInfo{"demo", DemoCardGame::kSeatCount}, [] { return eastl::unique_ptr<ISeatedGame>(eastl::make_unique<DemoCardGame>()); });
+                _registry.Register(SeatedGameInfo{"demo", DemoCardGame::kSeatCount}, [] { return UniquePtr<ISeatedGame>(eastl::make_unique<DemoCardGame>()); });
             }
 
             void Connect(uint8_t number) {
@@ -130,30 +130,30 @@ namespace BECore::Fuzz {
             }
 
             void Send(uint8_t number, const ClientMessage& message) {
-                const eastl::string text = SerializeClientMessage(message);
+                const String text = SerializeClientMessage(message);
                 RoomHubInput::AppendMessage(_bytes, number, text);
                 _hub.OnMessage(RoomHubInput::ConnectionOf(number), text, _now);
             }
 
-            void Create(uint8_t number, eastl::string_view name, eastl::string_view game = kGame, bool isPublic = false) {
-                Send(number, CreateRoomMessage{eastl::string(game), eastl::string(name), Json::object(), isPublic});
+            void Create(uint8_t number, StringView name, StringView game = kGame, bool isPublic = false) {
+                Send(number, CreateRoomMessage{String(game), String(name), Json::object(), isPublic});
             }
 
-            void List(uint8_t number, eastl::string_view game = kGame) {
-                Send(number, ListRoomsMessage{eastl::string(game)});
+            void List(uint8_t number, StringView game = kGame) {
+                Send(number, ListRoomsMessage{String(game)});
             }
 
-            void JoinByName(uint8_t number, eastl::string_view code, eastl::string_view name) {
+            void JoinByName(uint8_t number, StringView code, StringView name) {
                 JoinRoomMessage join;
-                join.code = eastl::string(code);
-                join.name = eastl::string(name);
+                join.code = String(code);
+                join.name = String(name);
                 Send(number, join);
             }
 
-            void JoinByToken(uint8_t number, eastl::string_view code, eastl::string_view token) {
+            void JoinByToken(uint8_t number, StringView code, StringView token) {
                 JoinRoomMessage join;
-                join.code = eastl::string(code);
-                join.token = eastl::string(token);
+                join.code = String(code);
+                join.token = String(token);
                 Send(number, join);
             }
 
@@ -166,16 +166,16 @@ namespace BECore::Fuzz {
                 Send(number, ActionMessage{known.version, known.actions[0]});
             }
 
-            [[nodiscard]] const eastl::string& RoomOf(uint8_t number) {
+            [[nodiscard]] const String& RoomOf(uint8_t number) {
                 return _known[number].room;
             }
 
             /// The code of the first room of the last list the connection was sent; empty when it has none
-            [[nodiscard]] const eastl::string& FirstListedOf(uint8_t number) {
+            [[nodiscard]] const String& FirstListedOf(uint8_t number) {
                 return _known[number].listed;
             }
 
-            [[nodiscard]] const eastl::string& TokenOf(uint8_t number) {
+            [[nodiscard]] const String& TokenOf(uint8_t number) {
                 return _known[number].token;
             }
 
@@ -185,30 +185,30 @@ namespace BECore::Fuzz {
 
         private:
             struct Known {
-                eastl::string room;
-                eastl::string token;
-                eastl::string listed;
+                String room;
+                String token;
+                String listed;
                 uint64_t version = 0;
                 Json actions = Json::array();
             };
 
             HubSink MakeSink() {
                 HubSink sink;
-                sink.send = [this](ConnectionId id, eastl::string text) {
+                sink.send = [this](ConnectionId id, String text) {
                     const auto parsed = ParseJson(text);
                     if (!parsed) {
                         return;
                     }
                     Known& known = _known[static_cast<uint8_t>(id - 1)];
-                    const auto type = GetJsonString(*parsed, "type").value_or(eastl::string());
+                    const auto type = GetJsonString(*parsed, "type").value_or(String());
                     if (type == RoomMessageTypes::kJoined) {
-                        known.room = GetJsonString(*parsed, "room").value_or(eastl::string());
-                        known.token = GetJsonString(*parsed, "token").value_or(eastl::string());
+                        known.room = GetJsonString(*parsed, "room").value_or(String());
+                        known.token = GetJsonString(*parsed, "token").value_or(String());
                     } else if (type == RoomMessageTypes::kRooms) {
                         known.listed.clear();
                         const Json* rooms = FindJsonMember(*parsed, "rooms");
                         if (rooms && rooms->is_array() && !rooms->empty()) {
-                            known.listed = GetJsonString((*rooms)[0], "room").value_or(eastl::string());
+                            known.listed = GetJsonString((*rooms)[0], "room").value_or(String());
                         }
                     } else if (type == RoomMessageTypes::kView) {
                         known.version = static_cast<uint64_t>(GetJsonInt(*parsed, "version").value_or(0));
@@ -217,7 +217,7 @@ namespace BECore::Fuzz {
                         }
                     }
                 };
-                sink.close = [](ConnectionId, eastl::string) {};
+                sink.close = [](ConnectionId, String) {};
                 return sink;
             }
 
@@ -225,7 +225,7 @@ namespace BECore::Fuzz {
             RoomHub _hub;
             RoomTime _now{std::chrono::seconds(1000)};
             FuzzBytes _bytes;
-            eastl::map<uint8_t, Known> _known;
+            Map<uint8_t, Known> _known;
         };
 
         /// Three humans in a room, a seat chosen, a start, and rounds of plays by whoever has an action
@@ -233,7 +233,7 @@ namespace BECore::Fuzz {
             Recorder recorder;
             recorder.Connect(0);
             recorder.Create(0, "Ann");
-            const eastl::string code = recorder.RoomOf(0);
+            const String code = recorder.RoomOf(0);
             recorder.Connect(1);
             recorder.JoinByName(1, code, "Bob");
             recorder.Connect(2);
@@ -255,12 +255,12 @@ namespace BECore::Fuzz {
             Recorder recorder;
             recorder.Connect(0);
             recorder.Create(0, "Ann");
-            const eastl::string code = recorder.RoomOf(0);
+            const String code = recorder.RoomOf(0);
             recorder.Connect(1);
             recorder.JoinByName(1, code, "Bob");
             recorder.Send(0, StartMessage{});
             recorder.PlayFirstAction(0);
-            const eastl::string token = recorder.TokenOf(1);
+            const String token = recorder.TokenOf(1);
             recorder.Disconnect(1);
             recorder.Tick(kLongPause);
             recorder.Connect(2);
@@ -287,7 +287,7 @@ namespace BECore::Fuzz {
             recorder.Send(1, ActionMessage{0, Json::object()});
             recorder.Send(1, LeaveMessage{});
             recorder.Create(1, "Host");
-            const eastl::string code = recorder.RoomOf(1);
+            const String code = recorder.RoomOf(1);
             recorder.Create(1, "Host again");
             recorder.Connect(2);
             recorder.JoinByName(2, code, "Guest");
@@ -303,10 +303,10 @@ namespace BECore::Fuzz {
             recorder.Send(1, ActionMessage{0, card});
             recorder.Connect(3);
             recorder.JoinByName(3, code, "Late");
-            recorder.JoinByToken(3, code, eastl::string(RoomLimits::kTokenLength, '0'));
+            recorder.JoinByToken(3, code, String(RoomLimits::kTokenLength, '0'));
             Json padding = Json::object();
-            padding["pad"] = eastl::string(kBigOptionsBytes, 'x').c_str();
-            recorder.Send(3, CreateRoomMessage{eastl::string(kGame), "Big", padding});
+            padding["pad"] = String(kBigOptionsBytes, 'x').c_str();
+            recorder.Send(3, CreateRoomMessage{String(kGame), "Big", padding});
             recorder.Tick(kLongPause);
             return recorder.TakeBytes();
         }
@@ -361,14 +361,14 @@ namespace BECore::Fuzz {
         // control_request: every method of the API with parameters as the tools send them
         // =============================================================================
 
-        FuzzBytes Request(const Json& id, eastl::string_view method, const Json& params = Json()) {
+        FuzzBytes Request(const Json& id, StringView method, const Json& params = Json()) {
             Json request = Json::object();
             request["id"] = id;
             request["method"] = MakeJsonString(method);
             if (!params.is_null()) {
                 request["params"] = params;
             }
-            const eastl::string text = DumpJson(request);
+            const String text = DumpJson(request);
             return FuzzBytes(text.begin(), text.end());
         }
 
@@ -380,7 +380,7 @@ namespace BECore::Fuzz {
             return params;
         }
 
-        void AddControlSeeds(eastl::vector<FuzzSeedFile>& seeds) {
+        void AddControlSeeds(Vector<FuzzSeedFile>& seeds) {
             const auto add = [&seeds](const char* name, FuzzBytes bytes) { seeds.push_back({kControlRequestFolder, name, std::move(bytes)}); };
             add("ping.bin", Request(1, "ping"));
             add("status.bin", Request(2, "status"));
@@ -409,7 +409,7 @@ namespace BECore::Fuzz {
 
     }  // namespace
 
-    void AddRoomAndControlSeeds(eastl::vector<FuzzSeedFile>& seeds) {
+    void AddRoomAndControlSeeds(Vector<FuzzSeedFile>& seeds) {
         AddRoomProtocolSeeds(seeds);
         seeds.push_back({kRoomHubFolder, "play.bin", RecordPlay()});
         seeds.push_back({kRoomHubFolder, "reconnect-by-token.bin", RecordReconnect()});

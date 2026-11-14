@@ -193,7 +193,7 @@ namespace BECore {
             return;
         }
         const ScopedOpacity opacity(renderer, element.opacity);  // the element and its subtree, nested by multiplying
-        std::optional<ScopedTransitionDraw> transitionDraw;
+        Optional<ScopedTransitionDraw> transitionDraw;
         if (const UITransitionComponent* transition = element.GetComponent<UITransitionComponent>()) {
             const double now = CoreManager::GetTime().GetTotalTime();
             if (transition->run.IsTransitioning(now)) {
@@ -246,7 +246,7 @@ namespace BECore {
         if (!target || !_tooltip.IsShown(target)) {
             return;
         }
-        const eastl::string& tooltipText = target->GetTooltipText();
+        const String& tooltipText = target->GetTooltipText();
         if (!_tooltipPlate) {
             _tooltipPlate = New<UIElement>();
             _tooltipPlate->active.fontSize = UITooltip::kFontSize;
@@ -269,7 +269,7 @@ namespace BECore {
     }
 
     bool UICanvasComponent::SyncPopups() {
-        const eastl::vector<UIElement*> open = _layout.OpenPopups();
+        const Vector<UIElement*> open = _layout.OpenPopups();
         UIElement* keep = nullptr;
         for (UIElement* popup : open) {
             if (popup != _popup.Get()) {
@@ -309,7 +309,7 @@ namespace BECore {
     }
 
     UIElement* UICanvasComponent::FindPopupOf(const UIElement& element, UIElement*& child) const {
-        const eastl::vector<UIElement*> open = _layout.OpenPopups();
+        const Vector<UIElement*> open = _layout.OpenPopups();
         for (auto popup = open.rbegin(); popup != open.rend(); ++popup) {
             for (const auto& candidate : (*popup)->children) {
                 if (Contains(*candidate, element)) {
@@ -385,7 +385,7 @@ namespace BECore {
         renderer->SetViewTransform(_layout.GetResolved().transform);
         {
             const ScopedOpacity opacity(*renderer, _opacity);  // the tooltip plate stays outside
-            std::optional<ScopedTransitionDraw> transitionDraw;
+            Optional<ScopedTransitionDraw> transitionDraw;
             if (_transition.IsTransitioning(now)) {
                 transitionDraw.emplace(*renderer, UITransition::Evaluate(spec, _transition.Progress(now)), CentreOf(_layout.GetResolved().bounds));
             }

@@ -80,8 +80,8 @@ namespace BECore {
         return *this;
     }
 
-    eastl::string PoolStringChain::Materialize() const {
-        eastl::string result;
+    String PoolStringChain::Materialize() const {
+        String result;
         result.reserve(Size());
 
         switch (_mode) {
@@ -131,13 +131,13 @@ namespace BECore {
             return _storage.single.HashValue();
         }
         if (_mode == Mode::Literal) {
-            return String::GetHash(eastl::string_view(_storage.view.p, _storage.view.s));
+            return StringUtils::GetHash(StringView(_storage.view.p, _storage.view.s));
         }
         if (_mode == Mode::Empty) {
-            return String::GetEmptyHash();
+            return StringUtils::GetEmptyHash();
         }
 
-        uint64_t hash = String::hashOffset;
+        uint64_t hash = StringUtils::hashOffset;
         for (uint8_t i = 0; i < _count; ++i) {
             const auto& v = _storage.compound[i];
             if (v.IsInt()) {
@@ -160,7 +160,7 @@ namespace BECore {
             return _storage.single == other._storage.single;
         }
         if (_mode == Mode::Literal) {
-            return eastl::string_view(_storage.view.p, _storage.view.s) == eastl::string_view(other._storage.view.p, other._storage.view.s);
+            return StringView(_storage.view.p, _storage.view.s) == StringView(other._storage.view.p, other._storage.view.s);
         }
         if (_mode == Mode::Compound) {
             if (_count != other._count) {

@@ -46,7 +46,7 @@ namespace BECore::Tests {
 
             [[nodiscard]] Json ReadJsonFile(const char* name) const {
                 const std::string text = ReadFile(name);
-                auto parsed = ParseJson(eastl::string_view(text.data(), text.size()));
+                auto parsed = ParseJson(FromStd(text));
                 EXPECT_TRUE(parsed.has_value()) << name;
                 return parsed ? *parsed : Json::object();
             }

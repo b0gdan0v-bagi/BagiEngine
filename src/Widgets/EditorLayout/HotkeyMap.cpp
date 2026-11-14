@@ -53,7 +53,7 @@ namespace BECore {
         return nullptr;
     }
 
-    std::optional<KeyChord> HotkeyMap::GetChord(PoolString commandId) const {
+    Optional<KeyChord> HotkeyMap::GetChord(PoolString commandId) const {
         const Binding* binding = FindBinding(commandId);
         return binding != nullptr ? binding->chord : std::nullopt;
     }

@@ -14,8 +14,8 @@ namespace BECore {
     struct UICssDeclaration {
         static constexpr uint32_t HtmlSource = 0xFFFFFFFFu;  ///< `sourceId` of a declaration from a `style=""` attribute
 
-        eastl::string property;  ///< lower case
-        eastl::string value;
+        String property;  ///< lower case
+        String value;
         bool important = false;
         uint32_t line = 0;
         uint32_t sourceId = 0;  ///< index into UICssSheet::sources
@@ -24,35 +24,35 @@ namespace BECore {
     /// `tag#id.class.class:hover`, with the combinator that joins it to the compound on its left
     struct UICssCompound {
         UICssCombinator combinator = UICssCombinator::None;
-        eastl::string tag;  ///< lower case; empty matches any element
-        eastl::string id;
-        eastl::vector<eastl::string> classes;
+        String tag;  ///< lower case; empty matches any element
+        String id;
+        Vector<String> classes;
         UICssPseudo pseudo = UICssPseudo::None;  ///< only on the last compound of a selector
     };
 
     struct UICssSelector {
-        eastl::vector<UICssCompound> compounds;  ///< left to right; the last one is the element itself
-        uint32_t specificity = 0;                ///< ids << 16 | classes and pseudo-classes << 8 | tags
+        Vector<UICssCompound> compounds;  ///< left to right; the last one is the element itself
+        uint32_t specificity = 0;         ///< ids << 16 | classes and pseudo-classes << 8 | tags
     };
 
     struct UICssRule {
-        eastl::vector<UICssSelector> selectors;  ///< a rule with a selector list is one rule
-        eastl::vector<UICssDeclaration> declarations;
+        Vector<UICssSelector> selectors;  ///< a rule with a selector list is one rule
+        Vector<UICssDeclaration> declarations;
         int media = -1;  ///< index into UICssSheet::medias, -1 outside every `@media`
         uint32_t order = 0;
     };
 
     /// An `@media` block: the block applies while any of the alternatives holds (a comma in the query)
     struct UICssMedia {
-        eastl::vector<UIVariantCondition> alternatives;
+        Vector<UIVariantCondition> alternatives;
         uint32_t line = 0;
         uint32_t sourceId = 0;
     };
 
     struct UICssSheet {
-        eastl::vector<eastl::string> sources;  ///< "css" or "css:<href>", for the issues
-        eastl::vector<UICssRule> rules;
-        eastl::vector<UICssMedia> medias;
+        Vector<String> sources;  ///< "css" or "css:<href>", for the issues
+        Vector<UICssRule> rules;
+        Vector<UICssMedia> medias;
     };
 
     /**
@@ -85,10 +85,10 @@ namespace BECore {
         static constexpr size_t kMaxSelectorBytes = 1024;
 
         /// Reads @p css and adds its rules to @p sheet after the ones already there. @p sourceName names the text in the issues, @p firstLine is the line of its first character in the file
-        static void ParseInto(UICssSheet& sheet, eastl::string_view css, eastl::string_view sourceName, uint32_t firstLine, UIWebReport& report);
+        static void ParseInto(UICssSheet& sheet, StringView css, StringView sourceName, uint32_t firstLine, UIWebReport& report);
 
         /// The declarations of a `style=""` attribute
-        [[nodiscard]] static eastl::vector<UICssDeclaration> ParseDeclarations(eastl::string_view text, uint32_t line, uint32_t sourceId, UIWebReport& report);
+        [[nodiscard]] static Vector<UICssDeclaration> ParseDeclarations(StringView text, uint32_t line, uint32_t sourceId, UIWebReport& report);
     };
 
 }  // namespace BECore

@@ -234,11 +234,11 @@ namespace BECore {
         const bool hasStore = _layouts.has_value();
 
         if (ImGui::BeginMenu("Layouts", hasStore)) {
-            const eastl::vector<eastl::string> names = _layouts->List();
+            const Vector<String> names = _layouts->List();
             if (names.empty()) {
                 ImGui::TextDisabled("No saved layouts");
             }
-            for (const eastl::string& name : names) {
+            for (const String& name : names) {
                 if (ImGui::MenuItem(name.c_str())) {
                     QueueLayout(name);
                 }
@@ -249,11 +249,11 @@ namespace BECore {
         CommandMenuItem(kViewSaveLayout, "Save Layout As...", hasStore);
 
         if (ImGui::BeginMenu("Delete Layout", hasStore)) {
-            const eastl::vector<eastl::string> names = _layouts->List();
+            const Vector<String> names = _layouts->List();
             if (names.empty()) {
                 ImGui::TextDisabled("No saved layouts");
             }
-            for (const eastl::string& name : names) {
+            for (const String& name : names) {
                 if (ImGui::MenuItem(name.c_str())) {
                     if (const auto result = _layouts->Delete(name); !result) {
                         LOG_WARNING(Format("Editor: cannot delete layout '{}': {}", name, result.error().detail));
@@ -282,7 +282,7 @@ namespace BECore {
             if (!command.rebindable) {
                 continue;
             }
-            const std::optional<KeyChord> chord = hotkeys.GetChord(command.id);
+            const Optional<KeyChord> chord = hotkeys.GetChord(command.id);
             const ImGuiInputFlags flags = command.repeats ? ImGuiInputFlags_RouteGlobal | ImGuiInputFlags_Repeat : ImGuiInputFlags_RouteGlobal;
             if (chord && ImGui::Shortcut(chord->ToImGui(), flags)) {
                 EditorCommandEvent::Emit(command.id);
@@ -310,7 +310,7 @@ namespace BECore {
         ImGui::SetNextItemWidth(kSaveLayoutFieldWidth);
         const bool enterPressed = ImGui::InputText("##LayoutName", _layoutNameBuffer, sizeof(_layoutNameBuffer), ImGuiInputTextFlags_EnterReturnsTrue);
 
-        const eastl::string_view name = _layoutNameBuffer;
+        const StringView name = _layoutNameBuffer;
         const bool isEmpty = name.empty();
         const bool isValid = IsValidLayoutName(name);
         const bool exists = isValid && _layouts->Exists(name);
@@ -345,9 +345,9 @@ namespace BECore {
     }
 
     void EditorLayoutWidget::CommandMenuItem(PoolString id, const char* label, bool enabled) {
-        eastl::string chordText;
+        String chordText;
         if (_settings) {
-            if (const std::optional<KeyChord> chord = _settings->GetHotkeys().GetChord(id)) {
+            if (const Optional<KeyChord> chord = _settings->GetHotkeys().GetChord(id)) {
                 chordText = ToString(*chord);
             }
         }
@@ -356,7 +356,7 @@ namespace BECore {
         }
     }
 
-    void EditorLayoutWidget::QueueLayout(const eastl::string& name) {
+    void EditorLayoutWidget::QueueLayout(const String& name) {
         const auto text = _layouts->Load(name);
         if (!text) {
             LOG_WARNING(Format("Editor: cannot load layout '{}': {}", name, text.error().detail));
@@ -370,12 +370,12 @@ namespace BECore {
         _pendingLayoutText = *text;
     }
 
-    std::expected<void, eastl::string> EditorLayoutWidget::SaveCurrentLayout(eastl::string_view name) {
+    std::expected<void, String> EditorLayoutWidget::SaveCurrentLayout(StringView name) {
         size_t size = 0;
         const char* text = ImGui::SaveIniSettingsToMemory(&size);
         // SaveIniSettingsToMemory cancels the pending write of imgui.ini
         ImGui::MarkIniSettingsDirty();
-        const auto result = _layouts->Save(name, eastl::string_view(text, size));
+        const auto result = _layouts->Save(name, StringView(text, size));
         if (!result) {
             LOG_ERROR(Format("Editor: cannot save layout '{}': {}", name, result.error().detail));
             return std::unexpected(result.error().detail);

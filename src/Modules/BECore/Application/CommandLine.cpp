@@ -6,19 +6,19 @@ namespace BECore {
 
         constexpr char kValueSeparator = '=';
 
-        eastl::string_view AsView(const eastl::string& text) {
-            return eastl::string_view(text.data(), text.size());
+        StringView AsView(const String& text) {
+            return StringView(text);
         }
 
     }  // namespace
 
-    void CommandLine::Set(eastl::span<const eastl::string> arguments) {
+    void CommandLine::Set(Span<const String> arguments) {
         _arguments.assign(arguments.begin(), arguments.end());
     }
 
-    std::optional<eastl::string_view> CommandLine::FindValue(eastl::string_view name) const {
-        for (const eastl::string& argument : _arguments) {
-            const eastl::string_view view = AsView(argument);
+    Optional<StringView> CommandLine::FindValue(StringView name) const {
+        for (const String& argument : _arguments) {
+            const StringView view = AsView(argument);
             if (view.size() > name.size() && view.starts_with(name) && view[name.size()] == kValueSeparator) {
                 return view.substr(name.size() + 1);
             }
@@ -26,8 +26,8 @@ namespace BECore {
         return std::nullopt;
     }
 
-    bool CommandLine::HasFlag(eastl::string_view name) const {
-        for (const eastl::string& argument : _arguments) {
+    bool CommandLine::HasFlag(StringView name) const {
+        for (const String& argument : _arguments) {
             if (AsView(argument) == name) {
                 return true;
             }

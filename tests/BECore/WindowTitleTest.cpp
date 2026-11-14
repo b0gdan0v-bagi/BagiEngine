@@ -7,8 +7,8 @@ namespace BECore::Tests {
 
         constexpr const char* kDash = "\xE2\x80\x94";  // U+2014 in UTF-8
 
-        eastl::string Expect(const char* game) {
-            return eastl::string(game) + " " + kDash + " BagiEngine Editor";
+        String Expect(const char* game) {
+            return String(game) + " " + kDash + " BagiEngine Editor";
         }
 
     }  // namespace
@@ -40,8 +40,8 @@ namespace BECore::Tests {
     }
 
     TEST(WindowTitleTest, TheEmDashHasSpacesAroundIt) {
-        const eastl::string title = ComposeWindowTitle("", "G", true);
-        EXPECT_NE(title.find(" \xE2\x80\x94 "), eastl::string::npos);
+        const String title = ComposeWindowTitle("", "G", true);
+        EXPECT_NE(title.find(" \xE2\x80\x94 "), String::npos);
     }
 
 }  // namespace BECore::Tests

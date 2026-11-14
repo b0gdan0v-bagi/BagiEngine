@@ -84,8 +84,8 @@ namespace BECore {
         return range;
     }
 
-    eastl::vector<TimelineLane> LayoutLanes(const RingSnapshot& snapshot, double beginTicks, double endTicks) {
-        eastl::vector<TimelineLane> lanes;
+    Vector<TimelineLane> LayoutLanes(const RingSnapshot& snapshot, double beginTicks, double endTicks) {
+        Vector<TimelineLane> lanes;
         for (size_t i = 0; i < snapshot.threads.size(); ++i) {
             uint32_t deepest = 0;
             bool any = false;
@@ -108,7 +108,7 @@ namespace BECore {
         return lanes;
     }
 
-    float LaneTop(const eastl::vector<TimelineLane>& lanes, size_t laneIndex, float rowHeight, float laneGap) {
+    float LaneTop(const Vector<TimelineLane>& lanes, size_t laneIndex, float rowHeight, float laneGap) {
         float top = 0.0f;
         for (size_t i = 0; i < laneIndex && i < lanes.size(); ++i) {
             top += static_cast<float>(lanes[i].rows) * rowHeight + laneGap;
@@ -120,8 +120,7 @@ namespace BECore {
         return static_cast<double>(zone.endTicks - zone.beginTicks) * pixelsPerTick >= kOnePixel;
     }
 
-    std::optional<ZoneHit> HitTest(const eastl::vector<TimelineLane>& lanes, const RingSnapshot& snapshot, const TimelineView& view, float x, float y, float rowHeight, float widthPixels,
-                                   float laneGap) {
+    Optional<ZoneHit> HitTest(const Vector<TimelineLane>& lanes, const RingSnapshot& snapshot, const TimelineView& view, float x, float y, float rowHeight, float widthPixels, float laneGap) {
         if (y < 0.0f || rowHeight <= 0.0f || widthPixels <= 0.0f) {
             return std::nullopt;
         }
@@ -138,7 +137,7 @@ namespace BECore {
             const auto row = static_cast<uint32_t>((y - top) / rowHeight);
             const double tick = view.XToTick(x, widthPixels);
             const double pixelsPerTick = view.PixelsPerTick(widthPixels);
-            const eastl::vector<ZoneRecord>& zones = snapshot.threads[lane.threadIndex].zones;
+            const Vector<ZoneRecord>& zones = snapshot.threads[lane.threadIndex].zones;
             for (size_t zoneIndex = 0; zoneIndex < zones.size(); ++zoneIndex) {
                 const ZoneRecord& zone = zones[zoneIndex];
                 if (zone.depth == row && static_cast<double>(zone.beginTicks) <= tick && tick <= static_cast<double>(zone.endTicks) && IsVisible(zone, pixelsPerTick)) {
@@ -150,11 +149,11 @@ namespace BECore {
         return std::nullopt;
     }
 
-    std::optional<ZoneHit> FindWorstCall(const RingSnapshot& snapshot, const ProfileSite* site) {
-        std::optional<ZoneHit> worst;
+    Optional<ZoneHit> FindWorstCall(const RingSnapshot& snapshot, const ProfileSite* site) {
+        Optional<ZoneHit> worst;
         uint64_t worstTicks = 0;
         for (size_t t = 0; t < snapshot.threads.size(); ++t) {
-            const eastl::vector<ZoneRecord>& zones = snapshot.threads[t].zones;
+            const Vector<ZoneRecord>& zones = snapshot.threads[t].zones;
             for (size_t z = 0; z < zones.size(); ++z) {
                 const uint64_t ticks = zones[z].endTicks - zones[z].beginTicks;
                 if (zones[z].site == site && (!worst || ticks > worstTicks)) {
@@ -175,12 +174,12 @@ namespace BECore {
         return nullptr;
     }
 
-    std::optional<size_t> FramePosition(const RingSnapshot& snapshot, std::optional<uint64_t> frameIndex) {
+    Optional<size_t> FramePosition(const RingSnapshot& snapshot, Optional<uint64_t> frameIndex) {
         if (!frameIndex || snapshot.frames.empty() || *frameIndex < snapshot.frames.front().index) {
             return std::nullopt;
         }
         const uint64_t position = *frameIndex - snapshot.frames.front().index;
-        return position < snapshot.frames.size() ? std::optional<size_t>(static_cast<size_t>(position)) : std::nullopt;
+        return position < snapshot.frames.size() ? Optional<size_t>(static_cast<size_t>(position)) : std::nullopt;
     }
 
 }  // namespace BECore

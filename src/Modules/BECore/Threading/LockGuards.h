@@ -2,7 +2,6 @@
 
 #include <BECore/Threading/Mutex.h>
 #include <BECore/Threading/SharedMutex.h>
-#include <mutex>
 #include <shared_mutex>
 
 namespace BECore {

@@ -15,7 +15,7 @@ namespace BECore {
 
     /// What the painter reads of a text: the fields of a `UITextComponent`, taken as they are now. A view, never kept
     struct UITextParams {
-        eastl::string_view text;  ///< the source text, with its `{#key}` and `{name}` (the painter expands them)
+        StringView text;  ///< the source text, with its `{#key}` and `{name}` (the painter expands them)
         PoolString font;
         PoolString fontFamily;
         uint16_t fontWeight = 400;
@@ -45,7 +45,7 @@ namespace BECore {
 
         /// The text as it is shown: @p source with every `{#key}` replaced by the string of the current language (UIStrings), then every `{name}` by the variable of that name
         /// (UIVars; `{{` and `}}` are literal braces). A key nobody translated shows as the key and is logged once. The view is valid until the next call
-        [[nodiscard]] eastl::string_view GetDisplayText(eastl::string_view source);
+        [[nodiscard]] StringView GetDisplayText(StringView source);
 
         /// The font file the text is measured and drawn with (the path of `font`, else the face of family and weight), empty when it did not load
         [[nodiscard]] PoolString GetResolvedFontPath(const UITextParams& params);
@@ -78,8 +78,8 @@ namespace BECore {
         PoolString _fontPath;      // the path _fontHandle was loaded from, to notice a changed font, family or weight
         FontRequest _fontRequest;  // the request of the last resolve: an unknown family is logged when it changes, not on every frame
         TextLayoutCache _layoutCache;
-        eastl::string _expandedSource;  // the source that _expanded was made from
-        eastl::string _expanded;
+        String _expandedSource;  // the source that _expanded was made from
+        String _expanded;
         uint64_t _expandedVersion = 0;         // the version of UIVars it was made at
         uint64_t _expandedStringsVersion = 0;  // the version of UIStrings it was made at, read only when _expandedUsesStrings
         bool _expandedUsesStrings = false;     // the text holds a `{#key}`

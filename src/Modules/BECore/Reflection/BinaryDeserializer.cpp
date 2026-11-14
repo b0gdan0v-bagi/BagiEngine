@@ -111,7 +111,7 @@ namespace BECore {
         return true;
     }
 
-    bool BinaryDeserializer::LoadFromBuffer(const eastl::vector<uint8_t>& data) {
+    bool BinaryDeserializer::LoadFromBuffer(const Vector<uint8_t>& data) {
         return LoadFromBuffer(data.data(), data.size());
     }
 
@@ -136,7 +136,7 @@ namespace BECore {
             return false;
         }
 
-        eastl::vector<uint8_t> bytes;
+        Vector<uint8_t> bytes;
         bytes.resize(static_cast<size_t>(fileSize));
         if (!file.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(fileSize))) {
             AddError("", "Failed to read binary file", 0);
@@ -145,7 +145,7 @@ namespace BECore {
         return LoadFromBuffer(bytes);
     }
 
-    void BinaryDeserializer::AddError(eastl::string_view path, eastl::string_view message, int32_t line) {
+    void BinaryDeserializer::AddError(StringView path, StringView message, int32_t line) {
         StoreError(_errors, path, message, line);
     }
 
@@ -153,7 +153,7 @@ namespace BECore {
     // Lookup
     // =============================================================================
 
-    bool BinaryDeserializer::FindEntry(eastl::string_view name, TagPredicate accepts, BinaryFormat::EntryView& outEntry) const {
+    bool BinaryDeserializer::FindEntry(StringView name, TagPredicate accepts, BinaryFormat::EntryView& outEntry) const {
         if (_scopeStack.empty()) {
             return false;
         }
@@ -175,7 +175,7 @@ namespace BECore {
         return found;
     }
 
-    bool BinaryDeserializer::FindScalar(eastl::string_view name, uint8_t expectedTag, bool reportMissing, BinaryFormat::EntryView& outEntry) {
+    bool BinaryDeserializer::FindScalar(StringView name, uint8_t expectedTag, bool reportMissing, BinaryFormat::EntryView& outEntry) {
         if (!FindEntry(name, &BinaryFormat::IsScalarTag, outEntry)) {
             if (reportMissing) {
                 ReportError(name, "Element not found");
@@ -194,7 +194,7 @@ namespace BECore {
     // =============================================================================
 
     template <typename T>
-    bool BinaryDeserializer::ReadScalar(eastl::string_view name, T& outValue, bool reportMissing) {
+    bool BinaryDeserializer::ReadScalar(StringView name, T& outValue, bool reportMissing) {
         BinaryFormat::EntryView entry;
         if (!FindScalar(name, BinaryFormat::TagFor<T>(), reportMissing, entry)) {
             return false;
@@ -209,63 +209,63 @@ namespace BECore {
         return true;
     }
 
-    bool BinaryDeserializer::ReadStringView(eastl::string_view name, bool reportMissing, eastl::string_view& outValue) {
+    bool BinaryDeserializer::ReadStringView(StringView name, bool reportMissing, StringView& outValue) {
         BinaryFormat::EntryView entry;
         if (!FindScalar(name, BinaryFormat::Tag::String, reportMissing, entry)) {
             return false;
         }
 
         const size_t length = BinaryFormat::Load<uint32_t>(_buffer.data() + entry.payloadBegin);
-        outValue = eastl::string_view(reinterpret_cast<const char*>(_buffer.data() + entry.payloadBegin + sizeof(uint32_t)), length);
+        outValue = StringView(reinterpret_cast<const char*>(_buffer.data() + entry.payloadBegin + sizeof(uint32_t)), length);
         return true;
     }
 
-    bool BinaryDeserializer::Read(eastl::string_view name, bool& outValue) {
+    bool BinaryDeserializer::Read(StringView name, bool& outValue) {
         return ReadScalar(name, outValue, true);
     }
 
-    bool BinaryDeserializer::Read(eastl::string_view name, int8_t& outValue) {
+    bool BinaryDeserializer::Read(StringView name, int8_t& outValue) {
         return ReadScalar(name, outValue, true);
     }
 
-    bool BinaryDeserializer::Read(eastl::string_view name, uint8_t& outValue) {
+    bool BinaryDeserializer::Read(StringView name, uint8_t& outValue) {
         return ReadScalar(name, outValue, true);
     }
 
-    bool BinaryDeserializer::Read(eastl::string_view name, int16_t& outValue) {
+    bool BinaryDeserializer::Read(StringView name, int16_t& outValue) {
         return ReadScalar(name, outValue, true);
     }
 
-    bool BinaryDeserializer::Read(eastl::string_view name, uint16_t& outValue) {
+    bool BinaryDeserializer::Read(StringView name, uint16_t& outValue) {
         return ReadScalar(name, outValue, true);
     }
 
-    bool BinaryDeserializer::Read(eastl::string_view name, int32_t& outValue) {
+    bool BinaryDeserializer::Read(StringView name, int32_t& outValue) {
         return ReadScalar(name, outValue, true);
     }
 
-    bool BinaryDeserializer::Read(eastl::string_view name, uint32_t& outValue) {
+    bool BinaryDeserializer::Read(StringView name, uint32_t& outValue) {
         return ReadScalar(name, outValue, true);
     }
 
-    bool BinaryDeserializer::Read(eastl::string_view name, int64_t& outValue) {
+    bool BinaryDeserializer::Read(StringView name, int64_t& outValue) {
         return ReadScalar(name, outValue, true);
     }
 
-    bool BinaryDeserializer::Read(eastl::string_view name, uint64_t& outValue) {
+    bool BinaryDeserializer::Read(StringView name, uint64_t& outValue) {
         return ReadScalar(name, outValue, true);
     }
 
-    bool BinaryDeserializer::Read(eastl::string_view name, float& outValue) {
+    bool BinaryDeserializer::Read(StringView name, float& outValue) {
         return ReadScalar(name, outValue, true);
     }
 
-    bool BinaryDeserializer::Read(eastl::string_view name, double& outValue) {
+    bool BinaryDeserializer::Read(StringView name, double& outValue) {
         return ReadScalar(name, outValue, true);
     }
 
-    bool BinaryDeserializer::Read(eastl::string_view name, eastl::string& outValue) {
-        eastl::string_view text;
+    bool BinaryDeserializer::Read(StringView name, String& outValue) {
+        StringView text;
         if (!ReadStringView(name, true, text)) {
             return false;
         }
@@ -273,8 +273,8 @@ namespace BECore {
         return true;
     }
 
-    bool BinaryDeserializer::Read(eastl::string_view name, PoolString& outValue) {
-        eastl::string_view text;
+    bool BinaryDeserializer::Read(StringView name, PoolString& outValue) {
+        StringView text;
         if (!ReadStringView(name, true, text)) {
             return false;
         }
@@ -286,52 +286,52 @@ namespace BECore {
     // ReadAttribute methods (a missing entry is not an error: the field may be optional)
     // =============================================================================
 
-    bool BinaryDeserializer::ReadAttribute(eastl::string_view name, bool& outValue) {
+    bool BinaryDeserializer::ReadAttribute(StringView name, bool& outValue) {
         return ReadScalar(name, outValue, false);
     }
 
-    bool BinaryDeserializer::ReadAttribute(eastl::string_view name, int8_t& outValue) {
+    bool BinaryDeserializer::ReadAttribute(StringView name, int8_t& outValue) {
         return ReadScalar(name, outValue, false);
     }
 
-    bool BinaryDeserializer::ReadAttribute(eastl::string_view name, uint8_t& outValue) {
+    bool BinaryDeserializer::ReadAttribute(StringView name, uint8_t& outValue) {
         return ReadScalar(name, outValue, false);
     }
 
-    bool BinaryDeserializer::ReadAttribute(eastl::string_view name, int16_t& outValue) {
+    bool BinaryDeserializer::ReadAttribute(StringView name, int16_t& outValue) {
         return ReadScalar(name, outValue, false);
     }
 
-    bool BinaryDeserializer::ReadAttribute(eastl::string_view name, uint16_t& outValue) {
+    bool BinaryDeserializer::ReadAttribute(StringView name, uint16_t& outValue) {
         return ReadScalar(name, outValue, false);
     }
 
-    bool BinaryDeserializer::ReadAttribute(eastl::string_view name, int32_t& outValue) {
+    bool BinaryDeserializer::ReadAttribute(StringView name, int32_t& outValue) {
         return ReadScalar(name, outValue, false);
     }
 
-    bool BinaryDeserializer::ReadAttribute(eastl::string_view name, uint32_t& outValue) {
+    bool BinaryDeserializer::ReadAttribute(StringView name, uint32_t& outValue) {
         return ReadScalar(name, outValue, false);
     }
 
-    bool BinaryDeserializer::ReadAttribute(eastl::string_view name, int64_t& outValue) {
+    bool BinaryDeserializer::ReadAttribute(StringView name, int64_t& outValue) {
         return ReadScalar(name, outValue, false);
     }
 
-    bool BinaryDeserializer::ReadAttribute(eastl::string_view name, uint64_t& outValue) {
+    bool BinaryDeserializer::ReadAttribute(StringView name, uint64_t& outValue) {
         return ReadScalar(name, outValue, false);
     }
 
-    bool BinaryDeserializer::ReadAttribute(eastl::string_view name, float& outValue) {
+    bool BinaryDeserializer::ReadAttribute(StringView name, float& outValue) {
         return ReadScalar(name, outValue, false);
     }
 
-    bool BinaryDeserializer::ReadAttribute(eastl::string_view name, double& outValue) {
+    bool BinaryDeserializer::ReadAttribute(StringView name, double& outValue) {
         return ReadScalar(name, outValue, false);
     }
 
-    bool BinaryDeserializer::ReadAttribute(eastl::string_view name, eastl::string& outValue) {
-        eastl::string_view text;
+    bool BinaryDeserializer::ReadAttribute(StringView name, String& outValue) {
+        StringView text;
         if (!ReadStringView(name, false, text)) {
             return false;
         }
@@ -339,8 +339,8 @@ namespace BECore {
         return true;
     }
 
-    bool BinaryDeserializer::ReadAttribute(eastl::string_view name, PoolString& outValue) {
-        eastl::string_view text;
+    bool BinaryDeserializer::ReadAttribute(StringView name, PoolString& outValue) {
+        StringView text;
         if (!ReadStringView(name, false, text)) {
             return false;
         }
@@ -352,7 +352,7 @@ namespace BECore {
     // Object nesting
     // =============================================================================
 
-    bool BinaryDeserializer::BeginObject(eastl::string_view name) {
+    bool BinaryDeserializer::BeginObject(StringView name) {
         BinaryFormat::EntryView entry;
         if (!FindEntry(name, &BinaryFormat::IsObjectTag, entry)) {
             return false;
@@ -377,7 +377,7 @@ namespace BECore {
     // Array support
     // =============================================================================
 
-    bool BinaryDeserializer::BeginArray(eastl::string_view name, eastl::string_view /*elementName*/, size_t& count) {
+    bool BinaryDeserializer::BeginArray(StringView name, StringView /*elementName*/, size_t& count) {
         BinaryFormat::EntryView entry;
         if (!FindEntry(name, &BinaryFormat::IsArrayTag, entry)) {
             return false;
@@ -450,7 +450,7 @@ namespace BECore {
         return !_errors.empty();
     }
 
-    const eastl::vector<DeserializeError>& BinaryDeserializer::GetErrors() const {
+    const Vector<DeserializeError>& BinaryDeserializer::GetErrors() const {
         return _errors;
     }
 

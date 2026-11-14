@@ -65,11 +65,11 @@ namespace BECore {
         /// The box style is flat in a file, like UIElementStyle: it reads and writes the attributes of the object the serializer is in
         template <>
         struct DataAccessor<UIBoxStyle> {
-            static void Save(ISerializer& s, const UIBoxStyle& value, eastl::string_view /*key*/) {
+            static void Save(ISerializer& s, const UIBoxStyle& value, StringView /*key*/) {
                 value.Serialize(s);
             }
 
-            static bool Load(IDeserializer& d, UIBoxStyle& value, eastl::string_view /*key*/) {
+            static bool Load(IDeserializer& d, UIBoxStyle& value, StringView /*key*/) {
                 value.Deserialize(d);
                 return true;
             }

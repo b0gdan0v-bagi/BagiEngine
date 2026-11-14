@@ -52,6 +52,6 @@ namespace BECore::Stress {
      * Every cell has a flat colour of its own, a marker inside it and translucent corners, so Alpha, Add and Multiply visibly differ and a
      * wrong `srcRect` shows. The atlases differ from each other.
      */
-    eastl::vector<uint8_t> MakeAtlasPixels(uint32_t atlasIndex, uint32_t cells, uint32_t cellSize);
+    Vector<uint8_t> MakeAtlasPixels(uint32_t atlasIndex, uint32_t cells, uint32_t cellSize);
 
 }  // namespace BECore::Stress

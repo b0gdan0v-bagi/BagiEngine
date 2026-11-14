@@ -30,7 +30,7 @@ namespace BECore::Fuzz {
                 AddBytes(&value, sizeof(T));
             }
 
-            void AddText(eastl::string_view text) {
+            void AddText(StringView text) {
                 Add(text.size());
                 AddBytes(text.data(), text.size());
             }
@@ -44,7 +44,7 @@ namespace BECore::Fuzz {
         };
 
         template <typename T>
-        constexpr bool IsTextType = std::is_same_v<T, eastl::string> || std::is_same_v<T, PoolString>;
+        constexpr bool IsTextType = std::is_same_v<T, String> || std::is_same_v<T, PoolString>;
 
         template <typename T>
         constexpr uint8_t ExpectedTag() {
@@ -55,11 +55,11 @@ namespace BECore::Fuzz {
             }
         }
 
-        eastl::string_view TextOf(const eastl::string& value) {
-            return eastl::string_view(value.data(), value.size());
+        StringView TextOf(const String& value) {
+            return StringView(value);
         }
 
-        eastl::string_view TextOf(const PoolString& value) {
+        StringView TextOf(const PoolString& value) {
             return value.ToStringView();
         }
 
@@ -71,7 +71,7 @@ namespace BECore::Fuzz {
                 return value == (*payload != 0);
             } else if constexpr (IsTextType<T>) {
                 const size_t length = BinaryFormat::Load<uint32_t>(payload);
-                return TextOf(value) == eastl::string_view(reinterpret_cast<const char*>(payload + sizeof(uint32_t)), length);
+                return TextOf(value) == StringView(reinterpret_cast<const char*>(payload + sizeof(uint32_t)), length);
             } else {
                 const T raw = BinaryFormat::Load<T>(payload);
                 return std::memcmp(&raw, &value, sizeof(T)) == 0;
@@ -102,8 +102,8 @@ namespace BECore::Fuzz {
             void WalkScope(size_t begin, size_t end, size_t depth) {
                 FUZZ_CHECK(depth <= BinaryFormat::MaxDepth);
 
-                eastl::vector<BinaryFormat::EntryView> entries;
-                eastl::hash_map<eastl::string_view, LastEntries> last;
+                Vector<BinaryFormat::EntryView> entries;
+                HashMap<StringView, LastEntries> last;
                 for (size_t position = begin; position < end;) {
                     BinaryFormat::EntryView entry;
                     FUZZ_CHECK(BinaryFormat::ParseEntry(_data, position, end, entry));
@@ -178,7 +178,7 @@ namespace BECore::Fuzz {
                 ProbeType<uint64_t>(entry);
                 ProbeType<float>(entry);
                 ProbeType<double>(entry);
-                ProbeType<eastl::string>(entry);
+                ProbeType<String>(entry);
                 ProbeType<PoolString>(entry);
             }
 
@@ -234,7 +234,7 @@ namespace BECore::Fuzz {
         /// A reader that refused its input exposes nothing: every read fails and no scope opens
         void ExpectNothingReadable(BinaryDeserializer& reader) {
             int32_t number = 0;
-            eastl::string text;
+            String text;
             size_t count = 0;
             FUZZ_CHECK(!reader.Read("a", number));
             FUZZ_CHECK(!reader.ReadAttribute("a", text));
@@ -276,7 +276,7 @@ namespace BECore::Fuzz {
     void FuzzBinaryDeserializer(const uint8_t* data, size_t size) {
         CheckBuffer(data, size);
 
-        const eastl::vector<uint8_t> repaired = WithTrueBinaryHeader(data, size);
+        const Vector<uint8_t> repaired = WithTrueBinaryHeader(data, size);
         if (!repaired.empty()) {
             CheckBuffer(repaired.data(), repaired.size());
         }

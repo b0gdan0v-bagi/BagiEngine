@@ -35,13 +35,13 @@ namespace BECore {
         void Initialize();
 
         /// Whether @p token is a legal token name
-        [[nodiscard]] static bool IsValidToken(eastl::string_view token);
+        [[nodiscard]] static bool IsValidToken(StringView token);
 
         /**
          * @brief Sets the colour of @p token in @p theme. The first theme set is the default one until SetDefaultTheme() says otherwise
          * @return false and nothing changed when @p token is not a legal name or @p theme is empty. A value equal to the current one changes nothing (and keeps the version)
          */
-        bool Set(PoolString theme, eastl::string_view token, const Color& color);
+        bool Set(PoolString theme, StringView token, const Color& color);
 
         /// The theme a token falls back to. Any id: a default with no colours is a table with no fallback
         void SetDefaultTheme(PoolString theme);
@@ -54,13 +54,13 @@ namespace BECore {
         [[nodiscard]] PoolString GetTheme() const;
 
         /// The themes that have colours, in the order they were first set
-        [[nodiscard]] const eastl::vector<PoolString>& GetThemes() const {
+        [[nodiscard]] const Vector<PoolString>& GetThemes() const {
             return _themeIds;
         }
         [[nodiscard]] bool HasTheme(PoolString theme) const;
 
         /// The colour of @p token in the current theme, else in the default theme, else nothing. Records nothing
-        [[nodiscard]] std::optional<Color> Find(eastl::string_view token) const;
+        [[nodiscard]] Optional<Color> Find(StringView token) const;
 
         /**
          * @brief Writes into @p color the channels of its token: the colour of Find(), else kMissingTokenColor with the token recorded in GetMissing() and logged, once per token.
@@ -69,16 +69,16 @@ namespace BECore {
         void Resolve(UIColor& color);
 
         /// The tokens Resolve() did not find in any theme, once each, in the order they were asked for
-        [[nodiscard]] const eastl::vector<PoolString>& GetMissing() const {
+        [[nodiscard]] const Vector<PoolString>& GetMissing() const {
             return _missing;
         }
 
         /// Every token any theme defines, in the order they were first set: what a theme has to define to be complete
-        [[nodiscard]] const eastl::vector<PoolString>& GetTokens() const {
+        [[nodiscard]] const Vector<PoolString>& GetTokens() const {
             return _tokens;
         }
         /// Whether @p theme itself (not its fallback to the default) defines @p token
-        [[nodiscard]] bool HasToken(PoolString theme, eastl::string_view token) const;
+        [[nodiscard]] bool HasToken(PoolString theme, StringView token) const;
 
         /// Drops every theme, the default and the current theme, and the record of missing tokens. The version grows
         void Clear();
@@ -95,7 +95,7 @@ namespace BECore {
          *         colour, a duplicate token in one theme (the first stays), a theme with no colours, a `default` that names no theme, an unknown element. The rest is loaded. Each problem is one line
          * of at most `UIText::kMaxMessageBytes` (it repeats text of the file, which is cut). An empty node adds nothing
          */
-        eastl::vector<eastl::string> LoadFromXml(const XmlNode& node);
+        Vector<String> LoadFromXml(const XmlNode& node);
 
     private:
         struct Theme {
@@ -104,12 +104,12 @@ namespace BECore {
         };
 
         [[nodiscard]] const Theme* FindTheme(PoolString theme) const;
-        [[nodiscard]] static std::optional<Color> FindColor(const Theme* theme, eastl::string_view token);
+        [[nodiscard]] static Optional<Color> FindColor(const Theme* theme, StringView token);
 
-        eastl::vector<Theme> _themes;
-        eastl::vector<PoolString> _themeIds;
-        eastl::vector<PoolString> _tokens;
-        eastl::vector<PoolString> _missing;
+        Vector<Theme> _themes;
+        Vector<PoolString> _themeIds;
+        Vector<PoolString> _tokens;
+        Vector<PoolString> _missing;
         PoolString _default;
         PoolString _current;
         uint64_t _version = 1;

@@ -65,7 +65,7 @@ namespace BECore {
          * @param virtualPath Virtual path (e.g., "config/game.xml")
          * @return true on success
          */
-        bool LoadFromVirtualPath(eastl::string_view virtualPath);
+        bool LoadFromVirtualPath(StringView virtualPath);
 
         /**
          * @brief Load XML from string
@@ -76,7 +76,7 @@ namespace BECore {
          * @param xmlContent XML string content
          * @return true on success
          */
-        bool LoadFromString(eastl::string_view xmlContent);
+        bool LoadFromString(StringView xmlContent);
 
         /**
          * @brief Position deserializer at the given XmlNode
@@ -92,39 +92,39 @@ namespace BECore {
         // IDeserializer interface - Read methods
         // =================================================================
 
-        bool Read(eastl::string_view name, bool& outValue) override;
-        bool Read(eastl::string_view name, int8_t& outValue) override;
-        bool Read(eastl::string_view name, uint8_t& outValue) override;
-        bool Read(eastl::string_view name, int16_t& outValue) override;
-        bool Read(eastl::string_view name, uint16_t& outValue) override;
-        bool Read(eastl::string_view name, int32_t& outValue) override;
-        bool Read(eastl::string_view name, uint32_t& outValue) override;
-        bool Read(eastl::string_view name, int64_t& outValue) override;
-        bool Read(eastl::string_view name, uint64_t& outValue) override;
-        bool Read(eastl::string_view name, float& outValue) override;
-        bool Read(eastl::string_view name, double& outValue) override;
-        bool Read(eastl::string_view name, eastl::string& outValue) override;
-        bool Read(eastl::string_view name, PoolString& outValue) override;
+        bool Read(StringView name, bool& outValue) override;
+        bool Read(StringView name, int8_t& outValue) override;
+        bool Read(StringView name, uint8_t& outValue) override;
+        bool Read(StringView name, int16_t& outValue) override;
+        bool Read(StringView name, uint16_t& outValue) override;
+        bool Read(StringView name, int32_t& outValue) override;
+        bool Read(StringView name, uint32_t& outValue) override;
+        bool Read(StringView name, int64_t& outValue) override;
+        bool Read(StringView name, uint64_t& outValue) override;
+        bool Read(StringView name, float& outValue) override;
+        bool Read(StringView name, double& outValue) override;
+        bool Read(StringView name, String& outValue) override;
+        bool Read(StringView name, PoolString& outValue) override;
 
         // Attribute deserialization (from XML attributes)
-        bool ReadAttribute(eastl::string_view name, bool& outValue) override;
-        bool ReadAttribute(eastl::string_view name, int8_t& outValue) override;
-        bool ReadAttribute(eastl::string_view name, uint8_t& outValue) override;
-        bool ReadAttribute(eastl::string_view name, int16_t& outValue) override;
-        bool ReadAttribute(eastl::string_view name, uint16_t& outValue) override;
-        bool ReadAttribute(eastl::string_view name, int32_t& outValue) override;
-        bool ReadAttribute(eastl::string_view name, uint32_t& outValue) override;
-        bool ReadAttribute(eastl::string_view name, int64_t& outValue) override;
-        bool ReadAttribute(eastl::string_view name, uint64_t& outValue) override;
-        bool ReadAttribute(eastl::string_view name, float& outValue) override;
-        bool ReadAttribute(eastl::string_view name, double& outValue) override;
-        bool ReadAttribute(eastl::string_view name, eastl::string& outValue) override;
-        bool ReadAttribute(eastl::string_view name, PoolString& outValue) override;
+        bool ReadAttribute(StringView name, bool& outValue) override;
+        bool ReadAttribute(StringView name, int8_t& outValue) override;
+        bool ReadAttribute(StringView name, uint8_t& outValue) override;
+        bool ReadAttribute(StringView name, int16_t& outValue) override;
+        bool ReadAttribute(StringView name, uint16_t& outValue) override;
+        bool ReadAttribute(StringView name, int32_t& outValue) override;
+        bool ReadAttribute(StringView name, uint32_t& outValue) override;
+        bool ReadAttribute(StringView name, int64_t& outValue) override;
+        bool ReadAttribute(StringView name, uint64_t& outValue) override;
+        bool ReadAttribute(StringView name, float& outValue) override;
+        bool ReadAttribute(StringView name, double& outValue) override;
+        bool ReadAttribute(StringView name, String& outValue) override;
+        bool ReadAttribute(StringView name, PoolString& outValue) override;
 
-        bool BeginObject(eastl::string_view name) override;
+        bool BeginObject(StringView name) override;
         void EndObject() override;
 
-        bool BeginArray(eastl::string_view name, eastl::string_view elementName, size_t& count) override;
+        bool BeginArray(StringView name, StringView elementName, size_t& count) override;
         void EndArray() override;
         bool BeginArrayElement() override;
         void EndArrayElement() override;
@@ -139,11 +139,11 @@ namespace BECore {
 
         // Error tracking
         bool HasErrors() const override;
-        const eastl::vector<DeserializeError>& GetErrors() const override;
+        const Vector<DeserializeError>& GetErrors() const override;
         void ClearErrors() override;
 
     protected:
-        void AddError(eastl::string_view path, eastl::string_view message, int32_t line) override;
+        void AddError(StringView path, StringView message, int32_t line) override;
 
     private:
         /**
@@ -154,17 +154,17 @@ namespace BECore {
         /**
          * @brief Whether one more open object, array or element would pass ReaderLimits::kMaxXmlNesting; reports it under @p name when it would
          */
-        bool IsNestedTooDeep(eastl::string_view name);
+        bool IsNestedTooDeep(StringView name);
 
         /**
          * @brief Get child node for reading
          */
-        pugi::xml_node GetChild(eastl::string_view name) const;
+        pugi::xml_node GetChild(StringView name) const;
 
         /**
          * @brief Get attribute from current node for reading
          */
-        pugi::xml_attribute GetAttribute(eastl::string_view name) const;
+        pugi::xml_attribute GetAttribute(StringView name) const;
 
         /**
          * @brief Strict read of an attribute: the whole text must be a value of T
@@ -173,30 +173,30 @@ namespace BECore {
          * text is reported under the name and the target keeps its value.
          */
         template <typename T>
-        bool ReadStrictAttribute(eastl::string_view name, T& outValue);
+        bool ReadStrictAttribute(StringView name, T& outValue);
 
         /**
          * @brief Strict read of a child element (see ReadStrictAttribute)
          */
         template <typename T>
-        bool ReadStrictElement(eastl::string_view name, T& outValue);
+        bool ReadStrictElement(StringView name, T& outValue);
 
         template <typename T>
-        bool ApplyStrictText(eastl::string_view name, eastl::string_view text, T& outValue);
+        bool ApplyStrictText(StringView name, StringView text, T& outValue);
 
         pugi::xml_document _document;
-        eastl::vector<pugi::xml_node> _nodeStack;
+        Vector<pugi::xml_node> _nodeStack;
 
         // For array iteration
         struct ArrayContext {
             pugi::xml_node parentNode;
-            eastl::vector<pugi::xml_node> elements;
+            Vector<pugi::xml_node> elements;
             size_t currentIndex = 0;
         };
-        eastl::vector<ArrayContext> _arrayStack;
+        Vector<ArrayContext> _arrayStack;
 
         // Error tracking
-        eastl::vector<DeserializeError> _errors;
+        Vector<DeserializeError> _errors;
 
         bool _strictValues = false;
     };

@@ -132,7 +132,7 @@ namespace BECore::BinaryFormat {
      */
     struct EntryView {
         uint8_t tag = 0;
-        eastl::string_view name;
+        StringView name;
         size_t payloadBegin = 0;  // first byte after the name
         size_t end = 0;           // one past the last byte of the entry
     };
@@ -180,7 +180,7 @@ namespace BECore::BinaryFormat {
         }
 
         outEntry.tag = tag;
-        outEntry.name = eastl::string_view(reinterpret_cast<const char*>(data + nameBegin), nameLength);
+        outEntry.name = StringView(reinterpret_cast<const char*>(data + nameBegin), nameLength);
         outEntry.payloadBegin = payloadBegin;
         outEntry.end = payloadBegin + payloadSize;
         return true;

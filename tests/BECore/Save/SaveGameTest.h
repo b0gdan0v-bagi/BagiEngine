@@ -26,7 +26,7 @@ namespace BECore {
 
             BE_REFLECT_FIELD int32_t id = 0;
             BE_REFLECT_FIELD float weight = 0.0f;
-            BE_REFLECT_FIELD eastl::string label;
+            BE_REFLECT_FIELD String label;
         };
 
     }  // namespace SaveTestData
@@ -34,7 +34,7 @@ namespace BECore {
     namespace PropVisit {
 
         /// The property visitor has no general support for a vector of structs by value (the inspector shows none): these tests do not edit one
-        inline bool Visit(IPropertyVisitor& /*v*/, eastl::vector<SaveTestData::Item>& /*items*/, eastl::string_view /*key*/) {
+        inline bool Visit(IPropertyVisitor& /*v*/, Vector<SaveTestData::Item>& /*items*/, StringView /*key*/) {
             return false;
         }
 
@@ -51,11 +51,11 @@ namespace BECore {
             BE_REFLECT_FIELD int64_t ticks = 0;
             BE_REFLECT_FIELD float speed = 1.5f;
             BE_REFLECT_FIELD bool hardcore = false;
-            BE_REFLECT_FIELD eastl::string title;
+            BE_REFLECT_FIELD String title;
             BE_REFLECT_FIELD PoolString hero;
             BE_REFLECT_FIELD Difficulty difficulty = Difficulty::Normal;
             BE_REFLECT_FIELD Point position;
-            BE_REFLECT_FIELD eastl::vector<Item> items;
+            BE_REFLECT_FIELD Vector<Item> items;
         };
 
         /// The same state in a later version of the game: one more field, which an old file does not have
@@ -67,11 +67,11 @@ namespace BECore {
             BE_REFLECT_FIELD int64_t ticks = 0;
             BE_REFLECT_FIELD float speed = 1.5f;
             BE_REFLECT_FIELD bool hardcore = false;
-            BE_REFLECT_FIELD eastl::string title;
+            BE_REFLECT_FIELD String title;
             BE_REFLECT_FIELD PoolString hero;
             BE_REFLECT_FIELD Difficulty difficulty = Difficulty::Normal;
             BE_REFLECT_FIELD Point position;
-            BE_REFLECT_FIELD eastl::vector<Item> items;
+            BE_REFLECT_FIELD Vector<Item> items;
             BE_REFLECT_FIELD int32_t lives = 3;
         };
 

@@ -30,7 +30,7 @@ namespace BECore {
         };
 
         /// The canvases of a subtree in the order of the scene: a node, then its children
-        void CollectCanvases(const SceneNode& node, eastl::vector<CanvasEntry>& out) {
+        void CollectCanvases(const SceneNode& node, Vector<CanvasEntry>& out) {
             if (auto canvas = node.GetComponent<UICanvasComponent>()) {
                 out.push_back({node.GetName(), std::move(canvas)});
             }
@@ -140,9 +140,9 @@ namespace BECore {
             if (image != nullptr && !image->sprite.Empty()) {
                 json["icon"] = MakeJsonString(image->sprite.ToStringView());
             }
-            const eastl::string& tooltip = element.GetTooltipText();
+            const String& tooltip = element.GetTooltipText();
             if (!tooltip.empty()) {
-                json["tooltip"] = MakeJsonString(eastl::string_view(tooltip.data(), tooltip.size()));
+                json["tooltip"] = MakeJsonString(StringView(tooltip));
             }
         }
 
@@ -231,7 +231,7 @@ namespace BECore {
         Json DescribeRegions(const UIRegionSet& regions) {
             Json json = Json::object();
             for (const UIRegionSet::Entry& entry : regions) {
-                json[std::string(entry.name.ToStringView().data(), entry.name.ToStringView().size())] = RectToJson(entry.rect);
+                json[ToStdString(entry.name.ToStringView())] = RectToJson(entry.rect);
             }
             return json;
         }
@@ -291,7 +291,7 @@ namespace BECore {
                 call.Fail(UIControlErrors::kNoScene, "there is no active scene");
                 return;
             }
-            eastl::vector<CanvasEntry> canvases;
+            Vector<CanvasEntry> canvases;
             CollectCanvases(scene->GetRootNode(), canvases);
 
             Json list = Json::array();
@@ -316,7 +316,7 @@ namespace BECore {
         };
 
         /// The elements of @p root named @p searched in depth first order
-        void CollectNamed(UIElement& root, PoolString searched, eastl::vector<UIElement*>& out) {
+        void CollectNamed(UIElement& root, PoolString searched, Vector<UIElement*>& out) {
             if (root.name == searched) {
                 out.push_back(&root);
             }
@@ -358,7 +358,7 @@ namespace BECore {
         /// Whether a press on @p element only closes the open list of its canvas: a list is open and the element is neither the dropdown that owns it (its header) nor below it.
         /// The canvas consumes such a press (UICanvasComponent::OnMouseButtonDown), so the element emits nothing
         bool PressOnlyClosesList(const UICanvasLayout& layout, const UIElement& element) {
-            const eastl::vector<UIElement*> open = layout.OpenPopups();
+            const Vector<UIElement*> open = layout.OpenPopups();
             if (open.empty()) {
                 return false;
             }
@@ -384,13 +384,13 @@ namespace BECore {
         }
 
         /// Looks for the element to click. A candidate that cannot be clicked is remembered only until a better miss or a hit turns up
-        bool FindClickable(const eastl::vector<CanvasEntry>& canvases, PoolString name, std::optional<PoolString> onlyNode, float at, ClickTarget& target, bool& anyNamed) {
+        bool FindClickable(const Vector<CanvasEntry>& canvases, PoolString name, Optional<PoolString> onlyNode, float at, ClickTarget& target, bool& anyNamed) {
             anyNamed = false;
             for (const CanvasEntry& entry : canvases) {
                 if (onlyNode && entry.node != *onlyNode) {
                     continue;
                 }
-                eastl::vector<UIElement*> named;
+                Vector<UIElement*> named;
                 CollectNamed(*entry.canvas->GetLayout().root, name, named);
                 for (UIElement* element : named) {
                     anyNamed = true;
@@ -424,7 +424,7 @@ namespace BECore {
             return false;
         }
 
-        eastl::string DescribeMiss(const ClickTarget& target, PoolString name) {
+        String DescribeMiss(const ClickTarget& target, PoolString name) {
             const auto text = name.ToStringView();
             switch (target.miss) {
                 case ClickMiss::NotInteractive:
@@ -460,7 +460,7 @@ namespace BECore {
                 call.Fail(ControlErrors::kInvalidParams, "'name' has to be the name of an element");
                 return;
             }
-            std::optional<PoolString> onlyNode;
+            Optional<PoolString> onlyNode;
             if (FindJsonMember(call.Params(), "canvas") != nullptr) {
                 const auto nodeText = GetJsonString(call.Params(), "canvas");
                 if (!nodeText) {
@@ -468,7 +468,7 @@ namespace BECore {
                     return;
                 }
                 // A name that was never interned belongs to no node; client text does not go into the pool
-                onlyNode = PoolString::Find(eastl::string_view(nodeText->c_str(), nodeText->size())).value_or(PoolString{});
+                onlyNode = PoolString::Find(StringView(nodeText->c_str(), nodeText->size())).value_or(PoolString{});
             }
             float at = kDefaultAt;
             if (FindJsonMember(call.Params(), "at") != nullptr) {
@@ -484,8 +484,8 @@ namespace BECore {
                 call.Fail(UIControlErrors::kNoScene, "there is no active scene");
                 return;
             }
-            const auto name = PoolString::Find(eastl::string_view(nameText->c_str(), nameText->size()));
-            eastl::vector<CanvasEntry> canvases;
+            const auto name = PoolString::Find(StringView(nameText->c_str(), nameText->size()));
+            Vector<CanvasEntry> canvases;
             CollectCanvases(scene->GetRootNode(), canvases);
 
             ClickTarget target;
@@ -529,7 +529,7 @@ namespace BECore {
                 static_cast<void>(input.DispatchMouseButtonUp(MakeButtonEvent(outputX, outputY, false)));
 
                 Json result = Json::object();
-                result["clicked"] = MakeJsonString(eastl::string_view(nameText->c_str(), nameText->size()));
+                result["clicked"] = MakeJsonString(StringView(nameText->c_str(), nameText->size()));
                 result["canvas"] = MakeJsonString(canvasNode.ToStringView());
                 result["x"] = outputX;
                 result["y"] = outputY;
@@ -550,8 +550,8 @@ namespace BECore {
                 }
                 if (onlyClosesList && result.contains("action")) {
                     // The press only closed the open list and reached nothing below it: no action, no value
-                    result["action"] = MakeJsonString(eastl::string_view{});
-                    result["value"] = MakeJsonString(eastl::string_view{});
+                    result["action"] = MakeJsonString(StringView{});
+                    result["value"] = MakeJsonString(StringView{});
                 }
                 call.Reply(std::move(result));
                 return;

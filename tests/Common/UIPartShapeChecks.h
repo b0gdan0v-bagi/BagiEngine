@@ -7,9 +7,9 @@
 namespace BECore::Tests {
 
     /// The calls of the given kind whose box lies inside @p area grown by the feather of a round part (a part that is drawn as geometry spills half a feather past its rect)
-    inline eastl::vector<DrawCall> CallsIn(const RecordingRenderer& renderer, DrawKind kind, const Rect& area) {
+    inline Vector<DrawCall> CallsIn(const RecordingRenderer& renderer, DrawKind kind, const Rect& area) {
         constexpr float kSlack = 2.0f * UIBoxMesh::kFeatherPixels;
-        eastl::vector<DrawCall> found;
+        Vector<DrawCall> found;
         for (const DrawCall& call : renderer.calls) {
             if (call.kind == kind && call.rect.x >= area.x - kSlack && call.rect.y >= area.y - kSlack && call.rect.x + call.rect.w <= area.x + area.w + kSlack &&
                 call.rect.y + call.rect.h <= area.y + area.h + kSlack) {

@@ -14,15 +14,15 @@ namespace BECore {
      * re-created at a mode switch). A panel acts on the commands it owns by subscribing to EditorCommandEvent.
      */
     struct EditorCommand {
-        PoolString id;             // "area.action", the key in hotkeys.json and in EditorCommandEvent
-        eastl::string_view title;  // shown in the palette and in the hotkey table
-        std::optional<KeyChord> defaultChord;
+        PoolString id;     // "area.action", the key in hotkeys.json and in EditorCommandEvent
+        StringView title;  // shown in the palette and in the hotkey table
+        Optional<KeyChord> defaultChord;
         bool rebindable = true;  // false: the chord is fixed and not in the map's reach (mode.toggle)
         bool repeats = false;    // the hotkey fires again while the chord is held (game.step)
     };
 
     /// Every command of the editor in the order the palette lists them when the query is empty
-    [[nodiscard]] eastl::span<const EditorCommand> GetEditorCommands();
+    [[nodiscard]] Span<const EditorCommand> GetEditorCommands();
 
     /// The command with @p id, or nullptr
     [[nodiscard]] const EditorCommand* FindEditorCommand(PoolString id);

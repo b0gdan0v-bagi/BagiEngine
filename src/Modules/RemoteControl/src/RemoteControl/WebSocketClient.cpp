@@ -6,7 +6,7 @@ namespace BECore {
 
     namespace {
 
-        constexpr eastl::string_view kHandshakeHeadEnd = "\r\n\r\n";
+        constexpr StringView kHandshakeHeadEnd = "\r\n\r\n";
         constexpr size_t kReadChunkSize = 16 * 1024;
         constexpr size_t kHandshakeChunkSize = 1024;
         constexpr size_t kFrameOverheadBytes = 14;  // header and masking key of a frame, for the byte cap of the send queue
@@ -20,8 +20,8 @@ namespace BECore {
         }
 
         /// The payload of a close frame: the code, then the reason cut to fit a control frame
-        [[nodiscard]] eastl::vector<uint8_t> MakeClosePayload(uint16_t code, eastl::string_view reason) {
-            eastl::vector<uint8_t> payload;
+        [[nodiscard]] Vector<uint8_t> MakeClosePayload(uint16_t code, StringView reason) {
+            Vector<uint8_t> payload;
             payload.push_back(static_cast<uint8_t>(code >> kBitsPerByte));
             payload.push_back(static_cast<uint8_t>(code & kByteMask));
             const size_t reasonSize = std::min(reason.size(), kMaxControlPayload - kCloseCodeSize);
@@ -38,7 +38,7 @@ namespace BECore {
         }
     }
 
-    std::expected<void, eastl::string> WebSocketClient::Open(eastl::string_view url, WebSocketClientSettings settings) {
+    std::expected<void, String> WebSocketClient::Open(StringView url, WebSocketClientSettings settings) {
         auto parsed = ParseWebSocketUrl(url);
         if (!parsed) {
             return std::unexpected(parsed.error());
@@ -51,7 +51,7 @@ namespace BECore {
             {
                 LockGuard lock(_mutex);
                 if (_state != WebSocketClientState::Ended) {
-                    return std::unexpected(eastl::string("the previous connection has not ended yet"));
+                    return std::unexpected(String("the previous connection has not ended yet"));
                 }
             }
             _reader.join();  // the reader only has to leave its function; the writer was joined before the state became Ended
@@ -80,12 +80,12 @@ namespace BECore {
         return {};
     }
 
-    bool WebSocketClient::SendText(eastl::string_view text) {
-        return QueueFrame(WebSocketOpcode::kText, eastl::vector<uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), reinterpret_cast<const uint8_t*>(text.data()) + text.size()),
+    bool WebSocketClient::SendText(StringView text) {
+        return QueueFrame(WebSocketOpcode::kText, Vector<uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), reinterpret_cast<const uint8_t*>(text.data()) + text.size()),
                           /*isClose=*/false);
     }
 
-    void WebSocketClient::Close(uint16_t code, eastl::string_view reason) {
+    void WebSocketClient::Close(uint16_t code, StringView reason) {
         bool connecting = false;
         {
             LockGuard lock(_mutex);
@@ -121,7 +121,7 @@ namespace BECore {
         return _state == WebSocketClientState::Open && !_aborted;
     }
 
-    bool WebSocketClient::QueueFrame(uint8_t opcode, eastl::vector<uint8_t> payload, bool isClose) {
+    bool WebSocketClient::QueueFrame(uint8_t opcode, Vector<uint8_t> payload, bool isClose) {
         enum class Outcome : uint8_t { Refused, Queued, Overflow };
         Outcome outcome = Outcome::Refused;
         {
@@ -151,7 +151,7 @@ namespace BECore {
         return outcome == Outcome::Queued;
     }
 
-    void WebSocketClient::AbortConnection(uint16_t code, eastl::string_view reason) {
+    void WebSocketClient::AbortConnection(uint16_t code, StringView reason) {
         {
             LockGuard lock(_mutex);
             SetEndLocked(code, reason);
@@ -167,12 +167,12 @@ namespace BECore {
         _inboxSpace.notify_all();
     }
 
-    eastl::string WebSocketClient::WithStreamError(eastl::string_view what) const {
-        const eastl::string detail = _stream.GetLastError();
-        return detail.empty() ? eastl::string(what.data(), what.size()) : Format("{}: {}", what, detail);
+    String WebSocketClient::WithStreamError(StringView what) const {
+        const String detail = _stream.GetLastError();
+        return detail.empty() ? String(what.data(), what.size()) : Format("{}: {}", what, detail);
     }
 
-    void WebSocketClient::SetEndLocked(uint16_t code, eastl::string_view reason) {
+    void WebSocketClient::SetEndLocked(uint16_t code, StringView reason) {
         if (!_endSet) {
             _endSet = true;
             _endCode = code;
@@ -180,7 +180,7 @@ namespace BECore {
         }
     }
 
-    void WebSocketClient::SetEnd(uint16_t code, eastl::string_view reason) {
+    void WebSocketClient::SetEnd(uint16_t code, StringView reason) {
         LockGuard lock(_mutex);
         SetEndLocked(code, reason);
     }
@@ -192,7 +192,7 @@ namespace BECore {
     }
 
     void WebSocketClient::ReaderMain() {
-        eastl::vector<uint8_t> pendingBytes;
+        Vector<uint8_t> pendingBytes;
         if (Connect() && Handshake(pendingBytes)) {
             ReadMessages(std::move(pendingBytes));
         }
@@ -221,7 +221,7 @@ namespace BECore {
         {
             LockGuard lock(_mutex);
             closed.closeCode = _endSet ? _endCode : WebSocketCloseCode::kAbnormalClosure;
-            closed.reason = _endSet ? _endReason : eastl::string("the connection ended");
+            closed.reason = _endSet ? _endReason : String("the connection ended");
             _inboxBytes += EventBytes(closed);
             _inbox.push_back(closed);
             _state = WebSocketClientState::Ended;
@@ -251,9 +251,9 @@ namespace BECore {
         return true;
     }
 
-    bool WebSocketClient::Handshake(eastl::vector<uint8_t>& pendingBytes) {
-        const eastl::string key = GenerateClientKey(_random);
-        const eastl::string request = BuildClientHandshakeRequest(_url, key, _settings.origin);
+    bool WebSocketClient::Handshake(Vector<uint8_t>& pendingBytes) {
+        const String key = GenerateClientKey(_random);
+        const String request = BuildClientHandshakeRequest(_url, key, _settings.origin);
         if (!_stream.SendAll(AsBytes(request))) {
             SetEnd(WebSocketCloseCode::kAbnormalClosure, WithStreamError("sending the opening request failed"));
             return false;
@@ -262,7 +262,7 @@ namespace BECore {
         // One deadline for the whole answer, as on the server's side: a timeout per Receive() would let a server that sends a byte now and then hold us.
         // With TLS it is the deadline of the TLS handshake as well
         const auto deadline = _handshakeDeadline;
-        eastl::vector<uint8_t> received;
+        Vector<uint8_t> received;
         std::array<uint8_t, kHandshakeChunkSize> chunk;
         size_t headSize = 0;
         for (;;) {
@@ -273,7 +273,7 @@ namespace BECore {
                 return false;
             }
             _stream.SetReceiveTimeout(left);
-            const auto count = _stream.Receive(eastl::span<uint8_t>(chunk.data(), chunk.size()));
+            const auto count = _stream.Receive(Span<uint8_t>(chunk.data(), chunk.size()));
             if (!count) {
                 switch (count.error()) {
                     case SocketError::TimedOut:
@@ -292,9 +292,9 @@ namespace BECore {
             // Pointers, not std::array iterators: EASTL's insert does not take MSVC's class iterator
             received.insert(received.end(), chunk.data(), chunk.data() + *count);
 
-            const eastl::string_view text(reinterpret_cast<const char*>(received.data()), received.size());
+            const StringView text(reinterpret_cast<const char*>(received.data()), received.size());
             const size_t end = text.find(kHandshakeHeadEnd);
-            if (end != eastl::string_view::npos) {
+            if (end != StringView::npos) {
                 headSize = end + kHandshakeHeadEnd.size();
                 break;
             }
@@ -304,7 +304,7 @@ namespace BECore {
             }
         }
 
-        const auto accepted = CheckServerHandshakeResponse(eastl::string_view(reinterpret_cast<const char*>(received.data()), headSize), key);
+        const auto accepted = CheckServerHandshakeResponse(StringView(reinterpret_cast<const char*>(received.data()), headSize), key);
         if (!accepted) {
             SetEnd(WebSocketCloseCode::kAbnormalClosure, accepted.error());
             return false;
@@ -327,9 +327,9 @@ namespace BECore {
         return true;
     }
 
-    void WebSocketClient::ReadMessages(eastl::vector<uint8_t> pendingBytes) {
+    void WebSocketClient::ReadMessages(Vector<uint8_t> pendingBytes) {
         WebSocketFrameParser parser(_settings.maxMessageBytes, WebSocketPeer::Server);
-        parser.Feed(eastl::span<const uint8_t>(pendingBytes.data(), pendingBytes.size()));
+        parser.Feed(Span<const uint8_t>(pendingBytes.data(), pendingBytes.size()));
 
         std::array<uint8_t, kReadChunkSize> chunk;
         for (;;) {
@@ -349,15 +349,15 @@ namespace BECore {
                 }
             }
 
-            const auto received = _stream.Receive(eastl::span<uint8_t>(chunk.data(), chunk.size()));
+            const auto received = _stream.Receive(Span<uint8_t>(chunk.data(), chunk.size()));
             if (!received) {
                 // An Abort() has set its reason before it shut the socket down, and the first reason stays
                 SetEnd(WebSocketCloseCode::kAbnormalClosure,
-                       received.error() == SocketError::Closed ? eastl::string("the server closed the connection without a close frame") : WithStreamError("the connection failed"));
+                       received.error() == SocketError::Closed ? String("the server closed the connection without a close frame") : WithStreamError("the connection failed"));
                 return;
             }
             _bytesReceived.fetch_add(*received, std::memory_order_relaxed);
-            parser.Feed(eastl::span<const uint8_t>(chunk.data(), *received));
+            parser.Feed(Span<const uint8_t>(chunk.data(), *received));
         }
     }
 
@@ -366,7 +366,7 @@ namespace BECore {
             case WebSocketMessageKind::Text:
                 return PushText(message);
             case WebSocketMessageKind::Binary: {
-                constexpr eastl::string_view kReason = "binary messages are not supported";
+                constexpr StringView kReason = "binary messages are not supported";
                 SetEnd(WebSocketCloseCode::kUnsupportedData, kReason);
                 QueueFrame(WebSocketOpcode::kClose, MakeClosePayload(WebSocketCloseCode::kUnsupportedData, kReason), /*isClose=*/true);
                 return false;
@@ -421,8 +421,8 @@ namespace BECore {
             for (size_t i = 0; i < kMaskSize; ++i) {
                 mask[i] = static_cast<uint8_t>((random >> (kBitsPerByte * i)) & kByteMask);
             }
-            const eastl::vector<uint8_t> bytes = EncodeFrame(frame.opcode, eastl::span<const uint8_t>(frame.payload.data(), frame.payload.size()), mask);
-            if (!_stream.SendAll(eastl::span<const uint8_t>(bytes.data(), bytes.size()))) {
+            const Vector<uint8_t> bytes = EncodeFrame(frame.opcode, Span<const uint8_t>(frame.payload.data(), frame.payload.size()), mask);
+            if (!_stream.SendAll(Span<const uint8_t>(bytes.data(), bytes.size()))) {
                 AbortConnection(WebSocketCloseCode::kAbnormalClosure, WithStreamError("sending to the server failed"));
                 break;
             }

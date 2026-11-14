@@ -32,7 +32,7 @@ namespace BECore {
         }
     }
 
-    void TextComponent::SetText(eastl::string_view text) {
+    void TextComponent::SetText(StringView text) {
         _text.assign(text.data(), text.size());
     }
 

@@ -7,7 +7,7 @@ namespace BECore::Tests {
 
         using namespace std::chrono_literals;
 
-        std::expected<RoomServerArgs, eastl::string> Parse(std::initializer_list<const char*> arguments) {
+        std::expected<RoomServerArgs, String> Parse(std::initializer_list<const char*> arguments) {
             std::vector<const char*> argv = {"BagiRoomServer"};
             argv.insert(argv.end(), arguments.begin(), arguments.end());
             return ParseRoomServerArgs(static_cast<int>(argv.size()), argv.data());
@@ -21,7 +21,7 @@ namespace BECore::Tests {
 
         using Environment = std::map<std::string, std::string>;
 
-        std::expected<RoomServerArgs, eastl::string> ReadEnvironment(const Environment& environment) {
+        std::expected<RoomServerArgs, String> ReadEnvironment(const Environment& environment) {
             return ReadRoomServerEnvironment([&environment](const char* name) -> const char* {
                 const auto found = environment.find(name);
                 return found != environment.end() ? found->second.c_str() : nullptr;
@@ -35,7 +35,7 @@ namespace BECore::Tests {
         }
 
         /// The environment first, the command line over it (what LoadRoomServerArgs() does with the real one)
-        std::expected<RoomServerArgs, eastl::string> ParseOver(const Environment& environment, std::initializer_list<const char*> arguments) {
+        std::expected<RoomServerArgs, String> ParseOver(const Environment& environment, std::initializer_list<const char*> arguments) {
             auto base = ReadEnvironment(environment);
             if (!base) {
                 return base;

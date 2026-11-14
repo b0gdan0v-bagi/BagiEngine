@@ -92,7 +92,7 @@ namespace BECore::Tests {
         int32_t capturedValue = 0;
         float capturedMultiplier = 0.0f;
 
-        TestDataEvent::ForEachFieldStatic(dataEvent, [&](eastl::string_view name, const auto& value) {
+        TestDataEvent::ForEachFieldStatic(dataEvent, [&](StringView name, const auto& value) {
             dataCount++;
             if (name == "value") {
                 capturedValue = value;
@@ -112,7 +112,7 @@ namespace BECore::Tests {
         PoolString capturedMessage;
         int32_t capturedCode = 0;
 
-        TestMessageEvent::ForEachFieldStatic(msgEvent, [&](eastl::string_view name, const auto& value) {
+        TestMessageEvent::ForEachFieldStatic(msgEvent, [&](StringView name, const auto& value) {
             msgCount++;
             if (name == "message") {
                 if constexpr (std::is_same_v<std::decay_t<decltype(value)>, PoolString>) {

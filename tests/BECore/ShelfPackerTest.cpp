@@ -90,7 +90,7 @@ namespace BECore::Tests {
 
     TEST(ShelfPackerTest, NothingOverlapsAndEverythingStaysInside) {
         ShelfPacker packer(128, 128);
-        eastl::vector<Placed> placed;
+        Vector<Placed> placed;
         uint32_t seed = 12345;
         const auto next = [&seed](uint32_t limit) {
             seed = seed * 1664525u + 1013904223u;

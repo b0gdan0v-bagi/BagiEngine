@@ -51,7 +51,7 @@ namespace BECore {
                     return;
                 }
 
-                const eastl::string name(active->game->GetName().ToStringView());
+                const String name(active->game->GetName().ToStringView());
                 const uint64_t version = active->control->GetStateVersion();
                 if (_seen && _seen->game == name && _seen->version == version) {
                     return;
@@ -71,12 +71,12 @@ namespace BECore {
 
         private:
             struct Seen {
-                eastl::string game;
+                String game;
                 uint64_t version = 0;
             };
 
             ControlService& _service;
-            std::optional<Seen> _seen;
+            Optional<Seen> _seen;
         };
 
         void HandleListGames(ControlCall& call) {
@@ -108,7 +108,7 @@ namespace BECore {
             // Look the name up instead of interning it: a client must not grow the PoolString table
             GameManager& manager = GameManager::GetInstance();
             for (const IntrusivePtr<IGame>& game : manager.GetAll()) {
-                if (game->GetName().ToStringView() == eastl::string_view(name->c_str(), name->size())) {
+                if (game->GetName().ToStringView() == StringView(name->c_str(), name->size())) {
                     manager.SwitchTo(game->GetName());
                     Json result = Json::object();
                     result["active"] = MakeJsonString(game->GetName().ToStringView());

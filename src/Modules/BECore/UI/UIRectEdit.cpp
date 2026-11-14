@@ -126,7 +126,7 @@ namespace BECore {
         return {std::move(all.spec), all.exact};
     }
 
-    std::optional<UILength> UIRectEdit::ConvertUnit(const UILength& length, UIUnit unit, float parentExtent) {
+    Optional<UILength> UIRectEdit::ConvertUnit(const UILength& length, UIUnit unit, float parentExtent) {
         if (length.unit == unit) {
             return length;
         }
@@ -140,8 +140,8 @@ namespace BECore {
         return UILength::Percent(units / parentExtent * 100.0f);
     }
 
-    eastl::vector<PoolString> UIRectEdit::RegionChoices(const UIRegionSet& regions, PoolString current) {
-        eastl::vector<PoolString> names;
+    Vector<PoolString> UIRectEdit::RegionChoices(const UIRegionSet& regions, PoolString current) {
+        Vector<PoolString> names;
         names.reserve(regions.Size() + 1);
         for (const UIRegionSet::Entry& entry : regions) {
             names.push_back(entry.name);

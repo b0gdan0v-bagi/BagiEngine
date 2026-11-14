@@ -45,7 +45,7 @@ namespace BECore {
          * @return true if the buffer is valid. On failure an error is recorded and every later read fails.
          */
         bool LoadFromBuffer(const uint8_t* data, size_t size);
-        bool LoadFromBuffer(const eastl::vector<uint8_t>& data);
+        bool LoadFromBuffer(const Vector<uint8_t>& data);
 
         /**
          * @brief Load a file written by BinarySerializer::SaveToFile
@@ -60,50 +60,50 @@ namespace BECore {
         // IDeserializer interface - Read methods
         // =================================================================
 
-        bool Read(eastl::string_view name, bool& outValue) override;
-        bool Read(eastl::string_view name, int8_t& outValue) override;
-        bool Read(eastl::string_view name, uint8_t& outValue) override;
-        bool Read(eastl::string_view name, int16_t& outValue) override;
-        bool Read(eastl::string_view name, uint16_t& outValue) override;
-        bool Read(eastl::string_view name, int32_t& outValue) override;
-        bool Read(eastl::string_view name, uint32_t& outValue) override;
-        bool Read(eastl::string_view name, int64_t& outValue) override;
-        bool Read(eastl::string_view name, uint64_t& outValue) override;
-        bool Read(eastl::string_view name, float& outValue) override;
-        bool Read(eastl::string_view name, double& outValue) override;
-        bool Read(eastl::string_view name, eastl::string& outValue) override;
-        bool Read(eastl::string_view name, PoolString& outValue) override;
+        bool Read(StringView name, bool& outValue) override;
+        bool Read(StringView name, int8_t& outValue) override;
+        bool Read(StringView name, uint8_t& outValue) override;
+        bool Read(StringView name, int16_t& outValue) override;
+        bool Read(StringView name, uint16_t& outValue) override;
+        bool Read(StringView name, int32_t& outValue) override;
+        bool Read(StringView name, uint32_t& outValue) override;
+        bool Read(StringView name, int64_t& outValue) override;
+        bool Read(StringView name, uint64_t& outValue) override;
+        bool Read(StringView name, float& outValue) override;
+        bool Read(StringView name, double& outValue) override;
+        bool Read(StringView name, String& outValue) override;
+        bool Read(StringView name, PoolString& outValue) override;
 
         // Binary has no attributes: these read the same entries as Read(), but a missing entry is not an error
-        bool ReadAttribute(eastl::string_view name, bool& outValue) override;
-        bool ReadAttribute(eastl::string_view name, int8_t& outValue) override;
-        bool ReadAttribute(eastl::string_view name, uint8_t& outValue) override;
-        bool ReadAttribute(eastl::string_view name, int16_t& outValue) override;
-        bool ReadAttribute(eastl::string_view name, uint16_t& outValue) override;
-        bool ReadAttribute(eastl::string_view name, int32_t& outValue) override;
-        bool ReadAttribute(eastl::string_view name, uint32_t& outValue) override;
-        bool ReadAttribute(eastl::string_view name, int64_t& outValue) override;
-        bool ReadAttribute(eastl::string_view name, uint64_t& outValue) override;
-        bool ReadAttribute(eastl::string_view name, float& outValue) override;
-        bool ReadAttribute(eastl::string_view name, double& outValue) override;
-        bool ReadAttribute(eastl::string_view name, eastl::string& outValue) override;
-        bool ReadAttribute(eastl::string_view name, PoolString& outValue) override;
+        bool ReadAttribute(StringView name, bool& outValue) override;
+        bool ReadAttribute(StringView name, int8_t& outValue) override;
+        bool ReadAttribute(StringView name, uint8_t& outValue) override;
+        bool ReadAttribute(StringView name, int16_t& outValue) override;
+        bool ReadAttribute(StringView name, uint16_t& outValue) override;
+        bool ReadAttribute(StringView name, int32_t& outValue) override;
+        bool ReadAttribute(StringView name, uint32_t& outValue) override;
+        bool ReadAttribute(StringView name, int64_t& outValue) override;
+        bool ReadAttribute(StringView name, uint64_t& outValue) override;
+        bool ReadAttribute(StringView name, float& outValue) override;
+        bool ReadAttribute(StringView name, double& outValue) override;
+        bool ReadAttribute(StringView name, String& outValue) override;
+        bool ReadAttribute(StringView name, PoolString& outValue) override;
 
-        bool BeginObject(eastl::string_view name) override;
+        bool BeginObject(StringView name) override;
         void EndObject() override;
 
-        bool BeginArray(eastl::string_view name, eastl::string_view elementName, size_t& count) override;
+        bool BeginArray(StringView name, StringView elementName, size_t& count) override;
         void EndArray() override;
         bool BeginArrayElement() override;
         void EndArrayElement() override;
 
         // Error tracking
         bool HasErrors() const override;
-        const eastl::vector<DeserializeError>& GetErrors() const override;
+        const Vector<DeserializeError>& GetErrors() const override;
         void ClearErrors() override;
 
     protected:
-        void AddError(eastl::string_view path, eastl::string_view message, int32_t line) override;
+        void AddError(StringView path, StringView message, int32_t line) override;
 
     private:
         /// Byte range [begin, end) holding the entries of the current object or array element
@@ -113,7 +113,7 @@ namespace BECore {
         };
 
         struct ArrayContext {
-            eastl::vector<Scope> elements;
+            Vector<Scope> elements;
             size_t currentIndex = 0;
         };
 
@@ -124,22 +124,22 @@ namespace BECore {
          *
          * A name written more than once resolves to the last entry.
          */
-        bool FindEntry(eastl::string_view name, TagPredicate accepts, BinaryFormat::EntryView& outEntry) const;
+        bool FindEntry(StringView name, TagPredicate accepts, BinaryFormat::EntryView& outEntry) const;
 
         /// Find a scalar entry and check its tag. Reports "Element not found" only if @p reportMissing.
-        bool FindScalar(eastl::string_view name, uint8_t expectedTag, bool reportMissing, BinaryFormat::EntryView& outEntry);
+        bool FindScalar(StringView name, uint8_t expectedTag, bool reportMissing, BinaryFormat::EntryView& outEntry);
 
         template <typename T>
-        bool ReadScalar(eastl::string_view name, T& outValue, bool reportMissing);
+        bool ReadScalar(StringView name, T& outValue, bool reportMissing);
 
-        bool ReadStringView(eastl::string_view name, bool reportMissing, eastl::string_view& outValue);
+        bool ReadStringView(StringView name, bool reportMissing, StringView& outValue);
 
         void ResetState();
 
-        eastl::vector<uint8_t> _buffer;
-        eastl::vector<Scope> _scopeStack;
-        eastl::vector<ArrayContext> _arrayStack;
-        eastl::vector<DeserializeError> _errors;
+        Vector<uint8_t> _buffer;
+        Vector<Scope> _scopeStack;
+        Vector<ArrayContext> _arrayStack;
+        Vector<DeserializeError> _errors;
     };
 
 }  // namespace BECore

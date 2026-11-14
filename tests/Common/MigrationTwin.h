@@ -135,7 +135,7 @@ namespace BECore::Tests::MigrationTwin {
         }
     };
 
-    inline std::string Text(const eastl::string& text) {
+    inline std::string Text(const String& text) {
         return std::string(text.c_str(), text.size());
     }
 
@@ -146,12 +146,12 @@ namespace BECore::Tests::MigrationTwin {
         }
     }
 
-    inline std::string JsonText(const Json& object, eastl::string_view key) {
+    inline std::string JsonText(const Json& object, StringView key) {
         const auto value = GetJsonString(object, key);
         return value ? Text(*value) : std::string();
     }
 
-    inline std::string JsonFlag(const Json& object, eastl::string_view key) {
+    inline std::string JsonFlag(const Json& object, StringView key) {
         return GetJsonBool(object, key).value_or(false) ? "true" : "false";
     }
 
@@ -186,7 +186,7 @@ namespace BECore::Tests::MigrationTwin {
             _renderer->height = kLargeHeight;
             CoreManager::GetRendererManager().SetRenderer(_renderer);
             RegisterUIControl(_service);
-            const eastl::vector<uint8_t> pixels(static_cast<size_t>(kIconPixels) * kIconPixels * 4, 200);
+            const Vector<uint8_t> pixels(static_cast<size_t>(kIconPixels) * kIconPixels * 4, 200);
             _icon = _renderer->CreateTexture(pixels.data(), kIconPixels, kIconPixels);
         }
 
@@ -203,7 +203,7 @@ namespace BECore::Tests::MigrationTwin {
         /// Loads a scene manager from @p xml, makes it the active one in the services and gives the icons their texture
         bool Load(const std::string& xml) {
             XmlDeserializer deserializer;
-            if (!deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size()))) {
+            if (!deserializer.LoadFromString(FromStd(xml))) {
                 ADD_FAILURE() << "the scene does not parse";
                 return false;
             }
@@ -304,7 +304,7 @@ namespace BECore::Tests::MigrationTwin {
             request["id"] = ++_nextId;
             request["method"] = "ui_tree";
             Json response;
-            _service.Post(DumpJson(request), [&response](eastl::string text) {
+            _service.Post(DumpJson(request), [&response](String text) {
                 auto parsed = ParseJson(text);
                 response = parsed ? std::move(*parsed) : Json();
             });

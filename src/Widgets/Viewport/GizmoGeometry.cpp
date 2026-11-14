@@ -120,7 +120,7 @@ namespace BECore::Gizmo {
         return quad;
     }
 
-    Rect Bounds(eastl::span<const Item> items) {
+    Rect Bounds(Span<const Item> items) {
         if (items.empty()) {
             return {};
         }
@@ -135,7 +135,7 @@ namespace BECore::Gizmo {
         return {low.x, low.y, high.x - low.x, high.y - low.y};
     }
 
-    Vec2 Pivot(eastl::span<const Item> items) {
+    Vec2 Pivot(Span<const Item> items) {
         if (items.empty()) {
             return {};
         }
@@ -146,7 +146,7 @@ namespace BECore::Gizmo {
         return {bounds.x + bounds.w * kMiddle, bounds.y + bounds.h * kMiddle};
     }
 
-    Frame MakeFrame(eastl::span<const Item> items, Space space) {
+    Frame MakeFrame(Span<const Item> items, Space space) {
         Frame frame;
         frame.origin = Pivot(items);
         frame.isGroup = items.size() > 1;

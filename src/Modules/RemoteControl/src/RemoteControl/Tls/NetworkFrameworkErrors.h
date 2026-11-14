@@ -12,6 +12,6 @@ namespace BECore {
      * The codes themselves (`errSSL*`, `errSec*`, errno) go to the log, never into this text. Pure, so a test can check it; it is
      * defined in NetworkFrameworkTlsStream.cpp and exists on macOS only. The result is a string literal.
      */
-    [[nodiscard]] eastl::string_view DescribeNetworkFailure(NetworkErrorDomain domain, int code);
+    [[nodiscard]] StringView DescribeNetworkFailure(NetworkErrorDomain domain, int code);
 
 }  // namespace BECore

@@ -78,7 +78,7 @@ namespace BECore::Stress {
             label.text->wrap = false;
             label.text->verticalAlign = UIVerticalAlign::Center;
             label.element->components.push_back(label.text);
-            const eastl::string_view text = TextOf(static_cast<uint32_t>(_labels.size()));
+            const StringView text = TextOf(static_cast<uint32_t>(_labels.size()));
             label.text->text.assign(text.data(), text.size());
             _labels.push_back(std::move(label));
         }

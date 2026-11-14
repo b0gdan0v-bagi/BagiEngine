@@ -1,7 +1,6 @@
 // What the UI loaders and the pure geometry do with content that is larger, longer or odder than any real file: the string and theme tables and the numbers of boxes, panels and
 // layouts here, the web front end in UIWebTest.cpp
 
-#include <BECore/Config/XmlNode.h>
 #include <BECore/UI/UIBoxMesh.h>
 #include <BECore/UI/UICanvasLayout.h>
 #include <BECore/UI/UIGeometryBounds.h>
@@ -12,7 +11,6 @@
 #include <BECore/UI/UITidyMessage.h>
 #include <cmath>
 #include <gtest/gtest.h>
-#include <limits>
 
 namespace BECore::Tests {
 
@@ -20,18 +18,18 @@ namespace BECore::Tests {
 
         /// The problems a table gives for the text of a file, each of which must be one short line
         template <typename Table>
-        eastl::vector<eastl::string> Load(Table& table, const std::string& xml) {
+        Vector<String> Load(Table& table, const std::string& xml) {
             pugi::xml_document document;
             EXPECT_TRUE(document.load_buffer(xml.data(), xml.size()));
             return table.LoadFromXml(XmlNode{document.document_element()});
         }
 
-        void ExpectOneShortLine(const eastl::vector<eastl::string>& problems) {
+        void ExpectOneShortLine(const Vector<String>& problems) {
             ASSERT_FALSE(problems.empty());
-            for (const eastl::string& problem : problems) {
+            for (const String& problem : problems) {
                 EXPECT_LE(problem.size(), UIText::kMaxMessageBytes);
-                EXPECT_EQ(problem.find('\n'), eastl::string::npos);
-                EXPECT_EQ(problem.find('\t'), eastl::string::npos);
+                EXPECT_EQ(problem.find('\n'), String::npos);
+                EXPECT_EQ(problem.find('\t'), String::npos);
             }
         }
 
@@ -64,12 +62,12 @@ namespace BECore::Tests {
         EXPECT_EQ(UIText::TidyMessage("a plain message"), "a plain message");
         EXPECT_EQ(UIText::TidyMessage("tab\tand\nline"), "tab and line");
         const std::string exact(UIText::kMaxMessageBytes, 'e');
-        EXPECT_EQ(UIText::TidyMessage(eastl::string_view(exact.data(), exact.size())).size(), UIText::kMaxMessageBytes);
+        EXPECT_EQ(UIText::TidyMessage(FromStd(exact)).size(), UIText::kMaxMessageBytes);
         const std::string over(UIText::kMaxMessageBytes + 1, 'e');
-        const eastl::string cut = UIText::TidyMessage(eastl::string_view(over.data(), over.size()));
+        const String cut = UIText::TidyMessage(FromStd(over));
         EXPECT_EQ(cut.size(), UIText::kMaxMessageBytes);
         EXPECT_EQ(cut.substr(cut.size() - 3), "...");
-        EXPECT_EQ(UIText::Excerpt(eastl::string_view(over.data(), over.size())).size(), UIText::kMaxExcerptBytes);
+        EXPECT_EQ(UIText::Excerpt(FromStd(over)).size(), UIText::kMaxExcerptBytes);
     }
 
     // =========================================================================
@@ -110,9 +108,9 @@ namespace BECore::Tests {
         }
 
         /// Every float field of a spec, one at a time (a pointer into the spec it was made for)
-        eastl::vector<float*> FloatFields(UIRectSpec& spec) {
-            eastl::vector<float*> fields = {&spec.x.value,     &spec.y.value,    &spec.width.value,  &spec.height.value,  &spec.aspectRatio,
-                                            &spec.margin.left, &spec.margin.top, &spec.margin.right, &spec.margin.bottom, &spec.flex};
+        Vector<float*> FloatFields(UIRectSpec& spec) {
+            Vector<float*> fields = {&spec.x.value,     &spec.y.value,    &spec.width.value,  &spec.height.value,  &spec.aspectRatio,
+                                     &spec.margin.left, &spec.margin.top, &spec.margin.right, &spec.margin.bottom, &spec.flex};
             spec.minWidth = UILength::Px(10.0f);
             spec.maxWidth = UILength::Px(500.0f);
             spec.minHeight = UILength::Percent(10.0f);
@@ -174,11 +172,11 @@ namespace BECore::Tests {
             for (const float extreme : kExtremes) {
                 UIStackSpec stack;
                 stack.wrap = wrap;
-                eastl::vector<UIRectSpec> children(3, PinnedSpec());
+                Vector<UIRectSpec> children(3, PinnedSpec());
                 children[1].flex = 1.0f;
                 children[2].width = UILength::Px(0.0f);
                 children[2].aspectRatio = 2.0f;
-                eastl::vector<Rect> rects;
+                Vector<Rect> rects;
 
                 stack.spacing = extreme;
                 UILayout::LayoutStack(parent, stack, children, rects);
@@ -316,8 +314,8 @@ namespace BECore::Tests {
         const UIShadowSpec shadow{0.0f, 4.0f, 8.0f, 0.0f, Color{0, 0, 0, 120}};
 
         const auto drawAll = [&](const Rect& rect, const UICorners& corners, const UIShadowSpec& spec, float width, float pixelsPerUnit) {
-            eastl::vector<GeometryVertex> vertices;
-            eastl::vector<int> indices;
+            Vector<GeometryVertex> vertices;
+            Vector<int> indices;
             UIBoxMesh::AppendFill(vertices, indices, rect, corners, color, UIGradientSpec{UIGradientDirection::Vertical, color}, pixelsPerUnit);
             UIBoxMesh::AppendBorder(vertices, indices, rect, corners, width, color, pixelsPerUnit);
             UIBoxMesh::AppendShadow(vertices, indices, rect, corners, spec, pixelsPerUnit);
@@ -349,8 +347,8 @@ namespace BECore::Tests {
         }
 
         // A box or a shadow past the bound is not drawn at all: the sum of its edges would be infinite
-        eastl::vector<GeometryVertex> vertices;
-        eastl::vector<int> indices;
+        Vector<GeometryVertex> vertices;
+        Vector<int> indices;
         UIBoxMesh::AppendShadow(vertices, indices, box, round, UIShadowSpec{0.0f, 0.0f, kLargest, 0.0f, Color{0, 0, 0, 120}}, 1.0f);
         UIBoxMesh::AppendFill(vertices, indices, Rect{kLargest, 0.0f, 100.0f, 100.0f}, round, color, UIGradientSpec{}, 1.0f);
         UIBoxMesh::AppendFill(vertices, indices, box, round, color, UIGradientSpec{}, kDenormal);

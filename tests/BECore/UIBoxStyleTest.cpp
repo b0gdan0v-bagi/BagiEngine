@@ -23,7 +23,7 @@ namespace BECore::Tests {
             return element;
         }
 
-        eastl::vector<DrawCall> Draw(UIElement& element, RecordingRenderer& renderer) {
+        Vector<DrawCall> Draw(UIElement& element, RecordingRenderer& renderer) {
             renderer.ClearCalls();
             element.DrawSelf(renderer);
             return renderer.calls;
@@ -33,7 +33,7 @@ namespace BECore::Tests {
         struct LoadedElement {
             IntrusivePtr<UICanvasComponent> canvas;
             bool hadErrors = false;
-            eastl::vector<DeserializeError> errors;
+            Vector<DeserializeError> errors;
 
             [[nodiscard]] UIElement& Get() const {
                 return *canvas->_elements[0];
@@ -41,9 +41,9 @@ namespace BECore::Tests {
         };
 
         LoadedElement LoadElement(const char* type, const char* attributes) {
-            const eastl::string xml = Format("<root><component><elements><element type=\"{}\" name=\"A\" {}/></elements></component></root>", type, attributes);
+            const String xml = Format("<root><component><elements><element type=\"{}\" name=\"A\" {}/></elements></component></root>", type, attributes);
             XmlDeserializer deserializer;
-            EXPECT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+            EXPECT_TRUE(deserializer.LoadFromString(StringView(xml)));
             LoadedElement loaded;
             loaded.canvas = New<UICanvasComponent>();
             EXPECT_TRUE(deserializer.BeginObject("component"));
@@ -55,7 +55,7 @@ namespace BECore::Tests {
             return loaded;
         }
 
-        eastl::string ElementToXml(const UIElement& element) {
+        String ElementToXml(const UIElement& element) {
             XmlSerializer serializer;
             EXPECT_TRUE(serializer.BeginObject("element"));
             element.Serialize(serializer);
@@ -127,8 +127,8 @@ namespace BECore::Tests {
 
     TEST(UIBoxStyleTest, EachFieldAloneDrawsOneGeometryCall) {
         const UIBoxStyle every = EveryField();
-        const eastl::vector<eastl::pair<const char*, UIBoxStyle>> cases = [&] {
-            eastl::vector<eastl::pair<const char*, UIBoxStyle>> list;
+        const Vector<eastl::pair<const char*, UIBoxStyle>> cases = [&] {
+            Vector<eastl::pair<const char*, UIBoxStyle>> list;
             UIBoxStyle box;
             box.cornerRadius = every.cornerRadius;
             list.emplace_back("cornerRadius", box);
@@ -178,14 +178,14 @@ namespace BECore::Tests {
         ExpectValidMesh(calls[0]);
 
         // Every part has its own red channel; the triangles must visit them in this order, each one once
-        eastl::vector<int> order;
+        Vector<int> order;
         for (size_t i = 0; i + 2 < calls[0].indices.size(); i += 3) {
             const int part = calls[0].vertices[static_cast<size_t>(calls[0].indices[i])].color.r;
             if (order.empty() || order.back() != part) {
                 order.push_back(part);
             }
         }
-        const eastl::vector<int> expected = {1, 2, 3, 4, 5};
+        const Vector<int> expected = {1, 2, 3, 4, 5};
         EXPECT_EQ(order, expected);
     }
 
@@ -306,7 +306,7 @@ namespace BECore::Tests {
         panel->color = Color{10, 20, 30, 255};
         panel->box.cornerRadius = UICorners::Uniform(8.0f);
         RecordingRenderer renderer;
-        const eastl::vector<uint8_t> pixels(16 * 16 * 4, 128);
+        const Vector<uint8_t> pixels(16 * 16 * 4, 128);
         panel->GetSprite().SetTexture(renderer.CreateTexture(pixels.data(), 16, 16), Rect{0, 0, 16, 16});
         panel->sprite = PoolString::Intern("Anything");
 
@@ -336,7 +336,7 @@ namespace BECore::Tests {
 
     TEST(UIBoxStyleTest, TheShadowTextFormRoundTrips) {
         const UIShadowSpec shadow{1.0f, -2.0f, 6.5f, 0.5f, Color{9, 200, 11, 128}};
-        const eastl::string text = UIText::FormatShadow(shadow);
+        const String text = UIText::FormatShadow(shadow);
         EXPECT_EQ(text, "1,-2,6.5,0.5,#09C80B80");
         const auto back = UIText::ParseShadow(text);
         ASSERT_TRUE(back.has_value());
@@ -365,13 +365,13 @@ namespace BECore::Tests {
         ASSERT_TRUE(serializer.BeginObject("component"));
         canvas->Serialize(serializer);
         serializer.EndObject();
-        const eastl::string xml = serializer.SaveToString();
+        const String xml = serializer.SaveToString();
         for (const char* name : {"cornerRadius=\"4,8,12,0\"", "borderWidth=", "borderColor=", "gradientColor=", "gradientDirection=\"Horizontal\"", "shadow=", "glow=", "highlight="}) {
-            EXPECT_NE(xml.find(name), eastl::string::npos) << name << " in " << xml.c_str();
+            EXPECT_NE(xml.find(name), String::npos) << name << " in " << xml.c_str();
         }
 
         XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+        ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
         auto loaded = New<UICanvasComponent>();
         ASSERT_TRUE(deserializer.BeginObject("component"));
         loaded->Deserialize(deserializer);
@@ -410,9 +410,9 @@ namespace BECore::Tests {
         for (const char* type : {"UIElement", "UIPanel", "UIStack"}) {
             auto element = AbstractFactory<UIElement>::GetInstance().Create(type);
             ASSERT_TRUE(element) << type;
-            const eastl::string xml = ElementToXml(*element);
+            const String xml = ElementToXml(*element);
             for (const char* name : {"cornerRadius", "borderWidth", "borderColor", "gradientColor", "gradientDirection", "shadow", "glow", "highlight"}) {
-                EXPECT_EQ(xml.find(name), eastl::string::npos) << type << " writes " << name << ": " << xml.c_str();
+                EXPECT_EQ(xml.find(name), String::npos) << type << " writes " << name << ": " << xml.c_str();
             }
         }
     }

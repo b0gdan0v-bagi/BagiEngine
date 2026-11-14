@@ -27,7 +27,7 @@ namespace BECore::Match3::Tests {
 
     namespace {
 
-        bool Contains(const eastl::vector<Cell>& cells, Cell target) {
+        bool Contains(const Vector<Cell>& cells, Cell target) {
             return eastl::find(cells.begin(), cells.end(), target) != cells.end();
         }
 
@@ -140,7 +140,7 @@ namespace BECore::Match3::Tests {
                           });
 
         // Snapshot the (mostly-empty) board so we can prove it was reverted.
-        eastl::vector<GemType> before;
+        Vector<GemType> before;
         before.reserve(static_cast<size_t>(kBoardSize) * static_cast<size_t>(kBoardSize));
         for (int8_t row = 0; row < kBoardSize; ++row) {
             for (int8_t col = 0; col < kBoardSize; ++col) {

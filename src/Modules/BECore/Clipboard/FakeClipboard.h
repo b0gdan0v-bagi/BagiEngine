@@ -11,13 +11,13 @@ namespace BECore {
     public:
         FakeClipboard() = default;
 
-        explicit FakeClipboard(eastl::string_view content) : _content(content) {}
+        explicit FakeClipboard(StringView content) : _content(content) {}
 
         [[nodiscard]] bool IsAvailable() const override {
             return _available;
         }
 
-        bool WriteText(eastl::string_view text) override {
+        bool WriteText(StringView text) override {
             ++_writeCount;
             if (_refuse) {
                 return false;
@@ -57,11 +57,11 @@ namespace BECore {
             return true;
         }
 
-        void SetContent(eastl::string_view content) {
+        void SetContent(StringView content) {
             _content.assign(content.data(), content.size());
         }
 
-        [[nodiscard]] const eastl::string& Content() const {
+        [[nodiscard]] const String& Content() const {
             return _content;
         }
 
@@ -80,7 +80,7 @@ namespace BECore {
         }
 
         /// A paste the platform announces by itself, handed out by TakePasted
-        void QueuePasted(eastl::string_view text) {
+        void QueuePasted(StringView text) {
             _pasted.emplace_back(text.data(), text.size());
         }
 
@@ -93,8 +93,8 @@ namespace BECore {
         }
 
     private:
-        eastl::string _content;
-        eastl::vector<eastl::string> _pasted;
+        String _content;
+        Vector<String> _pasted;
         bool _available = true;
         bool _refuse = false;
         int _deferredPolls = 0;
@@ -110,7 +110,7 @@ namespace BECore {
             Subscribe<ClipboardEvents::PasteEvent, &PasteRecorder::OnPaste>(this);
         }
 
-        eastl::vector<eastl::string> pastes;
+        Vector<String> pastes;
 
     private:
         void OnPaste(const ClipboardEvents::PasteEvent& event) {

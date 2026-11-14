@@ -116,7 +116,7 @@ namespace BECore::Tests {
             _canvas = _manager->GetSceneByName(PoolString::Intern("Main"))->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
             ASSERT_TRUE(_canvas);
 
-            const eastl::vector<uint8_t> pixels(static_cast<size_t>(kPictureSide) * kPictureSide * 4, 200);
+            const Vector<uint8_t> pixels(static_cast<size_t>(kPictureSide) * kPictureSide * 4, 200);
             _texture = _renderer->CreateTexture(pixels.data(), kPictureSide, kPictureSide);
             for (const char* icon : {"BtnIcon", "PlainIcon"}) {
                 Get(icon).GetComponent<UIImageComponent>()->GetSprite().SetTexture(_texture);

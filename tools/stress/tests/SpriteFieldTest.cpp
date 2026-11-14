@@ -141,12 +141,12 @@ namespace BECore::Stress::Tests {
 
     TEST(SpriteFieldTest, AtlasPixelsHaveTheSizeAndTheCellsDiffer) {
         const uint32_t side = kAtlasCellsPerSide * kAtlasCellSize;
-        const eastl::vector<uint8_t> pixels = MakeAtlasPixels(0, kAtlasCellsPerSide, kAtlasCellSize);
+        const Vector<uint8_t> pixels = MakeAtlasPixels(0, kAtlasCellsPerSide, kAtlasCellSize);
         ASSERT_EQ(pixels.size(), static_cast<size_t>(side) * side * 4);
 
         // The flat colour of a cell is read at a point that is outside its marker and its corners
         auto colorOf = [&](uint32_t atlas, uint32_t cell) {
-            const eastl::vector<uint8_t> atlasPixels = atlas == 0 ? pixels : MakeAtlasPixels(atlas, kAtlasCellsPerSide, kAtlasCellSize);
+            const Vector<uint8_t> atlasPixels = atlas == 0 ? pixels : MakeAtlasPixels(atlas, kAtlasCellsPerSide, kAtlasCellSize);
             const uint32_t x = (cell % kAtlasCellsPerSide) * kAtlasCellSize + 8;
             const uint32_t y = (cell / kAtlasCellsPerSide) * kAtlasCellSize + 8;
             const size_t offset = (static_cast<size_t>(y) * side + x) * 4;
@@ -162,7 +162,7 @@ namespace BECore::Stress::Tests {
 
     TEST(SpriteFieldTest, AtlasCornersAreTranslucentAndTheMiddleOfACellIsOpaque) {
         const uint32_t side = kAtlasCellsPerSide * kAtlasCellSize;
-        const eastl::vector<uint8_t> pixels = MakeAtlasPixels(2, kAtlasCellsPerSide, kAtlasCellSize);
+        const Vector<uint8_t> pixels = MakeAtlasPixels(2, kAtlasCellsPerSide, kAtlasCellSize);
         auto alphaAt = [&](uint32_t x, uint32_t y) { return pixels[(static_cast<size_t>(y) * side + x) * 4 + 3]; };
         for (uint32_t cell = 0; cell < kAtlasCellsPerSide * kAtlasCellsPerSide; ++cell) {
             const uint32_t left = (cell % kAtlasCellsPerSide) * kAtlasCellSize;

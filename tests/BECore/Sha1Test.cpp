@@ -17,7 +17,7 @@ namespace BECore::Tests {
 
         std::string Sha1Hex(std::string_view text) {
             const auto* bytes = reinterpret_cast<const uint8_t*>(text.data());
-            return Hex(Sha1(eastl::span<const uint8_t>(bytes, text.size())));
+            return Hex(Sha1(Span<const uint8_t>(bytes, text.size())));
         }
 
         std::string Sha1OfRepeated(char letter, size_t count) {

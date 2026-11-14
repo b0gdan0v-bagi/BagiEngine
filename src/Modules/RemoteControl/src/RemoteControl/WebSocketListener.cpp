@@ -11,15 +11,15 @@ namespace BECore {
 
         /// Answers a client that cannot be served now. The request is read first: closing a socket with unread data
         /// makes the system reset the connection, and the client could lose the answer
-        void RejectBusy(Socket socket, const eastl::string& message) {
+        void RejectBusy(Socket socket, const String& message) {
             socket.SetReceiveTimeout(kBusyDrainTimeout);
             std::array<uint8_t, kMaxHandshakeBytes> discarded;
-            (void)socket.Receive(eastl::span<uint8_t>(discarded.data(), discarded.size()));
-            const eastl::string response = BuildRejectResponse(HandshakeError{kServiceUnavailable, message});
+            (void)socket.Receive(Span<uint8_t>(discarded.data(), discarded.size()));
+            const String response = BuildRejectResponse(HandshakeError{kServiceUnavailable, message});
             (void)socket.SendAll(AsBytes(response));
         }
 
-        [[nodiscard]] eastl::string MakeThreadName(const WebSocketListenerSettings& settings, eastl::string_view role) {
+        [[nodiscard]] String MakeThreadName(const WebSocketListenerSettings& settings, StringView role) {
             return Format("{} {}", settings.threadName, role);
         }
 
@@ -60,7 +60,7 @@ namespace BECore {
         }
         _listener.Close();
 
-        eastl::vector<ConnectionPtr> connections;
+        Vector<ConnectionPtr> connections;
         {
             LockGuard lock(_connectionsMutex);
             connections.swap(_connections);
@@ -75,7 +75,7 @@ namespace BECore {
     }
 
     void WebSocketListener::ForEachOpenConnection(const std::function<void(WebSocketConnection&)>& visit) {
-        eastl::vector<ConnectionPtr> targets;
+        Vector<ConnectionPtr> targets;
         {
             LockGuard lock(_connectionsMutex);
             targets = _connections;
@@ -89,7 +89,7 @@ namespace BECore {
 
     void WebSocketListener::AcceptLoop() {
         while (!_stopping) {
-            eastl::string peerAddress;
+            String peerAddress;
             auto accepted = _listener.Accept(kAcceptPollInterval, &peerAddress);
             ReapFinishedConnections();
             if (accepted) {
@@ -103,7 +103,7 @@ namespace BECore {
         }
     }
 
-    void WebSocketListener::AddConnection(Socket socket, eastl::string peerAddress) {
+    void WebSocketListener::AddConnection(Socket socket, String peerAddress) {
         bool perAddressLimit = false;
         {
             LockGuard lock(_connectionsMutex);
@@ -139,7 +139,7 @@ namespace BECore {
         RejectBusy(std::move(socket), _settings.busyMessage);
     }
 
-    bool WebSocketListener::AdmitByClientAddress(WebSocketConnection& connection, const eastl::string& clientAddress) {
+    bool WebSocketListener::AdmitByClientAddress(WebSocketConnection& connection, const String& clientAddress) {
         // Counting the others and setting the address are one step under the lock, so two clients of one address that shake hands at
         // the same moment cannot both pass a limit of one. A connection that has not been admitted yet (still shaking hands, or just
         // refused) has no client address and counts for nobody
@@ -159,7 +159,7 @@ namespace BECore {
     }
 
     void WebSocketListener::ReapFinishedConnections() {
-        eastl::vector<ConnectionPtr> finished;
+        Vector<ConnectionPtr> finished;
         {
             LockGuard lock(_connectionsMutex);
             for (auto it = _connections.begin(); it != _connections.end();) {
@@ -177,10 +177,10 @@ namespace BECore {
     }
 
     void WebSocketListener::RunConnection(const ConnectionPtr& connection) {
-        eastl::vector<uint8_t> pendingBytes;
+        Vector<uint8_t> pendingBytes;
         AdmitClientFn admit;
         if (_settings.policy.trustedProxyHops != 0) {
-            admit = [this, &connection](const eastl::string& clientAddress) { return AdmitByClientAddress(*connection, clientAddress); };
+            admit = [this, &connection](const String& clientAddress) { return AdmitByClientAddress(*connection, clientAddress); };
         }
         if (connection->Handshake(_settings.policy, _settings.handshakeTimeout, pendingBytes, admit)) {
             LOG_INFO("{}: a client connected"_format(_settings.logName));
@@ -200,9 +200,9 @@ namespace BECore {
         connection->MarkFinished();
     }
 
-    void WebSocketListener::ReadMessages(const ConnectionPtr& connection, eastl::vector<uint8_t> pendingBytes) {
+    void WebSocketListener::ReadMessages(const ConnectionPtr& connection, Vector<uint8_t> pendingBytes) {
         WebSocketFrameParser parser(_settings.maxMessageBytes);
-        parser.Feed(eastl::span<const uint8_t>(pendingBytes.data(), pendingBytes.size()));
+        parser.Feed(Span<const uint8_t>(pendingBytes.data(), pendingBytes.size()));
 
         std::array<uint8_t, kReadChunkSize> chunk;
         for (;;) {
@@ -221,11 +221,11 @@ namespace BECore {
                 }
             }
 
-            const auto received = connection->Receive(eastl::span<uint8_t>(chunk.data(), chunk.size()));
+            const auto received = connection->Receive(Span<uint8_t>(chunk.data(), chunk.size()));
             if (!received) {
                 return;
             }
-            parser.Feed(eastl::span<const uint8_t>(chunk.data(), *received));
+            parser.Feed(Span<const uint8_t>(chunk.data(), *received));
         }
     }
 
@@ -237,7 +237,7 @@ namespace BECore {
                 connection->QueueClose(WebSocketCloseCode::kUnsupportedData, "binary messages are not supported");
                 return false;
             case WebSocketMessageKind::Ping:
-                connection->QueuePong(eastl::span<const uint8_t>(message.payload.data(), message.payload.size()));
+                connection->QueuePong(Span<const uint8_t>(message.payload.data(), message.payload.size()));
                 return true;
             case WebSocketMessageKind::Pong:
                 return true;

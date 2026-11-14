@@ -33,7 +33,7 @@ namespace BECore::Fuzz {
             return c == ' ' || c == '\t' || c == '\n' || c == '\r';
         }
 
-        eastl::string_view Trim(eastl::string_view text) {
+        StringView Trim(StringView text) {
             while (!text.empty() && IsAsciiSpace(text.front())) {
                 text.remove_prefix(1);
             }
@@ -50,7 +50,7 @@ namespace BECore::Fuzz {
         /// What the strict reader has to say about a text, worked out here from the grammar and not from the reader's code:
         /// true (a value of T, and @p expected holds it), false (not a value of T) or nothing (a float that has the shape of a number: the reader decides)
         template <typename T>
-        std::optional<bool> StrictVerdict(eastl::string_view text, T& expected) {
+        Optional<bool> StrictVerdict(StringView text, T& expected) {
             text = Trim(text);
             if constexpr (std::is_same_v<T, bool>) {
                 if (text == "true" || text == "1") {
@@ -126,7 +126,7 @@ namespace BECore::Fuzz {
 
         /// Reads one name with one overload and checks the answer against the text it has to read
         template <typename T>
-        void CheckRead(XmlDeserializer& reader, eastl::string_view name, bool asAttribute, eastl::string_view text, bool strict) {
+        void CheckRead(XmlDeserializer& reader, StringView name, bool asAttribute, StringView text, bool strict) {
             const T sentinel = Sentinel<T>();
             T value = sentinel;
             const size_t errorsBefore = reader.GetErrors().size();
@@ -136,7 +136,7 @@ namespace BECore::Fuzz {
             if constexpr (std::is_arithmetic_v<T>) {
                 if (strict) {
                     T expected{};
-                    const std::optional<bool> verdict = StrictVerdict(text, expected);
+                    const Optional<bool> verdict = StrictVerdict(text, expected);
                     if (verdict.has_value()) {
                         FUZZ_CHECK(ok == *verdict);
                         if (ok) {
@@ -164,12 +164,12 @@ namespace BECore::Fuzz {
                 if constexpr (std::is_same_v<T, PoolString>) {
                     FUZZ_CHECK(value.ToStringView() == text);
                 } else {
-                    FUZZ_CHECK(eastl::string_view(value.data(), value.size()) == text);
+                    FUZZ_CHECK(StringView(value) == text);
                 }
             }
         }
 
-        void CheckAllReads(XmlDeserializer& reader, eastl::string_view name, bool asAttribute, eastl::string_view text, bool strict) {
+        void CheckAllReads(XmlDeserializer& reader, StringView name, bool asAttribute, StringView text, bool strict) {
             CheckRead<bool>(reader, name, asAttribute, text, strict);
             CheckRead<int8_t>(reader, name, asAttribute, text, strict);
             CheckRead<uint8_t>(reader, name, asAttribute, text, strict);
@@ -181,12 +181,12 @@ namespace BECore::Fuzz {
             CheckRead<uint64_t>(reader, name, asAttribute, text, strict);
             CheckRead<float>(reader, name, asAttribute, text, strict);
             CheckRead<double>(reader, name, asAttribute, text, strict);
-            CheckRead<eastl::string>(reader, name, asAttribute, text, strict);
+            CheckRead<String>(reader, name, asAttribute, text, strict);
             CheckRead<PoolString>(reader, name, asAttribute, text, strict);
         }
 
-        eastl::string_view NameOf(const char* name) {
-            return eastl::string_view(name);
+        StringView NameOf(const char* name) {
+            return StringView(name);
         }
 
         /// Reads a loaded document by following a second parse of the same text: it needs no type, it asks the reader for what the document holds
@@ -219,7 +219,7 @@ namespace BECore::Fuzz {
                         continue;
                     }
                     --_budget;
-                    const eastl::string_view name = NameOf(child.name());
+                    const StringView name = NameOf(child.name());
                     CheckAllReads(_reader, name, false, NameOf(child.text().as_string()), _strict);
                     EndEntry();
 
@@ -232,7 +232,7 @@ namespace BECore::Fuzz {
             }
 
         private:
-            void WalkArray(pugi::xml_node arrayNode, eastl::string_view name, size_t depth) {
+            void WalkArray(pugi::xml_node arrayNode, StringView name, size_t depth) {
                 size_t expectedCount = 0;
                 for (const pugi::xml_node element : arrayNode.children()) {
                     (void)element;
@@ -286,8 +286,8 @@ namespace BECore::Fuzz {
         /// How many bytes the text sits behind the start of its buffer in the unaligned copy
         constexpr size_t kShift = 1;
 
-        eastl::vector<uint8_t> ShiftedCopy(const uint8_t* data, size_t size) {
-            eastl::vector<uint8_t> buffer(kShift + size);
+        Vector<uint8_t> ShiftedCopy(const uint8_t* data, size_t size) {
+            Vector<uint8_t> buffer(kShift + size);
             if (size > 0) {
                 std::memcpy(buffer.data() + kShift, data, size);
             }
@@ -302,7 +302,7 @@ namespace BECore::Fuzz {
         }
 
         void CheckDocument(const uint8_t* data, size_t size, bool strict) {
-            const eastl::string_view text(reinterpret_cast<const char*>(data), size);
+            const StringView text(reinterpret_cast<const char*>(data), size);
 
             // The same text parsed by pugixml alone: the walk follows it, and a document it refuses is refused by the reader too
             pugi::xml_document reference;
@@ -330,10 +330,10 @@ namespace BECore::Fuzz {
             FUZZ_CHECK(ReadProbeDigest(reader) == first);
 
             // The same text in the middle of a buffer, where nothing is aligned: it loads and reads the same
-            const eastl::vector<uint8_t> shifted = ShiftedCopy(data, size);
+            const Vector<uint8_t> shifted = ShiftedCopy(data, size);
             XmlDeserializer unaligned;
             unaligned.SetStrictValues(strict);
-            FUZZ_CHECK(unaligned.LoadFromString(eastl::string_view(reinterpret_cast<const char*>(shifted.data()) + kShift, size)));
+            FUZZ_CHECK(unaligned.LoadFromString(StringView(reinterpret_cast<const char*>(shifted.data()) + kShift, size)));
             FUZZ_CHECK(ReadProbeDigest(unaligned) == first);
 
             // Loading something that does not parse on top of a good document drops it

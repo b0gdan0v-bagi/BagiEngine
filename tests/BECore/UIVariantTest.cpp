@@ -244,9 +244,9 @@ namespace BECore::Tests {
 
         EXPECT_FALSE(style.visible);
         EXPECT_EQ(style.rect.anchor, UIAnchor::BottomLeft);
-        EXPECT_EQ(style.rect.anchorMin, std::optional<Vec2>(Vec2{0.1f, 0.2f}));
-        EXPECT_EQ(style.rect.anchorMax, std::optional<Vec2>(Vec2{0.9f, 0.8f}));
-        EXPECT_EQ(style.rect.pivot, std::optional<Vec2>(Vec2{0.0f, 1.0f}));
+        EXPECT_EQ(style.rect.anchorMin, Optional<Vec2>(Vec2{0.1f, 0.2f}));
+        EXPECT_EQ(style.rect.anchorMax, Optional<Vec2>(Vec2{0.9f, 0.8f}));
+        EXPECT_EQ(style.rect.pivot, Optional<Vec2>(Vec2{0.0f, 1.0f}));
         EXPECT_EQ(style.rect.margin, (UIEdges{1.0f, 2.0f, 3.0f, 4.0f}));
         EXPECT_FLOAT_EQ(style.rect.x.value, 1.0f);
         EXPECT_FLOAT_EQ(style.rect.y.value, 2.0f);
@@ -266,10 +266,10 @@ namespace BECore::Tests {
         ASSERT_TRUE(serializer.BeginObject("variant"));
         variant.Serialize(serializer);
         serializer.EndObject();
-        const eastl::string xml = serializer.SaveToString();
-        EXPECT_NE(xml.find("x=\"5%\""), eastl::string::npos);
+        const String xml = serializer.SaveToString();
+        EXPECT_NE(xml.find("x=\"5%\""), String::npos);
         XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+        ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
         UIVariant loaded;
         ASSERT_TRUE(deserializer.BeginObject("variant"));
         loaded.Deserialize(deserializer);
@@ -294,13 +294,13 @@ namespace BECore::Tests {
         ASSERT_TRUE(serializer.BeginObject("variant"));
         variant.Serialize(serializer);
         serializer.EndObject();
-        const eastl::string xml = serializer.SaveToString();
-        EXPECT_NE(xml.find("anchorMin=\"0,0\""), eastl::string::npos) << xml.c_str();
-        EXPECT_NE(xml.find("anchorMax=\"0.35,1\""), eastl::string::npos);
-        EXPECT_NE(xml.find("pivot=\"0.5,0\""), eastl::string::npos);
-        EXPECT_NE(xml.find("margin=\"0\""), eastl::string::npos);
+        const String xml = serializer.SaveToString();
+        EXPECT_NE(xml.find("anchorMin=\"0,0\""), String::npos) << xml.c_str();
+        EXPECT_NE(xml.find("anchorMax=\"0.35,1\""), String::npos);
+        EXPECT_NE(xml.find("pivot=\"0.5,0\""), String::npos);
+        EXPECT_NE(xml.find("margin=\"0\""), String::npos);
         XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+        ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
         UIVariant loaded;
         ASSERT_TRUE(deserializer.BeginObject("variant"));
         loaded.Deserialize(deserializer);
@@ -316,10 +316,10 @@ namespace BECore::Tests {
         ASSERT_TRUE(bareSerializer.BeginObject("variant"));
         bare.Serialize(bareSerializer);
         bareSerializer.EndObject();
-        const eastl::string bareXml = bareSerializer.SaveToString();
-        EXPECT_EQ(bareXml.find("anchorM"), eastl::string::npos);
-        EXPECT_EQ(bareXml.find("pivot"), eastl::string::npos);
-        EXPECT_EQ(bareXml.find("margin"), eastl::string::npos);
+        const String bareXml = bareSerializer.SaveToString();
+        EXPECT_EQ(bareXml.find("anchorM"), String::npos);
+        EXPECT_EQ(bareXml.find("pivot"), String::npos);
+        EXPECT_EQ(bareXml.find("margin"), String::npos);
     }
 
     TEST(UIVariantsTest, AMalformedEdgeAnchorOfAnOverrideIsReportedAndLeavesItUnset) {
@@ -335,7 +335,7 @@ namespace BECore::Tests {
         ASSERT_EQ(loaded.overrides.size(), 1u);
         EXPECT_FALSE(loaded.overrides[0].anchorMin);
         EXPECT_FALSE(loaded.overrides[0].margin);
-        EXPECT_EQ(loaded.overrides[0].pivot, std::optional<Vec2>(Vec2{0.5f, 0.5f}));
+        EXPECT_EQ(loaded.overrides[0].pivot, Optional<Vec2>(Vec2{0.5f, 0.5f}));
     }
 
     TEST(UIVariantsTest, ARegionOfAnOverrideSurvivesTheFileRoundTrip) {
@@ -350,9 +350,9 @@ namespace BECore::Tests {
         ASSERT_TRUE(serializer.BeginObject("variant"));
         variant.Serialize(serializer);
         serializer.EndObject();
-        const eastl::string xml = serializer.SaveToString();
+        const String xml = serializer.SaveToString();
         XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+        ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
         UIVariant loaded;
         ASSERT_TRUE(deserializer.BeginObject("variant"));
         loaded.Deserialize(deserializer);
@@ -361,7 +361,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(deserializer.HasErrors());
         EXPECT_TRUE(loaded == variant);
         ASSERT_EQ(loaded.overrides.size(), 2u);
-        EXPECT_EQ(loaded.overrides[0].region, std::optional<PoolString>{"table.plate.2"_intern});
+        EXPECT_EQ(loaded.overrides[0].region, Optional<PoolString>{"table.plate.2"_intern});
         EXPECT_TRUE(loaded.overrides[1].region.has_value()) << "region=\"\" is an override that clears, not an absent one";
         EXPECT_TRUE(loaded.overrides[1].region->Empty());
     }

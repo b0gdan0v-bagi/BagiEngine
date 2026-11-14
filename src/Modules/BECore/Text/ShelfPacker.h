@@ -19,7 +19,7 @@ namespace BECore {
         ShelfPacker(uint32_t width, uint32_t height) : _width(width), _height(height) {}
 
         /// Where a rect of this size goes, or nothing when it does not fit (or when a side is 0)
-        [[nodiscard]] std::optional<Slot> Pack(uint32_t width, uint32_t height);
+        [[nodiscard]] Optional<Slot> Pack(uint32_t width, uint32_t height);
 
         [[nodiscard]] uint32_t GetWidth() const {
             return _width;
@@ -42,7 +42,7 @@ namespace BECore {
         uint32_t _width = 0;
         uint32_t _height = 0;
         uint32_t _nextShelfY = 0;
-        eastl::vector<Shelf> _shelves;
+        Vector<Shelf> _shelves;
     };
 
 }  // namespace BECore

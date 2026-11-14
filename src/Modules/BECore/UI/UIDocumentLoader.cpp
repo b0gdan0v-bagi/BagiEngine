@@ -6,7 +6,7 @@
 
 namespace BECore {
 
-    bool UIDocumentLoader::CanLoad(eastl::string_view extension) const {
+    bool UIDocumentLoader::CanLoad(StringView extension) const {
         return extension == ".ui.xml";
     }
 

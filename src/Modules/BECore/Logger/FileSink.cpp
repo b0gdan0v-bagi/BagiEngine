@@ -40,7 +40,7 @@ namespace BECore {
         }
     }
 
-    void FileSink::Write(LogLevel level, eastl::string_view message) {
+    void FileSink::Write(LogLevel level, StringView message) {
         if (!ShouldLog(level) || !_file.is_open()) {
             return;
         }
@@ -65,7 +65,7 @@ namespace BECore {
                              ms.count(), message.data());
     }
 
-    void FileSink::SetFilename(eastl::string_view filename) {
+    void FileSink::SetFilename(StringView filename) {
         _filename = filename;
     }
 

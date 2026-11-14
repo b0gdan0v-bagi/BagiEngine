@@ -7,18 +7,18 @@ namespace BECore {
 
     /// Error codes of the game methods of the control API (see Games/CLAUDE.md). A game adds its own where it needs them.
     namespace GameControlErrors {
-        inline constexpr eastl::string_view kNoActiveGame = "no_active_game";
-        inline constexpr eastl::string_view kNotControllable = "not_controllable";
-        inline constexpr eastl::string_view kUnknownGame = "unknown_game";
-        inline constexpr eastl::string_view kNoActiveModel = "no_active_model";
-        inline constexpr eastl::string_view kIllegalAction = "illegal_action";
-        inline constexpr eastl::string_view kUnsupported = "unsupported";
+        inline constexpr StringView kNoActiveGame = "no_active_game";
+        inline constexpr StringView kNotControllable = "not_controllable";
+        inline constexpr StringView kUnknownGame = "unknown_game";
+        inline constexpr StringView kNoActiveModel = "no_active_model";
+        inline constexpr StringView kIllegalAction = "illegal_action";
+        inline constexpr StringView kUnsupported = "unsupported";
     }  // namespace GameControlErrors
 
     /// Events that the game layer pushes to the clients of the control API
     namespace GameControlEvents {
         /// {"game", "version", "state"}: the state version of the active game moved (published at the end of a frame)
-        inline constexpr eastl::string_view kStateChanged = "state_changed";
+        inline constexpr StringView kStateChanged = "state_changed";
     }  // namespace GameControlEvents
 
     /**

@@ -6,7 +6,7 @@ namespace BECore::Tests {
     static_assert(Tweenable<float>);
     static_assert(Tweenable<Vec2>);
     static_assert(Tweenable<Color>);
-    static_assert(!Tweenable<eastl::string>);
+    static_assert(!Tweenable<String>);
 
     TEST(LerpTest, CompileTimeChecks) {}
 
