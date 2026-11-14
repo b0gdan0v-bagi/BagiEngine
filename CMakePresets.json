@@ -305,6 +305,12 @@
             "inherits": ["ninja", "host-windows", "vs-env", "clang", "no-module-scan", "debug", "asan", "asan-windows-crt"]
         },
         {
+            "name": "windows-clang-profile-editor",
+            "displayName": "Windows Clang Ninja Profile with the editor (the ImGui Profiler panel)",
+            "description": "The Windows twin of macos-profile-editor (RelWithDebInfo, the profiler and its allocation tracking, the editor); configured and built through CI/scripts/vs_env.py like windows-clang-debug",
+            "inherits": ["ninja", "host-windows", "vs-env", "clang", "no-module-scan", "editor", "profile"]
+        },
+        {
             "name": "windows-vs2022",
             "displayName": "Windows Visual Studio 2022 (MSVC)",
             "inherits": ["vs2022", "host-windows"]
@@ -486,6 +492,12 @@
             "displayName": "Windows Clang Ninja Debug with AddressSanitizer + UBSan",
             "inherits": "build-windows",
             "configurePreset": "windows-clang-asan"
+        },
+        {
+            "name": "windows-clang-profile-editor",
+            "displayName": "Windows Clang Ninja Profile with the editor (the ImGui Profiler panel)",
+            "inherits": "build-windows",
+            "configurePreset": "windows-clang-profile-editor"
         },
         {
             "name": "windows-vs2022-debug",
@@ -681,6 +693,12 @@
                 "ASAN_OPTIONS": "detect_stack_use_after_return=1:strict_string_checks=1",
                 "UBSAN_OPTIONS": "print_stacktrace=1"
             }
+        },
+        {
+            "name": "windows-clang-profile-editor",
+            "displayName": "Windows Clang Ninja Profile with the editor (the ImGui Profiler panel)",
+            "inherits": "test-windows",
+            "configurePreset": "windows-clang-profile-editor"
         },
         {
             "name": "windows-vs2022-debug",
