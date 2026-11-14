@@ -5,10 +5,11 @@ Before / after pictures of a game's scenes for the todo loop, and a text diff of
 | File | Purpose |
 |------|---------|
 | `shots.py` | the command line: `scenes`, `capture`, `diff` |
-| `png_diff.py` | the pure comparison of two decoded pictures (`compare`, `describe`): no I/O, no process |
+| `png_diff.py` | the pure comparison of two decoded pictures (`compare`, `describe`, `diff_map`, `image_diff`): no I/O, no process |
+| `png_ops.py` | the pure picture operations: `crop`, `to_channels`, `scale_to` (bilinear), `encode_png` |
 | `tests/` | pytest (`write_png` of `conftest.py` makes a picture; a fake game command makes the files) |
 
-The PNG reader is `tools/control/tests/png_reader.py` (the game's `ui_shots.py` imports it from there too): `png_diff.py` puts that folder on `sys.path`, so it is not copied and not moved.
+The PNG reader is `tools/control/tests/png_reader.py` (the game's `ui_shots.py` imports it from there too): `png_ops.py` puts that folder on `sys.path`, so it is not copied and not moved.
 
 ```bash
 python3 <engine>/tools/shots/shots.py scenes [--root DIR]
@@ -72,3 +73,11 @@ summary: N changed, N unchanged, N not compared, N only in one side
 ```
 
 A pixel is changed when any channel differs by more than `--tolerance` (default 0). Regions: changed pixels are counted in cells of 8 px, 8-connected cells form a group, a group is one bounding box, overlapping boxes are merged. The number before `regions` is the count found, the lines below are the biggest. Rows that are byte-equal are skipped without a pixel loop.
+
+## Comparing two pictures
+
+`png_diff.image_diff(a, b, threshold=0, region=None)` is the whole comparison of two decoded pictures that the MCP tool `image_diff` and the reference check of the scenario player use (`tools/control/CLAUDE.md`); the `diff` command above is the same `compare` over folders and prints the same text as before.
+
+- **A is the reference.** `region` is `[x0, y0, x1, y1]`, corners inclusive, in pixels of A (the form the lines above print, so a reported box can be fed back); it must lie inside A with `x0 <= x1`, `y0 <= y1`, else a `ValueError` with the reason. `threshold` is the `tolerance` of `compare` (0..255).
+- **B is made comparable:** a different size is scaled to A's bilinearly (`scaled`; `aspectDiffers` when its shape was not A's, so it was stretched), a 3 beside a 4 channel picture loses the alpha of the one that has it and the compare is on RGB.
+- **Result:** `ImageDiff.stats()` is JSON: `equal`, `changed`, `compared` (the area compared: the region's), `share` (0..1 of it), `boundingBox` (exact box of every changed pixel, `null` when none), `regions` (at most `MAX_REGIONS`: `box`, `changed`, `shareOfPicture` of the whole A), `threshold`, `region`, `a` / `b` `{width, height, channels}` as given, `scaled`, `aspectDiffers`. `ImageDiff.map` is the difference map: RGB, A's size, A as grey at half brightness and the changed pixels red (only inside the region); `png_ops.encode_png` writes it.

@@ -1,3 +1,6 @@
+import json
+
+import pytest
 from conftest import COLOR_TYPE_RGB, write_png
 
 import png_diff
@@ -115,3 +118,107 @@ def test_another_channel_count_is_a_size_change():
     assert isinstance(result, png_diff.SizeChange)
     assert png_diff.describe("a.png", result) == ["a.png: channels 4 -> 3, not compared"]
     assert png_diff.describe("a.png", png_diff.compare(rgb, picture(8, 8))) == ["a.png: channels 3 -> 4, not compared"]
+
+
+def test_a_region_hides_a_change_outside_it_and_keeps_whole_picture_coordinates():
+    base = picture(64, 64)
+    changed = picture(64, 64, [(2, 2, 5, 5), (40, 40, 49, 44)])
+
+    result = png_diff.compare(base, changed, region=[32, 32, 63, 63])
+
+    assert result.changed == 50 and result.total == 32 * 32
+    assert result.regions == [png_diff.Region(40, 40, 49, 44, 50)]
+    assert result.bbox == (40, 40, 49, 44)
+
+
+def test_the_bbox_is_the_exact_box_of_all_changed_pixels_and_none_without_a_change():
+    result = png_diff.compare(picture(64, 64), picture(64, 64, [(3, 5, 3, 5), (60, 50, 60, 50)]))
+    assert result.bbox == (3, 5, 60, 50)
+    assert png_diff.compare(picture(8, 8), picture(8, 8)).bbox is None
+
+
+@pytest.mark.parametrize("region", [[0, 0, 8, 7], [-1, 0, 3, 3], [4, 0, 3, 3], [0, 4, 3, 3], [0, 0, 3], [0, 0, 1.5, 2], "abcd"])
+def test_a_bad_region_is_a_value_error(region):
+    with pytest.raises(ValueError, match="region"):
+        png_diff.compare(picture(8, 8), picture(8, 8), region=region)
+
+
+def test_the_map_is_grey_of_a_with_red_where_changed_and_only_grey_outside_the_region():
+    a = picture(8, 8, base=(100, 100, 100, 255))
+    b = picture(8, 8, [(1, 1, 1, 1), (6, 6, 6, 6)], base=(100, 100, 100, 255))
+
+    full = png_diff.diff_map(a, b)
+    assert full.channels == 3 and (full.width, full.height) == (8, 8)
+    assert full.pixel(1, 1) == (255, 0, 0) and full.pixel(6, 6) == (255, 0, 0)
+    assert full.pixel(0, 0) == (50, 50, 50)
+
+    inside = png_diff.diff_map(a, b, region=[0, 0, 3, 3])
+    assert inside.pixel(1, 1) == (255, 0, 0) and inside.pixel(6, 6) == (50, 50, 50)
+
+    assert png_diff.diff_map(a, b, tolerance=255).colors() == {(50, 50, 50)}
+
+
+def test_a_map_of_two_different_pictures_is_refused():
+    with pytest.raises(ValueError, match="one size"):
+        png_diff.diff_map(picture(8, 8), picture(8, 4))
+
+
+def test_image_diff_scales_b_to_a_and_says_so():
+    a = picture(16, 16, [(0, 0, 7, 15)])
+    b = picture(8, 8, [(0, 0, 3, 7)])  # the same picture at half size
+
+    result = png_diff.image_diff(a, b)
+
+    assert result.scaled and not result.aspect_differs
+    assert result.comparison.total == 256
+    assert result.map.width == 16
+    assert result.comparison.changed < 40  # only the blurred edge differs
+
+
+def test_image_diff_reports_a_stretch_when_the_shapes_differ():
+    result = png_diff.image_diff(picture(16, 16), picture(8, 16))
+    assert result.scaled and result.aspect_differs and result.stats()["aspectDiffers"] is True
+
+
+def test_image_diff_compares_rgb_with_rgba_on_rgb():
+    rgba = picture(8, 8, [(2, 2, 2, 2)])
+    rgb = read_png(write_png(8, 8, lambda x, y: (255, 255, 255) if (x, y) == (2, 2) else (0, 0, 0), color_type=COLOR_TYPE_RGB))
+
+    result = png_diff.image_diff(rgba, rgb)
+
+    assert result.comparison.changed == 0 and not result.scaled
+    assert result.stats()["a"]["channels"] == 4 and result.stats()["b"]["channels"] == 3
+    assert result.map.channels == 3
+
+
+def test_image_diff_uses_the_threshold_and_the_region_and_checks_them():
+    a = picture(16, 16)
+    b = picture(16, 16, [(1, 1, 2, 2), (10, 10, 12, 12)], color=(30, 0, 0, 255))
+
+    assert png_diff.image_diff(a, b).comparison.changed == 4 + 9
+    assert png_diff.image_diff(a, b, threshold=30).comparison.changed == 0
+    inside = png_diff.image_diff(a, b, region=[8, 8, 15, 15])
+    assert inside.comparison.changed == 9 and inside.comparison.total == 64
+    with pytest.raises(ValueError, match="region"):
+        png_diff.image_diff(a, b, region=[0, 0, 16, 16])
+    for threshold in (-1, 256, 1.5, "3", True):
+        with pytest.raises(ValueError, match="threshold"):
+            png_diff.image_diff(a, b, threshold=threshold)
+
+
+def test_stats_has_the_documented_keys_and_is_json():
+    a = picture(32, 32)
+    b = picture(32, 32, [(4, 4, 11, 11)])
+
+    stats = png_diff.image_diff(a, b, threshold=1, region=[0, 0, 31, 15]).stats()
+
+    assert set(stats) == {"equal", "changed", "compared", "share", "boundingBox", "regions", "threshold", "region", "a", "b", "scaled", "aspectDiffers"}
+    assert stats["equal"] is False and stats["changed"] == 64 and stats["compared"] == 32 * 16
+    assert stats["share"] == 64 / 512 and stats["boundingBox"] == [4, 4, 11, 11]
+    assert stats["regions"] == [{"box": [4, 4, 11, 11], "changed": 64, "shareOfPicture": 64 / 1024}]
+    assert stats["threshold"] == 1 and stats["region"] == [0, 0, 31, 15] and stats["scaled"] is False
+    assert stats["a"] == {"width": 32, "height": 32, "channels": 4}
+    assert json.loads(json.dumps(stats)) == stats
+
+    same = png_diff.image_diff(a, a).stats()
+    assert same["equal"] is True and same["boundingBox"] is None and same["regions"] == [] and same["region"] is None
