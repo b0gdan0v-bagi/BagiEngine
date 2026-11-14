@@ -241,6 +241,7 @@
         const entry = worker.entry;
         const folded = isFolded(worker.name);
         const card = el("section", (worker.waiting ? "card waiting" : worker.limited ? "card limited" : "card") + (folded ? " collapsed" : ""));
+        card.id = `card-${worker.name}`;
         const top = el("div", "card-top");
         const fold = el("button", "fold", folded ? "\u25B8" : "\u25BE");
         fold.title = folded ? "Expand: every detail of the worker" : "Collapse: only the status lines";
@@ -255,19 +256,6 @@
         card.appendChild(top);
 
         if (entry) card.appendChild(el("div", "title", entry.title));
-        if (worker.queue && worker.queue.length) {
-            const row = el("div", "queue");
-            row.appendChild(el("span", "muted", worker.queuePaused ? `next (paused: ${worker.queuePaused}):` : "next:"));
-            worker.queue.forEach((id) => {
-                const chip = el("span", "chip", id);
-                const x = el("button", "chip-x", "\u00D7");
-                x.title = `take ${id} out of the queue of ${worker.name}`;
-                x.addEventListener("click", () => vscode.postMessage({ cmd: "unqueue", entry: id, worker: worker.k }));
-                chip.appendChild(x);
-                row.appendChild(chip);
-            });
-            card.appendChild(row);
-        }
         if (worker.waiting) {
             const ask = el("div", "ask");
             ask.append(
@@ -442,7 +430,32 @@
         return card;
     }
 
+    // The flow graph (graph.js): a click on the worker or the entry it holds unfolds its card, one on a queued entry
+    // opens it in the Todo list; × and dragging a queued box change the queue.
+    function flowGraph(state) {
+        const graph = TodoGraph.mount(state.workers, {
+            onSelect: (act) => {
+                if (act.type === "entry" && !act.held) return vscode.postMessage({ cmd: "todoList", entry: act.entry });
+                expanded.add(act.name);
+                save();
+                render();
+                const card = document.getElementById(`card-${act.name}`);
+                if (card) card.scrollIntoView({ block: "nearest", behavior: "smooth" });
+            },
+            onUnqueue: (entry, worker) => vscode.postMessage({ cmd: "unqueue", entry, worker }),
+            onReorder: (worker, ids) => vscode.postMessage({ cmd: "reorderQueue", worker, ids }),
+        });
+        return graph;
+    }
+
+    let renderLater = null;
     function render() {
+        // a re-render under a box being dragged would drop it: wait for the drop
+        if (typeof TodoGraph !== "undefined" && TodoGraph.isDragging()) {
+            clearTimeout(renderLater);
+            renderLater = setTimeout(render, 300);
+            return;
+        }
         root.replaceChildren();
         const bar = el("div", "toolbar");
         const info = el("span", "muted", payload.refreshing ? "refreshing ..." : payload.at ? `updated ${ago(payload.at)}` : "");
@@ -488,6 +501,12 @@
         check.appendChild(el("span", "", payload.verifying ? "verify runs ..." : verify ? `last verify ${verify.ok ? "green" : "RED"}${verify.about ? ` after ${verify.about}` : ""} at ${verify.head} · ${ago(verify.at)}` : "no verify yet"));
         check.appendChild(button("Verify", { cmd: "verify" }, "configure, build and ctest the main checkout now"));
         root.appendChild(check);
+
+        const graph = state.workers.length ? flowGraph(state) : null;
+        if (graph) {
+            root.appendChild(el("h2", "", "Flow"));
+            root.appendChild(graph);
+        }
 
         const all = usageBlock(state.usage, false);
         if (all) {

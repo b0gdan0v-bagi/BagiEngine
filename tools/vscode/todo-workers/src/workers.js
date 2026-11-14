@@ -230,7 +230,22 @@ function attach(ctx) {
     // What the Todo list tab needs of the workers: who is free, who works which entry.
     function workersForList() {
         if (!ctx.state) return null;
-        return ctx.state.workers.map((w) => ({ k: w.k, name: w.name, active: Boolean(w.active), dirty: Boolean(w.dirty), busy: busy.has(w.k), entry: w.entry ? w.entry.id : null, queue: w.queue || [] }));
+        return ctx.state.workers.map((w) => ({
+            k: w.k, name: w.name, active: Boolean(w.active), dirty: Boolean(w.dirty), busy: busy.has(w.k), entry: w.entry ? w.entry.id : null, queue: w.queue || [],
+            graph: graphWorker(w),
+        }));
+    }
+
+    // The fields of a worker the flow graph (media/graph.js) draws, in the shape of `worker.py list --json`.
+    function graphWorker(w) {
+        const e = w.entry;
+        return {
+            k: w.k, name: w.name, active: w.active, waiting: w.waiting, stopped: w.stopped, endedTurn: w.endedTurn,
+            limited: w.limited ? { resets: w.limited.resets } : null,
+            session: w.session ? { state: w.session.state, status: w.session.status, startedAt: w.session.startedAt } : null,
+            entry: e ? { id: e.id, title: e.title, status: e.status, statusNote: e.statusNote, blockedBy: e.blockedBy, planProgress: e.planProgress, slices: e.slices } : null,
+            queue: w.queue || [], queueItems: w.queueItems || null, queuePaused: w.queuePaused || null, queueStreak: w.queueStreak || [],
+        };
     }
 
     // The ids of the entries whose branch lives in another checkout (worker.py list: elsewhere).

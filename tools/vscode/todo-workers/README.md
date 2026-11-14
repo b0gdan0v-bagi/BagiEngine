@@ -12,6 +12,12 @@ A panel for the parallel `todo-loop` workers (`tools/todo/worker.py`, "Workers" 
 - **collapse**: cards are folded by default to a few lines (the name, the entry and the badge, the title, the review note or the progress bar, one line of what the loop said, and the one action it needs: Answer, Relaunch, Review or Fast start); the arrow unfolds one, **Expand all** / **Collapse all** every card, and the choice is kept. Waiting and limited workers come first. An unfolded card keeps Attach, Relaunch and Stop or Fast start in sight; Log, Plan, Build & run, Update, Folder and Terminal are behind `…`;
 - buttons: **Attach** (`claude attach <session id>`; **Answer** takes its place while the session waits), **Log** (`claude logs`), **Folder** (a new window), **Terminal**, **Plan** (`~/.claude/plans/todo-loop-<branch-id>.md`), **Stop** (`worker.py stop <k>`, after a question, while the session runs); while it does not: **Update** (`worker.py update <k>`: the game and `engine/` detached at the tips of their base branches, as the loop's "go to the base"; the branch it held is kept; refused with uncommitted changes) and **Fast start** (`worker.py start <k>` at once: `/todo-loop` with the settings `todoWorkers.startSlices`, `todoWorkers.loopArgs` and `todoWorkers.reportTo`).
 
+Added in 0.20:
+
+- **Flow graph** (`media/graph.js`, inline SVG): at the top of the panel (**Flow**) and in place of the queue lists of the Todo list tab, one lane per worker: the worker (coloured by its session: busy, waits for you, usage limit, done, stopped) → the entry it holds (its status, the session's end, the plan) → its queued entries in order. A dashed arrow runs from a blocker shown in the graph to the entry it blocks: `stacked on` (cut from the blocker's branch in review), `paired` (the engine's branch in review, the game's entry), `waits for` / `waits for merge` (closed first). A queued entry the panel will not start now is drawn dashed. A paused queue has a pause mark on the arrow out of the held entry (the reason in its tooltip) and the streak `n/4`. Titles are truncated (the full text, the wait and the blockers are in the tooltip); the graph scrolls sideways in a narrow panel.
+- **On the graph**: a click on a worker or the entry it holds unfolds its card (in the tab: unfolds the entry in the list); a click on a queued entry opens it in the Todo list; `×` takes it out of the queue; dragging a queued box along its lane reorders the queue (both views). The flat `next:` row of the cards is gone.
+- **The data** (`worker.py list --json --store`): per worker `queueItems` (`{id, title, status, area, wait, blockedBy: [{id, status, title, kind}]}`: `wait` is the panel's start rule `queue_wait`, null when takeable; `kind` is `stacked`, `paired` or `waits`), and `kind` on each open blocker of the held entry. One `todo.py list` serves every queue.
+
 Added in 0.18:
 
 - **Priority**: an entry of the Todo list shows its `priority` (`now` red, `high` orange, `normal` faint, `low` grey; nothing when unset), the entries of one status are ordered `now`, `high`, `normal` and unset, `low` and then newest first (the order of `todo.py list`), and an unfolded entry has **Priority**, a quick pick (`now`, `high`, `normal`, `low`, `none`) that runs `todo.py edit <id> --priority`. The field comes from the service (deploy first; before it no badge shows).
@@ -60,7 +66,7 @@ No npm: the packer uses the standard library.
 
 ```bash
 python3 tools/vscode/todo-workers/pack.py        # in a game: engine/tools/vscode/todo-workers/pack.py
-code --install-extension tools/vscode/todo-workers/build/todo-workers-0.19.0.vsix
+code --install-extension tools/vscode/todo-workers/build/todo-workers-0.20.0.vsix
 ```
 
 `code` is in `/Applications/Visual Studio Code.app/Contents/Resources/app/bin/` on macOS when it is not on PATH. Then **Developer: Reload Window**. After a change bump `version` in `package.json`, pack and install again.
