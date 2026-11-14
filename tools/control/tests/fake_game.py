@@ -4,7 +4,8 @@
     fake_game.py --control --control-port=N [--headless] [--manual-clock] [--exit-immediately]
 
 The environment variable FAKE_GAME_EXIT makes it exit at once (code 3) like --exit-immediately. FAKE_GAME_PICTURE names a PNG file that `screenshot` serves instead of
-the 2x1 one (a test makes the picture of the game change this way).
+the 2x1 one (a test makes the picture of the game change this way); FAKE_GAME_WINDOW_PICTURE does the same for a start without `--headless` (a window), and
+FAKE_GAME_NO_WINDOW makes such a start exit at once (no display).
 
 Methods: ping, status, list_games, get_state (echoes the flags), list_actions, perform_action (a refusal for {"type": "bad"}, and for
 {"type": "needs_noop"} until some action has run; it raises the state version by one and pushes state_changed behind its answer), step, screenshot (a 2x1 PNG; one frame on the manual
@@ -42,9 +43,9 @@ def png_2x1() -> bytes:
     return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", zlib.compress(pixels)) + chunk(b"IEND", b"")
 
 
-def served_picture() -> tuple[int, int, bytes]:
-    """The width, height and bytes of the picture `screenshot` answers: the file FAKE_GAME_PICTURE names, else the 2x1 one."""
-    named = os.environ.get("FAKE_GAME_PICTURE")
+def served_picture(headless: bool = True) -> tuple[int, int, bytes]:
+    """The width, height and bytes of the picture `screenshot` answers: the file FAKE_GAME_PICTURE names (a window: FAKE_GAME_WINDOW_PICTURE first), else the 2x1 one."""
+    named = (None if headless else os.environ.get("FAKE_GAME_WINDOW_PICTURE")) or os.environ.get("FAKE_GAME_PICTURE")
     data = Path(named).read_bytes() if named else png_2x1()
     width, height = struct.unpack("!II", data[PNG_SIZE_OFFSET : PNG_SIZE_OFFSET + 8])  # the first fields of IHDR
     return width, height, data
@@ -54,6 +55,9 @@ def main() -> int:
     args = sys.argv[1:]
     if "--exit-immediately" in args or os.environ.get("FAKE_GAME_EXIT"):
         print("fake game: exiting at once", flush=True)
+        return 3
+    if "--headless" not in args and os.environ.get("FAKE_GAME_NO_WINDOW"):
+        print("fake game: no display for a window", flush=True)
         return 3
     port = next((int(arg.split("=", 1)[1]) for arg in args if arg.startswith("--control-port=")), 0)
     manual_clock = "--manual-clock" in args
@@ -90,7 +94,7 @@ def main() -> int:
         if method == "screenshot":
             if manual_clock:
                 frame["count"] += 1
-            width, height, data = served_picture()
+            width, height, data = served_picture("--headless" in args)
             return {"width": width, "height": height, "png_base64": base64.b64encode(data).decode("ascii")}
         if method == "quit":
             raise QuitServer({"quitting": True})
