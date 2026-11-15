@@ -1,0 +1,108 @@
+{
+  "version": 1,
+  "types": [
+    {
+      "name": "Button",
+      "parent": "Widget",
+      "abstract": false,
+      "creatable": true,
+      "purpose": "Common",
+      "icon": "",
+      "factoryBase": "Widget",
+      "fields": [
+        {"name": "text", "type": {"kind": "string"}, "attributes": {}},
+        {"name": "size", "type": {"kind": "float"}, "attributes": {}},
+        {"name": "style", "type": {"kind": "object", "object": "Point"}, "attributes": {}}
+      ],
+      "methods": []
+    },
+    {
+      "name": "Label",
+      "parent": "Widget",
+      "abstract": false,
+      "creatable": true,
+      "purpose": "Common",
+      "icon": "",
+      "factoryBase": "Widget",
+      "fields": [
+        {"name": "text", "type": {"kind": "string"}, "attributes": {}},
+        {"name": "size", "type": {"kind": "int32"}, "attributes": {}},
+        {"name": "style", "type": {"kind": "object", "object": "Point"}, "attributes": {}}
+      ],
+      "methods": []
+    },
+    {
+      "name": "Leaf",
+      "parent": null,
+      "abstract": false,
+      "creatable": true,
+      "purpose": "Common",
+      "icon": "",
+      "factoryBase": "Leaf",
+      "fields": [
+        {"name": "name", "type": {"kind": "string"}, "attributes": {}},
+        {"name": "children", "type": {"kind": "list", "resizable": true, "element": {"kind": "pointer", "object": "Leaf"}}, "attributes": {}}
+      ],
+      "methods": []
+    },
+    {
+      "name": "Point",
+      "parent": null,
+      "abstract": false,
+      "creatable": false,
+      "purpose": "Common",
+      "icon": "",
+      "fields": [
+        {"name": "x", "type": {"kind": "float"}, "attributes": {}},
+        {"name": "y", "type": {"kind": "float"}, "attributes": {}}
+      ],
+      "methods": []
+    },
+    {
+      "name": "Settings",
+      "parent": null,
+      "abstract": false,
+      "creatable": false,
+      "purpose": "Common",
+      "icon": "",
+      "fields": [
+        {"name": "title", "type": {"kind": "string", "capacity": 8}, "attributes": {}},
+        {"name": "volume", "type": {"kind": "float"}, "attributes": {"range": [0.0, 1.0], "tooltip": "From silent to loud"}},
+        {"name": "level", "type": {"kind": "int32"}, "attributes": {"range": [1.0, 10.0], "required": true}},
+        {"name": "mode", "type": {"kind": "enum", "values": ["Easy", "Hard"]}, "attributes": {}},
+        {"name": "enabled", "type": {"kind": "bool"}, "attributes": {}},
+        {"name": "id", "type": {"kind": "uint64"}, "attributes": {}},
+        {"name": "origin", "type": {"kind": "object", "object": "Point"}, "attributes": {}},
+        {"name": "tags", "type": {"kind": "list", "resizable": true, "element": {"kind": "string"}}, "attributes": {}},
+        {"name": "points", "type": {"kind": "list", "resizable": true, "element": {"kind": "object", "object": "Point"}}, "attributes": {}},
+        {"name": "scores", "type": {"kind": "list", "resizable": true, "element": {"kind": "int32"}}, "attributes": {"range": [0.0, 100.0]}},
+        {"name": "limits", "type": {"kind": "map", "resizable": true, "key": {"kind": "string"}, "element": {"kind": "int32"}}, "attributes": {}},
+        {"name": "byPoint", "type": {"kind": "map", "resizable": true, "key": {"kind": "int32"}, "element": {"kind": "object", "object": "Point"}}, "attributes": {}},
+        {"name": "choice", "type": {"kind": "variant", "alternatives": [{"kind": "int32"}, {"kind": "object", "object": "Point"}, {"kind": "string"}]}, "attributes": {}},
+        {"name": "nickname", "type": {"kind": "optional", "element": {"kind": "string"}}, "attributes": {}},
+        {"name": "span", "type": {"kind": "pair", "key": {"kind": "int32"}, "element": {"kind": "float"}}, "attributes": {}},
+        {"name": "widgets", "type": {"kind": "list", "resizable": true, "element": {"kind": "pointer", "object": "Widget"}}, "attributes": {}},
+        {"name": "tree", "type": {"kind": "pointer", "object": "Leaf"}, "attributes": {}},
+        {"name": "extra", "type": {"kind": "opaque"}, "attributes": {}}
+      ],
+      "methods": []
+    },
+    {
+      "name": "Widget",
+      "parent": null,
+      "abstract": true,
+      "creatable": false,
+      "purpose": "Common",
+      "icon": "",
+      "fields": [
+        {"name": "priority", "type": {"kind": "int32"}, "attributes": {}}
+      ],
+      "methods": []
+    }
+  ],
+  "factories": [
+    {"base": "Leaf", "derived": ["Leaf"]},
+    {"base": "Widget", "elementName": "widget", "derived": ["Button", "Label"]}
+  ],
+  "roots": []
+}
