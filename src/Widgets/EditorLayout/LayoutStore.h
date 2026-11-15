@@ -63,4 +63,25 @@ namespace BECore {
         std::filesystem::path _folder;
     };
 
+    /**
+     * @brief The names of a LayoutStore kept between frames, so a menu that is open reads the folder once, not on every draw.
+     *
+     * Names() scans the store only when the list is stale (at the start, or after Invalidate()). Whoever changes the layouts
+     * (save, delete) or opens a menu calls Invalidate(); a change made behind the cache's back shows at the next one.
+     */
+    class LayoutNameCache {
+    public:
+        /// The sorted names of @p store (LayoutStore::List()), scanned again only when stale. The reference holds until the next Names() call.
+        [[nodiscard]] const Vector<String>& Names(const LayoutStore& store);
+
+        /// Marks the list stale: the next Names() reads the folder
+        void Invalidate() {
+            _stale = true;
+        }
+
+    private:
+        Vector<String> _names;
+        bool _stale = true;
+    };
+
 }  // namespace BECore

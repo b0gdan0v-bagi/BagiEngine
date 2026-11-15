@@ -138,4 +138,12 @@ namespace BECore {
         return names;
     }
 
+    const Vector<String>& LayoutNameCache::Names(const LayoutStore& store) {
+        if (_stale) {
+            _names = store.List();
+            _stale = false;
+        }
+        return _names;
+    }
+
 }  // namespace BECore

@@ -141,4 +141,22 @@ namespace BECore::Tests {
         EXPECT_TRUE(store.List().empty());
     }
 
+    TEST_F(LayoutStoreTest, NameCacheReadsTheFolderOnceUntilInvalidated) {
+        LayoutStore store(_directory);
+        ASSERT_TRUE(store.Save("Alpha", "x").has_value());
+        LayoutNameCache cache;
+
+        EXPECT_EQ(Joined(cache.Names(store)), "Alpha");
+        // A file that appears behind the cache's back is not seen by a second draw: the folder was not scanned again
+        ASSERT_TRUE(store.Save("Beta", "x").has_value());
+        EXPECT_EQ(Joined(cache.Names(store)), "Alpha");
+
+        cache.Invalidate();
+        EXPECT_EQ(Joined(cache.Names(store)), "Alpha|Beta");
+        ASSERT_TRUE(store.Delete("Alpha").has_value());
+        EXPECT_EQ(Joined(cache.Names(store)), "Alpha|Beta");
+        cache.Invalidate();
+        EXPECT_EQ(Joined(cache.Names(store)), "Beta");
+    }
+
 }  // namespace BECore::Tests

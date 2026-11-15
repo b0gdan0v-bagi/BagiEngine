@@ -236,7 +236,12 @@ namespace BECore {
         const bool hasStore = _layouts.has_value();
 
         if (ImGui::BeginMenu("Layouts", hasStore)) {
-            const Vector<String> names = _layouts->List();
+            // BeginMenu is true on every frame the menu is open: rescan the folder only on the frame it opens
+            if (!_layoutsMenuOpen) {
+                _layoutsMenuOpen = true;
+                _layoutNames.Invalidate();
+            }
+            const Vector<String>& names = _layoutNames.Names(*_layouts);
             if (names.empty()) {
                 ImGui::TextDisabled("No saved layouts");
             }
@@ -246,12 +251,18 @@ namespace BECore {
                 }
             }
             ImGui::EndMenu();
+        } else {
+            _layoutsMenuOpen = false;
         }
 
         CommandMenuItem(kViewSaveLayout, "Save Layout As...", hasStore);
 
         if (ImGui::BeginMenu("Delete Layout", hasStore)) {
-            const Vector<String> names = _layouts->List();
+            if (!_deleteLayoutMenuOpen) {
+                _deleteLayoutMenuOpen = true;
+                _layoutNames.Invalidate();
+            }
+            const Vector<String>& names = _layoutNames.Names(*_layouts);
             if (names.empty()) {
                 ImGui::TextDisabled("No saved layouts");
             }
@@ -260,9 +271,13 @@ namespace BECore {
                     if (const auto result = _layouts->Delete(name); !result) {
                         LOG_WARNING(Format("Editor: cannot delete layout '{}': {}", name, result.error().detail));
                     }
+                    // The list is read again on the next draw: the loop above goes on over the old one
+                    _layoutNames.Invalidate();
                 }
             }
             ImGui::EndMenu();
+        } else {
+            _deleteLayoutMenuOpen = false;
         }
 
         CommandMenuItem(kViewResetLayout, "Reset to Defaults");
@@ -382,6 +397,7 @@ namespace BECore {
             LOG_ERROR(Format("Editor: cannot save layout '{}': {}", name, result.error().detail));
             return std::unexpected(result.error().detail);
         }
+        _layoutNames.Invalidate();
         LOG_INFO(Format("Editor: layout '{}' saved", name));
         return {};
     }
