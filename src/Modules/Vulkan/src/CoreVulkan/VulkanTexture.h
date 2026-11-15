@@ -7,15 +7,8 @@ namespace BECore {
 
     /**
      * Vulkan implementation of ITexture.
-     *
-     * Holds the GPU-side image resources:
-     *   VkImage / VkDeviceMemory  — device-local image in SHADER_READ_ONLY layout
-     *   VkImageView               — 2D view over the full image
-     *   VkSampler                 — LINEAR filter, CLAMP_TO_EDGE
-     *   VkDescriptorSet           — pre-bound combined-image-sampler set (set 0)
-     *
-     * All resources are destroyed in the destructor; the caller must ensure the
-     * GPU is idle before the last reference is released.
+     * Image, view, sampler and descriptor set (set 0) of one texture, all destroyed in the destructor: the GPU must be
+     * idle before the last reference is released.
      */
     class VulkanTexture : public ITexture {
         BE_CLASS(VulkanTexture)

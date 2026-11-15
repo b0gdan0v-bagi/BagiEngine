@@ -16,7 +16,6 @@ namespace BECore {
         if (extension != ".bmp" && extension != ".png" && extension != ".jpg" && extension != ".jpeg") {
             return false;
         }
-        // Only handle textures when the active renderer is the Vulkan backend.
         const auto& renderer = CoreManager::GetRenderer();
         return renderer && dynamic_cast<VulkanRendererBackend*>(renderer.Get()) != nullptr;
     }

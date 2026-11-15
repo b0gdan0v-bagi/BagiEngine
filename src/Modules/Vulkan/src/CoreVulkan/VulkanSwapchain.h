@@ -16,12 +16,6 @@ namespace BECore {
 
     /**
      * Manages swapchain, image views, render pass, and framebuffers.
-     *
-     * The swapchain is the bridge between Vulkan rendering and the OS window.
-     * Each swapchain image is wrapped with:
-     *   - VkImageView    - how the GPU sees the image
-     *   - VkFramebuffer  - ties the image view to a render pass
-     *
      * The render pass is created once in Initialize() and kept by Recreate(): the pipelines (and ImGui's) were built
      * against it, so a recreated swapchain must have the same image format. The decisions (result classification,
      * extent, format) are pure functions in VulkanSwapchainPolicy.h.
@@ -31,17 +25,13 @@ namespace BECore {
         VulkanSwapchain() = default;
         ~VulkanSwapchain() = default;
 
-        /// Sizes are in pixels of the window's surface (SDL_GetWindowSizeInPixels), not in window units.
         bool Initialize(VulkanDevice& device, VkSurfaceKHR surface, int pixelWidth, int pixelHeight);
         void Destroy(VulkanDevice& device);
 
-        /// Rebuilds the swapchain for a new size from the old one (oldSwapchain), keeping the render pass. The old
-        /// objects are destroyed only after the new ones exist. On Failed the new objects are released. The old
-        /// swapchain stays in place, but once vkCreateSwapchainKHR has been called with it the spec retires it even if
-        /// that call fails: the next acquire reports it out of date and the caller tries again. A Failed before that
-        /// call (no surface format, capabilities not readable) leaves it untouched. The caller must call
-        /// vkDeviceWaitIdle first: the old framebuffers and image views may still be in use by frames in flight. Sizes
-        /// are in pixels.
+        /// Rebuilds the swapchain for a size in pixels from the old one (oldSwapchain), keeping the render pass; the old objects go
+        /// only after the new ones exist. The caller calls vkDeviceWaitIdle first (frames in flight may still use them). Once
+        /// vkCreateSwapchainKHR has been called the spec retires the old swapchain even on Failed: the next acquire says out of
+        /// date and the caller tries again; an earlier Failed leaves everything untouched.
         SwapchainRecreateResult Recreate(VulkanDevice& device, VkSurfaceKHR surface, int pixelWidth, int pixelHeight);
 
         /// Acquire the next swapchain image index. OutOfDate: recreate; the semaphore is not signaled then.

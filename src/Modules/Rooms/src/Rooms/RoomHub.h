@@ -25,7 +25,7 @@ namespace BECore {
      *
      * Text in (OnMessage), text out (HubSink). No socket, no thread, no clock and no randomness of its own: the transport reports
      * connections and messages, the caller passes the time, the RandomFn makes room codes and seeds. **Single-threaded**: the caller
-     * serializes every call (slice 2 posts transport events to a queue that one thread drains, like ControlService).
+     * serializes every call (the server posts transport events to a queue that one thread drains, like ControlService).
      *
      * Nothing a client sends is trusted, and a handler never throws: every failure is an `error` message with a stable code
      * (RoomErrors). After every handled message and every Tick the hub flushes: for each member of the affected room it compares the

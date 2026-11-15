@@ -31,14 +31,14 @@ namespace BECore {
         /// The most seats a `lobby` message may list when a client reads it (a bound on the work, not a limit of any game)
         inline constexpr size_t kMaxLobbySeats = 64;
 
-        /// A player name: 1 to 24 UTF-8 bytes (after trimming) of printable text
+        /// A player name in UTF-8 bytes, after trimming; printable text
         inline constexpr size_t kMinNameBytes = 1;
         inline constexpr size_t kMaxNameBytes = 24;
 
         /// The name of a game in `create_room`
         inline constexpr size_t kMaxGameNameBytes = 64;
 
-        /// A room code: 5 characters of this alphabet (32 letters and digits without I, O, 0 and 1), upper case
+        /// A room code: characters of the alphabet below (no I, O, 0 and 1), upper case
         inline constexpr size_t kRoomCodeLength = 5;
         inline constexpr StringView kRoomCodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 

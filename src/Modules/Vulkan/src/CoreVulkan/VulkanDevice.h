@@ -17,19 +17,14 @@ namespace BECore {
     };
 
     /**
-     * Manages VkInstance, VkPhysicalDevice selection, VkDevice, and VkQueues.
-     *
-     * All Vulkan objects below the surface live here:
-     *   VkInstance -> VkPhysicalDevice -> VkDevice -> VkQueue (graphics + present)
+     * Owns the VkInstance, the chosen VkPhysicalDevice, the VkDevice and its graphics and present queues.
      */
     class VulkanDevice {
     public:
         VulkanDevice() = default;
         ~VulkanDevice() = default;
 
-        // Two-step initialization (needed because surface requires an existing instance):
-        //   1. InitializeInstance() -- creates VkInstance
-        //   2. InitializeDevice(surface) -- picks GPU and creates VkDevice
+        // Two steps because the surface needs an existing instance.
         bool InitializeInstance(SDL_Window* window);
         bool InitializeDevice(VkSurfaceKHR surface);
         void Destroy();
@@ -58,7 +53,6 @@ namespace BECore {
         // required property flags. Returns UINT32_MAX if not found.
         uint32_t FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) const;
 
-        // Single-time command helpers for one-off GPU operations (e.g. staging uploads).
         VkCommandBuffer BeginSingleTimeCommands(VkCommandPool pool) const;
         void EndSingleTimeCommands(VkCommandPool pool, VkCommandBuffer cmd) const;
 

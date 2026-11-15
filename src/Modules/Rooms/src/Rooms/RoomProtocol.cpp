@@ -80,7 +80,6 @@ namespace BECore {
             return Fail(RoomErrors::kBadMessage, std::move(message));
         }
 
-        /// A string member that must be there
         [[nodiscard]] std::expected<String, ControlError> RequireString(const Json& root, StringView key) {
             auto value = GetJsonString(root, key);
             if (!value) {
@@ -206,15 +205,12 @@ namespace BECore {
             return ClientMessage(std::move(message));
         }
 
-        /// The common start of every message: `v` and `type`
         [[nodiscard]] Json MakeEnvelope(StringView type) {
             Json root = Json::object();
             root["v"] = kRoomProtocolVersion;
             root["type"] = MakeJsonString(type);
             return root;
         }
-
-        // ---- Reading the server's messages ----
 
         [[nodiscard]] Optional<RoomPhase> ParsePhaseName(StringView name) {
             for (const RoomPhase phase : {RoomPhase::Lobby, RoomPhase::Playing, RoomPhase::Finished}) {
