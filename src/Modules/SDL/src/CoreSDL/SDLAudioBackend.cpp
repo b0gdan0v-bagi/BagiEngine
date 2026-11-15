@@ -4,6 +4,7 @@
 #include <Events/ApplicationEvents.h>
 #include <Generated/SDLAudioBackend.gen.hpp>
 #include <SDL3/SDL.h>
+#include <climits>
 
 namespace BECore {
 
@@ -87,6 +88,11 @@ namespace BECore {
 
     bool SDLAudioBackend::Start(uint32_t voice, const AudioClip& clip, float gain) {
         if (voice >= _streams.size() || clip.GetSamples().empty()) {
+            return false;
+        }
+        // SDL takes the byte count as an int: a clip of 2 GiB and more (about three hours of stereo at 48 kHz) cannot be put in one call
+        if (clip.GetSamples().size_bytes() > static_cast<size_t>(INT_MAX)) {
+            LOG_WARNING("SDLAudioBackend: '{}' is too long to play as one clip"_format(clip.GetPath().ToStringView()));
             return false;
         }
         SDL_AudioStream* stream = _streams[voice];

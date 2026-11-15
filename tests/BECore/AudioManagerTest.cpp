@@ -177,7 +177,6 @@ namespace BECore::Tests {
         const AudioHandle handle = manager.Play(*clip, AudioBus::Sfx);
         AudioSettings settings;
         settings._sfx._volume = 0.25f;
-        settings._master._muted = false;
         manager.ApplySettings(settings);
         EXPECT_FLOAT_EQ(backend->gains[handle.voice], 0.25f);
         EXPECT_EQ(manager.GetSettings()._voices, 1u) << "the voice count is not a level";

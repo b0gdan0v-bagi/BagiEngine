@@ -6,7 +6,8 @@
 #include <cstring>
 
 // The one translation unit that holds the stb_vorbis implementation (src/Modules/stb/README.md). No stdio (the engine reads the bytes) and no
-// push-data API (a clip is decoded whole); the functions stay internal to this file.
+// push-data API (a clip is decoded whole). stb_vorbis has no static option: its functions (stb_vorbis_decode_memory, ...) have external C
+// linkage, so a second copy linked into a game (another library that carries stb_vorbis) clashes at link time.
 #define STB_VORBIS_NO_STDIO
 #define STB_VORBIS_NO_PUSHDATA_API
 #if defined(__clang__)
@@ -29,6 +30,10 @@
 #pragma warning(push, 0)
 #endif
 #include <stb_vorbis.c>
+// stb_vorbis.c defines these at file scope for its channel tables
+#undef L
+#undef C
+#undef R
 #if defined(__clang__)
 #pragma clang diagnostic pop
 #elif defined(_MSC_VER)

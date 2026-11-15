@@ -40,4 +40,7 @@ namespace BECore {
         [[nodiscard]] const AudioLevel& LevelOf(AudioBus bus) const;
     };
 
+    // The generator reads `range` from the source text, so the bound of `_voices` is a literal: keep it the constant
+    static_assert(kMaxAudioVoices == 64, "the range of AudioSettings::_voices spells kMaxAudioVoices");
+
 }  // namespace BECore
