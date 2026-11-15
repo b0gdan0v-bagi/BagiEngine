@@ -14,11 +14,11 @@ namespace BECore {
         IWidget() = default;
         ~IWidget() override = default;
 
-        BE_FUNCTION virtual bool Initialize(IDeserializer& deserializer) = 0;
+        virtual bool Initialize(IDeserializer& deserializer) = 0;
 
-        BE_FUNCTION virtual void Update() = 0;
-        BE_FUNCTION virtual void DrawScreen() {}
-        BE_FUNCTION virtual void Draw() = 0;
+        virtual void Update() = 0;
+        virtual void DrawScreen() {}
+        virtual void Draw() = 0;
     };
 
 }  // namespace BECore

@@ -650,4 +650,15 @@ namespace BECore::Tests {
         EXPECT_GT(checkedFields, 100U);
     }
 
+    // The widget lifecycle is called by the loader and the manager through IWidget; a mark added again is a decision, not an accident
+    TEST(TypeRegistryEngineTest, NoWidgetListsAMethod) {
+        const TypeRegistry& registry = TypeRegistry::GetInstance();
+        const TypeInfo* widget = registry.Find(IWidget::GetStaticTypeMeta().typeHash);
+        ASSERT_NE(widget, nullptr);
+        EXPECT_TRUE(widget->methods.empty());
+        for (const TypeInfo* info : registry.Derived(*widget, true)) {
+            EXPECT_TRUE(info->methods.empty()) << String(info->Name()).c_str();
+        }
+    }
+
 }  // namespace BECore::Tests

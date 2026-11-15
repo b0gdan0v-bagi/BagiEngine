@@ -19,7 +19,7 @@ A widget is not game UI. In-game UI is a scene feature, canvases of `UICanvasCom
 
 ## IWidget Interface
 
-All methods are `BE_FUNCTION`.
+The lifecycle is called by the loader and `WidgetManager` through `IWidget`, never by name, so no widget method is `BE_FUNCTION` (a mark would list it in the schema as callable for nothing); a test holds it.
 
 | Method | Purpose |
 |--------|---------|

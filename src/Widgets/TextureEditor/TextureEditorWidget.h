@@ -23,9 +23,9 @@ namespace BECore {
         TextureEditorWidget() = default;
         ~TextureEditorWidget() override = default;
 
-        BE_FUNCTION bool Initialize(IDeserializer& deserializer) override;
-        BE_FUNCTION void Update() override;
-        BE_FUNCTION void Draw() override;
+        bool Initialize(IDeserializer& deserializer) override;
+        void Update() override;
+        void Draw() override;
 
     private:
         // Runs `texture.save` like the Save button (only with unsaved changes)
