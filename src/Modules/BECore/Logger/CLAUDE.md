@@ -9,7 +9,8 @@ Event-based logging. `Logger` pushes entries into a lock-free ring buffer, `LogE
 | Component | Purpose |
 |-----------|---------|
 | `Logger` | Static helper (`Debug` / `Info` / `Warning` / `Error` / `Fatal`), takes one `eastl::string_view` |
-| `LogEvent` | Event with level and message; `Emit` writes to the ring buffer, `Flush` dispatches it |
+| `LogEvent` | Event with level, message and site; `Emit` writes to the ring buffer, `Flush` dispatches it |
+| `LogSite` | `file` / `line` of a log call; `file` is the `__FILE__` literal, kept as a pointer through the ring buffer |
 | `LogRingBuffer` | Lock-free MPSC buffer, safe from any thread; entries are dropped when it is full |
 | `FlushLogsEvent` | Tells sinks to flush their output |
 | `ILogSink` | Interface for output destinations (`FACTORY_BASE`) |
@@ -43,7 +44,7 @@ A `type` that is not registered in the factory is logged as an error by `MakeFro
 
 ## Best Practices
 
-- Use the macros: `LOG_DEBUG`, `LOG_INFO`, `LOG_WARNING`, `LOG_ERROR`, `LOG_FATAL`.
+- Use the macros: `LOG_DEBUG`, `LOG_INFO`, `LOG_WARNING`, `LOG_ERROR`, `LOG_FATAL`. The macros pass the site; a direct `Logger::Info(msg)` or `LogEvent::Emit(level, msg)` has none (`file == nullptr`). `ILogSink::Write(level, message)` does not carry it: a sink that wants it reads it from the `LogEvent`.
 - The macros take one string, so format first: `LOG_ERROR("Failed to load {}"_format(path))` (or `Format(...)`). `LOG_INFO("x {}", v)` does not compile.
 - Pick the level deliberately; `Fatal` is for unrecoverable errors.
 - Sinks receive `eastl::string_view`.
