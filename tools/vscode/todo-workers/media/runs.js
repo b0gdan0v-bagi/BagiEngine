@@ -32,28 +32,14 @@
         return shown ? shown.text : "";
     }
 
-    // The line of an entry body that names what it waits for, bold or not (`**Waits for:** a, b and c`).
-    const WAITS_FOR = /^[ \t>]*(?:[-*][ \t]+)?\*{0,2}Waits for(?::\*{0,2}|\*{0,2}:)(.*)$/gim;
-    const ID_WORD = /[A-Za-z0-9][A-Za-z0-9_-]*/g;
-
-    function lookup(byId, id) {
-        if (!byId) return undefined;
-        return typeof byId.get === "function" ? byId.get(id) : byId[id];
-    }
-
-    // The ids a body names after `**Waits for:**` that exist in the store, are not closed and are not a dependency
-    // link of the entry yet: what the owner has to link (`todo.py dep add`) for the queue and the loop to see it.
-    // `byId` is a Map or an object of id -> entry. A word counts only when it is exactly an id of the store.
-    function unlinkedWaits(entry, byId) {
-        if (!entry || typeof entry.body !== "string") return [];
-        const linked = new Set((entry.blockedBy || []).map((b) => (b && typeof b === "object" ? b.id : b)));
-        const found = [];
-        for (const line of entry.body.matchAll(WAITS_FOR)) {
-            for (const word of line[1].replace(/`/g, " ").match(ID_WORD) || []) {
-                const other = lookup(byId, word);
-                if (!other || word === entry.id || linked.has(word) || other.status === "closed" || found.includes(word)) continue;
-                found.push(word);
-            }
+    // The entries whose text says they wait for others while the store has no link, from the answer of `worker.py doctor
+    // --json`: its `store` rows of the kind `waits-unlinked` (`entry`, `missing`) as `{entry id: [missing ids]}`. The
+    // CLI decides what counts; any other answer (an error object, null, no `store`) gives none.
+    function unlinkedWaitsOf(doctor) {
+        const found = {};
+        const rows = doctor && Array.isArray(doctor.store) ? doctor.store : [];
+        for (const row of rows) {
+            if (row && row.kind === "waits-unlinked" && row.entry && Array.isArray(row.missing) && row.missing.length) found[row.entry] = row.missing;
         }
         return found;
     }
@@ -94,5 +80,5 @@
             .filter((line) => QUEUE_LINE.test(line) && !/^w\d+: cd /.test(line));
     }
 
-    return { NO_REASON, progressOf, progressText, unlinkedWaits, queueRefusal, startedEntry, queueNotes };
+    return { NO_REASON, progressOf, progressText, unlinkedWaitsOf, queueRefusal, startedEntry, queueNotes };
 });
