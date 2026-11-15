@@ -41,7 +41,8 @@ function attach(ctx) {
         todoLoading = true;
         todoPanel.webview.postMessage({ loading: true, error: null });
         try {
-            entries = JSON.parse(await runTool(todoTool(tool), ["list", "--all", "--json", "--body"], 30000));
+            const [out] = await Promise.all([runTool(todoTool(tool), ["list", "--all", "--json", "--body"], 30000), ctx.readStages()]);
+            entries = ctx.withStages(JSON.parse(out));
             const state = ctx.state;
             if (todoPanel) todoPanel.webview.postMessage({ loading: false, entries, areas: state && state.areas ? state.areas : null, workers: ctx.workersForList(), elsewhere: ctx.elsewhereForList(), at: Date.now(), focus: focusNext });
             if (todoPanel) focusNext = null;

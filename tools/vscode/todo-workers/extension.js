@@ -9,6 +9,7 @@
 //   src/workers.js   sessions, update, fast start, relaunch, queues, start in a free worker, the engine pointer
 //   src/review.js    review, Review with Claude, Quick merge, Merge with Claude, Return with remarks
 //   src/todoList.js  the Todo list tab and the owner's writes to the store
+//   src/stages.js    the stage plans of through entries (their progress)
 //   src/runs.js      the runs that took nothing (`worker.noClaim`) and what is remembered of a loop's start
 //   src/insights.js  the slower views (busy files, the day, the timeline, review rounds), the doctor's fixes, the merge
 //                    train, the end of the day, Dispatch, the push to a phone
@@ -73,7 +74,7 @@ function activate(context) {
     ctx.workerOf = (k) => ctx.state && ctx.state.workers.find((w) => w.k === k);
     const entryOf = (id) => ctx.state && [...ctx.state.review, ...ctx.state.workers.map((w) => w.entry)].find((e) => e && e.id === id);
 
-    for (const name of ["feed", "build", "workers", "review", "todoList", "runs", "insights"]) require(`./src/${name}`).attach(ctx);
+    for (const name of ["feed", "build", "workers", "review", "todoList", "stages", "runs", "insights"]) require(`./src/${name}`).attach(ctx);
 
     function act(message) {
         const worker = ctx.workerOf(message.worker);
@@ -140,7 +141,7 @@ function activate(context) {
             // the last steps and the tokens (the usage ledger catches up on the next full read: its counts are totals)
             const full = view.visible ? ["--activity", "--usage"] : [];
             ctx.readMachine(); // beside the list: cheap, and the load history needs it hidden too
-            const out = await runTool(tool, ["list", "--json", "--store", ...full, "--claude", config().claude], 90000);
+            const [out] = await Promise.all([runTool(tool, ["list", "--json", "--store", ...full, "--claude", config().claude], 90000), ctx.readStages()]);
             ctx.state = JSON.parse(out);
             // A branch of another checkout or machine (or cut from another base) is not this checkout's to review or
             // merge: it leaves the review list, the status bar count and the "reached review" notices for a folded line.
@@ -148,6 +149,7 @@ function activate(context) {
             ctx.state.reviewElsewhere = (ctx.state.review || []).filter(away);
             ctx.state.review = (ctx.state.review || []).filter((e) => !away(e));
             ctx.markNoClaim(ctx.state);
+            ctx.withStages([...ctx.state.workers.map((w) => w.entry), ...ctx.state.review, ...ctx.state.reviewElsewhere]);
             const info = ctx.cachedBuildInfo() || (await ctx.getBuildInfo());
             view.show({ state: ctx.state, at: Date.now(), feed: ctx.feed(), lastVerify: ctx.lastVerify(), prices: config().prices, shotsTool: Boolean(info && info.shots), verifying: ctx.isVerifying() ? "running" : null, insights: ctx.insights(), ...ctx.machine() });
             ctx.postWorkersToList();

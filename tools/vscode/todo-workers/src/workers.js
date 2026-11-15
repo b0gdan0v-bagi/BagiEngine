@@ -243,7 +243,7 @@ function attach(ctx) {
             k: w.k, name: w.name, active: w.active, waiting: w.waiting, stopped: w.stopped, endedTurn: w.endedTurn,
             limited: w.limited ? { resets: w.limited.resets } : null,
             session: w.session ? { state: w.session.state, status: w.session.status, startedAt: w.session.startedAt } : null,
-            entry: e ? { id: e.id, title: e.title, status: e.status, statusNote: e.statusNote, blockedBy: e.blockedBy, planProgress: e.planProgress, slices: e.slices } : null,
+            entry: e ? { id: e.id, title: e.title, status: e.status, statusNote: e.statusNote, blockedBy: e.blockedBy, planProgress: e.planProgress, slices: e.slices, slicing: e.slicing, stages: e.stages } : null,
             queue: w.queue || [], queueItems: w.queueItems || null, queuePaused: w.queuePaused || null, queueStreak: w.queueStreak || [],
             noClaim: w.noClaim || null,
         };

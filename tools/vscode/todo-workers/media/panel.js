@@ -98,19 +98,16 @@
         return badge;
     }
 
-    // The bar is the whole entry when it has several slice plans ("slice 3: 120/190 over 3 slices"), else its plan.
+    // The bar and its words are TodoRuns.progressOf: a through entry's stages, else its slice plans, else its plan.
     function progress(entry) {
-        const p = entry && entry.planProgress;
-        const all = entry && entry.slices && entry.slices.count > 1 ? entry.slices : null;
-        const shown = all || p;
-        if (!shown || !shown.total) return null;
+        const shown = TodoRuns.progressOf(entry);
+        if (!shown) return null;
         const box = el("div", "progress");
         const bar = el("div", "bar");
         const fill = el("div", "fill");
         fill.style.width = `${Math.round((100 * shown.done) / shown.total)}%`;
         bar.appendChild(fill);
-        const text = all ? `${all.count} slices ${all.done}/${all.total}${p && p.total ? ` · this slice ${p.done}/${p.total}` : ""}` : `plan ${p.done}/${p.total}`;
-        box.append(bar, el("span", "muted", text));
+        box.append(bar, el("span", "muted", shown.text));
         return box;
     }
 

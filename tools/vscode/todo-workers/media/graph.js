@@ -5,9 +5,9 @@
 // Everything shown is text from the store or the transcripts, so it goes in as text nodes only.
 // The layout is built as a plain tree first, so node can turn it into an SVG string (a sample render) without a DOM.
 (function (root, factory) {
-    if (typeof module === "object" && module.exports) module.exports = factory();
-    else root.TodoGraph = factory();
-})(typeof self !== "undefined" ? self : this, function () {
+    if (typeof module === "object" && module.exports) module.exports = factory(require("./runs"));
+    else root.TodoGraph = factory(root.TodoRuns);
+})(typeof self !== "undefined" ? self : this, function (Runs) {
     const SVG_NS = "http://www.w3.org/2000/svg";
     const WORKER_W = 90;
     const NODE_W = 160;
@@ -50,13 +50,6 @@
         if (s && s.status === "busy") return { kind: "busy", word: s.startedAt ? `busy · ${minutes(s.startedAt)}` : "busy" };
         if (s) return { kind: "idle", word: "idle" };
         return { kind: "none", word: "no session" };
-    }
-
-    function progressOf(entry) {
-        const all = entry.slices && entry.slices.count > 1 ? entry.slices : null;
-        const p = entry.planProgress;
-        if (all && all.total) return `${all.done}/${all.total}`;
-        return p && p.total ? `plan ${p.done}/${p.total}` : "";
     }
 
     function openBlockers(entry) {
@@ -176,9 +169,9 @@
                 const status = entry.starting ? "starting" : entry.status || "?";
                 const over = ["stopped", "done", "waiting", "limited"].includes(sess.kind) ? sess : null;
                 const ebox = box(cx, y, NODE_W, `g-node g-entry g-held st-${slug(status)}${over ? ` over-${over.kind}` : ""}`, true);
-                const sub = [status, over ? over.word : "", progressOf(entry)].filter(Boolean).join(" · ");
+                const sub = [status, over ? over.word : "", Runs.progressText(entry)].filter(Boolean).join(" · ");
                 ebox.kids.push(textNode(cx + 11, y + 18, "g-id", trunc(entry.id, NODE_W - 18, ID_CHAR_PX)), textNode(cx + 11, y + 34, "g-sub", trunc(sub, NODE_W - 18)));
-                ebox.kids.push(tip([`${entry.id} (${status}, held by ${w.name}, session ${sess.word})`, entry.title, entry.statusNote].filter(Boolean).join("\n")));
+                ebox.kids.push(tip([`${entry.id} (${status}, held by ${w.name}, session ${sess.word})`, entry.title, Runs.progressText(entry), entry.statusNote].filter(Boolean).join("\n")));
                 ebox.act = { type: "entry", entry: entry.id, worker: w.k, name: w.name, held: true };
                 boxes.push(ebox);
                 const at = { id: entry.id, x: cx, y, w: NODE_W, lane };

@@ -210,8 +210,8 @@
         );
         if (entry.priority in PRIORITY_RANK) top.appendChild(el("span", `badge prio prio-${entry.priority}`, entry.priority));
         if (entry.stage !== null && entry.stage !== undefined) top.appendChild(el("span", "muted", `stage ${entry.stage}`));
-        if (entry.slices && entry.slices.count > 1) top.appendChild(el("span", "muted", `${entry.slices.count} slices ${entry.slices.done}/${entry.slices.total}`));
-        else if (entry.planProgress && entry.planProgress.total) top.appendChild(el("span", "muted", `plan ${entry.planProgress.done}/${entry.planProgress.total}`));
+        const progress = TodoRuns.progressText(entry);
+        if (progress) top.appendChild(el("span", "muted", progress));
         if (entry.slicing === "through") top.appendChild(el("span", "badge through", entry.costCap ? `through · cap $${entry.costCap}` : "through"));
         const blockers = (entry.blockedBy || []).filter((b) => b.status !== "closed");
         if (blockers.length) top.appendChild(el("span", "badge blocked", `blocked by ${blockers.map((b) => b.id).join(", ")}`));
