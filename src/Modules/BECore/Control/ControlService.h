@@ -15,24 +15,13 @@ namespace BECore {
     /**
      * @brief Command queue of the external control API: requests come from any thread and run on the main thread.
      *
-     * One instance lives in CoreManager (CoreManager::GetControlService()). It knows nothing about transports or games:
-     * a transport (the WebSocket server) calls Post(), and modules register handlers by method name (the builtins of
-     * ControlBuiltins.h, the game methods of GameControl, the screenshot of the SDL module).
+     * One instance lives in CoreManager. It knows nothing about transports or games: a transport calls Post(), and
+     * modules register handlers by method name. The wire shape, the frame stage of Drain() and the manual clock are
+     * in Control/CLAUDE.md.
      *
-     * Requests are JSON objects {"id":1,"method":"name","params":{..}}; a response is {"id":1,"ok":true,"result":..} or
-     * {"id":1,"ok":false,"error":{"code":..,"message":..}}; a push is {"event":"name","data":..}. See Control/CLAUDE.md.
-     *
-     * Order: requests run in the order they were posted (per posting thread). Drain() runs them at frame stage 1b,
-     * between input and tasks. A handler that defers its answer (ControlCall::DeferFrames) is a barrier: the requests
-     * behind it wait until it is answered, except those of methods registered with bypassBarrier.
-     *
-     * Manual clock: with SetManualClock(true) the application does not run frames by itself. It runs one only while
-     * IsStepDue() says so, i.e. while a deferred call (a `step`, a `screenshot`) waits for frames, and moves the game
-     * clock by GetStepSeconds() per frame. In between it only answers requests (WaitForRequests) and keeps the window
-     * alive. Every state of this lives here, so that a test can play the application loop without the application.
-     * The manual clock is a pause stepped by the API (GamePause, `Time/GamePause.h`): with a pause attached
-     * (SetPause) a deferred call on the manual clock also requests its frames from it, and the pause is what decides
-     * the kind and the seconds of every frame.
+     * A handler that defers its answer (ControlCall::DeferFrames) is a barrier: the requests behind it wait until it
+     * is answered, except those of methods registered with bypassBarrier. All state of the manual clock lives here,
+     * so that a test can play the application loop without the application.
      *
      * Everything except Post() belongs to the main thread.
      */

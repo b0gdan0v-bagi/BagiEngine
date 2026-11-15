@@ -62,7 +62,7 @@ namespace BECore {
 
         const Json* params = FindJsonMember(message, "params");
         if (params == nullptr || params->is_null()) {
-            return;  // no parameters: the empty object of Request
+            return;
         }
         if (!params->is_object()) {
             request.error = MakeControlError(ControlErrors::kInvalidParams, "'params' has to be an object");
