@@ -8,7 +8,6 @@ namespace BECore {
         constexpr float kDegreesToRadians = std::numbers::pi_v<float> / 180.0f;
     }  // namespace
 
-    //-NoStd: as the declaration
     Array<Vec2, 4> MakeTransformedQuad(const Rect& rect, const DrawTransform& transform) {
         const float radians = transform.rotation * kDegreesToRadians;
         const float cosine = std::cos(radians);
