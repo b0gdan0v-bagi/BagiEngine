@@ -29,18 +29,27 @@ Event-based logging. `Logger` pushes entries into a lock-free ring buffer, `LogE
 | `ConsoleSink` | stdout/stderr with ANSI colors (only when that stream is a terminal) | `colorEnabled` |
 | `FileSink` | Thread-safe file logging | `filename`, `append` |
 | `OutputSink` | Platform debug output (`OutputDebugString` on Windows, stderr on macOS; nothing on the web) | none |
+| `LogHistorySink` | Keeps the last lines in a `LogHistory` for the editor's Console panel | `capacity` (default 2048, clamped to 64..65536 when `Initialize()` builds the history) |
 
 ## Sink Configuration
 
 File: `config/LoggerConfig.xml`, entries `<sink .../>`:
-- `type`: the sink **class name** (`OutputSink`, `ConsoleSink`, `FileSink`), resolved by `AbstractFactory<ILogSink>`
+- `type`: the sink **class name** (`OutputSink`, `ConsoleSink`, `FileSink`, `LogHistorySink`), resolved by `AbstractFactory<ILogSink>`
 - `enabled`: enable/disable
 - `priority`: processing order (lower runs first)
 - `minLevel`: minimum level to process
 
 A `type` that is not registered in the factory is logged as an error by `MakeFromConfig` (`Config 'LoggerConfig': sinks[0].type: Unknown factory type: 'Console'`) and the entry is dropped. A `sink` without a `type` is dropped without a message. If the config yields no sinks, `LoggerManager` logs a warning and falls back to a `ConsoleSink`. The error and the warning are written while the sinks are still being built, so they sit in the ring buffer and reach the sinks at the first `LogEvent::Flush()`.
 
-`GetSinks()` and `GetSink<T>()` of `LoggerManager` are public (`CoreManager::GetLoggerManager().GetSink<ConsoleSink>()`). Tests: `tests/BECore/FileSinkTest.cpp` (the line a `FileSink` writes), `tests/BECore/LoggerConfigTest.cpp` (unknown type reported and dropped, the fallback warning), `tests/BECore/ConfigFieldSchemaTest.cpp` (only with `BE_WITH_EDITOR`; the Config Editor offers exactly the factory names), `tests/BECore/ConfigEditorSaveTest.cpp` (only with `BE_WITH_EDITOR`; the round trip: every offered type is staged, saved to a temporary file, reloaded and built into a `LoggerManager`; a value outside the dropdown is reported on reload). A test that builds sinks points every `FileSink` `filename` into a temporary directory and lets the `LoggerManager` go out of scope before it ends.
+`GetSinks()` and `GetSink<T>()` of `LoggerManager` are public (`CoreManager::GetLoggerManager().GetSink<ConsoleSink>()`). Tests: `tests/BECore/FileSinkTest.cpp` (the line a `FileSink` writes), `tests/BECore/LoggerConfigTest.cpp` (unknown type reported and dropped, the fallback warning), `tests/BECore/ConfigFieldSchemaTest.cpp` (only with `BE_WITH_EDITOR`; the Config Editor offers exactly the factory names), `tests/BECore/ConfigEditorSaveTest.cpp` (only with `BE_WITH_EDITOR`; the round trip: every offered type is staged, saved to a temporary file, reloaded and built into a `LoggerManager`; a value outside the dropdown is reported on reload). Tests of the history: `tests/BECore/LogSiteTest.cpp` (the site through the macros and the ring), `LogHistoryTest.cpp` (the drop, the counts, the categories), `LogHistorySinkTest.cpp` (the sink from XML, a line from a worker thread). A test that builds sinks points every `FileSink` `filename` into a temporary directory and lets the `LoggerManager` go out of scope before it ends.
+
+## The history
+
+`LogHistory` (`LogHistory.h`, plain C++) is a ring of `capacity` records with the level, the `LogSite`, the time text, a category and a copy of the message; it counts the kept records per level and says when it changed (`GetVersion()`). `LogHistorySink` fills it from `LogEvent`, so it lives on the main thread, where `Flush()` delivers lines, and takes no lock; whoever reads or clears it (the panel) is on that thread too. A full history reuses the oldest slot's string, so a line that fits allocates nothing.
+
+- A line has no category of its own: it is the module folder of the site's file (`LogCategoryOfFile`: after `Modules/`, else after the last `src/`), `General` without one, at most `kMaxLogCategories` kept and the rest `Other`. `sequence` of a record only grows, also across `Clear()`.
+- A game that ships its own `LoggerConfig.xml` replaces the engine's whole file, so it has to add the `LogHistorySink` entry itself; without it `GetSink<LogHistorySink>()` is null and the Console panel has nothing to show (it says so).
+- The web overlay has no history sink (`tests/BECore/WebConfigTest.cpp` expects its one console sink).
 
 ## Best Practices
 
