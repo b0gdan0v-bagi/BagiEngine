@@ -9,7 +9,7 @@ namespace BECore {
      * @brief Writes what `Ser::Save` and the generated `Serialize` give into a JSON document
      *
      * The interim DOM-backed writer of the control layer: the document is built as a `Json` and taken with Take(). The shapes
-     * (Control/CLAUDE.md, "JSON shapes of the reflection pair"): Write and WriteAttribute are the same member, BeginObject a member
+     * (Reflection/CLAUDE.md, "JSON shapes of the reflection pair"): Write and WriteAttribute are the same member, BeginObject a member
      * object, BeginArray an array member whose elements are objects, and an element that holds only a scalar `value` is that scalar.
      * A call that does not fit the open scope (an End with nothing open, a member written into an array) is ignored, never an abort.
      */

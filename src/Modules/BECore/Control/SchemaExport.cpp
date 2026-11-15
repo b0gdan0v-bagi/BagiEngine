@@ -66,6 +66,18 @@ namespace BECore {
             return parent != nullptr ? MakeJsonString(parent->Name()) : Json();
         }
 
+        /// The members the type entry and the `list_types` entry share
+        Json TypeHeadJson(const TypeInfo& info, const TypeRegistry& registry) {
+            Json json = Json::object();
+            json["name"] = MakeJsonString(info.Name());
+            json["parent"] = ParentJson(info, registry);
+            json["abstract"] = info.isAbstract;
+            json["creatable"] = IsCreatable(info);
+            json["purpose"] = MakeJsonString(PurposeName(info.meta.purpose));
+            json["icon"] = MakeJsonString(info.meta.icon);
+            return json;
+        }
+
         Vector<const TypeInfo*> SortedByName(const Vector<const TypeInfo*>& infos) {
             Vector<const TypeInfo*> sorted = infos;
             eastl::sort(sorted.begin(), sorted.end(), [](const TypeInfo* a, const TypeInfo* b) { return a->Name() < b->Name(); });
@@ -163,13 +175,7 @@ namespace BECore {
     }
 
     Json TypeEntryJson(const TypeInfo& info, const TypeRegistry& registry) {
-        Json json = Json::object();
-        json["name"] = MakeJsonString(info.Name());
-        json["parent"] = ParentJson(info, registry);
-        json["abstract"] = info.isAbstract;
-        json["creatable"] = IsCreatable(info);
-        json["purpose"] = MakeJsonString(PurposeName(info.meta.purpose));
-        json["icon"] = MakeJsonString(info.meta.icon);
+        Json json = TypeHeadJson(info, registry);
         if (info.factoryBase != 0) {
             const TypeInfo* base = registry.Find(info.factoryBase);
             if (base != nullptr) {
@@ -217,13 +223,7 @@ namespace BECore {
             if (filter.creatableOnly && !IsCreatable(*info)) {
                 continue;
             }
-            Json entry = Json::object();
-            entry["name"] = MakeJsonString(info->Name());
-            entry["parent"] = ParentJson(*info, registry);
-            entry["abstract"] = info->isAbstract;
-            entry["creatable"] = IsCreatable(*info);
-            entry["purpose"] = MakeJsonString(PurposeName(info->meta.purpose));
-            entry["icon"] = MakeJsonString(info->meta.icon);
+            Json entry = TypeHeadJson(*info, registry);
             entry["fields"] = info->fields.size();
             entry["methods"] = info->methods.size();
             types.push_back(std::move(entry));

@@ -11,7 +11,7 @@ namespace BECore {
      * The interim DOM-backed reader of the control layer: it walks a `Json` the caller keeps alive and never copies it. Values are always
      * strict: a bool is a JSON bool, a number a JSON number of the target's kind and range, a string a JSON string, and a refusal is an
      * error under the field's path that leaves the target as it was. The shapes it reads are those of JsonSerializer
-     * (Control/CLAUDE.md, "JSON shapes of the reflection pair"). Input from outside: check IsJsonNestedDeeperThan before keeping the
+     * (Reflection/CLAUDE.md, "JSON shapes of the reflection pair"). Input from outside: check IsJsonNestedDeeperThan before keeping the
      * document, as the control layer does; this class only counts open scopes against ReaderLimits::kMaxXmlNesting.
      */
     class JsonDeserializer final : public IDeserializer {
