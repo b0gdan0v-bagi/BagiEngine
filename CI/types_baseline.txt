@@ -8,8 +8,6 @@
 #   directory-iterator                 engine-file-layer, engine-path-type
 #   sto, stable-sort, stringstream     core-type-aliases-cleanup (and the entry that touches the file)
 # Whoever empties a rule deletes its lines here.
-src/Modules/BECore/Animation/Timeline.cpp function 4
-src/Modules/BECore/Animation/Timeline.h function 12
 src/Modules/BECore/Animation/Tween.h function 3
 src/Modules/BECore/Animation/TweenManager.cpp function 7
 src/Modules/BECore/Animation/TweenManager.h function 10
@@ -89,8 +87,6 @@ tests/BECore/SceneNodeFilesTest.cpp fstream 2
 tests/BECore/SceneNodeInstanceTest.cpp fstream 1
 tests/BECore/SceneSplitTest.cpp fstream 1
 tests/BECore/SpikeCaptureTest.cpp fstream 1
-tests/BECore/TimelinePlayTest.cpp function 1
-tests/BECore/TimelineTest.cpp function 2
 tests/BECore/Tls/FakeTlsStream.h sto 1
 tests/BECore/Tls/TlsLocalEndpointTest.cpp fstream 1
 tests/BECore/Tls/TlsLocalEndpointTest.cpp sto 4
