@@ -4,8 +4,10 @@
 #include <BECore/Logger/Logger.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
+#include <BECore/Reflection/ClassMeta.h>
 #include <BECore/Reflection/OpenDeserializer.h>
 #include <BECore/Reflection/TypeTraits.h>
+#include <BECore/Resource/AssetParts.h>
 #include <BECore/Resource/IResource.h>
 #include <BECore/Resource/IResourceLoader.h>
 #include <BECore/Resource/ResourceCache.h>
@@ -62,6 +64,20 @@ namespace BECore {
         template <HasReflection T>
         T LoadSerialized(StringView path);
 
+        /**
+         * @brief The object @p T of one part of an asset file (`gem.asset.xml`: `<sim>`, `<visual>`, `<editor>`), reading that part only
+         *
+         * The split file of the part is read when it is fresh (OpenAssetPart); no object of another part is created or filled, and a
+         * reflected type the part does not allow is an error at its path and stays default. Empty when the file does not open or the
+         * part or the object is absent; failures are logged like LoadSerialized.
+         */
+        template <HasReflection T>
+        Optional<T> LoadSerializedPart(StringView path, AssetPurpose part);
+
+        /// LoadSerializedPart on a background thread (the path is copied)
+        template <HasReflection T>
+        Task<Optional<T>> LoadSerializedPartAsync(StringView path, AssetPurpose part);
+
         /** @brief Loaders are asked in registration order; a null loader is refused. */
         void RegisterLoader(IntrusivePtr<IResourceLoader> loader);
 
@@ -78,6 +94,9 @@ namespace BECore {
          * "ui/hud.ui.xml" asks for ".ui.xml" first and ".xml" next, so a format inside XML files can have its own loader.
          */
         IResourceLoader* FindLoaderForPath(StringView path) const;
+
+        template <HasReflection T>
+        static Optional<T> ReadPartObject(StringView path, AssetPurpose part);
 
         ResourceCache _cache;
         Vector<IntrusivePtr<IResourceLoader>> _loaders;
@@ -187,6 +206,41 @@ namespace BECore {
         LogDeserializeErrors(path, deserializer);
 
         return result;
+    }
+
+    template <HasReflection T>
+    Optional<T> ResourceManager::ReadPartObject(StringView path, AssetPurpose part) {
+        auto opened = OpenAssetPart(path, part);
+        if (!opened) {
+            LOG_ERROR(Format("Failed to load file for deserialization: {}", opened.error()).c_str());
+            return {};
+        }
+        if (!*opened) {
+            return {};
+        }
+        IDeserializer& deserializer = **opened;
+
+        Optional<T> result;
+        if (deserializer.BeginObject(ReflectionTraits<T>::name)) {
+            result.emplace();
+            result->Deserialize(deserializer);
+            deserializer.EndObject();
+        }
+        LogDeserializeErrors(path, deserializer);
+        return result;
+    }
+
+    template <HasReflection T>
+    Task<Optional<T>> ResourceManager::LoadSerializedPartAsync(StringView path, AssetPurpose part) {
+        // The caller's view may be gone by the time the task resumes on the background thread
+        const String ownedPath(path);
+        co_await SwitchToBackground(TaskPriority::Normal, BE_TASK_LABEL("Load serialized part"));
+        co_return ReadPartObject<T>(ownedPath, part);
+    }
+
+    template <HasReflection T>
+    Optional<T> ResourceManager::LoadSerializedPart(StringView path, AssetPurpose part) {
+        return ReadPartObject<T>(path, part);
     }
 
 }  // namespace BECore

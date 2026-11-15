@@ -65,6 +65,9 @@ namespace BECore {
 //   BE_CLASS(ClassName, FACTORY_BASE, SERIALIZABLE)     - Multiple options
 //   BE_CLASS(ClassName, ICON=image)                     - Lucide icon name for the editor, read into ClassMeta::icon
 //                                                         (kebab case [a-z0-9-]+; other values warn and are ignored)
+//   BE_CLASS(ClassName, PURPOSE=visual)                 - Part of an asset the class belongs to (sim, visual or editor),
+//                                                         read into ClassMeta::purpose; without it the class is Common,
+//                                                         which every part may hold (other values warn and are ignored)
 //
 // @param ClassName The name of the containing class (required for static methods)
 // @param ...       Optional: Comma-separated options (FACTORY_BASE, SERIALIZABLE, etc.)

@@ -89,15 +89,18 @@ namespace BECore {
             return false;
         }
 
-        if (!_rectPipeline.Initialize(_device.GetDevice(), _swapchain.GetRenderPass())) {
+        // The render pass is kept for the life of the backend (a recreated swapchain keeps the format), so the colour space is decided once
+        _linearColors = IsSrgbFormat(_swapchain.GetImageFormat());
+
+        if (!_rectPipeline.Initialize(_device.GetDevice(), _swapchain.GetRenderPass(), _linearColors)) {
             return false;
         }
 
-        if (!_texturePipeline.Initialize(_device.GetDevice(), _swapchain.GetRenderPass())) {
+        if (!_texturePipeline.Initialize(_device.GetDevice(), _swapchain.GetRenderPass(), _linearColors)) {
             return false;
         }
 
-        if (!_geometryPipeline.Initialize(_device.GetDevice(), _swapchain.GetRenderPass(), _texturePipeline.GetDescriptorSetLayout())) {
+        if (!_geometryPipeline.Initialize(_device.GetDevice(), _swapchain.GetRenderPass(), _linearColors, _texturePipeline.GetDescriptorSetLayout())) {
             return false;
         }
 
@@ -332,10 +335,15 @@ namespace BECore {
     }
 
     void VulkanRendererBackend::Clear(const Color& color) {
-        _clearColor.float32[0] = color.r / 255.0f;
-        _clearColor.float32[1] = color.g / 255.0f;
-        _clearColor.float32[2] = color.b / 255.0f;
-        _clearColor.float32[3] = color.a / 255.0f;
+        constexpr float kChannelScale = 1.0f / 255.0f;
+        const auto channel = [this](uint8_t value) {
+            const float srgb = static_cast<float>(value) * kChannelScale;
+            return _linearColors ? SrgbToLinear(srgb) : srgb;
+        };
+        _clearColor.float32[0] = channel(color.r);
+        _clearColor.float32[1] = channel(color.g);
+        _clearColor.float32[2] = channel(color.b);
+        _clearColor.float32[3] = static_cast<float>(color.a) * kChannelScale;
     }
 
     void VulkanRendererBackend::Present() {

@@ -27,6 +27,8 @@ _RE_CLASS_DEF = re.compile(
 _RE_BE_MACRO = re.compile(r'\bBE_(CLASS|EVENT)\s*\(\s*(\w+)\s*(?:,\s*([^)]+?)\s*)?\)')
 _RE_ICON_NAME = re.compile(r'[a-z0-9-]+')
 _RE_BLANKS_AROUND_HYPHEN = re.compile(r'\s*-\s*')
+# The values of PURPOSE=<part>; a class without the option has the purpose "common" (ClassData.purpose).
+PURPOSE_VALUES = ("sim", "visual", "editor")
 _RE_FIELD_MARKER = re.compile(r'\bBE_REFLECT_FIELD\b')
 _RE_METHOD_MARKER = re.compile(r'\bBE_FUNCTION\b')
 _RE_ATTRIBUTE = re.compile(r'\[\[.*?\]\]\s*', re.DOTALL)
@@ -508,6 +510,7 @@ class RegexParser:
             register_self = any(o.upper() == "REGISTER_SELF" for o in options)
             element_name = None
             icon = ""
+            purpose = "common"
             for opt in options:
                 if "=" in opt:
                     key, val = opt.split("=", 1)
@@ -515,6 +518,8 @@ class RegexParser:
                         element_name = val.strip()
                     elif key.strip().upper() == "ICON":
                         icon = self._read_icon(val, brace_pos + 1 + be.start(), class_name)
+                    elif key.strip().upper() == "PURPOSE":
+                        purpose = self._read_purpose(val, brace_pos + 1 + be.start(), class_name)
 
             parent_class = _extract_parent_class(inheritance)
             ns = self._namespace_at(text, m.start())
@@ -543,6 +548,7 @@ class RegexParser:
                 element_name=element_name,
                 register_self=register_self,
                 icon=icon,
+                purpose=purpose,
             )
 
             self._warn_nested_markers(body, brace_pos + 1, class_name)
@@ -564,6 +570,17 @@ class RegexParser:
             f"ICON={value} ignored on '{class_name}': the value must be a Lucide name "
             f"in kebab case ([a-z0-9-]+)")
         return ""
+
+    def _read_purpose(self, value: str, pos: int, class_name: str) -> str:
+        """The part of PURPOSE=<part> in lower case; an unknown or empty value warns and is `common`."""
+        value = value.strip().lower()
+        if value in PURPOSE_VALUES:
+            return value
+        self._warn(
+            pos, "class",
+            f"PURPOSE={value} ignored on '{class_name}': the value must be one of "
+            f"{', '.join(PURPOSE_VALUES)}")
+        return "common"
 
     def _namespace_at(self, text: str, pos: int) -> str:
         """Determine the namespace at a given character position via brace counting."""

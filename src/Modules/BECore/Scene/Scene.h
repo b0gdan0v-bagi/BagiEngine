@@ -124,7 +124,7 @@ namespace BECore {
         IntrusivePtr<SceneNode> CreateNode(PoolString name, SceneNode* parent = nullptr);
 
         /// The @p index of InstantiateNode() that means "after the last child"
-        static constexpr size_t kAppend = std::numeric_limits<size_t>::max();
+        static constexpr size_t kAppend = (std::numeric_limits<size_t>::max)();
 
         /**
          * @brief Instantiates a node file at run time, with the overrides a `<node ref>` of a scene file would have
