@@ -70,8 +70,8 @@ namespace BECore {
                 call.Fail(seconds.error());
                 return;
             }
-            // A paused real clock: the step makes `frames` stepped frames of dt. The frame that runs this handler is a held (or running) one that the call counts too, hence the
-            // one more. The manual clock asks for its frames when the call is deferred and runs no frame meanwhile; a game that is running just counts frames
+            // A paused real clock steps `frames` frames of dt itself; the frame that runs this handler ends too and counts, hence one more.
+            // The manual clock requests its frames when the call is deferred
             GamePause* pause = service.GetPause();
             const bool stepsPausedGame = pause != nullptr && pause->IsPaused() && !service.IsManualClock();
             if (stepsPausedGame) {
