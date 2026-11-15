@@ -88,9 +88,7 @@ TYPES: Tuple[Tuple[str, str], ...] = (
     ("HashSet", "unordered_set|hash_set"),
     ("Optional", "optional"),
     ("UniquePtr", "unique_ptr"),
-    ("SharedPtr", "shared_ptr"),
     ("MakeUnique", "make_unique"),
-    ("MakeShared", "make_shared"),
     ("Pair", "pair"),
     ("MakePair", "make_pair"),
     ("Variant", "variant"),
@@ -113,6 +111,7 @@ LOCK_FOLDERS = (TESTS_FOLDER, "BECore/Threading")
 RULES: Tuple[Rule, ...] = (
     # the types the type layer replaces
     *(Rule("type", qualified(names), TYPE_ADVICE.format(alias=alias)) for alias, names in TYPES),
+    Rule("type", qualified("shared_ptr|make_shared"), "there is no `SharedPtr` in BECore/Types: share through `IntrusivePtr` of BECore/RefCounted (a test's shared fake: Common/SharedPtr.h) or " + MARK_ADVICE),
     # the callable types of BECore/Utils
     Rule("function", qualified("function"), "use `MoveOnlyFunction` for a stored callback, `FunctionRef` for a parameter called only during the call, `FixedFunction` where it must never allocate (Utils/CLAUDE.md), or " + MARK_ADVICE),
     # allocating calls

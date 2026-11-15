@@ -193,15 +193,18 @@ namespace BECore {
                 }
             }
 
-            /// Moves the callable of @p other in; this one is empty before and @p other is empty after
+            /// Moves the callable of @p other in; this one is empty before and @p other is empty after. @p other is emptied before the
+            /// relocation: the destructor of the moved-from capture runs inside it and may read or assign @p other.
             void Take(FunctionImpl& other) noexcept {
-                if (other._ops != nullptr) {
-                    other._ops->relocate(other._buffer, _buffer);
-                }
-                _invoke = other._invoke;
-                _ops = other._ops;
+                const Invoke invoke = other._invoke;
+                const Ops* ops = other._ops;
                 other._invoke = nullptr;
                 other._ops = nullptr;
+                if (ops != nullptr) {
+                    ops->relocate(other._buffer, _buffer);
+                }
+                _invoke = invoke;
+                _ops = ops;
             }
 
             alignas(detail::kFunctionInlineAlign) mutable unsigned char _buffer[InlineBytes];

@@ -283,6 +283,13 @@ def test_the_advice_of_a_lock_and_a_thread_names_the_engine_type(tmp_path):
     assert "`Thread(name, body)`" in messages[1]
 
 
+def test_the_advice_of_a_shared_pointer_names_the_intrusive_one(tmp_path):
+    write(tmp_path, "src/Foo.cpp", "std::shared_ptr<int> p;\nauto q = std::make_shared<int>();\n")
+    messages = types.check(tmp_path).findings
+    assert len(messages) == 2
+    assert all("`IntrusivePtr`" in message for message in messages)
+
+
 def test_a_folder_matches_whole_segments_only(tmp_path):
     assert found(tmp_path, "std::regex r;\n", "src/mytests/X.cpp") == ["regex"]
     assert found(tmp_path, "std::regex r;\n", "src/tests.cpp") == ["regex"]

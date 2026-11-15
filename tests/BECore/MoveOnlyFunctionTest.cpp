@@ -392,6 +392,83 @@ namespace BECore::Tests {
         EXPECT_EQ(LifeCounter::alive, 0);
     }
 
+    /// What the moved-from husks of a capture saw of the function they were relocated out of
+    struct HuskReport {
+        bool armed = false;
+        int reports = 0;
+        int sawFull = 0;
+        int calls = 0;
+    };
+
+    /// Its moved-from copy reports to @p onHusk when it is destroyed; the inline path leaves such a husk inside the source's buffer
+    template <size_t Padding>
+    struct WatchesAsHusk {
+        using OnHusk = void (*)(Task& holder, HuskReport& report);
+
+        LifeCounter life;
+        char padding[Padding + 1] = {};
+        Task* holder;
+        OnHusk onHusk;
+        HuskReport* report;
+        bool husk = false;
+
+        WatchesAsHusk(Task* heldBy, OnHusk callback, HuskReport* shared) : holder(heldBy), onHusk(callback), report(shared) {}
+        WatchesAsHusk(WatchesAsHusk&& other) noexcept : life(std::move(other.life)), holder(other.holder), onHusk(other.onHusk), report(other.report) {
+            other.husk = true;
+        }
+        ~WatchesAsHusk() {
+            if (husk && report->armed) {
+                ++report->reports;
+                onHusk(*holder, *report);
+            }
+        }
+
+        void operator()() const {}
+    };
+
+    static_assert(kFunctionFitsInline<WatchesAsHusk<InlinePadding::value>>);
+    static_assert(!kFunctionFitsInline<WatchesAsHusk<HeapPadding::value>>);
+
+    TYPED_TEST(MoveOnlyFunctionOverwriteTest, AMovedFromHuskSeesTheSourceEmptyWhileItIsRelocated) {
+        HuskReport report;
+        const auto look = [](Task& holder, HuskReport& shared) { shared.sawFull += holder ? 1 : 0; };
+        Task source{WatchesAsHusk<TypeParam::value>{&source, look, &report}};
+        report.armed = true;
+
+        Task target{std::move(source)};
+        EXPECT_EQ(report.sawFull, 0);
+        EXPECT_FALSE(source);
+        ASSERT_TRUE(target);
+
+        Task other;
+        other = std::move(target);
+        EXPECT_EQ(report.sawFull, 0);
+        EXPECT_FALSE(target);
+        EXPECT_TRUE(other);
+        report.armed = false;
+    }
+
+    TYPED_TEST(MoveOnlyFunctionOverwriteTest, AMovedFromHuskThatAssignsTheSourceLeavesBothValid) {
+        HuskReport report;
+        const auto assign = [](Task& holder, HuskReport& shared) { holder = Task{[&shared] { ++shared.calls; }}; };
+        Task source{WatchesAsHusk<TypeParam::value>{&source, assign, &report}};
+        report.armed = true;
+
+        Task target{std::move(source)};
+        report.armed = false;
+        ASSERT_TRUE(target);
+        target();
+        if (source) {  // the husk stored a callable of its own: only the inline path runs a husk
+            source();
+            EXPECT_GT(report.reports, 0);
+            EXPECT_EQ(report.calls, 1);
+        }
+        EXPECT_EQ(LifeCounter::alive, 1);
+        target = nullptr;
+        source = nullptr;
+        EXPECT_EQ(LifeCounter::alive, 0);
+    }
+
     TEST_F(MoveOnlyFunctionTest, TheEmptyState) {
         Task empty;
         EXPECT_FALSE(empty);
