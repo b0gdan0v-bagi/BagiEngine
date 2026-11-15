@@ -114,7 +114,6 @@ namespace BECore {
         /// Pings the connections that went quiet and drops the ones that did not answer (hub thread, on the tick)
         void CheckLiveness(LivenessMap& liveness, RoomTime now);
 
-        /// The HubSink
         void SendTo(ConnectionId connection, String text);
         void CloseConnection(ConnectionId connection, const String& reason);
 

@@ -27,10 +27,9 @@ namespace BECore {
     };
 
     /**
-     * @brief The anchor grid of Unity: three by three points, then a stretch row and a stretch column on each axis, and stretch on both.
+     * @brief The anchor grid of Unity: three by three points, then a stretch row and a stretch column on each axis, and stretch on both. Pure like UILayout.
      *
-     * Pure like UILayout. The nine points and the stretch of both axes are the shorthands of `UIRectSpec::anchor`; the other six are edge anchors
-     * only.
+     * The nine points and the stretch of both axes are the shorthands of `UIRectSpec::anchor`; the other six are edge anchors only.
      */
     class UIAnchorPresets {
     public:

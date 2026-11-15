@@ -146,10 +146,8 @@ namespace BECore::VulkanSwapchainPolicy {
         return channel <= kLinearSegment ? channel / kLinearSlope : std::pow((channel + kOffset) / (1.0f + kOffset), kGamma);
     }
 
-    /// How ImGui's colours have to be written into the main swapchain. ImGui's vertex colours are sRGB values (a
-    /// theme colour 0.14 means "0.14 on the screen"), but an sRGB attachment encodes what it is given, so written as
-    /// they are they come out much too light: they have to be turned into linear values first. A swapchain that is
-    /// not sRGB stores them as they are.
+    /// ImGui's vertex colours are sRGB values and an sRGB attachment encodes what it is given, so Linearize turns them
+    /// linear first; a swapchain that is not sRGB takes them as they are.
     [[nodiscard]] constexpr ImGuiColorMode ChooseImGuiColorMode(VkFormat mainSwapchainFormat) {
         return IsSrgbFormat(mainSwapchainFormat) ? ImGuiColorMode::Linearize : ImGuiColorMode::Direct;
     }

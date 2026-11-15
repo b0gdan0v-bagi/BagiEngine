@@ -10,8 +10,7 @@ namespace BECore {
     /**
      * @brief The named rectangles a game publishes for one canvas, in canvas units (for a SceneView canvas: scene units).
      *
-     * An element that names one (`UIRectSpec::region`) is laid out inside it instead of inside its parent. The set is plain data: the canvas layout reads it,
-     * the validator and `ui_tree` list it. A canvas has tens of regions at most, so the entries are a flat vector searched linearly.
+     * An element that names one (`UIRectSpec::region`) is laid out inside it instead of inside its parent. Plain data: a flat vector searched linearly (a canvas has tens of regions at most).
      */
     class UIRegionSet {
     public:

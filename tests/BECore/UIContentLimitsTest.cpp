@@ -207,7 +207,7 @@ namespace BECore::Tests {
     }
 
     TEST(UIContentLimitsTest, ANineSliceWithANegativeDestinationAndTinyBordersHasNoInfinitePiece) {
-        // The factor that shrinks the borders was extent / borders: -10 / 2e-44 is -infinity, and a border times it is -infinity
+        // The factor that shrinks the borders is extent / borders: -10 / 2e-44 is -infinity, and a border times it is -infinity
         const UIEdges tiny{1.0e-44f, 1.0e-44f, 1.0e-44f, 1.0e-44f};
         for (const float extent : {-10.0f, -kLargest, kNan, -kInfinity}) {
             for (const UINineSlicePiece& piece : UINineSlice::Compute(Rect{0.0f, 0.0f, 64.0f, 64.0f}, tiny, Rect{0.0f, 0.0f, extent, extent})) {
@@ -260,7 +260,7 @@ namespace BECore::Tests {
                     context.sceneViewWidth = 1280.0f;
                     context.sceneViewHeight = 720.0f;
 
-                    // A scale of 1e-45 divided the output into infinity before the range of the scale was kept
+                    // A scale of 1e-45 divides the output into infinity unless the range of the scale is kept
                     for (float* field : {&context.pixelDensity, &context.displayScale, &context.userScale, &context.outputWidth, &context.outputHeight, &context.sceneViewWidth,
                                          &context.sceneViewHeight, &context.safeArea.x, &context.safeArea.w, &context.worldBox.x, &context.worldBox.w, &context.worldBox.h}) {
                         const float kept = *field;

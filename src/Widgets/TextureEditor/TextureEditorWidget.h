@@ -12,15 +12,10 @@
 namespace BECore {
 
     /**
-     * @brief ImGui widget for managing the TextureLibrary sprite definitions
+     * @brief ImGui panel for the TextureLibrary sprite definitions
      *
-     * Two-panel layout:
-     *   Left  - Scrollable list of all named sprite entries; [+ Add] button
-     *   Right - Edit the selected entry (name, texture file, srcRect); [Delete] button
-     *
-     * Right panel now includes interactive texture preview with drag-to-select for srcRect.
-     *
-     * [Save] persists changes to config/TextureLibrary.xml.
+     * Left: the list of named entries and [+ Add]. Right: the selected entry (name, texture file, srcRect with a
+     * drag-to-select preview) and [Delete]. [Save] persists the changes to config/TextureLibrary.xml.
      */
     class TextureEditorWidget : public IWidget {
         BE_CLASS(TextureEditorWidget)

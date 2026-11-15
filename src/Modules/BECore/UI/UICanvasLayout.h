@@ -25,8 +25,7 @@ namespace BECore {
      * does not choose the variants again: they depend on the bounds only.
      *
      * **Transitions.** After the variants (and on every layout) a pass `Sync`s the run of each `UITransitionComponent` with the element's authored `active.visible`, makes a leaving element visible
-     * again so it keeps its rect and is drawn, and sets `UIElement::inputLocked` on the subtree of a transitioning element whose input is off. The authored state is the target; nothing else
-     * moves it.
+     * again so it keeps its rect and is drawn, and sets `UIElement::inputLocked` on the subtree of a transitioning element whose input is off. The authored state is the target.
      */
     class UICanvasLayout {
     public:

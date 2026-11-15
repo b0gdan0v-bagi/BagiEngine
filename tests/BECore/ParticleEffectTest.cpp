@@ -205,7 +205,6 @@ namespace BECore::Tests {
         EXPECT_EQ(clamped.maxParticles, kMinParticles);
         EXPECT_EQ(clamped.burstCount, kMinParticles);
 
-        // The effect itself keeps what was written
         EXPECT_EQ(effect.maxParticles, 0);
     }
 

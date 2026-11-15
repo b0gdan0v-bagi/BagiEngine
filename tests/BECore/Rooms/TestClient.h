@@ -16,7 +16,6 @@
 
 namespace BECore::Tests {
 
-    /// One message a client received, parsed
     struct ReceivedMessage {
         String text;
         Json json;
@@ -172,7 +171,6 @@ namespace BECore::Tests {
             Send(id, CreateRoomMessage{String(game), String(name), std::move(options), isPublic});
         }
 
-        /// `list_rooms` for @p game
         void List(ConnectionId id, StringView game = "fake") {
             Send(id, ListRoomsMessage{String(game)});
         }

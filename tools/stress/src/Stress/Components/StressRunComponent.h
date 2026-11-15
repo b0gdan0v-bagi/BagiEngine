@@ -28,14 +28,12 @@ namespace BECore::Stress {
      * only with `--stress-frames` (the fixed mode, below) or `--stress-ramp`; a plain run just shows the scene.
      *
      * **Fixed mode.** A sample is the `FrameStats` of the last finished frame, which this update (inside the next frame) reads once per new frame
-     * id: a frame it already took, a held frame (the game stood still) and every frame before `firstMeasured` are skipped. When
-     * `StressState::Version()` moves, the frame that notices it is the frame that builds the new nodes, textures and glyphs, so it and the next
-     * `warmup` frames are skipped: the warm-up restarts with every change of the scene, the count or the language. After `frames` samples the line
-     * (`FormatJsonLine`) goes to the sink and `ApplicationEvents::QuitEvent` is emitted, once. The recorder's samples are reserved when the run starts.
+     * id; the frame that notices a change of `StressState::Version()` builds the new nodes, so it and the next `warmup` frames are skipped. After
+     * `frames` samples the line (`FormatJsonLine`) goes to the sink and `ApplicationEvents::QuitEvent` is emitted, once.
      *
-     * **Ramp mode** (`--stress-ramp`, which wins over `--stress-frames`). Each new frame's measure (`workMs` or `cpuMs` by `--stress-measure`) goes
-     * to the `RampController`, and the count it answers is set into the state; its settle frames cover the frame that builds the new count, so no
-     * warm-up logic is needed here. When it is done (or aborted) the line (`FormatRampLine`) goes out and the application is asked to quit, once.
+     * **Ramp mode** (`--stress-ramp`, which wins over `--stress-frames`). Each new frame's measure goes to the `RampController`, and the count it
+     * answers is set into the state; its settle frames cover the frame that builds the new count. When it is done (or aborted) the line
+     * (`FormatRampLine`) goes out and the application is asked to quit, once. Both modes: `CLAUDE.md`, "Fixed mode" and "Ramp mode".
      */
     class StressRunComponent : public IComponent {
         BE_CLASS(StressRunComponent)

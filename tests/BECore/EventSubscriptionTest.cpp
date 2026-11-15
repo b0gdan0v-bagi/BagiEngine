@@ -3,10 +3,6 @@
 
 namespace BECore::Tests {
 
-    // =========================================================================
-    // Test Events
-    // =========================================================================
-
     namespace TestEvents {
         struct SimpleEvent : public EventBase<SimpleEvent> {};
 
@@ -15,10 +11,6 @@ namespace BECore::Tests {
             constexpr explicit DataEvent(int v) : value(v) {}
         };
     }  // namespace TestEvents
-
-    // =========================================================================
-    // Test Subscriber Classes
-    // =========================================================================
 
     class SimpleSubscriber : public SubscriptionHolder {
     public:
@@ -61,7 +53,6 @@ namespace BECore::Tests {
         SUCCEED() << "The static_asserts above are the check";
     }
 
-    /// SubscriptionHolder unsubscribes automatically when it goes out of scope.
     TEST(EventSubscriptionTest, SubscriptionHolder) {
         {
             RaiiSubscriber subscriber;
@@ -82,7 +73,6 @@ namespace BECore::Tests {
         EXPECT_EQ(newSubscriber.callCount, 1) << "Only the new subscriber should receive the event";
     }
 
-    /// Unsubscribing happens in the destructor.
     TEST(EventSubscriptionTest, DestructorUnsubscribe) {
         {
             RaiiSubscriber sub1;
@@ -104,7 +94,6 @@ namespace BECore::Tests {
         EXPECT_EQ(sub3.callCount, 1) << "Only sub3 should receive the event";
     }
 
-    /// UnsubscribeAll removes one event type and leaves the others alone.
     TEST(EventSubscriptionTest, UnsubscribeAll) {
         SimpleSubscriber subscriber;
 

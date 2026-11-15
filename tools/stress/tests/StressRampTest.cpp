@@ -2,11 +2,7 @@
 #include <Stress/RampController.h>
 #include <gtest/gtest.h>
 
-/**
- * Coverage of the ramp's search with synthetic frame times as a function of the count: a linear cost, a cliff, a machine that is too fast and
- * one that is too slow, the p95 of a step (one outlier is forgiven, two are not), the settle frames, the final re-measure that steps down, the
- * abort guard, counts always in range, and the same answer for the same frames.
- */
+/// The frame times are synthetic: a function of the count shown.
 namespace BECore::Stress::Tests {
 
     namespace {

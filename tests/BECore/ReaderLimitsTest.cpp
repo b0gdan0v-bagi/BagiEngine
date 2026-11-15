@@ -74,10 +74,6 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    // ---------------------------------------------------------------------------------------------
-    // XmlDeserializer
-    // ---------------------------------------------------------------------------------------------
-
     TEST(ReaderLimitsTest, XmlStringOverTheLimitIsRefused) {
         String big = "<root>";
         big.append(ReaderLimits::kMaxXmlDocumentBytes, ' ');
@@ -247,10 +243,6 @@ namespace BECore::Tests {
         EXPECT_LT(message.size(), 100u);
         EXPECT_NE(message.find("..."), StringView::npos);
     }
-
-    // ---------------------------------------------------------------------------------------------
-    // BinaryDeserializer
-    // ---------------------------------------------------------------------------------------------
 
     TEST(ReaderLimitsTest, BinaryFileThatIsNotARegularFileOrIsTooBigIsRefusedBeforeItIsRead) {
         BinaryDeserializer folder;

@@ -121,7 +121,6 @@ namespace BECore::Tests {
         ASSERT_TRUE(_scene->MoveNode(Node("A"), nullptr, 2));
         EXPECT_EQ(Tree(), "B B1. B1a.. B2. C A");
 
-        // Up
         ASSERT_TRUE(_scene->MoveNode(Node("A"), nullptr, 0));
         EXPECT_EQ(Tree(), "A B B1. B1a.. B2. C");
 
@@ -237,7 +236,6 @@ namespace BECore::Tests {
         EXPECT_EQ(copy->GetComponent<SceneEventCounter>()->updateCount, 1);
         EXPECT_EQ(a.GetComponent<SceneEventCounter>()->updateCount, 1);
 
-        // Editing the copy leaves the original
         auto copyTransform = copy->GetComponent<TransformComponent>();
         ASSERT_TRUE(copyTransform);
         EXPECT_FLOAT_EQ(copyTransform->_x, kOriginalX);
@@ -256,7 +254,6 @@ namespace BECore::Tests {
         EXPECT_EQ(first->GetName(), "A (copy)"_intern);
         EXPECT_EQ(second->GetName(), "A (copy 2)"_intern);
         EXPECT_EQ(third->GetName(), "A (copy 3)"_intern);
-        // Each lands right behind the original
         EXPECT_EQ(Tree(), "A A (copy 3) A (copy 2) A (copy) B B1. B1a.. B2. C");
     }
 

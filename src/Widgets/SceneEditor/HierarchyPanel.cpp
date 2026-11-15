@@ -268,7 +268,7 @@ namespace BECore {
             DrawTypeCombo(state, scene);
         }
 
-        // Keys of the focused panel; a text field (rename, later the search box) keeps them to itself
+        // Keys of the focused panel; a text field (rename, the search box) keeps them to itself
         void HandleKeys(HierarchyState& state) {
             if (!ImGui::IsWindowFocused() || ImGui::GetIO().WantTextInput || state.selected == nullptr) {
                 return;

@@ -13,18 +13,14 @@
 
 namespace BECore {
 
-    // Forward declaration
     template <typename T>
     class Task;
 
     namespace Detail {
 
         /**
-         * CompletionEvent - one-shot signal "the coroutine reached final_suspend".
-         *
-         * Owned by TaskHandle; the promise only keeps a pointer to it. A waiting thread blocks on a condition
-         * variable instead of spinning, and reads an atomic flag instead of the coroutine frame state
-         * (which the worker thread is writing at the same time).
+         * One-shot signal "the coroutine reached final_suspend". Owned by TaskHandle; the promise only keeps a
+         * pointer to it. Waiters read an atomic flag, never the coroutine frame state the worker is writing.
          */
         class CompletionEvent {
         public:
@@ -33,10 +29,7 @@ namespace BECore {
             CompletionEvent(const CompletionEvent&) = delete;
             CompletionEvent& operator=(const CompletionEvent&) = delete;
 
-            /**
-             * Makes the owner of this event stay alive until the task finishes.
-             * Signal() hands the reference back, so the owner may be destroyed right inside Signal().
-             */
+            /** Keeps the owner of this event alive until the task finishes; the owner may be destroyed right inside Signal(). */
             void SetKeepAlive(IntrusivePtr<RefCountedAtomic> owner) {
                 LockGuard lock(_mutex);
                 _keepAlive = std::move(owner);
@@ -44,9 +37,8 @@ namespace BECore {
 
             /**
              * Marks the task as finished, wakes all waiters and drops the keep-alive reference.
-             * The notification is sent under the mutex: a waiter cannot return (and destroy the event)
-             * until the lock is released. Nothing may touch the event after this call returns: if the
-             * keep-alive reference was the last one, the event is gone.
+             * Notifies under the mutex, so a waiter cannot return (and destroy the event) before the lock is released.
+             * Nothing may touch the event after this returns: the keep-alive reference may have been the last one.
              */
             void Signal() {
                 IntrusivePtr<RefCountedAtomic> keepAlive;
@@ -68,9 +60,7 @@ namespace BECore {
                 return std::move(_keepAlive);
             }
 
-            /**
-             * Wakes waiters without finishing the task, so they re-check their own predicate (used by Cancel).
-             */
+            /** Wakes waiters without finishing the task, so they re-check their own predicate (used by Cancel). */
             void Wake() {
                 LockGuard lock(_mutex);
                 _condition.notify_all();
@@ -80,9 +70,7 @@ namespace BECore {
                 return _signaled.load(std::memory_order_acquire);
             }
 
-            /**
-             * Blocks until the task has finished or interrupted() returns true.
-             */
+            /** Blocks until the task has finished or interrupted() returns true. */
             template <typename Predicate>
             void WaitUntil(Predicate interrupted) {
                 UniqueLock lock(_mutex);
@@ -96,14 +84,7 @@ namespace BECore {
             IntrusivePtr<RefCountedAtomic> _keepAlive;  // guarded by _mutex
         };
 
-        /**
-         * Базовый promise_type для Task<T>.
-         * Содержит общую логику для void и non-void типов.
-         */
-        /**
-         * FinalAwaiter - awaiter для final_suspend.
-         * Определён вне локального контекста, чтобы поддерживать шаблонный await_suspend.
-         */
+        /** The awaiter of final_suspend: signals the completion, then resumes the awaiting coroutine if there is one. */
         struct FinalAwaiter {
             bool await_ready() noexcept {
                 return false;
@@ -144,7 +125,6 @@ namespace BECore {
 
             void unhandled_exception() noexcept {
                 _error = TaskError::Exception;
-                // В debug можно логировать через ASSERT
                 ASSERT(false, "Unhandled exception in coroutine");
             }
 
@@ -153,10 +133,6 @@ namespace BECore {
             }
         };
 
-        /**
-         * Promise для Task<T> где T != void.
-         * Хранит возвращаемое значение.
-         */
         template <typename T>
         struct TaskPromise : TaskPromiseBase<T> {
             Variant<std::monostate, T> _result;
@@ -182,10 +158,6 @@ namespace BECore {
             }
         };
 
-        /**
-         * Promise для Task<void>.
-         * Не хранит значение, только ошибку.
-         */
         template <>
         struct TaskPromise<void> : TaskPromiseBase<void> {
             Task<void> get_return_object() noexcept;
@@ -203,12 +175,8 @@ namespace BECore {
     }  // namespace Detail
 
     /**
-     * Task<T> - основной тип корутины для асинхронных операций.
-     *
-     * Представляет отложенное вычисление, которое может быть запущено
-     * и ожидаемо через co_await.
-     *
-     * @tparam T Тип возвращаемого значения (void для задач без результата)
+     * Coroutine return type: lazy (suspended at the start), move-only, owns its frame. Start it with
+     * TaskManager::Run(...) or `co_await` it from another coroutine.
      *
      * @example
      * Task<int> ComputeAsync() {
@@ -236,7 +204,6 @@ namespace BECore {
             }
         }
 
-        // Move-only
         Task(Task&& other) noexcept : _handle(other._handle) {
             other._handle = nullptr;
         }
@@ -255,10 +222,6 @@ namespace BECore {
         Task(const Task&) = delete;
         Task& operator=(const Task&) = delete;
 
-        // =================================================================
-        // Awaitable interface
-        // =================================================================
-
         bool await_ready() const noexcept {
             return _handle.done();
         }
@@ -272,27 +235,15 @@ namespace BECore {
             return std::move(_handle.promise()).GetResult();
         }
 
-        // =================================================================
-        // Task control
-        // =================================================================
-
-        /**
-         * Проверяет, завершена ли задача.
-         */
         [[nodiscard]] bool IsDone() const noexcept {
             return !_handle || _handle.done();
         }
 
-        /**
-         * Проверяет валидность задачи.
-         */
         [[nodiscard]] bool IsValid() const noexcept {
             return static_cast<bool>(_handle);
         }
 
-        /**
-         * Явный запуск задачи (если не запущена автоматически).
-         */
+        /** Resumes the coroutine once, on the calling thread. */
         void Resume() {
             if (_handle && !_handle.done()) {
                 _handle.resume();
@@ -300,8 +251,8 @@ namespace BECore {
         }
 
         /**
-         * Получение результата (блокирующее).
-         * Запускает корутину до завершения.
+         * Resumes the coroutine on the calling thread until it finishes. Not for a task suspended on the pool: it
+         * would race with the pool (start it with TaskManager::Run and wait on the handle instead).
          */
         decltype(auto) GetResult() {
             while (!IsDone()) {
@@ -310,9 +261,6 @@ namespace BECore {
             return std::move(_handle.promise()).GetResult();
         }
 
-        /**
-         * Получение handle для низкоуровневого доступа.
-         */
         [[nodiscard]] handle_type GetHandle() const noexcept {
             return _handle;
         }
@@ -320,10 +268,6 @@ namespace BECore {
     private:
         handle_type _handle = nullptr;
     };
-
-    // =================================================================
-    // get_return_object implementations
-    // =================================================================
 
     namespace Detail {
 

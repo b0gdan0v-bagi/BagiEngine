@@ -6,7 +6,6 @@
 namespace BECore {
     struct BaseEvent;
 
-    // Менеджер для автоматической регистрации событий
     class EventsQueueRegistry {
     public:
         /// A plain function: MoveOnlyFunction asserts through events, so this header (which every event includes) cannot include it, and an update needs no capture

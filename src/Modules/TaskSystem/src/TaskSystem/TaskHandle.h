@@ -13,32 +13,22 @@
 namespace BECore {
 
     /**
-     * TaskHandleBase - базовый класс для TaskHandle без шаблонного параметра.
-     * Используется для хранения задач в контейнерах.
+     * The type-erased part of TaskHandle, for containers (TaskGroup, LiveTasks). Reference-counted with an atomic
+     * count: the handle may be released from any thread.
      */
     class TaskHandleBase : public RefCountedAtomic {
     public:
         virtual ~TaskHandleBase() = default;
 
-        /**
-         * Проверяет, завершена ли задача.
-         */
         [[nodiscard]] virtual bool IsDone() const = 0;
 
-        /**
-         * Отменяет задачу (если поддерживается).
-         */
         virtual void Cancel() = 0;
 
-        /**
-         * Ожидает завершения задачи (блокирующе).
-         */
         virtual void Wait() = 0;
 
         /**
-         * Получает статус задачи.
          * The coroutine finishes on its own thread without touching _status, so a stored Running that is already
-         * done is reported as Completed here instead of waiting for someone to update it.
+         * done is reported as Completed here.
          */
         [[nodiscard]] TaskStatus GetStatus() const {
             const TaskStatus status = _status.load(std::memory_order_acquire);
@@ -48,9 +38,6 @@ namespace BECore {
             return status;
         }
 
-        /**
-         * Получает ошибку задачи.
-         */
         [[nodiscard]] TaskError GetError() const {
             return _error.load(std::memory_order_acquire);
         }
@@ -73,20 +60,12 @@ namespace BECore {
     };
 
     /**
-     * TaskHandle<T> - handle для отслеживания и управления задачей.
-     *
-     * Позволяет:
-     * - Проверять статус задачи
-     * - Ожидать завершения
-     * - Получать результат
-     * - Отменять выполнение
-     *
-     * @tparam T Тип результата задачи
+     * Owns a task and lets any thread track, wait for, cancel and read it. Cancelling is cooperative: the coroutine
+     * is not interrupted, the handle only reads as cancelled and its waiters return.
      *
      * @example
-     * TaskHandle<int> handle = TaskManager::Run(MyTask());
-     * // ... делаем что-то еще ...
-     * int result = handle.GetResult();
+     * auto handle = TaskManager::GetInstance().Run(MyTask());
+     * auto result = handle->GetResult();  // std::expected<T, TaskError>
      */
     template <typename T = void>
     class TaskHandle : public TaskHandleBase {
@@ -102,10 +81,6 @@ namespace BECore {
         }
 
         ~TaskHandle() override = default;
-
-        // =================================================================
-        // TaskHandleBase interface
-        // =================================================================
 
         [[nodiscard]] bool IsDone() const override {
             return !_task.IsValid() || _completion.IsSignaled();
@@ -136,14 +111,7 @@ namespace BECore {
             _completion.WaitUntil([this] { return IsCancelled(); });
         }
 
-        // =================================================================
-        // Result access
-        // =================================================================
-
-        /**
-         * Получает результат задачи.
-         * Блокирует до завершения, если задача еще выполняется.
-         */
+        /** Blocks until the task has finished; the `Cancelled` error when the handle was cancelled. */
         std::expected<T, TaskError> GetResult() requires(!std::is_void_v<T>) {
             Wait();
             if (IsCancelled()) {
@@ -160,16 +128,9 @@ namespace BECore {
             return _task.GetResult();
         }
 
-        /**
-         * Проверяет, была ли задача отменена.
-         */
         [[nodiscard]] bool IsCancelled() const {
             return _cancelled.load(std::memory_order_acquire);
         }
-
-        // =================================================================
-        // Task access (для внутреннего использования)
-        // =================================================================
 
         Task<T>& GetTask() {
             return _task;
@@ -179,7 +140,6 @@ namespace BECore {
         }
 
         /**
-         * Запускает выполнение задачи.
          * From here until the coroutine finishes the handle keeps itself alive, so the caller may drop its
          * reference (fire and forget); the coroutine is resumed from pool threads that own nothing.
          * The caller of Start() must hold a reference of its own: the task may finish, and release the
@@ -195,9 +155,6 @@ namespace BECore {
             }
         }
 
-        /**
-         * Отмечает задачу как завершенную с ошибкой.
-         */
         void MarkFailed(TaskError error = TaskError::Exception) {
             _error.store(error, std::memory_order_release);
             SetStatus(TaskStatus::Failed);

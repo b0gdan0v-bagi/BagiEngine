@@ -106,7 +106,6 @@ namespace BECore {
         VkCommandPool commandPool = backend.GetCommandPool();
         VulkanTexturePipeline& pipeline = backend.GetTexturePipeline();
 
-        // ---- Staging buffer -------------------------------------------------
         StagingBuffer staging = CreateStagingBuffer(vkDevice, deviceObj, imageSize, rgba);
 
         if (staging.buffer == VK_NULL_HANDLE) {
@@ -115,7 +114,6 @@ namespace BECore {
             return texture;
         }
 
-        // ---- Device-local image ---------------------------------------------
         VkImageCreateInfo imageInfo{};
         imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
         imageInfo.imageType = VK_IMAGE_TYPE_2D;
@@ -167,7 +165,6 @@ namespace BECore {
         }
         vkBindImageMemory(vkDevice, image, imageMemory, 0);
 
-        // ---- Upload via single-time command buffer --------------------------
         {
             VkCommandBuffer cmd = deviceObj.BeginSingleTimeCommands(commandPool);
 
@@ -194,7 +191,6 @@ namespace BECore {
         vkDestroyBuffer(vkDevice, staging.buffer, nullptr);
         vkFreeMemory(vkDevice, staging.memory, nullptr);
 
-        // ---- Image view -----------------------------------------------------
         VkImageViewCreateInfo viewInfo{};
         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         viewInfo.image = image;
@@ -215,7 +211,6 @@ namespace BECore {
             return texture;
         }
 
-        // ---- Sampler --------------------------------------------------------
         VkSamplerCreateInfo samplerInfo{};
         samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
         samplerInfo.magFilter = VK_FILTER_LINEAR;
@@ -240,7 +235,6 @@ namespace BECore {
             return texture;
         }
 
-        // ---- Descriptor set -------------------------------------------------
         VkDescriptorSet descriptorSet = pipeline.AllocateDescriptorSet(vkDevice, imageView, sampler);
         if (descriptorSet == VK_NULL_HANDLE) {
             vkDestroySampler(vkDevice, sampler, nullptr);

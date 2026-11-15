@@ -40,7 +40,6 @@ namespace BECore {
         }
     };
 
-    // Arithmetic types: default is T{}
     template <typename T>
     struct DefaultChecker<T, std::enable_if_t<std::is_arithmetic_v<T>>> {
         static constexpr bool AlwaysFalse = false;
@@ -49,7 +48,6 @@ namespace BECore {
         }
     };
 
-    // Enum types: default is T{}
     template <typename T>
     struct DefaultChecker<T, std::enable_if_t<std::is_enum_v<T>>> {
         static constexpr bool AlwaysFalse = false;
@@ -63,9 +61,7 @@ namespace BECore {
     template <typename T>
         struct DefaultChecker < T,
         std::enable_if_t < !std::is_arithmetic_v<T> && !std::is_enum_v<T> && requires(const T& t) {
-        {
-            t.empty()
-        } -> std::convertible_to<bool>;
+        {t.empty()}->std::convertible_to<bool>;
     } && requires(T& t) {
         t.clear();
     }
@@ -76,7 +72,6 @@ namespace BECore {
         }
     };
 
-    // PoolString
     template <>
     struct DefaultChecker<PoolString> {
         static constexpr bool AlwaysFalse = false;
@@ -85,7 +80,6 @@ namespace BECore {
         }
     };
 
-    // IntrusivePtrAtomic
     template <typename T>
     struct DefaultChecker<IntrusivePtrAtomic<T>> {
         static constexpr bool AlwaysFalse = false;
@@ -94,7 +88,6 @@ namespace BECore {
         }
     };
 
-    // IntrusivePtrNonAtomic
     template <typename T>
     struct DefaultChecker<IntrusivePtrNonAtomic<T>> {
         static constexpr bool AlwaysFalse = false;
@@ -103,7 +96,6 @@ namespace BECore {
         }
     };
 
-    // eastl::optional<T>
     template <typename T>
     struct DefaultChecker<eastl::optional<T>> {
         static constexpr bool AlwaysFalse = false;
@@ -112,7 +104,6 @@ namespace BECore {
         }
     };
 
-    // std::optional<T>
     template <typename T>
     struct DefaultChecker<std::optional<T>> {
         static constexpr bool AlwaysFalse = false;
@@ -121,7 +112,6 @@ namespace BECore {
         }
     };
 
-    // eastl::pair<A, B>
     template <typename A, typename B>
     struct DefaultChecker<eastl::pair<A, B>> {
         static constexpr bool AlwaysFalse = DefaultChecker<A>::AlwaysFalse || DefaultChecker<B>::AlwaysFalse;
@@ -130,7 +120,6 @@ namespace BECore {
         }
     };
 
-    // std::pair<A, B>
     template <typename A, typename B>
     struct DefaultChecker<std::pair<A, B>> {
         static constexpr bool AlwaysFalse = DefaultChecker<A>::AlwaysFalse || DefaultChecker<B>::AlwaysFalse;
@@ -139,7 +128,6 @@ namespace BECore {
         }
     };
 
-    // eastl::array<T, N>
     template <typename T, size_t N>
     struct DefaultChecker<eastl::array<T, N>> {
         static constexpr bool AlwaysFalse = DefaultChecker<T>::AlwaysFalse;
@@ -152,7 +140,6 @@ namespace BECore {
         }
     };
 
-    // std::array<T, N>
     template <typename T, size_t N>
     struct DefaultChecker<std::array<T, N>> {
         static constexpr bool AlwaysFalse = DefaultChecker<T>::AlwaysFalse;
@@ -175,7 +162,6 @@ namespace BECore {
         static void MakeDefault(T&) {}
     };
 
-    // Arithmetic types
     template <typename T>
     struct DefaultMaker<T, std::enable_if_t<std::is_arithmetic_v<T>>> {
         static constexpr bool HasMakeDefault = true;
@@ -184,7 +170,6 @@ namespace BECore {
         }
     };
 
-    // Enum types
     template <typename T>
     struct DefaultMaker<T, std::enable_if_t<std::is_enum_v<T>>> {
         static constexpr bool HasMakeDefault = true;
@@ -205,7 +190,6 @@ namespace BECore {
         }
     };
 
-    // PoolString
     template <>
     struct DefaultMaker<PoolString> {
         static constexpr bool HasMakeDefault = true;
@@ -214,7 +198,6 @@ namespace BECore {
         }
     };
 
-    // IntrusivePtrAtomic
     template <typename T>
     struct DefaultMaker<IntrusivePtrAtomic<T>> {
         static constexpr bool HasMakeDefault = true;
@@ -223,7 +206,6 @@ namespace BECore {
         }
     };
 
-    // IntrusivePtrNonAtomic
     template <typename T>
     struct DefaultMaker<IntrusivePtrNonAtomic<T>> {
         static constexpr bool HasMakeDefault = true;
@@ -232,7 +214,6 @@ namespace BECore {
         }
     };
 
-    // eastl::optional<T>
     template <typename T>
     struct DefaultMaker<eastl::optional<T>> {
         static constexpr bool HasMakeDefault = true;
@@ -241,7 +222,6 @@ namespace BECore {
         }
     };
 
-    // std::optional<T>
     template <typename T>
     struct DefaultMaker<std::optional<T>> {
         static constexpr bool HasMakeDefault = true;
@@ -250,7 +230,6 @@ namespace BECore {
         }
     };
 
-    // eastl::array<T, N> -- reset all elements
     template <typename T, size_t N>
     struct DefaultMaker<eastl::array<T, N>> {
         static constexpr bool HasMakeDefault = DefaultMaker<T>::HasMakeDefault;
@@ -260,7 +239,6 @@ namespace BECore {
         }
     };
 
-    // std::array<T, N> -- reset all elements
     template <typename T, size_t N>
     struct DefaultMaker<std::array<T, N>> {
         static constexpr bool HasMakeDefault = DefaultMaker<T>::HasMakeDefault;

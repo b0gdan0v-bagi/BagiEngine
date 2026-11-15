@@ -241,10 +241,8 @@ namespace BECore::Fuzz {
 
     /**
      * The input is a stream of rounds (`FuzzUiGeometryInput.h`): the numbers of a box, of a nine-slice, of a rect spec, of a stack and of a canvas, as the raw bits of floats, so NaN,
-     * infinity, denormals and the largest floats all appear. Every round runs every builder of the list above with them. What is checked: the mesh of one call has at most the vertices and
-     * indices that the constants of `UIBoxMesh` allow, whole triangles, indices inside the list and vertices that are finite; every rect a layout, a stack, a nine-slice or a canvas gives
-     * has bounded numbers and no negative size; the resolved scale is positive and within its range; a corner radius is finite and not negative, and the two radii on a side fit it.
-     * The sanitizers carry the rest (a float to integer conversion that overflows, a division by zero, an overflow of an index).
+     * infinity, denormals and the largest floats all appear. Every round runs every builder of the list above with them; the properties are the `FUZZ_CHECK`s below, and the
+     * sanitizers carry the rest (a float to integer conversion that overflows, a division by zero, an overflow of an index).
      */
     void FuzzUiGeometry(const uint8_t* data, size_t size) {
         Reader reader(data, size);

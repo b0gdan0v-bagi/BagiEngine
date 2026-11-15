@@ -272,7 +272,6 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIEdgeAnchorScreenTest, AnOffsetThatLeavesTheRegionIsCaughtOnTheMatrix) {
-        // The same screen with the bar pushed 40 units down from the bottom of its region instead of 16 up
         UICanvasLayout layout;
         ASSERT_NO_FATAL_FAILURE(BuildLayout(layout, [](String& text) { Replace(text, "y=\"-16\"", "y=\"40\""); }));
 

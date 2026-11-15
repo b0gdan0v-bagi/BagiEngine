@@ -86,7 +86,7 @@ namespace BECore {
             if (axis.stretched) {
                 return axis.spanStart + (axis.spanExtent - axis.size) * pivot;
             }
-            // origin + extent * anchorMin - size * pivot, written so that anchorMin == pivot adds exactly 0 to the form every file has always had
+            // origin + extent * anchorMin - size * pivot, written so that anchorMin == pivot adds exactly 0 (no rounding noise for a point anchor)
             return origin + (extent - axis.size) * pivot + extent * (anchorMin - pivot) + offset;
         }
 

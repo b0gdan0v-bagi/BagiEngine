@@ -1,10 +1,6 @@
 #include <Stress/SpriteField.h>
 #include <gtest/gtest.h>
 
-/**
- * Coverage of SpriteField: the placement of a sprite is a pure function of its index, the count and the settings, and the atlas pixels
- * are what the scene feeds to IRenderer::CreateTexture.
- */
 namespace BECore::Stress::Tests {
 
     namespace {

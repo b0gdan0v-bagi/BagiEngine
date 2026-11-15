@@ -33,11 +33,7 @@ namespace BECore {
             GetChannel().Disconnect(ErasedInstance(instance), &Invoke<Candidate, Type>);
         }
 
-        /**
-         * @brief Unsubscribe all handlers for a specific instance
-         * @tparam Type Type of the instance
-         * @param instance Pointer to the instance
-         */
+        /// Removes every handler of @p instance from this event's channel
         template <typename Type>
         static void UnsubscribeAll(Type* instance) {
             GetChannel().DisconnectInstance(ErasedInstance(instance));

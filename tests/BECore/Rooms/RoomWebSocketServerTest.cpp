@@ -170,7 +170,6 @@ namespace BECore::Tests {
         auto client = RoomSocketClient::Connect(port);
         ASSERT_TRUE(client.has_value());
 
-        // A ping answers pong, garbage answers error: sent in a row, answered in a row
         const Vector<Pair<String, String>> script = {
             {"{\"v\":1,\"type\":\"ping\"}", "pong"}, {"not json", "error"}, {"{\"v\":1,\"type\":\"ping\"}", "pong"}, {"{\"v\":1,\"type\":\"no_such\"}", "error"},
             {"{\"v\":1,\"type\":\"ping\"}", "pong"},
@@ -229,7 +228,6 @@ namespace BECore::Tests {
         auto first = RoomSocketClient::Connect(port);
         auto second = RoomSocketClient::Connect(port);
         ASSERT_TRUE(first && second);
-        // Both are known to the hub once it answers a ping
         first->Send(PingMessage{});
         second->Send(PingMessage{});
         ASSERT_TRUE(first->WaitFor(RoomMessageTypes::kPong).has_value());
@@ -493,7 +491,6 @@ namespace BECore::Tests {
         ASSERT_TRUE(stuck.has_value());
         FloodWithoutReading(*stuck);
 
-        // The stuck client holds the drain open for the whole grace
         std::chrono::milliseconds elapsed{0};
         std::thread stopping([&] { elapsed = TimeStop(*server); });
         std::this_thread::sleep_for(150ms);
@@ -530,7 +527,6 @@ namespace BECore::Tests {
         ASSERT_TRUE(next->WaitFor(RoomMessageTypes::kPong).has_value());
         EXPECT_FALSE(next->WaitForClose(kShortWait).has_value());
 
-        // The destructor stops a running server, with a drain
         server.reset();
         const auto close = next->WaitForClose();
         ASSERT_TRUE(close.has_value());
@@ -697,10 +693,8 @@ namespace BECore::Tests {
         // Three intervals have passed by now, so the lobby of the drop is only a matter of delivery
         EXPECT_TRUE(ReadUntil(*host, [&] { return SawAwayHuman(*host); })) << "the host never saw the silent guest go away";
 
-        // The guest got the ping first, then the end of the connection
         EXPECT_TRUE(WaitForPing(*guest));
         EXPECT_TRUE(guest->Raw().WaitForEndOfStream());
-        // The host stayed
         RoundTrip(*host);
         EXPECT_FALSE(host->GetCloseFrame().has_value());
     }
@@ -839,7 +833,6 @@ namespace BECore::Tests {
         LetTicksPass();
         EXPECT_EQ(lines.Lines().size(), 1u) << "nothing changed: no second line";
 
-        // The interval has long passed, so a change is logged at once
         auto second = RoomSocketClient::Connect(port);
         ASSERT_TRUE(second.has_value());
         RoundTrip(*second);

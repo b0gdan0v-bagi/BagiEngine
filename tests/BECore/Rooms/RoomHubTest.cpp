@@ -163,7 +163,6 @@ namespace BECore::Tests {
     TEST(RoomHubTest, ErrorsOfEachKind) {
         HubHarness harness;
         const ConnectionId stranger = harness.Connect();
-        // Not in a room
         harness.Start(stranger);
         EXPECT_EQ(harness.Client(stranger).LastErrorCode(), RoomErrors::kNotInRoom);
         EXPECT_EQ(harness.Client(stranger).Last(RoomMessageTypes::kError)->GetString("ref"), "start");
@@ -184,7 +183,6 @@ namespace BECore::Tests {
         harness.Create(stranger, "   ");
         EXPECT_EQ(harness.Client(stranger).LastErrorCode(), RoomErrors::kBadName);
 
-        // A full lobby
         const auto ids = harness.MakeLobby(4);
         const String code = harness.Client(ids[0]).roomCode;
         harness.JoinByName(stranger, code, "Late");
@@ -210,7 +208,6 @@ namespace BECore::Tests {
         harness.JoinByName(stranger, code, "Late");
         EXPECT_EQ(harness.Client(stranger).LastErrorCode(), RoomErrors::kGameStarted);
 
-        // Actions
         const ConnectionId onTurn = FindPlayerOnTurn(harness, ids);
         ASSERT_NE(onTurn, 0u);
         ConnectionId other = 0;

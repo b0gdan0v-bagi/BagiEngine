@@ -20,12 +20,10 @@ namespace BECore {
             return it->second;
         }
 
-        // Heuristic: bool
         if (currentValue == "true" || currentValue == "false") {
             return FieldHint{FieldType::Bool};
         }
 
-        // Heuristic: flags (value contains '|' separator)
         if (currentValue.find('|') != StringView::npos) {
             FieldHint hint;
             hint.type = FieldType::Flags;
@@ -50,7 +48,6 @@ namespace BECore {
             return hint;
         }
 
-        // Heuristic: integer
         {
             int result = 0;
             const auto [ptr, ec] = std::from_chars(currentValue.data(), currentValue.data() + currentValue.size(), result);
@@ -59,7 +56,6 @@ namespace BECore {
             }
         }
 
-        // Heuristic: float
         {
             float result = 0.0f;
             const auto [ptr, ec] = std::from_chars(currentValue.data(), currentValue.data() + currentValue.size(), result);

@@ -54,7 +54,6 @@ namespace BECore {
 
     std::expected<void, ControlError> RoomClient::BeginRequest(StringView url, String firstMessage, bool awaitsJoin) {
         if (_state == RoomClientState::Connected && !_awaitingJoin && url == _url) {
-            // The connection that is open serves the request
             _awaitingJoin = awaitsJoin;
             if (!_transport->SendText(firstMessage)) {
                 _awaitingJoin = false;
@@ -404,7 +403,6 @@ namespace BECore {
         const RoomClientState before = _state;
         ResetConnection();
         if (before != RoomClientState::InRoom && before != RoomClientState::Reconnecting) {
-            // No room to bring back
             ForgetRoom();
             _state = RoomClientState::Disconnected;
             Emit(RoomClientEventKind::Closed, endCode.empty() ? StringView(_endReason) : endCode, reason, {}, closeCode);

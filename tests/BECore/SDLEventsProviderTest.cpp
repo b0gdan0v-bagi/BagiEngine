@@ -315,7 +315,6 @@ namespace BECore::Tests {
         EXPECT_EQ(ui.downs, 1);
         EXPECT_TRUE(recorder.clicks.empty());
 
-        // Once the UI is gone the same click reaches the game
         pushAndProcess();
         ASSERT_EQ(recorder.clicks.size(), 1u);
         EXPECT_FLOAT_EQ(recorder.clicks[0].x, 30.0f);

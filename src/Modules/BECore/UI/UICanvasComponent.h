@@ -23,26 +23,18 @@ namespace BECore {
      *
      * The reflected fields choose the space and the scaler (UICanvasScaler); the element tree, the variants and the cached layout are a UICanvasLayout, which
      * the component feeds with the context of each frame (output size, window metrics, the scene's view size, the node's box for a World canvas).
+     * `OnDraw()` runs in the scene's draw order (node layer, then scene order), sets the canvas's own view transform for its elements and restores the scene's afterwards.
      *
-     * **Drawing.** `OnDraw()` runs in the scene's draw order (node layer, then scene order), sets the canvas's own view transform for its elements and restores the scene's
-     * afterwards. Elements here are plain rects with a color; the controls come with the XML front-end.
+     * **Input** (the rules: `UI/CLAUDE.md`, "Canvases"). The canvas registers as a UIInput handler, with the draw rank of its node as the order, uses the layout of its
+     * last draw, and follows a press that it consumed to the release. The press of an element that `IsInteractive()` and the motion while it is held reach the element
+     * through `UIElement::OnPress` / `OnDrag` (a slider acts on them); the click on the release is still `OnClick`.
      *
-     * **Input.** The canvas registers as a UIInput handler, with the draw rank of its node as the order: the topmost canvas is asked first, and a `modal`
-     * canvas consumes every mouse event while it is shown, so nothing below it and no game code sees one. Otherwise a canvas consumes an event that lands on
-     * a hit-testable element (motion over one is consumed as a hover, unless a button is held whose press the canvas did not take: that drag is the game's),
-     * uses the layout of its last draw, and follows a press that it consumed to the release. The press of an element that `IsInteractive()` and the motion while it is held reach the element through
-     * `UIElement::OnPress` / `OnDrag` (a slider acts on them); the click on the release is still `OnClick`. A canvas of an inactive scene, a hidden one (`visible`) and one with `inputEnabled` off
-     * never consume anything.
+     * **Popups** (`UIElement::HasPopupChildren`, a dropdown's list). The children of an open popup are drawn after the whole tree and hit-tested before it. A click that ends inside an
+     * open popup goes to `UIElement::OnPopupChoice` of the popup instead of the child's `OnClick`. The canvas invalidates its layout when the set of open popups changed (the layout
+     * cache does not see element edits), at the latest on the next draw.
      *
-     * **Popups** (`UIElement::HasPopupChildren`, a dropdown's list). The children of an open popup are drawn after the whole tree and hit-tested before it. A left press that lands on neither an open
-     * popup element nor inside it closes the popup and is consumed (the release too; no click on what is below, no pressed element). A click that ends inside an open popup goes to
-     * `UIElement::OnPopupChoice` of the popup instead of the child's `OnClick`. Opening one popup closes another; a canvas that cannot take input closes its popups. The canvas
-     * invalidates its layout when the set of open popups changed (the layout cache does not see element edits), at the latest on the next draw.
-     *
-     * **Tooltips.** A hovered element with a tooltip (`UIElement::GetTooltipText`: a `UITooltipComponent`) shows it after `UITooltip::kHoverDelay`, a finger held on
-     * it for `UITooltip::kLongPress` shows it too and that press is no click (the release is swallowed); the rules are `UITooltip::Tracker`, the time is `CoreManager::GetTime()`. The plate is drawn
-     * last, over the popups, by a text element the canvas owns: it is no element of the tree, so it takes no input, is never hit, and the layout, `ui_tree` and the validator do not see it. A hidden
-     * canvas, one without input and any press of a mouse hide it.
+     * **Tooltips.** The rules are `UITooltip::Tracker`, the time is `CoreManager::GetTime()`. The plate is drawn last, over the popups, by a text element the canvas owns: it is no element of
+     * the tree, so it takes no input, is never hit, and the layout, `ui_tree` and the validator do not see it.
      *
      * **Regions.** The game publishes named rectangles with SetRegion() and an element places itself in one with `region="name"` (UIRectSpec::region).
      */

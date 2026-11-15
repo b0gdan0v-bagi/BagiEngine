@@ -32,7 +32,7 @@ namespace BECore {
         [[nodiscard]] float ShowSeconds() const;
         [[nodiscard]] float HideSeconds() const;
 
-        /// Some change takes time: a show or a hide has a duration. An inactive spec is the old pop, whatever else it says
+        /// Some change takes time: a show or a hide has a duration. An inactive spec changes in the same frame, whatever else it says
         [[nodiscard]] bool IsActive() const {
             return ShowSeconds() > 0.0f || HideSeconds() > 0.0f;
         }

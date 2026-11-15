@@ -13,13 +13,8 @@
 namespace BECore {
 
     /**
-     * TaskStatistics - статистика и метрики системы задач.
-     *
-     * Собирает информацию о:
-     * - Количестве выполненных задач
-     * - Времени выполнения
-     * - Использовании потоков
-     * - Размерах очередей
+     * Thread-safe counters and duration statistics of tasks. GetSnapshot fills the counters and the durations only;
+     * the `current*` and `workerThreadCount` fields of the Snapshot are left for the caller.
      */
     class TaskStatistics {
     public:
@@ -45,10 +40,6 @@ namespace BECore {
 
         TaskStatistics() = default;
 
-        // =================================================================
-        // Recording methods (thread-safe)
-        // =================================================================
-
         void RecordTaskScheduled() {
             _totalTasksScheduled.fetch_add(1, std::memory_order_relaxed);
         }
@@ -72,10 +63,6 @@ namespace BECore {
         void RecordTaskFailed() {
             _totalTasksFailed.fetch_add(1, std::memory_order_relaxed);
         }
-
-        // =================================================================
-        // Snapshot methods
-        // =================================================================
 
         Snapshot GetSnapshot() const {
             Snapshot snapshot;
@@ -114,10 +101,6 @@ namespace BECore {
             _totalDurationMs = 0.0;
         }
 
-        // =================================================================
-        // Formatted output
-        // =================================================================
-
         String ToString() const {
             auto snapshot = GetSnapshot();
             return "[TaskStatistics] Scheduled: {}, Completed: {}, Cancelled: {}, Failed: {}, AvgDuration: {:.2f}ms"_format(
@@ -140,7 +123,6 @@ namespace BECore {
             }
         }
 
-        // Atomic counters
         std::atomic<uint64_t> _totalTasksScheduled{0};
         std::atomic<uint64_t> _totalTasksCompleted{0};
         std::atomic<uint64_t> _totalTasksCancelled{0};

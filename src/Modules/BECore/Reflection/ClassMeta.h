@@ -52,18 +52,8 @@ namespace BECore {
     }
 
     /**
-     * @brief Compile-time type identifier using hash of type name
-     *
-     * ClassMeta provides a lightweight, compile-time type identification
-     * mechanism using FNV-1a hash of the type name. This allows for
-     * type-erased factory creation and type comparisons without RTTI.
-     *
-     * @example
-     * // Get ClassMeta for a reflected type
-     * constexpr auto meta = GetClassMeta<ConsoleSink>();
-     *
-     * // Compare types
-     * if (meta == GetClassMeta<FileSink>()) { ... }
+     * @brief Type identity of a reflected class: the FNV-1a hash of its name, so types compare and factories
+     * look up without RTTI.
      */
     struct ClassMeta {
         uint64_t typeHash = 0;
@@ -74,40 +64,26 @@ namespace BECore {
         /// Part of an asset the class belongs to, from `BE_CLASS(..., PURPOSE=<part>)`; `Common` when it names none.
         AssetPurpose purpose = AssetPurpose::Common;
 
-        /**
-         * @brief Compare ClassMeta by hash
-         */
+        /// Equality compares typeHash only (name, icon and purpose are ignored).
         constexpr bool operator==(const ClassMeta& other) const {
             return typeHash == other.typeHash;
         }
 
-        /**
-         * @brief Compare ClassMeta by hash
-         */
         constexpr bool operator!=(const ClassMeta& other) const {
             return typeHash != other.typeHash;
         }
 
-        /**
-         * @brief Check if ClassMeta is valid (non-zero hash)
-         */
+        /// False for a default ClassMeta (zero hash).
         constexpr explicit operator bool() const {
             return typeHash != 0;
         }
     };
 
     /**
-     * @brief Get ClassMeta for a reflected type at compile-time
+     * @brief ClassMeta of a reflected type at compile time (needs ReflectionTraits<T>::name)
      *
-     * @tparam T Type with ReflectionTraits specialization
-     * @return ClassMeta containing type hash and name
-     *
-     * @note Requires T to have ReflectionTraits<T>::name defined
-     *
-     * @example
-     * constexpr auto meta = GetClassMeta<ConsoleSink>();
-     * // meta.typeName == "ConsoleSink"
-     * // meta.typeHash == hash of "ConsoleSink"
+     * Only hash and name are filled: icon and purpose stay default here, the generated GetStaticTypeMeta()
+     * of a `BE_CLASS` carries them.
      */
     template <typename T>
     requires HasReflection<T> consteval ClassMeta GetClassMeta() {

@@ -90,7 +90,6 @@ namespace BECore {
                     ImGui::SetScrollHereY();
                 }
 
-                // The chord, right-aligned on the row
                 const String chordText = ChordText(command, hotkeys);
                 if (!chordText.empty()) {
                     const float textWidth = ImGui::CalcTextSize(chordText.c_str()).x;

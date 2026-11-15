@@ -47,7 +47,6 @@ namespace BECore {
             return false;
         }
 
-        // Verify the window was created with SDL_WINDOW_VULKAN flag
         const SDL_WindowFlags windowFlags = SDL_GetWindowFlags(nativeWindow);
         if (!(windowFlags & SDL_WINDOW_VULKAN)) {
             LOG_ERROR("VulkanRendererBackend: SDL_Window was not created with SDL_WINDOW_VULKAN flag. "
@@ -55,18 +54,16 @@ namespace BECore {
             return false;
         }
 
-        // Step 1: Create VkInstance (needed before surface creation)
+        // The instance comes first for the surface, and the surface for the queue pick of the device
         if (!_device.InitializeInstance(nativeWindow)) {
             return false;
         }
 
-        // Step 2: Create VkSurfaceKHR via SDL (platform-agnostic, needs a valid instance)
         if (!SDL_Vulkan_CreateSurface(nativeWindow, _device.GetInstance(), nullptr, &_surface)) {
             LOG_ERROR("VulkanRendererBackend: SDL_Vulkan_CreateSurface failed");
             return false;
         }
 
-        // Step 3: Pick physical device and create logical device (needs surface for queue detection)
         if (!_device.InitializeDevice(_surface)) {
             return false;
         }
@@ -170,13 +167,11 @@ namespace BECore {
         _geometryPipeline.Destroy(vkDevice);
         _swapchain.Destroy(_device);
 
-        // Surface must be destroyed before the instance
         if (_surface != VK_NULL_HANDLE) {
             vkDestroySurfaceKHR(_device.GetInstance(), _surface, nullptr);
             _surface = VK_NULL_HANDLE;
         }
 
-        // Device (logical + physical + instance) cleanup
         _device.Destroy();
     }
 
@@ -276,7 +271,6 @@ namespace BECore {
     }
 
     void VulkanRendererBackend::BeginFrame() {
-        // Begin the swapchain render pass. AcquireFrame() must have been called first.
         if (!_frameAcquired || _inSwapchainPass) {
             return;
         }
@@ -312,7 +306,6 @@ namespace BECore {
         vkCmdEndRenderPass(cmd);
         vkEndCommandBuffer(cmd);
 
-        // Submit the command buffer
         const VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;

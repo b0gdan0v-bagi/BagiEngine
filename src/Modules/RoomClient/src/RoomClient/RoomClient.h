@@ -43,7 +43,7 @@ namespace BECore {
     /// How many events wait for DrainEvents() before the oldest is dropped
     inline constexpr size_t kMaxQueuedRoomClientEvents = 256;
 
-    /// The defaults are the numbers of the design (Decisions of slice 3); a test passes small ones
+    /// The defaults of a real client; a test passes small ones
     struct RoomClientSettings {
         /// Makes the transport of a connection; empty uses MakeDefaultRoomTransport()
         RoomTransportFactory transportFactory;
@@ -123,12 +123,11 @@ namespace BECore {
      * After the first message the state goes Connecting, Connected, InRoom. A `left` from the server leaves the connection open
      * (Connected). Leave() asks to leave the room, Disconnect() closes.
      *
-     * **Heartbeat and reconnect.** The client sends `ping` after pingInterval of silence and counts the connection lost after silenceLimit
-     * of nothing at all (any text is life; the room protocol is used because a browser shows a script no WebSocket ping). A connection
-     * lost in a room (closed, failed, silent) goes to Reconnecting: after a backoff a new connection is opened and `join_room` goes out
-     * with the token, until `joined` (the event Resumed, then the lobby and the view again), a rule that says stop (RoomClientCloseReasons) or
-     * reconnectGiveUp. The old room, lobby and view stay readable while it waits (the game may show them frozen); commands that need the
-     * room are `wrong_state` until Resumed. Resume() does the same for a session saved by an earlier run. The end of all this is one event
+     * **Heartbeat and reconnect** (RoomClient/CLAUDE.md, "Heartbeat and reconnect"). The client sends `ping` after pingInterval of silence
+     * and counts the connection lost after silenceLimit of nothing at all (any text is life; the room protocol is used because a
+     * browser shows a script no WebSocket ping). A connection lost in a room goes to Reconnecting and is retried with the token until
+     * Resumed, a stop rule (RoomClientCloseReasons) or reconnectGiveUp; the old room, lobby and view stay readable meanwhile, and
+     * commands that need the room are `wrong_state`. Resume() does the same for a session saved by an earlier run. The end is one
      * `Closed` and the state Disconnected.
      *
      * Not thread-safe: use it from one thread.
@@ -140,8 +139,6 @@ namespace BECore {
 
         RoomClient(const RoomClient&) = delete;
         RoomClient& operator=(const RoomClient&) = delete;
-
-        // ---- Commands ----
 
         /// Opens a connection to @p url and creates a room of @p game with the player @p name; @p options go to the game's Start() (an
         /// object). @p isPublic asks the server to list the room for ListRooms() (a server that does not know the member keeps the room
@@ -183,8 +180,6 @@ namespace BECore {
         /// at once, the state is Disconnected, and a new Host() may follow without waiting for the old connection to finish
         void Disconnect();
 
-        // ---- Polling ----
-
         /// Takes everything the transport has: parses it, updates the state and queues events, and runs the clocks (heartbeat, connect
         /// timeout, backoff, give-up) against @p now, the time of the frame
         void Poll(RoomTime now);
@@ -194,8 +189,6 @@ namespace BECore {
 
         /// Appends the queued events to @p out in the order they happened and forgets them. Keep @p out as a member so it keeps its capacity
         void DrainEvents(Vector<RoomClientEvent>& out);
-
-        // ---- State ----
 
         [[nodiscard]] RoomClientState GetState() const {
             return _state;

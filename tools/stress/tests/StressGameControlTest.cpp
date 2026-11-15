@@ -2,10 +2,7 @@
 #include <Stress/StressGameControl.h>
 #include <gtest/gtest.h>
 
-/**
- * Coverage of StressGameControl: the state, the actions and the way to act, on a StressState that the test owns.
- * The adapter needs no scene: a scene change reaches the test as a counter.
- */
+/// The adapter needs no scene: a scene change reaches the test as a counter.
 namespace BECore::Stress::Tests {
 
     namespace {

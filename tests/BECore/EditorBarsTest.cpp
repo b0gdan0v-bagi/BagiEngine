@@ -130,12 +130,10 @@ namespace BECore::Tests {
         const ImVec2 center = ToolbarCenter();
         const float step = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x;
 
-        // Stopped: Step is disabled
         Click(center.x + step, center.y);
         EXPECT_EQ(model.GetState(), EditorPlayState::Stopped);
         EXPECT_EQ(model.GetStepCount(), 0u);
 
-        // Pause works from Stopped and from Playing
         Click(center.x, center.y);
         EXPECT_EQ(model.GetState(), EditorPlayState::Paused);
         Click(center.x, center.y);

@@ -172,7 +172,6 @@ namespace BECore::Tests {
         ASSERT_NE(message, nullptr);
         EXPECT_EQ(message->game, "mahjong");
         EXPECT_EQ(ParseOrNull(SerializeClientMessage(*parsed)), ParseOrNull(Message("list_rooms", R"("game":"mahjong")")));
-        // The longest game name is fine, members it does not read are ignored
         EXPECT_NE(As<ListRoomsMessage>(ParseClientMessage(Message("list_rooms", Format(R"("game":"{}","name":5,"public":"x")", Repeat('g', RoomLimits::kMaxGameNameBytes))))), nullptr);
     }
 
@@ -387,7 +386,6 @@ namespace BECore::Tests {
             EXPECT_EQ(ErrorCodeOfText(deep(prefix, RoomLimits::kMaxClientJsonDepth - kOwnLevels + 1)), "bad_message") << prefix.c_str();
             EXPECT_EQ(ErrorCodeOfText(deep(prefix, 7000)), "bad_message") << prefix.c_str();
         }
-        // Brackets inside strings are not levels
         EXPECT_EQ(ErrorCodeOfText(Message("create_room", Format(R"("game":"demo","name":"Ann","options":{{"a":"{}"}})", Repeat('[', 1000)))), "<ok>");
     }
 
@@ -660,7 +658,6 @@ namespace BECore::Tests {
         EXPECT_FALSE(read->seats[2].connected);
         EXPECT_EQ(read->seats[3].kind, SeatKind::Empty);
         EXPECT_EQ(read->seats[3].seat, 3);
-        // Built again from what was read, it is the same text
         EXPECT_EQ(MakeLobbyMessage(*read), MakeLobbyMessage(lobby));
         EXPECT_EQ(GetServerMessageType(*parsed), "lobby");
     }
@@ -862,7 +859,6 @@ namespace BECore::Tests {
         for (const BadInput& input : table) {
             EXPECT_EQ(ServerErrorCodeOf(input.text), String(input.code)) << input.label;
         }
-        // The same members, well formed, pass
         EXPECT_EQ(ServerErrorCodeOf(Message("joined", goodJoined)), "<ok>");
         EXPECT_EQ(ServerErrorCodeOf(Message("view", goodView)), "<ok>");
         EXPECT_EQ(ServerErrorCodeOf(LobbyWith(kGoodLobbyMembers)), "<ok>");
@@ -886,7 +882,6 @@ namespace BECore::Tests {
         EXPECT_EQ(ServerErrorCodeOf(pong, pong.size()), "<ok>");
         EXPECT_EQ(ServerErrorCodeOf(pong, pong.size() - 1), RoomErrors::kMessageTooLarge);
         EXPECT_EQ(ServerErrorCodeOf(Repeat('x', RoomLimits::kMaxServerMessageBytes + 1)), RoomErrors::kMessageTooLarge);
-        // A view of almost a megabyte is read, a byte more is not
         String big = Message("pong", Format(R"("pad":"{}")", ""));
         big.erase(big.size() - 1);
         big.append(R"(,"pad":")");
@@ -911,7 +906,6 @@ namespace BECore::Tests {
     }
 
     TEST(RoomProtocolTest, ParseServerMessageReadsWhatTheServerBuildsForAFullLobbyAndAGameSizedView) {
-        // The biggest honest lobby, and a view of a few hundred KiB: both come back whole
         LobbySnapshot lobby;
         lobby.room = "ABCDE";
         lobby.game = Repeat('g', RoomLimits::kMaxGameNameBytes);
@@ -1084,7 +1078,6 @@ namespace BECore::Tests {
         ASSERT_NE(read, nullptr);
         ASSERT_EQ(read->rooms.size(), 1u);
         EXPECT_EQ(read->rooms[0].host, "A\xC3\xA9 n");
-        // The size and NUL rules of the reader apply to the new type too
         const String rooms = MakeRoomListMessage(RoomListMessage{});
         EXPECT_EQ(ServerErrorCodeOf(rooms, rooms.size() - 1), RoomErrors::kMessageTooLarge);
         String withNul = rooms;
