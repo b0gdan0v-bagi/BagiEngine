@@ -343,6 +343,11 @@ namespace BECore {
             }
         }
 
+        template <typename T>
+        concept HasAcceptPropertyVisitor = requires(T & object, IPropertyVisitor& visitor) {
+            {object.AcceptPropertyVisitor(visitor)}->std::convertible_to<bool>;
+        };
+
         /// The fields, the methods and the `TypeInfo` of one type, built in place once (the `TypeInfo` spans point into the arrays)
         template <typename T, typename Parent, typename FactoryBase>
         struct TypeStorage {
@@ -366,13 +371,15 @@ namespace BECore {
                     info.parentHash = Parent::GetStaticTypeMeta().typeHash;
                     info.parentOffset = SubobjectOffset<T>([](const T* object) { return static_cast<const void*>(static_cast<const Parent*>(object)); });
                 }
-                if constexpr (requires(T & object, IPropertyVisitor & visitor) { {object.AcceptPropertyVisitor(visitor)}->std::convertible_to<bool>; }) {
+                if constexpr (HasAcceptPropertyVisitor<T>) {
                     info.acceptVisitor = [](void* object, IPropertyVisitor& visitor) -> bool { return static_cast<T*>(object)->AcceptPropertyVisitor(visitor); };
                 }
-                if constexpr (requires(const T& object, ISerializer& serializer) { object.Serialize(serializer); }) {
+                // The generator declares `Serialize` / `Deserialize` of a fieldless `BE_EVENT` and never defines them, so naming them would not link
+                constexpr bool kDefinesSerialize = kFieldCount > 0 || HasAcceptPropertyVisitor<T>;
+                if constexpr (kDefinesSerialize && requires(const T& object, ISerializer& serializer) { object.Serialize(serializer); }) {
                     info.serialize = [](const void* object, ISerializer& serializer) { static_cast<const T*>(object)->Serialize(serializer); };
                 }
-                if constexpr (requires(T & object, IDeserializer & deserializer) { object.Deserialize(deserializer); }) {
+                if constexpr (kDefinesSerialize && requires(T & object, IDeserializer & deserializer) { object.Deserialize(deserializer); }) {
                     info.deserialize = [](void* object, IDeserializer& deserializer) { static_cast<T*>(object)->Deserialize(deserializer); };
                 }
                 if constexpr (!std::is_void_v<FactoryBase>) {

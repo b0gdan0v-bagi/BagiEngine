@@ -21,11 +21,11 @@ namespace BECore::Tests {
 
     static_assert(HasReflection<TestData::Player>, "Player should have reflection");
     static_assert(HasReflection<TestData::Inventory>, "Inventory should have reflection");
-    static_assert(HasReflection<TestData::GameState>, "GameState should have reflection");
+    static_assert(HasReflection<TestData::SavedGameState>, "SavedGameState should have reflection");
 
     static_assert(FieldCount<TestData::Player>() == 4, "Player should have 4 fields");
     static_assert(FieldCount<TestData::Inventory>() == 2, "Inventory should have 2 fields");
-    static_assert(FieldCount<TestData::GameState>() == 3, "GameState should have 3 fields");
+    static_assert(FieldCount<TestData::SavedGameState>() == 3, "SavedGameState should have 3 fields");
 
     static_assert(HasField<TestData::Player>("health"), "Player should have 'health' field");
     static_assert(HasField<TestData::Player>("speed"), "Player should have 'speed' field");
@@ -218,7 +218,7 @@ namespace BECore::Tests {
 
         /// A stream that uses nested objects, arrays of objects, maps, strings and numbers.
         ByteBuffer MakeRichDocument() {
-            TestData::GameState state;
+            TestData::SavedGameState state;
             state.player.health = 64;
             state.player.speed = 2.5f;
             state.player.name = PoolString::Intern("Rich");
@@ -249,7 +249,7 @@ namespace BECore::Tests {
             if (!deserializer.BeginObject("Doc")) {
                 return;
             }
-            TestData::GameState state;
+            TestData::SavedGameState state;
             Ser::Load(deserializer, state, "state");
             Vector<TestData::Player> players;
             Ser::Load(deserializer, players, "players");
@@ -341,7 +341,7 @@ namespace BECore::Tests {
     }
 
     TEST(ReflectionTest, BinaryNestedObjects) {
-        TestData::GameState original;
+        TestData::SavedGameState original;
         original.player.health = 12;
         original.player.speed = 7.25f;
         original.player.name = PoolString::Intern("Nested");
@@ -352,7 +352,7 @@ namespace BECore::Tests {
 
         const ByteBuffer data = SaveToBinary("Save", "state", original);
 
-        TestData::GameState loaded;
+        TestData::SavedGameState loaded;
         loaded.player.health = 0;
         loaded.player.speed = 0.0f;
         loaded.player.isAlive = true;
@@ -402,7 +402,7 @@ namespace BECore::Tests {
     }
 
     TEST(ReflectionTest, BinaryIsSmallerThanXml) {
-        TestData::GameState state;
+        TestData::SavedGameState state;
         state.player.health = 80;
         state.player.speed = 4.5f;
         state.player.name = PoolString::Intern("Compact");
@@ -1101,7 +1101,7 @@ namespace BECore::Tests {
     }
 
     TEST(ReflectionTest, BinaryFileRoundTrip) {
-        TestData::GameState original;
+        TestData::SavedGameState original;
         original.player.health = 33;
         original.player.name = PoolString::Intern("Persistent");
         original.inventory.gold = 12;
@@ -1116,7 +1116,7 @@ namespace BECore::Tests {
         const std::filesystem::path path = TestTempPath("BagiEngineTests_BinaryFileRoundTrip");
         ASSERT_TRUE(serializer.SaveToFile(path));
 
-        TestData::GameState loaded;
+        TestData::SavedGameState loaded;
         {
             BinaryDeserializer deserializer;
             const bool loadedOk = deserializer.LoadFromFile(path);

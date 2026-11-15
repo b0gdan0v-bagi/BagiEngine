@@ -9,6 +9,30 @@
 
 namespace BECore::Tests {
 
+    /// No `Serialize`: its own `Ser::DataAccessor` is what saves it (as `UIEdges` and `UIColor` do)
+    struct AccessorOnly {
+        float value = 0.0f;
+    };
+
+}  // namespace BECore::Tests
+
+namespace BECore::Ser {
+
+    template <>
+    struct DataAccessor<Tests::AccessorOnly> {
+        static void Save(ISerializer& s, const Tests::AccessorOnly& value, StringView key) {
+            s.WriteAttribute(key, value.value);
+        }
+
+        static bool Load(IDeserializer& d, Tests::AccessorOnly& value, StringView key) {
+            return d.ReadAttribute(key, value.value);
+        }
+    };
+
+}  // namespace BECore::Ser
+
+namespace BECore::Tests {
+
     using RegistryTestData::RegInner;
     using RegistryTestData::RegMode;
     using RegistryTestData::RegNode;
@@ -93,6 +117,8 @@ namespace BECore::Tests {
     // A type with a Serialize / Deserialize pair that is no reflected class
     static_assert(DescribeType<Vec2>().kind == TypeKind::Opaque);
     static_assert(DescribeType<Vec2>().objectMeta == nullptr);
+    static_assert(DescribeType<AccessorOnly>().kind == TypeKind::Opaque);
+    static_assert(DescribeType<AccessorOnly>().objectMeta == nullptr);
 
     // A signature type
     static_assert(DescribeSignatureType<void>().kind == TypeKind::Void);
@@ -109,7 +135,7 @@ namespace BECore::Tests {
             return ((Describable<Ts> == Ser::HasDataAccessor<Ts>) && ...);
         }
 
-        static_assert(AgreeWithAccessor<bool, int8_t, uint64_t, float, double, String, FixedString<8>, FixedString<8, false>, PoolString, RegMode, RegInner, Vec2, Vector<int32_t>,
+        static_assert(AgreeWithAccessor<bool, int8_t, uint64_t, float, double, String, FixedString<8>, FixedString<8, false>, PoolString, RegMode, RegInner, Vec2, AccessorOnly, Vector<int32_t>,
                                         SmallVector<int32_t, 2>, FixedVector<int32_t, 2>, Array<int32_t, 2>, StdArray, HashMap<String, int32_t>, HashMap<int32_t, String>,
                                         FixedHashMap<String, int32_t, 4>, Map<String, int32_t>, Optional<int32_t>, EastlOptional, Pair<int32_t, String>, StdPair, Variant<int32_t, float>,
                                         std::monostate, IntrusivePtrNonAtomic<RegNode>, IntrusivePtrAtomic<RegNode>, Vector<IntrusivePtrNonAtomic<RegNode>>>());

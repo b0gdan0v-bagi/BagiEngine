@@ -5,7 +5,6 @@
 #include <BECore/Reflection/TypeRegistry.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
-#include <BECore/Utils/StringUtils.h>
 #include <Common/Printers.h>
 #include <Generated/TypeRegistryTest.gen.hpp>
 #include <gtest/gtest.h>
@@ -240,12 +239,12 @@ namespace BECore::Tests {
         EXPECT_EQ(Detail::ParamName<7>("x"), "arg7");
     }
 
-    TEST_F(TypeRegistryTest, ParameterWithoutAGivenNameIsArgN) {
+    TEST_F(TypeRegistryTest, ParametersCarryTheNamesOfTheDeclaration) {
         const MethodDesc* add = FindMethod(Get("RegMethods"), "Add");
         ASSERT_NE(add, nullptr);
-        for (size_t i = 0; i < add->params.size(); ++i) {
-            EXPECT_FALSE(add->params[i].name.empty());
-        }
+        ASSERT_EQ(add->params.size(), 2U);
+        EXPECT_EQ(add->params[0].name, "amount");
+        EXPECT_EQ(add->params[1].name, "label");
     }
 
     TEST_F(TypeRegistryTest, ParentChainAndDerivedLists) {
@@ -381,6 +380,29 @@ namespace BECore::Tests {
         EXPECT_TRUE(moved);
         moved.Reset();
         EXPECT_FALSE(moved);
+    }
+
+    // The registration block the generator writes into every .gen.hpp, seen through the process-wide registry
+    TEST(TypeRegistryGeneratedTest, EveryReflectedTypeOfThisFileRegisteredItself) {
+        const TypeRegistry& registry = TypeRegistry::GetInstance();
+        for (const StringView name : {"RegInner", "RegNode", "RegAllKinds", "RegBase", "RegDerived", "RegShifted", "RegAttributed", "RegMethods", "RegEvent"}) {
+            const TypeInfo* info = registry.Find(name);
+            ASSERT_NE(info, nullptr) << String(name).c_str();
+            EXPECT_EQ(info->Hash(), HashOf(name));
+            EXPECT_EQ(registry.Find(info->Hash()), info);
+        }
+    }
+
+    TEST(TypeRegistryGeneratedTest, TheGeneratorNamesTheReflectedParent) {
+        const TypeRegistry& registry = TypeRegistry::GetInstance();
+        const TypeInfo* derived = registry.Find("RegDerived");
+        ASSERT_NE(derived, nullptr);
+        EXPECT_EQ(derived->parentHash, HashOf("RegBase"));
+        EXPECT_EQ(registry.Parent(*derived), registry.Find("RegBase"));
+        // The first base is not reflected, so the generator writes no parent (the chain holds one parent per type)
+        const TypeInfo* shifted = registry.Find("RegShifted");
+        ASSERT_NE(shifted, nullptr);
+        EXPECT_EQ(shifted->parentHash, 0U);
     }
 
 }  // namespace BECore::Tests

@@ -13,13 +13,13 @@ namespace BECore {
     namespace ReflectionVariantTestData {
 
         /// An alternative saved as a child object
-        struct Point {
-            BE_CLASS(Point)
+        struct VariantPoint {
+            BE_CLASS(VariantPoint)
 
             BE_REFLECT_FIELD int32_t x = 0;
             BE_REFLECT_FIELD int32_t y = 0;
 
-            bool operator==(const Point& other) const = default;
+            bool operator==(const VariantPoint& other) const = default;
         };
 
     }  // namespace ReflectionVariantTestData

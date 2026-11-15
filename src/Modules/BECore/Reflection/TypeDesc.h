@@ -3,6 +3,7 @@
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/Reflection/ClassMeta.h>
+#include <BECore/Reflection/DataAccessor.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
@@ -305,7 +306,7 @@ namespace BECore {
      */
     template <typename T>
     concept Describable = std::is_arithmetic_v<T> || Detail::IsTextType<T> || IsReflectedEnum<T> || Detail::IsListType<T> || Detail::IsMapType<T> || Detail::IsOptionalType<T> ||
-                          Detail::IsPairType<T> || Detail::IsVariantType<T> || Detail::IsPointerType<T> || Detail::IsSelfSerializing<T> || std::is_same_v<T, std::monostate>;
+                          Detail::IsPairType<T> || Detail::IsVariantType<T> || Detail::IsPointerType<T> || Detail::IsSelfSerializing<T> || Ser::HasDataAccessor<T> || std::is_same_v<T, std::monostate>;
 
     namespace Detail {
 
@@ -351,8 +352,9 @@ namespace BECore {
             } else if constexpr (std::is_same_v<T, std::monostate>) {
                 desc.kind = TypeKind::Void;
             } else {
-                static_assert(IsSelfSerializing<T>, "The type has no Ser::DataAccessor, so it has no TypeDesc (Reflection/TypeDesc.h)");
-                if constexpr (HasStaticMeta<T>) {
+                // A type that is no class of its own but has a `Ser::DataAccessor` specialization (`UIEdges`, `UIColor`) is as opaque as a `Serialize` pair
+                static_assert(IsSelfSerializing<T> || Ser::HasDataAccessor<T>, "The type has no Ser::DataAccessor, so it has no TypeDesc (Reflection/TypeDesc.h)");
+                if constexpr (IsSelfSerializing<T> && HasStaticMeta<T>) {
                     desc.kind = TypeKind::Object;
                     desc.objectMeta = &T::GetStaticTypeMeta;
                 } else {
