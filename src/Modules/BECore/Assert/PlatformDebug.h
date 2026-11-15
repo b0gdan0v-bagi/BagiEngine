@@ -2,7 +2,7 @@
 
 namespace BECore {
 
-    /// Stops in the debugger. On Linux and the web it is `__builtin_trap()`: the program traps, there is no debugger to signal.
+    /// Stops in the debugger. On Linux and the web it is `__builtin_trap()`; on the web there is no debugger.
     inline void DebugBreak() {
 #if defined(PLATFORM_WINDOWS)
         __debugbreak();

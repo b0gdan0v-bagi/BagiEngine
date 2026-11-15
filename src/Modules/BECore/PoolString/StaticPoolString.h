@@ -76,7 +76,6 @@ namespace BECore {
         }
     };
 
-    // Обратные операторы сравнения: PoolString op StaticPoolString
     template <Details::FixedString Str>
     constexpr bool operator==(const PoolString& lhs, const StaticPoolString<Str>& rhs) noexcept {
         return rhs == lhs;

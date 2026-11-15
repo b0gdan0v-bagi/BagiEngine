@@ -9,7 +9,7 @@
 namespace BECore {
     template <typename T>
     struct GetIntrusivePtrType {
-        // Проверяем только RefCountedAtomic, так как RefCounted - это просто алиас
+        // RefCounted is an alias of RefCountedNonAtomic, so testing RefCountedAtomic is enough
         static constexpr bool IsAtomic = std::is_base_of_v<RefCountedAtomic, T>;
         using type = std::conditional_t<IsAtomic, IntrusivePtrAtomic<T>, IntrusivePtrNonAtomic<T>>;
     };

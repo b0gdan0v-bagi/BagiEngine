@@ -24,13 +24,13 @@ namespace BECore {
             }
         };
 
-        // Специальная обертка для пустой строки, вынесенная отдельно для MSVC
+        // The empty entry is a type of its own for MSVC
         struct EmptyEntry {
             PoolStringEntry header;
             constexpr EmptyEntry() : header(BECore::StringUtils::GetEmptyHash(), 0) {}
         };
 
-        // Инициализируем пустую запись здесь, чтобы избежать C2131 внутри класса
+        // Defined here, not inside the class, to avoid MSVC C2131
         inline constexpr EmptyEntry g_EmptyEntryStore{};
 
     }  // namespace Details

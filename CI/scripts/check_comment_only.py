@@ -20,6 +20,7 @@ Output: `path:line: <what differs>` per file (the line is in the working-tree fi
 summary. Exit code 0 when every file is the same without comments, 1 with findings, 2 on a bad argument or a git failure. Standard
 library only.
 """
+
 from __future__ import annotations
 
 import argparse

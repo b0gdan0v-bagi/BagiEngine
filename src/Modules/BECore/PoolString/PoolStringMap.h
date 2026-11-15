@@ -27,7 +27,6 @@ namespace eastl {
 
 namespace BECore {
 
-    // Хешер, поддерживающий разные типы
     struct PoolStringHasher {
         size_t operator()(const PoolString& s) const {
             return eastl::hash<StringView>{}(s.ToStringView());
@@ -77,7 +76,7 @@ namespace BECore {
         using Base = HashMap<PoolString, T, PoolStringHasher, PoolStringEquality>;
         using Base::Base;
 
-        // Гетерогенный поиск без необходимости указывать функторы
+        // Heterogeneous lookup: the caller does not name the hasher and the equality
         template <typename K>
         auto Find(const K& key) const {
             if constexpr (eastl::is_same_v<K, PoolString>) {
@@ -94,7 +93,7 @@ namespace BECore {
         using Base = Map<PoolString, T, eastl::less<PoolString>>;
         using Base::Base;
 
-        // Гетерогенный поиск без необходимости указывать компаратор
+        // Heterogeneous lookup: the caller does not name the comparator
         template <typename K>
         auto Find(const K& key) const {
             return this->find(key);
@@ -107,7 +106,7 @@ namespace eastl {
 
     template <>
     struct equal_to<BECore::PoolString> {
-        using is_transparent = void;  // Позволяет гетерогенный поиск
+        using is_transparent = void;
 
         constexpr bool operator()(const BECore::PoolString& lhs, const BECore::PoolString& rhs) const noexcept {
             return lhs == rhs;
@@ -138,7 +137,7 @@ namespace eastl {
 
     template <>
     struct less<BECore::PoolString> {
-        using is_transparent = void;  // Позволяет гетерогенный поиск
+        using is_transparent = void;
 
         constexpr bool operator()(const BECore::PoolString& lhs, const BECore::PoolString& rhs) const noexcept {
             return lhs.ToStringView() < rhs.ToStringView();
