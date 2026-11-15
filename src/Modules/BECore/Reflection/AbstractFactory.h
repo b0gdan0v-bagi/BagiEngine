@@ -89,6 +89,21 @@ namespace BECore {
         }
 
         /**
+         * @brief The ClassMeta registered under class name @p name, or null when no such type is registered.
+         *
+         * Lets a loader look at a type (its purpose) before it creates an instance.
+         */
+        [[nodiscard]] const ClassMeta* FindMeta(StringView name) const {
+            const uint64_t hash = StringUtils::GetHash(name);
+            for (const ClassMeta& meta : _metas) {
+                if (meta.typeHash == hash) {
+                    return &meta;
+                }
+            }
+            return nullptr;
+        }
+
+        /**
          * @brief Return all registered ClassMeta entries.
          *
          * Useful for iterating over all registered types, e.g. to

@@ -33,6 +33,7 @@ from core.parser import create_parser
 from core.generator import CodeGenerator, compute_enum_type_name
 
 _RE_CORE_ENUM = re.compile(r'\bCORE_ENUM\s*\(\s*(\w+)')
+_RE_IDENTIFIER = re.compile(r'[A-Za-z_]\w*')
 
 
 def scan_headers(source_dirs: List[Path], extensions: List[str] = None) -> List[Path]:
@@ -112,6 +113,38 @@ def collect_warning_lines(cache: MetadataCache, owned_dirs: List[Path], known_en
                     f"in the sources already declares")))
     entries.sort()
     return [f"{path}:{line}: warning: reflection: {message}" for path, line, message in entries]
+
+
+def collect_purpose_errors(cache: MetadataCache, owned_dirs: List[Path]) -> List[str]:
+    """`path:line: error: reflection: ...` for each field whose type names a class of a conflicting purpose.
+
+    A class of purpose P conflicts with a class of purpose Q when Q is not `common` and either Q differs
+    from P or P is `common` (so `common` data never drags a part's types into every part). A type names a
+    class by any identifier in it (`Vector<B>`, `Optional<B>`, `ns::B`); a name that is no class or that
+    several classes of the run share is not checked. Works on the cached class data, so a file that was
+    not parsed again is checked too.
+    """
+    by_name = {}
+    ambiguous = set()
+    for cls in cache.get_all_classes():
+        if cls.name in by_name:
+            ambiguous.add(cls.name)
+        by_name[cls.name] = cls
+
+    entries = set()
+    for cached_path, meta in cache.files.items():
+        if not any(is_under(Path(cached_path), d) for d in owned_dirs):
+            continue
+        for cls in meta.classes:
+            for fld in cls.fields:
+                for name in _RE_IDENTIFIER.findall(fld.type_name):
+                    target = by_name.get(name)
+                    if target is None or name in ambiguous or target.purpose == "common" or target.purpose == cls.purpose:
+                        continue
+                    entries.add((cached_path, cls.line, (
+                        f"'{cls.name}' (purpose {cls.purpose}) has a field of type '{name}' "
+                        f"(purpose {target.purpose})")))
+    return [f"{path}:{line}: error: reflection: {message}" for path, line, message in sorted(entries)]
 
 
 def main() -> int:
@@ -422,6 +455,11 @@ Examples:
         for line in warning_lines:
             print(line, file=sys.stderr)
 
+    # A field of a type of another part: an error of the class, from the cache like the warnings.
+    purpose_errors = collect_purpose_errors(cache, source_dirs + scan_dirs)
+    for line in purpose_errors:
+        print(line, file=sys.stderr)
+
     # Manifest: every .gen.hpp this run owns, including files that were up to date
     if args.manifest:
         owned_dirs = source_dirs + scan_dirs
@@ -454,7 +492,7 @@ Examples:
         verbose_log(f"  Cache: {stats['files']} files, {stats['classes']} classes, {stats['enums']} enums")
         log(f"  Cache load: {cache_load_elapsed:.2f} s | Cache save (serialization): {cache_save_elapsed:.2f} s")
 
-    if error_count > 0:
+    if error_count > 0 or purpose_errors:
         return 1
     if args.warnings_as_errors and warning_lines:
         return 1
