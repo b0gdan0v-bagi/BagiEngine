@@ -71,6 +71,40 @@ namespace BECore {
 
     }  // namespace
 
+    std::expected<RuleSpec, RuleError> ParseRuleSpec(Span<const RuleAxis> axes, Span<const StringView> selectors, StringView origin) {
+        if (selectors.size() != axes.size()) {
+            return std::unexpected(MakeError(Format("rule [{}]: {} selectors for a table of {} axes", origin, selectors.size(), axes.size())));
+        }
+        RuleSpec spec;
+        spec.origin = String(origin);
+        for (size_t a = 0; a < axes.size(); ++a) {
+            const auto selector = axes[a].ParseSelector(selectors[a]);
+            if (!selector) {
+                return std::unexpected(MakeError(Format("rule [{}]: {}", origin, selector.error())));
+            }
+            spec.selectors.push_back(*selector);
+            if (a != 0) {
+                spec.text.push_back(' ');
+            }
+            AppendFormat(spec.text, "{}={}", axes[a].Name(), selectors[a]);
+        }
+        return spec;
+    }
+
+    bool HaveSameDomain(const RuleAxis& a, const RuleAxis& b) {
+        if (a.Count() != b.Count()) {
+            return false;
+        }
+        for (uint32_t value = 0; value < a.Count(); ++value) {
+            const Span<const TagId> tagsA = a.ValueTags(value);
+            const Span<const TagId> tagsB = b.ValueTags(value);
+            if (a.ValueName(value) != b.ValueName(value) || tagsA.size() != tagsB.size() || !eastl::equal(tagsA.begin(), tagsA.end(), tagsB.begin())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     std::expected<RuleCells, RuleError> BakeRules(Span<const RuleAxis> axes, Span<const RuleSpec> rules) {
         const size_t axisCount = axes.size();
         if (axisCount == 0) {

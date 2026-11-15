@@ -49,6 +49,13 @@ namespace BECore {
         Vector<uint32_t> wonCells;
     };
 
+    /// Reads one selector text per axis (`RuleAxis::ParseSelector`) into a rule with `valueClass` 0 and the text
+    /// `<axis>=<selector> <axis>=<selector> ...`. A wrong number of texts or a text that does not parse is an error that names @p origin.
+    [[nodiscard]] std::expected<RuleSpec, RuleError> ParseRuleSpec(Span<const RuleAxis> axes, Span<const StringView> selectors, StringView origin);
+
+    /// Whether two axes have the same values: the same count, names and tag sets (a rule on `(a, b)` can be mirrored to `(b, a)`).
+    [[nodiscard]] bool HaveSameDomain(const RuleAxis& a, const RuleAxis& b);
+
     /**
      * @brief Decides, for every cell of the axes, which rule wins it.
      *
