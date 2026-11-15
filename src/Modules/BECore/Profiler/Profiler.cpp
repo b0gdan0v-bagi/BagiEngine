@@ -21,7 +21,7 @@ namespace BECore {
         constinit std::atomic<const char*> g_threadNames[Profiler::kMaxThreads]{};
         // The sort index + 1 of a thread, 0: none (so the zero-initialised table means "none")
         constinit std::atomic<uint32_t> g_threadSortIndex[Profiler::kMaxThreads]{};
-        // raw: the profiler cannot profile itself (Threading/CLAUDE.md)
+        //-NoStd: the profiler cannot profile itself (Threading/CLAUDE.md)
         constinit std::mutex g_backendMutex;
         // One fan-out per distinct primary, made with std::malloc and never freed (a zone may still end on it); under g_backendMutex
         constinit FanOutBackend* g_fanOuts[Profiler::kMaxFanOuts]{};
@@ -70,7 +70,7 @@ namespace BECore {
     }
 
     bool Profiler::SetBackend(IProfilerBackend* backend) {
-        std::lock_guard lock(g_backendMutex);
+        std::lock_guard lock(g_backendMutex);  //-NoStd: profiler lock (Threading/CLAUDE.md)
         IProfilerBackend* old = _primary.load(std::memory_order_acquire);
         if (old == backend) {
             return true;
@@ -87,7 +87,7 @@ namespace BECore {
     }
 
     void Profiler::SetRingEnabled(bool enabled) {
-        std::lock_guard lock(g_backendMutex);
+        std::lock_guard lock(g_backendMutex);  //-NoStd: profiler lock (Threading/CLAUDE.md)
         if (_ringEnabled.load(std::memory_order_relaxed) == enabled) {
             return;
         }

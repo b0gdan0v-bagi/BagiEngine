@@ -40,7 +40,7 @@ namespace BECore {
     }  // namespace
 
     struct FrameRingBackend::ThreadBuffer {
-        std::thread::id owner;  // raw: the profiler cannot profile itself (Threading/CLAUDE.md)
+        std::thread::id owner;
         uint32_t threadId = 0;
         uint64_t* slots = nullptr;          // kEventsPerThread * kSlotWords words, written through atomic_ref by the owner
         std::atomic<uint64_t> count{0};     // entries [count - capacity, count) are complete; written by the owner only
@@ -70,9 +70,9 @@ namespace BECore {
     bool FrameRingBackend::Start() {
         _generation.fetch_add(1, std::memory_order_relaxed);
         // The clock is read under the mark mutex, so no mark of the new epoch is older than its start
-        std::lock_guard markLock(_markMutex);
+        std::lock_guard markLock(_markMutex);  //-NoStd: profiler lock (Threading/CLAUDE.md)
         const uint64_t ticks = _options.now();
-        std::lock_guard epochLock(_epochMutex);
+        std::lock_guard epochLock(_epochMutex);  //-NoStd: profiler lock (Threading/CLAUDE.md)
         _epochMark = _markCount.load(std::memory_order_relaxed);
         _epochTicks = ticks;
         return true;
@@ -84,7 +84,7 @@ namespace BECore {
         }
 
         const std::thread::id self = std::this_thread::get_id();
-        std::lock_guard lock(_registryMutex);
+        std::lock_guard lock(_registryMutex);  //-NoStd: profiler lock (Threading/CLAUDE.md)
         ThreadBuffer* found = nullptr;
         const uint32_t count = _bufferCount.load(std::memory_order_relaxed);
         for (uint32_t i = 0; i < count && found == nullptr; ++i) {
@@ -198,7 +198,7 @@ namespace BECore {
     }
 
     void FrameRingBackend::FrameMark() {
-        std::lock_guard lock(_markMutex);
+        std::lock_guard lock(_markMutex);       //-NoStd: profiler lock (Threading/CLAUDE.md)
         const uint64_t ticks = _options.now();  // under the lock, so the stored ticks never go backwards
         const uint64_t index = _markCount.load(std::memory_order_relaxed);
         _markReserved.store(index + 1, std::memory_order_relaxed);
@@ -224,7 +224,7 @@ namespace BECore {
         {
             const uint64_t count = _markCount.load(std::memory_order_acquire);
             {
-                std::lock_guard epochLock(_epochMutex);
+                std::lock_guard epochLock(_epochMutex);  //-NoStd: profiler lock (Threading/CLAUDE.md)
                 epochMark = _epochMark;
                 epochTicks = _epochTicks;
             }

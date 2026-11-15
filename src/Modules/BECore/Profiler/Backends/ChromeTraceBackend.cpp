@@ -34,7 +34,7 @@ namespace BECore {
     };
 
     struct ChromeTraceBackend::ThreadBuffer {
-        std::thread::id owner;  // raw: the profiler cannot profile itself (Threading/CLAUDE.md)
+        std::thread::id owner;
         uint32_t threadId = 0;
         std::atomic<uint32_t> count{0};       // events [0, count) are complete; written by the owner only
         std::atomic<uint32_t> startIndex{0};  // the first event of the trace (MarkTraceStart)
@@ -61,7 +61,7 @@ namespace BECore {
         }
 
         const std::thread::id self = std::this_thread::get_id();
-        std::lock_guard lock(_registryMutex);
+        std::lock_guard lock(_registryMutex);  //-NoStd: profiler lock (Threading/CLAUDE.md)
         ThreadBuffer* found = nullptr;
         const uint32_t count = _bufferCount.load(std::memory_order_relaxed);
         for (uint32_t i = 0; i < count && found == nullptr; ++i) {
@@ -148,7 +148,7 @@ namespace BECore {
 
     void ChromeTraceBackend::MarkTraceStart() {
         // By index, not by time stamp: the clock ticks coarser than events follow each other. A buffer registered later holds only later events
-        std::lock_guard lock(_registryMutex);
+        std::lock_guard lock(_registryMutex);  //-NoStd: profiler lock (Threading/CLAUDE.md)
         _startTicks.store(ProfilerClock::Now(), std::memory_order_relaxed);
         const uint32_t count = _bufferCount.load(std::memory_order_relaxed);
         for (uint32_t i = 0; i < count; ++i) {
@@ -165,7 +165,7 @@ namespace BECore {
         const uint64_t start = _startTicks.load(std::memory_order_relaxed);
         const auto timestamp = [start](uint64_t ticks) { return ticks > start ? ProfilerClock::ToNanoseconds(ticks - start) / kNanosecondsPerMicrosecond : 0.0; };
 
-        std::lock_guard lock(_registryMutex);  // against MarkTraceStart and a buffer being registered; recording threads never take it
+        std::lock_guard lock(_registryMutex);  //-NoStd: profiler lock (Threading/CLAUDE.md); against MarkTraceStart and a buffer being registered, recording threads never take it
         String out;
         out.append("{\"traceEvents\":[");
         bool first = true;

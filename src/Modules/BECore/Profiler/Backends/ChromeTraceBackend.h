@@ -60,7 +60,7 @@ namespace BECore {
         const uint64_t _id;  // tells the thread-local cache which recorder its buffer belongs to
         std::atomic<uint64_t> _startTicks;
         std::atomic<uint64_t> _dropped{0};
-        // raw: the profiler cannot profile itself (Threading/CLAUDE.md)
+        //-NoStd: the profiler cannot profile itself (Threading/CLAUDE.md)
         mutable std::mutex _registryMutex;
         ThreadBuffer* _buffers[kMaxThreadBuffers]{};
         std::atomic<uint32_t> _bufferCount{0};

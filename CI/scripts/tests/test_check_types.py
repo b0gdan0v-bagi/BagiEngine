@@ -77,6 +77,19 @@ POSITIVES = [
     ("stable-sort", "std::stable_partition(a, b, p);"),
     ("directory-iterator", "for (auto& e : std::filesystem::directory_iterator(p)) {}"),
     ("fmt", "auto s = fmt::format(\"{}\", 1);"),
+    ("lock", "std::mutex m;"),
+    ("lock", "std::recursive_mutex m;"),
+    ("lock", "std::timed_mutex m;"),
+    ("lock", "std::shared_mutex m;"),
+    ("lock", "std::lock_guard<int> g(m);"),
+    ("lock", "std::unique_lock<int> g(m);"),
+    ("lock", "std::shared_lock<int> g(m);"),
+    ("lock", "std::scoped_lock g(a, b);"),
+    ("lock", "std::condition_variable cv;"),
+    ("lock", "std::condition_variable_any cv;"),
+    ("thread", "std::thread t(f);"),
+    ("thread", "std::jthread t(f);"),
+    ("thread", "auto n = std::thread::hardware_concurrency();"),
     ("include-stream", "#include <fstream>"),
     ("include-stream", "#include <sstream>"),
     ("include-stream", "#  include <iostream>"),
@@ -110,6 +123,16 @@ def test_every_rule_id_has_a_positive_case():
         "BECore::fmtx::name();",
         "int std_string = 0; int stringx = 1;",
         "#include <vector>",
+        "std::thread::id id;",
+        "auto id = std::this_thread::get_id();",
+        "std::this_thread::sleep_for(d);",
+        "std::once_flag f;",
+        "std::call_once(f, g);",
+        "Mutex m{BE_LOCK_SITE(\"x\")};",
+        "LockGuard lock(m);",
+        "Thread t(\"name\", f);",
+        "std::thread_like x;",
+        "mystd::mutex m;",
     ],
 )
 def test_the_companions_that_stay_and_the_alias_names_are_no_hit(tmp_path, code):
@@ -241,6 +264,25 @@ def test_a_tests_folder_deeper_in_the_tree_counts_as_tests(tmp_path):
     assert found(tmp_path, "std::regex r;\n", "tools/stress/tests/X.cpp") == []
 
 
+def test_tests_and_the_threading_layer_allow_raw_locks_and_threads(tmp_path):
+    code = "std::mutex m;\nstd::thread t(f);\n"
+    for relative in ("src/Modules/BECore/Threading/Mutex.h", "tests/BECore/X.cpp", "tools/stress/tests/X.cpp"):
+        assert found(tmp_path, code, relative) == []
+    for relative in ("src/Modules/BECore/Profiler/X.cpp", "src/Mahjong/Arena/X.cpp"):
+        assert found(tmp_path, code, relative) == ["lock", "thread"]
+
+
+def test_a_marker_keeps_a_raw_lock(tmp_path):
+    assert found(tmp_path, "std::mutex a;  //-NoStd: the profiler cannot lock itself\nstd::mutex b;\n") == ["lock"]
+
+
+def test_the_advice_of_a_lock_and_a_thread_names_the_engine_type(tmp_path):
+    write(tmp_path, "src/Foo.cpp", "std::shared_mutex m;\nstd::thread t(f);\n")
+    messages = types.check(tmp_path).findings
+    assert "`SharedMutex`" in messages[0]
+    assert "`Thread(name, body)`" in messages[1]
+
+
 def test_a_folder_matches_whole_segments_only(tmp_path):
     assert found(tmp_path, "std::regex r;\n", "src/mytests/X.cpp") == ["regex"]
     assert found(tmp_path, "std::regex r;\n", "src/tests.cpp") == ["regex"]
@@ -291,6 +333,13 @@ def test_a_lower_count_and_a_path_with_no_hits_are_fixed(tmp_path):
 def test_a_missing_baseline_file_is_an_empty_one(tmp_path):
     assert types.read_baseline(tmp_path / "nothing.txt") == {}
     assert types.read_baseline(None) == {}
+
+
+def test_a_baseline_line_of_the_lock_rule_is_read(tmp_path):
+    baseline = types.read_baseline(baseline_file(tmp_path, "src/Foo.cpp lock 1\n"))
+    assert baseline == {("src/Foo.cpp", "lock"): 1}
+    write(tmp_path, "src/Foo.cpp", "std::mutex m;\n")
+    assert types.check(tmp_path, baseline=baseline).findings == []
 
 
 def test_the_baseline_file_takes_comments_and_rejects_a_bad_line(tmp_path):
