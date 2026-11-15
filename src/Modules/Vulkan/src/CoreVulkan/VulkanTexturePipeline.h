@@ -32,7 +32,7 @@ namespace BECore {
         VulkanTexturePipeline(const VulkanTexturePipeline&) = delete;
         VulkanTexturePipeline& operator=(const VulkanTexturePipeline&) = delete;
 
-        bool Initialize(VkDevice device, VkRenderPass renderPass);
+        bool Initialize(VkDevice device, VkRenderPass renderPass, bool linearizeColors);
         void Destroy(VkDevice device);
 
         // Allocates and writes a descriptor set for the given image view + sampler.

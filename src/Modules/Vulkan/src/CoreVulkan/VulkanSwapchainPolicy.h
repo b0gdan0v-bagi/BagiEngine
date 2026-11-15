@@ -3,6 +3,7 @@
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <limits>
 #include <optional>
@@ -133,6 +134,16 @@ namespace BECore::VulkanSwapchainPolicy {
             default:
                 return false;
         }
+    }
+
+    /// The linear value of an sRGB channel (0..1), by the exact transfer function the shaders use (`ToTarget`): what
+    /// the backend hands an sRGB attachment for a colour that is computed on the CPU, the clear colour
+    [[nodiscard]] inline float SrgbToLinear(float channel) {
+        constexpr float kLinearSegment = 0.04045f;
+        constexpr float kLinearSlope = 12.92f;
+        constexpr float kOffset = 0.055f;
+        constexpr float kGamma = 2.4f;
+        return channel <= kLinearSegment ? channel / kLinearSlope : std::pow((channel + kOffset) / (1.0f + kOffset), kGamma);
     }
 
     /// How ImGui's colours have to be written into the main swapchain. ImGui's vertex colours are sRGB values (a

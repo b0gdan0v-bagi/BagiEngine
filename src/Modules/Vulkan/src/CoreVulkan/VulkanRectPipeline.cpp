@@ -9,7 +9,7 @@
 
 namespace BECore {
 
-    bool VulkanRectPipeline::Initialize(VkDevice device, VkRenderPass renderPass) {
+    bool VulkanRectPipeline::Initialize(VkDevice device, VkRenderPass renderPass, bool linearizeColors) {
         // ---- Shader modules ------------------------------------------------
         VkShaderModule vertModule = CreateShaderModule(device, kRectVertSpv, kRectVertSpvSize);
         VkShaderModule fragModule = CreateShaderModule(device, kRectFragSpv, kRectFragSpvSize);
@@ -25,6 +25,10 @@ namespace BECore {
             return false;
         }
 
+        // The colour space of the target: kLinearize (constant 0) of the shader that takes the colour
+        const VkBool32 linearizeValue = linearizeColors ? VK_TRUE : VK_FALSE;
+        const VkSpecializationMapEntry linearizeEntry{0, 0, sizeof(VkBool32)};
+        const VkSpecializationInfo linearizeInfo{1, &linearizeEntry, sizeof(VkBool32), &linearizeValue};
         VkPipelineShaderStageCreateInfo stages[2]{};
         stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
@@ -35,6 +39,7 @@ namespace BECore {
         stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
         stages[1].module = fragModule;
         stages[1].pName = "main";
+        stages[1].pSpecializationInfo = &linearizeInfo;
 
         // ---- Pipeline layout (push constants only) -------------------------
         VkPushConstantRange pushRange{};
