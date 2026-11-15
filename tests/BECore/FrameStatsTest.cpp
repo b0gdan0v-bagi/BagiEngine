@@ -6,6 +6,7 @@
 #include <BECore/Profiler/Profiler.h>
 #include <BECore/Profiler/ProfilerControl.h>
 #include <BECore/Reflection/XmlDeserializer.h>
+#include <BECore/Renderer/RendererManager.h>
 #include <BECore/Scene/Components/SpriteRendererComponent.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>

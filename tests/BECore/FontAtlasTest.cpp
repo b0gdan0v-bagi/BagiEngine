@@ -1,5 +1,6 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
+#include <BECore/Resource/ResourceManager.h>
 #include <BECore/Text/FontAtlas.h>
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/Text/GlyphOutline.h>

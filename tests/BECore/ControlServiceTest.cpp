@@ -2,6 +2,7 @@
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Time/Time.h>
 #include <Common/EngineEnvironment.h>
 #include <Events/ApplicationEvents.h>
 #include <gtest/gtest.h>
