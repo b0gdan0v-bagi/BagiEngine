@@ -118,13 +118,13 @@ namespace BECore {
             template <typename Var, size_t... I>
             void SaveVariantAlternative(ISerializer& s, const Var& value, std::index_sequence<I...> /*indices*/) {
                 const size_t active = value.index();
-                ((active == I ? (DataAccessor<std::variant_alternative_t<I, Var>>::Save(s, std::get<I>(value), kVariantValueKey), true) : false) || ...);
+                static_cast<void>(((active == I ? (DataAccessor<std::variant_alternative_t<I, Var>>::Save(s, std::get<I>(value), kVariantValueKey), true) : false) || ...));
             }
 
             template <typename Var, size_t... I>
             bool LoadVariantAlternative(IDeserializer& d, Var& value, size_t index, std::index_sequence<I...> /*indices*/) {
                 bool loaded = false;
-                ((index == I ? (loaded = DataAccessor<std::variant_alternative_t<I, Var>>::Load(d, value.template emplace<I>(), kVariantValueKey), true) : false) || ...);
+                static_cast<void>(((index == I ? (loaded = DataAccessor<std::variant_alternative_t<I, Var>>::Load(d, value.template emplace<I>(), kVariantValueKey), true) : false) || ...));
                 return loaded;
             }
 
