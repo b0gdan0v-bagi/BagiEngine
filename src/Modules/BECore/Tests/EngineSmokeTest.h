@@ -25,7 +25,6 @@ namespace BECore::Tests {
         }
     };
 
-    // Compile-time validation of test class
     static_assert(ValidTest<EngineSmokeTest>);
 
 }  // namespace BECore::Tests

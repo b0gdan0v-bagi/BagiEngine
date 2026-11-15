@@ -25,10 +25,6 @@ namespace BECore::Tests {
      * - Have a Run() method returning bool
      * - Have GetStaticTypeName() returning eastl::string_view (from BE_CLASS)
      * - Be derived from ITest
-     *
-     * @example
-     * static_assert(ValidTest<EnumUtilsTest>);
-     * static_assert(ValidTest<ReflectionTest>);
      */
     template <typename T>
     concept ValidTest = requires(T t) {
