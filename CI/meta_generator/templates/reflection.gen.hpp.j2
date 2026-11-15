@@ -90,6 +90,7 @@ template<>
 struct ReflectionTraits<{{ cls.qualified_name }}> {
     static constexpr bool reflected = true;
     static constexpr eastl::string_view name = "{{ cls.name }}";
+    static constexpr AssetPurpose purpose = AssetPurpose::{{ cls.purpose }};
     
     static constexpr auto fields = std::make_tuple(
 {% for field in cls.fields %}
@@ -220,7 +221,8 @@ const ::BECore::ClassMeta& {{ cls.full_qualified_name }}::GetStaticTypeMeta() {
     static const ::BECore::ClassMeta meta{
         ::BECore::StringUtils::GetHash(eastl::string_view{"{{ cls.name }}"}),
         eastl::string_view{"{{ cls.name }}"},
-        eastl::string_view{"{{ cls.icon }}"}
+        eastl::string_view{"{{ cls.icon }}"},
+        ::BECore::AssetPurpose::{{ cls.purpose }}
     };
     return meta;
 }
