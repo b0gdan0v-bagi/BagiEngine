@@ -1,16 +1,60 @@
 #pragma once
 
 #include <BECore/Threading/Mutex.h>
-#include <EASTL/priority_queue.h>
+#include <BECore/Types/Types.h>
 #include <TaskSystem/TaskPriority.h>
 #include <TaskSystem/TaskQueue.h>
 #include <TaskSystem/ThreadPool.h>
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 
 namespace BECore {
+
+    namespace Detail {
+
+        /// A binary heap (the largest element by operator< first) that moves its elements. eastl::priority_queue copies the new element in
+        /// push_heap and gives only a const top(), so it cannot hold a task that owns a move-only capture.
+        template <typename T>
+        class MovableHeap {
+        public:
+            void Push(T value) {
+                _items.push_back(std::move(value));
+                std::push_heap(_items.begin(), _items.end());
+            }
+
+            /// The largest element
+            [[nodiscard]] const T& Top() const {
+                return _items.front();
+            }
+
+            /// Removes the largest element and returns it by move
+            [[nodiscard]] T Pop() {
+                std::pop_heap(_items.begin(), _items.end());
+                T value = std::move(_items.back());
+                _items.pop_back();
+                return value;
+            }
+
+            [[nodiscard]] bool Empty() const {
+                return _items.empty();
+            }
+
+            [[nodiscard]] size_t Size() const {
+                return _items.size();
+            }
+
+            void Clear() {
+                _items.clear();
+            }
+
+        private:
+            Vector<T> _items;
+        };
+
+    }  // namespace Detail
 
     /**
      * TaskScheduler - планировщик задач с приоритетами и отложенным выполнением.
@@ -186,13 +230,13 @@ namespace BECore {
         // The three mutexes below have level 0: no path holds two of them (every guard is scoped and ProcessDelayedTasks schedules after it
         // released its lock), and Shutdown destroys queued handles under one of them, which takes the lock of LiveTasks
         // Очередь главного потока (с приоритетами)
-        eastl::priority_queue<PrioritizedTask> _mainThreadQueue;
+        Detail::MovableHeap<PrioritizedTask> _mainThreadQueue;
         mutable Mutex _mainThreadMutex{BE_LOCK_SITE("Main thread queue")};
 
         // Delayed tasks by real time
-        eastl::priority_queue<DelayedTask> _delayedTasks;
+        Detail::MovableHeap<DelayedTask> _delayedTasks;
         // Delayed tasks by game time (_gameTime), under the same mutex
-        eastl::priority_queue<DelayedTask> _gameDelayedTasks;
+        Detail::MovableHeap<DelayedTask> _gameDelayedTasks;
         Duration _gameTime{};
         mutable Mutex _delayedMutex{BE_LOCK_SITE("Delayed tasks")};
 

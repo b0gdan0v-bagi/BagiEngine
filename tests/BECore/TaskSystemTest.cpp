@@ -9,6 +9,7 @@
 #include <TaskSystem/TaskHandle.h>
 #include <TaskSystem/TaskManager.h>
 #include <TaskSystem/TaskQueue.h>
+#include <TaskSystem/TaskScheduler.h>
 #include <TaskSystem/TaskStatistics.h>
 #include <TaskSystem/ThreadPool.h>
 #include <chrono>
@@ -265,6 +266,137 @@ namespace BECore::Tests {
             queue.Stop();
             EXPECT_TRUE(queue.IsStopped());
         }
+    }
+
+    namespace {
+
+        /// What a task owns in the move-only tests: counts its destructions, so a double destroy or a leak shows as a count other than 1.
+        /// The task holds it through a UniquePtr, so a moved task leaves no second owner.
+        struct CaptureProbe {
+            explicit CaptureProbe(std::atomic<int>& destroyed) : _destroyed(&destroyed) {}
+            ~CaptureProbe() {
+                _destroyed->fetch_add(1, std::memory_order_relaxed);
+            }
+            CaptureProbe(const CaptureProbe&) = delete;
+            CaptureProbe& operator=(const CaptureProbe&) = delete;
+
+        private:
+            std::atomic<int>* _destroyed;
+        };
+
+        /// A task that owns a CaptureProbe and counts its runs.
+        TaskQueue::TaskFunc MakeOwningTask(std::atomic<int>& ran, std::atomic<int>& destroyed) {
+            return [probe = MakeUnique<CaptureProbe>(destroyed), &ran]() { ran.fetch_add(1, std::memory_order_relaxed); };
+        }
+
+    }  // namespace
+
+    TEST(TaskSystemTest, QueueMovesATaskWithAMoveOnlyCapture) {
+        std::atomic<int> ran{0};
+        std::atomic<int> destroyed{0};
+        {
+            TaskQueue queue;
+            queue.Push(MakeOwningTask(ran, destroyed));
+            queue.Push(MakeOwningTask(ran, destroyed));
+            queue.Push(MakeOwningTask(ran, destroyed));
+
+            TaskQueue::TaskFunc task;
+            ASSERT_TRUE(queue.TryPop(task));
+            task();
+            ASSERT_TRUE(queue.TrySteal(task));  // overwrites the finished one: its capture dies here
+            EXPECT_EQ(destroyed.load(), 1);
+            task();
+            EXPECT_EQ(ran.load(), 2);
+
+            queue.Clear();  // the third one never runs
+            EXPECT_EQ(destroyed.load(), 2);
+        }
+        EXPECT_EQ(destroyed.load(), 3) << "the last holder of a stolen task destroys it once";
+        EXPECT_EQ(ran.load(), 2);
+    }
+
+    TEST(TaskSystemTest, UnrunTasksOfAQueueAreDestroyedOnceWithIt) {
+        std::atomic<int> ran{0};
+        std::atomic<int> destroyed{0};
+        {
+            TaskQueue queue;
+            queue.Push(MakeOwningTask(ran, destroyed));
+            queue.Push(MakeOwningTask(ran, destroyed));
+        }
+        EXPECT_EQ(destroyed.load(), 2);
+        EXPECT_EQ(ran.load(), 0);
+    }
+
+    TEST(TaskSystemTest, PoolRunsATaskWithAMoveOnlyCaptureAndDestroysItOnce) {
+        std::atomic<int> ran{0};
+        std::atomic<int> destroyed{0};
+        {
+            ThreadPool pool(2);
+            pool.Submit(MakeOwningTask(ran, destroyed));
+            pool.SubmitToThread(1, MakeOwningTask(ran, destroyed));
+            EXPECT_TRUE(WaitUntil([&ran]() { return ran.load() == 2; }));
+            pool.Shutdown();  // a worker keeps its last task until it takes another one or ends
+        }
+        EXPECT_EQ(ran.load(), 2);
+        EXPECT_EQ(destroyed.load(), 2);
+    }
+
+    TEST(TaskSystemTest, InlinePoolRunsATaskWithAMoveOnlyCaptureAndDestroysItOnce) {
+        std::atomic<int> ran{0};
+        std::atomic<int> destroyed{0};
+        {
+            ThreadPool pool{ThreadPool::InlineTag{}};
+            TaskScheduler scheduler;
+            scheduler.Initialize(&pool);
+            scheduler.Schedule(MakeOwningTask(ran, destroyed), TaskPriority::Normal, ThreadType::Background);
+            EXPECT_EQ(ran.load(), 1) << "an inline job is done when Schedule returns";
+            EXPECT_EQ(destroyed.load(), 1) << "the wrapper that nests the task is gone with the job";
+            scheduler.Shutdown();
+        }
+        EXPECT_EQ(destroyed.load(), 1);
+    }
+
+    TEST(TaskSystemTest, SchedulerMovesTasksWithAMoveOnlyCaptureOnEveryRoute) {
+        std::atomic<int> ran{0};
+        std::atomic<int> destroyed{0};
+        ThreadPool pool(1);
+        TaskScheduler scheduler;
+        scheduler.Initialize(&pool);
+
+        scheduler.Schedule(MakeOwningTask(ran, destroyed), TaskPriority::Normal, ThreadType::MainThread);
+        scheduler.Schedule(MakeOwningTask(ran, destroyed), TaskPriority::High, ThreadType::MainThread);
+        scheduler.ScheduleDelayed(MakeOwningTask(ran, destroyed), std::chrono::nanoseconds(0), TaskPriority::Normal, ThreadType::MainThread);
+        scheduler.ScheduleDelayed(MakeOwningTask(ran, destroyed), std::chrono::nanoseconds(0), TaskPriority::Normal, ThreadType::MainThread, DelayClock::GameTime);
+        EXPECT_EQ(destroyed.load(), 0);
+
+        scheduler.ProcessDelayedTasks();  // releases both delayed tasks into the main-thread queue
+        EXPECT_EQ(scheduler.GetMainThreadQueueSize(), 4u);
+        scheduler.ProcessMainThreadTasks();
+        EXPECT_EQ(ran.load(), 4);
+        EXPECT_EQ(destroyed.load(), 4) << "each task is destroyed once, after its run";
+
+        scheduler.Shutdown();
+        pool.Shutdown();
+        EXPECT_EQ(destroyed.load(), 4);
+    }
+
+    TEST(TaskSystemTest, SchedulerShutdownDestroysUnrunTasksOnce) {
+        std::atomic<int> ran{0};
+        std::atomic<int> destroyed{0};
+        ThreadPool pool(1);
+        TaskScheduler scheduler;
+        scheduler.Initialize(&pool);
+
+        scheduler.Schedule(MakeOwningTask(ran, destroyed), TaskPriority::Normal, ThreadType::MainThread);
+        scheduler.ScheduleDelayed(MakeOwningTask(ran, destroyed), std::chrono::hours(1), TaskPriority::Normal, ThreadType::MainThread);
+        scheduler.ScheduleDelayed(MakeOwningTask(ran, destroyed), std::chrono::hours(1), TaskPriority::Normal, ThreadType::MainThread, DelayClock::GameTime);
+        EXPECT_EQ(destroyed.load(), 0);
+
+        scheduler.Shutdown();
+        EXPECT_EQ(destroyed.load(), 3);
+        EXPECT_EQ(ran.load(), 0);
+        pool.Shutdown();
+        EXPECT_EQ(destroyed.load(), 3);
     }
 
     TEST(TaskSystemTest, ThreadPoolExecutesTasks) {

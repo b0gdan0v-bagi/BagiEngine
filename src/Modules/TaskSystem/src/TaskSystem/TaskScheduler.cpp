@@ -42,7 +42,7 @@ namespace BECore {
 
         if (threadType == ThreadType::MainThread) {
             LockGuard lock(_mainThreadMutex);
-            _mainThreadQueue.push({std::move(task), priority});
+            _mainThreadQueue.Push({std::move(task), priority});
         } else {
             DispatchToThreadPool(std::move(task), priority);
         }
@@ -57,14 +57,14 @@ namespace BECore {
         if (clock == DelayClock::GameTime) {
             LockGuard lock(_delayedMutex);
             const TimePoint executeTime = TimePoint{} + SaturatingAdd(_gameTime, delay);
-            _gameDelayedTasks.push({std::move(task), executeTime, priority, threadType});
+            _gameDelayedTasks.Push({std::move(task), executeTime, priority, threadType});
             return;
         }
 
         auto executeTime = Clock::now() + delay;
 
         LockGuard lock(_delayedMutex);
-        _delayedTasks.push({std::move(task), executeTime, priority, threadType});
+        _delayedTasks.Push({std::move(task), executeTime, priority, threadType});
     }
 
     void TaskScheduler::AdvanceGameTime(double seconds) {
@@ -94,9 +94,8 @@ namespace BECore {
         {
             LockGuard lock(_mainThreadMutex);
             // Перемещаем все задачи для обработки
-            while (!_mainThreadQueue.empty()) {
-                tasksToProcess.push_back(std::move(const_cast<PrioritizedTask&>(_mainThreadQueue.top())));
-                _mainThreadQueue.pop();
+            while (!_mainThreadQueue.Empty()) {
+                tasksToProcess.push_back(_mainThreadQueue.Pop());
             }
         }
 
@@ -115,15 +114,13 @@ namespace BECore {
 
         {
             LockGuard lock(_delayedMutex);
-            while (!_delayedTasks.empty() && _delayedTasks.top().executeTime <= now) {
-                readyTasks.push_back(std::move(const_cast<DelayedTask&>(_delayedTasks.top())));
-                _delayedTasks.pop();
+            while (!_delayedTasks.Empty() && _delayedTasks.Top().executeTime <= now) {
+                readyTasks.push_back(_delayedTasks.Pop());
             }
 
             const TimePoint gameNow = TimePoint{} + _gameTime;
-            while (!_gameDelayedTasks.empty() && _gameDelayedTasks.top().executeTime <= gameNow) {
-                readyTasks.push_back(std::move(const_cast<DelayedTask&>(_gameDelayedTasks.top())));
-                _gameDelayedTasks.pop();
+            while (!_gameDelayedTasks.Empty() && _gameDelayedTasks.Top().executeTime <= gameNow) {
+                readyTasks.push_back(_gameDelayedTasks.Pop());
             }
         }
 
@@ -204,9 +201,7 @@ namespace BECore {
         // Очищаем очереди
         {
             LockGuard lock(_mainThreadMutex);
-            while (!_mainThreadQueue.empty()) {
-                _mainThreadQueue.pop();
-            }
+            _mainThreadQueue.Clear();
         }
 
         {
@@ -216,12 +211,8 @@ namespace BECore {
 
         {
             LockGuard lock(_delayedMutex);
-            while (!_delayedTasks.empty()) {
-                _delayedTasks.pop();
-            }
-            while (!_gameDelayedTasks.empty()) {
-                _gameDelayedTasks.pop();
-            }
+            _delayedTasks.Clear();
+            _gameDelayedTasks.Clear();
         }
 
         LOG_INFO("[TaskScheduler] Shutdown complete");
@@ -229,12 +220,12 @@ namespace BECore {
 
     size_t TaskScheduler::GetMainThreadQueueSize() const {
         LockGuard lock(_mainThreadMutex);
-        return _mainThreadQueue.size();
+        return _mainThreadQueue.Size();
     }
 
     size_t TaskScheduler::GetDelayedTaskCount() const {
         LockGuard lock(_delayedMutex);
-        return _delayedTasks.size() + _gameDelayedTasks.size();
+        return _delayedTasks.Size() + _gameDelayedTasks.Size();
     }
 
     void TaskScheduler::DispatchToThreadPool(TaskQueue::TaskFunc task, TaskPriority priority) {
@@ -249,6 +240,7 @@ namespace BECore {
     }
 
     void TaskScheduler::SubmitInlineBackgroundJob(TaskQueue::TaskFunc task) {
+        // The wrapper holds a whole TaskFunc, so it is above the inline buffer and takes the heap path (inline pool only).
         _threadPool->Submit([this, task = std::move(task)]() {
             // Restores the previous value: a drain can run a job while another one is on the stack
             const bool wasInBackgroundJob = _inBackgroundJob;

@@ -54,7 +54,6 @@ src/Modules/RoomServer/src/RoomServer/RoomWebSocketServer.cpp function 1
 src/Modules/RoomServer/src/RoomServer/RoomWebSocketServer.h function 1
 src/Modules/Rooms/src/Rooms/RoomHub.h function 2
 src/Modules/Rooms/src/Rooms/RoomTypes.h function 1
-src/Modules/TaskSystem/src/TaskSystem/TaskQueue.h function 1
 src/Widgets/ConfigEditor/StagedChanges.cpp function 1
 src/Widgets/ConfigEditor/StagedChanges.h function 1
 src/Widgets/EditorLayout/CommandFilter.cpp stable-sort 1
@@ -94,7 +93,6 @@ tests/BECore/SceneNodeFilesTest.cpp fstream 2
 tests/BECore/SceneNodeInstanceTest.cpp fstream 1
 tests/BECore/SceneSplitTest.cpp fstream 1
 tests/BECore/SpikeCaptureTest.cpp fstream 1
-tests/BECore/TaskSystemBudgetTest.cpp function 1
 tests/BECore/TimelinePlayTest.cpp function 1
 tests/BECore/TimelineTest.cpp function 2
 tests/BECore/Tls/FakeTlsStream.h sto 1
