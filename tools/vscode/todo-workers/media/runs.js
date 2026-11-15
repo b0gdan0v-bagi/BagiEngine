@@ -1,7 +1,6 @@
 // What the panel says about a run, as pure functions of the rows of `worker.py list --json` (and of the entries of
 // `todo.py list --json`): the words of a run that took nothing, the progress of an entry, the reading of what the
-// queue commands print, and the guard of a merge. Shared by the extension (src/) and the webviews, and driven by node
-// in test/ without VS Code.
+// queue commands print. Shared by the extension (src/) and the webviews, and driven by node in test/ without VS Code.
 (function (root, factory) {
     if (typeof module === "object" && module.exports) module.exports = factory();
     else root.TodoRuns = factory();
@@ -95,18 +94,5 @@
             .filter((line) => QUEUE_LINE.test(line) && !/^w\d+: cd /.test(line));
     }
 
-    // The workers that run a loop on the base the merge of `repoRel` moves: a session running, the head of that repository
-    // detached or on `base`, no `todo/*` branch. `repoRel` is the repository relative to the checkout ("." or "engine").
-    function loopsOnBase(workers, repoRel, base) {
-        const found = [];
-        for (const w of workers || []) {
-            const head = w && w.active ? (repoRel === "." ? w.head : repoRel === "engine" ? w.engine : null) : null;
-            if (!head) continue;
-            if (head.branch && head.branch !== base) continue;
-            found.push({ name: w.name, commit: head.commit || "" });
-        }
-        return found;
-    }
-
-    return { NO_REASON, progressOf, progressText, unlinkedWaits, queueRefusal, startedEntry, queueNotes, loopsOnBase };
+    return { NO_REASON, progressOf, progressText, unlinkedWaits, queueRefusal, startedEntry, queueNotes };
 });

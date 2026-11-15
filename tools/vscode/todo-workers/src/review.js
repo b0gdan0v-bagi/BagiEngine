@@ -7,7 +7,6 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { config, findTool, runTool, runGit, shellQuote, terminalWith } = require("./tools");
-const Runs = require("../media/runs");
 
 function attach(ctx) {
     // Review: the branch against the point where it left its base, every file in one multi-diff editor
@@ -46,16 +45,19 @@ function attach(ctx) {
 
     // Quick merge: worker.py merge, without Claude. The dialog shows the dry run; a yes merges (--no-ff),
     // closes the entry (or opens it again for the next slice), frees and deletes the branch and, for the
-    // engine in a game, commits the pointer. Conflicts and a dirty checkout are refused by worker.py.
+    // engine in a game, commits the pointer. Conflicts, a dirty checkout and a worker whose loop holds the
+    // branch are refused by worker.py; a loop on the base is a warning in the dialog.
     const merging = new Set();
     async function quickMerge(entry, verify) {
         const tool = findTool();
         if (!entry || !tool || merging.has(entry.id) || notHere(entry)) return;
         merging.add(entry.id);
+        // --claude lets worker.py see the loops: without it a merge under a running loop has no warning or problem.
+        const claude = config().claude;
         try {
             let plan;
             try {
-                plan = JSON.parse(await runTool(tool, ["merge", entry.id, "--dry-run", "--json"], 90000));
+                plan = JSON.parse(await runTool(tool, ["merge", entry.id, "--dry-run", "--json", "--claude", claude], 90000));
             } catch (error) {
                 vscode.window.showErrorMessage(`Quick merge of ${entry.id}: ${error.message}`);
                 return;
@@ -74,18 +76,19 @@ function attach(ctx) {
             if (plan.heldBy) detail.push(`${plan.heldBy} lets go of the branch (detached at ${plan.base}); the branch is deleted.`);
             else detail.push("The branch is deleted.");
             if (plan.pointer) detail.push(`Then one commit in the game: "Update engine: ${plan.title}".`);
-            const loops = loopWarnings(entry, plan.base);
-            if (loops.length) detail.push("", ...loops, "");
+            const warnings = plan.warnings || [];
+            if (warnings.length) detail.push("", ...warnings, "");
             detail.push("Nothing is pushed.");
             const pick = await vscode.window.showWarningMessage(`Merge ${plan.branch} into ${plan.base}${verify ? " and test it" : ""}?`, { modal: true, detail: detail.join("\n") }, verify ? "Merge + test" : "Merge");
             if (!pick) return;
             let merged = null;
             try {
-                const result = JSON.parse(await runTool(tool, ["merge", entry.id, "--json"], 120000));
+                const result = JSON.parse(await runTool(tool, ["merge", entry.id, "--json", "--claude", claude], 120000));
                 const parts = [`Merged ${result.branch} into ${result.base} (${result.merge})`, `entry ${result.status || "still in review"}`];
                 if (result.pointer) parts.push(`engine pointer ${result.pointer}`);
                 const text = parts.join(", ");
-                if (result.notes.length) vscode.window.showWarningMessage(`${text}. ${result.notes.join("; ")}`);
+                const notes = [...result.notes, ...(result.warnings || [])];
+                if (notes.length) vscode.window.showWarningMessage(`${text}. ${notes.join("; ")}`);
                 else vscode.window.showInformationMessage(text);
                 ctx.addFeed("merged", text, { entry: entry.id });
                 merged = result;
@@ -98,18 +101,6 @@ function attach(ctx) {
             merging.delete(entry.id);
             ctx.refresh();
         }
-    }
-
-    // The merge moves `base` in the main checkout: a loop that runs on it (head detached or on the base, no todo
-    // branch of its own) works on a tree that is behind after it. A warning only; the yes is the owner's.
-    function loopWarnings(entry, base) {
-        const state = ctx.state;
-        const tool = findTool();
-        if (!state || !tool || !entry.repo) return [];
-        const repoRel = path.relative(state.main || tool.cwd, entry.repo) || ".";
-        return Runs.loopsOnBase(state.workers, repoRel, base).map(
-            (w) => `${w.name} runs a loop on ${base}${w.commit ? ` (at ${w.commit})` : ""}: the merge moves the base under it; let it end first, or run Update on it after`
-        );
     }
 
     // The entries a merge let go (their last open blocker was the merged one): start one in a free worker or queue it.

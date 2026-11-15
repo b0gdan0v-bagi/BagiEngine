@@ -55,24 +55,3 @@ test("the notes of a start are the lines about the queue, not the session line",
     assert.deepStrictEqual(Runs.queueNotes("  failed: boom\n  e back at the head of the queue of w2"), ["e back at the head of the queue of w2"]);
     assert.deepStrictEqual(Runs.queueNotes(undefined), []);
 });
-
-const worker = (name, active, head, engine) => ({ name, active, head, engine: engine || null });
-
-test("a loop on the base: running, head detached or on the base, no todo branch", () => {
-    const workers = [
-        worker("w1", true, { branch: null, commit: "abc1234" }),
-        worker("w2", true, { branch: "todo/x", commit: "def5678" }),
-        worker("w3", false, { branch: null, commit: "0000000" }),
-        worker("w4", true, { branch: "games/match3", commit: "1111111" }),
-        worker("w5", true, { branch: "main", commit: "2222222" }),
-    ];
-    assert.deepStrictEqual(Runs.loopsOnBase(workers, ".", "games/match3"), [{ name: "w1", commit: "abc1234" }, { name: "w4", commit: "1111111" }]);
-});
-
-test("the repository of the entry decides which head counts: engine/ in a game", () => {
-    const workers = [worker("w1", true, { branch: "todo/game-work", commit: "aaa" }, { branch: null, commit: "bbb" })];
-    assert.deepStrictEqual(Runs.loopsOnBase(workers, "engine", "games/match3"), [{ name: "w1", commit: "bbb" }]);
-    assert.deepStrictEqual(Runs.loopsOnBase(workers, ".", "main"), []);
-    assert.deepStrictEqual(Runs.loopsOnBase(workers, "other", "main"), []);
-    assert.deepStrictEqual(Runs.loopsOnBase(undefined, ".", "main"), []);
-});
