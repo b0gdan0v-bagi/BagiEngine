@@ -1,5 +1,6 @@
 #include "TextureEditorWidget.h"
 
+#include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Renderer/ITexture.h>

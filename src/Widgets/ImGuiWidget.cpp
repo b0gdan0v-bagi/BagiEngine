@@ -1,7 +1,11 @@
 #include "ImGuiWidget.h"
 
+#include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/MainWindow/IMainWindow.h>
+#include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Reflection/IDeserializer.h>
+#include <BECore/Renderer/IRenderer.h>
 #include <CoreSDL/SDLEvents.h>
 #include <CoreSDL/SDLMainWindow.h>
 #include <Events/ApplicationEvents.h>

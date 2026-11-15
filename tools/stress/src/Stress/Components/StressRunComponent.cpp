@@ -1,6 +1,8 @@
 #include "StressRunComponent.h"
 
+#include <BECore/Control/ControlService.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <Events/ApplicationEvents.h>
 #include <Events/SceneEvents.h>
 #include <Generated/StressRunComponent.gen.hpp>

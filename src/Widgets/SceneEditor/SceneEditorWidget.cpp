@@ -1,6 +1,7 @@
 #include "SceneEditorWidget.h"
 
 #include <BECore/Config/ConfigManager.h>
+#include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/AbstractFactory.h>
 #include <BECore/Reflection/IDeserializer.h>

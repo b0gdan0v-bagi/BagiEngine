@@ -2,9 +2,11 @@
 
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
+#include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Profiler/FrameStats/FrameStatsText.h>
 #include <BECore/Profiler/ProfilerToggle.h>
 #include <BECore/Renderer/IRenderer.h>
+#include <BECore/Resource/ResourceManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/Text/TextLayout.h>
 #include <BECore/Text/TextRenderer.h>

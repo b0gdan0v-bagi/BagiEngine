@@ -6,6 +6,7 @@
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Renderer/IRenderTarget.h>
+#include <BECore/Time/GamePause.h>
 #include <BECore/Types/Types.h>
 #include <BECore/UI/UIPreview.h>
 #include <BECore/Widgets/IWidget.h>

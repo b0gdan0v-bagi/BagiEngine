@@ -1,5 +1,6 @@
 #include "EngineEnvironment.h"
 
+#include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Scene/SceneManager.h>
 

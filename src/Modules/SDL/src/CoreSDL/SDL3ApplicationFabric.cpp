@@ -1,13 +1,17 @@
 #include "SDL3ApplicationFabric.h"
 
 #include <BECore/Application/ApplicationConfig.h>
+#include <BECore/Clipboard/Clipboard.h>
+#include <BECore/Control/ControlService.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/AbstractFactory.h>
 #include <BECore/Renderer/IRenderer.h>
+#include <BECore/Renderer/RendererManager.h>
 #include <CoreSDL/SDLClipboard.h>
 #include <CoreSDL/SDLEventsProvider.h>
 #include <CoreSDL/SDLMainWindow.h>
 #include <CoreSDL/SDLScreenshot.h>
+#include <Events/EventsProviderManager.h>
 #include <Generated/SDL3ApplicationFabric.gen.hpp>
 
 namespace BECore {

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Application/CommandLine.h>
 #include <Games/IGame.h>
 #include <Stress/StressGameControl.h>
 #include <Stress/StressSettings.h>

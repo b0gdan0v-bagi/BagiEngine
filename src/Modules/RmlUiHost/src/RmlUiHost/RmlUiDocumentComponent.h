@@ -3,6 +3,7 @@
 #include <BECore/Input/UIInput.h>
 #include <BECore/Scene/IComponent.h>
 #include <BECore/UI/UICanvasScaler.h>
+#include <BECore/UI/UIVars.h>
 #include <RmlUi/Core/DataModelHandle.h>
 #include <RmlUi/Core/EventListener.h>
 #include <RmlUiHost/RmlUiFileInterface.h>

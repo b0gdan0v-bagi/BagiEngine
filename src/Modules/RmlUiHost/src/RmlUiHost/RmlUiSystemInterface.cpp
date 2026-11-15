@@ -1,6 +1,7 @@
 #include "RmlUiSystemInterface.h"
 
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Time/Time.h>
 
 namespace BECore {
 

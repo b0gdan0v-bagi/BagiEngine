@@ -1,6 +1,8 @@
 #include "SDLTextureLoader.h"
 
+#include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Renderer/IRenderer.h>
 #include <CoreSDL/SDLRendererBackend.h>
 #include <CoreSDL/SDLTexture.h>
 #include <Generated/SDLTextureLoader.gen.hpp>
