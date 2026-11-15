@@ -1,7 +1,7 @@
 #include <RemoteControl/Tls/TlsStream.h>
 
-// Written without a Windows compiler (see Tls/CLAUDE.md, "Windows: Schannel"): it was read against Microsoft's Schannel client
-// sample and the SSPI documentation, and has not been built or run.
+// Not built or run (see Tls/CLAUDE.md, "Windows: Schannel"): written from Microsoft's Schannel client sample and the SSPI
+// documentation.
 #ifdef PLATFORM_WINDOWS
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -173,7 +173,7 @@ namespace BECore {
         }
 
         /// The TLS stream of Windows over Schannel (SSPI) on a Socket; see Tls/CLAUDE.md. Structure as the macOS backend: the same
-        /// phases, the same texts. Not built or run yet
+        /// phases, the same texts.
         class SchannelTlsStream final : public ITlsStream {
         public:
             ~SchannelTlsStream() override {

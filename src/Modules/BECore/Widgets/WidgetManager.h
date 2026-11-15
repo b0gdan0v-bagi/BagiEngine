@@ -63,12 +63,8 @@ namespace BECore {
          * @brief Switches to the pending mode, if there is one; returns whether it did.
          *
          * Call it only at the end of a frame, after the present and outside UpdateAll / DrawScreenAll / DrawAll: ImGui's frame
-         * is open while the widgets draw, and a widget cannot be destroyed in the middle of its own call. The order is fixed:
-         *  1. wait until the GPU is idle (it may still read what the widgets own: ImGui's descriptors, the viewport's target),
-         *  2. destroy every widget, the last created first (DestroyAll; their subscriptions go with them),
-         *  3. create the widgets of the new mode, as CreateWidgets(mode) does,
-         *  4. log the new mode.
-         * Works without a renderer (step 1 is skipped).
+         * is open while the widgets draw, and a widget cannot be destroyed in the middle of its own call. It waits for the GPU
+         * (skipped without a renderer), destroys the widgets as DestroyAll does, then creates those of the new mode.
          */
         bool ApplyPendingMode();
 #endif
