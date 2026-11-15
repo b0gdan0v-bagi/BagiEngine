@@ -41,7 +41,7 @@ namespace BECore {
     }
 
     IntrusivePtr<TweenHandle> TweenManager::Delay(float seconds, eastl::function<void()> onComplete, eastl::function<void()> onCancel) {
-        // No setter: the same path as any tween (the loop calls `_apply` always, so it is a function that does nothing)
+        // `Step` calls `_apply` unconditionally, so the no-setter tween gets a function that does nothing
         return StartErased({.duration = seconds}, [](float) {}, std::move(onComplete), std::move(onCancel));
     }
 
