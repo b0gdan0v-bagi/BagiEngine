@@ -61,7 +61,7 @@ The engine builds without exceptions, so nlohmann/json is built with `JSON_NOEXC
 - An attribute and a child are the same member. An object is a member object, an array a member array of element objects; an element that holds only `value` is that scalar (`[1,2,3]`), and the reader takes both forms. A map is an array of `{key, value}`, a variant `{index, value}` (`monostate`: the index alone), a factory element carries `type` and `enabled`.
 - Integers are exact (`uint64_t` above 2^63 too), a `float` is the shortest text that reads back, a non-finite number is `null`, which the reader refuses.
 - The reader is always strict: a JSON bool is the only bool, a number the only number (`3.0` and `1.5` are no integers, a string is no number, a negative is no unsigned), a string target takes only a string. A refusal is an error under the field's path and the target keeps its value; a missing key is no error. Under diagnostics an unknown key is a finding with `did you mean`. Limits are those of `ReaderLimits.h`; `StoreError` cuts the text and replaces control characters with `?`. Check `IsJsonNestedDeeperThan` on input first.
-- A `SceneNode` does not round-trip: its components have no `type` member in this form.
+- A `SceneNode` does not round-trip: `IComponent` has no `FactoryTraits`, so no serializer writes the `type` member of a component.
 
 ## Manual clock and `step`
 

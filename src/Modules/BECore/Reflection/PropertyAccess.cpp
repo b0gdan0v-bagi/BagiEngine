@@ -517,6 +517,7 @@ namespace BECore {
                 const size_t kept = stored->size();
                 const PropertyValue previous(std::in_place_type<String>, visitor.TakeOldText());
                 PathVisitor restore(path, &previous, options);
+                // The old text fitted the field a moment ago and the path was just written, so the same checks pass again; nothing to report if they did not
                 static_cast<void>(restore.Run(root));
                 return std::unexpected(PropertyError{PropertyErrorCode::out_of_range, Format("path '{}': the text of {} bytes does not fit the field, which holds {} bytes at most",
                                                                                              FormatPropertyPath(path.segments, path.segments.size()), written.size(), kept)});

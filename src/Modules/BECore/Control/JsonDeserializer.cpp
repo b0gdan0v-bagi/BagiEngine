@@ -180,13 +180,12 @@ namespace BECore {
             return false;
         }
         const double number = value->get<double>();
-        const T narrowed = static_cast<T>(number);
-        // A number that is infinite, or only becomes so in the target's type, has no value to keep
-        if (!std::isfinite(number) || !std::isfinite(narrowed)) {
+        // A number that is infinite, or beyond the target's type, has no value to keep; the check comes before the cast, which is undefined for a value out of range
+        if (!std::isfinite(number) || std::fabs(number) > static_cast<double>(std::numeric_limits<T>::max())) {
             RejectValue(name, "number", *value, true);
             return false;
         }
-        outValue = narrowed;
+        outValue = static_cast<T>(number);
         return true;
     }
 
