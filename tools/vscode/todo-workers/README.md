@@ -12,6 +12,13 @@ A panel for the parallel `todo-loop` workers (`tools/todo/worker.py`, "Workers" 
 - **collapse**: cards are folded by default to a few lines (the name, the entry and the badge, the title, the review note or the progress bar, one line of what the loop said, and the one action it needs: Answer, Relaunch, Review or Fast start); the arrow unfolds one, **Expand all** / **Collapse all** every card, and the choice is kept. Waiting and limited workers come first. An unfolded card keeps Attach, Relaunch and Stop or Fast start in sight; Log, Plan, Build & run, Update, Folder and Terminal are behind `…`;
 - buttons: **Attach** (`claude attach <session id>`; **Answer** takes its place while the session waits), **Log** (`claude logs`), **Folder** (a new window), **Terminal**, **Plan** (`~/.claude/plans/todo-loop-<branch-id>.md`), **Stop** (`worker.py stop <k>`, after a question, while the session runs); while it does not: **Update** (`worker.py update <k>`: the game and `engine/` detached at the tips of their base branches, as the loop's "go to the base"; the branch it held is kept; refused with uncommitted changes) and **Fast start** (`worker.py start <k>` at once: `/todo-loop` with the settings `todoWorkers.startSlices`, `todoWorkers.loopArgs` and `todoWorkers.reportTo`).
 
+Added in 0.25 (the machine; `worker.py machine`: one `ps` and one `sysctl`, about 0.1 s of CPU, read beside every refresh, hidden too):
+
+- **Machine line** under the toolbar: the 1-minute load against the cores, memory in use, the memory pressure when it is not normal, the swap; amber when the load is above 1.5 x the cores or the pressure is not normal.
+- **On a worker card**: what its folder runs now (compiling N, linking N, tests N, build), its CPU and memory. A process goes to the folder its command line names (`<name>.workers/w<k>/...` or a main checkout `<name>/...`); a build or test tool that names none (ninja, ctest) takes the folder of its jobs, then of its parent.
+- **Machine** (folded section): every folder at work on this machine, the other games' checkouts and workers too (their builds and tests take the same cores), and the Claude processes with their memory. ps's CPU is an average and misses short compiler runs; the load counts them.
+- **The load on the Timeline**: the panel samples the load and the memory once a minute into its state (about three days kept) and draws them under the lanes, with the cores as a dashed line, so a slow stretch can be matched with what ran then.
+
 Added in 0.24 (the load):
 
 - **Day, Timeline, Busy files and the review rounds are cached**: each view keeps its last answer (also across a reload, in the extension's state) and is read again on its own interval while the panel is visible (Day 2 min, Timeline and Busy files 5 min, review rounds 15 min), after a write to the store at the soonest 30 s to 2 min later (one read for a burst of writes; the timeline does not follow the store), and at once on **Read again**. A section says how old its answer is and `reading …` while a newer one comes; only a view never read waits empty. `worker.py timeline` keeps the spans of finished sessions in `~/.claude/todo/timeline-cache.json` by the transcript's size, so it parses only the running and new ones.
@@ -82,7 +89,7 @@ No npm: the packer uses the standard library.
 
 ```bash
 python3 tools/vscode/todo-workers/pack.py        # in a game: engine/tools/vscode/todo-workers/pack.py
-code --install-extension tools/vscode/todo-workers/build/todo-workers-0.24.0.vsix
+code --install-extension tools/vscode/todo-workers/build/todo-workers-0.25.0.vsix
 ```
 
 `code` is in `/Applications/Visual Studio Code.app/Contents/Resources/app/bin/` on macOS when it is not on PATH. Then **Developer: Reload Window**. After a change bump `version` in `package.json`, pack and install again.

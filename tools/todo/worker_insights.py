@@ -10,6 +10,7 @@ branches with the remote refs the last fetch left.
 """
 
 import json
+import os
 import re
 import subprocess
 import time
@@ -495,6 +496,167 @@ def cmd_review_stats(layout: w.Layout, args) -> None:
         print(f"  {m['id']}: {m['changes']} reviewer rounds, {m['remarks']} remarks")
 
 
+# --- the machine: its load, its memory, and which checkout and worker runs what ------------------------------------
+#
+# One `ps` and one `sysctl` (about 30 ms together), so the panel can read it on every refresh. Each process goes to a
+# group by the path its command line names (`<name>.workers/w<k>/...`, or a main checkout `<name>/...`); one that
+# names none takes the group of its children (ninja under the jobs it runs), then of its parents (a test under ctest).
+
+PROCESS_KINDS = (
+    ("compile", re.compile(r"(^|/)(clang(\+\+)?|c\+\+|cc|gcc|g\+\+|ccache)$")),
+    ("link", re.compile(r"(^|/)(ld|ld64|lld|ld\.lld|ar|libtool|ranlib)$")),
+    ("build", re.compile(r"(^|/)(ninja|cmake|make)$")),
+    ("test", re.compile(r"(^|/)(ctest|[A-Za-z0-9_]*Tests?|BagiStress|BagiMahjong|BagiMatch3|[A-Za-z0-9_]*Probe)$")),
+    ("claude", re.compile(r"(^|/)claude$")),
+    ("python", re.compile(r"(^|/)python[0-9.]*$")),
+)
+WORKER_PATH = re.compile(r"/([^/\s'\"]+)\.workers/(w\d+)(?=[/\s'\"]|$)")
+INHERIT_DEPTH = 8
+# only the processes of a build or a test take a group from a relative (an app or a daemon under launchd never does)
+TOOL_KINDS = ("compile", "link", "build", "test", "python")
+
+
+def process_kind(args: str) -> str:
+    first = args.split(" ", 1)[0]
+    for kind, pattern in PROCESS_KINDS:
+        if pattern.search(first):
+            if kind == "compile" and " -c " not in f" {args} " and " -cc1 " not in f" {args} " and " -o " in f" {args} ":
+                return "link"  # the compiler driver linking
+            if kind == "python" and " -m pytest" in args:
+                return "test"
+            return kind
+    return "other"
+
+
+def main_checkouts(layout: w.Layout) -> list[tuple[str, str]]:
+    """The checkouts beside this one that have a workers folder (`<name>` beside `<name>.workers`), longest path first."""
+    found = {str(layout.main): layout.main.name}
+    try:
+        for folder in layout.root.parent.iterdir():
+            if folder.name.endswith(w.WORKERS_SUFFIX):
+                main = folder.with_name(folder.name[: -len(w.WORKERS_SUFFIX)])
+                if main.is_dir():
+                    found[str(main)] = main.name
+    except OSError:
+        pass
+    return sorted(found.items(), key=lambda kv: -len(kv[0]))
+
+
+def group_of(args: str, mains: list[tuple[str, str]]) -> str | None:
+    found = WORKER_PATH.search(args)
+    if found:
+        return f"{found.group(1)}/{found.group(2)}"
+    for path, name in mains:
+        if f"{path}/" in args or args.endswith(path):
+            return f"{name}/main"
+    return None
+
+
+def read_processes() -> list[dict]:
+    try:
+        out = subprocess.run(["ps", "-axww", "-o", "pid=,ppid=,pcpu=,rss=,args="], capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    rows = []
+    for line in out.splitlines():
+        parts = line.split(None, 4)
+        if len(parts) == 5:
+            try:
+                rows.append({"pid": int(parts[0]), "ppid": int(parts[1]), "cpu": float(parts[2]), "rss": int(parts[3]) * 1024, "args": parts[4]})
+            except ValueError:
+                continue
+    return rows
+
+
+def assign_groups(rows: list[dict], mains: list[tuple[str, str]]) -> None:
+    """In place: `group` and `kind` of every process (see the section comment)."""
+    by_pid = {r["pid"]: r for r in rows}
+    children: dict[int, list[dict]] = {}
+    for r in rows:
+        r["kind"] = process_kind(r["args"])
+        r["group"] = None if r["kind"] == "claude" else group_of(r["args"], mains)
+        children.setdefault(r["ppid"], []).append(r)
+    for r in rows:  # from the children: ninja and cmake name relative paths, their jobs absolute ones
+        if r["group"] is None and r["kind"] in TOOL_KINDS and r["pid"] > 1:
+            counts: dict[str, int] = {}
+            for c in children.get(r["pid"], []):
+                if c["group"]:
+                    counts[c["group"]] = counts.get(c["group"], 0) + 1
+            if counts:
+                r["group"] = max(counts, key=counts.get)
+    for r in rows:  # from the parents: a job of a tool that named the folder
+        parent, depth = by_pid.get(r["ppid"]), 0
+        while r["group"] is None and r["kind"] in TOOL_KINDS and parent is not None and parent["pid"] > 1 and depth < INHERIT_DEPTH:
+            r["group"] = parent["group"]
+            parent, depth = by_pid.get(parent["ppid"]), depth + 1
+
+
+def memory_state() -> dict | None:
+    """macOS: the size, the free share (`kern.memorystatus_level`, what memory_pressure prints), the pressure level
+    (1 normal, 2 warn, 4 critical) and the swap in use; None elsewhere."""
+    try:
+        out = subprocess.run(["sysctl", "-n", "hw.memsize", "kern.memorystatus_level", "kern.memorystatus_vm_pressure_level", "vm.swapusage"],
+                             capture_output=True, text=True, timeout=5).stdout.splitlines()
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if len(out) < 4:
+        return None
+    swap = re.search(r"used = ([0-9.]+)M", out[3])
+    try:
+        return {"total": int(out[0]), "freePercent": int(out[1]), "pressure": {1: "normal", 2: "warn", 4: "critical"}.get(int(out[2]), out[2]),
+                "swapUsed": int(float(swap.group(1)) * 1024 * 1024) if swap else None}
+    except ValueError:
+        return None
+
+
+def machine_state(layout: w.Layout) -> dict:
+    rows = read_processes()
+    assign_groups(rows, main_checkouts(layout))
+    groups: dict[str, dict] = {}
+    claude = {"count": 0, "cpu": 0.0, "rss": 0}
+    for r in rows:
+        if r["kind"] == "claude" or (r["group"] is None and "/claude" in r["args"].split(" ", 1)[0]):
+            claude["count"] += 1
+            claude["cpu"] += r["cpu"]
+            claude["rss"] += r["rss"]
+            continue
+        if r["group"] is None:
+            continue
+        g = groups.setdefault(r["group"], {"group": r["group"], "cpu": 0.0, "rss": 0, "kinds": {}})
+        g["cpu"] += r["cpu"]
+        g["rss"] += r["rss"]
+        if r["kind"] in ("compile", "link", "build", "test"):
+            g["kinds"][r["kind"]] = g["kinds"].get(r["kind"], 0) + 1
+    try:
+        load = list(os.getloadavg())
+    except (OSError, AttributeError):
+        load = None
+    shown = sorted(groups.values(), key=lambda g: -g["cpu"])
+    for g in shown:
+        g["cpu"] = round(g["cpu"], 1)
+    claude["cpu"] = round(claude["cpu"], 1)
+    return {"at": int(time.time() * 1000), "cores": os.cpu_count(), "load": load, "memory": memory_state(),
+            "checkout": layout.main.name, "groups": shown, "claude": claude}
+
+
+def cmd_machine(layout: w.Layout, args) -> None:
+    state = machine_state(layout)
+    if args.json:
+        print(json.dumps(state, ensure_ascii=False))
+        return
+    load = state["load"]
+    mem = state["memory"]
+    print(f"load {load[0]:.1f} / {state['cores']} cores" if load else "load ?", end="")
+    if mem:
+        print(f", memory {100 - mem['freePercent']}% used ({mem['pressure']}), swap {(mem['swapUsed'] or 0) / 2**30:.1f} GB", end="")
+    print()
+    for g in state["groups"]:
+        kinds = ", ".join(f"{n} {k}" for k, n in g["kinds"].items())
+        print(f"  {g['group']:40} {g['cpu']:6.1f}% {g['rss'] / 2**30:5.1f} GB  {kinds}")
+    c = state["claude"]
+    print(f"  {'Claude (' + str(c['count']) + ' processes)':40} {c['cpu']:6.1f}% {c['rss'] / 2**30:5.1f} GB")
+
+
 def add_parsers(sub) -> None:
     """The commands of this module in worker.py's parser."""
     p = sub.add_parser("busy", help="the busy files of the taken entries and which open entries meet them (the panel)")
@@ -512,9 +674,11 @@ def add_parsers(sub) -> None:
     p.add_argument("--hours", type=float, default=24)
     p.add_argument("--claude", default="claude", help="the command (default claude)")
     p.add_argument("--json", action="store_true")
+    p = sub.add_parser("machine", help="the load and memory of this machine and what each checkout and worker runs (the panel)")
+    p.add_argument("--json", action="store_true")
     p = sub.add_parser("review-stats", help="review rounds per entry: the reviewer's CHANGES and the owner's remarks (the panel)")
     p.add_argument("--days", type=float, default=7)
     p.add_argument("--json", action="store_true")
 
 
-COMMANDS = {"busy": cmd_busy, "merge-train": cmd_merge_train, "day": cmd_day, "timeline": cmd_timeline, "review-stats": cmd_review_stats}
+COMMANDS = {"busy": cmd_busy, "merge-train": cmd_merge_train, "day": cmd_day, "timeline": cmd_timeline, "review-stats": cmd_review_stats, "machine": cmd_machine}

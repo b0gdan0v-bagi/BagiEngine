@@ -128,11 +128,12 @@ function activate(context) {
         }
         running = true;
         // keep what is shown (the feed, the insights, the last verify) while worker.py answers
-        view.show(ctx.state ? { ...view.payload, refreshing: true } : { loading: true, refreshing: true, insights: ctx.insights() });
+        view.show(ctx.state ? { ...view.payload, refreshing: true } : { loading: true, refreshing: true, insights: ctx.insights(), ...ctx.machine() });
         try {
             // hidden, the panel only needs what the status bar and the notifications show: no transcripts read for
             // the last steps and the tokens (the usage ledger catches up on the next full read: its counts are totals)
             const full = view.visible ? ["--activity", "--usage"] : [];
+            ctx.readMachine(); // beside the list: cheap, and the load history needs it hidden too
             const out = await runTool(tool, ["list", "--json", "--store", ...full, "--claude", config().claude], 90000);
             ctx.state = JSON.parse(out);
             // A branch of another checkout or machine (or cut from another base) is not this checkout's to review or
