@@ -76,6 +76,9 @@ namespace BECore {
 
         Optional<EditorSettings> _settings;
         Optional<LayoutStore> _layouts;  // none when the system gives no per-user folder
+        LayoutNameCache _layoutNames;    // stale when a Layouts menu opens and after a save or a delete
+        MenuOpenTracker _layoutsMenuOpen;
+        MenuOpenTracker _deleteLayoutMenuOpen;
 
         EditorPlayModel _playModel;
         MainToolbar _toolbar;
