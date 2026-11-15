@@ -5,7 +5,8 @@ The library behind the skill `/qa` (`.claude/skills/qa/SKILL.md`): a charter scr
 | File | Purpose |
 |------|---------|
 | `bagi_qa_checks.py` | `Finding`, `Violation` and the generic checks as pure functions over control answers (no process, no I/O); the loader of a game's invariants module |
-| `tests/` | pytest (`.venv/bin/python -m pytest tools/qa/tests`) |
+| `bagi_qa.py` | `QaSession`, the session a charter script drives |
+| `tests/` | pytest (`.venv/bin/python -m pytest tools/qa/tests`); `qa_fake_game.py` is the game of the session tests (knobs by environment variable, listed in its docstring) |
 
 ## Findings
 
@@ -31,3 +32,18 @@ A Python file whose path is in the game's `.claude/rules/qa-project.md`, loaded 
 - `KNOWN_DEVIATIONS`: a set of names that are not bugs. `apply_known(findings, known)` splits them off; the report keeps them under "known".
 
 A `Violation` is `(name, message)` (a plain pair does too); `bagi_qa_checks.Violation` is importable from the module. A module that raises, or returns something else, is a finding of kind `invariant` named `qa.module_error` (the end of the traceback in `details`), not a crash of the session. A module that cannot be loaded at all (missing, a syntax error, a member of the wrong shape) is an `InvariantsError` before the session starts.
+
+## The session
+
+`QaSession(out_dir, charter, invariants=None, ui_every=10)`: `out_dir` is given by the script and must be outside every git work tree (refused at construction: the recording and the pictures are never committed); `invariants` is a path or a loaded `Invariants`. `launch(exe | preset + game, extra=())` starts the game headless on the manual clock, records to `<out>/session.jsonl` (mode `minimal`), runs two frames and checks, `ui_tree` included. `finish()` quits, checks the log once more and returns the path of the recording; calling it twice is safe, and it works after a lost game.
+
+| Method | What it does, what is checked after it |
+|--------|----------------------------------------|
+| `step(frames, dt)` | the state (version, `check_state`) and the log; the `ui_tree` only every `ui_every` steps (0: never), since it is the dearest check |
+| `act(action, expect_refusal=False)` | `perform_action`; a listed action that is refused, the version of the answer, `check_action`, the state, the log. A refusal is an `ActOutcome`, never an exception; `expect_refusal` is for an action the charter invented. `list_actions` is asked before it when the version moved since the last list |
+| `reset(**params)` | the game's `reset` (a refusal is a `ControlError`), then the state and the log |
+| `state()`, `listed_actions()`, `check(ui=False)` | read and check; the `ui_tree` needs a frame since the last change, so `step` first |
+| `shot(label)` | two frames, then `shots/<NN>-<label>.png` at `maxSize` 640 |
+| `note(text)` | what the charter covered, for the report |
+
+`calls` counts every control call the session made and is the number of the line in the recording, so a finding's `call_index` points at it: the `ui_tree` call for a ui finding, the `perform_action` call for a refused or a going-back version, the `get_state` call for a `check_state` finding, the last call so far for a log line. The same name and message again is not a new finding: it adds to `details["repeats"]` of the first. A `SessionError` is raised to the script and kept in `session_errors`. `bugs` and `known` split `findings` by the module's `KNOWN_DEVIATIONS`.

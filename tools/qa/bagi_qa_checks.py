@@ -15,7 +15,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable, NamedTuple, Sequence
 
-import scenario
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "control"))
+
+import scenario  # noqa: E402
 
 KIND_LOG = "log"
 KIND_UI_ISSUE = "ui_issue"
