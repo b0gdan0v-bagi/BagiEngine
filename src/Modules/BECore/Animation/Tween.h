@@ -45,8 +45,8 @@ namespace BECore {
             return TweenApply([](float) {});
         } else {
             auto apply = [from = std::move(from), to = std::move(to), onValue = std::forward<TOnValue>(onValue)](float easedT) mutable { onValue(Lerp(from, to, easedT)); };
-            static_assert(kFunctionFitsInline<decltype(apply), kTweenApplyBytes>,
-                          "onValue does not fit a tween setter (kTweenApplyBytes with `from` and `to`, noexcept move): capture a pointer to an object that holds the state");
+            static_assert(kFunctionFitsInline<decltype(apply), kTweenApplyBytes>, "onValue does not fit a tween setter (kTweenApplyBytes with `from` and `to`; its move must be noexcept, which a "
+                                                                                  "captured const object is not): capture a pointer to an object that holds the state");
             return TweenApply(std::move(apply));
         }
     }
@@ -130,9 +130,9 @@ namespace BECore {
         float _progress = 0.0f;
         float _elapsed = 0.0f;  // raw time since Start, the delay included
         TweenSettings _settings;
-        eastl::function<void(float)> _apply;  // the eased progress in, the value out (the setter of the typed Start)
-        eastl::function<void()> _onComplete;
-        eastl::function<void()> _onCancel;
+        TweenApply _apply;  // the setter of the typed Start
+        MoveOnlyFunction<void()> _onComplete;
+        MoveOnlyFunction<void()> _onCancel;
         Vector<Waiter> _waiters;  // in registration order; resumed (and removed one by one) by the manager when the tween finishes
     };
 

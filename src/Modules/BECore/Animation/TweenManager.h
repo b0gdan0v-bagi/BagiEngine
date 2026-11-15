@@ -6,6 +6,7 @@
 #include <BECore/Animation/TweenAwaiter.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/Types/Types.h>
+#include <BECore/Utils/MoveOnlyFunction.h>
 #include <cstddef>
 #include <utility>
 
@@ -51,22 +52,15 @@ namespace BECore {
          *
          * @p onComplete runs once after the last setter call (which is exactly @p to), @p onCancel once when the tween is cancelled.
          * The first step comes from the next `Advance`, also when the tween is started inside a callback. A @p duration or a delay that is
-         * not finite counts as zero.
+         * not finite counts as zero. @p onValue is a callable taking `const T&` (`{}` for none) whose capture must fit a `TweenApply`.
          */
-        // `type_identity_t` keeps T out of the deduction from the setter: T comes from `from` and `to` alone
-        template <Tweenable T>
-        IntrusivePtr<TweenHandle> Start(T from, T to, TweenSettings settings, eastl::function<void(const std::type_identity_t<T>&)> onValue, eastl::function<void()> onComplete = {},
-                                        eastl::function<void()> onCancel = {}) {
-            auto apply = [from = std::move(from), to = std::move(to), onValue = std::move(onValue)](float easedT) {
-                if (onValue) {
-                    onValue(Lerp(from, to, easedT));
-                }
-            };
-            return StartErased(settings, std::move(apply), std::move(onComplete), std::move(onCancel));
+        template <Tweenable T, TweenValueCallback<T> TOnValue = std::nullptr_t>
+        IntrusivePtr<TweenHandle> Start(T from, T to, TweenSettings settings, TOnValue&& onValue, MoveOnlyFunction<void()> onComplete = {}, MoveOnlyFunction<void()> onCancel = {}) {
+            return StartErased(settings, MakeTweenApply<T>(std::move(from), std::move(to), std::forward<TOnValue>(onValue)), std::move(onComplete), std::move(onCancel));
         }
 
         /// A tween with no setter that only lasts @p seconds of game time (the frame time given to `Advance`): @p onComplete runs at the end, @p onCancel when it is cancelled
-        IntrusivePtr<TweenHandle> Delay(float seconds, eastl::function<void()> onComplete = {}, eastl::function<void()> onCancel = {});
+        IntrusivePtr<TweenHandle> Delay(float seconds, MoveOnlyFunction<void()> onComplete = {}, MoveOnlyFunction<void()> onCancel = {});
 
         /// `AwaitTween(Delay(seconds))`: `co_await tweens.Wait(0.5f)` suspends the coroutine for 0.5 s of game time. Game time, not wall-clock:
         /// `DelaySec` of the task system is a scheduler job on `steady_clock` that ignores the frame clamp and the manual clock (`DelayGameSec` is its game-time counterpart on the task system)
@@ -86,7 +80,7 @@ namespace BECore {
          * stops (`Timeline::SetStopCheck`): no later clip of the same step, of a sub-timeline or of the next repeat gets a setter or callback call,
          * so a setter that captures its owner is safe under rule 8. The clip that did the cancelling finishes its own call.
          */
-        IntrusivePtr<TweenHandle> Play(Timeline timeline, float delay = 0.0f, eastl::function<void()> onComplete = {}, eastl::function<void()> onCancel = {});
+        IntrusivePtr<TweenHandle> Play(Timeline timeline, float delay = 0.0f, MoveOnlyFunction<void()> onComplete = {}, MoveOnlyFunction<void()> onCancel = {});
 
         /// Advances every tween by @p dt seconds (the frame time). A @p dt of zero, negative or NaN does nothing, and so does a call from a callback that runs during `Advance` or `CancelAll` (the
         /// walk is on). A cancel callback run by a direct `TweenHandle::Cancel()` outside a walk may call it, and it advances.
@@ -105,7 +99,7 @@ namespace BECore {
     private:
         friend class TweenHandle;
 
-        IntrusivePtr<TweenHandle> StartErased(const TweenSettings& settings, eastl::function<void(float)> apply, eastl::function<void()> onComplete, eastl::function<void()> onCancel);
+        IntrusivePtr<TweenHandle> StartErased(const TweenSettings& settings, TweenApply apply, MoveOnlyFunction<void()> onComplete, MoveOnlyFunction<void()> onCancel);
         void CancelTween(TweenHandle& tween);
         void Step(TweenHandle& tween, float dt);
         void ReleaseCallbacks(TweenHandle& tween);

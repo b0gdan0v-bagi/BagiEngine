@@ -1,6 +1,7 @@
 #include <BECore/Animation/ScopedTween.h>
 #include <BECore/Animation/TweenManager.h>
 #include <BECore/Time/Time.h>
+#include <Common/DestroyTally.h>
 #include <TaskSystem/Task.h>
 #include <chrono>
 #include <gtest/gtest.h>
@@ -47,8 +48,8 @@ namespace BECore::Tests {
             }
         }
 
-        /// The coroutine frame holds @p guard: a use count of 1 on the test side means the frame is gone
-        Task<void> AwaitHandleWithGuard([[maybe_unused]] SharedPtr<int> guard, IntrusivePtr<TweenHandle> handle, Log& log, int id) {
+        /// The coroutine frame holds @p guard: its tally is 1 once the frame is gone
+        Task<void> AwaitHandleWithGuard([[maybe_unused]] DestroyTally guard, IntrusivePtr<TweenHandle> handle, Log& log, int id) {
             const TweenResult result = co_await AwaitTween(std::move(handle));
             log.order.push_back(id);
             log.results.push_back(result);
@@ -285,11 +286,11 @@ namespace BECore::Tests {
     TEST(TweenAwaiterTest, ClearNeverResumesAWaiterAndTheFrameIsFreedByDroppingTheTask) {
         TweenManager tweens;
         Log log;
-        auto guard = MakeShared<int>(0);
+        int guardEnded = 0;
         {
-            Task<void> task = AwaitHandleWithGuard(guard, StartSilent(tweens, kOneSecond), log, 1);
+            Task<void> task = AwaitHandleWithGuard(DestroyTally(guardEnded), StartSilent(tweens, kOneSecond), log, 1);
             task.Resume();
-            ASSERT_EQ(guard.use_count(), 2);  // the frame holds one
+            ASSERT_EQ(guardEnded, 0);  // the frame holds it
 
             tweens.Clear();
             tweens.Advance(kOneSecond);
@@ -298,19 +299,19 @@ namespace BECore::Tests {
             EXPECT_FALSE(task.IsDone());
         }  // the Task is dropped: the suspended frame is destroyed, its awaiter with it
 
-        EXPECT_EQ(guard.use_count(), 1);
+        EXPECT_EQ(guardEnded, 1);
         EXPECT_TRUE(log.order.empty());
     }
 
     TEST(TweenAwaiterTest, TheDestructorOfTheManagerNeverResumesAWaiter) {
         Log log;
-        auto guard = MakeShared<int>(0);
+        int guardEnded = 0;
         IntrusivePtr<TweenHandle> handle;
         Task<void> task;
         {
             TweenManager tweens;
             handle = StartSilent(tweens, kOneSecond);
-            task = AwaitHandleWithGuard(guard, handle, log, 1);
+            task = AwaitHandleWithGuard(DestroyTally(guardEnded), handle, log, 1);
             task.Resume();
         }
 
@@ -318,21 +319,22 @@ namespace BECore::Tests {
         EXPECT_TRUE(log.order.empty());
         EXPECT_FALSE(task.IsDone());
 
-        task = Task<void>{};  // the frame goes, the awaiter finds no manager and nothing to unregister from
-        EXPECT_EQ(guard.use_count(), 1);
+        EXPECT_EQ(guardEnded, 0);  // the suspended frame is still alive
+        task = Task<void>{};       // the frame goes, the awaiter finds no manager and nothing to unregister from
+        EXPECT_EQ(guardEnded, 1);
     }
 
     TEST(TweenAwaiterTest, ATaskDroppedWhileItWaitsIsNeverResumed) {
         TweenManager tweens;
         Log log;
-        auto guard = MakeShared<int>(0);
+        int guardEnded = 0;
         const auto handle = StartSilent(tweens, kOneSecond);
         {
-            Task<void> task = AwaitHandleWithGuard(guard, handle, log, 1);
+            Task<void> task = AwaitHandleWithGuard(DestroyTally(guardEnded), handle, log, 1);
             task.Resume();
-            ASSERT_EQ(guard.use_count(), 2);
+            ASSERT_EQ(guardEnded, 0);
         }  // the awaiter unregisters in its destructor
-        EXPECT_EQ(guard.use_count(), 1);
+        EXPECT_EQ(guardEnded, 1);
 
         tweens.Advance(kOneSecond);  // would resume a destroyed frame if the waiter were still registered
 
