@@ -1,10 +1,15 @@
+#include <BECore/Clipboard/ClipboardControl.h>
 #include <BECore/Control/ControlBuiltins.h>
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Profiler/ProfilerControl.h>
 #include <BECore/Time/Time.h>
+#include <BECore/UI/UIControl.h>
 #include <Common/EngineEnvironment.h>
+#include <CoreSDL/SDLScreenshot.h>
 #include <Events/ApplicationEvents.h>
+#include <Games/GameControl.h>
 #include <gtest/gtest.h>
 #include <thread>
 
@@ -938,6 +943,288 @@ namespace BECore::Tests {
         EXPECT_EQ(counter.count, 1);
         ASSERT_EQ(responses.size(), 1u);
         EXPECT_EQ(IdOf(responses[0]), 2);
+    }
+
+    namespace {
+
+        const ControlMethodListing* FindListing(const Vector<ControlMethodListing>& methods, StringView name) {
+            for (const ControlMethodListing& listing : methods) {
+                if (listing.name == name) {
+                    return &listing;
+                }
+            }
+            return nullptr;
+        }
+
+        const Json* FindListedMethod(const Json& result, StringView name) {
+            const Json* methods = FindJsonMember(result, "methods");
+            if (methods == nullptr || !methods->is_array()) {
+                return nullptr;
+            }
+            for (const Json& method : *methods) {
+                const auto methodName = GetJsonString(method, "name");
+                if (methodName && *methodName == name) {
+                    return &method;
+                }
+            }
+            return nullptr;
+        }
+
+    }  // namespace
+
+    TEST_F(ControlServiceTest, GetMethodsListsEveryHandlerSortedByName) {
+        RegisterRecording("zeta");
+        RegisterRecording("alpha");
+        RegisterRecording("mid");
+
+        const Vector<ControlMethodListing> methods = service.GetMethods();
+
+        ASSERT_EQ(methods.size(), 3u);
+        EXPECT_EQ(methods[0].name, "alpha");
+        EXPECT_EQ(methods[1].name, "mid");
+        EXPECT_EQ(methods[2].name, "zeta");
+        EXPECT_EQ(methods[0].info, nullptr);
+    }
+
+    TEST_F(ControlServiceTest, ADescribedMethodIsListedWithItsDescription) {
+        RegisterRecording("move");
+        service.DescribeMethod("move", {"Moves a piece", {{"from", "string", true, "the square"}, {"to", "string", false, ""}}});
+
+        const Vector<ControlMethodListing> methods = service.GetMethods();
+
+        const ControlMethodListing* listing = FindListing(methods, "move");
+        ASSERT_NE(listing, nullptr);
+        ASSERT_NE(listing->info, nullptr);
+        EXPECT_EQ(listing->info->summary, "Moves a piece");
+        ASSERT_EQ(listing->info->params.size(), 2u);
+        EXPECT_EQ(listing->info->params[0].name, "from");
+        EXPECT_TRUE(listing->info->params[0].required);
+        EXPECT_FALSE(listing->info->params[1].required);
+    }
+
+    TEST_F(ControlServiceTest, ARegisteredAgainMethodKeepsItsDescription) {
+        RegisterRecording("move");
+        service.DescribeMethod("move", {"Moves a piece", {}});
+        RegisterRecording("move");
+
+        const Vector<ControlMethodListing> methods = service.GetMethods();
+
+        ASSERT_EQ(methods.size(), 1u);
+        ASSERT_NE(methods[0].info, nullptr);
+        EXPECT_EQ(methods[0].info->summary, "Moves a piece");
+    }
+
+    TEST_F(ControlServiceTest, ADescriptionIsReplacedByTheNextOne) {
+        RegisterRecording("move");
+        service.DescribeMethod("move", {"first", {{"a", "any", false, ""}}});
+        service.DescribeMethod("move", {"second", {}});
+
+        const Vector<ControlMethodListing> methods = service.GetMethods();
+
+        ASSERT_EQ(methods.size(), 1u);
+        ASSERT_NE(methods[0].info, nullptr);
+        EXPECT_EQ(methods[0].info->summary, "second");
+        EXPECT_TRUE(methods[0].info->params.empty());
+    }
+
+    TEST_F(ControlServiceTest, ADescriptionWithoutAHandlerIsNotListedButWaitsForOne) {
+        service.DescribeMethod("later", {"Described first", {}});
+        EXPECT_TRUE(service.GetMethods().empty());
+
+        RegisterRecording("later");
+
+        const Vector<ControlMethodListing> methods = service.GetMethods();
+        ASSERT_EQ(methods.size(), 1u);
+        ASSERT_NE(methods[0].info, nullptr);
+        EXPECT_EQ(methods[0].info->summary, "Described first");
+    }
+
+    TEST_F(ControlServiceTest, TheMethodsVersionMovesOnANewNameAndOnADescriptionOnly) {
+        const uint64_t start = service.GetMethodsVersion();
+
+        RegisterRecording("one");
+        const uint64_t afterNewName = service.GetMethodsVersion();
+        EXPECT_GT(afterNewName, start);
+
+        RegisterRecording("one");
+        EXPECT_EQ(service.GetMethodsVersion(), afterNewName);
+
+        service.DescribeMethod("one", {"text", {}});
+        const uint64_t afterDescription = service.GetMethodsVersion();
+        EXPECT_GT(afterDescription, afterNewName);
+
+        Post(MakeRequest(1, "one"));
+        service.Drain();
+        service.SetFrameEndHook("hook", [] {});
+        service.EndFrame();
+        EXPECT_EQ(service.GetMethodsVersion(), afterDescription);
+    }
+
+    TEST_F(ControlServiceTest, ListMethodsAnswersWithTheDescriptionsOfTheBuiltins) {
+        RegisterControlBuiltins(service);
+        RegisterRecording("undescribed");
+
+        Post(MakeRequest(1, "list_methods"));
+        service.Drain();
+
+        ASSERT_EQ(responses.size(), 1u);
+        ASSERT_TRUE(IsOk(responses[0]));
+        const Json* result = ResultOf(0);
+        ASSERT_NE(result, nullptr);
+
+        const Json* ping = FindListedMethod(*result, "ping");
+        ASSERT_NE(ping, nullptr);
+        EXPECT_FALSE(GetJsonString(*ping, "summary").value_or("").empty());
+        const Json* pingParams = FindJsonMember(*ping, "params");
+        ASSERT_NE(pingParams, nullptr);
+        EXPECT_TRUE(pingParams->is_array());
+        EXPECT_TRUE(pingParams->empty());
+
+        const Json* step = FindListedMethod(*result, "step");
+        ASSERT_NE(step, nullptr);
+        const Json* stepParams = FindJsonMember(*step, "params");
+        ASSERT_NE(stepParams, nullptr);
+        ASSERT_EQ(stepParams->size(), 2u);
+        EXPECT_EQ(GetJsonString((*stepParams)[0], "name").value_or(""), "frames");
+        EXPECT_EQ(GetJsonString((*stepParams)[0], "type").value_or(""), "integer");
+        EXPECT_FALSE(GetJsonBool((*stepParams)[0], "required").value_or(true));
+        EXPECT_EQ(GetJsonString((*stepParams)[1], "name").value_or(""), "dt");
+
+        const Json* undescribed = FindListedMethod(*result, "undescribed");
+        ASSERT_NE(undescribed, nullptr);
+        EXPECT_EQ(GetJsonString(*undescribed, "summary").value_or("x"), "");
+        const Json* undescribedParams = FindJsonMember(*undescribed, "params");
+        ASSERT_NE(undescribedParams, nullptr);
+        EXPECT_TRUE(undescribedParams->empty());
+        EXPECT_NE(FindListedMethod(*result, "list_methods"), nullptr);
+    }
+
+    TEST_F(ControlServiceTest, AMethodWithoutADescriptionStillRuns) {
+        RegisterRecording("plain");
+
+        Post(MakeRequest(1, "plain"));
+        service.Drain();
+
+        ASSERT_EQ(responses.size(), 1u);
+        EXPECT_TRUE(IsOk(responses[0]));
+        ASSERT_EQ(order.size(), 1u);
+    }
+
+    TEST_F(ControlServiceTest, ListingMethodsDoesNotInternTheirNames) {
+        ASSERT_FALSE(PoolString::Find("listed_only_method_7c41b9").has_value());
+        RegisterRecording("listed_only_method_7c41b9");
+        service.DescribeMethod("listed_only_method_7c41b9", {"text", {{"listed_only_param_7c41b9", "any", false, ""}}});
+
+        EXPECT_EQ(service.GetMethods().size(), 1u);
+
+        EXPECT_FALSE(PoolString::Find("listed_only_method_7c41b9").has_value());
+        EXPECT_FALSE(PoolString::Find("listed_only_param_7c41b9").has_value());
+    }
+
+    namespace {
+
+        /// What a BagiEngineTests process can register: the builtins and every module's methods (a game registers its own beside them)
+        void RegisterEveryModuleMethod(ControlService& service) {
+            RegisterControlBuiltins(service);
+            RegisterUIControl(service);
+            RegisterProfilerControl(service);
+            RegisterClipboardControl(service);
+            RegisterGameControl(service);
+            RegisterScreenshotControl(service);
+        }
+
+        Vector<String> RequiredParams(const Vector<ControlMethodListing>& methods, StringView name) {
+            Vector<String> required;
+            const ControlMethodListing* listing = FindListing(methods, name);
+            if (listing != nullptr && listing->info != nullptr) {
+                for (const ControlParamInfo& param : listing->info->params) {
+                    if (param.required) {
+                        required.push_back(param.name);
+                    }
+                }
+            }
+            return required;
+        }
+
+    }  // namespace
+
+    TEST_F(ControlServiceTest, EveryMethodOfTheModulesIsDescribed) {
+        RegisterEveryModuleMethod(service);
+
+        const Vector<ControlMethodListing> methods = service.GetMethods();
+
+        EXPECT_NE(FindListing(methods, "ui_click"), nullptr);
+        EXPECT_NE(FindListing(methods, "perform_action"), nullptr);
+        EXPECT_NE(FindListing(methods, "screenshot"), nullptr);
+        for (const ControlMethodListing& listing : methods) {
+            ASSERT_NE(listing.info, nullptr) << listing.name.c_str() << " has no description";
+            EXPECT_FALSE(listing.info->summary.empty()) << listing.name.c_str();
+            for (const ControlParamInfo& param : listing.info->params) {
+                EXPECT_FALSE(param.name.empty()) << listing.name.c_str();
+                EXPECT_FALSE(param.type.empty()) << listing.name.c_str() << "." << param.name.c_str();
+            }
+        }
+    }
+
+    TEST_F(ControlServiceTest, TheRequiredParamsOfADescriptionAreTheOnesTheHandlerRejects) {
+        RegisterEveryModuleMethod(service);
+        const Vector<ControlMethodListing> methods = service.GetMethods();
+
+        EXPECT_EQ(RequiredParams(methods, "ui_click"), Vector<String>{"name"});
+        EXPECT_EQ(RequiredParams(methods, "clipboard_set"), Vector<String>{"text"});
+        EXPECT_TRUE(RequiredParams(methods, "step").empty());
+
+        Post(MakeRequest(1, "ui_click"));
+        Post(MakeRequest(2, "clipboard_set"));
+        Post(MakeRequest(3, "switch_game"));
+        service.Drain();
+
+        ASSERT_EQ(responses.size(), 3u);
+        EXPECT_EQ(ErrorCode(responses[0]), "invalid_params");
+        EXPECT_EQ(ErrorCode(responses[1]), "invalid_params");
+        EXPECT_EQ(ErrorCode(responses[2]), "invalid_params");
+        EXPECT_EQ(RequiredParams(methods, "switch_game"), Vector<String>{"name"});
+    }
+
+    TEST_F(ControlServiceTest, TheTypesOfADescriptionAreTheOnesTheHandlerChecks) {
+        RegisterEveryModuleMethod(service);
+        const auto typeOf = [&](StringView method, StringView param) -> String {
+            const Vector<ControlMethodListing> methods = service.GetMethods();
+            const ControlMethodListing* listing = FindListing(methods, method);
+            if (listing != nullptr && listing->info != nullptr) {
+                for (const ControlParamInfo& info : listing->info->params) {
+                    if (info.name == param) {
+                        return info.type;
+                    }
+                }
+            }
+            return {};
+        };
+        EXPECT_EQ(typeOf("step", "frames"), "integer");
+        EXPECT_EQ(typeOf("step", "dt"), "number");
+        EXPECT_EQ(typeOf("ui_click", "canvas"), "string");
+        EXPECT_EQ(typeOf("ui_click", "at"), "number");
+
+        Json wrongFrames = Json::object();
+        wrongFrames["frames"] = "three";
+        Json wrongDt = Json::object();
+        wrongDt["dt"] = "slow";
+        Json wrongCanvas = Json::object();
+        wrongCanvas["name"] = "Ok";
+        wrongCanvas["canvas"] = 7;
+        Json wrongAt = Json::object();
+        wrongAt["name"] = "Ok";
+        wrongAt["at"] = "left";
+        Post(MakeRequest(1, "step", wrongFrames));
+        Post(MakeRequest(2, "step", wrongDt));
+        Post(MakeRequest(3, "ui_click", wrongCanvas));
+        Post(MakeRequest(4, "ui_click", wrongAt));
+        service.Drain();
+
+        ASSERT_EQ(responses.size(), 4u);
+        for (const Json& response : responses) {
+            EXPECT_EQ(ErrorCode(response), "invalid_params");
+        }
     }
 
     TEST_F(ControlServiceTest, StatusReportsWhetherTheClockIsManual) {
