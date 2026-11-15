@@ -852,8 +852,8 @@ def test_relaunch_of_a_named_worker_refuses_a_busy_session_and_one_that_is_missi
 # --- a run that ended its turn ------------------------------------------------------------------------------
 
 
-def blocked_session(w: Path, sessions: Path, last: dict) -> None:
-    record = session(w, "blocked", "ended1")
+def blocked_session(w: Path, sessions: Path, last: dict, state: str = "blocked") -> None:
+    record = session(w, state, "ended1")
     record["sessionId"] = "sess-ended"
     sessions.write_text(json.dumps([record]))
     path = worker.transcript_of(str(w), "sess-ended")
@@ -883,6 +883,22 @@ def test_a_run_that_ended_its_turn_waits_for_nobody(game: Path, fake_claude, tmp
     assert worker.main(["start", "--delay", "0", "--claude", str(script)]) == 0
     calls = log.read_text().splitlines()
     assert "stop ended1" in calls and any("--bg --name todo-w1" in c for c in calls)
+
+
+def test_an_idle_run_still_listed_as_working_has_ended(game: Path, fake_claude, tmp_path, monkeypatch, capsys):
+    script, _log, sessions = fake_claude
+    worker.main(["create", "1", "--no-configure"])
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude-config"))
+    w1 = game.parent / "game.workers" / "w1"
+    blocked_session(w1, sessions, ENDED, state="working")
+    capsys.readouterr()
+    assert worker.main(["list", "--json", "--claude", str(script)]) == 0
+    row = json.loads(capsys.readouterr().out)["workers"][0]
+    assert row["endedTurn"] and not row["active"]
+    blocked_session(w1, sessions, ASKING, state="working")
+    assert worker.main(["list", "--json", "--claude", str(script)]) == 0
+    row = json.loads(capsys.readouterr().out)["workers"][0]
+    assert row["active"] and not row["endedTurn"]
 
 
 def test_a_run_with_a_pending_tool_call_still_waits(game: Path, fake_claude, tmp_path, monkeypatch, capsys):
