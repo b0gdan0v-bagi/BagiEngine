@@ -96,11 +96,9 @@ namespace BECore::Tests {
         }
 
         /// A pure canvas layout with the screen, built through the same reflected path as a `.ui.xml` file; @p edit changes the text of the file first
-        void BuildLayout(UICanvasLayout& layout, const std::function<void(String&)>& edit = {}) {
+        void BuildLayout(UICanvasLayout& layout, FunctionRef<void(String&)> edit = NoTextEdit) {
             String body = kScreenBody;
-            if (edit) {
-                edit(body);
-            }
+            edit(body);
             const String xml = "<root>" + body + "</root>";
             XmlDeserializer deserializer;
             ASSERT_TRUE(deserializer.LoadFromString(xml));

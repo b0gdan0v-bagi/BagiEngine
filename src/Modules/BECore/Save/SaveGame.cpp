@@ -191,7 +191,7 @@ namespace BECore {
         return bytes;
     }
 
-    std::expected<void, SaveError> SaveGameService::Save(StringView slot, const SaveSchema& schema, const eastl::function<void(ISerializer&)>& writeState) {
+    std::expected<void, SaveError> SaveGameService::Save(StringView slot, const SaveSchema& schema, FunctionRef<void(ISerializer&)> writeState) {
         BE_PROFILE_SCOPE("SaveGame::Save");
         if (!_initialized) {
             return NotInitializedError();
@@ -211,7 +211,7 @@ namespace BECore {
         return WriteSlot(slot, serializer.GetData());
     }
 
-    std::expected<SaveInfo, SaveError> SaveGameService::Load(StringView slot, const SaveSchema& schema, const eastl::function<void(IDeserializer&)>& readState) const {
+    std::expected<SaveInfo, SaveError> SaveGameService::Load(StringView slot, const SaveSchema& schema, FunctionRef<void(IDeserializer&)> readState) const {
         BE_PROFILE_SCOPE("SaveGame::Load");
         const auto bytes = ReadSlot(slot);
         if (!bytes) {

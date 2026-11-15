@@ -74,7 +74,7 @@ namespace BECore {
         _port = 0;
     }
 
-    void WebSocketListener::ForEachOpenConnection(const std::function<void(WebSocketConnection&)>& visit) {
+    void WebSocketListener::ForEachOpenConnection(FunctionRef<void(WebSocketConnection&)> visit) {
         Vector<ConnectionPtr> targets;
         {
             LockGuard lock(_connectionsMutex);

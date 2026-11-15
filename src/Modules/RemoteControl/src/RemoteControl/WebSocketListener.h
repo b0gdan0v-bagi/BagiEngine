@@ -4,6 +4,7 @@
 #include <BECore/Threading/Mutex.h>
 #include <BECore/Threading/Thread.h>
 #include <BECore/Types/Types.h>
+#include <BECore/Utils/FunctionRef.h>
 #include <RemoteControl/WebSocketConnection.h>
 #include <atomic>
 #include <chrono>
@@ -108,7 +109,7 @@ namespace BECore {
         }
 
         /// Calls @p visit for every connection whose handshake is done and that is still open. The list is a copy: @p visit may queue frames, but it must not call Stop()
-        void ForEachOpenConnection(const std::function<void(WebSocketConnection&)>& visit);
+        void ForEachOpenConnection(FunctionRef<void(WebSocketConnection&)> visit);
 
     private:
         using ConnectionPtr = WebSocketHandler::ConnectionPtr;
