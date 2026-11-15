@@ -11,7 +11,7 @@ namespace BECore {
 
     namespace {
 
-        /// The rings get ids 1, 2, ...; a thread caches the buffer of the last ring it wrote to
+        /// The ids tell the rings apart, so a thread can cache the buffer of the last ring it wrote to
         constinit std::atomic<uint64_t> g_nextRingId{1};
         constinit thread_local uint64_t t_cachedRing = 0;
         constinit thread_local void* t_cachedBuffer = nullptr;

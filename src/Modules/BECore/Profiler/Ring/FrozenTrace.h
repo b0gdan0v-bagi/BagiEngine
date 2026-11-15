@@ -14,7 +14,6 @@ namespace BECore {
      * frames keep their real offsets. Each frame also gets an instant event named `Frozen frame` (`args` `frame`, `ms`) at its begin: not
      * `Frame`, which the summary tool turns into frame times, because the gap between two frozen frames is not a frame.
      * `otherData` holds `frozenFrames` and `dropped` (zones left out of the frames by SpikeCapture::kMaxFrozenZones). An empty list is a valid trace.
-     * The time unit of each frame is its own nanosecondsPerTick.
      */
     [[nodiscard]] String WriteFrozenTraceJson(const Vector<FrozenFrame>& frames);
 
