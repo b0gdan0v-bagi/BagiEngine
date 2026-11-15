@@ -23,9 +23,8 @@ namespace BECore {
      * IRenderer::CreateTexture().
      *
      * **Constants.** A draw reads two blocks, ConstantsSlot::Frame and ConstantsSlot::Draw. Each is at most kMaxConstantsBytes and a multiple
-     * of kConstantsAlignment; the pipeline declares the size of each, and SetConstants() takes exactly that many bytes. A backend may keep one
-     * slot in push constants and the other in a uniform ring. Constants live until the pass ends or the next SetPipeline() (the layouts of two
-     * pipelines may differ), and a draw needs every declared block set.
+     * of kConstantsAlignment; the pipeline declares the size of each, and SetConstants() takes exactly that many bytes. Constants live until the pass
+     * ends or the next SetPipeline() (the layouts of two pipelines may differ), and a draw needs every declared block set.
      *
      * **Conventions.** Front faces are counter-clockwise as seen from the camera; clip space has depth 0 to 1 and Y up (the Vulkan backend flips
      * the viewport, no matrix has a variant per backend); the viewport and the scissor default to the whole target at the start of a pass.
