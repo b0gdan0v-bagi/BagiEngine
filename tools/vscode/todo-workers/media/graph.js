@@ -56,9 +56,9 @@
     // What a run that took nothing says in a tooltip: the tried entry, the reason in full and where it came from.
     function noClaimTip(nc) {
         return [
-            nc.entry ? `${nc.entry}${nc.title ? `: ${nc.title}` : ""}: not taken` : "The run took nothing: no entry was eligible",
+            nc.entry ? `${nc.entry}: not taken` : "The run took nothing: no entry was eligible",
             `Reason: ${nc.reason || Runs.NO_REASON}`,
-            nc.source === "line" ? "said by the loop (NOT TAKEN line)" : "seen at start: the entry the loop was started on",
+            nc.reason ? "said by the loop (NOT TAKEN line)" : "seen at start: the entry the loop was started on",
             nc.entry ? "Click: open the entry in the Todo list" : "",
         ].filter(Boolean).join("\n");
     }

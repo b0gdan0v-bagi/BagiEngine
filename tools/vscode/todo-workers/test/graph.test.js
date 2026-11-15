@@ -19,7 +19,8 @@ const classOf = (box) => box.attrs.class;
 const textsOf = (box) => box.kids.filter((k) => k.tag === "text").map((k) => k.text);
 const tipOf = (box) => (box.kids.find((k) => k.tag === "title") || {}).text;
 
-const TOOK_NOTHING = { entry: "match3-level-format", title: "Level format", reason: "waits for match3-core-refactor", source: "line" };
+// `worker.noClaim` as `worker.py list --json --store` gives it.
+const TOOK_NOTHING = { entry: "match3-level-format", reason: "waits for match3-core-refactor" };
 
 test("a worker that took nothing is its own state, with the tried entry in place of the empty box", () => {
     const [wbox, nbox] = boxes([worker({ noClaim: TOOK_NOTHING })]);
@@ -37,15 +38,16 @@ test("a worker that took nothing is its own state, with the tried entry in place
     assert.ok(!svg.includes(">done<"));
 });
 
-test("the tooltip of an entry seen only at start names that source", () => {
-    const [, nbox] = boxes([worker({ noClaim: { ...TOOK_NOTHING, reason: null, source: "memory" } })]);
+test("the tooltip of an entry seen only at start (null reason) names that source", () => {
+    const [, nbox] = boxes([worker({ noClaim: { ...TOOK_NOTHING, reason: null } })]);
     assert.match(tipOf(nbox), /seen at start/);
+    assert.ok(!/NOT TAKEN line/.test(tipOf(nbox)));
     assert.match(textsOf(nbox)[1], /^not taken · no reason/);
     assert.match(tipOf(nbox), /no reason said: Log shows the run/);
 });
 
 test("NOT TAKEN - shows that nothing was eligible and cannot be clicked", () => {
-    const [, nbox] = boxes([worker({ noClaim: { entry: null, title: "", reason: "every entry is busy", source: "line" } })]);
+    const [, nbox] = boxes([worker({ noClaim: { entry: null, reason: "every entry is busy" } })]);
     assert.strictEqual(textsOf(nbox)[0], "nothing eligible");
     assert.strictEqual(nbox.act, undefined);
 });
@@ -68,4 +70,10 @@ test("a worker that holds an entry draws it, not the noClaim box", () => {
     const all = boxes([held]);
     assert.ok(all.some((b) => /g-held/.test(classOf(b))));
     assert.ok(!all.some((b) => /g-noclaim/.test(classOf(b))));
+});
+
+test("a CLI without noClaim (an older loader) draws the empty box and no error", () => {
+    const all = boxes([worker({ noClaim: undefined })]);
+    assert.match(classOf(all[0]), /sess-done/);
+    assert.match(classOf(all[1]), /g-ghost/);
 });

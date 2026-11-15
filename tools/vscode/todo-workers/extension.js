@@ -10,7 +10,6 @@
 //   src/review.js    review, Review with Claude, Quick merge, Merge with Claude, Return with remarks
 //   src/todoList.js  the Todo list tab and the owner's writes to the store
 //   src/stages.js    the stage plans of through entries (their progress)
-//   src/runs.js      the runs that took nothing (`worker.noClaim`) and what is remembered of a loop's start
 //   src/insights.js  the slower views (busy files, the day, the timeline, review rounds), the doctor's fixes, the merge
 //                    train, the end of the day, Dispatch, the push to a phone
 // Both views read again at once when todo.py signals a write (~/.claude/todo/changed.json), besides the timer.
@@ -74,7 +73,7 @@ function activate(context) {
     ctx.workerOf = (k) => ctx.state && ctx.state.workers.find((w) => w.k === k);
     const entryOf = (id) => ctx.state && [...ctx.state.review, ...ctx.state.workers.map((w) => w.entry)].find((e) => e && e.id === id);
 
-    for (const name of ["feed", "build", "workers", "review", "todoList", "stages", "runs", "insights"]) require(`./src/${name}`).attach(ctx);
+    for (const name of ["feed", "build", "workers", "review", "todoList", "stages", "insights"]) require(`./src/${name}`).attach(ctx);
 
     function act(message) {
         const worker = ctx.workerOf(message.worker);
@@ -148,7 +147,6 @@ function activate(context) {
             const away = (e) => e.local === false || Boolean(e.foreignBase);
             ctx.state.reviewElsewhere = (ctx.state.review || []).filter(away);
             ctx.state.review = (ctx.state.review || []).filter((e) => !away(e));
-            ctx.markNoClaim(ctx.state);
             ctx.withStages([...ctx.state.workers.map((w) => w.entry), ...ctx.state.review, ...ctx.state.reviewElsewhere]);
             const info = ctx.cachedBuildInfo() || (await ctx.getBuildInfo());
             view.show({ state: ctx.state, at: Date.now(), feed: ctx.feed(), lastVerify: ctx.lastVerify(), prices: config().prices, shotsTool: Boolean(info && info.shots), verifying: ctx.isVerifying() ? "running" : null, insights: ctx.insights(), ...ctx.machine() });

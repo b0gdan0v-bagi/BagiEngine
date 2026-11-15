@@ -245,12 +245,12 @@
         return box;
     }
 
-    // A run that ended without claiming an entry: which one it tried, and why not (media/runs.js, noClaimOf).
+    // A run that ended without claiming an entry: which one it tried, and why not (`worker.noClaim` of `worker.py list --store`).
     function noClaimLine(worker) {
         const nc = worker.noClaim;
         const ask = el("div", "ask noclaim");
         const text = el("span", "", `Took nothing: ${nc.entry ? `${nc.entry}: ` : ""}${nc.reason || TodoRuns.NO_REASON}`);
-        text.title = [nc.title, nc.source === "line" ? "said by the loop (NOT TAKEN line)" : "seen at start: the entry the loop was started on"].filter(Boolean).join("\n");
+        text.title = nc.reason ? "said by the loop (NOT TAKEN line)" : "seen at start: the entry the loop was started on";
         ask.appendChild(text);
         if (nc.entry) ask.appendChild(button("Open entry", { cmd: "todoList", entry: nc.entry }, "open it in the Todo list"));
         ask.appendChild(button("Fast start", { cmd: "fastStart", worker: worker.k }, "worker.py start <k> now: /todo-loop with the slices, loop arguments and report session of the settings (todoWorkers.*)", "primary"));
