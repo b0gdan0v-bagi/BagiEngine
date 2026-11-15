@@ -5,7 +5,8 @@ The library behind the skill `/qa` (`.claude/skills/qa/SKILL.md`): a charter scr
 | File | Purpose |
 |------|---------|
 | `bagi_qa_checks.py` | `Finding`, `Violation` and the generic checks as pure functions over control answers (no process, no I/O); the loader of a game's invariants module |
-| `bagi_qa.py` | `QaSession`, the session a charter script drives |
+| `bagi_qa.py` | `QaSession`, the session a charter script drives; the command line (`replay`, `shrink`) |
+| `bagi_qa_repro.py` | replay of a recorded scenario with the checks, the cut of it (`scenario_shrink.shrink`), the written reproduction |
 | `tests/` | pytest (`.venv/bin/python -m pytest tools/qa/tests`); `qa_fake_game.py` is the game of the session tests (knobs by environment variable, listed in its docstring) |
 
 ## Findings
@@ -47,3 +48,11 @@ A `Violation` is `(name, message)` (a plain pair does too); `bagi_qa_checks.Viol
 | `note(text)` | what the charter covered, for the report |
 
 `calls` counts every control call the session made and is the number of the line in the recording, so a finding's `call_index` points at it: the `ui_tree` call for a ui finding, the `perform_action` call for a refused or a going-back version, the `get_state` call for a `check_state` finding, the last call so far for a log line. The same name and message again is not a new finding: it adds to `details["repeats"]` of the first. A `SessionError` is raised to the script and kept in `session_errors`. `bugs` and `known` split `findings` by the module's `KNOWN_DEVIATIONS`.
+
+## Reproducing a finding
+
+`python3 tools/qa/bagi_qa.py replay|shrink --exe E [--invariants M] SESSION.jsonl` (`--preset` + `--game` instead of `--exe`; `--flag` adds a start flag; `shrink` also takes `--finding NAME`, `--out FILE`, `--max-probes N`). Exit codes: `replay` 0 nothing found (known deviations are printed and do not count), 1 findings, 2 a bad file or option, 77 no executable; `shrink` 0 nothing found, 1 the finding recurs and the file is written, 2 a bad file or option or a named finding that does not come back on the whole scenario (nothing written), 77.
+
+- **Replay** (`replay_steps`): a fresh game from the header's flags (they must hold `--headless` and `--manual-clock`; the game must be the header's), every call sent as it was through `QaSession.replay_call` (no launch frames, no recording), the same checks after every call, the `ui_tree` after every `step`. The checks add read-only calls, which change nothing in the game. A refusal is tolerated, as in the lenient mode of `bagi_play`. A finding's `call_index` is the 1-based number of the scenario call it showed after (a late log line: the last call played).
+- **Shrink** (`shrink_finding`): the calls after the one the finding showed at are dropped, then `scenario_shrink.shrink` cuts. A probe is a fresh game and the candidate calls; it fails when a finding with the same `name` appears. The last play of the result must show the finding again, else it is "not deterministic" (an error, nothing written).
+- **The written file** (`settle`, `write_repro`, `check_written`): the expectations of the recording are replaced by those of a run of the cut calls (a cut moves versions and refusals, so the recorded ones fail on lines that have nothing to do with the finding). The finding's `expect` goes on the last line: `logClean` for a log line, a `pointers` on the canvas for a ui finding (a `ui_tree` call is added at the end when the cut dropped it), `{}` (no expectation, so the refused call fails by itself) for a listed action that was refused. A finding with `expect` None (`version_back`, a game's invariant) leaves the lines as the run gave them: the file passes under `bagi_play.py` and only `bagi_qa.py replay` reproduces it; the output says so. Before the command succeeds it plays the file with `bagi_play` and removes it when it does not fail on the last line.

@@ -11,8 +11,15 @@
 
 Standard library only (through tools/control). The checks are in bagi_qa_checks.py; `tools/qa/CLAUDE.md` says what is checked after which call.
 A `SessionError` (the game is gone, did not answer, did not start) is raised to the script and kept in `session_errors` for the report.
+
+The command line works on a session that was recorded (`tools/qa/CLAUDE.md`, "Reproducing a finding"):
+
+    python3 tools/qa/bagi_qa.py replay --exe E [--invariants M] SESSION.jsonl
+    python3 tools/qa/bagi_qa.py shrink --exe E [--invariants M] [--finding NAME] [--out FILE] [--max-probes N] SESSION.jsonl
+Exit code: 0 nothing found, 1 a finding recurs (`shrink`: and its reproduction is written), 2 a bad file or option or a finding that does not recur, 77 no executable.
 """
 
+import argparse
 import base64
 import re
 import sys
@@ -38,6 +45,9 @@ SHOT_SETTLE_FRAMES = 2  # the picture shows the state only after the frames that
 SHOT_MAX_SIZE = 640
 HEADLESS_FLAG = "--headless"
 MANUAL_CLOCK_FLAG = "--manual-clock"
+PERFORM_ACTION_METHOD = "perform_action"
+STEP_METHOD = "step"
+UI_TREE_METHOD = "ui_tree"
 SCENARIO_FILE = "session.jsonl"
 SHOTS_FOLDER = "shots"
 SHOT_LABEL_UNSAFE = re.compile(r"[^A-Za-z0-9_-]+")
@@ -103,19 +113,23 @@ class QaSession:
     def known(self) -> list[Finding]:
         return checks.apply_known(self.findings, self.known_names)[1]
 
-    def launch(self, exe: str | None = None, preset: str | None = None, game: str | None = None, extra: Sequence[str] = ()) -> dict[str, Any]:
-        """Starts the game headless on the manual clock, recording to `session.jsonl`, lets a couple of frames pass and checks it (the `ui_tree` too)."""
+    def launch(self, exe: str | None = None, preset: str | None = None, game: str | None = None, extra: Sequence[str] = (), replay: bool = False) -> dict[str, Any]:
+        """Starts the game headless on the manual clock, recording to `session.jsonl`, lets a couple of frames pass and checks it (the `ui_tree` too).
+
+        `replay` is for playing a recorded scenario (bagi_qa_repro): the scenario holds its own first calls, so no frame is run and nothing is recorded.
+        """
         if self._launched:
             raise SessionError("this session already launched a game; make another QaSession")
         try:
-            description = self._game.launch(exe=exe, preset=preset, game=game, extra=extra, record=str(self.scenario_path))
+            description = self._game.launch(exe=exe, preset=preset, game=game, extra=extra, record=None if replay else str(self.scenario_path))
         except SessionError as error:
             self.session_errors.append(str(error))
             raise
         self._launched = True
         self.game = description.get("activeGame")
         self.flags = [HEADLESS_FLAG, MANUAL_CLOCK_FLAG, *extra]
-        self._step(LAUNCH_SETTLE_FRAMES, None, ui=True)
+        if not replay:
+            self._step(LAUNCH_SETTLE_FRAMES, None, ui=True)
         return description
 
     def step(self, frames: int = 1, dt: float | None = None) -> Any:
@@ -140,6 +154,26 @@ class QaSession:
         self._add(checks.run_action_checks(self.invariants, action, outcome.result, before, after), index)
         self._check_log()
         return outcome
+
+    def replay_call(self, method: str, params: dict[str, Any] | None = None) -> ActOutcome:
+        """Sends a recorded call as it was, then checks what it shows (the `ui_tree` after a `step` and from its own answer).
+
+        For playing a scenario back (bagi_qa_repro): an action goes through `act`, any other call that the game refuses is an outcome, not an exception.
+        The checks add read-only calls (`get_state`, `list_actions`, `ui_tree`), which change nothing in the game.
+        """
+        if method == PERFORM_ACTION_METHOD:
+            return self.act(params or {})
+        try:
+            result = self._call(method, params)
+        except ControlError as error:
+            self._check_log()
+            return ActOutcome(False, None, error.code, error.message)
+        index = self.calls
+        self._add(self._version_findings(result), index)
+        if method == UI_TREE_METHOD:
+            self._add(checks.check_ui_tree(result), index)
+        self.check(ui=method == STEP_METHOD)
+        return ActOutcome(True, result)
 
     def reset(self, **params: Any) -> Any:
         """The game's `reset` (its options are the game's: tools/stress/CLAUDE.md for BagiStress), then the checks. A refusal is a ControlError."""
@@ -176,7 +210,7 @@ class QaSession:
 
     def shot(self, label: str) -> Path:
         """A PNG of the next frame, `shots/<NN>-<label>.png` in the out folder, after a couple of frames so it shows the state; the path."""
-        self._call("step", {"frames": SHOT_SETTLE_FRAMES})
+        self._call(STEP_METHOD, {"frames": SHOT_SETTLE_FRAMES})
         answer = self._call("screenshot", {"maxSize": SHOT_MAX_SIZE})
         folder = self.out_dir / SHOTS_FOLDER
         folder.mkdir(exist_ok=True)
@@ -204,14 +238,14 @@ class QaSession:
         params: dict[str, Any] = {"frames": frames}
         if dt is not None:
             params["dt"] = dt
-        result = self._call("step", params)
+        result = self._call(STEP_METHOD, params)
         self.check(ui=ui)
         return result
 
     def _perform(self, action: dict[str, Any]) -> ActOutcome:
         self.actions += 1
         try:
-            result = self._call("perform_action", action)
+            result = self._call(PERFORM_ACTION_METHOD, action)
         except ControlError as error:
             self.refused += 1
             return ActOutcome(False, None, error.code, error.message)
@@ -239,7 +273,7 @@ class QaSession:
 
     def _check_ui(self) -> None:
         try:
-            tree = self._call("ui_tree")
+            tree = self._call(UI_TREE_METHOD)
         except ControlError:
             return  # no active scene: nothing to lay out
         self._add(checks.check_ui_tree(tree), self.calls)
@@ -268,3 +302,28 @@ class QaSession:
             kept = finding.at(call_index)
             self._sightings[key] = kept
             self.findings.append(kept)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    import bagi_qa_repro  # imported here: it imports QaSession from this module
+
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    commands = parser.add_subparsers(dest="command", required=True)
+    replay = commands.add_parser("replay", help="play a recorded scenario with the checks and print what it finds")
+    bagi_qa_repro.add_arguments(replay, shrinking=False)
+    replay.set_defaults(run=bagi_qa_repro.command_replay)
+    shrink = commands.add_parser("shrink", help="cut a recorded scenario down to the calls a finding needs and write it as a scenario")
+    bagi_qa_repro.add_arguments(shrink, shrinking=True)
+    shrink.set_defaults(run=bagi_qa_repro.command_shrink)
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    return args.run(args)
+
+
+if __name__ == "__main__":
+    import bagi_qa  # the one copy of this module that bagi_qa_repro imports too
+
+    sys.exit(bagi_qa.main())
