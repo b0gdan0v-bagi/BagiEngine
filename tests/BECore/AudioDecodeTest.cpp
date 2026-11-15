@@ -257,4 +257,71 @@ namespace BECore::Tests {
         EXPECT_EQ(ErrorOf(DecodeAudio(Vector<uint8_t>{'I', 'D', '3', 4, 0, 0})), "neither a WAVE nor an Ogg file");
     }
 
+    namespace {
+
+        /// Every frame of @p source, read in chunks of @p chunkFrames
+        Vector<float> ReadAll(IAudioSampleSource& source, size_t chunkFrames) {
+            const size_t channels = source.GetFormat().channels;
+            Vector<float> chunk(chunkFrames * channels);
+            Vector<float> all;
+            for (size_t frames = source.Read(chunk); frames > 0; frames = source.Read(chunk)) {
+                all.insert(all.end(), chunk.begin(), chunk.begin() + static_cast<ptrdiff_t>(frames * channels));
+            }
+            return all;
+        }
+
+    }  // namespace
+
+    TEST(AudioDecodeTest, AnOggStreamReadInChunksIsTheWholeDecode) {
+        const Vector<uint8_t> bytes = ReadFixture("stereo-tone.ogg");
+        const auto whole = DecodeOgg(bytes);
+        ASSERT_TRUE(whole.has_value()) << ErrorOf(whole).c_str();
+        auto stream = OpenAudioStream(bytes);
+        ASSERT_TRUE(stream.has_value()) << stream.error().c_str();
+        EXPECT_EQ((*stream)->GetFormat(), whole->format);
+
+        const Vector<float> read = ReadAll(**stream, 1000);  // not a divisor of the length: the last chunk is short
+        ASSERT_EQ(read.size(), whole->samples.size());
+        // DecodeOgg rounds to 16 bits, the stream gives the decoder's floats
+        for (size_t i = 0; i < read.size(); ++i) {
+            ASSERT_NEAR(read[i], whole->samples[i], 2.0f / 32768.0f) << "sample " << i;
+        }
+        Vector<float> after(16);
+        EXPECT_EQ((*stream)->Read(after), 0u) << "the end stays the end";
+    }
+
+    TEST(AudioDecodeTest, ARewoundOggStreamStartsAgain) {
+        auto stream = OpenAudioStream(ReadFixture("stereo-tone.ogg"));
+        ASSERT_TRUE(stream.has_value()) << stream.error().c_str();
+        const Vector<float> first = ReadAll(**stream, 4096);
+        ASSERT_TRUE((*stream)->Rewind());
+        const Vector<float> second = ReadAll(**stream, 4096);
+        ASSERT_EQ(first.size(), second.size());
+        for (size_t i = 0; i < first.size(); ++i) {
+            ASSERT_FLOAT_EQ(first[i], second[i]) << "sample " << i;
+        }
+    }
+
+    TEST(AudioDecodeTest, AWaveStreamReadsTheDecodedSamplesInWholeFrames) {
+        auto stream = OpenAudioStream(MakeWav(Fmt{.channels = 2}, Pcm16({0, 16384, -16384, 0, 32767, -32768})));
+        ASSERT_TRUE(stream.has_value()) << stream.error().c_str();
+        EXPECT_EQ((*stream)->GetFormat(), (AudioFormat{kRate, 2}));
+        Vector<float> chunk(5);  // two and a half frames: only whole frames are written
+        EXPECT_EQ((*stream)->Read(chunk), 2u);
+        EXPECT_FLOAT_EQ(chunk[1], 0.5f);
+        EXPECT_FLOAT_EQ(chunk[2], -0.5f);
+        EXPECT_EQ((*stream)->Read(chunk), 1u);
+        EXPECT_EQ((*stream)->Read(chunk), 0u);
+        ASSERT_TRUE((*stream)->Rewind());
+        EXPECT_EQ((*stream)->Read(chunk), 2u);
+        EXPECT_FLOAT_EQ(chunk[0], 0.0f);
+    }
+
+    TEST(AudioDecodeTest, AStreamOfBytesThatAreNotASoundIsRefused) {
+        EXPECT_FALSE(OpenAudioStream(Vector<uint8_t>{'I', 'D', '3', 4, 0, 0}).has_value());
+        EXPECT_FALSE(OpenAudioStream(Vector<uint8_t>{'O', 'g', 'g', 'S', 0, 2, 0, 0}).has_value());
+        EXPECT_FALSE(OpenAudioStream(MakeWav(Fmt{}, Vector<uint8_t>{})).has_value());
+        EXPECT_FALSE(OpenAudioStream(Vector<uint8_t>{}).has_value());
+    }
+
 }  // namespace BECore::Tests

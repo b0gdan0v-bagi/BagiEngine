@@ -22,24 +22,31 @@ namespace BECore {
         return LoadInternal(path);
     }
 
-    IntrusivePtr<AudioClip> AudioClipLoader::LoadInternal(PoolString path) {
-        BE_PROFILE_SCOPE("AudioClipLoader::Load");
+    std::expected<Vector<uint8_t>, String> ReadAudioFile(PoolString path) {
         const auto realPath = CoreManager::GetFileSystem().ResolvePath(path.ToStringView());
         std::ifstream file(realPath, std::ios::binary | std::ios::ate);  //-NoStd: file layer (engine-file-layer)
         if (realPath.empty() || !file) {
-            LOG_ERROR("AudioClipLoader: cannot open '{}'"_format(path.ToStringView()));
-            return AudioClip::CreateFailed(path);
+            return std::unexpected(Format("cannot open '{}'", path.ToStringView()));
         }
         const auto size = static_cast<size_t>(file.tellg());
         Vector<uint8_t> bytes(size);
         file.seekg(0);
         file.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(size));
         if (!file) {
-            LOG_ERROR("AudioClipLoader: cannot read '{}'"_format(path.ToStringView()));
+            return std::unexpected(Format("cannot read '{}'", path.ToStringView()));
+        }
+        return bytes;
+    }
+
+    IntrusivePtr<AudioClip> AudioClipLoader::LoadInternal(PoolString path) {
+        BE_PROFILE_SCOPE("AudioClipLoader::Load");
+        auto bytes = ReadAudioFile(path);
+        if (!bytes) {
+            LOG_ERROR("AudioClipLoader: {}"_format(bytes.error()));
             return AudioClip::CreateFailed(path);
         }
 
-        auto decoded = DecodeAudio(bytes);
+        auto decoded = DecodeAudio(*bytes);
         if (!decoded) {
             LOG_ERROR("AudioClipLoader: '{}': {}"_format(path.ToStringView(), decoded.error()));
             return AudioClip::CreateFailed(path);

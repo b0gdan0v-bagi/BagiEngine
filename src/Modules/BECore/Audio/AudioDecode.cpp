@@ -236,14 +236,118 @@ namespace BECore {
         return decoded;
     }
 
+    namespace {
+
+        bool IsWave(Span<const uint8_t> bytes) {
+            return bytes.size() >= kRiffHeaderSize && HasTag(bytes.data(), "RIFF") && HasTag(bytes.data() + 8, "WAVE");
+        }
+
+        bool IsOgg(Span<const uint8_t> bytes) {
+            return bytes.size() >= kTagSize && HasTag(bytes.data(), "OggS");
+        }
+
+        /// A sound decoded whole, read from memory
+        class MemorySampleSource final : public IAudioSampleSource {
+        public:
+            explicit MemorySampleSource(DecodedAudio audio) : _audio(std::move(audio)) {}
+
+            [[nodiscard]] AudioFormat GetFormat() const override {
+                return _audio.format;
+            }
+
+            size_t Read(Span<float> out) override {
+                const size_t channels = _audio.format.channels;
+                const size_t left = _audio.samples.size() - _position;
+                const size_t count = eastl::min(out.size() / channels * channels, left);
+                std::memcpy(out.data(), _audio.samples.data() + _position, count * sizeof(float));
+                _position += count;
+                return count / channels;
+            }
+
+            bool Rewind() override {
+                _position = 0;
+                return true;
+            }
+
+        private:
+            DecodedAudio _audio;
+            size_t _position = 0;  ///< in samples, a multiple of the channels
+        };
+
+        /// Ogg Vorbis decoded as it is read, through the pull API of stb_vorbis over the bytes it keeps
+        class OggSampleSource final : public IAudioSampleSource {
+        public:
+            OggSampleSource(Vector<uint8_t> bytes, stb_vorbis* decoder, AudioFormat format) : _bytes(std::move(bytes)), _decoder(decoder), _format(format) {}
+
+            ~OggSampleSource() override {
+                stb_vorbis_close(_decoder);
+            }
+
+            OggSampleSource(const OggSampleSource&) = delete;
+            OggSampleSource& operator=(const OggSampleSource&) = delete;
+
+            [[nodiscard]] AudioFormat GetFormat() const override {
+                return _format;
+            }
+
+            size_t Read(Span<float> out) override {
+                const size_t channels = _format.channels;
+                const size_t floats = eastl::min(out.size() / channels * channels, static_cast<size_t>(INT_MAX) / channels * channels);
+                if (floats == 0) {
+                    return 0;
+                }
+                const int frames = stb_vorbis_get_samples_float_interleaved(_decoder, static_cast<int>(channels), out.data(), static_cast<int>(floats));
+                return frames > 0 ? static_cast<size_t>(frames) : 0;
+            }
+
+            bool Rewind() override {
+                return stb_vorbis_seek_start(_decoder) != 0;
+            }
+
+        private:
+            Vector<uint8_t> _bytes;  ///< stb_vorbis reads from these: they live as long as the decoder
+            stb_vorbis* _decoder = nullptr;
+            AudioFormat _format;
+        };
+
+    }  // namespace
+
     AudioDecodeResult DecodeAudio(Span<const uint8_t> bytes) {
-        if (bytes.size() >= kRiffHeaderSize && HasTag(bytes.data(), "RIFF") && HasTag(bytes.data() + 8, "WAVE")) {
+        if (IsWave(bytes)) {
             return DecodeWav(bytes);
         }
-        if (bytes.size() >= kTagSize && HasTag(bytes.data(), "OggS")) {
+        if (IsOgg(bytes)) {
             return DecodeOgg(bytes);
         }
         return std::unexpected(String("neither a WAVE nor an Ogg file"));
+    }
+
+    AudioSampleSourceResult OpenAudioStream(Vector<uint8_t> bytes) {
+        if (IsWave(bytes)) {
+            auto decoded = DecodeWav(bytes);
+            if (!decoded) {
+                return std::unexpected(std::move(decoded.error()));
+            }
+            return UniquePtr<IAudioSampleSource>(MakeUnique<MemorySampleSource>(std::move(*decoded)));
+        }
+        if (!IsOgg(bytes)) {
+            return std::unexpected(String("neither a WAVE nor an Ogg file"));
+        }
+        if (bytes.size() > static_cast<size_t>(INT_MAX)) {
+            return std::unexpected(String("the Ogg file is larger than stb_vorbis can read"));
+        }
+        int error = 0;
+        stb_vorbis* decoder = stb_vorbis_open_memory(bytes.data(), static_cast<int>(bytes.size()), &error, nullptr);
+        if (decoder == nullptr) {
+            return std::unexpected(Format("not an Ogg Vorbis file stb_vorbis can open (error {})", error));
+        }
+        const stb_vorbis_info info = stb_vorbis_get_info(decoder);
+        if (info.channels <= 0 || info.channels > kMaxAudioChannels || info.sample_rate < kMinAudioSampleRate || info.sample_rate > kMaxAudioSampleRate) {
+            stb_vorbis_close(decoder);
+            return std::unexpected(Format("{} channels at {} Hz is not a stream the engine plays", info.channels, info.sample_rate));
+        }
+        const AudioFormat format{info.sample_rate, static_cast<uint8_t>(info.channels)};
+        return UniquePtr<IAudioSampleSource>(MakeUnique<OggSampleSource>(std::move(bytes), decoder, format));
     }
 
 }  // namespace BECore

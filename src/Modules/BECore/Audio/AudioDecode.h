@@ -34,4 +34,29 @@ namespace BECore {
     /// DecodeWav() or DecodeOgg() by the magic of the first bytes (`RIFF....WAVE`, `OggS`)
     [[nodiscard]] AudioDecodeResult DecodeAudio(Span<const uint8_t> bytes);
 
+    /// Samples read a part at a time, as music plays: the source of a stream voice. Main thread only (it keeps decoder state)
+    class IAudioSampleSource {
+    public:
+        virtual ~IAudioSampleSource() = default;
+
+        /// The rate and channels of every sample Read() gives
+        [[nodiscard]] virtual AudioFormat GetFormat() const = 0;
+
+        /// Fills the front of @p out with whole frames, interleaved; the frames written, 0 at the end. Allocates nothing
+        virtual size_t Read(Span<float> out) = 0;
+
+        /// Back to the first frame; false when the source cannot go back (and then it stays at the end)
+        virtual bool Rewind() = 0;
+    };
+
+    using AudioSampleSourceResult = std::expected<UniquePtr<IAudioSampleSource>, String>;
+
+    /**
+     * @brief A source over the bytes of a file, which it keeps: Ogg Vorbis is decoded while it is read (a few kilobytes of decoder state,
+     * not the whole track), a WAVE file is decoded whole by DecodeWav() at once.
+     *
+     * The same limits as a clip (channels, rate); the Ogg side trusts its input as DecodeOgg() does.
+     */
+    [[nodiscard]] AudioSampleSourceResult OpenAudioStream(Vector<uint8_t> bytes);
+
 }  // namespace BECore
