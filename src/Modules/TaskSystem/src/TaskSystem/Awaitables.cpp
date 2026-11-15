@@ -3,12 +3,7 @@
 
 namespace BECore {
 
-    // =================================================================
-    // MainThreadAwaiter
-    // =================================================================
-
     bool MainThreadAwaiter::await_ready() const noexcept {
-        // Если уже в главном потоке, не нужно переключаться
         return TaskManager::GetInstance().IsMainThread();
     }
 
@@ -19,20 +14,12 @@ namespace BECore {
         }
     }
 
-    // =================================================================
-    // BackgroundAwaiter
-    // =================================================================
-
     void BackgroundAwaiter::await_suspend(std::coroutine_handle<> handle) noexcept {
         auto* scheduler = TaskManager::GetInstance().GetScheduler();
         if (scheduler) {
             scheduler->Schedule([handle, label = label]() mutable { RunLabeled(label, [&handle] { handle.resume(); }); }, priority, ThreadType::Background);
         }
     }
-
-    // =================================================================
-    // DelayAwaiter
-    // =================================================================
 
     void DelayAwaiter::await_suspend(std::coroutine_handle<> handle) noexcept {
         auto* scheduler = TaskManager::GetInstance().GetScheduler();
@@ -41,14 +28,10 @@ namespace BECore {
         }
     }
 
-    // =================================================================
-    // YieldAwaiter
-    // =================================================================
-
     namespace {
 
-        /// The continuation of a yielded coroutine goes through TaskScheduler::ScheduleYielded: the cooperative
-        /// queue for a background job of a single-thread build, otherwise the queue of its own thread type.
+        /// Goes through TaskScheduler::ScheduleYielded (the cooperative queue for a background job of a single-thread
+        /// build, otherwise the queue of its own thread type).
         void ScheduleYield(std::coroutine_handle<> handle) noexcept {
             auto& taskManager = TaskManager::GetInstance();
             auto* scheduler = taskManager.GetScheduler();
@@ -66,10 +49,6 @@ namespace BECore {
     void YieldAwaiter::await_suspend(std::coroutine_handle<> handle) noexcept {
         ScheduleYield(handle);
     }
-
-    // =================================================================
-    // YieldIfNeededAwaiter
-    // =================================================================
 
     bool YieldIfNeededAwaiter::await_ready() const noexcept {
         return !TaskManager::GetInstance().ShouldYield();

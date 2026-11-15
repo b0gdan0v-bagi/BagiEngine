@@ -12,17 +12,13 @@
 namespace BECore {
 
     /**
-     * TaskGroup - группа связанных задач.
-     *
-     * Позволяет управлять несколькими задачами как единым целым:
-     * - Массовая отмена
-     * - Ожидание завершения всех
-     * - Общий CancellationToken
+     * Tasks managed together: cancel all, wait for all, one shared CancellationToken. Thread-safe. The group holds
+     * its handles until Clear() or its own destruction.
      *
      * @example
      * TaskGroup group;
-     * group.Run(Task1());
-     * group.Run(Task2());
+     * group.Add(TaskManager::GetInstance().Run(Task1()));
+     * group.Add(TaskManager::GetInstance().Run(Task2()));
      * group.WaitAll();
      */
     class TaskGroup {
@@ -30,23 +26,17 @@ namespace BECore {
         TaskGroup() : _token(CancellationToken::Create()) {}
         ~TaskGroup() = default;
 
-        // Non-copyable, non-movable (due to mutex)
         TaskGroup(const TaskGroup&) = delete;
         TaskGroup& operator=(const TaskGroup&) = delete;
         TaskGroup(TaskGroup&&) = delete;
         TaskGroup& operator=(TaskGroup&&) = delete;
 
-        /**
-         * Добавляет handle в группу.
-         */
         void Add(IntrusivePtr<TaskHandleBase> handle) {
             LockGuard lock(_mutex);
             _handles.push_back(std::move(handle));
         }
 
-        /**
-         * Отменяет все задачи в группе.
-         */
+        /** Cancels the group's token and every handle in it. */
         void CancelAll() {
             _token.Cancel();
 
@@ -56,9 +46,7 @@ namespace BECore {
             }
         }
 
-        /**
-         * Ожидает завершения всех задач.
-         */
+        /** Blocks until every task of the group at the time of the call has finished (a task added later is not waited for). */
         void WaitAll() {
             Vector<IntrusivePtr<TaskHandleBase>> handlesCopy;
             {
@@ -71,9 +59,6 @@ namespace BECore {
             }
         }
 
-        /**
-         * Проверяет, завершены ли все задачи.
-         */
         [[nodiscard]] bool AllDone() const {
             LockGuard lock(_mutex);
             for (const auto& handle : _handles) {
@@ -84,17 +69,11 @@ namespace BECore {
             return true;
         }
 
-        /**
-         * Возвращает количество задач в группе.
-         */
         [[nodiscard]] size_t Size() const {
             LockGuard lock(_mutex);
             return _handles.size();
         }
 
-        /**
-         * Возвращает количество завершенных задач.
-         */
         [[nodiscard]] size_t CompletedCount() const {
             LockGuard lock(_mutex);
             size_t count = 0;
@@ -106,9 +85,6 @@ namespace BECore {
             return count;
         }
 
-        /**
-         * Получает токен отмены группы.
-         */
         [[nodiscard]] CancellationToken& GetToken() {
             return _token;
         }
@@ -116,9 +92,7 @@ namespace BECore {
             return _token;
         }
 
-        /**
-         * Очищает список задач.
-         */
+        /** Drops the handles; the tasks themselves are not cancelled. */
         void Clear() {
             LockGuard lock(_mutex);
             _handles.clear();

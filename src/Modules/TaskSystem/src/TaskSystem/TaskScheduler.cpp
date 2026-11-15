@@ -88,18 +88,16 @@ namespace BECore {
     }
 
     void TaskScheduler::ProcessMainThreadTasks() {
-        // Обрабатываем задачи из очереди главного потока
         Vector<PrioritizedTask> tasksToProcess;
 
         {
             LockGuard lock(_mainThreadMutex);
-            // Перемещаем все задачи для обработки
             while (!_mainThreadQueue.Empty()) {
                 tasksToProcess.push_back(_mainThreadQueue.Pop());
             }
         }
 
-        // Выполняем задачи вне мьютекса
+        // Outside the mutex: a task may schedule more tasks
         for (auto& pt : tasksToProcess) {
             if (pt.task) {
                 BE_PROFILE_SCOPE("Main thread task");
@@ -124,7 +122,6 @@ namespace BECore {
             }
         }
 
-        // Планируем готовые задачи
         for (auto& dt : readyTasks) {
             Schedule(std::move(dt.task), dt.priority, dt.threadType);
         }
@@ -198,7 +195,6 @@ namespace BECore {
         _stopped.store(true, std::memory_order_relaxed);
         _sliceDeadline = (TimePoint::max)();
 
-        // Очищаем очереди
         {
             LockGuard lock(_mainThreadMutex);
             _mainThreadQueue.Clear();

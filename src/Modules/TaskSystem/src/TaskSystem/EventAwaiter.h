@@ -8,12 +8,8 @@
 namespace BECore {
 
     /**
-     * EventAwaiter<T> - awaitable для ожидания события.
-     *
-     * Позволяет использовать co_await для ожидания конкретного события.
-     * При получении события корутина возобновляется с данными события.
-     *
-     * @tparam EventType Тип события (должен наследовать EventBase<EventType>)
+     * Awaits one event of `EventType` (an EventBase<EventType>): the coroutine resumes inline from the handler, on
+     * the thread that fires the event, and the awaiter is unsubscribed first.
      *
      * @example
      * Task<void> HandleInput() {
@@ -27,7 +23,7 @@ namespace BECore {
         EventAwaiter() = default;
 
         bool await_ready() const noexcept {
-            return false;  // Всегда suspend для ожидания события
+            return false;
         }
 
         void await_suspend(std::coroutine_handle<> handle) noexcept {
@@ -55,10 +51,7 @@ namespace BECore {
     };
 
     /**
-     * Ожидает получение события указанного типа.
-     *
-     * @tparam EventType Тип события
-     * @return Awaitable, который вернет полученное событие
+     * Awaits one event of `EventType`.
      *
      * @example
      * auto keyEvent = co_await WaitForEvent<KeyPressEvent>();
@@ -69,9 +62,7 @@ namespace BECore {
     }
 
     /**
-     * EventAwaiterWithTimeout - ожидание события с таймаутом.
-     *
-     * @tparam EventType Тип события
+     * Awaits an event with a timeout; the timeout is not scheduled yet, so it waits for the event only.
      */
     template <typename EventType>
     class EventAwaiterWithTimeout : public SubscriptionHolder {
@@ -90,8 +81,6 @@ namespace BECore {
             _startTime = std::chrono::steady_clock::now();
 
             Subscribe<EventType, &EventAwaiterWithTimeout::OnEvent>(this);
-
-            // The timeout is not scheduled yet (there is no scheduler to call OnTimeout), so this awaiter waits for the event only.
         }
 
         Result await_resume() noexcept {
@@ -129,8 +118,7 @@ namespace BECore {
     };
 
     /**
-     * Ожидает событие с таймаутом.
-     * Возвращает std::nullopt при истечении таймаута.
+     * Event awaiter with a timeout (see EventAwaiterWithTimeout: the timeout does not fire yet).
      */
     template <typename EventType, typename Rep, typename Period>
     EventAwaiterWithTimeout<EventType> WaitForEventWithTimeout(std::chrono::duration<Rep, Period> timeout) {
