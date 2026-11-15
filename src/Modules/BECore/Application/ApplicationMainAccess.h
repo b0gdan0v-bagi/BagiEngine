@@ -2,8 +2,7 @@
 
 namespace BECore {
     /**
-     * Класс-ключ для доступа к методам Application только из main.cpp и классов,
-     * которые наследуются от ApplicationMainAccess (например, SDL3ApplicationFabric).
+     * Key type: only main.cpp and the classes derived from it (for example SDL3ApplicationFabric) may call the methods of Application.
      */
     class ApplicationMainAccess {};
 }  // namespace BECore

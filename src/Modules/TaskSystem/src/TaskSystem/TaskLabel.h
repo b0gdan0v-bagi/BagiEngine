@@ -5,13 +5,11 @@
 namespace BECore {
 
     /**
-     * @brief The name of a task in a profiler trace: the zone that a job of the pool or of the main thread opens around its slice.
+     * @brief The name of a task in a profiler trace: a zone opened inside the `Task` zone around a job's slice.
      *
-     * Every job on a pool thread already sits in a zone called `Task`; a label adds a zone inside it that says what the job is
-     * ("Load config"), so a trace shows what each thread works on. A label is made only with BE_TASK_LABEL (its name must be a string
-     * literal, as for BE_PROFILE_SCOPE) and passed to TaskManager::Run / RunDelayed / RunDelayedGameTime / RunOnMainThread or to
-     * SwitchToBackground / SwitchToMainThread. A default label is empty: no extra zone. Without the profiler (BE_PROFILER=0)
-     * BE_TASK_LABEL is the empty label, so the name costs nothing.
+     * Made only with BE_TASK_LABEL (a string literal, as for BE_PROFILE_SCOPE) and passed as the last argument of
+     * TaskManager::Run* or SwitchToBackground / SwitchToMainThread. A default label is empty: no extra zone. Without
+     * the profiler BE_TASK_LABEL is the empty label.
      */
     struct TaskLabel {
         const ProfileSite* site = nullptr;

@@ -66,7 +66,6 @@ namespace BECore {
 
             const uint64_t hash = StringUtils::GetHash(str);
 
-            // 1. Поиск под Shared Lock
             {
                 SharedLock lock(_mutex);
                 if (auto e = _table.Find(hash, str)) {
@@ -74,7 +73,6 @@ namespace BECore {
                 }
             }
 
-            // 2. Вставка под Unique Lock
             UniqueLock lock(_mutex);
 
             // Double-check

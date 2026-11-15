@@ -72,7 +72,7 @@ namespace BECore::Tests {
         const Json object = SampleObject();
 
         EXPECT_NE(FindJsonMember(object, "s"), nullptr);
-        EXPECT_NE(FindJsonMember(object, "n"), nullptr);  // a null member exists
+        EXPECT_NE(FindJsonMember(object, "n"), nullptr);
         EXPECT_EQ(FindJsonMember(object, "missing"), nullptr);
 
         EXPECT_EQ(FindJsonMember(Json::array({1, 2}), "s"), nullptr);

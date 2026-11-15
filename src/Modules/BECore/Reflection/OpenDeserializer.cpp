@@ -1,5 +1,6 @@
 #include "OpenDeserializer.h"
 
+#include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/XmlDeserializer.h>
@@ -54,15 +55,22 @@ namespace BECore {
 
     void LogDeserializeErrors(StringView configName, const IDeserializer& deserializer) {
         const auto& errors = deserializer.GetErrors();
-        LogDeserializeErrors(configName, Span<const DeserializeError>(errors.data(), errors.size()));
+        const auto& warnings = deserializer.GetWarnings();
+        LogDeserializeErrors(configName, Span<const DeserializeError>(errors.data(), errors.size()), Span<const DeserializeError>(warnings.data(), warnings.size()));
     }
 
-    void LogDeserializeErrors(StringView configName, Span<const DeserializeError> errors) {
+    void LogDeserializeErrors(StringView configName, Span<const DeserializeError> errors, Span<const DeserializeError> warnings) {
+        // A document that fails to parse has no path, and the line is 0 where the format has none (binary)
+        const auto text = [configName](const DeserializeError& message) {
+            const String path = message.path.ToStringView().empty() ? String{} : Format("{}: ", message.path.ToStringView());
+            const String line = message.line != 0 ? Format(" (line {})", message.line) : String{};
+            return Format("Config '{}': {}{}{}", configName, path, message.errorMessage.ToStringView(), line);
+        };
         for (const DeserializeError& error : errors) {
-            // A document that fails to parse has no path, and the line is 0 where the format has none (binary)
-            const String path = error.path.ToStringView().empty() ? String{} : Format("{}: ", error.path.ToStringView());
-            const String line = error.line != 0 ? Format(" (line {})", error.line) : String{};
-            LOG_ERROR(Format("Config '{}': {}{}{}", configName, path, error.errorMessage.ToStringView(), line).c_str());
+            LOG_ERROR(text(error).c_str());
+        }
+        for (const DeserializeError& warning : warnings) {
+            LOG_WARNING(text(warning).c_str());
         }
     }
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Reflection/FieldAttributes.h>
 #include <BECore/Reflection/MethodInfo.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Types/Types.h>
@@ -13,37 +14,29 @@
 namespace BECore {
 
     /**
-     * @brief Information about a reflected field
-     *
-     * Contains the field name and a pointer-to-member for accessing the field.
-     *
-     * @tparam Class The class containing the field
-     * @tparam T The type of the field
+     * @brief A reflected field: its name, the pointer-to-member and the attributes of `BE_FIELD_ATTRS(...)`
+     * (`FieldAttributes{}` when the field has none).
      */
     template <typename Class, typename T>
     struct FieldInfo {
         StringView name;
         T Class::* ptr;
+        FieldAttributes attributes;
 
-        constexpr FieldInfo(StringView n, T Class::* p) noexcept : name(n), ptr(p) {}
+        constexpr FieldInfo(StringView n, T Class::* p, const FieldAttributes& a = {}) noexcept : name(n), ptr(p), attributes(a) {}
     };
 
-    /**
-     * @brief Helper to deduce FieldInfo type from pointer-to-member
-     */
     template <typename Class, typename T>
     FieldInfo(StringView, T Class::*) -> FieldInfo<Class, T>;
 
+    template <typename Class, typename T>
+    FieldInfo(StringView, T Class::*, FieldAttributes) -> FieldInfo<Class, T>;
+
     /**
-     * @brief Primary template for reflection traits (empty by default)
+     * @brief Reflection traits; `reflected` is false unless the generated code specializes it for a `BE_CLASS` / `BE_EVENT` type
+     * (`name`, `purpose`, `fields`: a tuple of FieldInfo, `methods`: a tuple of MethodInfo / ConstMethodInfo).
      *
-     * Specialized by generated code for types marked with BE_REFLECT_CLASS.
-     * Provides:
-     * - static constexpr eastl::string_view name - the type name
-     * - static constexpr auto fields - tuple of FieldInfo
-     *
-     * @tparam T The type to get reflection traits for
-     * @note Default argument is specified in ReflectionMarkers.h forward declaration
+     * @note The default argument is in the forward declaration in ReflectionMarkers.h.
      */
     template <typename T, typename>
     struct ReflectionTraits {
@@ -51,17 +44,7 @@ namespace BECore {
     };
 
     /**
-     * @brief Concept to check if a type has reflection traits
-     *
-     * Used for SFINAE and if constexpr checks in serialization code.
-     *
-     * @example
-     * template<typename T>
-     * void Save(ISerializer& serializer, const T& obj) {
-     *     if constexpr (HasReflection<T>) {
-     *         // Use ReflectionTraits<T>::fields
-     *     }
-     * }
+     * @brief A type with generated reflection traits.
      */
     template <typename T>
     concept HasReflection = requires {
@@ -71,23 +54,13 @@ namespace BECore {
         ReflectionTraits<T>::fields;
     };
 
-    /**
-     * @brief Helper to get the number of reflected fields
-     *
-     * @tparam T The reflected type
-     * @return Number of fields in the reflection traits
-     */
     template <typename T>
     requires HasReflection<T> constexpr size_t FieldCount() {
         return std::tuple_size_v<decltype(ReflectionTraits<T>::fields)>;
     }
 
     /**
-     * @brief Check if a type has a field with the given name at compile-time
-     *
-     * @tparam T The reflected type
-     * @param name The field name to search for
-     * @return true if field exists
+     * @brief Whether a reflected type has a field of this name (the C++ name, with its underscore), at compile time.
      *
      * @example
      * static_assert(HasField<Player>("health"));
@@ -101,11 +74,7 @@ namespace BECore {
     }
 
     /**
-     * @brief Get field info by index at compile-time
-     *
-     * @tparam T The reflected type
-     * @tparam I The field index
-     * @return FieldInfo for the field at index I
+     * @brief The FieldInfo of field @p I, in declaration order.
      *
      * @example
      * static_assert(GetFieldInfo<Player, 0>().name == "health");
@@ -116,34 +85,20 @@ namespace BECore {
     }
 
     /**
-     * @brief Helper to iterate over all reflected fields
-     *
-     * @tparam T The reflected type
-     * @tparam Func Callable type
-     * @param obj The object to iterate over
-     * @param func Function to call for each field (receives name and value reference)
+     * @brief Calls @p func(name, value reference) for every reflected field, in declaration order.
      */
     template <typename T, typename Func>
     requires HasReflection<T> constexpr void ForEachField(T& obj, Func&& func) {
         std::apply([&](auto&&... fields) { (func(fields.name, obj.*(fields.ptr)), ...); }, ReflectionTraits<T>::fields);
     }
 
-    /**
-     * @brief Const version of ForEachField
-     */
     template <typename T, typename Func>
     requires HasReflection<T> constexpr void ForEachField(const T& obj, Func&& func) {
         std::apply([&](auto&&... fields) { (func(fields.name, obj.*(fields.ptr)), ...); }, ReflectionTraits<T>::fields);
     }
 
-    // =========================================================================
-    // Method Reflection Helpers
-    // =========================================================================
-
     /**
-     * @brief Concept to check if a type has method reflection
-     *
-     * Types with BE_FUNCTION marked methods will have ReflectionTraits<T>::methods
+     * @brief A reflected type with `ReflectionTraits<T>::methods` (an empty tuple when no method is marked `BE_FUNCTION`).
      */
     template <typename T>
     concept HasMethodReflection = requires {
@@ -152,23 +107,13 @@ namespace BECore {
         ReflectionTraits<T>::methods;
     };
 
-    /**
-     * @brief Helper to get the number of reflected methods
-     *
-     * @tparam T The reflected type
-     * @return Number of methods in the reflection traits
-     */
     template <typename T>
     requires HasMethodReflection<T> constexpr size_t MethodCount() {
         return std::tuple_size_v<decltype(ReflectionTraits<T>::methods)>;
     }
 
     /**
-     * @brief Check if a type has a method with the given name at compile-time
-     *
-     * @tparam T The reflected type
-     * @param name The method name to search for
-     * @return true if method exists
+     * @brief Whether a reflected type has a `BE_FUNCTION` method of this name, at compile time.
      *
      * @example
      * static_assert(HasMethod<Player>("TakeDamage"));
@@ -182,11 +127,7 @@ namespace BECore {
     }
 
     /**
-     * @brief Get method info by index at compile-time
-     *
-     * @tparam T The reflected type
-     * @tparam I The method index
-     * @return MethodInfo or ConstMethodInfo for the method at index I
+     * @brief The MethodInfo or ConstMethodInfo of method @p I, in declaration order.
      *
      * @example
      * static_assert(GetMethodInfo<Player, 0>().name == "TakeDamage");
@@ -197,10 +138,7 @@ namespace BECore {
     }
 
     /**
-     * @brief Concept to check if Derived is a reflected class derived from Base
-     *
-     * @tparam Derived The derived type
-     * @tparam Base The base type
+     * @brief Derived is a reflected class derived from the reflected Base.
      *
      * @example
      * static_assert(ReflectedDerivedFrom<ConsoleSink, ILogSink>);
@@ -209,11 +147,7 @@ namespace BECore {
     concept ReflectedDerivedFrom = HasReflection<Derived> && HasReflection<Base> && std::is_base_of_v<Base, Derived>;
 
     /**
-     * @brief Helper to iterate over all reflected methods
-     *
-     * @tparam T The reflected type
-     * @tparam Func Callable type
-     * @param func Function to call for each method (receives MethodInfo)
+     * @brief Calls @p func(MethodInfo or ConstMethodInfo) for every reflected method.
      */
     template <typename T, typename Func>
     requires HasMethodReflection<T> constexpr void ForEachMethod(Func&& func) {
@@ -221,10 +155,7 @@ namespace BECore {
     }
 
     namespace Detail {
-        /**
-         * @brief Try to invoke a single method if signature matches
-         * Uses if constexpr to skip methods with incompatible signatures at compile time
-         */
+        /// A method whose signature cannot take @p args is skipped at compile time, so a name shared by such methods is no error
         template <typename Ret, typename Method, typename T, typename... Args>
         constexpr bool TryInvokeOne(Method& method, T& obj, StringView name, Ret& result, Args&&... args) {
             using MethodPtr = decltype(method.ptr);
@@ -237,9 +168,6 @@ namespace BECore {
             return false;
         }
 
-        /**
-         * @brief Try to invoke a single void method if signature matches
-         */
         template <typename Method, typename T, typename... Args>
         constexpr bool TryInvokeOneVoid(Method& method, T& obj, StringView name, Args&&... args) {
             using MethodPtr = decltype(method.ptr);
@@ -252,37 +180,22 @@ namespace BECore {
             return false;
         }
 
-        /**
-         * @brief Helper to find and invoke a method by name
-         */
         template <typename Ret, typename T, typename... Args, typename MethodTuple, size_t... Is>
         constexpr Ret InvokeMethodImpl(T& obj, StringView name, MethodTuple& methods, std::index_sequence<Is...>, Args&&... args) {
             Ret result{};
-            // Fold expression with short-circuit - stops at first match
             (TryInvokeOne(std::get<Is>(methods), obj, name, result, std::forward<Args>(args)...) || ...);
             return result;
         }
 
-        /**
-         * @brief Helper for void return type
-         */
         template <typename T, typename... Args, typename MethodTuple, size_t... Is>
         constexpr void InvokeMethodVoidImpl(T& obj, StringView name, MethodTuple& methods, std::index_sequence<Is...>, Args&&... args) {
-            // Fold expression with short-circuit - stops at first match
             (TryInvokeOneVoid(std::get<Is>(methods), obj, name, std::forward<Args>(args)...) || ...);
         }
     }  // namespace Detail
 
     /**
-     * @brief Invoke a reflected method by name
-     *
-     * @tparam Ret The expected return type
-     * @tparam Args The argument types
-     * @tparam T The object type
-     * @param obj The object to invoke the method on
-     * @param name The name of the method to invoke
-     * @param args The arguments to pass to the method
-     * @return The return value of the method
+     * @brief Invoke the first reflected method named @p name that can take @p args and return @p Ret.
+     * @return Its result, or a value-initialized @p Ret when no method matches (no error is reported).
      *
      * @example
      * // For a class with BE_FUNCTION void Update():

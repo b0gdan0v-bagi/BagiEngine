@@ -218,7 +218,6 @@ namespace BECore::Tests {
         const float area = CoreArea(Fill(rect, UICorners::Uniform(radius), kWhite, ppu));
         EXPECT_NEAR(area, expected, expected * 0.005f);
 
-        // One rounded corner cuts away one of the four
         const float oneCorner = CoreArea(Fill(rect, {radius, 0, 0, 0}, kWhite, ppu));
         EXPECT_NEAR(oneCorner, (rect.w - feather) * (rect.h - feather) - (1.0f - kPi / 4.0f) * coreRadius * coreRadius, expected * 0.005f);
     }
@@ -550,7 +549,6 @@ namespace BECore::Tests {
         EXPECT_GT(extent.minX, rect.x + radius * 0.2f);
         EXPECT_LT(extent.maxX, rect.x + rect.w - radius * 0.2f);
 
-        // Too small to hold it: nothing
         EXPECT_EQ(Highlight({0, 0, 100, 2}, {}, kWhite, 1.0f).vertices.size(), 0u);
         // Square corners: the line runs the whole width
         const Extent square = ExtentOf(Highlight(rect, {}, kWhite, ppu));

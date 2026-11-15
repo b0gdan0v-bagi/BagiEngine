@@ -9,13 +9,14 @@ Enum reflection is handled via CORE_ENUM macro, not parsed by this module.
 """
 
 import bisect
+import math
 import re
 from pathlib import Path
 from typing import List, Tuple, Optional, Set
 
 from .models import (
-    ClassData, FieldData, MethodData, MethodParam,
-    EnumData, ParseWarning
+    ClassData, FieldAttrs, FieldData, MethodData, MethodParam,
+    EnumData, ParseWarning, is_bool_type, is_string_type
 )
 
 _RE_RAW_STRING_OPEN = re.compile(r'"([^()\\\s"]{0,16})\(')
@@ -27,13 +28,22 @@ _RE_CLASS_DEF = re.compile(
 _RE_BE_MACRO = re.compile(r'\bBE_(CLASS|EVENT)\s*\(\s*(\w+)\s*(?:,\s*([^)]+?)\s*)?\)')
 _RE_ICON_NAME = re.compile(r'[a-z0-9-]+')
 _RE_BLANKS_AROUND_HYPHEN = re.compile(r'\s*-\s*')
+# The values of PURPOSE=<part>; a class without the option has the purpose "common" (ClassData.purpose).
+PURPOSE_VALUES = ("sim", "visual", "editor")
 _RE_FIELD_MARKER = re.compile(r'\bBE_REFLECT_FIELD\b')
 _RE_METHOD_MARKER = re.compile(r'\bBE_FUNCTION\b')
 _RE_ATTRIBUTE = re.compile(r'\[\[.*?\]\]\s*', re.DOTALL)
 # A further declarator after a comma: `int a = 1, b = 2;` -> `b = 2`
 _RE_NEXT_DECLARATOR = re.compile(r'\s*[*&]*\s*[A-Za-z_]\w*\s*(?:=|\{|\[|$)')
 # Every reflection marker; BE_CLASS / BE_EVENT only count when called.
-_RE_ANY_MARKER = re.compile(r'\b(?:BE_(?:CLASS|EVENT)(?=\s*\()|BE_REFLECT_FIELD\b|BE_FUNCTION\b)')
+_RE_ANY_MARKER = re.compile(r'\b(?:BE_(?:CLASS|EVENT)(?=\s*\()|BE_REFLECT_FIELD\b|BE_FIELD_ATTRS\b|BE_FUNCTION\b)')
+# BE_FIELD_ATTRS right after BE_REFLECT_FIELD (the masked text, so no comment sits between)
+_RE_FIELD_ATTRS = re.compile(r'\s*BE_FIELD_ATTRS\b\s*')
+_RE_ATTR_NAME = re.compile(r'[A-Za-z_]\w*')
+_RE_ATTR_NUMBER = re.compile(r'[+-]?\s*(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?[fF]?')
+_RE_ATTR_STRING = re.compile(r'"[ \n]*"')
+_ATTR_FLAGS = ('readonly', 'hidden', 'required')
+_ATTR_NAMES = ('range', 'step', 'tooltip') + _ATTR_FLAGS
 _RE_IDENT = re.compile(r'[A-Za-z_]\w*$')
 # Pure virtual declaration: `virtual X Foo() const = 0;`
 _RE_PURE_VIRTUAL = re.compile(r'\)\s*(?:const\s*)?(?:noexcept\s*)?(?:override\s*)?=\s*0\s*;')
@@ -433,6 +443,126 @@ def _parse_single_param(param_str: str) -> Optional[MethodParam]:
     return MethodParam(name=candidate_name, type_name=candidate_type)
 
 
+def _skip_blanks(text: str, pos: int) -> int:
+    while pos < len(text) and text[pos].isspace():
+        pos += 1
+    return pos
+
+
+def _split_attr_arguments(masked: str, start: int, end: int) -> List[Tuple[int, int]]:
+    """Spans of the top-level, comma separated arguments in masked[start:end] (blank ones are dropped).
+
+    The masked text has the contents of its strings blanked, so a comma or a parenthesis in a
+    tooltip never counts.
+    """
+    spans: List[Tuple[int, int]] = []
+    depth = 0
+    begin = start
+    for pos in range(start, end):
+        ch = masked[pos]
+        if ch in '([{':
+            depth += 1
+        elif ch in ')]}':
+            depth -= 1
+        elif ch == ',' and depth == 0:
+            spans.append((begin, pos))
+            begin = pos + 1
+    spans.append((begin, end))
+    return [(a, b) for a, b in spans if masked[a:b].strip()]
+
+
+def _scan_attr_list(masked: str) -> Tuple[List[Tuple[str, Optional[List[Tuple[int, int]]]]], Optional[str]]:
+    """Cut `range(0, 1), readonly, ...` into (name, argument spans or None) items.
+
+    Returns the items read so far and the reason the list could not be read to its end, if any.
+    """
+    items: List[Tuple[str, Optional[List[Tuple[int, int]]]]] = []
+    pos = _skip_blanks(masked, 0)
+    while pos < len(masked):
+        name = _RE_ATTR_NAME.match(masked, pos)
+        if not name:
+            return items, f"unexpected '{masked[pos]}'"
+        pos = _skip_blanks(masked, name.end())
+        args = None
+        if pos < len(masked) and masked[pos] == '(':
+            close = _matching_paren(masked, pos)
+            if close == -1:
+                return items, f"'{name.group(0)}(' has no closing parenthesis"
+            args = _split_attr_arguments(masked, pos + 1, close)
+            pos = _skip_blanks(masked, close + 1)
+        items.append((name.group(0), args))
+        if pos >= len(masked):
+            break
+        if masked[pos] != ',':
+            return items, f"expected ',' after '{name.group(0)}'"
+        pos = _skip_blanks(masked, pos + 1)
+    return items, None
+
+
+def _attr_number(text: str) -> Optional[float]:
+    """The value of a C++ number literal (sign, decimals, exponent, `f` suffix), or None."""
+    text = text.strip()
+    if not _RE_ATTR_NUMBER.fullmatch(text):
+        return None
+    value = float(text.rstrip('fF').replace(' ', '').replace('\n', ''))
+    return value if math.isfinite(value) else None
+
+
+def _parse_field_attrs(masked: str, raw: str, type_name: str, is_enum: bool) -> Tuple[FieldAttrs, List[str]]:
+    """Read the inside of BE_FIELD_ATTRS(...): the attributes and a message per thing that was dropped.
+
+    *masked* and *raw* are the same text (same offsets); structure is read from the masked one and
+    the body of the tooltip from the raw one.
+    """
+    attrs = FieldAttrs()
+    problems: List[str] = []
+    items, broken = _scan_attr_list(masked)
+    if broken:
+        problems.append(f"the list is malformed: {broken}")
+    kind = 'a bool' if is_bool_type(type_name) else 'a string' if is_string_type(type_name) else \
+        'an enum' if is_enum else None
+    seen: Set[str] = set()
+    for name, args in items:
+        if name not in _ATTR_NAMES:
+            problems.append(f"unknown attribute '{name}' (known: {', '.join(_ATTR_NAMES)})")
+            continue
+        if name in seen:
+            problems.append(f"duplicate attribute '{name}' ignored")
+            continue
+        seen.add(name)
+        count = len(args) if args is not None else 0
+        if name in _ATTR_FLAGS:
+            if count:
+                problems.append(f"'{name}' takes no arguments")
+            else:
+                setattr(attrs, name, True)
+        elif name == 'tooltip':
+            if count != 1 or not _RE_ATTR_STRING.fullmatch(masked[args[0][0]:args[0][1]].strip()):
+                problems.append("'tooltip' takes one string literal")
+            else:
+                begin, end = args[0]
+                attrs.tooltip = raw[masked.index('"', begin, end) + 1:masked.rindex('"', begin, end)]
+        elif kind is not None:
+            problems.append(f"'{name}' ignored: it has no meaning on {kind} field")
+        elif name == 'range':
+            numbers = [_attr_number(masked[a:b]) for a, b in args or []]
+            if count != 2 or None in numbers:
+                problems.append("'range' takes two numbers: range(min, max)")
+            elif numbers[0] > numbers[1]:
+                problems.append("'range' ignored: min is greater than max")
+            else:
+                attrs.has_range, attrs.range_min, attrs.range_max = True, numbers[0], numbers[1]
+        else:
+            value = _attr_number(masked[args[0][0]:args[0][1]]) if count == 1 else None
+            if value is None:
+                problems.append("'step' takes one number: step(0.1)")
+            elif value <= 0:
+                problems.append("'step' ignored: it must be greater than 0")
+            else:
+                attrs.step = value
+    return attrs, problems
+
+
 class RegexParser:
     """Regex-based C++ parser for reflection metadata extraction.
 
@@ -447,6 +577,7 @@ class RegexParser:
         # Warnings of the last parse_file() call, sorted by line.
         self.last_warnings: List[ParseWarning] = []
         # State of the file being parsed.
+        self._raw = ""  # the file as written; `text` of the parse has its comments and strings blanked
         self._line_starts: List[int] = []
         self._handled: Set[int] = set()
         self._warnings: List[ParseWarning] = []
@@ -461,6 +592,7 @@ class RegexParser:
             raise RuntimeError(f"Failed to read {path}: {e}")
 
         text = _mask_source(raw)
+        self._raw = raw
 
         self._line_starts = [0] + [i + 1 for i, ch in enumerate(text) if ch == '\n']
         self._handled = set()
@@ -508,6 +640,7 @@ class RegexParser:
             register_self = any(o.upper() == "REGISTER_SELF" for o in options)
             element_name = None
             icon = ""
+            purpose = "common"
             for opt in options:
                 if "=" in opt:
                     key, val = opt.split("=", 1)
@@ -515,6 +648,8 @@ class RegexParser:
                         element_name = val.strip()
                     elif key.strip().upper() == "ICON":
                         icon = self._read_icon(val, brace_pos + 1 + be.start(), class_name)
+                    elif key.strip().upper() == "PURPOSE":
+                        purpose = self._read_purpose(val, brace_pos + 1 + be.start(), class_name)
 
             parent_class = _extract_parent_class(inheritance)
             ns = self._namespace_at(text, m.start())
@@ -540,9 +675,11 @@ class RegexParser:
                 parent_class=parent_class,
                 source_file=str(source_path),
                 line=line_no,
+                marker_line=self._line_at(brace_pos + 1 + be.start()),
                 element_name=element_name,
                 register_self=register_self,
                 icon=icon,
+                purpose=purpose,
             )
 
             self._warn_nested_markers(body, brace_pos + 1, class_name)
@@ -564,6 +701,17 @@ class RegexParser:
             f"ICON={value} ignored on '{class_name}': the value must be a Lucide name "
             f"in kebab case ([a-z0-9-]+)")
         return ""
+
+    def _read_purpose(self, value: str, pos: int, class_name: str) -> str:
+        """The part of PURPOSE=<part> in lower case; an unknown or empty value warns and is `common`."""
+        value = value.strip().lower()
+        if value in PURPOSE_VALUES:
+            return value
+        self._warn(
+            pos, "class",
+            f"PURPOSE={value} ignored on '{class_name}': the value must be one of "
+            f"{', '.join(PURPOSE_VALUES)}")
+        return "common"
 
     def _namespace_at(self, text: str, pos: int) -> str:
         """Determine the namespace at a given character position via brace counting."""
@@ -631,14 +779,22 @@ class RegexParser:
         for m in _RE_FIELD_MARKER.finditer(body):
             if m.start() < pos:
                 continue  # inside the declaration of the previous marker
+            marker_pos = base + m.start()
+            attrs_call = self._find_field_attrs(body, m.end(), base, marker_pos)
+            if attrs_call is False:
+                self._handled.add(marker_pos)
+                continue
             found = _declaration_end(body, m.end(), len(body), allow_body=False)
             if not found:
                 continue  # no ';': the marker stays unhandled and is reported as such
             decl_end, pos = found
             full = body[m.end():decl_end]
+            if attrs_call:
+                # the call is cut out: its commas are no declarators and it is no marker of the declaration
+                rel_start, rel_end = attrs_call[0] - m.end(), attrs_call[1] - m.end()
+                full = full[:rel_start] + _blank(full[rel_start:rel_end]) + full[rel_end:]
             raw = full.strip()
             decl_pos = base + m.end() + len(full) - len(full.lstrip())
-            marker_pos = base + m.start()
             self._handled.add(marker_pos)
             if self._swallowed(raw, decl_pos, marker_pos, 'field', 'BE_REFLECT_FIELD'):
                 continue
@@ -664,13 +820,43 @@ class RegexParser:
 
             line_no = self._line_at(marker_pos)
 
+            attributes = FieldAttrs()
+            if attrs_call:
+                inner = (attrs_call[2], attrs_call[3])
+                attributes, problems = _parse_field_attrs(
+                    body[inner[0]:inner[1]], self._raw[base + inner[0]:base + inner[1]], type_name, is_enum)
+                for problem in problems:
+                    self._warn(marker_pos, 'field', f"BE_FIELD_ATTRS of '{field_name}': {problem}")
+
             cls.fields.append(FieldData(
                 name=field_name,
                 type_name=type_name,
                 line=line_no,
                 column=0,
                 is_enum=is_enum,
+                attributes=attributes,
             ))
+
+    def _find_field_attrs(self, body: str, start: int, base: int, marker_pos: int):
+        """The BE_FIELD_ATTRS(...) call that directly follows a BE_REFLECT_FIELD ending at *start*.
+
+        Returns None when there is none, False (after a warning) when it has no
+        parenthesised list, else (begin of the call, end of the call, begin and end of the list
+        inside the parentheses), all as offsets in *body*.
+        """
+        found = _RE_FIELD_ATTRS.match(body, start)
+        if not found:
+            return None
+        self._handled.add(base + body.index('BE_FIELD_ATTRS', start))
+        open_at = found.end()
+        close = _matching_paren(body, open_at) if body[open_at:open_at + 1] == '(' else -1
+        if close == -1:
+            self._warn(
+                marker_pos, 'field',
+                "BE_FIELD_ATTRS ignored together with its field: it needs a parenthesised list "
+                "with a closing parenthesis")
+            return False
+        return found.start(), close + 1, open_at + 1, close
 
     def _parse_methods(self, body: str, cls: ClassData, base: int = 0):
         pos = 0
@@ -744,6 +930,12 @@ class RegexParser:
                         f"{shown} ignored: no class or struct definition the parser recognizes "
                         f"encloses it ('final', an export macro, alignas, an attribute before the name "
                         f"or a template specialization are not supported)")
+                continue
+            if name == 'BE_FIELD_ATTRS':
+                self._warn(
+                    pos, 'field',
+                    "BE_FIELD_ATTRS ignored: it must directly follow a BE_REFLECT_FIELD "
+                    "(`BE_REFLECT_FIELD BE_FIELD_ATTRS(...) float _x;`)")
                 continue
             kind = 'field' if name == 'BE_REFLECT_FIELD' else 'method'
             if any(start <= pos < end for start, end in self._reflected_ranges):

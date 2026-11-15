@@ -1,5 +1,6 @@
 #include "ClipboardControl.h"
 
+#include <BECore/Clipboard/Clipboard.h>
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
@@ -13,14 +14,21 @@ namespace BECore {
 
         /// A call that waits, frame by frame, for the clipboard: @c isDone is asked at the end of each frame, @c finish answers
         struct Waiting {
-            std::function<bool()> isDone;
-            std::function<void(ControlCall&)> finish;
+            MoveOnlyFunction<bool()> isDone;
+            MoveOnlyFunction<void(ControlCall&)> finish;
             uint32_t waitedFrames = 0;
         };
 
-        void Await(ControlCall& call, SharedPtr<Waiting> waiting) {
+        /// What a clipboard read leaves for the call that waits for it. Two parties hold it (the callback the clipboard keeps and the call's
+        /// wait), both on the main thread
+        struct Answer : RefCountedNonAtomic {
+            bool arrived = false;
+            ClipboardText text;
+        };
+
+        void Await(ControlCall& call, UniquePtr<Waiting> waiting) {
             // Frames of zero seconds: on the manual clock nothing moves while the clipboard answers
-            call.DeferFrames(1, 0.0, [waiting](ControlCall& done) {
+            call.DeferFrames(1, 0.0, [waiting = std::move(waiting)](ControlCall& done) mutable {
                 if (waiting->isDone()) {
                     waiting->finish(done);
                     return;
@@ -29,7 +37,7 @@ namespace BECore {
                     done.Fail(kTimeoutCode, Format("the clipboard did not answer in {} frames", kMaxClipboardWaitFrames));
                     return;
                 }
-                Await(done, waiting);
+                Await(done, std::move(waiting));
             });
         }
 
@@ -45,16 +53,12 @@ namespace BECore {
         }
 
         void HandleGet(ControlCall& call) {
-            struct Answer {
-                bool arrived = false;
-                ClipboardText text;
-            };
-            auto answer = MakeShared<Answer>();
+            auto answer = New<Answer>();
             CoreManager::GetClipboard().RequestText([answer](const ClipboardText& read) {
                 answer->text = read;
                 answer->arrived = true;
             });
-            auto waiting = MakeShared<Waiting>();
+            auto waiting = MakeUnique<Waiting>();
             waiting->isDone = [answer]() { return answer->arrived; };
             waiting->finish = [answer](ControlCall& done) {
                 Json result = Json::object();
@@ -67,7 +71,7 @@ namespace BECore {
 
         void HandlePaste(ControlCall& call) {
             CoreManager::GetClipboard().RequestPaste();
-            auto waiting = MakeShared<Waiting>();
+            auto waiting = MakeUnique<Waiting>();
             waiting->isDone = []() { return !CoreManager::GetClipboard().HasPending(); };
             waiting->finish = [](ControlCall& done) { done.Reply(Json::object()); };
             Await(call, std::move(waiting));

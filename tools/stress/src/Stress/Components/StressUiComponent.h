@@ -17,11 +17,10 @@ namespace BECore::Stress {
      * @brief The scene `StressUi`: `StressState::GetCount()` text labels on the `UICanvasComponent` of this node, laid out on the grid of `UiField`,
      *        in English and Russian.
      *
-     * The labels are `UIElement` + `UITextComponent` children of the canvas's root, made when `StressState::Version()` moved: a bigger count appends,
-     * a smaller one removes from the tail, and the first labels are kept (their cells are set again, because the grid changes with the count). The
-     * canvas is invalidated once after the change. A language change calls `UIStrings::SetLanguage`: the strings' own version rewords the
-     * `{#key}` labels at the next draw, no label is touched. The variables the `Variable` labels name (`count`, `last`) are set with the count.
-     * A steady frame does nothing here. Does nothing while the game is not the active `StressGame`.
+     * The labels are `UIElement` + `UITextComponent` children of the canvas's root, made when `StressState::Version()` moved; the kept labels get their
+     * cells again, because the grid changes with the count. The canvas is invalidated once after the change. A language change is one
+     * `UIStrings::SetLanguage`: the strings' own version rewords the `{#key}` labels, no label is touched. A steady frame does nothing here.
+     * Does nothing while the game is not the active `StressGame`.
      */
     class StressUiComponent : public IComponent {
         BE_CLASS(StressUiComponent)

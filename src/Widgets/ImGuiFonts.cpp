@@ -1,5 +1,6 @@
 #include "ImGuiFonts.h"
 
+#include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <cmath>

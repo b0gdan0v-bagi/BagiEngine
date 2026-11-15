@@ -168,7 +168,6 @@ namespace BECore::Tests {
         EXPECT_EQ(map.GetChord(kSceneSave), kCtrlS);
         EXPECT_TRUE(map.IsDefault(kSceneSave));
 
-        // A command with no default is reset to nothing
         map.Assign(kFileQuit, kCtrlK);
         EXPECT_EQ(map.ResetOne(kFileQuit).status, AssignStatus::Assigned);
         EXPECT_FALSE(map.GetChord(kFileQuit).has_value());

@@ -12,7 +12,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
-#include <functional>
 
 namespace BECore {
 
@@ -115,23 +114,23 @@ namespace BECore {
         /// Pings the connections that went quiet and drops the ones that did not answer (hub thread, on the tick)
         void CheckLiveness(LivenessMap& liveness, RoomTime now);
 
-        /// The HubSink
         void SendTo(ConnectionId connection, String text);
         void CloseConnection(ConnectionId connection, const String& reason);
 
-        [[nodiscard]] SharedPtr<WebSocketConnection> FindConnection(ConnectionId connection);
+        [[nodiscard]] WebSocketHandler::ConnectionPtr FindConnection(ConnectionId connection);
         [[nodiscard]] RoomTime Now() const;
 
         const SeatedGameRegistry& _registry;
+        // The clock and the random source are moved out of the settings argument before `_settings` takes the rest, so they come first
+        const MoveOnlyFunction<RoomTime()> _clock;
+        const RandomFn _random;  // the hub thread draws from it through a forwarding function, so a restarted server keeps it
         const RoomServerSettings _settings;
         const bool _passAddress;  // the hub applies per-address rules: a limit of sockets per address, or an address behind trusted proxies
-        const std::function<RoomTime()> _clock;
-        const RandomFn _random;
 
         Mutex _connectionsMutex{BE_LOCK_SITE("Room connections")};
-        HashMap<ConnectionId, SharedPtr<WebSocketConnection>> _connections;  // open connections by id; guarded by _connectionsMutex
-        bool _draining = false;                                              // Stop() is telling the clients; guarded by _connectionsMutex
-        ConditionVariable _connectionsChanged;                               // a connection ended (with _connectionsMutex); Stop() waits here during the drain
+        HashMap<ConnectionId, WebSocketHandler::ConnectionPtr> _connections;  // open connections by id; guarded by _connectionsMutex
+        bool _draining = false;                                               // Stop() is telling the clients; guarded by _connectionsMutex
+        ConditionVariable _connectionsChanged;                                // a connection ended (with _connectionsMutex); Stop() waits here during the drain
 
         Mutex _queueMutex{BE_LOCK_SITE("Room event queue")};  // guards the queue, its byte count and _stopping
         ConditionVariable _hubWake;                           // the hub thread waits here for an event, the tick or the stop

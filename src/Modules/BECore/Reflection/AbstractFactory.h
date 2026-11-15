@@ -11,10 +11,9 @@ namespace BECore {
     /**
      * @brief Runtime self-registration factory for type hierarchies.
      *
-     * A per-base-type Meyers singleton that derived classes register themselves into
-     * from their own .cpp via code generated in the reflection .gen.hpp file.
-     * Callers create instances by ClassMeta, eastl::string_view, or PoolString
-     * without including any derived-class headers.
+     * A per-base-type Meyers singleton that derived classes register into from their own .cpp (code in the
+     * generated .gen.hpp). Callers create instances by ClassMeta, StringView or PoolString without including
+     * any derived-class header.
      *
      * Registration happens via static initializers:
      * @code
@@ -44,11 +43,8 @@ namespace BECore {
         /**
          * @brief Register a derived type with its creator function.
          *
-         * Called from static initializers in generated .gen.hpp files.
-         * Duplicate registrations overwrite silently (last-write-wins).
-         *
-         * @param meta    ClassMeta of the concrete derived type.
-         * @param creator Zero-argument factory function returning BasePtr.
+         * Called from static initializers in generated .gen.hpp files. A second registration of the same type
+         * replaces the creator silently (last write wins), but its meta is listed again by GetRegisteredTypes().
          */
         void Register(const ClassMeta& meta, CreatorFunc creator) {
             _creators[meta.typeHash] = creator;
@@ -64,11 +60,9 @@ namespace BECore {
         }
 
         /**
-         * @brief Create an instance identified by class name string.
+         * @brief Create an instance identified by class name.
          *
-         * Computes FNV-1a hash of @p name at call-time (same algorithm as
-         * ClassMeta::typeHash) and performs a single hash_map lookup.
-         * No heap allocation.
+         * Hashes @p name at call time with the algorithm of ClassMeta::typeHash; no heap allocation.
          *
          * @return New instance, or empty pointer if type is not registered.
          */
@@ -79,8 +73,7 @@ namespace BECore {
         /**
          * @brief Create an instance identified by an interned PoolString.
          *
-         * Uses the hash already stored inside the PoolString entry — zero
-         * computation, single hash_map lookup, no heap allocation.
+         * Uses the hash stored in the PoolString entry; no heap allocation.
          *
          * @return New instance, or empty pointer if type is not registered.
          */
@@ -89,10 +82,22 @@ namespace BECore {
         }
 
         /**
-         * @brief Return all registered ClassMeta entries.
+         * @brief The ClassMeta registered under class name @p name, or null when no such type is registered.
          *
-         * Useful for iterating over all registered types, e.g. to
-         * instantiate all resource loaders at startup.
+         * Lets a loader read a type's purpose before it creates an instance.
+         */
+        [[nodiscard]] const ClassMeta* FindMeta(StringView name) const {
+            const uint64_t hash = StringUtils::GetHash(name);
+            for (const ClassMeta& meta : _metas) {
+                if (meta.typeHash == hash) {
+                    return &meta;
+                }
+            }
+            return nullptr;
+        }
+
+        /**
+         * @brief All registered ClassMeta entries (e.g. to instantiate every resource loader at startup).
          */
         [[nodiscard]] const Vector<ClassMeta>& GetRegisteredTypes() const {
             return _metas;

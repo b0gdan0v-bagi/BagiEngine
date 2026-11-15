@@ -8,32 +8,26 @@ namespace BECore::Tests {
 
     // Compile-time checks: a regression breaks the build.
 
-    // ToString is constexpr
     static_assert(ColorUtils::ToString(TestColor::Red) == "Red");
     static_assert(ColorUtils::ToString(TestColor::Green) == "Green");
     static_assert(ColorUtils::ToString(TestColor::Blue) == "Blue");
     static_assert(ColorUtils::ToString(TestColor::Yellow) == "Yellow");
 
-    // FromString is constexpr
     static_assert(ColorUtils::FromString("Red") == TestColor::Red);
     static_assert(ColorUtils::FromString("Green") == TestColor::Green);
     static_assert(ColorUtils::FromString("Blue") == TestColor::Blue);
     static_assert(ColorUtils::FromString("Yellow") == TestColor::Yellow);
 
-    // Count is constexpr
     static_assert(ColorUtils::Count() == 4);
 
-    // Names returns constexpr array
     static_assert(ColorUtils::Names().size() == 4);
     static_assert(ColorUtils::Names()[0] == "Red");
     static_assert(ColorUtils::Names()[3] == "Yellow");
 
-    // Values returns constexpr array
     static_assert(ColorUtils::Values().size() == 4);
     static_assert(ColorUtils::Values()[0] == TestColor::Red);
     static_assert(ColorUtils::Values()[3] == TestColor::Yellow);
 
-    // Cast is constexpr
     static_assert(ColorUtils::Cast("Red").has_value());
     static_assert(ColorUtils::Cast("Red").value() == TestColor::Red);
     static_assert(!ColorUtils::Cast("InvalidColor").has_value());
@@ -62,7 +56,6 @@ namespace BECore::Tests {
         EXPECT_EQ(ColorUtils::ToPoolString(TestColor::Blue).ToStringView(), "Blue");
         EXPECT_EQ(ColorUtils::ToPoolString(TestColor::Yellow).ToStringView(), "Yellow");
 
-        // The same enum value must give the same interned PoolString
         PoolString ps1 = ColorUtils::ToPoolString(TestColor::Red);
         PoolString ps2 = ColorUtils::ToPoolString(TestColor::Red);
         EXPECT_EQ(ps1, ps2);
@@ -89,7 +82,6 @@ namespace BECore::Tests {
         EXPECT_EQ(ColorUtils::FromPoolString(PoolString::Intern("Green")), TestColor::Green);
         EXPECT_EQ(ColorUtils::FromPoolString(PoolString::Intern("Blue")), TestColor::Blue);
 
-        // Round-trip: enum -> PoolString -> enum
         for (auto color : ColorUtils::Values()) {
             PoolString ps = ColorUtils::ToPoolString(color);
             EXPECT_EQ(ColorUtils::FromPoolString(ps), color) << "Round-trip failed for " << ps.CStr();
@@ -136,7 +128,6 @@ namespace BECore::Tests {
         EXPECT_EQ(poolStrings[2].ToStringView(), "Blue");
         EXPECT_EQ(poolStrings[3].ToStringView(), "Yellow");
 
-        // Pool strings are interned (the same as ToPoolString)
         EXPECT_EQ(poolStrings[0], ColorUtils::ToPoolString(TestColor::Red));
         EXPECT_EQ(poolStrings[1], ColorUtils::ToPoolString(TestColor::Green));
         EXPECT_EQ(poolStrings[2], ColorUtils::ToPoolString(TestColor::Blue));

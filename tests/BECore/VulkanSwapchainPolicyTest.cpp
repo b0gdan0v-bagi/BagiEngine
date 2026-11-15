@@ -168,6 +168,13 @@ namespace BECore::Tests {
         EXPECT_EQ(ChooseImGuiColorMode(VK_FORMAT_UNDEFINED), ImGuiColorMode::Direct);
     }
 
+    TEST(VulkanSwapchainPolicyTest, SrgbToLinearKeepsTheEndsAndDarkensTheMiddle) {
+        EXPECT_FLOAT_EQ(SrgbToLinear(0.0f), 0.0f);
+        EXPECT_FLOAT_EQ(SrgbToLinear(1.0f), 1.0f);
+        EXPECT_NEAR(SrgbToLinear(0.5f), 0.2140f, 1e-4f);
+        EXPECT_NEAR(SrgbToLinear(0.04f), 0.04f / 12.92f, 1e-6f);  // the linear segment at the dark end
+    }
+
     TEST(VulkanSwapchainPolicyTest, ImGuiViewportFormatFollowsTheColorMode) {
         static_assert(ImGuiViewportFormat(ImGuiColorMode::Linearize) == VK_FORMAT_B8G8R8A8_SRGB);
         EXPECT_EQ(ImGuiViewportFormat(ImGuiColorMode::Linearize), VK_FORMAT_B8G8R8A8_SRGB);

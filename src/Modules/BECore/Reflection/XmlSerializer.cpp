@@ -3,7 +3,6 @@
 namespace BECore {
 
     XmlSerializer::XmlSerializer() {
-        // Initialize with root node
         _nodeStack.push_back(_document.append_child("root"));
     }
 

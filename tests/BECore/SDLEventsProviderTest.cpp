@@ -1,6 +1,10 @@
+#include <BECore/Clipboard/Clipboard.h>
 #include <BECore/Clipboard/FakeClipboard.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Input/UIInput.h>
 #include <BECore/MainWindow/IMainWindow.h>
+#include <BECore/MainWindow/MainWindowManager.h>
+#include <BECore/Time/GamePause.h>
 #include <Common/Printers.h>
 #include <CoreSDL/SDLEvents.h>
 #include <CoreSDL/SDLEventsProvider.h>
@@ -311,7 +315,6 @@ namespace BECore::Tests {
         EXPECT_EQ(ui.downs, 1);
         EXPECT_TRUE(recorder.clicks.empty());
 
-        // Once the UI is gone the same click reaches the game
         pushAndProcess();
         ASSERT_EQ(recorder.clicks.size(), 1u);
         EXPECT_FLOAT_EQ(recorder.clicks[0].x, 30.0f);

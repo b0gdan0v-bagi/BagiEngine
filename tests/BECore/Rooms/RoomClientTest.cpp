@@ -209,19 +209,16 @@ namespace BECore::Tests {
     }
 
     TEST_F(RoomClientTest, ACommandThatDoesNotFitTheStateIsWrongState) {
-        // Nothing connected
         EXPECT_EQ(_client->ChooseSeat(1).error().code, RoomClientErrors::kWrongState);
         EXPECT_EQ(_client->Start().error().code, RoomClientErrors::kWrongState);
         EXPECT_EQ(_client->SendAction(OneAction()).error().code, RoomClientErrors::kWrongState);
         EXPECT_EQ(_client->Leave().error().code, RoomClientErrors::kWrongState);
 
-        // Opening
         ASSERT_TRUE(_client->Host(kUrl, "cards", "Ann").has_value());
         EXPECT_EQ(_client->Host(kUrl, "cards", "Ann").error().code, RoomClientErrors::kWrongState);
         EXPECT_EQ(_client->Join(kUrl, "ABCDE", "Ann").error().code, RoomClientErrors::kWrongState);
         EXPECT_EQ(_client->Start().error().code, RoomClientErrors::kWrongState);
 
-        // Waiting for the answer to create_room
         _transports.Last().PushOpened();
         Pump();
         EXPECT_EQ(_client->Join(kUrl, "ABCDE", "Ann").error().code, RoomClientErrors::kWrongState);
@@ -407,7 +404,6 @@ namespace BECore::Tests {
         Receive(link, MakePongMessage());
         EXPECT_EQ(_events.size(), errors);
 
-        // The state is as it was
         EXPECT_EQ(_client->GetState(), RoomClientState::InRoom);
         EXPECT_EQ(_client->GetViewVersion(), 5u);
         EXPECT_EQ(_client->GetRoom(), kRoom);
@@ -483,7 +479,7 @@ namespace BECore::Tests {
     TEST_F(RoomClientTest, AConnectionThatEndsInTheRoomWithoutReconnectForgetsTheRoomAndKeepsTheSession) {
         RoomClientSettings settings;
         settings.reconnect = false;
-        MakeClient(settings);
+        MakeClient(std::move(settings));
         FakeLink& link = EnterAsHost();
         Receive(link, View(2));
         link.PushClosed(1006, "the server went away");
@@ -514,13 +510,11 @@ namespace BECore::Tests {
     }
 
     TEST_F(RoomClientTest, DisconnectClosesInEveryState) {
-        // Nothing to close
         _client->Disconnect();
         EXPECT_TRUE(_events.empty());
         _client->DrainEvents(_events);
         EXPECT_TRUE(_events.empty());
 
-        // While connecting
         ASSERT_TRUE(_client->Host(kUrl, "cards", "Ann").has_value());
         _client->Disconnect();
         EXPECT_EQ(_client->GetState(), RoomClientState::Disconnected);
@@ -568,7 +562,7 @@ namespace BECore::Tests {
             FakeTransports transports;
             RoomClientSettings settings;
             settings.transportFactory = transports.Factory();
-            auto client = MakeUnique<RoomClient>(settings);
+            auto client = MakeUnique<RoomClient>(std::move(settings));
             ASSERT_TRUE(client->Host(kUrl, "cards", "Ann").has_value());
             client.reset();
             EXPECT_TRUE(transports.Last().destroyed);
@@ -577,7 +571,7 @@ namespace BECore::Tests {
             FakeTransports transports;
             RoomClientSettings settings;
             settings.transportFactory = transports.Factory();
-            auto client = MakeUnique<RoomClient>(settings);
+            auto client = MakeUnique<RoomClient>(std::move(settings));
             ASSERT_TRUE(client->Host(kUrl, "cards", "Ann").has_value());
             transports.Last().PushOpened();
             transports.Last().PushText(MakeJoinedMessage(kRoom, 1, kToken, 0, true));
@@ -590,7 +584,7 @@ namespace BECore::Tests {
             FakeTransports transports;
             RoomClientSettings settings;
             settings.transportFactory = transports.Factory();
-            auto client = MakeUnique<RoomClient>(settings);
+            auto client = MakeUnique<RoomClient>(std::move(settings));
             ASSERT_TRUE(client->Host(kUrl, "cards", "Ann").has_value());
             transports.Last().closeAnswers = false;
             client->Disconnect();
@@ -624,7 +618,6 @@ namespace BECore::Tests {
         }
         Pump();
         ASSERT_EQ(_events.size(), kMaxQueuedRoomClientEvents);
-        // The oldest were dropped, the newest are there
         EXPECT_EQ(_events.back().code, Format("e{}", kMaxQueuedRoomClientEvents + 9));
         EXPECT_EQ(_events.front().code, "e10");
     }
@@ -979,7 +972,7 @@ namespace BECore::Tests {
     TEST_F(RoomClientTest, TheClientGivesUpWhenTheConnectionDoesNotComeBackInTime) {
         RoomClientSettings settings;
         settings.reconnectGiveUp = seconds(5);
-        MakeClient(settings);
+        MakeClient(std::move(settings));
         FakeLink& first = EnterAsHost();
         Lose(first);
         // Attempts at 0.5 s, 1.5 s and 3.5 s all fail; the next would be at 7.5 s
@@ -1004,7 +997,7 @@ namespace BECore::Tests {
     TEST_F(RoomClientTest, TheGiveUpTimeAlsoCutsAnAttemptThatIsUnderWay) {
         RoomClientSettings settings;
         settings.reconnectGiveUp = seconds(5);
-        MakeClient(settings);
+        MakeClient(std::move(settings));
         FakeLink& first = EnterAsHost();
         Lose(first);
         Advance(seconds(4));

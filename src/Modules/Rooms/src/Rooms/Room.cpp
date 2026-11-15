@@ -111,7 +111,6 @@ namespace BECore {
         if (!HasMember(player)) {
             return false;
         }
-        // In a game the seat has no member any more, so a computer plays it for good
         EraseMember(player);
         return true;
     }
@@ -262,7 +261,7 @@ namespace BECore {
                 continue;
             }
             if (auto performed = _game->PerformSeatAction(seat, *action); !performed) {
-                // No room code, name or game message in the log: the platform's log is not a place for them (RoomServer/CLAUDE.md, "Log")
+                // No room code, name or game message in the log: the platform's log is not a place for them
                 LOG_ERROR(Format("Room: the game refused the computer's action for seat {}: {}", seat, performed.error().code.c_str()));
                 return false;
             }
@@ -394,7 +393,6 @@ namespace BECore {
                     lobby.hostSeat = seat;
                 }
             } else {
-                // Once the game has started an empty seat is played by a computer
                 entry.kind = _phase == RoomPhase::Lobby ? SeatKind::Empty : SeatKind::Computer;
             }
             lobby.seats.push_back(std::move(entry));

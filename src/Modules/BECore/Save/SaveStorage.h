@@ -2,6 +2,7 @@
 
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
+#include <BECore/Utils/MoveOnlyFunction.h>
 #include <cstdint>
 #include <filesystem>
 
@@ -42,6 +43,6 @@ namespace BECore {
     void NotifySaveChanged();
 
     /// For tests: replace what NotifySaveChanged() calls. An empty function restores the default.
-    void SetSaveChangedHandler(eastl::function<void()> handler);
+    void SetSaveChangedHandler(MoveOnlyFunction<void()> handler);
 
 }  // namespace BECore

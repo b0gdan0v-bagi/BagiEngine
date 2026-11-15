@@ -24,9 +24,6 @@ target_compile_definitions(BagiFuzzTargets PRIVATE
     REFLECTION_GENERATED=1
 )
 
-# The corpus folder is public: FuzzCorpusTest, which is in BagiEngineTests, reads the seeds from it.
-target_compile_definitions(BagiFuzzTargets PUBLIC "BAGI_FUZZ_CORPUS_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/corpus\"")
-
 # The directory above Fuzz/ is public so tests can include <Fuzz/FuzzTargets.h>; ${CMAKE_BINARY_DIR} is for <Generated/*.gen.hpp>.
 get_filename_component(TESTS_DIR "${CMAKE_CURRENT_SOURCE_DIR}" DIRECTORY)
 target_include_directories(BagiFuzzTargets PUBLIC ${TESTS_DIR} ${CMAKE_BINARY_DIR})

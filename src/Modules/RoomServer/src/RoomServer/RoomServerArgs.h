@@ -1,12 +1,12 @@
 #pragma once
 
 #include <BECore/Types/Types.h>
+#include <BECore/Utils/FunctionRef.h>
 #include <RoomServer/RoomServerSettings.h>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
-#include <functional>
 
 namespace BECore {
 
@@ -62,12 +62,12 @@ namespace BECore {
     /// The error is a message for the user (an unknown flag, a missing value, a number that is not one or out of range)
     [[nodiscard]] std::expected<RoomServerArgs, String> ParseRoomServerArgs(int argc, const char* const* argv, RoomServerArgs base = {});
 
-    /// Looks a variable up: its text, or null when it is not set (`std::getenv`, or a table in a test)
-    using RoomServerEnvironmentLookup = std::function<const char*(const char*)>;
+    /// Looks a variable up: its text, or null when it is not set (`std::getenv`, or a table in a test). Called only during the read, so a view is enough
+    using RoomServerEnvironmentLookup = FunctionRef<const char*(const char*)>;
 
     /// What the environment of a hosting platform says: `PORT` and `BAGI_ROOMS_*` (the list is in GetRoomServerUsage()), the same ranges as the flags. An unset or empty
     /// variable is unset. The error names the variable
-    [[nodiscard]] std::expected<RoomServerArgs, String> ReadRoomServerEnvironment(const RoomServerEnvironmentLookup& lookup);
+    [[nodiscard]] std::expected<RoomServerArgs, String> ReadRoomServerEnvironment(RoomServerEnvironmentLookup lookup);
 
     /// What a server main starts from: the defaults, the environment over them (`std::getenv`), the command line over both
     [[nodiscard]] std::expected<RoomServerArgs, String> LoadRoomServerArgs(int argc, const char* const* argv);

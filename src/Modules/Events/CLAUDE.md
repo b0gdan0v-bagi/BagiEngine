@@ -2,7 +2,14 @@
 
 ## Overview
 
-Event system on top of EnTT's `entt::dispatcher`. Every event type has its own static dispatcher (CRTP `EventBase<T>`), so there is no central bus to register with.
+Every event type has its own channel of listeners and its own queue (CRTP `EventBase<T>`), so there is no central bus to register with. The channel (`EventChannel.h`, header-only because `BECoreModule` emits events without linking `EventsModule`) is a type-erased list of (instance, invoker) pairs; no EnTT is involved.
+
+**Delivery rules** (pinned by `EventDispatchSemanticsTest` and `EventChannelTest`):
+- `Emit` calls the listeners from the **last subscribed to the first**, over the count at its start: a listener subscribed by a handler is called from the next `Emit`. A nested `Emit` is delivered at once.
+- (handler, instance) is a listener's identity: subscribing the pair again moves it to the end, and a connection disconnects by the pair, not by a token. A disconnect moves the **last** listener into the freed slot, so the order of the others changes.
+- `Update()` delivers what was queued when it started, in order; an event that a handler enqueues waits for the next `Update()`.
+- The queue registry (`EventsQueueRegistry`) keeps plain function pointers, not a `MoveOnlyFunction`: that header includes the assert macros, which emit events, so `EventBase.h` could not include it. An update is `[]() { Derived::Update(); }` and needs no capture.
+- A disconnect inside a handler does not crash or skip the others (the entry is marked and the list compacted after the outermost dispatch); still avoid it, the order after it is not a contract.
 
 ## Event Structure
 
@@ -62,4 +69,4 @@ Other modules define their own events next to their code (for example `LogEvent`
 - Store pointers to temporary objects in events.
 - Emit events from constructors.
 - Create circular event dependencies.
-- Connect or disconnect inside an event handler (undefined behavior).
+- Connect or disconnect inside an event handler unless you must (a coroutine awaiter does): the order of delivery after it is not a contract.

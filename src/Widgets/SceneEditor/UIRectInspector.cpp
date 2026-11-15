@@ -292,7 +292,6 @@ namespace BECore {
             ImGui::TextColored(GetImGuiPalette().warning, "The box of the element has no size now (a hidden parent?): the anchor presets and the unit switch are off");
         }
 
-        // ---- Preset ----
         const UIAnchorPreset* current = UIAnchorPresets::Match(spec);
         ImGui::BeginDisabled(!hasBox);
         const String presetLabel = Format("Anchor: {}##preset_button", current ? UIAnchorPresets::Name(*current) : "Custom");
@@ -313,7 +312,6 @@ namespace BECore {
         }
         ImGui::EndDisabled();
 
-        // ---- Anchors and pivot ----
         const UIEffectiveAnchors anchors = UILayout::EffectiveAnchors(spec);
         Vec2 anchorMin = anchors.min;
         Vec2 anchorMax = anchors.max;
@@ -333,7 +331,7 @@ namespace BECore {
 
         const bool anchorsChanged = changed;
 
-        // ---- Offsets, sizes, margins: an axis that stretches ignores its offset and size, a point axis ignores its margin ----
+        // Offsets, sizes, margins: an axis that stretches ignores its offset and size, a point axis ignores its margin
         const UIEffectiveAnchors now = UILayout::EffectiveAnchors(spec);
         const bool stretchX = now.min.x < now.max.x;
         const bool stretchY = now.min.y < now.max.y;

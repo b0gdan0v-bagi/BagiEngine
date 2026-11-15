@@ -2,6 +2,7 @@
 
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/UI/UIChoice.h>
+#include <BECore/UI/UIVars.h>
 #include <Generated/UISegmented.gen.hpp>
 
 namespace BECore {

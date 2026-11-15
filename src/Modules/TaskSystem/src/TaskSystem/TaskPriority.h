@@ -5,58 +5,27 @@
 
 namespace BECore {
 
-    /**
-     * Приоритет выполнения задачи.
-     * Задачи с более высоким приоритетом выполняются раньше.
-     */
-    CORE_ENUM(TaskPriority, uint8_t,
-              Low,      ///< Низкий приоритет - фоновые задачи, которые могут подождать
-              Normal,   ///< Нормальный приоритет - стандартные задачи
-              High,     ///< Высокий приоритет - важные задачи, требующие быстрого выполнения
-              Critical  ///< Критический приоритет - задачи, которые должны выполниться немедленно
-    );
+    /** Orders the main-thread queue (equal priorities are not FIFO); a job on the pool ignores it for now (TaskScheduler::DispatchToThreadPool). */
+    CORE_ENUM(TaskPriority, uint8_t, Low, Normal, High, Critical);
 
-    /**
-     * Тип потока для выполнения задачи.
-     * Определяет, в каком контексте будет выполняться задача.
-     */
+    /** The context a task runs in. */
     CORE_ENUM(ThreadType, uint8_t,
-              MainThread,  ///< Главный поток (UI, OpenGL context, etc.)
-              Background,  ///< Фоновый поток из пула потоков
-              IO,          ///< Поток для I/O операций (файлы, сеть)
-              Custom       ///< Пользовательский поток
-    );
+              MainThread,  ///< The main thread: its queue is drained in TaskManager::Update (UI and scene state belong here)
+              Background,  ///< A thread of the pool
+              IO, Custom);
 
-    /**
-     * The clock that counts the delay of a delayed task.
-     */
+    /** The clock that counts the delay of a delayed task. */
     CORE_ENUM(DelayClock, uint8_t,
               WallClock,  ///< Real time (steady_clock): independent of pause, frame limiting and the manual clock
               GameTime    ///< Game time: moves only through TaskScheduler::AdvanceGameTime (the frame delta from Time)
     );
 
-    /**
-     * Статус задачи.
-     * Отслеживает текущее состояние выполнения задачи.
-     */
-    CORE_ENUM(TaskStatus, uint8_t,
-              Pending,    ///< Задача ожидает выполнения
-              Running,    ///< Задача выполняется
-              Completed,  ///< Задача успешно завершена
-              Cancelled,  ///< Задача отменена
-              Failed      ///< Задача завершилась с ошибкой
-    );
+    /** The state of a task as its handle reports it. */
+    CORE_ENUM(TaskStatus, uint8_t, Pending, Running, Completed, Cancelled, Failed);
 
-    /**
-     * Ошибки выполнения задач.
-     * Используется в std::expected<T, TaskError> для возврата ошибок.
-     */
-    CORE_ENUM(TaskError, uint8_t,
-              None,         ///< Нет ошибки
-              Cancelled,    ///< Задача отменена
-              Timeout,      ///< Превышено время ожидания
-              Exception,    ///< Необработанное исключение (legacy)
-              InvalidState  ///< Некорректное состояние
-    );
+    /** The error of std::expected<T, TaskError> that a task or a handle returns. */
+    CORE_ENUM(TaskError, uint8_t, None, Cancelled, Timeout,
+              Exception,  ///< Set by the promise's unhandled_exception (which also asserts)
+              InvalidState);
 
 }  // namespace BECore

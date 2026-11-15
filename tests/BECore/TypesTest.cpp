@@ -1,5 +1,6 @@
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <Common/Printers.h>
+#include <Common/SharedPtr.h>
 
 namespace BECore::Tests {
 

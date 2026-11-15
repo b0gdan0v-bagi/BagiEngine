@@ -4,8 +4,10 @@
 #include <BECore/Logger/Logger.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
+#include <BECore/Reflection/ClassMeta.h>
 #include <BECore/Reflection/OpenDeserializer.h>
 #include <BECore/Reflection/TypeTraits.h>
+#include <BECore/Resource/AssetParts.h>
 #include <BECore/Resource/IResource.h>
 #include <BECore/Resource/IResourceLoader.h>
 #include <BECore/Resource/ResourceCache.h>
@@ -20,166 +22,102 @@
 namespace BECore {
 
     /**
-     * @brief Central manager for loading and caching resources
+     * @brief Loads resources through the registered loaders and caches them by path.
      *
-     * Provides async and sync resource loading with automatic caching.
-     * Supports multiple resource types through registered loaders.
-     *
-     * Thread-safe for concurrent loading operations.
-     * Resources are cached and reused across multiple Load calls.
-     *
-     * @note Access via CoreManager::GetResourceManager()
-     *
-     * @example
-     * // Async loading
-     * Task<void> LoadAssets() {
-     *     auto& rm = CoreManager::GetResourceManager();
-     *     auto xml = co_await rm.LoadAsync<XmlResource>("config/game.xml");
-     *     if (xml) {
-     *         auto root = xml->GetRoot();
-     *         // Use xml...
-     *     }
-     * }
-     *
-     * // Sync loading
-     * auto xml = CoreManager::GetResourceManager().Load<XmlResource>("config/game.xml");
-     *
-     * // Serialized resource loading
-     * auto player = co_await CoreManager::GetResourceManager()
-     *     .LoadSerializedAsync<Player>("saves/player.xml");
+     * Reached through CoreManager::GetResourceManager(). Loaders are registered at startup, before any load.
      */
     class ResourceManager {
     public:
         ResourceManager() = default;
         ~ResourceManager() = default;
 
-        // Non-copyable, non-movable
         ResourceManager(const ResourceManager&) = delete;
         ResourceManager& operator=(const ResourceManager&) = delete;
         ResourceManager(ResourceManager&&) = delete;
         ResourceManager& operator=(ResourceManager&&) = delete;
 
-        /**
-         * @brief Initialize resource manager and register default loaders
-         *
-         * Should be called once during application startup.
-         * Registers all loaders via generated ResourceLoaderFactory.
-         */
+        /** @brief Creates and registers every loader in AbstractFactory<IResourceLoader>; call once at startup. */
         void Initialize();
 
         /**
-         * @brief Load resource asynchronously with Task<T>
+         * @brief Returns the cached resource or loads it through the loader of the path.
          *
-         * Checks cache first. If not cached, loads via appropriate loader.
-         *
-         * @tparam T Resource type (must inherit from IResource)
-         * @param path Virtual path to the resource
-         * @return Task that resolves to ResourceHandle<T>
+         * A cached resource of another type than T is loaded again and replaces the cached one.
+         * The handle is empty when no loader accepts the path, the load fails or the result is not a T.
          */
         template <typename T>
         requires std::derived_from<T, IResource> Task<ResourceHandle<T>> LoadAsync(StringView path);
 
-        /**
-         * @brief Load resource synchronously (blocking)
-         *
-         * Checks cache first. If not cached, loads via appropriate loader.
-         *
-         * @tparam T Resource type (must inherit from IResource)
-         * @param path Virtual path to the resource
-         * @return ResourceHandle<T> (may be empty on failure)
-         */
+        /** @brief The blocking form of LoadAsync, with the same cache and failure rules. */
         template <typename T>
         requires std::derived_from<T, IResource> ResourceHandle<T> Load(StringView path);
 
         /**
-         * @brief Load and deserialize object via Reflection system
+         * @brief Deserializes T from a file opened with OpenDeserializer() (the extension picks XML or binary).
          *
-         * Opens the file with OpenDeserializer() (the format follows the extension: .xml or .bin) and deserializes
-         * into type T using reflection. Convenient wrapper for loading configuration objects.
-         *
-         * @tparam T Type with BE_CLASS and BE_REFLECT_FIELD
-         * @param path Virtual path to XML/binary file
-         * @return Task that resolves to deserialized object
+         * Not cached. A default-constructed T when the file does not open.
          */
         template <HasReflection T>
         Task<T> LoadSerializedAsync(StringView path);
 
-        /**
-         * @brief Load and deserialize object synchronously
-         *
-         * @tparam T Type with BE_CLASS and BE_REFLECT_FIELD
-         * @param path Virtual path to XML/binary file
-         * @return Deserialized object (default-constructed on failure)
-         */
+        /** @brief The blocking form of LoadSerializedAsync. */
         template <HasReflection T>
         T LoadSerialized(StringView path);
 
         /**
-         * @brief Register a resource loader
+         * @brief The object @p T of one part of an asset file (`gem.asset.xml`: `<sim>`, `<visual>`, `<editor>`), reading that part only
          *
-         * Loaders are checked in registration order.
-         *
-         * @param loader Loader instance to register
+         * The split file of the part is read when it is fresh (OpenAssetPart); no object of another part is created or filled, and a
+         * reflected type the part does not allow is an error at its path and stays default. Empty when the file does not open or the
+         * part or the object is absent; failures are logged like LoadSerialized.
          */
+        template <HasReflection T>
+        Optional<T> LoadSerializedPart(StringView path, AssetPurpose part);
+
+        /// LoadSerializedPart on a background thread (the path is copied)
+        template <HasReflection T>
+        Task<Optional<T>> LoadSerializedPartAsync(StringView path, AssetPurpose part);
+
+        /** @brief Loaders are asked in registration order; a null loader is refused. */
         void RegisterLoader(IntrusivePtr<IResourceLoader> loader);
 
-        /**
-         * @brief Clear all cached resources
-         *
-         * Forces reload on next Load call.
-         */
         void ClearCache();
 
-        /**
-         * @brief Get cache statistics
-         * @return Reference to internal cache for inspection
-         */
         const ResourceCache& GetCache() const;
 
     private:
-        /**
-         * @brief Find appropriate loader for file extension
-         * @param extension File extension (e.g., ".xml", ".ui.xml")
-         * @return Pointer to loader or nullptr if none found
-         */
         IResourceLoader* FindLoader(StringView extension) const;
 
         /**
-         * @brief Find the loader of a file by the longest suffix of its name that a loader accepts
+         * @brief The loader of the longest suffix of the file name that some loader accepts.
          *
-         * "ui/hud.ui.xml" asks for ".ui.xml" first and ".xml" next, so a format that lives inside XML files can have its own loader.
-         * @param path File path
-         * @return Pointer to loader or nullptr if none found
+         * "ui/hud.ui.xml" asks for ".ui.xml" first and ".xml" next, so a format inside XML files can have its own loader.
          */
         IResourceLoader* FindLoaderForPath(StringView path) const;
+
+        template <HasReflection T>
+        static Optional<T> ReadPartObject(StringView path, AssetPurpose part);
 
         ResourceCache _cache;
         Vector<IntrusivePtr<IResourceLoader>> _loaders;
     };
 
-    // Template implementations
-
     template <typename T>
     requires std::derived_from<T, IResource> Task<ResourceHandle<T>> ResourceManager::LoadAsync(StringView path) {
-        // Convert string_view to PoolString for cache key
         PoolString pathKey = PoolString::Intern(path);
 
-        // Check cache first
         if (auto cached = _cache.Get(pathKey)) {
-            // Cast to requested type
             if (auto typed = dynamic_cast<T*>(cached.Get())) {
                 co_return ResourceHandle<T>(IntrusivePtr<T>(typed));
             }
         }
 
-        // Find appropriate loader
         auto* loader = FindLoaderForPath(path);
         if (!loader) {
             LOG_ERROR(Format("No loader found for: {}", path).c_str());
             co_return ResourceHandle<T>();
         }
 
-        // Load resource asynchronously
         auto resourceResult = co_await loader->LoadAsync(pathKey);
         if (!resourceResult.has_value() || !resourceResult.value()) {
             LOG_ERROR(Format("Failed to load resource: {}", path).c_str());
@@ -188,10 +126,8 @@ namespace BECore {
 
         auto resource = resourceResult.value();
 
-        // Cache the resource
         _cache.Put(pathKey, resource);
 
-        // Cast to requested type
         if (auto typed = dynamic_cast<T*>(resource.Get())) {
             co_return ResourceHandle<T>(IntrusivePtr<T>(typed));
         }
@@ -202,35 +138,28 @@ namespace BECore {
 
     template <typename T>
     requires std::derived_from<T, IResource> ResourceHandle<T> ResourceManager::Load(StringView path) {
-        // Convert string_view to PoolString for cache key
         PoolString pathKey = PoolString::Intern(path);
 
-        // Check cache first
         if (auto cached = _cache.Get(pathKey)) {
-            // Cast to requested type
             if (auto typed = dynamic_cast<T*>(cached.Get())) {
                 return ResourceHandle<T>(IntrusivePtr<T>(typed));
             }
         }
 
-        // Find appropriate loader
         auto* loader = FindLoaderForPath(path);
         if (!loader) {
             LOG_ERROR(Format("No loader found for: {}", path).c_str());
             return ResourceHandle<T>();
         }
 
-        // Load resource synchronously
         auto resource = loader->LoadSync(pathKey);
         if (!resource) {
             LOG_ERROR(Format("Failed to load resource: {}", path).c_str());
             return ResourceHandle<T>();
         }
 
-        // Cache the resource
         _cache.Put(pathKey, resource);
 
-        // Cast to requested type
         if (auto typed = dynamic_cast<T*>(resource.Get())) {
             return ResourceHandle<T>(IntrusivePtr<T>(typed));
         }
@@ -241,7 +170,6 @@ namespace BECore {
 
     template <HasReflection T>
     Task<T> ResourceManager::LoadSerializedAsync(StringView path) {
-        // Switch to background thread for I/O
         co_await SwitchToBackground(TaskPriority::Normal, BE_TASK_LABEL("Load serialized resource"));
 
         auto opened = OpenDeserializer(path);
@@ -251,7 +179,6 @@ namespace BECore {
         }
         IDeserializer& deserializer = **opened;
 
-        // Deserialize using generated Deserialize method
         T result{};
         if (deserializer.BeginObject(ReflectionTraits<T>::name)) {
             result.Deserialize(deserializer);
@@ -271,7 +198,6 @@ namespace BECore {
         }
         IDeserializer& deserializer = **opened;
 
-        // Deserialize using generated Deserialize method
         T result{};
         if (deserializer.BeginObject(ReflectionTraits<T>::name)) {
             result.Deserialize(deserializer);
@@ -280,6 +206,41 @@ namespace BECore {
         LogDeserializeErrors(path, deserializer);
 
         return result;
+    }
+
+    template <HasReflection T>
+    Optional<T> ResourceManager::ReadPartObject(StringView path, AssetPurpose part) {
+        auto opened = OpenAssetPart(path, part);
+        if (!opened) {
+            LOG_ERROR(Format("Failed to load file for deserialization: {}", opened.error()).c_str());
+            return {};
+        }
+        if (!*opened) {
+            return {};
+        }
+        IDeserializer& deserializer = **opened;
+
+        Optional<T> result;
+        if (deserializer.BeginObject(ReflectionTraits<T>::name)) {
+            result.emplace();
+            result->Deserialize(deserializer);
+            deserializer.EndObject();
+        }
+        LogDeserializeErrors(path, deserializer);
+        return result;
+    }
+
+    template <HasReflection T>
+    Task<Optional<T>> ResourceManager::LoadSerializedPartAsync(StringView path, AssetPurpose part) {
+        // The caller's view may be gone by the time the task resumes on the background thread
+        const String ownedPath(path);
+        co_await SwitchToBackground(TaskPriority::Normal, BE_TASK_LABEL("Load serialized part"));
+        co_return ReadPartObject<T>(ownedPath, part);
+    }
+
+    template <HasReflection T>
+    Optional<T> ResourceManager::LoadSerializedPart(StringView path, AssetPurpose part) {
+        return ReadPartObject<T>(path, part);
     }
 
 }  // namespace BECore

@@ -19,7 +19,7 @@ namespace BECore::Fuzz {
         constexpr const char* kWebSocketFrameFolder = "ws_frame";
         constexpr const char* kWebSocketHandshakeFolder = "ws_handshake";
 
-        /// The game id and the schema versions of the save seeds against the schema of FuzzSaveEnvelope (game "FuzzGame", writes 3, reads 2 and 3)
+        /// The game id and the schema versions of the save seeds against the schema of FuzzSaveEnvelope (`kSchema`)
         constexpr StringView kSaveGame = "FuzzGame";
         constexpr uint32_t kSaveVersionCurrent = 3;
         constexpr uint32_t kSaveVersionOldest = 2;

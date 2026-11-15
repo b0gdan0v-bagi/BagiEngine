@@ -1,14 +1,11 @@
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/UI/UICanvasComponent.h>
+#include <BECore/UI/UIStrings.h>
+#include <BECore/UI/UIVars.h>
 #include <Stress/Components/StressUiComponent.h>
 #include <gtest/gtest.h>
 #include <tests/StressSceneFixture.h>
 
-/**
- * Coverage of StressUiComponent on the shipped scene file and the shipped string table, drawn on a RecordingRenderer: a label per count on one
- * canvas, English and Russian both drawn, a language switch that rewords the `{#key}` labels and no other, a field that grows and shrinks from
- * the tail, and a game that is not active builds nothing.
- */
 namespace BECore::Stress::Tests {
 
     using BECore::Tests::DrawCall;

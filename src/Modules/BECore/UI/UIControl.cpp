@@ -3,12 +3,14 @@
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Input/UIInput.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Scene/SceneNode.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIChoice.h>
 #include <BECore/UI/UIDropdown.h>
+#include <BECore/UI/UIEnvironment.h>
 #include <BECore/UI/UIImageComponent.h>
 #include <BECore/UI/UIInputClicker.h>
 #include <BECore/UI/UIProgressBar.h>
@@ -107,8 +109,8 @@ namespace BECore {
             return nullptr;
         }
 
-        /// The button-like facts of an element that is composed (a button is not a class there): the type names of its components and what its text, clicker, image and tooltip say, under
-        /// the names a button always had. Only what the element has: a plain element gets nothing. A clicker element with no text or image of its own answers
+        /// The button-like facts of an element that is composed (a button is not a class): the type names of its components and what its text, clicker, image and tooltip say.
+        /// Only what the element has: a plain element gets nothing. A clicker element with no text or image of its own answers
         /// `text` and `icon` from the first descendant that has one (the caption and the icon child of a button made of children)
         void DescribeComponents(const UIElement& element, Json& json) {
             if (element.components.empty()) {

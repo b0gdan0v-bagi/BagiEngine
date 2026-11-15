@@ -2,6 +2,8 @@
 
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/Types/Types.h>
+#include <BECore/Utils/FunctionRef.h>
+#include <BECore/Utils/MoveOnlyFunction.h>
 #include <cstddef>
 #include <filesystem>
 #include <pugixml.hpp>
@@ -21,8 +23,8 @@ namespace BECore {
      * node and, inside `<components>`, attributes and child elements of the node file's components, matched by `type`.
      * It cannot add or remove a component or a field.
      *
-     * One reference also has a single form, ExpandNodeReference, that the scene expansion and the runtime instantiation of
-     * a node (`Scene::InstantiateNode`) share, so the overrides can never differ between them.
+     * ExpandNodeReference is shared by the scene expansion and `Scene::InstantiateNode`, so the overrides cannot differ
+     * between them.
      *
      * Everything here works on pugixml documents: no CoreManager, no scene, no renderer. A bad reference never stops a
      * game: it is one error in NodeExpansion::errors, the reference element is dropped and the rest of the scene stays.
@@ -52,18 +54,20 @@ namespace BECore {
     /// Mount point of the node files; a reference `a/b` is the file `config/a/b.xml`
     inline constexpr StringView kNodeFilesMountPoint = "config";
 
-    /// Extension of a node file
     inline constexpr StringView kNodeFileExtension = ".xml";
 
     /**
-     * @brief Fills @p out with the parsed node file of a reference
+     * @brief Fills @p out (document element: the `<node>`) with the parsed node file of @p ref, which passed IsValidNodeRef
      *
-     * @param ref A reference that passed IsValidNodeRef (`nodes/MahjongHud`)
-     * @param out Receives the document; its document element is the `<node>`
-     * @param error Receives the reason when the file cannot be used
-     * @return false when it cannot be read, parsed or is not a node file
+     * @return false, with the reason in @p error, when the file cannot be read, parsed or is not a node file
      */
-    using NodeFileLoader = eastl::function<bool(StringView ref, pugi::xml_document& out, String& error)>;
+    using NodeFileLoaderSignature = bool(StringView ref, pugi::xml_document& out, String& error);
+
+    /// A loader that is made once and kept (a factory result, a member of a test)
+    using NodeFileLoader = MoveOnlyFunction<NodeFileLoaderSignature>;
+
+    /// A loader as a parameter that is only called during the call (it is passed down, never stored)
+    using NodeFileLoaderRef = FunctionRef<NodeFileLoaderSignature>;
 
     /// The result of an expansion: how many references were replaced and one message per reference that was not
     struct NodeExpansion {
@@ -97,12 +101,7 @@ namespace BECore {
      *   of one component written in both spellings, a child other than `components` / `component`, a second `<components>`
      *   and a `component` without `type` are errors. Text and comments are ignored.
      *
-     * The whole reference is checked before anything changes: on false @p node is untouched.
-     *
-     * @param node The `<node>` of a loaded node file
-     * @param reference The `<node ref="..">` element of the scene
-     * @param error Receives the reason when the reference is invalid
-     * @return false when the reference is invalid or names a component @p node does not have
+     * The whole reference is checked before anything changes: on false @p node is untouched and @p error holds the reason.
      */
     bool ApplyNodeOverrides(pugi::xml_node node, pugi::xml_node reference, String& error);
 
@@ -113,14 +112,10 @@ namespace BECore {
      * a document whose only element is a copy of the file's `<node>` without `contentVersion`. With @p markSource the copy
      * carries `sourceRef="<ref>"` (kNodeSourceAttribute). @p reference is not changed.
      *
-     * @param reference The `<node ref="..">` element, with its overrides
-     * @param loader Reads the node file of the reference
-     * @param markSource Set kNodeSourceAttribute on the copy
-     * @param out Receives the node; empty on failure
-     * @param error Receives the reason on failure
-     * @return false when the reference cannot be used (invalid, file missing or wrong, invalid override)
+     * @return false when the reference cannot be used (invalid, file missing or wrong, invalid override); @p out is then
+     *         empty and @p error holds the reason
      */
-    bool ExpandNodeReference(pugi::xml_node reference, const NodeFileLoader& loader, bool markSource, pugi::xml_document& out, String& error);
+    bool ExpandNodeReference(pugi::xml_node reference, NodeFileLoaderRef loader, bool markSource, pugi::xml_document& out, String& error);
 
     /**
      * @brief Replaces every `scenes/scene/nodes/node[@ref]` of @p configRoot by the node of its file
@@ -131,11 +126,10 @@ namespace BECore {
      * the scene are kept in order. Elements without `ref` and documents without references are left as they are.
      *
      * @param configRoot Document element of SceneConfig (`<SceneManager>`)
-     * @param loader Reads the node file of a reference
      * @param markSource Every expanded node gets kNodeSourceAttribute (what LoadSceneManager wants); tools that read the
      *        file leave it false, so the document they see is the plain inline one
      */
-    NodeExpansion ExpandNodeReferences(pugi::xml_node configRoot, const NodeFileLoader& loader, bool markSource = false);
+    NodeExpansion ExpandNodeReferences(pugi::xml_node configRoot, NodeFileLoaderRef loader, bool markSource = false);
 
     /**
      * @brief Loader that reads `<baseDirectory>/<ref>.xml`, for tools and tests that have only a folder

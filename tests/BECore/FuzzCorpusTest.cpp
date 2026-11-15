@@ -6,6 +6,11 @@
 #include <Fuzz/FuzzSeeds.h>
 #include <Fuzz/FuzzTargets.h>
 
+// Defined by the generated source of BagiEngineTestSupport (be_link_content_roots): no ordinary source names the checkout path
+namespace BagiContentRoots {
+    extern const char* const kEngine;
+}  // namespace BagiContentRoots
+
 namespace BECore::Tests {
 
     using Fuzz::FuzzBytes;
@@ -25,6 +30,11 @@ namespace BECore::Tests {
 
         /// Most mutations stacked on one seed
         constexpr uint32_t kMaxStackedMutations = 3;
+
+        /// The committed seeds, tests/Fuzz/corpus of the engine
+        std::filesystem::path CorpusRoot() {
+            return std::filesystem::path(BagiContentRoots::kEngine) / "tests" / "Fuzz" / "corpus";
+        }
 
         struct CorpusFile {
             String name;
@@ -104,7 +114,7 @@ namespace BECore::Tests {
 
     TEST_P(FuzzReplayTest, ReplaysTheCorpusAndMutationsOfIt) {
         const FuzzTarget& target = FindTarget(GetParam().name);
-        const std::filesystem::path folder = std::filesystem::path(BAGI_FUZZ_CORPUS_DIR) / target.corpusFolder;
+        const std::filesystem::path folder = CorpusRoot() / target.corpusFolder;
 
         const Vector<CorpusFile> files = LoadCorpus(folder);
         ASSERT_FALSE(files.empty()) << "no seeds in " << folder.string();
@@ -142,7 +152,7 @@ namespace BECore::Tests {
 
     TEST(FuzzCorpusTest, GeneratedSeedsAreTheCommittedFiles) {
         for (const Fuzz::FuzzSeedFile& seed : Fuzz::MakeGeneratedSeeds()) {
-            const Vector<CorpusFile> files = LoadCorpus(std::filesystem::path(BAGI_FUZZ_CORPUS_DIR) / seed.folder);
+            const Vector<CorpusFile> files = LoadCorpus(CorpusRoot() / seed.folder);
             const auto found = std::find_if(files.begin(), files.end(), [&](const CorpusFile& file) { return file.name == seed.name; });
             ASSERT_NE(found, files.end()) << seed.name << " is not in the corpus: run WriteSeeds";
             EXPECT_TRUE(std::equal(found->bytes.begin(), found->bytes.end(), seed.bytes.begin(), seed.bytes.end())) << seed.name << " differs from what the writers make now: run WriteSeeds";

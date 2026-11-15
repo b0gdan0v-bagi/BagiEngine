@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Config/ConfigManager.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/OpenDeserializer.h>
 #include <BECore/Types/Types.h>
@@ -8,40 +9,26 @@
 namespace BECore {
 
     /**
-     * @brief Create a RefCounted object and immediately deserialize it from a named XML config.
+     * @brief Create a RefCounted object and deserialize it from a named XML config
      *
-     * Replaces the pattern:
-     * @code
-     *   auto obj = BECore::New<T>();
-     *   if (auto d = CoreManager::GetConfigManager().CreateDeserializer("MyConfig")) { obj->Deserialize(*d); }
-     * @endcode
+     * An unknown config gives the object with default field values. Errors the deserializer reports (an unknown factory
+     * `type`, a malformed value) and its findings (an unknown key, a missing `required` field, a value outside `range`:
+     * ConfigManager::GetDiagnostics) go to the log through LogDeserializeErrors(); the object keeps what could be read. A
+     * message logged before LoggerManager has its sinks waits in the log ring buffer, so this also works for LoggerConfig.
      *
-     * With:
-     * @code
-     *   auto obj = BECore::MakeFromConfig<T>("MyConfig");
-     *   obj->Initialize(); // hand-written logic only
-     * @endcode
+     * @note Include from .cpp files only: it pulls in CoreManager.h.
      *
-     * If the config is not found, the object is returned with default field values.
-     * Errors the deserializer reports (an unknown factory `type`, a malformed value) are written to the log with
-     * LogDeserializeErrors() (declared in OpenDeserializer.h, included here); the object keeps what could be read. A message logged before LoggerManager has its
-     * sinks stays in the log ring buffer and reaches them later, so this also works for LoggerConfig itself.
-     *
-     * @note Include this header from .cpp files only — it pulls in CoreManager.h.
-     *
-     * @tparam T  Type to create; must have BE_CLASS and inherit from RefCounted or RefCountedAtomic.
-     * @param configName  Name of the XML config file (without extension).
-     * @param args        Optional constructor arguments forwarded to T.
-     * @return IntrusivePtrAtomic<T> or IntrusivePtrNonAtomic<T> (deduced from T's base).
+     * @tparam T Must have BE_CLASS and inherit from RefCounted or RefCountedAtomic
+     * @param configName Config name without extension
+     * @param args Forwarded to the constructor of T
      */
     template <typename T, typename... Args>
     auto MakeFromConfig(StringView configName, Args&&... args) {
         auto obj = BECore::New<T>(std::forward<Args>(args)...);
         if (auto deserializer = CoreManager::GetConfigManager().CreateDeserializer(configName)) {
             obj->Deserialize(*deserializer);
-            if (deserializer->HasErrors()) {
-                LogDeserializeErrors(configName, *deserializer);
-            }
+            deserializer->FinishLoad();
+            LogDeserializeErrors(configName, *deserializer);
         }
         return obj;
     }

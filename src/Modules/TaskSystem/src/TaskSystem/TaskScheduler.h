@@ -1,10 +1,11 @@
 #pragma once
 
 #include <BECore/Threading/Mutex.h>
-#include <EASTL/priority_queue.h>
+#include <BECore/Types/Types.h>
 #include <TaskSystem/TaskPriority.h>
 #include <TaskSystem/TaskQueue.h>
 #include <TaskSystem/ThreadPool.h>
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstddef>
@@ -12,16 +13,55 @@
 
 namespace BECore {
 
+    namespace Detail {
+
+        /// A binary heap (the largest element by operator< first) that moves its elements. eastl::priority_queue copies the new element in
+        /// push_heap and gives only a const top(), so it cannot hold a task that owns a move-only capture.
+        template <typename T>
+        class MovableHeap {
+        public:
+            void Push(T value) {
+                _items.push_back(std::move(value));
+                std::push_heap(_items.begin(), _items.end());
+            }
+
+            /// The largest element
+            [[nodiscard]] const T& Top() const {
+                return _items.front();
+            }
+
+            /// Removes the largest element and returns it by move
+            [[nodiscard]] T Pop() {
+                std::pop_heap(_items.begin(), _items.end());
+                T value = std::move(_items.back());
+                _items.pop_back();
+                return value;
+            }
+
+            [[nodiscard]] bool Empty() const {
+                return _items.empty();
+            }
+
+            [[nodiscard]] size_t Size() const {
+                return _items.size();
+            }
+
+            void Clear() {
+                _items.clear();
+            }
+
+        private:
+            Vector<T> _items;
+        };
+
+    }  // namespace Detail
+
     /**
-     * TaskScheduler - планировщик задач с приоритетами и отложенным выполнением.
-     *
-     * Поддерживает:
-     * - Приоритетные очереди
-     * - Отложенные задачи (delayed tasks)
-     * - Задачи для главного потока
-     * - Интеграцию с ThreadPool
-     * - Cooperative frame budget of a single-thread build (inline ThreadPool): a background coroutine that
-     *   yields is parked in a queue of its own and resumed by ProcessBackgroundSlices for a set time per frame
+     * Queues of the task system: the main-thread queue (by priority), delayed tasks on two clocks, hand-off of
+     * background jobs to the ThreadPool, and the cooperative queue of the frame budget of a single-thread build
+     * (inline ThreadPool): a background coroutine that yields is parked there and resumed by
+     * ProcessBackgroundSlices for a set time per frame. Thread-safe except the frame-budget state, which only
+     * the one thread of an inline pool touches.
      */
     class TaskScheduler {
     public:
@@ -32,78 +72,51 @@ namespace BECore {
         TaskScheduler() = default;
         ~TaskScheduler() = default;
 
-        // Non-copyable, non-movable
         TaskScheduler(const TaskScheduler&) = delete;
         TaskScheduler& operator=(const TaskScheduler&) = delete;
 
-        /**
-         * Инициализирует планировщик.
-         * @param threadPool Пул потоков для выполнения фоновых задач
-         */
+        /** @param threadPool Not owned; runs the background jobs. */
         void Initialize(ThreadPool* threadPool);
 
-        /**
-         * Добавляет задачу в очередь.
-         * @param task Функция для выполнения
-         * @param priority Приоритет задачи
-         * @param threadType Тип потока для выполнения
-         */
+        /** Queues the task: the main-thread queue for ThreadType::MainThread, the pool otherwise. Dropped with a warning once stopped. */
         void Schedule(TaskQueue::TaskFunc task, TaskPriority priority = TaskPriority::Normal, ThreadType threadType = ThreadType::Background);
 
         /**
-         * Добавляет отложенную задачу.
-         * @param task Функция для выполнения
-         * @param delay Задержка перед выполнением
-         * @param priority Приоритет задачи
-         * @param threadType Тип потока для выполнения
-         * @param clock Clock of the delay: real time (default) or game time (AdvanceGameTime).
-         *              A game delay counts from the game time at the moment of the call; call it from the
-         *              main thread for a deterministic release. A non-positive delay is ready at the
-         *              next ProcessDelayedTasks.
+         * Schedules the task after @p delay, released by ProcessDelayedTasks.
+         * @param clock Real time (default) or game time (AdvanceGameTime). A game delay counts from the game time at
+         *              the moment of the call; call it from the main thread for a deterministic release. A
+         *              non-positive delay is ready at the next ProcessDelayedTasks.
          */
         void ScheduleDelayed(TaskQueue::TaskFunc task, Duration delay, TaskPriority priority = TaskPriority::Normal, ThreadType threadType = ThreadType::Background,
                              DelayClock clock = DelayClock::WallClock);
 
         /**
-         * Advances the game clock. The only way to move DelayClock::GameTime.
-         * NaN, infinity and a negative step are ignored; a step that is too large saturates.
-         * The step is converted to Duration once (rounded to the nearest nanosecond), so the sums are
-         * exact integers and equal on every platform.
+         * Advances the game clock, the only way to move DelayClock::GameTime. NaN, infinity and a negative step are
+         * ignored; a step that is too large saturates. The step is rounded to the nearest nanosecond once, so the
+         * sums are exact integers and equal on every platform.
          * @param seconds Step in seconds (in a frame: Time::GetDeltaTime())
          */
         void AdvanceGameTime(double seconds);
 
-        /**
-         * Returns the scheduler's game time (the sum of the accepted AdvanceGameTime steps).
-         */
+        /** The sum of the accepted AdvanceGameTime steps. */
         [[nodiscard]] Duration GetGameTime() const;
 
         /**
-         * Обрабатывает задачи главного потока.
-         * Должен вызываться из главного потока каждый кадр.
+         * Runs the queued main-thread tasks, highest priority first. Call it from the main thread once per frame.
          */
         void ProcessMainThreadTasks();
 
         /**
-         * Checks and starts the ready delayed tasks:
-         * real-time ones by Clock::now(), game-time ones by GetGameTime().
-         * Должен вызываться регулярно (например, в Update).
+         * Schedules the ready delayed tasks: real-time ones by Clock::now(), game-time ones by GetGameTime().
+         * Call it regularly (TaskManager::Update does).
          */
         void ProcessDelayedTasks();
 
-        /**
-         * Останавливает планировщик.
-         */
+        /** Stops the scheduler: later Schedule calls are dropped and every queue is cleared (queued tasks are destroyed unrun). */
         void Shutdown();
 
-        /**
-         * Возвращает количество задач в очереди главного потока.
-         */
         [[nodiscard]] size_t GetMainThreadQueueSize() const;
 
-        /**
-         * Returns the number of delayed tasks (both queues).
-         */
         [[nodiscard]] size_t GetDelayedTaskCount() const;
 
         /**
@@ -145,9 +158,6 @@ namespace BECore {
          */
         void SetBudgetClock(TimePoint (*now)());
 
-        /**
-         * Returns the number of parked continuations in the cooperative queue.
-         */
         [[nodiscard]] size_t GetBackgroundSliceCount() const;
 
     private:
@@ -158,7 +168,7 @@ namespace BECore {
             ThreadType threadType;
 
             bool operator<(const DelayedTask& other) const {
-                // Min-heap: меньшее время = выше приоритет
+                // The heap puts the largest first, so the earliest time compares largest
                 return executeTime > other.executeTime;
             }
         };
@@ -168,7 +178,6 @@ namespace BECore {
             TaskPriority priority;
 
             bool operator<(const PrioritizedTask& other) const {
-                // Max-heap: больший приоритет = выше
                 return static_cast<uint8_t>(priority) < static_cast<uint8_t>(other.priority);
             }
         };
@@ -185,14 +194,13 @@ namespace BECore {
 
         // The three mutexes below have level 0: no path holds two of them (every guard is scoped and ProcessDelayedTasks schedules after it
         // released its lock), and Shutdown destroys queued handles under one of them, which takes the lock of LiveTasks
-        // Очередь главного потока (с приоритетами)
-        eastl::priority_queue<PrioritizedTask> _mainThreadQueue;
+        Detail::MovableHeap<PrioritizedTask> _mainThreadQueue;
         mutable Mutex _mainThreadMutex{BE_LOCK_SITE("Main thread queue")};
 
         // Delayed tasks by real time
-        eastl::priority_queue<DelayedTask> _delayedTasks;
+        Detail::MovableHeap<DelayedTask> _delayedTasks;
         // Delayed tasks by game time (_gameTime), under the same mutex
-        eastl::priority_queue<DelayedTask> _gameDelayedTasks;
+        Detail::MovableHeap<DelayedTask> _gameDelayedTasks;
         Duration _gameTime{};
         mutable Mutex _delayedMutex{BE_LOCK_SITE("Delayed tasks")};
 

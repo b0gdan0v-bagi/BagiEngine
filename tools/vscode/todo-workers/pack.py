@@ -10,7 +10,7 @@ from pathlib import Path
 from xml.sax.saxutils import escape
 
 HERE = Path(__file__).resolve().parent
-FILES = ["package.json", "extension.js", "README.md", "media/workers.svg", "media/panel.js", "media/panel.css", "media/todo.js", "media/todo.css"]
+FILES = ["package.json", "extension.js", "README.md", "media/workers.svg", "media/panel.js", "media/panel.css", "media/todo.js", "media/todo.css", "media/graph.js", "media/graph.css", "media/insights.js"]
 FILES += sorted(f"src/{path.name}" for path in (HERE / "src").glob("*.js"))  # the modules extension.js wires
 
 CONTENT_TYPES = """<?xml version="1.0" encoding="utf-8"?>

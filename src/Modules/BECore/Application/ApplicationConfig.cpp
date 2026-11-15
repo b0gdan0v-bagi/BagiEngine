@@ -1,5 +1,6 @@
 #include "ApplicationConfig.h"
 
+#include <BECore/Config/ConfigManager.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <Generated/ApplicationConfig.gen.hpp>
 
@@ -10,7 +11,9 @@ namespace BECore {
         load.found = true;
         deserializer.SetStrictValues(true);
         load.config.Deserialize(deserializer);
+        deserializer.FinishLoad();
         load.errors = deserializer.GetErrors();
+        load.warnings = deserializer.GetWarnings();
         return load;
     }
 

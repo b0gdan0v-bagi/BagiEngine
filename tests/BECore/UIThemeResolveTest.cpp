@@ -1,6 +1,7 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/PropertyVisitorDispatch.h>
 #include <BECore/Reflection/XmlDeserializer.h>
+#include <BECore/Renderer/RendererManager.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
@@ -430,8 +431,8 @@ namespace BECore::Tests {
         /// One colour attribute of a control and how to read the channels it ends up in
         struct ColorField {
             const char* attribute;
-            const char* prefix;  ///< what the attribute holds before the colour: the colour inside `shadow`, `textOutline`, ... follows other numbers
-            eastl::function<const Color&(UIElement&)> read;
+            const char* prefix;                            ///< what the attribute holds before the colour: the colour inside `shadow`, `textOutline`, ... follows other numbers
+            std::function<const Color&(UIElement&)> read;  //-NoStd: the field table is copied through initializer lists and Join, so the reader must be copyable
         };
 
         /// A control type, the component it carries (null: the attributes are the control's own) and the colour attributes of that

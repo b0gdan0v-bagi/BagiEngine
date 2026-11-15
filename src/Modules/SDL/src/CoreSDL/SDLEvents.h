@@ -6,7 +6,6 @@
 namespace BECore {
     namespace SDLEvents {
 
-        // События клавиатуры
         struct KeyDownEvent : public EventBase<KeyDownEvent> {
             SDL_Keycode key;
             SDL_Keymod mod;
@@ -22,7 +21,6 @@ namespace BECore {
             KeyUpEvent(SDL_Keycode k, SDL_Keymod m) : key(k), mod(m) {}
         };
 
-        // События мыши
         struct MouseButtonDownEvent : public EventBase<MouseButtonDownEvent> {
             SDL_MouseButtonEvent button;
 
@@ -54,7 +52,6 @@ namespace BECore {
             explicit TextInputEvent(StringView t) : text(t.data(), t.size()) {}
         };
 
-        // События окна
         // Resize, pixel size, display scale, move, focus and close request; window.type says which
         struct WindowEvent : public EventBase<WindowEvent> {
             SDL_WindowEvent window;
@@ -73,7 +70,7 @@ namespace BECore {
             DisplayOrientationChangedEvent(SDL_DisplayID d, SDL_DisplayOrientation o) : display(d), orientation(o) {}
         };
 
-        // Обёртка для любого SDL события (для совместимости)
+        // Every SDL event as it came, emitted before its conversion (ImGui reads these)
         struct SDLEventWrapper : public EventBase<SDLEventWrapper> {
             SDL_Event event;
 

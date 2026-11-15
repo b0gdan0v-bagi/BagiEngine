@@ -1,5 +1,6 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
+#include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Scene/SceneManager.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
@@ -129,12 +130,10 @@ namespace BECore::Tests {
         const ImVec2 center = ToolbarCenter();
         const float step = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x;
 
-        // Stopped: Step is disabled
         Click(center.x + step, center.y);
         EXPECT_EQ(model.GetState(), EditorPlayState::Stopped);
         EXPECT_EQ(model.GetStepCount(), 0u);
 
-        // Pause works from Stopped and from Playing
         Click(center.x, center.y);
         EXPECT_EQ(model.GetState(), EditorPlayState::Paused);
         Click(center.x, center.y);

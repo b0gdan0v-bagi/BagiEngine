@@ -47,25 +47,20 @@ namespace BECore {
      * `value` and `fraction` of the toggle, the slider and the progress bar: they read the variable when asked, no draw or `Sync` call is needed.
      *
      * `ui_click` presses the left mouse button on the middle (or at "at") of the first visible, interactive element of that name (in the scene's node order, or only on
-     * the node named by "canvas") exactly as a user would: a mouse move, the press and the release go through `CoreManager::GetUIInput()`, so a modal canvas
-     * above takes the click and a click that no canvas takes reaches game code. It fails with `not_found` when no element has the name and with `not_clickable`
-     * (the message says why) when the ones that do are hidden, not interactive, covered by another element of their canvas, or in a canvas that takes no
-     * input. "consumed" says whether a canvas took the press. "action" and "value" (empty for a plain button) are what the button emits with the click,
-     * the same pair as the `ActionEvent`; a choice group does not change by it, the game answers by setting the
-     * variable. A click on a dropdown's header toggles the list and answers with no "action" and no "value" (it emits nothing); one on an option of an open list answers the dropdown's
-     * "action" and the option's "value" (what was emitted: both "" for a disabled option or dropdown, which take the click and leave the list open), and the list closes at the next
-     * frame, so a client does `ui_click` the header, `step`, `ui_tree`, `ui_click` the option, `step`. A press elsewhere while the list is open closes it and is consumed (no click
-     * for what lies below), so the answer has "consumed" true and an empty "action" and "value" even for a button, a toggle or a slider. The same holds for a toggle
-     * (its "action" and the value it asks for: `offValue` while it is on, `onValue` while it is off, read before the click) and a slider (its "action" and the text of
-     * the value the press emitted, "" when nothing was emitted: a disabled slider or one without an action). A progress bar is not interactive, so it is `not_clickable`.
+     * the node named by "canvas") as a user would: a mouse move, the press and the release go through `CoreManager::GetUIInput()`, so a modal canvas above takes
+     * the click and a click that no canvas takes reaches game code. `not_found`: no element has the name; `not_clickable` (the message says why): the ones that do are
+     * hidden, not interactive (a progress bar always), covered by another element of their canvas, or in a canvas that takes no input. "consumed" says whether a canvas
+     * took the press. "action" and "value" (empty for a plain button) are what the control emits with the click, the pair of the `ActionEvent`; a disabled control or option
+     * answers both empty (it emitted nothing), and a choice group does not change by the click: the game answers by setting the variable. A click on a dropdown's header
+     * toggles the list and answers neither; one on an option of an open list answers the dropdown's "action" and the option's "value", and the list closes at the next
+     * frame (`ui_click` the header, `step`, `ui_tree`, `ui_click` the option, `step`). A press elsewhere while a list is open closes it and is consumed, so "consumed" is
+     * true with "action" and "value" empty, whatever the element. A toggle answers its "action" and the value it asks for (`offValue` while it is on, `onValue` while it is
+     * off, read before the click), a slider its "action" and the text of the value the press emitted ("" when nothing was).
      *
-     * "at" is a number from 0 to 1, the horizontal position of the press inside the element's rect (default 0.5, the middle; 0 and 1 are the left and the right
-     * edge, a hair inside it so the point still hits the element); the vertical position is always the middle. It is how a client sets a slider with one click:
-     * `at` 0 asks for the minimum, 1 for the maximum, and the answer's "value" says what that came to (a drag in several steps is not offered). Anything else
-     * (a string, null, a number outside 0..1) is `invalid_params`, checked before anything is pressed. `at` is also used for the covered-by check, so a point
-     * under another element is `not_clickable`. A click with `at` on a button is a press at that point of the button. A disabled button takes the click and does nothing with it. An element with a
-     * `UIInputClicker` answers as a button, but a disabled one (its flag or its group's) answers "action" and "value" empty: it emitted nothing. The answer comes after the click: its handlers (an
-     * action that switches the scene) have run.
+     * "at" is a number from 0 to 1, the horizontal position of the press inside the element's rect (default 0.5; 0 and 1 are a hair inside the left and the right edge, so the
+     * point still hits the element); the vertical position is always the middle. It sets a slider with one click: 0 asks for the minimum, 1 for the maximum, and the answer's
+     * "value" says what that came to. Anything else (a string, null, a number outside 0..1) is `invalid_params`, checked before anything is pressed. `at` also serves the
+     * covered-by check. The answer comes after the click: its handlers (an action that switches the scene) have run.
      *
      * Not seen: the documents of `RmlUiDocumentComponent` have a DOM of their own.
      *

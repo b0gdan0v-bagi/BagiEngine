@@ -43,7 +43,7 @@ namespace BECore {
 
         // @p descriptorSetLayout is the texture pipeline's (set 0, binding 0: a combined image sampler), so the descriptor
         // set of any VulkanTexture binds here
-        bool Initialize(VkDevice device, VkRenderPass renderPass, VkDescriptorSetLayout descriptorSetLayout);
+        bool Initialize(VkDevice device, VkRenderPass renderPass, bool linearizeColors, VkDescriptorSetLayout descriptorSetLayout);
         void Destroy(VkDevice device);
 
         // @p buffer holds the vertices from @p vertexOffset and the uint32 indices from @p indexOffset. @p extent is the

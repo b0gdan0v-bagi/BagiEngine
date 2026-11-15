@@ -8,16 +8,9 @@
 namespace BECore {
 
     /**
-     * @brief File system with virtual mount points
+     * @brief Virtual paths over content roots: a mount point has several directories (layers), the last added wins
      *
-     * Allows mounting directories under virtual paths and resolving
-     * virtual paths to real filesystem paths.
-     *
-     * Content is layered: a mount point can have several directories ("layers"), and the layer added
-     * last has the highest priority. The engine and a game each contribute their own config/ and assets/,
-     * and a game file overrides an engine file of the same relative path.
-     *
-     * @note Access via CoreManager::GetFileSystem()
+     * Layers, roots and the lookup order: `FileSystem/CLAUDE.md`. Reached through CoreManager::GetFileSystem().
      */
     class FileSystem {
     public:
@@ -27,16 +20,14 @@ namespace BECore {
         /**
          * @brief Mount config/ and assets/ of every content root
          *
-         * Without any content root added beforehand, the project root is searched upwards from the
-         * current working directory (first directory that contains config/).
+         * With no root added, the project root is searched upwards from the working directory.
          */
         void Initialize();
 
         /**
-         * @brief Add a content root (a directory with config/ and assets/ inside)
+         * @brief Add a content root (a directory with config/ and/or assets/ inside)
          *
-         * Call before Initialize(). The root added last has the highest priority, so add the engine first
-         * and the game after it. Adding a root twice is a no-op.
+         * Call before Initialize(). The root added last has the highest priority: the engine first, then the game.
          */
         void AddContentRoot(const std::filesystem::path& root);
 
@@ -62,7 +53,7 @@ namespace BECore {
         /// Replace all content roots with this one
         void SetRootPath(const std::filesystem::path& rootPath);
 
-        /// Highest priority layer of a mount point (where a file written by an editor lands by default)
+        /// Highest priority layer of a mount point: where a file written by an editor lands
         std::filesystem::path GetMountedPath(PoolString virtualPath) const;
 
         /// All layers of a mount point, lowest priority first
@@ -73,9 +64,8 @@ namespace BECore {
          *
          * A file present in several layers is listed once.
          *
-         * @param mountPoint Virtual mount point (e.g., "assets")
-         * @param extensions File extensions to match (e.g., {".png", ".jpg"})
-         * @return Vector of virtual paths (e.g., "assets/subdir/file.png"), sorted
+         * @param extensions With the dot, matched case-insensitively (e.g. ".png")
+         * @return Virtual paths such as "assets/subdir/file.png", sorted
          */
         Vector<PoolString> EnumerateFiles(PoolString mountPoint, Span<const StringView> extensions) const;
 
@@ -84,9 +74,6 @@ namespace BECore {
         std::filesystem::path _rootPath;                               // _roots.back()
         UnorderedPoolMap<Vector<std::filesystem::path>> _mountPoints;  // layers, lowest priority first
 
-        /**
-         * Найти корневую директорию проекта автоматически
-         */
         std::filesystem::path FindRootDirectory() const;
     };
 

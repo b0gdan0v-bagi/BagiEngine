@@ -10,11 +10,11 @@ Read by the skills `todo-loop`, `todo-merge`, `todo-add`, `todo-db` and by the a
 
 ## Areas
 
-| Area | `<area>` (todo store) | `<R>` (git repository) | `<base>` | Vikunja project (the service's) |
-|------|-----------------------|------------------------|----------|---------------------------------|
-| engine | `engine` | `.` | `main` | `BagiEngine` |
+| Area | `<area>` (todo store) | `<R>` (git repository) | `<base>` |
+|------|-----------------------|------------------------|----------|
+| engine | `engine` | `.` | `main` |
 
-`<engine>` is `.`. The CLI is `python3 tools/todo/todo.py`; `TODO_API_URL` and `TODO_API_TOKEN` come from the git-ignored `.env` (`.env.example`). The Vikunja project of an area is a setting of the store (`todo.py area set`), not of the CLI: the service mirrors by itself.
+`<engine>` is `.`. The CLI is `python3 tools/todo/todo.py` (the loader of the CLI the service hands out: `tools/todo/CLAUDE.md`); `TODO_API_URL` and `TODO_API_TOKEN` come from the git-ignored `.env` (`.env.example`); the token is this checkout's own, limited to its areas.
 
 ## Build and test (baseline and reviewer)
 

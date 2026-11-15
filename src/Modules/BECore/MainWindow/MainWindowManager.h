@@ -12,12 +12,10 @@ namespace BECore {
         MainWindowManager() = default;
         ~MainWindowManager() = default;
 
-        // Геттер для главного окна
         const IntrusivePtr<IMainWindow>& GetMainWindow() const {
             return _window;
         }
 
-        // Установка главного окна
         void SetMainWindow(IntrusivePtr<IMainWindow> window) {
             _window = std::move(window);
         }

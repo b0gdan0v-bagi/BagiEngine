@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Utils/MoveOnlyFunction.h>
 #include <RemoteControl/Socket.h>
 #include <RemoteControl/WebSocketFrame.h>
 #include <gtest/gtest.h>
@@ -14,8 +15,9 @@ namespace BECore::Tests {
     inline constexpr const char* kClientKey = "dGhlIHNhbXBsZSBub25jZQ==";
     inline constexpr std::chrono::seconds kClientWaitLimit{30};
 
-    /// Something a test thread does while it waits (the server tests drain the control service); may be empty
-    using WaitPump = std::function<void()>;
+    /// Something a test thread does while it waits (the server tests drain the control service); may be empty. A client owns its pump:
+    /// a test that gives one pump to several clients passes the lambda itself each time, not a `WaitPump` it made once
+    using WaitPump = MoveOnlyFunction<void()>;
 
     /// Calls @p pump and @p done every millisecond until @p done is true or @p limit has passed
     template <typename Predicate>

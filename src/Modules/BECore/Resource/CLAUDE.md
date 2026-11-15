@@ -2,13 +2,13 @@
 
 ## Overview
 
-Loading, caching and lifetime of game assets. Sync and async loading (`Task<T>`), a reference-counted cache and pluggable loaders. The Doxygen on `ResourceManager.h`, `IResourceLoader.h` and `IResource.h` has usage examples; this file only records the rules and the non-obvious parts.
+Loading, caching and lifetime of game assets. Sync and async loading (`Task<T>`), a reference-counted cache and pluggable loaders. The headers carry one or two sentences of contract per call; the usage example is under "ResourceManager API" and `XmlResource` with `XmlResourceLoader` is the reference pair; this file records the rules and the non-obvious parts.
 
 ## Architecture
 
 ```
 ResourceManager (CoreManager::GetResourceManager())
-    ├── ResourceCache        thread-safe (SharedMutex), no eviction in v1
+    ├── ResourceCache        thread-safe (SharedMutex), no eviction
     └── IResourceLoader[]    picked by file extension via CanLoad()
          ├── XmlResourceLoader   (.xml  → XmlResource)
          ├── SDLTextureLoader / VulkanTextureLoader   (images → ITexture)
@@ -19,7 +19,7 @@ ResourceManager (CoreManager::GetResourceManager())
 IResource (RefCounted, BE_CLASS(IResource, FACTORY_BASE))
     ├── XmlResource
     ├── Font
-    └── SerializedResource<T>   (reflected types)
+    └── SerializedResource<T>   (reflected types; no loader fills it, `LoadSerialized` returns by value)
 ```
 
 - `ResourceState` (`CORE_ENUM`): `Unloaded` → `Loading` → `Loaded` or `Failed`.
@@ -35,12 +35,23 @@ IResource (RefCounted, BE_CLASS(IResource, FACTORY_BASE))
 - **Hand-written array:** `Write` and `Load` call `BeginArray("sprites", "sprite", count)` themselves, because a reflected `eastl::vector<SpriteEntry>` is written with `<item>` elements and the file has `<sprite>`.
 - **Accepted differences from the old `XmlNode` loop:** `XmlDeserializer::BeginArray` hands out every child node of `<sprites>`, so an element not named `sprite` is read as a sprite (it was skipped), and a comment inside `<sprites>` is one element without a `name` (skipped like any entry without a name); the index in the path of a bad sprite counts such nodes.
 
+## Asset parts
+
+One asset file holds the data of several consumers, so a headless run does not load what only a window needs. A reflected class has a purpose (`BE_CLASS(Name, PURPOSE=sim|visual|editor)`, default `Common`, declared per class and not inherited; `.claude/rules/reflection-module.md`), and `AssetParts.h` loads a file one part at a time.
+
+- **Layout:** `<name>.asset.xml` is `<asset><sim><T .../></sim><visual>...</visual><editor>...</editor></asset>`: one object per part under the part's name, the object named by its type like in a `LoadSerialized` file. A part may be absent. A `.bin` whole file is read the same way (`BeginObject` by part name); the engine splits only XML, `.bin` splitting is left to `asset-pak`.
+- **`LoadSerializedPart<T>(path, part)`** (the logic of both calls is `OpenAssetPart`) enters `<part>` and then `<T>` and never visits another part, so no object of another part is created or filled and a headless build need not link the visual classes. It sets the deserializer's **purpose filter** (`IDeserializer::SetPurposeFilter`) to the part: any reflected object whose purpose is neither `Common` nor the part (a field, an array element, a factory element) is an error at its path and is not filled, and a factory element is refused before `Create`. If `T` itself is refused, the result is a default object plus the error line. Errors are logged like `LoadSerialized` does. A reader without a filter (every other load) accepts everything.
+- **Error paths** start at the document root of the whole file (`sim.PartSimHolder.field`) but at the part's first child in a split file (`PartSimHolder.field`): the split file's root is the part element itself.
+- **Split files:** `SplitAssetFile` (the packer step) writes `gem.sim.xml`, `gem.visual.xml` and `gem.editor.xml` for the parts present (`SplitPartPath`; only `.asset.xml` names split) and removes the file of a part that is gone, so the files mirror the source; `SplitAssetXml` is the pure text half. The loader takes the split file of its part when it is **not older than the whole file** (or the whole file is missing) and falls back to the part of the whole file otherwise, so a stale split file left by an earlier run is never served. `asset-pak` packs the split files and needs no knowledge of the format.
+- **Build-time check:** the generator refuses a class with a field of a class of a conflicting purpose (it sees names in field types only); the filter catches what it cannot, such as factory-created and `type="..."` elements.
+
 ## ResourceManager API
 
 | Call | Notes |
 |------|-------|
 | `Load<T>(path)` / `LoadAsync<T>(path)` | `T` derives from `IResource`; cached by path; returns `ResourceHandle<T>` (async: `Task<ResourceHandle<T>>`) |
 | `LoadSerialized<T>(path)` / `LoadSerializedAsync<T>(path)` | `T` is a `BE_CLASS` type; opened with `OpenDeserializer` (XML or binary, picked by the file extension), returned **by value** (default-constructed when the file does not load) |
+| `LoadSerializedPart<T>(path, part)` / `LoadSerializedPartAsync<T>` | one part of a `*.asset.xml` file, `Optional<T>` (empty when the file does not open or the part or the object is absent); see "Asset parts" |
 | `RegisterLoader(loader)` | rarely needed, see below |
 | `ClearCache()` | releases every cached resource |
 
@@ -83,4 +94,4 @@ Derive from `IResourceLoader` with `BE_CLASS(MyLoader)`, implement `CanLoad` / `
 
 ## Testing
 
-`tests/BECore/ResourceManagerTest.cpp` covers sync/async loading, cache hits, invalid paths and memory tracking.
+`tests/BECore/ResourceManagerTest.cpp` covers sync/async loading, cache hits, invalid paths and memory tracking; `AssetPartsTest.cpp` and `AssetPurposeTest.cpp` the parts and the filter.

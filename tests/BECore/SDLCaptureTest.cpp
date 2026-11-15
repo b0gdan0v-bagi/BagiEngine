@@ -3,6 +3,8 @@
 #include <BECore/Control/Json.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Renderer/IRenderer.h>
+#include <BECore/Renderer/RendererManager.h>
+#include <Common/DestroyTally.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -285,6 +287,29 @@ namespace BECore::Tests {
         renderer->Present();
         ASSERT_TRUE(second.has_value());
         EXPECT_TRUE(second->has_value());
+    }
+
+    TEST_F(SDLCaptureTest, AMoveOnlyCaptureIsAnsweredOnceAndDestroyedOnce) {
+        int destroyed = 0;
+        int calls = 0;
+        DrawFrame();
+        renderer->RequestCapture([token = DestroyTally(destroyed), &calls](CaptureResult) { ++calls; });
+        EXPECT_EQ(destroyed, 0);
+
+        renderer->Present();
+        EXPECT_EQ(calls, 1);
+        EXPECT_EQ(destroyed, 1);
+    }
+
+    TEST_F(SDLCaptureTest, AReplacedMoveOnlyCaptureIsAnsweredAndDestroyedOnce) {
+        int destroyed = 0;
+        int calls = 0;
+        DrawFrame();
+        renderer->RequestCapture([token = DestroyTally(destroyed), &calls](CaptureResult) { ++calls; });
+        renderer->RequestCapture([](CaptureResult) {});
+
+        EXPECT_EQ(calls, 1);
+        EXPECT_EQ(destroyed, 1);
     }
 
     TEST_F(SDLCaptureTest, PresentWithoutARequestIsAnOrdinaryPresent) {

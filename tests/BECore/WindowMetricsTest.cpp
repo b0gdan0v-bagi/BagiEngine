@@ -1,4 +1,5 @@
 #include <BECore/Config/XmlConfig.h>
+#include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/MainWindow/IMainWindow.h>
 #include <Common/EngineEnvironment.h>

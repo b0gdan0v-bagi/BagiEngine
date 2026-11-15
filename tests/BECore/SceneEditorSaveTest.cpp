@@ -3,6 +3,7 @@
 #include <BECore/Reflection/ClassMeta.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
+#include <BECore/Renderer/RendererManager.h>
 #include <BECore/Scene/Components/QuadRendererComponent.h>
 #include <BECore/Scene/Components/SpriteRendererComponent.h>
 #include <BECore/Scene/Components/TransformComponent.h>
@@ -381,7 +382,6 @@ namespace BECore::Tests {
         EXPECT_EQ(savedBannerQuad->_color.r, 9);
         EXPECT_EQ(savedBannerQuad->_color.a, 6);
 
-        // Menu and Credits have the nodes and values they had
         const auto& menuNodes = Reloaded("Menu").GetRootNode().GetChildren();
         ASSERT_EQ(menuNodes.size(), 1u);
         EXPECT_EQ(menuNodes[0]->GetName(), "Title"_intern);
@@ -473,7 +473,6 @@ namespace BECore::Tests {
     TEST_F(SceneEditorSaveTest, TheSceneKeepsItsPlace) {
         ASSERT_NO_FATAL_FAILURE(LoadScenes());
 
-        // The middle scene, then the first, then the last one
         for (const char* name : {"Game", "Menu", "Credits"}) {
             SCOPED_TRACE(name);
             _manager->SetActiveScene(PoolString::Intern(name));
@@ -959,7 +958,6 @@ namespace BECore::Tests {
         EXPECT_EQ(inner->GetLayer(), kPieceLayer);
         ASSERT_TRUE(inner->GetComponent<TransformComponent>());
         EXPECT_FLOAT_EQ(inner->GetComponent<TransformComponent>()->_x, kMovedX);
-        // A second save of the reloaded scene writes the same document
         const String once = Print(ConfigRoot());
         ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), main));
         EXPECT_EQ(Print(ConfigRoot()), once);

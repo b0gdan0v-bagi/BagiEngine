@@ -15,9 +15,12 @@ with a `.git` entry below the root (a game's `engine/` submodule checks itself) 
 (repeatable; a folder or a file, for a game's own vendored code).
 
 The rules are the table `RULES` below: one line is one rule, and the companions that stay `std::` (`std::visit`, `std::get`,
-`std::monostate`, `std::nullopt`, `std::tuple_size_v`, ...) are in no rule. A rule may be allowed in folders: `tests` allows `regex`,
-`stringstream` and `include-stream` (a folder matches when its segments are a run of the file's path from the root, so `tests` is also
-`tools/stress/tests`); `--allow <folder>:<rule>[,<rule>]` (repeatable) allows more in one root.
+`std::monostate`, `std::nullopt`, `std::tuple_size_v`, ...) are in no rule. The threading rules are `lock` (`std::mutex`, the guards and
+the condition variables) and `thread` (`std::thread`, `std::jthread`; `std::thread::id`, `std::this_thread` and `std::once_flag` are no
+hit): the engine's own are in `BECore/Threading` (`Threading/CLAUDE.md`). A rule may be allowed in folders: `tests` allows `regex`,
+`stringstream`, `include-stream`, `lock` and `thread`, and `BECore/Threading`, the layer that wraps the raw locks, allows `lock` and
+`thread` (a folder matches when its segments are a run of the file's path from the root, so `tests` is also `tools/stress/tests`);
+`--allow <folder>:<rule>[,<rule>]` (repeatable) allows more in one root.
 
 `--baseline <file>` lists what a root has not migrated yet, one `<path> <rule id> <count>` per line (sorted, `#` comments). A count above
 the baseline is `new` (every hit of that file and rule is printed), a count below it, or a path with no hits, is `fixed` and fails until
@@ -85,9 +88,7 @@ TYPES: Tuple[Tuple[str, str], ...] = (
     ("HashSet", "unordered_set|hash_set"),
     ("Optional", "optional"),
     ("UniquePtr", "unique_ptr"),
-    ("SharedPtr", "shared_ptr"),
     ("MakeUnique", "make_unique"),
-    ("MakeShared", "make_shared"),
     ("Pair", "pair"),
     ("MakePair", "make_pair"),
     ("Variant", "variant"),
@@ -95,12 +96,24 @@ TYPES: Tuple[Tuple[str, str], ...] = (
 )
 TYPE_ADVICE = "use the `{alias}` of BECore/Types (Types/CLAUDE.md) or mark `//-NoStd: <why>`"
 MARK_ADVICE = "mark a real boundary `//-NoStd: <why>`"
+# The threading names: (the advice, the `std::` names it covers). A test keeps raw locks and threads, and `BECore/Threading` wraps them.
+LOCKS: Tuple[Tuple[str, str], ...] = (
+    ("use `Mutex` (Threading/CLAUDE.md), or ", "mutex|recursive_mutex|timed_mutex|recursive_timed_mutex"),
+    ("use `SharedMutex` (Threading/CLAUDE.md), or ", "shared_mutex|shared_timed_mutex"),
+    ("use `LockGuard` (Threading/CLAUDE.md), or ", "lock_guard"),
+    ("use `UniqueLock` (Threading/CLAUDE.md), or ", "unique_lock"),
+    ("use `SharedLock` (Threading/CLAUDE.md), or ", "shared_lock"),
+    ("use `LockGuard`, or a std guard over the engine's lock types (Threading/CLAUDE.md), or ", "scoped_lock"),
+    ("use `ConditionVariable` (Threading/CLAUDE.md), or ", "condition_variable|condition_variable_any"),
+)
+LOCK_FOLDERS = (TESTS_FOLDER, "BECore/Threading")
 
 RULES: Tuple[Rule, ...] = (
     # the types the type layer replaces
     *(Rule("type", qualified(names), TYPE_ADVICE.format(alias=alias)) for alias, names in TYPES),
-    # no alias yet (`callables-move-only` makes the type)
-    Rule("function", qualified("function"), "no alias exists yet (entry `callables-move-only`); " + MARK_ADVICE),
+    Rule("type", qualified("shared_ptr|make_shared"), "there is no `SharedPtr` in BECore/Types: share through `IntrusivePtr` of BECore/RefCounted (a test's shared fake: Common/SharedPtr.h) or " + MARK_ADVICE),
+    # the callable types of BECore/Utils
+    Rule("function", qualified("function"), "use `MoveOnlyFunction` for a stored callback, `FunctionRef` for a parameter called only during the call, `FixedFunction` where it must never allocate (Utils/CLAUDE.md), or " + MARK_ADVICE),
     # allocating calls
     Rule("to_string", qualified("to_string"), "use `ToString` or `Format` (Format/CLAUDE.md), or " + MARK_ADVICE),
     Rule("sto", qualified(r"sto[ifdlu]+"), "parses through a temporary `std::string`; " + MARK_ADVICE),
@@ -113,6 +126,14 @@ RULES: Tuple[Rule, ...] = (
     Rule("stable-sort", qualified("stable_sort|inplace_merge|stable_partition"), "allocates a buffer; " + MARK_ADVICE),
     Rule("directory-iterator", re.compile(r"(?<![\w:])(?:::)?(?P<name>std::filesystem::(?:recursive_)?directory_iterator)\b"), "allocates per entry; " + MARK_ADVICE),
     Rule("fmt", re.compile(r"(?<![\w:])(?:::)?(?P<name>fmt::)(?=\w)"), "use the name of the format layer (Format/CLAUDE.md), or " + MARK_ADVICE),
+    # threading primitives: the engine's own are in BECore/Threading (Threading/CLAUDE.md)
+    *(Rule("lock", qualified(names, "std"), advice + MARK_ADVICE, LOCK_FOLDERS) for advice, names in LOCKS),
+    Rule(
+        "thread",
+        qualified(r"j?thread(?!::id\b)", "std"),
+        "use `Thread(name, body)` or `Thread::HardwareConcurrency()` (Threading/CLAUDE.md), or " + MARK_ADVICE,
+        LOCK_FOLDERS,
+    ),
     # the stream headers
     Rule(
         "include-stream",

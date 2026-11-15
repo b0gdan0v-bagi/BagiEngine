@@ -17,7 +17,7 @@ namespace BECore::Fuzz {
     };
 
     /**
-     * @brief The seeds that are made by the engine's own writers (binary streams, later saves and protocol messages)
+     * @brief The seeds that are made by the engine's own writers (binary streams, saves, node files, frames, protocol messages, UI texts)
      *
      * Real inputs, not hand-typed bytes: when a format changes the seeds are made again, and the files under
      * tests/Fuzz/corpus change with it. A seed that came from a finding (fix-<what>) is never made here.

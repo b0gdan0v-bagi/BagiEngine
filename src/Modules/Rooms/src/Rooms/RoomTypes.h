@@ -2,9 +2,9 @@
 
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
+#include <BECore/Utils/MoveOnlyFunction.h>
 #include <chrono>
 #include <cstdint>
-#include <functional>
 
 namespace BECore {
 
@@ -17,8 +17,9 @@ namespace BECore {
     /// Time as the room logic sees it. The caller passes it in (the hub never reads a clock), so tests never sleep.
     using RoomTime = std::chrono::steady_clock::time_point;
 
-    /// Source of random 64-bit words, injected so that a test is deterministic
-    using RandomFn = std::function<uint64_t()>;
+    /// Source of random 64-bit words, injected so that a test is deterministic. Move-only: whoever draws from one source holds the
+    /// function itself (the hub) or reaches it through a reference, never a copy.
+    using RandomFn = MoveOnlyFunction<uint64_t()>;
 
     /// Where a room is in its life
     CORE_ENUM(RoomPhase, uint8_t, Lobby, Playing, Finished)

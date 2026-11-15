@@ -2,8 +2,8 @@
 
 #include <BECore/Control/Json.h>
 #include <BECore/Types/Types.h>
+#include <BECore/Utils/MoveOnlyFunction.h>
 #include <BECore/Utils/PassKey.h>
-#include <functional>
 
 namespace BECore {
 
@@ -24,7 +24,7 @@ namespace BECore {
      */
     class ControlCall {
     public:
-        using DoneFn = std::function<void(ControlCall&)>;
+        using DoneFn = MoveOnlyFunction<void(ControlCall&)>;
 
         ControlCall(PassKey<ControlService>, String method, Json id, Json params, ControlReplyFn reply);
 
@@ -41,7 +41,7 @@ namespace BECore {
             return _params;
         }
 
-        /// Answers with success. @p result is the "result" member of the response
+        /// Answers with success
         void Reply(Json result);
 
         /// Answers with an error

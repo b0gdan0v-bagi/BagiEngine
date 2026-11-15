@@ -3,6 +3,7 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/UI/UIThemes.h>
+#include <BECore/UI/UIVars.h>
 #include <Generated/UIProgressBar.gen.hpp>
 
 namespace BECore {

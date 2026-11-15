@@ -14,7 +14,7 @@ namespace BECore {
      * `fontSize`, `visible`). Only a value that differs from the default is written. A length is "220" or "90%", `margin` and `padding` are one number or
      * "left,top,right,bottom", `anchorMin`, `anchorMax` and `pivot` are "x,y" (fractions, "10%" reads as 0.1, written as 0.1) and are written only when set.
      *
-     * These names share the element's attributes with the fields of every control (a label has its own `wrap`, the text one), so a new style attribute must not
+     * These names share the element's attributes with the fields of every control and component (the text component has its own `wrap`), so a new style attribute must not
      * reuse the name of a control field: `UIControlsTest` round-trips every control with everything set and fails on a clash.
      */
     struct UIElementStyle {

@@ -1,5 +1,6 @@
 #include "SDLMainWindow.h"
 
+#include <BECore/Config/ConfigManager.h>
 #include <BECore/MainWindow/WindowTitle.h>
 #include <BECore/Reflection/OpenDeserializer.h>
 #include <BECore/Utils/ScopeGuard.h>
@@ -46,6 +47,7 @@ namespace BECore {
             return false;
         }
         IDeserializer& deserializer = **opened;
+        deserializer.SetDiagnostics(ConfigManager::GetDiagnostics());
 
         SDLWindowConfig windowConfig;
         if (!deserializer.BeginObject("window")) {
@@ -53,6 +55,7 @@ namespace BECore {
         }
         windowConfig.Deserialize(deserializer);
         deserializer.EndObject();
+        deserializer.FinishLoad();
         LogDeserializeErrors(configPath, deserializer);
 
         SDL_WindowFlags flags = 0;

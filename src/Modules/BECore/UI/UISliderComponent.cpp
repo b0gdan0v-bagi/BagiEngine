@@ -5,6 +5,7 @@
 #include <BECore/UI/UIElement.h>
 #include <BECore/UI/UIProgressBar.h>
 #include <BECore/UI/UIThemes.h>
+#include <BECore/UI/UIVars.h>
 #include <Events/InputEvents.h>
 #include <Generated/UISliderComponent.gen.hpp>
 #include <cmath>

@@ -17,9 +17,10 @@ file(GLOB TEST_SUPPORT_SOURCES
 add_library(BagiTestPch STATIC "${BAGI_ENGINE_DIR}/tests/Pch/TestPch.cpp")
 set_target_properties(BagiTestPch PROPERTIES FOLDER "Tests")
 target_precompile_headers(BagiTestPch PRIVATE
-    ${BAGI_ENGINE_DIR}/src/Modules/BECore/pch.h
+    <BECore/pch.h>
     <gtest/gtest.h>
 )
+# <BECore/pch.h> and not a path: see the PCH of BECoreModule (a path in cmake_pch.hxx is different in every checkout).
 # IMGUI_VULKAN_AVAILABLE must match BECoreModule, otherwise the PCH is rejected.
 target_compile_definitions(BagiTestPch PRIVATE IMGUI_VULKAN_AVAILABLE=1 REFLECTION_GENERATED=1)
 target_link_libraries(BagiTestPch PUBLIC BECoreModule GTest::gtest)
@@ -38,8 +39,10 @@ be_force_include_pch(BagiEngineTestSupport)
 target_compile_definitions(BagiEngineTestSupport PRIVATE
     IMGUI_VULKAN_AVAILABLE=1
     REFLECTION_GENERATED=1
-    "BAGI_ENGINE_ROOT=\"${BAGI_ENGINE_DIR}\""
 )
+
+# The engine's config/ and assets/ are pinned by EngineEnvironment: the working directory is inside whichever repository builds the tests
+be_link_content_roots(BagiEngineTestSupport ENGINE "${BAGI_ENGINE_DIR}")
 
 # The directory above Common/ is public so tests can include <Common/EngineEnvironment.h>.
 get_filename_component(TESTS_DIR "${CMAKE_CURRENT_SOURCE_DIR}" DIRECTORY)

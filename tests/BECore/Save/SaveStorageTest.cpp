@@ -1,5 +1,6 @@
 #include <BECore/Save/SaveGame.h>
 #include <BECore/Save/SaveStorage.h>
+#include <Common/DestroyTally.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
 
@@ -131,6 +132,18 @@ namespace BECore::Tests {
         ASSERT_TRUE(service.WriteSlot("one", Bytes({1})).has_value());
         NotifySaveChanged();
         EXPECT_EQ(_notifications, 0);
+    }
+
+    TEST_F(SaveStorageTest, AMoveOnlyHandlerIsCalledAndDestroyedWhenReplaced) {
+        int destroyed = 0;
+        int calls = 0;
+        SetSaveChangedHandler([token = DestroyTally(destroyed), &calls] { ++calls; });
+        NotifySaveChanged();
+        EXPECT_EQ(calls, 1);
+        EXPECT_EQ(destroyed, 0);
+
+        SetSaveChangedHandler({});
+        EXPECT_EQ(destroyed, 1);
     }
 
 #ifndef __EMSCRIPTEN__

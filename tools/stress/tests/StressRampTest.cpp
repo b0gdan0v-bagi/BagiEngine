@@ -2,17 +2,15 @@
 #include <Stress/RampController.h>
 #include <gtest/gtest.h>
 
-/**
- * Coverage of the ramp's search with synthetic frame times as a function of the count: a linear cost, a cliff, a machine that is too fast and
- * one that is too slow, the p95 of a step (one outlier is forgiven, two are not), the settle frames, the final re-measure that steps down, the
- * abort guard, counts always in range, and the same answer for the same frames.
- */
+/// The frame times are synthetic: a function of the count shown.
 namespace BECore::Stress::Tests {
 
     namespace {
 
         /// The measure of one frame shown at @p count; @p visit is how many times the controller has switched to this count so far (1 for the first)
-        using CostOf = std::function<double(uint32_t count, uint32_t visit)>;
+        using CostSignature = double(uint32_t count, uint32_t visit);
+        using CostOf = MoveOnlyFunction<CostSignature>;
+        using CostRef = FunctionRef<CostSignature>;
 
         struct RampRun {
             RampResult result;
@@ -20,7 +18,7 @@ namespace BECore::Stress::Tests {
         };
 
         /// Feeds the controller the cost of every frame it asks for until it is done (or @p frameLimit frames went)
-        RampRun Drive(RampController& controller, const CostOf& cost, uint32_t frameLimit = 100000) {
+        RampRun Drive(RampController& controller, CostRef cost, uint32_t frameLimit = 100000) {
             RampRun run;
             HashMap<uint32_t, uint32_t> visits;
             uint32_t shown = 0;
@@ -37,7 +35,7 @@ namespace BECore::Stress::Tests {
             return run;
         }
 
-        RampRun Drive(const CostOf& cost, uint32_t maxFrames = kMaxRampFrames) {
+        RampRun Drive(CostRef cost, uint32_t maxFrames = kMaxRampFrames) {
             RampController controller(StressMeasure::Work, maxFrames);
             return Drive(controller, cost);
         }

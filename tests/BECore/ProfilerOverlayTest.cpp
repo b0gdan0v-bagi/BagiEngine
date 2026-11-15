@@ -1,6 +1,8 @@
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Profiler/FrameStats/FrameStatsText.h>
 #include <BECore/Profiler/ProfilerToggle.h>
+#include <BECore/Renderer/RendererManager.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/RecordingRenderer.h>
 #include <Widgets/ProfilerOverlayWidget.h>

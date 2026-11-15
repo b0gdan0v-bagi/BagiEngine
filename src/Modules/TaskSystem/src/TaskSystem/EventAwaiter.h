@@ -1,17 +1,15 @@
 #pragma once
 
 #include <Events/EventBase.h>
+#include <Events/SubscriptionHolder.h>
+#include <chrono>
 #include <coroutine>
 
 namespace BECore {
 
     /**
-     * EventAwaiter<T> - awaitable для ожидания события.
-     *
-     * Позволяет использовать co_await для ожидания конкретного события.
-     * При получении события корутина возобновляется с данными события.
-     *
-     * @tparam EventType Тип события (должен наследовать EventBase<EventType>)
+     * Awaits one event of `EventType` (an EventBase<EventType>): the coroutine resumes inline from the handler, on
+     * the thread that fires the event, and the awaiter is unsubscribed first.
      *
      * @example
      * Task<void> HandleInput() {
@@ -20,20 +18,17 @@ namespace BECore {
      * }
      */
     template <typename EventType>
-    class EventAwaiter {
+    class EventAwaiter : public SubscriptionHolder {
     public:
         EventAwaiter() = default;
 
         bool await_ready() const noexcept {
-            return false;  // Всегда suspend для ожидания события
+            return false;
         }
 
         void await_suspend(std::coroutine_handle<> handle) noexcept {
             _handle = handle;
-
-            // Подписываемся на событие
-            // Используем лямбду с захватом this
-            _connection = entt::scoped_connection{GetDispatcher().sink<EventType>().connect<&EventAwaiter::OnEvent>(this)};
+            Subscribe<EventType, &EventAwaiter::OnEvent>(this);
         }
 
         EventType await_resume() noexcept {
@@ -41,36 +36,22 @@ namespace BECore {
         }
 
     private:
-        static entt::dispatcher& GetDispatcher() {
-            // Используем тот же dispatcher, что и EventBase<EventType>
-            static entt::dispatcher& dispatcher = []() -> entt::dispatcher& {
-                // Хак: получаем доступ к приватному dispatcher через публичные методы
-                // Создаем временную подписку чтобы получить dispatcher
-                static entt::dispatcher localDispatcher;
-                return localDispatcher;
-            }();
-            return dispatcher;
-        }
-
         void OnEvent(const EventType& event) {
             _receivedEvent = event;
-            _connection.release();  // Отписываемся после получения
+            UnsubscribeAll();
 
-            if (_handle) {
-                _handle.resume();
+            // The coroutine frame owns this awaiter and may destroy it: nothing is touched after the resume.
+            if (const auto handle = _handle) {
+                handle.resume();
             }
         }
 
         std::coroutine_handle<> _handle;
         Optional<EventType> _receivedEvent;
-        entt::scoped_connection _connection;
     };
 
     /**
-     * Ожидает получение события указанного типа.
-     *
-     * @tparam EventType Тип события
-     * @return Awaitable, который вернет полученное событие
+     * Awaits one event of `EventType`.
      *
      * @example
      * auto keyEvent = co_await WaitForEvent<KeyPressEvent>();
@@ -81,12 +62,10 @@ namespace BECore {
     }
 
     /**
-     * EventAwaiterWithTimeout - ожидание события с таймаутом.
-     *
-     * @tparam EventType Тип события
+     * Awaits an event with a timeout; the timeout is not scheduled yet, so it waits for the event only.
      */
     template <typename EventType>
-    class EventAwaiterWithTimeout {
+    class EventAwaiterWithTimeout : public SubscriptionHolder {
     public:
         using Duration = std::chrono::steady_clock::duration;
         using Result = Optional<EventType>;
@@ -101,10 +80,7 @@ namespace BECore {
             _handle = handle;
             _startTime = std::chrono::steady_clock::now();
 
-            // Подписываемся на событие
-            _connection = entt::scoped_connection{GetDispatcher().sink<EventType>().connect<&EventAwaiterWithTimeout::OnEvent>(this)};
-
-            // TODO: Планируем таймаут через TaskScheduler
+            Subscribe<EventType, &EventAwaiterWithTimeout::OnEvent>(this);
         }
 
         Result await_resume() noexcept {
@@ -112,18 +88,13 @@ namespace BECore {
         }
 
     private:
-        static entt::dispatcher& GetDispatcher() {
-            static entt::dispatcher localDispatcher;
-            return localDispatcher;
-        }
-
         void OnEvent(const EventType& event) {
             if (!_timedOut) {
                 _receivedEvent = event;
-                _connection.release();
+                UnsubscribeAll();
 
-                if (_handle) {
-                    _handle.resume();
+                if (const auto handle = _handle) {
+                    handle.resume();
                 }
             }
         }
@@ -131,10 +102,10 @@ namespace BECore {
         void OnTimeout() {
             if (!_receivedEvent.has_value()) {
                 _timedOut = true;
-                _connection.release();
+                UnsubscribeAll();
 
-                if (_handle) {
-                    _handle.resume();
+                if (const auto handle = _handle) {
+                    handle.resume();
                 }
             }
         }
@@ -143,13 +114,11 @@ namespace BECore {
         std::chrono::steady_clock::time_point _startTime;
         std::coroutine_handle<> _handle;
         Optional<EventType> _receivedEvent;
-        entt::scoped_connection _connection;
         bool _timedOut = false;
     };
 
     /**
-     * Ожидает событие с таймаутом.
-     * Возвращает std::nullopt при истечении таймаута.
+     * Event awaiter with a timeout (see EventAwaiterWithTimeout: the timeout does not fire yet).
      */
     template <typename EventType, typename Rep, typename Period>
     EventAwaiterWithTimeout<EventType> WaitForEventWithTimeout(std::chrono::duration<Rep, Period> timeout) {

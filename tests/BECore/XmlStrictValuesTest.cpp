@@ -233,7 +233,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(deserializer.Read("off", off));
         EXPECT_FALSE(off);
 
-        // A missing element is reported in both modes, as it always was
+        // A missing element is reported in both modes
         int32_t missing = 0;
         EXPECT_FALSE(deserializer.Read("nothing", missing));
         EXPECT_EQ(deserializer.GetErrors().size(), 3u);

@@ -90,10 +90,11 @@ template<>
 struct ReflectionTraits<{{ cls.qualified_name }}> {
     static constexpr bool reflected = true;
     static constexpr eastl::string_view name = "{{ cls.name }}";
+    static constexpr AssetPurpose purpose = AssetPurpose::{{ cls.purpose }};
     
     static constexpr auto fields = std::make_tuple(
 {% for field in cls.fields %}
-        FieldInfo{ eastl::string_view{"{{ field.name }}"}, &{{ cls.qualified_name }}::{{ field.name }} }{{ "," if not loop.last else "" }}
+        FieldInfo{ eastl::string_view{"{{ field.name }}"}, &{{ cls.qualified_name }}::{{ field.name }}{% if field.attributes_init %}, {{ field.attributes_init }}{% endif %} }{{ "," if not loop.last else "" }}
 {% endfor %}
     );
     
@@ -178,7 +179,11 @@ void {{ cls.full_qualified_name }}::Serialize(::BECore::ISerializer& s) const {
 void {{ cls.full_qualified_name }}::Deserialize(::BECore::IDeserializer& d) {
 {% for field in cls.fields %}
 {% set xml_name = field.name[1:] if field.name.startswith('_') else field.name %}
+{% if field.attributes_init %}
+    ::BECore::Ser::Load(d, {{ field.name }}, "{{ xml_name }}", std::get<{{ loop.index0 }}>(::BECore::ReflectionTraits<{{ cls.qualified_name }}>::fields).attributes);
+{% else %}
     ::BECore::Ser::Load(d, {{ field.name }}, "{{ xml_name }}");
+{% endif %}
 {% endfor %}
 }
 {% endif %}
@@ -220,7 +225,8 @@ const ::BECore::ClassMeta& {{ cls.full_qualified_name }}::GetStaticTypeMeta() {
     static const ::BECore::ClassMeta meta{
         ::BECore::StringUtils::GetHash(eastl::string_view{"{{ cls.name }}"}),
         eastl::string_view{"{{ cls.name }}"},
-        eastl::string_view{"{{ cls.icon }}"}
+        eastl::string_view{"{{ cls.icon }}"},
+        ::BECore::AssetPurpose::{{ cls.purpose }}
     };
     return meta;
 }
@@ -240,12 +246,21 @@ void {{ cls.full_qualified_name }}::Serialize(::BECore::ISerializer& s) const {
 // {{ cls.full_qualified_name }}::Deserialize() - auto-generated from BE_REFLECT_FIELD markers
 // Reads data from IDeserializer (load/import)
 void {{ cls.full_qualified_name }}::Deserialize(::BECore::IDeserializer& d) {
+{% if cls.purpose != 'Common' %}
+    if (!d.AcceptsPurpose(::BECore::AssetPurpose::{{ cls.purpose }}, "{{ cls.name }}")) {
+        return;
+    }
+{% endif %}
 {% if cls.parent_has_be_class %}
     {{ cls.parent_full_qualified_name }}::Deserialize(d);
 {% endif %}
 {% for field in cls.fields %}
 {% set xml_name = field.name[1:] if field.name.startswith('_') else field.name %}
+{% if field.attributes_init %}
+    ::BECore::Ser::Load(d, {{ field.name }}, "{{ xml_name }}", std::get<{{ loop.index0 }}>(::BECore::ReflectionTraits<{{ cls.qualified_name }}>::fields).attributes);
+{% else %}
     ::BECore::Ser::Load(d, {{ field.name }}, "{{ xml_name }}");
+{% endif %}
 {% endfor %}
 }
 
@@ -258,7 +273,8 @@ bool {{ cls.full_qualified_name }}::AcceptPropertyVisitor(::BECore::IPropertyVis
     bool changed = false;
 {% for field in cls.fields %}
 {% set xml_name = field.name[1:] if field.name.startswith('_') else field.name %}
-    changed |= ::BECore::PropVisit::Visit(v, {{ field.name }}, "{{ xml_name }}");
+    changed |= ::BECore::PropVisit::VisitField(v, std::get<{{ loop.index0 }}>(::BECore::ReflectionTraits<{{ cls.qualified_name }}>::fields).attributes,
+        [&] { return ::BECore::PropVisit::Visit(v, {{ field.name }}, "{{ xml_name }}"); });
 {% endfor %}
     return changed;
 }

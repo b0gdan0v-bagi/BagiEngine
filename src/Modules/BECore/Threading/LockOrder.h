@@ -8,12 +8,7 @@
  * @brief The Debug check of the lock order: a lock of a level is taken only while every ordered lock the thread holds has a lower one.
  *
  * Only with BE_LOCK_ORDER_CHECK (asserts on): in any other build there is no member, no thread-local and no call. Locks of level 0
- * (LockSite::level) are not ordered and never recorded. A level is given by the code that owns the lock, `BE_LOCK_SITE_LEVEL("name", 30)`,
- * and only where the nesting was read in the code; the order is the one every path takes, so a violation is a possible deadlock.
- *
- * The holder stack is per thread, fixed in size and allocates nothing. A successful try_lock is recorded and never checked (it cannot
- * wait, so it cannot deadlock); a release removes its own entry wherever it is; a ConditionVariable wait does not touch the stack
- * (the lock stays "held" while the thread waits). SharedMutex counts on both sides, shared and exclusive.
+ * (LockSite::level) are not ordered and never recorded. What the stack holds and when a level may be given: Threading/CLAUDE.md.
  */
 
 #if BE_LOCK_ORDER_CHECK

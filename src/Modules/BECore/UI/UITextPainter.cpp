@@ -2,8 +2,11 @@
 
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Renderer/IRenderer.h>
+#include <BECore/Resource/ResourceManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/Text/TextRenderer.h>
+#include <BECore/UI/UIStrings.h>
+#include <BECore/UI/UIVars.h>
 
 namespace BECore {
 

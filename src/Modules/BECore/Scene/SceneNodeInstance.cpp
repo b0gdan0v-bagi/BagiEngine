@@ -36,7 +36,6 @@ namespace BECore {
             out.fields.append_copy(serializer.GetRootNode());
         }
 
-        /// The components of @p node serialized, in order
         Vector<SerializedComponent> SerializeComponents(const SceneNode& node) {
             Vector<SerializedComponent> result(node.GetComponents().size());
             for (size_t i = 0; i < result.size(); ++i) {
@@ -181,14 +180,13 @@ namespace BECore {
         }
     }
 
-    bool BuildNodeReference(const SceneNode& live, const NodeFileLoader& loader, pugi::xml_node nodesEl, String& reason) {
+    bool BuildNodeReference(const SceneNode& live, NodeFileLoaderRef loader, pugi::xml_node nodesEl, String& reason) {
         const String ref = live.GetSourceRef().CStr();
         if (ref.empty()) {
             reason = "the node has no node file";
             return false;
         }
 
-        // The baseline: the file as it stands, no overrides
         pugi::xml_document bare;
         bare.append_child(kNodeElementName.data()).append_attribute(kNodeRefAttribute.data()).set_value(ref.c_str());
         pugi::xml_document expanded;

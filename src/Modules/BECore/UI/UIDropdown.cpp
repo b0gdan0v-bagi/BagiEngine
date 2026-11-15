@@ -5,6 +5,7 @@
 #include <BECore/UI/UIChoice.h>
 #include <BECore/UI/UITextComponent.h>
 #include <BECore/UI/UIThemes.h>
+#include <BECore/UI/UIVars.h>
 #include <Events/InputEvents.h>
 #include <Generated/UIDropdown.gen.hpp>
 

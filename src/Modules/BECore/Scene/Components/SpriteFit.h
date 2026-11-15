@@ -7,7 +7,7 @@
 namespace BECore {
 
     /// How a sprite fills the rect of its node.
-    /// Stretch: the texture covers the whole rect, whatever its aspect (the default, what a sprite always did).
+    /// Stretch: the texture covers the whole rect, whatever its aspect (the default).
     /// Contain: the texture keeps the aspect of its source, is as big as the rect allows and is centered in it.
     CORE_ENUM(SpriteFit, uint8_t, Stretch, Contain)
 
@@ -21,8 +21,6 @@ namespace BECore {
      *
      * @param srcWidth  Width of the part of the texture that is drawn (the source rect, or the whole texture)
      * @param srcHeight Height of the same part
-     * @param dst       The rect of the node
-     * @param fit       The mode
      */
     [[nodiscard]] Rect FitSpriteRect(float srcWidth, float srcHeight, const Rect& dst, SpriteFit fit);
 

@@ -7,9 +7,6 @@ namespace BECore {
 
     /**
      * @brief Configuration for SDL window creation
-     *
-     * Loaded via BE_CLASS reflection from the window config node.
-     * Fields mirror the XML attributes previously parsed manually in SDLMainWindow.
      */
     struct SDLWindowConfig {
         BE_CLASS(SDLWindowConfig)

@@ -28,6 +28,7 @@ function config() {
         python: c.get("python", "python3"),
         claude: c.get("claude", "claude"),
         refreshSeconds: Math.max(5, c.get("refreshSeconds", 15)),
+        hiddenRefreshSeconds: Math.max(15, c.get("hiddenRefreshSeconds", 60)),
         notify: c.get("notify", true),
         startSlices: Math.max(1, Math.floor(c.get("startSlices", 1))),
         loopArgs: c.get("loopArgs", ""),
@@ -35,6 +36,8 @@ function config() {
         autoStartQueue: c.get("autoStartQueue", true),
         preset: c.get("preset", ""),
         prices: c.get("prices", DEFAULT_PRICES),
+        pushUrl: c.get("pushUrl", "").trim(),
+        timelineHours: Math.min(72, Math.max(1, c.get("timelineHours", 24))),
     };
 }
 
@@ -118,8 +121,8 @@ function sessionWord(worker) {
     return s.status === "busy" ? "busy" : "idle";
 }
 
-// A webview page: the script and the styles of media/ inline, under a nonce.
-function pageHtml(context, scriptName, styleNames, placeholder) {
+// A webview page: the scripts (one name or several, in order) and the styles of media/ inline, under a nonce.
+function pageHtml(context, scriptNames, styleNames, placeholder) {
     const nonce = crypto.randomBytes(16).toString("hex");
     const read = (name) => fs.readFileSync(path.join(context.extensionPath, "media", name), "utf8");
     const style = styleNames.map(read).join("\n");
@@ -133,7 +136,7 @@ function pageHtml(context, scriptName, styleNames, placeholder) {
 </head>
 <body>
 <div id="root"><p class="muted">${placeholder}</p></div>
-<script nonce="${nonce}">${read(scriptName)}</script>
+${[].concat(scriptNames).map((name) => `<script nonce="${nonce}">${read(name)}</script>`).join("\n")}
 </body>
 </html>`;
 }

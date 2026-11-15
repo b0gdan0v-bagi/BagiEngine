@@ -16,8 +16,7 @@ namespace BECore {
 
     }  // namespace
 
-    bool VulkanGeometryPipeline::Initialize(VkDevice device, VkRenderPass renderPass, VkDescriptorSetLayout descriptorSetLayout) {
-        // ---- Pipeline layout (push constants + the texture's descriptor set 0) ----
+    bool VulkanGeometryPipeline::Initialize(VkDevice device, VkRenderPass renderPass, bool linearizeColors, VkDescriptorSetLayout descriptorSetLayout) {
         VkPushConstantRange pushRange{};
         pushRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
         pushRange.offset = 0;
@@ -35,7 +34,6 @@ namespace BECore {
             return false;
         }
 
-        // ---- Shader modules --------------------------------------------------
         VkShaderModule vertModule = CreateShaderModule(device, kGeometryVertSpv, kGeometryVertSpvSize);
         VkShaderModule fragModule = CreateShaderModule(device, kGeometryFragSpv, kGeometryFragSpvSize);
 
@@ -50,18 +48,22 @@ namespace BECore {
             return false;
         }
 
+        // The colour space of the target: kLinearize (constant 0) of the shader that takes the colour
+        const VkBool32 linearizeValue = linearizeColors ? VK_TRUE : VK_FALSE;
+        const VkSpecializationMapEntry linearizeEntry{0, 0, sizeof(VkBool32)};
+        const VkSpecializationInfo linearizeInfo{1, &linearizeEntry, sizeof(VkBool32), &linearizeValue};
         VkPipelineShaderStageCreateInfo stages[2]{};
         stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
         stages[0].module = vertModule;
         stages[0].pName = "main";
+        stages[0].pSpecializationInfo = &linearizeInfo;
 
         stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
         stages[1].module = fragModule;
         stages[1].pName = "main";
 
-        // ---- Vertex input ----------------------------------------------------
         VkVertexInputBindingDescription binding{};
         binding.binding = 0;
         binding.stride = sizeof(Vertex);
@@ -88,7 +90,6 @@ namespace BECore {
         vertexInput.vertexAttributeDescriptionCount = 3;
         vertexInput.pVertexAttributeDescriptions = attributes;
 
-        // ---- Fixed-function state (the same as the texture pipeline) ---------
         VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
         inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
         inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
@@ -138,7 +139,6 @@ namespace BECore {
         dynamicState.dynamicStateCount = 2;
         dynamicState.pDynamicStates = kDynamicStates;
 
-        // ---- Pipeline creation -----------------------------------------------
         VkGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
         pipelineInfo.stageCount = 2;

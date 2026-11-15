@@ -31,8 +31,8 @@ namespace BECore {
      * (the rule of RingSnapshot). Frames of the window the ring no longer has are skipped; with none left the result is empty.
      *
      * **Total** is the sum of the durations of the calls: a zone inside itself (recursion) counts once per call, as the Chrome trace
-     * shows it. **Self** is a call's duration minus the durations of the zones directly inside it on its thread (found by walking the
-     * zones in begin order with a stack; a child is a zone that lies inside the interval of the one on top), also for a call whose
+     * shows it. **Self** is a call's duration minus the durations of the zones directly inside it on its thread (a child is a zone
+     * inside its interval that no other zone inside it contains), also for a call whose
      * children begin in a later frame. **p95** is the nearest-rank percentile of the per-call durations: the value at rank
      * ceil(0.95 * n) of the n sorted calls, so one call is its own duration. The rows come in the order the sites were first met.
      */

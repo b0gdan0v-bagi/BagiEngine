@@ -187,7 +187,7 @@ namespace BECore {
             result.errors.push_back(Format("scene '{}': node reference '{}': {}", scene, ref, reason));
         }
 
-        void ExpandScene(pugi::xml_node sceneEl, const NodeFileLoader& loader, bool markSource, NodeExpansion& result) {
+        void ExpandScene(pugi::xml_node sceneEl, NodeFileLoaderRef loader, bool markSource, NodeExpansion& result) {
             const StringView sceneName = sceneEl.attribute(kSceneNameAttribute.data()).as_string();
 
             for (pugi::xml_node nodesEl = sceneEl.child(kNodesElement.data()); nodesEl; nodesEl = nodesEl.next_sibling(kNodesElement.data())) {
@@ -252,7 +252,7 @@ namespace BECore {
         return true;
     }
 
-    bool ExpandNodeReference(pugi::xml_node reference, const NodeFileLoader& loader, bool markSource, pugi::xml_document& out, String& error) {
+    bool ExpandNodeReference(pugi::xml_node reference, NodeFileLoaderRef loader, bool markSource, pugi::xml_document& out, String& error) {
         out.reset();
         const String ref = reference.attribute(kNodeRefAttribute.data()).as_string();
         if (!IsValidNodeRef(ref)) {
@@ -280,7 +280,7 @@ namespace BECore {
         return true;
     }
 
-    NodeExpansion ExpandNodeReferences(pugi::xml_node configRoot, const NodeFileLoader& loader, bool markSource) {
+    NodeExpansion ExpandNodeReferences(pugi::xml_node configRoot, NodeFileLoaderRef loader, bool markSource) {
         NodeExpansion result;
         for (pugi::xml_node scenesEl = configRoot.child(kScenesElement.data()); scenesEl; scenesEl = scenesEl.next_sibling(kScenesElement.data())) {
             for (pugi::xml_node sceneEl = scenesEl.child(kSceneElement.data()); sceneEl; sceneEl = sceneEl.next_sibling(kSceneElement.data())) {

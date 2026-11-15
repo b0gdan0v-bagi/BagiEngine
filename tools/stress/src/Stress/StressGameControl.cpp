@@ -67,7 +67,7 @@ namespace BECore::Stress {
 
     }  // namespace
 
-    StressGameControl::StressGameControl(StressState& state, std::function<void()> onSceneChanged) : _state(state), _onSceneChanged(std::move(onSceneChanged)) {}
+    StressGameControl::StressGameControl(StressState& state, MoveOnlyFunction<void()> onSceneChanged) : _state(state), _onSceneChanged(std::move(onSceneChanged)) {}
 
     void StressGameControl::ChangeScene(StressScene scene) {
         if (scene == _state.GetScene()) {

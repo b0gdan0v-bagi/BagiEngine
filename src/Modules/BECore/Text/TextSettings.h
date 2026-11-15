@@ -38,7 +38,7 @@ namespace BECore {
      * `preload` lists the code points whose glyphs a FontAtlas draws up front, when a font is first used at a size;
      * any other glyph is drawn the first time a text needs it, in a page of its own.
      *
-     * `families` lets a label name a face by family and weight instead of a file path (`ResolveFontPath`):
+     * `families` lets a label name a face by family and weight instead of a file path (ResolveFontPath()):
      * - the weight is clamped to 100..900; an empty family means `defaultFamily`;
      * - the face is the one of that family whose weight is nearest by the CSS rule: for a weight under 400 the
      *   faces below are looked at first (the nearest), then those above; for 400..500 the faces from the weight up to
@@ -55,7 +55,7 @@ namespace BECore {
         Vector<GlyphRange> preload;
         Vector<FontFamily> families;
 
-        /// The values of the shipped TextConfig.xml: Basic Latin, Latin-1, Cyrillic and the general punctuation
+        /// The values of the shipped TextConfig.xml
         [[nodiscard]] static TextSettings Default();
 
         /// The file for @p family at @p weight (rules in the class comment). @p known, when given, is set to false only

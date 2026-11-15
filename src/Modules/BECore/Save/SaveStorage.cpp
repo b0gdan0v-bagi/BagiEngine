@@ -9,8 +9,8 @@ namespace BECore {
 
     namespace {
 
-        eastl::function<void()>& Handler() {
-            static eastl::function<void()> handler;
+        MoveOnlyFunction<void()>& Handler() {
+            static MoveOnlyFunction<void()> handler;
             return handler;
         }
 
@@ -22,7 +22,6 @@ namespace BECore {
 
         // The JavaScript of EM_ASM is stringized as it stands, so clang-format must not touch it (it splits === into == =)
         // clang-format off
-        // 1 persistent, 0 anything else (the page has no Module.bagiSaves, or its state is "memory")
         bool PageSavesArePersistent() {
             return EM_ASM_INT({
                 var saves = Module.bagiSaves;
@@ -71,7 +70,7 @@ namespace BECore {
 #endif
     }
 
-    void SetSaveChangedHandler(eastl::function<void()> handler) {
+    void SetSaveChangedHandler(MoveOnlyFunction<void()> handler) {
         Handler() = std::move(handler);
     }
 

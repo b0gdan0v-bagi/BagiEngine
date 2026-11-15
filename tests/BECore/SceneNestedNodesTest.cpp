@@ -5,6 +5,7 @@
 #include <BECore/SceneEventsTest.h>
 #include <Common/EngineEnvironment.h>
 #include <Events/SceneEvents.h>
+#include <entt/entt.hpp>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {

@@ -2,6 +2,7 @@
 #include <BECore/Threading/LockOrder.h>
 #include <BECore/Threading/Mutex.h>
 #include <BECore/Threading/SharedMutex.h>
+#include <Common/SharedPtr.h>
 #include <chrono>
 #include <gtest/gtest-spi.h>
 #include <gtest/gtest.h>

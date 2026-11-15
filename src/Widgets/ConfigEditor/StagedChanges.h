@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Types/Types.h>
+#include <BECore/Utils/FunctionRef.h>
 #include <EASTL/unordered_map.h>
 #include <pugixml.hpp>
 
@@ -62,7 +63,7 @@ namespace BECore {
          * @brief Iterate all staged entries
          * @param fn Callback receiving (key, newValue) for each staged change
          */
-        void ForEach(eastl::function<void(const String&, const String&)> fn) const;
+        void ForEach(FunctionRef<void(const String&, const String&)> fn) const;
 
     private:
         struct Entry {

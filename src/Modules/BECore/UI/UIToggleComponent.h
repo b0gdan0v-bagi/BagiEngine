@@ -26,14 +26,13 @@ namespace BECore {
      * </element>
      * ```
      *
-     * The row is the touch target, caption and switch together. Its children draw from the row's state (`UIElement::GetVisualState`): the caption in the colours of the state, the switch
-     * with its thumb at the on end when `IsChecked()`. The clicker is there for `disabled` (one source of it), for the hover and press of the row and for the state look of its plate; its
-     * own `action` stays empty, because this component decides what a click emits.
+     * The row is the touch target, caption and switch together; its children draw from the row's state (`UIElement::GetVisualState`). The clicker is there for `disabled` (one source of it), for the
+     * hover and press of the row and for the state look of its plate; its own `action` stays empty, because this component decides what a click emits.
      *
-     * `bind` names a `UIVars` variable; the toggle is *on* when the variable equals `onValue` (default `"true"`) and off otherwise: any other value, an unset variable, an empty `bind` and an
-     * empty `onValue` too. `offValue` (default `"false"`) is the value a click asks for when the toggle is on. **The toggle owns no state**: a click emits
-     * `ActionEvent(action, value)` with the state the person asks for and changes nothing here; the game answers by setting the variable (game -> `UIVars` -> widget). A click with an empty
-     * `action` or on a disabled row does nothing. Without a clicker beside it the toggle still clicks, but cannot be disabled and its switch does not know it is on.
+     * `bind` names a `UIVars` variable; the toggle is *on* when the variable equals `onValue` (default `"true"`) and off otherwise (any other value, an unset variable, an empty `bind` or an empty
+     * `onValue`). `offValue` (default `"false"`) is the value a click asks for when the toggle is on. **The toggle owns no state**: a click emits `ActionEvent(action, value)` with the state the
+     * person asks for and changes nothing here; the game answers by setting the variable (game -> `UIVars` -> widget). A click with an empty `action` or on a disabled row does nothing. Without a
+     * clicker beside it the toggle still clicks, but cannot be disabled and its switch does not know it is on.
      */
     class UIToggleComponent : public UIComponent {
         BE_CLASS(UIToggleComponent)

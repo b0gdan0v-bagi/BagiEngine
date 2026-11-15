@@ -5,9 +5,8 @@
 namespace BECore {
 
     RandomFn MakeSecureRandom() {
-        // std::function needs a copyable callable and std::random_device is not
-        auto device = MakeShared<std::random_device>();
-        return [device]() -> uint64_t {
+        // std::random_device has neither a copy nor a move constructor, so the capture holds it through a pointer
+        return [device = MakeUnique<std::random_device>()]() -> uint64_t {
             const uint64_t high = (*device)();
             const uint64_t low = (*device)();
             return (high << 32) ^ low;

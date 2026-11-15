@@ -175,6 +175,11 @@ namespace BECore {
         return found;
     }
 
+    bool BinaryDeserializer::HasKey(StringView name) const {
+        BinaryFormat::EntryView entry;
+        return FindEntry(name, [](uint8_t) { return true; }, entry);
+    }
+
     bool BinaryDeserializer::FindScalar(StringView name, uint8_t expectedTag, bool reportMissing, BinaryFormat::EntryView& outEntry) {
         if (!FindEntry(name, &BinaryFormat::IsScalarTag, outEntry)) {
             if (reportMissing) {

@@ -51,6 +51,9 @@ PRIMITIVE_PATTERNS = [
 ]
 
 
+STRING_TYPES = frozenset({'eastl::string', 'std::string', 'PoolString', 'String', 'BECore::String'})
+
+
 def is_primitive_type(type_name: str) -> bool:
     """Check if a type is a primitive that should be serialized as attribute."""
     # Remove const, volatile, reference, pointer modifiers
@@ -69,6 +72,62 @@ def is_primitive_type(type_name: str) -> bool:
     return False
 
 
+def is_string_type(type_name: str) -> bool:
+    """True for the string types of the engine (`String`, `PoolString`, `FixedString<N>`, `eastl::string`, ...)."""
+    clean_type = type_name.replace('const ', '').replace('volatile ', '').rstrip('&*').strip()
+    return clean_type in STRING_TYPES or any(clean_type.startswith(pattern) for pattern in PRIMITIVE_PATTERNS)
+
+
+def is_bool_type(type_name: str) -> bool:
+    """True for `bool` (with const / reference)."""
+    return type_name.replace('const ', '').replace('volatile ', '').rstrip('&*').strip() == 'bool'
+
+
+@dataclass
+class FieldAttrs:
+    """What BE_FIELD_ATTRS(...) says about one field (all defaults when the field has none).
+
+    `tooltip` is the body of the string literal as written in the source (C++ escapes kept), so it
+    goes back between quotes unchanged.
+    """
+    has_range: bool = False
+    range_min: float = 0.0
+    range_max: float = 0.0
+    step: float = 0.0  # 0: no step
+    tooltip: str = ""
+    readonly: bool = False
+    hidden: bool = False
+    required: bool = False
+
+    def is_empty(self) -> bool:
+        return self == FieldAttrs()
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "has_range": self.has_range,
+            "range_min": self.range_min,
+            "range_max": self.range_max,
+            "step": self.step,
+            "tooltip": self.tooltip,
+            "readonly": self.readonly,
+            "hidden": self.hidden,
+            "required": self.required,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'FieldAttrs':
+        return cls(
+            has_range=data.get("has_range", False),
+            range_min=data.get("range_min", 0.0),
+            range_max=data.get("range_max", 0.0),
+            step=data.get("step", 0.0),
+            tooltip=data.get("tooltip", ""),
+            readonly=data.get("readonly", False),
+            hidden=data.get("hidden", False),
+            required=data.get("required", False),
+        )
+
+
 @dataclass
 class FieldData:
     """Information about a reflected field."""
@@ -78,7 +137,8 @@ class FieldData:
     column: int = 0
     is_primitive: bool = False  # Set by parser, used by template for SerializeAttribute vs BeginObject
     is_enum: bool = False  # Set by parser when the field type is an enum
-    
+    attributes: FieldAttrs = field(default_factory=FieldAttrs)  # From BE_FIELD_ATTRS(...)
+
     def __post_init__(self):
         """Automatically determine if type is primitive after initialization."""
         if self.is_enum:
@@ -95,6 +155,7 @@ class FieldData:
             "column": self.column,
             "is_primitive": self.is_primitive,
             "is_enum": self.is_enum,
+            "attributes": self.attributes.to_dict(),
         }
     
     @classmethod
@@ -107,6 +168,7 @@ class FieldData:
             column=data.get("column", 0),
             is_primitive=data.get("is_primitive", False),
             is_enum=data.get("is_enum", False),
+            attributes=FieldAttrs.from_dict(data.get("attributes", {})),
         )
 
 
@@ -215,12 +277,15 @@ class ClassData:
     parent_class: Optional[str] = None  # Direct parent class name if inheriting
     source_file: str = ""
     line: int = 0
+    marker_line: int = 0  # the line of the BE_CLASS / BE_EVENT marker
     # Custom XML element name from ELEMENT=xxx option in BE_CLASS macro.
     element_name: Optional[str] = None
     # REGISTER_SELF option on a FACTORY_BASE: the base registers itself in its factory even when it has derived classes.
     register_self: bool = False
     # Lucide icon name from ICON=<name> in BE_CLASS (kebab case); empty when the class names none.
     icon: str = ""
+    # Asset part from PURPOSE=<sim|visual|editor> in BE_CLASS, lower case; "common" when the class names none.
+    purpose: str = "common"
     # Resolved at generation time (not stored in cache): FQN of the factory base this
     # class derives from, e.g. "BECore::ILogSink". Empty string when not a factory child.
     factory_base_fqn: str = ""
@@ -240,9 +305,11 @@ class ClassData:
             "parent_class": self.parent_class,
             "source_file": self.source_file,
             "line": self.line,
+            "marker_line": self.marker_line,
             "element_name": self.element_name,
             "register_self": self.register_self,
             "icon": self.icon,
+            "purpose": self.purpose,
         }
     
     @classmethod
@@ -263,9 +330,11 @@ class ClassData:
             parent_class=data.get("parent_class"),
             source_file=data.get("source_file", ""),
             line=data.get("line", 0),
+            marker_line=data.get("marker_line", 0),
             element_name=data.get("element_name"),
             register_self=data.get("register_self", False),
             icon=data.get("icon", ""),
+            purpose=data.get("purpose", "common"),
         )
 
 

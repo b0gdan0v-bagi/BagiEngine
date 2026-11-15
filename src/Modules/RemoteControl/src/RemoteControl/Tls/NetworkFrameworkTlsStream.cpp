@@ -67,11 +67,12 @@ namespace BECore {
         enum class Phase : uint8_t { Idle, Connecting, Ready, Failed, Cancelled };
 
         /**
-         * Everything the blocks of Network.framework touch. It lives in a shared_ptr that every block holds, so a callback that
-         * arrives after the stream is gone finds it still alive (the stream only cancels the connection; it never waits for it).
+         * Everything the blocks of Network.framework touch. It is counted (atomic: the system's queue and the stream's thread are
+         * the holders) and every block holds a reference, so a callback that arrives after the stream is gone finds it still alive
+         * (the stream only cancels the connection; it never waits for it). A block copies its captures, which a count allows.
          * One mutex guards it all; nothing blocks while it is held.
          */
-        class StreamState {
+        class StreamState : public RefCountedAtomic {
         public:
             ~StreamState() {
                 ReleaseConnectionLocked();
@@ -195,7 +196,7 @@ namespace BECore {
 
             /// Called with the mutex held; starts the one pending receive. @p self is a copy on purpose: a block captures a reference
             /// parameter as a reference, and the completion runs after the caller has returned
-            void StartReceiveLocked(SharedPtr<StreamState> self) {
+            void StartReceiveLocked(IntrusivePtrAtomic<StreamState> self) {
                 if (receiveInFlight || connection == nullptr) {
                     return;
                 }
@@ -248,14 +249,14 @@ namespace BECore {
         /// The TLS stream of macOS over Network.framework (see Tls/CLAUDE.md for why not Secure Transport)
         class NetworkFrameworkTlsStream final : public ITlsStream {
         public:
-            NetworkFrameworkTlsStream() : _state(MakeShared<StreamState>()) {}
+            NetworkFrameworkTlsStream() : _state(New<StreamState>()) {}
 
             ~NetworkFrameworkTlsStream() override {
                 Close();
             }
 
             std::expected<void, String> Connect(const TlsConnectParams& params) override {
-                const SharedPtr<StreamState> state = _state;
+                const IntrusivePtrAtomic<StreamState> state = _state;
                 const String host(params.host.data(), params.host.size());
                 {
                     LockGuard lock(state->mutex);
@@ -334,7 +335,7 @@ namespace BECore {
                 if (data.empty()) {
                     return IsValid();
                 }
-                const SharedPtr<StreamState> state = _state;
+                const IntrusivePtrAtomic<StreamState> state = _state;
                 UniqueLock lock(state->mutex);
                 if (state->closing || state->phase != Phase::Ready || state->connection == nullptr) {
                     return false;
@@ -352,7 +353,7 @@ namespace BECore {
                 if (buffer.empty()) {
                     return std::unexpected(SocketError::Failed);
                 }
-                const SharedPtr<StreamState> state = _state;
+                const IntrusivePtrAtomic<StreamState> state = _state;
                 UniqueLock lock(state->mutex);
                 const bool hasDeadline = state->receiveTimeout > std::chrono::milliseconds::zero();
                 const auto deadline = hasDeadline ? std::chrono::steady_clock::now() + state->receiveTimeout : std::chrono::steady_clock::time_point::max();
@@ -485,7 +486,7 @@ namespace BECore {
                 }
             }
 
-            SharedPtr<StreamState> _state;
+            IntrusivePtrAtomic<StreamState> _state;
         };
 
     }  // namespace

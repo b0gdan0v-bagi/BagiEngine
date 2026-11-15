@@ -1,8 +1,10 @@
+#include <BECore/Clipboard/Clipboard.h>
 #include <BECore/Clipboard/ClipboardControl.h>
 #include <BECore/Clipboard/FakeClipboard.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Time/Time.h>
 #include <Common/Printers.h>
 #include <Events/ClipboardEvents.h>
 #include <gtest/gtest.h>

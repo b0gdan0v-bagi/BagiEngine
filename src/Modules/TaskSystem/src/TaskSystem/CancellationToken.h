@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/RefCounted/New.h>
 #include <BECore/Types/Types.h>
 #include <TaskSystem/TaskPriority.h>
 #include <atomic>
@@ -9,7 +10,7 @@
 namespace BECore {
 
     /**
-     * CancellationToken - токен для кооперативной отмены задач.
+     * Token of cooperative cancellation; copies share one state, and any thread may cancel or poll it.
      *
      * @example
      * Task<void> MyTask(CancellationToken token) {
@@ -23,18 +24,13 @@ namespace BECore {
     public:
         CancellationToken() = default;
 
-        /**
-         * Создает новый токен отмены.
-         */
         static CancellationToken Create() {
-            return CancellationToken(MakeShared<State>());
+            return CancellationToken(New<State>());
         }
 
-        /**
-         * Checks whether cancellation was requested on this token or on any of its parents.
-         */
+        /** True when this token or any of its parents was cancelled. */
         [[nodiscard]] bool IsCancelled() const {
-            for (const State* state = _state.get(); state != nullptr; state = state->parent.get()) {
+            for (const State* state = _state.Get(); state != nullptr; state = state->parent.Get()) {
                 if (state->cancelled.load(std::memory_order_acquire)) {
                     return true;
                 }
@@ -42,19 +38,14 @@ namespace BECore {
             return false;
         }
 
-        /**
-         * Requests cancellation. Parent tokens are not affected.
-         */
+        /** Parent tokens are not affected. */
         void Cancel() {
             if (_state) {
                 _state->cancelled.store(true, std::memory_order_release);
             }
         }
 
-        /**
-         * Проверяет отмену и возвращает std::expected.
-         * @return std::expected<void, TaskError> с ошибкой Cancelled, если отменено
-         */
+        /** The `Cancelled` error when IsCancelled(), otherwise a value. */
         [[nodiscard]] std::expected<void, TaskError> CheckCancellation() const {
             if (IsCancelled()) {
                 return std::unexpected(TaskError::Cancelled);
@@ -62,33 +53,31 @@ namespace BECore {
             return {};
         }
 
-        /**
-         * Проверяет валидность токена.
-         */
+        /** False for a default-constructed token (it has no state and never reads as cancelled). */
         [[nodiscard]] bool IsValid() const {
             return _state != nullptr;
         }
 
         /**
-         * Creates a linked (child) token.
-         * Cancelling the parent cancels the child; cancelling the child leaves the parent alone.
-         * The child keeps its parent alive through shared_ptr, so destruction order does not matter.
+         * Creates a child: cancelling the parent cancels it, cancelling it leaves the parent alone.
+         * The child holds its own count of the parent state, so destruction order does not matter.
          */
         [[nodiscard]] CancellationToken CreateLinked() const {
-            auto state = MakeShared<State>();
+            auto state = New<State>();
             state->parent = _state;
             return CancellationToken(std::move(state));
         }
 
     private:
-        struct State {
+        // Atomic: copies of a token (and the children's parent links) are dropped by whichever thread ends last.
+        struct State : RefCountedAtomic {
             std::atomic<bool> cancelled{false};
-            SharedPtr<State> parent;
+            IntrusivePtrAtomic<State> parent;
         };
 
-        explicit CancellationToken(SharedPtr<State> state) : _state(std::move(state)) {}
+        explicit CancellationToken(IntrusivePtrAtomic<State> state) : _state(std::move(state)) {}
 
-        SharedPtr<State> _state;
+        IntrusivePtrAtomic<State> _state;
     };
 
 }  // namespace BECore

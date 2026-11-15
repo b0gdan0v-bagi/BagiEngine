@@ -1,4 +1,7 @@
 #include <BECore/Animation/Timeline.h>
+#include <BECore/Math/Vec3.h>
+#include <BECore/Math/Vec4.h>
+#include <Common/DestroyTally.h>
 #include <cmath>
 #include <gtest/gtest.h>
 
@@ -10,6 +13,27 @@ namespace BECore::Tests {
     static_assert(std::is_nothrow_move_assignable_v<Timeline>);
 
     TEST(TimelineTest, CompileTimeChecks) {}
+
+    namespace {
+
+        /// The closure `MakeTweenApply` builds for a value of type @p T and an `onValue` that holds one pointer
+        template <typename T>
+        struct SetterProbe {
+            static auto Make() {
+                int* target = nullptr;
+                auto onValue = [target](const T&) {};
+                return [from = T{}, to = T{}, onValue](float) mutable {};
+            }
+            static constexpr bool kFits = kFunctionFitsInline<decltype(Make()), kTweenApplyBytes>;
+        };
+
+    }  // namespace
+
+    static_assert(SetterProbe<float>::kFits);
+    static_assert(SetterProbe<Vec2>::kFits);
+    static_assert(SetterProbe<Vec3>::kFits);
+    static_assert(SetterProbe<Vec4>::kFits);
+    static_assert(SetterProbe<Color>::kFits);
 
     namespace {
 
@@ -40,7 +64,7 @@ namespace BECore::Tests {
             float value = kNever;
             int writes = 0;
 
-            eastl::function<void(const float&)> Setter() {
+            auto Setter() {
                 return [this](const float& written) {
                     value = written;
                     ++writes;
@@ -52,7 +76,7 @@ namespace BECore::Tests {
         struct Calls {
             Vector<int> ids;
 
-            eastl::function<void()> Callback(int id) {
+            MoveOnlyFunction<void()> Callback(int id) {
                 return [this, id] { ids.push_back(id); };
             }
         };
@@ -513,6 +537,72 @@ namespace BECore::Tests {
         timeline.Evaluate(kHalf);
         EXPECT_EQ(a.value, kTen);
         EXPECT_TRUE(timeline.IsFinished());
+    }
+
+    TEST(TimelineTest, ATypedClipHoldsAMoveOnlyOnValueAndDestroysItOnce) {
+        int destroyed = 0;
+        float value = kNever;
+        {
+            Timeline timeline;
+            timeline.Append<float>(0.0f, kTen, Settings(kQuarter), [token = DestroyTally(destroyed), &value](const float& written) { value = written; });
+            Timeline moved = std::move(timeline);
+            moved.Evaluate(kQuarter);
+            EXPECT_EQ(value, kTen);
+            EXPECT_EQ(destroyed, 0);
+        }
+        EXPECT_EQ(destroyed, 1);
+    }
+
+    TEST(TimelineTest, AClipTakesNoSetterAndTheTypeIsDeducedFromTheValues) {
+        Property a;
+        Timeline timeline;
+        timeline.Append(0.0f, kTen, Settings(kQuarter), a.Setter()).Join<float>(0.0f, kTwenty, Settings(kQuarter), {}).Insert<float>(kQuarter, 0.0f, kTwenty, Settings(kQuarter), nullptr);
+        EXPECT_EQ(timeline.GetDuration(), kHalf);
+
+        timeline.Evaluate(kOne);
+
+        EXPECT_EQ(a.value, kTen);
+        EXPECT_EQ(a.writes, 1);
+        EXPECT_TRUE(timeline.IsFinished());
+    }
+
+    TEST(TimelineTest, TheStopCheckOfTheRootStopsASubTimelineTwoLevelsDownAtTheClipBoundary) {
+        bool stop = false;
+        Calls calls;
+        Property inner;
+        Timeline innermost;
+        innermost.AppendCallback([&] {
+            stop = true;
+            calls.ids.push_back(1);
+        });
+        innermost.Append<float>(0.0f, kTen, Settings(kQuarter), inner.Setter());
+        Timeline middle;
+        middle.Append(std::move(innermost)).AppendCallback(calls.Callback(2));
+        Timeline root;
+        root.Append(std::move(middle)).AppendCallback(calls.Callback(3));
+        root.SetStopCheck([&stop] { return stop; });
+
+        root.Evaluate(kOne);
+
+        EXPECT_TRUE(calls.ids == std::initializer_list<int>({1}));
+        EXPECT_EQ(inner.writes, 0);
+        EXPECT_FALSE(root.IsFinished());
+    }
+
+    TEST(TimelineTest, ASubTimelineWithACheckOfItsOwnIsGovernedByTheRoot) {
+        Property inner;
+        Calls calls;
+        Timeline sub;
+        sub.SetStopCheck([] { return true; });  // would stop the sub at once if it were the one evaluated
+        sub.Append<float>(0.0f, kTen, Settings(kQuarter), inner.Setter());
+        Timeline root;
+        root.Append(std::move(sub)).AppendCallback(calls.Callback(1));
+
+        root.Evaluate(kOne);
+
+        EXPECT_EQ(inner.value, kTen);
+        EXPECT_TRUE(calls.ids == std::initializer_list<int>({1}));
+        EXPECT_TRUE(root.IsFinished());
     }
 
 }  // namespace BECore::Tests

@@ -75,7 +75,7 @@ namespace BECore::Tests {
         BE_REFLECT_FIELD int32_t id = 0;
     };
 
-    /// A factory base without any Initialize(IDeserializer&): its elements load as before the hook existed
+    /// A factory base without any Initialize(IDeserializer&): its elements load without a hook call
     class NoHookProbe : public RefCounted {
         BE_CLASS(NoHookProbe, FACTORY_BASE, ELEMENT = nohook)
     public:

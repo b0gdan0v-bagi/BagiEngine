@@ -20,7 +20,6 @@ namespace BECore {
 
         static Optional<Color> ParseColorFromString(StringView data);
 
-        // Manual serialization for lightweight types
         template <typename Serializer>
         void Serialize(Serializer& s) const {
             s.WriteAttribute("r", r);
