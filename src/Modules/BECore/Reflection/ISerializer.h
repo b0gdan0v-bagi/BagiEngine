@@ -8,18 +8,11 @@
 namespace BECore {
 
     /**
-     * @brief Base interface for archive operations (shared between serializer and deserializer)
-     *
-     * Provides common methods for object/array nesting that are used by both
-     * serialization (writing) and deserialization (reading).
+     * @brief Object and array nesting shared by ISerializer and IDeserializer.
      */
     class IArchiveBase {
     public:
         virtual ~IArchiveBase() = default;
-
-        // =================================================================
-        // Object nesting
-        // =================================================================
 
         /**
          * @brief Begin a nested object/section
@@ -32,14 +25,7 @@ namespace BECore {
          */
         virtual bool BeginObject(StringView name) = 0;
 
-        /**
-         * @brief End the current nested object/section
-         */
         virtual void EndObject() = 0;
-
-        // =================================================================
-        // Array support
-        // =================================================================
 
         /**
          * @brief Begin an array section
@@ -54,9 +40,6 @@ namespace BECore {
          */
         virtual bool BeginArray(StringView name, StringView elementName, size_t& count) = 0;
 
-        /**
-         * @brief End the current array section
-         */
         virtual void EndArray() = 0;
 
         /**
@@ -69,9 +52,6 @@ namespace BECore {
          */
         virtual bool BeginArrayElement() = 0;
 
-        /**
-         * @brief End the current array element
-         */
         virtual void EndArrayElement() = 0;
 
     protected:
@@ -83,10 +63,7 @@ namespace BECore {
     };
 
     /**
-     * @brief Interface for serialization (writing data)
-     *
-     * Provides methods for writing primitive types and strings to various
-     * storage formats (XML, binary, etc.).
+     * @brief Interface for serialization (writing data).
      *
      * @example
      * XmlSerializer serializer;

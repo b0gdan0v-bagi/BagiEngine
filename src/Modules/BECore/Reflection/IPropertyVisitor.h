@@ -69,15 +69,8 @@ namespace BECore {
         virtual bool Visit(StringView name, String& value) = 0;
 
         /**
-         * @brief Visit a reflected enum field with a combo selector
-         * @param name Field name
-         * @param enumNames Array of enum value names
-         * @param enumCount Number of enum values
-         * @param selectedIndex Mutable reference to current selection index (0 to enumCount-1)
-         * @return true if the selection was changed
-         *
-         * Default implementation returns false (no-op). Override in subclasses to provide
-         * UI (e.g. ImGui::BeginCombo) for selecting enum values.
+         * @brief Visit a reflected enum field; @p selectedIndex is in [0, enumCount)
+         * @return true if the selection was changed; the default changes nothing
          */
         virtual bool VisitEnum(StringView name, const StringView* enumNames, size_t enumCount, size_t& selectedIndex) {
             return false;

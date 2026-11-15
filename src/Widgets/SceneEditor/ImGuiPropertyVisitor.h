@@ -8,14 +8,8 @@ namespace BECore {
     /**
      * @brief IPropertyVisitor implementation that renders ImGui editing widgets
      *
-     * Each Visit() call renders the appropriate ImGui widget for the field type
-     * and returns true if the value was modified.
-     *
-     * Compound types (BeginCompound/EndCompound) are rendered as collapsible
-     * tree nodes using ImGui::TreeNode / ImGui::TreePop.
-     *
-     * Unique ImGui IDs are generated via an internal counter to avoid conflicts
-     * when multiple fields share the same display name.
+     * Every Visit returns true when the user changed the value; a compound is a tree node. Every widget gets its ImGui id
+     * from a counter, so fields of the same name do not clash.
      *
      * The attributes of `BE_FIELD_ATTRS(...)` arrive through BeginField / EndField (the decisions are in
      * `FieldPresentation`, which needs no ImGui):

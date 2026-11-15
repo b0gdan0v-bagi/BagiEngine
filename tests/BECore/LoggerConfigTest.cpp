@@ -40,7 +40,6 @@ namespace BECore::Tests {
         EXPECT_TRUE(Contains(message, "Unknown factory type")) << message.data();
         EXPECT_TRUE(Contains(message, "'Console'")) << message.data();
 
-        // The unknown entry is gone, the valid one after it stays
         ASSERT_EQ(manager->GetSinks().size(), 1u);
         EXPECT_NE(manager->GetSink<ConsoleSink>(), nullptr);
     }
@@ -73,7 +72,6 @@ namespace BECore::Tests {
 
         const LogRecorder::Entry* entry = recorder.Find(LogLevel::Error, {"Config 'LoggerConfig'"});
         ASSERT_NE(entry, nullptr);
-        // The config, the path of the entry in the document and the unknown type
         EXPECT_EQ(entry->message, "Config 'LoggerConfig': sinks[0].type: Unknown factory type: 'Console'");
     }
 

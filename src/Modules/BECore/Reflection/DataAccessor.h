@@ -20,7 +20,7 @@
 namespace BECore {
 
     // =========================================================================
-    // Internal helpers (shared with FieldSerializer, migrated here)
+    // Internal helpers
     // =========================================================================
 
     namespace Detail {
@@ -416,11 +416,10 @@ namespace BECore {
                             d.EndArrayElement();
                         }
                     }
-                    // Reset remaining elements to default if XML had fewer elements
                     using Elem = typename Arr::value_type;
                     for (size_t i = loadCount; i < arr.size(); ++i)
                         DefaultMaker<Elem>::MakeDefault(arr[i]);
-                    // Drain any extra elements from the XML
+                    // Elements past the array's size are skipped on purpose: their keys are not reported as unknown keys
                     for (size_t i = loadCount; i < count; ++i) {
                         if (d.BeginArrayElement()) {
                             d.SkipScope();

@@ -119,7 +119,7 @@ namespace BECore {
 
         CoreManager::GetInstance().OnApplicationInit({});
 
-        // Boot the game layer once core systems (config, scenes, widgets) are up.
+        // After OnApplicationInit: the game reads its configs and registers control methods.
         GameManager::GetInstance().Initialize();
         UpdateWindowTitle();
 

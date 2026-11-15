@@ -6,15 +6,11 @@
 
 namespace BECore {
 
-    // Forward declarations
     class XmlConfig;
     class XmlNode;
 
     /**
-     * @brief XML-based deserializer (reader) using pugixml
-     *
-     * Provides XML deserialization from save files and configuration,
-     * with error tracking for missing or malformed data.
+     * @brief XML reader over pugixml.
      *
      * @example
      * XmlDeserializer deserializer;
@@ -32,40 +28,24 @@ namespace BECore {
      */
     class XmlDeserializer : public IDeserializer {
     public:
-        /**
-         * @brief Construct an XML deserializer
-         */
         XmlDeserializer();
         ~XmlDeserializer() override = default;
 
-        // Non-copyable, movable
         XmlDeserializer(const XmlDeserializer&) = delete;
         XmlDeserializer& operator=(const XmlDeserializer&) = delete;
         XmlDeserializer(XmlDeserializer&&) = default;
         XmlDeserializer& operator=(XmlDeserializer&&) = default;
-
-        // =================================================================
-        // File I/O
-        // =================================================================
 
         /**
          * @brief Load XML from file
          *
          * Refused with an error, before the file is read, when the path is not a regular file or the file is over
          * ReaderLimits::kMaxXmlDocumentBytes. Any load drops the earlier document: after a refusal nothing is readable.
-         *
-         * @param path File path to load from
-         * @return true on success
          */
         bool LoadFromFile(const std::filesystem::path& path);
 
         /**
-         * @brief Load XML from virtual path
-         *
-         * Resolves path via CoreManager::GetFileSystem() and loads the file.
-         *
-         * @param virtualPath Virtual path (e.g., "config/game.xml")
-         * @return true on success
+         * @brief Load XML from a virtual path (CoreManager::GetFileSystem()), as LoadFromFile.
          */
         bool LoadFromVirtualPath(StringView virtualPath);
 
@@ -74,25 +54,13 @@ namespace BECore {
          *
          * The text is UTF-8 whatever its first bytes are, and at most ReaderLimits::kMaxXmlDocumentBytes. Any load drops the earlier
          * document: after a refusal nothing is readable.
-         *
-         * @param xmlContent XML string content
-         * @return true on success
          */
         bool LoadFromString(StringView xmlContent);
 
         /**
-         * @brief Position deserializer at the given XmlNode
-         *
-         * Allows using XmlDeserializer with nodes obtained from XmlConfig/ConfigManager.
-         *
-         * @param node XmlNode to position at
-         * @return true on success
+         * @brief Read from a node without copying it: the document that owns the node must outlive the reads.
          */
         bool LoadFromXmlNode(const XmlNode& node);
-
-        // =================================================================
-        // IDeserializer interface - Read methods
-        // =================================================================
 
         bool Read(StringView name, bool& outValue) override;
         bool Read(StringView name, int8_t& outValue) override;
@@ -108,7 +76,6 @@ namespace BECore {
         bool Read(StringView name, String& outValue) override;
         bool Read(StringView name, PoolString& outValue) override;
 
-        // Attribute deserialization (from XML attributes)
         bool ReadAttribute(StringView name, bool& outValue) override;
         bool ReadAttribute(StringView name, int8_t& outValue) override;
         bool ReadAttribute(StringView name, uint8_t& outValue) override;
@@ -131,7 +98,6 @@ namespace BECore {
         bool BeginArrayElement() override;
         void EndArrayElement() override;
 
-        // Strict values (see IDeserializer::SetStrictValues)
         void SetStrictValues(bool strict) override {
             _strictValues = strict;
         }
@@ -150,7 +116,6 @@ namespace BECore {
         void FinishLoad() override;
         void SkipScope() override;
 
-        // Error tracking
         bool HasErrors() const override;
         const Vector<DeserializeError>& GetErrors() const override;
         void ClearErrors() override;
@@ -169,14 +134,8 @@ namespace BECore {
          */
         bool IsNestedTooDeep(StringView name);
 
-        /**
-         * @brief Get child node for reading
-         */
         pugi::xml_node GetChild(StringView name) const;
 
-        /**
-         * @brief Get attribute from current node for reading
-         */
         pugi::xml_attribute GetAttribute(StringView name) const;
 
         /**
@@ -229,7 +188,6 @@ namespace BECore {
         Vector<pugi::xml_node> _nodeStack;
         mutable Vector<Scope> _scopes;
 
-        // For array iteration
         struct ArrayContext {
             pugi::xml_node parentNode;
             Vector<pugi::xml_node> elements;
@@ -237,7 +195,6 @@ namespace BECore {
         };
         Vector<ArrayContext> _arrayStack;
 
-        // Error tracking
         Vector<DeserializeError> _errors;
 
         bool _strictValues = false;

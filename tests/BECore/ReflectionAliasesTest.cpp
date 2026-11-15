@@ -17,7 +17,7 @@ namespace BECore::Tests {
     using AliasTestData::AliasState;
     using AliasTestData::EastlState;
 
-    // The types a field can have, by alias, that serialize: an alias is reflected as the eastl:: / std:: type it stands for was
+    // The types a field can have, by alias, that serialize: an alias is reflected as the eastl:: / std:: type it stands for
     static_assert(Ser::HasDataAccessor<String>);
     static_assert(Ser::HasDataAccessor<FixedString<8>>);
     static_assert(Ser::HasDataAccessor<FixedString<8, false>>);
@@ -33,7 +33,7 @@ namespace BECore::Tests {
     static_assert(Ser::HasDataAccessor<Pair<int32_t, String>>);
     static_assert(Ser::HasDataAccessor<Variant<int32_t, float>>);
 
-    // The aliases that are not reflected today: a field of one of them does not compile. Adding support is a decision to make
+    // The aliases that are not reflected: a field of one of them does not compile. Adding support is a decision to make
     // on purpose (the serialized form of a sorted vector, of a view and of a pointer to one object has to be chosen), and this
     // list is where to remove the line.
     static_assert(!Ser::HasDataAccessor<FlatMap<String, int32_t>>);
@@ -217,7 +217,7 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(LoadBinary(SaveBinary(aliased), binaryTwin));
         EXPECT_TRUE(SaveBinary(binaryTwin) == SaveBinary(eastl));
 
-        // A file written before the aliases loads into the alias fields
+        // A file written from the eastl:: / std:: spelling loads into the alias fields
         EastlState before;
         Fill(before);
         AliasState loaded;

@@ -29,28 +29,10 @@ namespace BECore {
     /**
      * @brief Interface for deserialization (reading data)
      *
-     * Provides methods for reading primitive types and strings from various
-     * storage formats (XML, binary, etc.). Includes error tracking for
-     * reporting missing or malformed data.
-     *
      * Path tracking is maintained automatically when subclasses call
      * PushPathSegment / PushPathArrayIndex / PopPathSegment in their
      * BeginObject / EndObject / BeginArray / EndArray / BeginArrayElement /
      * EndArrayElement overrides.
-     *
-     * @example
-     * XmlDeserializer deserializer;
-     * deserializer.LoadFromFile("save.xml");
-     * deserializer.BeginObject("player");
-     * int32_t health;
-     * deserializer.ReadAttribute("health", health);
-     * deserializer.EndObject();
-     *
-     * if (deserializer.HasErrors()) {
-     *     for (const auto& err : deserializer.GetErrors()) {
-     *         LOG_ERROR("Deserialization error at '{}': {}", err.path, err.errorMessage);
-     *     }
-     * }
      */
     class IDeserializer : public IArchiveBase {
     public:
@@ -236,21 +218,8 @@ namespace BECore {
         // Error tracking
         // =================================================================
 
-        /**
-         * @brief Check if any errors occurred during deserialization
-         * @return true if there are any errors
-         */
         virtual bool HasErrors() const = 0;
-
-        /**
-         * @brief Get all deserialization errors
-         * @return Vector of errors encountered
-         */
         virtual const Vector<DeserializeError>& GetErrors() const = 0;
-
-        /**
-         * @brief Clear all accumulated errors
-         */
         virtual void ClearErrors() = 0;
 
         // =================================================================
@@ -284,14 +253,7 @@ namespace BECore {
             return result;
         }
 
-        /**
-         * @brief Report an error at the current path + key
-         *
-         * Builds the full path and delegates to AddError().
-         *
-         * @param key  Leaf key where the error occurred
-         * @param message  Human-readable error description
-         */
+        /// @brief Report an error at the current path + key
         void ReportError(StringView key, StringView message) {
             String fullPath = GetCurrentPath(key);
             AddError(StringView(fullPath), message, 0);
@@ -344,9 +306,7 @@ namespace BECore {
         }
 
         /**
-         * @brief Store an error -- override in concrete deserializers
-         *
-         * Both readers store it with StoreError().
+         * @brief Store an error; both readers store it with StoreError()
          */
         virtual void AddError(StringView path, StringView message, int32_t line) = 0;
 
