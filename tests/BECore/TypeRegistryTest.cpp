@@ -192,6 +192,7 @@ namespace BECore::Tests {
         const MethodDesc* add = FindMethod(info, "Add");
         ASSERT_NE(add, nullptr);
         EXPECT_TRUE(add->callable);
+        EXPECT_NE(add->invoke, nullptr);
         EXPECT_FALSE(add->isConst);
         ASSERT_EQ(add->params.size(), 2U);
         EXPECT_EQ(add->params[0].type->kind, TypeKind::Int32);
@@ -217,6 +218,7 @@ namespace BECore::Tests {
         const MethodDesc* initialize = FindMethod(info, "Initialize");
         ASSERT_NE(initialize, nullptr);
         EXPECT_FALSE(initialize->callable);
+        EXPECT_EQ(initialize->invoke, nullptr);
         ASSERT_EQ(initialize->params.size(), 1U);
         EXPECT_EQ(initialize->params[0].type->kind, TypeKind::Unknown);
         EXPECT_EQ(initialize->result->kind, TypeKind::Bool);
@@ -224,11 +226,13 @@ namespace BECore::Tests {
         const MethodDesc* fill = FindMethod(info, "Fill");
         ASSERT_NE(fill, nullptr);
         EXPECT_FALSE(fill->callable) << "a non-const reference cannot carry its change back";
+        EXPECT_EQ(fill->invoke, nullptr);
         EXPECT_EQ(fill->params[0].type->kind, TypeKind::List);
 
         const MethodDesc* find = FindMethod(info, "Find");
         ASSERT_NE(find, nullptr);
         EXPECT_FALSE(find->callable) << "a raw pointer cannot be written";
+        EXPECT_EQ(find->invoke, nullptr);
         EXPECT_EQ(find->result->kind, TypeKind::Unknown);
         EXPECT_TRUE(find->isConst);
     }

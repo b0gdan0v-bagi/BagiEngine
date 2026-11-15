@@ -116,7 +116,8 @@ namespace BECore {
      * @brief One method marked `BE_FUNCTION`
      *
      * `callable`: every parameter can be default made and read through `Ser::Load` and the result is `void` or can be written through
-     * `Ser::Save`. A method that is not (an `IDeserializer&`, a pointer, a non-const reference) is listed all the same.
+     * `Ser::Save`, and none of them is or holds an intrusive pointer. A method that is not (an `IDeserializer&`, a pointer, a non-const
+     * reference) is listed all the same.
      */
     struct MethodDesc {
         StringView name;
@@ -125,6 +126,18 @@ namespace BECore {
         Span<const ParamDesc> params{};
         /// `Void` for no result, `Unknown` for a result that cannot be written
         const TypeDesc* result = nullptr;
+        /**
+         * @brief Calls the method on @p object, the address of an object of the **declaring** type; null exactly when `callable` is false
+         *
+         * Makes every parameter by default and reads it from the current scope of @p args under its `ParamDesc::name`; a key that
+         * is missing is the error `Argument is missing` under that name, except for an `Optional` parameter, which stays empty.
+         * Then calls `args.FinishLoad()`, so a key that no parameter asked for is a finding too. The method runs only when
+         * @p args holds no error then, so who wants a wrong argument refused (not defaulted, not ignored) turns on strict values and
+         * the diagnostics `Error` first (`CallMethod` does). A virtual method goes through the member pointer of the declaring
+         * class, so the override runs. A non-void result is written to @p result under the key `result`, also when it is the default
+         * value. Returns whether the method ran. Never asserts on @p args.
+         */
+        bool (*invoke)(void* object, IDeserializer& args, ISerializer& result) = nullptr;
     };
 
     /**
@@ -222,6 +235,33 @@ namespace BECore {
         concept LoadableParam = (!std::is_lvalue_reference_v<P> || std::is_const_v<std::remove_reference_t<P>>) && Describable<std::remove_cvref_t<P>> &&
                                 Ser::HasDataAccessor<std::remove_cvref_t<P>> && std::default_initializable<std::remove_cvref_t<P>>;
 
+        /// Whether a type is, or holds as an element, an intrusive pointer (`TypeKind::Pointer`)
+        constexpr bool HoldsPointer(const TypeDesc& desc) {
+            if (desc.kind == TypeKind::Pointer) {
+                return true;
+            }
+            if ((desc.element != nullptr && HoldsPointer(*desc.element)) || (desc.key != nullptr && HoldsPointer(*desc.key))) {
+                return true;
+            }
+            for (const TypeDesc* alternative : desc.alternatives) {
+                if (HoldsPointer(*alternative)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// A call by name neither takes nor gives objects through pointers: loading one would make an object, and the pointee may be an incomplete type here
+        template <typename P>
+        consteval bool CarriesPointer() {
+            using Plain = std::remove_cvref_t<P>;
+            if constexpr (Describable<Plain>) {
+                return HoldsPointer(DescribeType<Plain>());
+            } else {
+                return false;
+            }
+        }
+
         template <typename R>
         concept SavableResult = std::is_void_v<R> || (Describable<std::remove_cvref_t<R>> && Ser::HasDataAccessor<std::remove_cvref_t<R>>);
 
@@ -231,7 +271,7 @@ namespace BECore {
             using Result = R;
             static constexpr bool kConst = Const;
             static constexpr size_t kParamCount = sizeof...(A);
-            static constexpr bool kCallable = (LoadableParam<A> && ...) && SavableResult<R>;
+            static constexpr bool kCallable = (LoadableParam<A> && ...) && SavableResult<R> && !(CarriesPointer<A>() || ...) && !CarriesPointer<R>();
             template <size_t I>
             using Param = std::tuple_element_t<I, Tuple<A...>>;
         };
@@ -311,6 +351,51 @@ namespace BECore {
                 BuildParams<Signature>(std::get<I>(ReflectionTraits<T>::methods).paramNames, std::make_index_sequence<Signature::kParamCount>{});
         };
 
+        /// The key under which `MethodDesc::invoke` writes the result
+        inline constexpr StringView kMethodResultKey = "result";
+
+        /// A missing key is the error of its argument, but an `Optional` parameter may be left out
+        template <typename V>
+        void LoadArgument(IDeserializer& args, StringView name, V& value) {
+            if (!args.HasKey(name)) {
+                if constexpr (!Ser::Detail::IsOptionalType<V>::value) {
+                    args.ReportError(name, "Argument is missing");
+                }
+                return;
+            }
+            Ser::Load(args, value, name);
+        }
+
+        template <typename T, size_t I, size_t... Js>
+        bool InvokeThunk(void* object, IDeserializer& args, ISerializer& result, std::index_sequence<Js...> /*indices*/) {
+            using Table = MethodTable<T, I>;
+            using Signature = typename Table::Signature;
+            using Result = typename Signature::Result;
+            constexpr auto ptr = std::get<I>(ReflectionTraits<T>::methods).ptr;
+
+            Tuple<std::remove_cvref_t<typename Signature::template Param<Js>>...> values;
+            (LoadArgument(args, Table::kParams[Js].name, std::get<Js>(values)), ...);
+            args.FinishLoad();
+            if (args.HasErrors()) {
+                return false;
+            }
+
+            T& self = *static_cast<T*>(object);
+            const auto call = [&]() -> decltype(auto) { return (self.*ptr)(std::forward<typename Signature::template Param<Js>>(std::get<Js>(values))...); };
+            if constexpr (std::is_void_v<Result>) {
+                call();
+            } else {
+                // Not `Ser::Save`: a serializer that skips defaults would leave a default result out
+                Ser::DataAccessor<std::remove_cvref_t<Result>>::Save(result, call(), kMethodResultKey);
+            }
+            return true;
+        }
+
+        template <typename T, size_t I>
+        bool InvokeMethodDescThunk(void* object, IDeserializer& args, ISerializer& result) {
+            return InvokeThunk<T, I>(object, args, result, std::make_index_sequence<MethodTable<T, I>::Signature::kParamCount>{});
+        }
+
         template <typename T, size_t I>
         MethodDesc MakeMethodDesc() {
             using Table = MethodTable<T, I>;
@@ -320,6 +405,9 @@ namespace BECore {
             desc.callable = Table::Signature::kCallable;
             desc.params = Span<const ParamDesc>(Table::kParams.data(), Table::kParams.size());
             desc.result = &DescribeSignatureType<typename Table::Signature::Result>();
+            if constexpr (Table::Signature::kCallable) {
+                desc.invoke = &InvokeMethodDescThunk<T, I>;
+            }
             return desc;
         }
 

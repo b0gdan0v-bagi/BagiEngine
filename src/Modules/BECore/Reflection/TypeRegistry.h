@@ -18,6 +18,18 @@ namespace BECore {
         size_t offset = 0;
     };
 
+    /// A method seen from the type it is asked for: its owner (this type or an ancestor) and where the owner's subobject sits in the object
+    struct MethodRef {
+        const MethodDesc* method = nullptr;
+        const TypeInfo* owner = nullptr;
+        /// From the address of the asked-for type's object to the owner's subobject, the ancestors' subobject offsets added
+        size_t offset = 0;
+
+        explicit operator bool() const {
+            return method != nullptr;
+        }
+    };
+
     /**
      * @brief Every reflected type of the program, found by name or hash
      *
@@ -115,6 +127,13 @@ namespace BECore {
             owned.Reset();
             return result;
         }
+
+        /**
+         * @brief The method of this name in the type or its nearest ancestor that has one; empty when there is none
+         *
+         * The type's own methods come first, so a name declared again in a derived type hides the parent's. Allocates nothing, never interns.
+         */
+        [[nodiscard]] MethodRef FindMethod(const TypeInfo& info, StringView name) const;
 
         /// The fields of the type and of its ancestors, the root's first (the order `Serialize` writes them), with their offsets in @p info's object
         [[nodiscard]] Vector<FieldRef> AllFields(const TypeInfo& info) const;

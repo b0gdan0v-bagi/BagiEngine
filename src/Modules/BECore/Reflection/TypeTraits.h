@@ -213,6 +213,9 @@ namespace BECore {
 
     /**
      * @brief Invoke the first reflected method named @p name that can take @p args and return @p Ret.
+     *
+     * For a call whose type and argument types are known at compile time. A name and arguments that arrive at run time (a client
+     * request) go through `CallMethod` (`MethodCall.h`), which reads the arguments from an `IDeserializer` and checks them.
      * @return Its result, or a value-initialized @p Ret when no method matches (no error is reported).
      *
      * @example

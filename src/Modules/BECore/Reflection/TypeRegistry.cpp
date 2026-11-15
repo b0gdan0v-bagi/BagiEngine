@@ -136,6 +136,22 @@ namespace BECore {
         return info.create != nullptr ? info.create() : OwnedObject{};
     }
 
+    MethodRef TypeRegistry::FindMethod(const TypeInfo& info, StringView name) const {
+        const TypeInfo* current = &info;
+        size_t offset = 0;
+        // The bound stops a parent cycle from looping
+        for (size_t step = 0; current != nullptr && step <= _infos.size(); ++step) {
+            for (const MethodDesc& method : current->methods) {
+                if (method.name == name) {
+                    return MethodRef{&method, current, offset};
+                }
+            }
+            offset += current->parentOffset;
+            current = Parent(*current);
+        }
+        return {};
+    }
+
     Vector<FieldRef> TypeRegistry::AllFields(const TypeInfo& info) const {
         // Walk up collecting each ancestor with the offset of its subobject, then emit the root's fields first
         Vector<FieldRef> chain;
