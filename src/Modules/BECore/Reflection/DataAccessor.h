@@ -106,6 +106,21 @@ namespace BECore {
             }
 
             /**
+             * @brief Whether the purpose filter of @p d lets the factory type named @p typeText be created
+             *
+             * Asks the registered ClassMeta before `Create`, so a refused type is never instantiated; the error is
+             * reported at the current path. A name the factory does not know passes (the unknown-type error follows).
+             */
+            template <typename Pointee>
+            bool FactoryTypeAllowed(IDeserializer& d, StringView typeText) {
+                if (!d.GetPurposeFilter()) {
+                    return true;
+                }
+                const ClassMeta* meta = AbstractFactory<Pointee>::GetInstance().FindMeta(typeText);
+                return meta == nullptr || d.AcceptsPurpose(meta->purpose, meta->typeName);
+            }
+
+            /**
              * @brief Loads one array element (a value, an object or a factory-created pointer)
              *
              * For an intrusive pointer: creates the object by its `type` attribute when `item` is null, then
@@ -114,7 +129,8 @@ namespace BECore {
              * virtual, as IWidget does) has that called too, still inside the element scope (the caller
              * has opened it with BeginArrayElement), so it can read more of its own element. When it returns
              * `false` the error "<TypeName> failed to initialize" is reported under the key `type` and `item`
-             * is reset, so LoadVectorLikeFactory drops the element.
+             * is reset, so LoadVectorLikeFactory drops the element. A `type` the purpose filter of @p d refuses is
+             * reported and `item` stays empty (nothing is created or read), so the element is dropped the same way.
              *
              * @note The single-pointer accessors (DataAccessor for IntrusivePtr fields) do not call the
              *       `Initialize(IDeserializer&)` hook: a lone pointer cannot be dropped from a list.
@@ -126,6 +142,9 @@ namespace BECore {
                     if (!item) {
                         eastl::string typeStr;
                         if (d.ReadAttribute("type", typeStr)) {
+                            if (!FactoryTypeAllowed<Pointee>(d, StringView(typeStr))) {
+                                return;
+                            }
                             item = AbstractFactory<Pointee>::GetInstance().Create(StringView(typeStr));
                             if (!item && HasFactory<Pointee>)
                                 d.ReportError("type", eastl::string_view(Format("Unknown factory type: '{}'", typeStr).c_str()));
@@ -521,6 +540,10 @@ namespace BECore {
                     if (!ptr) {
                         eastl::string typeStr;
                         if (d.ReadAttribute("type", typeStr)) {
+                            if (!Detail::FactoryTypeAllowed<T>(d, StringView(typeStr))) {
+                                d.EndObject();
+                                return true;
+                            }
                             ptr = AbstractFactory<T>::GetInstance().Create(StringView(typeStr));
                             if (!ptr)
                                 d.ReportError(key, eastl::string_view(Format("Unknown factory type: '{}'", typeStr).c_str()));
