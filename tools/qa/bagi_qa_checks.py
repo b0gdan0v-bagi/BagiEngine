@@ -53,6 +53,9 @@ class Violation(NamedTuple):
     message: str
 
 
+FLAGGED_KEY = "flagged"  # details of a finding the charter script raised itself (`QaSession.flag`): no replay shows it
+
+
 @dataclass
 class Finding:
     """One thing a session found.

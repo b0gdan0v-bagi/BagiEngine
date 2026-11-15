@@ -183,6 +183,19 @@ def test_shot_writes_a_png_and_a_safe_name(qa_game_exe, out_dir):
     assert [label for label, _ in session.shots] == ["count 3 / big", "again"]
 
 
+def test_flag_adds_a_finding_at_the_last_call_and_counts_repeats(qa_game_exe, out_dir):
+    session = make(qa_game_exe, out_dir)
+    session.step(1)
+    calls = session.calls
+    session.flag("hud_mismatch", "HUD shows 1, state 2", {"hud": ["1"]})
+    session.flag("hud_mismatch", "HUD shows 1, state 2")
+    session.finish()
+    [finding] = session.findings
+    assert (finding.kind, finding.name, finding.call_index) == ("invariant", "hud_mismatch", calls)
+    assert finding.details["hud"] == ["1"] and finding.details["repeats"] == 1
+    assert finding in session.bugs
+
+
 def test_an_out_folder_inside_a_git_work_tree_is_refused():
     inside = Path(__file__).resolve().parent / "qa_out_must_not_exist"
     with pytest.raises(SessionError, match="git work tree"):

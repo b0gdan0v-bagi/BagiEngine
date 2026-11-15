@@ -147,6 +147,20 @@ def test_two_findings_of_one_name_are_one_bug_with_a_count():
     assert "It showed" not in drafts[1].body
 
 
+def test_a_flagged_finding_says_replay_does_not_show_it_until_it_has_a_scenario_with_an_expect(tmp_path):
+    pointers = {"pointers": {"/canvases/0/elements/2/text": "seed 1"}}
+    flagged = Finding("invariant", "hud_seed", "HUD shows seed 1337, state seed 1", 3, {"flagged": True}, pointers)
+    report = make_report(bugs=[flagged])
+    uncut = report_module.draft_bug(flagged, report, None)
+    assert "`bagi_qa.py replay` does not show it" in uncut.body and "bagi_qa.py replay --exe" not in uncut.repro_markdown
+    assert "state seed 1. It showed" not in uncut.body and "state seed 1.\n" in uncut.body
+    scenario_file = tmp_path / "hud_seed.jsonl"
+    scenario_file.write_text('{"scenario": 1, "game": "Fake", "flags": []}\n{"method": "ui_tree", "expect": {"pointers": {}}}\n', encoding="utf-8")
+    cut = report_module.draft_bug(flagged, report, scenario_file)
+    assert "it fails on its last line" in cut.body and "bagi_play.py <executable>" in cut.repro_markdown
+    assert "bagi_qa.py replay --exe" not in cut.repro_markdown
+
+
 def test_ids_are_valid_short_and_unique():
     messages = ["score fell from 10 to 8", "!!! ??? ###", "x" * 200, "", "[Warning] [12:00:00.000] a very long message about what happened to the board"]
     for message in messages:

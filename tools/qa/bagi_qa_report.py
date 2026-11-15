@@ -406,7 +406,7 @@ def _body(group: Sequence[Finding], report: Report, identifier: str, repro_name:
     lines = [
         f"**Where:** the game `{report.game}`, found by a QA session (charter: {_one_line(report.charter)}){call}{canvas}.",
         "",
-        f"**What is wrong:** expected {EXPECTED.get(finding.kind, 'the check to hold')}; actual: {_one_line(finding.message)}"
+        f"**What is wrong:** expected {EXPECTED.get(finding.kind, 'the check to hold')}; actual: {_one_line(finding.message).rstrip('.')}."
         + (f" It showed {count} times in the session, the first after call {finding.call_index}." if count > 1 else ""),
         "",
         "**Steps:**",
@@ -418,6 +418,10 @@ def _body(group: Sequence[Finding], report: Report, identifier: str, repro_name:
 
 
 def _how(finding: Finding, cut: bool) -> str:
+    if finding.details.get(checks.FLAGGED_KEY):
+        if cut and finding.expect is not None:
+            return "play it with `bagi_play.py`: it fails on its last line"
+        return "the recording of the session up to the finding; `bagi_qa.py replay` does not show it, the QA script found it with a check of its own (see the message)"
     if not cut:
         return "the recording of the session up to the finding: play it with `bagi_qa.py replay`, and cut it down with `bagi_qa.py shrink`"
     if finding.expect is None:
@@ -443,6 +447,7 @@ def _steps_in_words(text: str, cut: bool) -> list[str]:
 def _repro_markdown(finding: Finding, identifier: str, cut: bool, text: str, report: Report) -> str:
     name = identifier + REPRO_PLAN_SUFFIX
     how = _how(finding, cut)
+    flagged = bool(finding.details.get(checks.FLAGGED_KEY))
     lines = [
         f"# Reproduction of {identifier}",
         "",
@@ -450,7 +455,7 @@ def _repro_markdown(finding: Finding, identifier: str, cut: bool, text: str, rep
         + f". Save the block as `{name}.jsonl`; `<engine>` is the engine folder (`engine/` in a game) and `<executable>` the built game.",
         "",
         "```",
-        f"python3 <engine>/tools/qa/bagi_qa.py replay --exe <executable> [--invariants <the game's invariants module>] {name}.jsonl",
+        *([] if flagged else [f"python3 <engine>/tools/qa/bagi_qa.py replay --exe <executable> [--invariants <the game's invariants module>] {name}.jsonl"]),
         *([f"python3 <engine>/tools/control/bagi_play.py <executable> {name}.jsonl"] if cut and finding.expect is not None else []),
         "```",
         "",

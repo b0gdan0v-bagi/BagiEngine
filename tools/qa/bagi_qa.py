@@ -232,6 +232,16 @@ class QaSession:
         self.shots.append((label, path))
         return path
 
+    def flag(self, name: str, message: str, details: dict[str, Any] | None = None, expect: dict[str, Any] | None = None) -> None:
+        """A finding of the charter's own, for what no check can see (a HUD or a picture that disagrees with the state), at the last call.
+
+        `bagi_qa.py replay` plays only the generic and the module's checks, so a flagged finding never recurs there: the script that flags it
+        reproduces it by a scenario of its own (`repro/<name>.jsonl`, whose last line holds `expect`, a scenario expectation that fails while the
+        bug is there).
+        """
+        found = Finding("invariant", name, message, details={**(details or {}), checks.FLAGGED_KEY: True}, expect=expect)
+        self._add([found], self.calls)
+
     def note(self, text: str) -> None:
         """What the charter covered, counted into the report."""
         self.notes.append(text)
