@@ -21,6 +21,9 @@ namespace BECore {
      */
     CORE_ENUM(ParticleFrameClass, uint8_t, Interactive, FiniteEffect, DecorativeLoop)
 
+    /// How a flipbook picks the frame of a particle: one pass over the frames during its life, or a steady rate that wraps around
+    CORE_ENUM(ParticleFlipbookMode, uint8_t, OverLife, Loop)
+
     namespace ParticleLimits {
         inline constexpr int32_t kMinParticles = 1;          ///< the smallest pool: an effect always has room for one
         inline constexpr int32_t kMaxParticles = 8192;       ///< the largest pool; a file or the inspector cannot ask for more
@@ -35,6 +38,8 @@ namespace BECore {
         inline constexpr float kFullCircle = 360.0f;         ///< degrees; the widest `spread`
         inline constexpr float kMaxJitter = 1.0f;            ///< `sizeJitter` is a fraction of the size
         inline constexpr float kMaxRotationJitter = 360.0f;  ///< degrees, either way
+        inline constexpr int32_t kMaxFlipbookAxis = 64;      ///< cells per row and rows per grid of a flipbook
+        inline constexpr float kMaxFlipbookFps = 1000.0f;    ///< frames per second of a looping flipbook
     }  // namespace ParticleLimits
 
     /// A float over the life of a particle: `from` at its birth, `to` at its end, the progress shaped by `ease`
@@ -56,6 +61,22 @@ namespace BECore {
         BE_REFLECT_FIELD Color from{255, 255, 255, 255};
         BE_REFLECT_FIELD Color to{255, 255, 255, 0};
         BE_REFLECT_FIELD EaseType ease = EaseType::Linear;
+    };
+
+    /**
+     * @brief A grid of equal frames inside the sprite's source rect, one of which a particle shows.
+     *
+     * The default (1 x 1) is off: the one frame is the whole source rect. Frames count row by row, left to right, from the top.
+     */
+    struct ParticleFlipbook {
+        BE_CLASS(ParticleFlipbook)
+
+        BE_REFLECT_FIELD int32_t columns = 1;  ///< cells across the source rect
+        BE_REFLECT_FIELD int32_t rows = 1;     ///< cells down the source rect
+        BE_REFLECT_FIELD int32_t frames = 0;   ///< how many cells are frames, from the first; 0 is all `columns * rows`
+        BE_REFLECT_FIELD ParticleFlipbookMode mode = ParticleFlipbookMode::OverLife;
+        BE_REFLECT_FIELD float fps = 12.0f;         ///< frames per second of `Loop`; `OverLife` ignores it
+        BE_REFLECT_FIELD bool randomStart = false;  ///< each particle starts at a frame drawn at its birth
     };
 
     /**
@@ -96,6 +117,7 @@ namespace BECore {
         BE_REFLECT_FIELD ParticleColorCurve color;
 
         // Drawing
+        BE_REFLECT_FIELD ParticleFlipbook flipbook;
         BE_REFLECT_FIELD PoolString spriteId;     ///< a sprite of the TextureLibrary; empty and no `texturePath` draws plain squares
         BE_REFLECT_FIELD PoolString texturePath;  ///< a texture file, used when `spriteId` is empty (the whole texture)
         BE_REFLECT_FIELD BlendMode blend = BlendMode::Alpha;

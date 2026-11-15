@@ -16,6 +16,7 @@ namespace BECore {
         float lifetime = 1.0f;        ///< seconds
         float sizeScale = 1.0f;       ///< the size jitter, a factor on the size curve
         float rotationOffset = 0.0f;  ///< degrees added to the rotation curve
+        float frameSeed = 0.0f;       ///< in [0, 1): the flipbook's random start is `floor(frameSeed * frameCount)`, so a change of `frames` keeps it valid
         Color tint{255, 255, 255, 255};
     };
 
@@ -106,6 +107,15 @@ namespace BECore {
         /// The curves of @p effect at @p progress (0 at birth, 1 at the end of the life; clamped), also with `Ease` exact at the ends
         [[nodiscard]] static ParticleLook SampleLook(const ParticleEffect& effect, float progress);
 
+        /**
+         * @brief The flipbook frame, in `0..count-1`, of a particle that is @p age seconds old at @p progress (`age / lifetime`) of its life.
+         *
+         * `count` is `frames`, or `columns * rows` when `frames` is 0 (never more than the grid). `OverLife` shows every frame once over
+         * the life, `Loop` advances `fps` frames per second and wraps; `randomStart` shifts either by `floor(frameSeed * count)`.
+         * A function of the age only, so the frame is the same at any frame rate. Safe on an unsanitized flipbook.
+         */
+        [[nodiscard]] static int32_t FrameOf(const ParticleFlipbook& flipbook, float progress, float age, float frameSeed);
+
         /// Reserve @p vertices (four per particle) and @p indices (six) for @p maxParticles and write the index pattern `0 1 2 0 2 3 ...` once
         static void ReserveGeometry(int32_t maxParticles, Vector<GeometryVertex>& vertices, Vector<int>& indices);
 
@@ -113,7 +123,8 @@ namespace BECore {
          * @brief Fill @p vertices with one rotated square per live particle (four vertices each, corners in the order top left,
          * top right, bottom right, bottom left, straight-alpha color) and make sure @p indices holds the pattern for them.
          *
-         * @param source the part of the texture in pixels; empty means the whole texture
+         * @param source the part of the texture in pixels; empty means the whole texture. A flipbook splits it into its grid and
+         *        each particle gets the UVs of its frame's cell
          * @param textureSize the texture's size in pixels; zero in either component draws untextured (the UVs are 0)
          * @return the number of quads: draw `indices` up to `6 * quads` with `vertices`. Allocates only when the vectors are smaller
          *         than `ReserveGeometry` makes them
