@@ -106,7 +106,6 @@ namespace BECore {
         constexpr int kWriteRetryGestures = 3;
         // Pastes of the page the game has not taken yet; the oldest is dropped beyond it
         constexpr int kPastedQueueLimit = 8;
-        // What PollRead sees while the read has not finished
         constexpr int kWebCodePending = -1;
         // What a write reports: the browser has no API, the call threw at once, the call was made (it can still be rejected later)
         constexpr int kWriteNoApi = -1;
@@ -292,7 +291,6 @@ namespace BECore {
             }, kReadTimeoutMs, kWebCodeRefused, kWebCodePending);
         }
 
-        // Puts the text of the finished read into `outgoing` and forgets the read
         void TakePageRead() {
             EM_ASM({
                 var s = window.bagiClipboard;
@@ -301,7 +299,6 @@ namespace BECore {
             });
         }
 
-        // Moves the oldest paste of the page into `outgoing`; false when there is none
         bool TakePagePaste() {
             return EM_ASM_INT({
                 var s = window.bagiClipboard;
