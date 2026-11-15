@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Logger/LogLevel.h>
+#include <BECore/Logger/LogSite.h>
 #include <BECore/Types/Types.h>
 #include <algorithm>
 #include <atomic>
@@ -16,6 +17,7 @@ namespace BECore {
 
         LogLevel level = LogLevel::Debug;
         uint16_t messageLength = 0;
+        LogSite site;
         char message[MaxMessageSize] = {};
     };
 
@@ -52,7 +54,7 @@ namespace BECore {
          *
          * @return true on success, false if the buffer is full (entry dropped).
          */
-        bool TryPush(LogLevel level, StringView message) noexcept {
+        bool TryPush(LogLevel level, StringView message, LogSite site = {}) noexcept {
             size_t pos = _writeHead.load(std::memory_order_relaxed);
 
             for (;;) {
@@ -65,6 +67,7 @@ namespace BECore {
                     if (_writeHead.compare_exchange_weak(pos, pos + 1, std::memory_order_relaxed)) {
                         LogEntry& entry = cell.entry;
                         entry.level = level;
+                        entry.site = site;
                         const size_t len = std::min(message.size(), LogEntry::MaxMessageSize - 1);
                         entry.messageLength = static_cast<uint16_t>(len);
                         std::memcpy(entry.message, message.data(), len);

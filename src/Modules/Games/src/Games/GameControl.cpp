@@ -214,6 +214,14 @@ namespace BECore {
         service.RegisterHandler("perform_action", HandlePerformAction);
         service.RegisterHandler("set_state", HandleSetState);
 
+        service.DescribeMethod("list_games", {"The registered games and the active one", {}});
+        service.DescribeMethod("switch_game", {"Makes another game the active one", {{"name", "string", true, "The name of the game, as list_games gives it"}}});
+        service.DescribeMethod("reset", {"Starts the active game again; the parameters are the game's own", {}});
+        service.DescribeMethod("get_state", {"The state of the active game and its version", {}});
+        service.DescribeMethod("list_actions", {"The actions the active game accepts now", {}});
+        service.DescribeMethod("perform_action", {"Plays an action of the active game; the parameters are the game's (see list_actions and its control header)", {}});
+        service.DescribeMethod("set_state", {"Sets the state of the active game; the parameters are the game's (see its control header)", {}});
+
         service.SetFrameEndHook(GameControlEvents::kStateChanged, [watcher = MakeUnique<StateChangeWatcher>(service)] { watcher->OnFrameEnd(); });
     }
 
