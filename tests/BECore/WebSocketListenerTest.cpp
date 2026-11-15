@@ -43,7 +43,7 @@ namespace BECore::Tests {
 
             [[nodiscard]] WebSocketHandler::ConnectionPtr ConnectionAt(size_t index) const {
                 std::lock_guard<std::mutex> lock(_mutex);
-                return index < _connections.size() ? _connections[index] : nullptr;
+                return index < _connections.size() ? _connections[index] : WebSocketHandler::ConnectionPtr();
             }
 
             /// The open order of two clients is not the order they connected in: look a connection up by what it is
@@ -54,7 +54,7 @@ namespace BECore::Tests {
                         return connection;
                     }
                 }
-                return nullptr;
+                return {};
             }
 
         private:

@@ -15,6 +15,12 @@ namespace BECore {
 
         constexpr size_t kBytesPerPixel = 4;
 
+        /// The picture a capture request waits for. The renderer's callback fills it when a frame is presented and the deferred reply
+        /// reads it at the end of that frame; both run on the main thread, so the count is not atomic
+        struct CaptureSlot : RefCounted {
+            Optional<CaptureResult> result;
+        };
+
         /// A surface that holds a copy of @p image (SDL wants writable pixels, and the copy lets it own them)
         SDL_Surface* MakeSurface(const PixelBuffer& image) {
             SDL_Surface* surface = SDL_CreateSurface(static_cast<int>(image.width), static_cast<int>(image.height), SDL_PIXELFORMAT_RGBA32);
@@ -58,23 +64,23 @@ namespace BECore {
             }
 
             // The renderer fills it when the frame is presented; the answer is built at the end of that frame
-            auto capture = MakeShared<Optional<CaptureResult>>();
-            renderer->RequestCapture([capture](CaptureResult result) { *capture = std::move(result); });
-            if (*capture && !**capture) {  // refused at once: this backend cannot capture
-                call.Fail(ScreenshotErrors::kCaptureFailed, (*capture)->error());
+            auto capture = New<CaptureSlot>();
+            renderer->RequestCapture([capture](CaptureResult result) { capture->result = std::move(result); });
+            if (capture->result && !*capture->result) {  // refused at once: this backend cannot capture
+                call.Fail(ScreenshotErrors::kCaptureFailed, capture->result->error());
                 return;
             }
 
             call.DeferFrames(1, 0.0, [capture, maxSize](ControlCall& done) {
-                if (!*capture) {
+                if (!capture->result) {
                     done.Fail(ScreenshotErrors::kCaptureFailed, "no frame was presented");
                     return;
                 }
-                if (!**capture) {
-                    done.Fail(ScreenshotErrors::kCaptureFailed, (*capture)->error());
+                if (!*capture->result) {
+                    done.Fail(ScreenshotErrors::kCaptureFailed, capture->result->error());
                     return;
                 }
-                const auto png = EncodePng(***capture, maxSize);
+                const auto png = EncodePng(**capture->result, maxSize);
                 if (!png) {
                     done.Fail(ScreenshotErrors::kCaptureFailed, png.error());
                     return;

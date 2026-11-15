@@ -660,6 +660,42 @@ namespace BECore::Tests {
         EXPECT_TRUE(child.IsCancelled()) << "The child must keep seeing the cancellation after the parent token is gone";
     }
 
+    TEST(TaskSystemTest, ParentTokenOutlivesDroppedChildren) {
+        auto parent = CancellationToken::Create();
+        {
+            auto child = parent.CreateLinked();
+            auto grandchild = child.CreateLinked();
+            grandchild.Cancel();
+        }
+
+        EXPECT_FALSE(parent.IsCancelled()) << "Dropping a child must leave the parent as it was";
+        parent.Cancel();
+        EXPECT_TRUE(parent.IsCancelled());
+    }
+
+    TEST(TaskSystemTest, TokenDroppedOnAnotherThreadWhileACopyIsHeld) {
+        constexpr int kRounds = 200;
+        for (int round = 0; round < kRounds; ++round) {
+            auto parent = CancellationToken::Create();
+            CancellationToken child = parent.CreateLinked();
+            CancellationToken heldByTask = child;  // what a running task keeps
+
+            std::thread dropper([&parent, moved = std::move(child)]() mutable {
+                CancellationToken last = std::move(moved);
+                parent.Cancel();
+            });
+            std::thread holder([task = std::move(heldByTask)]() mutable {
+                while (!task.IsCancelled()) {
+                    std::this_thread::yield();
+                }
+                task = CancellationToken();  // the last reference to the state may be this one
+            });
+            dropper.join();
+            holder.join();
+            EXPECT_TRUE(parent.IsCancelled());
+        }
+    }
+
     TEST(TaskSystemTest, LinkedTokenFromInvalidParentIsIndependent) {
         CancellationToken empty;
         EXPECT_FALSE(empty.IsValid());

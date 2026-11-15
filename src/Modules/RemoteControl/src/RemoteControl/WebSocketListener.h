@@ -65,7 +65,7 @@ namespace BECore {
      * (the client left, a protocol error, a refusal of `onMessage`, Stop()), after its writer has stopped.
      */
     struct WebSocketHandler {
-        using ConnectionPtr = SharedPtr<WebSocketConnection>;
+        using ConnectionPtr = IntrusivePtrAtomic<WebSocketConnection>;
 
         /// The handshake succeeded and the connection takes frames
         MoveOnlyFunction<void(const ConnectionPtr&)> onOpen;

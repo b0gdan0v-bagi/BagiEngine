@@ -354,7 +354,7 @@ namespace BECore::Tests {
 
             [[nodiscard]] WebSocketHandler::ConnectionPtr Connection(size_t index) const {
                 std::lock_guard<std::mutex> lock(_mutex);
-                return index < _connections.size() ? _connections[index] : nullptr;
+                return index < _connections.size() ? _connections[index] : WebSocketHandler::ConnectionPtr();
             }
 
             void Stop() {

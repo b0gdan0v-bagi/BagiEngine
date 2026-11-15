@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/RefCounted/New.h>
 #include <BECore/Types/Types.h>
 #include <TaskSystem/TaskPriority.h>
 #include <atomic>
@@ -27,14 +28,14 @@ namespace BECore {
          * Создает новый токен отмены.
          */
         static CancellationToken Create() {
-            return CancellationToken(MakeShared<State>());
+            return CancellationToken(New<State>());
         }
 
         /**
          * Checks whether cancellation was requested on this token or on any of its parents.
          */
         [[nodiscard]] bool IsCancelled() const {
-            for (const State* state = _state.get(); state != nullptr; state = state->parent.get()) {
+            for (const State* state = _state.Get(); state != nullptr; state = state->parent.Get()) {
                 if (state->cancelled.load(std::memory_order_acquire)) {
                     return true;
                 }
@@ -72,23 +73,24 @@ namespace BECore {
         /**
          * Creates a linked (child) token.
          * Cancelling the parent cancels the child; cancelling the child leaves the parent alone.
-         * The child keeps its parent alive through shared_ptr, so destruction order does not matter.
+         * The child keeps its parent alive through its own count of the parent state, so destruction order does not matter.
          */
         [[nodiscard]] CancellationToken CreateLinked() const {
-            auto state = MakeShared<State>();
+            auto state = New<State>();
             state->parent = _state;
             return CancellationToken(std::move(state));
         }
 
     private:
-        struct State {
+        // Atomic: copies of a token (and the children's parent links) are dropped by whichever thread ends last.
+        struct State : RefCountedAtomic {
             std::atomic<bool> cancelled{false};
-            SharedPtr<State> parent;
+            IntrusivePtrAtomic<State> parent;
         };
 
-        explicit CancellationToken(SharedPtr<State> state) : _state(std::move(state)) {}
+        explicit CancellationToken(IntrusivePtrAtomic<State> state) : _state(std::move(state)) {}
 
-        SharedPtr<State> _state;
+        IntrusivePtrAtomic<State> _state;
     };
 
 }  // namespace BECore

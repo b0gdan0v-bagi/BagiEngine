@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/RefCounted/New.h>
 #include <BECore/Threading/ConditionVariable.h>
 #include <BECore/Threading/Mutex.h>
 #include <BECore/Threading/Thread.h>
@@ -48,9 +49,12 @@ namespace BECore {
      * The reader thread is started and joined by the listener; it does the handshake, starts the writer and reads. The writer thread
      * sends from the queue, so a caller of the Queue functions (any thread) never blocks on the network, and a client that does not
      * read cannot stall anybody: when its queue passes the cap the connection is dropped. The Queue functions are safe from any
-     * thread and after the connection ended (they take nothing then), so a holder of a shared_ptr may call them late.
+     * thread and after the connection ended (they take nothing then), so a holder of an IntrusivePtrAtomic may call them late.
+     *
+     * Atomic count: the listener, the reader thread, the handler's own tables and a reply that outlives the request each hold one,
+     * and the last holder is whichever thread lets go last.
      */
-    class WebSocketConnection {
+    class WebSocketConnection : public RefCountedAtomic {
     public:
         WebSocketConnection(WebSocketConnectionId id, Socket socket, String peerAddress, WebSocketConnectionSettings settings);
 
