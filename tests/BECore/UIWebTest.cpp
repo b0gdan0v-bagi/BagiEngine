@@ -1739,7 +1739,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->ComponentAttr("i", "UIImageComponent", "sprite"), "Hero");
         EXPECT_FALSE(compiled->Has("i", "sprite")) << "the sprite lives on the component";
         EXPECT_EQ(compiled->ComponentAttr("s", "UIImageComponent", "stretch"), "true");
-        EXPECT_NEAR(std::stof(compiled->Attr("s", "aspectRatio").c_str()), 16.0f / 9.0f, 1e-4f);
+        EXPECT_NEAR(StringUtils::ParseNumber<float>(compiled->Attr("s", "aspectRatio")).value_or(0.0f), 16.0f / 9.0f, 1e-4f);
         EXPECT_EQ(compiled->Find("p").attribute("type").as_string(), String("UIPanel"));
         EXPECT_EQ(compiled->Attr("p", "sprite"), "Panel9");
         EXPECT_EQ(compiled->Attr("p", "sliceBorder"), "8,12,8,12");

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Utils/MoveOnlyFunction.h>
+#include <BECore/Utils/StringUtils.h>
 #include <RemoteControl/Socket.h>
 #include <RemoteControl/WebSocketFrame.h>
 #include <gtest/gtest.h>
@@ -113,7 +114,12 @@ namespace BECore::Tests {
                     return false;
                 }
                 const size_t lengthAt = text.find("Content-Length: ");
-                bodyExpected = (lengthAt == String::npos || lengthAt > headEnd) ? 0 : static_cast<size_t>(std::stoul(text.substr(lengthAt + 16).c_str()));
+                if (lengthAt == String::npos || lengthAt > headEnd) {
+                    bodyExpected = 0;
+                } else {
+                    const StringView value = StringView(text).substr(lengthAt + 16);
+                    bodyExpected = StringUtils::ParseNumber<size_t>(value.substr(0, value.find('\r'))).value_or(0);
+                }
                 if (text.size() < headEnd + kHeadEnd.size() + bodyExpected) {
                     return false;
                 }

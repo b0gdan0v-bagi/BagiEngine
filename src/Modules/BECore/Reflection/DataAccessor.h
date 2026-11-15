@@ -11,7 +11,6 @@
 #include <EASTL/array.h>
 #include <EASTL/fixed_hash_map.h>
 #include <EASTL/map.h>
-#include <EASTL/optional.h>
 #include <EASTL/sort.h>
 #include <EASTL/unordered_map.h>
 #include <utility>
@@ -388,7 +387,7 @@ namespace BECore {
             }
 
             // -----------------------------------------------------------------
-            // Fixed-size array helpers (eastl::array, std::array)
+            // Fixed-size array helpers (eastl::array)
             // -----------------------------------------------------------------
 
             template <typename Arr>
@@ -730,21 +729,6 @@ namespace BECore {
         };
 
         // =================================================================
-        // std::array<T, N>
-        // =================================================================
-
-        template <typename T, size_t N>
-        struct DataAccessor<std::array<T, N>> {
-            static void Save(ISerializer& s, const std::array<T, N>& arr, eastl::string_view key) {
-                Detail::SaveFixedArray(s, arr, key);
-            }
-
-            static bool Load(IDeserializer& d, std::array<T, N>& arr, eastl::string_view key) {
-                return Detail::LoadFixedArray(d, arr, key);
-            }
-        };
-
-        // =================================================================
         // eastl::pair<A, B>
         // =================================================================
 
@@ -765,53 +749,6 @@ namespace BECore {
                     d.EndObject();
                     return true;
                 }
-                return false;
-            }
-        };
-
-        // =================================================================
-        // std::pair<A, B>
-        // =================================================================
-
-        template <typename A, typename B>
-        struct DataAccessor<std::pair<A, B>> {
-            static void Save(ISerializer& s, const std::pair<A, B>& p, eastl::string_view key) {
-                if (s.BeginObject(key)) {
-                    DataAccessor<A>::Save(s, p.first, "first");
-                    DataAccessor<B>::Save(s, p.second, "second");
-                    s.EndObject();
-                }
-            }
-
-            static bool Load(IDeserializer& d, std::pair<A, B>& p, eastl::string_view key) {
-                if (d.BeginObject(key)) {
-                    DataAccessor<A>::Load(d, p.first, "first");
-                    DataAccessor<B>::Load(d, p.second, "second");
-                    d.EndObject();
-                    return true;
-                }
-                return false;
-            }
-        };
-
-        // =================================================================
-        // eastl::optional<T>
-        // =================================================================
-
-        template <typename T>
-        struct DataAccessor<eastl::optional<T>> {
-            static void Save(ISerializer& s, const eastl::optional<T>& opt, eastl::string_view key) {
-                if (opt.has_value())
-                    DataAccessor<T>::Save(s, *opt, key);
-            }
-
-            static bool Load(IDeserializer& d, eastl::optional<T>& opt, eastl::string_view key) {
-                T tmp{};
-                if (DataAccessor<T>::Load(d, tmp, key)) {
-                    opt = eastl::move(tmp);
-                    return true;
-                }
-                opt.reset();
                 return false;
             }
         };
@@ -1068,9 +1005,6 @@ namespace BECore {
 
             template <typename T>
             struct IsOptionalType : std::false_type {};
-
-            template <typename T>
-            struct IsOptionalType<eastl::optional<T>> : std::true_type {};
 
             template <typename T>
             struct IsOptionalType<std::optional<T>> : std::true_type {};

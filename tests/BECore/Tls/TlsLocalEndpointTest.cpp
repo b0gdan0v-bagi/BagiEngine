@@ -159,7 +159,7 @@ namespace BECore::Tests {
         auto stream = MakeTlsStream();
         TlsConnectParams params;
         params.host = "localhost";
-        params.port = static_cast<uint16_t>(std::stoi(Env(kEnvPort).c_str()));
+        params.port = StringUtils::ParseNumber<uint16_t>(Env(kEnvPort)).value_or(0);
         params.handshakeDeadline = std::chrono::steady_clock::now() + kClientWaitLimit;
         const auto trusted = ReadFile(Env(kEnvCaFile));
         params.additionalTrustAnchorsDer = Span<const Vector<uint8_t>>(&trusted, 1);
@@ -189,7 +189,7 @@ namespace BECore::Tests {
         auto stream = MakeTlsStream();
         TlsConnectParams params;
         params.host = "localhost";
-        params.port = static_cast<uint16_t>(std::stoi(Env(kEnvPort).c_str()));
+        params.port = StringUtils::ParseNumber<uint16_t>(Env(kEnvPort)).value_or(0);
         params.handshakeDeadline = std::chrono::steady_clock::now() + kClientWaitLimit;
         const auto trusted = ReadFile(Env(kEnvCaFile));
         params.additionalTrustAnchorsDer = Span<const Vector<uint8_t>>(&trusted, 1);
@@ -211,7 +211,7 @@ namespace BECore::Tests {
         auto stream = MakeTlsStream();
         TlsConnectParams params;
         params.host = "127.0.0.1";
-        params.port = static_cast<uint16_t>(std::stoi(Env(kEnvPlainPort).c_str()));
+        params.port = StringUtils::ParseNumber<uint16_t>(Env(kEnvPlainPort)).value_or(0);
         params.handshakeDeadline = std::chrono::steady_clock::now() + kClientWaitLimit;  // the server never answers: only Close() can end it in time
         std::atomic<bool> returned{false};
         std::expected<void, String> result;
@@ -238,7 +238,7 @@ namespace BECore::Tests {
             auto stream = MakeTlsStream();
             TlsConnectParams params;
             params.host = "localhost";
-            params.port = static_cast<uint16_t>(std::stoi(Env(kEnvPort).c_str()));
+            params.port = StringUtils::ParseNumber<uint16_t>(Env(kEnvPort)).value_or(0);
             params.handshakeDeadline = std::chrono::steady_clock::now() + kClientWaitLimit;
             params.additionalTrustAnchorsDer = Span<const Vector<uint8_t>>(&trusted, 1);
             std::atomic<bool> started{false};
