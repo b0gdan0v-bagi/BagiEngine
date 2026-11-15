@@ -78,7 +78,8 @@ function runTool(tool, args, timeout, input) {
         const child = childProcess.execFile(python, [tool.script, ...args], { cwd: tool.cwd, env: toolEnv(), timeout, maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
             if (error) {
                 const text = (stderr || stdout || error.message).trim().split("\n").pop();
-                reject(new Error(text || error.message));
+                // `output`: what the command printed before it failed (a start says what it dropped there)
+                reject(Object.assign(new Error(text || error.message), { output: stdout }));
             } else {
                 resolve(stdout);
             }

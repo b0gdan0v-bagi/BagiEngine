@@ -1,6 +1,7 @@
 // What the panel says about a run, as pure functions of the rows of `worker.py list --json` (and of the entries of
-// `todo.py list --json`): the words of a run that took nothing, the progress of an entry, and the guards of the queue
-// and of a merge. Shared by the extension (src/) and the webviews, and driven by node in test/ without VS Code.
+// `todo.py list --json`): the words of a run that took nothing, the progress of an entry, the reading of what the
+// queue commands print, and the guard of a merge. Shared by the extension (src/) and the webviews, and driven by node
+// in test/ without VS Code.
 (function (root, factory) {
     if (typeof module === "object" && module.exports) module.exports = factory();
     else root.TodoRuns = factory();
@@ -58,23 +59,40 @@
         return found;
     }
 
-    // Why an entry should not be queued as it is. `show` is the entry as `todo.py show --json` gives it (with `origin`
-    // and `base` of its claim), `elsewhere` the ids of `worker.py list` whose branch lives in another checkout.
-    // {kind: "elsewhere", origin, base}: refuse. {kind: "blocked", blockers: [{id, status}]}: ask, because a stacked
-    // or paired entry is takeable and the start rule of the panel keeps the others queued. null: queue it.
-    function queueGuard(show, elsewhere) {
-        if (!show) return null;
-        if ((show.status === "in progress" || show.status === "review") && (elsewhere || []).includes(show.id)) {
-            return { kind: "elsewhere", origin: show.takenOrigin || show.origin || null, base: show.takenBase || show.base || null };
-        }
-        const blockers = (show.blockedBy || []).filter((b) => b && b.status !== "closed").map((b) => ({ id: b.id, status: b.status }));
-        return blockers.length ? { kind: "blocked", blockers } : null;
+    // What `worker.py queue <k> --add <id>` refuses with, as `runTool` gives it (the last line of stderr):
+    // `error: <id> not queued: <why>; --force queues it anyway`. `force` is true when the owner may overrule it, which
+    // only a blocker allows: an entry taken elsewhere or closed is dropped by the next start even when forced. The
+    // reason may hold `;`, so the match runs to the last `; --force`. null: the text is no refusal.
+    const REFUSAL = /^(?:error: )?\S+ not queued: (.+); --force queues it anyway\s*$/;
+    const BLOCKED = "blocked by";
+
+    function queueRefusal(message) {
+        const found = REFUSAL.exec(String(message || ""));
+        return found ? { why: found[1], force: found[1].startsWith(BLOCKED) } : null;
     }
 
-    // The ids of `wanted` that a queue no longer holds, in the wanted order: what a failed clear or add lost.
-    function idsToAddBack(wanted, current) {
-        const held = new Set(current || []);
-        return (wanted || []).filter((id) => !held.has(id));
+    // The entry `worker.py start <k> --queued-only` started, from the line it prints for the session:
+    // `w<k>: cd <path> && ... claude --bg ... '/todo-loop <N> <id> ...'`. null when it started none (a paused or empty
+    // queue, nothing takeable, a session that runs already).
+    const STARTED_LINE = /^w\d+: cd .*'\/todo-loop\s+\d+\s+([A-Za-z0-9][A-Za-z0-9_-]*)[\s']/;
+
+    function startedEntry(output) {
+        for (const line of String(output || "").split("\n")) {
+            const found = STARTED_LINE.exec(line.trim());
+            if (found) return found[1];
+        }
+        return null;
+    }
+
+    // The lines of `start --queued-only` that say what it did to the queue: an entry dropped with its reason, one that
+    // stays queued, a pause, nothing takeable, an entry put back after a failed start. Not the line of the session.
+    const QUEUE_LINE = /\bdropped \S+: |, stays queued$|queue is paused|not started|no queued entry|back at the head/;
+
+    function queueNotes(output) {
+        return String(output || "")
+            .split("\n")
+            .map((line) => line.trim())
+            .filter((line) => QUEUE_LINE.test(line) && !/^w\d+: cd /.test(line));
     }
 
     // The workers that run a loop on the base the merge of `repoRel` moves: a session running, the head of that repository
@@ -90,5 +108,5 @@
         return found;
     }
 
-    return { NO_REASON, progressOf, progressText, unlinkedWaits, queueGuard, idsToAddBack, loopsOnBase };
+    return { NO_REASON, progressOf, progressText, unlinkedWaits, queueRefusal, startedEntry, queueNotes, loopsOnBase };
 });
