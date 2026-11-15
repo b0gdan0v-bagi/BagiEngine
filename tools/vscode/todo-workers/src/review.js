@@ -7,6 +7,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { config, findTool, runTool, runGit, shellQuote, terminalWith } = require("./tools");
+const Runs = require("../media/runs");
 
 function attach(ctx) {
     // Review: the branch against the point where it left its base, every file in one multi-diff editor
@@ -73,6 +74,8 @@ function attach(ctx) {
             if (plan.heldBy) detail.push(`${plan.heldBy} lets go of the branch (detached at ${plan.base}); the branch is deleted.`);
             else detail.push("The branch is deleted.");
             if (plan.pointer) detail.push(`Then one commit in the game: "Update engine: ${plan.title}".`);
+            const loops = loopWarnings(entry, plan.base);
+            if (loops.length) detail.push("", ...loops, "");
             detail.push("Nothing is pushed.");
             const pick = await vscode.window.showWarningMessage(`Merge ${plan.branch} into ${plan.base}${verify ? " and test it" : ""}?`, { modal: true, detail: detail.join("\n") }, verify ? "Merge + test" : "Merge");
             if (!pick) return;
@@ -95,6 +98,18 @@ function attach(ctx) {
             merging.delete(entry.id);
             ctx.refresh();
         }
+    }
+
+    // The merge moves `base` in the main checkout: a loop that runs on it (head detached or on the base, no todo
+    // branch of its own) works on a tree that is behind after it. A warning only; the yes is the owner's.
+    function loopWarnings(entry, base) {
+        const state = ctx.state;
+        const tool = findTool();
+        if (!state || !tool || !entry.repo) return [];
+        const repoRel = path.relative(state.main || tool.cwd, entry.repo) || ".";
+        return Runs.loopsOnBase(state.workers, repoRel, base).map(
+            (w) => `${w.name} runs a loop on ${base}${w.commit ? ` (at ${w.commit})` : ""}: the merge moves the base under it; let it end first, or run Update on it after`
+        );
     }
 
     // The entries a merge let go (their last open blocker was the merged one): start one in a free worker or queue it.

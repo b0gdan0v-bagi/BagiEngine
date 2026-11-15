@@ -237,6 +237,12 @@ function attach(ctx) {
         await write(`todo.py dep add ${id}`, ["dep", "add", id, pick.label, ...(note.trim() ? ["--note", note.trim()] : [])]);
     }
 
+    // The link the text of the entry already names (`**Waits for:**`): the same write as depAdd, without the pickers.
+    async function depLink(id, blocker) {
+        if (!ID_RE.test(id) || !ID_RE.test(blocker)) return;
+        await write(`todo.py dep add ${id}`, ["dep", "add", id, blocker, "--note", "named after Waits for in the text"]);
+    }
+
     async function depRm(id, blocker) {
         if (!ID_RE.test(id) || !ID_RE.test(blocker)) return;
         const pick = await vscode.window.showWarningMessage(`${id} no longer waits for ${blocker}?`, { modal: true }, "Remove the link");
@@ -272,6 +278,7 @@ function attach(ctx) {
                 case "editBody": return editBody(message.entry);
                 case "setThrough": return setThrough(message.entry, Boolean(message.on));
                 case "depAdd": return depAdd(message.entry);
+                case "depLink": return depLink(message.entry, message.blocker);
                 case "depRm": return depRm(message.entry, message.blocker);
             }
         });
