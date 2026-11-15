@@ -5,6 +5,7 @@
 #include <BECore/Reflection/ISerializer.h>
 #include <BECore/Reflection/ReaderLimits.h>
 #include <BECore/Utils/EnumUtils.h>
+#include <initializer_list>
 
 namespace BECore {
 
@@ -329,6 +330,14 @@ namespace BECore {
          * @brief The first @p maxBytes of @p text, or fewer so that no UTF-8 sequence is split
          */
         static StringView CutText(StringView text, size_t maxBytes);
+
+        /**
+         * @brief ", did you mean 'y'?" for an unknown key, or an empty text
+         *
+         * y is the nearest name of @p askedKeys (at most 2 edits away and under half the length of @p unknown, case of ASCII letters
+         * ignored). Both sides are cut before the comparison, so the work of one hint is bounded whatever the input.
+         */
+        static String MakeDidYouMeanHint(StringView unknown, std::initializer_list<const Vector<String>*> askedKeys);
 
     private:
         void RecordFinding(StringView key, StringView message);
