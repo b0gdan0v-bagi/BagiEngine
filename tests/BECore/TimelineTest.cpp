@@ -605,4 +605,347 @@ namespace BECore::Tests {
         EXPECT_TRUE(root.IsFinished());
     }
 
+    namespace {
+
+        constexpr float kSixteenth = 0.0625f;
+        constexpr float kThreeEighths = 0.375f;
+        constexpr float kQuadInAtThreeQuarters = 0.5625f;  // Ease(QuadIn, 3/4)
+        constexpr float kQuadInAtQuarter = 0.0625f;        // Ease(QuadIn, 1/4)
+        constexpr float kTwo = 2.0f;
+        constexpr float kTwentyFive = 25.0f;
+        constexpr int kFour = 4;
+        constexpr int kSixteen = 16;
+
+        /// The writes of several properties in one sequence: (property id, value)
+        struct Trace {
+            Vector<Pair<int, float>> writes;
+
+            auto Setter(int id) {
+                return [this, id](const float& written) { writes.push_back({id, written}); };
+            }
+        };
+
+        /// Evaluates a timeline of `Repeat(2).Yoyo()` over a forward leg and a backward one of @p leg seconds on a 1/16 s grid, and checks that
+        /// the writes of the backward leg are those of the forward one in reverse order
+        void ExpectTheBackwardLegReversesTheForwardOne(Timeline& timeline, const Trace& trace, float leg) {
+            const int steps = static_cast<int>(leg / kSixteenth);
+            for (int step = 0; step < steps; ++step) {
+                timeline.Evaluate(static_cast<float>(step) * kSixteenth);
+            }
+            const size_t forwardCount = trace.writes.size();
+            timeline.Evaluate(leg);  // the end of one leg and the start of the other, in one call
+            const size_t boundary = trace.writes.size();
+            for (int step = 1; step <= steps; ++step) {
+                timeline.Evaluate(leg + static_cast<float>(step) * kSixteenth);
+            }
+            EXPECT_TRUE(timeline.IsFinished());
+            ASSERT_EQ(trace.writes.size() - boundary, forwardCount);
+            for (size_t index = 0; index < forwardCount; ++index) {
+                const Pair<int, float>& forward = trace.writes[forwardCount - 1 - index];
+                const Pair<int, float>& backward = trace.writes[boundary + index];
+                EXPECT_EQ(backward.first, forward.first) << "write " << index;
+                EXPECT_EQ(backward.second, forward.second) << "write " << index;
+            }
+        }
+
+    }  // namespace
+
+    TEST(TimelineTest, AYoyoThatIsOffChangesNothing) {
+        Property a;
+        Timeline timeline;
+        timeline.Append<float>(0.0f, kTen, Settings(kHalf), a.Setter()).Repeat(2).Yoyo(false);
+        timeline.Evaluate(kThreeQuarters);
+        EXPECT_EQ(a.value, kTen / 2);  // the second iteration runs forward again
+        timeline.Evaluate(kOne);
+        EXPECT_EQ(a.value, kTen);
+        EXPECT_TRUE(timeline.IsFinished());
+    }
+
+    TEST(TimelineTest, ABackwardIterationWalksTheSameCurveBackAndEndsExactlyOnFrom) {
+        Property a;
+        Timeline timeline;
+        timeline.Append<float>(0.0f, kTen, Settings(kHalf, 0.0f, EaseType::QuadIn), a.Setter()).Repeat(2).Yoyo();
+        EXPECT_EQ(timeline.GetDuration(), kOne);
+
+        timeline.Evaluate(kQuarter);
+        EXPECT_EQ(a.value, kTen * kQuadInAtHalf);
+
+        timeline.Evaluate(kHalf + kEighth);  // the backward leg at playback progress 1/4
+        EXPECT_EQ(a.value, kTen * kQuadInAtThreeQuarters);
+        timeline.Evaluate(kHalf + kQuarter);
+        EXPECT_EQ(a.value, kTen * kQuadInAtHalf);
+        timeline.Evaluate(kHalf + kThreeEighths);
+        EXPECT_EQ(a.value, kTen * kQuadInAtQuarter);
+        EXPECT_FALSE(timeline.IsFinished());
+
+        timeline.Evaluate(kOne);
+        EXPECT_EQ(a.value, 0.0f);
+        EXPECT_TRUE(timeline.IsFinished());
+    }
+
+    TEST(TimelineTest, ABackOutComesBackThroughItsBulgeInReverseOrder) {
+        Property a;
+        Vector<float> forward;
+        Vector<float> backward;
+        Timeline timeline;
+        timeline.Append<float>(0.0f, kTen, Settings(kHalf, 0.0f, EaseType::BackOut), a.Setter()).Repeat(2).Yoyo();
+        for (int step = 0; step < 8; ++step) {
+            timeline.Evaluate(static_cast<float>(step) * kSixteenth);
+            forward.push_back(a.value);
+        }
+        timeline.Evaluate(kHalf);
+        for (int step = 1; step <= 8; ++step) {
+            timeline.Evaluate(kHalf + static_cast<float>(step) * kSixteenth);
+            backward.push_back(a.value);
+        }
+
+        EXPECT_GT(*eastl::max_element(forward.begin(), forward.end()), kTen);  // the bulge
+        ASSERT_EQ(backward.size(), forward.size());
+        for (size_t index = 0; index < forward.size(); ++index) {
+            EXPECT_EQ(backward[index], forward[forward.size() - 1 - index]) << index;
+        }
+        EXPECT_EQ(a.value, 0.0f);
+    }
+
+    TEST(TimelineTest, ThreeYoyoIterationsAreForwardBackwardForwardAndEndExactlyOnTo) {
+        Property a;
+        Timeline timeline;
+        timeline.Append<float>(0.0f, kTen, Settings(kHalf), a.Setter()).Repeat(kThree).Yoyo();
+        EXPECT_EQ(timeline.GetDuration(), kOne + kHalf);
+
+        timeline.Evaluate(kHalf + kQuarter);
+        EXPECT_EQ(a.value, kTen / 2);  // backward at progress 1/2
+        timeline.Evaluate(kOne + kEighth);
+        EXPECT_EQ(a.value, kTen / 4);  // forward again, at progress 1/4
+        timeline.Evaluate(kOne + kHalf);
+        EXPECT_EQ(a.value, kTen);
+        EXPECT_TRUE(timeline.IsFinished());
+
+        Property b;
+        Timeline jump;
+        jump.Append<float>(0.0f, kTen, Settings(kHalf), b.Setter()).Repeat(kThree).Yoyo();
+        jump.Evaluate(jump.GetDuration());
+        EXPECT_EQ(b.value, kTen);
+        EXPECT_TRUE(jump.IsFinished());
+    }
+
+    TEST(TimelineTest, TwoClipsOnOnePropertyEndTheBackwardLegOnTheFirstClipsFrom) {
+        Property a;
+        Timeline timeline;
+        timeline.Append<float>(0.0f, kTen, Settings(kHalf), a.Setter()).Append<float>(kTwenty, kThirty, Settings(kHalf), a.Setter()).Repeat(2).Yoyo();
+
+        timeline.Evaluate(kOne);
+        EXPECT_EQ(a.value, kThirty);  // forward: the later clip wins
+
+        timeline.Evaluate(kOne + kQuarter);  // backward: the later clip is entered first, at its `to`
+        EXPECT_EQ(a.value, kTwentyFive);
+        timeline.Evaluate(kOne + kHalf);
+        EXPECT_EQ(a.value, kTen);  // the first clip is entered at its `to`
+        timeline.Evaluate(kOne + kThreeQuarters);
+        EXPECT_EQ(a.value, kTen / 2);
+        timeline.Evaluate(kOne + kOne);
+        EXPECT_EQ(a.value, 0.0f);
+    }
+
+    TEST(TimelineTest, TheDelayOfAClipSitsAtTheEndOfItsBackwardSlot) {
+        Property a;
+        Timeline timeline;
+        timeline.Append<float>(0.0f, kTen, Settings(kHalf, kQuarter), a.Setter()).Repeat(2).Yoyo();
+        EXPECT_EQ(timeline.GetDuration(), kThreeQuarters * 2);
+
+        timeline.Evaluate(kEighth);
+        EXPECT_EQ(a.writes, 0);  // the forward delay
+        timeline.Evaluate(kHalf);
+        EXPECT_EQ(a.value, kTen / 2);
+
+        timeline.Evaluate(kThreeQuarters + kQuarter);  // the backward leg: the active part comes first
+        EXPECT_EQ(a.value, kTen / 2);
+        timeline.Evaluate(kThreeQuarters + kHalf);
+        EXPECT_EQ(a.value, 0.0f);  // exactly `from` at the end of the active part
+        const int writes = a.writes;
+        timeline.Evaluate(kThreeQuarters + kThreeQuarters - kEighth);
+        EXPECT_EQ(a.writes, writes);  // nothing during the delay
+        timeline.Evaluate(kThreeQuarters * 2);
+        EXPECT_EQ(a.writes, writes);
+        EXPECT_TRUE(timeline.IsFinished());
+    }
+
+    TEST(TimelineTest, AZeroLengthClipWritesToForwardAndFromBackward) {
+        Property a;
+        Timeline timeline;
+        timeline.Append<float>(0.0f, kTen, Settings(0.0f), a.Setter()).AppendDelay(kHalf).Repeat(2).Yoyo();
+
+        timeline.Evaluate(0.0f);
+        EXPECT_EQ(a.value, kTen);
+        timeline.Evaluate(kThreeQuarters);
+        EXPECT_EQ(a.value, kTen);  // the backward leg enters the clip at its end
+        EXPECT_FALSE(timeline.IsFinished());
+        timeline.Evaluate(kOne);
+        EXPECT_EQ(a.value, 0.0f);
+        EXPECT_TRUE(timeline.IsFinished());
+    }
+
+    TEST(TimelineTest, ACallbackFiresOncePerIterationAtTheMirroredTimeAndInTheMirroredOrder) {
+        Calls calls;
+        Property a;
+        Timeline timeline;
+        timeline.Append<float>(0.0f, kTen, Settings(kOne), a.Setter())
+            .InsertCallback(kQuarter, calls.Callback(1))
+            .InsertCallback(kQuarter, calls.Callback(2))
+            .InsertCallback(kThreeQuarters, calls.Callback(3))
+            .Repeat(2)
+            .Yoyo();
+
+        timeline.Evaluate(kOne);
+        EXPECT_TRUE(calls.ids == std::initializer_list<int>({1, 2, 3}));
+        timeline.Evaluate(kOne + kEighth);
+        EXPECT_EQ(calls.ids.size(), 3u);
+        timeline.Evaluate(kOne + kQuarter);  // 1 - 3/4
+        EXPECT_TRUE(calls.ids == std::initializer_list<int>({1, 2, 3, 3}));
+        timeline.Evaluate(kOne + kThreeQuarters);  // 1 - 1/4: the equal times in reverse insertion order
+        EXPECT_TRUE(calls.ids == std::initializer_list<int>({1, 2, 3, 3, 2, 1}));
+        timeline.Evaluate(kTwo);
+        EXPECT_EQ(calls.ids.size(), 6u);
+    }
+
+    TEST(TimelineTest, OneEvaluateAcrossForwardBackwardAndForwardLosesNoCallback) {
+        Calls calls;
+        Timeline timeline;
+        timeline.Append<float>(0.0f, kTen, Settings(kOne), {}).InsertCallback(kQuarter, calls.Callback(1)).InsertCallback(kThreeQuarters, calls.Callback(2)).Repeat(kThree).Yoyo();
+        timeline.Evaluate(timeline.GetDuration());
+        EXPECT_TRUE(calls.ids == std::initializer_list<int>({1, 2, 2, 1, 1, 2}));
+        EXPECT_TRUE(timeline.IsFinished());
+    }
+
+    TEST(TimelineTest, ABigJumpOverAYoyoGivesWhatManySmallStepsGive) {
+        const auto build = [](Property& property, Calls& calls) {
+            Timeline timeline;
+            timeline.Append<float>(0.0f, kTen, Settings(kHalf, 0.0f, EaseType::QuadIn), property.Setter())
+                .AppendCallback(calls.Callback(1))
+                .InsertCallback(kEighth, calls.Callback(2))
+                .Repeat(kFive)
+                .Yoyo();
+            return timeline;
+        };
+        Property jumped;
+        Calls jumpedCalls;
+        Timeline jump = build(jumped, jumpedCalls);
+        jump.Evaluate(jump.GetDuration());
+
+        Property stepped;
+        Calls steppedCalls;
+        Timeline steps = build(stepped, steppedCalls);
+        constexpr float kStep = 1.0f / 64.0f;
+        for (float time = 0.0f; !steps.IsFinished(); time += kStep) {
+            steps.Evaluate(time);
+        }
+
+        EXPECT_EQ(jumped.value, stepped.value);
+        EXPECT_EQ(jumped.value, kTen);  // five iterations: forward, backward, forward, backward, forward
+        EXPECT_EQ(jumpedCalls.ids.size(), static_cast<size_t>(kFive) * 2);
+        EXPECT_TRUE(jumpedCalls.ids == steppedCalls.ids);
+    }
+
+    TEST(TimelineTest, ASubTimelineInABackwardIterationIsPlayedReversedAsAWhole) {
+        Trace trace;
+        Timeline sub;
+        sub.Append<float>(0.0f, kTen, Settings(kQuarter, 0.0f, EaseType::QuadIn), trace.Setter(1)).Append<float>(0.0f, kTwenty, Settings(kQuarter), trace.Setter(2));
+        Timeline timeline;
+        timeline.Append(std::move(sub)).Repeat(2).Yoyo();
+        EXPECT_EQ(timeline.GetDuration(), kOne);
+
+        ExpectTheBackwardLegReversesTheForwardOne(timeline, trace, kHalf);
+    }
+
+    TEST(TimelineTest, ASubTimelineWithItsOwnRepeatIsReversedAsAWhole) {
+        Trace trace;
+        Timeline sub;
+        sub.Append<float>(0.0f, kTen, Settings(kQuarter, 0.0f, EaseType::QuadIn), trace.Setter(1)).Append<float>(0.0f, kTwenty, Settings(kQuarter), trace.Setter(2)).Repeat(2);
+        Timeline timeline;
+        timeline.Append(std::move(sub)).Repeat(2).Yoyo();
+        EXPECT_EQ(timeline.GetDuration(), kTwo);
+
+        ExpectTheBackwardLegReversesTheForwardOne(timeline, trace, kOne);
+    }
+
+    TEST(TimelineTest, ASubTimelineWithItsOwnYoyoIsReversedAsAWhole) {
+        Trace trace;
+        Timeline sub;
+        sub.Append<float>(0.0f, kTen, Settings(kQuarter, 0.0f, EaseType::QuadIn), trace.Setter(1)).Append<float>(0.0f, kTwenty, Settings(kQuarter), trace.Setter(2)).Repeat(2).Yoyo();
+        Timeline timeline;
+        timeline.Append(std::move(sub)).Repeat(2).Yoyo();
+
+        ExpectTheBackwardLegReversesTheForwardOne(timeline, trace, kOne);
+    }
+
+    TEST(TimelineTest, ASingleIterationIsNotChangedByAYoyo) {
+        Trace plain;
+        Trace yoyo;
+        const auto run = [](Trace& trace, bool enabled) {
+            Timeline timeline;
+            timeline.Append<float>(0.0f, kTen, Settings(kHalf, 0.0f, EaseType::QuadIn), trace.Setter(1)).AppendCallback({}).Repeat(1).Yoyo(enabled);
+            for (int step = 0; step <= kSixteen; ++step) {
+                timeline.Evaluate(static_cast<float>(step) * kSixteenth);
+            }
+            EXPECT_TRUE(timeline.IsFinished());
+        };
+        run(plain, false);
+        run(yoyo, true);
+        ASSERT_EQ(plain.writes.size(), yoyo.writes.size());
+        for (size_t index = 0; index < plain.writes.size(); ++index) {
+            EXPECT_EQ(plain.writes[index].second, yoyo.writes[index].second) << index;
+        }
+    }
+
+    TEST(TimelineTest, ResetAfterAFinishedYoyoRunsForwardAgain) {
+        Property a;
+        Timeline timeline;
+        timeline.Append<float>(0.0f, kTen, Settings(kHalf), a.Setter()).Repeat(2).Yoyo();
+        timeline.Evaluate(kOne);
+        EXPECT_TRUE(timeline.IsFinished());
+        EXPECT_EQ(a.value, 0.0f);
+
+        timeline.Reset();
+        timeline.Evaluate(kQuarter);
+        EXPECT_EQ(a.value, kTen / 2);
+        timeline.Evaluate(kHalf + kQuarter);
+        EXPECT_EQ(a.value, kTen / 2);
+        timeline.Evaluate(kOne);
+        EXPECT_EQ(a.value, 0.0f);
+        EXPECT_TRUE(timeline.IsFinished());
+    }
+
+    TEST(TimelineTest, TheStopCheckStopsABackwardIterationAtTheClipBoundary) {
+        bool stop = false;
+        int secondCalls = 0;
+        Calls calls;
+        Timeline timeline;
+        timeline.Append<float>(0.0f, kTen, Settings(kOne), {})
+            .InsertCallback(kQuarter, calls.Callback(1))
+            .InsertCallback(kThreeQuarters,
+                            [&] {
+                                calls.ids.push_back(2);
+                                stop = ++secondCalls == 2;  // the backward visit of it
+                            })
+            .Repeat(2)
+            .Yoyo();
+        timeline.SetStopCheck([&stop] { return stop; });
+
+        timeline.Evaluate(kTwo);
+
+        EXPECT_TRUE(calls.ids == std::initializer_list<int>({1, 2, 2}));  // the backward leg enters 2 first: 1 is never called
+        EXPECT_FALSE(timeline.IsFinished());
+    }
+
+    TEST(TimelineTest, AYoyoThatIsNotAPowerOfTwoEndsExactlyOnFromAtItsDuration) {
+        Property a;
+        Calls calls;
+        Timeline timeline;
+        timeline.Append<float>(0.0f, kTen, Settings(kThirtyFiveHundredths), a.Setter()).AppendCallback(calls.Callback(1)).Repeat(kFour).Yoyo();
+        timeline.Evaluate(timeline.GetDuration());
+        EXPECT_EQ(a.value, 0.0f);
+        EXPECT_EQ(calls.ids.size(), static_cast<size_t>(kFour));
+        EXPECT_TRUE(timeline.IsFinished());
+    }
+
 }  // namespace BECore::Tests

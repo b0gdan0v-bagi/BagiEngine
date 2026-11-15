@@ -13,7 +13,7 @@ namespace BECore {
      * @brief A set of clips (tweens, callbacks, sub-timelines) on one local time line, run in sequence and in parallel.
      *
      * Pure maths, no manager and no clock: the owner calls `Evaluate(time)` with the time since the start; `TweenManager::Play` runs
-     * one as a tween. What `Evaluate`, `Repeat` and the stop check guarantee is in `Animation/CLAUDE.md`, "Rules" (11 to 15).
+     * one as a tween. What `Evaluate`, `Repeat`, `Yoyo` and the stop check guarantee is in `Animation/CLAUDE.md`, "Rules" (11 to 15).
      *
      * **Building.** Every clip has a start and a length on the local time line; the duration of one iteration is the latest end.
      * `Append` starts a clip when the timeline so far ends, `Join` with the last clip added (by any call), `Insert` at an absolute
@@ -22,7 +22,15 @@ namespace BECore {
      * clips to the timeline that calls it.
      *
      * Clips are visited in order of start, equal starts in insertion order; a sub-timeline is evaluated with its own local time (the
-     * time minus its start). Move-only: a copy of the callbacks and of a sub-timeline could not share state.
+     * time minus its start).
+     *
+     * **Yoyo.** With `Yoyo()` every second iteration (index 1, 3, ...) is the exact time reversal of a forward one: the clips are entered
+     * latest end first (equal ends in reverse insertion order), a tween writes `Lerp(from, to, Ease(type, 1 - p))` so the same curve is
+     * walked back and the last call of a clip is exactly its `from`, the `delay` of a clip sits at the end of its backward slot, a callback
+     * fires once per iteration at the mirrored time (`duration - at`), and a sub-timeline is played reversed as a whole (its own repeats
+     * and yoyo too).
+     *
+     * Move-only: a copy of the callbacks and of a sub-timeline could not share state.
      */
     class Timeline {
     public:
@@ -71,8 +79,15 @@ namespace BECore {
         /// A callback that fires once when the time reaches @p at
         Timeline& InsertCallback(float at, MoveOnlyFunction<void()> callback);
 
-        /// Runs the whole timeline @p count times in a row (forward, finite). A @p count below 1 is 1
+        /// Runs the whole timeline @p count times in a row (forward, unless `Yoyo()` turns every second one back). A @p count below 1 is 1
         Timeline& Repeat(int count);
+
+        /// With a repeat, every second iteration (index 1, 3, ...) runs backwards: an exact time reversal of the forward pass (see the class
+        /// comment). A single iteration is not changed by it
+        Timeline& Yoyo(bool enabled = true) {
+            _yoyo = enabled;
+            return *this;
+        }
 
         /**
          * @brief Applies the state of the timeline at @p time seconds since its start (the rules are in the class comment).
@@ -116,6 +131,7 @@ namespace BECore {
             TweenApply apply;                   // a tween clip: the eased progress in, the value out
             MoveOnlyFunction<void()> callback;  // a callback clip
             UniquePtr<Timeline> sub;            // a sub-timeline clip
+            size_t order = 0;                   // the insertion number: equal ends are entered in reverse of it in a backward iteration
             bool done = false;                  // the final call has been made in this iteration
         };
 
@@ -123,21 +139,37 @@ namespace BECore {
         Timeline& AddSub(float at, Timeline&& timeline);
         Timeline& AddClip(float at, Clip&& clip);
         // `stop` is the check of the timeline `Evaluate` was called on, handed down to the sub-timelines for the call and never stored
-        void EvaluateWith(float time, const MoveOnlyFunction<bool()>& stop);
+        // `reversed`: the parent plays this timeline backwards as a whole (its iteration that holds it runs backward)
+        void EvaluateWith(float time, const MoveOnlyFunction<bool()>& stop, bool reversed);
         void VisitClips(float time, const MoveOnlyFunction<bool()>& stop);
-        void VisitClip(Clip& clip, float time, const MoveOnlyFunction<bool()>& stop);
+        void VisitClip(Clip& clip, float time, const MoveOnlyFunction<bool()>& stop, bool backward);
         void RestartClips();
+        // Whether the current iteration runs backward: a yoyo iteration of odd index, flipped when the whole timeline is played reversed
+        [[nodiscard]] bool IsBackward() const;
+        [[nodiscard]] static float EndOf(const Clip& clip) {
+            return (clip.start + clip.delay) + clip.length;
+        }
+        // The time in an iteration at which a clip is entered: the order of `_clips` forward, of `_backOrder` backward
+        [[nodiscard]] float EnterTime(const Clip& clip, bool backward) const {
+            return backward ? _end - EndOf(clip) : clip.start;
+        }
+        void BuildBackwardOrder();
         [[nodiscard]] static bool IsStopped(const MoveOnlyFunction<bool()>& stop) {
             return stop && stop();
         }
 
         MoveOnlyFunction<bool()> _shouldStop;  // asked after every clip; true ends the `Evaluate` in progress
         Vector<Clip> _clips;                   // in order of start, equal starts in insertion order
-        size_t _cursor = 0;                    // clips before it are done in this iteration
+        Vector<size_t> _backOrder;             // indices into `_clips` in the order of a backward iteration; built at the first one
+        size_t _cursor = 0;                    // positions before it (in the order in use) are done in this iteration
+        size_t _inserted = 0;                  // clips added so far: the next insertion number
         float _end = 0.0f;                     // the end of the latest clip: the duration of one iteration
         float _lastStart = 0.0f;               // the start of the last clip added: where `Join` puts the next one
         int _repeat = 1;
         int _iteration = 0;
+        bool _yoyo = false;
+        bool _reversed = false;  // set by the parent on every call: this timeline is played backwards as a whole
+        bool _backOrderBuilt = false;
         bool _finished = false;
     };
 
