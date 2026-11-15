@@ -34,7 +34,7 @@ namespace BECore {
             BE_REFLECT_FIELD Variant<int32_t, String> choice;
         };
 
-        /// The same fields spelled the way the engine wrote them before the aliases; no `choice`: `Variant` is `std::variant` itself,
+        /// The same fields spelled with the eastl:: / std:: names; no `choice`: `Variant` is `std::variant` itself,
         /// so there is no other spelling to compare
         struct EastlState {
             BE_CLASS(EastlState)

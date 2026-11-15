@@ -11,7 +11,7 @@ namespace BECore::Tests {
 
     namespace {
 
-        /// Every Visit does nothing and no hook is overridden: the shape of a visitor written before the container hooks
+        /// Every Visit does nothing and no hook is overridden: the shape of a visitor that knows no container hook
         class NullVisitor : public IPropertyVisitor {
         public:
             bool Visit(StringView, bool&) override {

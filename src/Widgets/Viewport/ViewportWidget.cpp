@@ -259,7 +259,6 @@ namespace BECore {
             return;
         }
 
-        // Recreate the render target only when the viewport is resized.
         if (!_renderTarget || _lastWidth != w || _lastHeight != h) {
             _renderTarget = renderer->CreateRenderTarget(w, h);
             _lastWidth = w;
@@ -268,7 +267,6 @@ namespace BECore {
         }
 
         if (_renderTarget) {
-            // Set the clear color for the offscreen pass, then begin it.
             renderer->Clear(_clearColor);
             renderer->SetRenderTarget(_renderTarget.Get());
             // The target is not the window, so its safe area is the simulated one (the whole target for "No safe area"), never the window's
@@ -276,8 +274,7 @@ namespace BECore {
             const Rect safeArea = UIPreview::SimulatedSafeArea(_safeAreaSimulation, DeviceOf(_shape), size.x, size.y);
             uiEnvironment.SetSafeAreaOverride(safeArea);
             // The target has one pixel per ImGui unit at zoom 1, so its pixel density is 1 even when the window runs in the
-            // high-density mode, where canvases would otherwise lay out twice as big. A sharper viewport (a target of size times
-            // io.DisplayFramebufferScale, the mouse and the safe area scaled with it, the override set to that scale) is a follow-up.
+            // high-density mode, where canvases would otherwise lay out twice as big
             uiEnvironment.SetPixelDensityOverride(1.0f);
             // The forced view lives for this pass only: Update(), Game mode and the other scenes pick by their own output
             Scene* activeScene = CoreManager::GetSceneManager().GetActiveScene();
