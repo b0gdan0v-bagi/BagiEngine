@@ -26,6 +26,16 @@ namespace BECore {
      * - `hidden`: the field is not drawn (the dispatch skips it: `ShowsHidden()` is false)
      * - `required`: not used here
      * A value is constrained when the user edits it, not when it is shown: a value loaded outside the range stays as it is until touched.
+     *
+     * Containers (the hooks of `IPropertyVisitor`; the dispatch applies what they ask, after the list, never here):
+     * - a sequence or a map is a tree node `name (size)`, an `x` button after each element and a `+` after the last; a
+     *   button the `ListInfo` does not allow is drawn disabled. A map with text keys has a key field before its `+`, which
+     *   is disabled while the field is empty; an integer key needs no field (the dispatch takes the first unused one)
+     * - an `Optional` has a checkbox in front of its value (its name alone while it holds none)
+     * - a `Variant` has a combo of its alternatives by index, then the active one under `value`
+     * The elements are visited inside the container field's `BeginField`, so `range` and `step` reach its numeric elements
+     * through `CurrentField`, and `readonly` disables the elements, the buttons, the checkbox and the combo (the node can
+     * still be opened).
      */
     class ImGuiPropertyVisitor : public IPropertyVisitor {
     public:
@@ -54,13 +64,34 @@ namespace BECore {
         void BeginField(const FieldAttributes& attributes) override;
         void EndField() override;
 
+        bool BeginList(StringView name, const ListInfo& info) override;
+        void EndListElement(size_t index, ListRequest& request) override;
+        void EndList(ListRequest& request) override;
+        void VisitNewKey(String& key) override;
+        bool VisitPresence(StringView name, bool& present) override;
+        bool VisitAlternative(StringView name, size_t count, size_t& index) override;
+
     private:
+        /// What an open list allows and what its key field asked, between BeginList and EndList
+        struct OpenList {
+            bool canAdd = false;
+            bool canRemove = false;
+            /// VisitNewKey drew the `+` beside the key field, so EndList draws none
+            bool addDrawn = false;
+            bool addClicked = false;
+        };
+
+        /// Lists nest this deep with no allocation (the visitor is made again every frame)
+        static constexpr size_t kInlineListDepth = 8;
+
         /// The attributes of the field being visited: those of the innermost open BeginField, `FieldAttributes{}` outside one
         const FieldAttributes& CurrentField() const;
 
         int _idCounter = 0;
         /// The fields between BeginField and EndField, outermost first (a compound's children are visited inside its bracket)
         Vector<FieldAttributes> _fields;
+        /// The open lists, innermost last
+        SmallVector<OpenList, kInlineListDepth> _lists;
     };
 
 }  // namespace BECore

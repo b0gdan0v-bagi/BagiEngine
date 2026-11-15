@@ -89,7 +89,7 @@ Scene editor code is split across focused layers:
 
 - `SceneEditorWidget`: orchestration (selection flow, scene-level actions, window structure).
 - `ComponentInspectors`: per-component editing. `RenderComponentInspector` uses a custom inspector registered with `RegisterComponentInspector` when there is one, and otherwise the generic `ImGuiPropertyVisitor` driven by the component's generated `AcceptPropertyVisitor`.
-- `ImGuiPropertyVisitor`: the `IPropertyVisitor` implementation that renders ImGui controls for reflected fields; it draws the `BE_FIELD_ATTRS` of a field (slider, snap, tooltip, disabled), the decisions being `FieldPresentation` (pure, no ImGui).
+- `ImGuiPropertyVisitor`: the `IPropertyVisitor` implementation that renders ImGui controls for reflected fields; it draws the `BE_FIELD_ATTRS` of a field (slider, snap, tooltip, disabled), the decisions being `FieldPresentation` (pure, no ImGui), and the container hooks (`+` / `x` per list, the optional's checkbox, the variant's combo), only writing the request the dispatch applies after the list.
 
 Rules:
 - Keep selection and scene navigation in `SceneEditorWidget`; keep component field editing in `ComponentInspectors`. Do not duplicate edit logic in the scene widget.

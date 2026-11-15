@@ -1,6 +1,7 @@
 #include "ImGuiPropertyVisitor.h"
 
 #include <Widgets/EditorLayout/EditorControls.h>
+#include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/ImGuiFonts.h>
 #include <Widgets/SceneEditor/FieldPresentation.h>
 #include <imgui.h>
@@ -10,6 +11,28 @@ namespace BECore {
     namespace {
 
         constexpr size_t kHiddenLabelSize = 24;
+        /// Room for a list's label, `name (size)###id`
+        constexpr size_t kListLabelSize = 160;
+        /// Room for a button id, a hidden label or an alternative's index
+        constexpr size_t kIdSize = 32;
+        /// The longest map key the key field takes
+        constexpr size_t kNewKeySize = 128;
+
+        /**
+         * @brief The text typed into the key field of a map, kept between frames (the visitor is made again every frame)
+         *
+         * One draft for all maps: it belongs to the key field typed in last (`owner`, the field's ImGui id); every other
+         * map's field shows empty until typed in, which takes the draft over.
+         */
+        struct NewKeyDraft {
+            ImGuiID owner = 0;
+            char text[kNewKeySize] = {};
+        };
+
+        NewKeyDraft& GetNewKeyDraft() {
+            static NewKeyDraft draft;
+            return draft;
+        }
 
         void MakeLabel(char* buf, size_t bufSize, StringView name, int id) {
             snprintf(buf, bufSize, "%.*s##%d", static_cast<int>(name.size()), name.data(), id);
@@ -229,6 +252,125 @@ namespace BECore {
             ImGui::EndDisabled();
         }
         ImGui::TreePop();
+    }
+
+    bool ImGuiPropertyVisitor::BeginList(StringView name, const ListInfo& info) {
+        // `###id`: the id leaves out the size, so the node stays open when an element is added or removed
+        char label[kListLabelSize];
+        snprintf(label, sizeof(label), "%.*s (%zu)###%d", static_cast<int>(name.size()), name.data(), info.size, _idCounter++);
+        const FieldAttributes& attributes = CurrentField();
+        const bool open = ImGui::TreeNode(label);
+        FieldTooltip(attributes);
+        if (!open) {
+            return false;
+        }
+        if (attributes.readOnly) {
+            ImGui::BeginDisabled();
+        }
+        _lists.push_back(OpenList{info.canAdd, info.canRemove, false, false});
+        return true;
+    }
+
+    void ImGuiPropertyVisitor::EndListElement(size_t index, ListRequest& request) {
+        if (_lists.empty()) {
+            return;
+        }
+        // The ids of the buttons are local to the list's tree node, which pushed its id
+        char id[kIdSize];
+        snprintf(id, sizeof(id), "remove%zu", index);
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!_lists.back().canRemove);
+        if (IconButton(ICON_LC_X, "Remove this element", id)) {
+            request = ListRequest{ListAction::Remove, index};
+        }
+        ImGui::EndDisabled();
+    }
+
+    void ImGuiPropertyVisitor::VisitNewKey(String& key) {
+        if (_lists.empty()) {
+            return;
+        }
+        NewKeyDraft& draft = GetNewKeyDraft();
+        const ImGuiID fieldId = ImGui::GetID("##newKey");
+        const bool owned = draft.owner == fieldId;
+        char empty[kNewKeySize] = {};
+        char* text = owned ? draft.text : empty;
+        if (ImGui::InputTextWithHint("##newKey", "new key", text, kNewKeySize) && !owned) {
+            memcpy(draft.text, empty, sizeof(draft.text));
+            draft.owner = fieldId;
+            text = draft.text;
+        }
+        ItemTooltip("The key of the new entry");
+        ImGui::SameLine();
+        OpenList& list = _lists.back();
+        list.addDrawn = true;
+        ImGui::BeginDisabled(text[0] == '\0');
+        if (IconButton(ICON_LC_PLUS, "Add an entry under this key", "add")) {
+            key.assign(text);
+            text[0] = '\0';
+            list.addClicked = true;
+        }
+        ImGui::EndDisabled();
+    }
+
+    void ImGuiPropertyVisitor::EndList(ListRequest& request) {
+        if (!_lists.empty()) {
+            const OpenList list = _lists.back();
+            _lists.pop_back();
+            if (!list.addDrawn) {
+                ImGui::BeginDisabled(!list.canAdd);
+                if (IconButton(ICON_LC_PLUS, "Add an element", "add")) {
+                    request.action = ListAction::Add;
+                }
+                ImGui::EndDisabled();
+            } else if (list.addClicked) {
+                request.action = ListAction::Add;
+            }
+        }
+        EndCompound();
+    }
+
+    bool ImGuiPropertyVisitor::VisitPresence(StringView name, bool& present) {
+        const FieldAttributes& attributes = CurrentField();
+        const DisabledScope disabled(attributes);
+        char id[kIdSize];
+        snprintf(id, sizeof(id), "##present%d", _idCounter++);
+        const bool changed = ImGui::Checkbox(id, &present);
+        ItemTooltip(present ? "Holds a value: clear to remove it" : "Holds no value: check to add one");
+        // The value, when there is one, is drawn on this row after the checkbox; without one the name stands there
+        ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
+        if (!present) {
+            ImGui::TextDisabled("%.*s", static_cast<int>(name.size()), name.data());
+            FieldTooltip(attributes);
+        }
+        return changed;
+    }
+
+    bool ImGuiPropertyVisitor::VisitAlternative(StringView /*name*/, size_t count, size_t& index) {
+        const FieldAttributes& attributes = CurrentField();
+        const DisabledScope disabled(attributes);
+        char label[kIdSize];
+        snprintf(label, sizeof(label), "alternative##%d", _idCounter++);
+        char preview[kIdSize];
+        snprintf(preview, sizeof(preview), "%zu", index);
+        bool changed = false;
+        if (ImGui::BeginCombo(label, preview)) {
+            char item[kIdSize];
+            for (size_t i = 0; i < count; ++i) {
+                snprintf(item, sizeof(item), "%zu", i);
+                const bool isSelected = i == index;
+                if (ImGui::Selectable(item, isSelected)) {
+                    changed = i != index;
+                    index = i;
+                }
+                if (isSelected) {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+            ImGui::EndCombo();
+        }
+        FieldTooltip(attributes);
+        return changed;
     }
 
 }  // namespace BECore
