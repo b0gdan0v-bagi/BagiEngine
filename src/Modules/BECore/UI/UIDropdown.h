@@ -9,14 +9,11 @@ namespace BECore {
     /**
      * @brief A choice of many values behind one row: the header shows the chosen option and an arrow, a click opens a list of the options above everything of the canvas.
      *
-     * `<element type="UIDropdown" name="Level" bind="level" action="SetLevel" x="20" y="20" width="240" height="56" optionHeight="56">` with a `<components>` of one
-     * `<component type="UITextComponent" text="Pick one" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/>` (the header text) and `<children>` of an option per child:
-     * `<element type="UIElement" value="easy" ...>` with a `UITextComponent` and a `UIInputClicker` (the composed button; an icon is a child) (`UIChoice`: an option is an element with a
-     * `UIInputClicker`). `bind` names a `UIVars` variable, like `UISegmented`: the option (a direct child) whose `value` equals the variable is the chosen one. The header text is that option's
-     * caption (`UIChoice::GetText`: any `{#key}` or `{name}` in it is expanded as in the option itself, so a language switch rewords the header); with no option chosen it is the `text` of the
-     * component, a placeholder or empty. The font, the colour and the size (`fontSize` of the element) are the component's; it draws in `GetComponentArea()` and shows `GetTextOverride()`, the two
-     * hooks of `UIElement` that this class answers. Only the options are children of interest, anything else is ignored. An option has no `action` (the dropdown emits it): the clicker of a composed
-     * option carries `value` only.
+     * `<element type="UIDropdown" name="Level" bind="level" action="SetLevel" optionHeight="56">` with a `UITextComponent` in `<components>` (the header text) and an option per
+     * child in `<children>`: an element with a `UIInputClicker` and a `value` (`UIChoice`; an option has no `action`, the dropdown emits it). `bind` names a `UIVars` variable, like
+     * `UISegmented`: the option (a direct child) whose `value` equals it is the chosen one, and the header shows its caption (`UIChoice::GetText`, so a language switch rewords the
+     * header); with none chosen it shows the `text` of the component, a placeholder or empty. The component draws in `GetComponentArea()` and shows `GetTextOverride()`, the two hooks of
+     * `UIElement` that this class answers. Anything but the options among the children is ignored.
      *
      * **The dropdown owns no choice.** A click on an option emits `ActionEvent(action, value)` with the option's `value` and changes nothing else; the game answers by setting the
      * variable (game -> `UIVars` -> widget). That the list is open is runtime UI state (like `hovered`), neither reflected nor saved.
@@ -24,13 +21,13 @@ namespace BECore {
      * The list is a popup (`UIElement::HasPopupChildren`): closed, the options have no rect (not drawn, not hit, not validated, not visible to `ui_tree`); open, `GetPopupGeometry` puts
      * them in a column under the header, at least as wide as it, flipped above the header when they do not fit below, otherwise shifted into the safe area of the canvas. There is no
      * scrolling: a list taller than the canvas is reported by the validator. **Every option needs a height**: its own authored `height`, else `optionHeight`, else the height of the
-     * header (an option the same size as the header is the usual case, and 48 units at least keeps it a touch target). A click on the header toggles the list (`disabled` never opens
-     * it); a `disabled` option takes the click and does nothing, the list stays open; a press anywhere else closes the list and is consumed (`UICanvasComponent`).
+     * header. A click on the header toggles the list (`disabled` never opens it); a `disabled` option takes the click and does nothing, the list stays open; a press anywhere else closes
+     * the list and is consumed (`UICanvasComponent`).
      *
-     * The header is the touch target (`interactive`). It is the box of any element (`box`: rounded corners, border, gradient, shadow; with the default style one rect of `color`), its
-     * fill and gradient end with the hover, press and disabled shifts of a button (`GetCurrentBox`); the options have a box of their own (an option is drawn by the canvas in its own state, the
-     * children of a composed option in the state of the option). The text is laid out left of the arrow, and `CheckContent()` measures it there. `arrowColor` is derived from the `textColor` of the
-     * text component when left transparent; the arrow points down closed and up open, so the state does not rest on color alone.
+     * The header is the touch target (`interactive`). Its box is any element's (`box`), its fill and gradient end take the hover, press and disabled shifts of a button
+     * (`GetCurrentBox`); an option is drawn by the canvas in its own state, the children of a composed option in the state of the option. The text is laid out left of the arrow, and
+     * `CheckContent()` measures it there. `arrowColor` is derived from the `textColor` of the text component when left transparent; the arrow points down closed and up open, so the
+     * state does not rest on color alone.
      */
     class UIDropdown : public UIElement {
         BE_CLASS(UIDropdown)

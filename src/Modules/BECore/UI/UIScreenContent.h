@@ -7,8 +7,7 @@ namespace BECore {
     /**
      * @brief What a screen is made of: the elements under the canvas root and the responsive variants.
      *
-     * The reflected shape of a `.ui.xml` document (`<ui><elements>...</elements><variants>...</variants></ui>`), and of any other front-end that can
-     * drive an IDeserializer: it reads this and gets the same tree the XML front-end gets.
+     * The reflected shape of a `.ui.xml` document, and of any other front-end that can drive an IDeserializer.
      */
     class UIScreenContent {
         BE_CLASS(UIScreenContent)

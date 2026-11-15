@@ -12,13 +12,13 @@ namespace BECore {
      * `<component type="UISwitchComponent" trackColor="60,60,60,255" fillColor="60,160,90,255" thumbColor="255,255,255,255" partShape="Round"/>`; it is the component of the switch child
      * of a toggle row (`UIToggleComponent`).
      *
-     * It draws in the rect of its own element, from the state of its owner: the owner is a child of the row and has none of its own, so `UIElement::GetVisualState` gives it the row's
-     * (hover, press, disabled, `checked`). `trackColor` is the track while off, `fillColor` while on, `thumbColor` the thumb; left transparent they derive from a **white caption** (the off track
-     * is white at `kOffTrackAlpha`, the thumb white, the on track `kFillFallback`), because the switch cannot see the caption; a file with another caption colour says them. The track is
-     * lighter under the pointer, darker pressed and half transparent when disabled. `partShape="Round"` makes the track a pill and the thumb a circle (`UIElement::DrawPart`).
+     * It draws in the rect of its own element, from the state of its owner (`UIElement::GetVisualState` gives it the row's: hover, press, disabled, `checked`). `trackColor` is the track while off,
+     * `fillColor` while on, `thumbColor` the thumb; left transparent they derive from a **white caption** (the off track is white at `kOffTrackAlpha`, the thumb white, the on track `kFillFallback`),
+     * because the switch cannot see the caption: a file with another caption colour says them. The track is lighter under the pointer, darker pressed and half transparent when disabled.
+     * `partShape="Round"` makes the track a pill and the thumb a circle (`UIElement::DrawPart`).
      *
-     * Sizes follow the rect: the track is `kSwitchHeightRatio` of its height, centred, `kSwitchAspect` times wider than high, with the air above and below it at the right end too. A switch
-     * element is `height="100%" aspectRatio="1.25"` (`kAreaAspect`) so that the air at the right end is a quarter of the height and the track starts at the left edge of the element.
+     * The track is `kSwitchHeightRatio` of the height of the rect, centred, `kSwitchAspect` times wider than high. A switch element is `height="100%" aspectRatio="1.25"` (`kAreaAspect`) so that the
+     * track starts at the left edge of the element and the air at the right end is a quarter of the height.
      */
     class UISwitchComponent : public UIComponent {
         BE_CLASS(UISwitchComponent)

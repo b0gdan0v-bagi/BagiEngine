@@ -49,10 +49,9 @@ namespace BECore {
      * does: an end tag closes the nearest open element of that name, a stray one is reported, and `<p>` and `<li>` are not closed by the next sibling, so every
      * element needs its end tag.
      *
-     * **Limits.** A file is content a modder or a damaged download can make as large and as deep as it likes, so the parser keeps to these (about a hundred times
-     * what the largest screen of the engine and its games needs, where a cost is a product with the style sheet). A document, a nesting or a node count over its
-     * limit is one entry in the report and the rest of the document is left out (what was read stays); an element with more attributes, or an attribute longer, than
-     * the limit loses those attributes with an entry.
+     * **Limits.** A file can be made as large and as deep as one likes, so the parser keeps to these (about a hundred times what the largest screen needs, where a
+     * cost is a product with the style sheet). A document, a nesting or a node count over its limit is one entry in the report and the rest of the document is
+     * left out (what was read stays); an element with more attributes, or an attribute longer, than the limit loses those attributes with an entry.
      */
     class UIHtmlParser {
     public:

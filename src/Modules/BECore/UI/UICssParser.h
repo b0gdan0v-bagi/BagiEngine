@@ -65,9 +65,9 @@ namespace BECore {
      * and pseudo-elements, `@import`, `@font-face`, `@keyframes`, nested `@media`) is reported as an issue and left out. A declaration is kept as text; the
      * compiler decides whether it can apply it.
      *
-     * **Limits** (the same reason as the ones of `UIHtmlParser`: a style sheet is content that can be made as large as one likes). A sheet over its size, rules or
-     * declarations over theirs are one entry in the report and the rest of the sheet is left out (what was read stays); a block, a selector or a media query over its limit is
-     * left out with an entry, and the sheet goes on after it.
+     * **Limits** (as in `UIHtmlParser`: a style sheet can be made as large as one likes). A sheet over its size, rules or declarations over theirs are one entry in
+     * the report and the rest of the sheet is left out (what was read stays); a block, a selector or a media query over its limit is left out with an entry, and the
+     * sheet goes on after it.
      */
     class UICssParser {
     public:
