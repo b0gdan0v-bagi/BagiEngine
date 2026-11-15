@@ -13,6 +13,7 @@
     // A run without the line still says why in a word of this list; only the newest of the last lines counts.
     const WHY_WORDS = /BLOCKED|blocked by|waits for|taken|claimed|nothing/i;
     const WHY_LINES = 3;
+    const NO_REASON = "no reason said: Log shows the run";
 
     function says(events) {
         return (Array.isArray(events) ? events : []).filter((e) => e && e.kind === "say" && typeof e.text === "string");
@@ -108,5 +109,5 @@
         return shown ? shown.text : "";
     }
 
-    return { NO_ENTRY, REASON_MAX, parseNotTaken, noClaimOf, nextMemory, sessionIdOf, progressOf, progressText, newestStages };
+    return { NO_ENTRY, NO_REASON, REASON_MAX, parseNotTaken, noClaimOf, nextMemory, sessionIdOf, progressOf, progressText, newestStages };
 });

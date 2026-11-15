@@ -74,6 +74,9 @@ code {
 }
 .card.limited { border-left: 3px solid var(--vscode-charts-orange, #d18616); }
 .ask.limit { background: var(--vscode-inputValidation-warningBackground, rgba(209, 134, 22, 0.15)); }
+.badge.noclaim { color: var(--vscode-charts-yellow, #cca700); font-weight: 600; }
+.card.noclaim { border-left: 3px solid var(--vscode-charts-yellow, #cca700); }
+.ask.noclaim { background: var(--vscode-inputValidation-warningBackground, rgba(204, 167, 0, 0.15)); }
 .card.waiting { border-left: 3px solid var(--vscode-errorForeground, #f14c4c); }
 .ask {
     display: flex;
@@ -218,6 +221,7 @@ button.danger { color: var(--vscode-errorForeground, #f14c4c); }
 .feed-item .text { word-break: break-word; }
 .feed-item.broken .kind, .feed-item.error .kind, .feed-item.waiting .kind { color: var(--vscode-errorForeground, #f14c4c); }
 .feed-item.verified .kind, .feed-item.merged .kind { color: var(--vscode-charts-green, #388a34); }
+.feed-item.noclaim .kind { color: var(--vscode-charts-yellow, #cca700); }
 details.more { display: inline-block; position: relative; }
 details.more > summary { list-style: none; cursor: pointer; padding: 1px 8px; border: 1px solid var(--vscode-button-border, var(--vscode-widget-border, rgba(128, 128, 128, 0.35))); border-radius: 2px; }
 details.more > summary::-webkit-details-marker { display: none; }

@@ -45,11 +45,22 @@
         const s = w.session;
         if (w.limited) return { kind: "limited", word: w.limited.resets ? `limit · ${w.limited.resets}` : "usage limit" };
         if (w.stopped) return { kind: "stopped", word: "stopped" };
+        if (w.noClaim) return { kind: "noclaim", word: "took nothing" };
         if ((s && s.state === "done") || w.endedTurn) return { kind: "done", word: "done" };
         if (w.waiting) return { kind: "waiting", word: "waits for you" };
         if (s && s.status === "busy") return { kind: "busy", word: s.startedAt ? `busy · ${minutes(s.startedAt)}` : "busy" };
         if (s) return { kind: "idle", word: "idle" };
         return { kind: "none", word: "no session" };
+    }
+
+    // What a run that took nothing says in a tooltip: the tried entry, the reason in full and where it came from.
+    function noClaimTip(nc) {
+        return [
+            nc.entry ? `${nc.entry}${nc.title ? `: ${nc.title}` : ""}: not taken` : "The run took nothing: no entry was eligible",
+            `Reason: ${nc.reason || Runs.NO_REASON}`,
+            nc.source === "line" ? "said by the loop (NOT TAKEN line)" : "seen at start: the entry the loop was started on",
+            nc.entry ? "Click: open the entry in the Todo list" : "",
+        ].filter(Boolean).join("\n");
     }
 
     function openBlockers(entry) {
@@ -177,6 +188,15 @@
                 const at = { id: entry.id, x: cx, y, w: NODE_W, lane };
                 pos.set(entry.id, at);
                 blocked.push({ at, blockers: openBlockers(entry) });
+            } else if (w.noClaim) {
+                // the entry the finished run tried and did not take, in place of the empty ghost
+                const nc = w.noClaim;
+                const nbox = box(cx, y, NODE_W, "g-node g-noclaim", true);
+                const sub = `not taken · ${nc.reason || Runs.NO_REASON}`;
+                nbox.kids.push(textNode(cx + 11, y + 18, "g-id", trunc(nc.entry || "nothing eligible", NODE_W - 18, ID_CHAR_PX)), textNode(cx + 11, y + 34, "g-sub", trunc(sub, NODE_W - 18)));
+                nbox.kids.push(tip(noClaimTip(nc)));
+                if (nc.entry) nbox.act = { type: "entry", entry: nc.entry, worker: w.k, name: w.name, held: false };
+                boxes.push(nbox);
             } else {
                 const ghost = box(cx, y, NODE_W, "g-node g-ghost", false);
                 ghost.kids.push(textNode(cx + 11, y + 27, "g-sub", "no entry"));
@@ -353,7 +373,8 @@
             legendItem("kind-stacked", "stacked on (cut from its branch in review)"),
             legendItem("kind-waits", "waits for (merge or close first)"),
             legendItem("kind-paired", "paired (engine → game)"),
-            legendItem("pause", "queue paused")
+            legendItem("pause", "queue paused"),
+            legendItem("noclaim", "took nothing")
         );
         wrap.append(scroller, legend);
         return wrap;
