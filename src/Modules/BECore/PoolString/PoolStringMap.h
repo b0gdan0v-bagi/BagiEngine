@@ -7,7 +7,6 @@
 #include <EASTL/unordered_map.h>
 #include <cstddef>
 
-// Специализация eastl::hash для StaticPoolString
 namespace eastl {
 
     template <BECore::Details::FixedString Str>
@@ -26,7 +25,6 @@ namespace eastl {
 
 }  // namespace eastl
 
-// Структуры сравнения для использования в map/unordered_map
 namespace BECore {
 
     // Хешер, поддерживающий разные типы
@@ -51,14 +49,12 @@ namespace BECore {
         }
     };
 
-    // Для PoolString
     struct PoolStringEqual {
         constexpr bool operator()(const PoolString& lhs, const PoolString& rhs) const noexcept {
             return lhs == rhs;
         }
     };
 
-    // Для StaticPoolString (шаблонная версия)
     template <Details::FixedString Str>
     struct StaticPoolStringEqual {
         template <Details::FixedString OtherStr>
@@ -75,7 +71,6 @@ namespace BECore {
         }
     };
 
-    // Класс-обёртка для unordered_map с методом Find
     template <typename T>
     class UnorderedPoolMap : public HashMap<PoolString, T, PoolStringHasher, PoolStringEquality> {
     public:
@@ -93,7 +88,6 @@ namespace BECore {
         }
     };
 
-    // Класс-обёртка для map с методом Find
     template <typename T>
     class PoolMap : public Map<PoolString, T, eastl::less<PoolString>> {
     public:
@@ -109,7 +103,6 @@ namespace BECore {
 
 }  // namespace BECore
 
-// Специализация eastl::equal_to для PoolString
 namespace eastl {
 
     template <>
@@ -143,7 +136,6 @@ namespace eastl {
         }
     };
 
-    // Специализация eastl::less для PoolString с поддержкой гетерогенного поиска
     template <>
     struct less<BECore::PoolString> {
         using is_transparent = void;  // Позволяет гетерогенный поиск
