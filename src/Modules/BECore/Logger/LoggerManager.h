@@ -17,10 +17,6 @@ namespace BECore {
      *
      * @note Access via CoreManager::GetLoggerManager()
      * @note Created via BECore::MakeFromConfig<LoggerManager>("LoggerConfig")
-     *
-     * @example
-     * // Access specific sink
-     * auto* sink = CoreManager::GetLoggerManager().GetSink<ConsoleSink>();
      */
     class LoggerManager : public RefCountedAtomic {
         BE_CLASS(LoggerManager)
@@ -32,8 +28,6 @@ namespace BECore {
         /**
          * @brief Initialize sinks from configuration
          *
-         * Deserializes _sinks from config/LoggerConfig.xml via the reflection system.
-         * Sorts them by priority and initializes each one.
          * Safe to call multiple times - subsequent calls are no-ops.
          *
          * Sinks automatically subscribe to LogEvent during initialization.
@@ -42,8 +36,6 @@ namespace BECore {
 
         /**
          * @brief Get sink by type
-         *
-         * @tparam T Sink type to find
          * @return Pointer to sink or nullptr if not found
          */
         template <typename T>
@@ -56,18 +48,12 @@ namespace BECore {
             return nullptr;
         }
 
-        /**
-         * @brief Get all sinks
-         * @return Reference to sinks vector
-         */
+        /// Sorted by priority once Initialize() has run
         const Vector<IntrusivePtrAtomic<ILogSink>>& GetSinks() const {
             return _sinks;
         }
 
     private:
-        /**
-         * @brief Sort sinks by priority (lower first)
-         */
         void SortSinksByPriority();
 
         BE_REFLECT_FIELD Vector<IntrusivePtrAtomic<ILogSink>> _sinks;
