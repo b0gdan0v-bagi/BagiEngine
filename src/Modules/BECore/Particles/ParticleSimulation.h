@@ -32,19 +32,15 @@ namespace BECore {
      * - **A position is a function of time.** A particle stores its spawn time and what was drawn at birth; at emitter time `t`,
      *   `age = t - spawnTime` and the position is `origin + velocity * age + gravity * age^2 / 2`. Size, rotation and color are the
      *   curves of `age / lifetime`. Nothing is integrated, so a lower or an uneven frame rate gives the same picture at the same time.
-     * - **Looping emission is a schedule.** Particle number `n` (from 1) of a looping effect is born at `n / rate` of the time since
-     *   `Play()`; an update to time `t` spawns every one that is due, with the spawn time backdated, so its age is right after a long
-     *   frame. A one-shot effect fires `burstCount` at `Play()` (at the update that follows, when the effect and the area are known)
-     *   and stops emitting.
-     * - **Deterministic.** The numbers of a particle come from `ParticleRandom` by (seed, serial). A looping particle's serial is its
-     *   number, a burst particle's serial counts the burst particles since `Play()` (with a high bit), so the order and the number of updates
-     *   do not change the picture. Emitter time is the sum of the `dt` given to `Update` (game time).
-     * - **A fixed pool.** At most `maxParticles` live; a new particle that does not fit is dropped and counted. The pool is reserved
-     *   once (`Reserve`, or at the first update) and again only when the field grows. Dead particles are removed by a stable
-     *   compaction (spawn order is draw order), in an update where one died.
-     * - **World space.** A particle keeps the place it was born at.
+     * - **Looping emission is a schedule.** Particle `n` (from 1) is born at `n / rate` of the time since `Play()`; an update spawns
+     *   every one that is due, spawn time backdated. A one-shot effect fires `burstCount` at the update that follows `Play()`.
+     * - **Deterministic.** The numbers of a particle come from `ParticleRandom` by (seed, serial), so the order and the number of
+     *   updates do not change the picture. Emitter time is the sum of the `dt` given to `Update` (game time).
+     * - **A fixed pool.** At most `maxParticles` live; a particle that does not fit is dropped and counted. Dead ones are removed by a
+     *   stable compaction, so spawn order is draw order.
      *
-     * The effect is sanitized (`ParticleEffect::Sanitize`) on every call that reads it. No drag, no collisions, no sub-emitters.
+     * The effect is sanitized (`ParticleEffect::Sanitize`) on every call that reads it. Serials, pool growth and what is not there:
+     * `Particles/CLAUDE.md`, "The simulation".
      */
     class ParticleSimulation {
     public:
@@ -95,7 +91,6 @@ namespace BECore {
             return _time;
         }
 
-        /// The room the pool has reserved, in particles
         [[nodiscard]] size_t GetCapacity() const {
             return _particles.capacity();
         }
