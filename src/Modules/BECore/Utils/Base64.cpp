@@ -6,9 +6,9 @@ namespace BECore {
 
         constexpr char kAlphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
         constexpr char kPadding = '=';
-        constexpr size_t kGroupBytes = 3;    // input bytes per group
-        constexpr size_t kGroupChars = 4;    // output characters per group
-        constexpr uint32_t kSixBits = 0x3F;  // one output character carries 6 bits
+        constexpr size_t kGroupBytes = 3;
+        constexpr size_t kGroupChars = 4;
+        constexpr uint32_t kSixBits = 0x3F;
 
     }  // namespace
 
