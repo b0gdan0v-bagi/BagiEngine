@@ -52,7 +52,7 @@ struct MyEvent {
 |--------|-------------|
 | `GetStaticTypeMeta()` | `ClassMeta&` |
 | `GetStaticTypeHash()` | `uint64_t` type hash |
-| `GetStaticTypeName()` | `eastl::string_view` |
+| `GetStaticTypeName()` | `StringView` |
 | `GetStaticFieldCount()` | Number of reflected fields |
 | `ForEachFieldStatic(obj, func)` | Constexpr iteration over fields (const only) |
 | `Serialize(ISerializer&) const` / `Deserialize(IDeserializer&)` | Write / read the reflected fields |

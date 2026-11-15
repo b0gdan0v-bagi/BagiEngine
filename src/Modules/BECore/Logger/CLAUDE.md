@@ -8,7 +8,7 @@ Event-based logging. `Logger` pushes entries into a lock-free ring buffer, `LogE
 
 | Component | Purpose |
 |-----------|---------|
-| `Logger` | Static helper (`Debug` / `Info` / `Warning` / `Error` / `Fatal`), takes one `eastl::string_view` |
+| `Logger` | Static helper (`Debug` / `Info` / `Warning` / `Error` / `Fatal`), takes one `StringView` |
 | `LogEvent` | Event with level and message; `Emit` writes to the ring buffer, `Flush` dispatches it |
 | `LogRingBuffer` | Lock-free MPSC buffer, safe from any thread; entries are dropped when it is full |
 | `FlushLogsEvent` | Tells sinks to flush their output |
@@ -46,7 +46,7 @@ A `type` that is not registered in the factory is logged as an error by `MakeFro
 - Use the macros: `LOG_DEBUG`, `LOG_INFO`, `LOG_WARNING`, `LOG_ERROR`, `LOG_FATAL`.
 - The macros take one string, so format first: `LOG_ERROR("Failed to load {}"_format(path))` (or `Format(...)`). `LOG_INFO("x {}", v)` does not compile.
 - Pick the level deliberately; `Fatal` is for unrecoverable errors.
-- Sinks receive `eastl::string_view`.
+- Sinks receive `StringView`.
 - The sinks write the time of a line as `{:02}:{:02}:{:02}` of `tm_hour`, `tm_min`, `tm_sec` (`FileSink` also the date), not `{:%H:%M:%S}` of `<fmt/chrono.h>`: the Clang of Emscripten refuses the `FMT_STRING` that header uses inside, and nothing else needs the header. Do not bring it back.
 
 ## Don't

@@ -73,7 +73,7 @@ Managed by `TestManager`, which fills a `Tests::TestList` from `TestsConfig` wit
 
 1. Create a class in `BECore/Tests/` implementing `ITest`
 2. Add `BE_CLASS(TestName)` inside the class
-3. Implement `bool Run() override` and `eastl::string_view GetName() override`
+3. Implement `bool Run() override` and `StringView GetName() override`
 4. Add `static_assert(ValidTest<TestName>)` after the class
 5. Enable it in `config/TestsConfig.xml`: `<test type="TestName" enabled="true" />`
 6. Re-run `cmake --preset ...` (registration is generated code)
