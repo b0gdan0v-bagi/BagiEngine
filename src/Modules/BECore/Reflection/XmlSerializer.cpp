@@ -11,11 +11,15 @@ namespace BECore {
     }
 
     String XmlSerializer::SaveToString() const {
-        std::ostringstream oss;
-        _document.save(oss, "  ");
-        //-NoStd: the text of an std::ostringstream
-        std::string stdStr = oss.str();
-        return String(stdStr.c_str(), stdStr.size());
+        struct StringWriter final : pugi::xml_writer {
+            String text;
+            void write(const void* data, size_t size) override {
+                text.append(static_cast<const char*>(data), size);
+            }
+        };
+        StringWriter writer;
+        _document.save(writer, "  ");
+        return eastl::move(writer.text);
     }
 
     pugi::xml_node XmlSerializer::GetOrCreateChild(StringView name) {

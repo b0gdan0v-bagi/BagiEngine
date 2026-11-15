@@ -494,7 +494,7 @@ namespace BECore::Tests {
         Vector<uint64_t> ids;
         for (const String& event : recorder.Events()) {
             if (StringView(event).starts_with("open:")) {
-                ids.push_back(std::stoull(event.substr(5).c_str()));
+                ids.push_back(StringUtils::ParseNumber<uint64_t>(StringView(event).substr(5)).value_or(0));
             }
         }
         ASSERT_EQ(ids.size(), 4u);
