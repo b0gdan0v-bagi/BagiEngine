@@ -37,6 +37,9 @@ target_include_directories(BagiEngineTests PRIVATE ${BAGI_ENGINE_DIR}/src/Module
 if(Python3_FOUND)
     add_test(NAME BagiThirdPartyNotices
         COMMAND ${Python3_EXECUTABLE} ${BAGI_ENGINE_DIR}/CI/scripts/check_third_party_notices.py --root ${BAGI_ENGINE_DIR})
+    # the fragments of changelog/, CHANGELOG.md and the version header agree (tools/changelog/CLAUDE.md)
+    add_test(NAME BagiChangelogCheck
+        COMMAND ${Python3_EXECUTABLE} ${BAGI_ENGINE_DIR}/tools/changelog/changelog.py check --root ${BAGI_ENGINE_DIR})
     # a quoted include is allowed only for a source file's own header; every other include is <...> from an include root
     add_test(NAME BagiIncludeStyle
         COMMAND ${Python3_EXECUTABLE} ${BAGI_ENGINE_DIR}/CI/scripts/check_includes.py --root ${BAGI_ENGINE_DIR})

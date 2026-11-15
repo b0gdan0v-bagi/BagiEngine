@@ -42,7 +42,7 @@ The first fragment of an empty log (`baseline.md`) takes the header's version as
 
 ## What `check` reports (exit 1, one line per problem naming the file)
 
-A malformed fragment; a fragment not named after its `Entry`; a repeated version; the highest fragment version differing from the header; `CHANGELOG.md` missing or differing from the rendering. It does **not** compare `kContentVersion` with the fragments: a branch that bumped it has no fragment until `todo-merge` adds one after the merge, and the ctest would fail the branch.
+Ctest `BagiChangelogCheck` (`tests/CMakeLists.txt`) and `tests/test_real_tree.py` run it on the real tree. It reports: a malformed fragment; a fragment not named after its `Entry`; a repeated version; the highest fragment version differing from the header; `CHANGELOG.md` missing or differing from the rendering. It does **not** compare `kContentVersion` with the fragments: a branch that bumped it has no fragment until `todo-merge` adds one after the merge, and the ctest would fail the branch.
 
 ## `breaking`: what an engine update breaks for a game
 
