@@ -31,6 +31,7 @@ namespace BECore::Tests {
     static_assert(Ser::HasDataAccessor<FixedHashMap<String, int32_t, 8>>);
     static_assert(Ser::HasDataAccessor<Optional<int32_t>>);
     static_assert(Ser::HasDataAccessor<Pair<int32_t, String>>);
+    static_assert(Ser::HasDataAccessor<Variant<int32_t, float>>);
 
     // The aliases that are not reflected today: a field of one of them does not compile. Adding support is a decision to make
     // on purpose (the serialized form of a sorted vector, of a view and of a pointer to one object has to be chosen), and this
@@ -42,7 +43,6 @@ namespace BECore::Tests {
     static_assert(!Ser::HasDataAccessor<SharedPtr<int32_t>>);
     static_assert(!Ser::HasDataAccessor<HashSet<int32_t>>);
     static_assert(!Ser::HasDataAccessor<Set<int32_t>>);
-    static_assert(!Ser::HasDataAccessor<Variant<int32_t, float>>);
     static_assert(!Ser::HasDataAccessor<Tuple<int32_t, float>>);
 
     TEST(ReflectionAliasesTest, CompileTimeChecks) {
