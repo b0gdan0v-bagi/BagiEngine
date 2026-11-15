@@ -15,41 +15,12 @@
 namespace BECore {
 
     /**
-     * @brief Dispatch helpers for IPropertyVisitor, analogous to Ser::Save/Ser::Load
+     * @brief Dispatch helpers for IPropertyVisitor, the counterpart of Ser::Save / Ser::Load for in-place editing.
      *
-     * PropVisit::Visit(visitor, field, key) selects the right overload based on the
-     * field type:
-     *   - Arithmetic types              → visitor.Visit(key, field) directly
-     *   - PoolString / String (and any string type) → visitor.Visit(key, field) directly
-     *   - CORE_ENUM (IsReflectedEnum)   → visitor.VisitEnum(key, names, count, index)
-     *   - Types with VisitProperties()  → BeginCompound + VisitProperties + EndCompound
-     *   - BE_CLASS T by value           → BeginCompound + AcceptPropertyVisitor + EndCompound
-     *   - IntrusivePtr<BE_CLASS T>      → BeginCompound + ptr->AcceptPropertyVisitor + EndCompound
-     *   - vector<IntrusivePtr<T>>       → BeginCompound + iterate elements + EndCompound (no add, no remove: the class of
-     *                                     a new element would be a choice no hook offers)
-     *   - Vector, SmallVector, FixedVector, Array (and std::array)
-     *                                   → BeginList + per element (Visit under `[i]`, EndListElement) + EndList; an Array
-     *                                     is never resized, a FixedVector that cannot overflow adds only while it has room
-     *   - HashMap, FixedHashMap, Map    → the same, the values under the text of their key; VisitNewKey before EndList
-     *                                     when a text or integer key lets an add happen
-     *   - Pair (eastl:: and std::)      → BeginCompound + `first` + `second` + EndCompound
-     *   - Optional (eastl:: and std::)  → VisitPresence, then the value under the field's own name when it holds one
-     *   - Variant                       → BeginCompound + VisitAlternative + the active alternative under `value` + EndCompound
-     *
-     * The elements of a container are any type of this list, containers included. An add or a remove a visitor requests
-     * is applied by the dispatch after EndList, never during the loop.
-     *
-     * PropVisit::VisitField(visitor, attributes, visit) wraps the visit of one field of a reflected class in
-     * BeginField / EndField and leaves out a `hidden` field; the generated AcceptPropertyVisitor calls it with a
-     * lambda that calls PropVisit::Visit.
-     *
-     * Generated AcceptPropertyVisitor implementations call these helpers.
+     * An add or a remove a visitor requests is applied after EndList, never during the loop. The generated
+     * AcceptPropertyVisitor wraps each field in PropVisit::VisitField with a lambda that calls PropVisit::Visit.
      */
     namespace PropVisit {
-
-        // =====================================================================
-        // Detail helpers for intrusive pointer dispatch
-        // =====================================================================
 
         namespace Detail {
 
@@ -73,26 +44,14 @@ namespace BECore {
 
         }  // namespace Detail
 
-        // =====================================================================
-        // Arithmetic types
-        // =====================================================================
-
         template <typename T>
         requires std::is_arithmetic_v<T> bool Visit(IPropertyVisitor& v, T& value, eastl::string_view key) {
             return v.Visit(key, value);
         }
 
-        // =====================================================================
-        // PoolString
-        // =====================================================================
-
         inline bool Visit(IPropertyVisitor& v, PoolString& value, eastl::string_view key) {
             return v.Visit(key, value);
         }
-
-        // =====================================================================
-        // Strings: String, a string of any allocator, FixedString
-        // =====================================================================
 
         namespace Detail {
 
@@ -124,10 +83,6 @@ namespace BECore {
             return Detail::VisitText(v, value, key);
         }
 
-        // =====================================================================
-        // Compound types (with VisitProperties method)
-        // =====================================================================
-
         template <typename T>
         requires requires(T& t, IPropertyVisitor& visitor) {
             {
@@ -142,10 +97,6 @@ namespace BECore {
             }
             return false;
         }
-
-        // =====================================================================
-        // IntrusivePtr<T> (with AcceptPropertyVisitor)
-        // =====================================================================
 
         template <typename Ptr>
         requires(Detail::IsIntrusivePtr<Ptr>&& requires(typename Detail::IntrusivePtrPointee<Ptr>::type& t, IPropertyVisitor& v) {
@@ -164,10 +115,6 @@ namespace BECore {
             return false;
         }
 
-        // =====================================================================
-        // eastl::vector<IntrusivePtr<T>>
-        // =====================================================================
-
         template <typename Ptr, typename Alloc>
         requires Detail::IsIntrusivePtr<Ptr> bool Visit(IPropertyVisitor& v, eastl::vector<Ptr, Alloc>& vec, eastl::string_view key) {
             bool changed = false;
@@ -181,10 +128,6 @@ namespace BECore {
             }
             return changed;
         }
-
-        // =====================================================================
-        // BE_CLASS types embedded by value (have AcceptPropertyVisitor directly)
-        // =====================================================================
 
         template <typename T>
         requires(!Detail::IsIntrusivePtr<T> && !IsReflectedEnum<T> && !std::is_arithmetic_v<T> && requires(T & t, IPropertyVisitor& v) {
@@ -200,13 +143,8 @@ namespace BECore {
             return false;
         }
 
-        // =====================================================================
-        // One field of a reflected class
-        // =====================================================================
-
         /**
          * @brief Visit one reflected field between BeginField and EndField
-         * @param v The visitor
          * @param attributes The attributes of the field (`ReflectionTraits<T>::fields`)
          * @param visit Callable that visits the field and returns whether it changed, `[&] { return PropVisit::Visit(v, field, key); }`
          * @return true when the visit changed the value; false for a field left out
@@ -225,10 +163,6 @@ namespace BECore {
             v.EndField();
             return changed;
         }
-
-        // =====================================================================
-        // CORE_ENUM / IsReflectedEnum types
-        // =====================================================================
 
         template <typename T>
         requires IsReflectedEnum<T> bool Visit(IPropertyVisitor& v, T& value, eastl::string_view key) {

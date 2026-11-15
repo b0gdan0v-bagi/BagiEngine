@@ -14,21 +14,12 @@ namespace BECore {
      * Errors follow XmlDeserializer: Read() reports a missing entry, ReadAttribute() and BeginObject()
      * stay silent (the field may be optional). A type mismatch is reported by both, because the data
      * is there but is not what the reader expects.
-     *
-     * @example
-     * BinaryDeserializer deserializer;
-     * deserializer.LoadFromFile("save.bin");
-     * deserializer.BeginObject("player");
-     * int32_t health = 0;
-     * deserializer.ReadAttribute("health", health);
-     * deserializer.EndObject();
      */
     class BinaryDeserializer : public IDeserializer {
     public:
         BinaryDeserializer() = default;
         ~BinaryDeserializer() override = default;
 
-        // Non-copyable, movable
         BinaryDeserializer(const BinaryDeserializer&) = delete;
         BinaryDeserializer& operator=(const BinaryDeserializer&) = delete;
         BinaryDeserializer(BinaryDeserializer&&) = default;

@@ -4,65 +4,35 @@
 
 /**
  * @file ReflectionMarkers.h
- * @brief Macros for marking classes, fields, and enums for reflection
+ * @brief The markers meta_generator reads from the source text: BE_CLASS, BE_EVENT, BE_REFLECT_FIELD, BE_FIELD_ATTRS, BE_FUNCTION.
  *
- * These macros are used by the reflection parser (meta_generator) to identify
- * types that need reflection metadata generation. The generated code provides
- * ReflectionTraits<T> specializations and static class methods, including
- * auto-generated Serialize() and Deserialize() methods.
- *
- * Usage:
- *   struct Player {
- *       BE_CLASS(Player)
- *
- *       BE_REFLECT_FIELD int32_t health = 100;
- *       BE_REFLECT_FIELD float speed = 5.0f;
- *       BE_REFLECT_FIELD BECore::Color _clearColor;  // XML name: clearColor
- *   };
- *
- * Include the generated file in the class's own .cpp only:
- *   #include <Generated/Player.gen.hpp>
- *
- * The generated code provides non-template definitions of:
- *   - void Serialize(ISerializer&) const  - for writing/saving
- *   - void Deserialize(IDeserializer&)    - for reading/loading
- *
- * Other .cpp files that call Serialize/Deserialize on this class do NOT need
- * to include the generated file — the linker resolves the definitions.
- *
- * Note: Underscore prefix in field names is automatically stripped for XML
- * element/attribute names (e.g., _clearColor → clearColor).
+ * The generated `Generated/<Stem>.gen.hpp` is included by the class's own .cpp only: it holds non-template definitions,
+ * so other callers of Serialize / Deserialize link against them without including it.
  */
 
 namespace BECore {
 
-    // Forward declaration for friend access
-    // Default argument specified here; must not be repeated in TypeTraits.h definition
+    // The default argument is given here only: repeating it in the definition (TypeTraits.h) is ill-formed
     template <typename T, typename = void>
     struct ReflectionTraits;
 
-    // Forward declaration for embedded type identification
     struct ClassMeta;
 
-    // Forward declarations for non-template Serialize/Deserialize signatures
     class ISerializer;
     class IDeserializer;
 
-    // Forward declaration for property visitor (AcceptPropertyVisitor)
     class IPropertyVisitor;
 
 }  // namespace BECore
 
 // =============================================================================
-// BE_CLASS - Main reflection macro for classes/structs
+// BE_CLASS - inside the class body; declares what the generated .gen.hpp defines
 // =============================================================================
-// Place inside class body. Declares static reflection methods that are
-// defined in the generated .gen.hpp file.
 //
 // Usage:
 //   BE_CLASS(ClassName)                                 - Standard reflection
 //   BE_CLASS(ClassName, FACTORY_BASE)                   - Mark as factory base for enum generation
-//   BE_CLASS(ClassName, FACTORY_BASE, SERIALIZABLE)     - Multiple options
+//   BE_CLASS(ClassName, FACTORY_BASE, ELEMENT=sink)     - Options combine; ELEMENT names the XML element of the base's arrays
 //   BE_CLASS(ClassName, ICON=image)                     - Lucide icon name for the editor, read into ClassMeta::icon
 //                                                         (kebab case [a-z0-9-]+; other values warn and are ignored)
 //   BE_CLASS(ClassName, PURPOSE=visual)                 - Part of an asset the class belongs to (sim, visual or editor),
@@ -70,8 +40,7 @@ namespace BECore {
 //                                                         which every part may hold (other values warn and are ignored)
 //
 // @param ClassName The name of the containing class (required for static methods)
-// @param ...       Optional: Comma-separated options (FACTORY_BASE, SERIALIZABLE, etc.)
-//                  These options are parsed by reflector.py, not by C++ preprocessor
+// @param ...       Options, read by meta_generator, not by the preprocessor (an unknown one is ignored without a warning)
 // =============================================================================
 
 #define BE_CLASS(ClassName, ...)                                                                                                                                                                       \
@@ -121,24 +90,8 @@ private:                                                                        
 public:
 
 // =============================================================================
-// BE_EVENT - Lightweight reflection macro for event types
-// =============================================================================
-// Place inside event struct body. Similar to BE_CLASS but without virtual dispatch
-// overhead (0 bytes per instance). Events don't need runtime polymorphism.
-//
-// Usage:
-//   struct MyEvent {
-//       BE_EVENT(MyEvent)
-//       BE_REFLECT_FIELD int32_t value = 0;
-//   };
-//
-// Key differences from BE_CLASS:
-// - No virtual GetTypeMeta() / vptr overhead (events are never used through base pointers)
-// - No GetTypeMeta() instance method (type always known statically)
-// - No Is<T>()/Cast<T>() (events don't need polymorphism)
-// - Supports BE_REFLECT_FIELD for data serialization/logging
-//
-// @param EventName The name of the containing event struct
+// BE_EVENT - BE_CLASS without virtual functions (no vptr): an event is never used through a base pointer, so it has
+// no GetTypeMeta(), Is<T>() or Cast<T>() and no AcceptPropertyVisitor.
 // =============================================================================
 
 #define BE_EVENT(EventName)                                                                                                                                                                            \
@@ -165,25 +118,12 @@ private:                                                                        
                                                                                                                                                                                                        \
 public:
 
-// =============================================================================
-// Field and Enum markers
-// =============================================================================
-
-// Clang/GCC annotation macros for reflection parser
 #if defined(__clang__) || defined(__GNUC__)
-/**
- * @brief Mark a field for reflection
- *
- * Only fields marked with this macro will be included in the generated
- * ReflectionTraits<T>::fields tuple.
- */
+/// Marks a field for ReflectionTraits<T>::fields; written on the same line as the declaration.
 #define BE_REFLECT_FIELD [[clang::annotate("reflect_field")]]
 
 /**
- * @brief Mark a method for reflection
- *
- * Methods marked with this macro will be included in the generated
- * ReflectionTraits<T>::methods tuple and can be invoked via reflection.
+ * @brief Marks a method for ReflectionTraits<T>::methods (InvokeMethod).
  *
  * @example
  *   class MyClass {
@@ -195,8 +135,7 @@ public:
  */
 #define BE_FUNCTION [[clang::annotate("reflect_function")]]
 #else
-// MSVC: use comment markers as fallback since MSVC lacks [[annotate]]
-// The reflection parser detects these via regex patterns
+// MSVC has no [[clang::annotate]]: the markers expand to nothing; meta_generator reads their names from the source text either way
 #define BE_REFLECT_FIELD /* BE_REFLECT_FIELD */
 #define BE_FUNCTION      /* BE_FUNCTION */
 #endif
