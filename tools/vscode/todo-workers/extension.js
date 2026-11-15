@@ -9,6 +9,8 @@
 //   src/workers.js   sessions, update, fast start, relaunch, queues, start in a free worker, the engine pointer
 //   src/review.js    review, Review with Claude, Quick merge, Merge with Claude, Return with remarks
 //   src/todoList.js  the Todo list tab and the owner's writes to the store
+//   src/insights.js  the slower views (busy files, the day, the timeline, review rounds), the doctor's fixes, the merge
+//                    train, the end of the day, Dispatch, the push to a phone
 // Both views read again at once when todo.py signals a write (~/.claude/todo/changed.json), besides the timer.
 "use strict";
 
@@ -31,7 +33,7 @@ class WorkersView {
     resolveWebviewView(view) {
         this.view = view;
         view.webview.options = { enableScripts: true };
-        view.webview.html = pageHtml(this.context, ["graph.js", "panel.js"], ["panel.css", "graph.css"], "Asking worker.py ...");
+        view.webview.html = pageHtml(this.context, ["graph.js", "insights.js", "panel.js"], ["panel.css", "graph.css"], "Asking worker.py ...");
         view.webview.onDidReceiveMessage((message) => this.actions(message));
         view.onDidChangeVisibility(() => {
             if (view.visible) this.actions({ cmd: "refresh" });
@@ -65,7 +67,7 @@ function activate(context) {
     ctx.workerOf = (k) => ctx.state && ctx.state.workers.find((w) => w.k === k);
     const entryOf = (id) => ctx.state && [...ctx.state.review, ...ctx.state.workers.map((w) => w.entry)].find((e) => e && e.id === id);
 
-    for (const name of ["feed", "build", "workers", "review", "todoList"]) require(`./src/${name}`).attach(ctx);
+    for (const name of ["feed", "build", "workers", "review", "todoList", "insights"]) require(`./src/${name}`).attach(ctx);
 
     function act(message) {
         const worker = ctx.workerOf(message.worker);
@@ -96,6 +98,12 @@ function activate(context) {
             case "review": return ctx.reviewBranch(entryOf(message.entry));
             case "claudeReview": return ctx.startClaudeReview(entryOf(message.entry));
             case "todoList": return ctx.openTodoList(message.entry);
+            case "doctorFix": return ctx.doctorFix(message.worker, message.kind);
+            case "mergeTrain": return ctx.mergeTrain();
+            case "endDay": return ctx.endDay();
+            case "copyPush": return ctx.copyPush();
+            case "dispatch": return ctx.dispatch();
+            case "insights": return ctx.readInsights("now");
             case "settings": return vscode.commands.executeCommand("workbench.action.openSettings", "todoWorkers");
         }
     }
@@ -119,9 +127,13 @@ function activate(context) {
             return;
         }
         running = true;
-        view.show({ ...(ctx.state ? { state: ctx.state } : { loading: true }), refreshing: true });
+        // keep what is shown (the feed, the insights, the last verify) while worker.py answers
+        view.show(ctx.state ? { ...view.payload, refreshing: true } : { loading: true, refreshing: true, insights: ctx.insights() });
         try {
-            const out = await runTool(tool, ["list", "--json", "--store", "--activity", "--usage", "--claude", config().claude], 90000);
+            // hidden, the panel only needs what the status bar and the notifications show: no transcripts read for
+            // the last steps and the tokens (the usage ledger catches up on the next full read: its counts are totals)
+            const full = view.visible ? ["--activity", "--usage"] : [];
+            const out = await runTool(tool, ["list", "--json", "--store", ...full, "--claude", config().claude], 90000);
             ctx.state = JSON.parse(out);
             // A branch of another checkout or machine (or cut from another base) is not this checkout's to review or
             // merge: it leaves the review list, the status bar count and the "reached review" notices for a folded line.
@@ -129,13 +141,14 @@ function activate(context) {
             ctx.state.reviewElsewhere = (ctx.state.review || []).filter(away);
             ctx.state.review = (ctx.state.review || []).filter((e) => !away(e));
             const info = ctx.cachedBuildInfo() || (await ctx.getBuildInfo());
-            view.show({ state: ctx.state, at: Date.now(), feed: ctx.feed(), lastVerify: ctx.lastVerify(), prices: config().prices, shotsTool: Boolean(info && info.shots), verifying: ctx.isVerifying() ? "running" : null });
+            view.show({ state: ctx.state, at: Date.now(), feed: ctx.feed(), lastVerify: ctx.lastVerify(), prices: config().prices, shotsTool: Boolean(info && info.shots), verifying: ctx.isVerifying() ? "running" : null, insights: ctx.insights() });
             ctx.postWorkersToList();
             ctx.updateStatus(null);
             ctx.notifyChanges();
             ctx.autoStartQueues();
+            if (view.visible) ctx.readInsights("timer"); // each view on its own slower interval
         } catch (error) {
-            view.show({ ...(ctx.state ? { state: ctx.state } : {}), error: `worker.py list: ${error.message}`, at: Date.now() });
+            view.show({ ...view.payload, refreshing: false, error: `worker.py list: ${error.message}`, at: Date.now() });
             if (!ctx.state) ctx.updateStatus(error.message);
         } finally {
             running = false;
@@ -164,6 +177,7 @@ function activate(context) {
                 pending = setTimeout(() => {
                     refresh();
                     ctx.loadTodoList();
+                    if (view.visible) ctx.readInsights("write");
                 }, STORE_CHANGE_DEBOUNCE_MS);
             });
             watcher.on("error", () => watcher.close());
@@ -173,12 +187,18 @@ function activate(context) {
         }
     }
 
+    // Visible, the panel reads every refreshSeconds; hidden (only the status bar and the notifications need it) every
+    // hiddenRefreshSeconds. A write to the store reads at once either way (watchStoreChanges).
     let timer = null;
+    let lastTick = 0;
     function schedule() {
         if (timer) clearInterval(timer);
         timer = setInterval(() => {
-            if (view.visible || status.visible) refresh();
-        }, config().refreshSeconds * 1000);
+            const every = (view.visible ? config().refreshSeconds : config().hiddenRefreshSeconds) * 1000;
+            if (Date.now() - lastTick < every - 500) return;
+            lastTick = Date.now();
+            refresh();
+        }, 5000);
     }
 
     context.subscriptions.push(

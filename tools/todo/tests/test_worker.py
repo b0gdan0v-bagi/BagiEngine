@@ -1622,3 +1622,18 @@ def test_only_a_tracked_file_link_to_a_directory_is_reported(tmp_path: Path, mon
     assert run("status", "--porcelain", cwd=repo) == ""
     monkeypatch.setattr(worker, "ON_WINDOWS", False)
     assert worker.file_links_to_directories(repo) == []
+
+
+def test_a_running_loop_names_the_entry_it_was_started_on(tmp_path, monkeypatch):
+    # before the claim the worker has no branch: list takes the entry from the session's /todo-loop prompt
+    monkeypatch.setattr(worker, "projects_dir", lambda: tmp_path)
+    cwd = "/w/w3"
+    record = {"type": "user", "message": {"role": "user", "content": "<command-message>todo-loop</command-message>\n<command-name>/todo-loop</command-name>\n<command-args>1 callables-move-only report-to=main</command-args>"}}
+    path = worker.transcript_of(cwd, "s1")
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps(record) + "\n")
+    assert worker.loop_entry_of({"cwd": cwd, "sessionId": "s1"}) == "callables-move-only"
+    record["message"]["content"] = record["message"]["content"].replace("1 callables-move-only report-to=main", "2 list")
+    path.write_text(json.dumps(record) + "\n")
+    assert worker.loop_entry_of({"cwd": cwd, "sessionId": "s1"}) is None
+    assert worker.loop_entry_of(None) is None
