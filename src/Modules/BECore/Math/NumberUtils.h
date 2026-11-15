@@ -5,13 +5,12 @@
 
 namespace BECore {
 
-    // Подсчитывает количество цифр в числе (включая знак минус для отрицательных чисел)
-    // Использует каскад сравнений для оптимизации (быстрее, чем цикл или log10)
+    // The number of characters of `v` in decimal, the minus sign of a negative one included
     [[nodiscard]] constexpr size_t CountDigits(int v) {
-        size_t count = (v < 0) ? 1 : 0;  // Место под минус
+        size_t count = (v < 0) ? 1 : 0;
         unsigned int n = (v < 0) ? static_cast<unsigned int>(-static_cast<long long>(v)) : static_cast<unsigned int>(v);
 
-        // Каскад сравнений (быстрее, чем цикл или log10)
+        // A cascade of comparisons: faster than a loop or log10
         if (n < 10)
             return count + 1;
         if (n < 100)

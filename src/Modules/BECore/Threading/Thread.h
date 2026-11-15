@@ -10,7 +10,7 @@ namespace BECore {
 
     namespace Detail {
 
-        /// No place in the list of threads of a trace (the same value as Profiler::kNoSortIndex)
+        /// No place in the list of threads of a trace
         inline constexpr uint32_t kNoThreadSortIndex = 0xFFFFFFFFu;
 
         /// Names the calling thread in the profiler (the first thing a Thread does); a no-op with the profiler off (Thread.cpp)
@@ -43,9 +43,9 @@ namespace BECore {
      * @brief A thread that has a name: std::thread whose thread calls Profiler::SetThreadName (and the sort index, when given) before
      * the body runs, so no thread of the engine starts without a name in a trace.
      *
-     * std-shaped and move-only: joinable, join, detach, get_id. Like std::thread, a joinable Thread that is destroyed or assigned over
-     * terminates: join or detach it first. A default-constructed Thread is allowed (a member whose thread starts later) and is not
-     * joinable. @p name is copied; the sort index is the place in the list of threads (a lower number is shown higher).
+     * Like std::thread, a joinable Thread that is destroyed or assigned over terminates: join or detach it first.
+     * A default-constructed Thread is allowed (a member whose thread starts later) and is not joinable.
+     * @p name is copied; the sort index is the place in the list of threads (a lower number is shown higher).
      *
      * The single-thread build (BE_SINGLE_THREAD, the browser's single-thread page) is handled here and nowhere else: kAvailable is
      * false, the constructor asserts and starts nothing, joinable() stays false. The task pool of that build is inline and makes no Thread.

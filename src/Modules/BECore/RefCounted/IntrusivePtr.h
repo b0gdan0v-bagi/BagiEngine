@@ -162,23 +162,14 @@ namespace BECore {
             return _ptr == other._ptr;
         }
 
-        /**
-         * Оператор сравнения на неравенство
-         */
         bool operator!=(const IntrusivePtrNonAtomic& other) const {
             return _ptr != other._ptr;
         }
 
-        /**
-         * Оператор сравнения с nullptr
-         */
         bool operator==(std::nullptr_t) const {
             return _ptr == nullptr;
         }
 
-        /**
-         * Оператор сравнения с nullptr
-         */
         bool operator!=(std::nullptr_t) const {
             return _ptr != nullptr;
         }
@@ -220,7 +211,7 @@ namespace BECore {
 
         template <typename U>
         IntrusivePtrAtomic(IntrusivePtrAtomic<U>&& other) noexcept : _ptr(other._ptr) {
-            other._ptr = nullptr;  // Don't release - just transfer ownership
+            other._ptr = nullptr;
         }
 
         ~IntrusivePtrAtomic() {
@@ -280,7 +271,7 @@ namespace BECore {
                 _ptr->ReleaseRef();
             }
             _ptr = other._ptr;
-            other._ptr = nullptr;  // Don't release - just transfer ownership
+            other._ptr = nullptr;
             return *this;
         }
 

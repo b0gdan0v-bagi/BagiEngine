@@ -24,12 +24,10 @@ namespace BECore {
             return;
         }
 
-        // Get current time
         auto now = std::chrono::system_clock::now();
         auto time = std::chrono::system_clock::to_time_t(now);
         auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
 
-        // Thread-safe localtime conversion
         std::tm tm_buf;
 #ifdef _WIN32
         localtime_s(&tm_buf, &time);
@@ -37,14 +35,12 @@ namespace BECore {
         localtime_r(&time, &tm_buf);
 #endif
 
-        // Format message similar to console/file sinks (the time is written out, not {:%H:%M:%S}: the Emscripten build cannot use fmt/chrono.h)
+        // The time is written out, not {:%H:%M:%S}: the Emscripten build cannot use fmt/chrono.h
         const String formatted = Format("[{}] [{:02}:{:02}:{:02}.{:03d}] {}\n", level, tm_buf.tm_hour, tm_buf.tm_min, tm_buf.tm_sec, ms.count(), message);
 
 #if defined(PLATFORM_WINDOWS)
-        // Output to Visual Studio Output window
         OutputDebugStringA(formatted.c_str());
 #elif defined(PLATFORM_MACOS)
-        // Output to Xcode console (stderr is captured by Xcode)
         std::fprintf(stderr, "%s", formatted.c_str());
         std::fflush(stderr);
 #endif

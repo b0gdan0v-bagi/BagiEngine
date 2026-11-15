@@ -4,19 +4,18 @@
 #include <utility>
 
 namespace BECore {
+    /// Runs the callback when the object is destroyed.
     class ScopeGuard {
     public:
-        // Принимаем любой вызываемый объект
         explicit ScopeGuard(std::function<void()> onExit) : _onExit(std::move(onExit)) {}
 
-        // Деструктор сработает при выходе из {}
         ~ScopeGuard() {
             if (_onExit) {
                 _onExit();
             }
         }
 
-        // Запрещаем копирование, чтобы избежать двойного вызова
+        // A copy would run the callback twice.
         ScopeGuard(const ScopeGuard&) = delete;
         ScopeGuard& operator=(const ScopeGuard&) = delete;
 
