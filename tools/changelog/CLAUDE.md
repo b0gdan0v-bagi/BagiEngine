@@ -8,9 +8,10 @@ python3 <engine>/tools/changelog/changelog.py propose --draft FILE            # 
 python3 <engine>/tools/changelog/changelog.py add --draft FILE --bump minor|patch|auto [--date D] [--dry-run]
 python3 <engine>/tools/changelog/changelog.py render [--check]                # regenerate CHANGELOG.md (--check: only compare)
 python3 <engine>/tools/changelog/changelog.py check                           # ctest BagiChangelogCheck
+python3 <engine>/tools/changelog/changelog.py breaking --since <commit|version|pointer> [--repo E] [--json] [--all] [--check]
 ```
 
-Every command takes `--root E` (the engine folder; default the one the tool is in).
+Every command takes `--root E` (the engine folder; default the one the tool is in); `breaking` calls it `--repo E` (`engine` in a game) too.
 
 ## Fragments
 
@@ -43,4 +44,14 @@ The first fragment of an empty log (`baseline.md`) takes the header's version as
 
 A malformed fragment; a fragment not named after its `Entry`; a repeated version; the highest fragment version differing from the header; `CHANGELOG.md` missing or differing from the rendering. It does **not** compare `kContentVersion` with the fragments: a branch that bumped it has no fragment until `todo-merge` adds one after the merge, and the ctest would fail the branch.
 
-Exit codes: 0 ok, 1 a refusal or a failed check, 2 the layout is not there (no header, no draft).
+## `breaking`: what an engine update breaks for a game
+
+Read-only (`rev-parse`, `log`, `show-superproject-working-tree`; it never fetches, so the repository must already hold the commits). Lists the fragments added after a point, newest version first, with the Breaking bullets (their `Adapt:` text) and the Migration lines; by default only the entries that have one of the two, `--all` lists every entry. The point:
+
+- a **commit** (or any name git resolves): the fragment files `git log --diff-filter=A` shows added in `<commit>..HEAD`, so the commits of a `--no-ff` merged branch count;
+- a **version** `0.3.0`: the fragments with a higher version, no git;
+- `pointer`: the commit the superproject of `E` records for it (`HEAD:<path>` there); not a submodule is an error. A game runs it before taking an engine merge.
+
+A point older than the first fragment adds one line: the log starts at that version and `git log <point>..HEAD` has the rest. `--json` has `since`, `kind`, `commit`, `log_starts`, `before_the_log`, `breaking` (any listed entry has a Breaking section) and `entries` (the fields of a fragment, bullets as lists). `--check` exits 1 when `breaking` is true (a game's CI); without it the exit is 0 whatever is listed.
+
+Exit codes: 0 ok, 1 a refusal, a failed check or `breaking --check` with a Breaking entry, 2 the layout or the point is not there (no header, no draft, an unknown commit, not a submodule).

@@ -39,8 +39,10 @@ def draft_text(entry: str = "feature", title: str = "A feature", sections: str =
 class Tree:
     """A copy of the layout the tool reads, in a temp folder: never the real files."""
 
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, *, create: bool = True):
         self.root = root
+        if not create:
+            return
         (root / changelog.VERSION_HEADER).parent.mkdir(parents=True)
         (root / changelog.VERSION_HEADER).write_text(VERSION_HEADER_TEXT, encoding="utf-8")
         (root / changelog.CONTENT_VERSION_HEADER).parent.mkdir(parents=True)
