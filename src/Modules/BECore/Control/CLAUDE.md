@@ -11,6 +11,8 @@ The core of the external control API: a program or a model sends commands, the e
 | `ControlBuiltins` | `RegisterControlBuiltins()`: `ping`, `status`, `step`, `pause`, `resume`, `quit` |
 | `ControlSettings` | `ResolveControlSettings(args, ApplicationConfigLoad)`: the start-up flags and the settings of the reflected `ApplicationConfig` (`Application/ApplicationConfig.h`), the manual clock included (see "Starting the API"), a pure function |
 | `ControlTypes.h` | `ControlError`, `ControlErrors::k*` (error codes), `ControlReplyFn`, `ControlServerStatus` (listening, port, clients; see "Starting the API") |
+| `JsonSerializer` | `ISerializer` into a `Json` document (`Take()`); interim, DOM-backed: the allocation-free path is the entry `json-deserializer` |
+| `JsonDeserializer` | `IDeserializer` over a `const Json&` the caller keeps alive; always strict, with findings; interim like the writer, its internals are replaced by `json-deserializer` |
 | `Json.h`, `JsonFwd.h` | nlohmann/json behind checked helpers (see "JSON rules") |
 | `Utils/Base64.h` (one level up) | Base64 for the screenshot and the WebSocket handshake |
 
@@ -51,6 +53,15 @@ The engine builds without exceptions, so nlohmann/json is built with `JSON_NOEXC
 - Never call `at()`, `get<T>()`, `value()` or the const `operator[]` on client data. Building a response (`Json::object()`, `result["x"] = ...`) and `DumpJson()` are safe; `DumpJson()` replaces invalid UTF-8 instead of aborting.
 - Keep the 1 MiB request limit (`ControlService::kMaxRequestBytes`) at every transport. `ParseJson` itself takes any depth (it parses and frees without recursion), but copying a value recurses once per level, so a reader that keeps client JSON checks `IsJsonNestedDeeperThan` first: a request nested deeper than `ControlService::kMaxRequestDepth` (128) is `invalid_request`, answered without an `id`. The control API is fuzzed: `tests/Fuzz/CLAUDE.md`.
 - nlohmann uses `std::string` inside; convert to `eastl::string` at the edge, which the helpers do.
+
+## JSON shapes of the reflection pair
+
+`JsonSerializer` and `JsonDeserializer` are one format; no method uses them yet (the call by name of stage 3 does).
+
+- An attribute and a child are the same member. An object is a member object, an array a member array of element objects; an element that holds only `value` is that scalar (`[1,2,3]`), and the reader takes both forms. A map is an array of `{key, value}`, a variant `{index, value}` (`monostate`: the index alone), a factory element carries `type` and `enabled`.
+- Integers are exact (`uint64_t` above 2^63 too), a `float` is the shortest text that reads back, a non-finite number is `null`, which the reader refuses.
+- The reader is always strict: a JSON bool is the only bool, a number the only number (`3.0` and `1.5` are no integers, a string is no number, a negative is no unsigned), a string target takes only a string. A refusal is an error under the field's path and the target keeps its value; a missing key is no error. Under diagnostics an unknown key is a finding with `did you mean`. Limits are those of `ReaderLimits.h`; `StoreError` cuts the text and replaces control characters with `?`. Check `IsJsonNestedDeeperThan` on input first.
+- A `SceneNode` does not round-trip: its components have no `type` member in this form.
 
 ## Manual clock and `step`
 
