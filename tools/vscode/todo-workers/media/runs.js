@@ -7,34 +7,24 @@
 })(typeof self !== "undefined" ? self : this, function () {
     const NO_REASON = "no reason said: Log shows the run";
 
-    // The progress an entry shows, as the bar's fill and its words. A through entry is one branch over many slices:
-    // its slice plans of the past say nothing about it, so the whole is the stage plan (when it has one) and the
-    // slice plan is "this slice". An entry cut slice by slice shows its slice plans together.
+    // The progress an entry shows, as the bar's fill and its words, from the `slices` and `planProgress` of the store.
+    // A through entry is one branch over many slices: `slices.by` is "stages" when it has a stage plan (the whole is
+    // the stages and the slice plan is "this slice"), else its slice plans of the past say nothing about it. An entry
+    // cut slice by slice shows its slice plans together. A shown plan that is the stage plan has no slice to show.
     function progressOf(entry) {
         if (!entry) return null;
+        const slices = entry.slices || null;
         const p = entry.planProgress && entry.planProgress.total ? entry.planProgress : null;
-        const stages = entry.stages && entry.stages.total ? entry.stages : null;
-        const all = entry.slices && entry.slices.count > 1 && entry.slices.total ? entry.slices : null;
-        const slice = p ? `this slice ${p.done}/${p.total}` : "";
+        const stages = slices && slices.by === "stages" && slices.total ? slices : null;
+        const all = slices && slices.by !== "stages" && slices.count > 1 && slices.total ? slices : null;
+        const sliceShown = Boolean(entry.planShown) && entry.planShown === entry.stagesPlan ? null : p;
+        const slice = sliceShown ? `this slice ${sliceShown.done}/${sliceShown.total}` : "";
         if (entry.slicing === "through") {
             if (stages) return { done: stages.done, total: stages.total, text: [`stage ${stages.done}/${stages.total}`, slice].filter(Boolean).join(" · ") };
-            return p ? { done: p.done, total: p.total, text: slice } : null;
+            return sliceShown ? { done: sliceShown.done, total: sliceShown.total, text: slice } : null;
         }
-        if (all) return { done: all.done, total: all.total, text: `${all.count} slices ${all.done}/${all.total}${p ? ` · ${slice}` : ""}` };
+        if (all) return { done: all.done, total: all.total, text: `${all.count} slices ${all.done}/${all.total}${sliceShown ? ` · ${slice}` : ""}` };
         return p ? { done: p.done, total: p.total, text: `plan ${p.done}/${p.total}` } : null;
-    }
-
-    // The newest stage plan of each entry in the answer of `todo.py plan list --kind stages --json`:
-    // Map of entry id -> {name, done, total}.
-    function newestStages(plans) {
-        const newest = new Map();
-        for (const plan of Array.isArray(plans) ? plans : []) {
-            const p = plan && plan.progress;
-            if (!plan || !plan.entry || !p || !p.total) continue;
-            const held = newest.get(plan.entry);
-            if (!held || String(plan.updatedAt || "") > String(held.updatedAt || "")) newest.set(plan.entry, plan);
-        }
-        return new Map([...newest].map(([id, plan]) => [id, { name: plan.name, done: plan.progress.done, total: plan.progress.total }]));
     }
 
     function progressText(entry) {
@@ -100,5 +90,5 @@
         return found;
     }
 
-    return { NO_REASON, progressOf, progressText, newestStages, unlinkedWaits, queueGuard, idsToAddBack, loopsOnBase };
+    return { NO_REASON, progressOf, progressText, unlinkedWaits, queueGuard, idsToAddBack, loopsOnBase };
 });
