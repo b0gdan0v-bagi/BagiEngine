@@ -4,6 +4,7 @@
 #include <BECore/Format/Format.h>
 #include <BECore/Rules/RuleAxis.h>
 #include <BECore/Rules/RuleBaker.h>
+#include <BECore/Rules/RuleReport.h>
 #include <BECore/Types/Types.h>
 #include <concepts>
 #include <cstdint>
@@ -78,17 +79,53 @@ namespace BECore {
             return _defaultValue;
         }
 
+        /// The winning rule of the cell and every other rule that matches it, with origins and texts.
+        template <typename... Ids>
+        requires(sizeof...(Ids) > 0 && (std::convertible_to<Ids, uint32_t> && ...)) [[nodiscard]] CellExplanation Explain(Ids... ids) const {
+            return ExplainRuleCell(Axes(), RuleSpecs(), _cells, CellIndex(ids...));
+        }
+
+        /// One line about the cell (RuleReport.h): `stone x Hit x blast = <text>  <- #12 [origin] ...; overridden: ...`. @p valueToText
+        /// is any callable `String(const Value&)`; it comes first because the ids are a pack.
+        template <typename ToText, typename... Ids>
+        requires(sizeof...(Ids) > 0 && (std::convertible_to<Ids, uint32_t> && ...)) [[nodiscard]] String ExplainText(ToText&& valueToText, Ids... ids) const {
+            const uint32_t cell = CellIndex(ids...);
+            const String valueText = valueToText(_cellValues[cell]);
+            return ExplainRuleCellText(Axes(), RuleSpecs(), _cells, cell, valueText);
+        }
+
+        /// The text of the table for a golden file: a header, then one line per cell a rule won, in row-major order. The format is
+        /// pinned in `Rules/CLAUDE.md`. @p valueToText is any callable `String(const Value&)`, called once per distinct value.
+        template <typename ToText>
+        [[nodiscard]] String ExportText(StringView name, ToText&& valueToText, const RuleExportOptions& options = {}) const {
+            Vector<String> classTexts;
+            classTexts.reserve(_classValues.size());
+            for (const Value& value : _classValues) {
+                classTexts.push_back(valueToText(value));
+            }
+            const String defaultText = valueToText(_defaultValue);
+            return ExportRuleCells(name, Axes(), RuleSpecs(), _cells, Span<const String>(classTexts.data(), classTexts.size()), defaultText, options);
+        }
+
     private:
         template <RuleValue>
         friend class RuleTable;
 
-        BakedRuleTable(Vector<RuleAxis> axes, Vector<RuleSpec> rules, RuleCells cells, Vector<Value> cellValues, Value defaultValue)
-            : _axes(std::move(axes)), _rules(std::move(rules)), _cells(std::move(cells)), _cellValues(std::move(cellValues)), _defaultValue(std::move(defaultValue)) {}
+        BakedRuleTable(Vector<RuleAxis> axes, Vector<RuleSpec> rules, RuleCells cells, Vector<Value> cellValues, Vector<Value> classValues, Value defaultValue)
+            : _axes(std::move(axes)), _rules(std::move(rules)), _cells(std::move(cells)), _cellValues(std::move(cellValues)), _classValues(std::move(classValues)),
+              _defaultValue(std::move(defaultValue)) {}
+
+        [[nodiscard]] Span<const RuleSpec> RuleSpecs() const {
+            return Span<const RuleSpec>(_rules.data(), _rules.size());
+        }
 
         Vector<RuleAxis> _axes;
+        /// What the reports need of every rule: origin, text (a mirrored rule's ends with `(mirrored)`) and selectors.
         Vector<RuleSpec> _rules;
         RuleCells _cells;
         Vector<Value> _cellValues;
+        /// One value per `RuleSpec::valueClass`.
+        Vector<Value> _classValues;
         Value _defaultValue;
     };
 
@@ -180,7 +217,7 @@ namespace BECore {
             for (const uint32_t rule : cells->cellRule) {
                 cellValues.push_back(rule == kNoRule ? defaultValue : _values[_rules[rule].valueClass]);
             }
-            return BakedRuleTable<Value>(_axes, _rules, std::move(*cells), std::move(cellValues), std::move(defaultValue));
+            return BakedRuleTable<Value>(_axes, _rules, std::move(*cells), std::move(cellValues), _values, std::move(defaultValue));
         }
 
     private:
