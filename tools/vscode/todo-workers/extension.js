@@ -103,7 +103,7 @@ function activate(context) {
             case "endDay": return ctx.endDay();
             case "copyPush": return ctx.copyPush();
             case "dispatch": return ctx.dispatch();
-            case "insights": return ctx.readInsights(true);
+            case "insights": return ctx.readInsights("now");
             case "settings": return vscode.commands.executeCommand("workbench.action.openSettings", "todoWorkers");
         }
     }
@@ -127,9 +127,13 @@ function activate(context) {
             return;
         }
         running = true;
-        view.show({ ...(ctx.state ? { state: ctx.state } : { loading: true }), refreshing: true });
+        // keep what is shown (the feed, the insights, the last verify) while worker.py answers
+        view.show(ctx.state ? { ...view.payload, refreshing: true } : { loading: true, refreshing: true, insights: ctx.insights() });
         try {
-            const out = await runTool(tool, ["list", "--json", "--store", "--activity", "--usage", "--claude", config().claude], 90000);
+            // hidden, the panel only needs what the status bar and the notifications show: no transcripts read for
+            // the last steps and the tokens (the usage ledger catches up on the next full read: its counts are totals)
+            const full = view.visible ? ["--activity", "--usage"] : [];
+            const out = await runTool(tool, ["list", "--json", "--store", ...full, "--claude", config().claude], 90000);
             ctx.state = JSON.parse(out);
             // A branch of another checkout or machine (or cut from another base) is not this checkout's to review or
             // merge: it leaves the review list, the status bar count and the "reached review" notices for a folded line.
@@ -142,9 +146,9 @@ function activate(context) {
             ctx.updateStatus(null);
             ctx.notifyChanges();
             ctx.autoStartQueues();
-            ctx.readInsights(false); // on its own slower timer
+            if (view.visible) ctx.readInsights("timer"); // each view on its own slower interval
         } catch (error) {
-            view.show({ ...(ctx.state ? { state: ctx.state } : {}), error: `worker.py list: ${error.message}`, at: Date.now() });
+            view.show({ ...view.payload, refreshing: false, error: `worker.py list: ${error.message}`, at: Date.now() });
             if (!ctx.state) ctx.updateStatus(error.message);
         } finally {
             running = false;
@@ -173,7 +177,7 @@ function activate(context) {
                 pending = setTimeout(() => {
                     refresh();
                     ctx.loadTodoList();
-                    ctx.readInsights(true);
+                    if (view.visible) ctx.readInsights("write");
                 }, STORE_CHANGE_DEBOUNCE_MS);
             });
             watcher.on("error", () => watcher.close());
@@ -183,12 +187,18 @@ function activate(context) {
         }
     }
 
+    // Visible, the panel reads every refreshSeconds; hidden (only the status bar and the notifications need it) every
+    // hiddenRefreshSeconds. A write to the store reads at once either way (watchStoreChanges).
     let timer = null;
+    let lastTick = 0;
     function schedule() {
         if (timer) clearInterval(timer);
         timer = setInterval(() => {
-            if (view.visible || status.visible) refresh();
-        }, config().refreshSeconds * 1000);
+            const every = (view.visible ? config().refreshSeconds : config().hiddenRefreshSeconds) * 1000;
+            if (Date.now() - lastTick < every - 500) return;
+            lastTick = Date.now();
+            refresh();
+        }, 5000);
     }
 
     context.subscriptions.push(

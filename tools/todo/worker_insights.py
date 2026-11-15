@@ -342,18 +342,65 @@ def session_span(path: Path, since_ms: int, running: set[str]) -> dict | None:
             "loop": bool(head)}
 
 
+def span_cache_file() -> Path:
+    """The spans of finished sessions by transcript, keyed by its size: a finished transcript does not grow, so the
+    panel's timeline reads only the running and the new ones (outside every repository)."""
+    return w.claude_home() / "todo" / "timeline-cache.json"
+
+
+def read_span_cache() -> dict:
+    try:
+        cache = json.loads(span_cache_file().read_text())
+    except (OSError, ValueError):
+        return {}
+    return cache if isinstance(cache, dict) else {}
+
+
+def write_span_cache(seen: dict) -> None:
+    path = span_cache_file()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(seen))
+        temporary.replace(path)
+    except OSError:
+        pass  # no cache: the next read parses again
+
+
+def cached_span(cache: dict, seen: dict, transcript: Path, since: int, running: set[str]) -> dict | None:
+    """`session_span` of a transcript, from the cache while its size holds and it is not running. Every transcript
+    that may be in the window is remembered in `seen` (the next cache), with or without a span."""
+    try:
+        stat = transcript.stat()
+    except OSError:
+        return None
+    if stat.st_mtime * 1000 < since:
+        return None  # older than the window: Claude Code only ever touches a transcript later, never earlier
+    key = str(transcript)
+    hit = cache.get(key)
+    if isinstance(hit, dict) and hit.get("size") == stat.st_size and transcript.stem not in running:
+        span = hit.get("span")
+    else:
+        span = session_span(transcript, 0, running)
+    if transcript.stem not in running:  # a running session is parsed again next time: its span still grows
+        seen[key] = {"size": stat.st_size, "span": span}
+    return span if span and span["end"] >= since else None
+
+
 def timeline(layout: w.Layout, hours: float, claude: str) -> dict:
     now = int(time.time() * 1000)
     since = now - int(hours * 3600 * 1000)
     sessions = w.list_sessions(claude) or []
     running = {str(s.get("sessionId")) for s in sessions if w.is_running(s) and s.get("sessionId")}
+    cache = read_span_cache()
+    seen: dict[str, dict] = {}
     lanes = []
     for k, path in layout.workers():
         folder = w.projects_dir() / re.sub(r"[^A-Za-z0-9]", "-", str(path))
         spans = []
         if folder.is_dir():
             for transcript in folder.glob("*.jsonl"):
-                span = session_span(transcript, since, running)
+                span = cached_span(cache, seen, transcript, since, running)
                 if span:
                     spans.append(span)
         spans.sort(key=lambda s: s["start"])
@@ -365,6 +412,7 @@ def timeline(layout: w.Layout, hours: float, claude: str) -> dict:
                 busy += end - start
                 cursor = end
         lanes.append({"k": k, "name": f"{w.WORKER_PREFIX}{k}", "spans": spans, "busyShare": round(busy / max(1, now - since), 3)})
+    write_span_cache(seen)
     return {"since": since, "now": now, "hours": hours, "lanes": lanes}
 
 

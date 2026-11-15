@@ -12,7 +12,12 @@ A panel for the parallel `todo-loop` workers (`tools/todo/worker.py`, "Workers" 
 - **collapse**: cards are folded by default to a few lines (the name, the entry and the badge, the title, the review note or the progress bar, one line of what the loop said, and the one action it needs: Answer, Relaunch, Review or Fast start); the arrow unfolds one, **Expand all** / **Collapse all** every card, and the choice is kept. Waiting and limited workers come first. An unfolded card keeps Attach, Relaunch and Stop or Fast start in sight; Log, Plan, Build & run, Update, Folder and Terminal are behind `…`;
 - buttons: **Attach** (`claude attach <session id>`; **Answer** takes its place while the session waits), **Log** (`claude logs`), **Folder** (a new window), **Terminal**, **Plan** (`~/.claude/plans/todo-loop-<branch-id>.md`), **Stop** (`worker.py stop <k>`, after a question, while the session runs); while it does not: **Update** (`worker.py update <k>`: the game and `engine/` detached at the tips of their base branches, as the loop's "go to the base"; the branch it held is kept; refused with uncommitted changes) and **Fast start** (`worker.py start <k>` at once: `/todo-loop` with the settings `todoWorkers.startSlices`, `todoWorkers.loopArgs` and `todoWorkers.reportTo`).
 
-Added in 0.23 (the data: `worker.py doctor` and `list --json --store`: `problems`, `diff`; the slower views of `tools/todo/worker_insights.py`, read every 2 minutes and after a write to the store):
+Added in 0.24 (the load):
+
+- **Day, Timeline, Busy files and the review rounds are cached**: each view keeps its last answer (also across a reload, in the extension's state) and is read again on its own interval while the panel is visible (Day 2 min, Timeline and Busy files 5 min, review rounds 15 min), after a write to the store at the soonest 30 s to 2 min later (one read for a burst of writes; the timeline does not follow the store), and at once on **Read again**. A section says how old its answer is and `reading …` while a newer one comes; only a view never read waits empty. `worker.py timeline` keeps the spans of finished sessions in `~/.claude/todo/timeline-cache.json` by the transcript's size, so it parses only the running and new ones.
+- **The refresh**: the panel keeps what it shows while `worker.py list` runs (no more empty sections every 15 s). Hidden, it reads every `todoWorkers.hiddenRefreshSeconds` (60) and without `--activity --usage` (no transcripts: the status bar and the notifications do not need them); visible, every `todoWorkers.refreshSeconds` (15) in full. A write to the store still reads at once.
+
+Added in 0.23 (the data: `worker.py doctor` and `list --json --store`: `problems`, `diff`; the slower views of `tools/todo/worker_insights.py`):
 
 - **Doctor**: a card with a problem gets an amber edge and a line per problem, folded or not, with **Fix** when `worker.py doctor <k> --fix <kind>` can repair it: two loops running in one folder (stops all but the oldest, whose claim won), commits on a detached HEAD on no branch (moves the entry's branch forward to them, a fast-forward only, or keeps them on `rescue/w<k>-<sha>`), a worker left on a branch whose entry is not taken (detaches it), uncommitted changes with no loop running, a loop that has not claimed its named entry after 15 minutes.
 - **Diff**: an entry in progress shows what its branch holds so far (`N commits: files, +, -` and what is not committed); **Diff** behind `…` opens the commits in one diff editor.
@@ -77,7 +82,7 @@ No npm: the packer uses the standard library.
 
 ```bash
 python3 tools/vscode/todo-workers/pack.py        # in a game: engine/tools/vscode/todo-workers/pack.py
-code --install-extension tools/vscode/todo-workers/build/todo-workers-0.23.0.vsix
+code --install-extension tools/vscode/todo-workers/build/todo-workers-0.24.0.vsix
 ```
 
 `code` is in `/Applications/Visual Studio Code.app/Contents/Resources/app/bin/` on macOS when it is not on PATH. Then **Developer: Reload Window**. After a change bump `version` in `package.json`, pack and install again.

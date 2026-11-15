@@ -7,41 +7,70 @@ const vscode = require("vscode");
 const https = require("https");
 const http = require("http");
 const { config, findTool, runTool, shellQuote, terminalWith } = require("./tools");
-
-const INSIGHTS_EVERY_MS = 120000;
 const DAY_KEY = "todoWorkers.dayStart"; // when the owner last ended the day (ms): the day view counts from it
+const CACHE_KEY = "todoWorkers.insights"; // the last answer of each view, shown at once after a reload
+
+// Each view is read on its own: `every` on the timer, `afterWrite` at the soonest after a write to the store (null: the
+// store does not move it). A reading view keeps showing its last answer; only a view never read says "reading".
+const PARTS = {
+    day: { every: 120000, afterWrite: 30000, args: (ctx) => ["day", "--since", String(ctx.dayStart())] },
+    busy: { every: 300000, afterWrite: 60000, args: () => ["busy"] },
+    reviews: { every: 900000, afterWrite: 120000, args: () => ["review-stats"] },
+    timeline: { every: 300000, afterWrite: null, args: () => ["timeline", "--hours", String(config().timelineHours), "--claude", config().claude] },
+};
 
 function attach(ctx) {
-    let insights = null;
-    let reading = false;
-    let lastRead = 0;
+    const cached = ctx.context.globalState.get(CACHE_KEY, null);
+    const insights = cached && cached.read ? cached : { read: {} }; // {day, busy, reviews, timeline: answer, read: {part: ms}}
+    const reading = new Set();
+    const writePending = new Set();
 
-    function dayStart() {
+    ctx.dayStart = function dayStart() {
         const ended = ctx.context.globalState.get(DAY_KEY, 0);
         const midnight = new Date();
         midnight.setHours(0, 0, 0, 0);
         // an end of the day yesterday evening counts from then; an older one from today's midnight
         return ended && Date.now() - ended < 36 * 3600 * 1000 ? Math.min(ended, Date.now()) : midnight.getTime();
+    };
+
+    function publish() {
+        ctx.view.show({ ...ctx.view.payload, insights: { ...insights, reading: [...reading] } });
     }
 
-    async function readInsights(force) {
+    async function readPart(name) {
         const tool = findTool();
-        if (!tool || reading || (!force && Date.now() - lastRead < INSIGHTS_EVERY_MS)) return;
-        reading = true;
+        if (!tool || reading.has(name)) return;
+        reading.add(name);
+        publish();
         try {
-            const hours = String(config().timelineHours);
-            const ask = (args) => runTool(tool, [...args, "--json"], 180000).then((out) => JSON.parse(out)).catch((error) => ({ error: error.message }));
-            const [busy, day, timeline, reviews] = await Promise.all([
-                ask(["busy"]),
-                ask(["day", "--since", String(dayStart())]),
-                ask(["timeline", "--hours", hours, "--claude", config().claude]),
-                ask(["review-stats"]),
-            ]);
-            insights = { busy, day, timeline, reviews, at: Date.now() };
-            lastRead = Date.now();
-            ctx.view.show({ ...ctx.view.payload, insights });
+            const out = await runTool(tool, [...PARTS[name].args(ctx), "--json"], 180000);
+            insights[name] = JSON.parse(out);
+        } catch (error) {
+            // a failed read keeps the last answer; only a view never read shows the error
+            if (!insights[name] || insights[name].error) insights[name] = { error: error.message };
         } finally {
-            reading = false;
+            insights.read[name] = Date.now();
+            reading.delete(name);
+            ctx.context.globalState.update(CACHE_KEY, { ...insights, reading: undefined });
+            publish();
+        }
+    }
+
+    // why: "timer" (each refresh: the views past their interval), "write" (the store changed), "now" (a button: all)
+    function readInsights(why) {
+        const now = Date.now();
+        for (const [name, part] of Object.entries(PARTS)) {
+            const age = now - (insights.read[name] || 0);
+            if (why === "now" || age >= part.every) {
+                readPart(name);
+            } else if (why === "write" && part.afterWrite !== null && !writePending.has(name)) {
+                // a burst of writes (a claim, its plan, a review) makes one read, at the soonest afterWrite after the last
+                writePending.add(name);
+                setTimeout(() => {
+                    writePending.delete(name);
+                    readPart(name);
+                }, Math.max(2000, part.afterWrite - age));
+            }
         }
     }
 
@@ -106,7 +135,7 @@ function attach(ctx) {
         } finally {
             training = false;
             ctx.refresh();
-            readInsights(true);
+            readInsights("now");
         }
     }
 
@@ -115,7 +144,7 @@ function attach(ctx) {
     async function endDay() {
         const tool = findTool();
         if (!tool) return;
-        const day = insights && insights.day && !insights.day.error ? insights.day : null;
+        const day = insights.day && !insights.day.error ? insights.day : null;
         const running = ctx.state ? ctx.state.workers.filter((w) => w.active).map((w) => w.name) : [];
         const detail = [
             "Every worker queue is emptied: nothing starts by itself any more.",
@@ -134,11 +163,11 @@ function attach(ctx) {
         await ctx.context.globalState.update(DAY_KEY, Date.now());
         ctx.addFeed("day", `the day ended: queues emptied${day ? `, ${day.merged.length} merged today` : ""}`);
         ctx.refresh();
-        readInsights(true);
+        readInsights("now");
     }
 
     function copyPush() {
-        const day = insights && insights.day;
+        const day = insights.day;
         if (!day || !day.pushCommands || !day.pushCommands.length) return;
         vscode.env.clipboard.writeText(day.pushCommands.join("\n")).then(() => vscode.window.showInformationMessage("The push commands are on the clipboard"));
     }
@@ -170,7 +199,7 @@ function attach(ctx) {
         }
     }
 
-    Object.assign(ctx, { readInsights, insights: () => insights, doctorFix, mergeTrain, endDay, copyPush, dispatch, pushNotify });
+    Object.assign(ctx, { readInsights, insights: () => ({ ...insights, reading: [...reading] }), doctorFix, mergeTrain, endDay, copyPush, dispatch, pushNotify });
 }
 
 module.exports = { attach };

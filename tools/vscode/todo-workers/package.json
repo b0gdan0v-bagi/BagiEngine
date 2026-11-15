@@ -2,7 +2,7 @@
     "name": "todo-workers",
     "displayName": "Todo Workers",
     "description": "The parallel todo-loop workers of BagiEngine: their sessions, entries and branches, and the entries waiting for /todo-merge.",
-    "version": "0.23.0",
+    "version": "0.24.0",
     "publisher": "bagiengine",
     "license": "UNLICENSED",
     "private": true,
@@ -71,6 +71,12 @@
                     "default": 15,
                     "minimum": 5,
                     "description": "How often the panel asks worker.py (it also asks the todo store and reads the session transcripts)."
+                },
+                "todoWorkers.hiddenRefreshSeconds": {
+                    "type": "number",
+                    "default": 60,
+                    "minimum": 15,
+                    "description": "How often the panel asks worker.py while it is hidden (for the status bar and the notifications; no transcripts are read then)."
                 },
                 "todoWorkers.startSlices": {
                     "type": "number",

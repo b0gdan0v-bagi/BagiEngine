@@ -284,3 +284,4 @@ button.toggle.on { opacity: 1; color: var(--vscode-testing-iconPassed, #3fb950);
     color: var(--vscode-badge-foreground, inherit);
 }
 .link { cursor: pointer; text-decoration: underline dotted; }
+.insight-age { font-size: 11px; }

@@ -6,6 +6,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import worker  # noqa: E402
@@ -151,3 +153,19 @@ def test_the_merge_train_merges_a_blocker_first_and_stops_at_a_conflict(tmp_path
     assert merged_ids == ["eng", "game"]
     assert out["stopped"]["id"] == "bad" and "src/x.h" in out["stopped"]["why"]
     assert out["left"] == ["late"]
+
+
+def test_the_timeline_cache_keeps_finished_sessions_and_reparses_running_ones(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(worker, "claude_home", lambda: tmp_path)
+    prompt = {"type": "user", "timestamp": "2026-11-15T06:00:00Z", "message": {"content": "<command-name>/todo-loop</command-name>\n<command-args>1 e1</command-args>"}}
+    path = tmp_path / "s1.jsonl"
+    path.write_text(json.dumps(prompt) + "\n")
+    seen: dict = {}
+    assert wi.cached_span({}, seen, path, 0, {"s1"})["outcome"] == "running"
+    assert seen == {}  # a running session is never cached
+    review = {"type": "assistant", "timestamp": "2026-11-15T07:00:00Z", "message": {"content": [{"type": "tool_use", "name": "Bash", "input": {"command": "todo.py review e1 --branch todo/e1"}}]}}
+    path.write_text("\n".join(json.dumps(r) for r in (prompt, review)) + "\n")
+    assert wi.cached_span({}, seen, path, 0, set())["outcome"] == "review"
+    wi.write_span_cache(seen)
+    monkeypatch.setattr(wi, "session_span", lambda *_args: pytest.fail("a finished transcript of the same size is not parsed again"))
+    assert wi.cached_span(wi.read_span_cache(), {}, path, 0, set())["outcome"] == "review"

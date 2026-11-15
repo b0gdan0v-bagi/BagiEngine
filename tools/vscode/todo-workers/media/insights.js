@@ -63,11 +63,20 @@
         return line;
     }
 
-    function section(title, key, saved, onToggle, build) {
+    function age(ms) {
+        const m = Math.max(0, Math.round((Date.now() - ms) / 60000));
+        return m < 1 ? "just now" : m < 60 ? `${m} min ago` : `${Math.floor(m / 60)} h ${m % 60} min ago`;
+    }
+
+    // `part`: the name of the view in insights (src/insights.js): its age, and "reading" while a newer answer comes
+    function section(title, key, saved, onToggle, build, insights, part) {
         const box = el("details", "feed insight");
         box.open = Boolean(saved[key]);
         box.addEventListener("toggle", () => onToggle(key, box.open));
-        box.appendChild(el("summary", "", title));
+        const busy = insights && (insights.reading || []).includes(part);
+        box.appendChild(el("summary", "", busy && insights[part] ? `${title} · reading …` : title));
+        const read = insights && insights.read && insights.read[part];
+        if (read && insights[part]) box.appendChild(el("div", "muted insight-age", `read ${age(read)}`));
         build(box);
         return box;
     }
@@ -123,7 +132,7 @@
             actions.appendChild(button(post, "End the day", { cmd: "endDay" }, "empty every worker queue (running loops finish their slice), copy the push commands; the Day counts from then", "danger"));
             actions.appendChild(button(post, "Dispatch", { cmd: "dispatch" }, "claude '/todo-dispatch' in the main checkout: it advises what each free worker takes, asks, and starts"));
             box.appendChild(actions);
-        });
+        }, insights, "day");
     }
 
     const OUTCOME_TEXT = { review: "reached review", through: "slice approved, the next follows", limited: "stopped by the usage limit", running: "running", ended: "ended without review" };
@@ -176,7 +185,7 @@
             box.appendChild(legend);
             const overlaps = tl.lanes.filter((lane) => lane.spans.some((s, j) => lane.spans.slice(j + 1).some((o) => o.start < s.end - 60000)));
             if (overlaps.length) box.appendChild(el("div", "warn soft", `two sessions at once in ${overlaps.map((l) => l.name).join(", ")}: look at the bars that share a lane`));
-        });
+        }, insights, "timeline");
     }
 
     // Busy files: what each taken entry holds, and why an open entry cannot go to a worker now.
@@ -220,7 +229,7 @@
             actions.appendChild(button(post, "Dispatch", { cmd: "dispatch" }, "claude '/todo-dispatch' in the main checkout: it classifies what it needs, advises and starts"));
             actions.appendChild(button(post, "Read again", { cmd: "insights" }, "worker.py busy, day, timeline and review-stats now"));
             box.appendChild(actions);
-        });
+        }, insights, "busy");
     }
 
     window.TodoInsights = { problemLines, diffLine, reviewLine, daySection, timelineSection, busySection };
