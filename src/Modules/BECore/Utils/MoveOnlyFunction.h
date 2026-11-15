@@ -194,7 +194,8 @@ namespace BECore {
             }
 
             /// Moves the callable of @p other in; this one is empty before and @p other is empty after. @p other is emptied before the
-            /// relocation: the destructor of the moved-from capture runs inside it and may read or assign @p other.
+            /// relocation, so the destructor of the moved-from capture may read it (and sees it empty); assigning @p other from there is
+            /// not supported: on the inline path that destructor runs inside @p other's buffer.
             void Take(FunctionImpl& other) noexcept {
                 const Invoke invoke = other._invoke;
                 const Ops* ops = other._ops;

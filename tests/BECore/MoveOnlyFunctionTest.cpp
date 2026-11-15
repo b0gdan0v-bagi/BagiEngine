@@ -397,7 +397,6 @@ namespace BECore::Tests {
         bool armed = false;
         int reports = 0;
         int sawFull = 0;
-        int calls = 0;
     };
 
     /// Its moved-from copy reports to @p onHusk when it is destroyed; the inline path leaves such a husk inside the source's buffer
@@ -440,33 +439,16 @@ namespace BECore::Tests {
         EXPECT_FALSE(source);
         ASSERT_TRUE(target);
 
+        // the husk of an assignment watches its own source, the function assigned from
+        report.armed = false;
+        Task assigned{WatchesAsHusk<TypeParam::value>{&assigned, look, &report}};
+        report.armed = true;
         Task other;
-        other = std::move(target);
+        other = std::move(assigned);
         EXPECT_EQ(report.sawFull, 0);
-        EXPECT_FALSE(target);
+        EXPECT_FALSE(assigned);
         EXPECT_TRUE(other);
         report.armed = false;
-    }
-
-    TYPED_TEST(MoveOnlyFunctionOverwriteTest, AMovedFromHuskThatAssignsTheSourceLeavesBothValid) {
-        HuskReport report;
-        const auto assign = [](Task& holder, HuskReport& shared) { holder = Task{[&shared] { ++shared.calls; }}; };
-        Task source{WatchesAsHusk<TypeParam::value>{&source, assign, &report}};
-        report.armed = true;
-
-        Task target{std::move(source)};
-        report.armed = false;
-        ASSERT_TRUE(target);
-        target();
-        if (source) {  // the husk stored a callable of its own: only the inline path runs a husk
-            source();
-            EXPECT_GT(report.reports, 0);
-            EXPECT_EQ(report.calls, 1);
-        }
-        EXPECT_EQ(LifeCounter::alive, 1);
-        target = nullptr;
-        source = nullptr;
-        EXPECT_EQ(LifeCounter::alive, 0);
     }
 
     TEST_F(MoveOnlyFunctionTest, TheEmptyState) {
