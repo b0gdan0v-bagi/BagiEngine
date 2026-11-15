@@ -48,8 +48,7 @@ namespace BECore {
         /**
          * @brief Push a log entry into the buffer (lock-free, thread-safe).
          *
-         * Copies up to LogEntry::MaxMessageSize-1 characters from message.
-         * Messages that exceed the limit are truncated.
+         * A message longer than LogEntry::MaxMessageSize-1 characters is truncated.
          *
          * @return true on success, false if the buffer is full (entry dropped).
          */
@@ -64,7 +63,6 @@ namespace BECore {
                 if (diff == 0) {
                     // Slot is free — try to claim it atomically
                     if (_writeHead.compare_exchange_weak(pos, pos + 1, std::memory_order_relaxed)) {
-                        // Write payload
                         LogEntry& entry = cell.entry;
                         entry.level = level;
                         const size_t len = std::min(message.size(), LogEntry::MaxMessageSize - 1);
@@ -72,7 +70,6 @@ namespace BECore {
                         std::memcpy(entry.message, message.data(), len);
                         entry.message[len] = '\0';
 
-                        // Signal consumer that the entry is ready
                         cell.sequence.store(pos + 1, std::memory_order_release);
                         return true;
                     }
@@ -127,9 +124,6 @@ namespace BECore {
             return _dropped.load(std::memory_order_relaxed);
         }
 
-        /**
-         * @brief Process-wide singleton ring buffer instance.
-         */
         static LogRingBuffer& GetGlobal() noexcept {
             static LogRingBuffer instance;
             return instance;
