@@ -23,8 +23,7 @@
 #include <type_traits>
 #include <variant>
 
-// The container types of the engine: names for what the code uses, so the implementation is chosen here, once. All but the
-// maps keyed by String are plain `using`: the same type as the eastl:: name.
+// The container types of the engine (Types/CLAUDE.md). All but the maps keyed by String are plain `using`: the same type as the eastl:: name.
 namespace BECore {
 
     /// The hash, equality and order a key gets by default: those of the key, except for String, whose map looks up by StringView
@@ -36,7 +35,6 @@ namespace BECore {
     template <typename Key>
     using DefaultLess = std::conditional_t<std::is_same_v<Key, String>, StringLess, eastl::less<Key>>;
 
-    /// The growing array.
     template <typename T>
     using Vector = eastl::vector<T>;
 
@@ -48,7 +46,6 @@ namespace BECore {
     template <typename T, size_t N>
     using FixedVector = eastl::fixed_vector<T, N, false>;
 
-    /// The array of a size known at compile time.
     template <typename T, size_t N>
     using Array = eastl::array<T, N>;
 
@@ -78,12 +75,11 @@ namespace BECore {
     template <typename Key, typename T, size_t NodeCount, size_t BucketCount = NodeCount + 1, bool Overflow = true, typename Hash = DefaultHash<Key>, typename Equal = DefaultEqual<Key>>
     using FixedHashMap = eastl::fixed_hash_map<Key, T, NodeCount, BucketCount, Overflow, Hash, Equal>;
 
-    /// A map kept as a sorted vector (eastl::vector_map). For new code, instead of HashMap, when the map is small, rarely changed
-    /// and iterated often: lookup is a binary search, iteration is a walk of one block of memory, insertion moves elements.
+    /// A map kept as a sorted vector (eastl::vector_map): lookup is a binary search, insertion moves elements (Types/CLAUDE.md says when to pick it).
     template <typename Key, typename T, typename Compare = DefaultLess<Key>>
     using FlatMap = eastl::vector_map<Key, T, Compare>;
 
-    /// The set kept as a sorted vector (eastl::vector_set); the same rule as FlatMap.
+    /// The set kept as a sorted vector (eastl::vector_set), like FlatMap.
     template <typename Key, typename Compare = DefaultLess<Key>>
     using FlatSet = eastl::vector_set<Key, Compare>;
 
@@ -110,7 +106,7 @@ namespace BECore {
         return eastl::make_shared<T>(eastl::forward<Args>(args)...);
     }
 
-    /// Two values; the value_type of every EASTL map. Structured bindings work (`auto [a, b] = pair`), `std::tie(a, b) = pair` does not.
+    /// Structured bindings work (`auto [a, b] = pair`), `std::tie(a, b) = pair` does not.
     template <typename A, typename B>
     using Pair = eastl::pair<A, B>;
 
@@ -119,12 +115,11 @@ namespace BECore {
         return eastl::make_pair(eastl::forward<A>(first), eastl::forward<B>(second));
     }
 
-    /// One of several types. std::variant, like Optional: the standard one; `std::visit`, `std::get`, `std::get_if`,
-    /// `std::holds_alternative` and `std::monostate` stay spelled `std::`.
+    /// std::variant, like Optional: the standard one, so `std::visit`, `std::get` and the rest stay spelled `std::`.
     template <typename... Ts>
     using Variant = std::variant<Ts...>;
 
-    /// Several values of different types. std::tuple: the reflection traits store fields in one; `std::apply` and `std::get` stay spelled `std::`.
+    /// std::tuple: the reflection traits store fields in one, so `std::apply` and `std::get` stay spelled `std::`.
     template <typename... Ts>
     using Tuple = std::tuple<Ts...>;
 

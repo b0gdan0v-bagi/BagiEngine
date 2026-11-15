@@ -8,10 +8,7 @@
 #include <iterator>
 #include <string_view>
 
-/**
- * @brief Специализации fmt::formatter для строк EASTL (String и StringView из BECore/Types/Strings.h).
- * Это позволяет использовать их напрямую в функциях форматирования. Строка с любым аллокатором форматируется так же.
- */
+// String (of any allocator) and StringView are format arguments of fmt, and so of this layer.
 template <typename Allocator>
 struct fmt::formatter<eastl::basic_string<char, Allocator>> : formatter<std::string_view> {
     auto format(const eastl::basic_string<char, Allocator>& s, format_context& ctx) const {
@@ -56,15 +53,9 @@ namespace BECore {
         return fmt::runtime(ToStd(text));
     }
 
-    /**
-     * @brief Обертки над функциями форматирования для независимости от конкретной библиотеки.
-     * На данный момент используется libfmt.
-     */
     namespace Details::Format {
 
-        /**
-         * @brief Formats a string and returns a String. A short result allocates nothing but the string itself.
-         */
+        /// Formats into a String. A short result allocates nothing but the string itself.
         template <typename... Args>
         [[nodiscard]] inline String Format(FormatString<Args...> fmt, Args&&... args) {
             fmt::basic_memory_buffer<char, 256> buffer;
@@ -72,51 +63,39 @@ namespace BECore {
             return String{buffer.data(), buffer.size()};
         }
 
-        /**
-         * @brief Appends the formatted text to the end of an existing string (one place for formatting into a string).
-         */
+        /// Appends the formatted text to `out`.
         template <typename... Args>
         inline void AppendFormat(String& out, FormatString<Args...> fmt, Args&&... args) {
             fmt::format_to(eastl::back_inserter(out), fmt, std::forward<Args>(args)...);
         }
 
-        /**
-         * @brief Печатает отформатированную строку в стандартный вывод.
-         */
+        /// Prints to stdout.
         template <typename... Args>
         inline void Print(FormatString<Args...> fmt, Args&&... args) {
             fmt::print(fmt, std::forward<Args>(args)...);
         }
 
-        /**
-         * @brief Prints the formatted text into a C stream.
-         */
+        /// Prints to a C stream.
         template <typename... Args>
         inline void Print(std::FILE* stream, FormatString<Args...> fmt, Args&&... args) {
             fmt::print(stream, fmt, std::forward<Args>(args)...);
         }
 
-        /**
-         * @brief Печатает отформатированную строку с переносом строки в стандартный вывод.
-         */
+        /// Prints to stdout and ends the line.
         template <typename... Args>
         inline void PrintLine(FormatString<Args...> fmt, Args&&... args) {
             fmt::print(fmt, std::forward<Args>(args)...);
             fmt::print("\n");
         }
 
-        /**
-         * @brief Форматирует строку в итератор вывода.
-         */
+        /// Formats into an output iterator and returns its end.
         template <typename OutputIt, typename... Args>
         inline OutputIt FormatTo(OutputIt out, FormatString<Args...> fmt, Args&&... args) {
             return fmt::format_to(out, fmt, std::forward<Args>(args)...);
         }
 
-        /**
-         * @brief Formats into a buffer of `capacity` characters and allocates nothing. The text is cut at the capacity, the
-         * buffer is not zero-terminated, and the result tells the full length.
-         */
+        /// Formats into a buffer of `capacity` characters and allocates nothing. The text is cut at the capacity, the buffer is not
+        /// zero-terminated, and the result tells the full length.
         template <typename... Args>
         inline FormatResult FormatToN(char* buffer, size_t capacity, FormatString<Args...> fmt, Args&&... args) {
             const auto result = fmt::format_to_n(buffer, capacity, fmt, std::forward<Args>(args)...);
@@ -126,7 +105,6 @@ namespace BECore {
 
     }  // namespace Details::Format
 
-    // Алиасы для удобства в пространстве имен Core
     using Details::Format::AppendFormat;
     using Details::Format::Format;
     using Details::Format::FormatTo;
@@ -134,17 +112,11 @@ namespace BECore {
     using Details::Format::Print;
     using Details::Format::PrintLine;
 
-    /**
-     * @brief Вспомогательный класс для поддержки user-defined literal _format.
-     * Позволяет использовать синтаксис: "{}"_format(value)
-     */
+    /// What `"{}"_format` makes: calling it formats with the literal as the format string, parsed at run time (RuntimeFormat).
     class FormatLiteral {
     public:
         constexpr FormatLiteral(StringView format) : _format(format) {}
 
-        /**
-         * @brief Оператор вызова для форматирования с аргументами.
-         */
         template <typename... Args>
         [[nodiscard]] String operator()(Args&&... args) const {
             return Details::Format::Format(RuntimeFormat(_format), std::forward<Args>(args)...);
@@ -154,14 +126,6 @@ namespace BECore {
         StringView _format;
     };
 
-    /**
-     * @brief User-defined literal для форматирования строк.
-     * Использование: "{}"_format(value)
-     *
-     * @example
-     * auto str = "Hello, {}!"_format("World");
-     * auto num = "Value: {}"_format(42);
-     */
     inline namespace Literals {
         [[nodiscard]] constexpr FormatLiteral operator""_format(const char* str, size_t len) {
             return FormatLiteral(StringView(str, len));
