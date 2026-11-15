@@ -948,4 +948,255 @@ namespace BECore::Tests {
         EXPECT_TRUE(timeline.IsFinished());
     }
 
+    namespace {
+
+        constexpr float kStepSixtyFourth = 1.0f / 64.0f;
+        constexpr float kFrameTime = 0.0166f;  // not a power of two: the sums round
+        constexpr int kFrames = 200000;
+        constexpr int kThousand = 1000;
+        constexpr int kSix = 6;
+        constexpr float kPulseValueTolerance = 1e-3f;
+
+        /// A pulse of one tween (0 to 10 over a half second) and a callback at its end, repeated forever
+        Timeline MakePulse(Property& property, Calls& calls) {
+            Timeline timeline;
+            timeline.Append<float>(0.0f, kTen, Settings(kHalf), property.Setter()).AppendCallback(calls.Callback(1)).RepeatForever();
+            return timeline;
+        }
+
+    }  // namespace
+
+    TEST(TimelineTest, AnEndlessTimelineHasAnInfiniteDurationAndIsNeverFinishedByItself) {
+        Property a;
+        Calls calls;
+        Timeline timeline = MakePulse(a, calls);
+        EXPECT_TRUE(timeline.IsEndless());
+        EXPECT_EQ(timeline.GetDuration(), std::numeric_limits<float>::infinity());
+
+        timeline.Evaluate(kThousand * kHalf + kQuarter);
+        EXPECT_FALSE(timeline.IsFinished());
+        const int writes = a.writes;
+        timeline.Evaluate(std::numeric_limits<float>::infinity());  // not a time an endless run can reach
+        EXPECT_EQ(a.writes, writes);
+        EXPECT_FALSE(timeline.IsFinished());
+
+        Timeline empty;
+        empty.RepeatForever();
+        EXPECT_TRUE(empty.IsEndless());
+        EXPECT_EQ(empty.GetDuration(), 0.0f);
+    }
+
+    TEST(TimelineTest, AThousandIterationsInOneEvaluateFireEveryCallbackOnceAndLeaveTheValueOfTheIterationItIsIn) {
+        Property a;
+        Calls calls;
+        Timeline timeline = MakePulse(a, calls);
+
+        timeline.Evaluate(static_cast<float>(kThousand) * kHalf + kQuarter);
+
+        EXPECT_EQ(calls.ids.size(), static_cast<size_t>(kThousand));
+        EXPECT_EQ(a.value, kTen / 2);
+        EXPECT_FALSE(timeline.IsFinished());
+    }
+
+    TEST(TimelineTest, AnEndlessTimelineWithNoLengthIsDoneByItsFirstCallAndDoesNotLoop) {
+        Calls calls;
+        Timeline timeline;
+        timeline.AppendCallback(calls.Callback(1)).RepeatForever();
+        EXPECT_EQ(timeline.GetDuration(), 0.0f);
+
+        timeline.Evaluate(kOne);
+        EXPECT_EQ(calls.ids.size(), 1u);
+        EXPECT_TRUE(timeline.IsFinished());
+        timeline.Evaluate(kTwo);
+        EXPECT_EQ(calls.ids.size(), 1u);
+
+        Calls advanced;
+        Timeline other;
+        other.AppendCallback(advanced.Callback(1)).RepeatForever();
+        other.Advance(kOne);
+        other.Advance(kOne);
+        EXPECT_EQ(advanced.ids.size(), 1u);
+        EXPECT_TRUE(other.IsFinished());
+    }
+
+    TEST(TimelineTest, TheLastOfRepeatAndRepeatForeverWins) {
+        Calls finite;
+        Property a;
+        Timeline timeline;
+        timeline.Append<float>(0.0f, kTen, Settings(kHalf), a.Setter()).AppendCallback(finite.Callback(1)).RepeatForever().Repeat(kThree);
+        EXPECT_FALSE(timeline.IsEndless());
+        EXPECT_EQ(timeline.GetDuration(), kOne + kHalf);
+        timeline.Evaluate(kOne + kHalf);
+        EXPECT_TRUE(timeline.IsFinished());
+        EXPECT_EQ(finite.ids.size(), static_cast<size_t>(kThree));
+
+        Calls endless;
+        Timeline other;
+        other.Append<float>(0.0f, kTen, Settings(kHalf), a.Setter()).AppendCallback(endless.Callback(1)).Repeat(kThree).RepeatForever();
+        other.Evaluate(kOne + kHalf);
+        EXPECT_FALSE(other.IsFinished());
+        EXPECT_EQ(endless.ids.size(), static_cast<size_t>(kThree));
+        other.Evaluate(kTwo + kHalf);
+        EXPECT_FALSE(other.IsFinished());
+        EXPECT_EQ(endless.ids.size(), static_cast<size_t>(kFive));
+    }
+
+    TEST(TimelineTest, AnEndlessYoyoFlipsAtEveryBoundaryAndEndsEveryBackwardLegOnFrom) {
+        Trace trace;
+        Timeline timeline;
+        timeline.Append<float>(0.0f, kTen, Settings(kHalf, 0.0f, EaseType::QuadIn), trace.Setter(1)).RepeatForever().Yoyo();
+
+        for (int boundary = 0; boundary < kSix; ++boundary) {
+            const float start = static_cast<float>(boundary) * kHalf;
+            timeline.Evaluate(start + kEighth);
+            // QuadIn at progress 1/4 forward, at 3/4 backward
+            EXPECT_EQ(trace.writes.back().second, boundary % 2 == 0 ? kTen * kQuadInAtQuarter : kTen * kQuadInAtThreeQuarters) << boundary;
+
+            const size_t before = trace.writes.size();
+            timeline.Evaluate(start + kHalf);  // the end of this iteration and the start of the next, in one call
+            ASSERT_EQ(trace.writes.size() - before, 2u) << boundary;
+            const float edge = boundary % 2 == 0 ? kTen : 0.0f;
+            EXPECT_EQ(trace.writes[before].second, edge) << boundary;      // the last call of the leg
+            EXPECT_EQ(trace.writes[before + 1].second, edge) << boundary;  // the first call of the next one
+        }
+        EXPECT_FALSE(timeline.IsFinished());
+    }
+
+    TEST(TimelineTest, AParentPlaysOneIterationOfAnEndlessSubTimeline) {
+        for (const bool yoyo : {false, true}) {
+            Property a;
+            Property b;
+            Timeline sub;
+            sub.Append<float>(0.0f, kTen, Settings(kHalf), a.Setter()).RepeatForever().Yoyo();
+            Timeline timeline;
+            timeline.Append(std::move(sub)).Append<float>(0.0f, kTwenty, Settings(kQuarter), b.Setter());
+            if (yoyo) {
+                timeline.Repeat(2).Yoyo();
+            }
+            EXPECT_EQ(timeline.GetDuration(), yoyo ? kThreeQuarters * 2 : kThreeQuarters);
+
+            timeline.Evaluate(kHalf + kEighth);  // the clip after the sub-timeline starts when ONE iteration of it ends
+            EXPECT_EQ(a.value, kTen);
+            EXPECT_EQ(b.value, kTen);  // 0 to 20, half way
+
+            timeline.Evaluate(timeline.GetDuration());
+            EXPECT_TRUE(timeline.IsFinished()) << yoyo;
+            EXPECT_EQ(a.value, yoyo ? 0.0f : kTen);
+            EXPECT_EQ(b.value, yoyo ? 0.0f : kTwenty);
+        }
+    }
+
+    TEST(TimelineTest, AdvanceGivesTheWritesOfEvaluateOfTheRunningSum) {
+        const auto build = [](Trace& trace, Calls& calls, int kind) {
+            Timeline timeline;
+            timeline.Append<float>(0.0f, kTen, Settings(kHalf, kEighth, EaseType::QuadIn), trace.Setter(1)).InsertCallback(kQuarter, calls.Callback(1)).AppendCallback(calls.Callback(2));
+            if (kind == 0) {
+                timeline.Repeat(kThree);
+            } else if (kind == 1) {
+                timeline.Repeat(kFive).Yoyo();
+            } else {
+                timeline.RepeatForever().Yoyo();
+            }
+            return timeline;
+        };
+        for (int kind = 0; kind < kThree; ++kind) {
+            Trace advanced;
+            Calls advancedCalls;
+            Timeline advancing = build(advanced, advancedCalls, kind);
+            Trace evaluated;
+            Calls evaluatedCalls;
+            Timeline evaluating = build(evaluated, evaluatedCalls, kind);
+
+            float elapsed = 0.0f;
+            for (int step = 0; step < kHundred * kFour; ++step) {
+                elapsed += kStepSixtyFourth;
+                advancing.Advance(kStepSixtyFourth);
+                evaluating.Evaluate(elapsed);
+            }
+
+            EXPECT_EQ(advancing.IsFinished(), evaluating.IsFinished()) << kind;
+            EXPECT_EQ(kind != 2, advancing.IsFinished()) << kind;
+            EXPECT_EQ(advancedCalls.ids.size(), evaluatedCalls.ids.size()) << kind;
+            EXPECT_TRUE(advancedCalls.ids == evaluatedCalls.ids) << kind;
+            ASSERT_EQ(advanced.writes.size(), evaluated.writes.size()) << kind;
+            for (size_t index = 0; index < advanced.writes.size(); ++index) {
+                EXPECT_EQ(advanced.writes[index].second, evaluated.writes[index].second) << kind << " write " << index;
+            }
+        }
+    }
+
+    TEST(TimelineTest, AnAdvanceOverSeveralIterationsCrossesEveryOneOfThem) {
+        Property a;
+        Calls calls;
+        Timeline timeline = MakePulse(a, calls);
+        timeline.Advance(kTen + kQuarter);  // 20 iterations and a quarter of one
+        EXPECT_EQ(calls.ids.size(), 20u);
+        EXPECT_EQ(a.value, kTen / 2);
+        timeline.Advance(kQuarter);
+        EXPECT_EQ(calls.ids.size(), 21u);
+        EXPECT_EQ(a.value, 0.0f);  // the iteration that has just begun
+    }
+
+    TEST(TimelineTest, AdvanceKeepsItsPrecisionOverALongRun) {
+        Property a;
+        Calls calls;
+        Timeline timeline = MakePulse(a, calls);
+        for (int frame = 0; frame < kFrames; ++frame) {
+            timeline.Advance(kFrameTime);
+        }
+
+        const double elapsed = static_cast<double>(kFrames) * static_cast<double>(kFrameTime);
+        const double iterations = elapsed / static_cast<double>(kHalf);
+        EXPECT_LE(std::abs(static_cast<double>(calls.ids.size()) - std::floor(iterations)), 1.0);
+        const double phase = iterations - std::floor(iterations);  // the progress of the tween in its iteration
+        EXPECT_NEAR(a.value, kTen * phase, kPulseValueTolerance);
+    }
+
+    TEST(TimelineTest, ANegativeOrNanDtChangesNothing) {
+        Property a;
+        Calls calls;
+        Timeline timeline = MakePulse(a, calls);
+        timeline.Advance(kHalf + kQuarter);
+        const float value = a.value;
+        const size_t count = calls.ids.size();
+
+        timeline.Advance(-kOne);
+        timeline.Advance(std::numeric_limits<float>::quiet_NaN());
+        timeline.Advance(std::numeric_limits<float>::infinity());
+
+        EXPECT_EQ(a.value, value);
+        EXPECT_EQ(calls.ids.size(), count);
+        timeline.Advance(kQuarter);
+        EXPECT_EQ(calls.ids.size(), count + 1);
+    }
+
+    TEST(TimelineTest, ResetAfterAnEndlessRunStartsAgainFromTheFirstClip) {
+        Property a;
+        Calls calls;
+        Timeline timeline = MakePulse(a, calls);
+        timeline.Advance(kThree + kQuarter + kEighth);
+        timeline.Reset();
+        EXPECT_FALSE(timeline.IsFinished());
+
+        calls.ids.clear();
+        timeline.Advance(kEighth);
+        EXPECT_EQ(a.value, kTen / 4);
+        EXPECT_TRUE(calls.ids.empty());
+        timeline.Advance(kHalf);
+        EXPECT_EQ(calls.ids.size(), 1u);
+    }
+
+    TEST(TimelineTest, AFiniteTimelineFinishesByAdvanceWithItsExactFinalValues) {
+        Property a;
+        Calls calls;
+        Timeline timeline;
+        timeline.Append<float>(0.0f, kTen, Settings(kThirtyFiveHundredths), a.Setter()).AppendCallback(calls.Callback(1)).Repeat(kThree);
+        for (int step = 0; step < kHundred && !timeline.IsFinished(); ++step) {
+            timeline.Advance(kTenth / 2);
+        }
+        EXPECT_TRUE(timeline.IsFinished());
+        EXPECT_EQ(a.value, kTen);
+        EXPECT_EQ(calls.ids.size(), static_cast<size_t>(kThree));
+    }
+
 }  // namespace BECore::Tests

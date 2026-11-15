@@ -46,10 +46,14 @@ namespace BECore {
 
     Timeline& Timeline::Repeat(int count) {
         _repeat = std::max(count, 1);
+        _endless = false;
         return *this;
     }
 
     float Timeline::GetDuration() const {
+        if (_endless) {
+            return _end > 0.0f ? std::numeric_limits<float>::infinity() : 0.0f;
+        }
         return _end * static_cast<float>(_repeat);
     }
 
@@ -63,6 +67,11 @@ namespace BECore {
     }
 
     Timeline& Timeline::AddSub(float at, Timeline&& timeline) {
+        // A parent holds a finite length: an endless sub-timeline plays one iteration
+        if (timeline._endless) {
+            timeline._endless = false;
+            timeline._repeat = 1;
+        }
         Clip clip;
         clip.length = timeline.GetDuration();
         clip.sub = MakeUnique<Timeline>(std::move(timeline));
@@ -86,7 +95,7 @@ namespace BECore {
     }
 
     void Timeline::EvaluateWith(float time, const MoveOnlyFunction<bool()>& stop, bool reversed) {
-        if (_finished || std::isnan(time) || IsStopped(stop)) {
+        if (_finished || std::isnan(time) || (_endless && !std::isfinite(time)) || IsStopped(stop)) {
             return;
         }
         _reversed = reversed;
@@ -98,18 +107,39 @@ namespace BECore {
             return;
         }
 
-        // Decided once, from the duration the owner knows: the subtraction below can round a hair under `_end` in the last iteration,
+        // Decided once, from the duration the owner knows: the subtraction in `Run` can round a hair under `_end` in the last iteration,
         // and a call at `GetDuration()` must still finish every clip with its exact final value
         const bool finishing = time >= GetDuration();
+        Run(static_cast<double>(time) - static_cast<double>(_iteration) * static_cast<double>(_end), finishing, stop);
+    }
+
+    void Timeline::Advance(float dt) {
+        if (_finished || IsStopped(_shouldStop)) {
+            return;
+        }
+        _reversed = false;
+
+        if (_end <= 0.0f) {
+            VisitClips(0.0f, _shouldStop);
+            _finished = !IsStopped(_shouldStop);
+            return;
+        }
+        Run(_clock + static_cast<double>(NonNegative(dt)), false, _shouldStop);
+    }
+
+    void Timeline::Run(double local, bool finishing, const MoveOnlyFunction<bool()>& stop) {
+        const double length = static_cast<double>(_end);
         while (true) {
-            const float local = time - static_cast<float>(_iteration) * _end;
-            if (_iteration + 1 >= _repeat) {
-                VisitClips(finishing ? _end : local, stop);
-                _finished = !IsStopped(stop) && (finishing || local >= _end);
+            if (!_endless && _iteration + 1 >= _repeat) {
+                const bool reachesEnd = finishing || local >= length;
+                _clock = local;
+                VisitClips(reachesEnd ? _end : static_cast<float>(local), stop);
+                _finished = !IsStopped(stop) && reachesEnd;
                 return;
             }
-            if (!finishing && local < _end) {
-                VisitClips(local, stop);
+            if (!finishing && local < length) {
+                _clock = local;
+                VisitClips(static_cast<float>(local), stop);
                 return;
             }
             VisitClips(_end, stop);
@@ -118,10 +148,12 @@ namespace BECore {
             }
             RestartClips();
             ++_iteration;
+            local -= length;
         }
     }
 
     void Timeline::Reset() {
+        _clock = 0.0;
         _iteration = 0;
         _finished = false;
         RestartClips();

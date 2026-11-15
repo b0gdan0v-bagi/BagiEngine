@@ -12,8 +12,9 @@ namespace BECore {
     /**
      * @brief A set of clips (tweens, callbacks, sub-timelines) on one local time line, run in sequence and in parallel.
      *
-     * Pure maths, no manager and no clock: the owner calls `Evaluate(time)` with the time since the start; `TweenManager::Play` runs
-     * one as a tween. What `Evaluate`, `Repeat`, `Yoyo` and the stop check guarantee is in `Animation/CLAUDE.md`, "Rules" (11 to 15).
+     * Pure maths, no manager and no clock: the owner calls `Evaluate(time)` with the time since the start (or `Advance(dt)` with the
+     * time since the last call, for a run of any length); `TweenManager::Play` runs
+     * one as a tween. What `Evaluate`, `Advance`, `Repeat`, `Yoyo` and the stop check guarantee is in `Animation/CLAUDE.md`, "Rules" (11 to 15).
      *
      * **Building.** Every clip has a start and a length on the local time line; the duration of one iteration is the latest end.
      * `Append` starts a clip when the timeline so far ends, `Join` with the last clip added (by any call), `Insert` at an absolute
@@ -61,7 +62,8 @@ namespace BECore {
             return AddTween(at, settings, MakeTweenApply<T>(std::move(from), std::move(to), std::forward<TOnValue>(onValue)));
         }
 
-        /// A sub-timeline (moved in) starting when the timeline so far ends. Its duration, repeats included, is the length of the clip
+        /// A sub-timeline (moved in) starting when the timeline so far ends. Its duration, repeats included, is the length of the clip.
+        /// A parent cannot contain an endless one: it plays ONE iteration of it (the endless flag is dropped), and the clip is that long
         Timeline& Append(Timeline timeline);
 
         /// A sub-timeline starting with the last clip added
@@ -79,8 +81,17 @@ namespace BECore {
         /// A callback that fires once when the time reaches @p at
         Timeline& InsertCallback(float at, MoveOnlyFunction<void()> callback);
 
-        /// Runs the whole timeline @p count times in a row (forward, unless `Yoyo()` turns every second one back). A @p count below 1 is 1
+        /// Runs the whole timeline @p count times in a row (forward, unless `Yoyo()` turns every second one back). A @p count below 1 is 1.
+        /// The last of `Repeat` and `RepeatForever` wins
         Timeline& Repeat(int count);
+
+        /// Repeats without end (every second iteration backward with `Yoyo()`). `GetDuration()` is infinite, the timeline is never finished
+        /// by itself (only a `Reset()` starts it over), and a parent plays one iteration of it. A timeline with no length is done by its first
+        /// call and does not loop
+        Timeline& RepeatForever() {
+            _endless = true;
+            return *this;
+        }
 
         /// With a repeat, every second iteration (index 1, 3, ...) runs backwards: an exact time reversal of the forward pass (see the class
         /// comment). A single iteration is not changed by it
@@ -92,10 +103,20 @@ namespace BECore {
         /**
          * @brief Applies the state of the timeline at @p time seconds since its start (the rules are in the class comment).
          *
-         * @p time must never go back between two calls; `Reset()` starts over. A negative @p time counts as zero, NaN is ignored, and a call
-         * after the timeline is finished does nothing.
+         * @p time must never go back between two calls; `Reset()` starts over. A negative @p time counts as zero, NaN is ignored (so is a
+         * time that is not finite, for an endless timeline), and a call after the timeline is finished does nothing. A @p time that spans
+         * several iterations crosses every one of them: each ends with its exact final values and its callbacks.
          */
         void Evaluate(float time);
+
+        /**
+         * @brief Like `Evaluate(elapsed + dt)` for a timeline that keeps its own elapsed time: the iteration and the time inside it, so it
+         * stays exact however long the run (no growing float time).
+         *
+         * A @p dt that is negative, NaN or infinite counts as zero. A @p dt that crosses several iterations crosses all of them. `Evaluate`
+         * and `Advance` are not mixed on one run; `Reset()` clears both.
+         */
+        void Advance(float dt);
 
         /**
          * @brief Gives this timeline a predicate that says "stop": `Evaluate` asks it after every clip it visits, and when it answers true it
@@ -110,10 +131,17 @@ namespace BECore {
             _shouldStop = std::move(shouldStop);
         }
 
-        /// The duration of one iteration times the repeats; zero for an empty timeline
+        /// The duration of one iteration times the repeats; zero for an empty timeline; for an endless one `+infinity`, or zero when it has
+        /// no length
         [[nodiscard]] float GetDuration() const;
 
-        /// True once `Evaluate` has been called with a time at or after `GetDuration()` (or the first time, for a timeline with no length)
+        /// True after `RepeatForever()` (until a later `Repeat`)
+        [[nodiscard]] bool IsEndless() const {
+            return _endless;
+        }
+
+        /// True once `Evaluate` has been called with a time at or after `GetDuration()` (or the first time, for a timeline with no length);
+        /// `Advance` finishes it when the time inside the last iteration reaches its end. An endless timeline is never finished
         [[nodiscard]] bool IsFinished() const {
             return _finished;
         }
@@ -141,6 +169,9 @@ namespace BECore {
         // `stop` is the check of the timeline `Evaluate` was called on, handed down to the sub-timelines for the call and never stored
         // `reversed`: the parent plays this timeline backwards as a whole (its iteration that holds it runs backward)
         void EvaluateWith(float time, const MoveOnlyFunction<bool()>& stop, bool reversed);
+        // The iteration loop both entry points share: @p local is the time inside the current iteration, @p finishing says the call
+        // reaches the end of the last one (decided by the caller from the duration, so rounding cannot leave a clip short)
+        void Run(double local, bool finishing, const MoveOnlyFunction<bool()>& stop);
         void VisitClips(float time, const MoveOnlyFunction<bool()>& stop);
         void VisitClip(Clip& clip, float time, const MoveOnlyFunction<bool()>& stop, bool backward);
         void RestartClips();
@@ -165,8 +196,11 @@ namespace BECore {
         size_t _inserted = 0;                  // clips added so far: the next insertion number
         float _end = 0.0f;                     // the end of the latest clip: the duration of one iteration
         float _lastStart = 0.0f;               // the start of the last clip added: where `Join` puts the next one
+        // The time inside the current iteration, in double: a run of hours of small `Advance` steps adds no float rounding error to it
+        double _clock = 0.0;
         int _repeat = 1;
         int _iteration = 0;
+        bool _endless = false;
         bool _yoyo = false;
         bool _reversed = false;  // set by the parent on every call: this timeline is played backwards as a whole
         bool _backOrderBuilt = false;
