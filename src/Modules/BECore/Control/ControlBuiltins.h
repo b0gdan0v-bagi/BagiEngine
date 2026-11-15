@@ -6,7 +6,7 @@ namespace BECore {
 
     class ControlService;
 
-    /// Most frames one `step` may ask for: ten minutes at 60 fps. `quit` still works while a step runs, so a long one can be ended
+    /// Most frames one `step` may ask for. `quit` still works while a step runs, so a long one can be ended
     inline constexpr uint32_t kMaxStepFrames = 36000;
 
     /**
@@ -21,10 +21,7 @@ namespace BECore {
      * | resume | none | {"paused":false}; the code `manual_clock` with the manual clock, which only `step` advances |
      * | quit   | none | {}; then ApplicationEvents::QuitEvent, so the application stops at the end of the frame. Bypasses the barrier |
      *
-     * `step` answers when the frames have run and holds back the requests behind it (a barrier), so a client that
-     * pipelines `step` and `get_state` gets the state after the step. With the manual clock (--manual-clock) the frames run
-     * only because of it and every one lasts `dt`; on the real clock `dt` is ignored and the frames take their own time, unless the game is paused: then `step` makes
-     * `frames` stepped frames of `dt`.
+     * `step` is a barrier; what it means on the real and the manual clock: Control/CLAUDE.md, "Manual clock and `step`".
      *
      * Registering twice replaces the handlers, so calling this again is harmless.
      */

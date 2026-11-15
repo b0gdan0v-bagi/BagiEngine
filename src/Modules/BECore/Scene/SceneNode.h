@@ -64,8 +64,7 @@ namespace BECore {
         /**
          * @brief Draw layer of this node: a lower layer is drawn first (further back).
          *
-         * Nodes with the same layer are drawn in scene order. The layer belongs to the node alone, its children do not
-         * inherit it. See Scene::Draw().
+         * The layer belongs to the node alone, its children do not inherit it. See Scene::Draw().
          */
         int32_t GetLayer() const;
         void SetLayer(int32_t layer);

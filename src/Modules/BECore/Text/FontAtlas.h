@@ -20,12 +20,11 @@ namespace BECore {
     /**
      * @brief The glyphs of one font at one pixel size, drawn into page textures.
      *
-     * A page is made whole by IRenderer::CreateTexture() and never changed or freed while the atlas lives, so a frame in
-     * flight can never be reading a page that is being written. Glyphs that are missing are added in new pages
-     * (Prepare()), not in the old ones. Glyphs are white with the coverage in alpha: the color comes from the tint of the draw.
+     * A page is never changed or freed while the atlas lives, so a frame in flight never reads a page that is being
+     * written: missing glyphs go into new pages (Prepare()). Glyphs are white with the coverage in alpha; the color is the tint of the draw.
      *
      * With `outlinePixels` above 0 the pictures are the glyphs grown by that many pixels (GlyphOutline::Dilate()), for the
-     * outline of a text; their offsets follow the grown picture, and the page padding stays 1 px.
+     * outline of a text; their offsets follow the grown picture.
      *
      * Not thread safe and main thread only: it makes GPU objects.
      */

@@ -93,7 +93,6 @@ namespace BECore {
         }
         time = std::max(time, 0.0f);
 
-        // No length: done by the first call, and nothing to loop over
         if (_end <= 0.0f) {
             VisitClips(0.0f);
             _finished = !IsStopped();
@@ -114,7 +113,6 @@ namespace BECore {
                 VisitClips(local);
                 return;
             }
-            // The iteration is over and another follows: finish it, start the next one and go on with the left-over time
             VisitClips(_end);
             if (IsStopped()) {
                 return;

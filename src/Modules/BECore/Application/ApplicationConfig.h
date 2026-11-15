@@ -65,7 +65,6 @@ namespace BECore {
     /// Writes no log. (The name is a parameter so that a test can ask for a config that does not exist.)
     ApplicationConfigLoad LoadApplicationConfig(PoolString configName);
 
-    /// The config named `ApplicationConfig`: the file of the running application.
     ApplicationConfigLoad LoadApplicationConfig();
 
 }  // namespace BECore

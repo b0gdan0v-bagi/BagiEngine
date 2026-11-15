@@ -6,7 +6,6 @@
 
 namespace BECore {
 
-    /// Port of the control API when nothing else is asked for
     inline constexpr uint16_t kDefaultControlPort = 8765;
 
     /// Flags of the command line that Application hands to ResolveControlSettings()
@@ -30,24 +29,13 @@ namespace BECore {
     /**
      * @brief Merges the command line, the ApplicationConfig fields and the defaults into the control settings.
      *
-     * Priority: command line, then attribute, then default (off, port kDefaultControlPort).
+     * Priority: command line, then attribute, then default. The flags, the attributes and the errors of the file half:
+     * Control/CLAUDE.md, "Starting the API".
      *
-     * | Command line | Attribute | Meaning |
-     * |--------------|-----------|---------|
-     * | --control | control="true" / "false" (also 1 / 0) | start the WebSocket server |
-     * | --control-port=N | controlPort="N" | port, 0 to 65535 (0 is a free port picked by the system) |
-     * | --manual-clock | manualClock="true" / "false" (also 1 / 0) | the game clock moves only on a `step` (see ControlService) |
-     * | --headless | headless="true" / "false" (also 1 / 0) | no window, drawing in memory; a screenshot is the way to see the game |
-     *
-     * The file half is the reflected ApplicationConfig (LoadApplicationConfig, strict values), so an attribute that is not a boolean
-     * or not a port is an error of the load under its name; this function reports the ones of the four control attributes. The flags are
-     * still parsed by hand here (a later stage reads them through a name to value source).
-     *
-     * Arguments it does not know are ignored (a game may have flags of its own). A value that cannot be read, a bare
-     * `--control-port`, and `--control-port`, the manual clock or headless mode while the API stays off are errors: the
-     * caller stops the start-up, because a person who asked for the API has to be told that it did not start (and a
-     * manual clock that nobody can step would freeze the game, and a game without a window that nobody can reach
-     * would run unseen). Whether headless mode fits the run mode is for the caller to check (it knows the mode).
+     * Arguments it does not know are ignored (a game may have flags of its own). A value that cannot be read, or a flag
+     * that needs the API while it stays off, is an error: the caller stops the start-up, because a person who asked for
+     * the API has to be told that it did not start. Whether headless mode fits the run mode is for the caller to check
+     * (it knows the mode).
      *
      * @param args Command line without the program name
      * @param file The loaded ApplicationConfig; a default one (no config, `found == false`) is allowed. Errors of other fields (`mode`,
