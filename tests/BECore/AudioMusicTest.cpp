@@ -8,6 +8,7 @@
 #include <Common/Printers.h>
 #include <filesystem>
 #include <gtest/gtest.h>
+#include <limits>
 
 namespace BECore::Tests {
 
@@ -237,6 +238,26 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(manager.GetMusicState().volume, 0.5f);
         AudioEvents::StopMusicEvent::Emit();
         EXPECT_FALSE(manager.GetMusicState().playing);
+    }
+
+    TEST_F(AudioMusicTest, AFadeThatIsNotANumberOrEndlessIsNoFade) {
+        ASSERT_TRUE(manager.PlayMusic(Tone(), 1.0f, true, std::numeric_limits<float>::quiet_NaN()));
+        const uint32_t first = backend->streamStarts.back();
+        EXPECT_FLOAT_EQ(backend->gains[first], 1.0f);
+        ASSERT_TRUE(manager.PlayMusic(Blip(), 1.0f, true, std::numeric_limits<float>::infinity()));
+        EXPECT_FALSE(backend->IsPlaying(first)) << "the old track stops at once";
+        EXPECT_FLOAT_EQ(backend->gains[backend->streamStarts.back()], 1.0f);
+        manager.StopMusic(std::numeric_limits<float>::quiet_NaN());
+        EXPECT_FALSE(manager.GetMusicState().playing);
+    }
+
+    TEST_F(AudioMusicTest, TheSamePathStartsAgainATrackThatPlaysOutItsEnd) {
+        ASSERT_TRUE(manager.PlayMusic(Tone(), 1.0f, false));
+        ASSERT_TRUE(backend->ended[backend->streamStarts.back()]);
+        ASSERT_TRUE(manager.PlayMusic(Tone(), 1.0f, true));
+        EXPECT_EQ(backend->streamStarts.size(), 2u);
+        EXPECT_FALSE(backend->ended[backend->streamStarts.back()]);
+        EXPECT_TRUE(manager.GetMusicState().loop);
     }
 
 }  // namespace BECore::Tests

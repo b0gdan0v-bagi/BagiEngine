@@ -76,7 +76,8 @@ namespace BECore {
         /// Takes @p settings as the config's (clamped to their ranges) and handles the AudioEvents from now on; call before SetBackend()
         void Initialize(AudioSettings settings);
 
-        /// Closes the old backend and opens @p backend with the configured voices; one that does not open is dropped with a warning
+        /// Closes the old backend and opens @p backend with the configured voices of the effects plus kMusicVoices; one that does not open is
+        /// dropped with a warning
         void SetBackend(IntrusivePtr<IAudioBackend> backend);
 
         [[nodiscard]] const IntrusivePtr<IAudioBackend>& GetBackend() const {

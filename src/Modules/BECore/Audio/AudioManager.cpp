@@ -15,6 +15,11 @@ namespace BECore {
 
         constexpr StringView kConfigName = "AudioConfig";
 
+        /// A fade time from a caller: a NaN, an infinity or a time that is not positive is no fade, so a fade always ends
+        float ClampFade(float seconds) {
+            return std::isfinite(seconds) && seconds > 0.0f ? seconds : 0.0f;
+        }
+
         /// A volume from a caller or a file: 0 to 1, and 0 for NaN, so a gain is never out of range
         float ClampVolume(float volume) {
             if (!(volume > 0.0f)) {
@@ -176,8 +181,10 @@ namespace BECore {
     }
 
     bool AudioManager::PlayMusic(PoolString clipPath, float volume, bool loop, float fadeSeconds) {
+        fadeSeconds = ClampFade(fadeSeconds);
         MusicTrack& current = _music[_currentMusic];
-        if (current.source && current.clip == clipPath && current.fadeStep >= 0.0f) {
+        // A track that plays out its end (no loop) starts again instead: a new loop flag could not bring it back
+        if (current.source && current.clip == clipPath && current.fadeStep >= 0.0f && !current.ending) {
             current.volume = ClampVolume(volume);
             current.loop = loop;
             _backend->SetGain(current.voice, GetMusicGain(current));
@@ -225,6 +232,7 @@ namespace BECore {
     }
 
     void AudioManager::StopMusic(float fadeSeconds) {
+        fadeSeconds = ClampFade(fadeSeconds);
         for (MusicTrack& track : _music) {
             FadeOutMusic(track, fadeSeconds);
         }
@@ -289,7 +297,11 @@ namespace BECore {
                 return;
             }
             track.framesSinceRewind += frames;
-            _backend->QueueStream(track.voice, chunk.first(frames * format.channels));
+            if (!_backend->QueueStream(track.voice, chunk.first(frames * format.channels))) {
+                // A stream that takes nothing (a backend closed at the clean-up) would be decoded for nobody: it plays out what it has
+                track.ending = true;
+                return;
+            }
         }
     }
 

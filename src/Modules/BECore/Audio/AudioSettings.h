@@ -15,16 +15,16 @@ namespace BECore {
         BE_REFLECT_FIELD bool _muted = false;
     };
 
-    /// The voices a backend opens when the config says nothing; a sound that finds them all busy takes the oldest
+    /// The voices of the effects when the config says nothing (the backend opens kMusicVoices more); a sound that finds them all busy takes the oldest
     inline constexpr uint32_t kDefaultAudioVoices = 16;
     inline constexpr uint32_t kMaxAudioVoices = 64;
 
     /**
      * @brief The root of config/AudioConfig.xml: the defaults of the sound, which a game's file replaces whole.
      *
-     * `backend` names the IAudioBackend the application fabric makes (empty: the platform's); `voices` how many sounds play at once; then the
+     * `backend` names the IAudioBackend the application fabric makes (empty: the platform's); `voices` how many sound effects play at once; then the
      * master and the buses as child elements `<master volume muted/>`, `<sfx/>`, `<music/>`, `<ui/>`. The player's own choice is kept apart
-     * (a later slice of no-audio), so this file stays the default.
+     * (AudioPreferences, in a save slot), so this file stays the default.
      */
     struct AudioSettings {
         BE_CLASS(AudioSettings)
