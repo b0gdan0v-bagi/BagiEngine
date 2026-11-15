@@ -237,7 +237,12 @@ namespace BECore {
         const bool hasStore = _layouts.has_value();
 
         if (ImGui::BeginMenu("Layouts", hasStore)) {
-            const Vector<String> names = _layouts->List();
+            // BeginMenu is true on every frame the menu is open, and the submenu is not drawn at all while View is closed:
+            // rescan the folder only on the first frame of an opening
+            if (_layoutsMenuOpen.Opened(ImGui::GetFrameCount())) {
+                _layoutNames.Invalidate();
+            }
+            const Vector<String>& names = _layoutNames.Names(*_layouts);
             if (names.empty()) {
                 ImGui::TextDisabled("No saved layouts");
             }
@@ -252,7 +257,10 @@ namespace BECore {
         CommandMenuItem(kViewSaveLayout, "Save Layout As...", hasStore);
 
         if (ImGui::BeginMenu("Delete Layout", hasStore)) {
-            const Vector<String> names = _layouts->List();
+            if (_deleteLayoutMenuOpen.Opened(ImGui::GetFrameCount())) {
+                _layoutNames.Invalidate();
+            }
+            const Vector<String>& names = _layoutNames.Names(*_layouts);
             if (names.empty()) {
                 ImGui::TextDisabled("No saved layouts");
             }
@@ -261,6 +269,8 @@ namespace BECore {
                     if (const auto result = _layouts->Delete(name); !result) {
                         LOG_WARNING(Format("Editor: cannot delete layout '{}': {}", name, result.error().detail));
                     }
+                    // The list is read again on the next draw: the loop above goes on over the old one
+                    _layoutNames.Invalidate();
                 }
             }
             ImGui::EndMenu();
@@ -383,6 +393,7 @@ namespace BECore {
             LOG_ERROR(Format("Editor: cannot save layout '{}': {}", name, result.error().detail));
             return std::unexpected(result.error().detail);
         }
+        _layoutNames.Invalidate();
         LOG_INFO(Format("Editor: layout '{}' saved", name));
         return {};
     }
