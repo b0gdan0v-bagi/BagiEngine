@@ -2,6 +2,7 @@
 
 #include <BECore/Assert/AssertHandlers.h>
 #include <BECore/Assert/CRTDebugHook.h>
+#include <BECore/Audio/AudioControl.h>
 #include <BECore/Clipboard/ClipboardControl.h>
 #include <BECore/Config/ConfigFactory.h>
 #include <BECore/Control/ControlBuiltins.h>
@@ -100,6 +101,7 @@ namespace BECore {
         RegisterUIControl(_controlService);
         RegisterProfilerControl(_controlService);
         RegisterClipboardControl(_controlService);
+        RegisterAudioControl(_controlService, _audioManager);
     }
 
     void CoreManager::OnApplicationInit(PassKey<Application>) {
