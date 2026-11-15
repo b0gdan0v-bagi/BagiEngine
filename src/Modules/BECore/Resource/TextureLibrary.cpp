@@ -55,6 +55,7 @@ namespace BECore {
         }
 
         Load(*deserializer);
+        deserializer->FinishLoad();
         LogDeserializeErrors("TextureLibrary", *deserializer);
     }
 

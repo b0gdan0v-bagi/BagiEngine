@@ -45,10 +45,12 @@ namespace BECore {
         BE_REFLECT_FIELD double _taskFrameBudgetMs = kNoTaskFrameBudget;
     };
 
-    /// An ApplicationConfig and what went wrong while reading it. A field with an error keeps its default.
+    /// An ApplicationConfig and what went wrong while reading it. A field with an error keeps its default. `warnings` are the
+    /// findings of a deserializer in the mode Warn (an unknown key); they never stop a start-up.
     struct ApplicationConfigLoad {
         ApplicationConfig config;
         Vector<DeserializeError> errors;
+        Vector<DeserializeError> warnings;
         bool found = false;  // false when there is no config named ApplicationConfig; config then holds the defaults
     };
 
@@ -56,8 +58,9 @@ namespace BECore {
      * @brief Reads the ApplicationConfig from @p deserializer (positioned at the root of the config).
      *
      * Switches the deserializer to strict values (IDeserializer::SetStrictValues): a boolean that is not true / false / 1 / 0 and a
-     * port that is not a number from 0 to 65535 are errors, not zero. Writes no log; the caller decides what to do with the errors.
-     * `found` of the result is true.
+     * port that is not a number from 0 to 65535 are errors, not zero. Ends the read with FinishLoad() and keeps the errors and the
+     * warnings of the deserializer (its diagnostics mode is the caller's: CreateDeserializer sets it). Writes no log; the caller
+     * decides what to do with them. `found` of the result is true.
      */
     ApplicationConfigLoad LoadApplicationConfig(IDeserializer& deserializer);
 

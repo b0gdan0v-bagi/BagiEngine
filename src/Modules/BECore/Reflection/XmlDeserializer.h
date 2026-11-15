@@ -139,6 +139,17 @@ namespace BECore {
             return _strictValues;
         }
 
+        // Load diagnostics (see IDeserializer::SetDiagnostics). With the mode not Off a scope that ends with an attribute or a child
+        // element nobody asked for gives the finding "Unknown attribute|element 'x'" at <scope path>.x, with "did you mean 'y'?" when a
+        // name asked in that scope is near. Asked is what counts, not read: Read, ReadAttribute, BeginObject, BeginArray, HasKey and
+        // NoteKnownKey name a key, so a value that fails to parse is no unknown key. A scope is checked once, when it ends
+        // (EndObject, EndArray, EndArrayElement) or, for the root, at FinishLoad. An array scope checks its own attributes only: its
+        // children are taken by position (BeginArrayElement) and are the elements. Children of one name count once. Off tracks nothing.
+        bool HasKey(StringView name) const override;
+        void NoteKnownKey(StringView name) override;
+        void FinishLoad() override;
+        void SkipScope() override;
+
         // Error tracking
         bool HasErrors() const override;
         const Vector<DeserializeError>& GetErrors() const override;
@@ -186,8 +197,37 @@ namespace BECore {
         template <typename T>
         bool ApplyStrictText(StringView name, StringView text, T& outValue);
 
+        /// What one open node was asked for; in lockstep with _nodeStack while the mode is not Off
+        struct Scope {
+            pugi::xml_node node;
+            Vector<String> askedAttributes;
+            Vector<String> askedElements;
+            bool isArray = false;
+            bool checked = false;
+        };
+
+        /// Notes that a key was asked of the current node, as an attribute and / or as a child element (const: HasKey asks too)
+        void NoteAsked(StringView name, bool asAttribute, bool asElement) const;
+
+        /// Makes a Scope for every open node that has none; all but the innermost count as checked (a mode switched on in the middle of a load did not see them)
+        void SyncScopes() const;
+
+        /// Called after a node is pushed on _nodeStack by BeginObject, BeginArray or BeginArrayElement
+        void OpenScope(bool isArray);
+
+        /// Called before a node is popped from _nodeStack: checks its scope and drops it
+        void CloseScope();
+
+        void CheckScope(Scope& scope);
+
+        /// The finding of one unknown name; @p scope gives the names to suggest from
+        void ReportUnknown(const Scope& scope, StringView kind, StringView name);
+
+        bool FindingsFull() const;
+
         pugi::xml_document _document;
         Vector<pugi::xml_node> _nodeStack;
+        mutable Vector<Scope> _scopes;
 
         // For array iteration
         struct ArrayContext {

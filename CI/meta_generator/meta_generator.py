@@ -33,6 +33,9 @@ from core.parser import create_parser
 from core.generator import CodeGenerator, compute_enum_type_name
 
 _RE_CORE_ENUM = re.compile(r'\bCORE_ENUM\s*\(\s*(\w+)')
+# `#include <Generated/Foo.gen.hpp>` (or in quotes; the line may sit behind an #if)
+_RE_GEN_INCLUDE = re.compile(r'^[ \t]*#[ \t]*include[ \t]*[<"](?:[\w./-]*/)?Generated/(\w+)\.gen\.hpp[>"]', re.MULTILINE)
+SOURCE_EXTENSIONS = ('.cpp', '.cc', '.cxx', '.mm')
 _RE_IDENTIFIER = re.compile(r'[A-Za-z_]\w*')
 
 
@@ -92,12 +95,36 @@ def is_under(path: Path, directory: Path) -> bool:
         return False
 
 
-def collect_warning_lines(cache: MetadataCache, owned_dirs: List[Path], known_enums: Set[str]) -> List[str]:
+def collect_generated_includes(search_dirs: List[Path]) -> Set[str]:
+    """The stems X of every `Generated/X.gen.hpp` that a source file under *search_dirs* includes.
+
+    Computed on every run from the files themselves, never cached with a header: an edit of a
+    `.cpp` changes the answer for a header that did not change.
+    """
+    roots = sorted({d.resolve() for d in search_dirs if d.exists()})
+    roots = [d for d in roots if not any(other != d and is_under(d, other) for other in roots)]
+    included: Set[str] = set()
+    for root in roots:
+        for ext in SOURCE_EXTENSIONS:
+            for path in root.rglob(f'*{ext}'):
+                try:
+                    text = path.read_text(encoding='utf-8', errors='replace')
+                except OSError:
+                    continue
+                if 'gen.hpp' in text:
+                    included.update(_RE_GEN_INCLUDE.findall(text))
+    return included
+
+
+def collect_warning_lines(cache: MetadataCache, owned_dirs: List[Path], known_enums: Set[str],
+                          generated_includes: Set[str]) -> List[str]:
     """`path:line: warning: reflection: ...` for the cached files under *owned_dirs*, sorted by path and line.
 
     Besides the warnings the parser stored, a `FACTORY_BASE` whose generated enum
     (`compute_enum_type_name`) has the name of an enum found in the sources by the pre-scan is
-    reported: the generated and the handwritten declaration would disagree.
+    reported: the generated and the handwritten declaration would disagree. A header with
+    reflected classes whose `Generated/<Stem>.gen.hpp` is not in *generated_includes* is reported
+    too: `Serialize` and `Deserialize` are declared by the macro and defined only there.
     """
     entries = []
     for cached_path, meta in cache.files.items():
@@ -105,6 +132,12 @@ def collect_warning_lines(cache: MetadataCache, owned_dirs: List[Path], known_en
             continue
         for w in meta.warnings:
             entries.append((cached_path, w.line, w.message))
+        if meta.classes and Path(cached_path).stem not in generated_includes:
+            first = meta.classes[0]
+            names = ', '.join(cls.name for cls in meta.classes)
+            entries.append((cached_path, first.marker_line or first.line, (
+                f"{Path(cached_path).stem}.gen.hpp is included by no .cpp of this target; "
+                f"Serialize / Deserialize of {names} are never defined (link error)")))
         for cls in meta.classes:
             enum_name = compute_enum_type_name(cls.name)
             if cls.is_factory_base and enum_name in known_enums:
@@ -450,19 +483,23 @@ Examples:
 
     # Warnings: every marker the parser skipped, from the cache too (an unchanged file is not
     # parsed again, but its warnings stay). Reference dirs belong to another target's run.
-    warning_lines = collect_warning_lines(cache, source_dirs + scan_dirs, known_enums)
+    owned_dirs = source_dirs + scan_dirs
+    # The `.cpp` that defines a class's Serialize / Deserialize may sit beside the header or in a
+    # folder the target's headers are reached through (its include dirs): a test target includes
+    # the .gen.hpp of a probe header from its own folder. A `.cpp` anywhere else does not count.
+    generated_includes = collect_generated_includes(owned_dirs + [Path(d) for d in include_dirs])
+    warning_lines = collect_warning_lines(cache, owned_dirs, known_enums, generated_includes)
     if not args.quiet:
         for line in warning_lines:
             print(line, file=sys.stderr)
 
     # A field of a type of another part: an error of the class, from the cache like the warnings.
-    purpose_errors = collect_purpose_errors(cache, source_dirs + scan_dirs)
+    purpose_errors = collect_purpose_errors(cache, owned_dirs)
     for line in purpose_errors:
         print(line, file=sys.stderr)
 
     # Manifest: every .gen.hpp this run owns, including files that were up to date
     if args.manifest:
-        owned_dirs = source_dirs + scan_dirs
         owned = set()
         for cached_path, meta in cache.files.items():
             if not (meta.classes or meta.enums):

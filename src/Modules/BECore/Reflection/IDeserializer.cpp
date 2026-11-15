@@ -38,4 +38,13 @@ namespace BECore {
         errors.push_back(error);
     }
 
+    void IDeserializer::RecordFinding(StringView key, StringView message) {
+        const String fullPath = GetCurrentPath(key);
+        if (_diagnostics == DiagnosticsMode::Warn) {
+            StoreError(_warnings, StringView(fullPath), message, 0);
+        } else {
+            AddError(StringView(fullPath), message, 0);
+        }
+    }
+
 }  // namespace BECore

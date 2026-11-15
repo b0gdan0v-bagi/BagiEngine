@@ -9,7 +9,7 @@
 
 namespace BECore {
 
-    IntrusivePtrAtomic<SceneManager> LoadSceneManager(const XmlNode& configRoot, NodeFileLoaderRef loader, StringView configName) {
+    IntrusivePtrAtomic<SceneManager> LoadSceneManager(const XmlNode& configRoot, NodeFileLoaderRef loader, StringView configName, SceneLoadFindings* findings) {
         auto manager = New<SceneManager>();
         if (!configRoot) {
             return manager;
@@ -24,10 +24,16 @@ namespace BECore {
         }
 
         XmlDeserializer deserializer;
+        deserializer.SetDiagnostics(ConfigManager::GetDiagnostics());
         if (deserializer.LoadFromXmlNode(XmlNode{expanded.document_element()})) {
+            // The root's contentVersion is read by CheckContentVersion and ExpandNodeReferences, not by the reflected SceneManager
+            deserializer.NoteKnownKey(kContentVersionAttribute);
             manager->Deserialize(deserializer);
-            if (deserializer.HasErrors()) {
-                LogDeserializeErrors(configName, deserializer);
+            deserializer.FinishLoad();
+            LogDeserializeErrors(configName, deserializer);
+            if (findings != nullptr) {
+                findings->errors = deserializer.GetErrors();
+                findings->warnings = deserializer.GetWarnings();
             }
         }
         return manager;

@@ -11,6 +11,7 @@ namespace BECore {
         // The nodes of the stacks belong to the document: they go before it does, so a refused load leaves nothing that points into it
         _nodeStack.clear();
         _arrayStack.clear();
+        _scopes.clear();
         ClearPathSegments();
         _document.reset();
     }
@@ -72,6 +73,7 @@ namespace BECore {
     bool XmlDeserializer::LoadFromXmlNode(const XmlNode& node) {
         _nodeStack.clear();
         _arrayStack.clear();
+        _scopes.clear();
         ClearPathSegments();
 
         pugi::xml_node pugiNode = node.GetPugiNode();
@@ -97,6 +99,7 @@ namespace BECore {
             return pugi::xml_node();
         }
 
+        NoteAsked(name, false, true);
         String nameStr(name);
         return _nodeStack.back().child(nameStr.c_str());
     }
@@ -106,8 +109,196 @@ namespace BECore {
             return pugi::xml_attribute();
         }
 
+        NoteAsked(name, true, false);
         String nameStr(name);
         return _nodeStack.back().attribute(nameStr.c_str());
+    }
+
+    bool XmlDeserializer::HasKey(StringView name) const {
+        // Both are asked, so the one that is found must not hide the other
+        const bool hasAttribute = !GetAttribute(name).empty();
+        const bool hasElement = !GetChild(name).empty();
+        return hasAttribute || hasElement;
+    }
+
+    // =============================================================================
+    // Unknown keys
+    // =============================================================================
+
+    namespace {
+
+        /// Names are input: both sides of an edit distance are cut to this many bytes, so the work of one suggestion is bounded
+        constexpr size_t kMaxSuggestedNameBytes = 48;
+
+        /// A suggestion is a name at most this many edits away, and the distance must also be under half the length of the unknown name
+        constexpr size_t kMaxSuggestedDistance = 2;
+
+        bool Contains(const Vector<String>& names, StringView name) {
+            for (const String& known : names) {
+                if (StringView(known) == name) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        void AddName(Vector<String>& names, StringView name) {
+            if (!Contains(names, name)) {
+                names.push_back(String(name));
+            }
+        }
+
+        char AsciiLower(char c) {
+            return c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c;
+        }
+
+        /// Levenshtein distance of two names cut to kMaxSuggestedNameBytes, with the case of ASCII letters ignored (a case difference alone is no edit)
+        size_t EditDistance(StringView a, StringView b) {
+            a = a.substr(0, kMaxSuggestedNameBytes);
+            b = b.substr(0, kMaxSuggestedNameBytes);
+            Array<size_t, kMaxSuggestedNameBytes + 1> previous{};
+            Array<size_t, kMaxSuggestedNameBytes + 1> current{};
+            for (size_t j = 0; j <= b.size(); ++j) {
+                previous[j] = j;
+            }
+            for (size_t i = 1; i <= a.size(); ++i) {
+                current[0] = i;
+                for (size_t j = 1; j <= b.size(); ++j) {
+                    const size_t substitution = previous[j - 1] + (AsciiLower(a[i - 1]) == AsciiLower(b[j - 1]) ? 0 : 1);
+                    current[j] = std::min({previous[j] + 1, current[j - 1] + 1, substitution});
+                }
+                previous = current;
+            }
+            return previous[b.size()];
+        }
+
+    }  // namespace
+
+    void XmlDeserializer::SyncScopes() const {
+        while (_scopes.size() < _nodeStack.size()) {
+            Scope scope;
+            scope.node = _nodeStack[_scopes.size()];
+            scope.checked = _scopes.size() + 1 < _nodeStack.size();
+            _scopes.push_back(eastl::move(scope));
+        }
+    }
+
+    void XmlDeserializer::NoteAsked(StringView name, bool asAttribute, bool asElement) const {
+        if (GetDiagnostics() == DiagnosticsMode::Off || _nodeStack.empty()) {
+            return;
+        }
+        SyncScopes();
+        Scope& scope = _scopes.back();
+        if (asAttribute) {
+            AddName(scope.askedAttributes, name);
+        }
+        if (asElement) {
+            AddName(scope.askedElements, name);
+        }
+    }
+
+    void XmlDeserializer::NoteKnownKey(StringView name) {
+        NoteAsked(name, true, true);
+    }
+
+    void XmlDeserializer::SkipScope() {
+        if (GetDiagnostics() == DiagnosticsMode::Off || _nodeStack.empty()) {
+            return;
+        }
+        SyncScopes();
+        _scopes.back().checked = true;
+    }
+
+    void XmlDeserializer::OpenScope(bool isArray) {
+        if (GetDiagnostics() == DiagnosticsMode::Off) {
+            return;
+        }
+        SyncScopes();
+        _scopes.back().isArray = isArray;
+    }
+
+    void XmlDeserializer::CloseScope() {
+        // A scope exists for every open node only while the mode is on: the two stacks stay in step because a node pushed under Off has no scope
+        if (_scopes.size() != _nodeStack.size()) {
+            return;
+        }
+        CheckScope(_scopes.back());
+        _scopes.pop_back();
+    }
+
+    bool XmlDeserializer::FindingsFull() const {
+        const Vector<DeserializeError>& list = GetDiagnostics() == DiagnosticsMode::Warn ? GetWarnings() : GetErrors();
+        return list.size() >= ReaderLimits::kMaxRecordedErrors;
+    }
+
+    void XmlDeserializer::ReportUnknown(const Scope& scope, StringView kind, StringView name) {
+        const StringView cutName = CutText(name, kMaxSuggestedNameBytes);
+        size_t bestDistance = kMaxSuggestedDistance + 1;
+        StringView best;
+        for (const Vector<String>* asked : {&scope.askedAttributes, &scope.askedElements}) {
+            for (const String& candidate : *asked) {
+                const size_t distance = EditDistance(cutName, candidate);
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    best = StringView(candidate);
+                }
+            }
+        }
+
+        const StringView shown = CutText(name, ReaderLimits::kMaxQuotedValueBytes);
+        const char* const cut = shown.size() < name.size() ? "..." : "";
+        String hint;
+        if (!best.empty() && bestDistance * 2 < cutName.size()) {
+            hint = Format(", did you mean '{}'?", CutText(best, ReaderLimits::kMaxQuotedValueBytes));
+        }
+        ReportFinding(name, Format("Unknown {} '{}{}'{}", kind, shown, cut, hint));
+    }
+
+    void XmlDeserializer::CheckScope(Scope& scope) {
+        if (scope.checked) {
+            return;
+        }
+        scope.checked = true;
+        if (GetDiagnostics() == DiagnosticsMode::Off) {
+            return;
+        }
+
+        for (const pugi::xml_attribute attribute : scope.node.attributes()) {
+            if (FindingsFull()) {
+                return;
+            }
+            const StringView name = attribute.name();
+            if (!Contains(scope.askedAttributes, name)) {
+                ReportUnknown(scope, "attribute", name);
+            }
+        }
+        if (scope.isArray) {
+            return;
+        }
+
+        Vector<String> reported;
+        for (const pugi::xml_node child : scope.node.children()) {
+            if (FindingsFull()) {
+                return;
+            }
+            if (child.type() != pugi::node_element) {
+                continue;
+            }
+            const StringView name = child.name();
+            if (!Contains(scope.askedElements, name) && !Contains(reported, name)) {
+                reported.push_back(String(name));
+                ReportUnknown(scope, "element", name);
+            }
+        }
+    }
+
+    void XmlDeserializer::FinishLoad() {
+        // Open scopes are the caller's to close: only a balanced load has a root to finish
+        if (GetDiagnostics() == DiagnosticsMode::Off || _nodeStack.size() != 1) {
+            return;
+        }
+        SyncScopes();
+        CheckScope(_scopes.front());
     }
 
     void XmlDeserializer::AddError(StringView path, StringView message, int32_t line) {
@@ -631,11 +822,13 @@ namespace BECore {
         }
         _nodeStack.push_back(node);
         PushPathSegment(name);
+        OpenScope(false);
         return true;
     }
 
     void XmlDeserializer::EndObject() {
         if (_nodeStack.size() > 1) {
+            CloseScope();
             _nodeStack.pop_back();
             PopPathSegment();
         }
@@ -665,6 +858,7 @@ namespace BECore {
         _arrayStack.push_back(eastl::move(ctx));
         _nodeStack.push_back(node);
         PushPathSegment(name);
+        OpenScope(true);
         return true;
     }
 
@@ -673,6 +867,7 @@ namespace BECore {
             _arrayStack.pop_back();
         }
         if (_nodeStack.size() > 1) {
+            CloseScope();
             _nodeStack.pop_back();
             PopPathSegment();
         }
@@ -688,11 +883,13 @@ namespace BECore {
         }
         PushPathArrayIndex(ctx.currentIndex);
         _nodeStack.push_back(ctx.elements[ctx.currentIndex++]);
+        OpenScope(false);
         return true;
     }
 
     void XmlDeserializer::EndArrayElement() {
         if (_nodeStack.size() > 1) {
+            CloseScope();
             _nodeStack.pop_back();
             PopPathSegment();
         }

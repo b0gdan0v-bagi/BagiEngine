@@ -81,6 +81,7 @@ namespace BECore {
                 return nullptr;
             }
             auto deserializer = MakeUnique<XmlDeserializer>();
+            deserializer->SetDiagnostics(ConfigManager::GetDiagnostics());
             if (!deserializer->LoadFromXmlNode(root)) {
                 return nullptr;
             }
@@ -88,6 +89,10 @@ namespace BECore {
         }
 
     }  // namespace
+
+    DiagnosticsMode ConfigManager::GetDiagnostics() {
+        return CoreManager::GetCommandLine().HasFlag(kStrictConfigFlag) ? DiagnosticsMode::Error : DiagnosticsMode::Warn;
+    }
 
     UniquePtr<IDeserializer> ConfigManager::CreateDeserializer(PoolString name) const {
         return MakeDeserializer(GetConfig(name));

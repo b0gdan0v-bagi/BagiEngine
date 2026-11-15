@@ -200,3 +200,18 @@ public:
 #define BE_REFLECT_FIELD /* BE_REFLECT_FIELD */
 #define BE_FUNCTION      /* BE_FUNCTION */
 #endif
+
+/**
+ * @brief Attributes of a reflected field, written right after `BE_REFLECT_FIELD`
+ *
+ * Expands to nothing on every compiler: only the meta generator reads it, from the source text, and writes the values into
+ * `ReflectionTraits<T>::fields` as a `FieldAttributes` (`Reflection/FieldAttributes.h`). It is not an argument of
+ * `BE_REFLECT_FIELD` so that the marker keeps its one form everywhere.
+ *
+ * Attributes (comma separated, each at most once): `range(min, max)`, `step(s)`, `tooltip("text")`, `readonly`, `hidden`, `required`.
+ * `range` and `step` need a numeric field. An attribute the generator cannot use is a reflection warning.
+ *
+ * @example
+ *   BE_REFLECT_FIELD BE_FIELD_ATTRS(range(0, 1), step(0.05), tooltip("Share of the screen")) float _opacity = 1.0f;
+ */
+#define BE_FIELD_ATTRS(...)

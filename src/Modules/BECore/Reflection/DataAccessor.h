@@ -3,6 +3,7 @@
 #include <BECore/Format/Format.h>
 #include <BECore/Reflection/AbstractFactory.h>
 #include <BECore/Reflection/FactoryTraits.h>
+#include <BECore/Reflection/FieldAttributes.h>
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Reflection/ISerializer.h>
 #include <BECore/Reflection/SerializationTraits.h>
@@ -13,6 +14,8 @@
 #include <EASTL/optional.h>
 #include <EASTL/sort.h>
 #include <EASTL/unordered_map.h>
+#include <utility>
+#include <variant>
 
 namespace BECore {
 
@@ -83,6 +86,77 @@ namespace BECore {
         };
 
         // =================================================================
+        // Variant body: the `index` attribute and the active alternative under `value`, in the scope the caller opened
+        // (a field's own object, or an element of an array or a map). Defined before SaveElement / LoadElement, which call it:
+        // with a std::variant argument, ADL looks in namespace std only, so a later declaration here would not be found.
+        // =================================================================
+
+        namespace Detail {
+
+            template <typename T>
+            struct IsVariantType : std::false_type {};
+
+            template <typename... Ts>
+            struct IsVariantType<std::variant<Ts...>> : std::true_type {};
+
+            template <typename T>
+            concept IsVariant = IsVariantType<T>::value;
+
+            inline constexpr StringView kVariantIndexKey = "index";
+            inline constexpr StringView kVariantValueKey = "value";
+
+            /// The index is an int32_t, not unsigned, so that a negative text in a lenient XML read is a bad index and not alternative 0
+            using VariantIndex = int32_t;
+
+            template <typename... Ts>
+            constexpr void CheckVariantAlternatives() {
+                static_assert((HasDataAccessor<Ts> && ...), "Every alternative of a reflected Variant needs a Ser::DataAccessor (Reflection/DataAccessor.h)");
+                static_assert((std::is_default_constructible_v<Ts> && ...),
+                              "Every alternative of a reflected Variant must be default constructible: a load emplaces the alternative its index names, then reads it");
+            }
+
+            template <typename Var, size_t... I>
+            void SaveVariantAlternative(ISerializer& s, const Var& value, std::index_sequence<I...> /*indices*/) {
+                const size_t active = value.index();
+                static_cast<void>(((active == I ? (DataAccessor<std::variant_alternative_t<I, Var>>::Save(s, std::get<I>(value), kVariantValueKey), true) : false) || ...));
+            }
+
+            template <typename Var, size_t... I>
+            bool LoadVariantAlternative(IDeserializer& d, Var& value, size_t index, std::index_sequence<I...> /*indices*/) {
+                bool loaded = false;
+                static_cast<void>(((index == I ? (loaded = DataAccessor<std::variant_alternative_t<I, Var>>::Load(d, value.template emplace<I>(), kVariantValueKey), true) : false) || ...));
+                return loaded;
+            }
+
+            template <typename... Ts>
+            void SaveVariantBody(ISerializer& s, const std::variant<Ts...>& value) {
+                CheckVariantAlternatives<Ts...>();
+                s.WriteAttribute(kVariantIndexKey, static_cast<VariantIndex>(value.index()));
+                SaveVariantAlternative(s, value, std::index_sequence_for<Ts...>{});
+            }
+
+            /// False, with the variant as it was, when the index is missing or out of range; otherwise the result of the alternative's Load
+            template <typename... Ts>
+            bool LoadVariantBody(IDeserializer& d, std::variant<Ts...>& value) {
+                CheckVariantAlternatives<Ts...>();
+                VariantIndex index = 0;
+                if (!d.ReadAttribute(kVariantIndexKey, index)) {
+                    // A key that is there and failed to read was reported by the reader
+                    if (!d.HasKey(kVariantIndexKey)) {
+                        d.ReportError(kVariantIndexKey, "Variant index is missing");
+                    }
+                    return false;
+                }
+                if (index < 0 || static_cast<size_t>(index) >= sizeof...(Ts)) {
+                    d.ReportError(kVariantIndexKey, Format("Invalid variant index {}", index));
+                    return false;
+                }
+                return LoadVariantAlternative(d, value, static_cast<size_t>(index), std::index_sequence_for<Ts...>{});
+            }
+
+        }  // namespace Detail
+
+        // =================================================================
         // Internal element helpers (used by vector/map specializations)
         // =================================================================
 
@@ -90,7 +164,9 @@ namespace BECore {
 
             template <typename T>
             void SaveElement(ISerializer& s, const T& item) {
-                if constexpr (::BECore::Detail::IsIntrusivePtr<T>) {
+                if constexpr (IsVariant<T>) {
+                    SaveVariantBody(s, item);
+                } else if constexpr (::BECore::Detail::IsIntrusivePtr<T>) {
                     if (item) {
                         using Pointee = typename ::BECore::Detail::IntrusivePtrPointeeType<T>::type;
                         if constexpr (HasFactory<Pointee>)
@@ -137,7 +213,9 @@ namespace BECore {
              */
             template <typename T>
             void LoadElement(IDeserializer& d, T& item) {
-                if constexpr (::BECore::Detail::IsIntrusivePtr<T>) {
+                if constexpr (IsVariant<T>) {
+                    LoadVariantBody(d, item);
+                } else if constexpr (::BECore::Detail::IsIntrusivePtr<T>) {
                     using Pointee = typename ::BECore::Detail::IntrusivePtrPointeeType<T>::type;
                     if (!item) {
                         eastl::string typeStr;
@@ -232,6 +310,8 @@ namespace BECore {
                             if (!IsFull(vec)) {
                                 using Elem = typename Container::value_type;
                                 vec.push_back(MakeElement<Elem>(d));
+                            } else {
+                                d.SkipScope();
                             }
                             d.EndArrayElement();
                         }
@@ -282,7 +362,9 @@ namespace BECore {
                             if (enabled) {
                                 Ptr item;
                                 LoadElement(d, item);
-                                if (item) {
+                                if (!item) {
+                                    d.SkipScope();
+                                } else {
                                     ++offered;
                                     if (IsFull(vec)) {
                                         ++dropped;
@@ -290,6 +372,8 @@ namespace BECore {
                                         vec.push_back(eastl::move(item));
                                     }
                                 }
+                            } else {
+                                d.SkipScope();
                             }
                             d.EndArrayElement();
                         }
@@ -338,8 +422,10 @@ namespace BECore {
                         DefaultMaker<Elem>::MakeDefault(arr[i]);
                     // Drain any extra elements from the XML
                     for (size_t i = loadCount; i < count; ++i) {
-                        if (d.BeginArrayElement())
+                        if (d.BeginArrayElement()) {
+                            d.SkipScope();
                             d.EndArrayElement();
+                        }
                     }
                     d.EndArray();
                     return true;
@@ -754,10 +840,64 @@ namespace BECore {
         };
 
         // =================================================================
+        // std::variant<Ts...> (Variant) and std::monostate
+        // =================================================================
+
+        /**
+         * @brief A Variant is an object `<key index="i">` holding the active alternative under `value` (an attribute for a scalar, a
+         *        child for an object or an array); as an element of an array or a map the same two names sit in the element itself
+         *
+         * A missing or out-of-range index is an error at `<key>.index` and leaves the variant as it was. A valid index emplaces a
+         * default alternative of that index before reading it, so a load whose `value` is missing or bad keeps that new default.
+         */
+        template <typename... Ts>
+        struct DataAccessor<std::variant<Ts...>> {
+            static void Save(ISerializer& s, const std::variant<Ts...>& value, StringView key) {
+                if (s.BeginObject(key)) {
+                    Detail::SaveVariantBody(s, value);
+                    s.EndObject();
+                }
+            }
+
+            static bool Load(IDeserializer& d, std::variant<Ts...>& value, StringView key) {
+                if (!d.BeginObject(key)) {
+                    return false;
+                }
+                const bool loaded = Detail::LoadVariantBody(d, value);
+                d.EndObject();
+                return loaded;
+            }
+        };
+
+        /// The empty alternative of a Variant: its index alone says it is active
+        template <>
+        struct DataAccessor<std::monostate> {
+            static void Save(ISerializer& /*s*/, const std::monostate& /*value*/, StringView /*key*/) {}
+
+            static bool Load(IDeserializer& /*d*/, std::monostate& /*value*/, StringView /*key*/) {
+                return true;
+            }
+        };
+
+        // =================================================================
         // eastl::unordered_map (HashMap) and eastl::fixed_hash_map (FixedHashMap) -- with sorted-key Save
         // =================================================================
 
         namespace Detail {
+
+            /// One entry of a hash map in the sorted order of Save. Its own swap: with a std:: type in K or V (a Variant value), an
+            /// eastl::pair of the two pointers would find both eastl::swap and std::swap in the sort and not compile
+            template <typename K, typename V>
+            struct SortedEntry {
+                const K* key = nullptr;
+                const V* value = nullptr;
+
+                friend void swap(SortedEntry& a, SortedEntry& b) noexcept {
+                    const SortedEntry held = a;
+                    a = b;
+                    b = held;
+                }
+            };
 
             template <typename HashMapType>
             void SaveHashMapLike(ISerializer& s, const HashMapType& map, StringView key) {
@@ -766,16 +906,16 @@ namespace BECore {
                 size_t count = map.size();
                 if (s.BeginArray(key, "entry", count)) {
                     if constexpr (requires(const K& a, const K& b) { {a < b}->std::convertible_to<bool>; }) {
-                        eastl::vector<eastl::pair<const K*, const V*>> sorted;
+                        eastl::vector<SortedEntry<K, V>> sorted;
                         sorted.reserve(map.size());
                         for (const auto& [k, v] : map) {
                             sorted.push_back({&k, &v});
                         }
-                        eastl::sort(sorted.begin(), sorted.end(), [](const eastl::pair<const K*, const V*>& a, const eastl::pair<const K*, const V*>& b) { return *a.first < *b.first; });
-                        for (const auto& [kPtr, vPtr] : sorted) {
+                        eastl::sort(sorted.begin(), sorted.end(), [](const SortedEntry<K, V>& a, const SortedEntry<K, V>& b) { return *a.key < *b.key; });
+                        for (const SortedEntry<K, V>& entry : sorted) {
                             if (s.BeginArrayElement()) {
-                                s.WriteAttribute("key", *kPtr);
-                                Detail::SaveElement(s, *vPtr);
+                                s.WriteAttribute("key", *entry.key);
+                                Detail::SaveElement(s, *entry.value);
                                 s.EndArrayElement();
                             }
                         }
@@ -911,6 +1051,128 @@ namespace BECore {
         bool Load(IDeserializer& d, T& value, eastl::string_view key) {
             static_assert(HasDataAccessor<T>, "The type has no Ser::DataAccessor: it is not a reflected type (see Reflection/DataAccessor.h)");
             return DataAccessor<T>::Load(d, value, key);
+        }
+
+        namespace Detail {
+
+            /// A number as the largest type of its kind, so that a finding reads it as the number it is (an int8_t is not a character)
+            template <typename T>
+            auto AsReportedNumber(T value) {
+                if constexpr (std::is_floating_point_v<T>) {
+                    return static_cast<double>(value);
+                } else if constexpr (std::is_signed_v<T>) {
+                    return static_cast<int64_t>(value);
+                } else {
+                    return static_cast<uint64_t>(value);
+                }
+            }
+
+            template <typename T>
+            struct IsOptionalType : std::false_type {};
+
+            template <typename T>
+            struct IsOptionalType<eastl::optional<T>> : std::true_type {};
+
+            template <typename T>
+            struct IsOptionalType<std::optional<T>> : std::true_type {};
+
+            /// A map: its mapped values are checked, the keys are not
+            template <typename T>
+            concept IsRangeMap = requires(const T& map) {
+                typename T::mapped_type;
+                map.begin()->second;
+            };
+
+            /// A vector-like or an array; a string is text, not a sequence of numbers
+            template <typename T>
+            concept IsRangeSequence = !IsRangeMap<T> && requires(const T& sequence) {
+                sequence.begin();
+                sequence.end();
+                requires(!std::is_same_v<typename T::value_type, char>);
+            };
+
+            /// Where a checked number sits in its field: the key, then `[i]` per element and `.value` per variant; text only for a finding
+            struct RangeSite {
+                const RangeSite* parent = nullptr;
+                StringView name;
+                size_t index = 0;
+                bool isIndex = false;
+            };
+
+            inline void AppendRangeSite(String& out, const RangeSite& site) {
+                if (site.parent != nullptr) {
+                    AppendRangeSite(out, *site.parent);
+                }
+                if (site.isIndex) {
+                    out += Format("[{}]", site.index);
+                } else {
+                    if (site.parent != nullptr) {
+                        out += '.';
+                    }
+                    out.append(site.name.data(), site.name.size());
+                }
+            }
+
+            /// Reports every number of @p value outside the range of @p attributes, walking containers, an engaged optional and the active alternative of a variant
+            template <typename T>
+            void CheckRange(IDeserializer& d, const T& value, const RangeSite& site, const FieldAttributes& attributes) {
+                if constexpr (std::is_arithmetic_v<T> && !std::is_same_v<T, bool>) {
+                    const double number = static_cast<double>(value);
+                    if (!(number >= attributes.rangeMin && number <= attributes.rangeMax)) {
+                        const String message = Format("Value {} is outside the range [{}, {}]", AsReportedNumber(value), attributes.rangeMin, attributes.rangeMax);
+                        if (site.parent == nullptr) {
+                            d.ReportFinding(site.name, message);
+                        } else {
+                            String path;
+                            AppendRangeSite(path, site);
+                            d.ReportFinding(path, message);
+                        }
+                    }
+                } else if constexpr (IsVariant<T>) {
+                    const RangeSite alternative{&site, kVariantValueKey};
+                    std::visit([&](const auto& active) { CheckRange(d, active, alternative, attributes); }, value);
+                } else if constexpr (IsOptionalType<T>::value) {
+                    if (value.has_value()) {
+                        CheckRange(d, *value, site, attributes);
+                    }
+                } else if constexpr (IsRangeMap<T>) {
+                    size_t position = 0;
+                    for (const auto& entry : value) {
+                        CheckRange(d, entry.second, RangeSite{&site, {}, position++, true}, attributes);
+                    }
+                } else if constexpr (IsRangeSequence<T>) {
+                    size_t position = 0;
+                    for (const auto& element : value) {
+                        CheckRange(d, element, RangeSite{&site, {}, position++, true}, attributes);
+                    }
+                }
+            }
+
+        }  // namespace Detail
+
+        /**
+         * @brief Load a field that has attributes: the plain Load, then the checks of `required` and `range`
+         *
+         * The checks run only when d.GetDiagnostics() is not Off, and only report (IDeserializer::ReportFinding): the field keeps
+         * what was read, and the result is that of the plain Load. `required` reports a key the scope does not have (IDeserializer::HasKey);
+         * `range` reports a number that was read and lies outside [rangeMin, rangeMax], a NaN included. bool is not a number here.
+         * `range` reaches the numeric elements of a container (at `key[i]`, `i` the position in the container's own iteration, which for a
+         * hash map is no sorted order), the mapped values of a map, an engaged optional and a variant's active alternative (`key.value`);
+         * objects, pairs and strings are not walked.
+         */
+        template <typename T>
+        bool Load(IDeserializer& d, T& value, eastl::string_view key, const FieldAttributes& attributes) {
+            const bool loaded = Load(d, value, key);
+            if (d.GetDiagnostics() == DiagnosticsMode::Off) {
+                return loaded;
+            }
+            if (attributes.required && !d.HasKey(key)) {
+                d.ReportFinding(key, "Required field is missing");
+            }
+            if (loaded && attributes.hasRange) {
+                Detail::CheckRange(d, value, Detail::RangeSite{nullptr, key}, attributes);
+            }
+            return loaded;
         }
 
     }  // namespace Ser

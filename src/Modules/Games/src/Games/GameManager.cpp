@@ -37,6 +37,7 @@ namespace BECore {
         if (const auto deserializer = CoreManager::GetConfigManager().CreateDeserializer("GamesConfig"_intern)) {
             GamesConfig config;
             config.Deserialize(*deserializer);
+            deserializer->FinishLoad();
             LogDeserializeErrors("GamesConfig", *deserializer);
             defaultName = config._defaultGame._name;
         }

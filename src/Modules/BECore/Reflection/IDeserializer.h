@@ -4,6 +4,7 @@
 #include <BECore/Reflection/ClassMeta.h>
 #include <BECore/Reflection/ISerializer.h>
 #include <BECore/Reflection/ReaderLimits.h>
+#include <BECore/Utils/EnumUtils.h>
 
 namespace BECore {
 
@@ -15,6 +16,15 @@ namespace BECore {
         PoolString errorMessage;
         int32_t line = 0;  // Line number for XML (0 for binary)
     };
+
+    /**
+     * @brief What a load does with a finding: content that loaded but looks wrong
+     *
+     * Off records nothing (the default: a save or a UI document rejects the whole document on any error, so a new finding must not
+     * make an existing file fail). Warn stores the finding in GetWarnings() and leaves HasErrors() alone. Error makes it an
+     * ordinary error.
+     */
+    CORE_ENUM(DiagnosticsMode, uint8_t, Off, Warn, Error)
 
     /**
      * @brief Interface for deserialization (reading data)
@@ -108,6 +118,84 @@ namespace BECore {
          */
         virtual bool IsStrictValues() const {
             return false;
+        }
+
+        // =================================================================
+        // Load diagnostics
+        // =================================================================
+
+        /**
+         * @brief Choose what ReportFinding does; Off by default, and the same for every format
+         *
+         * Set it before the load: a finding is recorded when it is found.
+         */
+        void SetDiagnostics(DiagnosticsMode mode) {
+            _diagnostics = mode;
+        }
+
+        DiagnosticsMode GetDiagnostics() const {
+            return _diagnostics;
+        }
+
+        /**
+         * @brief The findings recorded under Warn, apart from the errors
+         *
+         * Same entry as an error and the same limits (ReaderLimits::kMaxRecordedErrors, cut texts).
+         */
+        const Vector<DeserializeError>& GetWarnings() const {
+            return _warnings;
+        }
+
+        /**
+         * @brief Forget the recorded warnings (ClearErrors() clears errors only)
+         */
+        void ClearWarnings() {
+            _warnings.clear();
+        }
+
+        /**
+         * @brief Whether the current scope has an entry called @p name (an attribute or a child element; in binary, an entry of any kind)
+         *
+         * Lets a loader tell a missing key from a key that holds the default. The default is true, so a reader that cannot tell
+         * never produces a false "missing".
+         */
+        virtual bool HasKey(StringView /*name*/) const {
+            return true;
+        }
+
+        /**
+         * @brief Tell the reader that the current scope has a key that the caller reads by hand
+         *
+         * A reader that finds keys nobody read (the unknown-key finding) counts it as read. The default does nothing.
+         */
+        virtual void NoteKnownKey(StringView /*name*/) {}
+
+        /**
+         * @brief Close the root scope when the load is done
+         *
+         * The reflected struct of a config is read at the root with no BeginObject, so nothing else ends that scope. The default does
+         * nothing.
+         */
+        virtual void FinishLoad() {}
+
+        /**
+         * @brief Tell the reader that the caller leaves the rest of the current scope unread on purpose
+         *
+         * For an element a loader drops without reading it (a disabled element, one past the capacity of a fixed container): its keys are
+         * not unknown keys. The default does nothing.
+         */
+        virtual void SkipScope() {}
+
+        /**
+         * @brief Report content that loaded but looks wrong, at the current path + key; the field keeps what was read
+         *
+         * Off does nothing, Warn stores a warning, Error stores an error (HasErrors() becomes true).
+         */
+        void ReportFinding(StringView key, StringView message) {
+            if (_diagnostics == DiagnosticsMode::Off) {
+                return;
+            }
+            RecordFinding(key, message);
         }
 
         // =================================================================
@@ -283,11 +371,15 @@ namespace BECore {
         static StringView CutText(StringView text, size_t maxBytes);
 
     private:
+        void RecordFinding(StringView key, StringView message);
+
         struct PathSegment {
             String name;
             bool isArrayIndex = false;
         };
         Vector<PathSegment> _pathStack;
+        Vector<DeserializeError> _warnings;
+        DiagnosticsMode _diagnostics = DiagnosticsMode::Off;
         Optional<AssetPurpose> _purposeFilter;
     };
 
