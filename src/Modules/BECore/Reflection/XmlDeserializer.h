@@ -58,7 +58,7 @@ namespace BECore {
         bool LoadFromString(StringView xmlContent);
 
         /**
-         * @brief Read from a node of an XmlConfig without copying it: the config's document must outlive the reads.
+         * @brief Read from a node without copying it: the document that owns the node must outlive the reads.
          */
         bool LoadFromXmlNode(const XmlNode& node);
 

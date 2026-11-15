@@ -419,7 +419,7 @@ namespace BECore {
                     using Elem = typename Arr::value_type;
                     for (size_t i = loadCount; i < arr.size(); ++i)
                         DefaultMaker<Elem>::MakeDefault(arr[i]);
-                    // Elements past the array's size are skipped on purpose: their keys are no unknown keys
+                    // Elements past the array's size are skipped on purpose: their keys are not reported as unknown keys
                     for (size_t i = loadCount; i < count; ++i) {
                         if (d.BeginArrayElement()) {
                             d.SkipScope();

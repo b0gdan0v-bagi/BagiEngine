@@ -119,6 +119,7 @@ namespace BECore {
 
         CoreManager::GetInstance().OnApplicationInit({});
 
+        // After OnApplicationInit: the game reads its configs and registers control methods.
         GameManager::GetInstance().Initialize();
         UpdateWindowTitle();
 

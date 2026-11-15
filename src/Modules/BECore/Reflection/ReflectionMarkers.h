@@ -33,6 +33,7 @@ namespace BECore {
 //   BE_CLASS(ClassName)                                 - Standard reflection
 //   BE_CLASS(ClassName, FACTORY_BASE)                   - Mark as factory base for enum generation
 //   BE_CLASS(ClassName, FACTORY_BASE, ELEMENT=sink)     - Options combine; ELEMENT names the XML element of the base's arrays
+//   BE_CLASS(ClassName, FACTORY_BASE, REGISTER_SELF)    - A concrete base registers itself beside its derived classes
 //   BE_CLASS(ClassName, ICON=image)                     - Lucide icon name for the editor, read into ClassMeta::icon
 //                                                         (kebab case [a-z0-9-]+; other values warn and are ignored)
 //   BE_CLASS(ClassName, PURPOSE=visual)                 - Part of an asset the class belongs to (sim, visual or editor),
