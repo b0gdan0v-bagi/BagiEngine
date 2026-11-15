@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/FuzzProbe.h>
+#include <BECore/Reflection/TypedRef.h>
 #include <cstdint>
 
 namespace BECore::Fuzz {
@@ -16,6 +17,10 @@ namespace BECore::Fuzz {
      * file holds non-inline definitions: every other file of the library uses the probe through this header.
      */
     ProbeState MakeFilledProbe();
+
+    /// References for a control root over the probe: the generated reflection is in this library's one file only
+    TypedRef MakeProbeRef(ProbeState& state);
+    TypedRef MakeProbeRef(ProbeCalls& calls);
 
     /// A state of the shapes (`ProbeShapes`) with every field engaged or filled
     ProbeShapes MakeFilledShapes();

@@ -4,6 +4,14 @@
 
 namespace BECore::Fuzz {
 
+    TypedRef MakeProbeRef(ProbeState& state) {
+        return TypedRef::Of(state);
+    }
+
+    TypedRef MakeProbeRef(ProbeCalls& calls) {
+        return TypedRef::Of(calls);
+    }
+
     namespace {
 
         constexpr uint64_t kFnvOffset = 0xCBF29CE484222325ull;
