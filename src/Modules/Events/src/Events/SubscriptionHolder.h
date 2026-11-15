@@ -8,21 +8,7 @@ namespace BECore {
     /**
      * @brief RAII holder for event subscriptions using EventConnection
      *
-     * This class manages event subscriptions and automatically unsubscribes
-     * when the object is destroyed. Inherit from this class to get automatic
-     * subscription management.
-     *
-     * @example
-     * class MyWidget : public SubscriptionHolder {
-     * public:
-     *     void Initialize() {
-     *         Subscribe<NewFrameEvent, &MyWidget::OnNewFrame>(this);
-     *         Subscribe<RenderEvent, &MyWidget::OnRender>(this);
-     *     }
-     *
-     *     void OnNewFrame(const NewFrameEvent& e) { ... }
-     *     void OnRender(const RenderEvent& e) { ... }
-     * };
+     * The subscriptions end when the holder is destroyed. Inherit from it to subscribe (usage: Events/CLAUDE.md).
      */
     class SubscriptionHolder {
     public:
@@ -30,35 +16,20 @@ namespace BECore {
 
         virtual ~SubscriptionHolder() = default;
 
-        // Non-copyable, movable
+        // A moved holder takes the connections, but they stay bound to the address that subscribed.
         SubscriptionHolder(const SubscriptionHolder&) = delete;
         SubscriptionHolder& operator=(const SubscriptionHolder&) = delete;
         SubscriptionHolder(SubscriptionHolder&&) = default;
         SubscriptionHolder& operator=(SubscriptionHolder&&) = default;
 
     protected:
-        /**
-         * @brief Subscribe to an event and store the connection for auto-cleanup
-         *
-         * @tparam Event Event type (must have Subscribe method)
-         * @tparam Handler Member function pointer to handler
-         * @tparam T Type of the instance
-         * @param instance Pointer to the instance containing the handler
-         *
-         * @example
-         * Subscribe<NewFrameEvent, &MyWidget::OnNewFrame>(this);
-         */
+        /// Subscribes `instance` and keeps the connection until the destructor or UnsubscribeAll().
         template <typename Event, auto Handler, typename T>
         void Subscribe(T* instance) {
             _connections.push_back(Event::template Subscribe<Handler>(instance, {}));
         }
 
-        /**
-         * @brief Manually unsubscribe all held connections
-         *
-         * This is automatically called in the destructor, but can be
-         * called manually if needed.
-         */
+        /// Drops every held connection now; the destructor does the same.
         void UnsubscribeAll() {
             _connections.clear();  // each connection disconnects in its destructor
         }
