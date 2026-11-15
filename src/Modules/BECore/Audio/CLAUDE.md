@@ -1,6 +1,6 @@
 # Audio (BECore)
 
-The sound of a game: `CoreManager::GetAudio()` (`AudioManager`) plays `AudioClip`s on the voices of an `IAudioBackend`, under bus and master volumes. The split is the renderer's: the interface and the logic here, the platform in a module (`SDL/CoreSDL/SDLAudioBackend`). Short sound effects for now; streamed music, the `AudioSource` component, play events and the player's own volume are later slices of the todo entry `no-audio`.
+The sound of a game: `CoreManager::GetAudio()` (`AudioManager`) plays `AudioClip`s on the voices of an `IAudioBackend`, under bus and master volumes. The split is the renderer's: the interface and the logic here, the platform in a module (`SDL/CoreSDL/SDLAudioBackend`). Short sound effects for now; streamed music is the last slice of the todo entry `no-audio`.
 
 | File | Purpose |
 |------|---------|
@@ -12,6 +12,10 @@ The sound of a game: `CoreManager::GetAudio()` (`AudioManager`) plays `AudioClip
 | `NullAudioBackend.h` | Plays nothing: where there is no output |
 | `AudioSettings.h/.cpp` | The reflected root of `config/AudioConfig.xml`: `backend`, `voices`, `<master>`, `<sfx>`, `<music>`, `<ui>` (each `volume` 0 to 1 and `muted`) |
 | `AudioManager.h/.cpp` | The service |
+| `AudioEvents.h` | `PlaySoundEvent{clip, bus, volume}`, `StopAllSoundsEvent`: a sound asked for by code that does not hold the manager |
+| `AudioSourceComponent.h/.cpp` | The sound of a scene node: `clip`, `bus`, `volume`, `playOnStart`, `playAction` |
+| `AudioPreferences.h/.cpp` | The player's levels in a save slot: `SaveAudioPreferences`, `LoadAudioPreferences` |
+| `AudioControl.h/.cpp` | The control API: `audio_state`, `audio_set` |
 
 ## Rules
 
@@ -19,7 +23,21 @@ The sound of a game: `CoreManager::GetAudio()` (`AudioManager`) plays `AudioClip
 - **Voices.** A fixed set made at `Open`. `Play` takes the first voice that does not play, else the one started first; the handle of the sound it drops goes stale (its generation moves), and a stale handle is ignored by `Stop` and reads as not playing. A failed clip plays nothing.
 - **Gain** = volume of the sound × its bus × the master, each 0 to 1 (a NaN is 0), and 0 when the bus or the master is muted; a muted level keeps its volume. Every `Set*` and `ApplySettings` reaches the voices that play. `ApplySettings` takes the levels only: the backend and the voice count are read once, at `SetBackend`.
 - **Decoding.** A clip is decoded whole when it loads, to interleaved floats at the file's own rate and channels; the backend converts to the device. WAV: PCM of 8, 16, 24 and 32 bits, IEEE float of 32 bits, also inside `WAVE_FORMAT_EXTENSIBLE`; every size is checked against the bytes (fuzz target `AudioWav`, `tests/Fuzz/CLAUDE.md`). Ogg Vorbis: `stb_vorbis`, which trusts its input, so only for the assets of the engine and the games (`src/Modules/stb/README.md`). 1 to 8 channels, 1 kHz to 384 kHz.
+- **By path and by event.** `Play(path, bus, volume)` loads the clip through `ResourceManager` (synchronous the first time; the cache keeps it, a file that does not decode as a failed clip), so a scene preloads its clips: an `AudioSourceComponent` loads at attach, other code with `LoadAsync`. `AudioEvents::PlaySoundEvent` is the same call for code that should not include the manager (the manager subscribes in `Initialize`).
+- **The record of requests.** Every `Play`, also one that plays nothing (no backend, a failed clip), is a numbered `AudioPlayRecord` in a ring of the last `kAudioRecentPlays`; `audio_state` shows it, so a game's smoke test checks its sounds on a machine without an output.
 - **Main thread only**, except the loader's decode. A frame that plays nothing allocates nothing (the voices are made at `Open`); a play copies the samples into the backend.
+
+## The source component
+
+`AudioSourceComponent` holds one clip and plays it: `Play()`, an `InputEvents::ActionEvent` of `playAction` while its scene is active, and `playOnStart` at the first `SceneUpdateEvent` of its scene as the active one (not at attach: every loaded scene attaches). A change of `clip` (the inspector) loads at the next `Play()`; `Stop()` and `IsPlaying()` are about the latest sound it started.
+
+## The player's levels
+
+The config holds the defaults; the player's choice is the slot `audio` (`kAudioPreferencesSlot`, schema `{"BagiAudio", 1, 1}`: the engine's in every game) of the game's own `SaveGameService` folder. The game decides when and whether, under its own gate (as a game keeps control and test runs away from a person's saves): `LoadAudioPreferences` at the start (into a temporary, applied after a success, so `NotFound` or a refused file changes nothing), `SaveAudioPreferences` when `GetLevelsRevision()` moved. Only the four levels are saved: the backend and the voice count stay the config's.
+
+## Control API
+
+`audio_state`: `backend` (the reflected type name, or null), `voices`, `playing`, `started`, `requested`, `levels` (`master`, `sfx`, `music`, `ui`: `volume`, `muted`) and `recent` (`index`, `clip`, `bus`, `volume`, `played`, oldest first). `audio_set {bus, volume?, muted?}` sets one level and answers `levels`; anything else is `invalid_params` and changes nothing. The bus names on the wire are lower case.
 
 ## The SDL backend
 
@@ -27,4 +45,4 @@ The sound of a game: `CoreManager::GetAudio()` (`AudioManager`) plays `AudioClip
 
 ## Tests
 
-`tests/BECore/AudioDecodeTest.cpp` (WAV files built in memory, the Ogg fixture `tests/BECore/AudioData/stereo-tone.ogg`: a stereo 440 Hz tone, made for the test, right = -left), `AudioManagerTest.cpp` (a fake backend), `AudioClipLoaderTest.cpp` (the fixture folder mounted), `SDLAudioBackendTest.cpp` (SDL's `dummy` driver; skips where SDL has none; a test never waits for a sound to end: the dummy device plays in real time).
+`tests/BECore/AudioDecodeTest.cpp` (WAV files built in memory, the Ogg fixture `tests/BECore/AudioData/stereo-tone.ogg`: a stereo 440 Hz tone, made for the test, right = -left), `AudioManagerTest.cpp` (`FakeAudioBackend.h`, a fake backend for every audio test), `AudioPlaybackTest.cpp` (by path and by event, on the core's manager), `AudioSourceComponentTest.cpp` (scenes from XML), `AudioPreferencesTest.cpp` (a real `SaveGameService` in a temp folder), `AudioControlTest.cpp`, `AudioClipLoaderTest.cpp` (the fixture folder mounted), `SDLAudioBackendTest.cpp` (SDL's `dummy` driver; skips where SDL has none; a test never waits for a sound to end: the dummy device plays in real time).
