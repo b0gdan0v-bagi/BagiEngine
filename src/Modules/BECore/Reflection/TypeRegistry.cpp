@@ -63,11 +63,21 @@ namespace BECore {
         _direct.clear();
         _all.clear();
         _factoryBases.clear();
+        _factoryElementNames.clear();
         for (const TypeInfo* info : _infos) {
             if (info->factoryBase != 0) {
                 const TypeInfo* base = Find(info->factoryBase);
                 if (base != nullptr && eastl::find(_factoryBases.begin(), _factoryBases.end(), base) == _factoryBases.end()) {
                     _factoryBases.push_back(base);
+                }
+            }
+            for (const FieldDesc& field : info->fields) {
+                if (field.factoryElementName.empty() || field.type == nullptr) {
+                    continue;
+                }
+                const TypeDesc* pointer = field.type->kind == TypeKind::List ? field.type->element : field.type;
+                if (pointer != nullptr && pointer->kind == TypeKind::Pointer) {
+                    _factoryElementNames.emplace(pointer->ObjectHash(), field.factoryElementName);
                 }
             }
             if (const TypeInfo* parent = Parent(*info); parent != nullptr) {
@@ -125,6 +135,12 @@ namespace BECore {
     const Vector<const TypeInfo*>& TypeRegistry::FactoryBases() const {
         EnsureIndex();
         return _factoryBases;
+    }
+
+    StringView TypeRegistry::FactoryElementName(const TypeInfo& info) const {
+        EnsureIndex();
+        const auto found = _factoryElementNames.find(info.factoryBase != 0 ? info.factoryBase : info.Hash());
+        return found != _factoryElementNames.end() ? found->second : StringView{};
     }
 
     OwnedObject TypeRegistry::Create(StringView name) const {

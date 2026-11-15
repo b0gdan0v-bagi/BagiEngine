@@ -3,6 +3,7 @@
 #include <BECore/RefCounted/New.h>
 #include <BECore/Reflection/ClassMeta.h>
 #include <BECore/Reflection/DataAccessor.h>
+#include <BECore/Reflection/FactoryTraits.h>
 #include <BECore/Reflection/FieldAttributes.h>
 #include <BECore/Reflection/MethodInfo.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
@@ -108,6 +109,13 @@ namespace BECore {
         StringView cppName;
         FieldAttributes attributes;
         const TypeDesc* type = nullptr;
+        /**
+         * @brief `FactoryTraits<Base>::elementName` when the field is a pointer to, or a list of pointers to, a factory base; else empty
+         *
+         * Taken here, in the translation unit of the type that owns the field, because that is where its `.gen.hpp` has inlined the
+         * traits: a derived type's own unit does not see them. `TypeRegistry::FactoryElementName` finds the name of a base from it.
+         */
+        StringView factoryElementName{};
         size_t offset = 0;
         void* (*address)(void* object) = nullptr;
     };
@@ -213,6 +221,23 @@ namespace BECore {
             return std::addressof(static_cast<T*>(object)->*Ptr);
         }
 
+        /// The XML element name of the factory a field of type @p Member holds pointers of (a pointer, or a list of pointers); empty for any other field
+        template <typename Member>
+        constexpr StringView FactoryElementNameOf() {
+            if constexpr (IsPointerType<Member>) {
+                using Pointee = typename PointerTraits<Member>::Pointee;
+                if constexpr (HasFactory<Pointee>) {
+                    return FactoryTraits<Pointee>::elementName;
+                }
+            } else if constexpr (IsListType<Member>) {
+                using Element = typename ListTraits<Member>::Element;
+                if constexpr (IsPointerType<Element>) {
+                    return FactoryElementNameOf<Element>();
+                }
+            }
+            return {};
+        }
+
         template <typename T, size_t I>
         FieldDesc MakeFieldDesc() {
             constexpr auto info = std::get<I>(ReflectionTraits<T>::fields);
@@ -225,6 +250,7 @@ namespace BECore {
             desc.cppName = info.name;
             desc.attributes = info.attributes;
             desc.type = &DescribeType<Member>();
+            desc.factoryElementName = FactoryElementNameOf<Member>();
             desc.offset = SubobjectOffset<T>([](const T* object) { return static_cast<const void*>(std::addressof(object->*ptr)); });
             desc.address = &FieldAddress<T, ptr>;
             return desc;

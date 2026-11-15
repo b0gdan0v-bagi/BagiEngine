@@ -185,6 +185,20 @@ namespace BECore::Tests {
         EXPECT_TRUE((SameAs<IntrusivePtrNonAtomic<RegNode>, IntrusivePtrAtomic<RegNode>>()));
     }
 
+    TEST(TypeDescTest, OnlyAPoolStringInterns) {
+        static_assert(DescribeType<PoolString>().interns);
+        static_assert(DescribeType<Vector<PoolString>>().element->interns);
+        static_assert(DescribeType<Map<int32_t, PoolString>>().element->interns);
+        static_assert(!DescribeType<Vector<PoolString>>().interns);
+        static_assert(!DescribeType<String>().interns);
+        static_assert(!DescribeType<FixedString<8>>().interns);
+        static_assert(!DescribeType<FixedString<8, false>>().interns);
+        static_assert(!DescribeType<int32_t>().interns);
+        EXPECT_FALSE((SameAs<PoolString, String>())) << "a field that interns is not one that does not";
+        EXPECT_FALSE((SameAs<Vector<PoolString>, Vector<String>>()));
+        EXPECT_TRUE((SameAs<Vector<PoolString>, Vector<PoolString>>()));
+    }
+
     TEST(TypeDescTest, SameTypeDoesNotCompareAddresses) {
         // A copy lives at another address, as a second shared library's inline variable would
         using Mixed = Variant<int32_t, Vector<String>>;

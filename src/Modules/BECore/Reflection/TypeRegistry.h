@@ -93,6 +93,14 @@ namespace BECore {
         [[nodiscard]] const Vector<const TypeInfo*>& FactoryBases() const;
 
         /**
+         * @brief The XML element name of the factory list of @p info's factory base (`FactoryTraits<Base>::elementName`); @p info is the base or a type of it
+         *
+         * Read from the fields that hold pointers of the base (`FieldDesc::factoryElementName`), so a base that no reflected field holds
+         * has none: empty, as for a type of no factory.
+         */
+        [[nodiscard]] StringView FactoryElementName(const TypeInfo& info) const;
+
+        /**
          * @brief Makes an object of the type, owned by the handle; empty for an unknown name, an abstract type or a type with no factory
          *
          * The handle holds the address of the made type (the derived one). An unknown name allocates nothing.
@@ -154,6 +162,7 @@ namespace BECore {
         mutable DerivedMap _direct;
         mutable DerivedMap _all;
         mutable Vector<const TypeInfo*> _factoryBases;
+        mutable HashMap<uint64_t, StringView> _factoryElementNames;
         Vector<const TypeInfo*> _none;
     };
 

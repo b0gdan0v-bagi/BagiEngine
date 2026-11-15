@@ -51,6 +51,8 @@ namespace BECore {
         /// List (a FixedVector or an Array), Map (a FixedHashMap), String (a FixedString) that cannot grow: the most it holds;
         /// 0 when there is no limit
         size_t capacity = 0;
+        /// String: the value is a `PoolString`, so writing it puts the text into the pool, which never shrinks. Not set on a container of them: look at its element
+        bool interns = false;
         /// List: the element. Optional: the value. Map: the value. Pair: the second member.
         const TypeDesc* element = nullptr;
         /// Map: the key. Pair: the first member.
@@ -295,6 +297,7 @@ namespace BECore {
             } else if constexpr (IsTextType<T>) {
                 desc.kind = TypeKind::String;
                 desc.capacity = TextTraits<T>::kCapacity;
+                desc.interns = std::is_same_v<T, PoolString>;
             } else if constexpr (IsReflectedEnum<T>) {
                 desc.kind = TypeKind::Enum;
                 const auto& enumNames = EnumUtils<T>::Names();

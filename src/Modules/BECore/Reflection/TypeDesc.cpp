@@ -69,7 +69,7 @@ namespace BECore {
         if (&a == &b) {
             return true;
         }
-        if (a.kind != b.kind || a.resizable != b.resizable || a.capacity != b.capacity || a.ObjectHash() != b.ObjectHash()) {
+        if (a.kind != b.kind || a.resizable != b.resizable || a.capacity != b.capacity || a.interns != b.interns || a.ObjectHash() != b.ObjectHash()) {
             return false;
         }
         if (a.names.size() != b.names.size() || a.alternatives.size() != b.alternatives.size()) {

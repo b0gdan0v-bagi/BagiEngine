@@ -661,4 +661,39 @@ namespace BECore::Tests {
         }
     }
 
+    TEST_F(TypeRegistryTest, NoFieldOfAPlainTypeHasAFactoryElementName) {
+        for (const TypeInfo* info : registry.All()) {
+            for (const FieldDesc& field : info->fields) {
+                EXPECT_TRUE(field.factoryElementName.empty()) << String(info->Name()).c_str() << "." << String(field.cppName).c_str();
+            }
+        }
+    }
+
+    // The widget list of the engine is the field that holds IWidget pointers, so it is where the name of the factory list is known
+    TEST(TypeRegistryEngineTest, FactoryElementNameOfARealFactoryHierarchy) {
+        const TypeRegistry& registry = TypeRegistry::GetInstance();
+        const TypeInfo* widget = registry.Find(IWidget::GetStaticTypeMeta().typeHash);
+        ASSERT_NE(widget, nullptr);
+        EXPECT_EQ(registry.FactoryElementName(*widget), "widget");
+
+        const Vector<const TypeInfo*>& derived = registry.Derived(*widget, true);
+        ASSERT_FALSE(derived.empty());
+        for (const TypeInfo* info : derived) {
+            ASSERT_EQ(info->factoryBase, widget->Hash()) << String(info->Name()).c_str();
+            EXPECT_EQ(registry.FactoryElementName(*info), "widget") << String(info->Name()).c_str();
+        }
+    }
+
+    TEST(TypeRegistryEngineTest, FactoryElementNameIsEmptyWithoutAFactory) {
+        const TypeRegistry& registry = TypeRegistry::GetInstance();
+        const TypeInfo* list = registry.Find("WidgetList");
+        ASSERT_NE(list, nullptr);
+        EXPECT_TRUE(registry.FactoryElementName(*list).empty());
+        ASSERT_EQ(list->fields.size(), 1U);
+        EXPECT_EQ(list->fields[0].factoryElementName, "widget");
+
+        const TypeRegistry empty;
+        EXPECT_TRUE(empty.FactoryElementName(*list).empty());
+    }
+
 }  // namespace BECore::Tests
