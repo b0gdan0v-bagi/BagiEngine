@@ -2,6 +2,8 @@
 
 const test = require("node:test");
 const assert = require("node:assert");
+const fs = require("node:fs");
+const path = require("node:path");
 const Runs = require("../media/runs");
 
 const say = (text, time) => ({ time: time || "2026-11-15T10:00:00Z", kind: "say", text });
@@ -42,6 +44,16 @@ test("a NOT TAKEN line names the entry and the reason, whether it ends a text or
     const found = Runs.noClaimOf(finished({ activity: { events: [multi] } }), REMEMBERED);
     assert.strictEqual(found.source, "line");
     assert.strictEqual(found.title, "Level format");
+});
+
+test("the example line of the loop skill parses as the skill promises", () => {
+    const skill = fs.readFileSync(path.join(__dirname, "../../../../.claude/skills/todo-loop/SKILL.md"), "utf8");
+    const example = /Example: `(NOT TAKEN [^`]+)`/.exec(skill);
+    assert.ok(example, "SKILL.md has no `Example: ...` line for NOT TAKEN");
+    const found = Runs.parseNotTaken([say(`Offer: run /todo-merge. ${example[1]}`)]);
+    assert.strictEqual(found.entry, "match3-level-format");
+    assert.strictEqual(found.reason, example[1].replace(/^NOT TAKEN \S+: /, ""));
+    assert.ok(found.reason.length <= Runs.REASON_MAX);
 });
 
 test("NOT TAKEN with - names no entry; the newest line wins; an overlong reason is cut", () => {
