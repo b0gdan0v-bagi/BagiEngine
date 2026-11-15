@@ -123,6 +123,11 @@ function activate(context) {
         try {
             const out = await runTool(tool, ["list", "--json", "--store", "--activity", "--usage", "--claude", config().claude], 90000);
             ctx.state = JSON.parse(out);
+            // A branch of another checkout or machine (or cut from another base) is not this checkout's to review or
+            // merge: it leaves the review list, the status bar count and the "reached review" notices for a folded line.
+            const away = (e) => e.local === false || Boolean(e.foreignBase);
+            ctx.state.reviewElsewhere = (ctx.state.review || []).filter(away);
+            ctx.state.review = (ctx.state.review || []).filter((e) => !away(e));
             const info = ctx.cachedBuildInfo() || (await ctx.getBuildInfo());
             view.show({ state: ctx.state, at: Date.now(), feed: ctx.feed(), lastVerify: ctx.lastVerify(), prices: config().prices, shotsTool: Boolean(info && info.shots), verifying: ctx.isVerifying() ? "running" : null });
             ctx.postWorkersToList();

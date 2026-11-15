@@ -11,7 +11,7 @@
     const isFolded = (name) => !expanded.has(name);
 
     function save() {
-        vscode.setState({ openSteps: [...openSteps], expanded: [...expanded], feedOpen: saved.feedOpen });
+        vscode.setState({ openSteps: [...openSteps], expanded: [...expanded], feedOpen: saved.feedOpen, elsewhereOpen: saved.elsewhereOpen });
     }
 
     // The secondary buttons of a card behind "...": the main ones stay in sight.
@@ -523,6 +523,25 @@
         root.appendChild(el("h2", "", `Review: ${state.review.length} to merge`));
         if (!state.review.length) root.appendChild(el("p", "muted", "Nothing waits for /todo-merge."));
         state.review.forEach((e) => root.appendChild(reviewCard(e, state)));
+        const elsewhere = state.reviewElsewhere || [];
+        if (elsewhere.length) {
+            const box = el("details", "feed elsewhere");
+            box.open = Boolean(saved.elsewhereOpen);
+            box.addEventListener("toggle", () => {
+                saved.elsewhereOpen = box.open;
+                vscode.setState({ ...saved, openSteps: [...openSteps], expanded: [...expanded] });
+            });
+            const summary = el("summary", "muted", `${elsewhere.length} in other checkouts`);
+            summary.title = "in review, but the branch lives in another checkout or on another machine (or was cut from another base): review and merge it there";
+            box.appendChild(summary);
+            elsewhere.forEach((e) => {
+                const line = el("div", "feed-item");
+                const where = [e.takenOrigin, e.takenBase || e.foreignBase].filter(Boolean).join(", ");
+                line.append(el("span", "kind", e.id), el("span", "text muted", e.title + (where ? ` (${where})` : "")));
+                box.appendChild(line);
+            });
+            root.appendChild(box);
+        }
 
         const items = payload.feed || [];
         const box = el("details", "feed");
