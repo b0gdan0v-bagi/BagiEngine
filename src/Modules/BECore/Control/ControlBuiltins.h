@@ -21,6 +21,8 @@ namespace BECore {
      * | resume | none | {"paused":false}; the code `manual_clock` with the manual clock, which only `step` advances |
      * | quit   | none | {}; then ApplicationEvents::QuitEvent, so the application stops at the end of the frame. Bypasses the barrier |
      *
+     * It also registers the by-name methods (`RegisterReflectionControl`).
+     *
      * `step` is a barrier; what it means on the real and the manual clock: Control/CLAUDE.md, "Manual clock and `step`".
      *
      * Registering twice replaces the handlers, so calling this again is harmless.

@@ -2,6 +2,7 @@
 
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
+#include <BECore/Control/ReflectionControl.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Time/Time.h>
 #include <Events/ApplicationEvents.h>
@@ -125,6 +126,7 @@ namespace BECore {
         service.RegisterHandler("pause", [&service](ControlCall& call) { HandlePause(call, service); });
         service.RegisterHandler("resume", [&service](ControlCall& call) { HandleResume(call, service); });
         service.RegisterHandler("quit", HandleQuit, /*bypassBarrier=*/true);
+        RegisterReflectionControl(service);
     }
 
 }  // namespace BECore
