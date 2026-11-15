@@ -2,6 +2,7 @@
 
 #include <BECore/Rooms/ManualClock.h>
 #include <BECore/Rooms/TestRandom.h>
+#include <Common/SharedPtr.h>
 #include <Games/SeatedGameRegistry.h>
 #include <RoomClient/RoomTransport.h>
 #include <RoomServer/DemoCardGame.h>

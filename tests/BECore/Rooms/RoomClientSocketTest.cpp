@@ -3,6 +3,7 @@
 #include <BECore/Rooms/TestRandom.h>
 #include <BECore/WebSocketTestClient.h>
 #include <Common/Printers.h>
+#include <Common/SharedPtr.h>
 #include <RemoteControl/Tls/TlsStream.h>
 #include <RemoteControl/WebSocketClient.h>
 #include <RoomClient/RoomClient.h>

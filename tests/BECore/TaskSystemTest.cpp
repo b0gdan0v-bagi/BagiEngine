@@ -1,6 +1,7 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Common/SharedPtr.h>
 #include <TaskSystem/Awaitables.h>
 #include <TaskSystem/CancellationToken.h>
 #include <TaskSystem/LiveTasks.h>

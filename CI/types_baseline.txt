@@ -3,7 +3,6 @@
 # --update-baseline` rewrites the file after it. A diff that adds a line or raises a count is a finding: fix the new hit with the alias of
 # BECore/Types, or mark a real boundary `//-NoStd: <why>`; never baseline it.
 # Who removes which lines:
-#   function                           callables-move-only (the callable type replaces std::function / eastl::function)
 #   fstream, include-stream, getline   engine-file-layer (files and text go through the file layer)
 #   directory-iterator                 engine-file-layer, engine-path-type
 #   sto, stable-sort, stringstream     core-type-aliases-cleanup (and the entry that touches the file)
@@ -59,8 +58,6 @@ tests/BECore/Tls/FakeTlsStream.h sto 1
 tests/BECore/Tls/TlsLocalEndpointTest.cpp fstream 1
 tests/BECore/Tls/TlsLocalEndpointTest.cpp sto 4
 tests/BECore/UIDocumentTest.cpp fstream 1
-tests/BECore/UIInputTest.cpp function 1
-tests/BECore/UIThemeResolveTest.cpp function 1
 tests/BECore/UIWebTest.cpp fstream 1
 tests/BECore/UIWebTest.cpp sto 1
 tests/BECore/WebSocketListenerTest.cpp sto 1

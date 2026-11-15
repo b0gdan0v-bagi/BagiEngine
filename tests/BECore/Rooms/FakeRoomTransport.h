@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Common/SharedPtr.h>
 #include <RoomClient/RoomTransport.h>
 #include <Rooms/RoomProtocol.h>
 #include <gtest/gtest.h>

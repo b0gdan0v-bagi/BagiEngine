@@ -1,6 +1,7 @@
 #include <BECore/Rooms/HubTransport.h>
 #include <BECore/Rooms/JudgedTransport.h>
 #include <Common/Printers.h>
+#include <Common/SharedPtr.h>
 #include <RoomClient/RoomClient.h>
 #include <Rooms/RoomErrors.h>
 #include <gtest/gtest.h>

@@ -1,6 +1,7 @@
 #include <BECore/Rooms/FakeSeatedGame.h>
 #include <BECore/Rooms/TestRandom.h>
 #include <Common/Printers.h>
+#include <Common/SharedPtr.h>
 #include <Rooms/Room.h>
 #include <Rooms/RoomErrors.h>
 #include <gtest/gtest.h>

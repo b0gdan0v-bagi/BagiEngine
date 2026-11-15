@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Common/SharedPtr.h>
 #include <Rooms/RoomTypes.h>
 #include <memory>
 

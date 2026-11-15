@@ -4,7 +4,6 @@
 #include <Events/EventChannel.h>
 #include <Events/EventsQueueRegistry.h>
 #include <Events/SubscriptionHolder.h>
-#include <functional>
 #include <type_traits>
 #include <utility>
 

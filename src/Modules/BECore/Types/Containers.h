@@ -10,7 +10,6 @@
 #include <EASTL/map.h>
 #include <EASTL/memory.h>
 #include <EASTL/set.h>
-#include <EASTL/shared_ptr.h>
 #include <EASTL/span.h>
 #include <EASTL/unique_ptr.h>
 #include <EASTL/utility.h>
@@ -95,15 +94,6 @@ namespace BECore {
     template <typename T, typename... Args>
     [[nodiscard]] auto MakeUnique(Args&&... args) {
         return eastl::make_unique<T>(eastl::forward<Args>(args)...);
-    }
-
-    /// The shared owner of one object, counted. The control block of MakeShared is allocated with the object.
-    template <typename T>
-    using SharedPtr = eastl::shared_ptr<T>;
-
-    template <typename T, typename... Args>
-    [[nodiscard]] SharedPtr<T> MakeShared(Args&&... args) {
-        return eastl::make_shared<T>(eastl::forward<Args>(args)...);
     }
 
     /// Structured bindings work (`auto [a, b] = pair`), `std::tie(a, b) = pair` does not.
