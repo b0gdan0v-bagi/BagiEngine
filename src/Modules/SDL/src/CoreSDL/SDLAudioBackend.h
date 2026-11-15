@@ -34,11 +34,16 @@ namespace BECore {
         void Stop(uint32_t voice) override;
         void SetGain(uint32_t voice, float gain) override;
         [[nodiscard]] bool IsPlaying(uint32_t voice) const override;
+        bool StartStream(uint32_t voice, AudioFormat format, float gain) override;
+        bool QueueStream(uint32_t voice, Span<const float> samples) override;
+        void EndStream(uint32_t voice) override;
+        [[nodiscard]] uint64_t GetQueuedFrames(uint32_t voice) const override;
 
     private:
         void OnCleanUp();
 
         Vector<SDL_AudioStream*> _streams;
+        Vector<uint8_t> _streamChannels;  ///< per voice: the channels of the stream's input, 0 for a voice that is not a stream
         uint32_t _device = 0;
         bool _headless = false;
         bool _subsystem = false;

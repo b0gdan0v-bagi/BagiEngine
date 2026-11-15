@@ -1,7 +1,9 @@
 #pragma once
 
+#include <BECore/Audio/AudioTypes.h>
 #include <BECore/RefCounted/RefCounted.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
+#include <BECore/Types/Types.h>
 #include <cstdint>
 
 namespace BECore {
@@ -9,7 +11,8 @@ namespace BECore {
     class AudioClip;
 
     /**
-     * @brief The platform half of the sound, as IRenderer is of the drawing: a fixed set of voices, each playing one clip at a gain.
+     * @brief The platform half of the sound, as IRenderer is of the drawing: a fixed set of voices, each playing one clip, or a stream fed
+     * in parts (music), at a gain.
      *
      * A backend is dumb: AudioManager picks the voice, computes the gain from the buses and keeps the handles. Made by name through
      * AbstractFactory<IAudioBackend> (SDLAudioBackend, NullAudioBackend). Main thread only.
@@ -37,6 +40,18 @@ namespace BECore {
 
         /// Whether @p voice still has samples to play
         [[nodiscard]] virtual bool IsPlaying(uint32_t voice) const = 0;
+
+        /// Makes @p voice a stream of @p format at @p gain, dropping what it played; the samples come by QueueStream(). False: no stream there
+        virtual bool StartStream(uint32_t voice, AudioFormat format, float gain) = 0;
+
+        /// Appends interleaved samples in the stream's format to @p voice; they are copied
+        virtual bool QueueStream(uint32_t voice, Span<const float> samples) = 0;
+
+        /// No more samples come: what is queued plays out to its end
+        virtual void EndStream(uint32_t voice) = 0;
+
+        /// The frames of the stream of @p voice not played yet
+        [[nodiscard]] virtual uint64_t GetQueuedFrames(uint32_t voice) const = 0;
     };
 
 }  // namespace BECore

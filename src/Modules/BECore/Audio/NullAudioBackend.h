@@ -4,7 +4,7 @@
 
 namespace BECore {
 
-    /// A backend that plays nothing: a sound ends the moment it starts. Used where there is no output (a machine without a device, a build without one)
+    /// A backend that plays nothing: a sound ends the moment it starts, a stream does not start. Used where there is no output (a machine without a device, a build without one)
     class NullAudioBackend : public IAudioBackend {
         BE_CLASS(NullAudioBackend)
     public:
@@ -31,6 +31,21 @@ namespace BECore {
 
         [[nodiscard]] bool IsPlaying(uint32_t /*voice*/) const override {
             return false;
+        }
+
+        /// No stream: nothing would drain it, so the music would be decoded for nobody
+        bool StartStream(uint32_t /*voice*/, AudioFormat /*format*/, float /*gain*/) override {
+            return false;
+        }
+
+        bool QueueStream(uint32_t /*voice*/, Span<const float> /*samples*/) override {
+            return false;
+        }
+
+        void EndStream(uint32_t /*voice*/) override {}
+
+        [[nodiscard]] uint64_t GetQueuedFrames(uint32_t /*voice*/) const override {
+            return 0;
         }
 
     private:

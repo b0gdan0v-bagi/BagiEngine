@@ -52,6 +52,7 @@ namespace BECore {
             }
             _streams.push_back(stream);
         }
+        _streamChannels.assign(voiceCount, 0);
         if (!SDL_BindAudioStreams(_device, _streams.data(), static_cast<int>(_streams.size()))) {
             LOG_WARNING("SDLAudioBackend: cannot bind the voices: {}"_format(SDL_GetError()));
             Close();
@@ -69,6 +70,7 @@ namespace BECore {
             SDL_DestroyAudioStream(stream);  // unbinds it too
         }
         _streams.clear();
+        _streamChannels.clear();
         if (_device != 0) {
             SDL_CloseAudioDevice(_device);
             _device = 0;
@@ -95,6 +97,7 @@ namespace BECore {
             LOG_WARNING("SDLAudioBackend: '{}' is too long to play as one clip"_format(clip.GetPath().ToStringView()));
             return false;
         }
+        _streamChannels[voice] = 0;
         SDL_AudioStream* stream = _streams[voice];
         const AudioFormat& format = clip.GetFormat();
         const SDL_AudioSpec source{SDL_AUDIO_F32, format.channels, static_cast<int>(format.sampleRate)};
@@ -126,6 +129,44 @@ namespace BECore {
         }
         // Queued: put and not converted yet; available: converted and not taken by the device yet
         return SDL_GetAudioStreamQueued(_streams[voice]) > 0 || SDL_GetAudioStreamAvailable(_streams[voice]) > 0;
+    }
+
+    bool SDLAudioBackend::StartStream(uint32_t voice, AudioFormat format, float gain) {
+        if (voice >= _streams.size() || format.channels == 0) {
+            return false;
+        }
+        SDL_AudioStream* stream = _streams[voice];
+        const SDL_AudioSpec source{SDL_AUDIO_F32, format.channels, static_cast<int>(format.sampleRate)};
+        if (!(SDL_ClearAudioStream(stream) && SDL_SetAudioStreamFormat(stream, &source, nullptr) && SDL_SetAudioStreamGain(stream, gain))) {
+            LOG_WARNING("SDLAudioBackend: cannot start a stream on voice {}: {}"_format(voice, SDL_GetError()));
+            _streamChannels[voice] = 0;
+            return false;
+        }
+        _streamChannels[voice] = format.channels;
+        return true;
+    }
+
+    bool SDLAudioBackend::QueueStream(uint32_t voice, Span<const float> samples) {
+        if (voice >= _streams.size() || _streamChannels[voice] == 0 || samples.size_bytes() > static_cast<size_t>(INT_MAX)) {
+            return false;
+        }
+        return SDL_PutAudioStreamData(_streams[voice], samples.data(), static_cast<int>(samples.size_bytes()));
+    }
+
+    void SDLAudioBackend::EndStream(uint32_t voice) {
+        if (voice < _streams.size()) {
+            // The resampler keeps a few frames back until it knows no more come
+            SDL_FlushAudioStream(_streams[voice]);
+        }
+    }
+
+    uint64_t SDLAudioBackend::GetQueuedFrames(uint32_t voice) const {
+        if (voice >= _streams.size() || _streamChannels[voice] == 0) {
+            return 0;
+        }
+        // Queued is the input not converted yet, in the stream's input format; what is converted and waits for the device is a few ms more
+        const int bytes = SDL_GetAudioStreamQueued(_streams[voice]);
+        return bytes > 0 ? static_cast<uint64_t>(bytes) / (sizeof(float) * _streamChannels[voice]) : 0;
     }
 
     void SDLAudioBackend::OnCleanUp() {

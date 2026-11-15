@@ -96,4 +96,35 @@ namespace BECore::Tests {
         manager.Shutdown();
     }
 
+    TEST_F(SDLAudioBackendTest, AStreamTakesSamplesPartByPartAndPlaysOutAfterItsEnd) {
+        const AudioFormat format{22050, 2};
+        ASSERT_TRUE(backend->StartStream(2, format, 0.5f));
+        EXPECT_EQ(backend->GetQueuedFrames(2), 0u);
+        const Vector<float> part(22050 * 2 * 4, 0.0f);  // four seconds: the dummy device takes them in real time, far slower than the test
+        ASSERT_TRUE(backend->QueueStream(2, part));
+        EXPECT_GT(backend->GetQueuedFrames(2), 0u);
+        EXPECT_TRUE(backend->IsPlaying(2));
+        backend->EndStream(2);
+        EXPECT_TRUE(backend->IsPlaying(2));
+        backend->Stop(2);
+        EXPECT_EQ(backend->GetQueuedFrames(2), 0u);
+        EXPECT_FALSE(backend->IsPlaying(2));
+    }
+
+    TEST_F(SDLAudioBackendTest, AClipAfterAStreamOnTheSameVoiceIsNotAStream) {
+        ASSERT_TRUE(backend->StartStream(0, AudioFormat{22050, 1}, 1.0f));
+        ASSERT_TRUE(backend->Start(0, *clip, 1.0f));
+        EXPECT_EQ(backend->GetQueuedFrames(0), 0u);
+        EXPECT_FALSE(backend->QueueStream(0, Vector<float>(4, 0.0f)));
+    }
+
+    TEST_F(SDLAudioBackendTest, AStreamOutOfRangeIsRefused) {
+        EXPECT_FALSE(backend->StartStream(kVoices, AudioFormat{22050, 1}, 1.0f));
+        EXPECT_FALSE(backend->StartStream(0, AudioFormat{22050, 0}, 1.0f));
+        EXPECT_FALSE(backend->QueueStream(kVoices, Vector<float>(4, 0.0f)));
+        EXPECT_FALSE(backend->QueueStream(1, Vector<float>(4, 0.0f))) << "not started as a stream";
+        backend->EndStream(kVoices);
+        EXPECT_EQ(backend->GetQueuedFrames(kVoices), 0u);
+    }
+
 }  // namespace BECore::Tests
