@@ -3,6 +3,9 @@
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlRoots.h>
 #include <BECore/Control/ControlService.h>
+#include <BECore/Control/JsonDeserializer.h>
+#include <BECore/Control/JsonSerializer.h>
+#include <BECore/Reflection/MethodCall.h>
 #include <BECore/Reflection/PropertyAccess.h>
 #include <cmath>
 
@@ -130,6 +133,50 @@ namespace BECore {
             return result;
         }
 
+        /// Whether a type holds a `PoolString` anywhere inside; every object type is entered once, so a type that holds its own kind ends the walk
+        class InternWalk {
+        public:
+            explicit InternWalk(const TypeRegistry& registry) : _registry(registry) {}
+
+            bool Reaches(const TypeDesc& desc) {
+                if (desc.interns) {
+                    return true;
+                }
+                if (desc.element != nullptr && Reaches(*desc.element)) {
+                    return true;
+                }
+                if (desc.key != nullptr && Reaches(*desc.key)) {
+                    return true;
+                }
+                for (const TypeDesc* alternative : desc.alternatives) {
+                    if (alternative != nullptr && Reaches(*alternative)) {
+                        return true;
+                    }
+                }
+                return desc.objectMeta != nullptr && ReachesObject(desc.ObjectHash());
+            }
+
+        private:
+            bool ReachesObject(uint64_t hash) {
+                if (!_entered.insert(hash).second) {
+                    return false;
+                }
+                const TypeInfo* info = _registry.Find(hash);
+                if (info == nullptr) {
+                    return false;
+                }
+                for (const FieldRef& field : _registry.AllFields(*info)) {
+                    if (field.field->type != nullptr && Reaches(*field.field->type)) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            const TypeRegistry& _registry;
+            HashSet<uint64_t> _entered;
+        };
+
         void HandleGetProperty(ControlCall& call, const ControlService& service) {
             const auto names = ReadNames(call.Params());
             if (!names) {
@@ -179,11 +226,81 @@ namespace BECore {
             call.Reply(DescribeAccess(names->root, names->path, *readBack));
         }
 
+        /// The wire code of a refused call; `CallStatus::unknown_method` is renamed so it is not taken for the control method of that name
+        ControlError FromCallError(const CallError& error) {
+            const StringView code = error.status == CallStatus::unknown_method ? ReflectionControlErrors::kUnknownFunction : EnumUtils<CallStatus>::ToString(error.status);
+            return MakeControlError(code, error.message);
+        }
+
+        void HandleCallMethod(ControlCall& call, const ControlService& service) {
+            const Json& params = call.Params();
+            const auto rootName = ReadText(params, "root");
+            if (!rootName) {
+                call.Fail(rootName.error());
+                return;
+            }
+            const auto method = ReadText(params, "method");
+            if (!method) {
+                call.Fail(method.error());
+                return;
+            }
+            const Json* arguments = FindJsonMember(params, "arguments");
+            if (arguments != nullptr && !arguments->is_object()) {
+                call.Fail(ControlErrors::kInvalidParams, "'arguments' has to be an object");
+                return;
+            }
+            const auto target = ResolveRoot(service, *rootName);
+            if (!target) {
+                call.Fail(target.error());
+                return;
+            }
+
+            // Before the arguments are read: a method that takes text for the pool is refused whatever the arguments are
+            const TypeRegistry& registry = TypeRegistry::GetInstance();
+            const MethodRef found = registry.FindMethod(*target->object.type, *method);
+            if (found && found.method->callable && !target->root->allowInterning && MethodInterns(*found.method, registry)) {
+                call.Fail(ReflectionControlErrors::kInterning, Format("Method '{}' takes text that would be interned, and the root '{}' does not allow it", found.method->name, Shown(*rootName)));
+                return;
+            }
+
+            // `Post` refuses a request nested deeper than `kMaxRequestDepth`, so the document is safe to read; a recursive parameter type is
+            // still bounded by the reader's own limit on open scopes
+            const Json noArguments = Json::object();
+            JsonDeserializer reader(arguments != nullptr ? *arguments : noArguments);
+            JsonSerializer writer;
+            const auto called = CallMethod(target->object, *method, reader, writer, registry);
+            if (!called) {
+                call.Fail(FromCallError(called.error()));
+                return;
+            }
+
+            Json written = writer.Take();
+            Json result = Json::object();
+            result["root"] = MakeJsonString(*rootName);
+            result["method"] = MakeJsonString(*method);
+            const auto answer = written.find("result");
+            if (answer != written.end()) {
+                result["result"] = std::move(*answer);
+            }
+            call.Reply(std::move(result));
+        }
+
     }  // namespace
+
+    bool MethodInterns(const MethodDesc& method, const TypeRegistry& registry) {
+        InternWalk walk(registry);
+        for (const ParamDesc& param : method.params) {
+            if (param.type != nullptr && walk.Reaches(*param.type)) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     void RegisterReflectionControl(ControlService& service) {
         service.RegisterHandler("get_property", [&service](ControlCall& call) { HandleGetProperty(call, service); });
         service.RegisterHandler("set_property", [&service](ControlCall& call) { HandleSetProperty(call, service); });
+        service.RegisterHandler("call_method", [&service](ControlCall& call) { HandleCallMethod(call, service); });
     }
 
 }  // namespace BECore

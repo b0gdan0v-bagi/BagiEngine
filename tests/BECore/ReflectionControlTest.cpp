@@ -6,6 +6,7 @@
 #include <BECore/Control/ControlRoots.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
+#include <BECore/Control/ReflectionControl.h>
 #include <BECore/Reflection/TypeRegistry.h>
 #include <BECore/Reflection/TypedRef.h>
 #include <BECore/Reflection/XmlSerializer.h>
@@ -39,6 +40,9 @@ namespace BECore::Tests {
                 RegisterControlBuiltins(service);
                 service.Roots().Register("box", ControlRoot{[this] { return TypedRef::Of(box); }});
                 service.Roots().Register("open", ControlRoot{[this] { return TypedRef::Of(box); }, true});
+                service.Roots().Register("tool", ControlRoot{[this] { return TypedRef::Of(tool); }});
+                service.Roots().Register("tool_open", ControlRoot{[this] { return TypedRef::Of(tool); }, true});
+                service.Roots().Register("tool_const", ControlRoot{[this] { return TypedRef::Of(std::as_const(tool)); }});
                 service.Roots().Register("empty", ControlRoot{[] { return TypedRef{}; }});
             }
 
@@ -101,8 +105,32 @@ namespace BECore::Tests {
                 EXPECT_EQ(Snapshot(box), before) << String(path).c_str();
             }
 
+            Json Call(StringView root, StringView method, Json arguments) {
+                Json params = Json::object();
+                params["root"] = MakeJsonString(root);
+                params["method"] = MakeJsonString(method);
+                params["arguments"] = std::move(arguments);
+                return Ask("call_method", std::move(params));
+            }
+
+            /// The `result` member of the answer's result, null when there is none
+            static const Json* ResultOf(const Json& response) {
+                const Json* result = FindJsonMember(response, "result");
+                return result != nullptr ? FindJsonMember(*result, "result") : nullptr;
+            }
+
+            /// A call that is refused with @p code and did not run the method
+            void ExpectCallRefused(StringView root, StringView method, Json arguments, StringView code) {
+                const int32_t before = tool.calls;
+                const Json response = Call(root, method, std::move(arguments));
+                EXPECT_FALSE(IsOk(response)) << String(method).c_str();
+                EXPECT_EQ(CodeOf(response), String(code)) << String(method).c_str() << ": " << MessageOf(response).c_str();
+                EXPECT_EQ(tool.calls, before) << String(method).c_str();
+            }
+
             ControlService service;
             RcBox box;
+            RcTool tool;
             int64_t nextId = 0;
         };
 
@@ -331,6 +359,241 @@ namespace BECore::Tests {
         });
         other.Drain();
         EXPECT_EQ(CodeOf(response), "invalid_params");
+    }
+
+    // =========================================================================
+    // call_method
+    // =========================================================================
+
+    TEST_F(ReflectionControlTest, CallMethodRunsTheMethodAndAnswersWithItsResult) {
+        Json arguments = Json::object();
+        arguments["first"] = 2;
+        arguments["second"] = 3;
+        const Json response = Call("tool", "Add", arguments);
+        ASSERT_TRUE(IsOk(response)) << MessageOf(response).c_str();
+        const Json* result = FindJsonMember(response, "result");
+        ASSERT_NE(result, nullptr);
+        EXPECT_EQ(GetJsonString(*result, "root").value_or(String()), "tool");
+        EXPECT_EQ(GetJsonString(*result, "method").value_or(String()), "Add");
+        ASSERT_NE(ResultOf(response), nullptr);
+        EXPECT_EQ(*ResultOf(response), Json(5));
+        EXPECT_EQ(tool.calls, 1);
+    }
+
+    TEST_F(ReflectionControlTest, CallMethodTakesTextListsAndObjects) {
+        Json echo = Json::object();
+        echo["text"] = MakeJsonString("hello");
+        EXPECT_EQ(*ResultOf(Call("tool", "Echo", echo)), MakeJsonString("hello"));
+
+        Json total = Json::object();
+        total["numbers"] = Json::array({1, 2, 3});
+        EXPECT_EQ(*ResultOf(Call("tool", "Total", total)), Json(6));
+
+        Json leaf = Json::object();
+        leaf["id"] = 4;
+        leaf["label"] = MakeJsonString("x");
+        Json shift = Json::object();
+        shift["leaf"] = leaf;
+        const Json shifted = Call("tool", "Shift", shift);
+        ASSERT_TRUE(IsOk(shifted)) << MessageOf(shifted).c_str();
+        ASSERT_NE(ResultOf(shifted), nullptr);
+        EXPECT_EQ(GetJsonInt(*ResultOf(shifted), "id").value_or(0), 5);
+        EXPECT_EQ(GetJsonString(*ResultOf(shifted), "label").value_or(String()), "x");
+    }
+
+    TEST_F(ReflectionControlTest, AMethodThatReturnsNothingHasNoResultAndNeedsNoArguments) {
+        Json params = Json::object();
+        params["root"] = MakeJsonString("tool");
+        params["method"] = MakeJsonString("Touch");
+        const Json response = Ask("call_method", params);
+        ASSERT_TRUE(IsOk(response)) << MessageOf(response).c_str();
+        EXPECT_EQ(ResultOf(response), nullptr);
+        EXPECT_EQ(tool.calls, 1);
+    }
+
+    TEST_F(ReflectionControlTest, AConstMethodRunsOnAConstRoot) {
+        tool.calls = 4;
+        const Json response = Call("tool_const", "Count", Json::object());
+        ASSERT_TRUE(IsOk(response)) << MessageOf(response).c_str();
+        EXPECT_EQ(*ResultOf(response), Json(4));
+    }
+
+    TEST_F(ReflectionControlTest, AMethodThatChangesTheObjectIsRefusedOnAConstRoot) {
+        Json arguments = Json::object();
+        arguments["first"] = 1;
+        arguments["second"] = 1;
+        ExpectCallRefused("tool_const", "Add", arguments, "const_object");
+    }
+
+    TEST_F(ReflectionControlTest, BadArgumentsAreRefusedAndTheMethodDoesNotRun) {
+        ExpectCallRefused("tool", "Add", Json::object(), "bad_arguments");
+
+        Json missing = Json::object();
+        missing["first"] = 1;
+        ExpectCallRefused("tool", "Add", missing, "bad_arguments");
+
+        Json wrongType = Json::object();
+        wrongType["first"] = MakeJsonString("1");
+        wrongType["second"] = 2;
+        ExpectCallRefused("tool", "Add", wrongType, "bad_arguments");
+
+        Json unknownKey = Json::object();
+        unknownKey["first"] = 1;
+        unknownKey["second"] = 2;
+        unknownKey["third"] = 3;
+        ExpectCallRefused("tool", "Add", unknownKey, "bad_arguments");
+
+        Json outOfRange = Json::object();
+        outOfRange["first"] = int64_t{5000000000};
+        outOfRange["second"] = 2;
+        ExpectCallRefused("tool", "Add", outOfRange, "bad_arguments");
+    }
+
+    TEST_F(ReflectionControlTest, ANameThatIsNoMethodOrNoCallableMethodIsRefused) {
+        ExpectCallRefused("tool", "Nothing", Json::object(), "unknown_function");
+        ExpectCallRefused("tool", "Self", Json::object(), "not_callable");
+    }
+
+    TEST_F(ReflectionControlTest, ARootThatIsUnknownOrHasNoObjectIsRefused) {
+        EXPECT_EQ(CodeOf(Call("nothing", "Touch", Json::object())), "unknown_root");
+        EXPECT_EQ(CodeOf(Call("empty", "Touch", Json::object())), "no_object");
+    }
+
+    TEST_F(ReflectionControlTest, AMethodWithTextForThePoolNeedsARootThatAllowsInterning) {
+        Json name = Json::object();
+        name["name"] = MakeJsonString(kClientTag);
+        ExpectCallRefused("tool", "Name", name, "interning");
+        EXPECT_FALSE(PoolString::Find(kClientTag).has_value());
+
+        Json tagged = Json::object();
+        tagged["tagged"] = Json{{"id", 1}, {"tag", MakeJsonString(kClientTag)}};
+        ExpectCallRefused("tool", "Tag", tagged, "interning");
+        ExpectCallRefused("tool", "Tag", Json::object(), "interning");  // refused before the arguments are read
+        EXPECT_FALSE(PoolString::Find(kClientTag).has_value());
+
+        EXPECT_TRUE(IsOk(Call("tool_open", "Name", name)));
+        EXPECT_TRUE(IsOk(Call("tool_open", "Tag", tagged)));
+        EXPECT_TRUE(PoolString::Find(kClientTag).has_value());
+        EXPECT_EQ(tool.calls, 2);
+    }
+
+    TEST_F(ReflectionControlTest, ArgumentsThatAreNoObjectAreInvalidParams) {
+        for (Json arguments : {Json::array({1}), MakeJsonString("text"), Json(5), Json()}) {
+            ExpectCallRefused("tool", "Touch", arguments, "invalid_params");
+        }
+    }
+
+    TEST_F(ReflectionControlTest, ARequestNestedOverTheServiceLimitIsInvalid) {
+        Json deep = Json::array();
+        for (size_t level = 0; level < ControlService::kMaxRequestDepth + 8; ++level) {
+            deep = Json::array({std::move(deep)});
+        }
+        Json arguments = Json::object();
+        arguments["numbers"] = std::move(deep);
+        Json params = Json::object();
+        params["root"] = MakeJsonString("tool");
+        params["method"] = MakeJsonString("Total");
+        params["arguments"] = std::move(arguments);
+        EXPECT_EQ(CodeOf(Ask("call_method", params)), "invalid_request");
+        EXPECT_EQ(tool.calls, 0);
+    }
+
+    TEST_F(ReflectionControlTest, ADeepArgumentOfARecursiveTypeIsReadOrRefusedNeverCrashes) {
+        constexpr size_t kLevels = 50;
+        Json node = Json{{"id", 1}, {"children", Json::array()}};
+        for (size_t level = 0; level < kLevels; ++level) {
+            node = Json{{"id", 1}, {"children", Json::array({std::move(node)})}};
+        }
+        Json arguments = Json::object();
+        arguments["node"] = std::move(node);
+        const Json response = Call("tool", "Nest", arguments);
+        EXPECT_TRUE(IsOk(response) || CodeOf(response) == "bad_arguments") << MessageOf(response).c_str();
+    }
+
+    TEST_F(ReflectionControlTest, ALongTextArgumentReachesTheMethodWhole) {
+        const String longText(100000, 'x');
+        Json arguments = Json::object();
+        arguments["text"] = MakeJsonString(longText);
+        const Json response = Call("tool", "Echo", arguments);
+        ASSERT_TRUE(IsOk(response)) << MessageOf(response).c_str();
+        EXPECT_EQ(GetJsonString(*FindJsonMember(response, "result"), "result").value_or(String()).size(), longText.size());
+    }
+
+    TEST_F(ReflectionControlTest, ALongTextInTheWrongPlaceIsCutInTheMessage) {
+        Json arguments = Json::object();
+        arguments["first"] = MakeJsonString(String(100000, 'y'));
+        arguments["second"] = 1;
+        const Json response = Call("tool", "Add", arguments);
+        EXPECT_EQ(CodeOf(response), "bad_arguments");
+        EXPECT_LT(MessageOf(response).size(), 2000U);
+        EXPECT_EQ(tool.calls, 0);
+    }
+
+    TEST_F(ReflectionControlTest, ANameOfAMethodTheClientSendsIsNeverInterned) {
+        EXPECT_EQ(CodeOf(Call("tool", kClientPath, Json::object())), "unknown_function");
+        EXPECT_FALSE(PoolString::Find(kClientPath).has_value());
+    }
+
+    TEST_F(ReflectionControlTest, ParamsOfCallMethodAreChecked) {
+        Json noMethod = Json::object();
+        noMethod["root"] = MakeJsonString("tool");
+        EXPECT_EQ(CodeOf(Ask("call_method", noMethod)), "invalid_params");
+
+        Json numberMethod = noMethod;
+        numberMethod["method"] = 3;
+        EXPECT_EQ(CodeOf(Ask("call_method", numberMethod)), "invalid_params");
+
+        Json noRoot = Json::object();
+        noRoot["method"] = MakeJsonString("Touch");
+        EXPECT_EQ(CodeOf(Ask("call_method", noRoot)), "invalid_params");
+    }
+
+    // =========================================================================
+    // MethodInterns
+    // =========================================================================
+
+    namespace {
+
+        const MethodDesc& MethodOf(StringView type, StringView name) {
+            static const MethodDesc kMissing;
+            const TypeInfo* info = TypeRegistry::GetInstance().Find(type);
+            EXPECT_NE(info, nullptr) << String(type).c_str();
+            if (info == nullptr) {
+                return kMissing;
+            }
+            const MethodRef found = TypeRegistry::GetInstance().FindMethod(*info, name);
+            EXPECT_TRUE(found) << String(name).c_str();
+            return found ? *found.method : kMissing;
+        }
+
+        bool Interns(StringView name) {
+            return MethodInterns(MethodOf("RcTool", name));
+        }
+
+    }  // namespace
+
+    TEST(ReflectionControlMethodInternsTest, APoolStringParameterInterns) {
+        EXPECT_TRUE(Interns("Name"));
+    }
+
+    TEST(ReflectionControlMethodInternsTest, AnObjectParameterWithAPoolStringFieldInterns) {
+        EXPECT_TRUE(Interns("Tag"));
+    }
+
+    TEST(ReflectionControlMethodInternsTest, AVariantAlternativeAndAMapValueAreLookedInto) {
+        EXPECT_TRUE(Interns("Choose"));
+        EXPECT_TRUE(Interns("Table"));
+    }
+
+    TEST(ReflectionControlMethodInternsTest, PlainParametersDoNotIntern) {
+        for (const StringView name : {"Add", "Echo", "Total", "Shift", "Touch", "Count", "Self"}) {
+            EXPECT_FALSE(Interns(name)) << String(name).c_str();
+        }
+    }
+
+    TEST(ReflectionControlMethodInternsTest, ARecursiveTypeEndsTheWalkWhetherOrNotItHoldsAPoolString) {
+        EXPECT_FALSE(Interns("Nest"));
+        EXPECT_TRUE(Interns("NestNamed"));
     }
 
 }  // namespace BECore::Tests

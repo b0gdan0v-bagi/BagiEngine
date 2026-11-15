@@ -42,4 +42,102 @@ namespace BECore::ReflectionControlData {
         BE_REFLECT_FIELD Vector<int32_t> numbers;
     };
 
+    /// An object with a `PoolString` field, and a type that holds its own kind (with and without one)
+    struct RcTagged {
+        BE_CLASS(RcTagged)
+
+        BE_REFLECT_FIELD int32_t id = 0;
+        BE_REFLECT_FIELD PoolString tag;
+    };
+
+    struct RcNode {
+        BE_CLASS(RcNode)
+
+        BE_REFLECT_FIELD int32_t id = 0;
+        BE_REFLECT_FIELD Vector<RcNode> children;
+    };
+
+    struct RcNamedNode {
+        BE_CLASS(RcNamedNode)
+
+        BE_REFLECT_FIELD Vector<RcNamedNode> children;
+        BE_REFLECT_FIELD PoolString name;
+    };
+
+    /// One method for each kind of parameter and of result; every call that runs counts itself, so a refused call is the one that leaves `calls` as it was
+    struct RcTool {
+        BE_CLASS(RcTool)
+
+        BE_REFLECT_FIELD int32_t calls = 0;
+
+        BE_FUNCTION int32_t Add(int32_t first, int32_t second) {
+            ++calls;
+            return first + second;
+        }
+
+        BE_FUNCTION String Echo(const String& text) {
+            ++calls;
+            return text;
+        }
+
+        BE_FUNCTION int64_t Total(const Vector<int32_t>& numbers) {
+            ++calls;
+            int64_t total = 0;
+            for (const int32_t number : numbers) {
+                total += number;
+            }
+            return total;
+        }
+
+        BE_FUNCTION RcLeaf Shift(const RcLeaf& leaf) {
+            ++calls;
+            RcLeaf shifted = leaf;
+            ++shifted.id;
+            return shifted;
+        }
+
+        BE_FUNCTION void Touch() {
+            ++calls;
+        }
+
+        BE_FUNCTION int32_t Count() const {
+            return calls;
+        }
+
+        BE_FUNCTION void Name(const PoolString& name) {
+            ++calls;
+            (void)name;
+        }
+
+        BE_FUNCTION void Tag(const RcTagged& tagged) {
+            ++calls;
+            (void)tagged;
+        }
+
+        BE_FUNCTION void Choose(const Variant<int32_t, RcTagged>& pick) {
+            ++calls;
+            (void)pick;
+        }
+
+        BE_FUNCTION void Table(const Map<int32_t, RcTagged>& table) {
+            ++calls;
+            (void)table;
+        }
+
+        BE_FUNCTION void Nest(const RcNode& node) {
+            ++calls;
+            (void)node;
+        }
+
+        BE_FUNCTION void NestNamed(const RcNamedNode& node) {
+            ++calls;
+            (void)node;
+        }
+
+        BE_FUNCTION RcTool* Self() {
+            ++calls;
+            return this;
+        }
+    };
+
 }  // namespace BECore::ReflectionControlData
