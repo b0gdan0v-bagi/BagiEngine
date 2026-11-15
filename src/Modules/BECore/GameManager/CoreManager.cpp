@@ -52,6 +52,7 @@ namespace BECore {
     }
 
     void CoreManager::OnTestEnvironmentDeinit(PassKey<Tests::EngineEnvironment>) {
+        _audioManager.Shutdown();
         _tweenManager.Clear();  // no callbacks: what they point at may be gone
         _controlService.Shutdown();
         TaskManager::GetInstance().Shutdown(PassKey<CoreManager>{});
@@ -92,6 +93,7 @@ namespace BECore {
         _uiEnvironment.Initialize();
         _uiStrings.Initialize();
         _uiThemes.Initialize();
+        _audioManager.Initialize();
 
         _controlService.SetPause(&_pause);
         RegisterControlBuiltins(_controlService);
@@ -173,7 +175,8 @@ namespace BECore {
 
     void CoreManager::OnApplicationDeinit(PassKey<Application>) {
         BE_PROFILE_SCOPE("CoreManager::OnApplicationDeinit");
-        _tweenManager.Clear();  // no callbacks: the scenes and what the setters point at may be going away
+        _tweenManager.Clear();     // no callbacks: the scenes and what the setters point at may be going away
+        _audioManager.Shutdown();  // a backend still open here (none closed it at the clean-up) is closed before the task system goes
         _controlService.Shutdown();
         TaskManager::GetInstance().Shutdown(PassKey<CoreManager>{});
     }
