@@ -35,6 +35,8 @@ function config() {
         autoStartQueue: c.get("autoStartQueue", true),
         preset: c.get("preset", ""),
         prices: c.get("prices", DEFAULT_PRICES),
+        pushUrl: c.get("pushUrl", "").trim(),
+        timelineHours: Math.min(72, Math.max(1, c.get("timelineHours", 24))),
     };
 }
 

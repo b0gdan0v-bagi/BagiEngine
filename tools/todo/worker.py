@@ -898,6 +898,14 @@ def transcript_of(cwd: str, session_id: str) -> Path:
 
 
 LOOP_WORDS = {"list", "plan-only", "close"}
+# the prompt of a loop session in its transcript, where JSON keeps the newline between the tags as `\n`
+LOOP_PROMPT = re.compile(r"<command-name>/todo-loop</command-name>(?:\\n|\s)*<command-args>([^<]*)</command-args>")
+LOOP_PROMPT_BYTES = 20000
+
+
+def entry_of_loop_args(text: str) -> str | None:
+    """The entry id among the arguments of `/todo-loop` (not N, a keyword or `key=value`)."""
+    return next((word for word in text.split() if not word.isdigit() and word not in LOOP_WORDS and "=" not in word), None)
 
 
 def loop_entry_of(session: dict | None) -> str | None:
@@ -907,16 +915,11 @@ def loop_entry_of(session: dict | None) -> str | None:
         return None
     try:
         with transcript_of(session["cwd"], session["sessionId"]).open(encoding="utf-8", errors="replace") as f:
-            head = f.read(20000)
+            head = f.read(LOOP_PROMPT_BYTES)
     except OSError:
         return None
-    match = re.search(r"<command-name>/todo-loop</command-name>(?:\\n|\s)*<command-args>([^<]*)</command-args>", head)
-    if not match:
-        return None
-    for word in match.group(1).split():
-        if not word.isdigit() and word not in LOOP_WORDS and "=" not in word:
-            return word
-    return None
+    match = LOOP_PROMPT.search(head)
+    return entry_of_loop_args(match.group(1)) if match else None
 
 
 def tail_records(path: Path) -> list[dict]:
@@ -1624,7 +1627,13 @@ def cmd_queue(layout: Layout, args) -> None:
     queues = read_queues(layout)
     state = read_queue_state(layout)
     names = {f"{WORKER_PREFIX}{k}" for k, _path in layout.workers()}
-    if args.k is not None:
+    if args.k is None and args.clear:
+        # the end of the day: nothing starts by itself any more; the loops that run finish their slice
+        for name in names:
+            queues[name] = []
+            queue_state_of(state, name)["streak"] = []
+        write_queues(layout, queues, state)
+    elif args.k is not None:
         name = f"{WORKER_PREFIX}{args.k}"
         if name not in names:
             raise WorkerError(f"no worker {name} in {layout.root}")
@@ -2027,6 +2036,142 @@ def cmd_build_info(layout: Layout, args) -> None:
     print(json.dumps(info) if args.json else "\n".join(f"{k}: {v}" for k, v in info.items()))
 
 
+# --- the doctor: states of a worker that need a hand ---------------------------------------------------------------
+#
+# Each problem is `{kind, text, fix}`; `fix` names what `doctor <k> --fix <kind>` does, null when only the owner can
+# decide. Every one was met in practice: two loops in one folder (a kick and the panel's queue start at once), a
+# developer that committed on a detached HEAD (the branch stayed empty, the work sat on no branch), uncommitted
+# changes with no loop running, a worker left on a branch whose entry is no longer taken, a loop that never claimed.
+
+STARTING_STUCK_MIN = 15  # a loop started on an entry that has not claimed it after this long is stuck
+
+
+def running_sessions_in(sessions: list[dict], worker: Path) -> list[dict]:
+    """Every running background session of `worker`, oldest first."""
+    found = [s for s in sessions if s.get("kind") == "background" and s.get("cwd") and is_running(s)
+             and (Path(s["cwd"]) == worker or worker in Path(s["cwd"]).parents)]
+    return sorted(found, key=lambda s: s.get("startedAt") or 0)
+
+
+def unbranched_commits(repo: Path) -> int:
+    """The commits of a detached HEAD that no local branch holds (0 on a branch)."""
+    if git("symbolic-ref", "--quiet", "HEAD", cwd=repo, check=False):
+        return 0
+    count = git("rev-list", "--count", "HEAD", "--not", "--branches", cwd=repo, check=False)
+    return int(count) if count.isdigit() else 0
+
+
+def detached_target(repo: Path, entries: list[dict]) -> str | None:
+    """The branch of a taken entry that a detached HEAD continues (the branch is an ancestor of HEAD)."""
+    for entry in entries:
+        branch = entry.get("branch")
+        if entry.get("status") == "in progress" and branch and git_ok("rev-parse", "--verify", "--quiet", f"refs/heads/{branch}", cwd=repo) \
+                and git_ok("merge-base", "--is-ancestor", branch, "HEAD", cwd=repo):
+            return branch
+    return None
+
+
+def worker_problems(layout: Layout, path: Path, heads: list[tuple[str, Path, dict | None]], sessions: list[dict] | None,
+                    entry: dict | None, entries: list[dict], changed: bool) -> list[dict]:
+    problems = []
+    session = session_in(sessions or [], path)
+    loops = running_sessions_in(sessions or [], path)
+    if len(loops) > 1:
+        problems.append({"kind": "sessions", "fix": "stop all but the oldest",
+                         "text": f"{len(loops)} loops run in this folder at once ({', '.join(str(s.get('id')) for s in loops)}): they fight over the branch"})
+    taken = {e.get("branch") for e in entries if e.get("branch")}
+    for label, repo, h in heads:
+        if h is None:
+            continue
+        count = unbranched_commits(repo)
+        if count:
+            target = detached_target(repo, entries)
+            problems.append({"kind": f"detached-{label}", "fix": f"move {target} to them" if target else "keep them on a rescue branch",
+                             "text": f"{label}: {count} commit{'s' if count != 1 else ''} on a detached HEAD, on no branch" + (f" (they continue {target}, which does not hold them)" if target else "")})
+        if h.get("branch", "") and h["branch"].startswith("todo/") and h["branch"] not in taken and not is_running(session) and entries:
+            problems.append({"kind": f"stale-{label}", "fix": None if changed else "update (detach at the base)",
+                             "text": f"{label} stands on {h['branch']}, whose entry is not taken any more"})
+    if changed and not is_running(session) and not limit_hit(session) and not stopped_at(session):
+        problems.append({"kind": "dirty", "fix": None, "text": "uncommitted changes, and no loop runs here: look before a start (Terminal)"})
+    if entry and entry.get("starting") and session and isinstance(session.get("startedAt"), (int, float)):
+        minutes = int((time.time() * 1000 - session["startedAt"]) / 60000)
+        if minutes >= STARTING_STUCK_MIN:
+            problems.append({"kind": "starting", "fix": None, "text": f"started on {entry['id']} {minutes} min ago and has not claimed it: look at the log"})
+    return problems
+
+
+def cmd_doctor(layout: Layout, args) -> None:
+    """`doctor [k]`: the problems of the workers (`worker_problems`); `doctor <k> --fix <kind>` repairs one:
+    `sessions` stops every loop of the folder but the oldest (it started first, so its claim won), `detached-<repo>`
+    moves the entry's branch forward to the commits (only a fast-forward, and only when no worktree has the branch
+    checked out) and switches to it, or keeps them on `rescue/w<k>-<sha>`; `stale-<repo>` detaches at the base."""
+    listing = list_json(layout, argparse.Namespace(claude=args.claude, store=True, usage=False, activity=False))
+    rows = [w for w in listing["workers"] if args.k is None or w["k"] == args.k]
+    if args.k is not None and not rows:
+        raise WorkerError(f"no worker w{args.k} in {layout.root}")
+    if not args.fix:
+        if args.json:
+            print(json.dumps({w["name"]: w["problems"] for w in rows}, ensure_ascii=False, indent=1))
+            return
+        for w in rows:
+            for p in w["problems"] or [{"text": "ok", "fix": None}]:
+                print(f"{w['name']}: {p['text']}" + (f" [fix: {p['fix']}]" if p.get("fix") else ""))
+        return
+    if args.k is None:
+        raise WorkerError("--fix needs the worker")
+    row = rows[0]
+    problem = next((p for p in row["problems"] if p["kind"] == args.fix), None)
+    if problem is None or not problem.get("fix"):
+        raise WorkerError(f"{row['name']} has no problem {args.fix} that can be fixed ({', '.join(p['kind'] for p in row['problems']) or 'none'})")
+    path = Path(row["path"])
+    done = ""
+    if args.fix == "sessions":
+        loops = running_sessions_in(list_sessions(args.claude) or [], path)
+        for session in loops[1:]:
+            result = subprocess.run([args.claude, "stop", session_ref(session)], capture_output=True, text=True)
+            if result.returncode == 0:
+                mark_stopped(session)
+        done = f"stopped {len(loops) - 1} session(s), kept {loops[0].get('id')}"
+    elif args.fix.startswith("detached-") or args.fix.startswith("stale-"):
+        label = args.fix.split("-", 1)[1]
+        repo = path / SHARED_SUBMODULE if label == SHARED_SUBMODULE else path
+        if args.fix.startswith("stale-"):
+            result = update_one(layout, row["k"], path, list_sessions(args.claude))
+            done = "; ".join(["detached at the base", *result["notes"]])
+        else:
+            entries, _error = store_entries(layout)
+            target = detached_target(repo, entries)
+            head = git("rev-parse", "HEAD", cwd=repo)
+            if target:
+                holder = worktree_of(layout.shared if label == SHARED_SUBMODULE and layout.shared is not None else layout.main, target)
+                if holder is not None:
+                    raise WorkerError(f"{target} is checked out in {holder}: switch that worktree off it first")
+                old = git("rev-parse", target, cwd=repo)
+                git("update-ref", f"refs/heads/{target}", head, old, cwd=repo)
+                git("switch", target, cwd=repo)
+                done = f"{target} moved from {old[:8]} to {head[:8]} and checked out"
+            else:
+                name = f"rescue/{row['name']}-{head[:8]}"
+                git("branch", name, head, cwd=repo)
+                done = f"the commits are on {name}"
+    print(json.dumps({"fixed": args.fix, "done": done}) if args.json else done)
+
+
+def worker_diff(path: Path, entry: dict | None, layout: Layout) -> dict | None:
+    """What a worker's branch holds so far against its base (`--shortstat`) and what is not committed yet."""
+    if not entry or entry.get("starting") or entry.get("status") != "in progress" or not entry.get("base"):
+        return None
+    repo = path / SHARED_SUBMODULE if layout.shared is not None and entry.get("repo") == str(layout.shared.resolve()) else path
+    if not (repo / ".git").exists() or git("symbolic-ref", "--quiet", "--short", "HEAD", cwd=repo, check=False) != entry.get("branch"):
+        return None
+    ignore = ["--ignore-submodules=all"] if repo == path and layout.shared is not None else []
+    return {
+        "commits": int(git("rev-list", "--count", f"{entry['base']}..HEAD", cwd=repo, check=False) or 0),
+        "committed": git("diff", "--shortstat", *ignore, f"{entry['base']}...HEAD", cwd=repo, check=False).strip(),
+        "uncommitted": git("diff", "--shortstat", *ignore, "HEAD", cwd=repo, check=False).strip(),
+    }
+
+
 def list_json(layout: Layout, args) -> dict:
     """What `list --json` prints: the workers, their sessions and entries, and the entries in review
     (the VS Code panel of tools/vscode/todo-workers reads it)."""
@@ -2061,9 +2206,14 @@ def list_json(layout: Layout, args) -> dict:
             if entry:
                 for blocker in open_blockers(entry):
                     blocker["kind"] = blocker_kind(layout, entry, blocker, table, show)
+        heads = [("game", path, game)] + ([(SHARED_SUBMODULE, path / SHARED_SUBMODULE, engine)] if engine is not None else [])
         workers.append({
             "k": k,
             "name": f"{WORKER_PREFIX}{k}",
+            # what needs a hand (`worker_problems`; `doctor <k> --fix <kind>` repairs what has a `fix`)
+            "problems": worker_problems(layout, path, heads, sessions, entry, entries, bool(changed)),
+            # with --store: what the branch of the entry in progress holds so far
+            "diff": worker_diff(path, entry, layout) if args.store else None,
             "path": str(path),
             "head": game,
             "engine": engine,
@@ -2596,6 +2746,8 @@ def cmd_update(layout: Layout, args) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    import worker_insights  # it imports this module: as `worker`, also when this one runs as __main__ (main)
+
     parser = argparse.ArgumentParser(prog="worker.py", description="The folders of the parallel todo-loop workers (git worktrees).")
     sub = parser.add_subparsers(dest="command", required=True)
     p = sub.add_parser("create", help="make the workers w1..wN that are missing")
@@ -2665,7 +2817,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--by-loop", action="store_true", help="with --add: a loop queues its own next work, the count of entries in a row stays")
     p.add_argument("--remove", help="take this entry out")
     p.add_argument("--pop", action="store_true", help="take the first entry out and print it (nothing from a paused queue)")
-    p.add_argument("--clear", action="store_true", help="empty the queue; the count of entries in a row starts again")
+    p.add_argument("--clear", action="store_true", help="empty the queue (without a worker: every queue); the count of entries in a row starts again")
     p.add_argument("--pause", action="store_true", help="--queued-only and kick start nothing from it until --resume (a loop that stopped)")
     p.add_argument("--reason", help="with --pause: why")
     p.add_argument("--resume", action="store_true", help="lift a pause; the count of entries in a row starts again")
@@ -2700,6 +2852,12 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("build-info", help="the product, tests, preset and screenshot tool of this checkout (for the panel)")
     p.add_argument("--preset", help="this preset instead of the platform's debug one")
     p.add_argument("--json", action="store_true")
+    p = sub.add_parser("doctor", help="the states of the workers that need a hand; --fix repairs one (the panel)")
+    p.add_argument("k", nargs="?", type=int, help="the worker (default: all)")
+    p.add_argument("--fix", help="the kind of problem to repair (sessions, detached-game, detached-engine, stale-game, stale-engine)")
+    p.add_argument("--claude", default="claude", help="the command (default claude)")
+    p.add_argument("--json", action="store_true")
+    worker_insights.add_parsers(sub)
     p = sub.add_parser("stop", help="stop the background sessions of the workers")
     p.add_argument("workers", nargs="*", type=int, help="the workers (default: all)")
     p.add_argument("--claude", default="claude", help="the command (default claude)")
@@ -2710,12 +2868,15 @@ def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     rest = argv[argv.index("--") + 1 :] if "--" in argv else []
     argv = argv[: argv.index("--")] if "--" in argv else argv
+    sys.modules.setdefault("worker", sys.modules[__name__])  # one module, so worker_insights raises our WorkerError
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
     args = build_parser().parse_args(argv)
     args.rest = rest
     args.argv = argv + (["--", *rest] if rest else [])
+    import worker_insights
     try:
         layout = find_layout(Path.cwd())
-        commands = {"create": cmd_create, "list": cmd_list, "check": cmd_check, "remove": cmd_remove, "run": cmd_run, "start": cmd_start, "stop": cmd_stop, "relaunch": cmd_relaunch, "merge": cmd_merge, "update": cmd_update, "attach": cmd_session, "logs": cmd_session, "queue": cmd_queue, "overlap": cmd_overlap, "prefs": cmd_prefs, "dispatch": cmd_dispatch, "build-info": cmd_build_info, "cost": cmd_cost, "remarks": cmd_remarks, "kick": cmd_kick}
+        commands = {"create": cmd_create, "list": cmd_list, "check": cmd_check, "remove": cmd_remove, "run": cmd_run, "start": cmd_start, "stop": cmd_stop, "relaunch": cmd_relaunch, "merge": cmd_merge, "update": cmd_update, "attach": cmd_session, "logs": cmd_session, "queue": cmd_queue, "overlap": cmd_overlap, "prefs": cmd_prefs, "dispatch": cmd_dispatch, "build-info": cmd_build_info, "cost": cmd_cost, "remarks": cmd_remarks, "kick": cmd_kick, "doctor": cmd_doctor, **worker_insights.COMMANDS}
         commands[args.command](layout, args)
     except WorkerError as error:
         print(f"error: {error}", file=sys.stderr)

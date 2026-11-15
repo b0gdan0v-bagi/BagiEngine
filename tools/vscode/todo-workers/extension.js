@@ -9,6 +9,8 @@
 //   src/workers.js   sessions, update, fast start, relaunch, queues, start in a free worker, the engine pointer
 //   src/review.js    review, Review with Claude, Quick merge, Merge with Claude, Return with remarks
 //   src/todoList.js  the Todo list tab and the owner's writes to the store
+//   src/insights.js  the slower views (busy files, the day, the timeline, review rounds), the doctor's fixes, the merge
+//                    train, the end of the day, Dispatch, the push to a phone
 // Both views read again at once when todo.py signals a write (~/.claude/todo/changed.json), besides the timer.
 "use strict";
 
@@ -31,7 +33,7 @@ class WorkersView {
     resolveWebviewView(view) {
         this.view = view;
         view.webview.options = { enableScripts: true };
-        view.webview.html = pageHtml(this.context, ["graph.js", "panel.js"], ["panel.css", "graph.css"], "Asking worker.py ...");
+        view.webview.html = pageHtml(this.context, ["graph.js", "insights.js", "panel.js"], ["panel.css", "graph.css"], "Asking worker.py ...");
         view.webview.onDidReceiveMessage((message) => this.actions(message));
         view.onDidChangeVisibility(() => {
             if (view.visible) this.actions({ cmd: "refresh" });
@@ -65,7 +67,7 @@ function activate(context) {
     ctx.workerOf = (k) => ctx.state && ctx.state.workers.find((w) => w.k === k);
     const entryOf = (id) => ctx.state && [...ctx.state.review, ...ctx.state.workers.map((w) => w.entry)].find((e) => e && e.id === id);
 
-    for (const name of ["feed", "build", "workers", "review", "todoList"]) require(`./src/${name}`).attach(ctx);
+    for (const name of ["feed", "build", "workers", "review", "todoList", "insights"]) require(`./src/${name}`).attach(ctx);
 
     function act(message) {
         const worker = ctx.workerOf(message.worker);
@@ -96,6 +98,12 @@ function activate(context) {
             case "review": return ctx.reviewBranch(entryOf(message.entry));
             case "claudeReview": return ctx.startClaudeReview(entryOf(message.entry));
             case "todoList": return ctx.openTodoList(message.entry);
+            case "doctorFix": return ctx.doctorFix(message.worker, message.kind);
+            case "mergeTrain": return ctx.mergeTrain();
+            case "endDay": return ctx.endDay();
+            case "copyPush": return ctx.copyPush();
+            case "dispatch": return ctx.dispatch();
+            case "insights": return ctx.readInsights(true);
             case "settings": return vscode.commands.executeCommand("workbench.action.openSettings", "todoWorkers");
         }
     }
@@ -129,11 +137,12 @@ function activate(context) {
             ctx.state.reviewElsewhere = (ctx.state.review || []).filter(away);
             ctx.state.review = (ctx.state.review || []).filter((e) => !away(e));
             const info = ctx.cachedBuildInfo() || (await ctx.getBuildInfo());
-            view.show({ state: ctx.state, at: Date.now(), feed: ctx.feed(), lastVerify: ctx.lastVerify(), prices: config().prices, shotsTool: Boolean(info && info.shots), verifying: ctx.isVerifying() ? "running" : null });
+            view.show({ state: ctx.state, at: Date.now(), feed: ctx.feed(), lastVerify: ctx.lastVerify(), prices: config().prices, shotsTool: Boolean(info && info.shots), verifying: ctx.isVerifying() ? "running" : null, insights: ctx.insights() });
             ctx.postWorkersToList();
             ctx.updateStatus(null);
             ctx.notifyChanges();
             ctx.autoStartQueues();
+            ctx.readInsights(false); // on its own slower timer
         } catch (error) {
             view.show({ ...(ctx.state ? { state: ctx.state } : {}), error: `worker.py list: ${error.message}`, at: Date.now() });
             if (!ctx.state) ctx.updateStatus(error.message);
@@ -164,6 +173,7 @@ function activate(context) {
                 pending = setTimeout(() => {
                     refresh();
                     ctx.loadTodoList();
+                    ctx.readInsights(true);
                 }, STORE_CHANGE_DEBOUNCE_MS);
             });
             watcher.on("error", () => watcher.close());
