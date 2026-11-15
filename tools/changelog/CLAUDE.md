@@ -5,7 +5,7 @@ The engine's changelog and version. Standard library only, Python 3.10+. `change
 ```bash
 python3 <engine>/tools/changelog/changelog.py current                         # the version of the header
 python3 <engine>/tools/changelog/changelog.py propose --draft FILE            # minor when the draft has a non-empty Breaking, else patch
-python3 <engine>/tools/changelog/changelog.py add --draft FILE --bump minor|patch|auto [--date D] [--dry-run]
+python3 <engine>/tools/changelog/changelog.py add --draft FILE --bump minor|patch|auto [--date D] [--content-version N] [--dry-run]
 python3 <engine>/tools/changelog/changelog.py render [--check]                # regenerate CHANGELOG.md (--check: only compare)
 python3 <engine>/tools/changelog/changelog.py check                           # ctest BagiChangelogCheck
 python3 <engine>/tools/changelog/changelog.py breaking --since <commit|version|pointer> [--repo E] [--json] [--all] [--check]
@@ -38,7 +38,7 @@ A **draft** is the same without the `Version` and `Date` lines (`add` fills them
 
 `Bump: patch` with a Breaking section; a Breaking bullet without `Adapt:`; an `Entry` that already has a fragment; a draft without `Content version` while `kContentVersion` (`Config/ContentVersion.h`) is higher than every `Content version` of the fragments (the entry bumped it and forgot its Migration section); a `Content version` above `kContentVersion` or not above the log's; a broken log, or a header whose version is not the highest fragment's.
 
-The first fragment of an empty log (`baseline.md`) takes the header's version as it is: it records where the log starts and moves nothing. Then `add` writes the fragment, rewrites the three `#define BE_ENGINE_VERSION_*` lines (nothing else of the header, line endings kept) and regenerates `CHANGELOG.md`. `--dry-run` runs every refusal and prints what it would write.
+The first fragment of an empty log (`baseline.md`) takes the header's version as it is: it records where the log starts and moves nothing. Then `add` writes the fragment, rewrites the three `#define BE_ENGINE_VERSION_*` lines (nothing else of the header, line endings kept) and regenerates `CHANGELOG.md`. `--dry-run` runs every refusal and prints what it would write. `--content-version N` stands for `kContentVersion` in the comparison: `todo-merge` dry-runs on the base, before the merge, where the header still holds the old number while the draft describes the branch, so it passes the branch's value; the real `add` after the merge never passes it. `--date` must be a calendar date.
 
 ## What `check` reports (exit 1, one line per problem naming the file)
 
@@ -54,4 +54,4 @@ Read-only (`rev-parse`, `log`, `show-superproject-working-tree`; it never fetche
 
 A point older than the first fragment adds one line: the log starts at that version and `git log <point>..HEAD` has the rest. `--json` has `since`, `kind`, `commit`, `log_starts`, `before_the_log`, `breaking` (any listed entry has a Breaking section) and `entries` (the fields of a fragment, bullets as lists). `--check` exits 1 when `breaking` is true (a game's CI); without it the exit is 0 whatever is listed.
 
-Exit codes: 0 ok, 1 a refusal, a failed check or `breaking --check` with a Breaking entry, 2 the layout or the point is not there (no header, no draft, an unknown commit, not a submodule).
+Exit codes: 0 ok, 1 a refusal of `add`, a failed `check` or `render --check`, or `breaking --check` with a Breaking entry; 2 a file or a point the command needs is not there (no version header, no draft, an unknown commit, not a submodule), for every command including `add` and `check`, and also input that `propose` or `breaking` cannot read (a malformed draft or log).

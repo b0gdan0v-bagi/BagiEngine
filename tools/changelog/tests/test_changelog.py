@@ -28,11 +28,11 @@ def test_a_fragment_survives_parse_and_format():
         ("# T\n\n## Added\nloose text\n", "bullet"),
         ("# T\n\n- Entry: Bad_Id\n", "not a todo id"),
         ("# T\n\n- Bump: major\n", "minor or patch"),
-        ("# T\n\n- Date: 2026-13-45\n", "month"),
+        ("# T\n\n- Date: 2026-13-45\n", "not a date"),
     ],
 )
 def test_a_malformed_fragment_names_the_line(text, message):
-    with pytest.raises((changelog.ChangelogError, ValueError), match=message):
+    with pytest.raises(changelog.ChangelogError, match=message):
         changelog.parse_fragment(text)
 
 
@@ -196,3 +196,55 @@ def test_current_prints_the_header_version(tree, capsys):
 
 def test_the_baseline_draft_is_valid():
     assert changelog.parse_fragment(BASELINE_DRAFT).content_version == 5
+
+
+def test_add_refuses_a_date_that_is_not_a_calendar_date(tree, capsys):
+    tree.with_baseline()
+    assert tree.add(draft_text(), "patch", date="2026-13-45") == changelog.EXIT_REFUSED
+    assert "--date" in capsys.readouterr().err
+    assert not tree.fragment_file("feature").exists()
+
+
+def test_a_draft_with_an_impossible_date_is_an_error_not_a_traceback(tree, capsys):
+    tree.with_baseline()
+    assert tree.add(draft_text(extra="- Date: 2026-02-31\n"), "patch") == changelog.EXIT_REFUSED
+    assert "not a date" in capsys.readouterr().err
+
+
+def test_a_dry_run_before_the_merge_compares_with_the_content_version_of_the_branch(tree, capsys):
+    """todo-merge runs the dry run on the base (old kContentVersion) for a draft of the branch (new one)."""
+    tree.with_baseline()
+    draft = tree.draft(draft_text(extra="- Content version: 6\n", sections=MIGRATION))
+    base = ["add", "--root", str(tree.root), "--draft", str(draft), "--bump", "patch", "--date", "2026-11-15", "--dry-run"]
+    assert changelog.main(base) == changelog.EXIT_REFUSED
+    assert "does not fit" in capsys.readouterr().err
+    assert changelog.main([*base, "--content-version", "6"]) == 0
+    assert "would write changelog/feature.md" in capsys.readouterr().out
+    assert not tree.fragment_file("feature").exists()
+
+
+def test_the_content_version_override_keeps_the_other_refusals(tree, capsys):
+    tree.with_baseline()
+    draft = tree.draft(draft_text())
+    args = ["add", "--root", str(tree.root), "--draft", str(draft), "--bump", "patch", "--dry-run", "--content-version", "6"]
+    assert changelog.main(args) == changelog.EXIT_REFUSED
+    assert "kContentVersion is 6" in capsys.readouterr().err
+    draft = tree.draft(draft_text(extra="- Content version: 7\n"))
+    assert changelog.main(args) == changelog.EXIT_REFUSED
+    assert "does not fit" in capsys.readouterr().err
+
+
+def test_add_without_its_draft_is_an_error_of_the_layout(tree, capsys):
+    tree.with_baseline()
+    args = ["add", "--root", str(tree.root), "--draft", str(tree.root.parent / "nothing.md"), "--bump", "patch"]
+    assert changelog.main(args) == changelog.EXIT_ERROR
+    assert "nothing.md" in capsys.readouterr().err
+
+
+def test_add_and_check_without_the_header_are_errors_of_the_layout(tree, capsys):
+    tree.with_baseline()
+    (tree.root / changelog.VERSION_HEADER).unlink()
+    assert changelog.main(["check", "--root", str(tree.root)]) == changelog.EXIT_ERROR
+    assert "EngineVersion.h" in capsys.readouterr().err
+    assert tree.add(draft_text(), "patch") == changelog.EXIT_ERROR
+    assert "EngineVersion.h" in capsys.readouterr().err

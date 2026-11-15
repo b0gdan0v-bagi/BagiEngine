@@ -3,7 +3,7 @@ Standard library only, Python 3.10+. The contract is `tools/changelog/CLAUDE.md`
 
     python3 <engine>/tools/changelog/changelog.py current   [--root E]
     python3 <engine>/tools/changelog/changelog.py propose   --draft FILE
-    python3 <engine>/tools/changelog/changelog.py add       --draft FILE --bump minor|patch|auto [--date D] [--dry-run] [--root E]
+    python3 <engine>/tools/changelog/changelog.py add       --draft FILE --bump minor|patch|auto [--date D] [--content-version N] [--dry-run] [--root E]
     python3 <engine>/tools/changelog/changelog.py render    [--check] [--root E]
     python3 <engine>/tools/changelog/changelog.py check     [--root E]
     python3 <engine>/tools/changelog/changelog.py breaking  --since <commit|version|pointer> [--repo E] [--json] [--all] [--check]
@@ -27,7 +27,7 @@ CONTENT_VERSION_HEADER = Path("src/Modules/BECore/Config/ContentVersion.h")
 
 EXIT_OK = 0
 EXIT_REFUSED = 1  # a check failed or `add` refused: the message names the file
-EXIT_ERROR = 2  # the layout is not there (no header, no draft)
+EXIT_ERROR = 2  # the layout is not there (no header, no draft), or a command other than `add` got input it cannot read
 
 MINOR = "minor"
 PATCH = "patch"
@@ -73,6 +73,10 @@ Version = tuple[int, int, int]
 
 class ChangelogError(Exception):
     """A refusal or a broken tree; the message is what the caller prints."""
+
+
+class LayoutError(ChangelogError):
+    """A file the command needs is not there (the version header, the content version header, the draft): exit 2 for every command."""
 
 
 @dataclass
@@ -158,9 +162,12 @@ def apply_meta(fragment: Fragment, meta: dict[str, str]) -> None:
         raise ChangelogError(f"Entry `{fragment.entry}` is not a todo id (lower-case letters, digits and `-`)")
     fragment.date = meta.get(KEY_DATE, "")
     if fragment.date:
-        if not DATE_RE.match(fragment.date):
-            raise ChangelogError(f"Date `{fragment.date}` is not YYYY-MM-DD")
-        datetime.date.fromisoformat(fragment.date)
+        try:
+            if not DATE_RE.match(fragment.date):
+                raise ValueError
+            datetime.date.fromisoformat(fragment.date)
+        except ValueError:
+            raise ChangelogError(f"Date `{fragment.date}` is not a date YYYY-MM-DD") from None
     fragment.bump = meta.get(KEY_BUMP, "")
     if fragment.bump and fragment.bump not in BUMPS:
         raise ChangelogError(f"Bump `{fragment.bump}` is not minor or patch")
@@ -229,7 +236,7 @@ def read_version_header(root: Path) -> Version:
     try:
         text = path.read_text(encoding="utf-8")
     except OSError as error:
-        raise ChangelogError(f"{path}: {error.strerror}") from error
+        raise LayoutError(f"{path}: {error.strerror}") from error
     numbers = []
     for name in MACRO_NAMES:
         match = re.search(rf"^#define BE_ENGINE_VERSION_{name}[ \t]+(\d+)[ \t]*$", text, re.MULTILINE)
@@ -255,7 +262,7 @@ def read_content_version(root: Path) -> int:
     try:
         match = CONTENT_VERSION_RE.search(path.read_text(encoding="utf-8"))
     except OSError as error:
-        raise ChangelogError(f"{path}: {error.strerror}") from error
+        raise LayoutError(f"{path}: {error.strerror}") from error
     if not match:
         raise ChangelogError(f"{path}: no `kContentVersion = N;`")
     return int(match.group(1))
@@ -272,7 +279,7 @@ def load_fragments(root: Path) -> tuple[list[tuple[Path, Fragment]], list[str]]:
         shown = f"{FRAGMENT_DIR}/{path.name}"
         try:
             fragment = parse_fragment(path.read_text(encoding="utf-8"))
-        except (ChangelogError, ValueError) as error:
+        except ChangelogError as error:
             problems.append(f"{shown}: {error}")
             continue
         found = validate_fragment(fragment, complete=True)
@@ -296,6 +303,8 @@ def check_tree(root: Path) -> list[str]:
         seen.setdefault(fragment.version, path.name)
     try:
         header = read_version_header(root)
+    except LayoutError:
+        raise
     except ChangelogError as error:
         return [*problems, str(error)]
     if not fragments:
@@ -321,8 +330,11 @@ def highest_content_version(fragments: list[Fragment]) -> int:
     return max((f.content_version for f in fragments if f.content_version is not None), default=0)
 
 
-def prepare_add(root: Path, draft: Fragment, bump: str, date: str) -> tuple[Fragment, Version]:
-    """The fragment `add` would write and the new header version; raises ChangelogError for every refusal."""
+def prepare_add(root: Path, draft: Fragment, bump: str, date: str, content_version: int | None = None) -> tuple[Fragment, Version]:
+    """The fragment `add` would write and the new header version; raises ChangelogError for every refusal.
+
+    `content_version` stands for kContentVersion when it is not the one of `root`: the dry run of `todo-merge` runs on the base
+    before the merge, while the draft describes the branch."""
     if draft.version is not None or draft.date:
         raise ChangelogError("the draft must not carry `Version` or `Date` lines: `add` decides them")
     if bump == AUTO:
@@ -330,8 +342,12 @@ def prepare_add(root: Path, draft: Fragment, bump: str, date: str) -> tuple[Frag
     if bump not in BUMPS:
         raise ChangelogError(f"--bump must be minor, patch or auto, got {bump!r}")
     draft.bump = bump
-    if not DATE_RE.match(date):
-        raise ChangelogError(f"--date `{date}` is not YYYY-MM-DD")
+    try:
+        if not DATE_RE.match(date):
+            raise ValueError
+        datetime.date.fromisoformat(date)
+    except ValueError:
+        raise ChangelogError(f"--date `{date}` is not a date YYYY-MM-DD") from None
     draft.date = date
     problems = validate_fragment(draft, complete=False)
     if problems:
@@ -350,7 +366,7 @@ def prepare_add(root: Path, draft: Fragment, bump: str, date: str) -> tuple[Frag
         new_version = bumped(header, bump)
     else:
         new_version = header  # the first fragment records where the log starts, it does not move the number
-    engine_content = read_content_version(root)
+    engine_content = read_content_version(root) if content_version is None else content_version
     known_content = highest_content_version(existing)
     if draft.content_version is None:
         if engine_content > known_content:
@@ -365,7 +381,7 @@ def prepare_add(root: Path, draft: Fragment, bump: str, date: str) -> tuple[Frag
 
 def command_add(root: Path, args: argparse.Namespace) -> int:
     draft = parse_fragment(read_draft(args.draft))
-    fragment, version = prepare_add(root, draft, args.bump, args.date or datetime.date.today().isoformat())
+    fragment, version = prepare_add(root, draft, args.bump, args.date or datetime.date.today().isoformat(), args.content_version)
     loaded, _ = load_fragments(root)
     rendered = render_changelog([*(f for _, f in loaded), fragment])
     target = root / FRAGMENT_DIR / f"{fragment.entry}.md"
@@ -386,7 +402,7 @@ def read_draft(path: str) -> str:
     try:
         return Path(path).read_text(encoding="utf-8")
     except OSError as error:
-        raise ChangelogError(f"{path}: {error.strerror}") from error
+        raise LayoutError(f"{path}: {error.strerror}") from error
 
 
 def command_render(root: Path, args: argparse.Namespace) -> int:
@@ -558,6 +574,7 @@ def build_parser() -> argparse.ArgumentParser:
     add.add_argument("--draft", required=True)
     add.add_argument("--bump", required=True, choices=[MINOR, PATCH, AUTO])
     add.add_argument("--date", help="YYYY-MM-DD (default: today)")
+    add.add_argument("--content-version", type=int, help="kContentVersion to compare the draft with (default: the one of --root); for the dry run before a merge")
     add.add_argument("--dry-run", action="store_true", help="write nothing, print what would be written")
     render = command("render", "regenerate CHANGELOG.md from the fragments")
     render.add_argument("--check", action="store_true", help="write nothing, exit 1 when CHANGELOG.md is out of date")
@@ -587,7 +604,8 @@ def main(argv: list[str] | None = None) -> int:
         return HANDLERS[args.command](Path(args.root), args)
     except ChangelogError as error:
         print(f"changelog: {error}", file=sys.stderr)
-        return EXIT_REFUSED if args.command == "add" else EXIT_ERROR
+        refused = args.command == "add" and not isinstance(error, LayoutError)
+        return EXIT_REFUSED if refused else EXIT_ERROR
 
 
 if __name__ == "__main__":
