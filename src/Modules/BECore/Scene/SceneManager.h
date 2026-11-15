@@ -21,8 +21,7 @@ namespace BECore {
         /**
          * @brief Activate a scene by its name (Scene::GetName()).
          *
-         * Looks up the scene in _scenes by interned name. No-op if name is empty,
-         * already active, or unknown (logged as error). Used by GameManager to switch
+         * No-op if name is empty, already active, or unknown (logged as error). Used by GameManager to switch
          * between game-specific scenes.
          */
         void SetActiveScene(PoolString name);

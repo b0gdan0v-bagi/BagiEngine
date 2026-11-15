@@ -31,8 +31,8 @@ namespace BECore {
         Vector<RingThread> threads;  // threads with at least one zone in the frame
         uint64_t beginTicks = 0;
         uint64_t endTicks = 0;
-        double nanosecondsPerTick = 1.0;
-        uint64_t truncatedZones = 0;  // zones of the frame left out because of SpikeCapture::kMaxFrozenZones
+        double nanosecondsPerTick = 1.0;  // the rate of this frame's snapshot: the trace writer converts each frame with its own
+        uint64_t truncatedZones = 0;      // zones of the frame left out because of SpikeCapture::kMaxFrozenZones
     };
 
     /**

@@ -94,7 +94,7 @@ struct ReflectionTraits<{{ cls.qualified_name }}> {
     
     static constexpr auto fields = std::make_tuple(
 {% for field in cls.fields %}
-        FieldInfo{ eastl::string_view{"{{ field.name }}"}, &{{ cls.qualified_name }}::{{ field.name }} }{{ "," if not loop.last else "" }}
+        FieldInfo{ eastl::string_view{"{{ field.name }}"}, &{{ cls.qualified_name }}::{{ field.name }}{% if field.attributes_init %}, {{ field.attributes_init }}{% endif %} }{{ "," if not loop.last else "" }}
 {% endfor %}
     );
     
@@ -179,7 +179,11 @@ void {{ cls.full_qualified_name }}::Serialize(::BECore::ISerializer& s) const {
 void {{ cls.full_qualified_name }}::Deserialize(::BECore::IDeserializer& d) {
 {% for field in cls.fields %}
 {% set xml_name = field.name[1:] if field.name.startswith('_') else field.name %}
+{% if field.attributes_init %}
+    ::BECore::Ser::Load(d, {{ field.name }}, "{{ xml_name }}", std::get<{{ loop.index0 }}>(::BECore::ReflectionTraits<{{ cls.qualified_name }}>::fields).attributes);
+{% else %}
     ::BECore::Ser::Load(d, {{ field.name }}, "{{ xml_name }}");
+{% endif %}
 {% endfor %}
 }
 {% endif %}
@@ -252,7 +256,11 @@ void {{ cls.full_qualified_name }}::Deserialize(::BECore::IDeserializer& d) {
 {% endif %}
 {% for field in cls.fields %}
 {% set xml_name = field.name[1:] if field.name.startswith('_') else field.name %}
+{% if field.attributes_init %}
+    ::BECore::Ser::Load(d, {{ field.name }}, "{{ xml_name }}", std::get<{{ loop.index0 }}>(::BECore::ReflectionTraits<{{ cls.qualified_name }}>::fields).attributes);
+{% else %}
     ::BECore::Ser::Load(d, {{ field.name }}, "{{ xml_name }}");
+{% endif %}
 {% endfor %}
 }
 
@@ -265,7 +273,8 @@ bool {{ cls.full_qualified_name }}::AcceptPropertyVisitor(::BECore::IPropertyVis
     bool changed = false;
 {% for field in cls.fields %}
 {% set xml_name = field.name[1:] if field.name.startswith('_') else field.name %}
-    changed |= ::BECore::PropVisit::Visit(v, {{ field.name }}, "{{ xml_name }}");
+    changed |= ::BECore::PropVisit::VisitField(v, std::get<{{ loop.index0 }}>(::BECore::ReflectionTraits<{{ cls.qualified_name }}>::fields).attributes,
+        [&] { return ::BECore::PropVisit::Visit(v, {{ field.name }}, "{{ xml_name }}"); });
 {% endfor %}
     return changed;
 }

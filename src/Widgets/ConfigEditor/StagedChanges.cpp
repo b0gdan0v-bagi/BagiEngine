@@ -43,7 +43,7 @@ namespace BECore {
         }
     }
 
-    void StagedChanges::ForEach(eastl::function<void(const String&, const String&)> fn) const {
+    void StagedChanges::ForEach(FunctionRef<void(const String&, const String&)> fn) const {
         for (const auto& [key, entry] : _changes) {
             fn(key, entry.value);
         }

@@ -450,7 +450,7 @@ namespace BECore::Tests {
 
         CountingLockBackend& counting = GetCountingBackend();
         ASSERT_TRUE(Profiler::SetBackend(&counting));
-        EXPECT_TRUE(LockHooks::EventsActive());  // through the fan-out with the ring too
+        EXPECT_TRUE(LockHooks::EventsActive());
         Profiler::SetBackend(nullptr);
         Profiler::SetRingEnabled(false);
         EXPECT_FALSE(LockHooks::EventsActive());

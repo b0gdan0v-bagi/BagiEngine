@@ -4,7 +4,6 @@ namespace BECore {
 
     namespace {
 
-        /// The flag name without its '=' ("--trace" of "--trace=")
         StringView BareFlag(StringView prefix) {
             return prefix.substr(0, prefix.size() - 1);
         }

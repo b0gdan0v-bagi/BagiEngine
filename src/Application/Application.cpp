@@ -2,15 +2,24 @@
 
 #include <BECore/Application/ApplicationConfig.h>
 #include <BECore/Application/ApplicationFabric.h>
+#include <BECore/Application/CommandLine.h>
 #include <BECore/Application/RunMode.h>
+#include <BECore/Control/ControlService.h>
 #include <BECore/Control/ControlSettings.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/LogEvent.h>
+#include <BECore/MainWindow/IMainWindow.h>
 #include <BECore/MainWindow/WindowTitle.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
+#include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Profiler/Profiler.h>
 #include <BECore/Profiler/ProfilerSettings.h>
 #include <BECore/Reflection/OpenDeserializer.h>
+#include <BECore/Renderer/IRenderer.h>
+#include <BECore/Text/FontAtlasLibrary.h>
+#include <BECore/Time/GamePause.h>
+#include <BECore/Time/Time.h>
+#include <BECore/Widgets/WidgetManager.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/ApplicationEvents.h>
 #include <Events/RenderEvents.h>
@@ -78,7 +87,7 @@ namespace BECore {
 #endif
 
         // The control fields stopped the start-up above; what is left is every other field (`mode`, `type`, `renderer`, `path`)
-        LogDeserializeErrors("ApplicationConfig", load.errors);
+        LogDeserializeErrors("ApplicationConfig", load.errors, load.warnings);
 
         if (load.config._taskFrameBudgetMs >= 0.0) {
             CoreManager::GetTaskManager().SetFrameBudget(std::chrono::duration_cast<TaskManager::Duration>(std::chrono::duration<double, std::milli>(load.config._taskFrameBudgetMs)));
@@ -110,7 +119,7 @@ namespace BECore {
 
         CoreManager::GetInstance().OnApplicationInit({});
 
-        // Boot the game layer once core systems (config, scenes, widgets) are up.
+        // After OnApplicationInit: the game reads its configs and registers control methods.
         GameManager::GetInstance().Initialize();
         UpdateWindowTitle();
 

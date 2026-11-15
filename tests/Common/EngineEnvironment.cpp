@@ -1,7 +1,13 @@
 #include "EngineEnvironment.h"
 
+#include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Scene/SceneManager.h>
+
+// Defined by the generated source of BagiEngineTestSupport (be_link_content_roots)
+namespace BagiContentRoots {
+    extern const char* const kEngine;
+}  // namespace BagiContentRoots
 
 namespace BECore::Tests {
 
@@ -26,10 +32,8 @@ namespace BECore::Tests {
         if (g_coreServicesUp) {
             return;
         }
-#ifdef BAGI_ENGINE_ROOT
         // The working directory is inside whichever repository builds the tests: pin the engine's config/ and assets/
-        CoreManager::GetFileSystem().AddContentRoot(BAGI_ENGINE_ROOT);
-#endif
+        CoreManager::GetFileSystem().AddContentRoot(BagiContentRoots::kEngine);
         CoreManager::GetInstance().OnTestEnvironmentInit(PassKey<EngineEnvironment>{});
         g_coreServicesUp = true;
     }

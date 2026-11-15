@@ -13,15 +13,12 @@ namespace BECore {
     class IGpuDepthTexture;
     class IRenderTarget;
 
-    /// The name of a shader of the build. The backend resolves it to the blobs it compiled in (the shaders are written once in Slang,
-    /// .claude/rules/rendering-module.md); no GPU handle or shader language appears above the device.
+    /// The name of a shader of the build. The backend resolves it to the blobs it compiled in; no GPU handle or shader language appears above the
+    /// device.
     using ShaderId = PoolString;
 
     /// The type of one vertex attribute
-    CORE_ENUM(VertexFormat, uint8_t,
-              Float2,   ///< two 32-bit floats
-              Float3,   ///< three 32-bit floats
-              Float4,   ///< four 32-bit floats
+    CORE_ENUM(VertexFormat, uint8_t, Float2, Float3, Float4,
               Unorm8x4  ///< four bytes read as 0 to 1 (a Color)
     )
 
@@ -101,9 +98,8 @@ namespace BECore {
         }
     };
 
-    /// All the state of a pipeline. The device makes it from this and a shader of the build; nothing else is hidden in it.
-    /// The color format is not here: it is the one of the pass target (the back buffer or an IRenderTarget).
-    /// The defaults are the 2D defaults: no depth, straight alpha, both sides drawn.
+    /// All the state of a pipeline; the device makes it from this and a shader of the build. The color format is not here: it is the one of
+    /// the pass target (the back buffer or an IRenderTarget). The defaults are the 2D ones.
     struct PipelineDesc {
         ShaderId shader;
         VertexLayout vertexLayout;

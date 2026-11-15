@@ -12,13 +12,10 @@ namespace BECore {
     /**
      * @brief The engine's mutex: std::mutex with a name (LockSite), so a long wait on it shows in the profiler.
      *
-     * Lockable, so std::lock_guard, std::unique_lock (try_to_lock included) and std::scoped_lock work over it; the aliases of
-     * LockGuards.h are the explicit spellings. There is no default constructor: every lock has a static name,
-     * `Mutex _mutex{BE_LOCK_SITE("Task queue")};`.
+     * Lockable, so the std guards work over it. There is no default constructor: every lock has a static name (BE_LOCK_SITE).
      *
-     * lock() is try_lock() first; only a failed try takes the out-of-line contended path (clock read, blocking lock, record), so an
-     * uncontended lock reads no clock. Without BE_LOCK_SITES (a shipped build) the site is dropped and the class is std::mutex in
-     * size and cost.
+     * lock() is try_lock() first, so an uncontended lock reads no clock. Without BE_LOCK_SITES (a shipped build) the site is dropped
+     * and the class is std::mutex in size and cost.
      */
     class Mutex {
     public:
@@ -63,7 +60,6 @@ namespace BECore {
     private:
         friend class ConditionVariable;
 
-        /// The lock order check (LockOrder.h): nothing at all without BE_LOCK_ORDER_CHECK
         void OrderBefore() const {
 #if BE_LOCK_ORDER_CHECK
             LockOrder::BeforeAcquire(*_site);
@@ -82,7 +78,6 @@ namespace BECore {
 #endif
         }
 
-        /// The per-lock events of a backend that wants them (Tracy): with BE_PROFILER one atomic load each, otherwise nothing at all
         [[nodiscard]] bool EventsBeforeLock() {
 #if BE_PROFILER
             return _events.BeforeLock(*_site, LockKind::Mutex);
@@ -110,7 +105,6 @@ namespace BECore {
         }
 
 #if BE_LOCK_SITES
-        /// The blocking lock after a failed try_lock, timed for the profiler (Mutex.cpp)
         void LockContended();
 
         const LockSite* _site;

@@ -13,8 +13,7 @@ namespace BECore {
      * @brief A bounded memory of the most recent zones of every thread, for the editor's profiler panel; no file, no Chrome trace.
      *
      * It stores **completed zones** (begin tick, end tick, site, depth, allocations), written at EndZone, so overwriting the oldest
-     * never leaves a begin without its end. Frames are cut at read time by the ticks of FrameMark: frame k is the interval between
-     * mark k-1 and mark k, and a zone belongs to the frame its begin tick falls in.
+     * never leaves a begin without its end. Frames are cut at read time by the ticks of FrameMark (see RingSnapshot).
      *
      * A reader never blocks a writer. Each thread owns a ring of slots written with relaxed atomic stores and publishes the count of
      * finished zones with a release store; Snapshot() copies the window, then checks which slots the writer started overwriting
@@ -29,7 +28,7 @@ namespace BECore {
         static constexpr uint32_t kMaxThreadBuffers = 256;
         static constexpr uint32_t kMaxZoneDepth = 64;  // a deeper zone is not recorded (and counted in GetDroppedCount)
 
-        /// The clock is a plain function pointer so a test can give it a fake one; the price is one indirect call per zone end
+        /// A plain function pointer so a test can give the ring a fake clock
         using NowFn = uint64_t (*)();
 
         struct Options {
@@ -75,22 +74,22 @@ namespace BECore {
         std::atomic<uint64_t> _generation{1};
         std::atomic<uint64_t> _dropped{0};
 
-        // raw: the profiler cannot profile itself (Threading/CLAUDE.md); so are _markMutex and _epochMutex
+        //-NoStd: the profiler cannot profile itself (Threading/CLAUDE.md)
         mutable std::mutex _registryMutex;
         ThreadBuffer* _buffers[kMaxThreadBuffers]{};
         std::atomic<uint32_t> _bufferCount{0};
 
         // Frame marks: any thread may mark, so writers take a mutex among themselves; readers take nothing
-        std::mutex _markMutex;
+        std::mutex _markMutex;                      //-NoStd: the profiler cannot profile itself (Threading/CLAUDE.md)
         mutable uint64_t _markTicks[kMaxFrames]{};  // accessed through std::atomic_ref (mutable: Snapshot() reads it atomically)
         std::atomic<uint64_t> _markReserved{0};
         std::atomic<uint64_t> _markCount{0};
 
         // The epoch: the ring made, or the last Start. Snapshot() shows no frame or zone from before it. Written by Start, read by Snapshot,
         // and a writer never takes this mutex
-        mutable std::mutex _epochMutex;
-        uint64_t _epochMark = 0;   // the first mark that ends a frame of the epoch
-        uint64_t _epochTicks = 0;  // that frame begins here
+        mutable std::mutex _epochMutex;  //-NoStd: the profiler cannot profile itself (Threading/CLAUDE.md)
+        uint64_t _epochMark = 0;         // the first mark that ends a frame of the epoch
+        uint64_t _epochTicks = 0;        // that frame begins here
     };
 
 }  // namespace BECore

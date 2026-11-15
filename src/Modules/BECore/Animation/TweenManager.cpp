@@ -14,7 +14,7 @@ namespace BECore {
         Clear();
     }
 
-    IntrusivePtr<TweenHandle> TweenManager::StartErased(const TweenSettings& settings, eastl::function<void(float)> apply, eastl::function<void()> onComplete, eastl::function<void()> onCancel) {
+    IntrusivePtr<TweenHandle> TweenManager::StartErased(const TweenSettings& settings, TweenApply apply, MoveOnlyFunction<void()> onComplete, MoveOnlyFunction<void()> onCancel) {
         auto tween = New<TweenHandle>();
         tween->_manager = this;
         tween->_settings = settings;
@@ -40,8 +40,8 @@ namespace BECore {
         tween._onCancel = nullptr;
     }
 
-    IntrusivePtr<TweenHandle> TweenManager::Delay(float seconds, eastl::function<void()> onComplete, eastl::function<void()> onCancel) {
-        // No setter: the same path as any tween (the loop calls `_apply` always, so it is a function that does nothing)
+    IntrusivePtr<TweenHandle> TweenManager::Delay(float seconds, MoveOnlyFunction<void()> onComplete, MoveOnlyFunction<void()> onCancel) {
+        // `Step` calls `_apply` unconditionally, so the no-setter tween gets a function that does nothing
         return StartErased({.duration = seconds}, [](float) {}, std::move(onComplete), std::move(onCancel));
     }
 
@@ -49,16 +49,18 @@ namespace BECore {
         return AwaitTween(Delay(seconds));
     }
 
-    IntrusivePtr<TweenHandle> TweenManager::Play(Timeline timeline, float delay, eastl::function<void()> onComplete, eastl::function<void()> onCancel) {
+    IntrusivePtr<TweenHandle> TweenManager::Play(Timeline timeline, float delay, MoveOnlyFunction<void()> onComplete, MoveOnlyFunction<void()> onCancel) {
         const float duration = timeline.GetDuration();
-        // `eastl::function` needs a copyable callable and a Timeline is move-only: the tween owns it through a shared pointer
-        auto owned = MakeShared<Timeline>(std::move(timeline));
+        // The setter owns the timeline: one allocation, no control block
+        auto owned = MakeUnique<Timeline>(std::move(timeline));
+        Timeline* const running = owned.get();
         // The progress of the last step is exactly 1, so the last call is exactly the duration; the tween itself is linear
-        auto apply = [owned, duration](float progress) { owned->Evaluate(progress * duration); };
-        auto handle = StartErased({.duration = duration, .delay = delay, .ease = EaseType::Linear}, std::move(apply), std::move(onComplete), std::move(onCancel));
+        auto handle = StartErased(
+            {.duration = duration, .delay = delay, .ease = EaseType::Linear}, [owned = std::move(owned), duration](float progress) { owned->Evaluate(progress * duration); }, std::move(onComplete),
+            std::move(onCancel));
         // A clip callback may cancel its own run (Cancel, CancelAll, a ScopedTween, Clear): the timeline then stops at the clip boundary, so no setter or
         // callback runs after it. The raw pointer is safe: the timeline belongs to the setter, which belongs to the handle and is released with it
-        owned->SetStopCheck([tween = handle.Get()] { return tween->IsFinished(); });
+        running->SetStopCheck([tween = handle.Get()] { return tween->IsFinished(); });
         return handle;
     }
 

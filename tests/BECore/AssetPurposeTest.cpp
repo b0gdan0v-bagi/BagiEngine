@@ -143,7 +143,6 @@ namespace BECore::Tests {
         holder.Deserialize(deserializer);
 
         ExpectSimPartOnly(holder);
-        // The refused field, element and pointer are three errors, each at its own path
         ASSERT_EQ(deserializer.GetErrors().size(), 3u);
         EXPECT_EQ(deserializer.GetErrors()[0].path.ToStringView(), "visualPart");
         EXPECT_EQ(deserializer.GetErrors()[0].errorMessage.ToStringView(), "Type 'PurposeVisualProbe' (purpose visual) is not allowed in the sim part");

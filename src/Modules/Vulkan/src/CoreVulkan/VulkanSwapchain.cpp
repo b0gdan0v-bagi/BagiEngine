@@ -160,13 +160,11 @@ namespace BECore {
 
         const auto& qf = device.GetQueueFamilies();
         if (qf.graphicsFamily != qf.presentFamily) {
-            // Images shared between graphics and present queues
             const uint32_t indices[] = {qf.graphicsFamily, qf.presentFamily};
             createInfo.imageSharingMode      = VK_SHARING_MODE_CONCURRENT;
             createInfo.queueFamilyIndexCount = 2;
             createInfo.pQueueFamilyIndices   = indices;
         } else {
-            // Single queue family owns the images exclusively (better performance)
             createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
         }
 
@@ -222,7 +220,6 @@ namespace BECore {
     }
 
     bool VulkanSwapchain::CreateRenderPass(VulkanDevice& device) {
-        // Single color attachment, cleared at load, stored at end
         VkAttachmentDescription colorAttachment{};
         colorAttachment.format         = _chain.format;
         colorAttachment.samples        = VK_SAMPLE_COUNT_1_BIT;
@@ -301,7 +298,6 @@ namespace BECore {
         Vector<VkPresentModeKHR> modes(count);
         vkGetPhysicalDeviceSurfacePresentModesKHR(device.GetPhysicalDevice(), surface, &count, modes.data());
 
-        // Prefer mailbox (triple-buffered, low latency)
         for (const auto& mode : modes) {
             if (mode == VK_PRESENT_MODE_MAILBOX_KHR) {
                 return mode;

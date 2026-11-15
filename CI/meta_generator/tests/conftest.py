@@ -57,3 +57,13 @@ def run_cli(monkeypatch, capsys, tmp_path):
         return code, captured.out, captured.err
 
     return run
+
+
+@pytest.fixture
+def include_gen():
+    """Write `<directory>/<Stem>.cpp` that includes `Generated/<Stem>.gen.hpp`, as a class's own .cpp does."""
+    def write(directory, *stems: str, quoted: bool = False):
+        for stem in stems:
+            include = f'"Generated/{stem}.gen.hpp"' if quoted else f"<Generated/{stem}.gen.hpp>"
+            (Path(directory) / f"{stem}.cpp").write_text(f"#include {include}\n", encoding="utf-8")
+    return write

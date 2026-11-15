@@ -22,7 +22,7 @@ namespace BECore {
         float hotReloadInterval = 0.5f;
 
         /// How long, in seconds of game time, the look of a control takes to ease from one state (rest, hover, pressed, disabled, selected) to the next: its box, the tint of its picture and the
-        /// colour of its text. 0 is the one-frame change of old and the default; an element's own `stateDuration` overrides it. Kept in 0 to `kMaxStateTransition`
+        /// colour of its text. 0 (the default) is the one-frame change; an element's own `stateDuration` overrides it. Kept in 0 to `kMaxStateTransition`
         float stateTransition = 0.0f;
 
         /// The longest state transition, a setting or an element's own

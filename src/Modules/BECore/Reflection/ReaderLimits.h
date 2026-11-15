@@ -5,9 +5,9 @@
 namespace BECore::ReaderLimits {
 
     // =========================================================================
-    // What the deserializers take from a file, a save or a network buffer. Each limit is far above anything the content has (the largest
-    // config of the engine and the games is about 66 KB, a save about 1 KB), so a real file never meets one; a file that does is refused
-    // with an error before it is allocated or walked. A game with content beyond them raises the constant, it does not work around it.
+    // What the deserializers take from a file, a save or a network buffer. Each limit is far above real content, so a real file never
+    // meets one; a file that does is refused with an error before it is allocated or walked. A game with content beyond them raises
+    // the constant, it does not work around it.
     // =========================================================================
 
     /// An XML document (a file or a string), in bytes. pugixml spends about fifty bytes per element, so this is also the bound of the tree

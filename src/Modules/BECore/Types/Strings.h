@@ -13,22 +13,22 @@
 #include <string_view>
 #include <type_traits>
 
-// The string types of the engine. Code names these, not eastl:: / std: (Types/CLAUDE.md): the implementation is chosen here, once.
+// The string types of the engine (Types/CLAUDE.md).
 namespace BECore {
 
-    /// The owning string. Today eastl::string; an alias so that the allocator or the type can change in one place.
+    /// The owning string.
     using String = eastl::string;
 
-    /// The non-owning view of characters. Today eastl::string_view.
+    /// The non-owning view of characters.
     using StringView = eastl::string_view;
 
     /// A string with N characters inside the object; with Overflow it moves to the heap when longer, without it the length is capped at N.
     template <size_t N, bool Overflow = true>
     using FixedString = eastl::fixed_string<char, N, Overflow>;
 
-    /// Hash of a string key that takes a String, a StringView or a const char* without making a String: the hash map of String keys
-    /// looks up by view or literal (`map.find("name")`). The value is the one eastl::hash<eastl::string> gives for a string without
-    /// a NUL character, so the iteration order of a map does not depend on which of the two hashes it.
+    /// Hash of a string key that takes a String, a StringView or a const char* without making a String (`map.find("name")`). The value is
+    /// the one eastl::hash<eastl::string> gives for a string without a NUL character, so the iteration order of a map does not depend on
+    /// which of the two hashes it.
     struct StringHash {
         using is_transparent = void;
 
@@ -73,7 +73,7 @@ namespace BECore {
             if (std::isnan(value)) {
                 return String{"nan"};
             }
-            // std::to_string widens a float to double and writes %f; {:f} writes the same text, into the string's own buffer
+            // {:f} writes the text std::to_string does (it widens a float to double), straight into the string's own buffer
             String text;
             using Widened = std::conditional_t<std::is_same_v<T, long double>, long double, double>;
             fmt::format_to(eastl::back_inserter(text), "{:f}", Widened{value});
@@ -81,8 +81,7 @@ namespace BECore {
         }
     }
 
-    // The boundary with std:: and third-party APIs. The views are constexpr and copy nothing; the pair that makes a string copies and
-    // is named so. Use them at the call, not as a habit: a `std::` type inside the engine's own code goes through these only.
+    // The boundary with std:: and third-party APIs: the views copy nothing; the pair that makes a string copies and is named so.
 
     /// The same characters as a std::string_view (for std::filesystem, std::from_chars, nlohmann, SDL wrappers, ...).
     [[nodiscard]] constexpr std::string_view ToStd(StringView view) noexcept {

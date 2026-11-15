@@ -28,8 +28,7 @@ namespace BECore {
      * @brief What a game offers to an external controller (a program or a model): its state, its legal actions and a way to act.
      *
      * IGame::AsControllable() hands it out. The methods of GameControl (get_state, list_actions, perform_action, ...) call it on
-     * the main thread, in frame stage 1b, so a call never races with the game's logic. The game decides what its state and its
-     * actions look like; both are plain JSON, readable by a model.
+     * the main thread, in frame stage 1b, so a call never races with the game's logic.
      *
      * Everything that comes from the client (the parameters of PerformAction, Reset and SetState) is untrusted: read it with the
      * checked helpers of BECore/Control/Json.h, never with the throwing accessors of nlohmann (BECore/Control/CLAUDE.md), and

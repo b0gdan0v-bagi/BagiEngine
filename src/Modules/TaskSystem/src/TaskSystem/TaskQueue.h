@@ -3,37 +3,31 @@
 #include <BECore/Threading/ConditionVariable.h>
 #include <BECore/Threading/LockGuards.h>
 #include <BECore/Threading/Mutex.h>
+#include <BECore/Utils/MoveOnlyFunction.h>
 #include <EASTL/deque.h>
 #include <atomic>
 #include <cstddef>
-#include <functional>
 #include <utility>
 
 namespace BECore {
 
     /**
-     * TaskQueue - потокобезопасная очередь задач.
-     *
-     * Использует Mutex для синхронизации и ConditionVariable для ожидания.
-     * Поддерживает graceful shutdown.
+     * Thread-safe FIFO of jobs with a blocking Pop. After Stop(), Pop still hands out what is queued and returns
+     * false only when the queue is empty.
      */
     class TaskQueue {
     public:
-        using TaskFunc = std::function<void()>;
+        /// Move-only: a task owns its captures (a handle, a UniquePtr) and is moved from queue to queue, never copied.
+        using TaskFunc = MoveOnlyFunction<void()>;
 
         TaskQueue() = default;
         ~TaskQueue() = default;
 
-        // Non-copyable, non-movable
         TaskQueue(const TaskQueue&) = delete;
         TaskQueue& operator=(const TaskQueue&) = delete;
         TaskQueue(TaskQueue&&) = delete;
         TaskQueue& operator=(TaskQueue&&) = delete;
 
-        /**
-         * Добавляет задачу в очередь.
-         * @param task Задача для выполнения
-         */
         void Push(TaskFunc task) {
             {
                 LockGuard lock(_mutex);
@@ -42,11 +36,7 @@ namespace BECore {
             _condition.notify_one();
         }
 
-        /**
-         * Извлекает задачу из очереди (блокирующе).
-         * @param task Выходной параметр для задачи
-         * @return true если задача получена, false если очередь остановлена
-         */
+        /** Blocks until a job is queued or the queue is stopped; false when stopped and empty. */
         bool Pop(TaskFunc& task) {
             UniqueLock lock(_mutex);
             _condition.wait(lock, [this] { return !_tasks.empty() || _stopped.load(std::memory_order_acquire); });
@@ -60,11 +50,7 @@ namespace BECore {
             return true;
         }
 
-        /**
-         * Пытается извлечь задачу без блокировки.
-         * @param task Выходной параметр для задачи
-         * @return true если задача получена
-         */
+        /** Takes the oldest job without waiting. */
         bool TryPop(TaskFunc& task) {
             LockGuard lock(_mutex);
             if (_tasks.empty()) {
@@ -75,11 +61,7 @@ namespace BECore {
             return true;
         }
 
-        /**
-         * Пытается украсть задачу с конца очереди (для work stealing).
-         * @param task Выходной параметр для задачи
-         * @return true если задача получена
-         */
+        /** Takes the newest job without waiting (the other end from TryPop: work stealing). */
         bool TrySteal(TaskFunc& task) {
             LockGuard lock(_mutex);
             if (_tasks.empty()) {
@@ -90,9 +72,6 @@ namespace BECore {
             return true;
         }
 
-        /**
-         * Останавливает очередь и пробуждает все ожидающие потоки.
-         */
         void Stop() {
             {
                 // The flag is part of the predicate of Pop's wait: it changes under the mutex, otherwise a
@@ -103,32 +82,20 @@ namespace BECore {
             _condition.notify_all();
         }
 
-        /**
-         * Проверяет, остановлена ли очередь.
-         */
         [[nodiscard]] bool IsStopped() const {
             return _stopped.load(std::memory_order_acquire);
         }
 
-        /**
-         * Возвращает количество задач в очереди.
-         */
         [[nodiscard]] size_t Size() const {
             LockGuard lock(_mutex);
             return _tasks.size();
         }
 
-        /**
-         * Проверяет, пуста ли очередь.
-         */
         [[nodiscard]] bool Empty() const {
             LockGuard lock(_mutex);
             return _tasks.empty();
         }
 
-        /**
-         * Очищает очередь.
-         */
         void Clear() {
             LockGuard lock(_mutex);
             _tasks.clear();

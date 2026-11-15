@@ -1,72 +1,61 @@
 # tools/todo
 
-The todo store: the source of truth for the todo entries of every area (the engine, each game), their status, the roadmap stages, the plans and the reviews. It is a service on Railway (FastAPI over Postgres, `service/`) with a command line (`todo.py`, standard library only). **Nothing of it lives in git**: no entry files, no status commits, no plans. The service mirrors every entry into Vikunja by itself and takes back what a person changes there, so nobody runs a push or a pull.
+The command line of the **todo store**: the source of truth for the todo entries of every area (the engine, each game), their status, the roadmap stages, the plans and the reviews. The store, its service and its pages live in the owner's private BagiTodo repository and its instance; **nothing of it is in git here** (no entry files, status commits or plans). This folder holds only the **loader** of the command line, which the service hands out:
 
 ```
-todo.py            the CLI (stdlib only): list, show, add, edit, claim, review, stop, close, dep, plan, area, import, export, admin
-todo_markdown.py   shared (stdlib): the old entry-file format (import), checklists, summaries, markdown <-> HTML
-worker.py          the worker folders of parallel todo-loop runs (stdlib; git worktrees, below)
-service/           the service: app.py (API and pages), store.py (reads and writes), db.py (pool, migrations),
-                   schema/NNN_*.sql, mirror.py (Vikunja mirror), vikunja.py (client, task rendering), dashboard.py (pages)
-Dockerfile, service/requirements.txt   the image on Railway (build context: this folder)
-.railway/railway.ts, package.json   the settings of the service on Railway (IaC; package.json only pins the SDK)
-tests/             pytest: the API, the mirror (fake_vikunja.py), the CLI (uvicorn in a thread), the markdown
+bagitodo_cli.py   the loader (stdlib, Python 3.10+): asks the service for the current version, downloads and checks it, runs it
+todo.py           three lines: bagitodo_cli.run("todo.py")    -- the entries, plans, dependencies, areas
+worker.py         three lines: bagitodo_cli.run("worker.py")  -- the worker folders of parallel todo-loop runs
 ```
+
+The files are copied as they are from the loader of BagiTodo (`loader/` there) and are public code: no address, no token, no private name. Skills, rules, agents and `tools/vscode/todo-workers` call `tools/todo/todo.py` and `tools/todo/worker.py` as scripts only; never import or read anything else of this folder.
+
+## The loader
+
+Each run asks the service `GET /api/v1/cli` for the version it hands out (the names and sha256 of its files: `todo.py`, `todo_markdown.py`, `worker.py`, `worker_insights.py`), downloads a version it has not seen (`GET /api/v1/cli/<file>`) into the cache, checks every hash and runs the script with the same arguments. The answer is trusted for a minute, so a burst of calls asks once. When the service does not answer, the last version that ran is used, with a line on stderr; with none yet, it is an error. Versions unused for two weeks are removed. Updating the loader itself is a copy of BagiTodo's `loader/` again.
 
 ## Settings
 
-The CLI reads `TODO_API_URL` (the service, no `/api/v1`) and `TODO_API_TOKEN` from the environment, then `--env-file`, then the first `.env` upwards that has `TODO_API_URL` (git-ignored; `.env.example`). `TODO_ACTOR` (or `--actor`) names the writer in the history (`todo-loop`, `owner`, ...; default `cli`). The token is never printed. Every write the store accepts (any method but `GET`) also rewrites the signal file `TODO_CHANGED_FILE` (default `~/.claude/todo/changed.json`: `at`, `actor`, `method`, `path`; a rename; a signal that cannot be written never fails the command), so a viewer reads the store again at once: `tools/vscode/todo-workers` watches it.
-
-The service reads `DATABASE_URL`, `TODO_API_TOKEN`, `VIKUNJA_URL`, `VIKUNJA_TOKEN` (the mirror is off without the two), `VIKUNJA_WEBHOOK_SECRET`, `TODO_PUBLIC_URL` (default `https://$RAILWAY_PUBLIC_DOMAIN`; the target of the webhooks) and `TODO_RECONCILE_SECONDS` (300).
+- `TODO_API_URL` (the service, no `/api/v1`) and `TODO_API_TOKEN`: from the environment, then `--env-file`, then the first `.env` from the current folder upwards that has `TODO_API_URL` (git-ignored; `.env.example`). The token is the checkout's own, limited to its areas, and issued by the owner; it is never printed or committed.
+- `BAGITODO_CACHE`: the cache of the downloaded versions (default `~/.cache/bagitodo`, readable by its owner only: it holds code that runs).
+- `TODO_ACTOR` (or `--actor`) names the writer in the history (`todo-loop`, `owner`, ...; default `cli`).
+- Every accepted write also rewrites the signal file `TODO_CHANGED_FILE` (default `~/.claude/todo/changed.json`), so a viewer (`tools/vscode/todo-workers`) reads the store again at once.
 
 ## The data
 
-- **Area** (`todo.py area set <id> --title T --vikunja-project P --roadmap roadmap.md`): one todo list and its Vikunja project, with the roadmap stages. Today `engine` (project `BagiEngine`) and `chess` (`BagiEngine-Chess`).
-- **Entry**: `id` (letters, digits, `_`, `-`; unique over every area), `area`, `title`, `body` (markdown, no title line), `status` (`open`, `in progress`, `review`, `deferred`, `closed`), `statusDate`, `statusNote`, `branch` (`todo/<branch-id>` while taken), `base` (the base branch the branch was cut from), `origin` (the checkout that made it, `<game repository>@<host>`), `stage`, `plan` (the owner's plan), `version` (grows on every change; `edit --expected-version` refuses a stale write), `aliases` (old ids: the `id:` an old entry file kept for the tracker; a Vikunja marker with one still links), `slicing` (null, or `through`: the loop starts the next slice on the same branch as soon as the last one is approved and the owner merges once, `todo-loop/SKILL.md` "Through") and `costCap` (the dollars a through run may spend, null for none) and `priority` (`now`, `high`, `normal`, `low` or null: the owner's, an agent may propose one; `history` says who set it; independent of `stage`, not inherited through dependencies; unset orders as `normal`; `GET /entries?priority=now,high,none`). A new `schema/NNN_*.sql` runs when the service starts, i.e. with the next deploy (the owner's step). `base` and `origin` are set by `claim --base`, are null for an entry claimed before they existed, and go with the branch: `close`, an API patch with `clear: ["branch"]` and a change made in Vikunja that opens or closes the entry (deleting its task there too) clear all three; `claim` without `--base` stores neither. A finished entry is `closed`, not deleted. `statusLine` spells it as the old front matter did: `review 2026-11-06 branch todo/x: what was done`. The dashboard's summary is the `**What is missing**` / `**What is wrong**` paragraph of the body.
-- **Dependency** (`schema/004_dependencies.sql`): "`A` is blocked by `B`" with an optional note, between any two entries of any areas. The store refuses a link to itself, an unknown id and a cycle (409 naming it). An entry is `blocked` while one of its blockers is not `closed`; a closed blocker keeps its link as history. Every entry's JSON carries `blockedBy`, `blocks` (each `{id, status, title, note}`) and `blocked`; `GET /entries?blocked=true|false` filters. The loop takes only unblocked entries (`todo-loop/SKILL.md`, step 1), except one whose only open blocker waits in `review` on a branch of the same repository: that one is stacked on the blocker's branch (`todo-loop/SKILL.md`, "Stacked branches"). So a link is a wait for the blocker's work, not for its merge; a part that can be done before the blocker is a note in the body, not a link.
-- **Plan**: a markdown text with a bare file name (`todo-loop-<branch-id>.md`), a kind (`owner`, `slice`, `review`, `stages`: the stage plan of a whole through entry, `remarks`: the owner's remarks a review branch goes back with) and usually an entry. Its progress is its `- [ ]` / `- [x]` lines outside code fences. An entry shows its owner's plan, or else its newest slice plan; its JSON also sums every slice plan (`slices`: `count`, `done`, `total`) and names its stage plan (`stagesPlan`).
+- **Area** (`todo.py area list|set`): one todo list with its roadmap stages. `engine` and one per game. An area is a setting of the shared store: changing it is the owner's step.
+- **Entry**: `id` (letters, digits, `_`, `-`; unique over every area), `area`, `title`, `body` (markdown, no title line), `status` (`open`, `in progress`, `review`, `deferred`, `closed`), `statusNote`, `branch` (`todo/<branch-id>` while taken), `base` and `origin` (set by `claim --base`: the base branch and the checkout that made the branch; they go with the branch), `stage`, `plan` (the owner's plan), `version` (`edit --expected-version` refuses a stale write), `slicing` (`through`, the default of `add`: one branch, one merge, `todo-loop/SKILL.md` "Through"; none: each slice waits for its merge), `costCap`, `priority` (`now`, `high`, `normal`, `low` or unset, which orders as `normal`; the owner's, an agent may propose one). A finished entry is `closed`, not deleted. The summary is the `**What is missing**` / `**What is wrong**` paragraph of the body.
+- **Dependency**: "`A` is blocked by `B`" with an optional note, between any two entries of any areas. The store refuses a link to itself, an unknown id and a cycle (409). An entry is `blocked` while one of its blockers is not `closed`; a closed blocker keeps its link as history. Every entry's JSON carries `blockedBy`, `blocks` and `blocked`. The loop takes only unblocked entries (`todo-loop/SKILL.md`, step 1), except one whose only open blocker waits in `review` on a branch of this checkout: it is stacked on, or paired with, that branch ("Stacked branches", "Paired"). So a link is a wait for the blocker's work, not for its merge; a part that can be done before the blocker is a note in the body, not a link.
+- **Plan**: a markdown text with a bare file name (`todo-loop-<branch-id>.md`), a kind (`owner`, `slice`, `review`, `stages`: the stage plan of a through entry, `remarks`: the owner's remarks a review branch goes back with) and usually an entry. Its progress is its `- [ ]` / `- [x]` lines outside code fences.
 - **Events**: every write with its actor; `todo.py history <id>`.
 
 ## Plans never go into git
 
-Agents read and write plans as files, so a plan has a local working copy in `~/.claude/plans/` (outside every repository) and its truth in the store. `plan get` writes and `plan put` reads a file **only outside a git work tree** (`git rev-parse --show-toplevel` of the folder; it refuses otherwise), and so does `export`. The repositories ignore `.claude/plans/`, `*.plan.md` and `todo-export/` as a second guard, and the reviewer of the loop blocks a commit that holds a plan, a review or an entry file.
+Agents read and write plans as files, so a plan has a local working copy in `~/.claude/plans/` (outside every repository) and its truth in the store. `plan get` writes and `plan put` reads a file **only outside a git work tree** (else it refuses); `plan put` takes the bare name of a file in `~/.claude/plans/`. The repositories ignore `.claude/plans/`, `*.plan.md` and `todo-export/` as a second guard, and the reviewer of the loop blocks a commit that holds a plan, a review or an entry file.
 
 ## Commands
 
+`todo.py --help`, `worker.py --help` and `<command> --help` give the details.
+
 ```bash
-python3 tools/todo/todo.py ping                                   # the service, the token, the mirror and its outbox
-python3 tools/todo/todo.py list [--area A] [--status S,..] [--priority P,..] [--all] [--json]  # sorted by priority within an area
+python3 tools/todo/todo.py ping                                   # the service and the token
+python3 tools/todo/todo.py list [--area A] [--status S,..] [--priority P,..] [--all] [--ready|--blocked] [--json]
 python3 tools/todo/todo.py show <id> [--json]                     # the entry as markdown
-python3 tools/todo/todo.py add <id> --area A --title T [--stage N] [--priority P] [--body-file F|-]
+python3 tools/todo/todo.py add <id> --area A --title T [--stage N] [--priority P] [--slicing through|none] [--body-file F|-]
 python3 tools/todo/todo.py edit <id> [--title] [--body-file F|-] [--stage N|none] [--priority P|none] [--plan NAME|none] [--status S] [--slicing through|none] [--cost-cap D|none] [--expected-version V]
 python3 tools/todo/todo.py note <id> --note "..."                 # the status note alone (a through slice approved)
-python3 tools/todo/todo.py claim <id> --branch todo/<branch-id> [--base B] [--origin O]  # open -> in progress (409 when taken: one winner); B is the base the branch is cut from, O defaults to `<game repository>@<host>` when B is given
+python3 tools/todo/todo.py claim <id> --branch todo/<branch-id> [--base B]  # open -> in progress (409 when taken: one winner)
 python3 tools/todo/todo.py review <id> --branch todo/<branch-id> --note "what was done, how it was checked"
 python3 tools/todo/todo.py stop <id> --reason "..."               # stays in progress, "stopped: ..."
 python3 tools/todo/todo.py close <id> [--reopen]                  # after the merge; --reopen: the next slice
 python3 tools/todo/todo.py plan get|put|list|url|delete ...       # files in ~/.claude/plans/ by default
 python3 tools/todo/todo.py history <id>
-python3 tools/todo/todo.py dep add <id> <blocker>... [--note N] # <id> waits until each blocker is closed; `dep rm` takes it back
-python3 tools/todo/todo.py dep list [<id>]                       # every link, or the blockers and the blocked of one entry
-python3 tools/todo/todo.py dep graph [--area A]                  # the address of the graph page
-python3 tools/todo/todo.py list --ready | --blocked              # every blocker closed, or not
-python3 tools/todo/todo.py dashboard [--area A]                   # the address of the pages (Basic auth: the token)
-python3 tools/todo/todo.py admin reconcile|webhooks|outbox        # the mirror by hand
-python3 tools/todo/todo.py admin dedupe [--apply]                 # several open tasks for one entry: keep the oldest
-python3 tools/todo/todo.py import --area A --todo DIR [--dry-run] # the old entry files and their plans (once; file name = id, an old `id:` = alias)
+python3 tools/todo/todo.py dep add|rm|list|graph ...              # <id> waits until each blocker is closed
+python3 tools/todo/todo.py dashboard [--area A]                   # the address of the pages
 python3 tools/todo/todo.py export --out DIR                       # a backup outside git, old file format
 ```
 
 Exit codes: 0, 1 (settings, network, a guard), 2 (the store refused: 404, 409, 422). `--json` works before or after the command.
-
-## The mirror (service/mirror.py)
-
-- **Store to Vikunja:** a write that changes what a task shows queues the entry in `vikunja_outbox` (one row per entry). The worker thread writes due rows every 2 s (and at once after a write of the API), retries a failure with a backoff (5 s doubling, at most 10 min) and keeps what it wrote as the entry's `vikunja_snapshot`. A task shows the marker `todo-sync:id=<id>`, the status line, the stage and the plan, a rule, the body (markdown as HTML) and the plan's checklist as the editor's task list (at most 300 items of 240 characters). Owned: title, description, done and the labels `in progress`, `review`, `deferred`, `stage N`, the priority (`now` 5, `high` 3, `normal` 2, `low` 1, unset 0, compared by level: a task at 4 is `now` and stays 4); due date, assignees, comments and other labels are kept (read-modify-write).
-- **Vikunja to store:** a webhook per project (`task.created`, `task.updated`, `task.deleted`; HMAC-SHA256 of the body in `X-Vikunja-Signature`, installed at start or by `admin webhooks`) and a reconcile pass every `TODO_RECONCILE_SECONDS`. The task is read again and compared with the snapshot; what differs was a person: done closes the entry (undone opens it), the title, the body (HTML back to markdown, so formatting the editor cannot hold may change), the labels `in progress` / `deferred` (status) and `stage N`, the priority, a move to the project of another area. A snapshot written before the priority was mirrored has no `priority` key: the task's priority is then adopted when the entry has none (never wiped), else the store's is written. `review` never comes from Vikunja. A task without the marker that is not done becomes a new entry (id from the title). A deleted task closes its entry, and no task is made again for it.
-- **Dependencies** go one way, store to Vikunja: an entry's blockers are its task's `blocked` relations (Vikunja adds `blocking` to the other task). Only relations between tasks of entries are owned; a relation changed in Vikunja is put back at the next write of the entry. A refused relation (a token without `tasks_relations`) never fails the task: it is kept as `relationsError` of `/healthz` (`ping`) until a relation is written again.
-- **One task per entry:** before the worker makes a task it looks for an unlinked task of the project whose marker names the entry (its id or an alias) and takes that one.
-- **No lost edit, no echo:** the entry row is locked while its task is written and while a webhook is applied, so the echo of the mirror's own write meets the new snapshot and changes nothing; an edit that arrives before a pending write is applied first and shown, not overwritten. A task that lost its marker is still found by its id and gets the marker back. **Lock order everywhere: the entry row, then its outbox row** (table in `mirror.py`), so a write and the mirror never wait in a circle. A transaction Postgres still aborts (deadlock, serialization failure) is run again by the API up to four times, then 503; any other unexpected error is 500 with its class (traceback in the log).
-- Health: `GET /healthz` (`todo.py ping`) shows the mirror, its last error and the outbox; `admin outbox` lists what waits and why.
 
 ## Workers (worker.py)
 
@@ -74,47 +63,31 @@ Several loops at once, each in a **worker folder** (the loop's own rules: `.clau
 
 ```bash
 python3 tools/todo/worker.py create 3      # <parent>/<name>.workers/w1..w3; --base, --preset, --no-configure
-python3 tools/todo/worker.py list          # branch, cleanliness and session of each; --json [--store] [--activity] [--usage] for the VS Code panel
+python3 tools/todo/worker.py list          # branch, cleanliness, session of each; --json [--store] [--activity] [--usage]: the panel
 python3 tools/todo/worker.py check [--fix] # the shared config and the Windows links (below) of every worker
-python3 tools/todo/worker.py run 2         # claude in w2 in this terminal
-python3 tools/todo/worker.py start         # /todo-loop in every worker in the background, --delay apart; --slices, --report-to, --print
-python3 tools/todo/worker.py start 2 --detach --wait-free 1800 --queued-only --delay 0  # a through loop's own next slice (below)
+python3 tools/todo/worker.py start         # /todo-loop in every worker, background, --delay apart; --slices, --report-to, --print
+python3 tools/todo/worker.py start 2 --detach --wait-free 1800 --queued-only --delay 0  # the end of a run in a worker (below)
 python3 tools/todo/worker.py stop [k ...]  # stop background sessions (the conversation is kept)
 python3 tools/todo/worker.py relaunch [k]  # resume sessions stopped by the usage limit
-python3 tools/todo/worker.py merge <id> [--dry-run]  # quick merge of an entry in review
+python3 tools/todo/worker.py attach <k>    # open the session of a worker (answer what it waits for)
+python3 tools/todo/worker.py merge <id> [--dry-run] [--no-kick]  # quick merge of an entry in review, then `kick`
+python3 tools/todo/worker.py kick [--merged id]      # idle workers take the head of their queues, detached
 python3 tools/todo/worker.py update [k ...]          # detach an idle, clean worker at the tips of its bases (no build, no submodule update)
-python3 tools/todo/worker.py remove 3      # a clean folder; its branches stay
-python3 tools/todo/worker.py queue [k] [--add id [--first] | --remove id | --pop | --clear]  # the panel's next entries
-python3 tools/todo/worker.py overlap <id>  # busy entries whose slice plans name its files (a hint)
-python3 tools/todo/worker.py prefs [--prefer a,b] [--avoid c] [--clear]   # the owner's preferences of /todo-dispatch
-python3 tools/todo/worker.py dispatch --json [k ...] [--depth N]  # one read for /todo-dispatch; --record <file> keeps a classifier answer
-python3 tools/todo/worker.py build-info    # preset, product, tests, screenshot tool (the panel's Verify, Build & run, Shots)
-python3 tools/todo/worker.py cost <id> [--json]      # dollars of every loop session that held the entry, against its costCap
-python3 tools/todo/worker.py remarks <id> --file F|- [--start]  # an entry in review goes back with the owner's remarks
+python3 tools/todo/worker.py remove 3      # a clean folder (its branches stay)
+python3 tools/todo/worker.py queue [k] [--add id [--first] [--by-loop] | --remove id | --pop | --clear | --pause [--reason R] | --resume]
+python3 tools/todo/worker.py overlap <id>  # busy entries whose plans name its files
+python3 tools/todo/worker.py prefs | dispatch --json [k ...]   # the owner's preferences and the one read of /todo-dispatch
+python3 tools/todo/worker.py build-info | cost <id> | remarks <id> --file F|- [--start]
+python3 tools/todo/worker.py doctor [k] [--fix K] | merge-train [--dry-run] | busy | day | timeline | review-stats | machine  # the panel's
 ```
 
-- **Worktrees, not clones:** one shared `.git`, so a worker's branch is at once in the main checkout (tried and merged there) and in the other workers. A worker starts detached at the base, because the main checkout holds the base branch.
+- **Worktrees, not clones:** one shared `.git`, so a worker's branch is at once in the main checkout (tried and merged there) and in the other workers. A worker stands detached at the base: the main checkout holds the base branch.
 - **In a game:** the worker's `engine/` is a worktree of the main checkout's engine module. **Never run `git submodule update` in a worker**: it would write the worker's path into the shared `core.worktree` and break the main `engine/`; `create` sets `submodule.engine.update=none` per worker, `check --fix` repairs `core.worktree`.
 - **Shared by symlink:** `.env`, `.claude/settings.local.json`, `.venv` / `engine/.venv`.
-- **Windows symlinks:** git makes a tracked link as a *file* symlink when its target is missing at checkout time (the game's `.claude/skills/*` into an `engine/` that is empty or on an older commit); `stat` on it then fails (`WinError 5`) and the skill does not load. `create`, `update` and `start` remake such links as directory symlinks after both repositories moved (the order of the two checkouts is not relied on), `check --fix` by hand.
-- **Builds:** each worker has its own `build/`; `create` configures with `ENGINE_CCACHE_BASE_DIR=<the workers' folder>`, so the workers share ccache hits (`cmake/BagiCompilerCache.cmake`).
-- **Sessions:** `start` runs `/todo-loop N` as a `claude --bg` session (`--model sonnet --effort medium`) only in workers whose session has finished, `--delay` (60 s) apart. Before that it detaches the worker at the tips of its bases (as `update`; uncommitted changes: it starts where it stands, with a note), since a game on an old commit beside a newer engine base gives a red baseline. `list` shows a session that waits for a permission (a run that ended its turn with text is finished, `endedTurn`; `start` stops it first), one stopped by the usage limit (`relaunch` after the reset) and one stopped by `stop` (`~/.claude/todo/stopped-sessions.json`). A folder Claude Code does not trust yet needs one `run <k>` first.
-- **Through and remarks.** `start --queued-only` starts a worker on the head of its queue (taken out; an empty queue: not started), `--wait-free S` first waits for the worker's session to end, `--detach` does it all in a process of its own. A through loop queues its entry first on its own worker and runs this as its last step, so the next slice gets a fresh conductor without the panel. `remarks` stores them as the plan `todo-loop-<branch-id>-remarks-<n>.md` (kind `remarks`), sets the entry back to `in progress` and queues it first on the worker that holds its branch (or a free one).
-- **Quick merge** = `/todo-merge` after the owner's yes, without a session: refuses an entry not in review or with an open blocker, a foreign or merged branch, conflicts, a dirty tree; merges `--no-ff`, closes (or `--reopen`s) the entry, detaches the worker, deletes the branch, commits the engine pointer in a game. It never builds and never pushes.
-- **Branches of another checkout:** branches are never pushed, so an entry is reviewed and merged only where it was taken. `claim --base` stores `base` and `origin`; `list --store` marks entries whose branch is not here (`local` false) or was cut from another base (`foreignBase`), and the panel and `merge` refuse them.
-- **The panel's files** (outside every repository, in `~/.claude/todo/`): `worker-queues.json`, `dispatch-prefs.json` and `dispatch-verdicts.json` (all by the workers' root: the queues, the owner's preferences and the classifier's verdicts of `/todo-dispatch`, a verdict reused while the entry's `version` is unchanged, a skip that depends on other entries never) and `usage-ledger.json` (the tokens of each loop session by the entry its worker held). `list --store` also checks each local review branch against the base and the other review branches.
-
-## Railway
-
-One Railway project holds Vikunja (Docker image `vikunja/vikunja:2.7.1`, SQLite on a volume), **Postgres** (the Railway template) and **todo-api** (this folder, `railway up tools/todo --path-as-root --service todo-api` from the engine root). Variables of todo-api: `DATABASE_URL=${{Postgres.DATABASE_URL}}`, `TODO_API_TOKEN` (`openssl rand -hex 32`), `VIKUNJA_URL` (the public Vikunja domain), `VIKUNJA_TOKEN` (a scoped token: `projects` create/read_all, `tasks` create/read_all/update/delete, `labels` create/read_all, `tasks_labels` update_bulk, `tasks_relations` create/delete, `projects_webhooks` create/read_all), `VIKUNJA_WEBHOOK_SECRET` (`openssl rand -hex 32`). A public domain on port 8080 (`PORT` is set by Railway). One replica: the worker runs in the web process. Postgres backups are the Railway volume's; `todo.py export` is one by hand.
-
-**The settings of todo-api** (builder `DOCKERFILE`, health check `/healthz` with 60 s, restart `ON_FAILURE`, one replica in `sfo`) are Railway Infrastructure as Code: `.railway/railway.ts` here, the partial `todo`, which owns only todo-api, so `apply` never touches Vikunja, Postgres or a game's web service; variables stay unmanaged (`railway variables`). A change: `cd tools/todo && npm install && railway config plan`, then `railway config apply` (after `railway link`).
-
-## Tests
-
-```bash
-uv pip install --python .venv/bin/python -r tools/todo/requirements-dev.txt   # once
-.venv/bin/python -m pytest tools/todo/tests
-```
-
-The service tests need a real Postgres: `TODO_TEST_DATABASE_URL` (wiped), else a `postgres:17-alpine` container is started through docker for the session; without either they skip. `fake_vikunja.py` stands in for the Vikunja 2.7.1 behaviour the mirror relies on.
+- **Windows symlinks:** a tracked link whose target was missing at checkout (the game's `.claude/skills/*` into an older `engine/`) becomes a *file* symlink (the skill does not load); `create`, `update` and `start` remake it as a directory symlink, `check --fix` by hand.
+- **Builds:** each worker has its own `build/`. `create` and every session set `ENGINE_CCACHE_BASE_DIR=<the parent of the main checkout>` (the owner's value wins), so every checkout and preset shares hits (`cmake/BagiCompilerCache.cmake`).
+- **Sessions:** `start` runs `/todo-loop N` as a `claude --bg` session only in workers whose session has finished, `--delay` apart, after detaching the worker at its bases' tips (as `update`). `list` shows a session waiting for a permission, one stopped by the usage limit (`relaunch` after the reset) and one stopped by `stop`. A folder Claude Code does not trust yet needs one `run <k>` first.
+- **Queues.** `start --queued-only` takes the first *takeable* entry of the worker's queue (the loop's stacked/paired rule; blocked ones stay). A paused queue (`queue --pause`, set by every stopped loop; `--resume`) starts nothing; after 4 entries in a row without the owner the queue pauses instead. `--wait-free S` waits for the session to end, `--detach` runs it apart: every run in a worker ends so (`todo-loop/SKILL.md`, "End of the run"); `kick` (and `merge`) does it for each idle worker. `remarks` stores the plan `todo-loop-<branch-id>-remarks-<n>.md` (kind `remarks`), sets the entry `in progress` and queues it first on the worker holding its branch.
+- **Quick merge** = `/todo-merge` after the owner's yes: refuses an entry not in review or with an open blocker, a foreign or merged branch, conflicts, a dirty tree; merges `--no-ff`, closes (or `--reopen`s) the entry, detaches the worker, deletes the branch, commits the engine pointer in a game, then `kick`s. It never builds and never pushes.
+- **Branches of another checkout:** branches are never pushed, so an entry is reviewed and merged only where it was taken. `claim --base` stores `base` and `origin`; `list --store` marks entries whose branch is not here or was cut from another base, and the panel and `merge` refuse them.
+- **The panel's files** (outside every repository, in `~/.claude/todo/`): `worker-queues.json`, `dispatch-prefs.json`, `dispatch-verdicts.json`, `usage-ledger.json`, `stopped-sessions.json`.

@@ -1,8 +1,8 @@
 #pragma once
 
-#include <BECore/Time/GamePause.h>  // kDefaultStepSeconds: the frame time of a deferred call that does not say how long its frame is
+#include <BECore/Time/GamePause.h>  // kDefaultStepSeconds
 #include <BECore/Types/Types.h>
-#include <functional>
+#include <BECore/Utils/MoveOnlyFunction.h>
 
 namespace BECore {
 
@@ -14,10 +14,10 @@ namespace BECore {
 
     /// Receives the serialized JSON text of a response. Called on the main thread, except for a request posted after
     /// ControlService::Shutdown() (answered on the posting thread).
-    using ControlReplyFn = std::function<void(String)>;
+    using ControlReplyFn = MoveOnlyFunction<void(String)>;
 
-    /// What the transport of the control API is doing, for whoever shows it (the editor's status bar). Published by Application every
-    /// frame, so a widget reads it without reaching into the transport
+    /// What the transport is doing, for whoever shows it (the editor's status bar). Application publishes it every frame, so a widget
+    /// does not reach into the transport
     struct ControlServerStatus {
         bool listening = false;
         uint16_t port = 0;

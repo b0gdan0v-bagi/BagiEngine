@@ -7,7 +7,6 @@
 // EnumUtils.h, which comes before Format.h in the PCH, makes every CORE_ENUM formattable through it.
 namespace BECore {
 
-    /// Where a formatter writes the text, and what it reads the spec (`{:>8}`) from.
     using FormatContext = fmt::format_context;
     using FormatParseContext = fmt::format_parse_context;
 

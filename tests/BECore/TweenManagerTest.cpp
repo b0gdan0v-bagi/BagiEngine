@@ -1,6 +1,8 @@
 #include <BECore/Animation/ScopedTween.h>
 #include <BECore/Animation/TweenManager.h>
+#include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Time/Time.h>
+#include <Common/DestroyTally.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -20,6 +22,7 @@ namespace BECore::Tests {
         constexpr float kHugeFrame = 1000.0f;
         constexpr int kLaterTweenCount = 2;
         constexpr int kFramesInASecond = 32;
+        constexpr int kWarmTweenCount = 8;
 
         TweenSettings Settings(float duration, float delay = 0.0f, EaseType ease = EaseType::Linear) {
             return {duration, delay, ease};
@@ -35,6 +38,26 @@ namespace BECore::Tests {
                 return tweens.Start<float>(0.0f, to, settings, [this](const float& value) { values.push_back(value); }, [this] { ++completed; }, [this] { ++cancelled; });
             }
         };
+
+        /// The three callables of a tween, each holding a move-only token that counts its end
+        struct Tallies {
+            int value = 0;
+            int complete = 0;
+            int cancel = 0;
+        };
+
+        IntrusivePtr<TweenHandle> StartTracked(TweenManager& tweens, Tallies& tallies) {
+            return tweens.Start<float>(
+                0.0f, kTo, Settings(kOneSecond), [token = DestroyTally(tallies.value)](const float&) {}, [token = DestroyTally(tallies.complete)] {}, [token = DestroyTally(tallies.cancel)] {});
+        }
+
+        /// Allocations of the calling thread while @p body runs (all zero when the allocation counting is off)
+        template <typename TBody>
+        uint64_t AllocationsOf(TBody&& body) {
+            const AllocTracker::ThreadCounters before = AllocTracker::GetThreadCounters();
+            body();
+            return AllocTracker::GetThreadCounters().count - before.count;
+        }
 
     }  // namespace
 
@@ -393,13 +416,13 @@ namespace BECore::Tests {
         TweenManager tweens;
         int started = 0;
         int values = 0;
-        eastl::function<void()> chain;
+        MoveOnlyFunction<void()> chain;
         chain = [&] {
             if (++started < 5) {
-                tweens.Start<float>(0.0f, kTo, Settings(kQuarterSecond), [&values](const float&) { ++values; }, chain);
+                tweens.Start<float>(0.0f, kTo, Settings(kQuarterSecond), [&values](const float&) { ++values; }, [&chain] { chain(); });
             }
         };
-        tweens.Start<float>(0.0f, kTo, Settings(kQuarterSecond), [&values](const float&) { ++values; }, chain);
+        tweens.Start<float>(0.0f, kTo, Settings(kQuarterSecond), [&values](const float&) { ++values; }, [&chain] { chain(); });
 
         tweens.Advance(kHugeFrame);
 
@@ -485,35 +508,35 @@ namespace BECore::Tests {
     TEST(TweenManagerTest, TheRunningSetterSurvivesACancelOfItsOwnTween) {
         TweenManager tweens;
         IntrusivePtr<TweenHandle> handle;
-        const auto token = MakeShared<int>(0);  // the setter holds a copy: its use count says whether the setter is alive
+        int setterEnded = 0;  // the setter holds a token that counts its end: 0 while it runs, 1 once it was released
         bool aliveInsideAfterCancel = false;
-        handle = tweens.Start<float>(0.0f, kTo, Settings(kOneSecond), [&, guard = token](const float&) {
+        handle = tweens.Start<float>(0.0f, kTo, Settings(kOneSecond), [&, guard = DestroyTally(setterEnded)](const float&) {
             handle->Cancel();
-            aliveInsideAfterCancel = token.use_count() == 2;
+            aliveInsideAfterCancel = setterEnded == 0;
         });
-        ASSERT_EQ(token.use_count(), 2);
+        ASSERT_EQ(setterEnded, 0);
 
         tweens.Advance(kQuarterSecond);
 
         EXPECT_TRUE(aliveInsideAfterCancel);
-        EXPECT_EQ(token.use_count(), 1);  // released after the setter returned
+        EXPECT_EQ(setterEnded, 1);  // released after the setter returned
         EXPECT_TRUE(handle->IsCancelled());
     }
 
     TEST(TweenManagerTest, TheRunningSetterSurvivesAClearInsideIt) {
         TweenManager tweens;
-        const auto token = MakeShared<int>(0);
+        int setterEnded = 0;
         bool aliveInsideAfterClear = false;
-        tweens.Start<float>(0.0f, kTo, Settings(kOneSecond), [&, guard = token](const float&) {
+        tweens.Start<float>(0.0f, kTo, Settings(kOneSecond), [&, guard = DestroyTally(setterEnded)](const float&) {
             tweens.Clear();
-            aliveInsideAfterClear = token.use_count() == 2;
+            aliveInsideAfterClear = setterEnded == 0;
         });
-        ASSERT_EQ(token.use_count(), 2);
+        ASSERT_EQ(setterEnded, 0);
 
         tweens.Advance(kQuarterSecond);
 
         EXPECT_TRUE(aliveInsideAfterClear);
-        EXPECT_EQ(token.use_count(), 1);
+        EXPECT_EQ(setterEnded, 1);
     }
 
     TEST(TweenManagerTest, CancelAllFromACompletionCallbackCancelsTheRestOfTheWalkAndThePending) {
@@ -715,6 +738,102 @@ namespace BECore::Tests {
             EXPECT_EQ(recorder.values[0], kTo);
             EXPECT_EQ(handle->GetState(), TweenState::Completed);
             EXPECT_EQ(recorder.completed, 1);
+        }
+    }
+
+    TEST(TweenManagerTest, MoveOnlyCallbacksAreDestroyedOnceWhenTheTweenCompletes) {
+        TweenManager tweens;
+        Tallies tallies;
+        const auto handle = StartTracked(tweens, tallies);
+        ASSERT_EQ(tallies.value + tallies.complete + tallies.cancel, 0);
+
+        tweens.Advance(kOneSecond);
+
+        EXPECT_EQ(handle->GetState(), TweenState::Completed);
+        EXPECT_EQ(tallies.value, 1);
+        EXPECT_EQ(tallies.complete, 1);
+        EXPECT_EQ(tallies.cancel, 1);
+    }
+
+    TEST(TweenManagerTest, MoveOnlyCallbacksAreDestroyedOnceWhenTheTweenIsCancelled) {
+        TweenManager tweens;
+        Tallies tallies;
+        const auto handle = StartTracked(tweens, tallies);
+        tweens.Advance(kQuarterSecond);
+
+        handle->Cancel();
+
+        EXPECT_TRUE(handle->IsCancelled());
+        EXPECT_EQ(tallies.value, 1);
+        EXPECT_EQ(tallies.complete, 1);
+        EXPECT_EQ(tallies.cancel, 1);
+    }
+
+    TEST(TweenManagerTest, MoveOnlyCallbacksAreDestroyedOnceByCancelAllClearAndTheDestructorOfTheManager) {
+        Tallies cancelAll;
+        Tallies cleared;
+        Tallies dropped;
+        IntrusivePtr<TweenHandle> keptByTheCaller;
+        {
+            TweenManager tweens;
+            StartTracked(tweens, cancelAll);
+            tweens.CancelAll();
+            EXPECT_EQ(cancelAll.value + cancelAll.complete + cancelAll.cancel, 3);
+
+            StartTracked(tweens, cleared);
+            tweens.Clear();
+            EXPECT_EQ(cleared.value + cleared.complete + cleared.cancel, 3);
+
+            keptByTheCaller = StartTracked(tweens, dropped);
+            EXPECT_EQ(dropped.value + dropped.complete + dropped.cancel, 0);
+        }
+
+        EXPECT_EQ(dropped.value, 1);  // the manager is gone and the handle is not: the callables were released with the manager
+        EXPECT_EQ(dropped.complete, 1);
+        EXPECT_EQ(dropped.cancel, 1);
+        EXPECT_TRUE(keptByTheCaller->IsCancelled());
+        EXPECT_EQ(cancelAll.value, 1);
+        EXPECT_EQ(cleared.cancel, 1);
+    }
+
+    TEST(TweenManagerTest, ATweenOfAPlayedMoveOnlyTimelineDestroysItsClipsOnce) {
+        int clipEnded = 0;
+        int completeEnded = 0;
+        {
+            TweenManager tweens;
+            Timeline timeline;
+            timeline.Append<float>(0.0f, kTo, Settings(kQuarterSecond), [token = DestroyTally(clipEnded)](const float&) {});
+            tweens.Play(std::move(timeline), 0.0f, [token = DestroyTally(completeEnded)] {});
+
+            tweens.Advance(kOneSecond);
+
+            EXPECT_EQ(clipEnded, 1);  // the setter, which owns the timeline, was released at completion
+            EXPECT_EQ(completeEnded, 1);
+        }
+        EXPECT_EQ(clipEnded, 1);
+        EXPECT_EQ(completeEnded, 1);
+    }
+
+    TEST(TweenManagerTest, ASmallSetterAllocatesNothingBeyondTheHandleAndAPlayedTimelineOnlyItsOwnBox) {
+        TweenManager tweens;
+        float value = 0.0f;
+        for (int warm = 0; warm < kWarmTweenCount; ++warm) {  // grows the lists of the manager
+            tweens.Delay(kQuarterSecond);
+        }
+        tweens.Advance(kOneSecond);
+
+        const uint64_t delayAllocations = AllocationsOf([&] { tweens.Delay(kOneSecond); });
+        const uint64_t startAllocations = AllocationsOf([&] { tweens.Start<float>(0.0f, kTo, Settings(kOneSecond), [&value](const float& next) { value = next; }); });
+        Timeline timeline;
+        const uint64_t buildAllocations = AllocationsOf([&] { timeline.Append<float>(0.0f, kTo, Settings(kOneSecond), [&value](const float& next) { value = next; }); });
+        const uint64_t playAllocations = AllocationsOf([&] { tweens.Play(std::move(timeline)); });
+
+        if (AllocTracker::kEnabled) {
+            EXPECT_EQ(startAllocations, delayAllocations);     // the handle, and nothing for the setter
+            EXPECT_EQ(buildAllocations, 1u);                   // the storage of the clips
+            EXPECT_EQ(playAllocations, delayAllocations + 1);  // the handle and the one box of the timeline: no control block
+        } else {
+            EXPECT_EQ(playAllocations, 0u);
         }
     }
 

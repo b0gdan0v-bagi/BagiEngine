@@ -8,7 +8,7 @@ Built only with `ENGINE_WITH_REMOTE_CONTROL` (the web build has no sockets). Mod
 
 | File | Purpose |
 |------|---------|
-| `RoomServerSettings.h` | `RoomServerSettings` and `kRoomServerHealthPath`: port, bind scope, handshake policy, transport limits, the hub's `RoomHubSettings`, the tick interval, the ping interval, the injected clock and `RandomFn` |
+| `RoomServerSettings.h` | `RoomServerSettings` and `kRoomServerHealthPath`: port, bind scope, handshake policy, transport limits, the hub's `RoomHubSettings`, the tick interval, the ping interval, the injected clock and `RandomFn` (`MoveOnlyFunction`s: the settings are move-only) |
 | `RoomWebSocketServer.h/.cpp` | `RoomWebSocketServer(registry, settings)`: `Start()`, `Stop()`, `GetPort()`, `IsRunning()` |
 | `RoomServerArgs.h/.cpp` | `RoomServerArgs` (what a server is started with: a plain struct), `LoadRoomServerArgs(argc, argv)` (environment, then flags), `ParseRoomServerArgs(argc, argv, base)`, `ReadRoomServerEnvironment(lookup)`, `GetRoomServerUsage()`, `ToSettings(args)` |
 | `RoomServerMain.h/.cpp` | `RunRoomServer(registry, args)`: logging, the server, the listening line, the loop until SIGINT / SIGTERM |

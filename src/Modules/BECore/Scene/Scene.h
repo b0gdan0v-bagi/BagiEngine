@@ -13,7 +13,7 @@
 #include <BECore/Utils/PassKey.h>
 #include <cstddef>
 #include <cstdint>
-#include <entt/entt.hpp>
+#include <entt/entity/fwd.hpp>
 #include <limits>
 
 namespace BECore {
@@ -23,8 +23,8 @@ namespace BECore {
     class Scene : public RefCounted {
         BE_CLASS(Scene, FACTORY_BASE)
     public:
-        Scene() = default;
-        ~Scene() override = default;
+        Scene();
+        ~Scene() override;
 
         void Initialize();
 
@@ -37,14 +37,10 @@ namespace BECore {
         void Update();
 
         /**
-         * @brief Draw every component in draw order.
+         * @brief Draw every component in draw order: by SceneNode::GetLayer(), then scene order (depth-first, a parent before its children).
          *
-         * The pass is SceneDrawSystem: it writes a SceneDrawItem into the registry for every node, sorts them and walks
-         * a view over them. It draws QuadRendererComponent and SpriteRendererComponent itself from their registry data
-         * and calls IComponent::OnDraw() of every other component. Draw order is the order of the nodes sorted by
-         * (SceneNode::GetLayer(), scene order): a lower layer first, and within a layer the depth-first order of the tree
-         * (a parent before its children, siblings as in the config), so a node later in the scene is drawn on top. It does
-         * not depend on any event handler order. A node has at most one quad and one sprite (the first of each counts).
+         * SceneDrawSystem draws QuadRendererComponent and SpriteRendererComponent itself from their registry data (the first of each per node)
+         * and calls IComponent::OnDraw() of every other component; no event handler order is involved.
          * Nothing may add or remove nodes while this runs.
          */
         void Draw();
@@ -52,18 +48,16 @@ namespace BECore {
         /**
          * @brief The place of @p node in the draw order: how many nodes Draw() draws before it. A higher rank is drawn later, so on top.
          *
-         * It follows the same rule as Draw() (layer, then scene order), computed from the tree as it is now, with no draw before it needed.
-         * Input handlers use it to ask the topmost first. 0 for a node that is not in this scene.
+         * Computed from the tree as it is now, no draw needed. Input handlers use it to ask the topmost first. 0 for a node that is not in this scene.
          */
         int32_t GetDrawRank(const SceneNode& node) const;
 
         /**
-         * @brief Size of the scene's **active** view in scene units, 0 when it has none.
+         * @brief Size of the scene's **active** view in scene units, 0 when it has none (then a unit is an output pixel).
          *
          * The default view is the XML `viewWidth`, `viewHeight`; a scene may list `viewVariants` that replace it while the render output has
-         * their shape (see GetActiveView()). With a view size the scene is drawn scaled to fit the render output and centered, so it looks
-         * the same in a window of any size; without one a unit is a pixel. Everything in the scene (transforms, board origins) is in these
-         * units. Before the first draw this is the default view.
+         * their shape (see GetActiveView()). Everything in the scene (transforms, board origins) is in these units.
+         * Before the first draw this is the default view.
          */
         float GetViewWidth() const;
         float GetViewHeight() const;
@@ -76,7 +70,7 @@ namespace BECore {
          */
         ActiveSceneView GetActiveView() const;
 
-        /// Moves up exactly when the choice (its `index`) changes, never goes back; a change of the pick is the only thing it counts
+        /// Moves up exactly when the choice (its `index`) changes, never goes back
         uint32_t GetViewVersion() const;
 
         /// The declared view variants, read only (a tool lists them by name; a variant's index is the one `ActiveSceneView::index` carries)
@@ -108,11 +102,9 @@ namespace BECore {
         [[nodiscard]] const ViewTransform& GetViewTransform() const;
 
         /**
-         * @brief True while this is the scene that SceneManager updates and draws.
+         * @brief True while this is the scene that SceneManager updates and draws; never for a scene no SceneManager has activated.
          *
-         * Scene events and input events are global, so every loaded scene's components receive them;
-         * IComponent::SubscribeInScene uses this flag to let only the active scene's components react.
-         * A scene that no SceneManager has activated is never active.
+         * Scene and input events are global, so IComponent::SubscribeInScene uses this flag to let only the active scene's components react.
          */
         bool IsActive() const;
 
@@ -137,24 +129,20 @@ namespace BECore {
         /**
          * @brief Instantiates a node file at run time, with the overrides a `<node ref>` of a scene file would have
          *
-         * @p reference is a `<node ref=".." name=".." layer="..">` element with the same overrides as in a scene file
-         * (ApplyNodeOverrides), so a game writes the overrides as XML text and loads it with XmlDocument: there is no second
-         * override language. The expansion is ExpandNodeReference, the same function that expands the scene file, with the
-         * source mark: the new node answers SceneNode::GetSourceRef(). The node is wired as a loaded one is (entity, then
-         * IComponent::OnAttached of every component) and inserted into the children of @p parent at @p index, so its draw
-         * and input order follow from the tree. It has no children of its own.
+         * @p reference is a `<node ref=".." name=".." layer="..">` element with the overrides of ApplyNodeOverrides, which a game writes as
+         * XML text and loads with XmlDocument. It is expanded by ExpandNodeReference with the source mark, so the new node answers
+         * SceneNode::GetSourceRef(), wired as a loaded node is (entity, then IComponent::OnAttached of every component) and inserted into
+         * the children of @p parent at @p index; its draw and input order follow from the tree. It has no children of its own.
          *
-         * A reference that cannot be used (invalid, a file that is missing or of another content version, a bad override), a
-         * scene that is not initialized and a @p parent that is not a live node of this scene are one LOG_ERROR that names the
-         * scene and the reference; an empty pointer is returned and the scene is not changed.
+         * A reference that cannot be used, a scene that is not initialized and a @p parent that is not a live node of this scene are one
+         * LOG_ERROR that names the scene and the reference; an empty pointer is returned and the scene is not changed.
          *
-         * @param reference The `<node ref="..">` element
          * @param loader Reads the node file of the reference
          * @param parent The parent node, the scene's root when null
          * @param index Place among the children of the parent, clamped to their number; kAppend is the last
          * @return The new node (also held by its parent), empty on failure
          */
-        IntrusivePtr<SceneNode> InstantiateNode(pugi::xml_node reference, const NodeFileLoader& loader, SceneNode* parent = nullptr, size_t index = kAppend);
+        IntrusivePtr<SceneNode> InstantiateNode(pugi::xml_node reference, NodeFileLoaderRef loader, SceneNode* parent = nullptr, size_t index = kAppend);
 
         /// InstantiateNode() of a reference without overrides (`nodes/MahjongHud`), the node file found through the FileSystem of CoreManager (a game's `config/nodes/X.xml` wins over the engine's)
         IntrusivePtr<SceneNode> InstantiateNode(StringView ref, SceneNode* parent = nullptr, size_t index = kAppend);
@@ -167,7 +155,7 @@ namespace BECore {
          *
          * @p index counts the children of the new parent **after @p node has left its old place**, so moving a node down inside one parent to
          * index `n` puts it behind `n` of the others; it is clamped, kAppend is the last. The node keeps its entity, its components and its
-         * subtree (no second `OnAttached`), and the draw order follows the tree, so nothing else is updated.
+         * subtree (no second `OnAttached`).
          *
          * Refused, with nothing changed, and false returned: the root, a node of another scene, a parent of another scene, and a parent that
          * is the node itself or below it.
@@ -204,7 +192,7 @@ namespace BECore {
         BE_REFLECT_FIELD float _viewHeight = 0.0f;
         BE_REFLECT_FIELD Vector<SceneViewVariant> _viewVariants;
         BE_REFLECT_FIELD Vector<IntrusivePtr<SceneNode>> _nodes;
-        entt::registry _registry;
+        UniquePtr<entt::registry> _registry;  // by pointer so that this header needs no entt.hpp
         IntrusivePtr<SceneNode> _rootNode;
         ViewTransform _viewTransform;   // fit of the view to the output, set by Draw(), read by ScreenToScene*
         int32_t _activeViewIndex = -1;  // index in _viewVariants, -1 the default view; set by Draw()

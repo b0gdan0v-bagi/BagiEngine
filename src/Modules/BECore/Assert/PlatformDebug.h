@@ -1,21 +1,8 @@
 #pragma once
 
-/**
- * @file PlatformDebug.h
- * @brief Platform-specific debug utilities
- *
- * Provides cross-platform debug break functionality.
- */
-
 namespace BECore {
 
-    /**
-     * @brief Triggers a debugger breakpoint
-     *
-     * On Windows: Uses __debugbreak() intrinsic
-     * On macOS/Linux: Uses __builtin_debugtrap() or raise(SIGTRAP)
-     * On the web (Emscripten): __builtin_trap() (an `unreachable` instruction: the page stops with a trap, there is no debugger to signal)
-     */
+    /// Stops in the debugger. On Linux and the web it is `__builtin_trap()`; on the web there is no debugger.
     inline void DebugBreak() {
 #if defined(PLATFORM_WINDOWS)
         __debugbreak();
@@ -24,7 +11,6 @@ namespace BECore {
 #elif defined(PLATFORM_LINUX) || defined(PLATFORM_WEB)
         __builtin_trap();
 #else
-// Fallback: use SIGTRAP signal
 #include <csignal>
         raise(SIGTRAP);
 #endif
@@ -32,7 +18,6 @@ namespace BECore {
 
 }  // namespace BECore
 
-// Macro for use in assert expressions
 #if defined(PLATFORM_WINDOWS)
 #define ENGINE_DEBUG_BREAK() __debugbreak()
 #elif defined(PLATFORM_MACOS)

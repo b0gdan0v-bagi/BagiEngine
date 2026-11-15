@@ -1,6 +1,7 @@
 #include "XmlConfig.h"
 
 #include <BECore/Config/XmlDocument.h>
+#include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 
 namespace BECore {

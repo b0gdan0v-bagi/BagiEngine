@@ -3,9 +3,11 @@
 #include <BECore/Reflection/IPropertyVisitor.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
+#include <BECore/Renderer/RendererManager.h>
 #include <BECore/Resource/TextureLibrary.h>
 #include <BECore/Scene/Components/ParticleEmitterComponent.h>
 #include <BECore/Scene/SceneManager.h>
+#include <BECore/Time/Time.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>

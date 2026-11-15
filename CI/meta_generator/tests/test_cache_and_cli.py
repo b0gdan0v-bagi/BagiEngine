@@ -51,7 +51,8 @@ def test_second_run_with_an_unchanged_file_prints_the_same_warnings(run_cli, sou
     assert "2 reflection warnings" in out_first and "2 reflection warnings" in out_second
 
 
-def test_warning_lines_are_sorted_by_path_and_line(run_cli, source):
+def test_warning_lines_are_sorted_by_path_and_line(run_cli, source, include_gen):
+    include_gen(source, 'B')
     (source / "B.h").write_text("struct B {\n BE_CLASS(B)\n BE_REFLECT_FIELD int a[2];\n BE_REFLECT_FIELD int b[2];\n};\n", encoding="utf-8")
     (source / "A.h").write_text("BE_REFLECT_FIELD int lonely;\n", encoding="utf-8")
     _, _, err = run_cli(source)
@@ -59,7 +60,8 @@ def test_warning_lines_are_sorted_by_path_and_line(run_cli, source):
     assert [line.split(": warning")[0].rsplit("/", 1)[1] for line in lines] == ["A.h:1", "B.h:3", "B.h:4"]
 
 
-def test_a_file_fixed_by_an_edit_stops_printing(run_cli, source):
+def test_a_file_fixed_by_an_edit_stops_printing(run_cli, source, include_gen):
+    include_gen(source, 'Foo')
     header = source / "Foo.h"
     header.write_text(BROKEN, encoding="utf-8")
     _, _, err = run_cli(source)
@@ -71,7 +73,8 @@ def test_a_file_fixed_by_an_edit_stops_printing(run_cli, source):
     assert warning_lines(err) == []
 
 
-def test_a_file_broken_by_an_edit_starts_printing(run_cli, source):
+def test_a_file_broken_by_an_edit_starts_printing(run_cli, source, include_gen):
+    include_gen(source, 'Foo')
     header = source / "Foo.h"
     header.write_text(FIXED, encoding="utf-8")
     _, _, err = run_cli(source)
@@ -101,7 +104,8 @@ def test_force_prints_the_same_warnings(run_cli, source):
 # which files report
 # ---------------------------------------------------------------------------
 
-def test_reference_dirs_print_no_warnings(run_cli, tmp_path, source):
+def test_reference_dirs_print_no_warnings(run_cli, tmp_path, source, include_gen):
+    include_gen(source, 'Game')
     reference = tmp_path / "reference"
     reference.mkdir()
     (reference / "Engine.h").write_text(BROKEN, encoding="utf-8")
@@ -112,7 +116,8 @@ def test_reference_dirs_print_no_warnings(run_cli, tmp_path, source):
     assert "0 reflection warnings" in out
 
 
-def test_scan_dirs_do_report(run_cli, tmp_path, source):
+def test_scan_dirs_do_report(run_cli, tmp_path, source, include_gen):
+    include_gen(source, 'Game')
     scan = tmp_path / "scan"
     scan.mkdir()
     (scan / "Derived.h").write_text(BROKEN, encoding="utf-8")
@@ -144,7 +149,8 @@ def test_warnings_as_errors_is_decided_from_the_cache_too(run_cli, source):
     assert run_cli(source, "--warnings-as-errors")[0] == 1
 
 
-def test_warnings_as_errors_exits_with_zero_once_the_file_is_fixed(run_cli, source):
+def test_warnings_as_errors_exits_with_zero_once_the_file_is_fixed(run_cli, source, include_gen):
+    include_gen(source, 'Foo')
     header = source / "Foo.h"
     header.write_text(BROKEN, encoding="utf-8")
     assert run_cli(source, "--warnings-as-errors")[0] == 1
@@ -209,7 +215,8 @@ def test_corrupt_cache_file_is_discarded(run_cli, tmp_path, source):
 # generated output of a method with an inline body
 # ---------------------------------------------------------------------------
 
-def test_inline_body_method_and_the_next_one_are_both_in_the_generated_table(run_cli, tmp_path, source):
+def test_inline_body_method_and_the_next_one_are_both_in_the_generated_table(run_cli, tmp_path, source, include_gen):
+    include_gen(source, 'IFoo')
     (source / "IFoo.h").write_text(textwrap.dedent("""\
         struct IFoo {
             BE_CLASS(IFoo)
@@ -230,7 +237,8 @@ def test_inline_body_method_and_the_next_one_are_both_in_the_generated_table(run
 # generated ClassMeta of a class with ICON=
 # ---------------------------------------------------------------------------
 
-def test_icon_reaches_the_generated_class_meta(run_cli, tmp_path, source):
+def test_icon_reaches_the_generated_class_meta(run_cli, tmp_path, source, include_gen):
+    include_gen(source, 'Pic')
     (source / "Pic.h").write_text(textwrap.dedent("""\
         struct Pic {
             BE_CLASS(Pic, ICON=image)
@@ -246,7 +254,8 @@ def test_icon_reaches_the_generated_class_meta(run_cli, tmp_path, source):
     assert 'eastl::string_view{"Plain"},\n        eastl::string_view{""}' in generated
 
 
-def test_generated_header_has_no_quoted_include(run_cli, tmp_path, source):
+def test_generated_header_has_no_quoted_include(run_cli, tmp_path, source, include_gen):
+    include_gen(source, 'Pic')
     (source / "Pic.h").write_text(textwrap.dedent("""\
         struct Pic {
             BE_CLASS(Pic)
@@ -263,7 +272,8 @@ def test_generated_header_has_no_quoted_include(run_cli, tmp_path, source):
 # a FACTORY_BASE whose enum name is already taken
 # ---------------------------------------------------------------------------
 
-def test_factory_base_whose_generated_enum_name_is_declared_by_hand_warns(run_cli, source):
+def test_factory_base_whose_generated_enum_name_is_declared_by_hand_warns(run_cli, source, include_gen):
+    include_gen(source, 'IThing')
     (source / "IThing.h").write_text(textwrap.dedent("""\
         struct IThing {
             BE_CLASS(IThing, FACTORY_BASE)
@@ -276,7 +286,8 @@ def test_factory_base_whose_generated_enum_name_is_declared_by_hand_warns(run_cl
     assert "IThing.h:1" in lines[0] and "'ThingType'" in lines[0]
 
 
-def test_factory_base_without_a_clash_does_not_warn(run_cli, source):
+def test_factory_base_without_a_clash_does_not_warn(run_cli, source, include_gen):
+    include_gen(source, 'IThing')
     (source / "IThing.h").write_text("struct IThing {\n BE_CLASS(IThing, FACTORY_BASE)\n};\n", encoding="utf-8")
     (source / "Other.h").write_text("CORE_ENUM(OtherType, uint8_t, A, B)\n", encoding="utf-8")
     _, _, err = run_cli(source)

@@ -201,7 +201,6 @@ namespace BECore::Tests {
         // Into the parent it already ends, when it is the last child
         EXPECT_FALSE(CanDrop(Node("C"), Root(), DropPlace::Into));
         EXPECT_FALSE(CanDrop(Node("B2"), Node("Branch"), DropPlace::Into));
-        // The same moves a step away are fine
         EXPECT_TRUE(CanDrop(Node("Branch"), Node("A"), DropPlace::Before));
         EXPECT_TRUE(CanDrop(Node("Branch"), Node("C"), DropPlace::After));
         EXPECT_TRUE(CanDrop(Node("B1"), Node("Branch"), DropPlace::Into));
@@ -238,7 +237,6 @@ namespace BECore::Tests {
         // Down: A goes behind Branch, which is the index of Branch after A left
         EXPECT_EQ(DropAndShow("A", "Branch", DropPlace::After), "Branch B1. Leaf.. B2. A C");
         EXPECT_EQ(DropAndShow("A", "C", DropPlace::After), "Branch B1. Leaf.. B2. C A");
-        // Up
         EXPECT_EQ(DropAndShow("A", "Branch", DropPlace::Before), "A Branch B1. Leaf.. B2. C");
         // Down but not to the end
         EXPECT_EQ(DropAndShow("A", "C", DropPlace::Before), "Branch B1. Leaf.. B2. A C");
@@ -431,7 +429,6 @@ namespace BECore::Tests {
         EXPECT_EQ(state.searchBuffer[0], '\0');
         EXPECT_TRUE(state.componentType.empty());
 
-        // "A" passes the filter
         state.componentType = kTransform;
         snprintf(state.searchBuffer, sizeof(state.searchBuffer), "a");
         ASSERT_TRUE(HierarchyPanel::Reveal(*_scene, state, _scene, &Node("A")));

@@ -64,19 +64,15 @@ namespace BECore {
     };
 
     /**
-     * @brief Turns a rounded box into triangles for IRenderer::DrawGeometry (untextured, per-vertex alpha), anti-aliased at any scale.
+     * @brief Turns a rounded box into anti-aliased triangles for IRenderer::DrawGeometry (untextured, per-vertex alpha, clockwise on the screen).
      *
-     * Pure, like UINineSlice: no renderer, scene or window. Every function appends to the vertex and index lists it is given (the element keeps them as
-     * scratch, so a steady frame allocates nothing) and draws nothing for a rect with no area, a non-finite number or one past `UIBounds::kMaxExtent`. Indices are positions in @p vertices
-     * (not relative to this call), so several calls can fill one list for one draw. Every triangle has the same winding: clockwise on the screen (a positive
-     * cross product in y-down coordinates).
+     * Pure, like UINineSlice. Every function appends to the lists it is given (the element keeps them as scratch, so a steady frame allocates nothing);
+     * indices are positions in @p vertices, not relative to the call. A rect with no area, a non-finite number or one past `UIBounds::kMaxExtent`, or a
+     * @p pixelsPerUnit outside [`UIBounds::kMinScale`, `UIBounds::kMaxScale`], draws nothing.
      *
-     * Units: positions, radii, widths, offsets and blurs are UI units; @p pixelsPerUnit is the output pixels of one unit (`ViewTransform::scale` at the
-     * draw). It sets the number of segments of a corner and the feather: the edge is a ring of vertices of alpha 0 and, one output pixel inside it, a ring of
-     * full alpha, so the shape's true edge sits in the middle of the ramp and the covered area stays the rect's. Nothing is drawn for a @p pixelsPerUnit outside
-     * [`UIBounds::kMinScale`, `UIBounds::kMaxScale`].
-     *
-     * Colours are straight alpha. The corners come from `UICorners`; pass them through `Clamped` first or not: every function clamps them to the rect itself.
+     * Positions, radii, widths, offsets and blurs are UI units; @p pixelsPerUnit (`ViewTransform::scale` at the draw) sets the segments of a corner and the
+     * feather: the edge is a ring of alpha 0 and, one output pixel inside it, a ring of full alpha, so the true edge sits mid-ramp and the covered area
+     * stays the rect's. Colours are straight alpha; every function clamps the corners to the rect itself.
      */
     class UIBoxMesh {
     public:
@@ -103,13 +99,11 @@ namespace BECore {
         [[nodiscard]] static int CornerSegments(float radiusPixels, float sagittaPixels = kCornerSagittaPixels);
 
         /**
-         * A solid or gradient box. The fully opaque core is the rect inset by half the feather; outside it one feather of alpha falling to 0. A gradient runs
-         * over the core (so the top vertices hold exactly the colour and the bottom ones exactly `gradient.end`). Nothing for a colour with no alpha at
-         * both ends.
+         * A solid or gradient box: a fully opaque core (the rect inset by half the feather) and one feather of alpha falling to 0 outside it. A gradient runs
+         * over the core, so the top vertices hold exactly the colour and the bottom ones `gradient.end`. Nothing for a colour with no alpha at both ends.
          *
-         * The core (of a fill, a shadow and a glow) is not a fan from one corner: the SDL software renderer pays for every triangle the pixels of its bounding
-         * rectangle (a temporary surface, `SDL_SW_FillTriangle` with blending), and a fan of n points would cost n times the area. It is cut along the four arc
-         * centres into small triangles, about twice the area in bounding boxes; the covered area is the same, so Vulkan sees no difference.
+         * The core (of a fill, a shadow and a glow) is cut along the four arc centres, not fanned from one corner: the SDL software renderer pays every
+         * triangle the pixels of its bounding rectangle (`SDL_SW_FillTriangle`), so a fan of n points costs n times the area. The covered area is the same.
          */
         static void AppendFill(Vector<GeometryVertex>& vertices, Vector<int>& indices, const Rect& rect, const UICorners& corners, const Color& color, const UIGradientSpec& gradient,
                                float pixelsPerUnit);
@@ -122,13 +116,12 @@ namespace BECore {
         static void AppendBorder(Vector<GeometryVertex>& vertices, Vector<int>& indices, const Rect& rect, const UICorners& corners, float width, const Color& color, float pixelsPerUnit);
 
         /**
-         * A shadow or a glow of the box: @p rect moved by the offset and grown by the spread, with the blur falloff outward and inward over the blur: the
-         * alpha is the colour's at the inner ring and 0 at the outer one (`blur` units beyond the edge), falling by a smooth curve. A blur under one output
-         * pixel is a hard edge with the plain feather. A shape smaller than its blur never reaches full alpha. The box itself is not cut out of the shadow:
-         * the fill is drawn over it.
+         * A shadow or a glow of the box: @p rect moved by the offset and grown by the spread, the alpha falling by a smooth curve from the colour's at the
+         * inner ring to 0 at the outer one (`blur` units beyond the edge). A blur under one output pixel is a hard edge with the plain feather. A shape
+         * smaller than its blur never reaches full alpha. The box itself is not cut out: the fill is drawn over it.
          *
-         * @p detail is what the renderer asks for (`IRenderer::GetGeometryDetail()`): Full is the mesh above, Reduced has kReducedBlurRings steps and corners within
-         * kReducedCornerSagittaPixels, about a third of the triangles, for a renderer that pays for each one. The bounds of a call hold for both.
+         * @p detail is what the renderer asks for (`IRenderer::GetGeometryDetail()`): Reduced has kReducedBlurRings steps and corners within
+         * kReducedCornerSagittaPixels, for a renderer that pays for each triangle. The bounds of a call hold for both.
          */
         static void AppendShadow(Vector<GeometryVertex>& vertices, Vector<int>& indices, const Rect& rect, const UICorners& corners, const UIShadowSpec& shadow, float pixelsPerUnit,
                                  GeometryDetail detail = GeometryDetail::Full);

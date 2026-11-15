@@ -1,5 +1,6 @@
 #include "RmlUiRuntime.h"
 
+#include <BECore/Config/ConfigManager.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Text/TextSettings.h>
 #include <Events/ApplicationEvents.h>

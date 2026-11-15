@@ -8,9 +8,8 @@ namespace BECore {
     /**
      * @brief Packs rectangles into a fixed-size area in rows ("shelves"). Pure code.
      *
-     * A rect goes onto the existing shelf that is tall enough and wastes the least height; when none has room a new
-     * shelf is opened below the last one. Feed it rects from tall to short for a tight result. Nothing is ever moved or
-     * freed: a glyph page is filled once and then only read.
+     * Feed it rects from tall to short for a tight result. Nothing is ever moved or freed: a glyph page is filled once
+     * and then only read.
      */
     class ShelfPacker {
     public:

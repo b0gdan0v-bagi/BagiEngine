@@ -2,7 +2,6 @@
 #include <Stress/UiField.h>
 #include <gtest/gtest.h>
 
-/// Coverage of UiField: the grid and the text of a label are pure functions of the index and the count, and the grid always fits the canvas.
 namespace BECore::Stress::Tests {
 
     namespace {

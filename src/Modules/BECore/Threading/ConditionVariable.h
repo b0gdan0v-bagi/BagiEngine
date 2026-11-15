@@ -8,8 +8,7 @@
 namespace BECore {
 
     /**
-     * @brief std::condition_variable over the engine's Mutex, with the std interface (wait, wait_for, wait_until, notify_one,
-     * notify_all, and the predicate overloads).
+     * @brief std::condition_variable over the engine's Mutex, with the std interface.
      *
      * A wait adopts the native mutex of the lock for the duration of the std wait and hands it back afterwards, so the guard
      * (UniqueLock<Mutex>) and everything the lock keeps about the holder stay true while the thread waits: for the lock order check the

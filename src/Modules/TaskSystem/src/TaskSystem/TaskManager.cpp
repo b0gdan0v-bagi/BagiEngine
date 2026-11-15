@@ -28,7 +28,6 @@ namespace BECore {
 
         LOG_INFO("[TaskManager] Initialized in single-thread mode (inline pool, no worker threads)");
 #else
-        // Создаем пул потоков
         size_t numThreads = std::min<size_t>(Thread::HardwareConcurrency(), kMaxWorkerThreads);
         if (numThreads < 2) {
             numThreads = 2;
@@ -36,7 +35,6 @@ namespace BECore {
 
         _threadPool = MakeUnique<ThreadPool>(numThreads);
 
-        // Инициализируем планировщик
         _scheduler.Initialize(_threadPool.get());
 
         LOG_INFO("[TaskManager] Initialized with {} worker threads"_format(numThreads));
@@ -51,10 +49,8 @@ namespace BECore {
 
         SampleProfilerCounters();
 
-        // Обрабатываем отложенные задачи
         _scheduler.ProcessDelayedTasks();
 
-        // Обрабатываем задачи главного потока
         _scheduler.ProcessMainThreadTasks();
 
         // Single-thread build: the continuations of the background jobs that yielded, for at most the frame budget
@@ -77,10 +73,8 @@ namespace BECore {
 
         LOG_INFO("[TaskManager] Shutting down...");
 
-        // Останавливаем планировщик
         _scheduler.Shutdown();
 
-        // Останавливаем пул потоков
         if (_threadPool) {
             _threadPool->Shutdown();
         }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Utils/MoveOnlyFunction.h>
 #include <Games/ISeatedGame.h>
 
 namespace BECore {
@@ -16,7 +17,8 @@ namespace BECore {
         bool listsStartedRooms = false;
     };
 
-    using SeatedGameFactory = std::function<UniquePtr<ISeatedGame>()>;
+    /// Makes one game; stored by the registry and by a room, called through a `const` reference
+    using SeatedGameFactory = MoveOnlyFunction<UniquePtr<ISeatedGame>()>;
 
     /**
      * @brief The seated games a server can create by name.

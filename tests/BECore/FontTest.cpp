@@ -1,4 +1,5 @@
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Resource/ResourceManager.h>
 #include <BECore/Text/Font.h>
 #include <BECore/Text/TextLayout.h>
 #include <Common/EngineEnvironment.h>

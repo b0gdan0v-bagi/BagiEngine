@@ -20,8 +20,7 @@ namespace BECore {
      * test drives a component with any frame rate without waiting.
      *
      * Frame time is clamped to kMaxFrameTime, so a pause in a debugger or a window drag does not make the game
-     * jump ahead and does not queue hundreds of fixed steps. The clamped value is what GetTotalTime() adds up.
-     * A paused game holds the clock (Hold()) instead of advancing it.
+     * jump ahead and does not queue hundreds of fixed steps.
      */
     class Time {
     public:

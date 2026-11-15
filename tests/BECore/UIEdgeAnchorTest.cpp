@@ -28,7 +28,7 @@ namespace BECore::Tests {
             return spec;
         }
 
-        /// The layout rule as it was before anchorMin / anchorMax / pivot existed: ten anchors, pixel or percent sizes and offsets. The reference of the
+        /// The layout rule of the ten anchors with pixel or percent sizes and offsets, without anchorMin / anchorMax / pivot. The reference of the
         /// equivalence test; it must not change with the layout.
         Rect LegacyResolveRect(const Rect& parent, const UIRectSpec& spec) {
             const bool stretch = spec.anchor == UIAnchor::Stretch;
@@ -135,7 +135,7 @@ namespace BECore::Tests {
         EXPECT_EQ(anchors.pivot, (Vec2{1.0f, 1.0f}));
     }
 
-    /// For every anchor, a grid of parents, sizes, offsets, margins, limits and aspect settings: the rect is the one of the old rule, with the new fields
+    /// For every anchor, a grid of parents, sizes, offsets, margins, limits and aspect settings: the rect is the one of LegacyResolveRect, with the new fields
     /// unset and with them set to the shorthand's own values
     TEST(UIEdgeAnchorTest, WithoutNewValuesEveryAnchorLaysOutAsItAlwaysDid) {
         const Rect parents[] = {{0.0f, 0.0f, 1280.0f, 720.0f}, {100.0f, 50.0f, 400.0f, 200.0f}, {-30.0f, 17.5f, 333.0f, 91.0f}, {10.0f, 10.0f, 0.0f, 0.0f}};

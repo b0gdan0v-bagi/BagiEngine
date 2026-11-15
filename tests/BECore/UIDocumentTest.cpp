@@ -1,6 +1,7 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
+#include <BECore/Resource/ResourceManager.h>
 #include <BECore/Resource/XmlResource.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>

@@ -3,23 +3,12 @@
 # --update-baseline` rewrites the file after it. A diff that adds a line or raises a count is a finding: fix the new hit with the alias of
 # BECore/Types, or mark a real boundary `//-NoStd: <why>`; never baseline it.
 # Who removes which lines:
-#   function                           callables-move-only (the callable type replaces std::function / eastl::function)
 #   fstream, include-stream, getline   engine-file-layer (files and text go through the file layer)
 #   directory-iterator                 engine-file-layer, engine-path-type
 #   sto, stable-sort, stringstream     core-type-aliases-cleanup (and the entry that touches the file)
 # Whoever empties a rule deletes its lines here.
-src/Modules/BECore/Animation/Timeline.cpp function 4
-src/Modules/BECore/Animation/Timeline.h function 12
-src/Modules/BECore/Animation/Tween.h function 3
-src/Modules/BECore/Animation/TweenManager.cpp function 7
-src/Modules/BECore/Animation/TweenManager.h function 10
-src/Modules/BECore/Clipboard/ClipboardControl.cpp function 2
-src/Modules/BECore/Clipboard/ClipboardTypes.h function 1
 src/Modules/BECore/Config/ConfigManager.cpp directory-iterator 1
 src/Modules/BECore/Config/XmlDocument.cpp fstream 2
-src/Modules/BECore/Control/ControlCall.h function 1
-src/Modules/BECore/Control/ControlService.h function 3
-src/Modules/BECore/Control/ControlTypes.h function 1
 src/Modules/BECore/FileSystem/FileSystem.cpp directory-iterator 2
 src/Modules/BECore/Logger/FileSink.h fstream 1
 src/Modules/BECore/Logger/FileSink.h include-stream 1
@@ -27,45 +16,17 @@ src/Modules/BECore/Profiler/Ring/FrozenTrace.cpp stable-sort 1
 src/Modules/BECore/Reflection/BinaryDeserializer.cpp fstream 1
 src/Modules/BECore/Reflection/BinarySerializer.cpp fstream 1
 src/Modules/BECore/Reflection/XmlSerializer.cpp stringstream 1
-src/Modules/BECore/Renderer/IRenderer.h function 1
 src/Modules/BECore/Save/SaveGame.cpp fstream 2
-src/Modules/BECore/Save/SaveGame.cpp function 2
-src/Modules/BECore/Save/SaveGame.h function 4
-src/Modules/BECore/Save/SaveStorage.cpp function 3
-src/Modules/BECore/Save/SaveStorage.h function 1
-src/Modules/BECore/Scene/SceneNodeFiles.h function 1
 src/Modules/BECore/Text/FontLoader.cpp fstream 1
 src/Modules/BECore/UI/UIWebCompiler.cpp stable-sort 1
-src/Modules/BECore/UI/UIWebCompiler.h function 1
 src/Modules/BECore/UI/UIWebDocumentLoader.cpp fstream 1
 src/Modules/BECore/UI/UIWebDocumentLoader.cpp stringstream 1
-src/Modules/BECore/Utils/ScopeGuard.h function 2
-src/Modules/BECore/Widgets/WidgetManager.h function 1
-src/Modules/Events/src/Events/EventsQueueRegistry.h function 1
-src/Modules/Games/src/Games/SeatedGameRegistry.h function 1
-src/Modules/RemoteControl/src/RemoteControl/Tls/TlsStream.h function 1
-src/Modules/RemoteControl/src/RemoteControl/WebSocketConnection.h function 1
-src/Modules/RemoteControl/src/RemoteControl/WebSocketListener.cpp function 1
-src/Modules/RemoteControl/src/RemoteControl/WebSocketListener.h function 4
 src/Modules/RmlUiHost/src/RmlUiHost/RmlUiFileInterface.cpp fstream 1
-src/Modules/RoomClient/src/RoomClient/RoomTransport.h function 1
-src/Modules/RoomServer/src/RoomServer/RoomServerArgs.h function 1
-src/Modules/RoomServer/src/RoomServer/RoomServerSettings.h function 1
-src/Modules/RoomServer/src/RoomServer/RoomWebSocketServer.cpp function 1
-src/Modules/RoomServer/src/RoomServer/RoomWebSocketServer.h function 1
-src/Modules/Rooms/src/Rooms/RoomHub.h function 2
-src/Modules/Rooms/src/Rooms/RoomTypes.h function 1
-src/Modules/TaskSystem/src/TaskSystem/TaskQueue.h function 1
-src/Widgets/ConfigEditor/StagedChanges.cpp function 1
-src/Widgets/ConfigEditor/StagedChanges.h function 1
 src/Widgets/EditorLayout/CommandFilter.cpp stable-sort 1
 src/Widgets/EditorLayout/LayoutStore.cpp directory-iterator 1
 src/Widgets/EditorLayout/UserFileIo.cpp fstream 2
 src/Widgets/EditorLayout/UserFileIo.cpp stringstream 1
 src/Widgets/ImGuiFonts.cpp fstream 1
-src/Widgets/SceneEditor/ComponentInspectors.cpp function 3
-src/Widgets/SceneEditor/ComponentInspectors.h function 2
-src/Widgets/Viewport/ViewportInput.h function 1
 tests/BECore/ConfigDeserializerTest.cpp fstream 3
 tests/BECore/ContentFilesVersionTest.cpp fstream 1
 tests/BECore/ContentMigrationAfterTest.cpp sto 2
@@ -84,8 +45,6 @@ tests/BECore/ParticleCaptureTest.cpp fstream 1
 tests/BECore/ProfilerTest.cpp fstream 1
 tests/BECore/ReaderLimitsTest.cpp fstream 1
 tests/BECore/ReflectionTest.cpp fstream 1
-tests/BECore/Rooms/ManualClock.h function 1
-tests/BECore/Rooms/RoomWebSocketServerTest.cpp function 1
 tests/BECore/Save/SaveGameFilesTest.cpp directory-iterator 1
 tests/BECore/Save/SaveGameFilesTest.cpp fstream 7
 tests/BECore/Save/SaveStorageTest.cpp fstream 1
@@ -95,35 +54,16 @@ tests/BECore/SceneNodeFilesTest.cpp fstream 2
 tests/BECore/SceneNodeInstanceTest.cpp fstream 1
 tests/BECore/SceneSplitTest.cpp fstream 1
 tests/BECore/SpikeCaptureTest.cpp fstream 1
-tests/BECore/TaskSystemBudgetTest.cpp function 1
-tests/BECore/TimelinePlayTest.cpp function 1
-tests/BECore/TimelineTest.cpp function 2
 tests/BECore/Tls/FakeTlsStream.h sto 1
 tests/BECore/Tls/TlsLocalEndpointTest.cpp fstream 1
 tests/BECore/Tls/TlsLocalEndpointTest.cpp sto 4
-tests/BECore/TweenManagerTest.cpp function 1
 tests/BECore/UIDocumentTest.cpp fstream 1
-tests/BECore/UIDropdownScreenTest.cpp function 2
-tests/BECore/UIEdgeAnchorScreenTest.cpp function 1
-tests/BECore/UIInputTest.cpp function 1
-tests/BECore/UISelectorScreenTest.cpp function 2
-tests/BECore/UISettingsScreenTest.cpp function 2
-tests/BECore/UIThemeResolveTest.cpp function 1
 tests/BECore/UIWebTest.cpp fstream 1
 tests/BECore/UIWebTest.cpp sto 1
-tests/BECore/WebSocketClientTest.cpp function 1
 tests/BECore/WebSocketListenerTest.cpp sto 1
-tests/BECore/WebSocketTestClient.h function 1
 tests/BECore/WebSocketTestClient.h sto 1
 tests/Common/ContentFilesCheck.h directory-iterator 1
 tests/Common/MigrationTwin.h directory-iterator 1
 tests/Common/MigrationTwin.h fstream 1
-tests/Common/MigrationTwin.h function 2
-tests/Common/UILayoutMatrix.h function 1
-tests/Fuzz/FuzzSaveEnvelope.cpp function 1
 tests/Fuzz/FuzzSeeds.cpp fstream 1
 tests/RmlUiHost/RmlUiHostTest.cpp fstream 3
-tools/stress/src/Stress/Components/StressRunComponent.h function 1
-tools/stress/src/Stress/StressGameControl.cpp function 1
-tools/stress/src/Stress/StressGameControl.h function 2
-tools/stress/tests/StressRampTest.cpp function 1

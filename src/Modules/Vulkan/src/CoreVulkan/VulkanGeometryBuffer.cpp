@@ -7,7 +7,7 @@ namespace BECore {
 
     namespace {
 
-        // A new buffer is this big unless one draw needs more: RmlUi's biggest screens use a fraction of it per frame
+        // A draw that needs more gets a bigger buffer of its own
         constexpr VkDeviceSize kDefaultChunkBytes = 1024 * 1024;
         // Vertices are 20 bytes and indices 4, so every piece starts on a multiple of 4
         constexpr VkDeviceSize kAlignment = 4;

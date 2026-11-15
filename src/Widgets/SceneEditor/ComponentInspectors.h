@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Scene/IComponent.h>
+#include <BECore/Utils/MoveOnlyFunction.h>
 
 namespace BECore {
 
@@ -9,7 +10,7 @@ namespace BECore {
      *
      * Called with the raw IComponent pointer; returns true if any field changed.
      */
-    using InspectorFunc = eastl::function<bool(IComponent*)>;
+    using InspectorFunc = MoveOnlyFunction<bool(IComponent*)>;
 
     /**
      * @brief Register a custom inspector for a component type (by type hash)
@@ -21,11 +22,12 @@ namespace BECore {
     /**
      * @brief Register a typed custom inspector for component type T
      *
-     * Wraps the type-safe callback and registers it under T::GetStaticTypeMeta().typeHash.
+     * Wraps the type-safe callback and registers it under T::GetStaticTypeMeta().typeHash. The wrapper holds a function that is
+     * bigger than the default buffer, so it takes one allocation, once per registration at start-up.
      */
     template <typename T>
-    void RegisterComponentInspector(eastl::function<bool(T&)> func) {
-        RegisterComponentInspector(T::GetStaticTypeMeta().typeHash, [f = eastl::move(func)](IComponent* comp) -> bool { return f(static_cast<T&>(*comp)); });
+    void RegisterComponentInspector(MoveOnlyFunction<bool(T&)> func) {
+        RegisterComponentInspector(T::GetStaticTypeMeta().typeHash, [f = std::move(func)](IComponent* comp) -> bool { return f(static_cast<T&>(*comp)); });
     }
 
     /**

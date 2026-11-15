@@ -23,7 +23,7 @@ namespace BECore {
         float lineSpacing = 1.0f;  ///< multiplies the line height of the font
         bool wrap = true;          ///< break lines at spaces (and inside a word that is wider than the box) when maxWidth > 0
         TextOverflow overflow = TextOverflow::Clip;
-        float minFontSize = 8.0f;  ///< the smallest size that AutoFit goes to
+        float minFontSize = 8.0f;
     };
 
     /// The pen position of one glyph, relative to the top-left corner of the text box. y is the baseline of its line.
@@ -45,8 +45,8 @@ namespace BECore {
     struct TextLayoutResult {
         Vector<PositionedGlyph> glyphs;
         Vector<TextLine> lines;
-        float width = 0.0f;     ///< of the widest line
-        float height = 0.0f;    ///< the number of lines times the line height
+        float width = 0.0f;  ///< of the widest line
+        float height = 0.0f;
         float fontSize = 0.0f;  ///< the size that was used; smaller than asked only after AutoFit
         float lineHeight = 0.0f;
         bool truncated = false;   ///< text was cut for an ellipsis

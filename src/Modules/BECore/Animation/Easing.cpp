@@ -82,7 +82,7 @@ namespace BECore {
         }
 
         float BounceOut(float t) {
-            // The four parabolas of easings.net: the ball falls, then bounces three times, each bounce lower
+            // The four parabolas of easings.net
             constexpr float kSecondStart = 1.0f;
             constexpr float kSecondOffset = 1.5f;
             constexpr float kSecondFloor = 0.75f;

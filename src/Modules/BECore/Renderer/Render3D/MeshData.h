@@ -12,7 +12,7 @@ namespace BECore {
         Vector<uint32_t> indices;  ///< three per triangle, into `vertices`
     };
 
-    /// A cube of side 1 centered on the origin: 24 vertices (four per face, so each face has its own normal and one UV square) and 36 indices
+    /// A cube of side 1 centered on the origin: four vertices per face, so each face has its own normal and one UV square
     [[nodiscard]] MeshData MakeUnitCube();
 
 }  // namespace BECore

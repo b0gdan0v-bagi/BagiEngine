@@ -7,7 +7,6 @@
 
 namespace BECore {
 
-    // Required device extensions for swapchain support
     static constexpr const char* kDeviceExtensions[] = {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
     };
@@ -45,7 +44,6 @@ namespace BECore {
     }
 
     bool VulkanDevice::CreateInstance(SDL_Window* window) {
-        // Collect extensions required by SDL
         uint32_t sdlExtCount = 0;
         const char* const* sdlExts = SDL_Vulkan_GetInstanceExtensions(&sdlExtCount);
         if (!sdlExts) {
@@ -126,7 +124,6 @@ namespace BECore {
         queueInfo.pQueuePriorities = &priority;
         queueInfos.push_back(queueInfo);
 
-        // Add separate present queue only if it differs from graphics queue
         if (present != gfx) {
             queueInfo.queueFamilyIndex = present;
             queueInfos.push_back(queueInfo);
@@ -179,12 +176,10 @@ namespace BECore {
     }
 
     bool VulkanDevice::IsDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface) const {
-        // Check queue families
         if (!FindQueueFamilies(device, surface).IsComplete()) {
             return false;
         }
 
-        // Check required extensions
         uint32_t extCount = 0;
         vkEnumerateDeviceExtensionProperties(device, nullptr, &extCount, nullptr);
         Vector<VkExtensionProperties> available(extCount);
@@ -203,7 +198,6 @@ namespace BECore {
             }
         }
 
-        // Check swapchain capabilities
         VkSurfaceCapabilitiesKHR caps{};
         vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &caps);
 

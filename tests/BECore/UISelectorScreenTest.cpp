@@ -1,13 +1,17 @@
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Input/UIInput.h>
 #include <BECore/Reflection/XmlDeserializer.h>
+#include <BECore/Renderer/RendererManager.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/UI/UICanvasComponent.h>
+#include <BECore/UI/UIEnvironment.h>
 #include <BECore/UI/UIInputClicker.h>
 #include <BECore/UI/UISegmented.h>
 #include <BECore/UI/UIStack.h>
 #include <BECore/UI/UITextComponent.h>
+#include <BECore/UI/UIVars.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -229,7 +233,7 @@ namespace BECore::Tests {
             return groups;
         }
 
-        String SceneXml(float viewWidth, float viewHeight, const std::function<void(String&)>& edit = {}) {
+        String SceneXml(float viewWidth, float viewHeight, FunctionRef<void(String&)> edit = NoTextEdit) {
             String xml = kSelectorXml;
             const auto replace = [&xml](const String& what, const String& with) {
                 for (size_t at = xml.find(what); at != String::npos; at = xml.find(what, at + with.size())) {
@@ -238,9 +242,7 @@ namespace BECore::Tests {
             };
             replace("@VIEW_W@", ToString(static_cast<int>(viewWidth)));
             replace("@VIEW_H@", ToString(static_cast<int>(viewHeight)));
-            if (edit) {
-                edit(xml);
-            }
+            edit(xml);
             return xml;
         }
 
@@ -408,7 +410,7 @@ namespace BECore::Tests {
         }
 
         /// The scene of the panel with a view of this size; the output has the same size, so a point of the view is a pixel
-        void LoadScene(float viewWidth = kViewWidth, float viewHeight = kViewHeight, const std::function<void(String&)>& edit = {}) {
+        void LoadScene(float viewWidth = kViewWidth, float viewHeight = kViewHeight, FunctionRef<void(String&)> edit = NoTextEdit) {
             _game.reset();
             _hud.Reset();
             _selector.Reset();
@@ -719,7 +721,6 @@ namespace BECore::Tests {
         Draw();
         BoardClicks board;
 
-        // On a segment, on the plate between two controls and on the dim far from the plate: all are the panel's
         const UIElement& plate = Get<UIStack>("Plate");
         const Pair<float, float> points[] = {CenterOf(El("LevelHard")), {plate.rect.x + 4.0f, plate.rect.y + 4.0f}, {5.0f, 5.0f}, {kViewWidth - 5.0f, kViewHeight - 5.0f}};
         for (const auto& [x, y] : points) {
@@ -744,7 +745,6 @@ namespace BECore::Tests {
         EXPECT_TRUE(_selector->_visible);
         Draw();
 
-        // The menu button is under the dim now: the panel takes the press first
         const size_t actions = _game->Total();
         ClickAt(CenterOf(*newGame).first, CenterOf(*newGame).second);
         EXPECT_EQ(_game->Total(), actions) << "the modal panel is in front of the menu button";
@@ -755,7 +755,6 @@ namespace BECore::Tests {
         EXPECT_FALSE(_selector->_visible);
         Draw();
 
-        // Closed: the board gets its presses again, and the menu button works
         const auto [pressed, released] = ClickAt(kViewWidth * 0.5f, kViewHeight * 0.5f);
         EXPECT_FALSE(pressed);
         EXPECT_EQ(board.downs, 1);

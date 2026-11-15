@@ -7,12 +7,9 @@
 #include <utility>
 
 namespace BECore {
-    // Вспомогательная функция для определения типа указателя
     template <typename T>
     struct GetIntrusivePtrType {
-        // Проверяем наследование от RefCountedAtomic напрямую
-        // RefCounted - это алиас для RefCountedAtomic, но std::is_base_of_v работает с реальными типами
-        // Проверяем только RefCountedAtomic, так как RefCounted - это просто алиас
+        // RefCounted is an alias of RefCountedNonAtomic, so testing RefCountedAtomic is enough
         static constexpr bool IsAtomic = std::is_base_of_v<RefCountedAtomic, T>;
         using type = std::conditional_t<IsAtomic, IntrusivePtrAtomic<T>, IntrusivePtrNonAtomic<T>>;
     };

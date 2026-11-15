@@ -65,7 +65,7 @@ namespace BECore::Tests {
 
         /// Two tweens, with a callback that runs @p cancel between them, then a callback: the clips after @p cancel must never be called.
         /// The ids of the clips are the constants above; the first tween writes `{kBeforeTheCancel, kTo}` when the step covers it
-        Timeline MakeCancelling(Calls& calls, eastl::function<void()> cancel) {
+        Timeline MakeCancelling(Calls& calls, MoveOnlyFunction<void()> cancel) {
             Timeline timeline;
             timeline.Append<float>(0.0f, kTo, Settings(kQuarterSecond), [&calls](const float& value) { calls.push_back({kBeforeTheCancel, value}); });
             timeline.AppendCallback(std::move(cancel));

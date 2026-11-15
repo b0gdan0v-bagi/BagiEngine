@@ -176,13 +176,13 @@ namespace BECore {
         renderer.PopClipRect();
         renderer.PopClipRect();
 
-        // Cells 5 and 6: DrawGeometry(), untextured with a color per corner, and textured, mirrored and moved by its translation
+        // Cells 5 and 6: DrawGeometry(), untextured and textured
         DrawColorQuad(renderer, cellX(5), originY, kCell);
         if (_gradient) {
             DrawMirroredTexture(renderer, *_gradient, cellX(6), originY, kCell);
         }
 
-        // Cells 7 and 8: DrawTransformedTexture(), the gradient turned 30 degrees about the cell's center, then the same mirrored left to right (cell 0
+        // Cells 7 and 8: DrawTransformedTexture(), the gradient turned, then the same mirrored left to right (cell 0
         // is the straight reference). Cells 9 and 10 split into a straight-alpha half on the left and the blended half on the right: additive
         // (brighter than the straight half, saturating) and multiply (darker, the checker shows through its pattern).
         if (_gradient) {

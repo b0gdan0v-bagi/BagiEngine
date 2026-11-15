@@ -1,6 +1,7 @@
 #include "RmlUiVarsDefinition.h"
 
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/UI/UIVars.h>
 #include <RmlUi/Core/Variant.h>
 
 namespace BECore {

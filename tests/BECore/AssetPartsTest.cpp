@@ -67,7 +67,6 @@ namespace BECore::Tests {
             std::ofstream(_dir / fileName) << text;  //-NoStd: the test writes the file below its own mounted temp folder, outside the engine's file layer
         }
 
-        /// Moves the modification time of a file @p age into the past
         void Age(const char* fileName, std::chrono::hours age) const {
             std::filesystem::last_write_time(_dir / fileName, std::filesystem::file_time_type::clock::now() - age);
         }
@@ -286,7 +285,6 @@ namespace BECore::Tests {
         EXPECT_TRUE(FileExists("gem.sim.xml"));
         EXPECT_TRUE(FileExists("gem.visual.xml"));
         EXPECT_TRUE(FileExists("gem.editor.xml"));
-        // With the whole file gone, only the split files can serve
         std::filesystem::remove(_dir / "gem.asset.xml");
 
         EXPECT_EQ(Serialized(Load<PartSimProbe>("gem.asset.xml", AssetPurpose::Sim)), simWhole);

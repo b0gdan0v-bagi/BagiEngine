@@ -18,12 +18,10 @@ namespace BECore {
 
 #if defined(PLATFORM_WINDOWS)
 
-    // Windows implementation using DbgHelp API
     void CaptureAndPrintStackTrace(int skipFrames) {
         constexpr int MaxFrames = 62;
         void* stack[MaxFrames];
 
-        // Initialize symbol handler once per process
         static bool symbolsInitialized = false;
         if (!symbolsInitialized) {
             SymSetOptions(SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES);
@@ -32,7 +30,6 @@ namespace BECore {
             }
         }
 
-        // Capture stack frames
         USHORT frameCount = CaptureStackBackTrace(skipFrames + 1, MaxFrames, stack, nullptr);
 
         fprintf(stderr, "\n=== Stack Trace ===\n");
@@ -43,14 +40,12 @@ namespace BECore {
 
         HANDLE process = GetCurrentProcess();
 
-        // Allocate symbol info buffer
         constexpr int SymbolInfoSize = sizeof(SYMBOL_INFO) + MAX_SYM_NAME * sizeof(TCHAR);
         char symbolBuffer[SymbolInfoSize];
         SYMBOL_INFO* symbol = reinterpret_cast<SYMBOL_INFO*>(symbolBuffer);
         symbol->MaxNameLen = MAX_SYM_NAME;
         symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
 
-        // Line info structure
         IMAGEHLP_LINE64 line;
         line.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
 
@@ -60,12 +55,10 @@ namespace BECore {
             fprintf(stderr, "[%2d] 0x%016llX", i, address);
 
             if (symbolsInitialized) {
-                // Get symbol name
                 DWORD64 displacement = 0;
                 if (SymFromAddr(process, address, &displacement, symbol)) {
                     fprintf(stderr, " %s", symbol->Name);
 
-                    // Try to get file and line number
                     DWORD lineDisplacement = 0;
                     if (SymGetLineFromAddr64(process, address, &lineDisplacement, &line)) {
                         fprintf(stderr, " (%s:%lu)", line.FileName, line.LineNumber);
@@ -84,17 +77,14 @@ namespace BECore {
 
 #elif defined(PLATFORM_LINUX) || defined(PLATFORM_MACOS)
 
-    // Unix implementation using backtrace()
     void CaptureAndPrintStackTrace(int skipFrames) {
         constexpr int MaxFrames = 64;
         void* stack[MaxFrames];
 
-        // Capture stack frames
         int frameCount = backtrace(stack, MaxFrames);
 
         fprintf(stderr, "\n=== Stack Trace ===\n");
 
-        // Get symbol names
         char** symbols = backtrace_symbols(stack, frameCount);
 
         if (symbols == nullptr) {
@@ -103,7 +93,7 @@ namespace BECore {
             return;
         }
 
-        // Skip the requested frames plus this function itself
+        // The +1 skips this function itself.
         int startFrame = skipFrames + 1;
         if (startFrame >= frameCount) {
             startFrame = frameCount - 1;
@@ -112,12 +102,11 @@ namespace BECore {
         for (int i = startFrame; i < frameCount; ++i) {
             fprintf(stderr, "[%2d] ", i - startFrame);
 
-            // Try to demangle C++ names
             char* mangled_name = nullptr;
             char* offset_begin = nullptr;
             char* offset_end = nullptr;
 
-            // Find parentheses and +address offset
+            // glibc frame text is "image(mangled+offset) [address]"; any other shape is printed as it is.
             for (char* p = symbols[i]; *p; ++p) {
                 if (*p == '(') {
                     mangled_name = p;
@@ -144,7 +133,6 @@ namespace BECore {
                     fprintf(stderr, "%s: %s+%s\n", symbols[i], mangled_name, offset_begin);
                 }
             } else {
-                // Couldn't parse, print as-is
                 fprintf(stderr, "%s\n", symbols[i]);
             }
         }
@@ -156,7 +144,6 @@ namespace BECore {
 
 #else
 
-    // Fallback for unsupported platforms
     void CaptureAndPrintStackTrace(int skipFrames) {
         fprintf(stderr, "\n=== Stack Trace ===\n");
         fprintf(stderr, "Stack trace not supported on this platform\n");

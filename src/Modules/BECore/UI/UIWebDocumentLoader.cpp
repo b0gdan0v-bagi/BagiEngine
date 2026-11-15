@@ -1,5 +1,6 @@
 #include "UIWebDocumentLoader.h"
 
+#include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/UI/UIDocument.h>
 #include <BECore/UI/UIWebCompiler.h>

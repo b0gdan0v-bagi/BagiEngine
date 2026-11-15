@@ -79,11 +79,9 @@ namespace BECore {
     /**
      * @brief Turns the bytes that a client sends into messages (RFC 6455, section 5).
      *
-     * Feed() takes bytes as they arrive from the socket, in pieces of any size; Pop() returns the messages that are
-     * complete. A client's frames have to be masked, RSV bits are zero, control frames are at most 125 bytes and not
-     * fragmented, a text or binary message may be split into fragments with a ping or pong between them, and a
-     * message may not exceed the limit: the length in the frame header is checked before the payload is stored, so a
-     * client cannot make the server buffer more than the limit.
+     * Feed() takes bytes in pieces of any size; Pop() returns the messages that are complete. A client's frames have to be
+     * masked, RSV bits zero, control frames at most 125 bytes and not fragmented; a message may not exceed the limit: the
+     * length in the frame header is checked before the payload is stored, so a client cannot make the server buffer more.
      *
      * The parser reads the frames of a client by default; WebSocketPeer::Server makes it the parser of a client that
      * reads a server: the frames must then be unmasked (a masked one is a protocol error). Everything else is shared.

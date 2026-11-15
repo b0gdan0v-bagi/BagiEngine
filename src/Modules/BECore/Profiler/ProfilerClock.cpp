@@ -12,7 +12,7 @@ namespace BECore {
 
     namespace {
 
-        /// mach_absolute_time counts in units of numer / denom nanoseconds (1 / 1 on Intel, 125 / 3 on Apple silicon)
+        /// mach_absolute_time counts in units of numer / denom nanoseconds
         double NanosecondsPerTick() {
             static const double ratio = [] {
                 mach_timebase_info_data_t info{};

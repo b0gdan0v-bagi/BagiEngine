@@ -1,5 +1,6 @@
 #include "ComponentInspectors.h"
 
+#include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Input/ActionsLibrary.h>
 #include <BECore/Reflection/ClassMeta.h>
@@ -26,9 +27,6 @@ namespace BECore {
         bool InspectSpriteRenderer(SpriteRendererComponent& s) {
             bool changed = false;
 
-            // -----------------------------------------------------------------
-            // Sprite ID — pick from TextureLibrary
-            // -----------------------------------------------------------------
             const auto& entries = CoreManager::GetTextureLibrary().GetAll();
 
             int currentSpriteIndex = -1;
@@ -64,9 +62,7 @@ namespace BECore {
 
             ImGui::Separator();
 
-            // -----------------------------------------------------------------
-            // Texture path + srcRect — read-only when a sprite ID is active
-            // -----------------------------------------------------------------
+            // Texture path and srcRect are read-only while a sprite ID is set
             const bool lockedBySprite = !s._spriteId.Empty();
             if (lockedBySprite) {
                 ImGui::BeginDisabled();
@@ -139,9 +135,7 @@ namespace BECore {
                 ImGui::EndDisabled();
             }
 
-            // -----------------------------------------------------------------
-            // Fit — the choice of the node, not of the library, so it stays editable with a sprite ID
-            // -----------------------------------------------------------------
+            // Fit is the node's choice, not the library's, so it stays editable with a sprite ID
             const auto& fitNames = EnumUtils<SpriteFit>::Names();
             const auto& fitValues = EnumUtils<SpriteFit>::Values();
             if (ImGui::BeginCombo("Fit##sprite_fit", EnumUtils<SpriteFit>::ToString(s._fit).data())) {
@@ -158,9 +152,7 @@ namespace BECore {
                 ImGui::EndCombo();
             }
 
-            // -----------------------------------------------------------------
-            // Blend and flip — the choices of the node, editable with a sprite ID too (the rotation is on the TransformComponent)
-            // -----------------------------------------------------------------
+            // Blend and flip are the node's choices too (the rotation is on the TransformComponent)
             const auto& blendNames = EnumUtils<BlendMode>::Names();
             const auto& blendValues = EnumUtils<BlendMode>::Values();
             if (ImGui::BeginCombo("Blend##sprite_blend", EnumUtils<BlendMode>::ToString(s._blend).data())) {
@@ -189,15 +181,12 @@ namespace BECore {
         }
 
         const bool _registeredSpriteRenderer = [] {
-            RegisterComponentInspector<SpriteRendererComponent>(eastl::function<bool(SpriteRendererComponent&)>(InspectSpriteRenderer));
+            RegisterComponentInspector<SpriteRendererComponent>(InspectSpriteRenderer);
             return true;
         }();
 
-        // -----------------------------------------------------------------
-        // Shared helper: action combo + optional "Add new action" input
-        // noneLabel — displayed when current is empty ("(none)" / "(any)")
-        // showAdd   — show text field + button to register a new action
-        // -----------------------------------------------------------------
+        // Action combo; noneLabel is shown when current is empty ("(none)" / "(any)"), showAdd adds a text field and
+        // a button to register a new action
         bool ActionCombo(const char* label, PoolString& current, const char* noneLabel, bool showAdd) {
             const auto& entries = ActionsLibrary::GetInstance().GetAll();
             bool changed = false;
@@ -249,7 +238,7 @@ namespace BECore {
         }
 
         const bool _registeredClickable = [] {
-            RegisterComponentInspector<ClickableComponent>(eastl::function<bool(ClickableComponent&)>(InspectClickable));
+            RegisterComponentInspector<ClickableComponent>(InspectClickable);
             return true;
         }();
 
@@ -258,7 +247,7 @@ namespace BECore {
         }
 
         const bool _registeredChangeToRandomColor = [] {
-            RegisterComponentInspector<ChangeToRandomColorDebugComponent>(eastl::function<bool(ChangeToRandomColorDebugComponent&)>(InspectChangeToRandomColor));
+            RegisterComponentInspector<ChangeToRandomColorDebugComponent>(InspectChangeToRandomColor);
             return true;
         }();
 

@@ -19,41 +19,34 @@
 
 namespace BECore::Tests {
 
-    // HasReflection concept
     static_assert(HasReflection<TestData::Player>, "Player should have reflection");
     static_assert(HasReflection<TestData::Inventory>, "Inventory should have reflection");
     static_assert(HasReflection<TestData::GameState>, "GameState should have reflection");
 
-    // Field counts
     static_assert(FieldCount<TestData::Player>() == 4, "Player should have 4 fields");
     static_assert(FieldCount<TestData::Inventory>() == 2, "Inventory should have 2 fields");
     static_assert(FieldCount<TestData::GameState>() == 3, "GameState should have 3 fields");
 
-    // HasField
     static_assert(HasField<TestData::Player>("health"), "Player should have 'health' field");
     static_assert(HasField<TestData::Player>("speed"), "Player should have 'speed' field");
     static_assert(HasField<TestData::Player>("name"), "Player should have 'name' field");
     static_assert(HasField<TestData::Player>("isAlive"), "Player should have 'isAlive' field");
     static_assert(!HasField<TestData::Player>("mana"), "Player should not have 'mana' field");
 
-    // GetFieldInfo
     static_assert(GetFieldInfo<TestData::Player, 0>().name == "health");
     static_assert(GetFieldInfo<TestData::Player, 1>().name == "speed");
     static_assert(GetFieldInfo<TestData::Player, 2>().name == "name");
     static_assert(GetFieldInfo<TestData::Player, 3>().name == "isAlive");
 
-    // Method reflection
     static_assert(HasMethodReflection<TestData::Player>, "Player should have method reflection");
     static_assert(MethodCount<TestData::Player>() == 4, "Player should have 4 reflected methods");
 
-    // HasMethod
     static_assert(HasMethod<TestData::Player>("TakeDamage"), "Player should have 'TakeDamage' method");
     static_assert(HasMethod<TestData::Player>("Heal"), "Player should have 'Heal' method");
     static_assert(HasMethod<TestData::Player>("IsDead"), "Player should have 'IsDead' method");
     static_assert(HasMethod<TestData::Player>("GetHealthPercent"), "Player should have 'GetHealthPercent' method");
     static_assert(!HasMethod<TestData::Player>("Fly"), "Player should not have 'Fly' method");
 
-    // GetMethodInfo
     static_assert(GetMethodInfo<TestData::Player, 0>().name == "TakeDamage");
     static_assert(GetMethodInfo<TestData::Player, 1>().name == "Heal");
 
@@ -65,10 +58,6 @@ namespace BECore::Tests {
 }  // namespace BECore::Tests
 
 namespace BECore {
-
-    // =========================================================================
-    // Player method implementations
-    // =========================================================================
 
     int32_t TestData::Player::TakeDamage(int32_t amount) {
         health -= amount;
@@ -95,10 +84,6 @@ namespace BECore {
     }
 
 }  // namespace BECore
-
-// =========================================================================
-// Tests
-// =========================================================================
 
 namespace BECore::Tests {
 
@@ -153,10 +138,6 @@ namespace BECore::Tests {
             EXPECT_EQ(actual.name, expected.name);
             EXPECT_EQ(actual.isAlive, expected.isAlive);
         }
-
-        // ---------------------------------------------------------------------
-        // Binary helpers
-        // ---------------------------------------------------------------------
 
         using ByteBuffer = Vector<uint8_t>;
 
@@ -340,10 +321,6 @@ namespace BECore::Tests {
 
         ExpectPlayersEqual(loaded, original);
     }
-
-    // =========================================================================
-    // Binary serialization
-    // =========================================================================
 
     TEST(ReflectionTest, BinarySerialization) {
         TestData::Player original;
@@ -1203,12 +1180,10 @@ namespace BECore::Tests {
         player.health = 100;
         player.isAlive = true;
 
-        // TakeDamage via reflection
         const int32_t remaining = InvokeMethod<int32_t>(player, "TakeDamage", 30);
         EXPECT_EQ(remaining, 70);
         EXPECT_EQ(player.health, 70) << "health after TakeDamage";
 
-        // Heal via reflection
         InvokeMethod<void>(player, "Heal", 20);
         EXPECT_EQ(player.health, 90) << "health after Heal";
 
@@ -1218,22 +1193,18 @@ namespace BECore::Tests {
     }
 
     TEST(ReflectionTest, DefaultChecker) {
-        // Arithmetic types
         EXPECT_TRUE(DefaultChecker<int32_t>::IsDefault(0));
         EXPECT_FALSE(DefaultChecker<int32_t>::IsDefault(42));
         EXPECT_TRUE(DefaultChecker<float>::IsDefault(0.0f));
         EXPECT_TRUE(DefaultChecker<bool>::IsDefault(false));
         EXPECT_FALSE(DefaultChecker<bool>::IsDefault(true));
 
-        // PoolString
         EXPECT_TRUE(DefaultChecker<PoolString>::IsDefault(PoolString{}));
         EXPECT_FALSE(DefaultChecker<PoolString>::IsDefault(PoolString::Intern("test")));
 
-        // eastl::string
         EXPECT_TRUE(DefaultChecker<String>::IsDefault(String{}));
         EXPECT_FALSE(DefaultChecker<String>::IsDefault(String{"hello"}));
 
-        // eastl::vector
         EXPECT_TRUE(DefaultChecker<Vector<int32_t>>::IsDefault(Vector<int32_t>{}));
         const Vector<int32_t> nonEmptyVec{1, 2, 3};
         EXPECT_FALSE(DefaultChecker<Vector<int32_t>>::IsDefault(nonEmptyVec));
@@ -1310,7 +1281,6 @@ namespace BECore::Tests {
     }
 
     TEST(ReflectionTest, ArraySerialization) {
-        // eastl::array
         {
             SCOPED_TRACE("eastl::array");
             const Array<float, 3> original = {1.0f, 2.5f, 3.75f};
@@ -1324,7 +1294,6 @@ namespace BECore::Tests {
             }
         }
 
-        // std::array
         {
             SCOPED_TRACE("std::array");
             //-NoStd: twin case: the reflection reads std::array as well as eastl::array
@@ -1357,7 +1326,6 @@ namespace BECore::Tests {
     }
 
     TEST(ReflectionTest, PairSerialization) {
-        // eastl::pair
         {
             SCOPED_TRACE("eastl::pair");
             const Pair<int32_t, String> original = {42, String("hello")};
@@ -1370,7 +1338,6 @@ namespace BECore::Tests {
             EXPECT_EQ(loaded.second, original.second);
         }
 
-        // std::pair
         {
             SCOPED_TRACE("std::pair");
             //-NoStd: twin case: the reflection reads std::pair as well as eastl::pair
@@ -1387,7 +1354,6 @@ namespace BECore::Tests {
     }
 
     TEST(ReflectionTest, OptionalSerialization) {
-        // eastl::optional with a value
         {
             SCOPED_TRACE("eastl::optional with value");
             const Optional<int32_t> original = 77;
@@ -1400,7 +1366,6 @@ namespace BECore::Tests {
             EXPECT_EQ(*loaded, 77);
         }
 
-        // eastl::optional without a value (absent key -> nullopt)
         {
             SCOPED_TRACE("eastl::optional without value");
             const Optional<int32_t> original;
@@ -1412,7 +1377,6 @@ namespace BECore::Tests {
             EXPECT_FALSE(loaded.has_value()) << "should be nullopt after loading an absent key";
         }
 
-        // std::optional with a value
         {
             SCOPED_TRACE("std::optional with value");
             const Optional<int32_t> original = 123;
@@ -1455,7 +1419,6 @@ namespace BECore::Tests {
         ASSERT_FALSE(errors.empty());
         const String pathStr = errors[0].path.CStr();
 
-        // The path should contain "player" and "inventory"
         EXPECT_NE(pathStr.find("player"), String::npos) << "error path '" << pathStr.c_str() << "'";
         EXPECT_NE(pathStr.find("inventory"), String::npos) << "error path '" << pathStr.c_str() << "'";
     }
@@ -1478,7 +1441,6 @@ namespace BECore::Tests {
         ASSERT_NE(posZebra, String::npos) << xml.c_str();
         EXPECT_TRUE(posApple < posMango && posMango < posZebra) << "keys not sorted: apple=" << posApple << ", mango=" << posMango << ", zebra=" << posZebra;
 
-        // The round-trip must still work
         HashMap<String, int32_t> loaded;
         ASSERT_NO_FATAL_FAILURE(LoadFromXml(xml, "MapSortTest", "entries", loaded));
 

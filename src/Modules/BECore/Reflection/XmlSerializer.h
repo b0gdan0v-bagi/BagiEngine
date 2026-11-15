@@ -6,57 +6,33 @@
 
 namespace BECore {
 
-    // Forward declarations
     class XmlConfig;
     class XmlNode;
 
     /**
-     * @brief XML-based serializer (writer) using pugixml
-     *
-     * Provides human-readable XML serialization for save files and configuration.
+     * @brief XML serializer (writer) on pugixml: human-readable save files and configuration
      *
      * @example
      * XmlSerializer serializer;
      * serializer.BeginObject("player");
      * serializer.WriteAttribute("health", 100);
-     * serializer.WriteAttribute("name", "Hero");
      * serializer.EndObject();
      * serializer.SaveToFile("save.xml");
      */
     class XmlSerializer : public ISerializer {
     public:
-        /**
-         * @brief Construct an XML serializer
-         */
         XmlSerializer();
         ~XmlSerializer() override = default;
 
-        // Non-copyable, movable
         XmlSerializer(const XmlSerializer&) = delete;
         XmlSerializer& operator=(const XmlSerializer&) = delete;
         XmlSerializer(XmlSerializer&&) = default;
         XmlSerializer& operator=(XmlSerializer&&) = default;
 
-        // =================================================================
-        // File I/O
-        // =================================================================
-
-        /**
-         * @brief Save XML to file
-         * @param path File path to save to
-         * @return true on success
-         */
+        /// Writes the document to a file; true on success.
         bool SaveToFile(const std::filesystem::path& path) const;
 
-        /**
-         * @brief Get XML as string
-         * @return XML content as string
-         */
         String SaveToString() const;
-
-        // =================================================================
-        // ISerializer interface - Write methods
-        // =================================================================
 
         void Write(StringView name, bool value) override;
         void Write(StringView name, int8_t value) override;
@@ -96,30 +72,20 @@ namespace BECore {
         void EndArrayElement() override;
 
         /**
-         * @brief Get the root XML node for direct manipulation
-         *
-         * Used to copy serialized component data into a different XML tree
-         * without creating intermediate serializers.
+         * @brief The root XML node, for copying serialized data into another XML tree without an intermediate serializer
          */
         const pugi::xml_node& GetRootNode() const {
             return _nodeStack.front();
         }
 
     private:
-        /**
-         * @brief Get or create child node with given name
-         */
         pugi::xml_node GetOrCreateChild(StringView name);
 
-        /**
-         * @brief Get or create attribute on current node
-         */
         pugi::xml_attribute GetOrCreateAttribute(StringView name);
 
         pugi::xml_document _document;
         Vector<pugi::xml_node> _nodeStack;
 
-        // For array iteration
         struct ArrayContext {
             pugi::xml_node parentNode;
             String elementName;

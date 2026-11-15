@@ -4,13 +4,14 @@
 #include <BECore/Threading/Mutex.h>
 #include <BECore/Threading/Thread.h>
 #include <BECore/Types/Types.h>
+#include <BECore/Utils/FunctionRef.h>
+#include <BECore/Utils/MoveOnlyFunction.h>
 #include <RemoteControl/WebSocketConnection.h>
 #include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
-#include <functional>
 
 namespace BECore {
 
@@ -64,16 +65,16 @@ namespace BECore {
      * (the client left, a protocol error, a refusal of `onMessage`, Stop()), after its writer has stopped.
      */
     struct WebSocketHandler {
-        using ConnectionPtr = SharedPtr<WebSocketConnection>;
+        using ConnectionPtr = IntrusivePtrAtomic<WebSocketConnection>;
 
         /// The handshake succeeded and the connection takes frames
-        std::function<void(const ConnectionPtr&)> onOpen;
+        MoveOnlyFunction<void(const ConnectionPtr&)> onOpen;
 
         /// A text message of the client (a ping, a pong, a close, binary data and protocol errors are the listener's). False ends the
         /// connection: queue a close frame first if the client is to hear why
-        std::function<bool(const ConnectionPtr&, WebSocketMessage)> onMessage;
+        MoveOnlyFunction<bool(const ConnectionPtr&, WebSocketMessage)> onMessage;
 
-        std::function<void(const ConnectionPtr&)> onClosed;
+        MoveOnlyFunction<void(const ConnectionPtr&)> onClosed;
     };
 
     /**
@@ -108,7 +109,7 @@ namespace BECore {
         }
 
         /// Calls @p visit for every connection whose handshake is done and that is still open. The list is a copy: @p visit may queue frames, but it must not call Stop()
-        void ForEachOpenConnection(const std::function<void(WebSocketConnection&)>& visit);
+        void ForEachOpenConnection(FunctionRef<void(WebSocketConnection&)> visit);
 
     private:
         using ConnectionPtr = WebSocketHandler::ConnectionPtr;

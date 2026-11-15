@@ -4,6 +4,7 @@
 #include <BECore/Reflection/ClassMeta.h>
 #include <BECore/Reflection/ISerializer.h>
 #include <BECore/Reflection/ReaderLimits.h>
+#include <BECore/Utils/EnumUtils.h>
 
 namespace BECore {
 
@@ -17,30 +18,21 @@ namespace BECore {
     };
 
     /**
-     * @brief Interface for deserialization (reading data)
+     * @brief What a load does with a finding: content that loaded but looks wrong
      *
-     * Provides methods for reading primitive types and strings from various
-     * storage formats (XML, binary, etc.). Includes error tracking for
-     * reporting missing or malformed data.
+     * Off records nothing (the default: a save or a UI document rejects the whole document on any error, so a new finding must not
+     * make an existing file fail). Warn stores the finding in GetWarnings() and leaves HasErrors() alone. Error makes it an
+     * ordinary error.
+     */
+    CORE_ENUM(DiagnosticsMode, uint8_t, Off, Warn, Error)
+
+    /**
+     * @brief Interface for deserialization (reading data)
      *
      * Path tracking is maintained automatically when subclasses call
      * PushPathSegment / PushPathArrayIndex / PopPathSegment in their
      * BeginObject / EndObject / BeginArray / EndArray / BeginArrayElement /
      * EndArrayElement overrides.
-     *
-     * @example
-     * XmlDeserializer deserializer;
-     * deserializer.LoadFromFile("save.xml");
-     * deserializer.BeginObject("player");
-     * int32_t health;
-     * deserializer.ReadAttribute("health", health);
-     * deserializer.EndObject();
-     *
-     * if (deserializer.HasErrors()) {
-     *     for (const auto& err : deserializer.GetErrors()) {
-     *         LOG_ERROR("Deserialization error at '{}': {}", err.path, err.errorMessage);
-     *     }
-     * }
      */
     class IDeserializer : public IArchiveBase {
     public:
@@ -111,6 +103,84 @@ namespace BECore {
         }
 
         // =================================================================
+        // Load diagnostics
+        // =================================================================
+
+        /**
+         * @brief Choose what ReportFinding does; Off by default, and the same for every format
+         *
+         * Set it before the load: a finding is recorded when it is found.
+         */
+        void SetDiagnostics(DiagnosticsMode mode) {
+            _diagnostics = mode;
+        }
+
+        DiagnosticsMode GetDiagnostics() const {
+            return _diagnostics;
+        }
+
+        /**
+         * @brief The findings recorded under Warn, apart from the errors
+         *
+         * Same entry as an error and the same limits (ReaderLimits::kMaxRecordedErrors, cut texts).
+         */
+        const Vector<DeserializeError>& GetWarnings() const {
+            return _warnings;
+        }
+
+        /**
+         * @brief Forget the recorded warnings (ClearErrors() clears errors only)
+         */
+        void ClearWarnings() {
+            _warnings.clear();
+        }
+
+        /**
+         * @brief Whether the current scope has an entry called @p name (an attribute or a child element; in binary, an entry of any kind)
+         *
+         * Lets a loader tell a missing key from a key that holds the default. The default is true, so a reader that cannot tell
+         * never produces a false "missing".
+         */
+        virtual bool HasKey(StringView /*name*/) const {
+            return true;
+        }
+
+        /**
+         * @brief Tell the reader that the current scope has a key that the caller reads by hand
+         *
+         * A reader that finds keys nobody read (the unknown-key finding) counts it as read. The default does nothing.
+         */
+        virtual void NoteKnownKey(StringView /*name*/) {}
+
+        /**
+         * @brief Close the root scope when the load is done
+         *
+         * The reflected struct of a config is read at the root with no BeginObject, so nothing else ends that scope. The default does
+         * nothing.
+         */
+        virtual void FinishLoad() {}
+
+        /**
+         * @brief Tell the reader that the caller leaves the rest of the current scope unread on purpose
+         *
+         * For an element a loader drops without reading it (a disabled element, one past the capacity of a fixed container): its keys are
+         * not unknown keys. The default does nothing.
+         */
+        virtual void SkipScope() {}
+
+        /**
+         * @brief Report content that loaded but looks wrong, at the current path + key; the field keeps what was read
+         *
+         * Off does nothing, Warn stores a warning, Error stores an error (HasErrors() becomes true).
+         */
+        void ReportFinding(StringView key, StringView message) {
+            if (_diagnostics == DiagnosticsMode::Off) {
+                return;
+            }
+            RecordFinding(key, message);
+        }
+
+        // =================================================================
         // Purpose filter (asset parts)
         // =================================================================
 
@@ -148,21 +218,8 @@ namespace BECore {
         // Error tracking
         // =================================================================
 
-        /**
-         * @brief Check if any errors occurred during deserialization
-         * @return true if there are any errors
-         */
         virtual bool HasErrors() const = 0;
-
-        /**
-         * @brief Get all deserialization errors
-         * @return Vector of errors encountered
-         */
         virtual const Vector<DeserializeError>& GetErrors() const = 0;
-
-        /**
-         * @brief Clear all accumulated errors
-         */
         virtual void ClearErrors() = 0;
 
         // =================================================================
@@ -196,14 +253,7 @@ namespace BECore {
             return result;
         }
 
-        /**
-         * @brief Report an error at the current path + key
-         *
-         * Builds the full path and delegates to AddError().
-         *
-         * @param key  Leaf key where the error occurred
-         * @param message  Human-readable error description
-         */
+        /// @brief Report an error at the current path + key
         void ReportError(StringView key, StringView message) {
             String fullPath = GetCurrentPath(key);
             AddError(StringView(fullPath), message, 0);
@@ -256,9 +306,7 @@ namespace BECore {
         }
 
         /**
-         * @brief Store an error -- override in concrete deserializers
-         *
-         * Both readers store it with StoreError().
+         * @brief Store an error; both readers store it with StoreError()
          */
         virtual void AddError(StringView path, StringView message, int32_t line) = 0;
 
@@ -283,11 +331,15 @@ namespace BECore {
         static StringView CutText(StringView text, size_t maxBytes);
 
     private:
+        void RecordFinding(StringView key, StringView message);
+
         struct PathSegment {
             String name;
             bool isArrayIndex = false;
         };
         Vector<PathSegment> _pathStack;
+        Vector<DeserializeError> _warnings;
+        DiagnosticsMode _diagnostics = DiagnosticsMode::Off;
         Optional<AssetPurpose> _purposeFilter;
     };
 

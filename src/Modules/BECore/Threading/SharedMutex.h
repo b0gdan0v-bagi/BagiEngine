@@ -9,8 +9,6 @@ namespace BECore {
 
     /**
      * @brief The engine's reader-writer mutex: std::shared_mutex with a name (LockSite). Same contract as Mutex (Mutex.h).
-     *
-     * SharedLockable as well, so std::shared_lock works over it, and std::lock_guard / std::unique_lock take the writer side.
      */
     class SharedMutex {
     public:
@@ -78,7 +76,6 @@ namespace BECore {
         }
 
     private:
-        /// The lock order check (LockOrder.h): nothing at all without BE_LOCK_ORDER_CHECK
         void OrderBefore() const {
 #if BE_LOCK_ORDER_CHECK
             LockOrder::BeforeAcquire(*_site);
@@ -97,7 +94,6 @@ namespace BECore {
 #endif
         }
 
-        /// The per-lock events of a backend that wants them (Tracy): with BE_PROFILER one atomic load each, otherwise nothing at all
         [[nodiscard]] bool EventsBeforeLock([[maybe_unused]] LockKind kind) {
 #if BE_PROFILER
             return _events.BeforeLock(*_site, kind);
@@ -125,7 +121,6 @@ namespace BECore {
         }
 
 #if BE_LOCK_SITES
-        /// The blocking locks after a failed try, timed for the profiler (SharedMutex.cpp)
         void LockContended();
         void LockContendedShared();
 

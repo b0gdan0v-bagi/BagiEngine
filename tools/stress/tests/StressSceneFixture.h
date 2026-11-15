@@ -1,9 +1,12 @@
 #pragma once
 
+#include <BECore/Application/CommandLine.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/XmlDeserializer.h>
+#include <BECore/Renderer/RendererManager.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
+#include <BECore/Time/Time.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/RecordingRenderer.h>
 #include <Games/GameManager.h>

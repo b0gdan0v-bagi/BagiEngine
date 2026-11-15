@@ -15,7 +15,7 @@ Two layers in one class:
 |------|-------|
 | `SaveGame.h` | `SaveGameService`, `SaveSchema {game, version, minVersion}`, `SaveInfo {game, version}`, `SaveErrorKind` (`CORE_ENUM`), `SaveError {kind, detail}`, the constants `kSaveMountPoint`, `kSaveExtension`, `kSaveTempExtension`, `kMaxSlotNameLength`; the thin templates `Save(slot, schema, const State&)` and `Load(slot, schema, State&)` |
 | `SaveStorage.{h,cpp}` | `kWebSaveDirectory`, `SaveStorageState` (`CORE_ENUM`), `PersistentSaveDirectory()`, `GetSaveStorageState()`, `NotifySaveChanged()`, `SetSaveChangedHandler()` (test seam): the browser's side of the folder, see "In the browser" |
-| `SaveGame.cpp` | the implementation (the non-template `Save` / `Load` / `Peek` take `eastl::function` callbacks, so the binary serializer stays out of the header) |
+| `SaveGame.cpp` | the implementation (the non-template `Save` / `Load` / `Peek` take `FunctionRef` callbacks, so the binary serializer stays out of the header) |
 
 Tests: `tests/BECore/Save/SaveStorageTest.cpp` (the notifications, with a fake handler), `tests/BECore/Save/SaveGameFilesTest.cpp` (slot files; a local `FileSystem` on a `TestTempDirectory`, no global services) and `tests/BECore/Save/SaveGameTest.{h,cpp}` (the envelope; `SaveGameTest.h` holds the reflected test states, its `.gen.hpp` is included in the `.cpp` only).
 
@@ -99,4 +99,4 @@ if (auto info = service.Load("slot1", kSchema, loaded)) {
 }
 ```
 
-A state that is not a reflected class passes lambdas instead: `service.Save(slot, schema, [&](ISerializer& s) { ... })` and `service.Load(slot, schema, [&](IDeserializer& d) { ... })`; the lambdas see the object `state` as the current scope. A reflected vector of structs by value saves and loads, but the property visitor (the inspector) has no overload for it, so a state with one needs a no-op `PropVisit::Visit` overload for its vector type, as `BECore/UI/UIVariant.h` does for `eastl::vector<UIVariant>` and `SaveGameTest.h` does for its items. A generic overload in `PropertyVisitorDispatch.h` would remove that need; it is the open follow-up.
+A state that is not a reflected class passes lambdas instead: `service.Save(slot, schema, [&](ISerializer& s) { ... })` and `service.Load(slot, schema, [&](IDeserializer& d) { ... })`; the lambdas see the object `state` as the current scope. A reflected vector of structs by value saves, loads and is edited by the property visitor (the inspector) through the container overloads of `PropertyVisitorDispatch.h`; a type the inspector must not edit keeps a non-template `PropVisit::Visit` overload that does nothing, as `BECore/UI/UIVariant.h` does for `Vector<UIVariant>`.

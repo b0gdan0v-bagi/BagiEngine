@@ -21,13 +21,11 @@ namespace BECore {
 
         _workerBusy = MakeUnique<std::atomic<bool>[]>(numThreads);
 
-        // Создаем очереди для каждого потока
         _queues.reserve(numThreads);
         for (size_t i = 0; i < numThreads; ++i) {
             _queues.push_back(MakeUnique<TaskQueue>());
         }
 
-        // Запускаем рабочие потоки
         _threads.reserve(numThreads);
         for (size_t i = 0; i < numThreads; ++i) {
             _threads.emplace_back(Format("Worker {}", i).c_str(), kWorkerSortBase + static_cast<uint32_t>(i), [this, i] { WorkerLoop(i); });
@@ -55,7 +53,6 @@ namespace BECore {
             return;
         }
 
-        // Round-robin распределение по очередям
         size_t index = _nextQueue.fetch_add(1, std::memory_order_relaxed) % _queues.size();
         _queues[index]->Push(std::move(task));
     }
@@ -99,17 +96,15 @@ namespace BECore {
 
     void ThreadPool::Shutdown() {
         if (_stopped.exchange(true, std::memory_order_acq_rel)) {
-            return;  // Already stopped
+            return;
         }
 
         LOG_INFO("[ThreadPool] Shutting down...");
 
-        // Останавливаем все очереди
         for (auto& queue : _queues) {
             queue->Stop();
         }
 
-        // Ждем завершения всех потоков
         for (auto& thread : _threads) {
             if (thread.joinable()) {
                 thread.join();
@@ -175,20 +170,18 @@ namespace BECore {
         };
 
         while (!_stopped.load(std::memory_order_acquire)) {
-            // Сначала пытаемся взять из своей очереди
             if (_queues[threadIndex]->TryPop(task)) {
                 run();
                 continue;
             }
 
-            // Пытаемся украсть у других
             if (TryStealTask(threadIndex, task)) {
                 _stealCount.fetch_add(1, std::memory_order_relaxed);
                 run();
                 continue;
             }
 
-            // Ждем задачу в своей очереди; the wait is a zone, so a trace tells an idle worker from a busy one
+            // The wait is a zone, so a trace tells an idle worker from a busy one
             bool gotTask = false;
             {
                 BE_PROFILE_SCOPE("Idle");
@@ -199,7 +192,7 @@ namespace BECore {
             }
         }
 
-        // Доделываем оставшиеся задачи в своей очереди
+        // A job queued before the stop still runs
         while (_queues[threadIndex]->TryPop(task)) {
             run();
         }
@@ -208,7 +201,6 @@ namespace BECore {
     bool ThreadPool::TryStealTask(size_t thiefIndex, TaskQueue::TaskFunc& task) {
         size_t numQueues = _queues.size();
 
-        // Пытаемся украсть из других очередей
         for (size_t i = 1; i < numQueues; ++i) {
             size_t victimIndex = (thiefIndex + i) % numQueues;
             if (_queues[victimIndex]->TrySteal(task)) {

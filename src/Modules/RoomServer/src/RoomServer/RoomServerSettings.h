@@ -1,12 +1,12 @@
 #pragma once
 
+#include <BECore/Utils/MoveOnlyFunction.h>
 #include <RemoteControl/Socket.h>
 #include <RemoteControl/WebSocketHandshake.h>
 #include <Rooms/RoomLimits.h>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 
 namespace BECore {
 
@@ -58,7 +58,7 @@ namespace BECore {
         std::chrono::milliseconds shutdownGrace{0};
 
         /// What the hub is told the time is. Empty: the real clock (`steady_clock`). A test moves a manual clock instead of sleeping
-        std::function<RoomTime()> clock;
+        MoveOnlyFunction<RoomTime()> clock;
 
         /// Source of room codes, tokens and seeds. Empty: MakeSecureRandom()
         RandomFn random;

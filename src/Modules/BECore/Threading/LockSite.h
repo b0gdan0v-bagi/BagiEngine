@@ -32,8 +32,7 @@ namespace BECore {
      * @brief The static place of a lock: its name, the zone a long wait on it is recorded as, and its level in the lock order.
      *
      * `wait` is a ProfileSite so a backend keeps its address as the identity of the zone (and the Tracy backend passes it as a source
-     * location). Made by BE_LOCK_SITE / BE_LOCK_SITE_LEVEL, never by hand. `level` 0 means "not ordered"; a lock of a level is taken only
-     * while every lock the thread holds has a lower one (LockOrder.h).
+     * location). Made by BE_LOCK_SITE / BE_LOCK_SITE_LEVEL, never by hand. `level` 0 means "not ordered" (LockOrder.h).
      */
     struct LockSite {
         ProfileSite wait;

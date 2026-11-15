@@ -12,6 +12,7 @@
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
 #include <Events/SceneEvents.h>
+#include <entt/entt.hpp>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {

@@ -33,8 +33,6 @@ namespace BECore {
      *   [widget Draw()]    -> widgets record commands into the active render pass
      *   RenderPresentEvent -> Present(): end render pass + command buffer, submit, present
      * A skipped frame records nothing: every draw, SetRenderTarget and the ImGui render check that a frame is open.
-     *
-     * Max number of frames processed simultaneously (in-flight)
      */
     class VulkanRendererBackend : public IRenderer {
         BE_CLASS(VulkanRendererBackend)
@@ -170,7 +168,6 @@ namespace BECore {
         VkExtent2D _requestedPixelExtent = {};
         // The swapchain must be rebuilt before the next frame (a window event, a suboptimal or out-of-date result)
         bool _swapchainDirty = false;
-        // The warning about a blend mode other than Alpha was logged
         bool _blendWarned = false;
 
         VkCommandPool _commandPool = VK_NULL_HANDLE;

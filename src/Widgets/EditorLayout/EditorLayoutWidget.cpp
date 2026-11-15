@@ -1,8 +1,11 @@
 #include "EditorLayoutWidget.h"
 
+#include <BECore/Control/ControlService.h>
+#include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Time/GamePause.h>
+#include <BECore/Widgets/WidgetManager.h>
 #include <Events/ApplicationEvents.h>
 #include <Events/RenderEvents.h>
 #include <Generated/EditorLayoutWidget.gen.hpp>
@@ -168,7 +171,6 @@ namespace BECore {
             EditorCommandEvent::Emit(chosen);
         }
 
-        // --- DockSpace ---
         // It takes what the status bar leaves; the bars are children of the host, so no dock node can overlap them
         const float dockHeight = eastl::max(0.0f, ImGui::GetContentRegionAvail().y - StatusBar::GetHeight());
         const ImGuiID dockspaceId = ImGui::GetID("MainDockSpace");
@@ -389,15 +391,15 @@ namespace BECore {
         ImGui::DockBuilderAddNode(id, ImGuiDockNodeFlags_DockSpace);
         ImGui::DockBuilderSetNodeSize(id, size);
 
-        // Right: Sprite Library (25%)
+        // Right: Sprite Library
         ImGuiID right, center;
         ImGui::DockBuilderSplitNode(id, ImGuiDir_Right, 0.25f, &right, &center);
 
-        // Left: Scene Editor / Config Editor (22% of remaining)
+        // Left: Scene Editor and Config Editor
         ImGuiID left, viewport;
         ImGui::DockBuilderSplitNode(center, ImGuiDir_Left, 0.22f, &left, &viewport);
 
-        // Left panel split: Scene Editor (top 70%) / Config Editor (bottom 30%)
+        // Left panel: Scene Editor above Config Editor
         ImGuiID leftTop, leftBottom;
         ImGui::DockBuilderSplitNode(left, ImGuiDir_Down, 0.3f, &leftBottom, &leftTop);
 

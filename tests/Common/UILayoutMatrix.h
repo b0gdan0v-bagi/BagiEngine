@@ -3,6 +3,8 @@
 #include <BECore/Scene/SceneView.h>
 #include <BECore/UI/UICanvasLayout.h>
 #include <BECore/UI/UIPreview.h>
+#include <BECore/Utils/FunctionRef.h>
+#include <BECore/Utils/MoveOnlyFunction.h>
 
 namespace BECore::Tests {
 
@@ -25,9 +27,13 @@ namespace BECore::Tests {
         Span<const SceneViewVariant> variants;
     };
 
+    /// The default edit of the screen tests that load a scene text: leaves it as it is
+    inline void NoTextEdit(String&) {}
+
     /// Fills the regions a game publishes for one case: @p regions is cleared first, @p resolved (the scale, `bounds`, `contentBounds`, `viewBounds`) is what the canvas will lay out in.
-    /// A game passes the function it calls itself when its layout changes (the one that computes the scene regions from the bounds).
-    using UIMatrixRegions = eastl::function<void(UIRegionSet& regions, const UICanvasResolved& resolved)>;
+    /// A game passes the function it calls itself when its layout changes (the one that computes the scene regions from the bounds). A value, not a `FunctionRef`: it may be empty and a helper returns
+    /// one.
+    using UIMatrixRegions = MoveOnlyFunction<void(UIRegionSet& regions, const UICanvasResolved& resolved)>;
 
     namespace UIMatrixDetail {
 
@@ -98,7 +104,7 @@ namespace BECore::Tests {
      * @param baseContext the fields that the matrix does not set (the scene view size, the world box, the density)
      * @param views the scene's view declaration, for a SceneView canvas of a scene with `viewVariants`: every case sets `sceneViewWidth` / `sceneViewHeight` to the view
      *        that SceneViewSelector::Pick() gives for the output of the case (what Scene::Draw() would pick) and the label ends with `view <name>` (`view default` for the
-     *        default, `view #<index>` for an unnamed variant). Left empty (the default), the matrix keeps the view size of @p baseContext in every case, as before.
+     *        default, `view #<index>` for an unnamed variant). Left empty (the default), the matrix keeps the view size of @p baseContext in every case.
      * @param publishRegions the game's function that computes its named regions (`UICanvasLayout::regions`) from the bounds of the case: called per case with an empty set and the
      *        resolved canvas (`UICanvasScaler::Resolve` of the case's params and context, before the layout), so the validator checks "inside its region" on the whole matrix.
      *        A name the function does not set is a `MissingRegion` in every case. Left empty (the default), the canvas keeps the regions it has in every case.

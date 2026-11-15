@@ -356,6 +356,24 @@ namespace BECore::Tests {
         EXPECT_EQ(answer, 42);
     }
 
+    TEST_F(SaveGameTest, NamedMutableCallbacksAreCalledOnceAndKeepTheirState) {
+        int32_t written = 40;
+        auto write = [&written](ISerializer& serializer) mutable { serializer.WriteAttribute("answer", ++written); };
+        ASSERT_TRUE(Service().Save("slot", kSchema, write).has_value());
+        EXPECT_EQ(written, 41);
+
+        int32_t answer = 0;
+        int32_t calls = 0;
+        auto read = [&answer, &calls](IDeserializer& deserializer) mutable {
+            ++calls;
+            deserializer.Read("answer", answer);
+        };
+        const auto info = Service().Load("slot", kSchema, read);
+        ASSERT_TRUE(info.has_value()) << info.error().detail.c_str();
+        EXPECT_EQ(answer, 41);
+        EXPECT_EQ(calls, 1);
+    }
+
     TEST_F(SaveGameTest, ErrorsOfTheReaderAreCorrupt) {
         ASSERT_TRUE(Service().Save("slot", kSchema, MakeState()).has_value());
 

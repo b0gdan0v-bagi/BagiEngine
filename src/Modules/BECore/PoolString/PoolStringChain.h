@@ -142,12 +142,11 @@ namespace BECore {
     private:
         Storage _storage;
         Mode _mode;
-        uint8_t _count;  // Для Compound: кол-во элементов (2 или 3)
+        uint8_t _count;  // Compound only: the number of parts
     };
 
     static_assert(sizeof(PoolStringChain) <= 32);
 
-    // Обратные операторы сравнения: PoolString op PoolStringChain
     [[nodiscard]] inline bool operator==(const PoolString& lhs, const PoolStringChain& rhs) {
         return rhs == lhs;
     }

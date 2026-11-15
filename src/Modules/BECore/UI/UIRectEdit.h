@@ -15,22 +15,16 @@ namespace BECore {
     };
 
     /**
-     * @brief The inverse of UILayout::ResolveRect: from a rect to the spec that lays out there. Pure, so the editor holds no layout math.
-     *
-     * Everything the editor changes about a rect goes through here: a field edited by hand, an anchor preset, a drag.
+     * @brief The inverse of UILayout::ResolveRect: from a rect to the spec that lays out there. Pure, so the editor holds no layout math (a field, an anchor preset and a drag all go through here).
      */
     class UIRectEdit {
     public:
         /**
          * @brief The spec that `UILayout::ResolveRect(parent, result.spec)` lays out at @p wanted.
          *
-         * Only the numbers of each axis change: a point axis (min = max) gets its size (`width` / `height`) and its offset (`x` / `y`), a stretched
-         * axis gets its `margin` (the span is taken between the anchors first, then inset, as in the layout). Anchors, pivot, limits, aspect ratio,
-         * region, the unit of every length and the fields an axis ignores stay as they are. An axis that already lays out at @p wanted is left
-         * untouched, so an edit of one axis does not rewrite the other.
-         *
-         * When the limits or the aspect ratio forbid the size, the nearest layout is returned with `exact` false; it is never silently wrong.
-         * A percent length against a zero extent cannot be set (any number is zero there), so it keeps its value.
+         * Only the numbers of each axis change: a point axis (min = max) gets `width` / `height` and `x` / `y`, a stretched axis its `margin`. Anchors, pivot, limits, aspect ratio, region and the
+         * unit of every length stay as they are. An axis that already lays out at @p wanted is left untouched, so an edit of one axis does not rewrite the other. When the limits or the aspect ratio
+         * forbid the size, the nearest layout is returned with `exact` false. A percent length against a zero extent cannot be set (any number is zero there), so it keeps its value.
          *
          * @param parent the box the element lays out in: its parent, or the region it names
          */

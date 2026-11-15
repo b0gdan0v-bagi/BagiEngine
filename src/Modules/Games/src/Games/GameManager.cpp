@@ -1,5 +1,7 @@
 #include "GameManager.h"
 
+#include <BECore/Config/ConfigManager.h>
+#include <BECore/Control/ControlService.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/AbstractFactory.h>
 #include <BECore/Reflection/OpenDeserializer.h>
@@ -35,6 +37,7 @@ namespace BECore {
         if (const auto deserializer = CoreManager::GetConfigManager().CreateDeserializer("GamesConfig"_intern)) {
             GamesConfig config;
             config.Deserialize(*deserializer);
+            deserializer->FinishLoad();
             LogDeserializeErrors("GamesConfig", *deserializer);
             defaultName = config._defaultGame._name;
         }

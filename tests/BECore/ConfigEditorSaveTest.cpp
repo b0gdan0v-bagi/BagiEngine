@@ -174,7 +174,6 @@ namespace BECore::Tests {
             EXPECT_EQ(TypeNameOf(*manager->GetSinks()[0]), option);
             EXPECT_EQ(TypeNameOf(*manager->GetSinks()[1]), "FileSink");
 
-            // A file sink the loader built is working: it has opened its file
             for (const auto& sink : manager->GetSinks()) {
                 if (const auto* fileSink = dynamic_cast<const FileSink*>(sink.Get())) {
                     EXPECT_TRUE(fileSink->IsOpen());
@@ -199,7 +198,6 @@ namespace BECore::Tests {
             XmlDeserializer saved;
             ASSERT_TRUE(SaveEditedType(StringView{option.c_str(), option.size()}, edited, saved));
 
-            // In the file: only the `type` of the first sink differs from the copy that was edited
             XmlDocument reloaded;
             ASSERT_TRUE(reloaded.LoadFromFile(SavedPath()));
             const Vector<pugi::xml_node> reloadedSinks = SinkElements(reloaded);
@@ -221,7 +219,6 @@ namespace BECore::Tests {
                 EXPECT_EQ(reloadedAttributeCount, attributeCount) << "sink " << i;
             }
 
-            // In the manager: the edited sink keeps its priority and level, the file sink its settings and its file
             std::filesystem::remove(EngineLogPath());
             const auto manager = New<LoggerManager>();
             manager->Deserialize(saved);
@@ -238,7 +235,6 @@ namespace BECore::Tests {
             const auto* fileSink = dynamic_cast<const FileSink*>(&second);
             ASSERT_NE(fileSink, nullptr);
             EXPECT_TRUE(fileSink->IsOpen());
-            // The sink opened the `filename` of the saved file, not the default ./engine.log
             EXPECT_TRUE(std::filesystem::exists(EngineLogPath()));
         }
     }
@@ -260,7 +256,6 @@ namespace BECore::Tests {
         EXPECT_EQ(saved.GetErrors()[0].path.ToStringView(), "sinks[0].type");
         EXPECT_EQ(saved.GetErrors()[0].errorMessage.ToStringView(), "Unknown factory type: 'Console'");
 
-        // The entry is dropped, the FileSink after it stays
         EXPECT_EQ(manager->GetSink<OutputSink>(), nullptr);
         ASSERT_EQ(manager->GetSinks().size(), 1u);
         EXPECT_EQ(TypeNameOf(*manager->GetSinks()[0]), "FileSink");

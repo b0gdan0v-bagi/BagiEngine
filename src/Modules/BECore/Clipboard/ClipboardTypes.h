@@ -2,6 +2,7 @@
 
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
+#include <BECore/Utils/MoveOnlyFunction.h>
 #include <cstddef>
 #include <cstdint>
 
@@ -37,6 +38,6 @@ namespace BECore {
     };
 
     /// Called by Clipboard::Update(), never inside the request
-    using ClipboardCallback = eastl::function<void(const ClipboardText&)>;
+    using ClipboardCallback = MoveOnlyFunction<void(const ClipboardText&)>;
 
 }  // namespace BECore

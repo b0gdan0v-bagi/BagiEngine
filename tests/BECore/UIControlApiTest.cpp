@@ -2,7 +2,9 @@
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Input/UIInput.h>
 #include <BECore/Reflection/XmlDeserializer.h>
+#include <BECore/Renderer/RendererManager.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
@@ -10,7 +12,9 @@
 #include <BECore/UI/UIControl.h>
 #include <BECore/UI/UIDropdown.h>
 #include <BECore/UI/UISegmented.h>
+#include <BECore/UI/UIStrings.h>
 #include <BECore/UI/UITextComponent.h>
+#include <BECore/UI/UIVars.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -837,7 +841,6 @@ namespace BECore::Tests {
         const Json* flat = FindElement(*canvas, "Flat");
         ASSERT_NE(flat, nullptr);
         EXPECT_EQ(Member(*flat, "box"), nullptr);
-        // Every element of the other scenes has the default style too
         Show("Main");
         const Json main = Call("ui_tree");
         EXPECT_EQ(DumpJson(main).find("\"box\""), String::npos);
@@ -1565,7 +1568,6 @@ namespace BECore::Tests {
         Show("Main");
         Recorder recorder;
 
-        // Ok is 80 x 40 at (122, 62): at 0 and at 1 are both on it
         for (double at : {0.0, 1.0}) {
             Json params = Click("Ok");
             params["at"] = at;

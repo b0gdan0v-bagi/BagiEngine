@@ -12,8 +12,10 @@ namespace BECore {
         static constexpr uint64_t hashOffset = 14695981039346656037ULL;
         static constexpr uint64_t hashPrime = 1099511628211ULL;
 
+        /// Views into `str`, which must outlive them; an empty string gives no part, every delimiter ends a part (so "a," gives "a" and "").
         static SmallStrVector Split(StringView str, char delimiter);
 
+        /// FNV-1a, 64 bit.
         static constexpr uint64_t GetHash(StringView sv) noexcept {
 
             uint64_t hash = hashOffset;

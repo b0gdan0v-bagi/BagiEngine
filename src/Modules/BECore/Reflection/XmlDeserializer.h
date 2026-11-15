@@ -6,15 +6,11 @@
 
 namespace BECore {
 
-    // Forward declarations
     class XmlConfig;
     class XmlNode;
 
     /**
-     * @brief XML-based deserializer (reader) using pugixml
-     *
-     * Provides XML deserialization from save files and configuration,
-     * with error tracking for missing or malformed data.
+     * @brief XML reader over pugixml.
      *
      * @example
      * XmlDeserializer deserializer;
@@ -32,40 +28,24 @@ namespace BECore {
      */
     class XmlDeserializer : public IDeserializer {
     public:
-        /**
-         * @brief Construct an XML deserializer
-         */
         XmlDeserializer();
         ~XmlDeserializer() override = default;
 
-        // Non-copyable, movable
         XmlDeserializer(const XmlDeserializer&) = delete;
         XmlDeserializer& operator=(const XmlDeserializer&) = delete;
         XmlDeserializer(XmlDeserializer&&) = default;
         XmlDeserializer& operator=(XmlDeserializer&&) = default;
-
-        // =================================================================
-        // File I/O
-        // =================================================================
 
         /**
          * @brief Load XML from file
          *
          * Refused with an error, before the file is read, when the path is not a regular file or the file is over
          * ReaderLimits::kMaxXmlDocumentBytes. Any load drops the earlier document: after a refusal nothing is readable.
-         *
-         * @param path File path to load from
-         * @return true on success
          */
         bool LoadFromFile(const std::filesystem::path& path);
 
         /**
-         * @brief Load XML from virtual path
-         *
-         * Resolves path via CoreManager::GetFileSystem() and loads the file.
-         *
-         * @param virtualPath Virtual path (e.g., "config/game.xml")
-         * @return true on success
+         * @brief Load XML from a virtual path (CoreManager::GetFileSystem()), as LoadFromFile.
          */
         bool LoadFromVirtualPath(StringView virtualPath);
 
@@ -74,25 +54,13 @@ namespace BECore {
          *
          * The text is UTF-8 whatever its first bytes are, and at most ReaderLimits::kMaxXmlDocumentBytes. Any load drops the earlier
          * document: after a refusal nothing is readable.
-         *
-         * @param xmlContent XML string content
-         * @return true on success
          */
         bool LoadFromString(StringView xmlContent);
 
         /**
-         * @brief Position deserializer at the given XmlNode
-         *
-         * Allows using XmlDeserializer with nodes obtained from XmlConfig/ConfigManager.
-         *
-         * @param node XmlNode to position at
-         * @return true on success
+         * @brief Read from a node without copying it: the document that owns the node must outlive the reads.
          */
         bool LoadFromXmlNode(const XmlNode& node);
-
-        // =================================================================
-        // IDeserializer interface - Read methods
-        // =================================================================
 
         bool Read(StringView name, bool& outValue) override;
         bool Read(StringView name, int8_t& outValue) override;
@@ -108,7 +76,6 @@ namespace BECore {
         bool Read(StringView name, String& outValue) override;
         bool Read(StringView name, PoolString& outValue) override;
 
-        // Attribute deserialization (from XML attributes)
         bool ReadAttribute(StringView name, bool& outValue) override;
         bool ReadAttribute(StringView name, int8_t& outValue) override;
         bool ReadAttribute(StringView name, uint8_t& outValue) override;
@@ -131,7 +98,6 @@ namespace BECore {
         bool BeginArrayElement() override;
         void EndArrayElement() override;
 
-        // Strict values (see IDeserializer::SetStrictValues)
         void SetStrictValues(bool strict) override {
             _strictValues = strict;
         }
@@ -139,7 +105,17 @@ namespace BECore {
             return _strictValues;
         }
 
-        // Error tracking
+        // Load diagnostics (see IDeserializer::SetDiagnostics). With the mode not Off a scope that ends with an attribute or a child
+        // element nobody asked for gives the finding "Unknown attribute|element 'x'" at <scope path>.x, with "did you mean 'y'?" when a
+        // name asked in that scope is near. Asked is what counts, not read: Read, ReadAttribute, BeginObject, BeginArray, HasKey and
+        // NoteKnownKey name a key, so a value that fails to parse is no unknown key. A scope is checked once, when it ends
+        // (EndObject, EndArray, EndArrayElement) or, for the root, at FinishLoad. An array scope checks its own attributes only: its
+        // children are taken by position (BeginArrayElement) and are the elements. Children of one name count once. Off tracks nothing.
+        bool HasKey(StringView name) const override;
+        void NoteKnownKey(StringView name) override;
+        void FinishLoad() override;
+        void SkipScope() override;
+
         bool HasErrors() const override;
         const Vector<DeserializeError>& GetErrors() const override;
         void ClearErrors() override;
@@ -158,14 +134,8 @@ namespace BECore {
          */
         bool IsNestedTooDeep(StringView name);
 
-        /**
-         * @brief Get child node for reading
-         */
         pugi::xml_node GetChild(StringView name) const;
 
-        /**
-         * @brief Get attribute from current node for reading
-         */
         pugi::xml_attribute GetAttribute(StringView name) const;
 
         /**
@@ -186,10 +156,38 @@ namespace BECore {
         template <typename T>
         bool ApplyStrictText(StringView name, StringView text, T& outValue);
 
+        /// What one open node was asked for; in lockstep with _nodeStack while the mode is not Off
+        struct Scope {
+            pugi::xml_node node;
+            Vector<String> askedAttributes;
+            Vector<String> askedElements;
+            bool isArray = false;
+            bool checked = false;
+        };
+
+        /// Notes that a key was asked of the current node, as an attribute and / or as a child element (const: HasKey asks too)
+        void NoteAsked(StringView name, bool asAttribute, bool asElement) const;
+
+        /// Makes a Scope for every open node that has none; all but the innermost count as checked (a mode switched on in the middle of a load did not see them)
+        void SyncScopes() const;
+
+        /// Called after a node is pushed on _nodeStack by BeginObject, BeginArray or BeginArrayElement
+        void OpenScope(bool isArray);
+
+        /// Called before a node is popped from _nodeStack: checks its scope and drops it
+        void CloseScope();
+
+        void CheckScope(Scope& scope);
+
+        /// The finding of one unknown name; @p scope gives the names to suggest from
+        void ReportUnknown(const Scope& scope, StringView kind, StringView name);
+
+        bool FindingsFull() const;
+
         pugi::xml_document _document;
         Vector<pugi::xml_node> _nodeStack;
+        mutable Vector<Scope> _scopes;
 
-        // For array iteration
         struct ArrayContext {
             pugi::xml_node parentNode;
             Vector<pugi::xml_node> elements;
@@ -197,7 +195,6 @@ namespace BECore {
         };
         Vector<ArrayContext> _arrayStack;
 
-        // Error tracking
         Vector<DeserializeError> _errors;
 
         bool _strictValues = false;

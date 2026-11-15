@@ -5,7 +5,7 @@
 
 namespace BECore {
 
-    /// Standard Base64 (RFC 4648, section 4) with padding: the screenshot PNG and the WebSocket handshake use it
+    /// Standard Base64 (RFC 4648, section 4) with padding
     [[nodiscard]] String Base64Encode(Span<const uint8_t> data);
 
 }  // namespace BECore

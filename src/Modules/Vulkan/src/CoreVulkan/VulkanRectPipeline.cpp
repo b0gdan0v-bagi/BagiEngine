@@ -10,7 +10,6 @@
 namespace BECore {
 
     bool VulkanRectPipeline::Initialize(VkDevice device, VkRenderPass renderPass, bool linearizeColors) {
-        // ---- Shader modules ------------------------------------------------
         VkShaderModule vertModule = CreateShaderModule(device, kRectVertSpv, kRectVertSpvSize);
         VkShaderModule fragModule = CreateShaderModule(device, kRectFragSpv, kRectFragSpvSize);
 
@@ -41,11 +40,10 @@ namespace BECore {
         stages[1].pName = "main";
         stages[1].pSpecializationInfo = &linearizeInfo;
 
-        // ---- Pipeline layout (push constants only) -------------------------
         VkPushConstantRange pushRange{};
         pushRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
         pushRange.offset = 0;
-        pushRange.size = sizeof(PushConstants);  // 40 bytes
+        pushRange.size = sizeof(PushConstants);
 
         VkPipelineLayoutCreateInfo layoutInfo{};
         layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -59,7 +57,6 @@ namespace BECore {
             return false;
         }
 
-        // ---- Fixed-function state ------------------------------------------
 
         // No vertex input — geometry is generated in the vertex shader.
         VkPipelineVertexInputStateCreateInfo vertexInput{};
@@ -118,7 +115,6 @@ namespace BECore {
         dynamicState.dynamicStateCount = 2;
         dynamicState.pDynamicStates = kDynamicStates;
 
-        // ---- Pipeline creation ---------------------------------------------
         VkGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
         pipelineInfo.stageCount = 2;

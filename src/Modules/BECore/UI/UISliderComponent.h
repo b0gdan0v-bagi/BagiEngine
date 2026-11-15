@@ -12,26 +12,25 @@ namespace BECore {
      * `<element type="UIElement" name="Volume" height="56"><components><component type="UIInputClicker" stateLook="false"/><component type="UISliderComponent" bind="volume" action="SetVolume"
      * minValue="0" maxValue="1" step="0.1"/></components></element>`
      *
-     * The clicker beside it makes the element `disabled`-able (one source of it), gives the pointer state to the thumb and, with `stateLook="false"`, leaves the plate of the element still
-     * (a slider's plate never changed with the pointer). Its own `action` stays empty: this component emits on a press and a drag, which the clicker's fixed `(action, value)` on a click cannot.
-     * It still makes the element interactive by itself, so a forgotten clicker leaves a working slider, only one that cannot be disabled.
+     * The clicker beside it makes the element `disabled`-able (one source of it), gives the pointer state to the thumb and, with `stateLook="false"`, leaves the plate of the element still. Its own
+     * `action` stays empty: this component emits on a press and a drag, which the clicker's fixed `(action, value)` on a click cannot. The slider makes the element interactive by itself, so without a
+     * clicker it works but cannot be disabled.
      *
-     * `bind` names a `UIVars` variable that holds the number; `minValue` (0) and `maxValue` (1) are the ends of the range and `step` (0 = continuous) the grid a value is snapped to.
-     * The thumb stands at `GetFraction()` of the travel, read from the variable (`UIText::ValueInRange`, `FractionInRange`: an unset or malformed variable is the minimum, a value outside the
-     * range is clamped, an empty or reversed range is a fraction of 0). **The slider owns no value**: nothing it does changes the variable (game -> `UIVars` -> widget).
+     * `bind` names a `UIVars` variable that holds the number; `minValue` (0) and `maxValue` (1) are the ends of the range and `step` (0 = continuous) the grid a value is snapped to. The thumb stands
+     * at `GetFraction()`, read from the variable
+     * (`UIText::ValueInRange`, `FractionInRange`: an unset or malformed variable is the minimum, a value outside the range is clamped, an empty or reversed range is a fraction of 0). **The slider
+     * owns no value**: nothing it does changes the variable (game -> `UIVars` -> widget).
      *
-     * **Input.** A press anywhere on the rect emits `ActionEvent(action, valueText)` with the value under the pointer, and the canvas then follows the press to its release
-     * (`OnPress` / `OnDrag`), also outside the rect: every motion emits again, but only when the text of the value changed, so a drag inside one step is silent. The release emits nothing, and
-     * there is no `OnClick`, so one gesture never fires a second action. A disabled owner takes the press (it does not fall through to what is below) and does nothing; so does a slider with an
-     * empty `action`.
+     * **Input.** A press anywhere on the rect emits `ActionEvent(action, valueText)` with the value under the pointer, and the canvas then follows the press to its release (`OnPress` / `OnDrag`),
+     * also outside the rect: every motion emits again, but only when the text of the value changed, so a drag inside one step is silent. The release emits nothing and there is no `OnClick`, so one
+     * gesture never fires a second action. A disabled owner takes the press (it does not fall through to what is below) and does nothing; so does a slider with an empty `action`.
      *
-     * **The value under a point.** The thumb is a square of the height of the rect and never leaves it, so the travel of its centre is the rect narrowed by half a thumb on both sides. The value
-     * is the position in the travel, clamped, then snapped to `step` from `minValue`; the maximum is also a place to snap to when the range is not a whole number of steps. `FormatValue`
-     * writes it short and exact: `0.3`, never `0.30000001`; `7`, never `7.0`.
+     * **The value under a point.** The thumb is a square of the height of the rect and never leaves it, so the travel of its centre is the rect narrowed by half a thumb on both sides. The value is
+     * the position in the travel, clamped, then snapped to `step` from `minValue`; the maximum is also a place to snap to when the range is not a whole number of steps. `FormatValue` writes it short
+     * and exact: `0.3`, never `0.30000001`.
      *
-     * The track (`trackColor`), the part before the thumb (`fillColor`) and the thumb (`thumbColor`) are derived when left transparent. A disabled slider is drawn at half alpha. The thumb is
-     * lighter under the pointer and darker while the press is held (wherever the pointer is). `partShape="Round"` makes the track and the filled part pills and the thumb a circle
-     * (`UIElement::DrawPart`).
+     * `trackColor`, `fillColor` (the part before the thumb) and `thumbColor` are derived when left transparent. A disabled slider is drawn at half alpha; the thumb is lighter under the pointer and
+     * darker while the press is held (wherever the pointer is). `partShape="Round"` makes the track and the filled part pills and the thumb a circle (`UIElement::DrawPart`).
      */
     class UISliderComponent : public UIComponent {
         BE_CLASS(UISliderComponent)

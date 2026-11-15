@@ -1,22 +1,30 @@
 #include <Application/Application.h>
+#include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
 #endif
 
+#ifndef BAGI_WEB_ROOT
+// Defined by the generated source of the target (be_link_content_roots): the only source that names this checkout's paths
+namespace BagiContentRoots {
+    extern const char* const kEngine;
+    extern const char* const kGame;
+}  // namespace BagiContentRoots
+#endif
+
 int RunApplication(int argc, const char* const* argv) {
     // Content roots, lowest priority first: the engine's config/ and assets/, then the game's on top of them.
-    // be_add_game_executable() defines both; without them FileSystem searches upwards from the working directory.
-    // BAGI_WEB_ROOT (the web build's config overlay) comes last, so it has the highest priority.
-#ifdef BAGI_ENGINE_ROOT
-    BECore::CoreManager::GetFileSystem().AddContentRoot(BAGI_ENGINE_ROOT);
-#endif
-#ifdef BAGI_GAME_ROOT
-    BECore::CoreManager::GetFileSystem().AddContentRoot(BAGI_GAME_ROOT);
-#endif
+    // The web build's roots are virtual paths (-D defines of cmake/BagiWeb.cmake) and BAGI_WEB_ROOT, its config overlay,
+    // comes last, so it has the highest priority.
 #ifdef BAGI_WEB_ROOT
+    BECore::CoreManager::GetFileSystem().AddContentRoot(BAGI_ENGINE_ROOT);
+    BECore::CoreManager::GetFileSystem().AddContentRoot(BAGI_GAME_ROOT);
     BECore::CoreManager::GetFileSystem().AddContentRoot(BAGI_WEB_ROOT);
+#else
+    BECore::CoreManager::GetFileSystem().AddContentRoot(BagiContentRoots::kEngine);
+    BECore::CoreManager::GetFileSystem().AddContentRoot(BagiContentRoots::kGame);
 #endif
 
     BECore::Application::GetInstance().SetArguments(argc, argv);

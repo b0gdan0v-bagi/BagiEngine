@@ -10,7 +10,7 @@ file(GLOB_RECURSE TESTS_SOURCES
 
 # Tests of the editor panels exist only when the editor is built (BE_WITH_EDITOR, cmake/BagiEngine.cmake)
 if(NOT BE_EDITOR_ENABLED)
-    list(FILTER TESTS_SOURCES EXCLUDE REGEX "/BECore/(ConfigEditorSaveTest|SceneEditorSaveTest|ConfigFieldSchemaTest|KeyChordTest|HotkeyMapTest|CommandFilterTest|EditorSettingsTest|ViewportInputTest|LayoutStoreTest|IconTableTest|EditorPlayModelTest|StatusBarModelTest|GitBranchTest|EditorBarsTest|HierarchyModelTest|ScenePickTest|ViewportGizmosTest|GizmoGeometryTest|GizmoDragTest|ViewportCameraTest|SceneSelectionTest)\\.")
+    list(FILTER TESTS_SOURCES EXCLUDE REGEX "/BECore/(ConfigEditorSaveTest|SceneEditorSaveTest|ConfigFieldSchemaTest|KeyChordTest|HotkeyMapTest|CommandFilterTest|EditorSettingsTest|ViewportInputTest|LayoutStoreTest|IconTableTest|EditorPlayModelTest|StatusBarModelTest|GitBranchTest|EditorBarsTest|HierarchyModelTest|ScenePickTest|ViewportGizmosTest|GizmoGeometryTest|GizmoDragTest|ViewportCameraTest|SceneSelectionTest|FieldPresentationTest)\\.")
 endif()
 
 # Tests of the RmlUi host exist only when the host is built
@@ -41,7 +41,7 @@ if(Python3_FOUND)
     add_test(NAME BagiIncludeStyle
         COMMAND ${Python3_EXECUTABLE} ${BAGI_ENGINE_DIR}/CI/scripts/check_includes.py --root ${BAGI_ENGINE_DIR})
     # the type rules of BECore/Types/CLAUDE.md as a check (raw std::/eastl:: types, allocating calls: CI/scripts/check_types.py).
-    # The engine still holds lines that other entries own (std::function, file streams, directory iterators), so the check has a baseline,
+    # The engine still holds lines that other entries own (file streams, directory iterators, ...), so the check has a baseline,
     # CI/types_baseline.txt: it only shrinks, a fix removes its lines, and a new hit or a line that is gone fails the test.
     add_test(NAME BagiTypesCheck
         COMMAND ${Python3_EXECUTABLE} ${BAGI_ENGINE_DIR}/CI/scripts/check_types.py --root ${BAGI_ENGINE_DIR}

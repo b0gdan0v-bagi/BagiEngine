@@ -1,6 +1,8 @@
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Input/UIInput.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
+#include <BECore/Renderer/RendererManager.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
@@ -14,10 +16,12 @@
 #include <BECore/UI/UISliderComponent.h>
 #include <BECore/UI/UIStack.h>
 #include <BECore/UI/UIStateLook.h>
+#include <BECore/UI/UIStrings.h>
 #include <BECore/UI/UISwitchComponent.h>
 #include <BECore/UI/UITextComponent.h>
 #include <BECore/UI/UIToggleComponent.h>
 #include <BECore/UI/UITooltipComponent.h>
+#include <BECore/UI/UIVars.h>
 #include <BECore/UIComponentTest.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
@@ -718,7 +722,6 @@ namespace BECore::Tests {
         Draw();
         EXPECT_EQ(text.GetDisplayText(), "{#other}");
 
-        // and so does a doubled brace in the text itself
         text.text = "{{#menu.start}}";
         Draw();
         EXPECT_EQ(text.GetDisplayText(), "{#menu.start}");
@@ -1225,7 +1228,6 @@ namespace BECore::Tests {
         const auto large = GlyphsIn(El("Title"), 2.0f);
         ASSERT_EQ(large.size(), small.size());
 
-        // The same text in a twice as large output: every quad is twice as large and twice as far from the corner
         for (size_t i = 0; i < small.size(); ++i) {
             EXPECT_NEAR(large[i].rect.x, small[i].rect.x * 2.0f, kScaleTolerance) << i;
             EXPECT_NEAR(large[i].rect.y, small[i].rect.y * 2.0f, kScaleTolerance) << i;
@@ -1429,7 +1431,6 @@ namespace BECore::Tests {
         Release(700.0f, 500.0f);
         EXPECT_EQ(actions.Total(), 0u);
 
-        // Pressing outside and releasing on the button is not a click either
         CoreManager::GetUIInput().DispatchMouseButtonDown(Button(700.0f, 500.0f, true));
         const Rect c = Center(ok);
         Release(c.x, c.y);
@@ -1645,7 +1646,6 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIControlsTest, TheValidatorChecksTheTouchSizeOfButtons) {
-        // The validator checks interactive elements against the minimum touch size; Ok is 80 x 40 units at scale 1
         Draw();
         UILayoutValidatorOptions options;
         options.minTouchSize = 48.0f;

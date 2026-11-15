@@ -1,12 +1,18 @@
 #include "UICanvasComponent.h"
 
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Input/UIInput.h>
+#include <BECore/MainWindow/IMainWindow.h>
 #include <BECore/Renderer/IRenderer.h>
+#include <BECore/Resource/ResourceManager.h>
 #include <BECore/Scene/Components/TransformComponent.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneNode.h>
+#include <BECore/Time/Time.h>
 #include <BECore/UI/UIDocument.h>
+#include <BECore/UI/UIEnvironment.h>
 #include <BECore/UI/UITextComponent.h>
+#include <BECore/UI/UIThemes.h>
 #include <BECore/UI/UITransitionComponent.h>
 #include <Generated/UICanvasComponent.gen.hpp>
 

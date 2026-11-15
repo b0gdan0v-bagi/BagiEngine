@@ -9,30 +9,18 @@ namespace BECore {
      * @brief Binary serializer (writer): compact, name-keyed, little-endian
      *
      * Same call sequence as XmlSerializer, so every type that serializes to XML serializes to binary.
-     * The layout is described in BinaryFormat.h. Fields that are skipped (SetSkipDefaults, null pointers,
-     * empty optionals) are simply not written; the reader finds the rest by name.
-     *
-     * @example
-     * BinarySerializer serializer;
-     * serializer.BeginObject("player");
-     * serializer.WriteAttribute("health", 100);
-     * serializer.EndObject();
-     * serializer.SaveToFile("save.bin");
+     * Layout: BinaryFormat.h. Skipped fields (SetSkipDefaults, null pointers, empty optionals) are not
+     * written; the reader finds the rest by name.
      */
     class BinarySerializer : public ISerializer {
     public:
         BinarySerializer();
         ~BinarySerializer() override = default;
 
-        // Non-copyable, movable
         BinarySerializer(const BinarySerializer&) = delete;
         BinarySerializer& operator=(const BinarySerializer&) = delete;
         BinarySerializer(BinarySerializer&&) = default;
         BinarySerializer& operator=(BinarySerializer&&) = default;
-
-        // =================================================================
-        // Output
-        // =================================================================
 
         /**
          * @brief Bytes written so far, header included
@@ -43,15 +31,8 @@ namespace BECore {
             return _buffer;
         }
 
-        /**
-         * @brief Save the bytes to a file
-         * @return true on success
-         */
+        /// Writes the bytes to a file; false if it cannot be written.
         bool SaveToFile(const std::filesystem::path& path) const;
-
-        // =================================================================
-        // ISerializer interface - Write methods
-        // =================================================================
 
         void Write(StringView name, bool value) override;
         void Write(StringView name, int8_t value) override;

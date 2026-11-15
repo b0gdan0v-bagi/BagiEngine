@@ -20,10 +20,8 @@ namespace BECore {
      * @brief The glyph atlases that exist, one per (font, pixel size, outline pixels): `CoreManager::GetFontAtlasLibrary()`.
      *
      * Atlases are made on first use. A new plain atlas draws the `preload` ranges of the TextSettings up front; an
-     * outline atlas (outline pixels above 0) is not preloaded, its glyphs come on first use. The size is a
-     * whole number of pixels (QuantizeSize()): the effective size of a text is its font size times the scale of its
-     * canvas times the pixel density, rounded, so a text is rasterized at the size it is shown at, and the atlas stays
-     * small however the scale moves.
+     * outline atlas (outline pixels above 0) is not preloaded, its glyphs come on first use. The size is a whole
+     * number of pixels (QuantizeSize()), so a text is rasterized at the size it is shown at and the atlas count stays small.
      *
      * The atlases hold GPU textures of one renderer. A call with a renderer other than the one the atlases were made
      * for drops them all (a renderer is told from another by IRenderer::GetId()). `Application::Cleanup()` calls Clear()
@@ -40,7 +38,7 @@ namespace BECore {
 
         FontAtlasLibrary() = default;
 
-        /// Reads `config/TextConfig.xml` (the defaults when it is missing)
+        /// Reads `config/TextConfig.xml`; the defaults when it is missing
         void Initialize();
 
         [[nodiscard]] const TextSettings& GetSettings() const {

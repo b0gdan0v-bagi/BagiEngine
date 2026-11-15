@@ -21,30 +21,23 @@ namespace BECore {
     class Scene;
     class SceneNode;
 
-    // Renders the active scene into an offscreen texture and displays it as a
-    // dockable ImGui window ("Viewport"). The offscreen pass happens BEFORE
-    // ClearScreenWidget opens the swapchain render pass, so this widget must
-    // appear before ClearScreenWidget in WidgetsConfig.xml.
+    // Renders the active scene into an offscreen texture and displays it as a dockable ImGui window ("Viewport"). The
+    // offscreen pass happens BEFORE ClearScreenWidget opens the swapchain render pass, so this widget must appear before
+    // ClearScreenWidget in WidgetsConfig.xml.
     //
-    // A toolbar picks the shape of the image (the panel, a preset ratio, a device of UIPreview::GetDevices() or a custom
-    // W x H; "Rotate" turns it sideways) and pretends a safe area (a notch, side insets, the cut-out of the chosen device),
-    // so a UI layout can be looked at in several shapes without resizing the window (UIPreview). The viewport is not the
-    // window: the safe area that canvases see during the scene pass is the simulated one, and a device or custom size
-    // renders the target at exactly that size (canvases lay out for it) and shows it scaled down to fit the panel, never
-    // above 100%; the mouse is mapped back through that zoom.
-    // An "Overlays" popup toggles what is drawn over the image: the safe area, the view bounds, the canvas bounds, the touch targets
-    // and the regions a game published for its canvases (UIPreviewOverlay; the touch rule is the validator's).
-    // A third combo forces one of the scene's view variants (Scene::SetViewOverride) around the viewport's own pass only.
-    // The image is covered by an InvisibleButton (a real item with an id: a press on it is always seen and never moves the window)
-    // and its mouse is the game's input as the window's (ViewportPointer). The input mode (ViewportInputMode, a toolbar toggle and
-    // the viewport.inputMode command) says whether a press goes to the game (Play) or is kept for the editor (Edit: the game gets
-    // nothing and ViewportEditClickEvent is emitted); Alt held flips it for one click. A badge in the image corner shows the
-    // effective mode, and Edit adds an outline around the image. A left click in Edit is answered by the scene editor (ScenePick), and the nodes it
-    // selects, from here or from the hierarchy (SceneSelectionChangedEvent), are outlined over the image (the primary in the accent colour).
-    // In Edit the image has an editor camera (ViewportCamera: wheel zoom about the pointer, middle-drag or Space + left-drag pan, F frames the selection, a Reset
-    // button and a zoom label): the texture is drawn scaled and shifted under the clip rect of the panel, and everything in target pixels goes through ViewportFrame.
-    // A drag on empty ground draws a rubber band and selects what it touches; the gizmo (ViewportGizmos) moves, turns and scales the selected nodes (keys W / E / R / X while the panel has the keys;
-    // the commands viewport.tool.*, viewport.gizmoSpace, viewport.snap and viewport.frameSelected do the same from the palette, with no default chord).
+    // A toolbar picks the shape of the image (panel, preset ratio, device of UIPreview::GetDevices(), custom W x H, rotate)
+    // and simulates a safe area, so a UI layout can be looked at in several shapes without resizing the window. The safe
+    // area canvases see during the scene pass is the simulated one; a device or custom size renders the target at exactly
+    // that size and shows it scaled down to fit the panel (never above 100%), the mouse is mapped back through that zoom.
+    // The "Overlays" popup toggles what is drawn over the image (UIPreviewOverlay), a combo forces one of the scene's view
+    // variants (Scene::SetViewOverride) around the viewport's own pass only.
+    //
+    // The image is covered by an InvisibleButton (an item with an id: a press on it is always seen and never moves the
+    // window) and its mouse is the game's input as the window's (ViewportPointer). The input mode (ViewportInputMode) says
+    // whether a press goes to the game (Play) or to the editor as ViewportEditClickEvent (Edit); Alt flips it for one click.
+    // Selected nodes (SceneSelectionChangedEvent) are outlined over the image, the primary in the accent colour. In Edit the
+    // image has an editor camera (ViewportCamera), a drag on empty ground draws a rubber band, and the gizmo
+    // (ViewportGizmos) moves, turns and scales the selected nodes; its keys and commands are in EditorCommands.h.
     class ViewportWidget : public IWidget {
         BE_CLASS(ViewportWidget)
     public:

@@ -8,12 +8,10 @@ namespace BECore::Tests {
     using namespace ReflectionTestEvents;
 
     // Compile-time checks: a regression breaks the build.
-    // Events have reflection
     static_assert(HasReflection<TestEmptyEvent>);
     static_assert(HasReflection<TestDataEvent>);
     static_assert(HasReflection<TestMessageEvent>);
 
-    // Events are default constructible
     static_assert(std::is_default_constructible_v<TestEmptyEvent>);
     static_assert(std::is_default_constructible_v<TestDataEvent>);
     static_assert(std::is_default_constructible_v<TestMessageEvent>);
@@ -48,12 +46,10 @@ namespace BECore::Tests {
         EXPECT_EQ(meta3.typeName, "TestMessageEvent");
         EXPECT_NE(meta3.typeHash, 0u) << "Type hash should be non-zero";
 
-        // Type hashes are unique
         EXPECT_NE(meta1.typeHash, meta2.typeHash);
         EXPECT_NE(meta2.typeHash, meta3.typeHash);
         EXPECT_NE(meta1.typeHash, meta3.typeHash);
 
-        // GetStaticTypeHash matches the meta
         EXPECT_EQ(TestEmptyEvent::GetStaticTypeHash(), meta1.typeHash);
         EXPECT_EQ(TestDataEvent::GetStaticTypeHash(), meta2.typeHash);
         EXPECT_EQ(TestMessageEvent::GetStaticTypeHash(), meta3.typeHash);
@@ -80,13 +76,11 @@ namespace BECore::Tests {
     }
 
     TEST(ReflectionEventTest, FieldIteration) {
-        // Empty event
         TestEmptyEvent emptyEvent;
         int emptyCount = 0;
         TestEmptyEvent::ForEachFieldStatic(emptyEvent, [&](auto, auto&) { emptyCount++; });
         EXPECT_EQ(emptyCount, 0);
 
-        // Data event
         TestDataEvent dataEvent{42, 2.5f};
         int dataCount = 0;
         int32_t capturedValue = 0;
@@ -105,7 +99,6 @@ namespace BECore::Tests {
         EXPECT_EQ(capturedValue, 42);
         EXPECT_FLOAT_EQ(capturedMultiplier, 2.5f);
 
-        // Message event
         PoolString helloStr = PoolString::Intern("Hello");
         TestMessageEvent msgEvent{helloStr, 123};
         int msgCount = 0;

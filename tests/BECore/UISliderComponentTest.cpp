@@ -1,8 +1,10 @@
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Input/UIInput.h>
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/BinarySerializer.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
+#include <BECore/Renderer/RendererManager.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
@@ -10,6 +12,7 @@
 #include <BECore/UI/UIInputClicker.h>
 #include <BECore/UI/UISliderComponent.h>
 #include <BECore/UI/UIThemes.h>
+#include <BECore/UI/UIVars.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -501,14 +504,12 @@ namespace BECore::Tests {
         // step 1 over 0..10: "7", not "7.0"
         ASSERT_NO_FATAL_FAILURE(Tap("Unit", 0.7f));
         EXPECT_EQ(actions.LastValue(), "7");
-        // 0..100 step 5
         ASSERT_NO_FATAL_FAILURE(Tap("Fine", 0.35f));
         EXPECT_EQ(actions.LastValue(), "35");
         ASSERT_NO_FATAL_FAILURE(Tap("Fine", 0.372f));
         EXPECT_EQ(actions.LastValue(), "35");
         ASSERT_NO_FATAL_FAILURE(Tap("Fine", 0.39f));
         EXPECT_EQ(actions.LastValue(), "40");
-        // step 0.25
         ASSERT_NO_FATAL_FAILURE(Tap("Quarter", 0.3f));
         EXPECT_EQ(actions.LastValue(), "0.25");
         ASSERT_NO_FATAL_FAILURE(Tap("Quarter", 0.4f));
@@ -623,13 +624,11 @@ namespace BECore::Tests {
         EXPECT_EQ(actions.Values("SliderCompOther"), "0.2");
         EXPECT_EQ(actions.Count("SliderCompVolume"), 2u);
 
-        // A press on the same value as the last gesture ended on still emits
         ASSERT_NO_FATAL_FAILURE(Tap("Volume", 0.9f));
         EXPECT_EQ(actions.Values("SliderCompVolume"), "0.5 1 0.9");
         ASSERT_NO_FATAL_FAILURE(Tap("Volume", 0.9f));
         EXPECT_EQ(actions.Values("SliderCompVolume"), "0.5 1 0.9 0.9");
 
-        // Motion with no press held does nothing
         CoreManager::GetUIInput().DispatchMouseMotion(Motion(XAt("Volume", 0.1f), MiddleY("Volume")));
         EXPECT_EQ(actions.Count("SliderCompVolume"), 4u);
     }

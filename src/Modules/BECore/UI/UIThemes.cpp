@@ -1,5 +1,6 @@
 #include "UIThemes.h"
 
+#include <BECore/Config/ConfigManager.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/UI/UIColor.h>
 #include <BECore/UI/UITidyMessage.h>

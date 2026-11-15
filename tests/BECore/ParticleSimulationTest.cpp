@@ -154,7 +154,6 @@ namespace BECore::Tests {
             EXPECT_FLOAT_EQ(a.sizeScale, b.sizeScale);
         }
 
-        // The same picture as geometry
         Vector<GeometryVertex> fineVertices;
         Vector<GeometryVertex> coarseVertices;
         Vector<int> indices;
@@ -399,7 +398,6 @@ namespace BECore::Tests {
         EXPECT_EQ(vertices[0].u, 0.0f);  // untextured
         EXPECT_EQ(vertices[0].v, 0.0f);
 
-        // No live particle, no quad
         sim.Clear();
         EXPECT_EQ(sim.BuildGeometry(effect, Rect{}, Vec2{}, vertices, indices), 0u);
         EXPECT_TRUE(vertices.empty());
@@ -423,7 +421,6 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(vertices[3].u, 0.25f);
         EXPECT_FLOAT_EQ(vertices[3].v, 0.75f);
 
-        // An empty source is the whole texture
         sim.BuildGeometry(effect, Rect{}, Vec2(64.0f, 32.0f), vertices, indices);
         EXPECT_FLOAT_EQ(vertices[0].u, 0.0f);
         EXPECT_FLOAT_EQ(vertices[2].u, 1.0f);
@@ -573,7 +570,6 @@ namespace BECore::Tests {
         EXPECT_EQ(indices.capacity(), indexCapacity);
         EXPECT_GT(sim.GetDroppedCount(), 0u);
 
-        // With no live particle too
         sim.Clear();
 #if BE_PROFILER_ALLOC
         const uint64_t emptyBefore = AllocTracker::GetThreadCounters().count;

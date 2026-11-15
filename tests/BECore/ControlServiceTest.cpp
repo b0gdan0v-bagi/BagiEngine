@@ -2,6 +2,7 @@
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Time/Time.h>
 #include <Common/EngineEnvironment.h>
 #include <Events/ApplicationEvents.h>
 #include <gtest/gtest.h>
@@ -63,6 +64,26 @@ namespace BECore::Tests {
             }
             return DumpJson(request);
         }
+
+        /// A move-only capture that counts how many times it was destroyed as an owner (a moved-from one does not count)
+        class DestroyCounter {
+        public:
+            explicit DestroyCounter(int& destroyed) : _destroyed(&destroyed) {}
+
+            DestroyCounter(DestroyCounter&& other) noexcept : _destroyed(std::exchange(other._destroyed, nullptr)) {}
+            DestroyCounter& operator=(DestroyCounter&&) = delete;
+            DestroyCounter(const DestroyCounter&) = delete;
+            DestroyCounter& operator=(const DestroyCounter&) = delete;
+
+            ~DestroyCounter() {
+                if (_destroyed != nullptr) {
+                    ++*_destroyed;
+                }
+            }
+
+        private:
+            int* _destroyed;
+        };
 
         /// What a running frame lasts in the loop of a test that has no real clock
         constexpr double kRealFrameSeconds = 1.0 / 64;
@@ -479,12 +500,12 @@ namespace BECore::Tests {
         EXPECT_EQ(order, (Vector<String>{"slow"}));
         EXPECT_TRUE(responses.empty());
 
-        service.EndFrame();  // one frame left
+        service.EndFrame();
         service.Drain();
         EXPECT_EQ(order, (Vector<String>{"slow"}));
         EXPECT_TRUE(responses.empty());
 
-        service.EndFrame();  // done
+        service.EndFrame();
         EXPECT_EQ(order, (Vector<String>{"slow", "slow-done"}));
         ASSERT_EQ(responses.size(), 1u);
         EXPECT_EQ(IdOf(responses[0]), 1);
@@ -625,7 +646,7 @@ namespace BECore::Tests {
     TEST_F(ControlServiceTest, HandlerMayRegisterHandlers) {
         service.RegisterHandler("register", [this](ControlCall& call) {
             for (int index = 0; index < 200; ++index) {  // enough to rehash the handler table
-                service.RegisterHandler(View("extra" + ToString(index)), [](ControlCall& extra) { extra.Reply(Json::object()); });
+                service.RegisterHandler(View(Format("extra{}", index)), [](ControlCall& extra) { extra.Reply(Json::object()); });
             }
             call.Reply(Json::object());
         });
@@ -653,6 +674,112 @@ namespace BECore::Tests {
         service.Drain();
 
         EXPECT_EQ(order, (Vector<String>{"new"}));
+    }
+
+    TEST_F(ControlServiceTest, HandlerWithAMoveOnlyCaptureIsCalledAndDestroyedOnceWhenReplaced) {
+        int destroyed = 0;
+        int calls = 0;
+        service.RegisterHandler("m", [owner = DestroyCounter(destroyed), &calls](ControlCall& call) {
+            ++calls;
+            call.Reply(Json::object());
+        });
+
+        Post(MakeRequest(1, "m"));
+        Post(MakeRequest(2, "m"));
+        service.Drain();
+        EXPECT_EQ(calls, 2);
+        EXPECT_EQ(destroyed, 0);
+
+        service.RegisterHandler("m", [](ControlCall& call) { call.Reply(Json::object()); });
+        EXPECT_EQ(destroyed, 1);
+    }
+
+    TEST_F(ControlServiceTest, HandlerWithAMoveOnlyCaptureIsDestroyedOnceWithTheService) {
+        int destroyed = 0;
+        {
+            ControlService local;
+            local.RegisterHandler("m", [owner = DestroyCounter(destroyed)](ControlCall& call) { call.Reply(Json::object()); });
+            local.Post(MakeRequest(1, "m"), Collect());
+            local.Drain();
+            EXPECT_EQ(destroyed, 0);
+        }
+        EXPECT_EQ(destroyed, 1);
+    }
+
+    TEST_F(ControlServiceTest, HandlerThatReplacesItselfKeepsItsCaptureUntilTheCallEnds) {
+        int destroyed = 0;
+        int destroyedAfterRegistering = -1;
+        constexpr int kWitness = 42;
+        int witnessAfterRegistering = 0;
+        service.RegisterHandler("self", [this, owner = DestroyCounter(destroyed), witness = kWitness, &destroyed, &destroyedAfterRegistering, &witnessAfterRegistering](ControlCall& call) {
+            service.RegisterHandler("self", [](ControlCall& next) { next.Reply(Json::object()); });
+            destroyedAfterRegistering = destroyed;
+            witnessAfterRegistering = witness;
+            call.Reply(Json::object());
+        });
+
+        Post(MakeRequest(1, "self"));
+        service.Drain();
+
+        EXPECT_EQ(destroyedAfterRegistering, 0);
+        EXPECT_EQ(witnessAfterRegistering, kWitness);
+        EXPECT_EQ(destroyed, 1);
+        ASSERT_EQ(responses.size(), 1u);
+        EXPECT_TRUE(IsOk(responses[0]));
+
+        Post(MakeRequest(2, "self"));
+        service.Drain();
+        ASSERT_EQ(responses.size(), 2u);
+        EXPECT_TRUE(IsOk(responses[1]));
+    }
+
+    TEST_F(ControlServiceTest, HandlerThatRegistersOthersStaysRegistered) {
+        int calls = 0;
+        service.RegisterHandler("grow", [this, &calls](ControlCall& call) {
+            ++calls;
+            for (int index = 0; index < 200; ++index) {
+                service.RegisterHandler(View(Format("extra{}", index)), [](ControlCall& extra) { extra.Reply(Json::object()); });
+            }
+            call.Reply(Json::object());
+        });
+
+        Post(MakeRequest(1, "grow"));
+        Post(MakeRequest(2, "grow"));
+        service.Drain();
+
+        EXPECT_EQ(calls, 2);
+        EXPECT_EQ(responses.size(), 2u);
+    }
+
+    TEST_F(ControlServiceTest, FrameEndHookThatReplacesItselfKeepsItsCaptureUntilItReturns) {
+        int destroyed = 0;
+        int destroyedAfterReplacing = -1;
+        service.SetFrameEndHook("a", [this, owner = DestroyCounter(destroyed), &destroyed, &destroyedAfterReplacing] {
+            service.SetFrameEndHook("a", [this] { order.push_back("second"); });
+            destroyedAfterReplacing = destroyed;
+        });
+
+        service.EndFrame();
+        EXPECT_EQ(destroyedAfterReplacing, 0);
+        EXPECT_EQ(destroyed, 1);
+
+        service.EndFrame();
+        EXPECT_EQ(order, (Vector<String>{"second"}));
+    }
+
+    TEST_F(ControlServiceTest, FrameEndHookThatAddsHooksKeepsRunning) {
+        int calls = 0;
+        service.SetFrameEndHook("grow", [this, &calls] {
+            ++calls;
+            for (int index = 0; index < 50; ++index) {  // enough to move the entries of the list
+                service.SetFrameEndHook(View(Format("extra{}", index)), [] {});
+            }
+        });
+
+        service.EndFrame();
+        service.EndFrame();
+
+        EXPECT_EQ(calls, 2);
     }
 
     TEST_F(ControlServiceTest, ShutdownAnswersEverythingWithShuttingDown) {
@@ -702,6 +829,50 @@ namespace BECore::Tests {
         const Json* eventData = FindJsonMember(*parsed, "data");
         ASSERT_NE(eventData, nullptr);
         EXPECT_EQ(GetJsonInt(*eventData, "version").value_or(0), 3);
+    }
+
+    TEST_F(ControlServiceTest, TheSinkStaysAfterPublishing) {
+        int calls = 0;
+        service.SetEventSink([&calls](const String&) { ++calls; });
+
+        service.Publish("a", Json::object());
+        service.Publish("b", Json::object());
+
+        EXPECT_EQ(calls, 2);
+    }
+
+    TEST_F(ControlServiceTest, SinkThatReplacesItselfKeepsItsCaptureUntilItReturns) {
+        int destroyed = 0;
+        int destroyedAfterReplacing = -1;
+        service.SetEventSink([this, owner = DestroyCounter(destroyed), &destroyed, &destroyedAfterReplacing](const String&) {
+            service.SetEventSink([this](const String&) { order.push_back("second"); });
+            destroyedAfterReplacing = destroyed;
+        });
+
+        service.Publish("a", Json::object());
+        EXPECT_EQ(destroyedAfterReplacing, 0);
+        EXPECT_EQ(destroyed, 1);
+
+        service.Publish("b", Json::object());
+        EXPECT_EQ(order, (Vector<String>{"second"}));
+    }
+
+    TEST_F(ControlServiceTest, SinkThatClearsItselfKeepsItsCaptureUntilItReturns) {
+        int destroyed = 0;
+        int destroyedAfterClearing = -1;
+        int calls = 0;
+        service.SetEventSink([this, owner = DestroyCounter(destroyed), &destroyed, &destroyedAfterClearing, &calls](const String&) {
+            ++calls;
+            service.SetEventSink({});
+            destroyedAfterClearing = destroyed;
+        });
+
+        service.Publish("a", Json::object());
+        EXPECT_EQ(destroyedAfterClearing, 0);
+        EXPECT_EQ(destroyed, 1);
+
+        service.Publish("b", Json::object());
+        EXPECT_EQ(calls, 1);
     }
 
     TEST_F(ControlServiceTest, PublishWithoutASinkDoesNothing) {
@@ -789,7 +960,7 @@ namespace BECore::Tests {
 
         service.SetManualClock(true);
         EXPECT_TRUE(service.IsManualClock());
-        EXPECT_FALSE(service.IsStepDue());  // nothing waits for frames
+        EXPECT_FALSE(service.IsStepDue());
     }
 
     TEST_F(ControlServiceTest, RealClockNeverAsksForAFrame) {
@@ -849,7 +1020,7 @@ namespace BECore::Tests {
         EXPECT_EQ(RunDueFrames(), 2);  // each frame drains: "after" stays behind the barrier until the second one ends
         EXPECT_EQ(order, (Vector<String>{"wait", "wait-done"}));
 
-        service.Drain();  // the idle cycle
+        service.Drain();
         EXPECT_EQ(order, (Vector<String>{"wait", "wait-done", "after"}));
         EXPECT_EQ(IdOf(responses.back()), 2);
     }

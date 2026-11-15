@@ -2,13 +2,13 @@
 
 ## Overview
 
-Loading, caching and lifetime of game assets. Sync and async loading (`Task<T>`), a reference-counted cache and pluggable loaders. The Doxygen on `ResourceManager.h`, `IResourceLoader.h` and `IResource.h` has usage examples; this file only records the rules and the non-obvious parts.
+Loading, caching and lifetime of game assets. Sync and async loading (`Task<T>`), a reference-counted cache and pluggable loaders. The headers carry one or two sentences of contract per call; the usage example is under "ResourceManager API" and `XmlResource` with `XmlResourceLoader` is the reference pair; this file records the rules and the non-obvious parts.
 
 ## Architecture
 
 ```
 ResourceManager (CoreManager::GetResourceManager())
-    ├── ResourceCache        thread-safe (SharedMutex), no eviction in v1
+    ├── ResourceCache        thread-safe (SharedMutex), no eviction
     └── IResourceLoader[]    picked by file extension via CanLoad()
          ├── XmlResourceLoader   (.xml  → XmlResource)
          ├── SDLTextureLoader / VulkanTextureLoader   (images → ITexture)
@@ -19,7 +19,7 @@ ResourceManager (CoreManager::GetResourceManager())
 IResource (RefCounted, BE_CLASS(IResource, FACTORY_BASE))
     ├── XmlResource
     ├── Font
-    └── SerializedResource<T>   (reflected types)
+    └── SerializedResource<T>   (reflected types; no loader fills it, `LoadSerialized` returns by value)
 ```
 
 - `ResourceState` (`CORE_ENUM`): `Unloaded` → `Loading` → `Loaded` or `Failed`.

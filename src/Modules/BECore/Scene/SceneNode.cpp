@@ -3,8 +3,11 @@
 #include <BECore/Reflection/ClassMeta.h>
 #include <BECore/Scene/Scene.h>
 #include <Generated/SceneNode.gen.hpp>
+#include <entt/entt.hpp>
 
 namespace BECore {
+
+    SceneNode::SceneNode() : _entity(entt::null) {}
 
     SceneNode* SceneNode::GetParent() const {
         return _parent;

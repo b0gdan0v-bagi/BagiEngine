@@ -33,19 +33,15 @@ namespace BECore {
     };
 
     /**
-     * @brief How one element finds its rect in its parent (anchor layout) or its place in a stack.
+     * @brief How one element finds its rect in its parent (anchor layout) or its place in a stack. Everything is relative to the parent, never to the screen.
      *
-     * Everything is relative to the parent, never to the screen, so the same spec works at any canvas size.
-     * `anchor` is a shorthand for the anchors of the three optional fields: one of the nine points, or Stretch (the whole parent). A set
-     * `anchorMin`, `anchorMax` or `pivot` (fractions of the parent box, or of the region the element names) replaces that part of the
-     * shorthand, so a spec without them lays out as it always did (UILayout::EffectiveAnchors).
-     * On an axis where min equals max the element hangs on that point: `x` and `y` are an offset from it, in UI units or a percent of the
-     * parent's extent on that axis, and `width` / `height` are the size. Where min is less than max the axis is stretched: the element fills
-     * the span between the two edges minus `margin`, and the size and the offset of that axis are ignored. A Stretch element ignores x, y,
-     * width and height on both axes (until a field turns an axis into a point).
-     * The minimum and maximum limits come after the size and before the aspect ratio; when they disagree the minimum wins. A stack uses the
-     * size, the limits and `flex` of its children and ignores their anchor, offset and margin; it uses the aspect ratio only of a child that
-     * gives exactly one side (a percent or a non-zero number of units) and has no `flex`: the other side follows from the ratio, then the limits.
+     * `anchor` is a shorthand for the anchors of the three optional fields: one of the nine points, or Stretch (the whole parent). A set `anchorMin`, `anchorMax` or `pivot` (fractions of the parent
+     * box, or of the region the element names) replaces that part of the shorthand (UILayout::EffectiveAnchors). On an axis where min equals max the element hangs on that point: `x` and `y` are an
+     * offset from it, in UI units or a percent of the parent's extent on that axis, and `width` / `height` are the size. Where min is less than max the axis is stretched: the element fills the span
+     * between the two edges minus `margin`, and the size and the offset of that axis are ignored. A Stretch element ignores x, y, width and height on both axes (until a field turns an axis into a
+     * point). The minimum and maximum limits come after the size and before the aspect ratio; when they disagree the minimum wins. A stack uses the size, the limits and `flex` of its children and
+     * ignores their anchor, offset and margin; it uses the aspect ratio only of a child that gives exactly one side (a percent or a non-zero number of units) and has no `flex`: the other side follows
+     * from the ratio, then the limits.
      */
     struct UIRectSpec {
         UIAnchor anchor = UIAnchor::TopLeft;

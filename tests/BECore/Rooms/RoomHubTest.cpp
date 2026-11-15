@@ -1,4 +1,5 @@
 #include <BECore/Rooms/TestClient.h>
+#include <Rooms/RoomCode.h>
 
 namespace BECore::Tests {
 
@@ -72,6 +73,25 @@ namespace BECore::Tests {
         EXPECT_EQ(GetJsonString((*seats)[2], "kind").value_or(String()), "empty");
     }
 
+    TEST(RoomHubTest, TwoRoomsOfOneHubDrawFromTheOneSourceInOrder) {
+        HubHarness harness;
+        const ConnectionId first = harness.Connect();
+        harness.Create(first, "Ann");
+        const ConnectionId second = harness.Connect();
+        harness.Create(second, "Bob");
+
+        // The words a lone source gives, in the order of use: a code, then the two words of a token, for the first room and then the second
+        const RandomFn reference = MakeSequence(42);
+        const String firstCode = GenerateRoomCode(reference);
+        const String firstToken = GenerateToken(reference);
+        const String secondCode = GenerateRoomCode(reference);
+        const String secondToken = GenerateToken(reference);
+        EXPECT_EQ(harness.Client(first).roomCode, firstCode);
+        EXPECT_EQ(harness.Client(first).token, firstToken);
+        EXPECT_EQ(harness.Client(second).roomCode, secondCode);
+        EXPECT_EQ(harness.Client(second).token, secondToken);
+    }
+
     TEST(RoomHubTest, TheLobbyShowsEveryMemberThePublicOptionsOfTheRoomAndNothingElse) {
         HubHarness harness;
         const ConnectionId host = harness.Connect();
@@ -143,7 +163,6 @@ namespace BECore::Tests {
     TEST(RoomHubTest, ErrorsOfEachKind) {
         HubHarness harness;
         const ConnectionId stranger = harness.Connect();
-        // Not in a room
         harness.Start(stranger);
         EXPECT_EQ(harness.Client(stranger).LastErrorCode(), RoomErrors::kNotInRoom);
         EXPECT_EQ(harness.Client(stranger).Last(RoomMessageTypes::kError)->GetString("ref"), "start");
@@ -164,7 +183,6 @@ namespace BECore::Tests {
         harness.Create(stranger, "   ");
         EXPECT_EQ(harness.Client(stranger).LastErrorCode(), RoomErrors::kBadName);
 
-        // A full lobby
         const auto ids = harness.MakeLobby(4);
         const String code = harness.Client(ids[0]).roomCode;
         harness.JoinByName(stranger, code, "Late");
@@ -190,7 +208,6 @@ namespace BECore::Tests {
         harness.JoinByName(stranger, code, "Late");
         EXPECT_EQ(harness.Client(stranger).LastErrorCode(), RoomErrors::kGameStarted);
 
-        // Actions
         const ConnectionId onTurn = FindPlayerOnTurn(harness, ids);
         ASSERT_NE(onTurn, 0u);
         ConnectionId other = 0;

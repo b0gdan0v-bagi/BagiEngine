@@ -21,13 +21,8 @@ namespace BECore {
     class UICanvasComponent;
 
     /**
-     * @brief ImGui widget for real-time scene editing
-     *
-     * Displays a two-panel layout:
-     *   Left panel  - HierarchyPanel: tree of scene nodes
-     *   Right panel - Inspector for selected node and its components
-     *
-     * All edits are applied live without staging.
+     * @brief ImGui panel for live scene editing: the hierarchy tree on the left, the inspector of the selected node
+     * and its components on the right. Edits apply at once, without staging.
      */
     class SceneEditorWidget : public IWidget {
         BE_CLASS(SceneEditorWidget)

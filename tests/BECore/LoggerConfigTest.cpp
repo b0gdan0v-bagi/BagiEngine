@@ -3,6 +3,7 @@
 #include <BECore/Logger/LoggerManager.h>
 #include <BECore/Logger/OutputSink.h>
 #include <BECore/Reflection/XmlDeserializer.h>
+#include <Common/LogRecorder.h>
 #include <Common/Printers.h>
 
 namespace BECore::Tests {
@@ -24,45 +25,6 @@ namespace BECore::Tests {
             return text.find(part) != StringView::npos;
         }
 
-        /// Collects the log messages that LogEvent::Flush() delivers. It copies them: the string_view of a LogEvent
-        /// points into the ring buffer. Unsubscribes when it goes out of scope.
-        class LogRecorder : public SubscriptionHolder {
-        public:
-            struct Entry {
-                LogLevel level = LogLevel::Debug;
-                String message;
-            };
-
-            LogRecorder() {
-                Subscribe<LogEvent, &LogRecorder::OnLog>(this);
-            }
-
-            /// The first recorded message of @p level that contains every part of @p parts, or nullptr.
-            const Entry* Find(LogLevel level, std::initializer_list<StringView> parts) const {
-                for (const Entry& entry : _entries) {
-                    if (entry.level != level) {
-                        continue;
-                    }
-                    const StringView message(entry.message.data(), entry.message.size());
-                    bool all = true;
-                    for (const StringView part : parts) {
-                        all = all && Contains(message, part);
-                    }
-                    if (all) {
-                        return &entry;
-                    }
-                }
-                return nullptr;
-            }
-
-        private:
-            void OnLog(const LogEvent& event) {
-                _entries.push_back({event.level, String(event.message.data(), event.message.size())});
-            }
-
-            Vector<Entry> _entries;
-        };
-
     }  // namespace
 
     TEST(LoggerConfigTest, AnUnknownSinkTypeIsReportedAndDropped) {
@@ -78,7 +40,6 @@ namespace BECore::Tests {
         EXPECT_TRUE(Contains(message, "Unknown factory type")) << message.data();
         EXPECT_TRUE(Contains(message, "'Console'")) << message.data();
 
-        // The unknown entry is gone, the valid one after it stays
         ASSERT_EQ(manager->GetSinks().size(), 1u);
         EXPECT_NE(manager->GetSink<ConsoleSink>(), nullptr);
     }
@@ -111,7 +72,6 @@ namespace BECore::Tests {
 
         const LogRecorder::Entry* entry = recorder.Find(LogLevel::Error, {"Config 'LoggerConfig'"});
         ASSERT_NE(entry, nullptr);
-        // The config, the path of the entry in the document and the unknown type
         EXPECT_EQ(entry->message, "Config 'LoggerConfig': sinks[0].type: Unknown factory type: 'Console'");
     }
 
