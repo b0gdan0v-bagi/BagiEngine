@@ -1,5 +1,7 @@
 #include "TagTree.h"
 
+#include <BECore/Utils/EnumUtils.h>
+
 namespace BECore {
 
     namespace {
@@ -54,7 +56,7 @@ namespace BECore {
             return {};
         }
 
-        enum class PatternKind : uint8_t { Tag, Subtree, All };
+        CORE_ENUM(PatternKind, uint8_t, Tag, Subtree, All)
 
         /// A pattern text split into the tag path to look up and how much of the tree it takes.
         struct ParsedPattern {
@@ -273,7 +275,8 @@ namespace BECore {
 
     uint32_t BakedTagTree::Depth(TagId tag) const {
         uint32_t depth = 0;
-        for (TagId id = tag; id < count; id = parent[id]) {
+        // A blob that is not a baked tree can have a cycle in parent[]: the depth of a real tag never exceeds kMaxTagDepth.
+        for (TagId id = tag; id < count && depth <= kMaxTagDepth; id = parent[id]) {
             ++depth;
         }
         return depth;

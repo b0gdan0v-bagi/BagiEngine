@@ -96,7 +96,7 @@ namespace BECore {
 
     static_assert(std::is_trivially_copyable_v<BakedTagTree>, "BakedTagTree is memcpy'd");         //-NoStd: a type trait, no EASTL form
     static_assert(std::is_standard_layout_v<BakedTagTree>, "BakedTagTree is a plain data block");  //-NoStd: a type trait, no EASTL form
-    static_assert(sizeof(BakedTagTree) == 4 + 3 * sizeof(TagId) * kMaxTagCount + kMaxTagNameBlob, "no padding: the unused bytes are the zero fill");
+    static_assert(sizeof(BakedTagTree) == 2 * sizeof(uint16_t) + 3 * sizeof(TagId) * kMaxTagCount + kMaxTagNameBlob, "no padding: the unused bytes are the zero fill");
 
     /**
      * @brief Hierarchical tags written as dotted paths (`match.3`), numbered so that a subtree is a range of ids.

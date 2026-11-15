@@ -187,6 +187,13 @@ namespace BECore::Tests {
         EXPECT_EQ(memcmp(&tree, &zero, sizeof(BakedTagTree)), 0);
     }
 
+    TEST(BakedTagTreeTest, DepthOfACorruptParentCycleEndsPastTheLimit) {
+        BakedTagTree tree = BakeOf({"a", "b"});
+        tree.parent[0] = 1;
+        tree.parent[1] = 0;
+        EXPECT_GT(tree.Depth(0), kMaxTagDepth);
+    }
+
     TEST(BakedTagTreeTest, ALongestPathFillsTheDeepestAndLongestSlot) {
         const String longest(kMaxTagNameLength, 'x');
         const String deepest = "a.b.c.d.e.f.g.h";
@@ -309,7 +316,7 @@ namespace BECore::Tests {
 
         for (TagId id = 0; id < tree.Count(); ++id) {
             const String name = Text(tree.Name(id));
-            const bool inMatch = name == "match" || name.compare(0, 6, "match.") == 0;
+            const bool inMatch = name == "match" || StringView(name).starts_with("match.");
             EXPECT_EQ(row.Contains(id), inMatch) << ToStd(name);
         }
     }

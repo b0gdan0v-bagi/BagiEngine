@@ -332,7 +332,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(Mentions(overflow.error(), Format("{}", kMaxTagNameBlob)));
         EXPECT_EQ(tree.Count(), kFit);
 
-        // The rest of the blob is exactly kMaxTagNameBlob - kFit * 65 bytes: a failed Add took nothing, and a name that fits exactly does.
+        // A failed Add took nothing from the rest of the blob, and a name that fits it exactly does.
         constexpr size_t kRest = kMaxTagNameBlob - kFit * (kMaxTagNameLength + 1);
         const String tooBig(kRest, 'z');  // kRest characters and a NUL: one byte over
         EXPECT_FALSE(tree.Add(tooBig).has_value());
@@ -347,8 +347,8 @@ namespace BECore::Tests {
         for (size_t i = 0; i + 1 < kFit; ++i) {
             ASSERT_TRUE(tree.Add(Format("t{:063}", i)).has_value()) << i;
         }
-        // One name of the longest length still fits (65 bytes of the 67 left); with its parent `pp` (3 bytes) it does not.
-        EXPECT_FALSE(tree.Add(String("pp.") + String(kMaxTagNameLength - 3, 'a')).has_value());
+        // A name of the longest length still fits the rest of the blob; with its parent `pp` it does not.
+        EXPECT_FALSE(tree.Add(Format("pp.{}", String(kMaxTagNameLength - 3, 'a'))).has_value());
         EXPECT_EQ(tree.Count(), kFit - 1);
         EXPECT_TRUE(tree.Add(String(kMaxTagNameLength, 'a')).has_value());
     }
