@@ -70,6 +70,9 @@ namespace BECore::Tests {
             state.present = 42;
             state.absent.reset();
             state.entry = {11, "eleven"};
+            if constexpr (requires { state.choice; }) {
+                state.choice = String("picked");
+            }
         }
 
         template <typename State>
@@ -127,9 +130,11 @@ namespace BECore::Tests {
             state.present.reset();
             state.absent = 5;
             state.entry = {0, "stale"};
+            state.choice = 99;
         }
 
-        void ExpectFilled(const AliasState& state) {
+        /// @p withChoice: the file had the `choice` the twin of the eastl:: spelling has not
+        void ExpectFilled(const AliasState& state, bool withChoice = true) {
             EXPECT_EQ(state.text, "caf\xC3\xA9 <&> \"quoted\"");
             EXPECT_EQ(state.fixedText, "fixed");
             EXPECT_EQ(state.list.size(), 3u);
@@ -155,6 +160,20 @@ namespace BECore::Tests {
             EXPECT_FALSE(state.absent.has_value());
             EXPECT_EQ(state.entry.first, 11);
             EXPECT_EQ(state.entry.second, "eleven");
+            if (withChoice) {
+                ASSERT_EQ(state.choice.index(), 1u);
+                EXPECT_EQ(std::get<1>(state.choice), "picked");
+            }
+        }
+
+        /// @p xml without the line of its `choice` element, the field the twin of the eastl:: spelling has not
+        eastl::string WithoutChoice(eastl::string xml) {
+            const size_t at = xml.find("<choice");
+            if (at != eastl::string::npos) {
+                const size_t lineStart = xml.rfind('\n', at);
+                xml.erase(lineStart, xml.find("/>", at) + 2 - lineStart);
+            }
+            return xml;
         }
 
     }  // namespace
@@ -191,15 +210,19 @@ namespace BECore::Tests {
 
         const eastl::string aliasedXml = SaveXml(aliased);
         // Only the type of the root differs in the text when the names do not
-        EXPECT_EQ(aliasedXml, SaveXml(eastl));
-        EXPECT_TRUE(SaveBinary(aliased) == SaveBinary(eastl));
+        ASSERT_NE(aliasedXml.find("<choice index=\"1\" value=\"picked\""), eastl::string::npos) << aliasedXml.c_str();
+        EXPECT_EQ(WithoutChoice(aliasedXml), SaveXml(eastl));
+        // The binary entries have sizes, so the twin reads the alias bytes (skipping `choice`) and writes the same bytes as its own
+        EastlState binaryTwin;
+        ASSERT_NO_FATAL_FAILURE(LoadBinary(SaveBinary(aliased), binaryTwin));
+        EXPECT_TRUE(SaveBinary(binaryTwin) == SaveBinary(eastl));
 
         // A file written before the aliases loads into the alias fields
         EastlState before;
         Fill(before);
         AliasState loaded;
         ASSERT_NO_FATAL_FAILURE(LoadXml(SaveXml(before), loaded));
-        ExpectFilled(loaded);
+        ExpectFilled(loaded, false);
     }
 
     TEST(ReflectionAliasesTest, ThePairIsSavedAsTheEastlPairIs) {
@@ -233,7 +256,9 @@ namespace BECore::Tests {
             empty.Serialize(serializer);
             serializer.EndObject();
         }
-        EXPECT_NE(serializer.SaveToString().find("<State />"), eastl::string::npos);
+        // A Variant has no default to skip (its index is always written): it is the one field left
+        const eastl::string xml = serializer.SaveToString();
+        EXPECT_NE(xml.find("<State>\n    <choice index=\"0\" value=\"0\" />\n  </State>"), eastl::string::npos) << xml.c_str();
     }
 
     TEST(ReflectionAliasesTest, TheKeysOfAHashMapComeOutSortedWhatEverTheHashOrder) {
@@ -526,6 +551,81 @@ namespace BECore::Tests {
         AliasState state;
         state.fixedText = "kept";
         EXPECT_TRUE(state.AcceptPropertyVisitor(editor));
+    }
+
+    TEST(ReflectionAliasesTest, TheInspectorEditsTheStringsOfAListAndOfAVariant) {
+        AliasState state;
+        state.words = {"one", "two"};
+        state.choice = String("picked");
+        TextEditor editor;
+        EXPECT_TRUE(PropVisit::Visit(editor, state.words, "words"));
+        EXPECT_EQ(editor.seen, "two");
+        ASSERT_EQ(state.words.size(), 2u);
+        EXPECT_EQ(state.words[0], editor.replacement);
+        EXPECT_EQ(state.words[1], editor.replacement);
+
+        EXPECT_TRUE(PropVisit::Visit(editor, state.choice, "choice"));
+        EXPECT_EQ(editor.seen, "picked");
+        EXPECT_EQ(std::get<1>(state.choice), editor.replacement);
+    }
+
+    namespace {
+
+        /// The name of every field of a visit, in order: the first name the visit of a field gives after its BeginField
+        class FieldNames final : public TextEditor {
+        public:
+            using TextEditor::Visit;
+
+            Vector<String> names;
+
+            void BeginField(const FieldAttributes& /*attributes*/) override {
+                ++_depth;
+                _named = false;
+            }
+            void EndField() override {
+                --_depth;
+            }
+            bool Visit(StringView name, int32_t& /*value*/) override {
+                Note(name);
+                return false;
+            }
+            bool Visit(StringView name, String& /*value*/) override {
+                Note(name);
+                return false;
+            }
+            bool BeginCompound(StringView name) override {
+                Note(name);
+                return true;
+            }
+            bool BeginList(StringView name, const ListInfo& /*info*/) override {
+                Note(name);
+                return true;
+            }
+            bool VisitPresence(StringView name, bool& /*present*/) override {
+                Note(name);
+                return false;
+            }
+
+        private:
+            void Note(StringView name) {
+                if (_depth == 1 && !_named) {
+                    names.push_back(String(name.data(), name.size()));
+                    _named = true;
+                }
+            }
+
+            int32_t _depth = 0;
+            bool _named = false;
+        };
+
+    }  // namespace
+
+    TEST(ReflectionAliasesTest, TheVisitorReachesEveryFieldThroughTheDispatch) {
+        AliasState state;
+        FieldNames visitor;
+        EXPECT_FALSE(state.AcceptPropertyVisitor(visitor));
+        const Vector<String> expected{"text", "fixedText", "list", "words", "small", "fixed", "triple", "hashed", "ordered", "fixedHashed", "present", "absent", "entry", "choice"};
+        EXPECT_EQ(visitor.names, expected);
     }
 
 }  // namespace BECore::Tests

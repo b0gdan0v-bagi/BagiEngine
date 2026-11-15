@@ -3,7 +3,6 @@
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/RefCounted/RefCounted.h>
 #include <BECore/Reflection/IDeserializer.h>
-#include <BECore/Reflection/IPropertyVisitor.h>
 #include <BECore/Reflection/TypeTraits.h>
 #include <BECore/Utils/EnumUtils.h>
 
@@ -111,39 +110,5 @@ namespace BECore {
         };
 
     }  // namespace XmlDiagnosticsTestData
-
-    namespace PropVisit {
-
-        inline bool Visit(IPropertyVisitor& /*v*/, HashMap<int32_t, XmlDiagnosticsTestData::Leaf>& /*value*/, StringView /*key*/) {
-            return false;
-        }
-
-        /// The visitor edits no list of objects; the generated `AcceptPropertyVisitor` of `Constrained` needs something to call
-        inline bool Visit(IPropertyVisitor& /*v*/, Vector<XmlDiagnosticsTestData::Leaf>& /*value*/, StringView /*key*/) {
-            return false;
-        }
-
-        /// The visitor edits none of the containers of `RangedContainers`; its generated `AcceptPropertyVisitor` needs something to call
-        inline bool Visit(IPropertyVisitor& /*v*/, Vector<float>& /*value*/, StringView /*key*/) {
-            return false;
-        }
-
-        inline bool Visit(IPropertyVisitor& /*v*/, Array<int32_t, 3>& /*value*/, StringView /*key*/) {
-            return false;
-        }
-
-        inline bool Visit(IPropertyVisitor& /*v*/, Optional<float>& /*value*/, StringView /*key*/) {
-            return false;
-        }
-
-        inline bool Visit(IPropertyVisitor& /*v*/, Map<String, float>& /*value*/, StringView /*key*/) {
-            return false;
-        }
-
-        inline bool Visit(IPropertyVisitor& /*v*/, Variant<int32_t, String>& /*value*/, StringView /*key*/) {
-            return false;
-        }
-
-    }  // namespace PropVisit
 
 }  // namespace BECore

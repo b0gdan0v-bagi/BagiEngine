@@ -35,31 +35,6 @@ namespace BECore {
             BE_REFLECT_FIELD Vector<ProbeNode> children;
         };
 
-    }  // namespace FuzzProbeData
-
-    namespace PropVisit {
-
-        /// The property visitor has no general support for a vector of structs or of values by value (the inspector shows none): the fuzz targets edit none
-        inline bool Visit(IPropertyVisitor& /*v*/, Vector<FuzzProbeData::ProbeLeaf>& /*leaves*/, StringView /*key*/) {
-            return false;
-        }
-
-        inline bool Visit(IPropertyVisitor& /*v*/, Vector<FuzzProbeData::ProbeNode>& /*children*/, StringView /*key*/) {
-            return false;
-        }
-
-        inline bool Visit(IPropertyVisitor& /*v*/, Vector<int32_t>& /*numbers*/, StringView /*key*/) {
-            return false;
-        }
-
-        inline bool Visit(IPropertyVisitor& /*v*/, Vector<String>& /*words*/, StringView /*key*/) {
-            return false;
-        }
-
-    }  // namespace PropVisit
-
-    namespace FuzzProbeData {
-
         /// Every scalar type, both string types, an enum, a nested object, a list of objects and lists of scalars
         struct ProbeState {
             BE_CLASS(ProbeState)
