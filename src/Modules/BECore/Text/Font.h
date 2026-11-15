@@ -11,7 +11,6 @@ namespace BECore {
         float descent = 0.0f;
         float lineGap = 0.0f;
 
-        /// Distance between two baselines
         [[nodiscard]] float LineHeight() const {
             return ascent - descent + lineGap;
         }
@@ -30,8 +29,7 @@ namespace BECore {
     /**
      * @brief A TrueType or OpenType font file: the bytes, parsed on the CPU.
      *
-     * A font needs no window and no GPU, so it loads on a pool thread (FontLoader) and measuring text with it is testable.
-     * Turning glyphs into textures is FontAtlas's job and happens on the main thread.
+     * Needs no window and no GPU, so it loads on a pool thread (FontLoader). Glyph textures are FontAtlas's job (main thread).
      *
      * Sizes are CSS-like: a size of 16 maps the em square of the font to 16 pixels (not the ascent plus descent).
      * Glyph indices are the font's own; 0 is the font's .notdef glyph. All queries are const and thread safe.
@@ -44,7 +42,7 @@ namespace BECore {
         Font();
         ~Font() override;
 
-        /// Parses font data from memory; @p name is what GetPath() answers. A font that cannot be parsed is in the Failed state.
+        /// @p name is what GetPath() answers. A font that cannot be parsed is in the Failed state.
         [[nodiscard]] static IntrusivePtr<Font> CreateFromMemory(PoolString name, Vector<uint8_t> data);
 
         ResourceState GetState() const override;
