@@ -18,6 +18,7 @@ On the web (Emscripten) there is no Vulkan: the window config and the renderer c
 | `SDLTexture` / `SDLTextureLoader` | `ITexture` implementation and its `IResourceLoader` |
 | `SDLWindowConfig` | Window settings (`config/SDLWindowConfig.xml`: size, `windowFlags`, an optional `title` the shipped files omit (the title is composed, see below); the shipped file asks for `SDL_WINDOW_HIGH_PIXEL_DENSITY`: two output pixels per unit on a Retina display, 1 on the headless dummy driver) |
 | `SDLWebCanvas` | `FitWindowSize()` and `SafeAreaFromInsets()` (pure, every platform: the window size for a browser window, rounded, never below a minimum; the safe area from the four CSS insets) and, Emscripten only, `InstallWebCanvasResize()` and `GetWebSafeArea()`; see "Web build" |
+| `SDLAudioBackend` | `BECore/Audio/CLAUDE.md` |
 | `SDLClipboard` | `SDLClipboardBackend` (`SDL_SetClipboardText` / `SDL_GetClipboardText`, installed by `SDL3ApplicationFabric::Create`) and the pure `IsPasteShortcut`. The service and its rules: `BECore/Clipboard/CLAUDE.md` |
 | `SDLWebPost` | `WebPostStart()` / `WebPostPoll()` (text POST to a path of the page's own origin, answered by polling), `IsWebPostPathValid()` and the limits: pure, every platform; the browser half is Emscripten only, every other build says "unavailable"; see "Web build" |
 | `SDLUtils` | Shared SDL helpers |
