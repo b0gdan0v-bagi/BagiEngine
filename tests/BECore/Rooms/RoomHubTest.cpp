@@ -1,4 +1,5 @@
 #include <BECore/Rooms/TestClient.h>
+#include <Rooms/RoomCode.h>
 
 namespace BECore::Tests {
 
@@ -70,6 +71,25 @@ namespace BECore::Tests {
         EXPECT_EQ(GetJsonString((*seats)[1], "kind").value_or(String()), "human");
         EXPECT_EQ(GetJsonString((*seats)[1], "name").value_or(String()), "Bob");
         EXPECT_EQ(GetJsonString((*seats)[2], "kind").value_or(String()), "empty");
+    }
+
+    TEST(RoomHubTest, TwoRoomsOfOneHubDrawFromTheOneSourceInOrder) {
+        HubHarness harness;
+        const ConnectionId first = harness.Connect();
+        harness.Create(first, "Ann");
+        const ConnectionId second = harness.Connect();
+        harness.Create(second, "Bob");
+
+        // The words a lone source gives, in the order of use: a code, then the two words of a token, for the first room and then the second
+        const RandomFn reference = MakeSequence(42);
+        const String firstCode = GenerateRoomCode(reference);
+        const String firstToken = GenerateToken(reference);
+        const String secondCode = GenerateRoomCode(reference);
+        const String secondToken = GenerateToken(reference);
+        EXPECT_EQ(harness.Client(first).roomCode, firstCode);
+        EXPECT_EQ(harness.Client(first).token, firstToken);
+        EXPECT_EQ(harness.Client(second).roomCode, secondCode);
+        EXPECT_EQ(harness.Client(second).token, secondToken);
     }
 
     TEST(RoomHubTest, TheLobbyShowsEveryMemberThePublicOptionsOfTheRoomAndNothingElse) {

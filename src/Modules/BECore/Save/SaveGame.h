@@ -5,6 +5,7 @@
 #include <BECore/Reflection/ISerializer.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
+#include <BECore/Utils/FunctionRef.h>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
@@ -109,7 +110,7 @@ namespace BECore {
          * @p writeState fills the object `state` of the file. It is not called when the slot name is bad or the service is
          * not initialized.
          */
-        [[nodiscard]] std::expected<void, SaveError> Save(StringView slot, const SaveSchema& schema, const eastl::function<void(ISerializer&)>& writeState);
+        [[nodiscard]] std::expected<void, SaveError> Save(StringView slot, const SaveSchema& schema, FunctionRef<void(ISerializer&)> writeState);
 
         /**
          * @brief Read the slot and hand its `state` object to @p readState
@@ -120,7 +121,7 @@ namespace BECore {
          *
          * @return what the file says; its version lets the caller migrate an older state
          */
-        [[nodiscard]] std::expected<SaveInfo, SaveError> Load(StringView slot, const SaveSchema& schema, const eastl::function<void(IDeserializer&)>& readState) const;
+        [[nodiscard]] std::expected<SaveInfo, SaveError> Load(StringView slot, const SaveSchema& schema, FunctionRef<void(IDeserializer&)> readState) const;
 
         /// Save() of a reflected state
         template <typename State>
@@ -128,7 +129,7 @@ namespace BECore {
             state.Serialize(serializer);
         }
         [[nodiscard]] std::expected<void, SaveError> Save(StringView slot, const SaveSchema& schema, const State& state) {
-            return Save(slot, schema, eastl::function<void(ISerializer&)>([&state](ISerializer& serializer) { state.Serialize(serializer); }));
+            return Save(slot, schema, [&state](ISerializer& serializer) { state.Serialize(serializer); });
         }
 
         /**
@@ -141,7 +142,7 @@ namespace BECore {
             state.Deserialize(deserializer);
         }
         [[nodiscard]] std::expected<SaveInfo, SaveError> Load(StringView slot, const SaveSchema& schema, State& state) const {
-            return Load(slot, schema, eastl::function<void(IDeserializer&)>([&state](IDeserializer& deserializer) { state.Deserialize(deserializer); }));
+            return Load(slot, schema, [&state](IDeserializer& deserializer) { state.Deserialize(deserializer); });
         }
 
         /**

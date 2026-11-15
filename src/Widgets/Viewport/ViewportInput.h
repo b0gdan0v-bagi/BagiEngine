@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Utils/EnumUtils.h>
+#include <BECore/Utils/MoveOnlyFunction.h>
 #include <Widgets/Viewport/ViewportEvents.h>
 #include <cstdint>
 
@@ -66,7 +67,7 @@ namespace BECore {
      */
     class ViewportPointer {
     public:
-        using EditClickSink = eastl::function<void(const ViewportEditClickEvent&)>;
+        using EditClickSink = MoveOnlyFunction<void(const ViewportEditClickEvent&)>;
 
         /// A frame: motion while the pointer is over the image or a game press is held, the presses and the releases of the buttons, the wheel
         void Forward(const ViewportPointerFrame& frame, ViewportInputMode mode, bool oneOffModifier, UIInput& uiInput, const EditClickSink& editClickSink);

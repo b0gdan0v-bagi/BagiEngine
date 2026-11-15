@@ -3,10 +3,10 @@
 #include <BECore/Threading/ConditionVariable.h>
 #include <BECore/Threading/LockGuards.h>
 #include <BECore/Threading/Mutex.h>
+#include <BECore/Utils/MoveOnlyFunction.h>
 #include <EASTL/deque.h>
 #include <atomic>
 #include <cstddef>
-#include <functional>
 #include <utility>
 
 namespace BECore {
@@ -19,7 +19,8 @@ namespace BECore {
      */
     class TaskQueue {
     public:
-        using TaskFunc = std::function<void()>;
+        /// Move-only: a task owns its captures (a handle, a UniquePtr) and is moved from queue to queue, never copied.
+        using TaskFunc = MoveOnlyFunction<void()>;
 
         TaskQueue() = default;
         ~TaskQueue() = default;

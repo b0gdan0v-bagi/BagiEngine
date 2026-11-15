@@ -4,7 +4,6 @@
 #include <Events/EventChannel.h>
 #include <Events/EventsQueueRegistry.h>
 #include <Events/SubscriptionHolder.h>
-#include <functional>
 #include <type_traits>
 #include <utility>
 
@@ -16,7 +15,7 @@ namespace BECore {
     protected:
         // PassKey<BaseEvent> can be made by BaseEvent only, so the CRTP base registers through here.
         static void RegisterQueueUpdate(EventsQueueRegistry::UpdateFunction update) {
-            EventsQueueRegistry::Register(std::move(update), {});
+            EventsQueueRegistry::Register(update, {});
         }
     };
 

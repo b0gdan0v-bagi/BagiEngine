@@ -2,6 +2,7 @@
 
 #include <BECore/Types/Types.h>
 #include <BECore/UI/UIWebReport.h>
+#include <BECore/Utils/MoveOnlyFunction.h>
 #include <cstddef>
 
 namespace BECore {
@@ -55,7 +56,7 @@ namespace BECore {
         static constexpr size_t kMaxCascadeWork = 2'000'000;
 
         /// Gives the text of the style sheet at @p href (relative to the document), or nothing when it cannot be read
-        using StylesheetLoader = eastl::function<Optional<String>(StringView href)>;
+        using StylesheetLoader = MoveOnlyFunction<Optional<String>(StringView href)>;
 
         /// @p loadStylesheet may be empty when the document has no `<link>`
         [[nodiscard]] static String Compile(StringView html, const StylesheetLoader& loadStylesheet, UIWebReport& report);

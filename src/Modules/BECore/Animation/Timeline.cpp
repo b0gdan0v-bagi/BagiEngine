@@ -32,11 +32,11 @@ namespace BECore {
         return *this;
     }
 
-    Timeline& Timeline::AppendCallback(eastl::function<void()> callback) {
+    Timeline& Timeline::AppendCallback(MoveOnlyFunction<void()> callback) {
         return InsertCallback(_end, std::move(callback));
     }
 
-    Timeline& Timeline::InsertCallback(float at, eastl::function<void()> callback) {
+    Timeline& Timeline::InsertCallback(float at, MoveOnlyFunction<void()> callback) {
         Clip clip;
         clip.isCallback = true;
         clip.callback = std::move(callback);
@@ -52,7 +52,7 @@ namespace BECore {
         return _end * static_cast<float>(_repeat);
     }
 
-    Timeline& Timeline::AddTween(float at, const TweenSettings& settings, eastl::function<void(float)> apply) {
+    Timeline& Timeline::AddTween(float at, const TweenSettings& settings, TweenApply apply) {
         Clip clip;
         clip.delay = NonNegative(settings.delay);
         clip.length = NonNegative(settings.duration);
@@ -78,24 +78,19 @@ namespace BECore {
         return *this;
     }
 
-    void Timeline::SetStopCheck(eastl::function<bool()> shouldStop) {
-        for (Clip& clip : _clips) {
-            if (clip.sub) {
-                clip.sub->SetStopCheck(shouldStop);
-            }
-        }
-        _shouldStop = std::move(shouldStop);
+    void Timeline::Evaluate(float time) {
+        EvaluateWith(time, _shouldStop);
     }
 
-    void Timeline::Evaluate(float time) {
-        if (_finished || std::isnan(time) || IsStopped()) {
+    void Timeline::EvaluateWith(float time, const MoveOnlyFunction<bool()>& stop) {
+        if (_finished || std::isnan(time) || IsStopped(stop)) {
             return;
         }
         time = std::max(time, 0.0f);
 
         if (_end <= 0.0f) {
-            VisitClips(0.0f);
-            _finished = !IsStopped();
+            VisitClips(0.0f, stop);
+            _finished = !IsStopped(stop);
             return;
         }
 
@@ -105,16 +100,16 @@ namespace BECore {
         while (true) {
             const float local = time - static_cast<float>(_iteration) * _end;
             if (_iteration + 1 >= _repeat) {
-                VisitClips(finishing ? _end : local);
-                _finished = !IsStopped() && (finishing || local >= _end);
+                VisitClips(finishing ? _end : local, stop);
+                _finished = !IsStopped(stop) && (finishing || local >= _end);
                 return;
             }
             if (!finishing && local < _end) {
-                VisitClips(local);
+                VisitClips(local, stop);
                 return;
             }
-            VisitClips(_end);
-            if (IsStopped()) {
+            VisitClips(_end, stop);
+            if (IsStopped(stop)) {
                 return;
             }
             RestartClips();
@@ -128,12 +123,12 @@ namespace BECore {
         RestartClips();
     }
 
-    void Timeline::VisitClips(float time) {
+    void Timeline::VisitClips(float time, const MoveOnlyFunction<bool()>& stop) {
         // The list is in order of start: past the first clip that has not started, none has
         for (size_t index = _cursor; index < _clips.size() && _clips[index].start <= time; ++index) {
             if (!_clips[index].done) {
-                VisitClip(_clips[index], time);
-                if (IsStopped()) {
+                VisitClip(_clips[index], time, stop);
+                if (IsStopped(stop)) {
                     break;  // a clip cancelled the run: nothing after it is called
                 }
             }
@@ -143,7 +138,7 @@ namespace BECore {
         }
     }
 
-    void Timeline::VisitClip(Clip& clip, float time) {
+    void Timeline::VisitClip(Clip& clip, float time, const MoveOnlyFunction<bool()>& stop) {
         if (clip.isCallback) {
             clip.done = true;
             if (clip.callback) {
@@ -156,7 +151,7 @@ namespace BECore {
         const float end = activeStart + clip.length;
         if (clip.sub) {
             // Past the end the sub-timeline gets exactly its duration, so rounding of the subtraction cannot leave it unfinished
-            clip.sub->Evaluate(time >= end ? clip.length : time - clip.start);
+            clip.sub->EvaluateWith(time >= end ? clip.length : time - clip.start, stop);
             clip.done = clip.sub->IsFinished();
             return;
         }

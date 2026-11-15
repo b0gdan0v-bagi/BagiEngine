@@ -19,6 +19,7 @@
 #include <BECore/UI/UIImageComponent.h>
 #include <BECore/UI/UIStrings.h>
 #include <BECore/UI/UIVars.h>
+#include <BECore/Utils/FunctionRef.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -30,7 +31,6 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
-#include <functional>
 #include <gtest/gtest.h>
 #include <map>
 #include <regex>
@@ -153,7 +153,7 @@ namespace BECore::Tests::MigrationTwin {
         }
     };
 
-    inline void WalkElements(UIElement& parent, const std::function<void(UIElement&)>& visit) {
+    inline void WalkElements(UIElement& parent, FunctionRef<void(UIElement&)> visit) {
         for (const auto& child : parent.children) {
             visit(*child);
             WalkElements(*child, visit);
@@ -169,7 +169,7 @@ namespace BECore::Tests::MigrationTwin {
     }
 
     /// The named elements of a `ui_tree` canvas (or of an element below it) as "canvasKey|name" -> @p fieldsOf of its entry; the first element of a name wins
-    inline void CollectTree(const Json& parent, const String& canvasKey, Set<String>& seen, Map<String, String>& out, const std::function<String(const Json&)>& fieldsOf) {
+    inline void CollectTree(const Json& parent, const String& canvasKey, Set<String>& seen, Map<String, String>& out, FunctionRef<String(const Json&)> fieldsOf) {
         const Json* list = FindJsonMember(parent, parent.contains("elements") ? "elements" : "children");
         if (list == nullptr || !list->is_array()) {
             return;

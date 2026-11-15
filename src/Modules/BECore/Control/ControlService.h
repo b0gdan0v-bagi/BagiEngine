@@ -36,9 +36,9 @@ namespace BECore {
         /// Version of the request and response format, reported by the "ping" method
         static constexpr int kProtocolVersion = 1;
 
-        using Handler = std::function<void(ControlCall&)>;
-        using EventSink = std::function<void(const String&)>;
-        using FrameEndHook = std::function<void()>;
+        using Handler = MoveOnlyFunction<void(ControlCall&)>;
+        using EventSink = MoveOnlyFunction<void(const String&)>;
+        using FrameEndHook = MoveOnlyFunction<void()>;
 
         ControlService();
         ~ControlService();
@@ -61,7 +61,7 @@ namespace BECore {
         /// Where Publish() sends its messages (the transport); none by default
         void SetEventSink(EventSink sink);
 
-        /// Sends {"event":..,"data":..} to the event sink, if there is one
+        /// Sends {"event":..,"data":..} to the event sink, if there is one. A sink may replace or clear itself; a Publish from inside the sink sends nothing
         void Publish(StringView event, const Json& data);
 
         /// Runs @p hook at the end of every frame, before a deferred call is completed. A hook of the same @p name is replaced, so registering a module again adds nothing
@@ -121,10 +121,12 @@ namespace BECore {
         struct HandlerEntry {
             Handler handler;
             bool bypassBarrier = false;
+            uint64_t generation = 0;  // the registration that made this entry; a running handler goes back only if it is still the current one
         };
         struct HookEntry {
             String name;
             FrameEndHook hook;
+            uint64_t generation = 0;
         };
 
         static void ParseRequest(StringView text, Request& request);
@@ -147,8 +149,10 @@ namespace BECore {
         bool _manualClock = false;
         GamePause* _pause = nullptr;
         ControlServerStatus _serverStatus;
-        EventSink _eventSink;
+        EventSink _eventSink;               // empty while the sink runs (Publish moves it out)
+        uint64_t _eventSinkGeneration = 0;  // the registration of the current sink; a running sink goes back only if no other was set
         Vector<HookEntry> _frameEndHooks;
+        uint64_t _registrations = 0;  // counts RegisterHandler, SetFrameEndHook and SetEventSink calls; the source of the generations
     };
 
 }  // namespace BECore

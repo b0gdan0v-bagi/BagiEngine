@@ -8,6 +8,7 @@
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
 #include <Common/Printers.h>
+#include <Common/SharedPtr.h>
 #include <EASTL/optional.h>
 #include <Generated/ReflectionAliasesTest.gen.hpp>
 

@@ -1,9 +1,11 @@
 #pragma once
 
+#include <BECore/RefCounted/New.h>
 #include <BECore/Threading/ConditionVariable.h>
 #include <BECore/Threading/Mutex.h>
 #include <BECore/Threading/Thread.h>
 #include <BECore/Types/Types.h>
+#include <BECore/Utils/FunctionRef.h>
 #include <RemoteControl/Socket.h>
 #include <RemoteControl/WebSocketFrame.h>
 #include <RemoteControl/WebSocketHandshake.h>
@@ -12,7 +14,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
-#include <functional>
 #include <utility>
 
 namespace BECore {
@@ -38,8 +39,9 @@ namespace BECore {
 
     /// Asked once per handshake of a server behind trusted proxies (HandshakePolicy::trustedProxyHops), after the request is accepted
     /// and before the 101, with the client address the proxies report. False: the client is answered with a 503 and no connection
-    /// opens. It runs on the reader thread, and it has to call SetClientAddress() itself (so the check and the address are one step)
-    using AdmitClientFn = std::function<bool(const String& clientAddress)>;
+    /// opens. It runs on the reader thread, and it has to call SetClientAddress() itself (so the check and the address are one step).
+    /// Called only during Handshake(), so a view of the caller's lambda is enough.
+    using AdmitClientFn = FunctionRef<bool(const String& clientAddress)>;
 
     /**
      * @brief One client of a WebSocketListener: its socket, the two threads that serve it and the queue of frames waiting to be sent.
@@ -47,9 +49,12 @@ namespace BECore {
      * The reader thread is started and joined by the listener; it does the handshake, starts the writer and reads. The writer thread
      * sends from the queue, so a caller of the Queue functions (any thread) never blocks on the network, and a client that does not
      * read cannot stall anybody: when its queue passes the cap the connection is dropped. The Queue functions are safe from any
-     * thread and after the connection ended (they take nothing then), so a holder of a shared_ptr may call them late.
+     * thread and after the connection ended (they take nothing then), so a holder of an IntrusivePtrAtomic may call them late.
+     *
+     * Atomic count: the listener, the reader thread, the handler's own tables and a reply that outlives the request each hold one,
+     * and the last holder is whichever thread lets go last.
      */
-    class WebSocketConnection {
+    class WebSocketConnection : public RefCountedAtomic {
     public:
         WebSocketConnection(WebSocketConnectionId id, Socket socket, String peerAddress, WebSocketConnectionSettings settings);
 
@@ -90,7 +95,7 @@ namespace BECore {
         /// Reads the HTTP request, answers it and leaves in @p pendingBytes what came after it. With policy.trustedProxyHops > 0 the
         /// client address the proxies report is found first and passed to @p admit (when there is one; otherwise it is simply set).
         /// False: no WebSocket connection (the client was answered with an error or is gone)
-        bool Handshake(const HandshakePolicy& policy, std::chrono::milliseconds timeout, Vector<uint8_t>& pendingBytes, const AdmitClientFn& admit = {});
+        bool Handshake(const HandshakePolicy& policy, std::chrono::milliseconds timeout, Vector<uint8_t>& pendingBytes, Optional<AdmitClientFn> admit = std::nullopt);
 
         void StartReader(Thread reader) {
             _reader = std::move(reader);

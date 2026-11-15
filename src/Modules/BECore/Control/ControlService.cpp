@@ -89,11 +89,12 @@ namespace BECore {
     }
 
     void ControlService::RegisterHandler(StringView method, Handler handler, bool bypassBarrier) {
-        _handlers[String(method)] = HandlerEntry{std::move(handler), bypassBarrier};
+        _handlers[String(method)] = HandlerEntry{std::move(handler), bypassBarrier, ++_registrations};
     }
 
     void ControlService::SetEventSink(EventSink sink) {
         _eventSink = std::move(sink);
+        _eventSinkGeneration = ++_registrations;
     }
 
     void ControlService::Publish(StringView event, const Json& data) {
@@ -103,17 +104,25 @@ namespace BECore {
         Json message = Json::object();
         message["event"] = MakeJsonString(event);
         message["data"] = data;
-        _eventSink(DumpJson(message));
+
+        // The running sink is moved out like a running handler: it may set another sink, and its capture must live until it returns
+        const uint64_t generation = _eventSinkGeneration;
+        EventSink sink = std::move(_eventSink);
+        sink(DumpJson(message));
+        if (_eventSinkGeneration == generation) {
+            _eventSink = std::move(sink);
+        }
     }
 
     void ControlService::SetFrameEndHook(StringView name, FrameEndHook hook) {
         for (HookEntry& entry : _frameEndHooks) {
             if (entry.name == name) {
                 entry.hook = std::move(hook);
+                entry.generation = ++_registrations;
                 return;
             }
         }
-        _frameEndHooks.push_back(HookEntry{String(name), std::move(hook)});
+        _frameEndHooks.push_back(HookEntry{String(name), std::move(hook), ++_registrations});
     }
 
     bool ControlService::BypassesBarrier(const Request& request) const {
@@ -155,10 +164,16 @@ namespace BECore {
             return;
         }
 
-        // A copy: the handler may register handlers, which can move the entry
-        const Handler handler = entry->second.handler;
+        // The running handler is moved out of the table: it may register handlers, which replaces entries (its own too, and its capture dies with the replaced handler)
+        const uint64_t generation = entry->second.generation;
+        Handler handler = std::move(entry->second.handler);
         auto call = MakeUnique<ControlCall>(PassKey<ControlService>{}, std::move(request.method), std::move(request.id), std::move(request.params), std::move(request.reply));
         handler(*call);
+
+        const auto current = _handlers.find(call->GetMethod());
+        if (current != _handlers.end() && current->second.generation == generation) {
+            current->second.handler = std::move(handler);
+        }
         Settle(std::move(call));
     }
 
@@ -196,10 +211,16 @@ namespace BECore {
 
     void ControlService::EndFrame() {
         BE_PROFILE_SCOPE("ControlService::EndFrame");
-        // By index: a hook may add hooks. A copy: a hook may replace itself
+        // By index: a hook may add hooks. The running hook is moved out of its entry, which a hook that replaces itself (or adds hooks, which can move the entries) must not destroy
         for (size_t i = 0; i < _frameEndHooks.size(); ++i) {
-            const FrameEndHook hook = _frameEndHooks[i].hook;
-            hook();
+            const uint64_t generation = _frameEndHooks[i].generation;
+            FrameEndHook hook = std::move(_frameEndHooks[i].hook);
+            if (hook) {
+                hook();
+            }
+            if (_frameEndHooks[i].generation == generation) {
+                _frameEndHooks[i].hook = std::move(hook);
+            }
         }
 
         if (!_pending) {
@@ -211,7 +232,6 @@ namespace BECore {
 
         UniquePtr<ControlCall> call = std::move(_pending);
         const ControlCall::DoneFn done = std::move(call->_done);
-        call->_done = nullptr;
         if (done) {
             done(*call);
         }

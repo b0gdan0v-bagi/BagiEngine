@@ -69,10 +69,10 @@ namespace BECore::Fuzz {
             const uint64_t untouchedDigest = DigestProbe(untouched);
             ProbeState state = untouched;
             bool readerCalled = false;
-            const auto loaded = service.Load(kSlot, kSchema, eastl::function<void(IDeserializer&)>([&](IDeserializer& reader) {
-                                                 readerCalled = true;
-                                                 state.Deserialize(reader);
-                                             }));
+            const auto loaded = service.Load(kSlot, kSchema, [&](IDeserializer& reader) {
+                readerCalled = true;
+                state.Deserialize(reader);
+            });
 
             if (loaded.has_value()) {
                 // A load that succeeded read a file that Peek read too, of this game and a version the schema accepts

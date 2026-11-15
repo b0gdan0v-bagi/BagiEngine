@@ -270,7 +270,10 @@ namespace BECore {
         const SeatedGameRegistry* registry = &_registry;
         const String gameName = info->name;
         auto entry = MakeUnique<RoomEntry>();
-        entry->room = MakeUnique<Room>(code, *info, _random, [registry, gameName]() { return registry->Create(gameName); }, _settings.timings);
+        // One source for the hub and every room, so their draws follow one sequence: a room draws through the hub's function, which
+        // outlives the rooms the hub owns.
+        const RandomFn* random = &_random;
+        entry->room = MakeUnique<Room>(code, *info, [random]() { return (*random)(); }, [registry, gameName]() { return registry->Create(gameName); }, _settings.timings);
         entry->creation = ++_roomsCreated;
         entry->options = message.options;
         entry->room->SetLobbyOptions(message.options);

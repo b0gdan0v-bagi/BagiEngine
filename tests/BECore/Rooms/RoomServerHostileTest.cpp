@@ -71,7 +71,7 @@ namespace BECore::Tests {
             }
 
             /// The pump of the waits of an attack: the good table plays from them, so its hand is under way the whole time
-            WaitPump PumpTheTable(Clients& table) {
+            auto PumpTheTable(Clients& table) {
                 players.clear();
                 for (const auto& client : table) {
                     players.emplace_back(*client);
@@ -191,11 +191,11 @@ namespace BECore::Tests {
     TEST_F(RoomServerHostileTest, SocketsThatNeverHandshakeAreAllCutWhileATablePlaysOn) {
         RoomServerSettings settings = MakeSettings();
         settings.maxConnectionsPerAddress = kSilentSockets + kHumansAtFullTable + 8;
-        const uint16_t port = StartServer(settings);
+        const uint16_t port = StartServer(std::move(settings));
         Clients table;
         ASSERT_NO_FATAL_FAILURE(OpenTable(port, "cards", kHumansAtFullTable, table));
         table[0]->Start();
-        const WaitPump pumpTheHand = PumpTheTable(table);
+        const auto pumpTheHand = PumpTheTable(table);
 
         Vector<WebSocketTestClient> silent;
         for (int i = 0; i < kSilentSockets; ++i) {
@@ -215,11 +215,11 @@ namespace BECore::Tests {
         settings.maxConnectionsPerAddress = kFloodSockets + kHumansAtFullTable + 8;
         // The flood is the kind that would trip the per-connection limits one by one; the table must not notice any of it
         settings.hub.maxRoomsPerAddress = 6;
-        const uint16_t port = StartServer(settings);
+        const uint16_t port = StartServer(std::move(settings));
         Clients table;
         ASSERT_NO_FATAL_FAILURE(OpenTable(port, "cards", kHumansAtFullTable, table));
         table[0]->Start();
-        const WaitPump pumpTheHand = PumpTheTable(table);
+        const auto pumpTheHand = PumpTheTable(table);
 
         Clients flooders;
         for (int i = 0; i < kFloodSockets; ++i) {
@@ -264,7 +264,7 @@ namespace BECore::Tests {
         RoomServerSettings settings = MakeSettings();
         settings.hub.addressJoinBurst = kAddressBudget;
         settings.hub.addressJoinRefill = std::chrono::milliseconds(0);
-        const uint16_t port = StartServer(settings);
+        const uint16_t port = StartServer(std::move(settings));
         Clients table;
         ASSERT_NO_FATAL_FAILURE(OpenTable(port, "cards", kHumansOfAPair, table));
         const String realCode = table[0]->roomCode;

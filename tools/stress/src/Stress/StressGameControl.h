@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Utils/MoveOnlyFunction.h>
 #include <Games/IControllableGame.h>
 #include <Stress/StressState.h>
 
@@ -27,7 +28,7 @@ namespace BECore::Stress {
      */
     class StressGameControl : public IControllableGame {
     public:
-        StressGameControl(StressState& state, std::function<void()> onSceneChanged);
+        StressGameControl(StressState& state, MoveOnlyFunction<void()> onSceneChanged);
 
         [[nodiscard]] std::expected<Json, ControlError> GetState() const override;
         [[nodiscard]] std::expected<Json, ControlError> GetActions() const override;
@@ -39,7 +40,7 @@ namespace BECore::Stress {
         void ChangeScene(StressScene scene);
 
         StressState& _state;
-        std::function<void()> _onSceneChanged;
+        MoveOnlyFunction<void()> _onSceneChanged;
     };
 
 }  // namespace BECore::Stress

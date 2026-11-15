@@ -15,7 +15,7 @@ Two layers in one class:
 |------|-------|
 | `SaveGame.h` | `SaveGameService`, `SaveSchema {game, version, minVersion}`, `SaveInfo {game, version}`, `SaveErrorKind` (`CORE_ENUM`), `SaveError {kind, detail}`, the constants `kSaveMountPoint`, `kSaveExtension`, `kSaveTempExtension`, `kMaxSlotNameLength`; the thin templates `Save(slot, schema, const State&)` and `Load(slot, schema, State&)` |
 | `SaveStorage.{h,cpp}` | `kWebSaveDirectory`, `SaveStorageState` (`CORE_ENUM`), `PersistentSaveDirectory()`, `GetSaveStorageState()`, `NotifySaveChanged()`, `SetSaveChangedHandler()` (test seam): the browser's side of the folder, see "In the browser" |
-| `SaveGame.cpp` | the implementation (the non-template `Save` / `Load` / `Peek` take `eastl::function` callbacks, so the binary serializer stays out of the header) |
+| `SaveGame.cpp` | the implementation (the non-template `Save` / `Load` / `Peek` take `FunctionRef` callbacks, so the binary serializer stays out of the header) |
 
 Tests: `tests/BECore/Save/SaveStorageTest.cpp` (the notifications, with a fake handler), `tests/BECore/Save/SaveGameFilesTest.cpp` (slot files; a local `FileSystem` on a `TestTempDirectory`, no global services) and `tests/BECore/Save/SaveGameTest.{h,cpp}` (the envelope; `SaveGameTest.h` holds the reflected test states, its `.gen.hpp` is included in the `.cpp` only).
 

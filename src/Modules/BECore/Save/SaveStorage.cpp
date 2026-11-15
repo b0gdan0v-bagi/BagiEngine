@@ -9,8 +9,8 @@ namespace BECore {
 
     namespace {
 
-        eastl::function<void()>& Handler() {
-            static eastl::function<void()> handler;
+        MoveOnlyFunction<void()>& Handler() {
+            static MoveOnlyFunction<void()> handler;
             return handler;
         }
 
@@ -70,7 +70,7 @@ namespace BECore {
 #endif
     }
 
-    void SetSaveChangedHandler(eastl::function<void()> handler) {
+    void SetSaveChangedHandler(MoveOnlyFunction<void()> handler) {
         Handler() = std::move(handler);
     }
 

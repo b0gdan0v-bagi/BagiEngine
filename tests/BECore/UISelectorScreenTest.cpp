@@ -233,7 +233,7 @@ namespace BECore::Tests {
             return groups;
         }
 
-        String SceneXml(float viewWidth, float viewHeight, const std::function<void(String&)>& edit = {}) {
+        String SceneXml(float viewWidth, float viewHeight, FunctionRef<void(String&)> edit = NoTextEdit) {
             String xml = kSelectorXml;
             const auto replace = [&xml](const String& what, const String& with) {
                 for (size_t at = xml.find(what); at != String::npos; at = xml.find(what, at + with.size())) {
@@ -242,9 +242,7 @@ namespace BECore::Tests {
             };
             replace("@VIEW_W@", ToString(static_cast<int>(viewWidth)));
             replace("@VIEW_H@", ToString(static_cast<int>(viewHeight)));
-            if (edit) {
-                edit(xml);
-            }
+            edit(xml);
             return xml;
         }
 
@@ -412,7 +410,7 @@ namespace BECore::Tests {
         }
 
         /// The scene of the panel with a view of this size; the output has the same size, so a point of the view is a pixel
-        void LoadScene(float viewWidth = kViewWidth, float viewHeight = kViewHeight, const std::function<void(String&)>& edit = {}) {
+        void LoadScene(float viewWidth = kViewWidth, float viewHeight = kViewHeight, FunctionRef<void(String&)> edit = NoTextEdit) {
             _game.reset();
             _hud.Reset();
             _selector.Reset();

@@ -210,7 +210,7 @@ namespace BECore {
          */
         template <typename T>
         static TaskQueue::TaskFunc MakeStartTask(IntrusivePtr<TaskHandle<T>> handle, TaskLabel label) {
-            return [handle, label]() mutable {
+            return [handle = std::move(handle), label]() mutable {
                 auto owned = std::move(handle);
                 RunLabeled(label, [&owned] { owned->Start(); });  // Start() сам вызывает Resume()
             };
