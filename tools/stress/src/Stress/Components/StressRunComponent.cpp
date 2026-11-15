@@ -19,6 +19,7 @@ namespace BECore::Stress {
         if (game == nullptr) {
             return;
         }
+        game->SyncStateVersion();
         FrameStatsCollector& frameStats = CoreManager::GetFrameStats();
         frameStats.SetCounter(_counterName, game->GetState().GetCount());
 
