@@ -111,6 +111,14 @@ def test_a_content_root_may_carry_the_content_version(schema):
     assert 'name="contentVersion"' in xsd.build_xsd(schema, "Settings", "SceneManager")
 
 
+def test_a_scene_node_takes_the_reference_the_loader_expands():
+    node = {"name": "SceneNode", "parent": None, "abstract": False, "creatable": True, "fields": [{"name": "name", "type": {"kind": "string"}, "attributes": {}}]}
+    scenes = {"name": "SceneManager", "parent": None, "abstract": False, "creatable": False, "fields": [{"name": "nodes", "type": {"kind": "list", "element": {"kind": "pointer", "object": "SceneNode"}}, "attributes": {}}]}
+    schema = {"version": 1, "types": [node, scenes], "factories": [{"base": "SceneNode", "derived": ["SceneNode"]}], "roots": []}
+    attributes = {attribute.get("name") for attribute in complex_type(xsd.build_xsd(schema, "SceneManager", "SceneManager"), "factory_SceneNode").findall(f"{{{XS_NAMESPACE}}}attribute")}
+    assert {"name", "ref", "type", "enabled"} <= attributes
+
+
 def test_a_type_that_holds_itself_ends(schema):
     text = xsd.build_xsd(schema, "Leaf", SETTINGS_ROOT)
     assert 'type="factory_Leaf"' in text

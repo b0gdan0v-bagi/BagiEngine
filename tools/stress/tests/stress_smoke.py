@@ -4,7 +4,7 @@ Starts the app in a fresh process per scene (sprites 500, entities 500, ui 200),
 it over the control API: the state, `set_count` shown in the next frame (`frame_stats` draw calls and the `Stress objects` counter),
 the bad values, screenshots that are not flat, `set_language` rewording the `ui` scene, `set_scene`, `ui_tree`, and a log with no
 Warning or Error. The `reflection` scene drives the by-name methods over `StressGame` (`list_types`, `describe_type`, `schema`,
-`get_property`, `set_property`, `call_method`). The helpers are those of tools/control/tests/smoke.py (the default scenario of `smoke.py` is not touched).
+`get_property`, `set_property`, `call_method`) and checks the engine's `config/*.xml` against the XSD made from the live schema (`tools/schema`; printed as skipped when `xmllint` is missing). The helpers are those of tools/control/tests/smoke.py (the default scenario of `smoke.py` is not touched).
 
 Unlike smoke.py's `run_smoke` this script drives the process through `GameProcess`, because the check of the game's log needs the log's
 path and `smoke.play` keeps it to itself. Exit codes as smoke.py: 0 passed, 1 failed, 77 skipped (the executable is not built).
@@ -13,15 +13,18 @@ path and `smoke.play` keeps it to itself. Exit codes as smoke.py: 0 passed, 1 fa
 import argparse
 import os
 import sys
+import tempfile
 from pathlib import Path
 from typing import Callable
 
 ENGINE_DIR = Path(os.environ["BAGI_ENGINE_DIR"]) if "BAGI_ENGINE_DIR" in os.environ else Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ENGINE_DIR / "tools" / "control"))
 sys.path.insert(0, str(ENGINE_DIR / "tools" / "control" / "tests"))
+sys.path.insert(0, str(ENGINE_DIR / "tools" / "schema"))
 
 from bagi_control_client import BagiControlClient, ConnectionClosed, ControlError  # noqa: E402
 from game_process import PORT_TAKEN_MARKER, GameLaunchError, GameProcess, build_game_command, free_port, preset_executable  # noqa: E402
+from schema_to_xsd import Binding, check_files, convert_config_dir, find_xmllint  # noqa: E402
 from smoke import EXIT_FAILED, EXIT_PASSED, EXIT_SKIPPED, SmokeFailure, check, expect_error, take_screenshot  # noqa: E402
 
 STATUS_STARTUP_TIMEOUT = 30.0
@@ -34,6 +37,17 @@ ENTITIES_COUNT = 500
 UI_COUNT = 200
 REFLECTION_COUNT = 50
 RUN_NUMBER_MAX = 1000  # the range of the field `runNumber` of StressGame
+ENGINE_CONFIG_DIR = ENGINE_DIR / "config"
+# The engine's config files whose reflected type is not named like their stem (tools/schema/CLAUDE.md, "What the XSD says")
+ENGINE_CONFIG_BINDINGS = {
+    "LoggerConfig": Binding("LoggerManager"),
+    "AssertHandlersConfig": Binding("AssertHandlerManager"),
+    "TestsConfig": Binding("TestList"),
+    "WidgetsConfig": Binding("WidgetList"),
+    "GameWidgetsConfig": Binding("WidgetList"),
+    "SDLWindowConfig": Binding("SDLWindowConfig", "window"),
+}
+ENGINE_CONFIG_BY_HAND = {"TextConfig", "UIConfig"}  # read by hand: no reflected type, so no XSD
 
 
 def last_frame(client: BagiControlClient) -> dict:
@@ -225,7 +239,7 @@ def check_methods(client: BagiControlClient) -> None:
     expect_error("invalid_params", lambda: client.call("call_method", {"root": "game", "method": "SetObjectCount", "arguments": [1]}), "arguments that are not an object")
 
 
-def check_schema(client: BagiControlClient) -> None:
+def check_schema(client: BagiControlClient) -> dict:
     schema = client.call("schema")
     check(schema["version"] == 1, f"schema version {schema['version']}")
     stress_game = named(schema["types"], "StressGame", "the types of the schema")
@@ -238,6 +252,23 @@ def check_schema(client: BagiControlClient) -> None:
     names = [entry["name"] for entry in schema["types"]]
     check(names == sorted(names), "the types of the schema are not sorted by name")
     check(not keys_named(schema, "hash"), "the schema carries a hash")
+    return schema
+
+
+def check_config_files(schema: dict) -> None:
+    """Every config file of the engine that has a reflected type is valid against the XSD made from the live schema (xmllint judges)."""
+    if find_xmllint() is None:
+        print("reflection: SKIPPED the check of config/*.xml against the schema: xmllint is not on PATH", flush=True)
+        return
+    with tempfile.TemporaryDirectory() as temp_dir:
+        results = convert_config_dir(schema, ENGINE_CONFIG_DIR, Path(temp_dir), ENGINE_CONFIG_BINDINGS)
+        uncovered = {result.stem for result in results if result.xsd is None}
+        covered = len(results) - len(uncovered)
+        print(f"reflection: config/*.xml against the schema: {covered} covered, {len(uncovered)} not covered ({', '.join(sorted(uncovered))})", flush=True)
+        check(uncovered == ENGINE_CONFIG_BY_HAND, f"the config files without an XSD are {sorted(uncovered)}, expected {sorted(ENGINE_CONFIG_BY_HAND)}: " + "; ".join(f"{result.stem}: {result.reason}" for result in results if result.xsd is None))
+        findings = check_files(results, ENGINE_CONFIG_DIR)
+        for stem, lines in findings.items():
+            raise SmokeFailure(f"config/{stem}.xml does not match its XSD: {lines[0]}")
 
 
 def scenario_reflection(client: BagiControlClient) -> None:
@@ -245,7 +276,7 @@ def scenario_reflection(client: BagiControlClient) -> None:
     check_stress_game_description(client)
     check_properties(client)
     check_methods(client)
-    check_schema(client)
+    check_config_files(check_schema(client))
 
 
 SCENARIOS: list[tuple[str, list[str], Callable[[BagiControlClient], None]]] = [
