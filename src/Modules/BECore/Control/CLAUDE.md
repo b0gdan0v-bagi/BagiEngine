@@ -8,9 +8,9 @@ The core of the external control API: a program or a model sends commands, the e
 |------|---------|
 | `ControlService` | Thread-safe FIFO queue of requests, handler table, barrier, deferred answers, push events. One instance: `CoreManager::GetControlService()` |
 | `ControlCall` | One request being handled: `Params()`, `Reply()`, `Fail()`, `DeferFrames()` |
-| `ControlBuiltins` | `RegisterControlBuiltins()`: `ping`, `status`, `step`, `pause`, `resume`, `quit` |
+| `ControlBuiltins` | `RegisterControlBuiltins()`: `ping`, `status`, `step`, `pause`, `resume`, `list_methods`, `quit` |
 | `ControlSettings` | `ResolveControlSettings(args, ApplicationConfigLoad)`: the start-up flags and the settings of the reflected `ApplicationConfig` (`Application/ApplicationConfig.h`), the manual clock included (see "Starting the API"), a pure function |
-| `ControlTypes.h` | `ControlError`, `ControlErrors::k*` (error codes), `ControlReplyFn`, `ControlServerStatus` (listening, port, clients; see "Starting the API") |
+| `ControlTypes.h` | `ControlError`, `ControlErrors::k*` (error codes), `ControlReplyFn`, `ControlServerStatus` (listening, port, clients; see "Starting the API"), `ControlParamInfo` / `ControlMethodInfo` (what a module says about a method) and `ControlMethodListing` (what `GetMethods()` returns) |
 | `Json.h`, `JsonFwd.h` | nlohmann/json behind checked helpers (see "JSON rules") |
 | `Utils/Base64.h` (one level up) | Base64 for the screenshot and the WebSocket handshake |
 
@@ -94,7 +94,7 @@ The file half is the reflected `ApplicationConfig` read with strict values (`IDe
 
 | Where | Methods |
 |-------|---------|
-| `BECore/Control/ControlBuiltins` | `ping`, `status` (the clock, `manualClock`, `paused`), `step`, `pause` / `resume` (`{paused}`; see "Manual clock and `step`"), `quit` |
+| `BECore/Control/ControlBuiltins` | `ping`, `status` (the clock, `manualClock`, `paused`), `step`, `pause` / `resume` (`{paused}`; see "Manual clock and `step`"), `list_methods` (to `{methods: [{name, summary, params: [{name, type, required, description}]}]}`, sorted; a method without a description has `""` and `[]`), `quit` |
 | `SDL/CoreSDL/SDLScreenshot` | `screenshot` (`{maxSize}` to `{width, height, png_base64}`; `capture_failed` where the renderer cannot capture; `SDL/CLAUDE.md`) |
 | `BECore/UI/UIControl` | `ui_tree` (the canvases and elements of the active scene with rects and the validator's findings), `ui_click` (`{name, canvas?, at?}`: a real mouse click on a visible button, toggle or slider, `at` 0..1 the horizontal position, which also sets a slider; the answer has its `action` and `value`; codes `no_scene`, `not_found`, `not_clickable`, `invalid_params`; `UI/CLAUDE.md`, "Control API") |
 | `BECore/Clipboard/ClipboardControl` | `clipboard_set` (`{text}` to `{ok}`, what `SetText` returned), `clipboard_get` (to `{status, text}`; answered after frames, `clipboard_timeout` after 600), `clipboard_paste` (to `{}` once the `PasteEvent` has been delivered, as Cmd+V gives it); `Clipboard/CLAUDE.md` |
@@ -106,9 +106,10 @@ The file half is the reflected `ApplicationConfig` read with strict values (`IDe
 1. Write a handler `void(ControlCall&)` in the module that owns the behaviour (BECore only for things that need nothing above it).
 2. Read `call.Params()` with the checked helpers; answer with `call.Reply(Json)` or `call.Fail(code, message)`. For an answer that needs frames to pass (step, screenshot) use `call.DeferFrames(...)`.
 3. Register it with `CoreManager::GetControlService().RegisterHandler("name", handler)` where the owning module starts up (registering again replaces the handler).
-4. Test it with a `ControlService` of its own and a lambda as the reply function (`tests/BECore/ControlServiceTest.cpp` shows the pattern): no transport needed.
-5. Write the method and its codes into the protocol description of the owning module.
+4. Describe it with `DescribeMethod("name", {summary, params})` beside the registration, so `list_methods` and the editor's console can offer it and complete its parameters. The description is for people and for completion, never checked against the handler, which stays the judge; a method without one still runs. It is kept apart from the handler (registering again keeps it), and `GetMethodsVersion()` moves when a name or a description is added.
+5. Test it with a `ControlService` of its own and a lambda as the reply function (`tests/BECore/ControlServiceTest.cpp` shows the pattern): no transport needed.
+6. Write the method and its codes into the protocol description of the owning module.
 
 ## Tests
 
-`tests/BECore/ControlServiceTest.cpp` (queue, order across threads, barrier, deferred answers, hooks, the manual clock and `step`, shutdown, builtins), `GameControlTest.cpp` (the state-change push), `JsonTest.cpp` (checked helpers, garbage, nesting), `Base64Test.cpp` (RFC 4648 vectors), `ControlSettingsTest.cpp` (priority of the flags, attributes and defaults, the manual clock, every kind of invalid value). `ControlServiceTest` also holds the server status (default, round trip). The transport has its own tests, see `RemoteControl/CLAUDE.md`.
+`tests/BECore/ControlServiceTest.cpp` (queue, order across threads, barrier, deferred answers, hooks, the manual clock and `step`, shutdown, builtins), `GameControlTest.cpp` (the state-change push), `JsonTest.cpp` (checked helpers, garbage, nesting), `Base64Test.cpp` (RFC 4648 vectors), `ControlSettingsTest.cpp` (priority of the flags, attributes and defaults, the manual clock, every kind of invalid value). `ControlServiceTest` also holds the server status (default, round trip) and the method listing (`GetMethods`, descriptions, `list_methods`). The transport has its own tests, see `RemoteControl/CLAUDE.md`.

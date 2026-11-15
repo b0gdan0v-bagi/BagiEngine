@@ -940,6 +940,182 @@ namespace BECore::Tests {
         EXPECT_EQ(IdOf(responses[0]), 2);
     }
 
+    namespace {
+
+        const ControlMethodListing* FindListing(const Vector<ControlMethodListing>& methods, StringView name) {
+            for (const ControlMethodListing& listing : methods) {
+                if (listing.name == name) {
+                    return &listing;
+                }
+            }
+            return nullptr;
+        }
+
+        const Json* FindListedMethod(const Json& result, StringView name) {
+            const Json* methods = FindJsonMember(result, "methods");
+            if (methods == nullptr || !methods->is_array()) {
+                return nullptr;
+            }
+            for (const Json& method : *methods) {
+                const auto methodName = GetJsonString(method, "name");
+                if (methodName && *methodName == name) {
+                    return &method;
+                }
+            }
+            return nullptr;
+        }
+
+    }  // namespace
+
+    TEST_F(ControlServiceTest, GetMethodsListsEveryHandlerSortedByName) {
+        RegisterRecording("zeta");
+        RegisterRecording("alpha");
+        RegisterRecording("mid");
+
+        const Vector<ControlMethodListing> methods = service.GetMethods();
+
+        ASSERT_EQ(methods.size(), 3u);
+        EXPECT_EQ(methods[0].name, "alpha");
+        EXPECT_EQ(methods[1].name, "mid");
+        EXPECT_EQ(methods[2].name, "zeta");
+        EXPECT_EQ(methods[0].info, nullptr);
+    }
+
+    TEST_F(ControlServiceTest, ADescribedMethodIsListedWithItsDescription) {
+        RegisterRecording("move");
+        service.DescribeMethod("move", {"Moves a piece", {{"from", "string", true, "the square"}, {"to", "string", false, ""}}});
+
+        const Vector<ControlMethodListing> methods = service.GetMethods();
+
+        const ControlMethodListing* listing = FindListing(methods, "move");
+        ASSERT_NE(listing, nullptr);
+        ASSERT_NE(listing->info, nullptr);
+        EXPECT_EQ(listing->info->summary, "Moves a piece");
+        ASSERT_EQ(listing->info->params.size(), 2u);
+        EXPECT_EQ(listing->info->params[0].name, "from");
+        EXPECT_TRUE(listing->info->params[0].required);
+        EXPECT_FALSE(listing->info->params[1].required);
+    }
+
+    TEST_F(ControlServiceTest, ARegisteredAgainMethodKeepsItsDescription) {
+        RegisterRecording("move");
+        service.DescribeMethod("move", {"Moves a piece", {}});
+        RegisterRecording("move");
+
+        const Vector<ControlMethodListing> methods = service.GetMethods();
+
+        ASSERT_EQ(methods.size(), 1u);
+        ASSERT_NE(methods[0].info, nullptr);
+        EXPECT_EQ(methods[0].info->summary, "Moves a piece");
+    }
+
+    TEST_F(ControlServiceTest, ADescriptionIsReplacedByTheNextOne) {
+        RegisterRecording("move");
+        service.DescribeMethod("move", {"first", {{"a", "any", false, ""}}});
+        service.DescribeMethod("move", {"second", {}});
+
+        const Vector<ControlMethodListing> methods = service.GetMethods();
+
+        ASSERT_EQ(methods.size(), 1u);
+        ASSERT_NE(methods[0].info, nullptr);
+        EXPECT_EQ(methods[0].info->summary, "second");
+        EXPECT_TRUE(methods[0].info->params.empty());
+    }
+
+    TEST_F(ControlServiceTest, ADescriptionWithoutAHandlerIsNotListedButWaitsForOne) {
+        service.DescribeMethod("later", {"Described first", {}});
+        EXPECT_TRUE(service.GetMethods().empty());
+
+        RegisterRecording("later");
+
+        const Vector<ControlMethodListing> methods = service.GetMethods();
+        ASSERT_EQ(methods.size(), 1u);
+        ASSERT_NE(methods[0].info, nullptr);
+        EXPECT_EQ(methods[0].info->summary, "Described first");
+    }
+
+    TEST_F(ControlServiceTest, TheMethodsVersionMovesOnANewNameAndOnADescriptionOnly) {
+        const uint64_t start = service.GetMethodsVersion();
+
+        RegisterRecording("one");
+        const uint64_t afterNewName = service.GetMethodsVersion();
+        EXPECT_GT(afterNewName, start);
+
+        RegisterRecording("one");
+        EXPECT_EQ(service.GetMethodsVersion(), afterNewName);
+
+        service.DescribeMethod("one", {"text", {}});
+        const uint64_t afterDescription = service.GetMethodsVersion();
+        EXPECT_GT(afterDescription, afterNewName);
+
+        Post(MakeRequest(1, "one"));
+        service.Drain();
+        service.SetFrameEndHook("hook", [] {});
+        service.EndFrame();
+        EXPECT_EQ(service.GetMethodsVersion(), afterDescription);
+    }
+
+    TEST_F(ControlServiceTest, ListMethodsAnswersWithTheDescriptionsOfTheBuiltins) {
+        RegisterControlBuiltins(service);
+        RegisterRecording("undescribed");
+
+        Post(MakeRequest(1, "list_methods"));
+        service.Drain();
+
+        ASSERT_EQ(responses.size(), 1u);
+        ASSERT_TRUE(IsOk(responses[0]));
+        const Json* result = ResultOf(0);
+        ASSERT_NE(result, nullptr);
+
+        const Json* ping = FindListedMethod(*result, "ping");
+        ASSERT_NE(ping, nullptr);
+        EXPECT_FALSE(GetJsonString(*ping, "summary").value_or("").empty());
+        const Json* pingParams = FindJsonMember(*ping, "params");
+        ASSERT_NE(pingParams, nullptr);
+        EXPECT_TRUE(pingParams->is_array());
+        EXPECT_TRUE(pingParams->empty());
+
+        const Json* step = FindListedMethod(*result, "step");
+        ASSERT_NE(step, nullptr);
+        const Json* stepParams = FindJsonMember(*step, "params");
+        ASSERT_NE(stepParams, nullptr);
+        ASSERT_EQ(stepParams->size(), 2u);
+        EXPECT_EQ(GetJsonString((*stepParams)[0], "name").value_or(""), "frames");
+        EXPECT_EQ(GetJsonString((*stepParams)[0], "type").value_or(""), "integer");
+        EXPECT_FALSE(GetJsonBool((*stepParams)[0], "required").value_or(true));
+        EXPECT_EQ(GetJsonString((*stepParams)[1], "name").value_or(""), "dt");
+
+        const Json* undescribed = FindListedMethod(*result, "undescribed");
+        ASSERT_NE(undescribed, nullptr);
+        EXPECT_EQ(GetJsonString(*undescribed, "summary").value_or("x"), "");
+        const Json* undescribedParams = FindJsonMember(*undescribed, "params");
+        ASSERT_NE(undescribedParams, nullptr);
+        EXPECT_TRUE(undescribedParams->empty());
+        EXPECT_NE(FindListedMethod(*result, "list_methods"), nullptr);
+    }
+
+    TEST_F(ControlServiceTest, AMethodWithoutADescriptionStillRuns) {
+        RegisterRecording("plain");
+
+        Post(MakeRequest(1, "plain"));
+        service.Drain();
+
+        ASSERT_EQ(responses.size(), 1u);
+        EXPECT_TRUE(IsOk(responses[0]));
+        ASSERT_EQ(order.size(), 1u);
+    }
+
+    TEST_F(ControlServiceTest, ListingMethodsDoesNotInternTheirNames) {
+        ASSERT_FALSE(PoolString::Find("listed_only_method_7c41b9").has_value());
+        RegisterRecording("listed_only_method_7c41b9");
+        service.DescribeMethod("listed_only_method_7c41b9", {"text", {{"listed_only_param_7c41b9", "any", false, ""}}});
+
+        EXPECT_EQ(service.GetMethods().size(), 1u);
+
+        EXPECT_FALSE(PoolString::Find("listed_only_method_7c41b9").has_value());
+        EXPECT_FALSE(PoolString::Find("listed_only_param_7c41b9").has_value());
+    }
+
     TEST_F(ControlServiceTest, StatusReportsWhetherTheClockIsManual) {
         RegisterControlBuiltins(service);
 
