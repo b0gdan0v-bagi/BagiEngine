@@ -26,7 +26,6 @@ namespace BECore {
             curve.ease = ValidEnum(curve.ease, fallback.ease);
         }
 
-        /// Both ends clamped, then put in order
         void SanitizeRange(float& low, float& high, float minimum, float maximum, float fallbackLow, float fallbackHigh) {
             low = ClampFinite(low, minimum, maximum, fallbackLow);
             high = ClampFinite(high, minimum, maximum, fallbackHigh);

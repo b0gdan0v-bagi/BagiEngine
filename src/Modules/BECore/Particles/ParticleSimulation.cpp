@@ -177,7 +177,6 @@ namespace BECore {
             const float sinA = std::sin(angle);
             const Color color = Multiply(look.color, particle.tint);
 
-            // The corners of the unrotated square, clockwise from the top left, turned about the center
             const float cornerX[kQuadVertices] = {-half, half, half, -half};
             const float cornerY[kQuadVertices] = {-half, -half, half, half};
             const float cornerU[kQuadVertices] = {u0, u1, u1, u0};

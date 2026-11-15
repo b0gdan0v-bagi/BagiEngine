@@ -36,7 +36,6 @@ namespace BECore {
             out.fields.append_copy(serializer.GetRootNode());
         }
 
-        /// The components of @p node serialized, in order
         Vector<SerializedComponent> SerializeComponents(const SceneNode& node) {
             Vector<SerializedComponent> result(node.GetComponents().size());
             for (size_t i = 0; i < result.size(); ++i) {
@@ -188,7 +187,6 @@ namespace BECore {
             return false;
         }
 
-        // The baseline: the file as it stands, no overrides
         pugi::xml_document bare;
         bare.append_child(kNodeElementName.data()).append_attribute(kNodeRefAttribute.data()).set_value(ref.c_str());
         pugi::xml_document expanded;

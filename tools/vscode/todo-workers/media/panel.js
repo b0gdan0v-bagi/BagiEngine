@@ -265,6 +265,8 @@
 
         if (entry) card.appendChild(el("div", "title", entry.title));
         TodoInsights.problemLines(worker, post).forEach((line) => card.appendChild(line));
+        const runs = TodoInsights.workerLoad(worker, payload.machine);
+        if (runs) card.appendChild(runs);
         if (worker.waiting) {
             const ask = el("div", "ask");
             ask.append(
@@ -499,6 +501,8 @@
             if (payload.loading) root.appendChild(el("p", "muted", "Asking worker.py ..."));
             return;
         }
+        const load = TodoInsights.machineLine(payload.machine);
+        if (load) root.appendChild(load);
         if (!state.sessionsKnown) root.appendChild(el("div", "warn", "claude agents did not answer: set todoWorkers.claude to the full path of claude."));
         if (state.store !== "ok" && state.store !== "off") root.appendChild(el("div", "warn", `todo store: ${state.store}`));
 
@@ -525,7 +529,8 @@
             root.appendChild(graph);
         }
         root.appendChild(TodoInsights.daySection(payload.insights, state, saved, keepOpen, post));
-        if (state.workers.length) root.appendChild(TodoInsights.timelineSection(payload.insights, saved, keepOpen));
+        if (state.workers.length) root.appendChild(TodoInsights.timelineSection(payload.insights, saved, keepOpen, payload.machineHistory, payload.machine && payload.machine.cores));
+        if (payload.machine) root.appendChild(TodoInsights.machineSection(payload.machine, saved, keepOpen));
         root.appendChild(TodoInsights.busySection(payload.insights, saved, keepOpen, post));
 
         const all = usageBlock(state.usage, false);

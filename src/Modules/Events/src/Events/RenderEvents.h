@@ -6,12 +6,11 @@
 namespace BECore {
     namespace RenderEvents {
 
-        // События рендеринга
         struct NewFrameEvent : public EventBase<NewFrameEvent> {};
         struct RenderClearEvent : public EventBase<RenderClearEvent> {};
         struct RenderPresentEvent : public EventBase<RenderPresentEvent> {};
 
-        // События ImGui — эмитятся ImGuiWidget, обрабатываются каждым renderer backend'ом
+        // Emitted by ImGuiWidget, handled by every renderer backend.
         struct ImGuiInitEvent : public EventBase<ImGuiInitEvent> {};
         struct ImGuiShutdownEvent : public EventBase<ImGuiShutdownEvent> {};
         struct ImGuiNewFrameEvent : public EventBase<ImGuiNewFrameEvent> {};

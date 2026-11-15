@@ -503,10 +503,18 @@ def is_active(session: dict | None) -> bool:
     return session is not None and session.get("state") != "done"
 
 
+def run_ended(session: dict | None) -> bool:
+    """A run that ended its turn (`turn_ended`) though `claude agents` still lists it as not done: as `blocked`, or as
+    status `idle` with state `working` (a background run whose report ends the turn can stay so for hours)."""
+    if not is_active(session) or not (is_waiting(session) or session.get("status") == "idle"):
+        return False
+    return turn_ended(session)
+
+
 def is_running(session: dict | None) -> bool:
-    """`is_active`, less a run that ended its turn and only stays listed as blocked (`turn_ended`): `start` and `update`
-    treat it as finished, and `start` stops it before it starts the next loop (one session per worker)."""
-    return is_active(session) and not (is_waiting(session) and turn_ended(session))
+    """`is_active`, less a run that ended its turn (`run_ended`): `start` and `update` treat it as finished, and `start`
+    stops it before it starts the next loop (one session per worker)."""
+    return is_active(session) and not run_ended(session)
 
 
 def describe(session: dict | None) -> str:
@@ -527,7 +535,7 @@ def describe(session: dict | None) -> str:
         minutes = int((time.time() * 1000 - stopped) / 60000)
         when = f"{minutes // 60} h {minutes % 60} min" if minutes >= 60 else f"{minutes} min"
         return f"{session.get('name') or session.get('id')}: stopped by worker.py stop {when} ago (start or relaunch to go on)"
-    if is_waiting(session) and turn_ended(session):
+    if run_ended(session):
         return f"{session.get('name') or session.get('id')}: {state}/{session.get('status', '?')}{since}, its run ended (nothing waits; stop clears it)"
     waiting = f", waits for you ({session.get('waitingFor') or 'input'}): claude attach {session_ref(session)}" if is_waiting(session) else ""
     return f"{session.get('name') or session.get('id')}: {state}/{session.get('status', '?')}{since}{waiting}"
@@ -2222,7 +2230,7 @@ def list_json(layout: Layout, args) -> dict:
             "active": is_running(session),
             "waiting": waits_for_owner(session) and limited is None,
             "asking": pending_ask(session) if waits_for_owner(session) and limited is None else None,
-            "endedTurn": is_waiting(session) and limited is None and turn_ended(session),
+            "endedTurn": limited is None and run_ended(session),
             "limited": limited,
             "stopped": stopped_at(session),
             "activity": session_activity(session) if args.activity else None,

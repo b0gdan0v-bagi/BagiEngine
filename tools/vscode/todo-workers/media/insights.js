@@ -138,7 +138,7 @@
     const OUTCOME_TEXT = { review: "reached review", through: "slice approved, the next follows", limited: "stopped by the usage limit", running: "running", ended: "ended without review" };
 
     // Timeline: one lane per worker over the last hours, a bar per session coloured by how it ended.
-    function timelineSection(insights, saved, onToggle) {
+    function timelineSection(insights, saved, onToggle, history, cores) {
         const tl = insights && insights.timeline;
         const title = tl && tl.lanes ? `Timeline · ${tl.hours} h · busy ${tl.lanes.map((l) => `${l.name} ${Math.round(100 * l.busyShare)}%`).join(", ")}` : "Timeline";
         return section(title, "timelineOpen", saved, onToggle, (box) => {
@@ -149,7 +149,11 @@
             const top = 16;
             const span = Math.max(1, tl.now - tl.since);
             const x = (ms) => labelW + ((width - labelW - 4) * (Math.min(tl.now, Math.max(tl.since, ms)) - tl.since)) / span;
-            const height = top + tl.lanes.length * laneH + 4;
+            // the load of the machine under the lanes (the panel's samples, one a minute), against its cores
+            const samples = (history || []).filter((h) => h.at >= tl.since && h.at <= tl.now + 600000 && typeof h.load === "number");
+            const loadH = samples.length >= 2 ? 44 : 0;
+            const lanesBottom = top + tl.lanes.length * laneH;
+            const height = lanesBottom + (loadH ? loadH + 8 : 0) + 4;
             const chart = svg("svg", { viewBox: `0 0 ${width} ${height}`, class: "timeline", role: "img", "aria-label": "sessions of each worker over time" });
             const step = tl.hours > 36 ? 6 : tl.hours > 12 ? 3 : 1;
             const first = new Date(tl.since);
@@ -176,12 +180,34 @@
                     }
                 });
             });
+            if (loadH) {
+                const y0 = lanesBottom + 6 + loadH;
+                const maxLoad = Math.max(cores ? cores * 1.5 : 1, ...samples.map((h) => h.load));
+                const y = (v) => y0 - (loadH * Math.min(v, maxLoad)) / maxLoad;
+                const xs = (h) => x(Math.min(h.at, tl.now));
+                chart.appendChild(svg("text", { x: 0, y: y0 - loadH / 2 + 3, class: "tl-name" }, "load"));
+                const area = `M ${xs(samples[0])} ${y0} ` + samples.map((h) => `L ${xs(h)} ${y(h.load)}`).join(" ") + ` L ${xs(samples[samples.length - 1])} ${y0} Z`;
+                const fill = svg("path", { d: area, class: "tl-load" });
+                fill.appendChild(svg("title", {}, `load of the machine, 1 min average (most ${Math.round(Math.max(...samples.map((h) => h.load)))})${cores ? `; the dashed line is ${cores} cores` : ""}`));
+                chart.appendChild(fill);
+                const mem = samples.filter((h) => typeof h.mem === "number");
+                if (mem.length >= 2) {
+                    const line = svg("polyline", { points: mem.map((h) => `${xs(h)},${y0 - (loadH * h.mem) / 100}`).join(" "), class: "tl-mem" });
+                    line.appendChild(svg("title", {}, "memory in use, % of the machine's"));
+                    chart.appendChild(line);
+                }
+                if (cores && cores <= maxLoad) chart.appendChild(svg("line", { x1: labelW, x2: width - 4, y1: y(cores), y2: y(cores), class: "tl-cores" }));
+            }
             box.appendChild(chart);
             const legend = el("div", "tl-legend muted");
             ["review", "through", "running", "limited", "ended"].forEach((k) => {
                 const item = el("span", `tl-key tl-${k}`, OUTCOME_TEXT[k]);
                 legend.appendChild(item);
             });
+            if (loadH) {
+                legend.appendChild(el("span", "tl-key tl-load-key", "load"));
+                legend.appendChild(el("span", "tl-key tl-mem-key", "memory %"));
+            }
             box.appendChild(legend);
             const overlaps = tl.lanes.filter((lane) => lane.spans.some((s, j) => lane.spans.slice(j + 1).some((o) => o.start < s.end - 60000)));
             if (overlaps.length) box.appendChild(el("div", "warn soft", `two sessions at once in ${overlaps.map((l) => l.name).join(", ")}: look at the bars that share a lane`));
@@ -232,5 +258,54 @@
         }, insights, "busy");
     }
 
-    window.TodoInsights = { problemLines, diffLine, reviewLine, daySection, timelineSection, busySection };
+    function gb(bytes) {
+        return `${(bytes / 2 ** 30).toFixed(1)} GB`;
+    }
+
+    const KIND_WORDS = { compile: "compiling", link: "linking", build: "build", test: "tests" };
+
+    function kindsText(kinds) {
+        return ["compile", "link", "test", "build"].filter((k) => kinds[k]).map((k) => `${KIND_WORDS[k]} ${kinds[k]}`).join(" · ");
+    }
+
+    // The load line under the toolbar (worker.py machine): amber when the load is well over the cores or memory is short.
+    function machineLine(machine) {
+        if (!machine || !machine.load) return null;
+        const mem = machine.memory;
+        const heavy = machine.load[0] > machine.cores * 1.5 || (mem && mem.pressure !== "normal");
+        const parts = [`load ${machine.load[0].toFixed(1)} / ${machine.cores} cores`];
+        if (mem) parts.push(`memory ${100 - mem.freePercent}% of ${Math.round(mem.total / 2 ** 30)} GB${mem.pressure !== "normal" ? ` (pressure ${mem.pressure})` : ""}`);
+        if (mem && mem.swapUsed) parts.push(`swap ${gb(mem.swapUsed)}`);
+        const line = el("div", heavy ? "warn soft machine" : "muted machine", `Machine: ${parts.join(" · ")}`);
+        line.title = `1, 5 and 15 min load: ${machine.load.map((v) => v.toFixed(1)).join(", ")}. A load above the cores means processes wait for a core.`;
+        return line;
+    }
+
+    // What a worker's folder runs now: compilers, linkers, tests, and their CPU and memory.
+    function workerLoad(worker, machine) {
+        const g = machine && (machine.groups || []).find((x) => x.group === `${machine.checkout}/${worker.name}`);
+        if (!g || (!kindsText(g.kinds) && g.cpu < 5)) return null;
+        const text = [kindsText(g.kinds), `${Math.round(g.cpu)}% CPU`, gb(g.rss)].filter(Boolean).join(" · ");
+        return el("div", "muted runs", text);
+    }
+
+    // Machine: every checkout and worker on this machine (other games' too) by CPU, and the Claude sessions.
+    function machineSection(machine, saved, onToggle) {
+        const busy = (machine.groups || []).filter((g) => kindsText(g.kinds) || g.cpu >= 5);
+        const title = `Machine · ${busy.length} folder${busy.length === 1 ? "" : "s"} at work`;
+        return section(title, "machineOpen", saved, onToggle, (box) => {
+            busy.forEach((g) => {
+                const line = el("div", "feed-item");
+                const mine = g.group.startsWith(`${machine.checkout}/`);
+                line.append(el("span", mine ? "kind" : "kind muted", g.group), el("span", "text", [kindsText(g.kinds), `${Math.round(g.cpu)}% CPU`, gb(g.rss)].filter(Boolean).join(" · ")));
+                box.appendChild(line);
+            });
+            if (!busy.length) box.appendChild(el("div", "muted", "no build or test runs in any checkout"));
+            const c = machine.claude;
+            if (c && c.count) box.appendChild(el("div", "muted", `Claude: ${c.count} processes · ${Math.round(c.cpu)}% CPU · ${gb(c.rss)}`));
+            box.appendChild(el("div", "muted", "CPU is ps's average and misses the short compiler runs; the load counts them."));
+        });
+    }
+
+    window.TodoInsights = { machineLine, workerLoad, machineSection, problemLines, diffLine, reviewLine, daySection, timelineSection, busySection };
 })();

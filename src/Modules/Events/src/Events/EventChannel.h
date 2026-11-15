@@ -63,7 +63,7 @@ namespace BECore {
      *   others changes; the order of subscribers after a re-subscribe is part of the contract.
      *
      * A disconnect inside `Publish` is tolerated: the entry is marked, skipped if it has not run yet, and the list
-     * is compacted (order kept) when the outermost `Publish` ends. A connect appends.
+     * is compacted (order kept) when the outermost `Publish` ends.
      * One thread only; a channel is never moved or destroyed while a connection to it lives (the channel of an
      * event type is a static that is never freed).
      *

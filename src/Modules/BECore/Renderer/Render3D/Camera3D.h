@@ -5,8 +5,7 @@
 
 namespace BECore {
 
-    /// A perspective camera, set as a position, a point to look at and the world's up (not an orientation: the scene's camera is aimed at the table
-    /// and moves with a target; `scene-3d` converts a node's rotation to a target when it needs to). Right-handed, Y up (`Math/CLAUDE.md`).
+    /// A perspective camera, set as a position, a point to look at and the world's up (not an orientation). Right-handed, Y up (`Math/CLAUDE.md`).
     struct Camera3D {
         static constexpr float kDefaultFovYRadians = std::numbers::pi_v<float> / 3.0f;
         static constexpr float kDefaultNearPlane = 0.1f;

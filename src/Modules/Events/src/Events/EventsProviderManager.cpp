@@ -9,7 +9,7 @@ namespace BECore {
 
         const auto it = eastl::find(_providers.begin(), _providers.end(), provider);
         if (it != _providers.end()) {
-            return;  // Провайдер уже зарегистрирован
+            return;  // already registered
         }
         _providers.push_back(provider);
     }

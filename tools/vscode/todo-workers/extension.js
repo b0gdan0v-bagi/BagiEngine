@@ -20,7 +20,8 @@ const os = require("os");
 const path = require("path");
 const { config, findTool, runTool, pageHtml } = require("./src/tools");
 
-const STORE_CHANGE_DEBOUNCE_MS = 700; // a claim and its stub plan are two writes: one refresh
+const STORE_CHANGE_DEBOUNCE_MS = 700;
+const STICKY_KEYS = ["insights", "machine", "machineHistory", "feed", "lastVerify"]; // a claim and its stub plan are two writes: one refresh
 
 class WorkersView {
     constructor(context, actions) {
@@ -48,8 +49,12 @@ class WorkersView {
         return Boolean(this.view && this.view.visible);
     }
 
+    // What each module reads on its own timer (the views of insights.js, the machine and its history, the feed, the
+    // last verify) stays until that module sends a newer one: a show from another module never drops it.
     show(payload) {
-        this.payload = payload;
+        const kept = {};
+        for (const key of STICKY_KEYS) if (this.payload[key] !== undefined) kept[key] = this.payload[key];
+        this.payload = { ...kept, ...payload };
         this.post();
     }
 
@@ -128,11 +133,12 @@ function activate(context) {
         }
         running = true;
         // keep what is shown (the feed, the insights, the last verify) while worker.py answers
-        view.show(ctx.state ? { ...view.payload, refreshing: true } : { loading: true, refreshing: true, insights: ctx.insights() });
+        view.show(ctx.state ? { ...view.payload, refreshing: true } : { loading: true, refreshing: true, insights: ctx.insights(), ...ctx.machine() });
         try {
             // hidden, the panel only needs what the status bar and the notifications show: no transcripts read for
             // the last steps and the tokens (the usage ledger catches up on the next full read: its counts are totals)
             const full = view.visible ? ["--activity", "--usage"] : [];
+            ctx.readMachine(); // beside the list: cheap, and the load history needs it hidden too
             const out = await runTool(tool, ["list", "--json", "--store", ...full, "--claude", config().claude], 90000);
             ctx.state = JSON.parse(out);
             // A branch of another checkout or machine (or cut from another base) is not this checkout's to review or
@@ -141,7 +147,7 @@ function activate(context) {
             ctx.state.reviewElsewhere = (ctx.state.review || []).filter(away);
             ctx.state.review = (ctx.state.review || []).filter((e) => !away(e));
             const info = ctx.cachedBuildInfo() || (await ctx.getBuildInfo());
-            view.show({ state: ctx.state, at: Date.now(), feed: ctx.feed(), lastVerify: ctx.lastVerify(), prices: config().prices, shotsTool: Boolean(info && info.shots), verifying: ctx.isVerifying() ? "running" : null, insights: ctx.insights() });
+            view.show({ state: ctx.state, at: Date.now(), feed: ctx.feed(), lastVerify: ctx.lastVerify(), prices: config().prices, shotsTool: Boolean(info && info.shots), verifying: ctx.isVerifying() ? "running" : null, insights: ctx.insights(), ...ctx.machine() });
             ctx.postWorkersToList();
             ctx.updateStatus(null);
             ctx.notifyChanges();

@@ -91,7 +91,7 @@ python3 tools/todo/worker.py dispatch --json [k ...] [--depth N]  # one read for
 python3 tools/todo/worker.py build-info    # preset, product, tests, screenshot tool (the panel's Verify, Build & run, Shots)
 python3 tools/todo/worker.py cost <id> [--json]      # dollars of the loop sessions that held the entry, against its costCap
 python3 tools/todo/worker.py remarks <id> --file F|- [--start]  # an entry in review goes back with the owner's remarks
-python3 tools/todo/worker.py doctor [k] [--fix K] | merge-train [--dry-run] | busy | day | timeline | review-stats  # the panel's (worker_insights.py)
+python3 tools/todo/worker.py doctor [k] [--fix K] | merge-train [--dry-run] | busy | day | timeline | review-stats | machine  # the panel's (worker_insights.py)
 ```
 
 - **Worktrees, not clones:** one shared `.git`, so a worker's branch is at once in the main checkout (tried and merged there) and in the other workers. A worker stands detached at the base: the main checkout holds the base branch.

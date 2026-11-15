@@ -169,3 +169,26 @@ def test_the_timeline_cache_keeps_finished_sessions_and_reparses_running_ones(tm
     wi.write_span_cache(seen)
     monkeypatch.setattr(wi, "session_span", lambda *_args: pytest.fail("a finished transcript of the same size is not parsed again"))
     assert wi.cached_span(wi.read_span_cache(), {}, path, 0, set())["outcome"] == "review"
+
+
+def test_machine_processes_go_to_the_folder_their_command_names():
+    mains = [("/d/Game", "Game")]
+    rows = [
+        {"pid": 1, "ppid": 0, "cpu": 0.0, "rss": 1, "args": "/sbin/launchd"},
+        {"pid": 10, "ppid": 1, "cpu": 1.0, "rss": 1, "args": "ninja -C build/macos-debug"},
+        {"pid": 11, "ppid": 10, "cpu": 90.0, "rss": 5, "args": "/usr/bin/clang++ -c /d/Game.workers/w2/src/A.cpp -o x.o"},
+        {"pid": 12, "ppid": 10, "cpu": 50.0, "rss": 5, "args": "/usr/bin/clang++ /d/Game.workers/w2/build/a.o -o /d/Game.workers/w2/build/bin/App"},
+        {"pid": 20, "ppid": 1, "cpu": 0.0, "rss": 1, "args": "ctest --preset macos-debug -j8"},
+        {"pid": 21, "ppid": 20, "cpu": 30.0, "rss": 2, "args": "/d/Game/build/macos-debug/bin/GameTests --gtest_filter=X"},
+        {"pid": 30, "ppid": 1, "cpu": 5.0, "rss": 9, "args": "/Applications/Chrome.app/Contents/MacOS/Chrome"},
+        {"pid": 40, "ppid": 1, "cpu": 2.0, "rss": 3, "args": "claude bg-pty-host --bg-pty-host /tmp/x.sock"},
+    ]
+    wi.assign_groups(rows, mains)
+    got = {r["pid"]: (r["group"], r["kind"]) for r in rows}
+    assert got[11] == ("Game/w2", "compile")
+    assert got[12] == ("Game/w2", "link")
+    assert got[10] == ("Game/w2", "build")  # from its jobs
+    assert got[20] == ("Game/main", "test")  # ctest from the test it runs
+    assert got[21] == ("Game/main", "test")
+    assert got[1][0] is None and got[30][0] is None  # launchd and an app never take a group
+    assert got[40] == (None, "claude")

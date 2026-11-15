@@ -5,7 +5,7 @@
 
 namespace BECore {
 
-    /// Frame time of one step when nothing says how long it lasts: one frame at 60 fps
+    /// Frame time of one step when nothing says how long it lasts
     inline constexpr double kDefaultStepSeconds = 1.0 / 60.0;
 
     /// What the game does in one frame, as GamePause::BeginFrame() decides it
@@ -36,7 +36,7 @@ namespace BECore {
      */
     class GamePause {
     public:
-        /// Pause or resume. Resuming a paused game drops the pending steps; pausing keeps them
+        /// Pause or resume; resuming drops the pending steps
         void SetPaused(bool paused);
 
         [[nodiscard]] bool IsPaused() const {
@@ -46,7 +46,7 @@ namespace BECore {
         /**
          * @brief Ask for @p count more stepped frames of @p seconds each.
          *
-         * They are taken only while paused (a running game takes none). Zero adds nothing.
+         * They are taken only while paused (a running game takes none).
          */
         void RequestSteps(uint32_t count, double seconds = kDefaultStepSeconds);
 
@@ -65,7 +65,7 @@ namespace BECore {
             return _paused && _pendingSteps > 0;
         }
 
-        /// Decide the frame that starts now; a Stepped frame uses up one pending step. Application::RunFrame calls it once per frame
+        /// Decide the frame that starts now; a Stepped frame uses up one pending step
         [[nodiscard]] FrameDecision BeginFrame();
 
     private:

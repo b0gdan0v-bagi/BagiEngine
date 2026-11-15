@@ -28,7 +28,6 @@ namespace BECore {
     /// The mode that runs in this build: @p requested, except that Editor becomes Game (with one warning) when !kEditorBuilt.
     RunMode ResolveRunMode(RunMode requested);
 
-    /// The other mode: Editor for Game and Game for Editor.
     RunMode OtherRunMode(RunMode mode);
 
     /// Name of the config that lists the widgets created in @p mode.

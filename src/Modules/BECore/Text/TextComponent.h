@@ -13,13 +13,10 @@ namespace BECore {
      * @brief Draws text in the box of the node's TransformComponent (x, y, width, height).
      *
      * A width of 0 means no limit: no wrap, no cut on the width; the same for the height. The font size is in scene
-     * units: the text is rasterized at that size times the scale of the view transform (a scene with a view size that
-     * is fitted to a bigger output gets sharper text, not stretched text). Usable outside the UI: it is an ordinary scene component.
+     * units: the text is rasterized at that size times the scale of the view transform, so a scene fitted to a bigger
+     * output gets sharper text, not stretched text.
      *
-     * Overflow: Clip clips the drawing to the box when the text does not fit, Ellipsis ends the text with "…", AutoFit
-     * shrinks the font down to `_minFontSize` (TextLayout).
-     *
-     * The outline and the hard shadow (`_outlineWidth` / `_outlineColor`, `_shadowOffsetX/Y` / `_shadowColor`, scene units) are paint: the layout never counts them, and a Clip box cuts them.
+     * The outline and the hard shadow are paint: the layout never counts them, and a Clip box cuts them.
      */
     class TextComponent : public IComponent {
         BE_CLASS(TextComponent, ICON = type)
@@ -49,8 +46,7 @@ namespace BECore {
 
         void SetText(StringView text);
 
-        /// Load the font again from `_fontPath`, or `_fontFamily` and `_fontWeight`. A changed path, family or weight is noticed by the next draw by itself;
-        /// call it to read the file again
+        /// Loads the font again. A changed path, family or weight is noticed by the next draw by itself; call this to read the file again
         void ReloadFont();
 
         /// The layout that the last draw used (empty before the first draw)

@@ -75,7 +75,7 @@ namespace BECore {
     [[nodiscard]] TickRange SnapshotExtent(const RingSnapshot& snapshot);
 
     /**
-     * @brief The threads that have a zone overlapping [beginTicks, endTicks), in the order of the contract: by sort index
+     * @brief The threads that have a zone overlapping [beginTicks, endTicks), ordered by sort index
      * (threads without one, Profiler::kNoSortIndex, after those with), then by thread id.
      */
     [[nodiscard]] Vector<TimelineLane> LayoutLanes(const RingSnapshot& snapshot, double beginTicks, double endTicks);

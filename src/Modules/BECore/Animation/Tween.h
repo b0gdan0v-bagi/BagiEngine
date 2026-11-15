@@ -67,9 +67,8 @@ namespace BECore {
      * **Lifetime of the setter.** The setter of a tween often captures a pointer to an object (a component, a node). The tween does not
      * know when that object dies: cancel it first, from the owner (a `ScopedTween` member does it in its destructor).
      *
-     * **Waiters.** A coroutine suspended on the handle (`AwaitTween`) is a waiter. The manager resumes the waiters inline, in the order
-     * they registered, right after the `onComplete` or `onCancel` callback of the tween (a waiter is a callback and has all the rules of
-     * one). `Clear()` and the destructor of the manager drop them without resuming them.
+     * **Waiters.** A coroutine suspended on the handle (`AwaitTween`) is resumed inline after the `onComplete` or `onCancel` callback;
+     * `Clear()` and the destructor of the manager drop it without resuming it (`Animation/CLAUDE.md`, rule 9 and 10).
      */
     class TweenHandle : public RefCountedNonAtomic {
     public:

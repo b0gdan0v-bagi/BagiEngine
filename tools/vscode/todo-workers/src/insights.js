@@ -8,7 +8,11 @@ const https = require("https");
 const http = require("http");
 const { config, findTool, runTool, shellQuote, terminalWith } = require("./tools");
 const DAY_KEY = "todoWorkers.dayStart"; // when the owner last ended the day (ms): the day view counts from it
-const CACHE_KEY = "todoWorkers.insights"; // the last answer of each view, shown at once after a reload
+const CACHE_KEY = "todoWorkers.insights";
+const MACHINE_KEY = "todoWorkers.machine";
+const HISTORY_KEY = "todoWorkers.machineHistory"; // [{at, load (1 min), mem (% used)}], one a minute
+const SAMPLE_EVERY_MS = 55000;
+const HISTORY_KEEP_MS = 74 * 3600 * 1000; // the longest timeline (todoWorkers.timelineHours, at most 72) and a margin // the last answer of each view, shown at once after a reload
 
 // Each view is read on its own: `every` on the timer, `afterWrite` at the soonest after a write to the store (null: the
 // store does not move it). A reading view keeps showing its last answer; only a view never read says "reading".
@@ -53,6 +57,32 @@ function attach(ctx) {
             reading.delete(name);
             ctx.context.globalState.update(CACHE_KEY, { ...insights, reading: undefined });
             publish();
+        }
+    }
+
+    // The machine (worker.py machine: one ps and one sysctl, about 0.2 s with Python's start) on every refresh, and
+    // a sample of its load and memory at most once a minute into a history of a day and more, for the timeline.
+    let machine = ctx.context.globalState.get(MACHINE_KEY, null);
+    let history = ctx.context.globalState.get(HISTORY_KEY, []);
+    let machineReading = false;
+    async function readMachine() {
+        const tool = findTool();
+        if (!tool || machineReading) return;
+        machineReading = true;
+        try {
+            machine = JSON.parse(await runTool(tool, ["machine", "--json"], 30000));
+            const last = history[history.length - 1];
+            if (machine.load && (!last || machine.at - last.at >= SAMPLE_EVERY_MS)) {
+                const mem = machine.memory;
+                history = [...history.filter((h) => machine.at - h.at < HISTORY_KEEP_MS), { at: machine.at, load: machine.load[0], mem: mem ? 100 - mem.freePercent : null }];
+                ctx.context.globalState.update(HISTORY_KEY, history);
+            }
+            ctx.context.globalState.update(MACHINE_KEY, machine);
+            ctx.view.show({ ...ctx.view.payload, machine, machineHistory: history });
+        } catch (error) {
+            // no machine view this time: the last one stays
+        } finally {
+            machineReading = false;
         }
     }
 
@@ -199,7 +229,7 @@ function attach(ctx) {
         }
     }
 
-    Object.assign(ctx, { readInsights, insights: () => ({ ...insights, reading: [...reading] }), doctorFix, mergeTrain, endDay, copyPush, dispatch, pushNotify });
+    Object.assign(ctx, { readMachine, machine: () => ({ machine, machineHistory: history }), readInsights, insights: () => ({ ...insights, reading: [...reading] }), doctorFix, mergeTrain, endDay, copyPush, dispatch, pushNotify });
 }
 
 module.exports = { attach };

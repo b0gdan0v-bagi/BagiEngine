@@ -285,3 +285,10 @@ button.toggle.on { opacity: 1; color: var(--vscode-testing-iconPassed, #3fb950);
 }
 .link { cursor: pointer; text-decoration: underline dotted; }
 .insight-age { font-size: 11px; }
+.machine { margin: 2px 0; }
+.runs { font-size: 11px; margin: 2px 0; }
+.tl-load { fill: var(--vscode-charts-yellow, #d29922); opacity: 0.45; }
+.tl-mem { fill: none; stroke: var(--vscode-charts-purple, #a371f7); stroke-width: 1.2; }
+.tl-cores { stroke: var(--vscode-editorWarning-foreground, #d29922); stroke-dasharray: 4 3; stroke-width: 1; }
+.tl-key.tl-load-key::before { background: var(--vscode-charts-yellow, #d29922); opacity: 0.6; }
+.tl-key.tl-mem-key::before { background: var(--vscode-charts-purple, #a371f7); height: 2px; vertical-align: 3px; }

@@ -41,7 +41,7 @@ namespace BECore {
             return _params;
         }
 
-        /// Answers with success. @p result is the "result" member of the response
+        /// Answers with success
         void Reply(Json result);
 
         /// Answers with an error

@@ -20,7 +20,6 @@ namespace BECore {
             return 0;
         }
 
-        // Разделяем строку по разделителям (для имен флагов)
         const auto& flagNames = BECore::StringUtils::Split(flagsString, '|');
 
         SDL_WindowFlags result = 0;
@@ -33,7 +32,6 @@ namespace BECore {
     }
 
     SDL_WindowFlags SDLUtils::GetWindowFlagValue(StringView flagName) {
-        // Маппинг имен флагов на их значения
         static constexpr auto flagTable = SortFlagEntryFlags(Array<FlagEntry, 25>{{
             {.name = "SDL_WINDOW_FULLSCREEN", .value = SDL_WINDOW_FULLSCREEN},
             {.name = "SDL_WINDOW_OPENGL", .value = SDL_WINDOW_OPENGL},

@@ -14,12 +14,11 @@ namespace BECore {
      * The render data of a node in the scene's registry: components of the node's entity, written by SceneDrawSystem::Run() and
      * by nothing else. They are a mirror. TransformComponent, QuadRendererComponent and SpriteRendererComponent stay the source
      * of truth (reflection, the XML, the scene editor and game code write their fields), and the system copies the fields at the
-     * start of every Draw(), so a change shows in the next draw with no event or setter hook. A node that lost the component
-     * loses the registry component in the same walk. The structs are valid after a Draw(); game code does not read them.
+     * start of every Draw(), so a change shows in the next draw with no event or setter hook. The structs are valid after a Draw(); game code does not read them.
      */
 
     /// Mirror of TransformComponent: the rect of the node in scene units, and the rotation (degrees, clockwise) about the pivot,
-    /// which is normalized in that rect (0.5, 0.5 is the center). A rotation of 0 draws the plain, unturned rect.
+    /// which is normalized in that rect (0.5, 0.5 is the center).
     struct TransformData {
         float x = 0.0f;
         float y = 0.0f;
@@ -38,8 +37,7 @@ namespace BECore {
     };
 
     /**
-     * Mirror of SpriteRendererComponent. @c blend is the blend mode of its draw, @c flipX / @c flipY mirror the picture. @c owner is the
-     * component it was copied from. @c texture is null when the sprite has none.
+     * Mirror of SpriteRendererComponent. @c owner is the component it was copied from. @c texture is null when the sprite has none.
      *
      * @c texture is a raw pointer taken from the component's handle in the same Run() that draws. It is safe only because nothing may
      * change the component (SetTexture(), ReloadTexture(), RemoveComponent()) between the sync and the draw: nothing adds or removes
