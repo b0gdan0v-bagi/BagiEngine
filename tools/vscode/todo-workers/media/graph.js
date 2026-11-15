@@ -172,7 +172,8 @@
             flows.push(flowArrow(colX(0) + WORKER_W, cx, mid));
             const entry = w.entry;
             if (entry) {
-                const status = entry.status || "?";
+                // a loop started on this entry that has not claimed it yet (worker.py list: starting)
+                const status = entry.starting ? "starting" : entry.status || "?";
                 const over = ["stopped", "done", "waiting", "limited"].includes(sess.kind) ? sess : null;
                 const ebox = box(cx, y, NODE_W, `g-node g-entry g-held st-${slug(status)}${over ? ` over-${over.kind}` : ""}`, true);
                 const sub = [status, over ? over.word : "", progressOf(entry)].filter(Boolean).join(" · ");

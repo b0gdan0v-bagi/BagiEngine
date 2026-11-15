@@ -295,7 +295,8 @@
             return card;
         }
         if (entry) {
-            if (entry.status === "review") card.appendChild(el("div", "note ok", "in review" + (entry.statusNote ? `: ${entry.statusNote}` : "")));
+            if (entry.starting) card.appendChild(el("div", "note", "starting: the loop was started on this entry and has not claimed it yet"));
+            else if (entry.status === "review") card.appendChild(el("div", "note ok", "in review" + (entry.statusNote ? `: ${entry.statusNote}` : "")));
             else if (entry.statusNote) card.appendChild(el("div", "note", entry.statusNote));
             const bar = progress(entry);
             if (bar) card.appendChild(bar);

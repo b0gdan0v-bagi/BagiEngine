@@ -897,6 +897,28 @@ def transcript_of(cwd: str, session_id: str) -> Path:
     return projects_dir() / re.sub(r"[^A-Za-z0-9]", "-", cwd) / f"{session_id}.jsonl"
 
 
+LOOP_WORDS = {"list", "plan-only", "close"}
+
+
+def loop_entry_of(session: dict | None) -> str | None:
+    """The entry id a session's `/todo-loop N <id> ...` prompt names (`start --loop-args <id>`), or None: what a
+    worker is about to take before its loop has claimed it and cut the branch."""
+    if not session or not session.get("cwd") or not session.get("sessionId"):
+        return None
+    try:
+        with transcript_of(session["cwd"], session["sessionId"]).open(encoding="utf-8", errors="replace") as f:
+            head = f.read(20000)
+    except OSError:
+        return None
+    match = re.search(r"<command-name>/todo-loop</command-name>(?:\\n|\s)*<command-args>([^<]*)</command-args>", head)
+    if not match:
+        return None
+    for word in match.group(1).split():
+        if not word.isdigit() and word not in LOOP_WORDS and "=" not in word:
+            return word
+    return None
+
+
 def tail_records(path: Path) -> list[dict]:
     """The JSON records of the last TAIL_BYTES of a transcript (the first, cut line is dropped)."""
     try:
@@ -2024,6 +2046,13 @@ def list_json(layout: Layout, args) -> dict:
         changed = dirty(path, ignore_submodules=True) or (engine is not None and dirty(path / SHARED_SUBMODULE))
         session = session_in(sessions or [], path)
         entry = next((by_branch[h["branch"]] for h in (engine, game) if h and h["branch"] in by_branch), None)
+        # a running loop started on a named entry that has not claimed it yet: show that entry, marked `starting`
+        if entry is None and args.store and is_running(session):
+            named = loop_entry_of(session)
+            if named:
+                show = show or store_lookup(layout)
+                found = show(named)
+                entry = {**found, "starting": True} if isinstance(found, dict) else None
         limited = limit_hit(session)
         queue_state = queue_state_of(queue_states, f"{WORKER_PREFIX}{k}")
         items = queues.get(f"{WORKER_PREFIX}{k}", [])
