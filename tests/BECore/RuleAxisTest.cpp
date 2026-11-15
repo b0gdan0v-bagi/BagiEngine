@@ -117,14 +117,14 @@ namespace BECore::Tests {
         TagTree tags;
         String path = "t";
         ASSERT_TRUE(tags.Add(path).has_value());
-        for (int depth = 1; depth < 200; ++depth) {
+        for (size_t depth = 1; depth < kMaxTagDepth; ++depth) {
             path += ".t";
         }
         ASSERT_TRUE(tags.Add(path).has_value());
         tags.Bake();
         const RuleAxis axis = RuleAxis::OfTags("deep", tags);
         EXPECT_LT(SpecificityOf(axis, Format("tag:{}", path)), kIdSpecificity);
-        EXPECT_EQ(SpecificityOf(axis, Format("tag:{}", path)), 400u);
+        EXPECT_EQ(SpecificityOf(axis, Format("tag:{}", path)), 2 * kMaxTagDepth);
     }
 
     TEST(RuleAxisTest, SurroundingSpacesAreTrimmed) {
