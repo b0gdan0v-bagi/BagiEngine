@@ -72,7 +72,7 @@ namespace BECore {
         /// Where Publish() sends its messages (the transport); none by default
         void SetEventSink(EventSink sink);
 
-        /// Sends {"event":..,"data":..} to the event sink, if there is one
+        /// Sends {"event":..,"data":..} to the event sink, if there is one. A sink may replace or clear itself; a Publish from inside the sink sends nothing
         void Publish(StringView event, const Json& data);
 
         /// Runs @p hook at the end of every frame, before a deferred call is completed. A hook of the same @p name is replaced, so registering a module again adds nothing
@@ -160,9 +160,10 @@ namespace BECore {
         bool _manualClock = false;
         GamePause* _pause = nullptr;
         ControlServerStatus _serverStatus;
-        EventSink _eventSink;
+        EventSink _eventSink;               // empty while the sink runs (Publish moves it out)
+        uint64_t _eventSinkGeneration = 0;  // the registration of the current sink; a running sink goes back only if no other was set
         Vector<HookEntry> _frameEndHooks;
-        uint64_t _registrations = 0;  // counts RegisterHandler and SetFrameEndHook calls; the source of the generations
+        uint64_t _registrations = 0;  // counts RegisterHandler, SetFrameEndHook and SetEventSink calls; the source of the generations
     };
 
 }  // namespace BECore

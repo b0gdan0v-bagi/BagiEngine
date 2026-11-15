@@ -646,7 +646,7 @@ namespace BECore::Tests {
     TEST_F(ControlServiceTest, HandlerMayRegisterHandlers) {
         service.RegisterHandler("register", [this](ControlCall& call) {
             for (int index = 0; index < 200; ++index) {  // enough to rehash the handler table
-                service.RegisterHandler(View("extra" + ToString(index)), [](ControlCall& extra) { extra.Reply(Json::object()); });
+                service.RegisterHandler(View(Format("extra{}", index)), [](ControlCall& extra) { extra.Reply(Json::object()); });
             }
             call.Reply(Json::object());
         });
@@ -738,7 +738,7 @@ namespace BECore::Tests {
         service.RegisterHandler("grow", [this, &calls](ControlCall& call) {
             ++calls;
             for (int index = 0; index < 200; ++index) {
-                service.RegisterHandler(View("extra" + ToString(index)), [](ControlCall& extra) { extra.Reply(Json::object()); });
+                service.RegisterHandler(View(Format("extra{}", index)), [](ControlCall& extra) { extra.Reply(Json::object()); });
             }
             call.Reply(Json::object());
         });
@@ -772,7 +772,7 @@ namespace BECore::Tests {
         service.SetFrameEndHook("grow", [this, &calls] {
             ++calls;
             for (int index = 0; index < 50; ++index) {  // enough to move the entries of the list
-                service.SetFrameEndHook(View("extra" + ToString(index)), [] {});
+                service.SetFrameEndHook(View(Format("extra{}", index)), [] {});
             }
         });
 
@@ -829,6 +829,50 @@ namespace BECore::Tests {
         const Json* eventData = FindJsonMember(*parsed, "data");
         ASSERT_NE(eventData, nullptr);
         EXPECT_EQ(GetJsonInt(*eventData, "version").value_or(0), 3);
+    }
+
+    TEST_F(ControlServiceTest, TheSinkStaysAfterPublishing) {
+        int calls = 0;
+        service.SetEventSink([&calls](const String&) { ++calls; });
+
+        service.Publish("a", Json::object());
+        service.Publish("b", Json::object());
+
+        EXPECT_EQ(calls, 2);
+    }
+
+    TEST_F(ControlServiceTest, SinkThatReplacesItselfKeepsItsCaptureUntilItReturns) {
+        int destroyed = 0;
+        int destroyedAfterReplacing = -1;
+        service.SetEventSink([this, owner = DestroyCounter(destroyed), &destroyed, &destroyedAfterReplacing](const String&) {
+            service.SetEventSink([this](const String&) { order.push_back("second"); });
+            destroyedAfterReplacing = destroyed;
+        });
+
+        service.Publish("a", Json::object());
+        EXPECT_EQ(destroyedAfterReplacing, 0);
+        EXPECT_EQ(destroyed, 1);
+
+        service.Publish("b", Json::object());
+        EXPECT_EQ(order, (Vector<String>{"second"}));
+    }
+
+    TEST_F(ControlServiceTest, SinkThatClearsItselfKeepsItsCaptureUntilItReturns) {
+        int destroyed = 0;
+        int destroyedAfterClearing = -1;
+        int calls = 0;
+        service.SetEventSink([this, owner = DestroyCounter(destroyed), &destroyed, &destroyedAfterClearing, &calls](const String&) {
+            ++calls;
+            service.SetEventSink({});
+            destroyedAfterClearing = destroyed;
+        });
+
+        service.Publish("a", Json::object());
+        EXPECT_EQ(destroyedAfterClearing, 0);
+        EXPECT_EQ(destroyed, 1);
+
+        service.Publish("b", Json::object());
+        EXPECT_EQ(calls, 1);
     }
 
     TEST_F(ControlServiceTest, PublishWithoutASinkDoesNothing) {

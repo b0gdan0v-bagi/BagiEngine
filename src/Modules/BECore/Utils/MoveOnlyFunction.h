@@ -64,10 +64,15 @@ namespace BECore {
                 Take(other);
             }
 
+            /// The new callable is in place before the old one is destroyed, so a destructor of the old capture sees this function holding the new
+            /// callable. @p other is taken first: it may live inside the capture being overwritten.
             FunctionImpl& operator=(FunctionImpl&& other) noexcept {
                 if (this != &other) {
-                    Reset();
-                    Take(other);
+                    FunctionImpl incoming;
+                    incoming.Take(other);
+                    FunctionImpl old;
+                    old.Take(*this);
+                    Take(incoming);
                 }
                 return *this;
             }
@@ -79,22 +84,24 @@ namespace BECore {
 
             template <typename TCallable>
             requires(kIsOther<TCallable>&& kAccepts<TCallable>) FunctionImpl& operator=(TCallable&& callable) {
-                Reset();
-                Emplace(std::forward<TCallable>(callable));
-                return *this;
+                return *this = FunctionImpl(std::forward<TCallable>(callable));
             }
 
             ~FunctionImpl() {
-                Reset();
+                if (_ops != nullptr) {
+                    const Ops* ops = _ops;
+                    _invoke = nullptr;
+                    _ops = nullptr;
+                    ops->destroy(_buffer);
+                }
             }
 
-            /// Destroys the stored callable; the function is empty afterwards
+            /// Empties the function, then destroys the callable: its destructor sees an empty function, and may assign this one
             void Reset() noexcept {
                 if (_ops != nullptr) {
-                    _ops->destroy(_buffer);
+                    FunctionImpl old;
+                    old.Take(*this);
                 }
-                _invoke = nullptr;
-                _ops = nullptr;
             }
 
             explicit operator bool() const noexcept {

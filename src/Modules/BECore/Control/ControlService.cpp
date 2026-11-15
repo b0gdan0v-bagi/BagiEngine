@@ -94,6 +94,7 @@ namespace BECore {
 
     void ControlService::SetEventSink(EventSink sink) {
         _eventSink = std::move(sink);
+        _eventSinkGeneration = ++_registrations;
     }
 
     void ControlService::Publish(StringView event, const Json& data) {
@@ -103,7 +104,14 @@ namespace BECore {
         Json message = Json::object();
         message["event"] = MakeJsonString(event);
         message["data"] = data;
-        _eventSink(DumpJson(message));
+
+        // The running sink is moved out like a running handler: it may set another sink, and its capture must live until it returns
+        const uint64_t generation = _eventSinkGeneration;
+        EventSink sink = std::move(_eventSink);
+        sink(DumpJson(message));
+        if (_eventSinkGeneration == generation) {
+            _eventSink = std::move(sink);
+        }
     }
 
     void ControlService::SetFrameEndHook(StringView name, FrameEndHook hook) {

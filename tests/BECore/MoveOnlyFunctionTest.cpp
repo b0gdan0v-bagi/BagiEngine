@@ -270,6 +270,128 @@ namespace BECore::Tests {
         EXPECT_EQ(calls, 0);
     }
 
+    /// The outer callable of the overwrite tests: @p Padding picks the inline path (small) or the heap path (above the buffer)
+    template <size_t Padding>
+    struct OwnsInner {
+        LifeCounter life;
+        char padding[Padding + 1] = {};
+        UniquePtr<Task> task;
+        UniquePtr<Small> small;
+
+        OwnsInner(UniquePtr<Task> ownedTask, UniquePtr<Small> ownedSmall) : task(std::move(ownedTask)), small(std::move(ownedSmall)) {}
+        OwnsInner(OwnsInner&&) noexcept = default;
+
+        void operator()() const {}
+    };
+
+    /// Reports what its destructor sees of the function that holds it; the moved-from objects of the relocations report nothing
+    template <size_t Padding>
+    struct WatchesHolder {
+        using OnDestroy = void (*)(Task& holder, int* counter);
+
+        LifeCounter life;
+        char padding[Padding + 1] = {};
+        Task* holder;
+        OnDestroy onDestroy;
+        int* counter;
+
+        WatchesHolder(Task* heldBy, OnDestroy callback, int* callbackCounter) : holder(heldBy), onDestroy(callback), counter(callbackCounter) {}
+        WatchesHolder(WatchesHolder&& other) noexcept : life(std::move(other.life)), holder(std::exchange(other.holder, nullptr)), onDestroy(other.onDestroy), counter(other.counter) {}
+        ~WatchesHolder() {
+            if (holder != nullptr) {
+                onDestroy(*holder, counter);
+            }
+        }
+
+        void operator()() const {}
+    };
+
+    using InlinePadding = std::integral_constant<size_t, 8>;
+    using HeapPadding = std::integral_constant<size_t, kDefaultFunctionInlineBytes * 2>;
+    static_assert(kFunctionFitsInline<OwnsInner<InlinePadding::value>>);
+    static_assert(!kFunctionFitsInline<OwnsInner<HeapPadding::value>>);
+    static_assert(kFunctionFitsInline<WatchesHolder<InlinePadding::value>>);
+    static_assert(!kFunctionFitsInline<WatchesHolder<HeapPadding::value>>);
+
+    template <typename TPadding>
+    class MoveOnlyFunctionOverwriteTest : public MoveOnlyFunctionTest {};
+
+    using Paddings = ::testing::Types<InlinePadding, HeapPadding>;
+    TYPED_TEST_SUITE(MoveOnlyFunctionOverwriteTest, Paddings);
+
+    TYPED_TEST(MoveOnlyFunctionOverwriteTest, AssigningAFunctionTheOldCaptureOwnsKeepsIt) {
+        int calls = 0;
+        auto inner = MakeUnique<Task>(Small{&calls});
+        Task* innerPointer = inner.get();
+        Task function{OwnsInner<TypeParam::value>{std::move(inner), nullptr}};
+        EXPECT_EQ(LifeCounter::alive, 2);
+
+        function = std::move(*innerPointer);
+
+        EXPECT_EQ(LifeCounter::alive, 1);
+        ASSERT_TRUE(function);
+        function();
+        EXPECT_EQ(calls, 1);
+    }
+
+    TYPED_TEST(MoveOnlyFunctionOverwriteTest, AssigningACallableTheOldCaptureOwnsKeepsIt) {
+        int calls = 0;
+        auto inner = MakeUnique<Small>(&calls);
+        Small* innerPointer = inner.get();
+        Task function{OwnsInner<TypeParam::value>{nullptr, std::move(inner)}};
+        EXPECT_EQ(LifeCounter::alive, 2);
+
+        function = std::move(*innerPointer);
+
+        EXPECT_EQ(LifeCounter::alive, 1);
+        ASSERT_TRUE(function);
+        function();
+        EXPECT_EQ(calls, 1);
+    }
+
+    TYPED_TEST(MoveOnlyFunctionOverwriteTest, TheOldCaptureSeesTheNewCallableWhileItIsDestroyed) {
+        int calls = 0;
+        int seenCallable = 0;
+        Task function{WatchesHolder<TypeParam::value>{&function, [](Task& holder, int* counter) { *counter += holder ? 1 : 0; }, &seenCallable}};
+        Task replacement{[&calls] { ++calls; }};
+
+        function = std::move(replacement);
+
+        EXPECT_EQ(seenCallable, 1);  // the destructor found the new callable in the function, not the half-destroyed old one
+        function();
+        EXPECT_EQ(calls, 1);
+    }
+
+    TYPED_TEST(MoveOnlyFunctionOverwriteTest, TheOldCaptureSeesAnEmptyFunctionWhenItIsResetOrCleared) {
+        const auto record = [](Task& holder, int* counter) { *counter = holder ? 1 : 0; };
+        int observed = -1;
+        Task function{WatchesHolder<TypeParam::value>{&function, record, &observed}};
+        function.Reset();
+        EXPECT_EQ(observed, 0);
+        EXPECT_FALSE(function);
+
+        observed = -1;
+        function = WatchesHolder<TypeParam::value>{&function, record, &observed};
+        function = nullptr;
+        EXPECT_EQ(observed, 0);
+        EXPECT_FALSE(function);
+    }
+
+    TYPED_TEST(MoveOnlyFunctionOverwriteTest, ADestructorThatAssignsTheFunctionLeavesAValidOne) {
+        int calls = 0;
+        const auto assign = [](Task& holder, int* counter) { holder = Task{[counter] { ++*counter; }}; };
+        Task function{WatchesHolder<TypeParam::value>{&function, assign, &calls}};
+
+        function = Task{[] {}};  // the destructor of the old capture then stores its own callable
+        ASSERT_TRUE(function);
+        function();
+        EXPECT_EQ(calls, 1);
+
+        function.Reset();
+        EXPECT_FALSE(function);
+        EXPECT_EQ(LifeCounter::alive, 0);
+    }
+
     TEST_F(MoveOnlyFunctionTest, TheEmptyState) {
         Task empty;
         EXPECT_FALSE(empty);
