@@ -76,7 +76,6 @@ Several loops at once, each in a **worker folder** (the loop's own rules: `.clau
 python3 tools/todo/worker.py create 3      # <parent>/<name>.workers/w1..w3; --base, --preset, --no-configure
 python3 tools/todo/worker.py list          # branch, cleanliness, session of each; --json [--store] [--activity] [--usage]: the panel
 python3 tools/todo/worker.py check [--fix] # the shared config and the Windows links (below) of every worker
-python3 tools/todo/worker.py run 2         # claude in w2 in this terminal
 python3 tools/todo/worker.py start         # /todo-loop in every worker, background, --delay apart; --slices, --report-to, --print
 python3 tools/todo/worker.py start 2 --detach --wait-free 1800 --queued-only --delay 0  # the end of a run in a worker (below)
 python3 tools/todo/worker.py stop [k ...]  # stop background sessions (the conversation is kept)
@@ -84,21 +83,22 @@ python3 tools/todo/worker.py relaunch [k]  # resume sessions stopped by the usag
 python3 tools/todo/worker.py merge <id> [--dry-run] [--no-kick]  # quick merge of an entry in review, then `kick`
 python3 tools/todo/worker.py kick [--merged id]      # idle workers take the head of their queues, detached
 python3 tools/todo/worker.py update [k ...]          # detach an idle, clean worker at the tips of its bases (no build, no submodule update)
-python3 tools/todo/worker.py remove 3      # a clean folder; its branches stay
+python3 tools/todo/worker.py remove 3      # a clean folder (its branches stay)
 python3 tools/todo/worker.py queue [k] [--add id [--first] [--by-loop] | --remove id | --pop | --clear | --pause [--reason R] | --resume]  # (below)
-python3 tools/todo/worker.py overlap <id>  # busy entries whose slice plans name its files
+python3 tools/todo/worker.py overlap <id>  # busy entries whose plans name its files
 python3 tools/todo/worker.py prefs [--prefer a,b] [--avoid c] [--clear]   # the owner's preferences of /todo-dispatch
 python3 tools/todo/worker.py dispatch --json [k ...] [--depth N]  # one read for /todo-dispatch; --record <file> keeps a classifier answer
 python3 tools/todo/worker.py build-info    # preset, product, tests, screenshot tool (the panel's Verify, Build & run, Shots)
-python3 tools/todo/worker.py cost <id> [--json]      # dollars of every loop session that held the entry, against its costCap
+python3 tools/todo/worker.py cost <id> [--json]      # dollars of the loop sessions that held the entry, against its costCap
 python3 tools/todo/worker.py remarks <id> --file F|- [--start]  # an entry in review goes back with the owner's remarks
+python3 tools/todo/worker.py doctor [k] [--fix K] | merge-train [--dry-run] | busy | day | timeline | review-stats  # the panel's (worker_insights.py)
 ```
 
 - **Worktrees, not clones:** one shared `.git`, so a worker's branch is at once in the main checkout (tried and merged there) and in the other workers. A worker stands detached at the base: the main checkout holds the base branch.
 - **In a game:** the worker's `engine/` is a worktree of the main checkout's engine module. **Never run `git submodule update` in a worker**: it would write the worker's path into the shared `core.worktree` and break the main `engine/`; `create` sets `submodule.engine.update=none` per worker, `check --fix` repairs `core.worktree`.
 - **Shared by symlink:** `.env`, `.claude/settings.local.json`, `.venv` / `engine/.venv`.
-- **Windows symlinks:** git makes a tracked link a *file* symlink when its target is missing at checkout time (the game's `.claude/skills/*` into an `engine/` that is empty or older); `stat` then fails (`WinError 5`) and the skill does not load. `create`, `update` and `start` remake such links as directory symlinks after both repositories moved, `check --fix` by hand.
-- **Builds:** each worker has its own `build/`. `create` (`-D`) and every session (`build_env`, `setdefault`: the owner's wins) set `ENGINE_CCACHE_BASE_DIR=<the parent of the main checkout>` (main checkout, workers, sibling games): every preset shares hits. The main checkout needs `base_dir = <that folder>` and `hash_dir = false` once in `~/.ccache/ccache.conf` (it wins over ours) or the variable in the shell profile.
+- **Windows symlinks:** a tracked link whose target was missing at checkout (the game's `.claude/skills/*` into an older `engine/`) becomes a *file* symlink (`WinError 5`, the skill does not load); `create`, `update` and `start` remake it as a directory symlink, `check --fix` by hand.
+- **Builds:** each worker has its own `build/`. `create` (`-D`) and every session (`build_env`, `setdefault`: the owner's wins) set `ENGINE_CCACHE_BASE_DIR=<the parent of the main checkout>`: every checkout and preset shares hits. The main checkout needs `base_dir = <that folder>` and `hash_dir = false` once in `~/.ccache/ccache.conf` (it wins) or the variable in the shell profile.
 - **Sessions:** `start` runs `/todo-loop N` as a `claude --bg` session on a cheap model only in workers whose session has finished, `--delay` apart. First it detaches the worker at its bases' tips (as `update`; uncommitted changes: starts where it stands, with a note): an old game commit beside a newer engine base gives a red baseline. `list` shows a session waiting for a permission (a run that ended its turn with text is finished, `endedTurn`; `start` stops it first), one stopped by the usage limit (`relaunch` after the reset) and one stopped by `stop` (`~/.claude/todo/stopped-sessions.json`). A folder Claude Code does not trust yet needs one `run <k>` first.
 - **Queues.** `start --queued-only` takes the first *takeable* entry of the worker's queue (`queue_wait`: the loop's stacked/paired rule from the store JSON, busy files left to the loop; blocked ones stay). A paused queue (`queue --pause`, set by every stopped loop; `--resume`) starts nothing; a new entry beyond `QUEUE_STREAK_LIMIT` in a row pauses it instead, counted anew on `--add` (not `--by-loop`), `--resume`, `--clear`, `remarks` and a merge of an entry the worker held. `--wait-free S` waits for the session to end, `--detach` runs it apart: every run in a worker ends so (`todo-loop/SKILL.md`, "End of the run"); `kick` (and `merge`) does it for each idle worker (finished, not stopped, clean, takeable head). Its state is the key `state` of `worker-queues.json`, beside the older lists. `remarks` stores the plan `todo-loop-<branch-id>-remarks-<n>.md` (kind `remarks`), sets the entry `in progress` and queues it first on the worker holding its branch (or a free one).
 - **Quick merge** = `/todo-merge` after the owner's yes: refuses an entry not in review or with an open blocker, a foreign or merged branch, conflicts, a dirty tree; merges `--no-ff`, closes (or `--reopen`s) the entry, detaches the worker, deletes the branch, commits the engine pointer in a game, then `kick`s. It never builds and never pushes.

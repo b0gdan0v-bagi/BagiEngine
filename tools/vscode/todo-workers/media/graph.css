@@ -36,6 +36,8 @@
 /* by status: the stripe, and the frame of the entry a worker holds */
 .st-open .g-stripe { fill: var(--g-open); }
 .st-in-progress .g-stripe { fill: var(--g-progress); }
+.st-starting .g-stripe { fill: var(--g-progress); opacity: 0.5; }
+.g-held.st-starting .g-frame { stroke: var(--g-progress); stroke-dasharray: 4 3; }
 .st-review .g-stripe { fill: var(--g-review); }
 .st-closed .g-stripe { fill: var(--g-stopped); }
 .st-deferred .g-stripe { fill: var(--g-stopped); }
