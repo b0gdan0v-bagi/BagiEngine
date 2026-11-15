@@ -11,6 +11,7 @@ namespace BECore::Tests {
     class FakeAudioBackend : public IAudioBackend {
     public:
         bool opens = true;
+        bool queues = true;  ///< false: QueueStream() refuses, as a closed output does
         Vector<bool> playing;
         Vector<float> gains;
         Vector<uint32_t> starts;        ///< the voice of every Start(), in order
@@ -84,6 +85,9 @@ namespace BECore::Tests {
         }
 
         bool QueueStream(uint32_t voice, Span<const float> samples) override {
+            if (!queues) {
+                return false;
+            }
             const uint64_t frames = samples.size() / streamFormats[voice].channels;
             queuedFrames[voice] += frames;
             totalFrames[voice] += frames;

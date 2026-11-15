@@ -260,4 +260,16 @@ namespace BECore::Tests {
         EXPECT_TRUE(manager.GetMusicState().loop);
     }
 
+    TEST_F(AudioMusicTest, AStreamThatTakesNothingIsNotDecodedForNobody) {
+        backend->queues = false;
+        ASSERT_TRUE(manager.PlayMusic(Tone()));
+        const uint32_t voice = backend->streamStarts.back();
+        EXPECT_EQ(backend->totalFrames[voice], 0u);
+        manager.Update(1.0f / 60.0f);
+        EXPECT_TRUE(manager.GetMusicState().playing) << "it plays out what it has";
+        backend->playing[voice] = false;  // nothing left
+        manager.Update(1.0f / 60.0f);
+        EXPECT_FALSE(manager.GetMusicState().playing);
+    }
+
 }  // namespace BECore::Tests

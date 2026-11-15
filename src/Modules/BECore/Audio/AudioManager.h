@@ -103,13 +103,14 @@ namespace BECore {
          * @brief Plays the .ogg or .wav at @p clipPath as music on the Music bus, decoded while it plays (an Ogg file is read whole, a few
          * megabytes, and decoded a chunk at a time by Update(); a WAVE file is decoded whole)
          *
-         * The track that plays fades out over @p fadeSeconds while this one fades in (0: at once); a third track stops the oldest. The same
-         * path as the music that plays only takes the new @p volume and @p loop. False when nothing plays: no backend or one without
+         * The track that plays fades out over @p fadeSeconds while this one fades in (0, or not a finite positive number: at once); a third
+         * track stops the oldest. The same path as the music that plays only takes the new @p volume and @p loop, unless that track plays out
+         * its end without a loop: then it starts again. False when nothing plays: no backend or one without
          * streams (NullAudioBackend), a file that does not open or decode. The file is read here, on the main thread.
          */
         bool PlayMusic(PoolString clipPath, float volume = 1.0f, bool loop = true, float fadeSeconds = 0.0f);
 
-        /// Fades every music track out over @p fadeSeconds (0: stops at once)
+        /// Fades every music track out over @p fadeSeconds (0, or not a finite positive number: stops at once)
         void StopMusic(float fadeSeconds = 0.0f);
 
         [[nodiscard]] AudioMusicState GetMusicState() const;
