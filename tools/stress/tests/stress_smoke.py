@@ -3,7 +3,8 @@
 Starts the app in a fresh process per scene (sprites 500, entities 500, ui 200), `--headless --control --manual-clock`, and drives
 it over the control API: the state, `set_count` shown in the next frame (`frame_stats` draw calls and the `Stress objects` counter),
 the bad values, screenshots that are not flat, `set_language` rewording the `ui` scene, `set_scene`, `ui_tree`, and a log with no
-Warning or Error. The helpers are those of tools/control/tests/smoke.py (the default scenario of `smoke.py` is not touched).
+Warning or Error. The `reflection` scene drives the by-name methods over `StressGame` (`list_types`, `describe_type`, `schema`,
+`get_property`, `set_property`, `call_method`). The helpers are those of tools/control/tests/smoke.py (the default scenario of `smoke.py` is not touched).
 
 Unlike smoke.py's `run_smoke` this script drives the process through `GameProcess`, because the check of the game's log needs the log's
 path and `smoke.play` keeps it to itself. Exit codes as smoke.py: 0 passed, 1 failed, 77 skipped (the executable is not built).
@@ -31,6 +32,8 @@ OBJECTS_COUNTER = "Stress objects"
 SPRITES_COUNT = 500
 ENTITIES_COUNT = 500
 UI_COUNT = 200
+REFLECTION_COUNT = 50
+RUN_NUMBER_MAX = 1000  # the range of the field `runNumber` of StressGame
 
 
 def last_frame(client: BagiControlClient) -> dict:
@@ -130,11 +133,127 @@ def scenario_scenes(client: BagiControlClient) -> None:
     check(client.call("list_games")["active"] == "Stress", "list_games lost the game after set_scene")
 
 
+def keys_named(value: object, name: str) -> list[str]:
+    """The paths of every member called `name` in a JSON value (the schema carries no hash: a number above 2^53 is not safe in a client)."""
+    found: list[str] = []
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if key == name:
+                found.append(key)
+            found.extend(keys_named(child, name))
+    elif isinstance(value, list):
+        for child in value:
+            found.extend(keys_named(child, name))
+    return found
+
+
+def named(items: list[dict], name: str, what: str) -> dict:
+    matches = [item for item in items if item.get("name") == name]
+    check(len(matches) == 1, f"{what}: {len(matches)} entries named '{name}'")
+    return matches[0]
+
+
+def check_stress_game_description(client: BagiControlClient) -> None:
+    listed = client.call("list_types", {"base": "IGame"})["types"]
+    check([entry["name"] for entry in listed] == ["StressGame"], f"list_types IGame: {[entry['name'] for entry in listed]}")
+    expect_error("unknown_type", lambda: client.call("list_types", {"base": "NoSuchType"}), "list_types of an unknown base")
+    expect_error("unknown_type", lambda: client.call("describe_type", {"name": "NoSuchType"}), "describe_type of an unknown type")
+    expect_error("invalid_params", lambda: client.call("describe_type", {"name": 7}), "describe_type with a number as the name")
+
+    described = client.call("describe_type", {"name": "StressGame"})
+    check(described["parent"] == "IGame" and described["bases"] == ["IGame"], f"describe_type StressGame: parent {described['parent']}, bases {described['bases']}")
+    run_number = named(described["fields"], "runNumber", "the fields of StressGame")
+    check(run_number["type"]["kind"] == "uint32", f"runNumber is {run_number['type']}")
+    check(run_number["attributes"]["range"] == [0, RUN_NUMBER_MAX], f"runNumber range: {run_number['attributes']}")
+    check("tooltip" in run_number["attributes"], "runNumber has no tooltip")
+    state_version = named(described["fields"], "stateVersion", "the fields of StressGame")
+    check(state_version["attributes"].get("readonly") is True, f"stateVersion attributes: {state_version['attributes']}")
+    check([field["owner"] for field in described["allFields"]] == ["StressGame"] * 2, "allFields of StressGame name another owner")
+    set_count = named(described["methods"], "SetObjectCount", "the methods of StressGame")
+    check(set_count["callable"] is True and set_count["const"] is False, f"SetObjectCount: {set_count}")
+    check([param["name"] for param in set_count["params"]] == ["count"], f"SetObjectCount params: {set_count['params']}")
+    describe = named(described["methods"], "Describe", "the methods of StressGame")
+    check(describe["callable"] is True and describe["const"] is True and describe["result"]["kind"] == "string", f"Describe: {describe}")
+
+
+def check_properties(client: BagiControlClient) -> None:
+    first = client.call("get_property", {"root": "game", "path": "runNumber"})
+    check(first == {"root": "game", "path": "runNumber", "value": 0}, f"get_property runNumber: {first}")
+    written = client.call("set_property", {"root": "game", "path": "runNumber", "value": 42})
+    check(written["value"] == 42, f"set_property answered {written}, not the value read back")
+    check(client.call("get_property", {"root": "game", "path": "runNumber"})["value"] == 42, "the written runNumber was not read back")
+
+    expect_error("out_of_range", lambda: client.call("set_property", {"root": "game", "path": "runNumber", "value": RUN_NUMBER_MAX + 1}), "runNumber over its range")
+    expect_error("type_mismatch", lambda: client.call("set_property", {"root": "game", "path": "runNumber", "value": "seven"}), "a text for a number")
+    expect_error("invalid_params", lambda: client.call("set_property", {"root": "game", "path": "runNumber", "value": None}), "a null value")
+    expect_error("read_only", lambda: client.call("set_property", {"root": "game", "path": "stateVersion", "value": 1}), "the read-only stateVersion")
+    expect_error("not_found", lambda: client.call("get_property", {"root": "game", "path": "noSuchField"}), "a path that does not exist")
+    expect_error("invalid_path", lambda: client.call("get_property", {"root": "game", "path": "[["}), "a bad path")
+    expect_error("unknown_root", lambda: client.call("get_property", {"root": "nowhere", "path": "runNumber"}), "an unknown root")
+    expect_error("invalid_params", lambda: client.call("get_property", {"path": "runNumber"}), "get_property without a root")
+    check(client.call("get_property", {"root": "game", "path": "runNumber"})["value"] == 42, "a refused write changed runNumber")
+
+
+def described_state(state: dict) -> str:
+    """What `Describe()` of StressGame says for a `get_state` state."""
+    return f"scene={state['scene']} count={state['count']} language={state['language']}"
+
+
+def check_methods(client: BagiControlClient) -> None:
+    described = client.call("call_method", {"root": "game", "method": "Describe"})
+    check(described == {"root": "game", "method": "Describe", "result": described_state(stress_state(client))}, f"Describe answered {described}")
+
+    version = client.call("get_state")["version"]
+    outcome = client.call("call_method", {"root": "game", "method": "SetObjectCount", "arguments": {"count": REFLECTION_COUNT * 2}})
+    check("result" not in outcome, f"SetObjectCount answered a result: {outcome}")
+    frame = settle(client)
+    state = stress_state(client)
+    check(state["count"] == REFLECTION_COUNT * 2, f"SetObjectCount did not change the count: {state}")
+    check(frame["counters"].get(OBJECTS_COUNTER) == REFLECTION_COUNT * 2, f"the counter '{OBJECTS_COUNTER}' is {frame['counters'].get(OBJECTS_COUNTER)} after SetObjectCount")
+    check(client.call("get_state")["version"] > version, "SetObjectCount did not move the state version")
+    check(client.call("call_method", {"root": "game", "method": "Describe"})["result"] == described_state(state), "Describe does not follow get_state after SetObjectCount")
+    check(client.call("get_property", {"root": "game", "path": "stateVersion"})["value"] == client.call("get_state")["version"], "stateVersion is not the state version")
+
+    version = client.call("get_state")["version"]
+    for bad, description in (("many", "a text"), (-1, "a negative count"), (1.5, "a fraction")):
+        expect_error("bad_arguments", lambda bad=bad: client.call("call_method", {"root": "game", "method": "SetObjectCount", "arguments": {"count": bad}}), f"SetObjectCount with {description}")
+    expect_error("bad_arguments", lambda: client.call("call_method", {"root": "game", "method": "SetObjectCount"}), "SetObjectCount without its count")
+    expect_error("bad_arguments", lambda: client.call("call_method", {"root": "game", "method": "SetObjectCount", "arguments": {"count": 5, "extra": 1}}), "SetObjectCount with an argument it has not")
+    check(stress_state(client)["count"] == REFLECTION_COUNT * 2 and client.call("get_state")["version"] == version, "a refused call changed the state")
+    expect_error("unknown_function", lambda: client.call("call_method", {"root": "game", "method": "NoSuchMethod"}), "an unknown method")
+    expect_error("unknown_root", lambda: client.call("call_method", {"root": "nowhere", "method": "Describe"}), "a call on an unknown root")
+    expect_error("invalid_params", lambda: client.call("call_method", {"root": "game", "method": "SetObjectCount", "arguments": [1]}), "arguments that are not an object")
+
+
+def check_schema(client: BagiControlClient) -> None:
+    schema = client.call("schema")
+    check(schema["version"] == 1, f"schema version {schema['version']}")
+    stress_game = named(schema["types"], "StressGame", "the types of the schema")
+    check(stress_game["parent"] == "IGame" and stress_game["creatable"] is True, f"StressGame in the schema: parent {stress_game['parent']}, creatable {stress_game['creatable']}")
+    named(schema["types"], "IGame", "the types of the schema")
+    games = [entry for entry in schema["factories"] if entry["base"] == "IGame"]
+    check(len(games) == 1 and "StressGame" in games[0]["derived"], f"IGame as a factory base: {games}")
+    game_root = named(schema["roots"], "game", "the roots of the schema")
+    check(game_root.get("type") == "StressGame", f"the root game is of the type {game_root.get('type')}")
+    names = [entry["name"] for entry in schema["types"]]
+    check(names == sorted(names), "the types of the schema are not sorted by name")
+    check(not keys_named(schema, "hash"), "the schema carries a hash")
+
+
+def scenario_reflection(client: BagiControlClient) -> None:
+    check_state(client, "sprites", REFLECTION_COUNT)
+    check_stress_game_description(client)
+    check_properties(client)
+    check_methods(client)
+    check_schema(client)
+
+
 SCENARIOS: list[tuple[str, list[str], Callable[[BagiControlClient], None]]] = [
     ("sprites", ["--stress-scene=sprites", f"--stress-count={SPRITES_COUNT}"], scenario_sprites),
     ("entities", ["--stress-scene=entities", f"--stress-count={ENTITIES_COUNT}"], scenario_entities),
     ("ui", ["--stress-scene=ui", f"--stress-count={UI_COUNT}"], scenario_ui),
     ("scenes", ["--stress-scene=sprites", f"--stress-count={SPRITES_COUNT}"], scenario_scenes),
+    ("reflection", ["--stress-scene=sprites", f"--stress-count={REFLECTION_COUNT}"], scenario_reflection),
 ]
 
 
