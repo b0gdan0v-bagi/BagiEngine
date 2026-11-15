@@ -9,6 +9,7 @@
 #include <BECore/Scene/SceneNode.h>
 #include <BECore/Scene/SceneNodeFiles.h>
 #include <BECore/Scene/SceneView.h>
+#include <BECore/Time/Time.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/PassKey.h>
 #include <cstddef>

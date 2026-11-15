@@ -1,5 +1,6 @@
 #include "FontLoader.h"
 
+#include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Text/Font.h>
 #include <Generated/FontLoader.gen.hpp>

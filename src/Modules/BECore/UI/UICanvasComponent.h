@@ -6,6 +6,7 @@
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Scene/IComponent.h>
+#include <BECore/Time/Time.h>
 #include <BECore/Types/Types.h>
 #include <BECore/UI/UICanvasLayout.h>
 #include <BECore/UI/UIElement.h>

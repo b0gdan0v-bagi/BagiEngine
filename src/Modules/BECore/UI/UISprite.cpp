@@ -1,6 +1,7 @@
 #include "UISprite.h"
 
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Resource/ResourceManager.h>
 #include <BECore/Resource/TextureLibrary.h>
 
 namespace BECore {

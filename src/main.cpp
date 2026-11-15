@@ -1,4 +1,5 @@
 #include <Application/Application.h>
+#include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 
 #ifdef __EMSCRIPTEN__

@@ -2,6 +2,7 @@
 
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Renderer/IRenderer.h>
+#include <BECore/Time/Time.h>
 #include <BECore/UI/UIElement.h>
 #include <BECore/UI/UIThemes.h>
 #include <Generated/UIImageComponent.gen.hpp>

@@ -1,6 +1,7 @@
 #include "Clipboard.h"
 
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Time/GamePause.h>
 #include <Events/ClipboardEvents.h>
 
 namespace BECore {

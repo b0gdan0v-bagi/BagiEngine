@@ -1,5 +1,6 @@
 #include "ClipboardControl.h"
 
+#include <BECore/Clipboard/Clipboard.h>
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>

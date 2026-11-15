@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Animation/Easing.h>
+#include <BECore/Time/Time.h>
 #include <BECore/UI/UIStateLook.h>
 
 namespace BECore {

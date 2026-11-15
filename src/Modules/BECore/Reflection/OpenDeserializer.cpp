@@ -1,5 +1,6 @@
 #include "OpenDeserializer.h"
 
+#include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/XmlDeserializer.h>

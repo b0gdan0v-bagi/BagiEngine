@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Input/UIInput.h>
 #include <BECore/Types/Types.h>
 
 namespace BECore {

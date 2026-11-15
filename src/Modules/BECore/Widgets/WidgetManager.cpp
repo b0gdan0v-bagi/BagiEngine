@@ -3,6 +3,8 @@
 #include <BECore/Application/ApplicationConfig.h>
 #include <BECore/Application/RunMode.h>
 #include <BECore/Config/ConfigFactory.h>
+#include <BECore/Config/ConfigManager.h>
+#include <BECore/Renderer/IRenderer.h>
 #include <BECore/Widgets/WidgetList.h>
 
 namespace BECore {

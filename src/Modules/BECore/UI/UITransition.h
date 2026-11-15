@@ -3,6 +3,7 @@
 #include <BECore/Animation/Easing.h>
 #include <BECore/Math/Vec2.h>
 #include <BECore/Renderer/ViewTransform.h>
+#include <BECore/Time/Time.h>
 
 namespace BECore {
 

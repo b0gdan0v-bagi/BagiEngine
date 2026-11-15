@@ -1,9 +1,12 @@
 #include "Scene.h"
 
+#include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Scene/SceneDrawSystem.h>
 #include <BECore/Scene/SceneNodeInstance.h>
+#include <BECore/Time/Time.h>
 #include <Events/SceneEvents.h>
 #include <Generated/Scene.gen.hpp>
 #include <entt/entt.hpp>
