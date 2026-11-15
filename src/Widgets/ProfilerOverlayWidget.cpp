@@ -26,7 +26,7 @@ namespace BECore {
         constexpr float kBarWidth = 3.0f;
         constexpr float kBarsHeight = 48.0f;
         constexpr float kBudgetLineHeight = 1.0f;
-        constexpr float kBudgetsShown = 2.0f;  // the bar area spans two frame budgets
+        constexpr float kBudgetsShown = 2.0f;
 
     }  // namespace
 

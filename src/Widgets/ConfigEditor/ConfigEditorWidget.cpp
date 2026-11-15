@@ -19,10 +19,6 @@ namespace BECore {
         constexpr float kCancelButtonWidth = 100.0f;
     }  // namespace
 
-    // =========================================================================
-    // IWidget interface
-    // =========================================================================
-
     bool ConfigEditorWidget::Initialize(IDeserializer& /*deserializer*/) {
         auto& schema = ConfigFieldSchema::GetInstance();
 
@@ -73,9 +69,6 @@ namespace BECore {
         auto& configManager = CoreManager::GetConfigManager();
         const auto configNames = configManager.GetAllConfigNames();
 
-        // ----------------------------------------------------------------
-        // Left panel - config list
-        // ----------------------------------------------------------------
         const float leftPanelWidth = 220.0f;
         ImGui::BeginChild("##config_list", ImVec2(leftPanelWidth, 0.0f), true);
 
@@ -104,9 +97,6 @@ namespace BECore {
 
         ImGui::EndChild();
 
-        // ----------------------------------------------------------------
-        // Right panel - XML tree editor
-        // ----------------------------------------------------------------
         ImGui::SameLine();
         ImGui::BeginChild("##config_editor", ImVec2(0.0f, 0.0f), true);
 
@@ -117,7 +107,6 @@ namespace BECore {
             return;
         }
 
-        // Toolbar
         const auto filePath = configManager.GetConfigFilePath(_selectedConfig);
         const auto filePathStr = filePath.string();
 
@@ -158,7 +147,6 @@ namespace BECore {
 
         ImGui::Separator();
 
-        // XML tree
         const XmlNode rootNode = configManager.GetConfig(_selectedConfig);
         if (!rootNode) {
             EmptyState(ICON_LC_CIRCLE_ALERT, "This config is empty or failed to load");
@@ -172,9 +160,6 @@ namespace BECore {
 
         ImGui::EndChild();
 
-        // ----------------------------------------------------------------
-        // Confirmation popups (rendered outside child windows)
-        // ----------------------------------------------------------------
         if (_showReloadConfirm) {
             ImGui::OpenPopup("Unsaved Changes##reload");
             _showReloadConfirm = false;
@@ -189,7 +174,6 @@ namespace BECore {
             ClearTransientState();
         }
 
-        // Switch-config confirmation popup
         if (ImGui::BeginPopupModal("Unsaved Changes##switch", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::Text("You have unsaved changes in '%s'.", _selectedConfig.CStr());
             ImGui::Text("Switch config and discard changes?");
@@ -215,10 +199,6 @@ namespace BECore {
         // ImGui rendering is handled by ImGuiWidget::Draw()
     }
 
-    // =========================================================================
-    // XML tree rendering
-    // =========================================================================
-
     void ConfigEditorWidget::RenderXmlNode(pugi::xml_node node, const String& nodePath) {
         if (node.type() != pugi::node_element) {
             return;
@@ -237,7 +217,6 @@ namespace BECore {
         if (nodeOpen) {
             auto& schema = ConfigFieldSchema::GetInstance();
 
-            // Render attributes as typed inspector controls in a two-column table
             if (hasAttributes) {
                 ImGui::Indent(8.0f);
                 if (ImGui::BeginTable("##attrs", 2, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoSavedSettings)) {
@@ -247,7 +226,6 @@ namespace BECore {
                     for (auto attr = node.first_attribute(); attr; attr = attr.next_attribute()) {
                         ImGui::TableNextRow();
 
-                        // Column 0: attribute name with staged indicator
                         const String attrKey = Format("{}@{}", nodePath, attr.name());
                         const bool isStaged = _staged.Has(attrKey);
 
@@ -258,7 +236,6 @@ namespace BECore {
                             ImGui::TextUnformatted(attr.name());
                         }
 
-                        // Column 1: type-appropriate inspector
                         ImGui::TableSetColumnIndex(1);
 
                         const StringView domValue{attr.value()};
@@ -278,7 +255,6 @@ namespace BECore {
                 ImGui::Unindent(8.0f);
             }
 
-            // Recurse into element children
             size_t childIndex = 0;
             for (auto child = node.first_child(); child; child = child.next_sibling()) {
                 if (child.type() == pugi::node_element) {

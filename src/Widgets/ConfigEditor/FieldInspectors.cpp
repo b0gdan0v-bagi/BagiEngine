@@ -29,10 +29,6 @@ namespace BECore {
             return it->second.data();
         }
 
-        // -------------------------------------------------------------------------
-        // Per-type renderers
-        // -------------------------------------------------------------------------
-
         InspectorResult RenderBool(const String& widgetId, StringView currentValue) {
             bool value = (currentValue == "true");
             const String label = Format("##{}", widgetId);
@@ -114,7 +110,6 @@ namespace BECore {
                 return {};
             }
 
-            // Parse current active flags from the value string
             auto isActive = [&](const String& flag) {
                 StringView remaining = currentValue;
                 while (!remaining.empty()) {
@@ -178,10 +173,6 @@ namespace BECore {
         }
 
     }  // namespace
-
-    // =========================================================================
-    // Public API
-    // =========================================================================
 
     InspectorResult RenderFieldInspector(const String& widgetId, StringView currentValue, const FieldHint& hint) {
         switch (hint.type) {

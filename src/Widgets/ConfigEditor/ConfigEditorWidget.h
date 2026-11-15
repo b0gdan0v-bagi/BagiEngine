@@ -17,14 +17,10 @@ namespace BECore {
     class IDeserializer;
 
     /**
-     * @brief ImGui widget for browsing, editing, saving, and reloading XML configs
+     * @brief ImGui panel for browsing, editing, saving and reloading XML configs
      *
-     * Displays a two-panel layout:
-     *   Left panel  - list of all loaded config names
-     *   Right panel - recursive XML tree editor for the selected config
-     *
-     * Edits are staged in memory until the user clicks Save. Reload and config
-     * switching warn the user if there are unsaved staged changes.
+     * A list of the loaded configs on the left, a recursive XML tree editor on the right. Edits are staged in
+     * memory until Save; Reload and switching configs warn when staged changes exist.
      */
     class ConfigEditorWidget : public IWidget {
         BE_CLASS(ConfigEditorWidget)

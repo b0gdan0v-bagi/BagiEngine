@@ -41,9 +41,6 @@ namespace BECore {
             return;
         }
 
-        // -----------------------------------------------------------------
-        // Toolbar
-        // -----------------------------------------------------------------
         ImGui::BeginDisabled(!_isDirty);
         if (IconTextButton(ICON_LC_SAVE, "Save", "Write the sprite library to its file")) {
             SaveLibrary();
@@ -57,9 +54,6 @@ namespace BECore {
 
         ImGui::Separator();
 
-        // -----------------------------------------------------------------
-        // Two-panel split
-        // -----------------------------------------------------------------
         const float leftWidth = 200.0f;
         ImGui::BeginChild("##sprite_list", ImVec2(leftWidth, 0.0f), true);
         RenderLeftPanel();
@@ -75,8 +69,6 @@ namespace BECore {
     }
 
     void TextureEditorWidget::Draw() {}
-
-    // -------------------------------------------------------------------------
 
     void TextureEditorWidget::RenderLeftPanel() {
         auto& lib = CoreManager::GetTextureLibrary();
@@ -119,9 +111,6 @@ namespace BECore {
 
         SpriteEntry entry = entries[static_cast<size_t>(_selectedIndex)];
 
-        // -----------------------------------------------------------------
-        // Name field
-        // -----------------------------------------------------------------
         ImGui::TextUnformatted("Name:");
         ImGui::SameLine();
         ImGui::SetNextItemWidth(200.0f);
@@ -148,9 +137,6 @@ namespace BECore {
 
         ImGui::Separator();
 
-        // -----------------------------------------------------------------
-        // Texture file combo
-        // -----------------------------------------------------------------
         if (!_assetsLoaded) {
             RefreshAssetList();
         }
@@ -194,24 +180,18 @@ namespace BECore {
 
         ImGui::Separator();
 
-        // -----------------------------------------------------------------
-        // Texture preview with drag-to-select
-        // -----------------------------------------------------------------
         if (!entry.texturePath.Empty()) {
-            // Load texture if path changed
             if (entry.texturePath != _previewLoadedPath) {
                 _previewTexture = CoreManager::GetResourceManager().Load<ITexture>(entry.texturePath.ToStringView());
                 _previewLoadedPath = entry.texturePath;
                 _isDragging = false;
             }
 
-            // Display texture preview if loaded
             if (_previewTexture && _previewTexture->GetState() == ResourceState::Loaded) {
                 const float texW = _previewTexture->GetWidth();
                 const float texH = _previewTexture->GetHeight();
                 const float maxDisplaySize = 400.0f;
 
-                // Calculate display size preserving aspect ratio
                 float displayW = texW;
                 float displayH = texH;
                 if (displayW > maxDisplaySize || displayH > maxDisplaySize) {
@@ -225,7 +205,6 @@ namespace BECore {
                     }
                 }
 
-                // Calculate scales for coordinate conversion
                 _imageScaleX = texW / displayW;
                 _imageScaleY = texH / displayH;
 
@@ -239,7 +218,6 @@ namespace BECore {
                 const ImTextureID texId = static_cast<ImTextureID>(reinterpret_cast<std::uintptr_t>(_previewTexture->GetNativeHandle()));
                 drawList->AddImage(texId, _imageOrigin, imageMax, ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
 
-                // Draw current srcRect as overlay
                 if (!entry.srcRect.IsEmpty()) {
                     const ImVec2 rectMin(_imageOrigin.x + entry.srcRect.x / _imageScaleX, _imageOrigin.y + entry.srcRect.y / _imageScaleY);
                     const ImVec2 rectMax(rectMin.x + entry.srcRect.w / _imageScaleX, rectMin.y + entry.srcRect.h / _imageScaleY);
@@ -264,7 +242,6 @@ namespace BECore {
                     _dragEndPos.x = texX;
                     _dragEndPos.y = texY;
 
-                    // Draw preview rectangle during drag
                     const ImVec2 dragScreenMin(_imageOrigin.x + eastl::min(_dragStartPos.x, _dragEndPos.x) / _imageScaleX, _imageOrigin.y + eastl::min(_dragStartPos.y, _dragEndPos.y) / _imageScaleY);
                     const ImVec2 dragScreenMax(_imageOrigin.x + eastl::max(_dragStartPos.x, _dragEndPos.x) / _imageScaleX, _imageOrigin.y + eastl::max(_dragStartPos.y, _dragEndPos.y) / _imageScaleY);
                     drawList->AddRectFilled(dragScreenMin, dragScreenMax, ImGui::GetColorU32(ImVec4(0.0f, 1.0f, 0.0f, 0.3f)));
@@ -294,9 +271,6 @@ namespace BECore {
 
         ImGui::Separator();
 
-        // -----------------------------------------------------------------
-        // srcRect editing
-        // -----------------------------------------------------------------
         ImGui::TextUnformatted("Source Rect (precise adjustment):");
 
         Rect rect = entry.srcRect;
@@ -334,9 +308,6 @@ namespace BECore {
 
         ImGui::Separator();
 
-        // -----------------------------------------------------------------
-        // Delete button
-        // -----------------------------------------------------------------
         if (IconTextButton(ICON_LC_TRASH_2, "Delete Entry", "Remove this sprite from the library")) {
             lib.Remove(entry.name);
             _selectedIndex = eastl::min(_selectedIndex, static_cast<int>(lib.GetAll().size()) - 1);
