@@ -47,9 +47,9 @@ namespace BECore {
         /// Version of the request and response format, reported by the "ping" method
         static constexpr int kProtocolVersion = 1;
 
-        using Handler = std::function<void(ControlCall&)>;
-        using EventSink = std::function<void(const String&)>;
-        using FrameEndHook = std::function<void()>;
+        using Handler = MoveOnlyFunction<void(ControlCall&)>;
+        using EventSink = MoveOnlyFunction<void(const String&)>;
+        using FrameEndHook = MoveOnlyFunction<void()>;
 
         ControlService();
         ~ControlService();
@@ -132,10 +132,12 @@ namespace BECore {
         struct HandlerEntry {
             Handler handler;
             bool bypassBarrier = false;
+            uint64_t generation = 0;  // the registration that made this entry; a running handler goes back only if it is still the current one
         };
         struct HookEntry {
             String name;
             FrameEndHook hook;
+            uint64_t generation = 0;
         };
 
         static void ParseRequest(StringView text, Request& request);
@@ -160,6 +162,7 @@ namespace BECore {
         ControlServerStatus _serverStatus;
         EventSink _eventSink;
         Vector<HookEntry> _frameEndHooks;
+        uint64_t _registrations = 0;  // counts RegisterHandler and SetFrameEndHook calls; the source of the generations
     };
 
 }  // namespace BECore

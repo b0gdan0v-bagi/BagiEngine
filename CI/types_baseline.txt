@@ -13,13 +13,9 @@ src/Modules/BECore/Animation/Timeline.h function 12
 src/Modules/BECore/Animation/Tween.h function 3
 src/Modules/BECore/Animation/TweenManager.cpp function 7
 src/Modules/BECore/Animation/TweenManager.h function 10
-src/Modules/BECore/Clipboard/ClipboardControl.cpp function 2
 src/Modules/BECore/Clipboard/ClipboardTypes.h function 1
 src/Modules/BECore/Config/ConfigManager.cpp directory-iterator 1
 src/Modules/BECore/Config/XmlDocument.cpp fstream 2
-src/Modules/BECore/Control/ControlCall.h function 1
-src/Modules/BECore/Control/ControlService.h function 3
-src/Modules/BECore/Control/ControlTypes.h function 1
 src/Modules/BECore/FileSystem/FileSystem.cpp directory-iterator 2
 src/Modules/BECore/Logger/FileSink.h fstream 1
 src/Modules/BECore/Logger/FileSink.h include-stream 1
