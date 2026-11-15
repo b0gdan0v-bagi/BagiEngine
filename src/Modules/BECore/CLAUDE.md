@@ -10,8 +10,8 @@ Central service locator (`GameManager/CoreManager.h`): one static getter per sub
 |------|------|
 | `OnApplicationPreInit` | `InitializeCoreServices()`, then runs the enabled runtime `ITest`s through `TestManager` |
 | `OnApplicationInit` | creates the widgets of the run mode (see below), builds `SceneManager` from `SceneConfig` |
-| `OnGameCycle` | events → control commands (`ControlService::Drain`) → `TaskManager::Update` → `TweenManager::Advance` → scene update → widgets update → queued events → `DrawScreenAll` → `DrawAll` |
-| `OnIdleCycle` | the manual clock between steps instead of `OnGameCycle`: events → `Drain` → wait for a request (up to 8 ms). No frame runs |
+| `OnGameCycle` | events → control commands (`ControlService::Drain`) → `TaskManager::Update` → `TweenManager::Advance` → scene update → `AudioManager::Update` → widgets update → queued events → `DrawScreenAll` → `DrawAll` |
+| `OnIdleCycle` | the manual clock between steps instead of `OnGameCycle`: events → `Drain` → `AudioManager::Update(0)` → wait for a request (up to 8 ms). No frame runs |
 | `OnApplicationDeinit` | `TweenManager::Clear` (no callbacks), `ControlService::Shutdown`, `TaskManager::Shutdown` |
 
 `Application::Cleanup` runs before `OnApplicationDeinit`, in this order: stop the control server (when `--control` started one), `GameManager::Shutdown`, `FontAtlasLibrary::Clear()`, `WidgetManager::DestroyAll()`, then `ApplicationCleanUpEvent` (its handlers: the renderer and the window, and the other cleanup handlers such as `RmlUiRuntime::Shutdown` and `RenderProbeComponent`), then `OnApplicationDeinit`. The font atlas and the widgets own GPU objects (glyph pages, the viewport's target, ImGui's descriptors), so they are direct calls and not handlers of `ApplicationCleanUpEvent`: the event channel calls the handlers in the reverse order of the subscription (`Events/CLAUDE.md`), so the renderer's `Destroy` would run first and free the device under them. `DestroyAll` waits for the GPU, then destroys the widgets last-created-first (the viewport's target needs the ImGui context of `ImGuiWidget`, which is created before it).
@@ -55,6 +55,7 @@ A game starts in Game mode by shipping its own `config/ApplicationConfig.xml` wi
 | 2 | Tasks | `TaskManager::Update` | Delayed tasks that are due and the tasks queued for the main thread (not in a Held frame, nor the tweens and the logic below) |
 | 2b | Tweens | `TweenManager::Advance(dt)` | Every running tween moves by the frame time and its setters write the values, so the logic below reads them (`Animation/CLAUDE.md`) |
 | 3 | Logic | `SceneManager::UpdateAll` | `SceneFixedUpdateEvent` (zero or more, a constant step), then `SceneUpdateEvent` (once, with the frame time) |
+| 3b | Music | `AudioManager::Update(dt)` | Every kind of frame, a Held one too: the fades move by the frame time, the music is decoded ahead (`Audio/CLAUDE.md`, "Music") |
 | 4 | Render | `WidgetManager::UpdateAll`, `DrawScreenAll`, `DrawAll` | Editor: UI and `Scene::Draw()` through `ViewportWidget`, then ImGui render. Game: `Scene::Draw()` through `SceneRenderWidget::DrawScreen`. `Scene::Draw()` draws in layer order: the system draws the quad and the sprite itself from the registry and calls `IComponent::OnDraw()` of the other components (`Scene/CLAUDE.md`). Present at the end of the frame |
 
 Logic reads input and writes state; render only reads state. Do not draw from `SceneUpdateEvent` handlers and do not change game state from `OnDraw()`.
