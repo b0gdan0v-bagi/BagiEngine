@@ -13,6 +13,10 @@ A panel for the parallel `todo-loop` workers (`tools/todo/worker.py`, "Workers" 
 - **collapse**: cards are folded by default to a few lines (the name, the entry and the badge, the title, the review note or the progress bar, one line of what the loop said, and the one action it needs: Answer, Relaunch, Review or Fast start); the arrow unfolds one, **Expand all** / **Collapse all** every card, and the choice is kept. Waiting and limited workers come first. An unfolded card keeps Attach, Relaunch and Stop or Fast start in sight; Log, Plan, Build & run, Update, Folder and Terminal are behind `…`;
 - buttons: **Attach** (`claude attach <session id>`; **Answer** takes its place while the session waits), **Log** (`claude logs`), **Folder** (a new window), **Terminal**, **Plan** (`~/.claude/plans/todo-loop-<branch-id>.md`), **Stop** (`worker.py stop <k>`, after a question, while the session runs); while it does not: **Update** (`worker.py update <k>`: the game and `engine/` detached at the tips of their base branches, as the loop's "go to the base"; the branch it held is kept; refused with uncommitted changes) and **Fast start** (`worker.py start <k>` at once: `/todo-loop` with the settings `todoWorkers.startSlices`, `todoWorkers.loopArgs` and `todoWorkers.reportTo`).
 
+Added in 0.27 (the panel keeps no second copy of what `worker.py` / `todo.py` answer; the bullets of 0.26 below say where):
+
+- **From the CLI**: `took nothing` is `noClaim` of `list --store`; the progress of a through entry is `slices` and `stagesPlan` of the store; **Queue for worker** asks `queue --add` and shows its refusal (`--force` on the owner's yes for `blocked by ...`); the queue start is `start <k> --queued-only`, so its `dropped ...` / `stays queued` lines reach the feed and its streak limit holds for the panel's start too; Quick merge passes `--claude`, so the CLI sees the loops; the `no link` chip is `doctor --json`. Nothing of this shows more than before except where a bullet says so.
+
 Added in 0.26 (the stopped run, the progress of a through entry, the guards of the panel):
 
 - **Took nothing** (see the bullet above): the flow graph draws the worker box `took nothing` and, in place of the ghost `no entry`, an amber dashed box of the tried entry (`not taken · <reason>`; `-` shows `nothing eligible`; the tooltip has the full reason and whether the loop said it or the entry is only the one the run was started on); a click opens that entry in the Todo list. The feed gets one line `<worker>: the loop took nothing: ...` and a warning notification with **Show log** the moment the state appears.
@@ -99,7 +103,7 @@ No npm: the packer uses the standard library.
 
 ```bash
 python3 tools/vscode/todo-workers/pack.py        # in a game: engine/tools/vscode/todo-workers/pack.py
-code --install-extension tools/vscode/todo-workers/build/todo-workers-0.26.0.vsix
+code --install-extension tools/vscode/todo-workers/build/todo-workers-0.27.0.vsix
 ```
 
 `code` is in `/Applications/Visual Studio Code.app/Contents/Resources/app/bin/` on macOS when it is not on PATH. Then **Developer: Reload Window**. After a change bump `version` in `package.json`, pack and install again.
