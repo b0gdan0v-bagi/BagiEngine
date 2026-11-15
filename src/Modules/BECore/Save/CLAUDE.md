@@ -99,4 +99,6 @@ if (auto info = service.Load("slot1", kSchema, loaded)) {
 }
 ```
 
+The engine keeps one slot of its own in a game's folder: `audio`, the player's sound levels (`Audio/CLAUDE.md`, "The player's levels"); a game does not name a slot of its own so.
+
 A state that is not a reflected class passes lambdas instead: `service.Save(slot, schema, [&](ISerializer& s) { ... })` and `service.Load(slot, schema, [&](IDeserializer& d) { ... })`; the lambdas see the object `state` as the current scope. A reflected vector of structs by value saves, loads and is edited by the property visitor (the inspector) through the container overloads of `PropertyVisitorDispatch.h`; a type the inspector must not edit keeps a non-template `PropVisit::Visit` overload that does nothing, as `BECore/UI/UIVariant.h` does for `Vector<UIVariant>`.

@@ -2,6 +2,7 @@
 
 #include <BECore/Assert/AssertHandlers.h>
 #include <BECore/Assert/CRTDebugHook.h>
+#include <BECore/Audio/AudioControl.h>
 #include <BECore/Clipboard/ClipboardControl.h>
 #include <BECore/Config/ConfigFactory.h>
 #include <BECore/Control/ControlBuiltins.h>
@@ -52,6 +53,7 @@ namespace BECore {
     }
 
     void CoreManager::OnTestEnvironmentDeinit(PassKey<Tests::EngineEnvironment>) {
+        _audioManager.Shutdown();
         _tweenManager.Clear();  // no callbacks: what they point at may be gone
         _controlService.Shutdown();
         TaskManager::GetInstance().Shutdown(PassKey<CoreManager>{});
@@ -92,12 +94,14 @@ namespace BECore {
         _uiEnvironment.Initialize();
         _uiStrings.Initialize();
         _uiThemes.Initialize();
+        _audioManager.Initialize();
 
         _controlService.SetPause(&_pause);
         RegisterControlBuiltins(_controlService);
         RegisterUIControl(_controlService);
         RegisterProfilerControl(_controlService);
         RegisterClipboardControl(_controlService);
+        RegisterAudioControl(_controlService, _audioManager);
     }
 
     void CoreManager::OnApplicationInit(PassKey<Application>) {
@@ -119,6 +123,11 @@ namespace BECore {
             }
             _controlService.Drain();  // commands of the control API see this frame's input and run before the tasks and the logic
             UpdateGame(kind);
+            {
+                // Every kind of frame: a paused game keeps its music fed (a held frame has a frame time of 0, so the fades stand still)
+                BE_PROFILE_SCOPE("Audio");
+                _audioManager.Update(_time.GetDeltaTime());
+            }
         }
         // Render: the widgets (Editor: ViewportWidget draws the scene in its update), queued events, the screen draws and ImGui
         const FrameStatsCollector::StageScope render(_frameStats, FrameStage::Render);
@@ -166,6 +175,7 @@ namespace BECore {
     void CoreManager::OnIdleCycle(PassKey<Application>) {
         _eventsProviderManager.ProcessEvents();  // the window keeps answering and a close still quits
         _controlService.Drain();
+        _audioManager.Update(0.0f);  // the manual clock between steps: the music is still fed, its fades wait for game time
         if (!_controlService.IsStepDue()) {
             _controlService.WaitForRequests(kIdleWait);
         }
@@ -173,7 +183,8 @@ namespace BECore {
 
     void CoreManager::OnApplicationDeinit(PassKey<Application>) {
         BE_PROFILE_SCOPE("CoreManager::OnApplicationDeinit");
-        _tweenManager.Clear();  // no callbacks: the scenes and what the setters point at may be going away
+        _tweenManager.Clear();     // no callbacks: the scenes and what the setters point at may be going away
+        _audioManager.Shutdown();  // a backend still open here (none closed it at the clean-up) is closed before the task system goes
         _controlService.Shutdown();
         TaskManager::GetInstance().Shutdown(PassKey<CoreManager>{});
     }

@@ -2,6 +2,7 @@
 
 #include <BECore/Animation/TweenManager.h>
 #include <BECore/Application/CommandLine.h>
+#include <BECore/Audio/AudioManager.h>
 #include <BECore/Clipboard/Clipboard.h>
 #include <BECore/Config/ConfigManager.h>
 #include <BECore/Control/ControlService.h>
@@ -143,6 +144,11 @@ namespace BECore {
             return GetInstance()._clipboard;
         }
 
+        /// The sound: clips on the voices of the backend the application fabric sets (`Audio/CLAUDE.md`); no backend in the gtest executable
+        static AudioManager& GetAudio() {
+            return GetInstance()._audioManager;
+        }
+
         static UIInput& GetUIInput() {
             return GetInstance()._uiInput;
         }
@@ -195,7 +201,8 @@ namespace BECore {
         void OnApplicationDeinit(PassKey<Application>);
 
     private:
-        // FileSystem, TaskManager, ConfigManager, Logger, AssertHandlers, ResourceManager, TextureLibrary, FontAtlasLibrary, UIEnvironment, UIStrings, UIThemes, the builtin control methods
+        // FileSystem, TaskManager, ConfigManager, Logger, AssertHandlers, ResourceManager, TextureLibrary, FontAtlasLibrary, UIEnvironment, UIStrings, UIThemes, the audio settings, the builtin
+        // control methods
         void InitializeCoreServices();
 
         // Game time of the delayed tasks, tasks, tweens and the scene update: everything a Held frame leaves out. Does nothing for FrameKind::Held
@@ -211,6 +218,7 @@ namespace BECore {
         WidgetManager _widgetManager;
         EventsProviderManager _eventsProviderManager;
         Clipboard _clipboard;
+        AudioManager _audioManager;
         MainWindowManager _mainWindowManager;
         RendererManager _rendererManager;
         // Declared before _sceneManager, so they outlive the scenes: a canvas unregisters from UIInput when its scene is destroyed

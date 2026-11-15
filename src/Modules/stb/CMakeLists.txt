@@ -1,7 +1,7 @@
 # stb - single-header libraries by Sean Barrett (Vendored)
-# Only stb_truetype.h (v1.26, public domain) is used: glyph metrics and rasterization for BECore/Text.
-# The implementation is compiled in exactly one translation unit (BECore/Text/Font.cpp) with
-# STB_TRUETYPE_IMPLEMENTATION; every other file would include the header for declarations only.
+# stb_truetype.h (v1.26): glyph metrics and rasterization for BECore/Text, compiled in BECore/Text/Font.cpp with
+# STB_TRUETYPE_IMPLEMENTATION. stb_vorbis.c (v1.24): the Ogg Vorbis decoder of BECore/Audio, compiled in
+# BECore/Audio/AudioDecode.cpp. Each implementation lives in exactly one translation unit (README.md).
 
 add_library(stb INTERFACE)
 

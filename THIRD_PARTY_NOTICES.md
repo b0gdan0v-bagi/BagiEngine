@@ -23,6 +23,7 @@ file. A new library adds its row here in the same commit.
 | `src/Modules/pugixml` | pugixml (Arseny Kapoulkine) | 1.14 | MIT | `src/Modules/pugixml/LICENSE.md` | ships |
 | `src/Modules/RmlUi` | RmlUi (core only) | 6.3 | MIT | `src/Modules/RmlUi/LICENSE.txt` | ships if `ENGINE_UI_RMLUI` |
 | `src/Modules/stb` | stb_truetype (Sean Barrett) | 1.26 | public domain or MIT, the user's choice | `src/Modules/stb/stb_truetype.h` (end of file) | ships |
+| `src/Modules/stb/stb_vorbis.c` | stb_vorbis (Sean Barrett) | 1.24 | public domain or MIT, the user's choice | `src/Modules/stb/stb_vorbis.c` (end of file) | ships |
 | `src/Modules/tracy` | Tracy Profiler client (Bartosz Taudul) | 0.15.0 | BSD 3-Clause; its `libbacktrace` BSD 3-Clause | `src/Modules/tracy/LICENSE` | ships if `ENGINE_PROFILER_TRACY` (profile builds only) |
 | `src/Widgets/Icons/IconsLucide.h` | IconFontCppHeaders (Juliette Foucaut, Doug Binks) | commit 780f044 | zlib | `src/Widgets/Icons/IconsLucide.h` (its header) | ships with the editor |
 | `external/SDL` | SDL 3 (Sam Lantinga and contributors) | release-3.2.0 | zlib (its `src/hidapi` is used under its BSD option) | `external/SDL/LICENSE.txt` | ships |

@@ -64,6 +64,7 @@ namespace BECore {
             {"triangle-alert", ICON_LC_TRIANGLE_ALERT},
             {"type", ICON_LC_TYPE},
             {"undo-2", ICON_LC_UNDO_2},
+            {"volume-2", ICON_LC_VOLUME_2},
             {"x", ICON_LC_X},
         };
 
