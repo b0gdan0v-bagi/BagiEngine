@@ -30,6 +30,9 @@ namespace BECore::Fuzz {
     /// The seeds of web_ui and ui_tables (FuzzUiSeeds.cpp); MakeGeneratedSeeds adds them to its own
     void AddUiSeeds(Vector<FuzzSeedFile>& seeds);
 
+    /// The seeds of json (FuzzJsonSeeds.cpp); MakeGeneratedSeeds adds them to its own
+    void AddJsonSeeds(Vector<FuzzSeedFile>& seeds);
+
     /// Writes every generated seed under @p corpusRoot (<corpusRoot>/<folder>/<name>); returns false if a file cannot be written
     bool WriteGeneratedSeeds(const std::filesystem::path& corpusRoot);
 

@@ -15,7 +15,6 @@
 #include <Common/Printers.h>
 #include <Fuzz/FuzzProbeAccess.h>
 #include <gtest/gtest.h>
-#include <limits>
 
 namespace BECore::Tests {
 
@@ -659,6 +658,15 @@ namespace BECore::Tests {
         EXPECT_FALSE(reader.BeginArrayElement());
         reader.EndArray();
         EXPECT_FALSE(reader.HasErrors()) << ErrorsText(reader).c_str();
+    }
+
+    TEST(JsonDeserializerTest, AControlCharacterOfTheDocumentIsReplacedInAnErrorMessage) {
+        const Json document = Parse(R"({"mode":"Aus\u007f\u001b:[]}to"})");
+        JsonDeserializer reader(document);
+        DiagnosticsMode mode = DiagnosticsMode::Warn;
+        EXPECT_FALSE(Ser::Load(reader, mode, "mode"));
+        ASSERT_EQ(reader.GetErrors().size(), 1u);
+        EXPECT_EQ(reader.GetErrors()[0].errorMessage.ToStringView(), "Invalid enum value: 'Aus??:[]}to'");
     }
 
     TEST(JsonDeserializerTest, ALookupNeverInterns) {

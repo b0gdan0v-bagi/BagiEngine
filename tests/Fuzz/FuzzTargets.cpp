@@ -10,6 +10,7 @@ namespace BECore::Fuzz {
         static const FuzzTarget targets[] = {
             {"BinaryDeserializer", &FuzzBinaryDeserializer, "binary", 1},
             {"XmlDeserializer", &FuzzXmlDeserializer, "xml", 2},
+            {"JsonDeserializer", &FuzzJsonDeserializer, "json", 2},
             {"SaveEnvelope", &FuzzSaveEnvelope, "save", 10},
             {"SceneNode", &FuzzSceneNode, "scene", 1},
             {"WebSocketFrame", &FuzzWebSocketFrame, "ws_frame", 1},

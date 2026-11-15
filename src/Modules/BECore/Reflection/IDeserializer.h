@@ -322,7 +322,8 @@ namespace BECore {
          * @brief Append an error to @p errors within the limits of ReaderLimits
          *
          * The path and the message are cut to kMaxErrorTextBytes (they are interned into the PoolString table, which is never freed, and
-         * they can hold text of the input). The list holds at most kMaxRecordedErrors: the last place says once that the rest were dropped.
+         * they can hold text of the input), and a control character in them is replaced by '?' (they reach a log line and a reply). The list holds at most kMaxRecordedErrors: the last place says once
+         * that the rest were dropped.
          */
         static void StoreError(Vector<DeserializeError>& errors, StringView path, StringView message, int32_t line);
 

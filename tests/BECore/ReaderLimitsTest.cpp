@@ -3,6 +3,7 @@
 
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/BinarySerializer.h>
+#include <BECore/Reflection/DataAccessor.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
@@ -242,6 +243,16 @@ namespace BECore::Tests {
         const StringView message = reader.GetErrors()[0].errorMessage.ToStringView();
         EXPECT_LT(message.size(), 100u);
         EXPECT_NE(message.find("..."), StringView::npos);
+    }
+
+    TEST(ReaderLimitsTest, AControlCharacterOfTheInputIsReplacedInAnErrorMessage) {
+        // The enum accessor quotes the text it could not read; a control character must not reach a log line or a reply
+        XmlDeserializer reader;
+        ASSERT_TRUE(reader.LoadFromString("<root mode=\"Aus&#x7f;&#x1b;x\"/>"));
+        DiagnosticsMode mode = DiagnosticsMode::Warn;
+        EXPECT_FALSE(Ser::Load(reader, mode, "mode"));
+        ASSERT_EQ(reader.GetErrors().size(), 1u);
+        EXPECT_EQ(reader.GetErrors()[0].errorMessage.ToStringView(), "Invalid enum value: 'Aus??x'");
     }
 
     TEST(ReaderLimitsTest, BinaryFileThatIsNotARegularFileOrIsTooBigIsRefusedBeforeItIsRead) {

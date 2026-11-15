@@ -9,6 +9,22 @@ namespace BECore {
 
         constexpr StringView kTooManyErrors = "Too many errors: the rest are not recorded";
 
+        constexpr uint8_t kFirstPrintable = 0x20;
+        constexpr uint8_t kDelete = 0x7F;
+        constexpr char kReplacementChar = '?';
+
+        /// A message quotes the input (an enum name, a bad value) and reaches a log line and a reply: a control character in it is replaced
+        String Printable(StringView text) {
+            String printable(text.data(), text.size());
+            for (char& c : printable) {
+                const auto byte = static_cast<uint8_t>(c);
+                if (byte < kFirstPrintable || byte == kDelete) {
+                    c = kReplacementChar;
+                }
+            }
+            return printable;
+        }
+
         /// Names are input: both sides of an edit distance are cut to this many bytes, so the work of one suggestion is bounded
         constexpr size_t kMaxSuggestedNameBytes = 48;
 
@@ -61,8 +77,8 @@ namespace BECore {
         if (errors.size() + 1 == ReaderLimits::kMaxRecordedErrors) {
             error.errorMessage = PoolString::Intern(kTooManyErrors);
         } else {
-            error.path = PoolString::Intern(CutText(path, ReaderLimits::kMaxErrorTextBytes));
-            error.errorMessage = PoolString::Intern(CutText(message, ReaderLimits::kMaxErrorTextBytes));
+            error.path = PoolString::Intern(Printable(CutText(path, ReaderLimits::kMaxErrorTextBytes)));
+            error.errorMessage = PoolString::Intern(Printable(CutText(message, ReaderLimits::kMaxErrorTextBytes)));
             error.line = line;
         }
         errors.push_back(error);

@@ -375,6 +375,7 @@ namespace BECore::Fuzz {
         AddWebSocketSeeds(seeds);
         AddRoomAndControlSeeds(seeds);
         AddUiSeeds(seeds);
+        AddJsonSeeds(seeds);
         return seeds;
     }
 

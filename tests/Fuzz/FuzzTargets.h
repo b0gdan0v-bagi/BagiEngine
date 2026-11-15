@@ -48,6 +48,9 @@ namespace BECore::Fuzz {
     /// XmlDeserializer::LoadFromString, lenient and strict: every read over the whole document, strict refusals against a grammar of the values, a reflected probe type
     void FuzzXmlDeserializer(const uint8_t* data, size_t size);
 
+    /// JsonDeserializer over a JSON document: the probe types read under every mode of diagnostics, a round trip through JsonSerializer, and the document as the arguments of CallMethod
+    void FuzzJsonDeserializer(const uint8_t* data, size_t size);
+
     /// SaveGameService on a folder of the process: the bytes as a slot file, Peek and Load of a reflected state
     void FuzzSaveEnvelope(const uint8_t* data, size_t size);
 
