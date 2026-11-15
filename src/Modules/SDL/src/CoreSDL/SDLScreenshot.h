@@ -38,7 +38,7 @@ namespace BECore {
      *
      * | Params | Result |
      * |--------|--------|
-     * | `{"maxSize": 16 to 4096}` (optional, default 1024: the longer side of the picture) | `{"width", "height", "png_base64"}` |
+     * | `{"maxSize"}` (optional: the longer side of the picture, within kMinScreenshotSize and kMaxScreenshotSize) | `{"width", "height", "png_base64"}` |
      *
      * The picture is what the renderer presents at the end of one frame that has a clock step of zero seconds: on the manual
      * clock that is a frame of its own, on the real clock the frame in which the request is handled. Nothing moves in it, so

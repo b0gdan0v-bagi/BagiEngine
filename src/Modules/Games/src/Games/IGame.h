@@ -14,10 +14,6 @@ namespace BECore {
      * Each concrete game lives outside the engine, in its own module, derives from IGame
      * and is auto-registered into AbstractFactory<IGame> via BE_CLASS reflection.
      *
-     * GameManager enumerates AbstractFactory<IGame>::GetRegisteredTypes() at startup,
-     * instantiates one of each, and activates the default (configured in
-     * config/GamesConfig.xml) or the first registered if none is specified.
-     *
      * Lifecycle:
      *   - Start()  — called when the game becomes active. The corresponding scene
      *                (GetSceneName()) is set active in SceneManager just before.

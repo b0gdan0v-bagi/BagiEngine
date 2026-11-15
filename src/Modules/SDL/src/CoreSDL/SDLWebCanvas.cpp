@@ -32,7 +32,6 @@ namespace BECore {
         if (!std::isfinite(width) || !std::isfinite(height) || width <= 0.0 || height <= 0.0) {
             return whole;
         }
-        // Not a number or below zero counts as no inset; one that is larger than the window is cut to the window
         const auto inset = [](double value, double extent) { return std::isfinite(value) && value > 0.0 ? std::min(value, extent) : 0.0; };
         top = inset(top, height);
         bottom = inset(bottom, height);
@@ -45,7 +44,6 @@ namespace BECore {
 #ifdef __EMSCRIPTEN__
     namespace {
 
-        // The smallest window the renderer is asked for
         constexpr int kMinWindowSize = 64;
 
         // The sides of env(safe-area-inset-*), in the order of the CSS shorthand
@@ -67,7 +65,7 @@ namespace BECore {
         }
 
         // The four sides of env(safe-area-inset-*), in CSS pixels, read through the padding of a hidden fixed element (CSS has
-        // no other way to the value; 0 where the browser does not know env()). Written to the doubles at the given address.
+        // no other way to the value; 0 where the browser does not know env())
         void ReadInsets(double* out) {
             EM_ASM({
                 var probe = window.bagiSafeAreaProbe;
