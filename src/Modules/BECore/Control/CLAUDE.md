@@ -8,6 +8,7 @@ The core of the external control API: a program or a model sends commands, the e
 |------|---------|
 | `ControlService` | Thread-safe FIFO queue of requests, handler table, barrier, deferred answers, push events. One instance: `CoreManager::GetControlService()` |
 | `ControlCall` | One request being handled: `Params()`, `Reply()`, `Fail()`, `DeferFrames()` |
+| `ControlRoots` | The roots of a service: named providers of a `TypedRef` (`game` is the active game) that the by-name methods reach, and nothing else; names held as `String`, never interned; `allowInterning` of a root (default off) lets a write put client text into the `PoolString` pool |
 | `ControlBuiltins` | `RegisterControlBuiltins()`: `ping`, `status`, `step`, `pause`, `resume`, `quit` |
 | `ControlSettings` | `ResolveControlSettings(args, ApplicationConfigLoad)`: the start-up flags and the settings of the reflected `ApplicationConfig` (`Application/ApplicationConfig.h`), the manual clock included (see "Starting the API"), a pure function |
 | `ControlTypes.h` | `ControlError`, `ControlErrors::k*` (error codes), `ControlReplyFn`, `ControlServerStatus` (listening, port, clients; see "Starting the API") |
@@ -53,15 +54,6 @@ The engine builds without exceptions, so nlohmann/json is built with `JSON_NOEXC
 - Never call `at()`, `get<T>()`, `value()` or the const `operator[]` on client data. Building a response (`Json::object()`, `result["x"] = ...`) and `DumpJson()` are safe; `DumpJson()` replaces invalid UTF-8 instead of aborting.
 - Keep the 1 MiB request limit (`ControlService::kMaxRequestBytes`) at every transport. `ParseJson` itself takes any depth (it parses and frees without recursion), but copying a value recurses once per level, so a reader that keeps client JSON checks `IsJsonNestedDeeperThan` first: a request nested deeper than `ControlService::kMaxRequestDepth` (128) is `invalid_request`, answered without an `id`. The control API is fuzzed: `tests/Fuzz/CLAUDE.md`.
 - nlohmann uses `std::string` inside; convert to `eastl::string` at the edge, which the helpers do.
-
-## JSON shapes of the reflection pair
-
-`JsonSerializer` and `JsonDeserializer` are one format; no method uses them yet (the call by name of stage 3 does).
-
-- An attribute and a child are the same member. An object is a member object, an array a member array of element objects; an element that holds only `value` is that scalar (`[1,2,3]`), and the reader takes both forms. A map is an array of `{key, value}`, a variant `{index, value}` (`monostate`: the index alone), a factory element carries `type` and `enabled`.
-- Integers are exact (`uint64_t` above 2^63 too), a `float` is the shortest text that reads back, a non-finite number is `null`, which the reader refuses.
-- The reader is always strict: a JSON bool is the only bool, a number the only number (`3.0` and `1.5` are no integers, a string is no number, a negative is no unsigned), a string target takes only a string. A refusal is an error under the field's path and the target keeps its value; a missing key is no error. Under diagnostics an unknown key is a finding with `did you mean`. Limits are those of `ReaderLimits.h`; `StoreError` cuts the text and replaces control characters with `?`. Check `IsJsonNestedDeeperThan` on input first.
-- A `SceneNode` does not round-trip: `IComponent` has no `FactoryTraits`, so no serializer writes the `type` member of a component.
 
 ## Manual clock and `step`
 
@@ -119,6 +111,8 @@ The file half is the reflected `ApplicationConfig` read with strict values (`IDe
 3. Register it with `CoreManager::GetControlService().RegisterHandler("name", handler)` where the owning module starts up (registering again replaces the handler).
 4. Test it with a `ControlService` of its own and a lambda as the reply function (`tests/BECore/ControlServiceTest.cpp` shows the pattern): no transport needed.
 5. Write the method and its codes into the protocol description of the owning module.
+
+An object a client may read or write by name is offered as a root: `service.Roots().Register("name", {provider})` where the owning module starts up (`RegisterGameControl` registers `game`). The provider is called on every request and its `TypedRef` is not kept past the handler.
 
 ## Tests
 

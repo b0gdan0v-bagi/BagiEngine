@@ -11,9 +11,7 @@
 #include <EASTL/fixed_string.h>
 #include <EASTL/fixed_vector.h>
 #include <EASTL/map.h>
-#include <EASTL/optional.h>
 #include <EASTL/unordered_map.h>
-#include <array>
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
@@ -138,14 +136,6 @@ namespace BECore {
             static constexpr size_t kCapacity = N;
         };
 
-        template <typename Elem, size_t N>
-        struct ListTraits<std::array<Elem, N>> {  //-NoStd: the specialization names the type it matches, as Ser::DataAccessor does
-            static constexpr bool kMatch = true;
-            using Element = Elem;
-            static constexpr bool kResizable = false;
-            static constexpr size_t kCapacity = N;
-        };
-
         template <typename T>
         struct MapTraits {
             static constexpr bool kMatch = false;
@@ -187,25 +177,12 @@ namespace BECore {
         };
 
         template <typename T>
-        struct OptionalTraits<eastl::optional<T>> {  //-NoStd: the specialization names the type it matches, as Ser::DataAccessor does
-            static constexpr bool kMatch = true;
-            using Value = T;
-        };
-
-        template <typename T>
         struct PairTraits {
             static constexpr bool kMatch = false;
         };
 
         template <typename A, typename B>
         struct PairTraits<Pair<A, B>> {
-            static constexpr bool kMatch = true;
-            using First = A;
-            using Second = B;
-        };
-
-        template <typename A, typename B>
-        struct PairTraits<std::pair<A, B>> {  //-NoStd: the specialization names the type it matches, as Ser::DataAccessor does
             static constexpr bool kMatch = true;
             using First = A;
             using Second = B;

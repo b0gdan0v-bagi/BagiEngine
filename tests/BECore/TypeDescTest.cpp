@@ -37,11 +37,6 @@ namespace BECore::Tests {
     using RegistryTestData::RegMode;
     using RegistryTestData::RegNode;
 
-    // The types Ser::DataAccessor accepts that the BECore names do not spell
-    using StdArray = std::array<uint8_t, 5>;        //-NoStd: the accessor covers the std form too
-    using EastlOptional = eastl::optional<double>;  //-NoStd: the accessor covers the eastl form too
-    using StdPair = std::pair<int32_t, String>;     //-NoStd: the accessor covers the std form too
-
     // Scalars
     static_assert(DescribeType<bool>().kind == TypeKind::Bool);
     static_assert(DescribeType<int8_t>().kind == TypeKind::Int8);
@@ -83,7 +78,6 @@ namespace BECore::Tests {
     static_assert(DescribeType<Array<uint8_t, 2>>().kind == TypeKind::List);
     static_assert(!DescribeType<Array<uint8_t, 2>>().resizable);
     static_assert(DescribeType<Array<uint8_t, 2>>().capacity == 2);
-    static_assert(DescribeType<StdArray>().capacity == 5);
 
     // Maps
     static_assert(DescribeType<HashMap<String, int32_t>>().kind == TypeKind::Map);
@@ -98,7 +92,6 @@ namespace BECore::Tests {
     // Optional, pair, variant
     static_assert(DescribeType<Optional<double>>().kind == TypeKind::Optional);
     static_assert(DescribeType<Optional<double>>().element->kind == TypeKind::Double);
-    static_assert(DescribeType<EastlOptional>().element->kind == TypeKind::Double);
     static_assert(DescribeType<Pair<int32_t, String>>().kind == TypeKind::Pair);
     static_assert(DescribeType<Pair<int32_t, String>>().key->kind == TypeKind::Int32);
     static_assert(DescribeType<Pair<int32_t, String>>().element->kind == TypeKind::String);
@@ -136,9 +129,9 @@ namespace BECore::Tests {
         }
 
         static_assert(AgreeWithAccessor<bool, int8_t, uint64_t, float, double, String, FixedString<8>, FixedString<8, false>, PoolString, RegMode, RegInner, Vec2, AccessorOnly, Vector<int32_t>,
-                                        SmallVector<int32_t, 2>, FixedVector<int32_t, 2>, Array<int32_t, 2>, StdArray, HashMap<String, int32_t>, HashMap<int32_t, String>,
-                                        FixedHashMap<String, int32_t, 4>, Map<String, int32_t>, Optional<int32_t>, EastlOptional, Pair<int32_t, String>, StdPair, Variant<int32_t, float>,
-                                        std::monostate, IntrusivePtrNonAtomic<RegNode>, IntrusivePtrAtomic<RegNode>, Vector<IntrusivePtrNonAtomic<RegNode>>>());
+                                        SmallVector<int32_t, 2>, FixedVector<int32_t, 2>, Array<int32_t, 2>, HashMap<String, int32_t>, HashMap<int32_t, String>, FixedHashMap<String, int32_t, 4>,
+                                        Map<String, int32_t>, Optional<int32_t>, Pair<int32_t, String>, Variant<int32_t, float>, std::monostate, IntrusivePtrNonAtomic<RegNode>,
+                                        IntrusivePtrAtomic<RegNode>, Vector<IntrusivePtrNonAtomic<RegNode>>>());
 
         // The aliases ReflectionAliasesTest lists as having no accessor
         static_assert(AgreeWithAccessor<FlatMap<String, int32_t>, FlatSet<int32_t>, Span<int32_t>, UniquePtr<int32_t>, HashSet<int32_t>, Set<int32_t>, Tuple<int32_t, float>, int32_t*, void*>());

@@ -1,6 +1,7 @@
 #include "ControlService.h"
 
 #include <BECore/Control/ControlCall.h>
+#include <BECore/Control/ControlRoots.h>
 
 namespace BECore {
 
@@ -19,7 +20,7 @@ namespace BECore {
         ControlReplyFn reply;
     };
 
-    ControlService::ControlService() = default;
+    ControlService::ControlService() : _roots(MakeUnique<ControlRoots>()) {}
     ControlService::~ControlService() = default;
 
     void ControlService::ParseRequest(StringView text, Request& request) {

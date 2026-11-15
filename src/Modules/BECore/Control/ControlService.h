@@ -11,6 +11,7 @@
 namespace BECore {
 
     class ControlCall;
+    class ControlRoots;
 
     /**
      * @brief Command queue of the external control API: requests come from any thread and run on the main thread.
@@ -57,6 +58,15 @@ namespace BECore {
 
         /// Registers (or replaces) the handler of @p method. A method with @p bypassBarrier runs even while a deferred call is pending
         void RegisterHandler(StringView method, Handler handler, bool bypassBarrier = false);
+
+        /// The named objects the by-name methods may reach (ControlRoots.h); empty until a module registers one. Main thread only
+        [[nodiscard]] ControlRoots& Roots() {
+            return *_roots;
+        }
+
+        [[nodiscard]] const ControlRoots& Roots() const {
+            return *_roots;
+        }
 
         /// Where Publish() sends its messages (the transport); none by default
         void SetEventSink(EventSink sink);
@@ -143,6 +153,7 @@ namespace BECore {
         // Main thread only
         eastl::deque<UniquePtr<Request>> _inbox;  // taken from _queue, in order, waiting for the barrier
         HashMap<String, HandlerEntry> _handlers;
+        UniquePtr<ControlRoots> _roots;  // behind a pointer so this header does not pull in the reflection registry
         UniquePtr<ControlCall> _pending;
         uint32_t _pendingFramesLeft = 0;
         double _pendingSeconds = kDefaultStepSeconds;

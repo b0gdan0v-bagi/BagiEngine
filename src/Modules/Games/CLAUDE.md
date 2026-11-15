@@ -19,6 +19,8 @@ The contract between the engine and a game. `Games` provides `IGame` and `GameMa
 
 A program or a model plays a game through `IControllableGame` (`Games/IControllableGame.h`), which the game hands out from `IGame::AsControllable()`. The engine asks through that call, never through a cast, so no engine code names a game. `GameManager::Initialize()` calls `RegisterGameControl()`, which registers the methods below in `CoreManager::GetControlService()` (protocol and threading: `BECore/Control/CLAUDE.md`). They act on the active game, looked up on every call. `RegisterGameControl()` also installs a frame end hook that pushes `{"event": "state_changed", "data": {"game", "version", "state"}}` when the state version of the active game moved since the previous frame, whatever moved it (a client, a reset, a person's click); the first frame only records the version, and a game that is not controllable never pushes (`Control/CLAUDE.md`).
 
+`RegisterGameControl` also registers the control root `game` (`Control/CLAUDE.md`, `ControlRoots`): the active game, resolved on every request to its most derived type, empty when no game is active. It keeps `allowInterning` off, so a client cannot grow the `PoolString` pool through it.
+
 | Method | Params | Result |
 |--------|--------|--------|
 | `list_games` | none | `{"active": name or null, "games": [{"name", "scene", "controllable"}]}` |
