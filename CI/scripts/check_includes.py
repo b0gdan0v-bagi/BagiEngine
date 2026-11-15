@@ -8,7 +8,8 @@ except one case: a `.cpp .cc .cxx .c .mm .m` file including the header of the sa
 
 `<windows.h>` and `<winsock2.h>` (any case) define the macros `min` and `max` unless `NOMINMAX` is defined first, and those macros
 break every `std::numeric_limits<T>::max()` of a header that comes after them. So a header never includes them (the macros would reach
-every includer), and a source file includes them only after a `#define NOMINMAX` of its own.
+every includer), and a source file includes them only after a `#define NOMINMAX` of its own. The check reads the text only: it knows
+these two names (not `<minwindef.h>`, `<ws2tcpip.h>` or a header that brings them in indirectly) and does not evaluate `#if`.
 
     python3 engine/CI/scripts/check_includes.py --root .          (a game)
     python3 CI/scripts/check_includes.py --root .                 (the engine)
