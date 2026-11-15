@@ -7,15 +7,8 @@ namespace BECore {
     /**
      * @brief Registers the game methods of the control API in @p service.
      *
-     * | Method | Params | Result |
-     * |--------|--------|--------|
-     * | list_games | none | {"active": name or null, "games": [{"name", "scene", "controllable"}]} |
-     * | switch_game | {"name"} | {"active": name} |
-     * | reset | the game's options (e.g. a seed) | {"game", "version"} (a game that is not controllable gets a plain IGame::Reset and no version) |
-     * | get_state | none | {"game", "version", "state"} |
-     * | list_actions | none | {"game", "version", "actions": [..]} |
-     * | perform_action | the action object itself, as listed by list_actions | {"game", "version", "outcome"} |
-     * | set_state | the game's state (a game's own form, e.g. {"fen"} for Chess) | {"game", "version"} |
+     * The methods are list_games, switch_game, reset, get_state, list_actions, perform_action and set_state; their params and
+     * results are in Games/CLAUDE.md ("Control API").
      *
      * It also installs a frame end hook that pushes {"event":"state_changed","data":{"game","version","state"}} when the state
      * version of the active game moved (an action, a reset, a click of a person); see GameControlEvents.

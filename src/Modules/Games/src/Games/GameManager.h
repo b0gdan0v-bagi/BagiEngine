@@ -11,9 +11,6 @@ namespace BECore {
     /**
      * @brief Owns one instance of every registered IGame and tracks the active one.
      *
-     * Initialize() instantiates every game registered in AbstractFactory<IGame>,
-     * reads config/GamesConfig.xml to determine the default game, and activates it.
-     *
      * Activation sequence (SwitchTo):
      *   1. Stop() the previously active game.
      *   2. Tell SceneManager to make the new game's scene active.
