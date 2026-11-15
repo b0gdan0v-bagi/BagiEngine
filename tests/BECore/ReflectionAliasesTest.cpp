@@ -45,6 +45,12 @@ namespace BECore::Tests {
     static_assert(!Ser::HasDataAccessor<Set<int32_t>>);
     static_assert(!Ser::HasDataAccessor<Tuple<int32_t, float>>);
 
+    // The std:: and eastl:: spellings that are not the aliases' (`Array` and `Pair` are eastl's, `Optional` is std's) have no
+    // accessor of their own: a field spells the alias.
+    static_assert(!Ser::HasDataAccessor<std::array<int32_t, 3>>);      //-NoStd: the spelling without an accessor is the case
+    static_assert(!Ser::HasDataAccessor<std::pair<int32_t, String>>);  //-NoStd: the spelling without an accessor is the case
+    static_assert(!Ser::HasDataAccessor<eastl::optional<int32_t>>);    //-NoStd: the spelling without an accessor is the case
+
     TEST(ReflectionAliasesTest, CompileTimeChecks) {
         SUCCEED() << "The static_asserts at the top of this file are the check";
     }

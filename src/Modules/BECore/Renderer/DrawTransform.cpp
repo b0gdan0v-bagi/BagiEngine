@@ -9,7 +9,7 @@ namespace BECore {
     }  // namespace
 
     //-NoStd: as the declaration
-    std::array<Vec2, 4> MakeTransformedQuad(const Rect& rect, const DrawTransform& transform) {
+    Array<Vec2, 4> MakeTransformedQuad(const Rect& rect, const DrawTransform& transform) {
         const float radians = transform.rotation * kDegreesToRadians;
         const float cosine = std::cos(radians);
         const float sine = std::sin(radians);

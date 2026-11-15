@@ -68,11 +68,6 @@ namespace BECore::Tests {
         EXPECT_EQ(ColorUtils::FromString(StringView{"Blue"}), TestColor::Blue);
         EXPECT_EQ(ColorUtils::FromString(StringView{"Yellow"}), TestColor::Yellow);
 
-        //-NoStd: the overload that stays for the games
-        EXPECT_EQ(ColorUtils::FromString(std::string_view{"Red"}), TestColor::Red);
-        //-NoStd: the overload that stays for the games
-        EXPECT_EQ(ColorUtils::FromString(std::string_view{"Green"}), TestColor::Green);
-
         EXPECT_EQ(ColorUtils::FromString("Red"), TestColor::Red);
         EXPECT_EQ(ColorUtils::FromString("Blue"), TestColor::Blue);
     }

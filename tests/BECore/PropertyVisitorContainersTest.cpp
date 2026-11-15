@@ -263,31 +263,25 @@ namespace BECore::Tests {
 
     TEST(PropertyVisitorContainersTest, AnArrayCanNeitherAddNorRemove) {
         Array<int32_t, 2> twin{{4, 5}};
-        std::array<int32_t, 1> single{{6}};  //-NoStd: the std::array overload is the case
         Recorder recorder;
         PropVisit::Visit(recorder, twin, "twin");
-        PropVisit::Visit(recorder, single, "single");
-        EXPECT_EQ(recorder.Trace(), "twin(2) [0]=4 ~0 [1]=5 ~1 /list single(1) [0]=6 ~0 /list");
+        EXPECT_EQ(recorder.Trace(), "twin(2) [0]=4 ~0 [1]=5 ~1 /list");
     }
 
     TEST(PropertyVisitorContainersTest, APairIsACompoundOfFirstAndSecond) {
         Pair<int32_t, String> entry{11, "eleven"};
-        std::pair<int32_t, float> standard{1, 0.5f};  //-NoStd: the std::pair overload is the case
         Recorder recorder;
         PropVisit::Visit(recorder, entry, "entry");
-        PropVisit::Visit(recorder, standard, "standard");
-        EXPECT_EQ(recorder.Trace(), "<entry> first=11 second=eleven </> <standard> first=1 second=0.5 </>");
+        EXPECT_EQ(recorder.Trace(), "<entry> first=11 second=eleven </>");
     }
 
     TEST(PropertyVisitorContainersTest, AnOptionalShowsItsPresenceThenItsValueWhenItHasOne) {
         Optional<int32_t> engaged = 4;
         Optional<int32_t> empty;
-        eastl::optional<int32_t> eastlOptional = 5;  //-NoStd: the eastl::optional overload is the case
         Recorder recorder;
         PropVisit::Visit(recorder, engaged, "engaged");
         PropVisit::Visit(recorder, empty, "empty");
-        PropVisit::Visit(recorder, eastlOptional, "other");
-        EXPECT_EQ(recorder.Trace(), "engaged?1 engaged=4 empty?0 other?1 other=5");
+        EXPECT_EQ(recorder.Trace(), "engaged?1 engaged=4 empty?0");
     }
 
     TEST(PropertyVisitorContainersTest, AVariantShowsItsAlternativeThenTheActiveValue) {
