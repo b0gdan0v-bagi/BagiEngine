@@ -245,6 +245,7 @@ function attach(ctx) {
             session: w.session ? { state: w.session.state, status: w.session.status, startedAt: w.session.startedAt } : null,
             entry: e ? { id: e.id, title: e.title, status: e.status, statusNote: e.statusNote, blockedBy: e.blockedBy, planProgress: e.planProgress, slices: e.slices } : null,
             queue: w.queue || [], queueItems: w.queueItems || null, queuePaused: w.queuePaused || null, queueStreak: w.queueStreak || [],
+            noClaim: w.noClaim || null,
         };
     }
 

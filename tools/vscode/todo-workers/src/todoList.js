@@ -252,7 +252,7 @@ function attach(ctx) {
         }
         todoPanel = vscode.window.createWebviewPanel("todoWorkers.todoList", "Todo list", vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true });
         todoPanel.iconPath = vscode.Uri.file(path.join(ctx.context.extensionPath, "media", "workers.svg"));
-        todoPanel.webview.html = pageHtml(ctx.context, ["graph.js", "todo.js"], ["panel.css", "todo.css", "graph.css"], "Asking todo.py ...");
+        todoPanel.webview.html = pageHtml(ctx.context, ["runs.js", "graph.js", "todo.js"], ["panel.css", "todo.css", "graph.css"], "Asking todo.py ...");
         todoPanel.webview.onDidReceiveMessage((message) => {
             switch (message.cmd) {
                 case "ready":
