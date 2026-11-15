@@ -174,7 +174,6 @@ namespace BECore::Tests {
             auto accepted = listener->Accept(kWaitLimit);
             ASSERT_TRUE(accepted.has_value()) << host;
 
-            // The connected socket is the usual blocking one: bytes go through both ways
             const Array<uint8_t, 2> bytes = {7, 9};
             ASSERT_TRUE(client->SendAll(Span<const uint8_t>(bytes.data(), bytes.size())));
             Array<uint8_t, 8> buffer;

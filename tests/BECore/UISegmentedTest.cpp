@@ -456,7 +456,6 @@ namespace BECore::Tests {
         EXPECT_TRUE(Selected("MixedTwo")) << "the button next to a label is a segment";
         EXPECT_EQ(Element("Caption").GetComponent<UITextComponent>()->text, "Mode") << "the label is left alone";
 
-        // A nested group manages its own children: `Inner` is bound to `inner`, not to `mode`
         EXPECT_FALSE(Selected("InnerTwo")) << "its value is the one of Mixed, but the nested group has its own variable";
         EXPECT_TRUE(Selected("InnerX"));
 

@@ -721,7 +721,6 @@ namespace BECore::Tests {
         Draw();
         BoardClicks board;
 
-        // On a segment, on the plate between two controls and on the dim far from the plate: all are the panel's
         const UIElement& plate = Get<UIStack>("Plate");
         const Pair<float, float> points[] = {CenterOf(El("LevelHard")), {plate.rect.x + 4.0f, plate.rect.y + 4.0f}, {5.0f, 5.0f}, {kViewWidth - 5.0f, kViewHeight - 5.0f}};
         for (const auto& [x, y] : points) {
@@ -746,7 +745,6 @@ namespace BECore::Tests {
         EXPECT_TRUE(_selector->_visible);
         Draw();
 
-        // The menu button is under the dim now: the panel takes the press first
         const size_t actions = _game->Total();
         ClickAt(CenterOf(*newGame).first, CenterOf(*newGame).second);
         EXPECT_EQ(_game->Total(), actions) << "the modal panel is in front of the menu button";
@@ -757,7 +755,6 @@ namespace BECore::Tests {
         EXPECT_FALSE(_selector->_visible);
         Draw();
 
-        // Closed: the board gets its presses again, and the menu button works
         const auto [pressed, released] = ClickAt(kViewWidth * 0.5f, kViewHeight * 0.5f);
         EXPECT_FALSE(pressed);
         EXPECT_EQ(board.downs, 1);

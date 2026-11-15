@@ -28,7 +28,7 @@
 namespace BECore::Tests {
 
     /*
-     * The screen test of a settings panel, the template for a screen with the controls of stage 6.4 and with translations (.claude/rules/ui-layout.md, "A screen test").
+     * The screen test of a settings panel, the template for a screen with controls and translations (.claude/rules/ui-layout.md, "A screen test").
      * The shape of the panel (the choice panel of UISelectorScreenTest with other rows):
      *
      *  - a small canvas `Hud` with one button, `Open`, whose action shows the panel;
@@ -225,7 +225,6 @@ namespace BECore::Tests {
 
         const Language kLanguages[] = {{"en", "Settings", "LanguageEn"}, {"ru", "Настройки", "LanguageRu"}, {"de", "Einstellungen ändern", "LanguageDe"}};
 
-        // Every control of the panel that shows a text of the table
         constexpr const char* kTextControlNames[] = {"Title", "SoundCaption", "MusicCaption", "DownloadCaption", "Percent", "LanguageCaption", "LanguageEn", "LanguageRu", "LanguageDe", "Ok"};
 
         String SceneXml(float viewWidth, float viewHeight, FunctionRef<void(String&)> edit = NoTextEdit) {
@@ -984,9 +983,7 @@ namespace BECore::Tests {
             EXPECT_EQ(ShownText(*_hud->GetRoot().FindByName("Open"_intern)), *CoreManager::GetUIStrings().Find("settings.open")) << "the button of the other canvas follows too";
             EXPECT_TRUE(El(language.segment).selected);
             EXPECT_EQ(Get<UISegmented>("Language").GetSelectedValue(), language.id);
-            // The names of the languages are the same in every language
             EXPECT_EQ(ShownText(El("LanguageDe")), "Deutsch");
-            // The layout is still valid in the narrowest window, in the language that is set now
             UICanvasLayout& layout = _settings->GetLayout();
             LayOutInTheNarrowestWindow(layout);
             EXPECT_TRUE(Problems(layout).empty()) << language.id << ": " << Problems(layout).c_str();

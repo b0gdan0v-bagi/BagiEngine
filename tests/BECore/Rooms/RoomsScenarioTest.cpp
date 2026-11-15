@@ -69,7 +69,6 @@ namespace BECore::Tests {
             for (const ConnectionId id : ids) {
                 EXPECT_GT(harness.Client(id).Count(RoomMessageTypes::kView), 0u);
                 EXPECT_EQ(harness.Client(id).LastErrorCode(), "");
-                // The end: every card is public
                 EXPECT_EQ(TableSize(harness, id), FakeSeatedGame::kTotalPlays);
             }
             if (leaky) {
@@ -111,7 +110,6 @@ namespace BECore::Tests {
         harness.Tick(seconds(5));
         EXPECT_EQ(game->GetPlayCount(), stalledAt);
 
-        // After the grace a computer plays the seat
         harness.Tick(seconds(30));
         for (int step = 0; step < kMaxSteps && game->GetHand(1).size() == FakeSeatedGame::kCardsPerSeat; ++step) {
             harness.Tick(milliseconds(10));
@@ -137,12 +135,10 @@ namespace BECore::Tests {
         EXPECT_EQ(harness.Client(replacement).Types(), "joined,lobby,view");
         EXPECT_EQ(harness.Client(replacement).seat, 1);
 
-        // Both play on to the end
         ASSERT_TRUE(PlayToTheEnd(harness, {ids[0], replacement}));
         EXPECT_TRUE(game->IsFinished());
         EXPECT_EQ(harness.GetLeakCount(), 0u);
 
-        // After leaving for good the token is refused
         harness.Leave(replacement);
         const ConnectionId late = harness.Connect();
         harness.JoinByToken(late, code, token);
@@ -210,7 +206,6 @@ namespace BECore::Tests {
             EXPECT_EQ(game->GetPlayCount(), plays);
         };
 
-        // A card that belongs to another seat
         ActionMessage steal;
         steal.version = version;
         steal.action = CardAction(Format("c{}_0", otherSeat));
@@ -218,7 +213,6 @@ namespace BECore::Tests {
         EXPECT_EQ(harness.Client(onTurn).LastErrorCode(), RoomErrors::kIllegalAction);
         expectUnchanged();
 
-        // A card that does not exist, and an action of the wrong shape
         ActionMessage nothing;
         nothing.version = version;
         nothing.action = CardAction("c9_9");
@@ -243,7 +237,6 @@ namespace BECore::Tests {
         EXPECT_EQ(harness.Client(onTurn).LastErrorCode(), RoomErrors::kStaleAction);
         expectUnchanged();
 
-        // The seat that is not on turn plays its own card with the right version
         ActionMessage early;
         early.version = version;
         early.action = CardAction(Format("c{}_0", otherSeat));
@@ -252,7 +245,6 @@ namespace BECore::Tests {
         expectUnchanged();
         EXPECT_EQ(harness.GetLeakCount(), 0u);
 
-        // The game still goes on normally after all that
         ASSERT_TRUE(PlayToTheEnd(harness, ids));
     }
 

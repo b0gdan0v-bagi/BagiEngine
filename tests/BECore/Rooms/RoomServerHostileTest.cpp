@@ -128,7 +128,6 @@ namespace BECore::Tests {
         const uint16_t port = StartServer();
         auto client = RoomSocketClient::Connect(port);
         ASSERT_TRUE(client.has_value());
-        // Exactly the limit, in three pieces: the boundary is on the allowed side
         const String message = PaddedPing(kLimit);
         const size_t cut = message.size() / 3;
         client->Raw().Send(AsBytes(Fragment(WebSocketOpcode::kText, message.substr(0, cut), false)));
@@ -203,7 +202,6 @@ namespace BECore::Tests {
             ASSERT_TRUE(client.has_value());
             silent.push_back(std::move(*client));
         }
-        // The handshake deadline of the listener ends every one of them, each by itself
         for (WebSocketTestClient& client : silent) {
             EXPECT_TRUE(client.WaitForEndOfStream());
         }
@@ -240,13 +238,11 @@ namespace BECore::Tests {
         }
 
         ASSERT_NO_FATAL_FAILURE(ExpectTheTableFinishes(table));
-        // The table's room was started: nobody joined it, and nobody learned its cards
         for (const auto& flooder : flooders) {
             Drain(*flooder);
             EXPECT_EQ(CountOf(*flooder, RoomMessageTypes::kView), 0u);
             ExpectCleanWire(*flooder, "a flooder");
         }
-        // The cap of rooms per address held (the table's room and five more at most), and the server still answers
         size_t refusedCreates = 0;
         for (const auto& flooder : flooders) {
             for (const ReceivedMessage& message : flooder->Received()) {
@@ -300,7 +296,6 @@ namespace BECore::Tests {
         EXPECT_EQ(answer->GetString("code"), RoomErrors::kRateLimited);
         EXPECT_EQ(CountOf(*last, RoomMessageTypes::kJoined), 0u);
 
-        // The table still plays
         table[0]->Start();
         ASSERT_TRUE(PlayToTheEnd(table));
         ExpectCleanWire(table);

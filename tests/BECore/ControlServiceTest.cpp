@@ -500,12 +500,12 @@ namespace BECore::Tests {
         EXPECT_EQ(order, (Vector<String>{"slow"}));
         EXPECT_TRUE(responses.empty());
 
-        service.EndFrame();  // one frame left
+        service.EndFrame();
         service.Drain();
         EXPECT_EQ(order, (Vector<String>{"slow"}));
         EXPECT_TRUE(responses.empty());
 
-        service.EndFrame();  // done
+        service.EndFrame();
         EXPECT_EQ(order, (Vector<String>{"slow", "slow-done"}));
         ASSERT_EQ(responses.size(), 1u);
         EXPECT_EQ(IdOf(responses[0]), 1);
@@ -688,7 +688,7 @@ namespace BECore::Tests {
         Post(MakeRequest(2, "m"));
         service.Drain();
         EXPECT_EQ(calls, 2);
-        EXPECT_EQ(destroyed, 0);  // kept in the table after each call
+        EXPECT_EQ(destroyed, 0);
 
         service.RegisterHandler("m", [](ControlCall& call) { call.Reply(Json::object()); });
         EXPECT_EQ(destroyed, 1);
@@ -723,14 +723,14 @@ namespace BECore::Tests {
 
         EXPECT_EQ(destroyedAfterRegistering, 0);
         EXPECT_EQ(witnessAfterRegistering, kWitness);
-        EXPECT_EQ(destroyed, 1);  // gone once the call has ended
+        EXPECT_EQ(destroyed, 1);
         ASSERT_EQ(responses.size(), 1u);
         EXPECT_TRUE(IsOk(responses[0]));
 
         Post(MakeRequest(2, "self"));
         service.Drain();
         ASSERT_EQ(responses.size(), 2u);
-        EXPECT_TRUE(IsOk(responses[1]));  // the replacement answers
+        EXPECT_TRUE(IsOk(responses[1]));
     }
 
     TEST_F(ControlServiceTest, HandlerThatRegistersOthersStaysRegistered) {
@@ -960,7 +960,7 @@ namespace BECore::Tests {
 
         service.SetManualClock(true);
         EXPECT_TRUE(service.IsManualClock());
-        EXPECT_FALSE(service.IsStepDue());  // nothing waits for frames
+        EXPECT_FALSE(service.IsStepDue());
     }
 
     TEST_F(ControlServiceTest, RealClockNeverAsksForAFrame) {
@@ -1020,7 +1020,7 @@ namespace BECore::Tests {
         EXPECT_EQ(RunDueFrames(), 2);  // each frame drains: "after" stays behind the barrier until the second one ends
         EXPECT_EQ(order, (Vector<String>{"wait", "wait-done"}));
 
-        service.Drain();  // the idle cycle
+        service.Drain();
         EXPECT_EQ(order, (Vector<String>{"wait", "wait-done", "after"}));
         EXPECT_EQ(IdOf(responses.back()), 2);
     }

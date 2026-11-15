@@ -118,8 +118,7 @@ namespace BECore::Stress {
     };
 
     /**
-     * @brief The one JSON line of a ramp, no newline, keys sorted: `scene`, `mode` ("ramp"), `objectsAt60fps`, `budgetMs`, `measure`, `capped`,
-     *        `aborted`, `verified`, `steps`, `frames`, `settleFrames`, `measureFrames`, `interleave`, `atlases`, `manualClock`, `allocTracking`.
+     * @brief The one JSON line of a ramp, no newline, keys sorted (listed in `CLAUDE.md`, "Ramp mode").
      */
     String FormatRampLine(const RampResult& result, StressMeasure measure, const RampRunContext& context);
 

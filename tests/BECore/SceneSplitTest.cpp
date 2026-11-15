@@ -522,7 +522,6 @@ namespace BECore::Tests {
         EXPECT_EQ(nodes[0]->GetLayer(), 9);
         EXPECT_EQ(nodes[1]->GetLayer(), 4);
         EXPECT_NE(nodes[0].Get(), nodes[1].Get());
-        // Both keep the file's transform and canvas
         EXPECT_EQ(nodes[0]->GetComponent<TransformComponent>()->_x, 10.0f);
         EXPECT_EQ(nodes[1]->GetComponent<TransformComponent>()->_x, 10.0f);
         EXPECT_EQ(nodes[0]->GetComponent<UICanvasComponent>()->_elements.size(), 2u);
@@ -552,7 +551,6 @@ namespace BECore::Tests {
         EXPECT_EQ(Printed(doc.document_element()), before);
         EXPECT_NE(before.find("name=\"PanelA\""), String::npos);
         EXPECT_NE(before.find("ref=\"nodes/Panel\""), String::npos);
-        // Nothing of the node file leaked into the given document
         EXPECT_EQ(before.find("Base"), String::npos);
     }
 

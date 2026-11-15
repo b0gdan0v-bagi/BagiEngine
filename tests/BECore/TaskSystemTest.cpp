@@ -32,17 +32,14 @@ namespace BECore::Tests {
 
     namespace {
 
-        // Helper: simple coroutine returning void
         Task<void> SimpleVoidTask() {
             co_return;
         }
 
-        // Helper: coroutine returning a value
         Task<int> SimpleIntTask(int value) {
             co_return value * 2;
         }
 
-        // Helper: coroutine with nested co_await
         Task<int> NestedTask() {
             auto resultA = co_await SimpleIntTask(10);
             auto resultB = co_await SimpleIntTask(20);
@@ -201,7 +198,6 @@ namespace BECore::Tests {
             EXPECT_TRUE(task.IsDone()) << "Task should be done after GetResult";
         }
 
-        // Move semantics
         {
             auto task1 = SimpleVoidTask();
             auto task2 = std::move(task1);
@@ -231,7 +227,6 @@ namespace BECore::Tests {
     TEST(TaskSystemTest, TaskQueue) {
         TaskQueue queue;
 
-        // Push and Pop
         {
             std::atomic<int> counter{0};
 
@@ -252,7 +247,6 @@ namespace BECore::Tests {
             EXPECT_FALSE(queue.TryPop(task)) << "TryPop on empty queue should fail";
         }
 
-        // TrySteal (work stealing)
         {
             queue.Push([]() {});
             queue.Push([]() {});
@@ -262,7 +256,6 @@ namespace BECore::Tests {
             EXPECT_EQ(queue.Size(), 1u) << "Queue should have 1 task after steal";
         }
 
-        // Stop
         {
             queue.Stop();
             EXPECT_TRUE(queue.IsStopped());

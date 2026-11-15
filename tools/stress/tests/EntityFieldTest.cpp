@@ -1,7 +1,6 @@
 #include <Stress/EntityField.h>
 #include <gtest/gtest.h>
 
-/// Coverage of EntityField: the orbit of a node is a pure function of its index.
 namespace BECore::Stress::Tests {
 
     namespace {

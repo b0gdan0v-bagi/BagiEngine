@@ -229,10 +229,7 @@ namespace BECore::Fuzz {
     /**
      * The input is an XML text. A root named `UIStrings` goes to the string table, `UIThemes` to the theme table, anything else to both (the loaders say what
      * they do with a file of the wrong kind). The tables are local instances: they are pure data and need no service.
-     *
-     * What is checked: the complaints of a load are short sentences with no control character; the table has what the file says (read from the document by
-     * pugixml alone: the first occurrence of a good key wins), no empty key, token or language, and no duplicate; a reference to a key resolves to its text; the same
-     * file loaded again changes nothing, and a fresh table gives the same answers.
+     * The expected content is read from the document by pugixml alone, not by the loaders' code.
      */
     void FuzzUiTables(const uint8_t* data, size_t size) {
         // The text in a buffer of its own: pugixml reads a text that looks like UTF-16 or UTF-32 as words

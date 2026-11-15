@@ -577,7 +577,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIToggleComponentTest, TheTrackAndThumbOfA300By56RowAreAtTheirNumbers) {
-        // The numbers the first toggle (a class, now gone) drew, kept as the specification: a 28 high, 56 wide track with 14 of air to the right
+        // The specification of the geometry: a 28 high, 56 wide track with 14 of air to the right
         const auto parts = PartsOf("Sound");
         const Rect& row = Get("Sound").rect;
         EXPECT_TRUE(Near(parts.track, Rect{row.x + 230.0f, row.y + 14.0f, 56.0f, 28.0f}));

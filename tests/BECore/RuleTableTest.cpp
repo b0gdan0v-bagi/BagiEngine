@@ -168,7 +168,6 @@ namespace BECore::Tests {
         RuleTable<Effect> table(std::move(axes));
         EXPECT_FALSE(table.AddRule({"tag:nothing"}, Effect(1), "x").has_value());
         ASSERT_TRUE(table.AddRule({"a"}, Effect(3, true), "one").has_value());
-        // Equal values of equal specificity do not clash.
         ASSERT_TRUE(table.AddRule({"a"}, Effect(3, true), "two").has_value());
         ASSERT_TRUE(table.AddRule({"*"}, Effect(2), "three").has_value());
         const auto baked = table.Bake(Effect(0));

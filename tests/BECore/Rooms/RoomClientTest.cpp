@@ -209,19 +209,16 @@ namespace BECore::Tests {
     }
 
     TEST_F(RoomClientTest, ACommandThatDoesNotFitTheStateIsWrongState) {
-        // Nothing connected
         EXPECT_EQ(_client->ChooseSeat(1).error().code, RoomClientErrors::kWrongState);
         EXPECT_EQ(_client->Start().error().code, RoomClientErrors::kWrongState);
         EXPECT_EQ(_client->SendAction(OneAction()).error().code, RoomClientErrors::kWrongState);
         EXPECT_EQ(_client->Leave().error().code, RoomClientErrors::kWrongState);
 
-        // Opening
         ASSERT_TRUE(_client->Host(kUrl, "cards", "Ann").has_value());
         EXPECT_EQ(_client->Host(kUrl, "cards", "Ann").error().code, RoomClientErrors::kWrongState);
         EXPECT_EQ(_client->Join(kUrl, "ABCDE", "Ann").error().code, RoomClientErrors::kWrongState);
         EXPECT_EQ(_client->Start().error().code, RoomClientErrors::kWrongState);
 
-        // Waiting for the answer to create_room
         _transports.Last().PushOpened();
         Pump();
         EXPECT_EQ(_client->Join(kUrl, "ABCDE", "Ann").error().code, RoomClientErrors::kWrongState);
@@ -407,7 +404,6 @@ namespace BECore::Tests {
         Receive(link, MakePongMessage());
         EXPECT_EQ(_events.size(), errors);
 
-        // The state is as it was
         EXPECT_EQ(_client->GetState(), RoomClientState::InRoom);
         EXPECT_EQ(_client->GetViewVersion(), 5u);
         EXPECT_EQ(_client->GetRoom(), kRoom);
@@ -514,13 +510,11 @@ namespace BECore::Tests {
     }
 
     TEST_F(RoomClientTest, DisconnectClosesInEveryState) {
-        // Nothing to close
         _client->Disconnect();
         EXPECT_TRUE(_events.empty());
         _client->DrainEvents(_events);
         EXPECT_TRUE(_events.empty());
 
-        // While connecting
         ASSERT_TRUE(_client->Host(kUrl, "cards", "Ann").has_value());
         _client->Disconnect();
         EXPECT_EQ(_client->GetState(), RoomClientState::Disconnected);
@@ -624,7 +618,6 @@ namespace BECore::Tests {
         }
         Pump();
         ASSERT_EQ(_events.size(), kMaxQueuedRoomClientEvents);
-        // The oldest were dropped, the newest are there
         EXPECT_EQ(_events.back().code, Format("e{}", kMaxQueuedRoomClientEvents + 9));
         EXPECT_EQ(_events.front().code, "e10");
     }

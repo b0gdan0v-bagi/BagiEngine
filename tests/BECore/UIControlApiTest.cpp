@@ -841,7 +841,6 @@ namespace BECore::Tests {
         const Json* flat = FindElement(*canvas, "Flat");
         ASSERT_NE(flat, nullptr);
         EXPECT_EQ(Member(*flat, "box"), nullptr);
-        // Every element of the other scenes has the default style too
         Show("Main");
         const Json main = Call("ui_tree");
         EXPECT_EQ(DumpJson(main).find("\"box\""), String::npos);
@@ -1569,7 +1568,6 @@ namespace BECore::Tests {
         Show("Main");
         Recorder recorder;
 
-        // Ok is 80 x 40 at (122, 62): at 0 and at 1 are both on it
         for (double at : {0.0, 1.0}) {
             Json params = Click("Ok");
             params["at"] = at;

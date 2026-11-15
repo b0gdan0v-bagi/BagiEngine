@@ -110,14 +110,12 @@ namespace BECore::Tests {
         EXPECT_EQ(file["bindings"].size(), 1u);  // file.quit had no default chord, so unbinding it changes nothing
         EXPECT_EQ(file["bindings"]["scene.save"], "Ctrl+K");
 
-        // Unbinding a command that has a default is an override
         ASSERT_TRUE(settings.GetHotkeys().Unbind(kViewPreferences));
         ASSERT_TRUE(settings.SaveHotkeys());
         const Json again = ReadJsonFile("hotkeys.json");
         EXPECT_EQ(again["bindings"].size(), 2u);
         EXPECT_EQ(again["bindings"]["view.preferences"], "");
 
-        // Going back to the default removes the entry
         settings.GetHotkeys().ResetAll();
         ASSERT_TRUE(settings.SaveHotkeys());
         EXPECT_TRUE(ReadJsonFile("hotkeys.json")["bindings"].empty());
@@ -174,7 +172,6 @@ namespace BECore::Tests {
         EXPECT_EQ(ReadFile("preferences.json.bad"), garbage);
         EXPECT_FALSE(ReadJsonFile("preferences.json").contains("theme"));
 
-        // A second save does not move the good file aside
         WriteFile("preferences.json.bad", "kept");
         ASSERT_TRUE(settings.SavePreferences());
         EXPECT_EQ(ReadFile("preferences.json.bad"), "kept");
@@ -201,7 +198,6 @@ namespace BECore::Tests {
         EditorSettings settings(_directory);
         settings.Load();
         EXPECT_EQ(settings.GetPreferences(), EditorPreferences{});
-        // An unknown command is not applied
         EXPECT_TRUE(settings.GetHotkeys().Find(KeyChord{ImGuiKey_J, kChordModCtrl}).Empty());
 
         settings.SetPreferences(EditorPreferences{});
@@ -218,7 +214,7 @@ namespace BECore::Tests {
         EXPECT_EQ(hotkeys["bindings"]["scene.save"], "Ctrl+K");
     }
 
-    // The theme setting is gone (one theme, ImGuiTheme.h): an old file loads, the key is kept and written back as it was
+    // An old file with a `theme` key loads: the key is kept and written back as it was, never applied (one theme, ImGuiTheme.h)
     TEST_F(EditorSettingsTest, AnOldThemeKeyIsKeptAndNeverApplied) {
         WriteFile("preferences.json", R"({"version":1,"theme":"Classic","fontScale":1.5})");
         EditorSettings settings(_directory);
@@ -278,7 +274,6 @@ namespace BECore::Tests {
         EXPECT_FALSE(preview.shape.custom);
         EXPECT_EQ(preview.shape.aspect, ViewportAspect::Free);
         EXPECT_EQ(preview.safeArea, SafeAreaSimulation::None);
-        // The rest of the choice is kept
         EXPECT_TRUE(preview.shape.rotated);
         EXPECT_TRUE(preview.overlays.touchTargets);
         // An old file has no regions key
@@ -299,7 +294,6 @@ namespace BECore::Tests {
         EXPECT_EQ(preview.safeArea, SafeAreaSimulation::None);
         EXPECT_FALSE(preview.overlays.viewBounds);
         EXPECT_FALSE(preview.overlays.regions);
-        // Load does not write
         EXPECT_EQ(ReadFile("preferences.json"), text);
 
         WriteFile("preferences.json", R"({"viewportPreview":[1,2]})");
@@ -399,7 +393,6 @@ namespace BECore::Tests {
         EXPECT_TRUE(map.IsDefault(kViewPreferences));
         EXPECT_EQ(map.GetChord(kModeToggle), (KeyChord{ImGuiKey_E, kChordModCtrl | kChordModShift}));
         EXPECT_FALSE(map.GetChord(kFileQuit).has_value());
-        // The one good entry is applied
         EXPECT_EQ(map.GetChord(kViewSaveLayout), (KeyChord{ImGuiKey_Q, kChordModCtrl}));
     }
 

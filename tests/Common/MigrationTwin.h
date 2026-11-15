@@ -42,8 +42,7 @@ namespace BECore::Tests::MigrationTwin {
 
     /*
      * What the tests of the migration steps share (`ContentMigrationAfterTest.cpp`): the fixture folders of `tools/migrate/tests/fixtures/<step>/`, a content file read as a scene
-     * manager, the pointer helpers, and a fixture class that loads a screen into canvases on a `RecordingRenderer`. There is no `before` side any more: the classes that the steps
-     * rewrote are gone from the engine, so a test loads a final `.after.xml` and checks the composed form on its own.
+     * manager, the pointer helpers, and a fixture class that loads a screen into canvases on a `RecordingRenderer`. A test loads a final `.after.xml` and checks the composed form on its own.
      */
 
     inline constexpr float kLargeWidth = 1280.0f;

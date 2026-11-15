@@ -95,9 +95,7 @@ namespace BECore::Stress {
 
     /**
      * @brief The one JSON line of a fixed run, no newline: the keys sorted (as `headless_frames.py` writes with `sort_keys`), numbers as plain
-     *        decimals. `scene`, `count`, `frames` (the samples taken), `warmup`, `interleave`, `atlases`, `manualClock`, `allocTracking`, `frameMsP50`, `frameMsP99`,
-     *        `cpuMsP50`, `cpuMsP99`, `workMsP50`, `workMsP99`, `cpuMs`, `workMs`, `drawCalls`, `triangles`, `textureSwitches`, `allocsPerFrame`,
-     *        `allocBytesPerFrame`. Written by hand: the app does not link nlohmann/json.
+     *        decimals; the keys are listed in `CLAUDE.md`, "Fixed mode". Written by hand: the app does not link nlohmann/json.
      */
     String FormatJsonLine(const StressSummary& summary, const StressRunContext& context);
 

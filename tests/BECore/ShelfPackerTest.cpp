@@ -64,7 +64,7 @@ namespace BECore::Tests {
         ShelfPacker packer(30, 100);
         packer.Pack(30, 40);  // shelf 0, full
         packer.Pack(10, 20);  // shelf 1, 20 high
-        packer.Pack(30, 10);  // does not fit shelf 1 any more? it is 10 wide used: needs 30 -> shelf 2
+        packer.Pack(30, 10);  // 30 wide: shelf 1 has only 20 left, so a new shelf 2
 
         const auto slot = packer.Pack(10, 15);
 

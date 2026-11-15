@@ -6,7 +6,7 @@
 
 namespace BECore::Tests {
 
-    /// The text of a log line in a file is "[Level] [date time.ms] message": the layer's Format must write it as before.
+    /// The text of a log line in a file is "[Level] [date time.ms] message": the layer's Format must write it so.
     TEST(FileSinkTest, WritesTheLevelTheTimeAndTheMessage) {
         const std::filesystem::path dir = TestTempDirectory("BagiFileSinkTest");
         std::filesystem::remove_all(dir);

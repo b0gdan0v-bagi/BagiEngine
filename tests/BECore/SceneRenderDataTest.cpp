@@ -108,7 +108,6 @@ namespace BECore::Tests {
         EXPECT_EQ(turned.rotation, 30.0f);
         EXPECT_EQ(turned.pivotX, 0.0f);
         EXPECT_EQ(turned.pivotY, 1.0f);
-        // The rect is mirrored as before
         EXPECT_EQ(turned.x, 5.0f);
         EXPECT_EQ(turned.width, 7.0f);
     }

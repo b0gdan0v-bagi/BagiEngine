@@ -180,7 +180,6 @@ namespace BECore::Tests {
         EXPECT_EQ(previous, 1u);
         while (!game.IsFinished()) {
             const int seat = game.GetTurn();
-            // an error does not move it
             EXPECT_FALSE(game.PerformSeatAction((seat + 1) % 4, PlayAction("c0_0")).has_value());
             EXPECT_EQ(game.GetStateVersion(), previous);
             ASSERT_TRUE(game.PerformSeatAction(seat, *game.ChooseComputerAction(seat)).has_value());
@@ -203,11 +202,9 @@ namespace BECore::Tests {
         const auto actions = game.GetSeatActions(0);
         ASSERT_TRUE(actions.has_value());
         EXPECT_NE(std::find(actions->begin(), actions->end(), *chosen), actions->end());
-        // the lowest card id of the hand
         Vector<String> hand = game.GetHand(0);
         eastl::sort(hand.begin(), hand.end());
         EXPECT_EQ(GetJsonString(*chosen, "card"), hand.front());
-        // choosing does not play
         EXPECT_EQ(game.GetPlayCount(), 0);
         EXPECT_TRUE(game.PerformSeatAction(0, *chosen).has_value());
         EXPECT_FALSE(game.ChooseComputerAction(0).has_value());
@@ -294,7 +291,6 @@ namespace BECore::Tests {
         EXPECT_EQ(leaked.size(), 9u) << "the cards of the other three seats";
         EXPECT_NONFATAL_FAILURE(ExpectNoLeak(text, 1, leaky), "hidden cards");
 
-        // the same check passes the honest game in the same position
         FakeSeatedGame honest;
         ASSERT_TRUE(honest.Start(5, Json::object()).has_value());
         const String honestText = Dump(honest.GetSeatView(1));

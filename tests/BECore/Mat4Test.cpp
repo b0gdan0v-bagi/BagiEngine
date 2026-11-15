@@ -108,7 +108,6 @@ namespace BECore::Tests {
         ExpectVecNear(Mat4::RotationZ(kHalfPi).TransformDirection(kAxisX), kAxisY);
         // +X about +Y goes to -Z
         ExpectVecNear(Mat4::RotationY(kHalfPi).TransformDirection(kAxisX), -kAxisZ);
-        // The axis of a rotation stays put
         ExpectVecNear(Mat4::RotationX(1.234f).TransformDirection(kAxisX), kAxisX);
         ExpectVecNear(Mat4::RotationY(1.234f).TransformDirection(kAxisY), kAxisY);
         ExpectVecNear(Mat4::RotationZ(1.234f).TransformDirection(kAxisZ), kAxisZ);
@@ -191,12 +190,10 @@ namespace BECore::Tests {
         const Mat4 projection = Mat4::Perspective(1.0f, 1.5f, nearPlane, farPlane);
         EXPECT_NEAR(Project(projection, Vec3(0.0f, 0.0f, -nearPlane)).z, 0.0f, kTolerance);
         EXPECT_NEAR(Project(projection, Vec3(0.0f, 0.0f, -farPlane)).z, 1.0f, kTolerance);
-        // Depth grows with distance and stays inside 0..1 between the planes
         const float middle = Project(projection, Vec3(0.0f, 0.0f, -10.0f)).z;
         EXPECT_GT(middle, 0.0f);
         EXPECT_LT(middle, 1.0f);
         EXPECT_GT(Project(projection, Vec3(0.0f, 0.0f, -20.0f)).z, middle);
-        // The point in front of the near plane is outside (negative depth), the one beyond the far plane too (greater than 1)
         EXPECT_LT(Project(projection, Vec3(0.0f, 0.0f, -0.25f)).z, 0.0f);
         EXPECT_GT(Project(projection, Vec3(0.0f, 0.0f, -100.0f)).z, 1.0f);
     }
@@ -259,7 +256,6 @@ namespace BECore::Tests {
         const Optional<Mat4> inverse = m.Inverse();
         ASSERT_TRUE(inverse.has_value());
         ExpectMatNear(m * *inverse, Mat4::Identity(), 1e-4f);
-        // A clip-space point goes back to the view-space point it came from
         const Vec3 viewPoint{1.0f, -2.0f, -8.0f};
         ExpectVecNear(inverse->TransformPoint(Project(m, viewPoint)), viewPoint, 1e-3f);
     }

@@ -234,7 +234,6 @@ namespace BECore::Tests {
         EXPECT_NEAR(DragOne(Tool::Rotate, Handle::Ring, kFlat, press, OnCircle(kFlatCenter, 60.0f, 22.0f), snap)[0].rotation, 15.0f, kTolerance);
         EXPECT_NEAR(DragOne(Tool::Rotate, Handle::Ring, kFlat, press, OnCircle(kFlatCenter, 60.0f, 23.0f), snap)[0].rotation, 30.0f, kTolerance);
         EXPECT_NEAR(DragOne(Tool::Rotate, Handle::Ring, kFlat, press, OnCircle(kFlatCenter, 60.0f, -22.0f), snap)[0].rotation, -15.0f, kTolerance);
-        // Off, and the modifier flips it
         EXPECT_NEAR(DragOne(Tool::Rotate, Handle::Ring, kFlat, press, OnCircle(kFlatCenter, 60.0f, 22.0f))[0].rotation, 22.0f, kTolerance);
         EXPECT_NEAR(DragOne(Tool::Rotate, Handle::Ring, kFlat, press, OnCircle(kFlatCenter, 60.0f, 22.0f), {}, true)[0].rotation, 15.0f, kTolerance);
         EXPECT_NEAR(DragOne(Tool::Rotate, Handle::Ring, kFlat, press, OnCircle(kFlatCenter, 60.0f, 22.0f), snap, true)[0].rotation, 22.0f, kTolerance);
@@ -310,7 +309,6 @@ namespace BECore::Tests {
         const auto result = DragOne(Tool::Scale, Handle::Corner2, kFlat, {100.0f, 50.0f}, {-1000.0f, -1000.0f});
         EXPECT_FLOAT_EQ(result[0].width, kMinItemSize);
         EXPECT_FLOAT_EQ(result[0].height, kMinItemSize);
-        // The corner that was opposite stays at (0, 0)
         ExpectVec({0.0f, 0.0f}, WorldPointOf(result[0], 0.0f, 0.0f));
         const auto edge = DragOne(Tool::Scale, Handle::Edge3, kFlat, {0.0f, 25.0f}, {500.0f, 25.0f});
         EXPECT_FLOAT_EQ(edge[0].width, kMinItemSize);
@@ -332,7 +330,6 @@ namespace BECore::Tests {
         // Pulled up by half the height: the change in y decides, 50 x 25
         result = DragOne(Tool::Scale, Handle::Corner2, item, {100.0f, 50.0f}, {100.0f, 25.0f}, {}, false, true);
         ExpectItem(MakeItem(0.0f, 0.0f, 50.0f, 25.0f), result[0]);
-        // An edge scales the other axis about its middle
         result = DragOne(Tool::Scale, Handle::Edge1, item, {100.0f, 25.0f}, {120.0f, 25.0f}, {}, false, true);
         ExpectItem(MakeItem(0.0f, -5.0f, 120.0f, 60.0f), result[0]);
         result = DragOne(Tool::Scale, Handle::Edge2, item, {50.0f, 50.0f}, {50.0f, 75.0f}, {}, false, true);
@@ -365,7 +362,6 @@ namespace BECore::Tests {
         result = DragOne(Tool::Scale, Handle::Corner2, kFlat, {100.0f, 50.0f}, {123.4f, 53.5f}, snap);
         EXPECT_NEAR(result[0].width, 120.0f, kTolerance);
         EXPECT_NEAR(result[0].height, 55.0f, kTolerance);
-        // Off by the modifier, on by it when the switch is off
         result = DragOne(Tool::Scale, Handle::Edge1, kFlat, {100.0f, 25.0f}, {123.4f, 25.0f}, snap, true);
         EXPECT_NEAR(result[0].width, 123.4f, kTolerance);
         result = DragOne(Tool::Scale, Handle::Edge1, kFlat, {100.0f, 25.0f}, {123.4f, 25.0f}, {}, true);
@@ -412,7 +408,6 @@ namespace BECore::Tests {
         const Vec2 centre{20.0f, 5.0f};
         SnapSettings snap;
         snap.scale = true;
-        // 1.234 snaps to 1.2
         const auto snapped = Drag(Tool::Scale, Space::World, Handle::Corner2, items, centre + Vec2{50.0f, 0.0f}, centre + Vec2{61.7f, 0.0f}, snap);
         EXPECT_NEAR(snapped[0].width, 12.0f, kTolerance);
         // Pulled onto the centre: the smallest item stays at the minimum size

@@ -189,7 +189,7 @@ namespace BECore::Tests {
             EXPECT_NEAR(expected->rect.h, actual->rect.h, kTolerance) << name;
         }
 
-        // The HUD of the plan's sketch (a plate with a score and a Reset button, and a portrait variant), once in the engine's XML and once in HTML + CSS
+        // A HUD (a plate with a score and a Reset button, and a portrait variant), once in the engine's XML and once in HTML + CSS
         constexpr const char* kHudHtml = R"(
 <div id="Hud" class="hud">
   <span id="Score">Score: {score}</span>
@@ -230,8 +230,7 @@ button:hover { background: #3a6; }
   </variants>
 </ui>)";
 
-        // A game's main menu as it shipped before its buttons became composed (the HTML compiler writes the composed form, whose layout is the
-        // same), and the same menu in HTML + CSS
+        // A game's main menu with plain buttons (the HTML compiler writes the composed form, whose layout is the same), and the same menu in HTML + CSS
         constexpr const char* kMenuXml = R"(<ui><elements>
   <element type="UIStack" name="Column" anchor="Center" width="90%" maxWidth="320" height="232" direction="Vertical" spacing="16" crossAlign="Stretch">
     <children>
@@ -271,7 +270,7 @@ button  { height: 56px; font-size: 28px; }
 #Quit   { background: rgb(90, 50, 50); }
 )";
 
-        // A game's HUD as it shipped before its buttons became composed (same note as the menu), and the same HUD in HTML + CSS
+        // A game's HUD with plain buttons (same note as the menu), and the same HUD in HTML + CSS
         constexpr const char* kGameHudXml = R"(<ui><elements>
   <element type="UIElement" name="Score" x="96" y="12" width="250" height="40" fontSize="28">
     <components>
@@ -543,7 +542,6 @@ button   { width: 124px; height: 48px; font-size: 24px; }
                     EXPECT_FALSE(expected.attribute(attribute.name()).empty()) << name << " has the extra attribute " << attribute.name();
                 }
             }
-            // The components of a composed element: the same types in the same order, with the same attributes
             pugi::xml_node actualComponent = actual.child("components").first_child();
             for (pugi::xml_node expectedComponent : expected.child("components").children()) {
                 ASSERT_TRUE(actualComponent) << name << " lacks the component " << expectedComponent.attribute("type").as_string();
@@ -877,7 +875,6 @@ button   { width: 124px; height: 48px; font-size: 24px; }
             EXPECT_EQ(left->end.r, 255) << text;
         }
 
-        // Stops with commas and spaces inside, white space and case
         const auto stops = ParseLinearGradient("  LINEAR-GRADIENT( To   Right ,  rgba(1, 2, 3, .5) ,rgb(4 5 6) )  ");
         ASSERT_TRUE(stops);
         EXPECT_EQ(stops->direction, UIGradientDirection::Horizontal);
@@ -932,7 +929,6 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(two->layers[1].offsetY, 3.0f);
         EXPECT_EQ(two->layers[1].color.a, 255);
 
-        // A layer past the limit is counted and not stored
         const auto three = ParseBoxShadows("0 0 1px red, 0 0 2px green, 0 0 3px blue");
         ASSERT_TRUE(three);
         EXPECT_EQ(three->count, 3u);
@@ -1334,19 +1330,16 @@ button   { width: 124px; height: 48px; font-size: 24px; }
     }
 
     TEST_F(UIWebTest, ChoiceGroupsOutsideTheSubsetAreReported) {
-        // An unknown widget is read as a plain element and reported
         const auto unknown = Compile(R"(<div id="g" data-widget="dropdown"></div>)");
         EXPECT_EQ(unknown->IssuesMentioning("data-widget=\"dropdown\" is not supported"), 1u);
         EXPECT_EQ(unknown->IssuesMentioning("\"segmented\", \"toggle\", \"slider\" and \"progress\""), 1u) << "the message names every widget";
         EXPECT_EQ(unknown->Find("g").attribute("type").as_string(), String("UIElement"));
 
-        // data-bind with no widget, on a div and on a button
         const auto bind = Compile(R"(<div id="g" data-bind="v"></div><button id="b" data-bind="w">B</button>)");
         EXPECT_EQ(bind->IssuesMentioning("data-bind only applies"), 1u) << "one message for both, like every issue";
         EXPECT_FALSE(bind->Has("g", "bind"));
         EXPECT_FALSE(bind->Has("b", "bind"));
 
-        // A group that is not display: flex still compiles (a UISegmented is a stack), and says so
         const auto noFlex = Compile(R"(<div id="g" data-widget="segmented" data-bind="v"><button id="a" data-value="x">A</button></div>)");
         EXPECT_EQ(noFlex->IssuesMentioning("needs display: flex"), 1u);
         EXPECT_EQ(noFlex->Attr("g", "bind"), "v");
@@ -1354,7 +1347,6 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         const auto flex = Compile(R"(<div id="g" data-widget="segmented"><button>A</button></div>)", "div { display: flex }");
         EXPECT_EQ(flex->IssuesMentioning("needs display: flex"), 0u);
 
-        // data-value away from a button, and the widget on a button
         const auto value = Compile(R"(<div id="g" data-value="x"></div>)");
         EXPECT_EQ(value->IssuesMentioning("data-value only applies to a <button>"), 1u);
         EXPECT_FALSE(value->Has("g", "value"));
@@ -1362,7 +1354,6 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(onButton->IssuesMentioning("on a <button> is left out"), 1u);
         EXPECT_EQ(onButton->Find("b").attribute("type").as_string(), String("UIElement")) << "a button that is no segment is composed";
 
-        // The widget name is not case sensitive, like a tag
         const auto upper = Compile(R"(<div id="g" data-widget="Segmented"></div>)", "div { display: flex }");
         EXPECT_EQ(upper->Find("g").attribute("type").as_string(), String("UISegmented"));
         EXPECT_TRUE(upper->report.issues.empty());
@@ -1533,7 +1524,6 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_FALSE(compiled->Component("d", "UISliderComponent").attribute("minValue")) << "nothing written, nothing invented";
         EXPECT_FALSE(compiled->Component("d", "UISliderComponent").attribute("step"));
 
-        // and what the controls read from it
         const auto* toggle = compiled->Element("t")->GetComponent<UIToggleComponent>();
         const auto* look = compiled->Element("tSwitch")->GetComponent<UISwitchComponent>();
         const auto* slider = compiled->Element("s")->GetComponent<UISliderComponent>();
@@ -1555,7 +1545,6 @@ button   { width: 124px; height: 48px; font-size: 24px; }
     }
 
     TEST_F(UIWebTest, WidgetMisuseIsReported) {
-        // data-step, data-min, data-max, data-on, data-off, data-action and data-bind with no widget that reads them
         const auto stray = Compile(R"(<div id="a" data-step="1" data-min="0" data-max="1" data-on="x" data-off="y" data-action="Go" data-bind="v"></div>)");
         EXPECT_EQ(stray->IssuesMentioning("data-step only applies"), 1u);
         EXPECT_EQ(stray->IssuesMentioning("data-min only applies"), 1u);
@@ -1568,7 +1557,6 @@ button   { width: 124px; height: 48px; font-size: 24px; }
             EXPECT_FALSE(stray->Has("a", key)) << key << " has no widget to read it, so nothing is written";
         }
 
-        // data-step on a progress bar, data-on on a slider, data-action on a progress bar and a segmented group
         const auto wrong = Compile(R"(<div id="p" data-widget="progress" data-step="1" data-action="Go"></div><div id="s" data-widget="slider" data-on="1"></div>)");
         EXPECT_EQ(wrong->IssuesMentioning("data-step only applies"), 1u);
         EXPECT_EQ(wrong->IssuesMentioning("data-action only applies"), 1u);
@@ -1577,7 +1565,6 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_FALSE(wrong->Has("p", "action"));
         EXPECT_FALSE(wrong->Has("s", "onValue"));
 
-        // a number that is not one is reported and the default stays
         const auto bad = Compile(R"(<div id="s" data-widget="slider" data-min="low" data-max="inf" data-step="-1"></div><div id="p" data-widget="progress" data-max="ten"></div>)");
         EXPECT_EQ(bad->IssuesMentioning("data-min=\"low\" is not a number"), 1u);
         EXPECT_EQ(bad->IssuesMentioning("data-max=\"inf\" is not a number"), 1u);
@@ -1588,7 +1575,6 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         }
         EXPECT_FALSE(bad->Has("p", "maxValue"));
 
-        // a widget on a button or an image is left out, and a progress bar is not disabled
         const auto onButton = Compile(R"(<button id="b" data-widget="toggle">B</button><img id="i" src="x" data-widget="slider"><div id="p" data-widget="progress" disabled></div>)");
         EXPECT_EQ(onButton->IssuesMentioning("data-widget=\"toggle\" on a <button> is left out"), 1u);
         EXPECT_EQ(onButton->IssuesMentioning("data-widget=\"slider\" on a <img> is left out"), 1u);
@@ -1598,7 +1584,6 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_FALSE(onButton->Component("i", "UIImageComponent").empty());
         EXPECT_FALSE(onButton->Has("p", "disabled"));
 
-        // content inside a slider or a progress bar has nowhere to go
         const auto inside = Compile(R"(<div id="s" data-widget="slider"><span id="x">hi</span></div>)");
         EXPECT_EQ(inside->IssuesMentioning("shows no content"), 1u);
         EXPECT_TRUE(inside->Find("x").empty()) << "its children are not elements";
@@ -1615,7 +1600,6 @@ button   { width: 124px; height: 48px; font-size: 24px; }
             EXPECT_FALSE(compiled->Has(name, "trackColor")) << name;
             EXPECT_FALSE(compiled->Has(name, "thumbColor")) << name;
         }
-        // The value is checked like any property
         const auto bad = Compile(R"(<div id="t" data-widget="toggle">T</div>)", "#t { -be-fill-color: notacolor; }");
         EXPECT_EQ(bad->IssuesMentioning("'-be-fill-color: notacolor' is not understood"), 1u);
         EXPECT_EQ(bad->report.declarationsUnsupported, 1u);
@@ -1876,7 +1860,6 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->ComponentAttr("q", "UITextComponent", "text"), "{{#menu.start}}") << "an escaped brace stays escaped";
         EXPECT_TRUE(compiled->report.issues.empty());
 
-        // and the control made from it shows the string of the current language
         UIStrings& strings = CoreManager::GetUIStrings();
         strings.Set("en"_intern, "menu.start", "Start");
         strings.Set("en"_intern, "score.title", "Score");
@@ -2222,7 +2205,6 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->IssuesMentioning("data-icon-position=\"above\" is not supported on a <button> yet"), 1u);
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
 
-        // Icon only: the button keeps its box, the icon is a centred square child that takes the tint and the clicker the action
         EXPECT_EQ(compiled->Attr("Only", "type"), "UIElement");
         for (const char* key : {"icon", "iconTint", "iconPlacement", "tooltip", "text", "layout"}) {
             EXPECT_FALSE(compiled->Has("Only", key)) << key;
@@ -2238,7 +2220,6 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_TRUE(compiled->Component("Only", "UITextComponent").empty()) << "no caption, no text component";
         EXPECT_EQ(static_cast<float>(UIImageComponent::kIconOnlyShare), 0.6f) << "the 60% above is the share of UIImageComponent";
 
-        // Icon left of a caption: a horizontal stack of the icon and the caption, the caption holds the text and the font size
         EXPECT_EQ(compiled->Attr("Left", "layout"), "Stack");
         EXPECT_EQ(compiled->Attr("Left", "direction"), "Horizontal");
         EXPECT_EQ(compiled->Attr("Left", "padding"), "8,0,0,0");
@@ -2260,12 +2241,10 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(static_cast<float>(UIImageComponent::kIconPadding), 8.0f);
         EXPECT_EQ(static_cast<float>(UIImageComponent::kIconGap), 6.0f);
 
-        // Above is left, with the tooltip kept
         EXPECT_EQ(compiled->Attr("Above", "layout"), "Stack");
         EXPECT_EQ(compiled->ComponentAttr("Above", "UITooltipComponent", "text"), "{#opt.tip}");
         EXPECT_NE(compiled->Find("AboveCaption"), pugi::xml_node());
 
-        // A plain button has no children
         EXPECT_FALSE(compiled->Find("Plain").child("children"));
         EXPECT_FALSE(compiled->Has("Plain", "layout"));
 
@@ -2603,7 +2582,6 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->IssuesMentioning("<table> is not supported"), 1u);
         EXPECT_EQ(compiled->report.declarationsUnsupported, 3u);
         EXPECT_EQ(compiled->report.issues.size(), 4u) << "cursor, position: absolute and box-sizing mean nothing here and are not defects";
-        // The rest of the screen is built
         EXPECT_EQ(compiled->Attr("a", "width"), "10");
         // The line of the declaration is the line of the style text, counted from the <style> tag
         for (const UIWebIssue& issue : compiled->report.issues) {
@@ -2796,7 +2774,6 @@ button  { height: 56px; font-size: 28px; }
         EXPECT_EQ(compiled->ComponentAttr("knob", "UISliderComponent", "thumbColor"), "@line");
         EXPECT_EQ(compiled->ComponentAttr("iconIcon", "UIImageComponent", "tint"), "@accent");
 
-        // The XML front-end reads it back into the fields, as tokens
         const auto* card = compiled->Element("card");
         ASSERT_NE(card, nullptr);
         EXPECT_EQ(card->color.token.ToStringView(), "panel");
@@ -2898,7 +2875,6 @@ button:checked { background: var(--panel); }
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
         EXPECT_FALSE(compiled->report.HasIssues()) << compiled->report.issues[0].message.c_str() << " / " << compiled->xml.c_str();
 
-        // Compiles to the XML of the menu with `@token`, and that XML lays out as the literal menu does
         const UIScreenContent tokens = ReadXml(kTokenMenuXml);
         ExpectSameElements(tokens.elements, compiled->content.elements);
         LaidOut web(compiled->content);
@@ -2909,7 +2885,6 @@ button:checked { background: var(--panel); }
             ExpectSameRect(literal.Find(name), web.Find(name), name);
         }
 
-        // and draws in the colours of the current theme, and in the other ones after a switch
         UIElement* play = compiled->Element("Play");
         ASSERT_NE(play, nullptr);
         play->ResolveTheme(themes);
@@ -2945,7 +2920,6 @@ button:checked { background: var(--panel); }
         EXPECT_TRUE(ColorsEqual(drawn(), Color{30, 32, 40, 255}));
         EXPECT_TRUE(themes.GetMissing().empty());
 
-        // A token the table lacks is magenta and is recorded once
         const auto ghost = Compile(R"(<div id="ghost"></div>)", "#ghost { width: 10px; height: 10px; background: var(--nowhere); }");
         UIElement* element = ghost->Element("ghost");
         element->rect = {0.0f, 0.0f, 10.0f, 10.0f};

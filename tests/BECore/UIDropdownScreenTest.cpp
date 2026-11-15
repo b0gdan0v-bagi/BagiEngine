@@ -703,7 +703,6 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIDropdownScreenTest, AnIconOptionHasTheRectOfAPlainOne) {
-        // The same list twice, once with the plain options and once with an icon on the second: every option in the same place, in both views
         for (const auto [width, height] : {Pair<float, float>{kViewWidth, kViewHeight}, Pair<float, float>{kPortraitWidth, kPortraitHeight}}) {
             ASSERT_NO_FATAL_FAILURE(LoadScene(width, height));
             ASSERT_NO_FATAL_FAILURE(ShowAndOpen());

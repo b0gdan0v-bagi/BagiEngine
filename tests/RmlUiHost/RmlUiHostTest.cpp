@@ -861,7 +861,7 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
         ASSERT_TRUE(doc);
 
         EXPECT_EQ(doc->GetDocument(), nullptr);
-        manager->DrawAll();  // draws nothing and does not crash
+        manager->DrawAll();
         EXPECT_EQ(CountGeometry(*_renderer), 0u);
         doc.Reset();
         manager.Reset();

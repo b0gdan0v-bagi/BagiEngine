@@ -6,10 +6,6 @@
 #include <gtest/gtest.h>
 #include <tests/StressSceneFixture.h>
 
-/**
- * Coverage of StressRunComponent's fixed mode on the shipped scene file with a clock the test moves: which frames are recorded (warm-up and
- * the building frame are not, a change restarts the warm-up), exactly `frames` samples, one line, one quit, and a plain run that measures nothing.
- */
 namespace BECore::Stress::Tests {
 
     namespace {

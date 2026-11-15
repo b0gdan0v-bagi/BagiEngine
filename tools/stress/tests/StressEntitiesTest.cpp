@@ -3,10 +3,6 @@
 #include <gtest/gtest.h>
 #include <tests/StressSceneFixture.h>
 
-/**
- * Coverage of StressEntitiesComponent on the shipped scene file: a node and a running tween per count, a field that grows and shrinks from the
- * tail, a tween that starts again when it ends, nothing drawn, and no tween left when the scene goes.
- */
 namespace BECore::Stress::Tests {
 
     namespace {
