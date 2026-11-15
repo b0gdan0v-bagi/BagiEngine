@@ -50,14 +50,20 @@ namespace BECore {
     }
 
     IntrusivePtr<TweenHandle> TweenManager::Play(Timeline timeline, float delay, MoveOnlyFunction<void()> onComplete, MoveOnlyFunction<void()> onCancel) {
-        const float duration = timeline.GetDuration();
+        const bool endless = timeline.IsEndless();
+        const AnimationFrameClass frameClass = timeline.GetFrameClass();
+        // An endless duration is infinite, which `StartErased` would turn into zero: the endless handle never looks at its duration
+        const float duration = endless ? 0.0f : timeline.GetDuration();
         // The setter owns the timeline: one allocation, no control block
         auto owned = MakeUnique<Timeline>(std::move(timeline));
         Timeline* const running = owned.get();
-        // The progress of the last step is exactly 1, so the last call is exactly the duration; the tween itself is linear
-        auto handle = StartErased(
-            {.duration = duration, .delay = delay, .ease = EaseType::Linear}, [owned = std::move(owned), duration](float progress) { owned->Evaluate(progress * duration); }, std::move(onComplete),
-            std::move(onCancel));
+        // The progress of the last step is exactly 1, so the last call is exactly the duration; the tween itself is linear. An endless run gets
+        // the seconds of the step instead of a progress, so no ever larger time is accumulated into one float
+        TweenApply apply = endless ? TweenApply([owned = std::move(owned)](float seconds) { owned->Advance(seconds); })
+                                   : TweenApply([owned = std::move(owned), duration](float progress) { owned->Evaluate(progress * duration); });
+        auto handle = StartErased({.duration = duration, .delay = delay, .ease = EaseType::Linear}, std::move(apply), std::move(onComplete), std::move(onCancel));
+        handle->_endless = endless;
+        handle->_frameClass = frameClass;
         // A clip callback may cancel its own run (Cancel, CancelAll, a ScopedTween, Clear): the timeline then stops at the clip boundary, so no setter or
         // callback runs after it. The raw pointer is safe: the timeline belongs to the setter, which belongs to the handle and is released with it
         running->SetStopCheck([tween = handle.Get()] { return tween->IsFinished(); });
@@ -91,7 +97,34 @@ namespace BECore {
         ResumeWaiters(tween);
     }
 
+    void TweenManager::CallSetter(TweenHandle& tween, float value) {
+        _stepping = &tween;
+        tween._apply(value);
+        _stepping = nullptr;
+        if (tween.IsFinished()) {
+            ReleaseCallbacks(tween);  // the setter cancelled its own tween (or cleared the manager): it could not be released while it ran
+        }
+    }
+
+    void TweenManager::StepEndless(TweenHandle& tween, float dt) {
+        float seconds = dt;
+        if (tween._state == TweenState::Waiting) {
+            tween._elapsed += dt;
+            if (tween._elapsed < tween._settings.delay) {
+                return;
+            }
+            tween._state = TweenState::Running;
+            seconds = tween._elapsed - tween._settings.delay;  // rule 3: the time left after the delay
+            tween._elapsed = tween._settings.delay;            // nothing grows past it: the timeline keeps the time
+        }
+        CallSetter(tween, seconds);
+    }
+
     void TweenManager::Step(TweenHandle& tween, float dt) {
+        if (tween._endless) {
+            StepEndless(tween, dt);
+            return;
+        }
         tween._elapsed += dt;
         const TweenSettings& settings = tween._settings;
         if (tween._elapsed < settings.delay) {
@@ -102,11 +135,8 @@ namespace BECore {
         const float running = tween._elapsed - settings.delay;
         const bool done = settings.duration <= 0.0f || running >= settings.duration;
         tween._progress = done ? 1.0f : running / settings.duration;
-        _stepping = &tween;
-        tween._apply(Ease(settings.ease, tween._progress));
-        _stepping = nullptr;
+        CallSetter(tween, Ease(settings.ease, tween._progress));
         if (tween.IsFinished()) {
-            ReleaseCallbacks(tween);  // the setter cancelled its own tween (or cleared the manager): it could not be released while it ran
             return;
         }
         if (!done) {
@@ -195,6 +225,11 @@ namespace BECore {
 
     size_t TweenManager::GetActiveCount() const {
         const auto active = [](const IntrusivePtr<TweenHandle>& tween) { return !tween->IsFinished(); };
+        return static_cast<size_t>(eastl::count_if(_tweens.begin(), _tweens.end(), active) + eastl::count_if(_pending.begin(), _pending.end(), active));
+    }
+
+    size_t TweenManager::GetActiveCount(AnimationFrameClass frameClass) const {
+        const auto active = [frameClass](const IntrusivePtr<TweenHandle>& tween) { return !tween->IsFinished() && tween->GetFrameClass() == frameClass; };
         return static_cast<size_t>(eastl::count_if(_tweens.begin(), _tweens.end(), active) + eastl::count_if(_pending.begin(), _pending.end(), active));
     }
 

@@ -54,6 +54,15 @@ namespace BECore {
     /// Waiting (the delay has not passed), Running, then Completed or Cancelled (never both)
     CORE_ENUM(TweenState, uint8_t, Waiting, Running, Completed, Cancelled)
 
+    /**
+     * @brief How much the frame loop has to be awake for a tween (the contract of the render-on-demand entry; the names and the meaning of
+     * `ParticleFrameClass`).
+     *
+     * Interactive needs a frame all the time, FiniteEffect needs frames until the tween ends, DecorativeLoop is an endless loop that only
+     * decorates (it may run at a lower rate or not at all while the rest of the picture sleeps). `TweenManager::GetActiveCount(class)` counts them.
+     */
+    CORE_ENUM(AnimationFrameClass, uint8_t, Interactive, FiniteEffect, DecorativeLoop)
+
     /// How a tween that was awaited ended (`TweenAwaiter`)
     CORE_ENUM(TweenResult, uint8_t, Completed, Cancelled)
 
@@ -85,9 +94,15 @@ namespace BECore {
             return _state == TweenState::Cancelled;
         }
 
-        /// 0..1 of the raw time (not eased) since the end of the delay: 0 while waiting, 1 once completed, where it stopped when cancelled
+        /// 0..1 of the raw time (not eased) since the end of the delay: 0 while waiting, 1 once completed, where it stopped when cancelled.
+        /// Always 0 for the handle of an endless timeline (`TweenManager::Play`): it has no end to measure against
         [[nodiscard]] float GetProgress() const {
             return _progress;
+        }
+
+        /// The frame class of the tween: `FiniteEffect` for `Start` and `Delay`, the class of the timeline for `Play`
+        [[nodiscard]] AnimationFrameClass GetFrameClass() const {
+            return _frameClass;
         }
 
         /**
@@ -126,6 +141,8 @@ namespace BECore {
 
         TweenManager* _manager = nullptr;  // null once the tween is finished
         TweenState _state = TweenState::Waiting;
+        AnimationFrameClass _frameClass = AnimationFrameClass::FiniteEffect;
+        bool _endless = false;  // set by `Play` of an endless timeline: no completion, the setter gets seconds instead of a progress
         float _progress = 0.0f;
         float _elapsed = 0.0f;  // raw time since Start, the delay included
         TweenSettings _settings;
