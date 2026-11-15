@@ -7,6 +7,7 @@
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UICssParser.h>
 #include <BECore/UI/UIDocument.h>
+#include <BECore/UI/UIEnvironment.h>
 #include <BECore/UI/UIHtmlParser.h>
 #include <BECore/UI/UIImageComponent.h>
 #include <BECore/UI/UIInputClicker.h>
@@ -22,6 +23,7 @@
 #include <BECore/UI/UIToggleComponent.h>
 #include <BECore/UI/UITooltipComponent.h>
 #include <BECore/UI/UITransitionComponent.h>
+#include <BECore/UI/UIVars.h>
 #include <BECore/UI/UIWebCompiler.h>
 #include <BECore/UI/UIWebText.h>
 #include <Common/EngineEnvironment.h>

@@ -4,6 +4,7 @@
 #include <BECore/Clipboard/Clipboard.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/MainWindow/MainWindowManager.h>
 #include <BECore/Reflection/AbstractFactory.h>
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Renderer/RendererManager.h>

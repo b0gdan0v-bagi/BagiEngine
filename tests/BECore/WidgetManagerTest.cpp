@@ -3,6 +3,7 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Reflection/XmlDeserializer.h>
+#include <BECore/Renderer/RendererManager.h>
 #include <BECore/Widgets/WidgetList.h>
 #include <BECore/Widgets/WidgetManager.h>
 #include <Common/EngineEnvironment.h>

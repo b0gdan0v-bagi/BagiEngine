@@ -2,6 +2,7 @@
 
 #include <BECore/Application/RunMode.h>
 #include <BECore/Config/ConfigFactory.h>
+#include <BECore/Config/ConfigManager.h>
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Tests/TestList.h>
