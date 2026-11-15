@@ -84,4 +84,25 @@ namespace BECore {
         bool _stale = true;
     };
 
+    /**
+     * @brief Tells whether a menu that is drawn only while open has just opened.
+     *
+     * A menu is drawn open on consecutive frames; it is not drawn at all while a parent menu is closed, so a flag cleared in the
+     * "closed" branch can stay set. Opened() compares frame numbers instead: any gap since the last open draw means it was closed.
+     */
+    class MenuOpenTracker {
+    public:
+        /// Call on every frame the menu is drawn open, with the frame's number; true on the first such frame after a gap (or ever)
+        [[nodiscard]] bool Opened(int frame) {
+            const bool newlyOpened = !_seen || frame - _lastFrame != 1;
+            _seen = true;
+            _lastFrame = frame;
+            return newlyOpened;
+        }
+
+    private:
+        int _lastFrame = 0;
+        bool _seen = false;
+    };
+
 }  // namespace BECore

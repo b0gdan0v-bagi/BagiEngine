@@ -159,4 +159,24 @@ namespace BECore::Tests {
         EXPECT_EQ(Joined(cache.Names(store)), "Beta");
     }
 
+    TEST(MenuOpenTrackerTest, OpensOnTheFirstFrameAndOnAnyGap) {
+        MenuOpenTracker tracker;
+
+        EXPECT_TRUE(tracker.Opened(0));
+        EXPECT_FALSE(tracker.Opened(1));
+        EXPECT_FALSE(tracker.Opened(2));
+        // The parent menu closed: the submenu was not drawn for frames 3 and 4
+        EXPECT_TRUE(tracker.Opened(5));
+        EXPECT_FALSE(tracker.Opened(6));
+        // Closed for one frame only
+        EXPECT_TRUE(tracker.Opened(8));
+    }
+
+    TEST(MenuOpenTrackerTest, TheFirstFrameCountsWhateverItsNumber) {
+        MenuOpenTracker tracker;
+
+        EXPECT_TRUE(tracker.Opened(1));
+        EXPECT_FALSE(tracker.Opened(2));
+    }
+
 }  // namespace BECore::Tests

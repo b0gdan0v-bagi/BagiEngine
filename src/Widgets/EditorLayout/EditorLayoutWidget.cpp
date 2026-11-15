@@ -236,9 +236,9 @@ namespace BECore {
         const bool hasStore = _layouts.has_value();
 
         if (ImGui::BeginMenu("Layouts", hasStore)) {
-            // BeginMenu is true on every frame the menu is open: rescan the folder only on the frame it opens
-            if (!_layoutsMenuOpen) {
-                _layoutsMenuOpen = true;
+            // BeginMenu is true on every frame the menu is open, and the submenu is not drawn at all while View is closed:
+            // rescan the folder only on the first frame of an opening
+            if (_layoutsMenuOpen.Opened(ImGui::GetFrameCount())) {
                 _layoutNames.Invalidate();
             }
             const Vector<String>& names = _layoutNames.Names(*_layouts);
@@ -251,15 +251,12 @@ namespace BECore {
                 }
             }
             ImGui::EndMenu();
-        } else {
-            _layoutsMenuOpen = false;
         }
 
         CommandMenuItem(kViewSaveLayout, "Save Layout As...", hasStore);
 
         if (ImGui::BeginMenu("Delete Layout", hasStore)) {
-            if (!_deleteLayoutMenuOpen) {
-                _deleteLayoutMenuOpen = true;
+            if (_deleteLayoutMenuOpen.Opened(ImGui::GetFrameCount())) {
                 _layoutNames.Invalidate();
             }
             const Vector<String>& names = _layoutNames.Names(*_layouts);
@@ -276,8 +273,6 @@ namespace BECore {
                 }
             }
             ImGui::EndMenu();
-        } else {
-            _deleteLayoutMenuOpen = false;
         }
 
         CommandMenuItem(kViewResetLayout, "Reset to Defaults");
