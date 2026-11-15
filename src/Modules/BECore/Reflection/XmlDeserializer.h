@@ -1,6 +1,5 @@
 #pragma once
 
-#include <BECore/FileSystem/FileSystem.h>
 #include <BECore/Reflection/IDeserializer.h>
 #include <filesystem>
 #include <pugixml.hpp>

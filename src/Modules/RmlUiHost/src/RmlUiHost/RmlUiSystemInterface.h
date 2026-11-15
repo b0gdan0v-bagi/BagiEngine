@@ -1,6 +1,5 @@
 #pragma once
 
-#include <BECore/Time/Time.h>
 #include <RmlUi/Core/SystemInterface.h>
 
 namespace BECore {

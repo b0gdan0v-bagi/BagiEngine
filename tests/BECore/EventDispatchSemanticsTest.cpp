@@ -411,7 +411,7 @@ namespace BECore::Tests {
     }
 
     // The defaulted move of SubscriptionHolder moves the connections and leaves them bound to the address that
-    // subscribed. This is the behavior the dispatcher had; the test pins it as it is.
+    // subscribed, so the moved-to object receives nothing.
     TEST(EventDispatchSemanticsTest, AMovedHolderKeepsTheConnectionsBoundToTheOriginalInstance) {
         Vector<int> log;
         Listener moved(1, log);

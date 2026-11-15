@@ -95,7 +95,8 @@ namespace BECore {
             return const_cast<void*>(static_cast<const void*>(instance));
         }
 
-        // The address of this function is the identity of (Candidate, Type) in the channel.
+        // The address of this function is the identity of (Candidate, Type) in the channel. Two instantiations with the same
+        // body must not fold into one address (MSVC /OPT:ICF would merge them and Disconnect would hit the wrong handler).
         template <auto Candidate, typename Type>
         static void Invoke(void* instance, const void* event) {
             auto* target = static_cast<Type*>(instance);
