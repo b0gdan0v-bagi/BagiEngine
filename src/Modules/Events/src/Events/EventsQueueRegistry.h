@@ -2,8 +2,6 @@
 
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/PassKey.h>
-#include <functional>
-#include <utility>
 
 namespace BECore {
     struct BaseEvent;
@@ -11,10 +9,11 @@ namespace BECore {
     // Менеджер для автоматической регистрации событий
     class EventsQueueRegistry {
     public:
-        using UpdateFunction = std::function<void()>;
+        /// A plain function: MoveOnlyFunction asserts through events, so this header (which every event includes) cannot include it, and an update needs no capture
+        using UpdateFunction = void (*)();
 
         static void Register(UpdateFunction updateFunc, PassKey<BaseEvent>) {
-            GetInstance()._updateFunctions.push_back(std::move(updateFunc));
+            GetInstance()._updateFunctions.push_back(updateFunc);
         }
 
         static void UpdateAll() {

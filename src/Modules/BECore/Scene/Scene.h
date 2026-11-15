@@ -154,7 +154,7 @@ namespace BECore {
          * @param index Place among the children of the parent, clamped to their number; kAppend is the last
          * @return The new node (also held by its parent), empty on failure
          */
-        IntrusivePtr<SceneNode> InstantiateNode(pugi::xml_node reference, const NodeFileLoader& loader, SceneNode* parent = nullptr, size_t index = kAppend);
+        IntrusivePtr<SceneNode> InstantiateNode(pugi::xml_node reference, NodeFileLoaderRef loader, SceneNode* parent = nullptr, size_t index = kAppend);
 
         /// InstantiateNode() of a reference without overrides (`nodes/MahjongHud`), the node file found through the FileSystem of CoreManager (a game's `config/nodes/X.xml` wins over the engine's)
         IntrusivePtr<SceneNode> InstantiateNode(StringView ref, SceneNode* parent = nullptr, size_t index = kAppend);

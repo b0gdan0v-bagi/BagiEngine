@@ -181,7 +181,7 @@ namespace BECore {
         }
     }
 
-    bool BuildNodeReference(const SceneNode& live, const NodeFileLoader& loader, pugi::xml_node nodesEl, String& reason) {
+    bool BuildNodeReference(const SceneNode& live, NodeFileLoaderRef loader, pugi::xml_node nodesEl, String& reason) {
         const String ref = live.GetSourceRef().CStr();
         if (ref.empty()) {
             reason = "the node has no node file";

@@ -8,7 +8,6 @@
 #   directory-iterator                 engine-file-layer, engine-path-type
 #   sto, stable-sort, stringstream     core-type-aliases-cleanup (and the entry that touches the file)
 # Whoever empties a rule deletes its lines here.
-src/Modules/BECore/Clipboard/ClipboardTypes.h function 1
 src/Modules/BECore/Config/ConfigManager.cpp directory-iterator 1
 src/Modules/BECore/Config/XmlDocument.cpp fstream 2
 src/Modules/BECore/FileSystem/FileSystem.cpp directory-iterator 2
@@ -18,18 +17,11 @@ src/Modules/BECore/Profiler/Ring/FrozenTrace.cpp stable-sort 1
 src/Modules/BECore/Reflection/BinaryDeserializer.cpp fstream 1
 src/Modules/BECore/Reflection/BinarySerializer.cpp fstream 1
 src/Modules/BECore/Reflection/XmlSerializer.cpp stringstream 1
-src/Modules/BECore/Renderer/IRenderer.h function 1
 src/Modules/BECore/Save/SaveGame.cpp fstream 2
-src/Modules/BECore/Save/SaveStorage.cpp function 3
-src/Modules/BECore/Save/SaveStorage.h function 1
-src/Modules/BECore/Scene/SceneNodeFiles.h function 1
 src/Modules/BECore/Text/FontLoader.cpp fstream 1
 src/Modules/BECore/UI/UIWebCompiler.cpp stable-sort 1
-src/Modules/BECore/UI/UIWebCompiler.h function 1
 src/Modules/BECore/UI/UIWebDocumentLoader.cpp fstream 1
 src/Modules/BECore/UI/UIWebDocumentLoader.cpp stringstream 1
-src/Modules/BECore/Widgets/WidgetManager.h function 1
-src/Modules/Events/src/Events/EventsQueueRegistry.h function 1
 src/Modules/Games/src/Games/SeatedGameRegistry.h function 1
 src/Modules/RemoteControl/src/RemoteControl/Tls/TlsStream.h function 1
 src/Modules/RemoteControl/src/RemoteControl/WebSocketConnection.h function 1
@@ -47,9 +39,6 @@ src/Widgets/EditorLayout/LayoutStore.cpp directory-iterator 1
 src/Widgets/EditorLayout/UserFileIo.cpp fstream 2
 src/Widgets/EditorLayout/UserFileIo.cpp stringstream 1
 src/Widgets/ImGuiFonts.cpp fstream 1
-src/Widgets/SceneEditor/ComponentInspectors.cpp function 3
-src/Widgets/SceneEditor/ComponentInspectors.h function 2
-src/Widgets/Viewport/ViewportInput.h function 1
 tests/BECore/ConfigDeserializerTest.cpp fstream 3
 tests/BECore/ContentFilesVersionTest.cpp fstream 1
 tests/BECore/ContentMigrationAfterTest.cpp sto 2
@@ -96,6 +85,3 @@ tests/Common/MigrationTwin.h directory-iterator 1
 tests/Common/MigrationTwin.h fstream 1
 tests/Fuzz/FuzzSeeds.cpp fstream 1
 tests/RmlUiHost/RmlUiHostTest.cpp fstream 3
-tools/stress/src/Stress/Components/StressRunComponent.h function 1
-tools/stress/src/Stress/StressGameControl.cpp function 1
-tools/stress/src/Stress/StressGameControl.h function 2

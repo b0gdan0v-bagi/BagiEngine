@@ -5,11 +5,11 @@
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Scene/IComponent.h>
 #include <BECore/Types/Types.h>
+#include <BECore/Utils/MoveOnlyFunction.h>
 #include <Stress/RampController.h>
 #include <Stress/StressRecorder.h>
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <utility>
 
 namespace BECore::SceneEvents {
@@ -41,7 +41,7 @@ namespace BECore::Stress {
         BE_CLASS(StressRunComponent)
     public:
         /// Where the JSON line goes: a line without its newline
-        using LineSink = std::function<void(const String&)>;
+        using LineSink = MoveOnlyFunction<void(const String&)>;
 
         StressRunComponent() = default;
         ~StressRunComponent() override = default;

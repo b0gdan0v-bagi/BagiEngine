@@ -3,6 +3,7 @@
 #include <BECore/Application/RunMode.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/Types/Types.h>
+#include <BECore/Utils/MoveOnlyFunction.h>
 #include <BECore/Widgets/IWidget.h>
 #include <utility>
 
@@ -12,7 +13,7 @@ namespace BECore {
     public:
         /// Builds the widgets of a run mode. The default reads the config named by GetWidgetsConfigName(mode); a test replaces it
         /// (SetWidgetLoader) to get widgets with no config files and no real editor.
-        using WidgetLoader = eastl::function<Vector<IntrusivePtr<IWidget>>(RunMode)>;
+        using WidgetLoader = MoveOnlyFunction<Vector<IntrusivePtr<IWidget>>(RunMode)>;
 
         WidgetManager() = default;
         /// Destroys the widgets the way DestroyAll does (the last created first), without waiting for the GPU.

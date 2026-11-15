@@ -197,7 +197,7 @@ namespace BECore {
         return node;
     }
 
-    IntrusivePtr<SceneNode> Scene::InstantiateNode(pugi::xml_node reference, const NodeFileLoader& loader, SceneNode* parent, size_t index) {
+    IntrusivePtr<SceneNode> Scene::InstantiateNode(pugi::xml_node reference, NodeFileLoaderRef loader, SceneNode* parent, size_t index) {
         const String ref = reference.attribute(kNodeRefAttribute.data()).as_string();
         const auto fail = [&](StringView reason) {
             LOG_ERROR(Format("Scene '{}': cannot instantiate '{}': {}", _name.CStr(), ref, reason).c_str());

@@ -2,6 +2,8 @@
 
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/Types/Types.h>
+#include <BECore/Utils/FunctionRef.h>
+#include <BECore/Utils/MoveOnlyFunction.h>
 #include <cstddef>
 #include <filesystem>
 #include <pugixml.hpp>
@@ -63,7 +65,13 @@ namespace BECore {
      * @param error Receives the reason when the file cannot be used
      * @return false when it cannot be read, parsed or is not a node file
      */
-    using NodeFileLoader = eastl::function<bool(StringView ref, pugi::xml_document& out, String& error)>;
+    using NodeFileLoaderSignature = bool(StringView ref, pugi::xml_document& out, String& error);
+
+    /// A loader that is made once and kept (a factory result, a member of a test)
+    using NodeFileLoader = MoveOnlyFunction<NodeFileLoaderSignature>;
+
+    /// A loader as a parameter that is only called during the call (it is passed down, never stored)
+    using NodeFileLoaderRef = FunctionRef<NodeFileLoaderSignature>;
 
     /// The result of an expansion: how many references were replaced and one message per reference that was not
     struct NodeExpansion {
@@ -120,7 +128,7 @@ namespace BECore {
      * @param error Receives the reason on failure
      * @return false when the reference cannot be used (invalid, file missing or wrong, invalid override)
      */
-    bool ExpandNodeReference(pugi::xml_node reference, const NodeFileLoader& loader, bool markSource, pugi::xml_document& out, String& error);
+    bool ExpandNodeReference(pugi::xml_node reference, NodeFileLoaderRef loader, bool markSource, pugi::xml_document& out, String& error);
 
     /**
      * @brief Replaces every `scenes/scene/nodes/node[@ref]` of @p configRoot by the node of its file
@@ -135,7 +143,7 @@ namespace BECore {
      * @param markSource Every expanded node gets kNodeSourceAttribute (what LoadSceneManager wants); tools that read the
      *        file leave it false, so the document they see is the plain inline one
      */
-    NodeExpansion ExpandNodeReferences(pugi::xml_node configRoot, const NodeFileLoader& loader, bool markSource = false);
+    NodeExpansion ExpandNodeReferences(pugi::xml_node configRoot, NodeFileLoaderRef loader, bool markSource = false);
 
     /**
      * @brief Loader that reads `<baseDirectory>/<ref>.xml`, for tools and tests that have only a folder

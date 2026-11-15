@@ -16,7 +16,7 @@ namespace BECore {
     protected:
         // PassKey<BaseEvent> can be made by BaseEvent only, so the CRTP base registers through here.
         static void RegisterQueueUpdate(EventsQueueRegistry::UpdateFunction update) {
-            EventsQueueRegistry::Register(std::move(update), {});
+            EventsQueueRegistry::Register(update, {});
         }
     };
 

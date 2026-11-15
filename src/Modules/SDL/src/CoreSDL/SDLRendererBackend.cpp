@@ -347,7 +347,6 @@ namespace BECore {
             return;
         }
         CaptureCallback callback = std::move(_captureCallback);
-        _captureCallback = nullptr;
 
         SDL_Surface* surface = SDL_RenderReadPixels(_renderer, nullptr);
         if (!surface) {

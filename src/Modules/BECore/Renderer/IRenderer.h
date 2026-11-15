@@ -10,10 +10,10 @@
 #include <BECore/Renderer/RenderCounters.h>
 #include <BECore/Renderer/ViewTransform.h>
 #include <BECore/Types/Types.h>
+#include <BECore/Utils/MoveOnlyFunction.h>
 #include <Events/SubscriptionHolder.h>
 #include <cstdint>
 #include <expected>
-#include <functional>
 
 namespace BECore {
 
@@ -41,7 +41,7 @@ namespace BECore {
 
     /// The image, or why it could not be taken
     using CaptureResult = std::expected<PixelBuffer, String>;
-    using CaptureCallback = std::function<void(CaptureResult)>;
+    using CaptureCallback = MoveOnlyFunction<void(CaptureResult)>;
 
     class IRenderer : public RefCounted, public SubscriptionHolder {
         BE_CLASS(IRenderer, FACTORY_BASE)

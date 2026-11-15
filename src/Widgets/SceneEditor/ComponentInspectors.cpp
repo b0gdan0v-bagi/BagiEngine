@@ -190,7 +190,7 @@ namespace BECore {
         }
 
         const bool _registeredSpriteRenderer = [] {
-            RegisterComponentInspector<SpriteRendererComponent>(eastl::function<bool(SpriteRendererComponent&)>(InspectSpriteRenderer));
+            RegisterComponentInspector<SpriteRendererComponent>(InspectSpriteRenderer);
             return true;
         }();
 
@@ -250,7 +250,7 @@ namespace BECore {
         }
 
         const bool _registeredClickable = [] {
-            RegisterComponentInspector<ClickableComponent>(eastl::function<bool(ClickableComponent&)>(InspectClickable));
+            RegisterComponentInspector<ClickableComponent>(InspectClickable);
             return true;
         }();
 
@@ -259,7 +259,7 @@ namespace BECore {
         }
 
         const bool _registeredChangeToRandomColor = [] {
-            RegisterComponentInspector<ChangeToRandomColorDebugComponent>(eastl::function<bool(ChangeToRandomColorDebugComponent&)>(InspectChangeToRandomColor));
+            RegisterComponentInspector<ChangeToRandomColorDebugComponent>(InspectChangeToRandomColor);
             return true;
         }();
 
