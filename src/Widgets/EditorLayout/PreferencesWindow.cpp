@@ -1,5 +1,6 @@
 #include "PreferencesWindow.h"
 
+#include <Widgets/EditorLayout/EditorControls.h>
 #include <Widgets/ImGuiTheme.h>
 #include <imgui.h>
 
@@ -13,6 +14,10 @@ namespace BECore {
         constexpr float kChordColumnEms = 11.0f;
         constexpr float kActionsColumnEms = 17.0f;
         constexpr float kPopupWidthEms = 28.0f;
+        constexpr const char* kExternalEditorHint = "code -g {file}:{line}";
+        constexpr const char* kExternalEditorTooltip = "The program that opens a file of the log. {file} and {line} are replaced inside an argument; quotes keep an\n"
+                                                       "argument together. Empty: the system's program for the file, without the line.\n"
+                                                       "On Windows a .cmd tool needs cmd /c code -g {file}:{line}";
 
         // The keys a chord can name, read in the frame the user presses one
         Optional<KeyChord> ReadPressedChord() {
@@ -103,6 +108,16 @@ namespace BECore {
         }
         commit |= ImGui::IsItemDeactivatedAfterEdit();
         ImGui::EndDisabled();
+
+        ImGui::SeparatorText("Console");
+        char editorBuffer[kMaxExternalEditorLength + 1] = {};
+        std::memcpy(editorBuffer, preferences.externalEditor.data(), preferences.externalEditor.size());
+        if (ImGui::InputTextWithHint("Open files with", kExternalEditorHint, editorBuffer, sizeof(editorBuffer))) {
+            preferences.externalEditor = String(editorBuffer);
+            changed = true;
+        }
+        commit |= ImGui::IsItemDeactivatedAfterEdit();
+        ItemTooltip(kExternalEditorTooltip);
 
         if (changed) {
             settings.SetPreferences(preferences);

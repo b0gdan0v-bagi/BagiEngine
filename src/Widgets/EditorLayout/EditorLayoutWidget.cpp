@@ -61,6 +61,7 @@ namespace BECore {
         Subscribe<EditorCommandEvent, &EditorLayoutWidget::OnCommand>(this);
         Subscribe<ViewportPreviewChangedEvent, &EditorLayoutWidget::OnViewportPreviewChanged>(this);
         Subscribe<ViewportInputModeChangedEvent, &EditorLayoutWidget::OnViewportInputModeChanged>(this);
+        Subscribe<ConsoleCommandSubmittedEvent, &EditorLayoutWidget::OnConsoleCommandSubmitted>(this);
         Subscribe<RenderEvents::ImGuiNewFrameEvent, &EditorLayoutWidget::OnImGuiNewFrame>(this);
         return true;
     }
@@ -122,6 +123,14 @@ namespace BECore {
         // The viewport already shows this mode, so the panels are not told again (no EditorPreferencesChangedEvent)
         EditorPreferences preferences = _settings->GetPreferences();
         preferences.viewportInputMode = event.mode;
+        _settings->SetPreferences(preferences);
+        _settings->SavePreferences();
+    }
+
+    void EditorLayoutWidget::OnConsoleCommandSubmitted(const ConsoleCommandSubmittedEvent& event) {
+        // The Console keeps its own history, so the panels are not told again (no EditorPreferencesChangedEvent)
+        EditorPreferences preferences = _settings->GetPreferences();
+        AddConsoleHistory(preferences, StringView(event.command.data(), event.command.size()));
         _settings->SetPreferences(preferences);
         _settings->SavePreferences();
     }
@@ -281,7 +290,8 @@ namespace BECore {
 
     void EditorLayoutWidget::AnnouncePreferences() const {
         const EditorPreferences& preferences = _settings->GetPreferences();
-        EditorPreferencesChangedEvent::Emit(preferences.viewportGrid, preferences.viewportGridStep, preferences.viewportPreview, preferences.viewportInputMode);
+        EditorPreferencesChangedEvent::Emit(preferences.viewportGrid, preferences.viewportGridStep, preferences.viewportPreview, preferences.viewportInputMode, preferences.externalEditor,
+                                            preferences.consoleHistory);
     }
 
     void EditorLayoutWidget::DispatchHotkeys() {
