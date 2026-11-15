@@ -55,6 +55,11 @@ namespace BECore {
          * so the last step is exactly the duration. The timeline is moved into the tween. The rules 1 to 10 hold for the handle; the clips
          * have no cancel callbacks of their own, @p onCancel is the one of a cancelled run. A duration that is not finite counts as zero.
          * A clip may cancel its own run: the timeline then stops at that clip (`Animation/CLAUDE.md`, rule 15).
+         *
+         * An endless timeline (`RepeatForever()`) makes a handle that runs until it is cancelled (`Cancel()`, `CancelAll`, a `ScopedTween`):
+         * it never completes, `onComplete` never runs, `GetProgress()` stays 0 and an await on it ends only by cancel. Every step hands the
+         * timeline the seconds since the last one (`Timeline::Advance`), so a run of hours keeps its precision. The handle takes the
+         * frame class of the timeline (`TweenHandle::GetFrameClass`).
          */
         IntrusivePtr<TweenHandle> Play(Timeline timeline, float delay = 0.0f, MoveOnlyFunction<void()> onComplete = {}, MoveOnlyFunction<void()> onCancel = {});
 
@@ -71,12 +76,18 @@ namespace BECore {
         /// Tweens that are not finished yet (waiting or running); walks the list
         [[nodiscard]] size_t GetActiveCount() const;
 
+        /// Tweens of the frame class @p frameClass that are not finished yet: what the frame loop asks to know whether an endless decorative
+        /// loop is the only thing that runs. The counts of the three classes add up to `GetActiveCount()`
+        [[nodiscard]] size_t GetActiveCount(AnimationFrameClass frameClass) const;
+
     private:
         friend class TweenHandle;
 
         IntrusivePtr<TweenHandle> StartErased(const TweenSettings& settings, TweenApply apply, MoveOnlyFunction<void()> onComplete, MoveOnlyFunction<void()> onCancel);
         void CancelTween(TweenHandle& tween);
         void Step(TweenHandle& tween, float dt);
+        void StepEndless(TweenHandle& tween, float dt);
+        void CallSetter(TweenHandle& tween, float value);
         void ReleaseCallbacks(TweenHandle& tween);
         void ResumeWaiters(TweenHandle& tween);
         void CancelAllIn(const Vector<IntrusivePtr<TweenHandle>>& list);

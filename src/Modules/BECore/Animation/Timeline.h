@@ -135,6 +135,17 @@ namespace BECore {
         /// no length
         [[nodiscard]] float GetDuration() const;
 
+        /// The frame class `TweenManager::Play` gives the tween (see `AnimationFrameClass`). Not set, it is `DecorativeLoop` for an endless
+        /// timeline and `FiniteEffect` otherwise; a class set here is kept whatever `RepeatForever` or `Repeat` say
+        Timeline& SetFrameClass(AnimationFrameClass frameClass) {
+            _frameClass = frameClass;
+            return *this;
+        }
+
+        [[nodiscard]] AnimationFrameClass GetFrameClass() const {
+            return _frameClass.value_or(_endless ? AnimationFrameClass::DecorativeLoop : AnimationFrameClass::FiniteEffect);
+        }
+
         /// True after `RepeatForever()` (until a later `Repeat`)
         [[nodiscard]] bool IsEndless() const {
             return _endless;
@@ -200,6 +211,7 @@ namespace BECore {
         double _clock = 0.0;
         int _repeat = 1;
         int _iteration = 0;
+        Optional<AnimationFrameClass> _frameClass;  // empty: derived from `_endless`
         bool _endless = false;
         bool _yoyo = false;
         bool _reversed = false;  // set by the parent on every call: this timeline is played backwards as a whole
