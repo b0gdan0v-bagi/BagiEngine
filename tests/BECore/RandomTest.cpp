@@ -1,7 +1,6 @@
 #include <BECore/Random/Rng.h>
-#include <cstring>
 #include <gtest/gtest.h>
-#include <type_traits>
+#include <numeric>
 
 namespace BECore::Tests {
 
@@ -173,6 +172,245 @@ namespace BECore::Tests {
             ASSERT_LT(v, 1.0);
         }
         EXPECT_EQ(rng.Counter(), 100000u);
+    }
+
+    // UniformInt: `lo + x % range` of the first draw `x` that is not below `2^64 mod range`; the sequences below are from an
+    // independent implementation of that rule.
+
+    TEST(RandomTest, UniformIntZeroToFive) {
+        constexpr Array<int, 20> expected{5, 1, 0, 5, 3, 2, 3, 3, 0, 4, 3, 4, 2, 4, 4, 5, 3, 5, 2, 0};
+        Rng rng(1);
+        for (const int value : expected) {
+            EXPECT_EQ(rng.UniformInt(0, 5), value);
+        }
+        EXPECT_EQ(rng.Counter(), 20u);
+    }
+
+    TEST(RandomTest, UniformIntNegativeRange) {
+        constexpr Array<int, 20> expected{1, -3, -3, -2, 0, -1, -3, 2, -1, -2, -3, -2, -3, 2, 3, 2, 3, 0, -1, -1};
+        Rng rng(2);
+        for (const int value : expected) {
+            EXPECT_EQ(rng.UniformInt(-3, 3), value);
+        }
+        EXPECT_EQ(rng.Counter(), 20u);
+    }
+
+    TEST(RandomTest, UniformIntOfOneValueDrawsOnceEach) {
+        Rng rng(3);
+        for (int i = 0; i < 10; ++i) {
+            EXPECT_EQ(rng.UniformInt(5, 5), 5);
+        }
+        EXPECT_EQ(rng.Counter(), 10u);
+        EXPECT_EQ(rng.UniformInt<uint8_t>(7, 7), 7);
+        EXPECT_EQ(rng.UniformInt<int64_t>(-9, -9), -9);
+        EXPECT_EQ(rng.Counter(), 12u);
+    }
+
+    TEST(RandomTest, UniformIntFullSignedRangeIsTheDrawAsIs) {
+        constexpr Array<int64_t, 5> expected{7958955049054603978LL, -1984743375926415312LL, -2598829887456574369LL, 9071633986856679582LL, 7278725300257082041LL};
+        Rng rng(4);
+        for (const int64_t value : expected) {
+            EXPECT_EQ(rng.UniformInt<int64_t>(std::numeric_limits<int64_t>::min(), std::numeric_limits<int64_t>::max()), value);
+        }
+        EXPECT_EQ(rng.Counter(), 5u);
+    }
+
+    TEST(RandomTest, UniformIntFullUnsignedRangeIsTheDrawAsIs) {
+        constexpr Array<uint64_t, 5> expected{0x6e73e372e2338acaULL, 0xe474c66a4b98b030ULL, 0xdbef19fc8e7b845fULL, 0x7de4eb0c26f3f89eULL, 0x65033a18a378cab9ULL};
+        Rng rng(4);
+        for (const uint64_t value : expected) {
+            EXPECT_EQ(rng.UniformInt<uint64_t>(0, std::numeric_limits<uint64_t>::max()), value);
+        }
+        EXPECT_EQ(rng.Counter(), 5u);
+    }
+
+    TEST(RandomTest, UniformIntRangeNear2Pow63RejectsOften) {
+        // range 2^63 + 1: a draw is rejected with probability close to one half (20 results took 46 draws)
+        constexpr Array<uint64_t, 20> expected{4654242949169100535ULL, 8957066056171264800ULL, 204786321411665706ULL,  1908141438795372386ULL, 6903704994719435514ULL,
+                                               8387343232142502422ULL, 8097663149109484117ULL, 6107755222391796074ULL, 8992142949797167562ULL, 6929563570622903022ULL,
+                                               3922199910016846850ULL, 8049559783456564693ULL, 6350574005908689845ULL, 8807188270585211006ULL, 8683844339055248014ULL,
+                                               3850321435793303524ULL, 535584032798730017ULL,  2377898451075746561ULL, 2794872976919844752ULL, 4833303329173688674ULL};
+        Rng rng(5);
+        for (const uint64_t value : expected) {
+            EXPECT_EQ(rng.UniformInt<uint64_t>(0, uint64_t{1} << 63), value);
+        }
+        EXPECT_EQ(rng.Counter(), 46u);
+    }
+
+    TEST(RandomTest, UniformIntRejectedDrawMovesTheCounterByTwo) {
+        // Seed 3: draw 1 is 0x1d0b14e4db018fed (below the limit 2^63 - 1 of range 2^63 + 1, rejected), draw 2 is
+        // 0xb3466f8a7b81a989 (taken).
+        Rng rng(3);
+        EXPECT_EQ(rng.UniformInt<uint64_t>(0, uint64_t{1} << 63), 3694763184872335752ULL);
+        EXPECT_EQ(rng.Counter(), 2u);
+    }
+
+    TEST(RandomTest, UniformIntIsInsideTheBoundsForNarrowTypes) {
+        Rng rng(77);
+        for (int i = 0; i < 5000; ++i) {
+            const int8_t narrow = rng.UniformInt<int8_t>(-100, 100);
+            ASSERT_GE(narrow, -100);
+            ASSERT_LE(narrow, 100);
+            const int64_t wide = rng.UniformInt<int64_t>(std::numeric_limits<int64_t>::min() + 1, std::numeric_limits<int64_t>::min() + 3);
+            ASSERT_GE(wide, std::numeric_limits<int64_t>::min() + 1);
+            ASSERT_LE(wide, std::numeric_limits<int64_t>::min() + 3);
+        }
+    }
+
+    TEST(RandomTest, UniformIntHasNoModuloBiasSmoke) {
+        // 600000 draws over 6 faces (the exact counts are from the independent implementation; the band is the smoke)
+        constexpr Array<int, 6> expected{100066, 100300, 99840, 99745, 100138, 99911};
+        Rng rng(2024);
+        Array<int, 6> counts{};
+        for (int i = 0; i < 600000; ++i) {
+            ++counts[static_cast<size_t>(rng.UniformInt(0, 5))];
+        }
+        for (size_t face = 0; face < counts.size(); ++face) {
+            EXPECT_EQ(counts[face], expected[face]) << "face " << face;
+            EXPECT_NEAR(counts[face], 100000, 2000) << "face " << face;
+        }
+        EXPECT_EQ(rng.Counter(), 600000u);
+    }
+
+    TEST(RandomTest, ChanceBeyondTheBoundsDrawsNothing) {
+        Rng rng(5);
+        EXPECT_FALSE(rng.Chance(0.0));
+        EXPECT_FALSE(rng.Chance(-1.0));
+        EXPECT_FALSE(rng.Chance(std::numeric_limits<double>::quiet_NaN()));
+        EXPECT_TRUE(rng.Chance(1.0));
+        EXPECT_TRUE(rng.Chance(2.5));
+        EXPECT_TRUE(rng.Chance(std::numeric_limits<double>::infinity()));
+        EXPECT_EQ(rng.Counter(), 0u);
+    }
+
+    TEST(RandomTest, ChanceHalfAndTenth) {
+        constexpr Array<bool, 20> half{true, false, true, true, true, true, false, false, true, false, true, true, false, true, false, false, false, true, true, true};
+        Rng halfRng(5);
+        for (const bool value : half) {
+            EXPECT_EQ(halfRng.Chance(0.5), value);
+        }
+        EXPECT_EQ(halfRng.Counter(), 20u);
+
+        Rng tenth(5);
+        for (int i = 0; i < 20; ++i) {
+            EXPECT_EQ(tenth.Chance(0.1), i == 3) << "draw " << i;
+        }
+        EXPECT_EQ(tenth.Counter(), 20u);
+    }
+
+    TEST(RandomTest, WeightedPickNeverTakesAZeroWeight) {
+        constexpr Array<uint32_t, 4> weights{3, 0, 5, 2};
+        constexpr Array<size_t, 20> expected{0, 2, 2, 3, 2, 0, 0, 0, 2, 0, 2, 2, 0, 2, 2, 0, 3, 0, 3, 2};
+        Rng rng(6);
+        for (const size_t index : expected) {
+            const Optional<size_t> picked = rng.WeightedPick(Span<const uint32_t>(weights));
+            ASSERT_TRUE(picked.has_value());
+            EXPECT_EQ(*picked, index);
+        }
+        EXPECT_EQ(rng.Counter(), 20u);
+    }
+
+    TEST(RandomTest, WeightedPickOfNothingDrawsNothing) {
+        Rng rng(6);
+        const Vector<uint32_t> empty;
+        const Vector<uint32_t> zeros{0, 0, 0};
+        EXPECT_FALSE(rng.WeightedPick(Span<const uint32_t>(empty)).has_value());
+        EXPECT_FALSE(rng.WeightedPick(Span<const uint32_t>(zeros)).has_value());
+        EXPECT_EQ(rng.Counter(), 0u);
+    }
+
+    TEST(RandomTest, WeightedPickOfOneWeightDrawsOnce) {
+        constexpr Array<uint32_t, 1> single{7};
+        Rng rng(7);
+        for (int i = 1; i <= 3; ++i) {
+            EXPECT_EQ(rng.WeightedPick(Span<const uint32_t>(single)), Optional<size_t>{0});
+            EXPECT_EQ(rng.Counter(), static_cast<uint64_t>(i));
+        }
+
+        constexpr Array<uint32_t, 5> oneNonZero{0, 0, 0, 1, 0};
+        Rng other(9);
+        for (int i = 0; i < 3; ++i) {
+            EXPECT_EQ(other.WeightedPick(Span<const uint32_t>(oneNonZero)), Optional<size_t>{3});
+        }
+    }
+
+    TEST(RandomTest, WeightedPickSumsInSixtyFourBits) {
+        // 3 * (2^32 - 1) does not fit in 32 bits
+        constexpr Array<uint32_t, 3> weights{0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu};
+        constexpr Array<size_t, 20> expected{1, 0, 1, 1, 1, 0, 0, 1, 0, 0, 2, 1, 0, 0, 2, 0, 0, 0, 0, 0};
+        Rng rng(8);
+        for (const size_t index : expected) {
+            EXPECT_EQ(rng.WeightedPick(Span<const uint32_t>(weights)), Optional<size_t>{index});
+        }
+        EXPECT_EQ(rng.Counter(), 20u);
+    }
+
+    TEST(RandomTest, ShuffleOfFewElementsDrawsAsExpected) {
+        Rng rng(1);
+        Array<int, 0> none{};
+        rng.Shuffle(Span<int>(none));
+        Array<int, 1> one{42};
+        rng.Shuffle(Span<int>(one));
+        EXPECT_EQ(one[0], 42);
+        EXPECT_EQ(rng.Counter(), 0u);
+
+        Array<int, 2> swapped{0, 1};
+        Rng first(10);
+        first.Shuffle(Span<int>(swapped));
+        EXPECT_EQ(swapped, (Array<int, 2>{1, 0}));
+        EXPECT_EQ(first.Counter(), 1u);
+
+        Array<int, 2> kept{0, 1};
+        Rng second(11);
+        second.Shuffle(Span<int>(kept));
+        EXPECT_EQ(kept, (Array<int, 2>{0, 1}));
+        EXPECT_EQ(second.Counter(), 1u);
+    }
+
+    TEST(RandomTest, ShuffleOfTenElements) {
+        Array<int, 10> first{};
+        std::iota(first.begin(), first.end(), 0);
+        Rng rngFirst(13);
+        rngFirst.Shuffle(Span<int>(first));
+        EXPECT_EQ(first, (Array<int, 10>{8, 1, 2, 4, 9, 3, 7, 0, 6, 5}));
+        EXPECT_EQ(rngFirst.Counter(), 9u);
+
+        Array<int, 10> second{};
+        std::iota(second.begin(), second.end(), 0);
+        Rng rngSecond(14);
+        rngSecond.Shuffle(Span<int>(second));
+        EXPECT_EQ(second, (Array<int, 10>{4, 1, 7, 3, 9, 5, 0, 2, 6, 8}));
+        EXPECT_EQ(rngSecond.Counter(), 9u);
+    }
+
+    TEST(RandomTest, ShuffleOfStringsThroughSpan) {
+        Vector<String> items{"a", "bb", "ccc", "dddd", "e"};
+        Rng rng(15);
+        rng.Shuffle(Span<String>(items));
+        EXPECT_EQ(items, (Vector<String>{"dddd", "e", "ccc", "a", "bb"}));
+        EXPECT_EQ(rng.Counter(), 4u);
+    }
+
+    TEST(RandomTest, ShuffleOfArrayThroughSpan) {
+        Array<int, 7> items{10, 20, 30, 40, 50, 60, 70};
+        Rng rng(16);
+        rng.Shuffle(Span<int>(items));
+        EXPECT_EQ(items, (Array<int, 7>{50, 10, 60, 70, 40, 20, 30}));
+        EXPECT_EQ(rng.Counter(), 6u);
+    }
+
+    TEST(RandomTest, ShuffleKeepsAPermutation) {
+        Array<int, 52> deck{};
+        std::iota(deck.begin(), deck.end(), 0);
+        Rng rng(99);
+        for (int round = 0; round < 20; ++round) {
+            rng.Shuffle(Span<int>(deck));
+            Array<int, 52> sorted = deck;
+            std::sort(sorted.begin(), sorted.end());
+            for (int i = 0; i < 52; ++i) {
+                ASSERT_EQ(sorted[static_cast<size_t>(i)], i) << "round " << round;
+            }
+        }
     }
 
 }  // namespace BECore::Tests
