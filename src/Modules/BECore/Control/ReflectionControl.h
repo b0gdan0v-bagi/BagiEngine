@@ -13,6 +13,7 @@ namespace BECore {
         inline constexpr StringView kUnknownRoot = "unknown_root";
         inline constexpr StringView kNoObject = "no_object";
         inline constexpr StringView kInterning = "interning";
+        inline constexpr StringView kUnknownType = "unknown_type";
         /// The wire name of `CallStatus::unknown_method`, renamed so a client does not confuse it with the control method `unknown_method`
         inline constexpr StringView kUnknownFunction = "unknown_function";
     }  // namespace ReflectionControlErrors
@@ -28,7 +29,7 @@ namespace BECore {
     /**
      * @brief Registers the methods that reach the objects under the roots of @p service by name (`ControlRoots`)
      *
-     * `get_property`, `set_property` and `call_method` here. Everything in a request is client data: the names of a root, a path and a method
+     * `get_property`, `set_property`, `call_method`, `list_types`, `describe_type` and `schema` here. Everything in a request is client data: the names of a root, a path and a method
      * are looked up as text, never interned. Registering twice replaces the handlers.
      */
     void RegisterReflectionControl(ControlService& service);

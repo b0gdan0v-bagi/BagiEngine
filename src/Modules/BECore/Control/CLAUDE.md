@@ -9,7 +9,7 @@ The core of the external control API: a program or a model sends commands, the e
 | `ControlService` | Thread-safe FIFO queue of requests, handler table, barrier, deferred answers, push events. One instance: `CoreManager::GetControlService()` |
 | `ControlCall` | One request being handled: `Params()`, `Reply()`, `Fail()`, `DeferFrames()` |
 | `ControlRoots` | The roots of a service: named providers of a `TypedRef` (`game` is the active game) that the by-name methods reach, and nothing else; names held as `String`, never interned; `allowInterning` of a root (default off) lets a write put client text into the `PoolString` pool |
-| `ReflectionControl` | `RegisterReflectionControl()`: the by-name methods, called by `RegisterControlBuiltins`; client text is looked up, never interned |
+| `ReflectionControl` | `RegisterReflectionControl()`: the by-name methods, called by `RegisterControlBuiltins` |
 | `SchemaExport` | The type registry as JSON (`TypeDescJson`, `TypeEntryJson`, `DescribeTypeJson`, `ListTypesJson`, `BuildSchemaJson`); pure over a `TypeRegistry`, see "Schema export" |
 | `ControlBuiltins` | `RegisterControlBuiltins()`: `ping`, `status`, `step`, `pause`, `resume`, `quit` |
 | `ControlSettings` | `ResolveControlSettings(args, ApplicationConfigLoad)`: the start-up flags and the settings of the reflected `ApplicationConfig` (`Application/ApplicationConfig.h`), the manual clock included (see "Starting the API"), a pure function |
@@ -30,7 +30,7 @@ response  {"id": 1, "ok": true,  "result": {...}}
 push      {"event": "state_changed", "data": {"game": "Stress", "version": 12, "state": {...}}}
 ```
 
-Error codes are strings and part of the protocol (`ControlErrors`): `parse_error`, `invalid_request`, `invalid_params`, `unknown_method`, `request_too_large`, `internal_error`, `shutting_down`, `manual_clock`. A method adds its own (`illegal_action`, ...); the by-name methods add `unknown_root`, `no_object` and the codes of `Reflection/CLAUDE.md`, "Reflection methods". A request that cannot be parsed gets `"id": null`. `ping` reports `ControlService::kProtocolVersion`; change it when the format changes incompatibly.
+Error codes are strings and part of the protocol (`ControlErrors`): `parse_error`, `invalid_request`, `invalid_params`, `unknown_method`, `request_too_large`, `internal_error`, `shutting_down`, `manual_clock`. A method adds its own (`illegal_action`, ...); the by-name methods add `unknown_root`, `no_object`, `unknown_type` and the codes of `Reflection/CLAUDE.md`, "Reflection methods". A request that cannot be parsed gets `"id": null`. `ping` reports `ControlService::kProtocolVersion`; change it when the format changes incompatibly.
 
 `state_changed` is the only push so far (`GameControl` publishes it, `Games/CLAUDE.md`). It is sent at the end of the frame in which the state version of the active game moved, whoever moved it: a client, a reset, a click of a person. `data` is what `get_state` answers (`game`, `version`, `state`; `state` is left out when the game cannot give it). The first frame only records the version, so nothing is pushed for the state a client connects to. An action that a client makes with the manual clock waits for the next frame like everything else (see "Manual clock and `step`").
 
@@ -103,12 +103,12 @@ The file half is the reflected `ApplicationConfig` read with strict values (`IDe
 
 | Where | Methods |
 |-------|---------|
-| `BECore/Control/ControlBuiltins` | `ping`, `status` (the clock, `manualClock`, `paused`), `step`, `pause` / `resume` (`{paused}`; see "Manual clock and `step`"), `quit` |
+| `BECore/Control/ControlBuiltins` | `ping`, `status` (the clock, `manualClock`, `paused`), `step`, `pause` / `resume` (`{paused}`), `quit` |
 | `SDL/CoreSDL/SDLScreenshot` | `screenshot` (`{maxSize}` to `{width, height, png_base64}`; `capture_failed` where the renderer cannot capture; `SDL/CLAUDE.md`) |
 | `BECore/UI/UIControl` | `ui_tree` (the canvases and elements of the active scene with rects and the validator's findings), `ui_click` (`{name, canvas?, at?}`: a real mouse click on a visible button, toggle or slider, `at` 0..1 the horizontal position, which also sets a slider; the answer has its `action` and `value`; codes `no_scene`, `not_found`, `not_clickable`, `invalid_params`; `UI/CLAUDE.md`, "Control API") |
-| `BECore/Clipboard/ClipboardControl` | `clipboard_set` (`{text}` to `{ok}`, what `SetText` returned), `clipboard_get` (to `{status, text}`; answered after frames, `clipboard_timeout` after 600), `clipboard_paste` (to `{}` once the `PasteEvent` has been delivered, as Cmd+V gives it); `Clipboard/CLAUDE.md` |
+| `BECore/Clipboard/ClipboardControl` | `clipboard_set` (`{text}` to `{ok}`), `clipboard_get` (to `{status, text}`; answered after frames, `clipboard_timeout` after 600), `clipboard_paste` (to `{}` once the `PasteEvent` has been delivered, as Cmd+V gives it); `Clipboard/CLAUDE.md` |
 | `BECore/Profiler/ProfilerControl` | `frame_stats` (`{frames?}` 1..240: the last frames, oldest first, with stage times, draws, allocations, named counters), `profiler_dump` (`{path?}` relative, no `..`: writes the Chrome trace; `not_recording` unless the game runs with `--trace=` or `--profiler=chrome`), `zone_allocs` (`{top?, reset?}`: allocations per zone and the totals; `enabled` false without `ENGINE_PROFILER_ALLOC`); `Profiler/CLAUDE.md` |
-| `BECore/Control/ReflectionControl` | `get_property` (`{root, path}`), `set_property` (`{root, path, value}`), `call_method` (`{root, method, arguments?}`) over a root; shapes and codes in `Reflection/CLAUDE.md`, "Reflection methods" |
+| `BECore/Control/ReflectionControl` | `get_property` (`{root, path}`), `set_property` (`{root, path, value}`), `call_method` (`{root, method, arguments?}`) over a root; `list_types` (`{base?, recursive?, creatable?}`), `describe_type` (`{name}`), `schema`; shapes and codes in `Reflection/CLAUDE.md`, "Reflection methods" |
 | `Games/GameControl` | `list_games`, `switch_game`, `reset`, `get_state`, `list_actions`, `perform_action`, `set_state` (`Games/CLAUDE.md`) |
 
 ## Adding a method

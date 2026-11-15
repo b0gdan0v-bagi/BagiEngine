@@ -7,10 +7,12 @@
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
 #include <BECore/Control/ReflectionControl.h>
+#include <BECore/Control/SchemaExport.h>
 #include <BECore/Reflection/TypeRegistry.h>
 #include <BECore/Reflection/TypedRef.h>
 #include <BECore/Reflection/XmlSerializer.h>
 #include <Common/Printers.h>
+#include <Games/GameControl.h>
 #include <Generated/ReflectionControlTest.gen.hpp>
 #include <gtest/gtest.h>
 
@@ -546,6 +548,186 @@ namespace BECore::Tests {
         Json noRoot = Json::object();
         noRoot["method"] = MakeJsonString("Touch");
         EXPECT_EQ(CodeOf(Ask("call_method", noRoot)), "invalid_params");
+    }
+
+    // =========================================================================
+    // list_types, describe_type, schema
+    // =========================================================================
+
+    namespace {
+
+        constexpr StringView kClientType = "rc_client_type_name_7c3a90";
+
+        Json Named(const char* key, StringView value) {
+            Json params = Json::object();
+            params[key] = MakeJsonString(value);
+            return params;
+        }
+
+        const Json* ResultMember(const Json& response, StringView key) {
+            const Json* result = FindJsonMember(response, "result");
+            return result != nullptr ? FindJsonMember(*result, key) : nullptr;
+        }
+
+        Vector<String> TypeNames(const Json& response) {
+            Vector<String> names;
+            const Json* types = ResultMember(response, "types");
+            if (types == nullptr || !types->is_array()) {
+                ADD_FAILURE() << "no types array";
+                return names;
+            }
+            for (const Json& entry : *types) {
+                names.push_back(GetJsonString(entry, "name").value_or(String()));
+            }
+            return names;
+        }
+
+        bool Contains(const Vector<String>& names, StringView name) {
+            for (const String& entry : names) {
+                if (StringView(entry) == name) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+    }  // namespace
+
+    TEST_F(ReflectionControlTest, ListTypesListsEveryTypeSortedByName) {
+        const Json response = Ask("list_types", Json::object());
+        ASSERT_TRUE(IsOk(response)) << MessageOf(response).c_str();
+        const Vector<String> names = TypeNames(response);
+        EXPECT_TRUE(Contains(names, "RcBox"));
+        EXPECT_TRUE(Contains(names, "RcTool"));
+        for (size_t i = 1; i < names.size(); ++i) {
+            EXPECT_LT(StringView(names[i - 1]), StringView(names[i]));
+        }
+    }
+
+    TEST_F(ReflectionControlTest, ListTypesWithABaseListsItsDerivedTypes) {
+        // The registry's own hierarchy: IWidget is a factory base with derived widgets
+        const Json response = Ask("list_types", Named("base", "IWidget"));
+        ASSERT_TRUE(IsOk(response)) << MessageOf(response).c_str();
+        const Vector<String> names = TypeNames(response);
+        EXPECT_FALSE(names.empty());
+        EXPECT_FALSE(Contains(names, "IWidget"));
+        EXPECT_FALSE(Contains(names, "RcBox"));
+
+        Json direct = Named("base", "IWidget");
+        direct["recursive"] = false;
+        const Vector<String> directNames = TypeNames(Ask("list_types", direct));
+        EXPECT_FALSE(directNames.empty());
+        EXPECT_LE(directNames.size(), names.size());
+    }
+
+    TEST_F(ReflectionControlTest, ListTypesCreatableOnlyDropsAbstractAndUnregisteredTypes) {
+        Json params = Json::object();
+        params["creatable"] = true;
+        const Vector<String> creatable = TypeNames(Ask("list_types", params));
+        const Vector<String> all = TypeNames(Ask("list_types", Json::object()));
+        EXPECT_LT(creatable.size(), all.size());
+        EXPECT_FALSE(Contains(creatable, "RcBox"));
+    }
+
+    TEST_F(ReflectionControlTest, ListTypesRefusesAnUnknownBaseAndBadParams) {
+        EXPECT_EQ(CodeOf(Ask("list_types", Named("base", kClientType))), "unknown_type");
+        Json numberBase = Json::object();
+        numberBase["base"] = 3;
+        EXPECT_EQ(CodeOf(Ask("list_types", numberBase)), "invalid_params");
+
+        Json badRecursive = Named("base", "IWidget");
+        badRecursive["recursive"] = "yes";
+        EXPECT_EQ(CodeOf(Ask("list_types", badRecursive)), "invalid_params");
+
+        Json badCreatable = Json::object();
+        badCreatable["creatable"] = 1;
+        EXPECT_EQ(CodeOf(Ask("list_types", badCreatable)), "invalid_params");
+    }
+
+    TEST_F(ReflectionControlTest, DescribeTypeAnswersTheTypeWithItsFieldsAndMethods) {
+        const Json response = Ask("describe_type", Named("name", "RcTool"));
+        ASSERT_TRUE(IsOk(response)) << MessageOf(response).c_str();
+        const Json* result = FindJsonMember(response, "result");
+        ASSERT_NE(result, nullptr);
+        EXPECT_EQ(GetJsonString(*result, "name").value_or(String()), "RcTool");
+        const Json* methods = FindJsonMember(*result, "methods");
+        ASSERT_TRUE(methods != nullptr && methods->is_array());
+        EXPECT_FALSE(methods->empty());
+        EXPECT_NE(FindJsonMember(*result, "allFields"), nullptr);
+
+        const TypeRegistry& registry = TypeRegistry::GetInstance();
+        const TypeInfo* info = registry.Find("RcTool");
+        ASSERT_NE(info, nullptr);
+        EXPECT_EQ(*result, DescribeTypeJson(*info, registry));
+    }
+
+    TEST_F(ReflectionControlTest, DescribeTypeRefusesAnUnknownTypeAndBadParams) {
+        EXPECT_EQ(CodeOf(Ask("describe_type", Named("name", kClientType))), "unknown_type");
+        EXPECT_EQ(CodeOf(Ask("describe_type", Json::object())), "invalid_params");
+        Json numberName = Json::object();
+        numberName["name"] = 5;
+        EXPECT_EQ(CodeOf(Ask("describe_type", numberName)), "invalid_params");
+    }
+
+    TEST_F(ReflectionControlTest, ATypeNameFromAClientIsNeverInterned) {
+        EXPECT_FALSE(PoolString::Find(kClientType).has_value());
+        (void)Ask("describe_type", Named("name", kClientType));
+        (void)Ask("list_types", Named("base", kClientType));
+        EXPECT_FALSE(PoolString::Find(kClientType).has_value());
+    }
+
+    TEST_F(ReflectionControlTest, SchemaEqualsTheExportOfTheRegistryAndListsTheRoots) {
+        const Json response = Ask("schema", Json::object());
+        ASSERT_TRUE(IsOk(response)) << MessageOf(response).c_str();
+        const Json* result = FindJsonMember(response, "result");
+        ASSERT_NE(result, nullptr);
+        EXPECT_EQ(*result, BuildSchemaJson(TypeRegistry::GetInstance(), service.Roots()));
+
+        const Json* roots = FindJsonMember(*result, "roots");
+        ASSERT_TRUE(roots != nullptr && roots->is_array());
+        EXPECT_EQ(roots->size(), service.Roots().Names().size());
+        bool sawBox = false;
+        bool sawEmpty = false;
+        for (const Json& root : *roots) {
+            const String name = GetJsonString(root, "name").value_or(String());
+            if (name == "box") {
+                sawBox = true;
+                EXPECT_EQ(GetJsonString(root, "type").value_or(String()), "RcBox");
+            }
+            if (name == "empty") {
+                sawEmpty = true;
+                EXPECT_EQ(FindJsonMember(root, "type"), nullptr);
+            }
+        }
+        EXPECT_TRUE(sawBox);
+        EXPECT_TRUE(sawEmpty);
+    }
+
+    TEST_F(ReflectionControlTest, EveryMethodAnswersNoObjectForTheGameRootWithoutAnActiveGame) {
+        RegisterGameControl(service);
+        Json named = Json::object();
+        named["root"] = "game";
+        named["path"] = "x";
+        EXPECT_EQ(CodeOf(Ask("get_property", named)), "no_object");
+        named["value"] = 1;
+        EXPECT_EQ(CodeOf(Ask("set_property", named)), "no_object");
+        Json call = Json::object();
+        call["root"] = "game";
+        call["method"] = "Anything";
+        EXPECT_EQ(CodeOf(Ask("call_method", call)), "no_object");
+
+        const Json schema = Ask("schema", Json::object());
+        const Json* roots = ResultMember(schema, "roots");
+        ASSERT_TRUE(roots != nullptr && roots->is_array());
+        bool sawGame = false;
+        for (const Json& root : *roots) {
+            if (GetJsonString(root, "name").value_or(String()) == "game") {
+                sawGame = true;
+                EXPECT_EQ(FindJsonMember(root, "type"), nullptr);
+            }
+        }
+        EXPECT_TRUE(sawGame);
+        EXPECT_TRUE(IsOk(Ask("list_types", Json::object())));
     }
 
     // =========================================================================

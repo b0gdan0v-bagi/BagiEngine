@@ -5,6 +5,7 @@
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/JsonDeserializer.h>
 #include <BECore/Control/JsonSerializer.h>
+#include <BECore/Control/SchemaExport.h>
 #include <BECore/Reflection/MethodCall.h>
 #include <BECore/Reflection/PropertyAccess.h>
 #include <cmath>
@@ -285,6 +286,78 @@ namespace BECore {
             call.Reply(std::move(result));
         }
 
+        /// An optional boolean member: @p fallback when absent, an `invalid_params` error when present and not a boolean
+        std::expected<bool, ControlError> ReadOptionalBool(const Json& params, StringView key, bool fallback) {
+            if (FindJsonMember(params, key) == nullptr) {
+                return fallback;
+            }
+            const Optional<bool> flag = GetJsonBool(params, key);
+            if (!flag.has_value()) {
+                return InvalidParams(Format("'{}' has to be a boolean", key));
+            }
+            return *flag;
+        }
+
+        /// The type a client named; the name is looked up as text, never interned
+        std::expected<const TypeInfo*, ControlError> FindType(const TypeRegistry& registry, StringView name) {
+            const TypeInfo* info = registry.Find(name);
+            if (info == nullptr) {
+                return std::unexpected(MakeControlError(ReflectionControlErrors::kUnknownType, Format("There is no type '{}'", Shown(name))));
+            }
+            return info;
+        }
+
+        void HandleListTypes(ControlCall& call) {
+            const Json& params = call.Params();
+            const TypeRegistry& registry = TypeRegistry::GetInstance();
+            ListTypesFilter filter;
+            if (FindJsonMember(params, "base") != nullptr) {
+                const auto baseName = ReadText(params, "base");
+                if (!baseName) {
+                    call.Fail(baseName.error());
+                    return;
+                }
+                const auto base = FindType(registry, *baseName);
+                if (!base) {
+                    call.Fail(base.error());
+                    return;
+                }
+                filter.base = *base;
+            }
+            const auto recursive = ReadOptionalBool(params, "recursive", filter.recursive);
+            if (!recursive) {
+                call.Fail(recursive.error());
+                return;
+            }
+            const auto creatable = ReadOptionalBool(params, "creatable", filter.creatableOnly);
+            if (!creatable) {
+                call.Fail(creatable.error());
+                return;
+            }
+            filter.recursive = *recursive;
+            filter.creatableOnly = *creatable;
+            call.Reply(ListTypesJson(registry, filter));
+        }
+
+        void HandleDescribeType(ControlCall& call) {
+            const auto name = ReadText(call.Params(), "name");
+            if (!name) {
+                call.Fail(name.error());
+                return;
+            }
+            const TypeRegistry& registry = TypeRegistry::GetInstance();
+            const auto info = FindType(registry, *name);
+            if (!info) {
+                call.Fail(info.error());
+                return;
+            }
+            call.Reply(DescribeTypeJson(**info, registry));
+        }
+
+        void HandleSchema(ControlCall& call, const ControlService& service) {
+            call.Reply(BuildSchemaJson(TypeRegistry::GetInstance(), service.Roots()));
+        }
+
     }  // namespace
 
     bool MethodInterns(const MethodDesc& method, const TypeRegistry& registry) {
@@ -301,6 +374,9 @@ namespace BECore {
         service.RegisterHandler("get_property", [&service](ControlCall& call) { HandleGetProperty(call, service); });
         service.RegisterHandler("set_property", [&service](ControlCall& call) { HandleSetProperty(call, service); });
         service.RegisterHandler("call_method", [&service](ControlCall& call) { HandleCallMethod(call, service); });
+        service.RegisterHandler("list_types", [](ControlCall& call) { HandleListTypes(call); });
+        service.RegisterHandler("describe_type", [](ControlCall& call) { HandleDescribeType(call); });
+        service.RegisterHandler("schema", [&service](ControlCall& call) { HandleSchema(call, service); });
     }
 
 }  // namespace BECore
