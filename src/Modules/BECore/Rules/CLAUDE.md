@@ -4,7 +4,7 @@ Selector rules baked into dense tables, for a game's "who x what x how" interact
 
 | File | What |
 |------|------|
-| `TagTree.h` | hierarchical tags (`match.3`) numbered so that a subtree is an id range |
+| `TagTree.h` | hierarchical tags (`match.3`) numbered so that a subtree is an id range; `BakedTagTree`, its memcpy-able form |
 | `RuleAxis.h` | `RuleAxis` (one dimension: value names, tags per value), `RuleSelector`, selector text and specificity |
 | `RuleBaker.h` | `BakeRules`: which rule wins each cell, conflicts; the non-template core |
 | `RuleTable.h` | `RuleTable<Value>` (rules from selector texts), `BakedRuleTable<Value>` (lookup, `Explain`, `ExportText`) |
@@ -12,7 +12,25 @@ Selector rules baked into dense tables, for a game's "who x what x how" interact
 
 ## Tags
 
-`TagTree::Add("a.b")` creates `a` and `a.b` (idempotent; an empty segment, a leading or trailing dot, `*`, whitespace or more than `kMaxTagCount` tags is an error and changes nothing). `Bake()` numbers the tags by a depth-first preorder walk with the children in the order of their **first `Add`**: a tag and its whole subtree are the contiguous range `[id, id + subtree size - 1]` (`Range`; `DescendantRange` leaves out the tag), so "is this tag under that one" is two comparisons. Declaring `a.x`, `b`, `a.y` numbers `a=0, a.x=1, a.y=2, b=3`. This order is a contract: the ids and the order of `OfTags` values follow it. `Add` after `Bake` is a contract violation. An axis keeps its own copy of the tree.
+`TagTree::Add("a.b")` creates `a` and `a.b` (idempotent). A path is 1..`kMaxTagDepth` non-empty segments of `[A-Za-z0-9_]`, at most `kMaxTagNameLength` characters in all; a tree holds at most `kMaxTagCount` tags (implied ancestors count) whose full names take at most `kMaxTagNameBlob` bytes (one NUL each). Anything else is an error that names the tag and the limit and leaves the tree unchanged. The limits are those of the baked form, a fixed block of about 11 KB that a game keeps in its content blob: a vocabulary is tens to hundreds of tags, and a game's own limits are these values. `Bake()` numbers the tags by a depth-first preorder walk with the children in the order of their **first `Add`**: a tag and its whole subtree are the contiguous range `[id, id + subtree size - 1]` (`Range`; `DescendantRange` leaves out the tag), so "is this tag under that one" is two comparisons. Declaring `a.x`, `b`, `a.y` numbers `a=0, a.x=1, a.y=2, b=3`. This order is a contract: the ids and the order of `OfTags` values follow it. `Add` after `Bake` is a contract violation. An axis keeps its own copy of the tree.
+
+`Parent(tag)` is the id of the parent, `kNoTag` (never a tag) for a root. `ResolveTag(path)` is the id of one exact path; `Resolve(pattern)` is the id range a pattern stands for. Both return `std::expected<..., String>` and the error names the path or pattern (an unknown name too, also the prefix of `x.*`); `*` is only the whole pattern or the whole last segment after a dot (`a.*.b`, `a*`, `a.**` are errors).
+
+| Pattern | Range |
+|---------|-------|
+| `x` | `{id, id}` |
+| `x.*` | `Range(id)`: the subtree **with** `x` (unlike `DescendantRange`), so a row for `match.*` also takes a tag that is exactly `match`; a leaf gives `{id, id}` |
+| `*` | every tag; empty on an empty tree |
+
+**The baked form.** `TagTree::FillBaked(BakedTagTree&)` (the tree must be baked) writes a POD block: no pointers or containers, trivially copyable and standard layout, so a game memcpy's it into a content blob. The whole block is zeroed first, so the same tree gives byte-equal blocks. It answers `Count`, `Parent`, `Name` (a view into the blob), `Find`, `Range`, `DescendantRange`, `Depth`, `ResolveTag` and `Resolve` as the tree does (one shared implementation), allocating nothing on success; an id that is not a tag gives `kNoTag`, an empty name or an empty range, never an assert. `Find` scans the names (load time, not a frame); `Depth` follows the parent chain and stops past `kMaxTagDepth` (a corrupt blob with a cycle).
+
+| Field | Content |
+|-------|---------|
+| `count`, `nameBlobSize` | `uint16_t` each: the tags, the bytes of `names` in use |
+| `parent[]`, `subtreeEnd[]` | per id: the parent (`kNoTag` for a root), the last id of the subtree |
+| `nameOffset[]`, `names[]` | per id: the offset of the full dotted name in the blob, where the names follow in id order, a NUL after each |
+
+The arrays are sized by `kMaxTagCount` and `kMaxTagNameBlob`; the same-name-twice check of a game's loader is not the engine's (`Add` is idempotent).
 
 ## Axes and selectors
 
@@ -65,4 +83,4 @@ One `RuleTable` per interaction table, built from the game's own content (a load
 
 Left out: reading rules from XML or another content format (the game's loader), ordered first-match rows with conditions, the linter extras (unused tags, `Transform` cycles, level analysis) and a diff tool.
 
-Tests: `tests/BECore/TagTreeTest.cpp`, `RuleAxisTest.cpp`, `RuleBakerTest.cpp`, `RuleTableTest.cpp`, `RuleReportTest.cpp`; the helper `RuleTestSupport.h` has a brute-force winner written from the definition and a 100 x 8 x 20 fixture of about 300 rules.
+Tests: `tests/BECore/TagTreeTest.cpp`, `BakedTagTreeTest.cpp`, `RuleAxisTest.cpp`, `RuleBakerTest.cpp`, `RuleTableTest.cpp`, `RuleReportTest.cpp`; the helper `RuleTestSupport.h` has a brute-force winner written from the definition and a 100 x 8 x 20 fixture of about 300 rules.
