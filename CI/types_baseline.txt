@@ -39,7 +39,6 @@ src/Modules/BECore/UI/UIWebCompiler.cpp stable-sort 1
 src/Modules/BECore/UI/UIWebCompiler.h function 1
 src/Modules/BECore/UI/UIWebDocumentLoader.cpp fstream 1
 src/Modules/BECore/UI/UIWebDocumentLoader.cpp stringstream 1
-src/Modules/BECore/Utils/ScopeGuard.h function 2
 src/Modules/BECore/Widgets/WidgetManager.h function 1
 src/Modules/Events/src/Events/EventsQueueRegistry.h function 1
 src/Modules/Games/src/Games/SeatedGameRegistry.h function 1

@@ -66,6 +66,8 @@
 #include <BECore/Utils/EnumUtils.h>
 #include <BECore/Utils/Overload.h>
 #include <BECore/Utils/MoveOnlyFunction.h>
+#include <BECore/Utils/FixedFunction.h>
+#include <BECore/Utils/FunctionRef.h>
 #include <BECore/RefCounted/RefCounted.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/RefCounted/New.h>
