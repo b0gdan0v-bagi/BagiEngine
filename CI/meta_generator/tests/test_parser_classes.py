@@ -490,3 +490,83 @@ def test_icon_survives_the_cache_round_trip(parse):
     old_entry = only(classes).to_dict()
     del old_entry["icon"]
     assert ClassData.from_dict(old_entry).icon == ""
+
+
+# ---------------------------------------------------------------------------
+# PURPOSE= option
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("value", ["sim", "visual", "editor"])
+def test_purpose_option(parse, value):
+    classes, warnings = parse(f"""
+        struct Foo {{
+            BE_CLASS(Foo, PURPOSE={value})
+        }};
+    """)
+    assert only(classes).purpose == value
+    assert warnings == []
+
+
+def test_purpose_key_and_value_are_case_insensitive_and_stripped(parse):
+    classes, warnings = parse("""
+        struct Foo {
+            BE_CLASS( Foo ,  purpose = Visual )
+        };
+    """)
+    assert only(classes).purpose == "visual"
+    assert warnings == []
+
+
+def test_purpose_as_clang_format_writes_it(parse):
+    classes, warnings = parse("""
+        struct Foo {
+            BE_CLASS(Foo, PURPOSE = visual)
+        };
+    """)
+    assert only(classes).purpose == "visual"
+    assert warnings == []
+
+
+def test_purpose_with_other_options(parse):
+    classes, warnings = parse("""
+        struct Foo {
+            BE_CLASS(Foo, FACTORY_BASE, ELEMENT=item, ICON=bug, PURPOSE=sim)
+        };
+    """)
+    cls = only(classes)
+    assert (cls.is_factory_base, cls.element_name, cls.icon, cls.purpose) == (True, "item", "bug", "sim")
+    assert warnings == []
+
+
+def test_a_class_without_purpose_is_common(parse):
+    classes, _ = parse("""
+        struct Foo {
+            BE_CLASS(Foo)
+        };
+    """)
+    assert only(classes).purpose == "common"
+
+
+@pytest.mark.parametrize("value", ["", "common", "render", "sim visual"])
+def test_an_unknown_purpose_warns_and_is_common(parse, value):
+    classes, warnings = parse(f"""
+        struct Foo {{
+            BE_CLASS(Foo, PURPOSE={value})
+        }};
+    """)
+    assert only(classes).purpose == "common"
+    assert kinds_and_lines(warnings) == [("class", 2)]
+    assert "PURPOSE=" in warnings[0].message and "'Foo'" in warnings[0].message
+
+
+def test_purpose_survives_the_cache_round_trip(parse):
+    classes, _ = parse("""
+        struct Foo {
+            BE_CLASS(Foo, PURPOSE=editor)
+        };
+    """)
+    restored = ClassData.from_dict(only(classes).to_dict())
+    assert restored.purpose == "editor"
+    old_entry = only(classes).to_dict()
+    del old_entry["purpose"]
+    assert ClassData.from_dict(old_entry).purpose == "common"
