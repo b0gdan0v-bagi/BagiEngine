@@ -1,10 +1,15 @@
 #include "TypeRegistryTest.h"
 
+#include <BECore/Reflection/AbstractFactory.h>
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Reflection/TypeInfo.h>
 #include <BECore/Reflection/TypeRegistry.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
+#include <BECore/Scene/Components/SpriteRendererComponent.h>
+#include <BECore/Scene/Components/TransformComponent.h>
+#include <BECore/Scene/IComponent.h>
+#include <BECore/Scene/SceneNode.h>
 #include <Common/Printers.h>
 #include <Generated/TypeRegistryTest.gen.hpp>
 #include <gtest/gtest.h>
@@ -120,6 +125,7 @@ namespace BECore::Tests {
         EXPECT_EQ(registry.All().size(), before);
         EXPECT_EQ(registry.Find("RegInner")->Name(), "RegInner");
         EXPECT_EQ(registry.Find("OtherName"), nullptr);
+        EXPECT_EQ(registry.RefusedCount(), 1U);
     }
 
     TEST_F(TypeRegistryTest, FieldsHaveNamesAndDescriptors) {
@@ -403,6 +409,140 @@ namespace BECore::Tests {
         const TypeInfo* shifted = registry.Find("RegShifted");
         ASSERT_NE(shifted, nullptr);
         EXPECT_EQ(shifted->parentHash, 0U);
+    }
+
+    TEST(TypeRegistryCreatorTest, CreateAsMovesToTheBaseSubobjectWhenAnotherBaseComesFirst) {
+        TypeRegistry registry;
+        registry.Register(MakeTypeInfo<RegBase, void, RegBase>());
+        registry.Register(MakeTypeInfo<RegShifted, RegBase, RegBase>());
+        registry.Register(MakeTypeInfo<RegDerived, RegBase, RegBase>());
+
+        IntrusivePtr<RegBase> base = registry.CreateAs<RegBase>("RegShifted");
+        ASSERT_TRUE(base);
+        EXPECT_EQ(base->GetTypeMeta(), RegShifted::GetStaticTypeMeta());
+        EXPECT_EQ(base->GetRefCount(), 1);
+        // The object was made at the derived address, which is not the address of its RegBase part
+        const auto* shifted = static_cast<const RegShifted*>(base.Get());
+        EXPECT_EQ(shifted->shiftedValue, 3);
+        EXPECT_NE(static_cast<const void*>(shifted), static_cast<const void*>(base.Get()));
+        EXPECT_FALSE(registry.CreateAs<RegDerived>("RegShifted"));
+    }
+
+    // The engine's own hierarchy, through the process-wide registry the generated blocks fill
+
+    namespace {
+
+        bool Contains(const Vector<const TypeInfo*>& list, StringView name) {
+            for (const TypeInfo* info : list) {
+                if (info->Name() == name) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+    }  // namespace
+
+    TEST(TypeRegistryEngineTest, NoTwoRegisteredTypesShareAHash) {
+        const TypeRegistry& registry = TypeRegistry::GetInstance();
+        EXPECT_EQ(registry.RefusedCount(), 0U);
+        for (const TypeInfo* info : registry.All()) {
+            EXPECT_EQ(registry.Find(info->Hash()), info) << String(info->Name()).c_str();
+        }
+    }
+
+    TEST(TypeRegistryEngineTest, DerivedOfTheComponentBaseHoldsTheComponents) {
+        const TypeRegistry& registry = TypeRegistry::GetInstance();
+        const TypeInfo* component = registry.Find("IComponent");
+        ASSERT_NE(component, nullptr);
+        const Vector<const TypeInfo*>& derived = registry.Derived(*component, true);
+        EXPECT_TRUE(Contains(derived, "TransformComponent"));
+        EXPECT_TRUE(Contains(derived, "SpriteRendererComponent"));
+        EXPECT_FALSE(Contains(derived, "IComponent"));
+        EXPECT_TRUE(Contains(registry.Derived(*component, false), "TransformComponent"));
+    }
+
+    TEST(TypeRegistryEngineTest, EveryTypeOfAnAbstractFactoryIsRegisteredWithTheSameHash) {
+        const TypeRegistry& registry = TypeRegistry::GetInstance();
+        const auto& registered = AbstractFactory<IComponent>::GetInstance().GetRegisteredTypes();
+        ASSERT_FALSE(registered.empty());
+        for (const ClassMeta& meta : registered) {
+            const TypeInfo* info = registry.Find(meta.typeName);
+            ASSERT_NE(info, nullptr) << String(meta.typeName).c_str();
+            EXPECT_EQ(info->Hash(), meta.typeHash);
+            EXPECT_EQ(info->factoryBase, IComponent::GetStaticTypeMeta().typeHash);
+        }
+    }
+
+    TEST(TypeRegistryEngineTest, FactoryBasesListTheBasesOfTheAbstractFactories) {
+        const Vector<const TypeInfo*>& bases = TypeRegistry::GetInstance().FactoryBases();
+        EXPECT_TRUE(Contains(bases, "IComponent"));
+        EXPECT_TRUE(Contains(bases, "SceneNode"));
+        EXPECT_FALSE(Contains(bases, "TransformComponent"));
+    }
+
+    TEST(TypeRegistryEngineTest, BasesOfAComponentEndAtTheComponentBase) {
+        const TypeRegistry& registry = TypeRegistry::GetInstance();
+        const TypeInfo* transform = registry.Find("TransformComponent");
+        ASSERT_NE(transform, nullptr);
+        const Vector<const TypeInfo*> bases = registry.Bases(*transform);
+        ASSERT_FALSE(bases.empty());
+        EXPECT_EQ(bases.back()->Name(), "IComponent");
+        EXPECT_TRUE(registry.IsDerivedFrom(*transform, *bases.back()));
+    }
+
+    TEST(TypeRegistryEngineTest, CreateMakesTheTypeByName) {
+        const TypeRegistry& registry = TypeRegistry::GetInstance();
+        OwnedObject object = registry.Create("TransformComponent");
+        ASSERT_TRUE(object);
+        const auto* transform = static_cast<const TransformComponent*>(object.Get());
+        EXPECT_EQ(transform->GetTypeMeta(), TransformComponent::GetStaticTypeMeta());
+    }
+
+    TEST(TypeRegistryEngineTest, AnAbstractTypeAnUnknownNameAndATypeWithNoFactoryMakeNothing) {
+        const TypeRegistry& registry = TypeRegistry::GetInstance();
+        EXPECT_FALSE(registry.Create("IComponent"));
+        EXPECT_FALSE(registry.Create("NoSuchType"));
+        EXPECT_FALSE(registry.Create(*registry.Find("RegInner")));
+        EXPECT_FALSE(PoolString::Find("NoSuchType").has_value());
+    }
+
+    TEST(TypeRegistryEngineTest, CreateAsGivesTheBaseOnlyForADerivedType) {
+        const TypeRegistry& registry = TypeRegistry::GetInstance();
+        IntrusivePtr<IComponent> component = registry.CreateAs<IComponent>("SpriteRendererComponent");
+        ASSERT_TRUE(component);
+        EXPECT_EQ(component->GetTypeMeta(), SpriteRendererComponent::GetStaticTypeMeta());
+        EXPECT_EQ(component->GetRefCount(), 1);
+
+        EXPECT_FALSE(registry.CreateAs<IComponent>("NoSuchType"));
+        EXPECT_FALSE(registry.CreateAs<IComponent>("IComponent"));
+        // Registered and creatable, but not a component
+        EXPECT_FALSE(registry.CreateAs<IComponent>("SceneNode"));
+        EXPECT_TRUE(registry.CreateAs<SceneNode>("SceneNode"));
+    }
+
+    // The live check of the offset rule on the real classes (IWidget has two bases, the UI tree a vtable and nested structs)
+    TEST(TypeRegistryEngineTest, OffsetsAgreeWithTheThunksOnEveryCreatableType) {
+        const TypeRegistry& registry = TypeRegistry::GetInstance();
+        size_t checkedTypes = 0;
+        size_t checkedFields = 0;
+        for (const TypeInfo* info : registry.All()) {
+            if (info->create == nullptr) {
+                continue;
+            }
+            OwnedObject object = registry.Create(*info);
+            ASSERT_TRUE(object) << String(info->Name()).c_str();
+            char* const base = static_cast<char*>(object.Get());
+            for (const FieldRef& ref : registry.AllFields(*info)) {
+                // The object of the type that declares the field sits at the offset of the ancestor's subobject
+                char* const owner = base + (ref.offset - ref.field->offset);
+                EXPECT_EQ(static_cast<char*>(ref.field->address(owner)), base + ref.offset) << String(info->Name()).c_str() << "." << String(ref.field->cppName).c_str();
+                ++checkedFields;
+            }
+            ++checkedTypes;
+        }
+        EXPECT_GT(checkedTypes, 20U);
+        EXPECT_GT(checkedFields, 100U);
     }
 
 }  // namespace BECore::Tests

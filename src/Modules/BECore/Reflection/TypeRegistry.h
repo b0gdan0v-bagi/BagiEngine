@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/RefCounted/New.h>
 #include <BECore/Reflection/TypeInfo.h>
 #include <BECore/Threading/Mutex.h>
 #include <BECore/Types/Types.h>
@@ -56,6 +57,11 @@ namespace BECore {
             return _infos;
         }
 
+        /// How many types `Register` refused for a hash that another type already has: not 0 is a build-time bug (two names that hash alike, or two types of one name)
+        [[nodiscard]] size_t RefusedCount() const {
+            return _refused;
+        }
+
         /// The reflected parent, or null when the type has none or its library is not linked
         [[nodiscard]] const TypeInfo* Parent(const TypeInfo& info) const;
 
@@ -68,23 +74,67 @@ namespace BECore {
         /// True when @p base is @p derived or one of its ancestors
         [[nodiscard]] bool IsDerivedFrom(const TypeInfo& derived, const TypeInfo& base) const;
 
+        /// Where the subobject of the reflected ancestor @p base sits in an object of @p derived; none when @p base is not @p derived or one of its ancestors
+        [[nodiscard]] Optional<size_t> OffsetOfBase(const TypeInfo& derived, const TypeInfo& base) const;
+
+        /// The types that are the base of an `AbstractFactory` (what `TypeInfo::factoryBase` names), sorted by name
+        [[nodiscard]] const Vector<const TypeInfo*>& FactoryBases() const;
+
+        /**
+         * @brief Makes an object of the type, owned by the handle; empty for an unknown name, an abstract type or a type with no factory
+         *
+         * The handle holds the address of the made type (the derived one). An unknown name allocates nothing.
+         */
+        [[nodiscard]] OwnedObject Create(StringView name) const;
+        [[nodiscard]] OwnedObject Create(const TypeInfo& info) const;
+
+        /**
+         * @brief Makes an object of the type named @p name as an `IntrusivePtr<Base>`; empty when the type is unknown, cannot be made or does not derive from `Base`
+         *
+         * The check is the registry's own chain (`IsDerivedFrom`), and the pointer is moved to the `Base` subobject by the offsets of
+         * the chain, so it is right when `Base` is not the first thing in the object. `Base` itself must be registered.
+         */
+        template <typename Base>
+        [[nodiscard]] typename GetIntrusivePtrType<Base>::type CreateAs(StringView name) const {
+            const TypeInfo* info = Find(name);
+            const TypeInfo* base = Find(Base::GetStaticTypeMeta().typeHash);
+            if (info == nullptr || base == nullptr) {
+                return {};
+            }
+            const Optional<size_t> offset = OffsetOfBase(*info, *base);
+            if (!offset.has_value()) {
+                return {};
+            }
+            OwnedObject owned = Create(*info);
+            if (!owned) {
+                return {};
+            }
+            // The made object lives at the derived address and its `Base` part at the chain's offset: char arithmetic on the address of a live object
+            Base* typed = reinterpret_cast<Base*>(static_cast<char*>(owned.Get()) + *offset);
+            typename GetIntrusivePtrType<Base>::type result(typed);
+            owned.Reset();
+            return result;
+        }
+
         /// The fields of the type and of its ancestors, the root's first (the order `Serialize` writes them), with their offsets in @p info's object
         [[nodiscard]] Vector<FieldRef> AllFields(const TypeInfo& info) const;
 
     private:
         using DerivedMap = HashMap<uint64_t, Vector<const TypeInfo*>>;
 
-        void EnsureDerivedIndex() const;
+        void EnsureIndex() const;
         const Vector<const TypeInfo*>& DerivedFrom(const DerivedMap& map, const TypeInfo& info) const;
 
         Vector<const TypeInfo*> _infos;
         HashMap<uint64_t, const TypeInfo*> _byHash;
+        size_t _refused = 0;
 
         // Built at the first query after the last registration; the lock is taken only to build
         mutable Mutex _indexMutex{BE_LOCK_SITE("Type registry index")};
         mutable std::atomic<size_t> _indexedCount{0};
         mutable DerivedMap _direct;
         mutable DerivedMap _all;
+        mutable Vector<const TypeInfo*> _factoryBases;
         Vector<const TypeInfo*> _none;
     };
 

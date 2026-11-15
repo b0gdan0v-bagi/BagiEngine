@@ -1,5 +1,6 @@
 #include "TypeRegistry.h"
 
+#include <EASTL/algorithm.h>
 #include <EASTL/sort.h>
 
 namespace BECore {
@@ -13,6 +14,7 @@ namespace BECore {
         const auto found = _byHash.find(info.Hash());
         if (found != _byHash.end()) {
             if (found->second != &info) {
+                ++_refused;
                 LOG_ERROR(Format("Reflection: type '{}' has the same hash as the registered type '{}'; it is not registered", info.Name(), found->second->Name()));
             }
             return false;
@@ -50,7 +52,7 @@ namespace BECore {
         return bases;
     }
 
-    void TypeRegistry::EnsureDerivedIndex() const {
+    void TypeRegistry::EnsureIndex() const {
         if (_indexedCount.load(std::memory_order_acquire) == _infos.size()) {
             return;
         }
@@ -60,7 +62,14 @@ namespace BECore {
         }
         _direct.clear();
         _all.clear();
+        _factoryBases.clear();
         for (const TypeInfo* info : _infos) {
+            if (info->factoryBase != 0) {
+                const TypeInfo* base = Find(info->factoryBase);
+                if (base != nullptr && eastl::find(_factoryBases.begin(), _factoryBases.end(), base) == _factoryBases.end()) {
+                    _factoryBases.push_back(base);
+                }
+            }
             if (const TypeInfo* parent = Parent(*info); parent != nullptr) {
                 _direct[parent->Hash()].push_back(info);
             }
@@ -69,6 +78,7 @@ namespace BECore {
             }
         }
         const auto byName = [](const TypeInfo* a, const TypeInfo* b) { return a->Name() < b->Name(); };
+        eastl::sort(_factoryBases.begin(), _factoryBases.end(), byName);
         for (DerivedMap* map : {&_direct, &_all}) {
             for (auto& entry : *map) {
                 eastl::sort(entry.second.begin(), entry.second.end(), byName);
@@ -83,7 +93,7 @@ namespace BECore {
     }
 
     const Vector<const TypeInfo*>& TypeRegistry::Derived(const TypeInfo& info, bool recursive) const {
-        EnsureDerivedIndex();
+        EnsureIndex();
         return DerivedFrom(recursive ? _all : _direct, info);
     }
 
@@ -97,6 +107,33 @@ namespace BECore {
             }
         }
         return false;
+    }
+
+    Optional<size_t> TypeRegistry::OffsetOfBase(const TypeInfo& derived, const TypeInfo& base) const {
+        const TypeInfo* current = &derived;
+        size_t offset = 0;
+        for (size_t step = 0; current != nullptr && step <= _infos.size(); ++step) {
+            if (current->Hash() == base.Hash()) {
+                return offset;
+            }
+            offset += current->parentOffset;
+            current = Parent(*current);
+        }
+        return std::nullopt;
+    }
+
+    const Vector<const TypeInfo*>& TypeRegistry::FactoryBases() const {
+        EnsureIndex();
+        return _factoryBases;
+    }
+
+    OwnedObject TypeRegistry::Create(StringView name) const {
+        const TypeInfo* info = Find(name);
+        return info != nullptr ? Create(*info) : OwnedObject{};
+    }
+
+    OwnedObject TypeRegistry::Create(const TypeInfo& info) const {
+        return info.create != nullptr ? info.create() : OwnedObject{};
     }
 
     Vector<FieldRef> TypeRegistry::AllFields(const TypeInfo& info) const {
