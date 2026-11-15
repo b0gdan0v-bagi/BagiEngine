@@ -23,11 +23,16 @@ namespace BECore {
             if (!stream) {
                 return std::nullopt;
             }
-            std::ostringstream buffer;
-            buffer << stream.rdbuf();
-            //-NoStd: the text of an std::ostringstream
-            const std::string text = buffer.str();
-            return String(text.data(), text.size());
+            std::error_code error;
+            const auto size = std::filesystem::file_size(resolved, error);
+            if (error) {
+                return std::nullopt;
+            }
+            String text(static_cast<size_t>(size), '\0');
+            if (!stream.read(text.data(), static_cast<std::streamsize>(size))) {
+                return std::nullopt;
+            }
+            return text;
         }
 
         /// The path of @p href next to the document at @p documentPath

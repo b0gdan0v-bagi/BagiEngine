@@ -124,6 +124,7 @@ namespace BECore {
                 hits.push_back({&command, score});
             }
         }
+        //-NoStd: equal scores keep the registration order; once per keystroke of the palette, not per frame
         std::stable_sort(hits.begin(), hits.end(), [](const Hit& lhs, const Hit& rhs) { return lhs.score > rhs.score; });
         for (const Hit& hit : hits) {
             result.push_back(hit.command);
