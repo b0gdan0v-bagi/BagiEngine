@@ -48,7 +48,9 @@ set_target_properties(BECoreModule PROPERTIES FOLDER "Modules")
 # Настройка предкомпилированных заголовков для модуля
 # PRIVATE означает, что PCH будет использоваться только для этого модуля
 # Другие модули могут переиспользовать его через REUSE_FROM
-target_precompile_headers(BECoreModule PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/pch.h)
+# <BECore/pch.h> and not the file path: CMake writes the argument into cmake_pch.hxx, which ccache hashes, and an absolute path there is
+# different in every checkout (cmake/BagiCompilerCache.cmake). The include root is the target's own (${PROJECT_ROOT}/src/Modules below).
+target_precompile_headers(BECoreModule PRIVATE <BECore/pch.h>)
 
 
 # Макрос должен совпадать с целями, переиспользующими PCH (MyGame с ImGui Vulkan), иначе -Wclang-cl-pch
