@@ -1,10 +1,15 @@
+#include <BECore/Clipboard/ClipboardControl.h>
 #include <BECore/Control/ControlBuiltins.h>
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Profiler/ProfilerControl.h>
 #include <BECore/Time/Time.h>
+#include <BECore/UI/UIControl.h>
 #include <Common/EngineEnvironment.h>
+#include <CoreSDL/SDLScreenshot.h>
 #include <Events/ApplicationEvents.h>
+#include <Games/GameControl.h>
 #include <gtest/gtest.h>
 #include <thread>
 
@@ -1114,6 +1119,112 @@ namespace BECore::Tests {
 
         EXPECT_FALSE(PoolString::Find("listed_only_method_7c41b9").has_value());
         EXPECT_FALSE(PoolString::Find("listed_only_param_7c41b9").has_value());
+    }
+
+    namespace {
+
+        /// What a BagiEngineTests process can register: the builtins and every module's methods (a game registers its own beside them)
+        void RegisterEveryModuleMethod(ControlService& service) {
+            RegisterControlBuiltins(service);
+            RegisterUIControl(service);
+            RegisterProfilerControl(service);
+            RegisterClipboardControl(service);
+            RegisterGameControl(service);
+            RegisterScreenshotControl(service);
+        }
+
+        Vector<String> RequiredParams(const Vector<ControlMethodListing>& methods, StringView name) {
+            Vector<String> required;
+            const ControlMethodListing* listing = FindListing(methods, name);
+            if (listing != nullptr && listing->info != nullptr) {
+                for (const ControlParamInfo& param : listing->info->params) {
+                    if (param.required) {
+                        required.push_back(param.name);
+                    }
+                }
+            }
+            return required;
+        }
+
+    }  // namespace
+
+    TEST_F(ControlServiceTest, EveryMethodOfTheModulesIsDescribed) {
+        RegisterEveryModuleMethod(service);
+
+        const Vector<ControlMethodListing> methods = service.GetMethods();
+
+        EXPECT_NE(FindListing(methods, "ui_click"), nullptr);
+        EXPECT_NE(FindListing(methods, "perform_action"), nullptr);
+        EXPECT_NE(FindListing(methods, "screenshot"), nullptr);
+        for (const ControlMethodListing& listing : methods) {
+            ASSERT_NE(listing.info, nullptr) << listing.name.c_str() << " has no description";
+            EXPECT_FALSE(listing.info->summary.empty()) << listing.name.c_str();
+            for (const ControlParamInfo& param : listing.info->params) {
+                EXPECT_FALSE(param.name.empty()) << listing.name.c_str();
+                EXPECT_FALSE(param.type.empty()) << listing.name.c_str() << "." << param.name.c_str();
+            }
+        }
+    }
+
+    TEST_F(ControlServiceTest, TheRequiredParamsOfADescriptionAreTheOnesTheHandlerRejects) {
+        RegisterEveryModuleMethod(service);
+        const Vector<ControlMethodListing> methods = service.GetMethods();
+
+        EXPECT_EQ(RequiredParams(methods, "ui_click"), Vector<String>{"name"});
+        EXPECT_EQ(RequiredParams(methods, "clipboard_set"), Vector<String>{"text"});
+        EXPECT_TRUE(RequiredParams(methods, "step").empty());
+
+        Post(MakeRequest(1, "ui_click"));
+        Post(MakeRequest(2, "clipboard_set"));
+        Post(MakeRequest(3, "switch_game"));
+        service.Drain();
+
+        ASSERT_EQ(responses.size(), 3u);
+        EXPECT_EQ(ErrorCode(responses[0]), "invalid_params");
+        EXPECT_EQ(ErrorCode(responses[1]), "invalid_params");
+        EXPECT_EQ(ErrorCode(responses[2]), "invalid_params");
+        EXPECT_EQ(RequiredParams(methods, "switch_game"), Vector<String>{"name"});
+    }
+
+    TEST_F(ControlServiceTest, TheTypesOfADescriptionAreTheOnesTheHandlerChecks) {
+        RegisterEveryModuleMethod(service);
+        const auto typeOf = [&](StringView method, StringView param) -> String {
+            const Vector<ControlMethodListing> methods = service.GetMethods();
+            const ControlMethodListing* listing = FindListing(methods, method);
+            if (listing != nullptr && listing->info != nullptr) {
+                for (const ControlParamInfo& info : listing->info->params) {
+                    if (info.name == param) {
+                        return info.type;
+                    }
+                }
+            }
+            return {};
+        };
+        EXPECT_EQ(typeOf("step", "frames"), "integer");
+        EXPECT_EQ(typeOf("step", "dt"), "number");
+        EXPECT_EQ(typeOf("ui_click", "canvas"), "string");
+        EXPECT_EQ(typeOf("ui_click", "at"), "number");
+
+        Json wrongFrames = Json::object();
+        wrongFrames["frames"] = "three";
+        Json wrongDt = Json::object();
+        wrongDt["dt"] = "slow";
+        Json wrongCanvas = Json::object();
+        wrongCanvas["name"] = "Ok";
+        wrongCanvas["canvas"] = 7;
+        Json wrongAt = Json::object();
+        wrongAt["name"] = "Ok";
+        wrongAt["at"] = "left";
+        Post(MakeRequest(1, "step", wrongFrames));
+        Post(MakeRequest(2, "step", wrongDt));
+        Post(MakeRequest(3, "ui_click", wrongCanvas));
+        Post(MakeRequest(4, "ui_click", wrongAt));
+        service.Drain();
+
+        ASSERT_EQ(responses.size(), 4u);
+        for (const Json& response : responses) {
+            EXPECT_EQ(ErrorCode(response), "invalid_params");
+        }
     }
 
     TEST_F(ControlServiceTest, StatusReportsWhetherTheClockIsManual) {

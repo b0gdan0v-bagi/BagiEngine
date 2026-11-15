@@ -101,6 +101,8 @@ The file half is the reflected `ApplicationConfig` read with strict values (`IDe
 | `BECore/Profiler/ProfilerControl` | `frame_stats` (`{frames?}` 1..240: the last frames, oldest first, with stage times, draws, allocations, named counters), `profiler_dump` (`{path?}` relative, no `..`: writes the Chrome trace; `not_recording` unless the game runs with `--trace=` or `--profiler=chrome`), `zone_allocs` (`{top?, reset?}`: allocations per zone and the totals; `enabled` false without `ENGINE_PROFILER_ALLOC`); `Profiler/CLAUDE.md` |
 | `Games/GameControl` | `list_games`, `switch_game`, `reset`, `get_state`, `list_actions`, `perform_action`, `set_state` (`Games/CLAUDE.md`) |
 
+Each module's register function also calls `DescribeMethod` for its methods (`list_methods` answers it); the game methods describe only what `GameControl` itself reads, the parameters of `perform_action` and `set_state` are the game's.
+
 ## Adding a method
 
 1. Write a handler `void(ControlCall&)` in the module that owns the behaviour (BECore only for things that need nothing above it).
