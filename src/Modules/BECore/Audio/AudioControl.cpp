@@ -14,14 +14,16 @@ namespace BECore {
 
         /// The wire name of a bus: lower case, as the keys of `levels`
         StringView BusKey(AudioBus bus) {
+            // No default: a new bus is a -Wswitch warning here, not a bus that shows as "sfx"
             switch (bus) {
+                case AudioBus::Sfx:
+                    return "sfx";
                 case AudioBus::Music:
                     return "music";
                 case AudioBus::Ui:
                     return "ui";
-                default:
-                    return "sfx";
             }
+            return "sfx";
         }
 
         Json LevelJson(const AudioLevel& level) {

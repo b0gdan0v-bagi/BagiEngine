@@ -30,7 +30,7 @@ namespace BECore {
             LoadClip();
         }
         if (!_loaded) {
-            // Still a request: AudioManager records what a game asked for
+            // A path no loader takes: still a request, which AudioManager records (and looks up again)
             _handle = CoreManager::GetAudio().Play(_clip, _bus, _volume);
             return;
         }

@@ -68,8 +68,9 @@ namespace BECore {
         /**
          * @brief Play() of the clip at @p clipPath, loaded through ResourceManager
          *
-         * The load is synchronous the first time a path is played (the cache keeps the clip, also one that failed): preload the clips of a
-         * scene (an AudioSourceComponent does, or ResourceManager::LoadAsync) so that a frame does not wait for a decode.
+         * The load is synchronous the first time a path is played (the cache keeps the clip, also one whose file does not open or decode; a
+         * path no loader takes is looked up and logged again at every call): preload the clips of a scene (an AudioSourceComponent does, or
+         * ResourceManager::LoadAsync) so that a frame does not wait for a decode.
          */
         AudioHandle Play(PoolString clipPath, AudioBus bus, float volume = 1.0f);
 

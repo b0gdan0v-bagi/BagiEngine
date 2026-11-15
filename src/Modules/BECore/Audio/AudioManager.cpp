@@ -54,7 +54,8 @@ namespace BECore {
         _settings = std::move(settings);
         ClampSettings(_settings);
         ++_levelsRevision;
-        // A second Initialize subscribes again, which only moves the pair to the end of the channel
+        // A second Initialize subscribes again: drop the old connections first so the holder keeps two
+        UnsubscribeAll();
         Subscribe<AudioEvents::PlaySoundEvent, &AudioManager::OnPlaySound>(this);
         Subscribe<AudioEvents::StopAllSoundsEvent, &AudioManager::OnStopAllSounds>(this);
     }
