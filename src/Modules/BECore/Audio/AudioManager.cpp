@@ -1,6 +1,7 @@
 #include "AudioManager.h"
 
 #include <BECore/Audio/AudioClip.h>
+#include <BECore/Audio/AudioClipLoader.h>
 #include <BECore/Audio/AudioEvents.h>
 #include <BECore/Config/ConfigManager.h>
 #include <BECore/GameManager/CoreManager.h>
@@ -58,6 +59,8 @@ namespace BECore {
         UnsubscribeAll();
         Subscribe<AudioEvents::PlaySoundEvent, &AudioManager::OnPlaySound>(this);
         Subscribe<AudioEvents::StopAllSoundsEvent, &AudioManager::OnStopAllSounds>(this);
+        Subscribe<AudioEvents::PlayMusicEvent, &AudioManager::OnPlayMusic>(this);
+        Subscribe<AudioEvents::StopMusicEvent, &AudioManager::OnStopMusic>(this);
     }
 
     void AudioManager::SetBackend(IntrusivePtr<IAudioBackend> backend) {
@@ -65,15 +68,24 @@ namespace BECore {
         if (!backend) {
             return;
         }
-        if (!backend->Open(_settings._voices)) {
+        if (!backend->Open(_settings._voices + kMusicVoices)) {
             LOG_WARNING("Audio: the backend did not open an output, the game runs without sound");
             return;
         }
         _backend = std::move(backend);
-        _voices.assign(_backend->GetVoiceCount(), Voice{});
+        const uint32_t count = _backend->GetVoiceCount();
+        _hasMusicVoices = count > kMusicVoices;
+        _voices.assign(_hasMusicVoices ? count - kMusicVoices : count, Voice{});
+        for (uint32_t index = 0; index < kMusicVoices; ++index) {
+            _music[index].voice = static_cast<uint32_t>(_voices.size()) + index;
+        }
+        _musicScratch.assign(kMusicChunkFrames * kMaxAudioChannels, 0.0f);
     }
 
     void AudioManager::Shutdown() {
+        for (MusicTrack& track : _music) {
+            StopMusicTrack(track);
+        }
         if (_backend) {
             _backend->Close();
             _backend.Reset();
@@ -155,6 +167,154 @@ namespace BECore {
         StopAll();
     }
 
+    void AudioManager::OnPlayMusic(const AudioEvents::PlayMusicEvent& event) {
+        PlayMusic(event.clip, event.volume, event.loop, event.fadeSeconds);
+    }
+
+    void AudioManager::OnStopMusic(const AudioEvents::StopMusicEvent& event) {
+        StopMusic(event.fadeSeconds);
+    }
+
+    bool AudioManager::PlayMusic(PoolString clipPath, float volume, bool loop, float fadeSeconds) {
+        MusicTrack& current = _music[_currentMusic];
+        if (current.source && current.clip == clipPath && current.fadeStep >= 0.0f) {
+            current.volume = ClampVolume(volume);
+            current.loop = loop;
+            _backend->SetGain(current.voice, GetMusicGain(current));
+            Record(clipPath, AudioBus::Music, volume, true);
+            return true;
+        }
+        if (!_backend || !_hasMusicVoices || clipPath.Empty()) {
+            Record(clipPath, AudioBus::Music, volume, false);
+            return false;
+        }
+        auto bytes = ReadAudioFile(clipPath);
+        if (!bytes) {
+            LOG_ERROR("Audio: the music: {}"_format(bytes.error()));
+            Record(clipPath, AudioBus::Music, volume, false);
+            return false;
+        }
+        auto source = OpenAudioStream(std::move(*bytes));
+        if (!source) {
+            LOG_ERROR("Audio: the music '{}': {}"_format(clipPath.ToStringView(), source.error()));
+            Record(clipPath, AudioBus::Music, volume, false);
+            return false;
+        }
+
+        const uint32_t next = (_currentMusic + 1) % kMusicVoices;
+        MusicTrack& incoming = _music[next];
+        StopMusicTrack(incoming);  // a track still fading out there is the oldest of three
+        incoming.source = std::move(*source);
+        incoming.clip = clipPath;
+        incoming.volume = ClampVolume(volume);
+        incoming.loop = loop;
+        incoming.fade = fadeSeconds > 0.0f ? 0.0f : 1.0f;
+        incoming.fadeStep = fadeSeconds > 0.0f ? 1.0f / fadeSeconds : 0.0f;
+        incoming.framesSinceRewind = 0;
+        incoming.ending = false;
+        if (!_backend->StartStream(incoming.voice, incoming.source->GetFormat(), GetMusicGain(incoming))) {
+            StopMusicTrack(incoming);
+            Record(clipPath, AudioBus::Music, volume, false);
+            return false;
+        }
+        FadeOutMusic(current, fadeSeconds);
+        _currentMusic = next;
+        FeedMusic(incoming);  // the first buffer now: a stream that starts empty would wait a frame
+        Record(clipPath, AudioBus::Music, volume, true);
+        return true;
+    }
+
+    void AudioManager::StopMusic(float fadeSeconds) {
+        for (MusicTrack& track : _music) {
+            FadeOutMusic(track, fadeSeconds);
+        }
+    }
+
+    AudioMusicState AudioManager::GetMusicState() const {
+        const MusicTrack& current = _music[_currentMusic];
+        if (!current.source) {
+            return {};
+        }
+        return AudioMusicState{current.clip, true, current.loop, current.volume, current.fadeStep != 0.0f};
+    }
+
+    void AudioManager::Update(float deltaSeconds) {
+        if (!_backend) {
+            return;
+        }
+        for (MusicTrack& track : _music) {
+            if (!track.source) {
+                continue;
+            }
+            if (track.fadeStep != 0.0f && deltaSeconds > 0.0f) {
+                track.fade += track.fadeStep * deltaSeconds;
+                if (track.fade <= 0.0f) {
+                    StopMusicTrack(track);
+                    continue;
+                }
+                if (track.fade >= 1.0f) {
+                    track.fade = 1.0f;
+                    track.fadeStep = 0.0f;
+                }
+                _backend->SetGain(track.voice, GetMusicGain(track));
+            }
+            FeedMusic(track);
+            if (track.ending && !_backend->IsPlaying(track.voice)) {
+                StopMusicTrack(track);
+            }
+        }
+    }
+
+    float AudioManager::GetMusicGain(const MusicTrack& track) const {
+        return GetGain(AudioBus::Music, track.volume) * track.fade;
+    }
+
+    void AudioManager::FeedMusic(MusicTrack& track) {
+        if (track.ending) {
+            return;
+        }
+        const AudioFormat format = track.source->GetFormat();
+        const auto target = static_cast<uint64_t>(static_cast<float>(format.sampleRate) * kMusicBufferSeconds);
+        const Span<float> chunk(_musicScratch.data(), kMusicChunkFrames * format.channels);
+        for (uint32_t read = 0; read < kMaxMusicChunksPerUpdate && _backend->GetQueuedFrames(track.voice) < target; ++read) {
+            const size_t frames = track.source->Read(chunk);
+            if (frames == 0) {
+                // A track that gave nothing since its start would rewind for ever: it ends instead
+                if (track.loop && track.framesSinceRewind > 0 && track.source->Rewind()) {
+                    track.framesSinceRewind = 0;
+                    continue;
+                }
+                _backend->EndStream(track.voice);
+                track.ending = true;
+                return;
+            }
+            track.framesSinceRewind += frames;
+            _backend->QueueStream(track.voice, chunk.first(frames * format.channels));
+        }
+    }
+
+    void AudioManager::FadeOutMusic(MusicTrack& track, float fadeSeconds) {
+        if (!track.source) {
+            return;
+        }
+        if (fadeSeconds <= 0.0f) {
+            StopMusicTrack(track);
+            return;
+        }
+        // From the level it has now, so a track that was still fading in does not jump up first
+        track.fadeStep = -1.0f / fadeSeconds;
+    }
+
+    void AudioManager::StopMusicTrack(MusicTrack& track) {
+        if (track.source && _backend) {
+            _backend->Stop(track.voice);
+        }
+        track.source.reset();
+        track.clip = PoolString();
+        track.fadeStep = 0.0f;
+        track.ending = false;
+    }
+
     void AudioManager::Stop(AudioHandle handle) {
         if (IsCurrent(handle)) {
             _backend->Stop(handle.voice);
@@ -170,6 +330,7 @@ namespace BECore {
             _backend->Stop(index);
             ++_voices[index].generation;
         }
+        StopMusic();
     }
 
     bool AudioManager::IsPlaying(AudioHandle handle) const {
@@ -240,6 +401,11 @@ namespace BECore {
             const Voice& voice = _voices[index];
             if (voice.startOrder != 0) {
                 _backend->SetGain(index, GetGain(voice.bus, voice.volume));
+            }
+        }
+        for (const MusicTrack& track : _music) {
+            if (track.source) {
+                _backend->SetGain(track.voice, GetMusicGain(track));
             }
         }
     }

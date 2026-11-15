@@ -84,6 +84,14 @@ namespace BECore::Tests {
         EXPECT_EQ(NumberOf(state, "started"), 0.0);
         EXPECT_EQ(NumberOf(state, "requested"), 1.0);
 
+        const Json* music = FindJsonMember(*state, "music");
+        ASSERT_NE(music, nullptr);
+        const Json* musicClip = FindJsonMember(*music, "clip");
+        ASSERT_NE(musicClip, nullptr);
+        EXPECT_TRUE(musicClip->is_null());
+        EXPECT_EQ(BoolOf(music, "playing"), Optional<bool>(false));
+        EXPECT_EQ(BoolOf(music, "fading"), Optional<bool>(false));
+
         const Json* recent = FindJsonMember(*state, "recent");
         ASSERT_NE(recent, nullptr);
         ASSERT_TRUE(recent->is_array());

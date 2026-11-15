@@ -46,7 +46,7 @@ namespace BECore {
             Json result = Json::object();
             if (const auto& backend = manager.GetBackend()) {
                 result["backend"] = MakeJsonString(backend->GetTypeMeta().typeName);
-                result["voices"] = backend->GetVoiceCount();
+                result["voices"] = manager.GetEffectVoiceCount();
             } else {
                 result["backend"] = nullptr;
                 result["voices"] = 0;
@@ -55,6 +55,19 @@ namespace BECore {
             result["started"] = manager.GetStartedCount();
             result["requested"] = manager.GetRequestCount();
             result["levels"] = LevelsJson(manager.GetSettings());
+
+            const AudioMusicState music = manager.GetMusicState();
+            Json musicJson = Json::object();
+            if (music.clip.Empty()) {
+                musicJson["clip"] = nullptr;
+            } else {
+                musicJson["clip"] = MakeJsonString(music.clip.ToStringView());
+            }
+            musicJson["playing"] = music.playing;
+            musicJson["loop"] = music.loop;
+            musicJson["volume"] = music.volume;
+            musicJson["fading"] = music.fading;
+            result["music"] = std::move(musicJson);
 
             Vector<AudioPlayRecord> records;
             manager.GetRecentPlays(records);

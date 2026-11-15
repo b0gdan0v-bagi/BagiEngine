@@ -123,6 +123,11 @@ namespace BECore {
             }
             _controlService.Drain();  // commands of the control API see this frame's input and run before the tasks and the logic
             UpdateGame(kind);
+            {
+                // Every kind of frame: a paused game keeps its music fed (a held frame has a frame time of 0, so the fades stand still)
+                BE_PROFILE_SCOPE("Audio");
+                _audioManager.Update(_time.GetDeltaTime());
+            }
         }
         // Render: the widgets (Editor: ViewportWidget draws the scene in its update), queued events, the screen draws and ImGui
         const FrameStatsCollector::StageScope render(_frameStats, FrameStage::Render);
@@ -170,6 +175,7 @@ namespace BECore {
     void CoreManager::OnIdleCycle(PassKey<Application>) {
         _eventsProviderManager.ProcessEvents();  // the window keeps answering and a close still quits
         _controlService.Drain();
+        _audioManager.Update(0.0f);  // the manual clock between steps: the music is still fed, its fades wait for game time
         if (!_controlService.IsStepDue()) {
             _controlService.WaitForRequests(kIdleWait);
         }
