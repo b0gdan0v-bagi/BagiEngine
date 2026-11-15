@@ -10,7 +10,7 @@
  * @brief The out-of-line side of the locks: what the contended path and the per-lock events of a Mutex / SharedMutex call.
  *
  * Mutex.h and SharedMutex.h are inline for the uncontended path and include only this file besides the std headers, so they can be
- * used before the PCH is complete; everything that needs the profiler lives in LockHooks.cpp. Only built with BE_LOCK_SITES.
+ * used before the PCH is complete; everything that needs the profiler lives in LockHooks.cpp.
  */
 
 #if BE_LOCK_SITES
@@ -30,8 +30,7 @@ namespace BECore::LockHooks {
 
 namespace BECore::LockHooks {
 
-    /// The backend that gets an event for every lock operation (IProfilerBackend::WantsLockEvents), nullptr when none: Chrome, the ring
-    /// and no backend leave it null, so their locks pay this one load and no virtual call. Set by Profiler when it installs a backend
+    /// The backend that gets an event for every lock operation (IProfilerBackend::WantsLockEvents), nullptr when none
     inline constinit std::atomic<IProfilerBackend*> g_eventBackend{nullptr};
 
     [[nodiscard]] inline bool EventsActive() noexcept {
@@ -49,10 +48,9 @@ namespace BECore {
     /**
      * @brief The per-lock state of the lock events (Tracy's lockables): the opaque context the backend made for this lock.
      *
-     * The context is made on the first event while a backend wants them (so never before Tracy runs), by compare-exchange: a thread
-     * that loses the race ends its own context and uses the winner's. The destructor ends it, so a lock that outlives the backend is
-     * safe (the backend ignores every call once it has stopped). A lock operation that began while no backend wanted events is not
-     * seen by it: switching the backend while locks are held can skew Tracy's own per-lock count, never the program.
+     * The destructor ends the context, so a lock that outlives the backend is safe (the backend ignores every call once it has
+     * stopped). A lock operation that began while no backend wanted events is not seen by it: switching the backend while locks are
+     * held can skew Tracy's own per-lock count, never the program.
      */
     class LockEvents {
     public:
