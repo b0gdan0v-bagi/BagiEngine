@@ -199,6 +199,12 @@
         return filter.area === "all" || entry.area === filter.area;
     }
 
+    // `**Waits for:**` ids of an open entry that no dependency link covers (the queue and the loop only see links).
+    function unlinked(entry) {
+        if (entry.status === "closed") return [];
+        return TodoRuns.unlinkedWaits(entry, new Map((payload.entries || []).map((e) => [e.id, e])));
+    }
+
     function row(entry) {
         const item = el("div", `card todo-entry${open.has(entry.id) ? " open" : ""}`);
         item.dataset.id = entry.id;
@@ -210,11 +216,16 @@
         );
         if (entry.priority in PRIORITY_RANK) top.appendChild(el("span", `badge prio prio-${entry.priority}`, entry.priority));
         if (entry.stage !== null && entry.stage !== undefined) top.appendChild(el("span", "muted", `stage ${entry.stage}`));
-        if (entry.slices && entry.slices.count > 1) top.appendChild(el("span", "muted", `${entry.slices.count} slices ${entry.slices.done}/${entry.slices.total}`));
-        else if (entry.planProgress && entry.planProgress.total) top.appendChild(el("span", "muted", `plan ${entry.planProgress.done}/${entry.planProgress.total}`));
+        const progress = TodoRuns.progressText(entry);
+        if (progress) top.appendChild(el("span", "muted", progress));
         if (entry.slicing === "through") top.appendChild(el("span", "badge through", entry.costCap ? `through · cap $${entry.costCap}` : "through"));
         const blockers = (entry.blockedBy || []).filter((b) => b.status !== "closed");
         if (blockers.length) top.appendChild(el("span", "badge blocked", `blocked by ${blockers.map((b) => b.id).join(", ")}`));
+        const waits = unlinked(entry);
+        if (waits.length) {
+            const mark = top.appendChild(el("span", "badge nolink", "!"));
+            mark.title = `waits for ${waits.join(", ")} (named in the text), no dependency link`;
+        }
         top.appendChild(el("span", "time", ago(entry.updatedAt)));
         item.appendChild(top);
         item.appendChild(inline(el("div", "title"), entry.title || ""));
@@ -251,7 +262,7 @@
             actions.appendChild(button("Copy id", { cmd: "copy", text: entry.id }));
             item.appendChild(actions);
             item.appendChild(editActions(entry));
-            item.appendChild(dependencies(entry));
+            item.appendChild(dependencies(entry, waits));
         } else if (entry.summary) {
             item.appendChild(inline(el("div", "summary muted"), entry.summary));
         }
@@ -281,7 +292,7 @@
         return actions;
     }
 
-    function dependencies(entry) {
+    function dependencies(entry, waits) {
         const box = el("div", "deps");
         const blockedBy = entry.blockedBy || [];
         box.appendChild(el("span", "muted", blockedBy.length ? "waits for:" : "waits for nothing"));
@@ -289,6 +300,11 @@
             const chip = box.appendChild(el("span", `badge dep status-${String(link.status).replace(" ", "-")}`, `${link.id} (${link.status})`));
             if (link.title) chip.title = link.title + (link.note ? ` · ${link.note}` : "");
             chip.appendChild(button("×", { cmd: "depRm", entry: entry.id, blocker: link.id }, `${entry.id} no longer waits for ${link.id}`, "link"));
+        }
+        for (const id of waits) {
+            const chip = box.appendChild(el("span", "badge nolink", `waits for ${id}, no link`));
+            chip.title = `the text says ${entry.id} waits for ${id}, but no dependency link exists: the queue and the loop do not see it`;
+            chip.appendChild(button("Link", { cmd: "depLink", entry: entry.id, blocker: id }, `todo.py dep add ${entry.id} ${id}`, "link"));
         }
         box.appendChild(button("+ waits for", { cmd: "depAdd", entry: entry.id }, "pick an entry this one waits for (the store refuses a cycle)", "link"));
         const blocks = entry.blocks || [];

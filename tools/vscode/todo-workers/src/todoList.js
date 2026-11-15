@@ -41,7 +41,8 @@ function attach(ctx) {
         todoLoading = true;
         todoPanel.webview.postMessage({ loading: true, error: null });
         try {
-            entries = JSON.parse(await runTool(todoTool(tool), ["list", "--all", "--json", "--body"], 30000));
+            const [out] = await Promise.all([runTool(todoTool(tool), ["list", "--all", "--json", "--body"], 30000), ctx.readStages()]);
+            entries = ctx.withStages(JSON.parse(out));
             const state = ctx.state;
             if (todoPanel) todoPanel.webview.postMessage({ loading: false, entries, areas: state && state.areas ? state.areas : null, workers: ctx.workersForList(), elsewhere: ctx.elsewhereForList(), at: Date.now(), focus: focusNext });
             if (todoPanel) focusNext = null;
@@ -236,6 +237,12 @@ function attach(ctx) {
         await write(`todo.py dep add ${id}`, ["dep", "add", id, pick.label, ...(note.trim() ? ["--note", note.trim()] : [])]);
     }
 
+    // The link the text of the entry already names (`**Waits for:**`): the same write as depAdd, without the pickers.
+    async function depLink(id, blocker) {
+        if (!ID_RE.test(id) || !ID_RE.test(blocker)) return;
+        await write(`todo.py dep add ${id}`, ["dep", "add", id, blocker, "--note", "named after Waits for in the text"]);
+    }
+
     async function depRm(id, blocker) {
         if (!ID_RE.test(id) || !ID_RE.test(blocker)) return;
         const pick = await vscode.window.showWarningMessage(`${id} no longer waits for ${blocker}?`, { modal: true }, "Remove the link");
@@ -252,7 +259,7 @@ function attach(ctx) {
         }
         todoPanel = vscode.window.createWebviewPanel("todoWorkers.todoList", "Todo list", vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true });
         todoPanel.iconPath = vscode.Uri.file(path.join(ctx.context.extensionPath, "media", "workers.svg"));
-        todoPanel.webview.html = pageHtml(ctx.context, ["graph.js", "todo.js"], ["panel.css", "todo.css", "graph.css"], "Asking todo.py ...");
+        todoPanel.webview.html = pageHtml(ctx.context, ["runs.js", "graph.js", "todo.js"], ["panel.css", "todo.css", "graph.css"], "Asking todo.py ...");
         todoPanel.webview.onDidReceiveMessage((message) => {
             switch (message.cmd) {
                 case "ready":
@@ -271,6 +278,7 @@ function attach(ctx) {
                 case "editBody": return editBody(message.entry);
                 case "setThrough": return setThrough(message.entry, Boolean(message.on));
                 case "depAdd": return depAdd(message.entry);
+                case "depLink": return depLink(message.entry, message.blocker);
                 case "depRm": return depRm(message.entry, message.blocker);
             }
         });

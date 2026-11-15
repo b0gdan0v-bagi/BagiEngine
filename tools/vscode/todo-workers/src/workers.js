@@ -5,7 +5,11 @@
 const vscode = require("vscode");
 const fs = require("fs");
 const path = require("path");
-const { config, findTool, runTool, runGit, branchId, planFile, shellQuote, toolEnv } = require("./tools");
+const { config, findTool, todoTool, runTool, runGit, branchId, planFile, shellQuote, toolEnv } = require("./tools");
+const Runs = require("../media/runs");
+
+const READ_TIMEOUT_MS = 30000;
+const QUEUE_ANYWAY = "Queue anyway";
 
 function attach(ctx) {
     const busy = ctx.busy;
@@ -21,12 +25,37 @@ function attach(ctx) {
     }
 
     // --- queues: the next entries of each worker, started by the panel as soon as the worker is free ----------
+
+    // false: the entry stays out of the queue. An entry taken in another checkout is refused, one with an open
+    // blocker is asked about (a stacked or paired entry is takeable; the start rule keeps the others queued). A
+    // failed read lets the queue go on: worker.py is the last word there.
+    async function queueAllowed(tool, id, elsewhere) {
+        let show;
+        try {
+            show = JSON.parse(await runTool(todoTool(tool), ["show", id, "--json"], READ_TIMEOUT_MS));
+        } catch (error) {
+            return true;
+        }
+        const guard = Runs.queueGuard(show, elsewhere);
+        if (!guard) return true;
+        if (guard.kind === "elsewhere") {
+            const origin = guard.origin ? ` in ${guard.origin}` : " in another checkout";
+            const base = guard.base ? `, base ${guard.base}` : "";
+            vscode.window.showWarningMessage(`${id} is ${show.status}${origin}${base}: it cannot be queued here`, { modal: true, detail: "Continue it in the checkout that took it; a worker here would start a second branch of the same entry." });
+            return false;
+        }
+        const names = guard.blockers.map((b) => `${b.id} (${b.status})`).join(", ");
+        const pick = await vscode.window.showWarningMessage(`Queue ${id} anyway?`, { modal: true, detail: `It waits for ${names}. The panel keeps it queued until the loop can take it; a stacked or paired entry starts at once.` }, QUEUE_ANYWAY);
+        return pick === QUEUE_ANYWAY;
+    }
+
     async function queueEntry(id, k) {
         const tool = findTool();
         if (!tool || !id || !/^[A-Za-z0-9_-]+$/.test(id)) return;
         if (!ctx.state) await ctx.refresh();
         const state = ctx.state;
         if (!state || !state.workers.length) return;
+        if (!(await queueAllowed(tool, id, Array.isArray(state.elsewhere) ? state.elsewhere : []))) return;
         let worker = k === undefined ? null : state.workers.find((w) => w.k === k);
         const overlaps = await overlapWarning(id);
         if (!worker) {
@@ -59,17 +88,45 @@ function attach(ctx) {
         await ctx.refresh();
     }
 
-    // A new order of one worker's queue (drag and drop in the Todo list): cleared and added again in that order.
+    // A new order of one worker's queue (drag and drop in the Todo list): cleared and added again in that order. A
+    // failure in between must not lose entries, so what the queue no longer holds is added back before the error is
+    // shown. Never `--resume`: the queue stays paused when it was.
     async function reorderQueue(k, ids) {
         const tool = findTool();
         if (!tool || !Array.isArray(ids) || !ids.every((id) => /^[A-Za-z0-9_-]+$/.test(id))) return;
+        let failure = null;
         try {
             await runTool(tool, ["queue", String(k), "--clear"], 30000);
             for (const id of ids) await runTool(tool, ["queue", String(k), "--add", id], 30000);
         } catch (error) {
-            vscode.window.showErrorMessage(`worker.py queue: ${error.message}`);
+            failure = error;
+        }
+        if (failure) {
+            const lost = await restoreQueue(tool, k, ids);
+            vscode.window.showErrorMessage(`worker.py queue: ${failure.message}${lost.length ? ` (could not put back ${lost.join(", ")})` : ""}`);
         }
         await ctx.refresh();
+    }
+
+    // Adds back the ids the queue of worker k lost; returns the ones it could not.
+    async function restoreQueue(tool, k, ids) {
+        let missing = ids;
+        try {
+            const all = JSON.parse(await runTool(tool, ["queue", String(k), "--json"], READ_TIMEOUT_MS));
+            const mine = all[`w${k}`];
+            if (mine && Array.isArray(mine.queue)) missing = Runs.idsToAddBack(ids, mine.queue);
+        } catch (error) {
+            // the read failed: add every id; worker.py moves an id that is queued already to the end
+        }
+        const lost = [];
+        for (const id of missing) {
+            try {
+                await runTool(tool, ["queue", String(k), "--add", id], 30000);
+            } catch (error) {
+                lost.push(id);
+            }
+        }
+        return lost;
     }
 
     // A free worker with a queue that is not paused (`worker.py queue --pause`) gets its next entry; one start per
@@ -243,8 +300,9 @@ function attach(ctx) {
             k: w.k, name: w.name, active: w.active, waiting: w.waiting, stopped: w.stopped, endedTurn: w.endedTurn,
             limited: w.limited ? { resets: w.limited.resets } : null,
             session: w.session ? { state: w.session.state, status: w.session.status, startedAt: w.session.startedAt } : null,
-            entry: e ? { id: e.id, title: e.title, status: e.status, statusNote: e.statusNote, blockedBy: e.blockedBy, planProgress: e.planProgress, slices: e.slices } : null,
+            entry: e ? { id: e.id, title: e.title, status: e.status, statusNote: e.statusNote, blockedBy: e.blockedBy, planProgress: e.planProgress, slices: e.slices, slicing: e.slicing, stages: e.stages } : null,
             queue: w.queue || [], queueItems: w.queueItems || null, queuePaused: w.queuePaused || null, queueStreak: w.queueStreak || [],
+            noClaim: w.noClaim || null,
         };
     }
 
