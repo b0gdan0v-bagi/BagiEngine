@@ -1,6 +1,7 @@
 #include <BECore/Audio/AudioClip.h>
 #include <BECore/Audio/AudioManager.h>
 #include <BECore/Audio/NullAudioBackend.h>
+#include <BECore/FakeAudioBackend.h>
 #include <Common/Printers.h>
 #include <gtest/gtest.h>
 #include <limits>
@@ -8,54 +9,6 @@
 namespace BECore::Tests {
 
     namespace {
-
-        /// Records what AudioManager asks of a backend; a voice plays until the test ends it
-        class FakeAudioBackend : public IAudioBackend {
-        public:
-            bool opens = true;
-            Vector<bool> playing;
-            Vector<float> gains;
-            Vector<uint32_t> starts;  ///< the voice of every Start(), in order
-            uint32_t closes = 0;
-
-            bool Open(uint32_t voiceCount) override {
-                if (!opens) {
-                    return false;
-                }
-                playing.assign(voiceCount, false);
-                gains.assign(voiceCount, -1.0f);
-                return true;
-            }
-
-            void Close() override {
-                ++closes;
-                playing.clear();
-                gains.clear();
-            }
-
-            [[nodiscard]] uint32_t GetVoiceCount() const override {
-                return static_cast<uint32_t>(playing.size());
-            }
-
-            bool Start(uint32_t voice, const AudioClip& /*clip*/, float gain) override {
-                starts.push_back(voice);
-                playing[voice] = true;
-                gains[voice] = gain;
-                return true;
-            }
-
-            void Stop(uint32_t voice) override {
-                playing[voice] = false;
-            }
-
-            void SetGain(uint32_t voice, float gain) override {
-                gains[voice] = gain;
-            }
-
-            [[nodiscard]] bool IsPlaying(uint32_t voice) const override {
-                return voice < playing.size() && playing[voice];
-            }
-        };
 
         IntrusivePtr<AudioClip> MakeClip() {
             DecodedAudio audio;
@@ -206,6 +159,81 @@ namespace BECore::Tests {
         EXPECT_TRUE(handle.IsValid());
         EXPECT_FALSE(manager.IsPlaying(handle));
         EXPECT_EQ(manager.GetStartedCount(), 1u);
+    }
+
+    TEST_F(AudioManagerTest, EveryRequestIsRecordedAlsoTheOnesThatPlayNothing) {
+        manager.Play(*clip, AudioBus::Ui, 2.0f);  // no backend yet
+        Open(1);
+        manager.Play(*clip, AudioBus::Music, 0.5f);
+        manager.Play(*AudioClip::CreateFailed("test/missing.wav"_intern), AudioBus::Sfx);
+
+        Vector<AudioPlayRecord> records;
+        manager.GetRecentPlays(records);
+        ASSERT_EQ(records.size(), 3u);
+        EXPECT_EQ(manager.GetRequestCount(), 3u);
+        EXPECT_EQ(manager.GetStartedCount(), 1u);
+
+        EXPECT_EQ(records[0].index, 1u);
+        EXPECT_EQ(records[0].clip, "test/clip.wav"_intern);
+        EXPECT_EQ(records[0].bus, AudioBus::Ui);
+        EXPECT_FLOAT_EQ(records[0].volume, 1.0f) << "clamped as the gain is";
+        EXPECT_FALSE(records[0].played);
+
+        EXPECT_EQ(records[1].bus, AudioBus::Music);
+        EXPECT_FLOAT_EQ(records[1].volume, 0.5f);
+        EXPECT_TRUE(records[1].played);
+
+        EXPECT_EQ(records[2].clip, "test/missing.wav"_intern);
+        EXPECT_FALSE(records[2].played);
+    }
+
+    TEST_F(AudioManagerTest, TheRecordKeepsTheLastRequestsOldestFirst) {
+        Open(1);
+        const size_t requests = kAudioRecentPlays + 5;
+        for (size_t i = 0; i < requests; ++i) {
+            manager.Play(*clip, AudioBus::Sfx);
+        }
+        Vector<AudioPlayRecord> records;
+        manager.GetRecentPlays(records);
+        ASSERT_EQ(records.size(), kAudioRecentPlays);
+        EXPECT_EQ(records.front().index, requests - kAudioRecentPlays + 1);
+        EXPECT_EQ(records.back().index, requests);
+        for (size_t i = 1; i < records.size(); ++i) {
+            EXPECT_EQ(records[i].index, records[i - 1].index + 1);
+        }
+    }
+
+    TEST_F(AudioManagerTest, TheLevelsRevisionMovesOnEveryChangeOfALevel) {
+        Open(1);
+        uint64_t revision = manager.GetLevelsRevision();
+        const auto expectMoved = [&](const char* what) {
+            EXPECT_GT(manager.GetLevelsRevision(), revision) << what;
+            revision = manager.GetLevelsRevision();
+        };
+        manager.SetMasterVolume(0.5f);
+        expectMoved("master volume");
+        manager.SetMasterMuted(true);
+        expectMoved("master mute");
+        manager.SetBusVolume(AudioBus::Music, 0.25f);
+        expectMoved("bus volume");
+        manager.SetBusMuted(AudioBus::Ui, true);
+        expectMoved("bus mute");
+        manager.ApplySettings(AudioSettings{});
+        expectMoved("settings");
+
+        manager.Play(*clip, AudioBus::Sfx);
+        manager.StopAll();
+        EXPECT_EQ(manager.GetLevelsRevision(), revision) << "a sound is not a level";
+    }
+
+    TEST_F(AudioManagerTest, ThePlayingCountIsTheVoicesThatPlay) {
+        EXPECT_EQ(manager.GetPlayingCount(), 0u);
+        Open(3);
+        const AudioHandle first = manager.Play(*clip, AudioBus::Sfx);
+        manager.Play(*clip, AudioBus::Sfx);
+        EXPECT_EQ(manager.GetPlayingCount(), 2u);
+        manager.Stop(first);
+        EXPECT_EQ(manager.GetPlayingCount(), 1u);
     }
 
 }  // namespace BECore::Tests

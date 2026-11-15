@@ -1,9 +1,11 @@
 #include "AudioManager.h"
 
 #include <BECore/Audio/AudioClip.h>
+#include <BECore/Audio/AudioEvents.h>
 #include <BECore/Config/ConfigManager.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/OpenDeserializer.h>
+#include <BECore/Resource/ResourceManager.h>
 #include <cmath>
 
 namespace BECore {
@@ -51,6 +53,10 @@ namespace BECore {
     void AudioManager::Initialize(AudioSettings settings) {
         _settings = std::move(settings);
         ClampSettings(_settings);
+        ++_levelsRevision;
+        // A second Initialize subscribes again, which only moves the pair to the end of the channel
+        Subscribe<AudioEvents::PlaySoundEvent, &AudioManager::OnPlaySound>(this);
+        Subscribe<AudioEvents::StopAllSoundsEvent, &AudioManager::OnStopAllSounds>(this);
     }
 
     void AudioManager::SetBackend(IntrusivePtr<IAudioBackend> backend) {
@@ -76,6 +82,7 @@ namespace BECore {
 
     AudioHandle AudioManager::Play(const AudioClip& clip, AudioBus bus, float volume) {
         if (!_backend || _voices.empty() || clip.GetState() != ResourceState::Loaded) {
+            Record(clip.GetPath(), bus, volume, false);
             return {};
         }
         const uint32_t index = PickVoice();
@@ -86,11 +93,65 @@ namespace BECore {
         ++voice.generation;
         if (!_backend->Start(index, clip, GetGain(bus, voice.volume))) {
             voice.startOrder = 0;
+            Record(clip.GetPath(), bus, volume, false);
             return {};
         }
         ++_startedCount;
         voice.startOrder = _startedCount;
+        Record(clip.GetPath(), bus, volume, true);
         return AudioHandle{index, voice.generation};
+    }
+
+    AudioHandle AudioManager::Play(PoolString clipPath, AudioBus bus, float volume) {
+        if (clipPath.Empty()) {
+            Record(clipPath, bus, volume, false);
+            return {};
+        }
+        const ResourceHandle<AudioClip> clip = CoreManager::GetResourceManager().Load<AudioClip>(clipPath.ToStringView());
+        if (!clip) {
+            Record(clipPath, bus, volume, false);
+            return {};
+        }
+        return Play(*clip, bus, volume);
+    }
+
+    void AudioManager::GetRecentPlays(Vector<AudioPlayRecord>& out) const {
+        out.clear();
+        const uint64_t count = eastl::min<uint64_t>(_requestCount, kAudioRecentPlays);
+        for (uint64_t index = _requestCount - count + 1; index <= _requestCount; ++index) {
+            out.push_back(_recent[(index - 1) % kAudioRecentPlays]);
+        }
+    }
+
+    uint32_t AudioManager::GetPlayingCount() const {
+        if (!_backend) {
+            return 0;
+        }
+        uint32_t playing = 0;
+        for (uint32_t index = 0; index < _voices.size(); ++index) {
+            if (_backend->IsPlaying(index)) {
+                ++playing;
+            }
+        }
+        return playing;
+    }
+
+    void AudioManager::Record(PoolString clip, AudioBus bus, float volume, bool played) {
+        ++_requestCount;
+        AudioPlayRecord& record = _recent[(_requestCount - 1) % kAudioRecentPlays];
+        record.index = _requestCount;
+        record.clip = clip;
+        record.bus = bus;
+        record.volume = ClampVolume(volume);
+        record.played = played;
+    }
+
+    void AudioManager::OnPlaySound(const AudioEvents::PlaySoundEvent& event) {
+        Play(event.clip, event.bus, event.volume);
+    }
+
+    void AudioManager::OnStopAllSounds(const AudioEvents::StopAllSoundsEvent& /*event*/) {
+        StopAll();
     }
 
     void AudioManager::Stop(AudioHandle handle) {
@@ -169,6 +230,8 @@ namespace BECore {
     }
 
     void AudioManager::RefreshGains() {
+        // Every Set*() and ApplySettings() ends here
+        ++_levelsRevision;
         if (!_backend) {
             return;
         }
