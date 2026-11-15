@@ -38,7 +38,7 @@ ImGui goes through `ImGuiInit/NewFrame/Render/ShutdownEvent` like the SDL backen
 
 ### Colour space
 
-Every colour the engine hands a backend (a rect, a texture tint, a vertex colour of `DrawGeometry()`, the clear colour) is an sRGB value, as on SDL. The swapchain and the offscreen targets are sRGB attachments that encode on write, so the backend decides once at `Initialize()` (`_linearColors = IsSrgbFormat(swapchain format)`) and the rect, texture and geometry pipelines get it as the specialization constant `kLinearize` (constant 0; `ToTarget()` in `rect.frag`, `texture.frag`, `geometry.vert`); the clear colour is made linear on the CPU (`SrgbToLinear`). Written as they were, every 2D colour came out much too light. Blending happens in linear space, so a translucent colour over another looks a little different from SDL's.
+Every colour the engine hands a backend (a rect, a texture tint, a vertex colour of `DrawGeometry()`, the clear colour) is an sRGB value, as on SDL. The swapchain and the offscreen targets are sRGB attachments that encode on write, so the backend decides once at `Initialize()` (`_linearColors = IsSrgbFormat(swapchain format)`) and the rect, texture and geometry pipelines get it as the specialization constant `kLinearize` (constant 0; `ToTarget()` in `rect.frag`, `texture.frag`, `geometry.vert`); the clear colour is made linear on the CPU (`SrgbToLinear`). Blending happens in linear space, so a translucent colour over another looks a little different from SDL's.
 
 ### ImGui colour
 
