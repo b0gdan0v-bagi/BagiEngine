@@ -1,4 +1,4 @@
-// The parts of the Workers panel built from worker.py's slower views (tools/todo/worker_insights.py) and from the
+// The parts of the Workers panel built from worker.py's slower views and from the
 // doctor and the diff of `list`: the problem lines and the diff of a worker card, the review rounds of a review card,
 // and the sections Day, Timeline and Busy files. Everything is put in as text (textContent); the timeline is inline SVG.
 // panel.js calls TodoInsights.* with `post` (vscode.postMessage).

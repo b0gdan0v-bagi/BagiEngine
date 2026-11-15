@@ -52,5 +52,5 @@ config/imgui.ini
 *.plan.md
 todo-export/
 
-# Node packages (the Railway IaC SDK of tools/todo)
+# Node packages
 node_modules/
