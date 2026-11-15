@@ -6,8 +6,7 @@
     outcome = session.act({"type": "set_count", "count": 100})
     session.shot("count-100")
     session.note("count 100 on every scene")
-    scenario_path = session.finish()
-    bugs, known = session.bugs, session.known
+    finished = session.finish()   # finished.report, finished.drafts: report.md, bugs/<id>.md
 
 Standard library only (through tools/control). The checks are in bagi_qa_checks.py; `tools/qa/CLAUDE.md` says what is checked after which call.
 A `SessionError` (the game is gone, did not answer, did not start) is raised to the script and kept in `session_errors` for the report.
@@ -16,7 +15,9 @@ The command line works on a session that was recorded (`tools/qa/CLAUDE.md`, "Re
 
     python3 tools/qa/bagi_qa.py replay --exe E [--invariants M] SESSION.jsonl
     python3 tools/qa/bagi_qa.py shrink --exe E [--invariants M] [--finding NAME] [--out FILE] [--max-probes N] SESSION.jsonl
-Exit code: 0 nothing found, 1 a finding recurs (`shrink`: and its reproduction is written), 2 a bad file or option or a finding that does not recur, 77 no executable.
+    python3 tools/qa/bagi_qa.py report SESSION_DIR      # the report of a finished session again
+    python3 tools/qa/bagi_qa.py drafts SESSION_DIR      # the bug drafts again, with the reproductions `shrink` wrote
+Exit code of replay and shrink: 0 nothing found, 1 a finding recurs (`shrink`: and its reproduction is written), 2 a bad file or option or a finding that does not recur, 77 no executable.
 """
 
 import argparse
@@ -33,6 +34,7 @@ sys.path.insert(0, str(QA_DIR.parent / "control"))
 sys.path.insert(0, str(QA_DIR))
 
 import bagi_qa_checks as checks  # noqa: E402
+import bagi_qa_report as report_module  # noqa: E402
 import png_ops  # noqa: E402
 import scenario  # noqa: E402
 from bagi_control_client import ControlError  # noqa: E402
@@ -54,6 +56,16 @@ SHOT_LABEL_UNSAFE = re.compile(r"[^A-Za-z0-9_-]+")
 SHOT_NUMBER_DIGITS = 2
 LATE_LOG_NOTE = " (shown only after the game quit: its stdout is block-buffered)"
 REPEATS_KEY = "repeats"  # details of a finding: how many more times the same name and message showed
+
+
+@dataclass
+class Finished:
+    """What `finish()` leaves for the skill to go on with: the recording, the report (`report.md`, `report.json`) and the bodies of the bug drafts (`bugs/<id>.md`)."""
+
+    scenario: Path
+    report: Path
+    report_json: Path
+    drafts: list[Path]
 
 
 @dataclass
@@ -90,7 +102,7 @@ class QaSession:
         self.refused = 0
         self._game = GameSession()
         self._launched = False
-        self._finished = False
+        self._finished: Finished | None = None
         self._state: dict[str, Any] | None = None
         self._version: int | None = None
         self._listed: tuple[int | None, list[dict[str, Any]]] | None = None
@@ -224,15 +236,24 @@ class QaSession:
         """What the charter covered, counted into the report."""
         self.notes.append(text)
 
-    def finish(self) -> Path:
-        """Quits the game, checks the log once more (a Warning may show only now), writes the recording and gives its path. Safe to call twice."""
+    def finish(self) -> Finished:
+        """Quits the game, checks the log once more (a Warning may show only now), writes the recording, the report and the bug drafts. Safe to call twice.
+
+        The drafts name the recording as their reproduction; `bagi_qa.py shrink` and `bagi_qa.py drafts` replace it by a cut one.
+        """
         if not self._launched:
             raise SessionError("no game was launched, so there is no session to finish")
-        if not self._finished:
-            self._finished = True
+        if self._finished is None:
             self._game.quit()
             self._check_log(late=True)
-        return self.scenario_path
+            try:
+                report = report_module.build_report(self)
+                markdown, data = report_module.write_report(report, self.out_dir)
+                drafts = report_module.write_drafts(report_module.make_drafts(report, self.out_dir), self.out_dir)
+            except OSError as error:
+                raise SessionError(f"cannot write the report into {self.out_dir}: {error}") from error
+            self._finished = Finished(self.scenario_path, markdown, data, drafts)
+        return self._finished
 
     def _step(self, frames: int, dt: float | None, ui: bool) -> Any:
         params: dict[str, Any] = {"frames": frames}
@@ -315,6 +336,10 @@ def build_parser() -> argparse.ArgumentParser:
     shrink = commands.add_parser("shrink", help="cut a recorded scenario down to the calls a finding needs and write it as a scenario")
     bagi_qa_repro.add_arguments(shrink, shrinking=True)
     shrink.set_defaults(run=bagi_qa_repro.command_shrink)
+    for name, run, text in (("report", report_module.command_report, "print the report of a finished session again"), ("drafts", report_module.command_drafts, "write the bug drafts of a finished session again, with the reproductions `shrink` wrote")):
+        command = commands.add_parser(name, help=text)
+        command.add_argument("session_dir", help="the out folder of the session")
+        command.set_defaults(run=run)
     return parser
 
 

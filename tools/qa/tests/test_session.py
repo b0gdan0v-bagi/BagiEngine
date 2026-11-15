@@ -33,7 +33,7 @@ def test_clean_run_finds_nothing(qa_game_exe, out_dir):
     assert session.act(NOOP).accepted
     session.reset(count=3)
     session.note("covered the counter")
-    assert session.finish() == session.scenario_path
+    assert session.finish().scenario == session.scenario_path
     assert session.findings == []
     assert session.bugs == [] and session.known == []
     assert session.notes == ["covered the counter"]
@@ -197,7 +197,7 @@ def test_a_lost_game_is_reported_and_the_session_still_finishes(qa_game_exe, out
         session.act(INC)
         session.step(1)
     assert session.session_errors
-    assert session.finish() == session.scenario_path
+    assert session.finish().scenario == session.scenario_path
     assert session.scenario_path.is_file()
 
 

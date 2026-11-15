@@ -11,7 +11,6 @@ The command line (`bagi_qa.py replay`, `bagi_qa.py shrink`) is `command_replay` 
 
 import argparse
 import dataclasses
-import re
 import sys
 import tempfile
 from dataclasses import dataclass, field
@@ -25,6 +24,7 @@ sys.path.insert(0, str(QA_DIR))
 
 import bagi_play  # noqa: E402
 import bagi_qa_checks as checks  # noqa: E402
+import bagi_qa_report as report  # noqa: E402
 import png_ops  # noqa: E402
 import scenario  # noqa: E402
 from bagi_qa import HEADLESS_FLAG, MANUAL_CLOCK_FLAG, UI_TREE_METHOD, QaSession  # noqa: E402
@@ -41,7 +41,6 @@ DEFAULT_MAX_PROBES = bagi_play.DEFAULT_MAX_PROBES
 
 QUIT_METHOD = "quit"
 NOTE_LIMIT = 300  # characters of a finding's message in the note of the written line
-NAME_UNSAFE = re.compile(r"[^A-Za-z0-9_-]+")
 TEMP_PREFIX = "bagi-qa-replay-"
 
 
@@ -282,7 +281,7 @@ def command_shrink(args: argparse.Namespace) -> int:
         name = args.finding or bugs[0].name
         if args.finding is None and len({found.name for found in bugs}) > 1:
             print(f"several findings recur ({', '.join(sorted({found.name for found in bugs}))}); shrinking the first, '{name}' (--finding names another)")
-        out = Path(args.out) if args.out else Path(args.scenario).with_name(f"{Path(args.scenario).stem}-{NAME_UNSAFE.sub('-', name).strip('-')}.jsonl")
+        out = Path(args.out) if args.out else report.repro_scenario_path(Path(args.scenario).resolve().parent, name)
         if png_ops.inside_git_work_tree(out.parent.resolve()):
             raise ReproError(f"--out {out} is inside a git work tree: a reproduction is written outside every repository")
         print(f"shrinking '{name}': {len(steps)} calls, up to {args.max_probes} probes", flush=True)
@@ -313,7 +312,7 @@ def add_arguments(parser: argparse.ArgumentParser, shrinking: bool) -> None:
     parser.add_argument("--flag", action="append", default=[], metavar="FLAG", help="a start flag for the game on top of the scenario's; repeatable")
     if shrinking:
         parser.add_argument("--finding", help="the name of the finding to shrink (default: the first one the whole scenario shows)")
-        parser.add_argument("--out", metavar="FILE", help="where the reproduction goes (default: next to the scenario, outside every git work tree)")
+        parser.add_argument("--out", metavar="FILE", help="where the reproduction goes (default: repro/<finding name>.jsonl next to the scenario, which `bagi_qa.py drafts` picks up)")
         parser.add_argument("--max-probes", type=int, default=DEFAULT_MAX_PROBES, help="game launches the cut may spend (default %(default)s)")
 
 

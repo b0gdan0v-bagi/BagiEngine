@@ -5,8 +5,9 @@ The library behind the skill `/qa` (`.claude/skills/qa/SKILL.md`): a charter scr
 | File | Purpose |
 |------|---------|
 | `bagi_qa_checks.py` | `Finding`, `Violation` and the generic checks as pure functions over control answers (no process, no I/O); the loader of a game's invariants module |
-| `bagi_qa.py` | `QaSession`, the session a charter script drives; the command line (`replay`, `shrink`) |
+| `bagi_qa.py` | `QaSession`, the session a charter script drives; the command line (`replay`, `shrink`, `report`, `drafts`) |
 | `bagi_qa_repro.py` | replay of a recorded scenario with the checks, the cut of it (`scenario_shrink.shrink`), the written reproduction |
+| `bagi_qa_report.py` | the report (`report.md`, `report.json`) and the bug drafts; never calls the todo store |
 | `tests/` | pytest (`.venv/bin/python -m pytest tools/qa/tests`); `qa_fake_game.py` is the game of the session tests (knobs by environment variable, listed in its docstring) |
 
 ## Findings
@@ -36,7 +37,7 @@ A `Violation` is `(name, message)` (a plain pair does too); `bagi_qa_checks.Viol
 
 ## The session
 
-`QaSession(out_dir, charter, invariants=None, ui_every=10)`: `out_dir` is given by the script and must be outside every git work tree (refused at construction: the recording and the pictures are never committed); `invariants` is a path or a loaded `Invariants`. `launch(exe | preset + game, extra=())` starts the game headless on the manual clock, records to `<out>/session.jsonl` (mode `minimal`), runs two frames and checks, `ui_tree` included. `finish()` quits, checks the log once more and returns the path of the recording; calling it twice is safe, and it works after a lost game.
+`QaSession(out_dir, charter, invariants=None, ui_every=10)`: `out_dir` is given by the script and must be outside every git work tree (refused at construction: the recording and the pictures are never committed); `invariants` is a path or a loaded `Invariants`. `launch(exe | preset + game, extra=())` starts the game headless on the manual clock, records to `<out>/session.jsonl` (mode `minimal`), runs two frames and checks, `ui_tree` included. `finish()` quits, checks the log once more, writes the report and the drafts and returns `Finished {scenario, report, report_json, drafts}` (paths); calling it twice gives the same result, and it works after a lost game.
 
 | Method | What it does, what is checked after it |
 |--------|----------------------------------------|
@@ -51,8 +52,16 @@ A `Violation` is `(name, message)` (a plain pair does too); `bagi_qa_checks.Viol
 
 ## Reproducing a finding
 
-`python3 tools/qa/bagi_qa.py replay|shrink --exe E [--invariants M] SESSION.jsonl` (`--preset` + `--game` instead of `--exe`; `--flag` adds a start flag; `shrink` also takes `--finding NAME`, `--out FILE`, `--max-probes N`). Exit codes: `replay` 0 nothing found (known deviations are printed and do not count), 1 findings, 2 a bad file or option, 77 no executable; `shrink` 0 nothing found, 1 the finding recurs and the file is written, 2 a bad file or option or a named finding that does not come back on the whole scenario (nothing written), 77.
+`python3 tools/qa/bagi_qa.py replay|shrink --exe E [--invariants M] SESSION.jsonl` (`--preset` + `--game` instead of `--exe`; `--flag` adds a start flag; `shrink` also takes `--finding NAME`, `--out FILE` (default `repro/<finding name>.jsonl` next to the scenario) and `--max-probes N`). Exit codes: `replay` 0 nothing found (known deviations are printed and do not count), 1 findings, 2 a bad file or option, 77 no executable; `shrink` 0 nothing found, 1 the finding recurs and the file is written, 2 a bad file or option or a named finding that does not come back on the whole scenario (nothing written), 77.
 
 - **Replay** (`replay_steps`): a fresh game from the header's flags (they must hold `--headless` and `--manual-clock`; the game must be the header's), every call sent as it was through `QaSession.replay_call` (no launch frames, no recording), the same checks after every call, the `ui_tree` after every `step`. The checks add read-only calls, which change nothing in the game. A refusal is tolerated, as in the lenient mode of `bagi_play`. A finding's `call_index` is the 1-based number of the scenario call it showed after (a late log line: the last call played).
 - **Shrink** (`shrink_finding`): the calls after the one the finding showed at are dropped, then `scenario_shrink.shrink` cuts. A probe is a fresh game and the candidate calls; it fails when a finding with the same `name` appears. The last play of the result must show the finding again, else it is "not deterministic" (an error, nothing written).
 - **The written file** (`settle`, `write_repro`, `check_written`): the expectations of the recording are replaced by those of a run of the cut calls (a cut moves versions and refusals, so the recorded ones fail on lines that have nothing to do with the finding). The finding's `expect` goes on the last line: `logClean` for a log line, a `pointers` on the canvas for a ui finding (a `ui_tree` call is added at the end when the cut dropped it), `{}` (no expectation, so the refused call fails by itself) for a listed action that was refused. A finding with `expect` None (`version_back`, a game's invariant) leaves the lines as the run gave them: the file passes under `bagi_play.py` and only `bagi_qa.py replay` reproduces it; the output says so. Before the command succeeds it plays the file with `bagi_play` and removes it when it does not fail on the last line.
+
+## Report and drafts
+
+`finish()` writes into the out folder: `session.jsonl` (the recording), `report.md` (short, for a person: charter, game, counts, what was covered, shots, bugs, known deviations, session errors), `report.json` (the same, `bagi_qa.py report DIR` prints the markdown from it again), `shots/`, `bugs/<id>.md` (the entry body in the `todo-add` form: `**Where:**`, `**What is wrong:**`, `**Steps:**`, `**Reproduction:**`) and `bugs/<id>-repro.md` (a markdown plan: the commands and the scenario in a `jsonl` block, which `read_repro_markdown` reads back). The library only writes files; filing them is the skill's step.
+
+- **One name, one bug:** findings with the same `name` make one draft (the first one is named, the count is in the body). The id is `bug-` + the words of the name and the first letters-only words of the message, at most about 40 characters, unique in the run (`-2`, ...).
+- **The reproduction in a draft** is `repro/<finding name>.jsonl` when `shrink` wrote it, else the recording up to the finding, which the text says is not cut down. After a `shrink`, `bagi_qa.py drafts DIR` writes the drafts again with the cut file.
+- **Nothing private:** paths in the files are relative to the out folder; the out folder, the home folder and the login name are replaced (`scrub`), so a draft can be pasted into the store.
