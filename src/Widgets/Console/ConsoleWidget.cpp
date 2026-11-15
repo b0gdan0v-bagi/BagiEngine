@@ -1,10 +1,13 @@
 #include "ConsoleWidget.h"
 
+#include <BECore/Control/ControlService.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/LogHistorySink.h>
 #include <BECore/Logger/LogRingBuffer.h>
 #include <BECore/Logger/LoggerManager.h>
 #include <Generated/ConsoleWidget.gen.hpp>
+#include <Widgets/Console/ConsoleCommandLine.h>
+#include <Widgets/Console/EditorLauncher.h>
 #include <Widgets/EditorLayout/EditorControls.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/ImGuiFonts.h>
@@ -22,6 +25,9 @@ namespace BECore {
         constexpr float kFilterWidthInEm = 14.0f;
         /// Closer than this to the end of the list counts as at the bottom
         constexpr float kBottomSlack = 1.0f;
+        /// The output area shows this many lines before it scrolls
+        constexpr size_t kOutputVisibleLines = 6;
+        constexpr const char* kCandidateSeparator = "  ";
 
         /// A toolbar toggle: Debug, Info, Warning, and Error with Fatal
         struct LevelGroup {
@@ -110,6 +116,7 @@ namespace BECore {
 
     bool ConsoleWidget::Initialize(IDeserializer& /*deserializer*/) {
         Subscribe<EditorCommandEvent, &ConsoleWidget::OnCommand>(this);
+        Subscribe<EditorPreferencesChangedEvent, &ConsoleWidget::OnPreferencesChanged>(this);
         _sink = CoreManager::GetLoggerManager().GetSink<LogHistorySink>();
         return true;
     }
@@ -117,6 +124,14 @@ namespace BECore {
     void ConsoleWidget::OnCommand(const EditorCommandEvent& event) {
         if (event.commandId == EditorCommandIds::kViewConsole) {
             _open = !_open;
+        }
+    }
+
+    void ConsoleWidget::OnPreferencesChanged(const EditorPreferencesChangedEvent& event) {
+        _externalEditor = event.externalEditor;
+        if (!_historyLoaded) {
+            _historyLoaded = true;
+            _session.GetHistory().Set(event.consoleHistory);
         }
     }
 
@@ -137,8 +152,10 @@ namespace BECore {
             } else {
                 DrawToolbar(*history);
                 _view.Update(*history, _filter, _paused);
-                DrawRows(*history);
+                DrawRows(*history, GetFooterHeight());
             }
+            DrawOutput();
+            DrawCommandLine();
         }
         ImGui::End();
     }
@@ -221,11 +238,18 @@ namespace BECore {
         ItemTooltip("The module the line comes from");
     }
 
-    void ConsoleWidget::DrawRows(const LogHistory& history) {
+    void ConsoleWidget::OpenSite(const char* file, uint32_t line) {
+        String error;
+        if (!LaunchEditor(_externalEditor, file, line, error)) {
+            LOG_WARNING(Format("Console: cannot open {}:{}: {}", file, line, error));
+        }
+    }
+
+    void ConsoleWidget::DrawRows(const LogHistory& history, float footerHeight) {
         const Vector<uint32_t>& rows = _view.GetRows();
         const ImGuiStyle& style = ImGui::GetStyle();
         const ImGuiPalette& palette = GetImGuiPalette();
-        ImGui::BeginChild("##consoleRows", ImVec2(0.0f, 0.0f), ImGuiChildFlags_None, ImGuiWindowFlags_HorizontalScrollbar);
+        ImGui::BeginChild("##consoleRows", ImVec2(0.0f, -footerHeight), ImGuiChildFlags_None, ImGuiWindowFlags_HorizontalScrollbar);
         if (rows.empty()) {
             EmptyState(ICON_LC_SCROLL_TEXT, history.Size() == 0 ? "No log lines yet" : "No line passes the filter");
             ImGui::EndChild();
@@ -245,7 +269,17 @@ namespace BECore {
 
                 // A selectable under the texts gives the whole row a hover highlight and a place for the menu
                 const ImVec2 rowStart = ImGui::GetCursorPos();
-                ImGui::Selectable("##row", false, ImGuiSelectableFlags_AllowOverlap);
+                const bool openable = siteFile != nullptr && IsSiteOpenable(siteFile);
+                ImGui::Selectable("##row", false, ImGuiSelectableFlags_AllowOverlap | ImGuiSelectableFlags_AllowDoubleClick);
+                if (openable) {
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+                        if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+                            OpenSite(siteFile, record.site.line);
+                        }
+                    }
+                    ItemTooltip("Double-click to open");
+                }
                 if (ImGui::BeginPopupContextItem("##rowMenu")) {
                     if (ImGui::MenuItem(ICON_LC_COPY " Copy line")) {
                         String text = Format("{} {} {}", record.time, ShortName(record.level), record.message);
@@ -253,6 +287,12 @@ namespace BECore {
                             text += Format("  {}:{}", FileNameOf(siteFile), record.site.line);
                         }
                         ImGui::SetClipboardText(text.c_str());
+                    }
+                    if (ImGui::MenuItem(ICON_LC_EXTERNAL_LINK " Open file", nullptr, false, openable)) {
+                        OpenSite(siteFile, record.site.line);
+                    }
+                    if (!openable) {
+                        ItemTooltip(siteFile == nullptr ? "This line has no source file" : "The source file is not an absolute path that exists on this machine");
                     }
                     ImGui::EndPopup();
                 }
@@ -287,6 +327,144 @@ namespace BECore {
             ImGui::SetScrollHereY(1.0f);
         }
         ImGui::EndChild();
+    }
+
+    bool ConsoleWidget::HasCandidates() const {
+        return !_candidates.empty() && _candidatesFor == _commandBuffer;
+    }
+
+    float ConsoleWidget::GetFooterHeight() const {
+        const ImGuiStyle& style = ImGui::GetStyle();
+        float height = style.ItemSpacing.y + ImGui::GetFrameHeight();
+        if (HasCandidates()) {
+            height += ImGui::GetTextLineHeightWithSpacing();
+        }
+        const size_t lines = _session.GetOutput().Size();
+        if (lines != 0) {
+            height += static_cast<float>(std::min(lines, kOutputVisibleLines)) * ImGui::GetTextLineHeightWithSpacing() + style.WindowPadding.y * 2.0f + style.ItemSpacing.y;
+        }
+        return height;
+    }
+
+    void ConsoleWidget::DrawOutput() {
+        const ConsoleOutput& output = _session.GetOutput();
+        const size_t count = output.Size();
+        if (count == 0) {
+            return;
+        }
+        const ImGuiStyle& style = ImGui::GetStyle();
+        const ImGuiPalette& palette = GetImGuiPalette();
+        const float height = static_cast<float>(std::min(count, kOutputVisibleLines)) * ImGui::GetTextLineHeightWithSpacing() + style.WindowPadding.y * 2.0f;
+        ImGui::BeginChild("##consoleOutput", ImVec2(0.0f, height), ImGuiChildFlags_Borders, ImGuiWindowFlags_HorizontalScrollbar);
+        ImGuiListClipper clipper;
+        clipper.Begin(static_cast<int>(count));
+        while (clipper.Step()) {
+            for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; ++i) {
+                const ConsoleOutputLine& line = output.At(static_cast<size_t>(i));
+                ImVec4 color = palette.text;
+                switch (line.kind) {
+                    case ConsoleOutputKind::Result:
+                        color = palette.success;
+                        break;
+                    case ConsoleOutputKind::Error:
+                        color = palette.error;
+                        break;
+                    case ConsoleOutputKind::Note:
+                        color = palette.textDisabled;
+                        break;
+                    default:
+                        break;
+                }
+                if (line.kind == ConsoleOutputKind::Input) {
+                    TextColored(color, "> ");
+                    ImGui::SameLine(0.0f, 0.0f);
+                }
+                TextColored(color, line.text.c_str(), line.text.c_str() + line.text.size());
+            }
+        }
+        clipper.End();
+        if (output.GetVersion() != _outputVersion) {
+            _outputVersion = output.GetVersion();
+            ImGui::SetScrollHereY(1.0f);
+        }
+        ImGui::EndChild();
+    }
+
+    void ConsoleWidget::RefreshMethods() {
+        const ControlService& service = CoreManager::GetControlService();
+        if (!_methodsKnown || service.GetMethodsVersion() != _methodsVersion) {
+            _methods = service.GetMethods();
+            _methodsVersion = service.GetMethodsVersion();
+            _methodsKnown = true;
+        }
+    }
+
+    void ConsoleWidget::DrawCommandLine() {
+        RefreshMethods();
+        if (HasCandidates()) {
+            TextColored(GetImGuiPalette().textDisabled, _candidates.c_str(), _candidates.c_str() + _candidates.size());
+        }
+
+        constexpr ImGuiInputTextFlags kFlags = ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackCompletion | ImGuiInputTextFlags_CallbackHistory;
+        ImGui::SetNextItemWidth(-(ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x));
+        const bool entered = ImGui::InputTextWithHint("##consoleCommand", "ping, step frames=3, list_methods ... (Tab completes)", _commandBuffer, sizeof(_commandBuffer), kFlags,
+                                                      &ConsoleWidget::OnInputCallback, this);
+        ItemTooltip("Enter runs a control API command: method, method {\"a\":1} or method key=value. Tab completes, Up and Down walk the history");
+        if (entered) {
+            const Optional<String> command = _session.Submit(CoreManager::GetControlService(), _commandBuffer);
+            if (command) {
+                ConsoleCommandSubmittedEvent::Emit(*command);
+                _commandBuffer[0] = '\0';  // a line that did not parse stays, to be fixed
+            }
+            ImGui::SetKeyboardFocusHere(-1);
+        }
+        ImGui::SameLine();
+        if (IconButton(ICON_LC_ERASER, "Clear output", "consoleClearOutput")) {
+            _session.GetOutput().Clear();
+        }
+    }
+
+    namespace {
+
+        void ReplaceText(ImGuiInputTextCallbackData& data, StringView text) {
+            data.DeleteChars(0, data.BufTextLen);
+            data.InsertChars(0, text.data(), text.data() + text.size());
+        }
+
+    }  // namespace
+
+    void ConsoleWidget::Complete(ImGuiInputTextCallbackData& data) {
+        const StringView text(data.Buf, static_cast<size_t>(data.BufTextLen));
+        const ConsoleCompletion completion = CompleteConsoleCommand(text, _methods);
+        if (StringView(completion.text) != text) {
+            ReplaceText(data, completion.text);
+        }
+        _candidates.clear();
+        for (const String& candidate : completion.candidates) {
+            if (!_candidates.empty()) {
+                _candidates += kCandidateSeparator;
+            }
+            _candidates += candidate;
+        }
+        _candidatesFor.assign(data.Buf, static_cast<size_t>(data.BufTextLen));
+    }
+
+    void ConsoleWidget::WalkHistory(ImGuiInputTextCallbackData& data) {
+        ConsoleCommandHistory& history = _session.GetHistory();
+        const Optional<StringView> text = data.EventKey == ImGuiKey_UpArrow ? history.Previous(StringView(data.Buf, static_cast<size_t>(data.BufTextLen))) : history.Next();
+        if (text) {
+            ReplaceText(data, *text);
+        }
+    }
+
+    int ConsoleWidget::OnInputCallback(ImGuiInputTextCallbackData* data) {
+        auto* self = static_cast<ConsoleWidget*>(data->UserData);
+        if (data->EventFlag == ImGuiInputTextFlags_CallbackCompletion) {
+            self->Complete(*data);
+        } else if (data->EventFlag == ImGuiInputTextFlags_CallbackHistory) {
+            self->WalkHistory(*data);
+        }
+        return 0;
     }
 
 }  // namespace BECore
