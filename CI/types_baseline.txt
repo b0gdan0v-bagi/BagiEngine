@@ -22,11 +22,7 @@ src/Modules/BECore/Text/FontLoader.cpp fstream 1
 src/Modules/BECore/UI/UIWebCompiler.cpp stable-sort 1
 src/Modules/BECore/UI/UIWebDocumentLoader.cpp fstream 1
 src/Modules/BECore/UI/UIWebDocumentLoader.cpp stringstream 1
-src/Modules/RemoteControl/src/RemoteControl/Tls/TlsStream.h function 1
-src/Modules/RemoteControl/src/RemoteControl/WebSocketConnection.h function 1
-src/Modules/RemoteControl/src/RemoteControl/WebSocketListener.h function 3
 src/Modules/RmlUiHost/src/RmlUiHost/RmlUiFileInterface.cpp fstream 1
-src/Modules/RoomServer/src/RoomServer/RoomServerArgs.h function 1
 src/Widgets/EditorLayout/CommandFilter.cpp stable-sort 1
 src/Widgets/EditorLayout/LayoutStore.cpp directory-iterator 1
 src/Widgets/EditorLayout/UserFileIo.cpp fstream 2
@@ -67,9 +63,7 @@ tests/BECore/UIInputTest.cpp function 1
 tests/BECore/UIThemeResolveTest.cpp function 1
 tests/BECore/UIWebTest.cpp fstream 1
 tests/BECore/UIWebTest.cpp sto 1
-tests/BECore/WebSocketClientTest.cpp function 1
 tests/BECore/WebSocketListenerTest.cpp sto 1
-tests/BECore/WebSocketTestClient.h function 1
 tests/BECore/WebSocketTestClient.h sto 1
 tests/Common/ContentFilesCheck.h directory-iterator 1
 tests/Common/MigrationTwin.h directory-iterator 1

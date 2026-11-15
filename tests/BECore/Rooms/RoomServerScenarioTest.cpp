@@ -292,7 +292,7 @@ namespace BECore::Tests {
         for (const auto& client : table) {
             players.emplace_back(*client);
         }
-        const WaitPump pumpTheHand = [&] {
+        const auto pumpTheHand = [&] {
             for (HandPlayer& player : players) {
                 player.Pump();
             }

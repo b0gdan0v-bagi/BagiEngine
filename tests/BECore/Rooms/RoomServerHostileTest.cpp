@@ -71,7 +71,7 @@ namespace BECore::Tests {
             }
 
             /// The pump of the waits of an attack: the good table plays from them, so its hand is under way the whole time
-            WaitPump PumpTheTable(Clients& table) {
+            auto PumpTheTable(Clients& table) {
                 players.clear();
                 for (const auto& client : table) {
                     players.emplace_back(*client);
@@ -195,7 +195,7 @@ namespace BECore::Tests {
         Clients table;
         ASSERT_NO_FATAL_FAILURE(OpenTable(port, "cards", kHumansAtFullTable, table));
         table[0]->Start();
-        const WaitPump pumpTheHand = PumpTheTable(table);
+        const auto pumpTheHand = PumpTheTable(table);
 
         Vector<WebSocketTestClient> silent;
         for (int i = 0; i < kSilentSockets; ++i) {
@@ -219,7 +219,7 @@ namespace BECore::Tests {
         Clients table;
         ASSERT_NO_FATAL_FAILURE(OpenTable(port, "cards", kHumansAtFullTable, table));
         table[0]->Start();
-        const WaitPump pumpTheHand = PumpTheTable(table);
+        const auto pumpTheHand = PumpTheTable(table);
 
         Clients flooders;
         for (int i = 0; i < kFloodSockets; ++i) {

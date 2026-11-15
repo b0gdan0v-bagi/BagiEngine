@@ -610,4 +610,37 @@ namespace BECore::Tests {
         EXPECT_TRUE(StringView(refused).starts_with("HTTP/1.1 503 ")) << refused;
     }
 
+    TEST_F(WebSocketListenerTest, AHandlerThatOwnsAMoveOnlyCaptureRunsForAConnectionAndIsDestroyedOnceWithTheListener) {
+        struct Sentinel {
+            explicit Sentinel(std::atomic<int>& target) : destroyed(target) {}
+            ~Sentinel() {
+                destroyed.fetch_add(1);
+            }
+            std::atomic<int>& destroyed;
+            std::atomic<int> messages{0};
+        };
+        std::atomic<int> destroyed{0};
+        {
+            WebSocketHandler handler;
+            handler.onMessage = [owned = MakeUnique<Sentinel>(destroyed)](const WebSocketHandler::ConnectionPtr& connection, WebSocketMessage message) {
+                owned->messages.fetch_add(1);
+                connection->QueueText(message.GetText());
+                return true;
+            };
+            listener = MakeUnique<WebSocketListener>(WebSocketListenerSettings{}, std::move(handler));
+        }
+        const auto started = listener->Start(0);
+        ASSERT_TRUE(started.has_value());
+        auto client = Connect(*started);
+        ASSERT_TRUE(client.has_value());
+        client->SendText("owned");
+        const auto frame = client->WaitForFrame();
+        ASSERT_TRUE(frame.has_value());
+        EXPECT_EQ(frame->payload, "owned");
+        EXPECT_EQ(destroyed.load(), 0) << "the handler is alive while the listener is";
+
+        listener.reset();
+        EXPECT_EQ(destroyed.load(), 1);
+    }
+
 }  // namespace BECore::Tests

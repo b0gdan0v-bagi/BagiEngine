@@ -178,9 +178,10 @@ namespace BECore {
 
     void WebSocketListener::RunConnection(const ConnectionPtr& connection) {
         Vector<uint8_t> pendingBytes;
-        AdmitClientFn admit;
+        const auto admitByAddress = [this, &connection](const String& clientAddress) { return AdmitByClientAddress(*connection, clientAddress); };
+        Optional<AdmitClientFn> admit;
         if (_settings.policy.trustedProxyHops != 0) {
-            admit = [this, &connection](const String& clientAddress) { return AdmitByClientAddress(*connection, clientAddress); };
+            admit.emplace(admitByAddress);
         }
         if (connection->Handshake(_settings.policy, _settings.handshakeTimeout, pendingBytes, admit)) {
             LOG_INFO("{}: a client connected"_format(_settings.logName));

@@ -5,13 +5,13 @@
 #include <BECore/Threading/Thread.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/FunctionRef.h>
+#include <BECore/Utils/MoveOnlyFunction.h>
 #include <RemoteControl/WebSocketConnection.h>
 #include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
-#include <functional>
 
 namespace BECore {
 
@@ -68,13 +68,13 @@ namespace BECore {
         using ConnectionPtr = SharedPtr<WebSocketConnection>;
 
         /// The handshake succeeded and the connection takes frames
-        std::function<void(const ConnectionPtr&)> onOpen;
+        MoveOnlyFunction<void(const ConnectionPtr&)> onOpen;
 
         /// A text message of the client (a ping, a pong, a close, binary data and protocol errors are the listener's). False ends the
         /// connection: queue a close frame first if the client is to hear why
-        std::function<bool(const ConnectionPtr&, WebSocketMessage)> onMessage;
+        MoveOnlyFunction<bool(const ConnectionPtr&, WebSocketMessage)> onMessage;
 
-        std::function<void(const ConnectionPtr&)> onClosed;
+        MoveOnlyFunction<void(const ConnectionPtr&)> onClosed;
     };
 
     /**

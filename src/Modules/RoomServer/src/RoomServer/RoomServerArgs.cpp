@@ -221,7 +221,7 @@ namespace BECore {
         return args;
     }
 
-    std::expected<RoomServerArgs, String> ReadRoomServerEnvironment(const RoomServerEnvironmentLookup& lookup) {
+    std::expected<RoomServerArgs, String> ReadRoomServerEnvironment(RoomServerEnvironmentLookup lookup) {
         RoomServerArgs args;
         const auto read = [&lookup](const char* name) -> StringView {
             const char* text = lookup(name);
