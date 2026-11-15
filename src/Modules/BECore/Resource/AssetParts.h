@@ -32,4 +32,36 @@ namespace BECore {
      */
     std::expected<UniquePtr<IDeserializer>, String> OpenAssetPart(StringView assetPath, AssetPurpose part);
 
+    /// The parts of one whole asset file as documents, empty where the file has no such part
+    struct AssetPartTexts {
+        Optional<String> sim;
+        Optional<String> visual;
+        Optional<String> editor;
+
+        const Optional<String>& Get(AssetPurpose part) const;
+    };
+
+    /**
+     * @brief Cut a whole asset document into one document per part present
+     *
+     * The root of each document is the part element, so it is what the loader reads from a split file. Pure text work
+     * (pugixml only): no engine service, no file. Comments and declarations of the whole file are not carried over.
+     *
+     * @return The texts, or a message when the text does not parse, a child of the root is no part, a part is repeated
+     *         or there is no part at all.
+     */
+    std::expected<AssetPartTexts, String> SplitAssetXml(StringView xml);
+
+    /**
+     * @brief Write the split files of the whole asset @p virtualAssetPath (the packer step)
+     *
+     * The files are named by `SplitPartPath` and land next to the source, or in @p outputVirtualFolder (same file names)
+     * when it is given; the folder is created inside its mount point when it does not exist yet. A part that is gone from
+     * the source has its old split file removed, so the files mirror the source. Nothing is touched when the source does
+     * not split. The files are newer than the source, so `OpenAssetPart` prefers them.
+     *
+     * @return false (and an error in the log) when the source does not read or split or a file cannot be written.
+     */
+    bool SplitAssetFile(StringView virtualAssetPath, StringView outputVirtualFolder = {});
+
 }  // namespace BECore

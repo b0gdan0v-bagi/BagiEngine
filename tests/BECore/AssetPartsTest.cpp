@@ -1,6 +1,7 @@
 #include <BECore/AssetPartsTest.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/BinarySerializer.h>
+#include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/Resource/AssetParts.h>
 #include <BECore/Resource/ResourceManager.h>
 #include <Common/EngineEnvironment.h>
@@ -73,6 +74,22 @@ namespace BECore::Tests {
 
         static String VirtualPath(const char* fileName) {
             return Format("{}/{}", kMountPoint, fileName);
+        }
+
+        bool FileExists(const char* fileName) const {
+            return std::filesystem::exists(_dir / fileName);
+        }
+
+        /// The serialized form of an object, to compare what two loads produced
+        template <typename T>
+        static String Serialized(const Optional<T>& object) {
+            XmlSerializer serializer;
+            if (object) {
+                serializer.BeginObject(ReflectionTraits<T>::name);
+                object->Serialize(serializer);
+                serializer.EndObject();
+            }
+            return serializer.SaveToString();
         }
 
         template <typename T>
@@ -223,6 +240,117 @@ namespace BECore::Tests {
         ASSERT_TRUE(result.has_value());
         ASSERT_TRUE(result->has_value());
         EXPECT_EQ((*result)->value, kSimValue);
+    }
+
+    TEST(AssetPartsSplit, EachPartPresentBecomesADocumentRootedAtThePartElement) {
+        const auto texts = SplitAssetXml(R"(<?xml version="1.0"?><asset>
+            <!-- a comment of the whole file -->
+            <editor><PartEditorProbe value="3"/></editor>
+            <sim><PartSimProbe value="1"/></sim>
+        </asset>)");
+
+        ASSERT_TRUE(texts.has_value()) << texts.error().c_str();
+        ASSERT_TRUE(texts->sim.has_value());
+        EXPECT_EQ(texts->sim->rfind("<sim>", 0), 0u);
+        EXPECT_NE(texts->sim->find("PartSimProbe"), String::npos);
+        EXPECT_EQ(texts->sim->find("PartEditorProbe"), String::npos);
+        EXPECT_FALSE(texts->visual.has_value());
+        ASSERT_TRUE(texts->Get(AssetPurpose::Editor).has_value());
+        EXPECT_EQ(texts->Get(AssetPurpose::Editor)->rfind("<editor>", 0), 0u);
+        EXPECT_EQ(texts->Get(AssetPurpose::Editor), texts->editor);
+        EXPECT_EQ(texts->sim->find("comment"), String::npos);
+    }
+
+    TEST(AssetPartsSplit, ADocumentThatDoesNotSplitIsAnErrorThatNamesTheCause) {
+        const auto unknown = SplitAssetXml(R"(<asset><sim><PartSimProbe/></sim><audio/></asset>)");
+        ASSERT_FALSE(unknown.has_value());
+        EXPECT_NE(unknown.error().find("'audio'"), String::npos);
+
+        const auto twice = SplitAssetXml(R"(<asset><sim/><sim/></asset>)");
+        ASSERT_FALSE(twice.has_value());
+        EXPECT_NE(twice.error().find("'sim'"), String::npos);
+
+        EXPECT_FALSE(SplitAssetXml("<asset/>").has_value());
+        EXPECT_FALSE(SplitAssetXml("<asset><!-- no part --></asset>").has_value());
+        EXPECT_FALSE(SplitAssetXml("<asset><sim>").has_value());
+        EXPECT_FALSE(SplitAssetXml("").has_value());
+    }
+
+    TEST_F(AssetPartsTest, SplitFilesLoadTheSameObjectsAsTheWholeFile) {
+        WriteFile("gem.asset.xml", kWholeXml);
+        const String simWhole = Serialized(Load<PartSimProbe>("gem.asset.xml", AssetPurpose::Sim));
+        const String visualWhole = Serialized(Load<PartVisualProbe>("gem.asset.xml", AssetPurpose::Visual));
+        const String editorWhole = Serialized(Load<PartEditorProbe>("gem.asset.xml", AssetPurpose::Editor));
+
+        ASSERT_TRUE(SplitAssetFile(VirtualPath("gem.asset.xml")));
+        EXPECT_TRUE(FileExists("gem.sim.xml"));
+        EXPECT_TRUE(FileExists("gem.visual.xml"));
+        EXPECT_TRUE(FileExists("gem.editor.xml"));
+        // With the whole file gone, only the split files can serve
+        std::filesystem::remove(_dir / "gem.asset.xml");
+
+        EXPECT_EQ(Serialized(Load<PartSimProbe>("gem.asset.xml", AssetPurpose::Sim)), simWhole);
+        EXPECT_EQ(Serialized(Load<PartVisualProbe>("gem.asset.xml", AssetPurpose::Visual)), visualWhole);
+        EXPECT_EQ(Serialized(Load<PartEditorProbe>("gem.asset.xml", AssetPurpose::Editor)), editorWhole);
+        EXPECT_NE(simWhole, visualWhole);
+    }
+
+    TEST_F(AssetPartsTest, TheSplitFilesAreTheOnesTheLoaderPrefersAfterAnEdit) {
+        WriteFile("gem.asset.xml", kWholeXml);
+        ASSERT_TRUE(SplitAssetFile(VirtualPath("gem.asset.xml")));
+
+        WriteFile("gem.asset.xml", R"(<asset><sim><PartSimProbe value="7"/></sim></asset>)");
+        // The edit made the split files stale: the whole file serves until it is split again
+        Age("gem.sim.xml", kOlder);
+        EXPECT_EQ(Load<PartSimProbe>("gem.asset.xml", AssetPurpose::Sim)->value, 7);
+
+        ASSERT_TRUE(SplitAssetFile(VirtualPath("gem.asset.xml")));
+        EXPECT_EQ(Load<PartSimProbe>("gem.asset.xml", AssetPurpose::Sim)->value, 7);
+        EXPECT_FALSE(Load<PartVisualProbe>("gem.asset.xml", AssetPurpose::Visual).has_value());
+    }
+
+    TEST_F(AssetPartsTest, AResplitRemovesTheFileOfAPartThatIsGone) {
+        WriteFile("gem.asset.xml", kWholeXml);
+        ASSERT_TRUE(SplitAssetFile(VirtualPath("gem.asset.xml")));
+        ASSERT_TRUE(FileExists("gem.editor.xml"));
+
+        WriteFile("gem.asset.xml", R"(<asset><sim><PartSimProbe value="1"/></sim><visual><PartVisualProbe value="2"/></visual></asset>)");
+        ASSERT_TRUE(SplitAssetFile(VirtualPath("gem.asset.xml")));
+
+        EXPECT_TRUE(FileExists("gem.sim.xml"));
+        EXPECT_TRUE(FileExists("gem.visual.xml"));
+        EXPECT_FALSE(FileExists("gem.editor.xml"));
+    }
+
+    TEST_F(AssetPartsTest, TheOutputFolderTakesTheFilesAndTheSourceFolderNone) {
+        WriteFile("gem.asset.xml", kWholeXml);
+        std::filesystem::create_directories(_dir / "packed");
+
+        ASSERT_TRUE(SplitAssetFile(VirtualPath("gem.asset.xml"), VirtualPath("packed")));
+        ASSERT_TRUE(SplitAssetFile(VirtualPath("gem.asset.xml"), VirtualPath("made/deep")));
+
+        EXPECT_TRUE(FileExists("packed/gem.sim.xml"));
+        EXPECT_TRUE(FileExists("packed/gem.visual.xml"));
+        EXPECT_TRUE(FileExists("made/deep/gem.editor.xml"));
+        EXPECT_FALSE(FileExists("gem.sim.xml"));
+        EXPECT_FALSE(SplitAssetFile(VirtualPath("gem.asset.xml"), "NoSuchMountPoint/out"));
+    }
+
+    TEST_F(AssetPartsTest, ASourceThatDoesNotSplitLeavesTheFilesAlone) {
+        WriteFile("gem.asset.xml", kWholeXml);
+        ASSERT_TRUE(SplitAssetFile(VirtualPath("gem.asset.xml")));
+
+        WriteFile("gem.asset.xml", "<asset><audio/></asset>");
+        EXPECT_FALSE(SplitAssetFile(VirtualPath("gem.asset.xml")));
+        EXPECT_TRUE(FileExists("gem.sim.xml"));
+        EXPECT_TRUE(FileExists("gem.visual.xml"));
+
+        EXPECT_FALSE(SplitAssetFile(VirtualPath("missing.asset.xml")));
+        WriteFile("gem.xml", kWholeXml);
+        EXPECT_FALSE(SplitAssetFile(VirtualPath("gem.xml")));
+        WriteFile("broken.asset.xml", "<asset><sim>");
+        EXPECT_FALSE(SplitAssetFile(VirtualPath("broken.asset.xml")));
+        EXPECT_FALSE(FileExists("broken.sim.xml"));
     }
 
 }  // namespace BECore::Tests
