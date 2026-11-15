@@ -1,4 +1,4 @@
-// The slower views of the panel (worker.py busy, day, timeline, review-stats: tools/todo/worker_insights.py), read on a
+// The slower views of the panel (worker.py busy, day, timeline, review-stats), read on a
 // timer of their own and after a write to the store, and the actions around them: the doctor's fixes, the merge train,
 // the end of the day, Dispatch, and the push to a phone (todoWorkers.pushUrl).
 "use strict";

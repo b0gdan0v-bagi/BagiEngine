@@ -169,7 +169,7 @@ function activate(context) {
     // The hook: todo.py rewrites ~/.claude/todo/changed.json (TODO_CHANGED_FILE) after every write the store
     // accepts (a claim, a review, a close, a plan put, ...), from a worker's loop, a merge or the owner's CLI.
     // A change reads the workers and the Todo list tab again at once; the timer stays for what moves without a
-    // write (the sessions, their last steps and tokens) and for edits a person makes in Vikunja.
+    // write (the sessions, their last steps and tokens) and for edits a person makes on the pages of the store.
     function watchStoreChanges() {
         const file = process.env.TODO_CHANGED_FILE || path.join(os.homedir(), ".claude", "todo", "changed.json");
         const dir = path.dirname(file);
