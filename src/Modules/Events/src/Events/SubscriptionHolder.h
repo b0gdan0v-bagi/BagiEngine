@@ -1,12 +1,12 @@
 #pragma once
 
 #include <BECore/Types/Types.h>
-#include <entt/entt.hpp>
+#include <Events/EventChannel.h>
 
 namespace BECore {
 
     /**
-     * @brief RAII holder for event subscriptions using entt::scoped_connection
+     * @brief RAII holder for event subscriptions using EventConnection
      *
      * This class manages event subscriptions and automatically unsubscribes
      * when the object is destroyed. Inherit from this class to get automatic
@@ -60,11 +60,11 @@ namespace BECore {
          * called manually if needed.
          */
         void UnsubscribeAll() {
-            _connections.clear();  // scoped_connection destructor handles disconnect
+            _connections.clear();  // each connection disconnects in its destructor
         }
 
     private:
-        Vector<entt::scoped_connection> _connections;
+        Vector<EventConnection> _connections;
     };
 
 }  // namespace BECore

@@ -1,6 +1,8 @@
 #include "SceneLoader.h"
 
+#include <BECore/Config/ConfigManager.h>
 #include <BECore/Config/ContentVersion.h>
+#include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/OpenDeserializer.h>
 #include <BECore/Reflection/XmlDeserializer.h>

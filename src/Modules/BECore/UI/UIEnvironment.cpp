@@ -1,5 +1,6 @@
 #include "UIEnvironment.h"
 
+#include <BECore/Config/ConfigManager.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/MainWindow/IMainWindow.h>
 

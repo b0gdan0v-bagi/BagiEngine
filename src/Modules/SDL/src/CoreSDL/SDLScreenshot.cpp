@@ -3,6 +3,7 @@
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Renderer/IRenderer.h>
 #include <BECore/Utils/Base64.h>
 #include <BECore/Utils/ScopeGuard.h>
 #include <SDL3/SDL.h>

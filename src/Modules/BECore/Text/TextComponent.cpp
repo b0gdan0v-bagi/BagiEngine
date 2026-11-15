@@ -2,6 +2,7 @@
 
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Renderer/IRenderer.h>
+#include <BECore/Resource/ResourceManager.h>
 #include <BECore/Scene/Components/TransformComponent.h>
 #include <BECore/Scene/SceneNode.h>
 #include <BECore/Text/FontAtlasLibrary.h>

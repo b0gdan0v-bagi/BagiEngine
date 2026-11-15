@@ -1,5 +1,6 @@
 #include "ApplicationConfig.h"
 
+#include <BECore/Config/ConfigManager.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <Generated/ApplicationConfig.gen.hpp>
 

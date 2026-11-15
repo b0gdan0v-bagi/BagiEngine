@@ -1,5 +1,6 @@
 #include "ComponentInspectors.h"
 
+#include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Input/ActionsLibrary.h>
 #include <BECore/Reflection/ClassMeta.h>

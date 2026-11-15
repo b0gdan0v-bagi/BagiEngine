@@ -1,5 +1,6 @@
 #include "StressGame.h"
 
+#include <BECore/Application/CommandLine.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Scene/SceneManager.h>
 #include <Games/GameManager.h>

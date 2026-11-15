@@ -1,7 +1,9 @@
+#include <BECore/Animation/TweenManager.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Time/GamePause.h>
+#include <BECore/Time/Time.h>
 #include <BECore/TimeTest.h>
 #include <Common/EngineEnvironment.h>
 #include <TaskSystem/Awaitables.h>

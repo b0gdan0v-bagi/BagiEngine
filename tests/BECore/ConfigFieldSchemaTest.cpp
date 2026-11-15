@@ -1,3 +1,4 @@
+#include <BECore/Config/ConfigManager.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/ILogSink.h>
 #include <BECore/Reflection/AbstractFactory.h>

@@ -1,10 +1,12 @@
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Renderer/RendererManager.h>
 #include <BECore/Scene/Components/QuadRendererComponent.h>
 #include <BECore/Scene/Components/SpriteRendererComponent.h>
 #include <BECore/Scene/Components/TransformComponent.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneRenderData.h>
 #include <Common/RecordingRenderer.h>
+#include <entt/entt.hpp>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {

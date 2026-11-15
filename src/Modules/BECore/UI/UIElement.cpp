@@ -2,6 +2,8 @@
 
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Renderer/IRenderer.h>
+#include <BECore/Time/Time.h>
+#include <BECore/UI/UIEnvironment.h>
 #include <BECore/UI/UIInputClicker.h>
 #include <BECore/UI/UISettings.h>
 #include <BECore/UI/UITextComponent.h>

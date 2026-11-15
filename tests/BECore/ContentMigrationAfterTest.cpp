@@ -1,9 +1,11 @@
+#include <BECore/Input/UIInput.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIControl.h>
 #include <BECore/UI/UIInputClicker.h>
 #include <BECore/UI/UISegmented.h>
 #include <BECore/UI/UISliderComponent.h>
 #include <BECore/UI/UIToggleComponent.h>
+#include <BECore/UI/UIVars.h>
 #include <Common/MigrationTwin.h>
 #include <Common/UILayoutMatrix.h>
 #include <cstdio>

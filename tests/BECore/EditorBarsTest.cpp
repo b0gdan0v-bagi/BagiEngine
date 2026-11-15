@@ -1,5 +1,6 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
+#include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Scene/SceneManager.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>

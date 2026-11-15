@@ -1,6 +1,8 @@
+#include <BECore/Clipboard/Clipboard.h>
 #include <BECore/Clipboard/FakeClipboard.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
+#include <BECore/Time/GamePause.h>
 #include <Common/Printers.h>
 #include <Events/ClipboardEvents.h>
 #include <gtest/gtest.h>

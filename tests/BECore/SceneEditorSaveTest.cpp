@@ -3,6 +3,7 @@
 #include <BECore/Reflection/ClassMeta.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
+#include <BECore/Renderer/RendererManager.h>
 #include <BECore/Scene/Components/QuadRendererComponent.h>
 #include <BECore/Scene/Components/SpriteRendererComponent.h>
 #include <BECore/Scene/Components/TransformComponent.h>

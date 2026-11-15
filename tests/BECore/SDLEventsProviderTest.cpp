@@ -1,6 +1,10 @@
+#include <BECore/Clipboard/Clipboard.h>
 #include <BECore/Clipboard/FakeClipboard.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Input/UIInput.h>
 #include <BECore/MainWindow/IMainWindow.h>
+#include <BECore/MainWindow/MainWindowManager.h>
+#include <BECore/Time/GamePause.h>
 #include <Common/Printers.h>
 #include <CoreSDL/SDLEvents.h>
 #include <CoreSDL/SDLEventsProvider.h>

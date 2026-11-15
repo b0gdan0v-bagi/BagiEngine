@@ -1,7 +1,9 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/XmlDeserializer.h>
+#include <BECore/Renderer/RendererManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/UI/UICanvasScaler.h>
+#include <BECore/UI/UIEnvironment.h>
 #include <BECore/UI/UIInputClicker.h>
 #include <BECore/UI/UIScreenContent.h>
 #include <BECore/UI/UIStrings.h>

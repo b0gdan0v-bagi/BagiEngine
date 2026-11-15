@@ -4,6 +4,7 @@
 #include <BECore/UI/UISegmented.h>
 #include <BECore/UI/UIStateLook.h>
 #include <BECore/UI/UITextComponent.h>
+#include <BECore/UI/UIVars.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/RecordingRenderer.h>
 #include <gtest/gtest.h>

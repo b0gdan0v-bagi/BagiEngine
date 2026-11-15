@@ -3,6 +3,7 @@
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Time/Time.h>
 #include <Events/ApplicationEvents.h>
 
 namespace BECore {

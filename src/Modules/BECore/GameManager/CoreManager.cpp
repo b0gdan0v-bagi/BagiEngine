@@ -7,6 +7,7 @@
 #include <BECore/Control/ControlBuiltins.h>
 #include <BECore/Logger/LoggerManager.h>
 #include <BECore/Logger/OutputSink.h>
+#include <BECore/MainWindow/IMainWindow.h>
 #include <BECore/Profiler/ProfilerControl.h>
 #include <BECore/Scene/SceneLoader.h>
 #include <BECore/Scene/SceneManager.h>

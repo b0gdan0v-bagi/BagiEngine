@@ -1,4 +1,5 @@
 #include <BECore/Control/Json.h>
+#include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <Events/ApplicationEvents.h>
 #include <Stress/Components/StressRunComponent.h>
 #include <Stress/RampController.h>

@@ -1,4 +1,5 @@
 #include <BECore/Application/RunMode.h>
+#include <BECore/Config/ConfigManager.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>

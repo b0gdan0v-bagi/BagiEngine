@@ -1,5 +1,6 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/XmlDeserializer.h>
+#include <BECore/Renderer/RendererManager.h>
 #include <BECore/Scene/Components/SpriteFit.h>
 #include <BECore/Scene/Components/SpriteRendererComponent.h>
 #include <BECore/Scene/Scene.h>

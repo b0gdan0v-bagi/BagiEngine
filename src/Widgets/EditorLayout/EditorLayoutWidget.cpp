@@ -1,8 +1,11 @@
 #include "EditorLayoutWidget.h"
 
+#include <BECore/Control/ControlService.h>
+#include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Time/GamePause.h>
+#include <BECore/Widgets/WidgetManager.h>
 #include <Events/ApplicationEvents.h>
 #include <Events/RenderEvents.h>
 #include <Generated/EditorLayoutWidget.gen.hpp>

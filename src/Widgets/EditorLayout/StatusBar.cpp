@@ -1,6 +1,8 @@
 #include "StatusBar.h"
 
+#include <BECore/Control/ControlService.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <Games/GameManager.h>

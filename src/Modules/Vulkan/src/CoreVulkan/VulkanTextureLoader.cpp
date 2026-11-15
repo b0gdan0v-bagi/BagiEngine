@@ -1,6 +1,8 @@
 #include "VulkanTextureLoader.h"
 
+#include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Renderer/IRenderer.h>
 #include <CoreVulkan/VulkanRendererBackend.h>
 #include <CoreVulkan/VulkanTexture.h>
 #include <CoreVulkan/VulkanTextureUpload.h>

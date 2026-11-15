@@ -1,5 +1,7 @@
 #include "ConfigDeserializerTest.h"
 
+#include <BECore/Config/ConfigManager.h>
+#include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/BinarySerializer.h>
 #include <BECore/Reflection/OpenDeserializer.h>

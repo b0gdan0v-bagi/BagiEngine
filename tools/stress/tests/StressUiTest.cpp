@@ -1,5 +1,7 @@
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/UI/UICanvasComponent.h>
+#include <BECore/UI/UIStrings.h>
+#include <BECore/UI/UIVars.h>
 #include <Stress/Components/StressUiComponent.h>
 #include <gtest/gtest.h>
 #include <tests/StressSceneFixture.h>

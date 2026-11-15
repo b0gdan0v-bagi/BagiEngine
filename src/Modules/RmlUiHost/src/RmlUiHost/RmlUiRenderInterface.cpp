@@ -3,6 +3,7 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Renderer/ITexture.h>
+#include <BECore/Resource/ResourceManager.h>
 
 namespace BECore {
 

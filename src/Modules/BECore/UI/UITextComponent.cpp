@@ -1,6 +1,7 @@
 #include "UITextComponent.h"
 
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Time/Time.h>
 #include <BECore/UI/UIElement.h>
 #include <BECore/UI/UIThemes.h>
 #include <Generated/UITextComponent.gen.hpp>
