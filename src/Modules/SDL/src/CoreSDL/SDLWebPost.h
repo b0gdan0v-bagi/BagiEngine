@@ -22,7 +22,6 @@ namespace BECore {
     /// The longest body a post may carry (the limit of the server's endpoint)
     inline constexpr size_t kWebPostMaxBodyBytes = 1024 * 1024;
 
-    /// The longest path a post may name
     inline constexpr size_t kWebPostMaxPathBytes = 2048;
 
     /// The longest content type a post may name (a real one is a few dozen bytes)
