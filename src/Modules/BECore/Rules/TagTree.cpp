@@ -72,7 +72,8 @@ namespace BECore {
             return {PatternKind::Tag, pattern};
         }
 
-        /// The one copy of the lookup rules: `Tree` has `Count()`, `Find(path)` giving `Optional<TagId>` and `Range(id)`.
+        /// The one copy of the lookup rules, for TagTree and BakedTagTree: `Tree` has `Count()`, `Find(path)` giving `Optional<TagId>`
+        /// and `Range(id)`.
         template <class Tree>
         std::expected<TagId, String> ResolveTagIn(const Tree& tree, StringView path) {
             if (String problem = CheckPath(path); !problem.empty()) {
@@ -229,6 +230,68 @@ namespace BECore {
     }
 
     std::expected<TagRange, String> TagTree::Resolve(StringView pattern) const {
+        return ResolveIn(*this, pattern);
+    }
+
+    void TagTree::FillBaked(BakedTagTree& out) const {
+        ASSERT(_baked, "TagTree::FillBaked before Bake");
+        memset(&out, 0, sizeof(BakedTagTree));
+        size_t blobUsed = 0;
+        for (size_t i = 0; i < _byId.size(); ++i) {
+            const Node& node = _nodes[_byId[i]];
+            out.parent[i] = node.parent == 0 ? kNoTag : _nodes[node.parent].id;
+            out.subtreeEnd[i] = node.last;
+            out.nameOffset[i] = static_cast<uint16_t>(blobUsed);
+            memcpy(out.names + blobUsed, node.path.data(), node.path.size());
+            blobUsed += node.path.size() + 1;  // the NUL is there: the block starts zeroed
+        }
+        out.count = static_cast<uint16_t>(_byId.size());
+        out.nameBlobSize = static_cast<uint16_t>(blobUsed);
+        ASSERT(blobUsed == _nameBytes, "TagTree: the name blob does not match the counted bytes");
+    }
+
+    Optional<TagId> BakedTagTree::Find(StringView path) const {
+        for (TagId tag = 0; tag < count; ++tag) {
+            if (Name(tag) == path) {
+                return tag;
+            }
+        }
+        return std::nullopt;
+    }
+
+    TagId BakedTagTree::Parent(TagId tag) const {
+        return tag < count ? parent[tag] : kNoTag;
+    }
+
+    TagRange BakedTagTree::Range(TagId tag) const {
+        return tag < count ? TagRange{tag, subtreeEnd[tag]} : TagRange{};
+    }
+
+    TagRange BakedTagTree::DescendantRange(TagId tag) const {
+        return tag < count ? TagRange{static_cast<TagId>(tag + 1), subtreeEnd[tag]} : TagRange{};
+    }
+
+    uint32_t BakedTagTree::Depth(TagId tag) const {
+        uint32_t depth = 0;
+        for (TagId id = tag; id < count; id = parent[id]) {
+            ++depth;
+        }
+        return depth;
+    }
+
+    StringView BakedTagTree::Name(TagId tag) const {
+        if (tag >= count) {
+            return {};
+        }
+        const size_t end = tag + 1 < count ? nameOffset[tag + 1] : nameBlobSize;
+        return StringView{names + nameOffset[tag], end - 1 - nameOffset[tag]};
+    }
+
+    std::expected<TagId, String> BakedTagTree::ResolveTag(StringView path) const {
+        return ResolveTagIn(*this, path);
+    }
+
+    std::expected<TagRange, String> BakedTagTree::Resolve(StringView pattern) const {
         return ResolveIn(*this, pattern);
     }
 
