@@ -17,7 +17,7 @@ namespace BECore {
      *
      * Main thread only, like the scene state; `CoreManager` owns one and ticks it once per frame. A test makes its own and calls
      * `Advance(dt)` with a fake frame time. The order of callbacks, the cancel rules and the waiters are in `Animation/CLAUDE.md`, "Rules"
-     * (1 to 10; the tests pin them).
+     * (1 to 10; the tests pin them; rule 16 for an endless `Play`).
      *
      * The destructor drops the tweens like `Clear`: no callbacks, the surviving handles read Cancelled. Destroying the manager from
      * inside one of its callbacks is not supported.

@@ -14,7 +14,7 @@ namespace BECore {
      *
      * Pure maths, no manager and no clock: the owner calls `Evaluate(time)` with the time since the start (or `Advance(dt)` with the
      * time since the last call, for a run of any length); `TweenManager::Play` runs
-     * one as a tween. What `Evaluate`, `Advance`, `Repeat`, `Yoyo` and the stop check guarantee is in `Animation/CLAUDE.md`, "Rules" (11 to 15).
+     * one as a tween. What `Evaluate`, `Advance`, `Repeat`, `Yoyo` and the stop check guarantee is in `Animation/CLAUDE.md`, "Rules" (11 to 16).
      *
      * **Building.** Every clip has a start and a length on the local time line; the duration of one iteration is the latest end.
      * `Append` starts a clip when the timeline so far ends, `Join` with the last clip added (by any call), `Insert` at an absolute
