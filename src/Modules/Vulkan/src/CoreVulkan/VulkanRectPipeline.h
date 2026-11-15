@@ -32,7 +32,7 @@ namespace BECore {
         VulkanRectPipeline(const VulkanRectPipeline&) = delete;
         VulkanRectPipeline& operator=(const VulkanRectPipeline&) = delete;
 
-        bool Initialize(VkDevice device, VkRenderPass renderPass);
+        bool Initialize(VkDevice device, VkRenderPass renderPass, bool linearizeColors);
         void Destroy(VkDevice device);
 
         // @p extent is the framebuffer size, @p scissor the clip in framebuffer pixels (the whole extent when nothing is clipped)

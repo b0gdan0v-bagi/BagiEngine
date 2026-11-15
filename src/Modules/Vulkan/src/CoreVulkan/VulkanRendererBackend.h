@@ -200,7 +200,8 @@ namespace BECore {
         VkImage _lastOffscreenImage = VK_NULL_HANDLE;
 
         // Clear color set by SetRenderDrawColorEvent (used for the swapchain pass)
-        VkClearColorValue _clearColor = {{0.0f, 0.0f, 0.0f, 1.0f}};
+        VkClearColorValue _clearColor = {{0.0f, 0.0f, 0.0f, 1.0f}};  // in the colour space of the attachment (_linearColors)
+        bool _linearColors = false;  // the swapchain is sRGB: every colour of the engine (an sRGB value) is made linear before it is written
     };
 
 }  // namespace BECore

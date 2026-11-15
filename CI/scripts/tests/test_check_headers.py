@@ -163,6 +163,17 @@ def test_keep_flags_drops_include_pch_and_output_flags():
     assert kept == ["-DX=1", "-D", "Y", "-I/a", "-isystem", "/b", "-std=gnu++2b", "-arch", "arm64", "-isysroot", "/sdk", "-fPIC"]
 
 
+def test_a_windows_command_keeps_its_backslashes():
+    entry = {"command": 'C:\\PROGRA~2\\LLVM\\bin\\CLANG_~1.EXE -DX=1 -I"C:/a b" "-isystemD:\\x y" -DQ=\\"v\\" -c D:\\src\\a.cpp'}
+    assert headers.split_command(entry, windows=True) == [
+        "C:\\PROGRA~2\\LLVM\\bin\\CLANG_~1.EXE", "-DX=1", "-IC:/a b", "-isystemD:\\x y", '-DQ="v"', "-c", "D:\\src\\a.cpp"]
+
+
+def test_a_posix_command_unquotes_and_unescapes():
+    entry = {"command": '/usr/bin/clang++ -DX=1 -I"/a b" -I/c\\ d -c /src/a.cpp'}
+    assert headers.split_command(entry, windows=False) == ["/usr/bin/clang++", "-DX=1", "-I/a b", "-I/c d", "-c", "/src/a.cpp"]
+
+
 def test_the_flags_come_from_the_nearest_translation_unit(tmp_path):
     entries = [
         entry(tmp_path, "src/Modules/A/a.cpp", "/usr/bin/clang++ -DA=1 -c a.cpp"),
@@ -201,10 +212,11 @@ clang = shutil.which("clang++")
 
 
 @pytest.mark.skipif(clang is None, reason="no clang++ on PATH")
-def test_real_clang_a_header_using_size_t_without_an_include_fails(tmp_path, capsys):
-    write(tmp_path, "src/A/NoInclude.h", "#pragma once\nstruct S { size_t count; };\n")
-    write(tmp_path, "src/A/WithInclude.h", "#pragma once\n#include <cstddef>\nstruct T { std::size_t count; };\n")
-    build = make_build(tmp_path, [entry(tmp_path, "src/A/a.cpp", f"{clang} -std=c++20 -c a.cpp")])
+def test_real_clang_a_header_using_uint64_t_without_an_include_fails(tmp_path, capsys):
+    # uint64_t, not size_t: clang targeting MSVC knows size_t without an include
+    write(tmp_path, "src/A/NoInclude.h", "#pragma once\nstruct S { uint64_t count; };\n")
+    write(tmp_path, "src/A/WithInclude.h", "#pragma once\n#include <cstdint>\nstruct T { std::uint64_t count; };\n")
+    build = make_build(tmp_path, [entry(tmp_path, "src/A/a.cpp", f"\"{clang}\" -std=c++20 -c a.cpp")])
     code, out = run(tmp_path, ["--build", str(build), "--jobs", "2"], headers.compile_header, capsys)
     assert code == 1
     assert "new: src/A/NoInclude.h" in out
