@@ -8,7 +8,7 @@ The client of the rooms (the entry `network-rooms` of the todo store, slice 3 of
 
 | File | Purpose |
 |------|---------|
-| `RoomTransport.h` | `IRoomTransport` (`Open`, `SendText`, `Close`, `Abort`, `PollEvent`), `RoomTransportEvent` (`Opened`, `Text`, `Closed`), `RoomTransportFactory`, `MakeDefaultRoomTransport()` |
+| `RoomTransport.h` | `IRoomTransport` (`Open`, `SendText`, `Close`, `Abort`, `PollEvent`), `RoomTransportEvent` (`Opened`, `Text`, `Closed`), `RoomTransportFactory` (a `MoveOnlyFunction`, so `RoomClientSettings` is move-only), `MakeDefaultRoomTransport()` |
 | `NativeRoomTransport.h/.cpp` | the desktop transport: a `WebSocketClient` (RemoteControl) behind `IRoomTransport`; empty without `BE_WITH_REMOTE_CONTROL` |
 | `EmscriptenRoomTransport.h/.cpp` | the browser transport: the page's WebSocket (`emscripten_websocket_*`) behind `IRoomTransport`; empty without `PLATFORM_WEB` |
 | `RoomTransportFactory.cpp` | `MakeDefaultRoomTransport()`: the transport of this platform, nullptr where there is none |

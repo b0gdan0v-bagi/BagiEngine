@@ -191,7 +191,7 @@ namespace BECore::Tests {
     TEST_F(RoomServerHostileTest, SocketsThatNeverHandshakeAreAllCutWhileATablePlaysOn) {
         RoomServerSettings settings = MakeSettings();
         settings.maxConnectionsPerAddress = kSilentSockets + kHumansAtFullTable + 8;
-        const uint16_t port = StartServer(settings);
+        const uint16_t port = StartServer(std::move(settings));
         Clients table;
         ASSERT_NO_FATAL_FAILURE(OpenTable(port, "cards", kHumansAtFullTable, table));
         table[0]->Start();
@@ -215,7 +215,7 @@ namespace BECore::Tests {
         settings.maxConnectionsPerAddress = kFloodSockets + kHumansAtFullTable + 8;
         // The flood is the kind that would trip the per-connection limits one by one; the table must not notice any of it
         settings.hub.maxRoomsPerAddress = 6;
-        const uint16_t port = StartServer(settings);
+        const uint16_t port = StartServer(std::move(settings));
         Clients table;
         ASSERT_NO_FATAL_FAILURE(OpenTable(port, "cards", kHumansAtFullTable, table));
         table[0]->Start();
@@ -264,7 +264,7 @@ namespace BECore::Tests {
         RoomServerSettings settings = MakeSettings();
         settings.hub.addressJoinBurst = kAddressBudget;
         settings.hub.addressJoinRefill = std::chrono::milliseconds(0);
-        const uint16_t port = StartServer(settings);
+        const uint16_t port = StartServer(std::move(settings));
         Clients table;
         ASSERT_NO_FATAL_FAILURE(OpenTable(port, "cards", kHumansOfAPair, table));
         const String realCode = table[0]->roomCode;

@@ -113,7 +113,7 @@ namespace BECore::Tests {
 
         RoomServerSettings settings = MakeSettings();
         settings.port = port;
-        RoomWebSocketServer other(registry, settings);
+        RoomWebSocketServer other(registry, std::move(settings));
         const auto taken = other.Start();
         ASSERT_FALSE(taken.has_value());
         EXPECT_EQ(taken.error().code, RemoteControlErrors::kListenFailed);
@@ -224,7 +224,7 @@ namespace BECore::Tests {
     TEST_F(RoomWebSocketServerTest, ConnectionOverTheHubLimitIsClosedWithTryAgainLater) {
         RoomServerSettings settings = MakeSettings();
         settings.hub.maxConnections = 2;
-        const uint16_t port = StartServer(settings);
+        const uint16_t port = StartServer(std::move(settings));
 
         auto first = RoomSocketClient::Connect(port);
         auto second = RoomSocketClient::Connect(port);
@@ -292,7 +292,7 @@ namespace BECore::Tests {
         settings.bind = SocketBind::AnyAddress;
         settings.policy.loopbackOnly = false;
         settings.policy.allowedOrigins = {"https://good.example"};
-        const uint16_t port = StartServer(settings);
+        const uint16_t port = StartServer(std::move(settings));
 
         auto good = WebSocketTestClient::Open(port);
         ASSERT_TRUE(good.has_value());
@@ -308,7 +308,7 @@ namespace BECore::Tests {
     TEST_F(RoomWebSocketServerTest, PerAddressLimitRefusesTheNextConnection) {
         RoomServerSettings settings = MakeSettings();
         settings.maxConnectionsPerAddress = 2;
-        const uint16_t port = StartServer(settings);
+        const uint16_t port = StartServer(std::move(settings));
 
         auto first = RoomSocketClient::Connect(port);
         auto second = RoomSocketClient::Connect(port);
@@ -356,7 +356,7 @@ namespace BECore::Tests {
         settings.maxOutboxBytes = 4 * 1024;
         settings.hub.rateBurst = 10'000'000;  // the flood below must reach the hub
         settings.hub.ratePerSecond = 10'000'000.0;
-        const uint16_t port = StartServer(settings);
+        const uint16_t port = StartServer(std::move(settings));
 
         auto slow = RoomSocketClient::Connect(port);
         auto fast = RoomSocketClient::Connect(port);
@@ -877,7 +877,7 @@ namespace BECore::Tests {
     TEST_F(RoomWebSocketServerTest, FifthRoomFromOneAddressIsRefusedAndTheFourStayIntact) {
         RoomServerSettings settings = MakeSettings();
         settings.hub.maxRoomsPerAddress = 4;
-        const uint16_t port = StartServer(settings);
+        const uint16_t port = StartServer(std::move(settings));
 
         Vector<RoomSocketClient> hosts;
         for (int i = 0; i < 4; ++i) {
@@ -905,7 +905,7 @@ namespace BECore::Tests {
         RoomServerSettings settings = MakeSettings();
         settings.maxConnectionsPerAddress = 0;
         settings.hub.maxRoomsPerAddress = 1;
-        const uint16_t port = StartServer(settings);
+        const uint16_t port = StartServer(std::move(settings));
         Vector<RoomSocketClient> hosts;
         for (int i = 0; i < 3; ++i) {
             auto host = MakeHost(port);
@@ -920,7 +920,7 @@ namespace BECore::Tests {
         settings.clock = clock.AsFunction();
         settings.pingInterval = 0ms;
         settings.hub.lobbyTimeout = 1min;
-        const uint16_t port = StartServer(settings);
+        const uint16_t port = StartServer(std::move(settings));
         auto host = MakeHost(port);
         ASSERT_TRUE(host.has_value());
         auto guest = RoomSocketClient::Connect(port);
@@ -947,7 +947,7 @@ namespace BECore::Tests {
         RoomServerSettings settings = MakeSettings();
         settings.policy.trustedProxyHops = 1;
         settings.hub.maxRoomsPerAddress = 4;
-        const uint16_t port = StartServer(settings);
+        const uint16_t port = StartServer(std::move(settings));
 
         Vector<RoomSocketClient> hosts;
         for (const char* header : {"X-Forwarded-For: 203.0.113.1\r\n", "X-Forwarded-For: 203.0.113.2\r\n"}) {
@@ -972,7 +972,7 @@ namespace BECore::Tests {
     TEST(ManualClockTest, AFunctionMadeFromTheClockOutlivesIt) {
         auto clock = MakeUnique<ManualClock>();
         const RoomTime before = clock->Now();
-        const std::function<RoomTime()> now = clock->AsFunction();
+        const MoveOnlyFunction<RoomTime()> now = clock->AsFunction();
         clock->Advance(5s);
         clock.reset();
 

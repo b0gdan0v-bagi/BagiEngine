@@ -7,7 +7,8 @@
 
 namespace BECore::Tests {
 
-    /// What the wire judge saw on the texts one client received (over all its connections)
+    /// What the wire judge saw on the texts one client received (over all its connections). Held by `SharedPtr` because the transports
+    /// the client makes and the test both use it.
     struct WireJudgeLog {
         size_t texts = 0;
         /// The seat the texts so far named (`joined`, `view`); -1 before the first and after `left`

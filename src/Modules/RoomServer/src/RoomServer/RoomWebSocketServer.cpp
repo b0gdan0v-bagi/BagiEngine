@@ -45,9 +45,9 @@ namespace BECore {
     }
 
     RoomWebSocketServer::RoomWebSocketServer(const SeatedGameRegistry& registry, RoomServerSettings settings)
-        : _registry(registry), _settings(std::move(settings)), _passAddress(_settings.maxConnectionsPerAddress != 0 || _settings.policy.trustedProxyHops != 0),
-          _clock(_settings.clock ? _settings.clock : std::function<RoomTime()>([] { return std::chrono::steady_clock::now(); })), _random(_settings.random ? _settings.random : MakeSecureRandom()),
-          _listener(MakeListenerSettings(_settings), MakeHandler()) {}
+        : _registry(registry), _clock(settings.clock ? std::move(settings.clock) : MoveOnlyFunction<RoomTime()>([] { return std::chrono::steady_clock::now(); })),
+          _random(settings.random ? std::move(settings.random) : MakeSecureRandom()), _settings(std::move(settings)),
+          _passAddress(_settings.maxConnectionsPerAddress != 0 || _settings.policy.trustedProxyHops != 0), _listener(MakeListenerSettings(_settings), MakeHandler()) {}
 
     RoomWebSocketServer::~RoomWebSocketServer() {
         Stop();
@@ -188,11 +188,12 @@ namespace BECore {
 
     void RoomWebSocketServer::RunHub() {
         // The hub lives here and nowhere else: only this thread can reach it
-        RoomHub hub(_registry, _settings.hub, _random,
-                    HubSink{
-                        .send = [this](ConnectionId connection, String text) { SendTo(connection, std::move(text)); },
-                        .close = [this](ConnectionId connection, String reason) { CloseConnection(connection, reason); },
-                    });
+        RoomHub hub(
+            _registry, _settings.hub, [this] { return _random(); },
+            HubSink{
+                .send = [this](ConnectionId connection, String text) { SendTo(connection, std::move(text)); },
+                .close = [this](ConnectionId connection, String reason) { CloseConnection(connection, reason); },
+            });
 
         LivenessMap liveness;
         RoomServerStats lastLoggedStats;

@@ -219,13 +219,16 @@ namespace BECore::Tests {
                 return WaitUntil([this] { Pump(); }, std::forward<Condition>(condition), limit);
             }
 
-            /// The first player hosts a room of @p game, the others join it; everybody is in the room afterwards, nobody has started
-            void MakeTable(StringView game, size_t humans, const Json& options = Json::object(), RoomClientSettings guestSettings = MakeClientSettings()) {
+            /// The first player hosts a room of @p game, the others join it (each with fresh settings that @p tuneGuest may change);
+            /// everybody is in the room afterwards, nobody has started
+            void MakeTable(StringView game, size_t humans, const Json& options = Json::object(), FunctionRef<void(RoomClientSettings&)> tuneGuest = [](RoomClientSettings&) {}) {
                 Player& host = AddPlayer();
                 ASSERT_TRUE(host.client->Host(url, game, "P0", options).has_value());
                 ASSERT_TRUE(WaitFor([&] { return host.client->IsInRoom(); }, kShortLimit));
                 for (size_t i = 1; i < humans; ++i) {
-                    Player& guest = AddPlayer(guestSettings);
+                    RoomClientSettings guestSettings = MakeClientSettings();
+                    tuneGuest(guestSettings);
+                    Player& guest = AddPlayer(std::move(guestSettings));
                     ASSERT_TRUE(guest.client->Join(url, host.client->GetRoom(), Format("P{}", i).c_str()).has_value());
                     ASSERT_TRUE(WaitFor([&] { return guest.client->IsInRoom(); }, kShortLimit));
                 }
@@ -326,10 +329,10 @@ namespace BECore::Tests {
         StartServer(std::move(settings));
 
         // Seat 0 moves first, and seat 1 does not play until the test lets it: the hand stalls at seat 1 when the client is cut
-        RoomClientSettings slowReturn = MakeClientSettings();
-        slowReturn.backoffStart = 1500ms;
-        slowReturn.backoffMax = 1500ms;
-        ASSERT_NO_FATAL_FAILURE(MakeTable("cards", 2, Json::object({{"firstSeat", 0}}), slowReturn));
+        ASSERT_NO_FATAL_FAILURE(MakeTable("cards", 2, Json::object({{"firstSeat", 0}}), [](RoomClientSettings& settings) {
+            settings.backoffStart = 1500ms;
+            settings.backoffMax = 1500ms;
+        }));
         Player& host = *players[0];
         Player& away = *players[1];
         const String token = away.client->GetSession().token;
@@ -393,7 +396,7 @@ namespace BECore::Tests {
         impatient.reconnectGiveUp = 700ms;
         impatient.backoffStart = 50ms;
         impatient.backoffMax = 100ms;
-        Player& host = AddPlayer(impatient);
+        Player& host = AddPlayer(std::move(impatient));
         ASSERT_TRUE(host.client->Host(url, "cards", "P0").has_value());
         ASSERT_TRUE(WaitFor([&] { return host.client->IsInRoom(); }, kShortLimit));
 
@@ -472,7 +475,7 @@ namespace BECore::Tests {
         StartServer();
         RoomClientSettings quick = MakeClientSettings();
         quick.pingInterval = 40ms;
-        Player& player = AddPlayer(quick);
+        Player& player = AddPlayer(std::move(quick));
         ASSERT_TRUE(player.client->Host(url, "cards", "P0").has_value());
         ASSERT_TRUE(WaitFor([&] { return player.tap.CountType(RoomMessageTypes::kPong.data()) >= 3; }, kShortLimit)) << "no pong came back";
         EXPECT_EQ(player.client->GetState(), RoomClientState::InRoom);

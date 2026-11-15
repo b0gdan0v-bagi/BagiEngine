@@ -1,12 +1,12 @@
 #pragma once
 
 #include <BECore/Types/Types.h>
+#include <BECore/Utils/MoveOnlyFunction.h>
 #include <Rooms/RateLimiter.h>
 #include <Rooms/Room.h>
 #include <Rooms/RoomLimits.h>
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 
 namespace BECore {
 
@@ -14,10 +14,10 @@ namespace BECore {
     /// thread; a sink must not call back into the hub.
     struct HubSink {
         /// A text message for a connection
-        std::function<void(ConnectionId, String)> send;
+        MoveOnlyFunction<void(ConnectionId, String)> send;
         /// The hub is done with the connection: the transport closes it (and need not report it with OnDisconnected, which would be
         /// ignored). The reason is for the log: `rate_limited`, `too_many_failed_joins`, `idle`, `replaced`, `server_full`.
-        std::function<void(ConnectionId, String)> close;
+        MoveOnlyFunction<void(ConnectionId, String)> close;
     };
 
     /**
@@ -40,6 +40,10 @@ namespace BECore {
     public:
         /// @param registry Must outlive the hub; rooms create their games through it.
         RoomHub(const SeatedGameRegistry& registry, RoomHubSettings settings, RandomFn random, HubSink sink);
+
+        /// The rooms draw from the hub's one RandomFn through a pointer to it, so the hub stays where it was made.
+        RoomHub(const RoomHub&) = delete;
+        RoomHub& operator=(const RoomHub&) = delete;
 
         /// A transport connection opened. Over the connection limit it is closed at once (`server_full`).
         /// @param address The client's address as an opaque string, empty when unknown (then no per-address rule applies to the

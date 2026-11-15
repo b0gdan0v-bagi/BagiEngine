@@ -13,7 +13,7 @@
 
 namespace BECore::Tests {
 
-    /// One connection between a client and the hub of a HubWorld
+    /// One connection between a client and the hub of a HubWorld. Held by `SharedPtr` because the client's transport and the world both use it.
     struct HubLink {
         ConnectionId id = 0;
         /// The hub knows the connection and nobody has closed it

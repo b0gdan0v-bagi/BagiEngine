@@ -19,7 +19,7 @@ namespace BECore::Tests {
             _state->elapsedMs += step.count();
         }
 
-        [[nodiscard]] std::function<RoomTime()> AsFunction() {
+        [[nodiscard]] MoveOnlyFunction<RoomTime()> AsFunction() {
             return [state = _state] { return state->Now(); };
         }
 

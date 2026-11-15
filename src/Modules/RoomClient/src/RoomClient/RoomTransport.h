@@ -2,9 +2,9 @@
 
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
+#include <BECore/Utils/MoveOnlyFunction.h>
 #include <cstdint>
 #include <expected>
-#include <functional>
 
 namespace BECore {
 
@@ -65,7 +65,7 @@ namespace BECore {
     };
 
     /// Makes a transport for one connection; RoomClient asks for a new one for every connection
-    using RoomTransportFactory = std::function<UniquePtr<IRoomTransport>()>;
+    using RoomTransportFactory = MoveOnlyFunction<UniquePtr<IRoomTransport>()>;
 
     /// The transport of this platform, or nullptr where there is none (a build without sockets that is not the browser)
     [[nodiscard]] UniquePtr<IRoomTransport> MakeDefaultRoomTransport();

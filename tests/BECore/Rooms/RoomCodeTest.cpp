@@ -10,9 +10,8 @@ namespace BECore::Tests {
 
         /// Always the same words, in order, then the last one again
         RandomFn MakeFixed(Vector<uint64_t> words) {
-            auto index = MakeShared<size_t>(0);
-            return [words = std::move(words), index]() -> uint64_t {
-                const size_t at = *index < words.size() ? (*index)++ : words.size() - 1;
+            return [words = std::move(words), index = size_t{0}]() mutable -> uint64_t {
+                const size_t at = index < words.size() ? index++ : words.size() - 1;
                 return words[at];
             };
         }
@@ -144,6 +143,14 @@ namespace BECore::Tests {
         EXPECT_NE(GenerateToken(random), GenerateToken(random));
         const RandomFn other = MakeSecureRandom();
         EXPECT_NE(GenerateToken(random), GenerateToken(other));
+    }
+
+    TEST(RoomCodeTest, ASecureRandomMovedToAnotherHolderKeepsDrawing) {
+        RandomFn first = MakeSecureRandom();
+        const RandomFn second = MakeSecureRandom();
+        const RandomFn moved = std::move(first);
+        EXPECT_FALSE(static_cast<bool>(first));  // a moved-from function is empty by contract
+        EXPECT_NE(GenerateToken(moved), GenerateToken(second));
     }
 
     TEST(RoomCodeTest, WellFormedTokenCases) {

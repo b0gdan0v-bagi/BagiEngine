@@ -483,7 +483,7 @@ namespace BECore::Tests {
     TEST_F(RoomClientTest, AConnectionThatEndsInTheRoomWithoutReconnectForgetsTheRoomAndKeepsTheSession) {
         RoomClientSettings settings;
         settings.reconnect = false;
-        MakeClient(settings);
+        MakeClient(std::move(settings));
         FakeLink& link = EnterAsHost();
         Receive(link, View(2));
         link.PushClosed(1006, "the server went away");
@@ -568,7 +568,7 @@ namespace BECore::Tests {
             FakeTransports transports;
             RoomClientSettings settings;
             settings.transportFactory = transports.Factory();
-            auto client = MakeUnique<RoomClient>(settings);
+            auto client = MakeUnique<RoomClient>(std::move(settings));
             ASSERT_TRUE(client->Host(kUrl, "cards", "Ann").has_value());
             client.reset();
             EXPECT_TRUE(transports.Last().destroyed);
@@ -577,7 +577,7 @@ namespace BECore::Tests {
             FakeTransports transports;
             RoomClientSettings settings;
             settings.transportFactory = transports.Factory();
-            auto client = MakeUnique<RoomClient>(settings);
+            auto client = MakeUnique<RoomClient>(std::move(settings));
             ASSERT_TRUE(client->Host(kUrl, "cards", "Ann").has_value());
             transports.Last().PushOpened();
             transports.Last().PushText(MakeJoinedMessage(kRoom, 1, kToken, 0, true));
@@ -590,7 +590,7 @@ namespace BECore::Tests {
             FakeTransports transports;
             RoomClientSettings settings;
             settings.transportFactory = transports.Factory();
-            auto client = MakeUnique<RoomClient>(settings);
+            auto client = MakeUnique<RoomClient>(std::move(settings));
             ASSERT_TRUE(client->Host(kUrl, "cards", "Ann").has_value());
             transports.Last().closeAnswers = false;
             client->Disconnect();
@@ -979,7 +979,7 @@ namespace BECore::Tests {
     TEST_F(RoomClientTest, TheClientGivesUpWhenTheConnectionDoesNotComeBackInTime) {
         RoomClientSettings settings;
         settings.reconnectGiveUp = seconds(5);
-        MakeClient(settings);
+        MakeClient(std::move(settings));
         FakeLink& first = EnterAsHost();
         Lose(first);
         // Attempts at 0.5 s, 1.5 s and 3.5 s all fail; the next would be at 7.5 s
@@ -1004,7 +1004,7 @@ namespace BECore::Tests {
     TEST_F(RoomClientTest, TheGiveUpTimeAlsoCutsAnAttemptThatIsUnderWay) {
         RoomClientSettings settings;
         settings.reconnectGiveUp = seconds(5);
-        MakeClient(settings);
+        MakeClient(std::move(settings));
         FakeLink& first = EnterAsHost();
         Lose(first);
         Advance(seconds(4));

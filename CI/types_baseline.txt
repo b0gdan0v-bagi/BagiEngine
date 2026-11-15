@@ -22,18 +22,11 @@ src/Modules/BECore/Text/FontLoader.cpp fstream 1
 src/Modules/BECore/UI/UIWebCompiler.cpp stable-sort 1
 src/Modules/BECore/UI/UIWebDocumentLoader.cpp fstream 1
 src/Modules/BECore/UI/UIWebDocumentLoader.cpp stringstream 1
-src/Modules/Games/src/Games/SeatedGameRegistry.h function 1
 src/Modules/RemoteControl/src/RemoteControl/Tls/TlsStream.h function 1
 src/Modules/RemoteControl/src/RemoteControl/WebSocketConnection.h function 1
 src/Modules/RemoteControl/src/RemoteControl/WebSocketListener.h function 3
 src/Modules/RmlUiHost/src/RmlUiHost/RmlUiFileInterface.cpp fstream 1
-src/Modules/RoomClient/src/RoomClient/RoomTransport.h function 1
 src/Modules/RoomServer/src/RoomServer/RoomServerArgs.h function 1
-src/Modules/RoomServer/src/RoomServer/RoomServerSettings.h function 1
-src/Modules/RoomServer/src/RoomServer/RoomWebSocketServer.cpp function 1
-src/Modules/RoomServer/src/RoomServer/RoomWebSocketServer.h function 1
-src/Modules/Rooms/src/Rooms/RoomHub.h function 2
-src/Modules/Rooms/src/Rooms/RoomTypes.h function 1
 src/Widgets/EditorLayout/CommandFilter.cpp stable-sort 1
 src/Widgets/EditorLayout/LayoutStore.cpp directory-iterator 1
 src/Widgets/EditorLayout/UserFileIo.cpp fstream 2
@@ -57,8 +50,6 @@ tests/BECore/ParticleCaptureTest.cpp fstream 1
 tests/BECore/ProfilerTest.cpp fstream 1
 tests/BECore/ReaderLimitsTest.cpp fstream 1
 tests/BECore/ReflectionTest.cpp fstream 1
-tests/BECore/Rooms/ManualClock.h function 1
-tests/BECore/Rooms/RoomWebSocketServerTest.cpp function 1
 tests/BECore/Save/SaveGameFilesTest.cpp directory-iterator 1
 tests/BECore/Save/SaveGameFilesTest.cpp fstream 7
 tests/BECore/Save/SaveStorageTest.cpp fstream 1

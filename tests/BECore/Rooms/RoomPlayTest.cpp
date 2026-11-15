@@ -18,7 +18,7 @@ namespace BECore::Tests {
         /// A room over the fake game, and the way to look at the game the room made (the truth, for the leak check)
         struct TestRoom {
             Room room;
-            SharedPtr<FakeSeatedGame*> game;
+            SharedPtr<FakeSeatedGame*> game;  // shared: the factory inside the room fills it, the test reads it
             Vector<RoomMemberJoined> members;
 
             const FakeSeatedGame& Game() const {
