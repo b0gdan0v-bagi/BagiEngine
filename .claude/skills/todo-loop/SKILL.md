@@ -84,7 +84,7 @@ A stacked branch whose parent is still unmerged takes no base ("Stacked branches
 
 ## Screenshots: before and after pictures of a visible change
 
-Opt-in per slice, and only where the game's `.claude/rules/qa-project.md` has a `## Screenshots` set (`tools/shots/CLAUDE.md`). The architect writes `**Shots:**` and `**Shots expect:**` in the slice plan for a visible change; the conductor takes `before` in step 4, the reviewer takes `after` and reads `diff.txt` in step 5 (`todo-reviewer.md`, check 7); developers take none. The folder is `~/.claude/plans/todo-loop-<plan id>-shots/` (a through slice K ≥ 2 has its own, taken at its `Slice start`). It informs and never gates: a failed capture is a line in the report, not a stop. A remarks round takes none, and neither does size S (no architect, so no `**Shots:**` line).
+Opt-in per slice, and only where the game's `.claude/rules/qa-project.md` (the template is the engine's file of that name) has a `## Screenshots` set (`tools/shots/CLAUDE.md`). The architect writes `**Shots:**` and `**Shots expect:**` in the slice plan for a visible change; the conductor takes `before` in step 4, the reviewer takes `after` and reads `diff.txt` in step 5 (`todo-reviewer.md`, check 7); developers take none. The folder is `~/.claude/plans/todo-loop-<plan id>-shots/` (a through slice K ≥ 2 has its own, taken at its `Slice start`). The reviewer's answer names each changed pair as `<folder>/before/<file>` and `<folder>/after/<file>`, and the review page links them. It informs and never gates: a failed capture is a line in the report, not a stop. A remarks round takes none, and neither does size S (no architect, so no `**Shots:**` line).
 
 ## Remarks: a review branch sent back
 

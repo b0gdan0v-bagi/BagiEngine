@@ -30,7 +30,7 @@ Run from the checkout root (`--root` otherwise). Exit code: 0 done, 1 an error (
 
 ## The screenshot set of a game
 
-A `## Screenshots` section of `.claude/rules/qa-project.md` with one fenced `json` block (the first after the heading; the same idea as the benchmark set of `.claude/rules/perf-project.md`, `tools/perf/CLAUDE.md`). A game without the section has no screenshots, and the loop goes on without them.
+A `## Screenshots` section of `.claude/rules/qa-project.md` (the template with the form of the block is the engine's file of that name; the pictures a `/qa` session takes itself are `tools/qa/CLAUDE.md`) with one fenced `json` block (the first after the heading; the same idea as the benchmark set of `.claude/rules/perf-project.md`, `tools/perf/CLAUDE.md`). A game without the section has no screenshots, and the loop goes on without them.
 
 | Key | Meaning |
 |-----|---------|
