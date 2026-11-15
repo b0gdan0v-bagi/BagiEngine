@@ -145,6 +145,7 @@ ctest --preset macos-debug
 - Before you say the work is done, check `git log --format='%an <%ae>'` in the game **and** in `engine/` (for any engine commit made during the setup). Every line must show the identity the owner gave.
 - The agent never pushes and never creates remote repositories. It does not move `main` or `games/*` of the engine (syncing them is the owner's `/sync-engine`) and does not run `todo.py area set` without the owner.
 - Later the pointer of `engine/` moves only as a commit of its own: by `todo-merge` after an engine branch is merged, or by the owner (`git submodule update --remote engine`).
+- Before `Update engine`, with `engine/` on the new commit, `python3 engine/tools/changelog/changelog.py breaking --since pointer --repo engine` lists what the move breaks for the game, each with its `Adapt:` line and migration step (`engine/tools/changelog/CLAUDE.md`).
 
 ## What stays in the engine
 
