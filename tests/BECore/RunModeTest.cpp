@@ -1,11 +1,11 @@
 #include <BECore/Application/RunMode.h>
+#include <BECore/Config/ConfigManager.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 
 namespace BECore::Tests {
 
-    // Compile-time checks: a regression breaks the build.
     static_assert(EnumUtils<RunMode>::Count() == 2);
     static_assert(EnumUtils<RunMode>::ToString(RunMode::Editor) == "Editor");
     static_assert(EnumUtils<RunMode>::ToString(RunMode::Game) == "Game");

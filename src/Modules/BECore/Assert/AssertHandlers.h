@@ -5,13 +5,6 @@
 
 namespace BECore {
 
-    /**
-     * @brief Handler that triggers debug break on assertion failures
-     *
-     * Subscribes to AssertEvent and calls platform-specific debug break
-     * when an assertion fails. This allows debuggers to stop at the
-     * exact point of failure.
-     */
     class DebugBreakHandler : public IAssertHandler {
         BE_CLASS(DebugBreakHandler)
 
@@ -49,13 +42,6 @@ namespace BECore {
         bool _initialized = false;
     };
 
-    /**
-     * @brief Handler that captures and prints stack traces on assertion failures
-     *
-     * Subscribes to AssertEvent and outputs a formatted stack trace to stderr
-     * when an assertion fails. This helps identify the call chain leading to
-     * the failure.
-     */
     class StackTraceHandler : public IAssertHandler {
         BE_CLASS(StackTraceHandler)
 

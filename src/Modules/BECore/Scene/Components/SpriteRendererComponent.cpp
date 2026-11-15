@@ -1,6 +1,7 @@
 #include "SpriteRendererComponent.h"
 
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Resource/ResourceManager.h>
 #include <BECore/Resource/TextureLibrary.h>
 #include <Generated/SpriteRendererComponent.gen.hpp>
 

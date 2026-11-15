@@ -1,3 +1,4 @@
+#include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/ClassMeta.h>
 #include <BECore/Scene/Components/ChangeToRandomColorDebugComponent.h>

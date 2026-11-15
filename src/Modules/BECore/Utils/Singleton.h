@@ -8,10 +8,7 @@ namespace BECore {
     template <typename T>
     class Singleton {
     public:
-        /**
-         * Получает единственный экземпляр класса T
-         * @return Ссылка на единственный экземпляр
-         */
+        /// Creates the instance on the first call. Not thread-safe: use SingletonAtomic when threads can meet here.
         static T& GetInstance() {
             if (_instance == nullptr) {
                 _instance = new T();
@@ -19,10 +16,7 @@ namespace BECore {
             return *_instance;
         }
 
-        /**
-         * Удаляет единственный экземпляр класса T
-         * Полезно для тестирования или явного освобождения ресурсов
-         */
+        /// Deletes the instance (a test, an explicit shutdown); the next GetInstance makes a new one.
         static void DestroyInstance() {
             if (_instance != nullptr) {
                 delete _instance;
@@ -30,10 +24,6 @@ namespace BECore {
             }
         }
 
-        /**
-         * Проверяет, существует ли экземпляр
-         * @return true если экземпляр создан, false в противном случае
-         */
         static bool IsInstanceCreated() {
             return _instance != nullptr;
         }
@@ -42,7 +32,6 @@ namespace BECore {
         Singleton() = default;
         virtual ~Singleton() = default;
 
-        // Запрещаем копирование и присваивание
         Singleton(const Singleton&) = delete;
         Singleton& operator=(const Singleton&) = delete;
         Singleton(Singleton&&) = delete;
@@ -52,36 +41,16 @@ namespace BECore {
         static T* _instance;
     };
 
-    // Инициализация статических членов
     template <typename T>
     T* Singleton<T>::_instance = nullptr;
 
     /**
-     * Базовый класс для реализации паттерна Singleton (атомарная версия).
-     * Потокобезопасен, использует double-checked locking.
-     * Используйте в многопоточных приложениях.
-     *
-     * @tparam T Тип класса, который должен быть Singleton
-     *
-     * Пример использования:
-     * class MyManager : public SingletonAtomic<MyManager> {
-     *     friend class SingletonAtomic<MyManager>;
-     * private:
-     *     MyManager() = default;
-     * public:
-     *     void DoSomething() { ... }
-     * };
-     *
-     * // Использование:
-     * MyManager::GetInstance().DoSomething();
+     * The thread-safe Singleton: double-checked locking on the first GetInstance and on DestroyInstance. The derived class befriends it
+     * (`friend class SingletonAtomic<MyManager>;`) to keep a private constructor. The instance itself gets no locking from here.
      */
     template <typename T>
     class SingletonAtomic {
     public:
-        /**
-         * Получает единственный экземпляр класса T
-         * @return Ссылка на единственный экземпляр
-         */
         static T& GetInstance() {
             T* instance = _instance.load(std::memory_order_acquire);
             if (instance == nullptr) {
@@ -95,10 +64,7 @@ namespace BECore {
             return *instance;
         }
 
-        /**
-         * Удаляет единственный экземпляр класса T
-         * Полезно для тестирования или явного освобождения ресурсов
-         */
+        /// A reference taken before this call dangles: destroy only when nothing uses the instance.
         static void DestroyInstance() {
             T* instance = _instance.load(std::memory_order_acquire);
             if (instance != nullptr) {
@@ -111,10 +77,6 @@ namespace BECore {
             }
         }
 
-        /**
-         * Проверяет, существует ли экземпляр
-         * @return true если экземпляр создан, false в противном случае
-         */
         static bool IsInstanceCreated() {
             return _instance.load(std::memory_order_acquire) != nullptr;
         }
@@ -123,7 +85,6 @@ namespace BECore {
         SingletonAtomic() = default;
         virtual ~SingletonAtomic() = default;
 
-        // Запрещаем копирование и присваивание
         SingletonAtomic(const SingletonAtomic&) = delete;
         SingletonAtomic& operator=(const SingletonAtomic&) = delete;
         SingletonAtomic(SingletonAtomic&&) = delete;
@@ -134,7 +95,6 @@ namespace BECore {
         static Mutex _mutex;
     };
 
-    // Инициализация статических членов
     template <typename T>
     std::atomic<T*> SingletonAtomic<T>::_instance{nullptr};
 

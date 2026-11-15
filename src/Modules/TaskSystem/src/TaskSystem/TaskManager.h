@@ -17,20 +17,14 @@
 
 namespace BECore {
 
-    // Forward declarations
     class CoreManager;
 
     /**
-     * TaskManager - главный интерфейс для работы с асинхронными задачами.
-     *
-     * Предоставляет API для запуска задач, управления потоками выполнения
-     * и интеграции с системой событий движка.
+     * Entry point of the task system: starts tasks on a thread type and priority. Thread-safe; the lifecycle
+     * calls are CoreManager's (PassKey).
      *
      * @example
-     * // Запуск простой задачи
      * auto handle = TaskManager::GetInstance().Run(MyAsyncTask());
-     *
-     * // Отложенная задача
      * TaskManager::GetInstance().RunDelayed(MyTask(), std::chrono::seconds(1));
      */
     class TaskManager : public SingletonAtomic<TaskManager> {
@@ -50,15 +44,10 @@ namespace BECore {
         TaskManager() = default;
         ~TaskManager() = default;
 
-        // Non-copyable, non-movable
         TaskManager(const TaskManager&) = delete;
         TaskManager& operator=(const TaskManager&) = delete;
         TaskManager(TaskManager&&) = delete;
         TaskManager& operator=(TaskManager&&) = delete;
-
-        // =================================================================
-        // Lifecycle (protected by PassKey<CoreManager>)
-        // =================================================================
 
         void Initialize(PassKey<CoreManager>);
         void Update(PassKey<CoreManager>);
@@ -70,18 +59,10 @@ namespace BECore {
         void AdvanceGameTime(PassKey<CoreManager>, double seconds);
         void Shutdown(PassKey<CoreManager>);
 
-        // =================================================================
-        // Public API - Run tasks
-        // =================================================================
-
         /**
-         * Запускает задачу на выполнение.
-         * @param task Корутина для выполнения
-         * @param priority Приоритет задачи
-         * @param threadType Тип потока для выполнения
-         * @param label BE_TASK_LABEL("name"): the zone that names the first slice of the task in a profiler trace (default: none).
+         * Schedules the task. The scheduled job owns a reference to the handle, so dropping the returned one is safe.
+         * @param label BE_TASK_LABEL("name"): names the first slice of the task in a profiler trace (default: none).
          *              A later slice after `co_await SwitchToBackground()` is named by the label of that call
-         * @return Handle для отслеживания задачи
          */
         template <typename T>
         IntrusivePtr<TaskHandle<T>> Run(Task<T> task, TaskPriority priority = TaskPriority::Normal, ThreadType threadType = ThreadType::Background, TaskLabel label = {}) {
@@ -92,9 +73,7 @@ namespace BECore {
             return handle;
         }
 
-        /**
-         * Запускает отложенную задачу.
-         */
+        /** Like Run, started after a wall-clock @p delay. */
         template <typename T>
         IntrusivePtr<TaskHandle<T>> RunDelayed(Task<T> task, Duration delay, TaskPriority priority = TaskPriority::Normal, ThreadType threadType = ThreadType::Background, TaskLabel label = {}) {
             auto handle = MakeIntrusive<TaskHandle<T>>(std::move(task));
@@ -120,46 +99,26 @@ namespace BECore {
             return handle;
         }
 
-        /**
-         * Запускает задачу в главном потоке.
-         */
+        /** Starts the task in the main-thread queue, drained in Update. */
         template <typename T>
         IntrusivePtr<TaskHandle<T>> RunOnMainThread(Task<T> task, TaskPriority priority = TaskPriority::Normal, TaskLabel label = {}) {
             return Run(std::move(task), priority, ThreadType::MainThread, label);
         }
 
-        // =================================================================
-        // Public API - Utilities
-        // =================================================================
-
-        /**
-         * Проверяет, инициализирована ли система задач.
-         */
         [[nodiscard]] bool IsInitialized() const {
             return _isInitialized;
         }
 
-        /**
-         * Проверяет, выполняется ли код в главном потоке.
-         */
         [[nodiscard]] bool IsMainThread() const;
 
-        /**
-         * Возвращает количество рабочих потоков в пуле.
-         */
         [[nodiscard]] size_t GetWorkerCount() const;
 
-        /**
-         * Возвращает количество ожидающих задач.
-         */
         [[nodiscard]] size_t GetPendingTaskCount() const;
 
         /**
-         * Sends the queues of the task system to the profiler as counters, one graph each (a Chrome trace `C` event, a Tracy plot):
-         * `Pool: pending jobs`, `Pool: steals` (since the last sample), `Main thread queue: pending`, `Delayed tasks: pending` and, in a
-         * single-thread build, `Cooperative queue: pending`. The busy graphs (`Pool: busy workers`, `Worker n: busy`, 0 or 1) are not
-         * sampled: the pool's workers send them on every change. Update samples once per frame, before it drains the queues; a test may
-         * call it. Does nothing without a profiler backend or with BE_PROFILER=0.
+         * Sends the sizes of the queues of the task system to the profiler as counters. Update samples once per
+         * frame, before it drains the queues; a test may call it. Does nothing without a profiler backend. The pool's
+         * busy graphs are sent by the workers themselves on every change (Profiler/CLAUDE.md).
          */
         void SampleProfilerCounters();
 
@@ -172,9 +131,6 @@ namespace BECore {
             _frameBudget = budget < Duration::zero() ? Duration::zero() : budget;
         }
 
-        /**
-         * Returns the time per frame of the background jobs (kDefaultFrameBudget unless SetFrameBudget was called).
-         */
         [[nodiscard]] Duration GetFrameBudget() const {
             return _frameBudget;
         }
@@ -188,16 +144,10 @@ namespace BECore {
             return _scheduler.ShouldYield();
         }
 
-        /**
-         * Получает ThreadPool (для низкоуровневого доступа).
-         */
         [[nodiscard]] ThreadPool* GetThreadPool() {
             return _threadPool.get();
         }
 
-        /**
-         * Получает TaskScheduler (для низкоуровневого доступа).
-         */
         [[nodiscard]] TaskScheduler* GetScheduler() {
             return &_scheduler;
         }
@@ -210,9 +160,9 @@ namespace BECore {
          */
         template <typename T>
         static TaskQueue::TaskFunc MakeStartTask(IntrusivePtr<TaskHandle<T>> handle, TaskLabel label) {
-            return [handle, label]() mutable {
+            return [handle = std::move(handle), label]() mutable {
                 auto owned = std::move(handle);
-                RunLabeled(label, [&owned] { owned->Start(); });  // Start() сам вызывает Resume()
+                RunLabeled(label, [&owned] { owned->Start(); });
             };
         }
 

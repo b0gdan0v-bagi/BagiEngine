@@ -1,7 +1,9 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/XmlDeserializer.h>
+#include <BECore/Renderer/RendererManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/UI/UICanvasScaler.h>
+#include <BECore/UI/UIEnvironment.h>
 #include <BECore/UI/UIInputClicker.h>
 #include <BECore/UI/UIScreenContent.h>
 #include <BECore/UI/UIStrings.h>
@@ -94,11 +96,9 @@ namespace BECore::Tests {
         }
 
         /// A pure canvas layout with the screen, built through the same reflected path as a `.ui.xml` file; @p edit changes the text of the file first
-        void BuildLayout(UICanvasLayout& layout, const std::function<void(String&)>& edit = {}) {
+        void BuildLayout(UICanvasLayout& layout, FunctionRef<void(String&)> edit = NoTextEdit) {
             String body = kScreenBody;
-            if (edit) {
-                edit(body);
-            }
+            edit(body);
             const String xml = "<root>" + body + "</root>";
             XmlDeserializer deserializer;
             ASSERT_TRUE(deserializer.LoadFromString(xml));
@@ -272,7 +272,6 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIEdgeAnchorScreenTest, AnOffsetThatLeavesTheRegionIsCaughtOnTheMatrix) {
-        // The same screen with the bar pushed 40 units down from the bottom of its region instead of 16 up
         UICanvasLayout layout;
         ASSERT_NO_FATAL_FAILURE(BuildLayout(layout, [](String& text) { Replace(text, "y=\"-16\"", "y=\"40\""); }));
 

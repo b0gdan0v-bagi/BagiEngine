@@ -13,7 +13,7 @@ namespace BECore {
      *
      * Like UIElementStyle it is flat in a file: its properties are attributes of the element itself (`cornerRadius`, `borderWidth`, `borderColor`, `gradientColor`,
      * `gradientDirection`, `shadow`, `glow`, `highlight`). Only a value that differs from the default is written, and every default is "no effect": an element with the default
-     * box style draws a plain `DrawFilledRect` of its `color`, exactly as before the box existed.
+     * box style draws a plain `DrawFilledRect` of its `color`.
      *
      * - `cornerRadius` is one number or "topLeft,topRight,bottomRight,bottomLeft" in UI units; a radius that does not fit the rect shrinks (UICorners::Clamped).
      * - `borderWidth` in UI units and `borderColor`: a ring inside the rect, drawn over the fill. Nothing for a width of 0 or a colour with no alpha.

@@ -1,12 +1,15 @@
 #include "ViewportWidget.h"
 
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Input/UIInput.h>
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Scene/SceneNode.h>
+#include <BECore/Time/GamePause.h>
 #include <BECore/UI/UICanvasComponent.h>
+#include <BECore/UI/UIEnvironment.h>
 #include <BECore/UI/UIPreviewOverlay.h>
 #include <Generated/ViewportEvents.gen.hpp>
 #include <Generated/ViewportWidget.gen.hpp>

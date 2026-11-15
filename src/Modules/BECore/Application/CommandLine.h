@@ -13,7 +13,6 @@ namespace BECore {
      */
     class CommandLine {
     public:
-        /// Replaces the arguments
         void Set(Span<const String> arguments);
 
         Span<const String> GetArguments() const {

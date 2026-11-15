@@ -8,7 +8,7 @@ namespace BECore {
 
     /// Which side of which lock an event is about (a lock's Tracy context type follows from the kind it was announced with)
     enum class LockKind : uint8_t {
-        Mutex,         // Mutex
+        Mutex,
         SharedWriter,  // the exclusive side of a SharedMutex (also the kind it is announced with)
         SharedReader,  // the shared side of a SharedMutex
     };

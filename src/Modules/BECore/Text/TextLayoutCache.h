@@ -17,7 +17,7 @@ namespace BECore {
         /// Forgets the layout: call it when the font was loaded again, since a new font can sit at the address of the old one
         void Reset();
 
-        /// How many layouts were made: a test reads it to show that an unchanged text is not laid out again
+        /// How many layouts were made
         [[nodiscard]] uint32_t GetLayoutCount() const {
             return _layoutCount;
         }

@@ -38,7 +38,7 @@ namespace BECore {
         /// Lets go of the device and what was made on it
         void Reset();
 
-        /// The matrix of the frame constants: `projection * view` for a target of @p aspect
+        /// `projection * view` for a target of @p aspect
         [[nodiscard]] static Mat4 ViewProjection(const Camera3D& camera, float aspect);
 
         /// The frame constants of @p scene for a target of @p aspect (width over height)
@@ -47,7 +47,7 @@ namespace BECore {
         /// The draw constants of one instance
         [[nodiscard]] static DrawConstants MakeDrawConstants(const MeshInstance& instance);
 
-        /// The description of the lit pipeline: the shader `Lit3D`, depth test Less with depth write, back faces culled, alpha blend, the Vertex3D layout
+        /// The description of the lit pipeline (the shader `Lit3D`, the Vertex3D layout)
         [[nodiscard]] static PipelineDesc MakeLitPipelineDesc();
 
     private:

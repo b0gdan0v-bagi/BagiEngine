@@ -276,7 +276,6 @@ namespace BECore::Tests {
         ASSERT_TRUE(elements) << result;
         EXPECT_FALSE(elements.first_child()) << result;
         ExpectRoundTrip(node);
-        // And it really loads empty
         pugi::xml_document expanded;
         String error;
         ASSERT_TRUE(ExpandNodeReference(_out.child("nodes").first_child(), _loader, false, expanded, error)) << error.c_str();

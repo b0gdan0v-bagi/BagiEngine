@@ -703,7 +703,6 @@ namespace BECore::Tests {
         EXPECT_STREQ(file.document_element().attribute("name").as_string(), "Right");
         EXPECT_STREQ(file.document_element().attribute("layer").as_string(), "2");
         EXPECT_STREQ(ComponentOf(file.document_element(), "TransformComponent").attribute("x").as_string(), "7");
-        // The reference itself is not touched
         EXPECT_STREQ(reference.document_element().attribute("ref").as_string(), "nodes/Hud");
     }
 
@@ -752,7 +751,6 @@ namespace BECore::Tests {
         EXPECT_TRUE(error.empty());
         pugi::xml_document file = Parse(kHudNode);
         EXPECT_EQ(Saved(out.document_element()), Saved(file.document_element()));
-        // The reference is not changed
         EXPECT_STREQ(reference.document_element().attribute("ref").as_string(), "nodes/Hud");
     }
 
@@ -855,7 +853,6 @@ namespace BECore::Tests {
         EXPECT_FALSE(own.attribute(kNodeSourceAttribute.data()));
         EXPECT_STREQ(second.attribute(kNodeSourceAttribute.data()).as_string(), "nodes/B");
         EXPECT_STREQ(second.attribute("name").as_string(), "X");
-        // The node file on disk is unchanged
         EXPECT_EQ(ReadFile(_dir / "nodes" / "Hud.xml"), hudBefore);
     }
 

@@ -2,6 +2,7 @@
 
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/LogEvent.h>
+#include <BECore/Resource/ResourceManager.h>
 #include <BECore/Text/Utf8.h>
 #include <RmlUi/Core/RenderManager.h>
 #include <RmlUi/Core/StringUtilities.h>

@@ -10,7 +10,6 @@
 #include <EASTL/functional.h>
 #include <EASTL/hash_map.h>
 #include <EASTL/internal/config.h>
-#include <EASTL/shared_ptr.h>
 #include <EASTL/span.h>
 #include <EASTL/string.h>
 #include <EASTL/fixed_string.h>
@@ -65,6 +64,9 @@
 #include <BECore/PoolString/PoolStringMap.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <BECore/Utils/Overload.h>
+#include <BECore/Utils/MoveOnlyFunction.h>
+#include <BECore/Utils/FixedFunction.h>
+#include <BECore/Utils/FunctionRef.h>
 #include <BECore/RefCounted/RefCounted.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/RefCounted/New.h>

@@ -15,7 +15,6 @@ namespace BECore {
         struct SDLEventWrapper;
     }
 
-    // Forward declaration для класса-ключа доступа
     class ApplicationMainAccess;
 #if BE_WITH_REMOTE_CONTROL
     class WebSocketServer;

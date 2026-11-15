@@ -28,6 +28,7 @@ function config() {
         python: c.get("python", "python3"),
         claude: c.get("claude", "claude"),
         refreshSeconds: Math.max(5, c.get("refreshSeconds", 15)),
+        hiddenRefreshSeconds: Math.max(15, c.get("hiddenRefreshSeconds", 60)),
         notify: c.get("notify", true),
         startSlices: Math.max(1, Math.floor(c.get("startSlices", 1))),
         loopArgs: c.get("loopArgs", ""),
@@ -35,6 +36,8 @@ function config() {
         autoStartQueue: c.get("autoStartQueue", true),
         preset: c.get("preset", ""),
         prices: c.get("prices", DEFAULT_PRICES),
+        pushUrl: c.get("pushUrl", "").trim(),
+        timelineHours: Math.min(72, Math.max(1, c.get("timelineHours", 24))),
     };
 }
 

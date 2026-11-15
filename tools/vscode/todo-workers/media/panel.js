@@ -11,8 +11,15 @@
     const isFolded = (name) => !expanded.has(name);
 
     function save() {
-        vscode.setState({ openSteps: [...openSteps], expanded: [...expanded], feedOpen: saved.feedOpen });
+        vscode.setState({ ...saved, openSteps: [...openSteps], expanded: [...expanded] });
     }
+
+    // a folded section of insights.js (Day, Timeline, Busy files) keeps its open state
+    function keepOpen(key, open) {
+        saved[key] = open;
+        save();
+    }
+    const post = (message) => vscode.postMessage(message);
 
     // The secondary buttons of a card behind "...": the main ones stay in sight.
     function more(buttons) {
@@ -240,7 +247,8 @@
     function workerCard(worker) {
         const entry = worker.entry;
         const folded = isFolded(worker.name);
-        const card = el("section", (worker.waiting ? "card waiting" : worker.limited ? "card limited" : "card") + (folded ? " collapsed" : ""));
+        const sick = !worker.waiting && !worker.limited && (worker.problems || []).length ? " sick" : "";
+        const card = el("section", (worker.waiting ? "card waiting" : worker.limited ? "card limited" : "card") + sick + (folded ? " collapsed" : ""));
         card.id = `card-${worker.name}`;
         const top = el("div", "card-top");
         const fold = el("button", "fold", folded ? "\u25B8" : "\u25BE");
@@ -256,6 +264,9 @@
         card.appendChild(top);
 
         if (entry) card.appendChild(el("div", "title", entry.title));
+        TodoInsights.problemLines(worker, post).forEach((line) => card.appendChild(line));
+        const runs = TodoInsights.workerLoad(worker, payload.machine);
+        if (runs) card.appendChild(runs);
         if (worker.waiting) {
             const ask = el("div", "ask");
             ask.append(
@@ -295,7 +306,8 @@
             return card;
         }
         if (entry) {
-            if (entry.status === "review") card.appendChild(el("div", "note ok", "in review" + (entry.statusNote ? `: ${entry.statusNote}` : "")));
+            if (entry.starting) card.appendChild(el("div", "note", "starting: the loop was started on this entry and has not claimed it yet"));
+            else if (entry.status === "review") card.appendChild(el("div", "note ok", "in review" + (entry.statusNote ? `: ${entry.statusNote}` : "")));
             else if (entry.statusNote) card.appendChild(el("div", "note", entry.statusNote));
             const bar = progress(entry);
             if (bar) card.appendChild(bar);
@@ -305,6 +317,8 @@
         const heads = el("div", "heads");
         [head("game", worker.head), head("engine", worker.engine)].forEach((h) => h && heads.appendChild(h));
         if (worker.dirty) heads.appendChild(el("div", "warn", "uncommitted changes (a developer is at work)"));
+        const diff = TodoInsights.diffLine(worker);
+        if (diff) heads.appendChild(diff);
         card.appendChild(heads);
 
         const usage = usageBlock(worker.usage, true);
@@ -349,6 +363,7 @@
         actions.append(more([
             worker.session && button("Log", { cmd: "logs", worker: worker.k }, "claude logs"),
             entry && button("Plan", { cmd: "plan", entry: entry.id }, "the plan the entry shows (its newest slice plan)"),
+            worker.diff && worker.diff.commits ? button("Diff", { cmd: "review", entry: entry.id }, "the commits of the branch so far against its base, in one diff editor") : null,
             entry && entry.branch && button("Build & run", { cmd: "run", worker: worker.k }, "configure, build the product and start it in this worker folder (its branch as it is now)"),
             !worker.active && button("Update", { cmd: "update", worker: worker.k }, "worker.py update: detach the game and engine/ at the tips of their base branches (main, games/...); the branch it held is kept; refused with uncommitted changes"),
             button("Folder", { cmd: "folder", worker: worker.k }, "open the worker in a new window"),
@@ -375,6 +390,8 @@
         if (where) top.append(el("span", "muted", `in ${where.name}`));
         card.append(top, el("div", "title", entry.title));
         if (entry.statusNote) card.appendChild(el("div", "note", entry.statusNote));
+        const rounds = TodoInsights.reviewLine(entry, payload.insights);
+        if (rounds) card.appendChild(rounds);
         card.appendChild(head("branch", { branch: entry.branch }));
         const bar = progress(entry);
         if (bar) card.appendChild(bar);
@@ -460,6 +477,8 @@
         const bar = el("div", "toolbar");
         const info = el("span", "muted", payload.refreshing ? "refreshing ..." : payload.at ? `updated ${ago(payload.at)}` : "");
         const limited = payload.state ? payload.state.workers.filter((w) => w.limited).length : 0;
+        const ready = payload.state ? payload.state.review.filter((e) => !(e.blockedBy || []).some((b) => b.status !== "closed")).length : 0;
+        if (ready >= 2) bar.append(button(`Merge all (${ready})`, { cmd: "mergeTrain" }, "worker.py merge-train: every ready review branch one by one (a dialog shows the order first), stop at the first conflict, then Verify once", "primary"));
         if (limited) bar.append(button(`Relaunch all (${limited})`, { cmd: "relaunchAll" }, "worker.py relaunch: continue every session the usage limit stopped (press it after the reset)", "primary"));
         const names = payload.state ? payload.state.workers.map((w) => w.name) : [];
         if (names.length) {
@@ -482,6 +501,8 @@
             if (payload.loading) root.appendChild(el("p", "muted", "Asking worker.py ..."));
             return;
         }
+        const load = TodoInsights.machineLine(payload.machine);
+        if (load) root.appendChild(load);
         if (!state.sessionsKnown) root.appendChild(el("div", "warn", "claude agents did not answer: set todoWorkers.claude to the full path of claude."));
         if (state.store !== "ok" && state.store !== "off") root.appendChild(el("div", "warn", `todo store: ${state.store}`));
 
@@ -507,6 +528,10 @@
             root.appendChild(el("h2", "", "Flow"));
             root.appendChild(graph);
         }
+        root.appendChild(TodoInsights.daySection(payload.insights, state, saved, keepOpen, post));
+        if (state.workers.length) root.appendChild(TodoInsights.timelineSection(payload.insights, saved, keepOpen, payload.machineHistory, payload.machine && payload.machine.cores));
+        if (payload.machine) root.appendChild(TodoInsights.machineSection(payload.machine, saved, keepOpen));
+        root.appendChild(TodoInsights.busySection(payload.insights, saved, keepOpen, post));
 
         const all = usageBlock(state.usage, false);
         if (all) {
@@ -523,6 +548,25 @@
         root.appendChild(el("h2", "", `Review: ${state.review.length} to merge`));
         if (!state.review.length) root.appendChild(el("p", "muted", "Nothing waits for /todo-merge."));
         state.review.forEach((e) => root.appendChild(reviewCard(e, state)));
+        const elsewhere = state.reviewElsewhere || [];
+        if (elsewhere.length) {
+            const box = el("details", "feed elsewhere");
+            box.open = Boolean(saved.elsewhereOpen);
+            box.addEventListener("toggle", () => {
+                saved.elsewhereOpen = box.open;
+                vscode.setState({ ...saved, openSteps: [...openSteps], expanded: [...expanded] });
+            });
+            const summary = el("summary", "muted", `${elsewhere.length} in other checkouts`);
+            summary.title = "in review, but the branch lives in another checkout or on another machine (or was cut from another base): review and merge it there";
+            box.appendChild(summary);
+            elsewhere.forEach((e) => {
+                const line = el("div", "feed-item");
+                const where = [e.takenOrigin, e.takenBase || e.foreignBase].filter(Boolean).join(", ");
+                line.append(el("span", "kind", e.id), el("span", "text muted", e.title + (where ? ` (${where})` : "")));
+                box.appendChild(line);
+            });
+            root.appendChild(box);
+        }
 
         const items = payload.feed || [];
         const box = el("details", "feed");

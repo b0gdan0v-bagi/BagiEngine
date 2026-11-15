@@ -216,7 +216,6 @@ namespace BECore::Tests {
             EXPECT_FALSE(service.Delete(name));
         }
 
-        // The longest name is fine, and nothing was written for the bad ones
         EXPECT_TRUE(SaveGameService::IsValidSlotName(longest));
         EXPECT_TRUE(SaveGameService::IsValidSlotName("A_z-09"));
         EXPECT_TRUE(service.WriteSlot(longest, Bytes({1})).has_value());
@@ -285,7 +284,6 @@ namespace BECore::Tests {
         ASSERT_TRUE(read.has_value());
         EXPECT_EQ(*read, Bytes({2, 2}));
 
-        // The first folder keeps its files
         EXPECT_TRUE(std::filesystem::exists(first / "only_first.save"));
     }
 

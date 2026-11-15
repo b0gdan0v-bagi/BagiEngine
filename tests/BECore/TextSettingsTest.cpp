@@ -1,3 +1,4 @@
+#include <BECore/Config/ConfigManager.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Text/TextSettings.h>
 #include <Common/EngineEnvironment.h>

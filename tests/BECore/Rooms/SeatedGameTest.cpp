@@ -180,7 +180,6 @@ namespace BECore::Tests {
         EXPECT_EQ(previous, 1u);
         while (!game.IsFinished()) {
             const int seat = game.GetTurn();
-            // an error does not move it
             EXPECT_FALSE(game.PerformSeatAction((seat + 1) % 4, PlayAction("c0_0")).has_value());
             EXPECT_EQ(game.GetStateVersion(), previous);
             ASSERT_TRUE(game.PerformSeatAction(seat, *game.ChooseComputerAction(seat)).has_value());
@@ -203,11 +202,9 @@ namespace BECore::Tests {
         const auto actions = game.GetSeatActions(0);
         ASSERT_TRUE(actions.has_value());
         EXPECT_NE(std::find(actions->begin(), actions->end(), *chosen), actions->end());
-        // the lowest card id of the hand
         Vector<String> hand = game.GetHand(0);
         eastl::sort(hand.begin(), hand.end());
         EXPECT_EQ(GetJsonString(*chosen, "card"), hand.front());
-        // choosing does not play
         EXPECT_EQ(game.GetPlayCount(), 0);
         EXPECT_TRUE(game.PerformSeatAction(0, *chosen).has_value());
         EXPECT_FALSE(game.ChooseComputerAction(0).has_value());
@@ -294,7 +291,6 @@ namespace BECore::Tests {
         EXPECT_EQ(leaked.size(), 9u) << "the cards of the other three seats";
         EXPECT_NONFATAL_FAILURE(ExpectNoLeak(text, 1, leaky), "hidden cards");
 
-        // the same check passes the honest game in the same position
         FakeSeatedGame honest;
         ASSERT_TRUE(honest.Start(5, Json::object()).has_value());
         const String honestText = Dump(honest.GetSeatView(1));
@@ -344,15 +340,44 @@ namespace BECore::Tests {
 
     TEST(SeatedGameRegistryTest, RefusesAnInvalidRegistration) {
         SeatedGameRegistry registry;
-        const SeatedGameFactory factory = [] { return MakeUnique<FakeSeatedGame>(); };
-        EXPECT_FALSE(registry.Register({"", 4}, factory));
-        EXPECT_FALSE(registry.Register({"G", 0}, factory));
-        EXPECT_FALSE(registry.Register({"G", -2}, factory));
+        const auto makeFactory = [] { return SeatedGameFactory([] { return MakeUnique<FakeSeatedGame>(); }); };
+        EXPECT_FALSE(registry.Register({"", 4}, makeFactory()));
+        EXPECT_FALSE(registry.Register({"G", 0}, makeFactory()));
+        EXPECT_FALSE(registry.Register({"G", -2}, makeFactory()));
         EXPECT_FALSE(registry.Register({"G", 4}, SeatedGameFactory()));
         EXPECT_EQ(registry.GetCount(), 0u);
-        ASSERT_TRUE(registry.Register({"G", 4}, factory));
-        EXPECT_FALSE(registry.Register({"G", 0}, factory)) << "a refused registration keeps the old one";
+        ASSERT_TRUE(registry.Register({"G", 4}, makeFactory()));
+        EXPECT_FALSE(registry.Register({"G", 0}, makeFactory())) << "a refused registration keeps the old one";
         EXPECT_EQ(registry.Find("G")->seatCount, 4);
+    }
+
+    TEST(SeatedGameRegistryTest, AFactoryThatOwnsAMoveOnlyCaptureMakesGamesAndIsDestroyedOnceWithTheRegistry) {
+        struct Counts {
+            int destroyed = 0;
+        };
+        struct Sentinel {
+            explicit Sentinel(Counts& target) : counts(&target) {}
+            Sentinel(Sentinel&& other) noexcept : counts(std::exchange(other.counts, nullptr)) {}
+            Sentinel(const Sentinel&) = delete;
+            ~Sentinel() {
+                if (counts != nullptr) {
+                    ++counts->destroyed;
+                }
+            }
+            Counts* counts;
+        };
+        Counts counts;
+        {
+            SeatedGameRegistry registry;
+            ASSERT_TRUE(registry.Register({"Owned", 4}, [made = MakeUnique<int>(0), sentinel = Sentinel(counts)]() mutable -> UniquePtr<ISeatedGame> {
+                ++*made;
+                return MakeUnique<FakeSeatedGame>();
+            }));
+            EXPECT_NE(registry.Create("Owned"), nullptr);
+            EXPECT_NE(registry.Create("Owned"), nullptr);
+            EXPECT_EQ(counts.destroyed, 0);
+        }
+        EXPECT_EQ(counts.destroyed, 1);
     }
 
     TEST(SeatedGameRegistryTest, CreateMakesIndependentInstances) {

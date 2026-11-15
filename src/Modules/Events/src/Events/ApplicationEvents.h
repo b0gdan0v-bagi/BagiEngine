@@ -5,7 +5,6 @@
 namespace BECore {
     namespace ApplicationEvents {
 
-        // События приложения
         struct QuitEvent : public EventBase<QuitEvent> {};
         struct ApplicationCleanUpEvent : public EventBase<ApplicationCleanUpEvent> {};
 

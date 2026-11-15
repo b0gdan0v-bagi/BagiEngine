@@ -2,15 +2,24 @@
 
 #include <BECore/Application/ApplicationConfig.h>
 #include <BECore/Application/ApplicationFabric.h>
+#include <BECore/Application/CommandLine.h>
 #include <BECore/Application/RunMode.h>
+#include <BECore/Control/ControlService.h>
 #include <BECore/Control/ControlSettings.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/LogEvent.h>
+#include <BECore/MainWindow/IMainWindow.h>
 #include <BECore/MainWindow/WindowTitle.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
+#include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Profiler/Profiler.h>
 #include <BECore/Profiler/ProfilerSettings.h>
 #include <BECore/Reflection/OpenDeserializer.h>
+#include <BECore/Renderer/IRenderer.h>
+#include <BECore/Text/FontAtlasLibrary.h>
+#include <BECore/Time/GamePause.h>
+#include <BECore/Time/Time.h>
+#include <BECore/Widgets/WidgetManager.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/ApplicationEvents.h>
 #include <Events/RenderEvents.h>

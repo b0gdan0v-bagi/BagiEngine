@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Config/ConfigManager.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/OpenDeserializer.h>
 #include <BECore/Types/Types.h>

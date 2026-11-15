@@ -3,6 +3,7 @@
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <limits>
 #include <optional>
@@ -135,10 +136,18 @@ namespace BECore::VulkanSwapchainPolicy {
         }
     }
 
-    /// How ImGui's colours have to be written into the main swapchain. ImGui's vertex colours are sRGB values (a
-    /// theme colour 0.14 means "0.14 on the screen"), but an sRGB attachment encodes what it is given, so written as
-    /// they are they come out much too light: they have to be turned into linear values first. A swapchain that is
-    /// not sRGB stores them as they are.
+    /// The linear value of an sRGB channel (0..1), by the exact transfer function the shaders use (`ToTarget`): what
+    /// the backend hands an sRGB attachment for a colour that is computed on the CPU, the clear colour
+    [[nodiscard]] inline float SrgbToLinear(float channel) {
+        constexpr float kLinearSegment = 0.04045f;
+        constexpr float kLinearSlope = 12.92f;
+        constexpr float kOffset = 0.055f;
+        constexpr float kGamma = 2.4f;
+        return channel <= kLinearSegment ? channel / kLinearSlope : std::pow((channel + kOffset) / (1.0f + kOffset), kGamma);
+    }
+
+    /// ImGui's vertex colours are sRGB values and an sRGB attachment encodes what it is given, so Linearize turns them
+    /// linear first; a swapchain that is not sRGB takes them as they are.
     [[nodiscard]] constexpr ImGuiColorMode ChooseImGuiColorMode(VkFormat mainSwapchainFormat) {
         return IsSrgbFormat(mainSwapchainFormat) ? ImGuiColorMode::Linearize : ImGuiColorMode::Direct;
     }

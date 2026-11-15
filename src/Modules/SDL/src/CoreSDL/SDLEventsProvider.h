@@ -17,7 +17,6 @@ namespace BECore {
     private:
         bool _isInitialized = false;
 
-        // Преобразование SDL события в EnTT событие
         void ConvertSDLEvent(const SDL_Event& sdlEvent);
     };
 

@@ -1,14 +1,18 @@
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Input/UIInput.h>
 #include <BECore/Reflection/XmlDeserializer.h>
+#include <BECore/Renderer/RendererManager.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIDropdown.h>
+#include <BECore/UI/UIEnvironment.h>
 #include <BECore/UI/UIInputClicker.h>
 #include <BECore/UI/UIStack.h>
 #include <BECore/UI/UIStrings.h>
 #include <BECore/UI/UITextComponent.h>
+#include <BECore/UI/UIVars.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -154,7 +158,7 @@ namespace BECore::Tests {
         constexpr const char* kOptionKeys[] = {"level.novice", "level.easy", "level.normal", "level.hard", "level.master"};
         constexpr const char* kOptionNames[] = {"LevelNovice", "LevelEasy", "LevelNormal", "LevelHard", "LevelMaster"};
 
-        String SceneXml(float viewWidth, float viewHeight, const std::function<void(String&)>& edit = {}) {
+        String SceneXml(float viewWidth, float viewHeight, FunctionRef<void(String&)> edit = NoTextEdit) {
             String xml = kLevelsXml;
             const auto replace = [&xml](const String& what, const String& with) {
                 for (size_t at = xml.find(what); at != String::npos; at = xml.find(what, at + with.size())) {
@@ -163,9 +167,7 @@ namespace BECore::Tests {
             };
             replace("@VIEW_W@", ToString(static_cast<int>(viewWidth)));
             replace("@VIEW_H@", ToString(static_cast<int>(viewHeight)));
-            if (edit) {
-                edit(xml);
-            }
+            edit(xml);
             return xml;
         }
 
@@ -355,7 +357,7 @@ namespace BECore::Tests {
             ASSERT_EQ(strings.GetLanguages().size(), 3u);
         }
 
-        void LoadScene(float viewWidth = kViewWidth, float viewHeight = kViewHeight, const std::function<void(String&)>& edit = {}) {
+        void LoadScene(float viewWidth = kViewWidth, float viewHeight = kViewHeight, FunctionRef<void(String&)> edit = NoTextEdit) {
             _game.reset();
             _hud.Reset();
             _levels.Reset();
@@ -701,7 +703,6 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIDropdownScreenTest, AnIconOptionHasTheRectOfAPlainOne) {
-        // The same list twice, once with the plain options and once with an icon on the second: every option in the same place, in both views
         for (const auto [width, height] : {Pair<float, float>{kViewWidth, kViewHeight}, Pair<float, float>{kPortraitWidth, kPortraitHeight}}) {
             ASSERT_NO_FATAL_FAILURE(LoadScene(width, height));
             ASSERT_NO_FATAL_FAILURE(ShowAndOpen());

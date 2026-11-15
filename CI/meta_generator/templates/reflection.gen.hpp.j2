@@ -90,6 +90,7 @@ template<>
 struct ReflectionTraits<{{ cls.qualified_name }}> {
     static constexpr bool reflected = true;
     static constexpr eastl::string_view name = "{{ cls.name }}";
+    static constexpr AssetPurpose purpose = AssetPurpose::{{ cls.purpose }};
     
     static constexpr auto fields = std::make_tuple(
 {% for field in cls.fields %}
@@ -224,7 +225,8 @@ const ::BECore::ClassMeta& {{ cls.full_qualified_name }}::GetStaticTypeMeta() {
     static const ::BECore::ClassMeta meta{
         ::BECore::StringUtils::GetHash(eastl::string_view{"{{ cls.name }}"}),
         eastl::string_view{"{{ cls.name }}"},
-        eastl::string_view{"{{ cls.icon }}"}
+        eastl::string_view{"{{ cls.icon }}"},
+        ::BECore::AssetPurpose::{{ cls.purpose }}
     };
     return meta;
 }
@@ -244,6 +246,11 @@ void {{ cls.full_qualified_name }}::Serialize(::BECore::ISerializer& s) const {
 // {{ cls.full_qualified_name }}::Deserialize() - auto-generated from BE_REFLECT_FIELD markers
 // Reads data from IDeserializer (load/import)
 void {{ cls.full_qualified_name }}::Deserialize(::BECore::IDeserializer& d) {
+{% if cls.purpose != 'Common' %}
+    if (!d.AcceptsPurpose(::BECore::AssetPurpose::{{ cls.purpose }}, "{{ cls.name }}")) {
+        return;
+    }
+{% endif %}
 {% if cls.parent_has_be_class %}
     {{ cls.parent_full_qualified_name }}::Deserialize(d);
 {% endif %}

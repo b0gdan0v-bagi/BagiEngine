@@ -1,5 +1,7 @@
 #pragma once
 
+#include <BECore/Format/Format.h>
+#include <BECore/Reflection/ClassMeta.h>
 #include <BECore/Reflection/ISerializer.h>
 #include <BECore/Reflection/ReaderLimits.h>
 #include <BECore/Utils/EnumUtils.h>
@@ -197,6 +199,40 @@ namespace BECore {
         }
 
         // =================================================================
+        // Purpose filter (asset parts)
+        // =================================================================
+
+        /**
+         * @brief Load one part of an asset only: a reflected type of another purpose is refused
+         *
+         * Empty (the default) accepts every type. With a part set, the generated `Deserialize` of a class of
+         * another purpose than `Common` and @p part returns at once without reading a field, and a factory
+         * element of such a type is dropped before it is created (see Ser::Detail::LoadElement). The filter
+         * stays when the reader loads another document.
+         */
+        void SetPurposeFilter(Optional<AssetPurpose> part) {
+            _purposeFilter = part;
+        }
+
+        Optional<AssetPurpose> GetPurposeFilter() const {
+            return _purposeFilter;
+        }
+
+        /**
+         * @brief Whether the filter lets a type of @p typePurpose be read; reports an error at the current path when it does not
+         *
+         * Called by generated code and by the factory sites with the type's own name, so the error reads
+         * `Type 'X' (purpose visual) is not allowed in the sim part`.
+         */
+        bool AcceptsPurpose(AssetPurpose typePurpose, StringView typeName) {
+            if (!_purposeFilter || IsAllowedIn(typePurpose, *_purposeFilter)) {
+                return true;
+            }
+            ReportError({}, Format("Type '{}' (purpose {}) is not allowed in the {} part", typeName, PurposeName(typePurpose), PurposeName(*_purposeFilter)));
+            return false;
+        }
+
+        // =================================================================
         // Error tracking
         // =================================================================
 
@@ -344,6 +380,7 @@ namespace BECore {
         Vector<PathSegment> _pathStack;
         Vector<DeserializeError> _warnings;
         DiagnosticsMode _diagnostics = DiagnosticsMode::Off;
+        Optional<AssetPurpose> _purposeFilter;
     };
 
 }  // namespace BECore

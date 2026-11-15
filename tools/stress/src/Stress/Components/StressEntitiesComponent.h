@@ -21,13 +21,10 @@ namespace BECore::Stress {
      *        tween that moves it on a circle of its own. No node has a renderer component, so nothing is drawn: the scene costs the update
      *        of the nodes, the tweens and the draw system's walk.
      *
-     * The nodes are made like `StressSpritesComponent`'s: when `StressState::Version()` moved, appended or removed from the tail. A tween is a
-     * `Tween<float>` of 0..1 whose setter writes the position, and its `onComplete` starts it again (a restart costs one frame per link, rule 2
-     * of `Animation/CLAUDE.md`, and one handle from `TweenManager::Start`, so a frame in which some tween ends allocates; at the benchmark counts
-     * some tween ends every frame). The first tween of a node starts at a hashed point of its turn (`EntityOrbit::startTurn`), so a field just
-     * built restarts at the steady rate from its first frames.
-     * A shrink resets the tail's tweens first (rule 8: the setter must not outlive what it writes). Every `kSpinEvery`th node also gets a rotation
-     * from `SceneUpdateEvent`. Does nothing while the game is not the active `StressGame`.
+     * The nodes are made like `StressSpritesComponent`'s, when `StressState::Version()` moved. A tween's `onComplete` starts it again, and a restart
+     * is a `TweenManager::Start` (a handle), so a frame in which some tween ends allocates; at the benchmark counts that is every frame.
+     * A shrink resets the tail's tweens first (rule 8 of `Animation/CLAUDE.md`: the setter must not outlive what it writes). Every `kSpinEvery`th
+     * node also gets a rotation from `SceneUpdateEvent`. Does nothing while the game is not the active `StressGame`.
      */
     class StressEntitiesComponent : public IComponent {
         BE_CLASS(StressEntitiesComponent)

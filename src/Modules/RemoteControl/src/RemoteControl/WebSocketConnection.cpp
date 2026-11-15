@@ -41,7 +41,7 @@ namespace BECore {
         return received;
     }
 
-    bool WebSocketConnection::Handshake(const HandshakePolicy& policy, std::chrono::milliseconds timeout, Vector<uint8_t>& pendingBytes, const AdmitClientFn& admit) {
+    bool WebSocketConnection::Handshake(const HandshakePolicy& policy, std::chrono::milliseconds timeout, Vector<uint8_t>& pendingBytes, Optional<AdmitClientFn> admit) {
         // One deadline for the whole head: a timeout per Receive() would let a client that sends a byte every few seconds hold the slot for ever
         const auto deadline = std::chrono::steady_clock::now() + timeout;
 
@@ -97,7 +97,7 @@ namespace BECore {
             }
             if (!admit) {
                 SetClientAddress(std::move(clientAddress));
-            } else if (!admit(clientAddress)) {
+            } else if (!(*admit)(clientAddress)) {
                 (void)_socket.SendAll(AsBytes(BuildRejectResponse(HandshakeError{kServiceUnavailable, _settings.busyMessage})));
                 return false;
             }

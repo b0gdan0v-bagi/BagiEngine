@@ -43,7 +43,7 @@ namespace BECore::Tests {
 
             [[nodiscard]] WebSocketHandler::ConnectionPtr ConnectionAt(size_t index) const {
                 std::lock_guard<std::mutex> lock(_mutex);
-                return index < _connections.size() ? _connections[index] : nullptr;
+                return index < _connections.size() ? _connections[index] : WebSocketHandler::ConnectionPtr();
             }
 
             /// The open order of two clients is not the order they connected in: look a connection up by what it is
@@ -54,7 +54,7 @@ namespace BECore::Tests {
                         return connection;
                     }
                 }
-                return nullptr;
+                return {};
             }
 
         private:
@@ -608,6 +608,39 @@ namespace BECore::Tests {
         ASSERT_TRUE(first.has_value());
         const String refused = TryHandshake(port, "X-Forwarded-For: 203.0.113.2\r\n");
         EXPECT_TRUE(StringView(refused).starts_with("HTTP/1.1 503 ")) << refused;
+    }
+
+    TEST_F(WebSocketListenerTest, AHandlerThatOwnsAMoveOnlyCaptureRunsForAConnectionAndIsDestroyedOnceWithTheListener) {
+        struct Sentinel {
+            explicit Sentinel(std::atomic<int>& target) : destroyed(target) {}
+            ~Sentinel() {
+                destroyed.fetch_add(1);
+            }
+            std::atomic<int>& destroyed;
+            std::atomic<int> messages{0};
+        };
+        std::atomic<int> destroyed{0};
+        {
+            WebSocketHandler handler;
+            handler.onMessage = [owned = MakeUnique<Sentinel>(destroyed)](const WebSocketHandler::ConnectionPtr& connection, WebSocketMessage message) {
+                owned->messages.fetch_add(1);
+                connection->QueueText(message.GetText());
+                return true;
+            };
+            listener = MakeUnique<WebSocketListener>(WebSocketListenerSettings{}, std::move(handler));
+        }
+        const auto started = listener->Start(0);
+        ASSERT_TRUE(started.has_value());
+        auto client = Connect(*started);
+        ASSERT_TRUE(client.has_value());
+        client->SendText("owned");
+        const auto frame = client->WaitForFrame();
+        ASSERT_TRUE(frame.has_value());
+        EXPECT_EQ(frame->payload, "owned");
+        EXPECT_EQ(destroyed.load(), 0) << "the handler is alive while the listener is";
+
+        listener.reset();
+        EXPECT_EQ(destroyed.load(), 1);
     }
 
 }  // namespace BECore::Tests

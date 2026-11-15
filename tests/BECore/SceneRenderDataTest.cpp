@@ -1,10 +1,12 @@
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Renderer/RendererManager.h>
 #include <BECore/Scene/Components/QuadRendererComponent.h>
 #include <BECore/Scene/Components/SpriteRendererComponent.h>
 #include <BECore/Scene/Components/TransformComponent.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneRenderData.h>
 #include <Common/RecordingRenderer.h>
+#include <entt/entt.hpp>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -106,7 +108,6 @@ namespace BECore::Tests {
         EXPECT_EQ(turned.rotation, 30.0f);
         EXPECT_EQ(turned.pivotX, 0.0f);
         EXPECT_EQ(turned.pivotY, 1.0f);
-        // The rect is mirrored as before
         EXPECT_EQ(turned.x, 5.0f);
         EXPECT_EQ(turned.width, 7.0f);
     }

@@ -2,10 +2,6 @@
 #include <gtest/gtest.h>
 #include <tests/StressSceneFixture.h>
 
-/**
- * Coverage of StressSpritesComponent on the shipped scene file, drawn on a RecordingRenderer: one draw call per sprite, the field grows and
- * shrinks from the tail, the sprites spin, a game that is not active shows nothing, and the draw order follows the runs of atlases.
- */
 namespace BECore::Stress::Tests {
 
     using BECore::Tests::DrawCall;

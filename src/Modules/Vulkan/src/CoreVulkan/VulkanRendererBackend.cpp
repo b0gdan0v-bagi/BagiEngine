@@ -47,7 +47,6 @@ namespace BECore {
             return false;
         }
 
-        // Verify the window was created with SDL_WINDOW_VULKAN flag
         const SDL_WindowFlags windowFlags = SDL_GetWindowFlags(nativeWindow);
         if (!(windowFlags & SDL_WINDOW_VULKAN)) {
             LOG_ERROR("VulkanRendererBackend: SDL_Window was not created with SDL_WINDOW_VULKAN flag. "
@@ -55,18 +54,16 @@ namespace BECore {
             return false;
         }
 
-        // Step 1: Create VkInstance (needed before surface creation)
+        // The instance comes first for the surface, and the surface for the queue pick of the device
         if (!_device.InitializeInstance(nativeWindow)) {
             return false;
         }
 
-        // Step 2: Create VkSurfaceKHR via SDL (platform-agnostic, needs a valid instance)
         if (!SDL_Vulkan_CreateSurface(nativeWindow, _device.GetInstance(), nullptr, &_surface)) {
             LOG_ERROR("VulkanRendererBackend: SDL_Vulkan_CreateSurface failed");
             return false;
         }
 
-        // Step 3: Pick physical device and create logical device (needs surface for queue detection)
         if (!_device.InitializeDevice(_surface)) {
             return false;
         }
@@ -89,15 +86,18 @@ namespace BECore {
             return false;
         }
 
-        if (!_rectPipeline.Initialize(_device.GetDevice(), _swapchain.GetRenderPass())) {
+        // The render pass is kept for the life of the backend (a recreated swapchain keeps the format), so the colour space is decided once
+        _linearColors = IsSrgbFormat(_swapchain.GetImageFormat());
+
+        if (!_rectPipeline.Initialize(_device.GetDevice(), _swapchain.GetRenderPass(), _linearColors)) {
             return false;
         }
 
-        if (!_texturePipeline.Initialize(_device.GetDevice(), _swapchain.GetRenderPass())) {
+        if (!_texturePipeline.Initialize(_device.GetDevice(), _swapchain.GetRenderPass(), _linearColors)) {
             return false;
         }
 
-        if (!_geometryPipeline.Initialize(_device.GetDevice(), _swapchain.GetRenderPass(), _texturePipeline.GetDescriptorSetLayout())) {
+        if (!_geometryPipeline.Initialize(_device.GetDevice(), _swapchain.GetRenderPass(), _linearColors, _texturePipeline.GetDescriptorSetLayout())) {
             return false;
         }
 
@@ -167,13 +167,11 @@ namespace BECore {
         _geometryPipeline.Destroy(vkDevice);
         _swapchain.Destroy(_device);
 
-        // Surface must be destroyed before the instance
         if (_surface != VK_NULL_HANDLE) {
             vkDestroySurfaceKHR(_device.GetInstance(), _surface, nullptr);
             _surface = VK_NULL_HANDLE;
         }
 
-        // Device (logical + physical + instance) cleanup
         _device.Destroy();
     }
 
@@ -273,7 +271,6 @@ namespace BECore {
     }
 
     void VulkanRendererBackend::BeginFrame() {
-        // Begin the swapchain render pass. AcquireFrame() must have been called first.
         if (!_frameAcquired || _inSwapchainPass) {
             return;
         }
@@ -309,7 +306,6 @@ namespace BECore {
         vkCmdEndRenderPass(cmd);
         vkEndCommandBuffer(cmd);
 
-        // Submit the command buffer
         const VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -332,10 +328,15 @@ namespace BECore {
     }
 
     void VulkanRendererBackend::Clear(const Color& color) {
-        _clearColor.float32[0] = color.r / 255.0f;
-        _clearColor.float32[1] = color.g / 255.0f;
-        _clearColor.float32[2] = color.b / 255.0f;
-        _clearColor.float32[3] = color.a / 255.0f;
+        constexpr float kChannelScale = 1.0f / 255.0f;
+        const auto channel = [this](uint8_t value) {
+            const float srgb = static_cast<float>(value) * kChannelScale;
+            return _linearColors ? SrgbToLinear(srgb) : srgb;
+        };
+        _clearColor.float32[0] = channel(color.r);
+        _clearColor.float32[1] = channel(color.g);
+        _clearColor.float32[2] = channel(color.b);
+        _clearColor.float32[3] = static_cast<float>(color.a) * kChannelScale;
     }
 
     void VulkanRendererBackend::Present() {

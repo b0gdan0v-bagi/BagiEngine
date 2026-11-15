@@ -1,11 +1,13 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/XmlDeserializer.h>
+#include <BECore/Renderer/RendererManager.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIImageComponent.h>
 #include <BECore/UI/UITextComponent.h>
+#include <BECore/UI/UIVars.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/RecordingRenderer.h>
 #include <gtest/gtest.h>
@@ -14,9 +16,8 @@ namespace BECore::Tests {
 
     /*
      * The draw and the content check of an icon button in its composed form (`ui-controls.md`, "Components": an image child, and a caption child in a horizontal stack when there is text).
-     * The class `UIButton` had these cases with `GetParts`; the geometry is now the layout of the children, and the numbers (the shares and the gaps that the HTML compiler writes, which
-     * `UIWebTest` holds it to) are given below as numbers. What the class tests held on the colour of an icon by state (hover, press, disabled, group-disabled, selected) is
-     * `UIStateLookTest` (`ResolveTint`), `UIInputClickerTest` and `UIStateInheritTest` (a child follows its button). An icon above the caption has no composed form, so its cases are gone.
+     * The shares and the gaps that the HTML compiler writes are held by `UIWebTest`; the colour of an icon by state is `UIStateLookTest` (`ResolveTint`),
+     * `UIInputClickerTest` and `UIStateInheritTest` (a child follows its button). An icon above the caption has no composed form.
      */
 
     namespace {
@@ -230,7 +231,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIButtonIconDrawTest, ASpriteThatIsNotInTheLibraryDrawsNoIconButStillTheCaption) {
-        Get("LeftIcon").GetComponent<UIImageComponent>()->GetSprite() = UISprite{};  // no direct texture any more: the name "TestIcon" is not in the TextureLibrary
+        Get("LeftIcon").GetComponent<UIImageComponent>()->GetSprite() = UISprite{};  // no direct texture, and the name "TestIcon" is not in the TextureLibrary
         Draw();
         EXPECT_EQ(IconCalls().size(), 2u);
         EXPECT_TRUE(GlyphBounds(Get("Left").rect).has_value());

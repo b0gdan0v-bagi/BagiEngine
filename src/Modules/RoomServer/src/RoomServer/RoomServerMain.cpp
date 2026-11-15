@@ -42,7 +42,6 @@ namespace BECore {
         // Line buffering fixes that on POSIX (the hosted server runs on Linux); the Windows CRT treats _IOLBF as full buffering, so there the log still comes in chunks
         std::setvbuf(stdout, nullptr, _IOLBF, kStdoutBufferBytes);
 
-        // Sinks come from a config in a game; a server without content files makes its own
         auto console = New<ConsoleSink>();
         console->Initialize();
 

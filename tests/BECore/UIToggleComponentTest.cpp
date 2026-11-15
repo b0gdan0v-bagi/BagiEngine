@@ -1,8 +1,10 @@
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Input/UIInput.h>
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/BinarySerializer.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
+#include <BECore/Renderer/RendererManager.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
@@ -12,6 +14,7 @@
 #include <BECore/UI/UITextComponent.h>
 #include <BECore/UI/UIThemes.h>
 #include <BECore/UI/UIToggleComponent.h>
+#include <BECore/UI/UIVars.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -574,7 +577,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIToggleComponentTest, TheTrackAndThumbOfA300By56RowAreAtTheirNumbers) {
-        // The numbers the first toggle (a class, now gone) drew, kept as the specification: a 28 high, 56 wide track with 14 of air to the right
+        // The specification of the geometry: a 28 high, 56 wide track with 14 of air to the right
         const auto parts = PartsOf("Sound");
         const Rect& row = Get("Sound").rect;
         EXPECT_TRUE(Near(parts.track, Rect{row.x + 230.0f, row.y + 14.0f, 56.0f, 28.0f}));

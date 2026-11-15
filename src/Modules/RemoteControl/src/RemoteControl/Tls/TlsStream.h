@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Types/Types.h>
+#include <BECore/Utils/MoveOnlyFunction.h>
 #include <RemoteControl/Socket.h>
 #include <atomic>
 #include <chrono>
@@ -77,7 +78,7 @@ namespace BECore {
         [[nodiscard]] virtual String GetLastError() const = 0;
     };
 
-    using TlsStreamFactory = eastl::function<UniquePtr<ITlsStream>()>;
+    using TlsStreamFactory = MoveOnlyFunction<UniquePtr<ITlsStream>()>;
 
     /// The TLS part of WebSocketClientSettings
     struct TlsClientOptions {

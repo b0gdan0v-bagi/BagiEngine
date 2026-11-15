@@ -138,7 +138,7 @@ namespace BECore::Tests {
             return MakeIntrusive<TaskHandle<void>>(std::move(task));
         }
 
-        bool WaitFor(const std::function<bool()>& condition) {
+        bool WaitFor(FunctionRef<bool()> condition) {
             const auto limit = std::chrono::steady_clock::now() + std::chrono::seconds(20);
             while (!condition()) {
                 if (std::chrono::steady_clock::now() > limit) {

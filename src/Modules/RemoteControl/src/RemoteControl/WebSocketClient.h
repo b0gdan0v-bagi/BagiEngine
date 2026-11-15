@@ -18,7 +18,7 @@
 
 namespace BECore {
 
-    /// The old name of kTlsUnsupported (Tls/TlsStream.h): the error text of a `wss://` address on a platform without a TLS backend starts with it
+    /// Alias of kTlsUnsupported (Tls/TlsStream.h): the error text of a `wss://` address on a platform without a TLS backend starts with it
     inline constexpr StringView kWebSocketTlsUnsupported = kTlsUnsupported;
 
     /// The limits, timeouts and names of one client
@@ -86,11 +86,11 @@ namespace BECore {
      * (safe in any state, also for an object that never opened; a reader still inside getaddrinfo cannot be woken, so the join may
      * wait for that one name lookup). One object serves one connection at a time.
      *
-     * The client masks every frame with a fresh key, answers pings, answers a close with a close, and closes the connection
-     * with 1002 on a protocol error (a masked frame of the server included), 1009 on a message over the limit, 1003 on a
-     * binary message. `wss://` goes through ITlsStream (the certificate is always checked: Tls/CLAUDE.md); a failed TLS connect is a Closed 1006 whose
-     * reason says what failed, and on a platform without a backend Open() refuses it at once (kTlsUnsupported). Only the thread that calls Open(), SendText(), Close(),
-     * Abort() and PollEvent() may do so (one thread, the owner's); IsOpen() and GetBytesReceived() are safe from any.
+     * The client closes the connection with 1002 on a protocol error (a masked frame of the server included), 1009 on a
+     * message over the limit, 1003 on a binary message. `wss://` goes through ITlsStream (the certificate is always checked);
+     * a failed TLS connect is a Closed 1006 whose reason says what failed, and on a platform without a backend Open() refuses
+     * it at once (kTlsUnsupported). Open(), SendText(), Close(), Abort() and PollEvent() belong to the owner's one thread;
+     * IsOpen() and GetBytesReceived() are safe from any.
      */
     class WebSocketClient {
     public:

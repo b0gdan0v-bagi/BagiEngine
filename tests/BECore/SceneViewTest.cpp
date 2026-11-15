@@ -5,6 +5,7 @@
 #include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/Renderer/IRenderTarget.h>
 #include <BECore/Renderer/IRenderer.h>
+#include <BECore/Renderer/RendererManager.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <Common/RecordingRenderer.h>

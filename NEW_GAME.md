@@ -14,7 +14,7 @@ Do not guess any of these. Ask, write the answers down and repeat them back befo
 | the remote URL of the new repository | the owner creates the empty repository on GitHub; the agent creates no remote repository |
 | **the git email and the name for the commits** | see step 2: the global git identity of the machine may be a different one (a work account), and these repositories must not get it |
 | the todo token (`TODO_API_TOKEN`) | the `.env` of the new repository; never committed, never printed |
-| whether to create the todo area and its Vikunja project now | it is a setting of the shared store (step 5) |
+| whether the owner has created the todo area and the game's token | it is a setting of the shared store (step 5) |
 
 **The email:** never take it from `git config --global`, from the environment, or from another repository's config or history without asking. Ask: "Which email and name should the commits of `<repo>` and of its `engine/` submodule use?" Use exactly the answer.
 
@@ -100,7 +100,7 @@ The rules are the game's own files, with the same headings as the engine's, beca
 | File | Template | What to fill in |
 |------|----------|-----------------|
 | `.claude/rules/build-project.md` | [.claude/rules/build-project.md](.claude/rules/build-project.md) of the engine (Chess has a filled one) | Product `Bagi<Name>`, Tests `<Name>Tests`, source paths `src tests`, the extra configure trigger "the pointer of `engine` moved", `--root .` everywhere, format scope `src/`, `config/`, `tests/` |
-| `.claude/rules/todo-project.md` | Chess's | two areas: game (`<area>`, `<R>` = `.`, base `main`, Vikunja `<repo>`) and engine (`engine`, `<R>` = `engine`, base `games/<area>`, Vikunja `BagiEngine`); the zones nobody edits (the vendored code of `engine/`); the classifier's `needs engine change` |
+| `.claude/rules/todo-project.md` | Chess's | two areas: game (`<area>`, `<R>` = `.`, base `main`) and engine (`engine`, `<R>` = `engine`, base `games/<area>`); the zones nobody edits (the vendored code of `engine/`); the classifier's `needs engine change` |
 | `.claude/rules/engine-and-todo.md` | Chess's | the names of the game and of the branch `games/<area>` |
 
 The skill texts give `games/chess` as an example of the engine's base branch. For another game the base is the one in its `todo-project.md`.
@@ -109,18 +109,17 @@ The skill texts give `games/chess` as an example of the engine's base branch. Fo
 
 ## 5. The todo store
 
-The entries, plans and reviews of every area live in the todo store, a service on Railway ([tools/todo/CLAUDE.md](tools/todo/CLAUDE.md)). Nothing of it is in git. The game gets an area of its own, and its Vikunja project is mirrored by the service.
+The entries, plans and reviews of every area live in the todo store, the service of the owner's BagiTodo; `engine/tools/todo/` holds only the loader of its CLI ([tools/todo/CLAUDE.md](tools/todo/CLAUDE.md)). Nothing of it is in git. The game gets an area of its own.
 
 1. `.env.example` (committed):
    ```
-   TODO_API_URL=<the service URL, the same as in the engine's .env.example>
+   TODO_API_URL=
    TODO_API_TOKEN=
    ```
-   `.env` (git-ignored): the same keys with the token the owner gave. Do not print the token or write it anywhere else.
+   `.env` (git-ignored): the address of the service and the game's own token, limited to its areas (the game's and `engine`), both from the owner. Do not print the token or write it anywhere else.
 2. `python3 engine/tools/todo/todo.py ping` must answer.
-3. The area, **only after the owner's yes** (it changes the shared store, and the mirror creates or links the Vikunja project):
+3. The area is the owner's step in the store (with the token that may reach it). Check it is there:
    ```bash
-   python3 engine/tools/todo/todo.py area set <area> --title "<Name>" --vikunja-project <repo>
    python3 engine/tools/todo/todo.py area list
    ```
 4. The first entries go in with `/todo-add` (or `todo.py add <id> --area <area> ...`), not as files. Plans and reviews are never committed (`todo.py plan get` / `put` refuse a path inside a git work tree).

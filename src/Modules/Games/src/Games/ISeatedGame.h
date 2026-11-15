@@ -20,8 +20,6 @@ namespace BECore {
      * Unlike IControllableGame (one controller sees everything), everything here is per seat:
      *  - GetSeatView() is what that seat may see and must contain **no hidden information** of the other seats, not even in
      *    a field a client does not draw: the server sends the view to the client as it is;
-     *  - GetSeatActions() and PerformSeatAction() name the seat that acts, and the game validates the seat, so a client
-     *    cannot act for another one;
      *  - ChooseComputerAction() is how a computer plays an empty or abandoned seat. The server sends the result through
      *    PerformSeatAction() like a person's action, so a computer cannot do what a seat may not.
      *
@@ -43,7 +41,6 @@ namespace BECore {
         /**
          * @brief Starts a new game (deals, sets the first turn). The same seed gives the same game.
          *
-         * @param seed Randomness for the deal, chosen by the server.
          * @param options An object whose members are the game's (rules variant, ...); it comes from a client and may be empty.
          * @return invalid_params for a member that is malformed; the game is then unchanged.
          */
@@ -67,7 +64,6 @@ namespace BECore {
         /**
          * @brief Applies @p action for @p seat after checking it is the seat's to make.
          *
-         * @param seat Checked by the game: invalid_seat when out of range.
          * @param action An object from a client. Malformed (no `type`, wrong types): invalid_params.
          * @return What the action did, as a JSON object (public information only, it may be sent to every seat), or an error:
          *         not_your_turn when the seat cannot act now, illegal_action when the action is well-formed but the rules

@@ -42,7 +42,6 @@ namespace BECore {
         _width  = width;
         _height = height;
 
-        // --- Image ---
         VkImageCreateInfo imgInfo{};
         imgInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
         imgInfo.imageType     = VK_IMAGE_TYPE_2D;
@@ -60,7 +59,6 @@ namespace BECore {
             return false;
         }
 
-        // --- Memory ---
         VkMemoryRequirements memReqs{};
         vkGetImageMemoryRequirements(device, _image, &memReqs);
 
@@ -79,7 +77,6 @@ namespace BECore {
         }
         vkBindImageMemory(device, _image, _memory, 0);
 
-        // --- Image view ---
         VkImageViewCreateInfo viewInfo{};
         viewInfo.sType                           = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         viewInfo.image                           = _image;
@@ -95,7 +92,6 @@ namespace BECore {
             return false;
         }
 
-        // --- Render pass ---
         // finalLayout = SHADER_READ_ONLY_OPTIMAL so the image is sampling-ready after EndRenderPass.
         VkAttachmentDescription colorAtt{};
         colorAtt.format         = format;
@@ -137,7 +133,6 @@ namespace BECore {
             return false;
         }
 
-        // --- Framebuffer ---
         VkFramebufferCreateInfo fbInfo{};
         fbInfo.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         fbInfo.renderPass      = _renderPass;
@@ -151,7 +146,6 @@ namespace BECore {
             return false;
         }
 
-        // --- Sampler ---
         VkSamplerCreateInfo samplerInfo{};
         samplerInfo.sType        = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
         samplerInfo.magFilter    = VK_FILTER_LINEAR;
@@ -164,7 +158,6 @@ namespace BECore {
             return false;
         }
 
-        // --- ImGui descriptor set ---
         _imguiTexId = ImGui_ImplVulkan_AddTexture(_sampler, _imageView,
                                                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         if (!_imguiTexId) {

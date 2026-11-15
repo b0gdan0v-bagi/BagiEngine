@@ -29,7 +29,7 @@ namespace BECore::Tests {
             }
 
             bool consume = false;
-            eastl::function<void()> hook;
+            MoveOnlyFunction<void()> hook;
             Vector<float> downs;
             Vector<float> ups;
             Vector<float> motions;

@@ -50,8 +50,8 @@ namespace BECore {
      *
      * **Theme tokens.** A colour field may be a token (`color="@primary"`, UIThemes). The canvas calls `ResolveTheme()` before it draws the element: the token's colour is written into the
      * channels of every colour field (the element's own, the box's, its controls' and components'), so every reader of a colour keeps reading channels. `_themeVersion` is the version of
-     * the table the channels were last resolved at; it is runtime state, neither reflected nor saved, and an element is never copied with it (elements are shared by pointer; a new one
-     * starts at 0 and resolves on its first draw). Code that assigns a token to a live element calls `ResetTheme()`.
+     * the table the channels were last resolved at (runtime, neither reflected nor saved; a new element starts at 0 and resolves on its first draw). Code that assigns a token to a live
+     * element calls `ResetTheme()`.
      */
     class UIElement : public RefCounted {
         BE_CLASS(UIElement, FACTORY_BASE, ELEMENT = element, REGISTER_SELF)
@@ -117,7 +117,7 @@ namespace BECore {
 
         /// **Popup protocol.** An element whose children are a popup (a dropdown's list) says so with `HasPopupChildren()`: the canvas takes those children out of the flow. Closed, their
         /// rects are empty (not drawn, not hit, not validated, not in `ui_tree` as visible). Open, `LayoutPopup` places them against the content bounds of the canvas, they are drawn
-        /// after the whole tree, hit-tested before it, and a left press anywhere else closes the popup (`ClosePopup`) and is consumed. The defaults are no popup, so no other control changes.
+        /// after the whole tree, hit-tested before it, and a left press anywhere else closes the popup (`ClosePopup`) and is consumed.
         /// The open state is runtime UI state: it is not reflected and not saved
         [[nodiscard]] virtual bool HasPopupChildren() const {
             return false;
@@ -211,9 +211,9 @@ namespace BECore {
         [[nodiscard]] virtual const String& GetTooltipText() const;
 
         /**
-         * Draws one part of a control (a track, a fill, a thumb) in @p area with @p fill. `Square` is the plain `DrawFilledRect` of the part, the call the control always made.
+         * Draws one part of a control (a track, a fill, a thumb) in @p area with @p fill. `Square` is the plain `DrawFilledRect` of the part.
          * `Round` is a box whose only setting is a corner radius of half the shorter side: a pill for a track, a circle for a square thumb. A part shorter than the track is a
-         * smaller pill (the fill of a progress bar at 2 % is a short capsule, not a track-high slice), which is accepted. Nothing for an empty @p area in the round shape.
+         * smaller pill (the fill of a progress bar at 2 % is a short capsule, not a track-high slice). Nothing for an empty @p area in the round shape.
          * Public because the components of a control call it on their owner (a switch's track and thumb, a slider's parts).
          */
         void DrawPart(IRenderer& renderer, const Rect& area, const Color& fill, UIPartShape shape);
@@ -260,7 +260,7 @@ namespace BECore {
 
         /**
          * Draws the box in `rect`: shadow, glow, fill, border, highlight, in this order, as one DrawGeometry call (the order of the triangles is the order of the paint). A
-         * @p boxStyle with no effect (`UIBoxStyle::HasEffect`) is the plain `DrawFilledRect` of @p fill, the call every element made before the box existed. @p fill is the colour
+         * @p boxStyle with no effect (`UIBoxStyle::HasEffect`) is the plain `DrawFilledRect` of @p fill. @p fill is the colour
          * (the start of the gradient), @p gradientEnd the far colour; a control passes its state-shifted colours (a hover, a press) and leaves @p boxStyle to its authored value.
          * Nothing for an empty rect. The shadow, glow and the feather of an edge are drawn outside `rect` (paint: not layout and not validated); the clip and the view
          * transform apply to them like to every draw.

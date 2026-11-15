@@ -3,6 +3,8 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneNode.h>
+#include <BECore/UI/UIStrings.h>
+#include <BECore/UI/UIVars.h>
 #include <Events/SceneEvents.h>
 #include <Generated/StressUiComponent.gen.hpp>
 #include <Stress/StressGame.h>

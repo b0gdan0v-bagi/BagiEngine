@@ -1,6 +1,9 @@
+#include <BECore/Clipboard/Clipboard.h>
 #include <BECore/Clipboard/FakeClipboard.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
+#include <BECore/Time/GamePause.h>
+#include <Common/DestroyTally.h>
 #include <Common/Printers.h>
 #include <Events/ClipboardEvents.h>
 #include <gtest/gtest.h>
@@ -155,7 +158,7 @@ namespace BECore::Tests {
                 Board().RequestText([&](const ClipboardText&) { ++calls; });
             }
         };
-        Board().RequestText(callback);
+        Board().RequestText(std::move(callback));
 
         Board().Update();
         EXPECT_EQ(calls, 1);
@@ -163,6 +166,19 @@ namespace BECore::Tests {
         Board().Update();
         EXPECT_EQ(calls, 2);
         EXPECT_FALSE(Board().HasPending());
+    }
+
+    TEST_F(ClipboardTest, AMoveOnlyCallbackIsAnsweredOnceAndDestroyedOnce) {
+        Fake().SetContent("owned");
+        int destroyed = 0;
+        int calls = 0;
+        Board().RequestText([token = DestroyTally(destroyed), &calls](const ClipboardText&) { ++calls; });
+        EXPECT_EQ(destroyed, 0);
+
+        Board().Update();
+        Board().Update();
+        EXPECT_EQ(calls, 1);
+        EXPECT_EQ(destroyed, 1);
     }
 
     TEST_F(ClipboardTest, ARequestPasteEmitsOnePasteEventOnOk) {

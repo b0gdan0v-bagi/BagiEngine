@@ -1,11 +1,17 @@
 #pragma once
 
 #include <BECore/Animation/Easing.h>
+#include <BECore/Animation/Lerp.h>
 #include <BECore/RefCounted/RefCounted.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
+#include <BECore/Utils/FixedFunction.h>
+#include <BECore/Utils/MoveOnlyFunction.h>
 #include <coroutine>
+#include <cstddef>
 #include <cstdint>
+#include <type_traits>
+#include <utility>
 
 namespace BECore {
 
@@ -17,6 +23,33 @@ namespace BECore {
         float delay = 0.0f;                ///< seconds before the first setter call (not finite counts as zero); the setter is not called during it
         EaseType ease = EaseType::Linear;  ///< the curve of the progress, see `Ease`
     };
+
+    /// The inline buffer of a tween setter, which holds `from`, `to` and the user's callable: one cache line with its two pointers, enough for a
+    /// `Vec4` with a pointer and for the biggest setter of the engine's own tools (the entities of `BagiStress`)
+    inline constexpr size_t kTweenApplyBytes = 48;
+
+    /// The eased progress in, the value out: the setter of one tween clip, type-erased so the manager has no code per value type. It never
+    /// allocates: a callable that does not fit `kTweenApplyBytes` is a compile error (`MakeTweenApply` says it in words)
+    using TweenApply = FixedFunction<kTweenApplyBytes, void(float)>;
+
+    /// What `onValue` of a typed tween can be: a callable taking `const T&`, or `std::nullptr_t` (`{}` and `nullptr`) for a tween with no setter.
+    /// An empty `MoveOnlyFunction` is not a "no setter": calling it asserts
+    template <typename TOnValue, typename T>
+    concept TweenValueCallback = std::is_same_v<std::decay_t<TOnValue>, std::nullptr_t> || std::is_invocable_v<std::decay_t<TOnValue>&, const T&>;
+
+    /// The setter of a typed tween from @p from to @p to: `onValue(Lerp(from, to, easedT))`. The one place that builds it, for `TweenManager::Start`
+    /// and the clips of `Timeline`; @p onValue is moved into the capture (a move-only one is fine)
+    template <Tweenable T, TweenValueCallback<T> TOnValue>
+    [[nodiscard]] TweenApply MakeTweenApply(T from, T to, TOnValue&& onValue) {
+        if constexpr (std::is_same_v<std::decay_t<TOnValue>, std::nullptr_t>) {
+            return TweenApply([](float) {});
+        } else {
+            auto apply = [from = std::move(from), to = std::move(to), onValue = std::forward<TOnValue>(onValue)](float easedT) mutable { onValue(Lerp(from, to, easedT)); };
+            static_assert(kFunctionFitsInline<decltype(apply), kTweenApplyBytes>, "onValue does not fit a tween setter (kTweenApplyBytes with `from` and `to`; its move must be noexcept, which a "
+                                                                                  "captured const object is not): capture a pointer to an object that holds the state");
+            return TweenApply(std::move(apply));
+        }
+    }
 
     /// Waiting (the delay has not passed), Running, then Completed or Cancelled (never both)
     CORE_ENUM(TweenState, uint8_t, Waiting, Running, Completed, Cancelled)
@@ -34,9 +67,8 @@ namespace BECore {
      * **Lifetime of the setter.** The setter of a tween often captures a pointer to an object (a component, a node). The tween does not
      * know when that object dies: cancel it first, from the owner (a `ScopedTween` member does it in its destructor).
      *
-     * **Waiters.** A coroutine suspended on the handle (`AwaitTween`) is a waiter. The manager resumes the waiters inline, in the order
-     * they registered, right after the `onComplete` or `onCancel` callback of the tween (a waiter is a callback and has all the rules of
-     * one). `Clear()` and the destructor of the manager drop them without resuming them.
+     * **Waiters.** A coroutine suspended on the handle (`AwaitTween`) is resumed inline after the `onComplete` or `onCancel` callback;
+     * `Clear()` and the destructor of the manager drop it without resuming it (`Animation/CLAUDE.md`, rule 9 and 10).
      */
     class TweenHandle : public RefCountedNonAtomic {
     public:
@@ -97,9 +129,9 @@ namespace BECore {
         float _progress = 0.0f;
         float _elapsed = 0.0f;  // raw time since Start, the delay included
         TweenSettings _settings;
-        eastl::function<void(float)> _apply;  // the eased progress in, the value out (the setter of the typed Start)
-        eastl::function<void()> _onComplete;
-        eastl::function<void()> _onCancel;
+        TweenApply _apply;  // the setter of the typed Start
+        MoveOnlyFunction<void()> _onComplete;
+        MoveOnlyFunction<void()> _onCancel;
         Vector<Waiter> _waiters;  // in registration order; resumed (and removed one by one) by the manager when the tween finishes
     };
 

@@ -25,9 +25,9 @@ namespace BECore {
         inline constexpr int kMixShiftC = 31;
         inline constexpr int kUnitBits = 24;                           ///< a float holds 24 bits of fraction exactly
         inline constexpr int kUnitShift = 64 - kUnitBits;              ///< the top bits of the hash are the best mixed
-        inline constexpr float kUnitScale = 1.0f / (1u << kUnitBits);  ///< 2^-24: the top bits times this are in [0, 1)
+        inline constexpr float kUnitScale = 1.0f / (1u << kUnitBits);  ///< the top bits times this are in [0, 1)
 
-        /// One step of splitmix64 from @p x (for x = 0 the first output of the generator seeded with 0: 0xE220A8397B1DCDAF)
+        /// One step of splitmix64 from @p x
         [[nodiscard]] constexpr uint64_t SplitMix64(uint64_t x) {
             uint64_t z = x + kGamma;
             z = (z ^ (z >> kMixShiftA)) * kMixA;

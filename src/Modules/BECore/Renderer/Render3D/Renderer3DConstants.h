@@ -52,7 +52,7 @@ namespace BECore {
     }
 
     /// The share of a directional light a surface gets: `max(0, dot(normal, toLight))`, both unit and in the same space. The lit Slang shader
-    /// must compute the same (slice 2).
+    /// must compute the same.
     [[nodiscard]] constexpr float LambertTerm(const Vec3& normal, const Vec3& toLight) {
         return std::max(0.0f, Dot(normal, toLight));
     }

@@ -22,7 +22,7 @@ namespace BECore::Tests {
         const Rect kLandscape{0.0f, 0.0f, 1280.0f, 720.0f};
         const Rect kPortrait{0.0f, 0.0f, 720.0f, 1280.0f};
 
-        /// The HUD of the plan's example: a 220 x 96 panel top left with a score label and a reset button inside
+        /// A HUD: a 220 x 96 panel top left with a score label and a reset button inside
         IntrusivePtr<UIElement> MakeHudTree() {
             auto root = New<UIElement>();
             root->name = "Root"_intern;

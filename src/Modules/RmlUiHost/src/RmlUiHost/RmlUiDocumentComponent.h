@@ -22,7 +22,7 @@ namespace BECore {
     /**
      * @brief A scene component that draws one RmlUi document (HTML-like markup and CSS-like styles in `.rml` / `.rcss`) and routes the mouse to it.
      *
-     * This is the third candidate for authoring a screen (`src/Modules/BECore/UI/AuthoringDecision.md`): the document has a DOM and a layout engine of its own, so it is not
+     * One of the ways to author a screen (`src/Modules/BECore/UI/AuthoringDecision.md`): the document has a DOM and a layout engine of its own, so it is not
      * a UIElement tree, and the scene editor, the validator and the control API's tree do not see into it. What it shares with a UICanvasComponent is the seam:
      * the same space / scale mode / safe area fields resolve to a rect and a scale with UICanvasScaler; it is drawn in the scene's draw order; it registers with UIInput in
      * the same order and consumes a mouse event that lands on an element; a `data-action` attribute on an element (a `<button>`) emits `InputEvents::ActionEvent` on click;
@@ -36,9 +36,8 @@ namespace BECore {
      * the HTML front-end makes with its "a group takes clicks only with a background" rule. A `click` is queued by the listener and the action is emitted after RmlUi has
      * finished with the event, because a handler may switch scenes and destroy this component.
      *
-     * **Hot reload.** A document that comes from `source` notes the files it read (the `.rml`, its `.rcss`, templates). Every `UISettings::hotReloadInterval` seconds of game time
-     * the draw looks at them and, when one changed, loads the document again (Reload()). A document that cannot be loaded is logged and the one on screen stays,
-     * and the next save is tried again. RmlUi's parser takes nearly any text for a document, so a typo in markup shows on screen (and in the log), it does not fail the load.
+     * **Hot reload.** A document that comes from `source` notes the files it read (the `.rml`, its `.rcss`, templates) and every `UISettings::hotReloadInterval` seconds
+     * of game time the draw calls ReloadIfChanged(). RmlUi's parser takes nearly any text for a document, so a typo in markup shows on screen (and in the log), it does not fail the load.
      * Not reloaded: images and fonts, and a document from SetMarkup().
      */
     class RmlUiDocumentComponent : public IComponent, public IUIInputHandler {

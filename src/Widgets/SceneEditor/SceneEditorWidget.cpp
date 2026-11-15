@@ -1,6 +1,7 @@
 #include "SceneEditorWidget.h"
 
 #include <BECore/Config/ConfigManager.h>
+#include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/AbstractFactory.h>
 #include <BECore/Reflection/IDeserializer.h>
@@ -29,10 +30,6 @@ namespace BECore {
         constexpr size_t kComponentLabelSize = 96;
         constexpr float kPopupButtonWidth = 120.0f;
     }  // namespace
-
-    // =========================================================================
-    // IWidget interface
-    // =========================================================================
 
     SceneEditorWidget::~SceneEditorWidget() {
         if (SceneManager* const sceneManager = CoreManager::FindSceneManager()) {
@@ -177,9 +174,6 @@ namespace BECore {
             return;
         }
 
-        // ----------------------------------------------------------------
-        // Toolbar
-        // ----------------------------------------------------------------
         ImGui::BeginDisabled(!_isDirty);
         if (IconTextButton(ICON_LC_SAVE, "Save", "Write the active scene back to its config file")) {
             SaveScene();
@@ -193,9 +187,6 @@ namespace BECore {
 
         ImGui::Separator();
 
-        // ----------------------------------------------------------------
-        // Left panel - Hierarchy
-        // ----------------------------------------------------------------
         const float leftPanelWidth = 300.0f;
         ImGui::BeginChild("##hierarchy", ImVec2(leftPanelWidth, 0.0f), true);
 
@@ -206,9 +197,6 @@ namespace BECore {
         ApplyHierarchyAnswers();
         AnnounceSelection(scene);
 
-        // ----------------------------------------------------------------
-        // Right panel - Inspector
-        // ----------------------------------------------------------------
         ImGui::SameLine();
         ImGui::BeginChild("##inspector", ImVec2(0.0f, 0.0f), true);
 
@@ -219,9 +207,7 @@ namespace BECore {
 
         ImGui::EndChild();
 
-        // ----------------------------------------------------------------
-        // Trigger popups (must happen inside Begin/End, after child windows)
-        // ----------------------------------------------------------------
+        // The popups are opened here: inside Begin/End, after the child windows
         if (_showAddNodePopup) {
             ImGui::OpenPopup("Add Node##modal");
             _showAddNodePopup = false;
@@ -240,10 +226,6 @@ namespace BECore {
     void SceneEditorWidget::Draw() {
         // All rendering is done in Update
     }
-
-    // =========================================================================
-    // Private methods
-    // =========================================================================
 
     void SceneEditorWidget::ApplyHierarchyAnswers() {
         if (_hierarchy.dirty) {
@@ -312,7 +294,6 @@ namespace BECore {
         }
         ImGui::BeginDisabled(locked);
 
-        // Node name editor
         ImGui::TextUnformatted("Name:");
         ImGui::SameLine();
 
@@ -342,7 +323,6 @@ namespace BECore {
             ImGui::TextDisabled("Instance of %s", _hierarchy.selected->GetSourceRef().CStr());
         }
 
-        // Entity ID (read-only)
         ImGui::TextUnformatted("Entity:");
         ImGui::SameLine();
         ImGui::Text("#%u", static_cast<unsigned int>(_hierarchy.selected->GetEntity()));

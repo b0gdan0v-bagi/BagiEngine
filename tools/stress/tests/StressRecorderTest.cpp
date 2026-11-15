@@ -3,10 +3,6 @@
 #include <gtest/gtest.h>
 #include <regex>
 
-/**
- * Coverage of the recorder: the nearest-rank percentiles by hand, the means, a buffer that never grows, and the one JSON line (it parses,
- * has every key, in sorted order, with plain decimals).
- */
 namespace BECore::Stress::Tests {
 
     namespace {

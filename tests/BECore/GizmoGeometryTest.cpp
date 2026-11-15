@@ -244,7 +244,6 @@ namespace BECore::Tests {
 
     TEST(GizmoGeometryTest, TranslateCentreSquareWinsOverTheArrowsAndTheNearerArrowWins) {
         const Frame frame = FrameOf(kFlat);
-        // On both the square and the X arrow
         EXPECT_EQ(HitTest(frame, Tool::Translate, kFlatCenter + Vec2{kCenterHalfSize - 1.0f, 1.0f}, 1.0f), Handle::Free);
         // Outside the square, within reach of both arrows: the nearer one
         EXPECT_EQ(HitTest(frame, Tool::Translate, kFlatCenter + Vec2{kCenterHalfSize + 3.0f, 5.0f}, 1.0f), Handle::AxisX);

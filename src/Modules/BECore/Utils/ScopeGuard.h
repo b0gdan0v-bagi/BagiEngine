@@ -1,26 +1,28 @@
 #pragma once
 
-#include <functional>
 #include <utility>
 
 namespace BECore {
+
+    /// Runs the callback when the object is destroyed; the callable is stored by value, with no type erasure and no allocation.
+    template <typename TCallable>
     class ScopeGuard {
     public:
-        // Принимаем любой вызываемый объект
-        explicit ScopeGuard(std::function<void()> onExit) : _onExit(std::move(onExit)) {}
+        explicit ScopeGuard(TCallable onExit) : _onExit(std::move(onExit)) {}
 
-        // Деструктор сработает при выходе из {}
         ~ScopeGuard() {
-            if (_onExit) {
-                _onExit();
-            }
+            _onExit();
         }
 
-        // Запрещаем копирование, чтобы избежать двойного вызова
+        // A copy would run the callback twice.
         ScopeGuard(const ScopeGuard&) = delete;
         ScopeGuard& operator=(const ScopeGuard&) = delete;
 
     private:
-        std::function<void()> _onExit;
+        TCallable _onExit;
     };
+
+    template <typename TCallable>
+    ScopeGuard(TCallable) -> ScopeGuard<TCallable>;
+
 }  // namespace BECore

@@ -9,8 +9,6 @@
 
 namespace BECore {
 
-    // DebugBreakHandler implementation
-
     void DebugBreakHandler::Initialize() {
         if (_initialized) {
             return;
@@ -25,14 +23,10 @@ namespace BECore {
             return;
         }
 
-        // Always break on fatal errors and asserts
-        // Expects also break if enabled
         if (event.type == AssertType::FatalError || event.type == AssertType::Assert || event.type == AssertType::Expect) {
             ENGINE_DEBUG_BREAK();
         }
     }
-
-    // LogHandler implementation
 
     void LogHandler::Initialize() {
         if (_initialized) {
@@ -44,7 +38,6 @@ namespace BECore {
     }
 
     void LogHandler::OnAssert(const AssertEvent& event) {
-        // Determine log level based on assert type
         LogLevel level = LogLevel::Error;
         const char* typeStr = "ASSERT";
 
@@ -63,7 +56,6 @@ namespace BECore {
                 break;
         }
 
-        // Build the message
         String message;
 
         if (event.expression) {
@@ -85,8 +77,6 @@ namespace BECore {
         LogEvent::Emit(level, message);
     }
 
-    // StackTraceHandler implementation
-
     void StackTraceHandler::Initialize() {
         if (_initialized) {
             return;
@@ -97,7 +87,6 @@ namespace BECore {
     }
 
     void StackTraceHandler::OnAssert(const AssertEvent& event) {
-        // Print stack trace for all assertion types
         fprintf(stderr, "\n[ASSERT] Stack trace for %s:%d\n", event.file, event.line);
         if (event.expression) {
             fprintf(stderr, "  Expression: %s\n", event.expression);
@@ -109,8 +98,6 @@ namespace BECore {
         // Skip 1 frame (this function itself)
         CaptureAndPrintStackTrace(1);
     }
-
-    // AssertHandlerManager implementation
 
     void AssertHandlerManager::Initialize() {
         if (_initialized) {

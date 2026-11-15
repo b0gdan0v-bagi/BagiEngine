@@ -1,8 +1,11 @@
 #include "SDLEventsProvider.h"
 
 #include <Application/Application.h>
+#include <BECore/Clipboard/Clipboard.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Input/UIInput.h>
 #include <BECore/MainWindow/IMainWindow.h>
+#include <BECore/Time/GamePause.h>
 #include <CoreSDL/SDLClipboard.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/ApplicationEvents.h>

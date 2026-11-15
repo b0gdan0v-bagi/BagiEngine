@@ -118,6 +118,21 @@ def test_added_code_is_reported_at_its_line():
     assert "added" in found[1]
 
 
+@pytest.mark.parametrize("code_point", [0xF0000, 0xF0020, 0xF3000])
+def test_a_character_of_the_shifted_block_is_a_difference_on_either_side(code_point):
+    holds = f"int a;\nchar c[] = \"{chr(code_point)}\";\n"
+    clean = "int a;\nchar c[] = \"\";\n"
+    for old, new, side in ((clean, holds, "now"), (holds, clean, "before"), (holds, holds, "now")):
+        found = comment_only.first_difference(old, new)
+        assert found is not None
+        assert found[0] == 2
+        assert f"U+{code_point:X}" in found[1] and side in found[1]
+
+
+def test_a_character_next_to_the_shifted_block_is_no_difference():
+    assert same(f"int a; // {chr(0xEFFFF)}{chr(0xF3001)}\n", "int a;\n")
+
+
 @pytest.mark.parametrize(
     "old, new",
     [
@@ -229,6 +244,13 @@ def test_a_deleted_file_fails(repo, capsys):
     code, out = run_check(repo, capsys=capsys)
     assert code == 1
     assert "src/Foo.h:1: file deleted" in out
+
+
+def test_a_shifted_block_character_prints_the_file_and_the_line(repo, capsys):
+    write(repo, "src/Foo.cpp", f"// the file\nint Foo() {{ return 1; }} // {chr(0xF0020)}\n")
+    code, out = run_check(repo, capsys=capsys)
+    assert code == 1
+    assert out.splitlines()[0].startswith("src/Foo.cpp:2: the source now holds U+F0020")
 
 
 def test_paths_narrow_the_files(repo, capsys):

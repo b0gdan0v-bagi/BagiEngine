@@ -65,10 +65,8 @@ namespace BECore::Fuzz {
     /**
      * The input is `html, NUL, css` (no NUL: all of it is the html) and `Compile` gets a loader that gives the css part for any `href`.
      *
-     * What is checked: `Compile` returns, and a second call gives the same text and the same report; every issue names a known source, a line inside the input,
-     * and a short message with no control character; the text of a document the report calls clean is well-formed XML (a document with issues may give XML
-     * that the loader refuses, which is how a damaged file is refused: nothing is promised for it); and the XML goes through `XmlDeserializer` and
-     * `UIScreenContent::Deserialize`, the way `UIDocument` reads it.
+     * Only the XML of a document the report calls clean is promised to be well-formed: a document with issues may give XML that the loader refuses, which is how a damaged
+     * file is refused.
      */
     void FuzzWebUi(const uint8_t* data, size_t size) {
         const auto* begin = reinterpret_cast<const char*>(data);

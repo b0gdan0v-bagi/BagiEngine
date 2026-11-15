@@ -89,7 +89,6 @@ namespace BECore::Tests {
     TEST_F(RoomServerScenarioTest, TheJudgeLetsASeatKnowItsHandAndTheTableAndNothingElse) {
         const String honest = R"({"type":"view","room":"ABCD","seat":0,"view":{"hand":["c0_1","c0_2"],"table":[{"seat":2,"card":"c2_0"}]},"actions":[{"type":"play","card":"c0_1"}]})";
         EXPECT_TRUE(FindLeakedCardIds(honest, 0).empty());
-        // The same text for another seat: its hand is somebody else's
         EXPECT_EQ(FindLeakedCardIds(honest, 1), (Vector<String>{"c0_1", "c0_2", "c0_1"}));
 
         const String leaky = R"({"type":"view","seat":0,"view":{"hand":["c0_1"],"table":[],"allHands":[["c0_1"],["c1_0"],["c2_2"]]}})";
@@ -98,7 +97,6 @@ namespace BECore::Tests {
         // Not JSON, or a client with no seat: only what is on the table (nothing) is allowed
         EXPECT_EQ(FindLeakedCardIds("the card c0_1", 0), Vector<String>{});
         EXPECT_EQ(FindLeakedCardIds("the card c0_1", -1), (Vector<String>{"c0_1"}));
-        // A card on the table of another message is not on the table of this one
         EXPECT_EQ(FindLeakedCardIds(R"({"type":"error","message":"c2_0"})", 0), (Vector<String>{"c2_0"}));
     }
 
@@ -186,7 +184,6 @@ namespace BECore::Tests {
                 [&] { return TableSize(guest) == kTableAtTheDrop && HasActions(guest); }, kPlayLimit));
         }
 
-        // The guest's socket is cut on its turn
         guest.Raw().Drop();
         for (;;) {
             const auto lobby = host.WaitFor(RoomMessageTypes::kLobby);
@@ -198,7 +195,6 @@ namespace BECore::Tests {
         Drain(host);
         const size_t viewsBefore = CountOf(host, RoomMessageTypes::kView);
 
-        // Inside the grace nobody plays for the seat
         for (int step = 0; step < 4; ++step) {
             clock.Advance(5s);
             std::this_thread::sleep_for(kPause / 3);
@@ -208,7 +204,6 @@ namespace BECore::Tests {
         EXPECT_EQ(CountOf(host, RoomMessageTypes::kView), viewsBefore) << "something was played while the seat was inside its grace";
         EXPECT_EQ(TableSize(host), kTableAtTheDrop);
 
-        // Past it a computer plays the seat
         clock.Advance(15s);
         ASSERT_TRUE(WaitUntil([&] { Drain(host); }, [&] { return TableSize(host) > kTableAtTheDrop; })) << "no computer took the seat after the grace";
 
@@ -235,7 +230,6 @@ namespace BECore::Tests {
         ASSERT_TRUE(replacement->WaitFor(RoomMessageTypes::kView).has_value());
         EXPECT_EQ(replacement->seat, kGuestSeat);
 
-        // Both humans play on to the end
         Clients playing;
         playing.push_back(std::move(clients[0]));
         playing.push_back(MakeUnique<RoomSocketClient>(std::move(*replacement)));
@@ -246,7 +240,6 @@ namespace BECore::Tests {
         ExpectCleanWire(guest, "the guest before the drop");
         ExpectCleanWire(playing);
 
-        // After `leave` the token is no longer good
         playing[1]->Leave();
         ASSERT_TRUE(playing[1]->WaitFor(RoomMessageTypes::kLeft).has_value());
         auto late = RoomSocketClient::Connect(port);
@@ -292,7 +285,7 @@ namespace BECore::Tests {
         for (const auto& client : table) {
             players.emplace_back(*client);
         }
-        const WaitPump pumpTheHand = [&] {
+        const auto pumpTheHand = [&] {
             for (HandPlayer& player : players) {
                 player.Pump();
             }
@@ -303,7 +296,6 @@ namespace BECore::Tests {
         ASSERT_TRUE(halfOpen.has_value());
         halfOpen->Send(String("GET /control HTTP/1.1\r\nHost: 127.0.0.1\r\nUpgrade: websocket\r\n"));
 
-        // Bytes that are not a frame: a protocol error
         {
             auto garbage = WebSocketTestClient::Open(port, pumpTheHand);
             ASSERT_TRUE(garbage.has_value());
@@ -329,7 +321,6 @@ namespace BECore::Tests {
             }
         }
 
-        // A message over the limit: closed at its header
         {
             auto big = WebSocketTestClient::Open(port, pumpTheHand);
             ASSERT_TRUE(big.has_value());
@@ -343,7 +334,6 @@ namespace BECore::Tests {
             EXPECT_EQ(CloseCodeOf(*close), WebSocketCloseCode::kMessageTooBig);
         }
 
-        // A flood: rate limited, then closed
         {
             auto flood = WebSocketTestClient::Open(port, pumpTheHand);
             ASSERT_TRUE(flood.has_value());
@@ -354,7 +344,6 @@ namespace BECore::Tests {
             EXPECT_EQ(CloseCodeOf(*close), WebSocketCloseCode::kPolicyViolation);
         }
 
-        // The hand of the good table finishes, untouched
         ASSERT_TRUE(PlayToTheEnd(table)) << "the hand of the other room did not finish";
         for (const auto& client : table) {
             ExpectAllTwelveCardsPlayed(*client);
@@ -362,7 +351,6 @@ namespace BECore::Tests {
         }
         ExpectCleanWire(table);
 
-        // And the server ended the half-open handshake by itself
         EXPECT_TRUE(halfOpen->WaitForEndOfStream());
     }
 
@@ -399,7 +387,6 @@ namespace BECore::Tests {
         EXPECT_FALSE(rooms->rooms[0].started);
         EXPECT_FALSE(rooms->more);
 
-        // Join from the list is the join by code; the hand is played to the end
         browser->JoinByName(rooms->rooms[0].room, "Browser");
         ASSERT_TRUE(browser->WaitFor(RoomMessageTypes::kLobby).has_value());
         open->Start();

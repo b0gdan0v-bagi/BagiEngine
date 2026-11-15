@@ -110,13 +110,12 @@ namespace BECore {
         }
 
         /**
-         * The fully opaque inside of the closed outline whose points start at @p ring (the corners one after the other, each `segments + 1` points, clockwise).
-         * The outline is convex, so the four arc centres (@p arcs) are inside it and the core is cut along them: the quad of the centres (two triangles), a small
-         * fan from each centre over the points of its own corner, and for each side the quad between the two centres and the two points where the arcs meet the
-         * side. A triangle is at best half of its bounding box, and these are close to it, so the bounding boxes the SDL software rasterizer pays for
-         * (`SDL_SW_FillTriangle`) add up to about twice the area, where a fan from one point would cost its number of points times the area. A corner with no radius has no fan and no side
-         * triangle (they would have no area). The centres are appended to @p vertices (their colour is @p colorOf at the centre: a gradient is linear in the
-         * position, so it interpolates exactly) with the alpha of the ring.
+         * The fully opaque inside of the closed outline starting at @p ring (the corners one after the other, each `segments + 1` points, clockwise).
+         * The outline is convex, so the four arc centres (@p arcs) are inside it and the core is cut along them: the quad of the centres, a small fan from
+         * each centre over its own corner, and a quad for each side. The SDL software rasterizer pays every triangle its bounding box (`SDL_SW_FillTriangle`),
+         * and these small triangles are close to their boxes, where a fan from one point would cost its number of points times the area. A corner with no
+         * radius has no fan and no side triangle (they would have no area). The centres are appended to @p vertices, coloured by @p colorOf at the centre
+         * (exact: a gradient is linear in the position), with the alpha of the ring.
          */
         template <typename ColorFn>
         void AppendCore(Vector<GeometryVertex>& vertices, Vector<int>& indices, int ring, const int* segments, const Array<Arc, kCornerCount>& arcs, float alpha, ColorFn&& colorOf) {

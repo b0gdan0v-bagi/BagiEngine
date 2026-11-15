@@ -8,8 +8,7 @@
 
 namespace BECore {
 
-    bool VulkanTexturePipeline::Initialize(VkDevice device, VkRenderPass renderPass) {
-        // ---- Descriptor set layout (binding 0 = combined image sampler) ------
+    bool VulkanTexturePipeline::Initialize(VkDevice device, VkRenderPass renderPass, bool linearizeColors) {
         VkDescriptorSetLayoutBinding samplerBinding{};
         samplerBinding.binding = 0;
         samplerBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -27,8 +26,6 @@ namespace BECore {
             return false;
         }
 
-        // ---- Descriptor pool --------------------------------------------------
-        // FREE_DESCRIPTOR_SET_BIT allows individual vkFreeDescriptorSets() calls.
         VkDescriptorPoolSize poolSize{};
         poolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         poolSize.descriptorCount = 512;
@@ -45,11 +42,10 @@ namespace BECore {
             return false;
         }
 
-        // ---- Pipeline layout (push constants + descriptor set 0) -------------
         VkPushConstantRange pushRange{};
         pushRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
         pushRange.offset = 0;
-        pushRange.size = sizeof(PushConstants);  // 56 bytes
+        pushRange.size = sizeof(PushConstants);
 
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -63,7 +59,6 @@ namespace BECore {
             return false;
         }
 
-        // ---- Shader modules --------------------------------------------------
         VkShaderModule vertModule = CreateShaderModule(device, kTextureVertSpv, kTextureVertSpvSize);
         VkShaderModule fragModule = CreateShaderModule(device, kTextureFragSpv, kTextureFragSpvSize);
 
@@ -78,6 +73,10 @@ namespace BECore {
             return false;
         }
 
+        // The colour space of the target: kLinearize (constant 0) of the shader that takes the colour
+        const VkBool32 linearizeValue = linearizeColors ? VK_TRUE : VK_FALSE;
+        const VkSpecializationMapEntry linearizeEntry{0, 0, sizeof(VkBool32)};
+        const VkSpecializationInfo linearizeInfo{1, &linearizeEntry, sizeof(VkBool32), &linearizeValue};
         VkPipelineShaderStageCreateInfo stages[2]{};
         stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
@@ -88,8 +87,8 @@ namespace BECore {
         stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
         stages[1].module = fragModule;
         stages[1].pName = "main";
+        stages[1].pSpecializationInfo = &linearizeInfo;
 
-        // ---- Fixed-function state --------------------------------------------
         VkPipelineVertexInputStateCreateInfo vertexInput{};
         vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
@@ -141,7 +140,6 @@ namespace BECore {
         dynamicState.dynamicStateCount = 2;
         dynamicState.pDynamicStates = kDynamicStates;
 
-        // ---- Pipeline creation -----------------------------------------------
         VkGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
         pipelineInfo.stageCount = 2;

@@ -3,11 +3,13 @@
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Input/UIInput.h>
 #include <BECore/Math/Rect.h>
 #include <BECore/Math/Vec2.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/Reflection/XmlDeserializer.h>
+#include <BECore/Renderer/RendererManager.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
@@ -15,6 +17,9 @@
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIControl.h>
 #include <BECore/UI/UIImageComponent.h>
+#include <BECore/UI/UIStrings.h>
+#include <BECore/UI/UIVars.h>
+#include <BECore/Utils/FunctionRef.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -26,7 +31,6 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
-#include <functional>
 #include <gtest/gtest.h>
 #include <map>
 #include <regex>
@@ -38,8 +42,7 @@ namespace BECore::Tests::MigrationTwin {
 
     /*
      * What the tests of the migration steps share (`ContentMigrationAfterTest.cpp`): the fixture folders of `tools/migrate/tests/fixtures/<step>/`, a content file read as a scene
-     * manager, the pointer helpers, and a fixture class that loads a screen into canvases on a `RecordingRenderer`. There is no `before` side any more: the classes that the steps
-     * rewrote are gone from the engine, so a test loads a final `.after.xml` and checks the composed form on its own.
+     * manager, the pointer helpers, and a fixture class that loads a screen into canvases on a `RecordingRenderer`. A test loads a final `.after.xml` and checks the composed form on its own.
      */
 
     inline constexpr float kLargeWidth = 1280.0f;
@@ -149,7 +152,7 @@ namespace BECore::Tests::MigrationTwin {
         }
     };
 
-    inline void WalkElements(UIElement& parent, const std::function<void(UIElement&)>& visit) {
+    inline void WalkElements(UIElement& parent, FunctionRef<void(UIElement&)> visit) {
         for (const auto& child : parent.children) {
             visit(*child);
             WalkElements(*child, visit);
@@ -165,7 +168,7 @@ namespace BECore::Tests::MigrationTwin {
     }
 
     /// The named elements of a `ui_tree` canvas (or of an element below it) as "canvasKey|name" -> @p fieldsOf of its entry; the first element of a name wins
-    inline void CollectTree(const Json& parent, const String& canvasKey, Set<String>& seen, Map<String, String>& out, const std::function<String(const Json&)>& fieldsOf) {
+    inline void CollectTree(const Json& parent, const String& canvasKey, Set<String>& seen, Map<String, String>& out, FunctionRef<String(const Json&)> fieldsOf) {
         const Json* list = FindJsonMember(parent, parent.contains("elements") ? "elements" : "children");
         if (list == nullptr || !list->is_array()) {
             return;

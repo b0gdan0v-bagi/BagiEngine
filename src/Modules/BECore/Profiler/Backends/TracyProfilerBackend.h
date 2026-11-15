@@ -12,8 +12,7 @@ namespace BECore {
      * Tracy is built with TRACY_ON_DEMAND (nothing is sent until a viewer connects), TRACY_MANUAL_LIFETIME and TRACY_DELAYED_INIT:
      * its threads start in Start(), the first time the backend is installed, not before main, and end in Shutdown() (Profiler::Finish).
      * A zone's ProfileSite is passed to Tracy as its source location (same layout, checked by static_asserts). Tracy's zone context
-     * does not fit the token, so each thread keeps a stack of them (zones nest per thread). Frame marks, counters (plots), thread names
-     * and allocations (with call stacks of kAllocCallstackDepth frames) map to Tracy's own.
+     * does not fit the token, so each thread keeps a stack of them (zones nest per thread).
      */
     class TracyProfilerBackend : public IProfilerBackend {
     public:

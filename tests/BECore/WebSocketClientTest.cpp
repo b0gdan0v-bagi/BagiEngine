@@ -354,7 +354,7 @@ namespace BECore::Tests {
 
             [[nodiscard]] WebSocketHandler::ConnectionPtr Connection(size_t index) const {
                 std::lock_guard<std::mutex> lock(_mutex);
-                return index < _connections.size() ? _connections[index] : nullptr;
+                return index < _connections.size() ? _connections[index] : WebSocketHandler::ConnectionPtr();
             }
 
             void Stop() {
@@ -548,7 +548,7 @@ namespace BECore::Tests {
         Session session;
         WebSocketClientSettings settings;
         settings.closeTimeout = kNeverTimeout;  // the answer has to end it, not the timeout
-        ASSERT_TRUE(session.client.Open(server.Url().c_str(), settings).has_value());
+        ASSERT_TRUE(session.client.Open(server.Url().c_str(), std::move(settings)).has_value());
         ASSERT_TRUE(server.AcceptAndReadRequest());
         server.Accept();
         ASSERT_TRUE(session.WaitForOpened());
@@ -606,7 +606,7 @@ namespace BECore::Tests {
     TEST(WebSocketClientTest, AnAnswerThatIsNotAHandshakeIsClosedWithAReason) {
         struct Case {
             const char* name;
-            std::function<String(const ScriptedServer&)> response;
+            String (*response)(const ScriptedServer&);  // the cases are captureless lambdas
             const char* expectedInReason;
         };
         const Vector<Case> cases = {
@@ -644,7 +644,7 @@ namespace BECore::Tests {
         Session session;
         WebSocketClientSettings settings;
         settings.handshakeTimeout = 150ms;
-        ASSERT_TRUE(session.client.Open(server.Url().c_str(), settings).has_value());
+        ASSERT_TRUE(session.client.Open(server.Url().c_str(), std::move(settings)).has_value());
         ASSERT_TRUE(server.AcceptAndReadRequest());  // and then it says nothing
         session.ExpectSingleClosed();
         EXPECT_EQ(session.Closed().closeCode, WebSocketCloseCode::kAbnormalClosure);
@@ -674,7 +674,7 @@ namespace BECore::Tests {
         Session session;
         WebSocketClientSettings settings = QuickSettings();
         settings.maxMessageBytes = 100;
-        ASSERT_TRUE(session.client.Open(server.Url().c_str(), settings).has_value());
+        ASSERT_TRUE(session.client.Open(server.Url().c_str(), std::move(settings)).has_value());
         ASSERT_TRUE(server.AcceptAndReadRequest());
         server.Accept();
         ASSERT_TRUE(session.WaitForOpened());
@@ -693,7 +693,7 @@ namespace BECore::Tests {
         Session session;
         WebSocketClientSettings settings;
         settings.maxMessageBytes = 100;
-        ASSERT_TRUE(session.client.Open(server.Url().c_str(), settings).has_value());
+        ASSERT_TRUE(session.client.Open(server.Url().c_str(), std::move(settings)).has_value());
         ASSERT_TRUE(server.AcceptAndReadRequest());
         server.Accept();
         ASSERT_TRUE(session.WaitForOpened());
@@ -728,7 +728,7 @@ namespace BECore::Tests {
         Session session;
         WebSocketClientSettings settings;
         settings.maxInboxEvents = 4;
-        ASSERT_TRUE(session.client.Open(server.Url().c_str(), settings).has_value());
+        ASSERT_TRUE(session.client.Open(server.Url().c_str(), std::move(settings)).has_value());
         ASSERT_TRUE(session.WaitForOpened());
 
         const auto connection = server.Connection(0);
@@ -762,7 +762,7 @@ namespace BECore::Tests {
         Session session;
         WebSocketClientSettings settings;
         settings.handshakeTimeout = kNeverTimeout;
-        ASSERT_TRUE(session.client.Open(server.Url().c_str(), settings).has_value());
+        ASSERT_TRUE(session.client.Open(server.Url().c_str(), std::move(settings)).has_value());
         ASSERT_TRUE(server.AcceptAndReadRequest());  // the reader now waits for an answer that never comes
 
         const auto started = std::chrono::steady_clock::now();
@@ -780,7 +780,7 @@ namespace BECore::Tests {
             Session session;
             WebSocketClientSettings settings;
             settings.handshakeTimeout = kNeverTimeout;
-            ASSERT_TRUE(session.client.Open(server.Url().c_str(), settings).has_value());
+            ASSERT_TRUE(session.client.Open(server.Url().c_str(), std::move(settings)).has_value());
             session.client.Abort();
             session.ExpectSingleClosed();
         }
@@ -791,7 +791,7 @@ namespace BECore::Tests {
         Session session;
         WebSocketClientSettings settings;
         settings.closeTimeout = kNeverTimeout;
-        ASSERT_TRUE(session.client.Open(server.Url().c_str(), settings).has_value());
+        ASSERT_TRUE(session.client.Open(server.Url().c_str(), std::move(settings)).has_value());
         ASSERT_TRUE(session.WaitForOpened());
 
         session.client.Abort();
@@ -806,7 +806,7 @@ namespace BECore::Tests {
         Session session;
         WebSocketClientSettings settings;
         settings.maxInboxEvents = 1;
-        ASSERT_TRUE(session.client.Open(server.Url().c_str(), settings).has_value());
+        ASSERT_TRUE(session.client.Open(server.Url().c_str(), std::move(settings)).has_value());
         ASSERT_TRUE(server.AcceptAndReadRequest());
         server.Accept();
         // The Opened event fills the inbox; the texts wait behind it
@@ -831,7 +831,7 @@ namespace BECore::Tests {
             WebSocketClient client;
             WebSocketClientSettings settings;
             settings.handshakeTimeout = kNeverTimeout;
-            ASSERT_TRUE(client.Open(server.Url().c_str(), settings).has_value());
+            ASSERT_TRUE(client.Open(server.Url().c_str(), std::move(settings)).has_value());
             ASSERT_TRUE(server.AcceptAndReadRequest());
         }
         {  // open, a read is blocked
@@ -839,7 +839,7 @@ namespace BECore::Tests {
             Session session;
             WebSocketClientSettings settings;
             settings.closeTimeout = kNeverTimeout;
-            ASSERT_TRUE(session.client.Open(server.Url().c_str(), settings).has_value());
+            ASSERT_TRUE(session.client.Open(server.Url().c_str(), std::move(settings)).has_value());
             ASSERT_TRUE(session.WaitForOpened());
         }
         {  // closing: our close frame is sent and the server never answers
@@ -847,7 +847,7 @@ namespace BECore::Tests {
             Session session;
             WebSocketClientSettings settings;
             settings.closeTimeout = kNeverTimeout;
-            ASSERT_TRUE(session.client.Open(server.Url().c_str(), settings).has_value());
+            ASSERT_TRUE(session.client.Open(server.Url().c_str(), std::move(settings)).has_value());
             ASSERT_TRUE(server.AcceptAndReadRequest());
             server.Accept();
             ASSERT_TRUE(session.WaitForOpened());
@@ -869,7 +869,7 @@ namespace BECore::Tests {
             WebSocketClient client;
             WebSocketClientSettings settings;
             settings.maxInboxEvents = 1;
-            ASSERT_TRUE(client.Open(server.Url().c_str(), settings).has_value());
+            ASSERT_TRUE(client.Open(server.Url().c_str(), std::move(settings)).has_value());
             ASSERT_TRUE(server.AcceptAndReadRequest());
             server.Accept();
             server.SendText("a");
@@ -948,7 +948,7 @@ namespace BECore::Tests {
         WebSocketClientSettings settings;
         settings.maxOutboxBytes = 1024;
         EXPECT_FALSE(session.client.SendText("before open"));
-        ASSERT_TRUE(session.client.Open(server.Url().c_str(), settings).has_value());
+        ASSERT_TRUE(session.client.Open(server.Url().c_str(), std::move(settings)).has_value());
         EXPECT_FALSE(session.client.SendText("while connecting"));
         ASSERT_TRUE(server.AcceptAndReadRequest());
         server.Accept();
@@ -967,7 +967,7 @@ namespace BECore::Tests {
         Session session;
         WebSocketClientSettings settings;
         settings.maxOutboxBytes = 512 * 1024;
-        ASSERT_TRUE(session.client.Open(server.Url().c_str(), settings).has_value());
+        ASSERT_TRUE(session.client.Open(server.Url().c_str(), std::move(settings)).has_value());
         ASSERT_TRUE(server.AcceptAndReadRequest());
         server.Accept();  // and from now on it reads nothing
         ASSERT_TRUE(session.WaitForOpened());
@@ -997,7 +997,7 @@ namespace BECore::Tests {
             Session session;
             WebSocketClientSettings settings;
             settings.origin = "https://game.example";
-            ASSERT_TRUE(session.client.Open(server.Url().c_str(), settings).has_value());
+            ASSERT_TRUE(session.client.Open(server.Url().c_str(), std::move(settings)).has_value());
             EXPECT_TRUE(session.WaitForOpened());
         }
         {  // a program sends none and gets in
@@ -1009,7 +1009,7 @@ namespace BECore::Tests {
             Session session;
             WebSocketClientSettings settings;
             settings.origin = "https://evil.example";
-            ASSERT_TRUE(session.client.Open(server.Url().c_str(), settings).has_value());
+            ASSERT_TRUE(session.client.Open(server.Url().c_str(), std::move(settings)).has_value());
             session.ExpectSingleClosed();
             EXPECT_NE(session.Closed().reason.find("403"), String::npos) << session.Closed().reason;
             EXPECT_EQ(session.Count(WebSocketClientEventKind::Opened), 0u);
@@ -1122,7 +1122,7 @@ namespace BECore::Tests {
         Session session;
         WebSocketClientSettings settings = FakeTlsSettings();
         settings.tls.additionalTrustAnchorsDer = {{0x30, 0x01}, {0x30, 0x02}, {0x30, 0x03}};
-        ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), settings).has_value());
+        ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), std::move(settings)).has_value());
         ASSERT_TRUE(AcceptFakeTlsAndRequest(server));
         EXPECT_EQ(server.TlsHello().anchorCount, 3u);
         server.Accept();
@@ -1135,7 +1135,7 @@ namespace BECore::Tests {
         WebSocketClientSettings settings = FakeTlsSettings();
         settings.handshakeTimeout = 150ms;
         settings.connectTimeout = kNeverTimeout;
-        ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), settings).has_value());
+        ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), std::move(settings)).has_value());
         ASSERT_TRUE(server.AcceptConnection());  // and then it says nothing to the hello
         session.ExpectSingleClosed();
         EXPECT_EQ(session.Closed().closeCode, WebSocketCloseCode::kAbnormalClosure);
@@ -1152,7 +1152,7 @@ namespace BECore::Tests {
         WebSocketClientSettings settings = FakeTlsSettings();
         settings.handshakeTimeout = kHandshakeTimeout;
         const auto started = std::chrono::steady_clock::now();
-        ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), settings).has_value());
+        ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), std::move(settings)).has_value());
         ASSERT_TRUE(server.AcceptConnection());
         std::this_thread::sleep_for(kTlsDelay);
         ASSERT_TRUE(server.FakeTlsHandshake());
@@ -1168,7 +1168,7 @@ namespace BECore::Tests {
             Session session;
             WebSocketClientSettings settings = FakeTlsSettings();
             settings.handshakeTimeout = kNeverTimeout;
-            ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), settings).has_value());
+            ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), std::move(settings)).has_value());
             ASSERT_TRUE(server.AcceptConnection());
             const auto started = std::chrono::steady_clock::now();
             session.client.Abort();
@@ -1182,7 +1182,7 @@ namespace BECore::Tests {
             Session session;
             WebSocketClientSettings settings = FakeTlsSettings();
             settings.handshakeTimeout = kNeverTimeout;
-            ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), settings).has_value());
+            ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), std::move(settings)).has_value());
             ASSERT_TRUE(AcceptFakeTlsAndRequest(server));
             session.client.Abort();
             session.ExpectSingleClosed();
@@ -1193,7 +1193,7 @@ namespace BECore::Tests {
             Session session;
             WebSocketClientSettings settings = FakeTlsSettings();
             settings.closeTimeout = kNeverTimeout;
-            ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), settings).has_value());
+            ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), std::move(settings)).has_value());
             ASSERT_TRUE(AcceptFakeTlsAndRequest(server));
             server.Accept();
             ASSERT_TRUE(session.WaitForOpened());
@@ -1208,7 +1208,7 @@ namespace BECore::Tests {
                 Session session;
                 WebSocketClientSettings settings = FakeTlsSettings();
                 settings.handshakeTimeout = kNeverTimeout;
-                ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), settings).has_value());
+                ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), std::move(settings)).has_value());
                 session.client.Abort();
                 session.ExpectSingleClosed();
             }
@@ -1221,7 +1221,7 @@ namespace BECore::Tests {
             WebSocketClient client;
             WebSocketClientSettings settings = FakeTlsSettings();
             settings.handshakeTimeout = kNeverTimeout;
-            ASSERT_TRUE(client.Open(server.TlsUrl().c_str(), settings).has_value());
+            ASSERT_TRUE(client.Open(server.TlsUrl().c_str(), std::move(settings)).has_value());
             ASSERT_TRUE(server.AcceptConnection());
         }
         {  // in the opening request
@@ -1229,7 +1229,7 @@ namespace BECore::Tests {
             WebSocketClient client;
             WebSocketClientSettings settings = FakeTlsSettings();
             settings.handshakeTimeout = kNeverTimeout;
-            ASSERT_TRUE(client.Open(server.TlsUrl().c_str(), settings).has_value());
+            ASSERT_TRUE(client.Open(server.TlsUrl().c_str(), std::move(settings)).has_value());
             ASSERT_TRUE(AcceptFakeTlsAndRequest(server));
         }
         {  // open, a read is blocked
@@ -1237,7 +1237,7 @@ namespace BECore::Tests {
             Session session;
             WebSocketClientSettings settings = FakeTlsSettings();
             settings.closeTimeout = kNeverTimeout;
-            ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), settings).has_value());
+            ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), std::move(settings)).has_value());
             ASSERT_TRUE(AcceptFakeTlsAndRequest(server));
             server.Accept();
             ASSERT_TRUE(session.WaitForOpened());
@@ -1247,7 +1247,7 @@ namespace BECore::Tests {
             Session session;
             WebSocketClientSettings settings = FakeTlsSettings();
             settings.closeTimeout = kNeverTimeout;
-            ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), settings).has_value());
+            ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), std::move(settings)).has_value());
             ASSERT_TRUE(AcceptFakeTlsAndRequest(server));
             server.Accept();
             ASSERT_TRUE(session.WaitForOpened());
@@ -1271,7 +1271,7 @@ namespace BECore::Tests {
         Session session;
         WebSocketClientSettings settings = QuickSettings();
         settings.tls.factory = [] { return UniquePtr<ITlsStream>(); };
-        ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), settings).has_value());
+        ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), std::move(settings)).has_value());
         session.ExpectSingleClosed();
         EXPECT_EQ(session.Closed().closeCode, WebSocketCloseCode::kAbnormalClosure);
     }

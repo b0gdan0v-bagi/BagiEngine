@@ -1,6 +1,6 @@
 // The smallest client of the rooms: hosts a room on a room server, starts it at once (the other seats are computers), plays every turn
 // with the first action it is offered, and exits 0 when the game is over. tools/rooms/smoke.py runs it against BagiRoomServer; a game's
-// component does the same per frame instead of in a loop (RoomClient/CLAUDE.md, "How a game uses it")
+// component does the same per frame instead of in a loop (RoomClient/CLAUDE.md, "A component in ten lines")
 
 #include <BECore/Control/Json.h>
 #include <BECore/Logger/ConsoleSink.h>

@@ -11,14 +11,10 @@
 namespace BECore {
 
     /**
-     * ThreadPool - пул рабочих потоков с work stealing.
-     *
-     * Каждый поток имеет свою локальную очередь задач.
-     * При отсутствии задач в локальной очереди поток пытается
-     * украсть задачу из очередей других потоков.
+     * Worker threads with a queue each; a worker with an empty queue steals from the others. Submit is thread-safe.
      *
      * @example
-     * ThreadPool pool(4);  // 4 рабочих потока
+     * ThreadPool pool(4);
      * pool.Submit([] { DoWork(); });
      *
      * Inline mode (ThreadPool(InlineTag{})): no thread is created; Submit runs the job on the calling
@@ -35,10 +31,7 @@ namespace BECore {
         /// The place of worker n in the list of threads of a trace: kWorkerSortBase + n (the main thread is 0, the control threads 200 and up)
         static constexpr uint32_t kWorkerSortBase = 100;
 
-        /**
-         * Создает пул потоков.
-         * @param numThreads Количество потоков (0 = hardware_concurrency)
-         */
+        /** @param numThreads 0 = hardware_concurrency (at least 2). */
         explicit ThreadPool(size_t numThreads = 0);
 
         /**
@@ -51,66 +44,40 @@ namespace BECore {
 
         ~ThreadPool();
 
-        // Non-copyable, non-movable
         ThreadPool(const ThreadPool&) = delete;
         ThreadPool& operator=(const ThreadPool&) = delete;
         ThreadPool(ThreadPool&&) = delete;
         ThreadPool& operator=(ThreadPool&&) = delete;
 
-        /**
-         * Добавляет задачу в очередь.
-         * @param task Функция для выполнения
-         */
+        /** Round-robin over the worker queues; dropped with a warning once stopped. Inline pool: runs the job at once. */
         void Submit(TaskQueue::TaskFunc task);
 
-        /**
-         * Добавляет задачу в очередь конкретного потока.
-         * @param threadIndex Индекс потока
-         * @param task Функция для выполнения
-         */
+        /** Like Submit, into the queue of one worker (the index wraps around the worker count); the others may still steal it. */
         void SubmitToThread(size_t threadIndex, TaskQueue::TaskFunc task);
 
-        /**
-         * Останавливает все потоки.
-         * Ожидает завершения текущих задач.
-         */
+        /** Idempotent. Joins the workers, each of which first runs what is left in its own queue. */
         void Shutdown();
 
-        /**
-         * Проверяет, остановлен ли пул.
-         */
         [[nodiscard]] bool IsStopped() const {
             return _stopped.load(std::memory_order_acquire);
         }
 
-        /**
-         * Returns true for an inline pool (no worker threads, jobs run on the submitting thread).
-         */
         [[nodiscard]] bool IsInline() const {
             return _isInline;
         }
 
-        /**
-         * Возвращает количество рабочих потоков.
-         */
         [[nodiscard]] size_t GetThreadCount() const {
             return _threads.size();
         }
 
-        /**
-         * Возвращает общее количество задач во всех очередях.
-         */
         [[nodiscard]] size_t GetPendingTaskCount() const;
 
-        /**
-         * Returns the number of workers that run a job at this moment (0 for an inline pool).
-         */
         [[nodiscard]] size_t GetBusyWorkerCount() const;
 
         /**
-         * Sends the queues of the pool to the profiler as counters: `Pool: pending jobs` and `Pool: steals` (the steals since the last call).
-         * Not for an inline pool. The busy graphs are not sampled: worker n reports `Worker n: busy` and `Pool: busy workers` itself every
-         * time it starts or ends a job, so they are exact. Does nothing without a profiler backend or with BE_PROFILER=0.
+         * Sends the pending-job and steal counters to the profiler (the steals since the last call). Not for an inline
+         * pool. The busy graphs are not sampled: each worker reports them itself when it starts or ends a job.
+         * Does nothing without a profiler backend.
          */
         void SampleProfilerCounters();
 

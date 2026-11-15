@@ -7,8 +7,7 @@ namespace BECore {
 
     namespace {
 
-        /// How many room codes MakeUnusedRoomCode draws before it gives up (with 64 rooms in 32^5 codes a second try is already rare;
-        /// a constant RandomFn must not hang the server)
+        /// How many room codes MakeUnusedRoomCode draws before it gives up: a constant RandomFn must not hang the server
         constexpr int kMaxCodeAttempts = 16;
 
         constexpr StringView kReasonLeft = "left";
@@ -39,8 +38,6 @@ namespace BECore {
         const auto found = _rooms.find(code);
         return found == _rooms.end() ? nullptr : found->second.get();
     }
-
-    // ---- Output --------------------------------------------------------------------------------------------------------------------
 
     void RoomHub::SendText(ConnectionId id, String text) {
         if (_sink.send) {
@@ -94,8 +91,6 @@ namespace BECore {
             CloseConnection(id, "too_many_failed_joins", now);
         }
     }
-
-    // ---- Connections ---------------------------------------------------------------------------------------------------------------
 
     void RoomHub::OnConnected(ConnectionId connection, RoomTime now, StringView address) {
         if (_connections.size() >= _settings.maxConnections || _connections.find(connection) != _connections.end()) {
@@ -167,8 +162,6 @@ namespace BECore {
             _sink.close(id, String(reason));
         }
     }
-
-    // ---- Messages ------------------------------------------------------------------------------------------------------------------
 
     void RoomHub::OnMessage(ConnectionId id, StringView text, RoomTime now) {
         const auto found = _connections.find(id);
@@ -270,7 +263,10 @@ namespace BECore {
         const SeatedGameRegistry* registry = &_registry;
         const String gameName = info->name;
         auto entry = MakeUnique<RoomEntry>();
-        entry->room = MakeUnique<Room>(code, *info, _random, [registry, gameName]() { return registry->Create(gameName); }, _settings.timings);
+        // One source for the hub and every room, so their draws follow one sequence: a room draws through the hub's function, which
+        // outlives the rooms the hub owns.
+        const RandomFn* random = &_random;
+        entry->room = MakeUnique<Room>(code, *info, [random]() { return (*random)(); }, [registry, gameName]() { return registry->Create(gameName); }, _settings.timings);
         entry->creation = ++_roomsCreated;
         entry->options = message.options;
         entry->room->SetLobbyOptions(message.options);
@@ -455,8 +451,6 @@ namespace BECore {
             Flush(*entry, now);
         }
     }
-
-    // ---- Flush and closing ---------------------------------------------------------------------------------------------------------
 
     void RoomHub::ResendView(ConnectionId id, Connection& connection, RoomEntry& entry) {
         Room& room = *entry.room;

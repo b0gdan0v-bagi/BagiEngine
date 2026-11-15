@@ -2,7 +2,7 @@
     "name": "todo-workers",
     "displayName": "Todo Workers",
     "description": "The parallel todo-loop workers of BagiEngine: their sessions, entries and branches, and the entries waiting for /todo-merge.",
-    "version": "0.20.0",
+    "version": "0.25.1",
     "publisher": "bagiengine",
     "license": "UNLICENSED",
     "private": true,
@@ -72,6 +72,12 @@
                     "minimum": 5,
                     "description": "How often the panel asks worker.py (it also asks the todo store and reads the session transcripts)."
                 },
+                "todoWorkers.hiddenRefreshSeconds": {
+                    "type": "number",
+                    "default": 60,
+                    "minimum": 15,
+                    "description": "How often the panel asks worker.py while it is hidden (for the status bar and the notifications; no transcripts are read then)."
+                },
                 "todoWorkers.startSlices": {
                     "type": "number",
                     "default": 1,
@@ -138,6 +144,18 @@
                         }
                     },
                     "description": "Dollars per million tokens by model family (the first key that is part of a model id): what the panel's costs are counted with. API list prices; a subscription bills otherwise."
+                },
+                "todoWorkers.pushUrl": {
+                    "type": "string",
+                    "default": "",
+                    "description": "A URL that gets a POST with the text of what stops a worker (it waits for you, it hit the usage limit, an entry reached review), the title in the Title header: an ntfy topic (https://ntfy.sh/<your topic>) puts it on a phone. Empty: off. The text names entry ids and worker names."
+                },
+                "todoWorkers.timelineHours": {
+                    "type": "number",
+                    "default": 24,
+                    "minimum": 1,
+                    "maximum": 72,
+                    "description": "The hours the Timeline of the panel shows."
                 }
             }
         }

@@ -2,6 +2,7 @@
 
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/UI/UIElement.h>
+#include <BECore/UI/UIVars.h>
 #include <Events/InputEvents.h>
 #include <Generated/UIToggleComponent.gen.hpp>
 

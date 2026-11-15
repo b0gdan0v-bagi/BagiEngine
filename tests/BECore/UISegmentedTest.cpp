@@ -1,8 +1,10 @@
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Input/UIInput.h>
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/BinarySerializer.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
+#include <BECore/Renderer/RendererManager.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
@@ -13,6 +15,7 @@
 #include <BECore/UI/UIStack.h>
 #include <BECore/UI/UIStateLook.h>
 #include <BECore/UI/UITextComponent.h>
+#include <BECore/UI/UIVars.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -453,7 +456,6 @@ namespace BECore::Tests {
         EXPECT_TRUE(Selected("MixedTwo")) << "the button next to a label is a segment";
         EXPECT_EQ(Element("Caption").GetComponent<UITextComponent>()->text, "Mode") << "the label is left alone";
 
-        // A nested group manages its own children: `Inner` is bound to `inner`, not to `mode`
         EXPECT_FALSE(Selected("InnerTwo")) << "its value is the one of Mixed, but the nested group has its own variable";
         EXPECT_TRUE(Selected("InnerX"));
 

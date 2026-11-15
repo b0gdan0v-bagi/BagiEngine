@@ -74,7 +74,7 @@ namespace BECore {
         _port = 0;
     }
 
-    void WebSocketListener::ForEachOpenConnection(const std::function<void(WebSocketConnection&)>& visit) {
+    void WebSocketListener::ForEachOpenConnection(FunctionRef<void(WebSocketConnection&)> visit) {
         Vector<ConnectionPtr> targets;
         {
             LockGuard lock(_connectionsMutex);
@@ -125,7 +125,7 @@ namespace BECore {
                 connectionSettings.writerThreadName = MakeThreadName(_settings, "writer");
                 connectionSettings.writerThreadOrder = _settings.threadOrder + 2;
 
-                auto connection = MakeShared<WebSocketConnection>(_nextId++, std::move(socket), std::move(peerAddress), std::move(connectionSettings));
+                auto connection = New<WebSocketConnection>(_nextId++, std::move(socket), std::move(peerAddress), std::move(connectionSettings));
                 _connections.push_back(connection);
                 connection->StartReader(Thread(MakeThreadName(_settings, "reader").c_str(), _settings.threadOrder + 1, [this, connection] { RunConnection(connection); }));
                 return;
@@ -146,7 +146,7 @@ namespace BECore {
         LockGuard lock(_connectionsMutex);
         size_t fromAddress = 0;
         for (const auto& other : _connections) {
-            if (other.get() != &connection && !other->IsFinished() && other->HasClientAddress() && other->GetClientAddress() == clientAddress) {
+            if (other.Get() != &connection && !other->IsFinished() && other->HasClientAddress() && other->GetClientAddress() == clientAddress) {
                 ++fromAddress;
             }
         }
@@ -178,9 +178,10 @@ namespace BECore {
 
     void WebSocketListener::RunConnection(const ConnectionPtr& connection) {
         Vector<uint8_t> pendingBytes;
-        AdmitClientFn admit;
+        const auto admitByAddress = [this, &connection](const String& clientAddress) { return AdmitByClientAddress(*connection, clientAddress); };
+        Optional<AdmitClientFn> admit;
         if (_settings.policy.trustedProxyHops != 0) {
-            admit = [this, &connection](const String& clientAddress) { return AdmitByClientAddress(*connection, clientAddress); };
+            admit.emplace(admitByAddress);
         }
         if (connection->Handshake(_settings.policy, _settings.handshakeTimeout, pendingBytes, admit)) {
             LOG_INFO("{}: a client connected"_format(_settings.logName));

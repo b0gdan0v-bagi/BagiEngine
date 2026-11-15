@@ -111,7 +111,7 @@ namespace BECore::Tests {
             SCOPED_TRACE(String(device.name).c_str());
             EXPECT_FALSE(device.name.empty());
             EXPECT_GT(device.width, 0u);
-            EXPECT_GT(device.height, device.width);  // portrait
+            EXPECT_GT(device.height, device.width);
             EXPECT_GE(device.cutout, 0.0f);
             EXPECT_GE(device.homeBar, 0.0f);
             EXPECT_LT(device.cutout, static_cast<float>(device.width));  // smaller than the short side

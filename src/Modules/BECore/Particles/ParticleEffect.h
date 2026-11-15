@@ -61,8 +61,7 @@ namespace BECore {
     /**
      * @brief A 2D particle effect as data: how many particles, where they are born, how they move and look.
      *
-     * The defaults are a usable small burst: 24 white squares fly out in all directions from a point and fade out in half a second.
-     * The data has no behavior of its own; `ParticleSimulation` runs it and `ParticleEmitterComponent` draws it. The fields are the
+     * The defaults are a usable small burst. The data has no behavior of its own; `ParticleSimulation` runs it and `ParticleEmitterComponent` draws it. The fields are the
      * attributes and child elements of the file (`Particles/CLAUDE.md`). `Sanitize()` makes any values safe to run.
      */
     struct ParticleEffect {
@@ -105,10 +104,9 @@ namespace BECore {
         /**
          * @brief Bring every field into its range, in place.
          *
-         * Not finite floats become the field's default, the others are clamped to `ParticleLimits`; a min above its max swaps with it;
-         * counts and rates are not negative, `maxParticles` is in `kMinParticles..kMaxParticles` and `burstCount` does not exceed it;
-         * an enum value that is none of its names (a cast of a bad number) becomes the default. The simulation runs on a sanitized copy,
-         * so a typo in a file or in the inspector never loops or allocates without bound; the effect itself keeps what was written.
+         * Not finite floats become the field's default, the others are clamped to `ParticleLimits`; a min above its max swaps with it.
+         * The simulation runs on a sanitized copy, so a typo in a file or in the inspector never loops or allocates without bound; the
+         * effect itself keeps what was written.
          */
         void Sanitize();
 

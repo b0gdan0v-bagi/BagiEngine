@@ -35,7 +35,10 @@ function attach(ctx) {
         };
         if (previous) {
             for (const entry of state.review) {
-                if (!previous.review.has(entry.id)) addFeed("review", `${entry.id} reached review: ${entry.statusNote || entry.branch}`, { entry: entry.id });
+                if (!previous.review.has(entry.id)) {
+                    addFeed("review", `${entry.id} reached review: ${entry.statusNote || entry.branch}`, { entry: entry.id });
+                    ctx.pushNotify(`Todo: ${entry.id} in review`, entry.statusNote || entry.title || entry.branch);
+                }
                 if (!previous.review.has(entry.id) && config().notify) {
                     vscode.window.showInformationMessage(`Todo: ${entry.id} is in review (${entry.branch})`, "Review", "Review with Claude", "Merge + test", "Return with remarks").then((pick) => {
                         if (pick === "Review") ctx.reviewBranch(entry);
@@ -48,6 +51,8 @@ function attach(ctx) {
             for (const worker of state.workers) {
                 // A loop that asks a question or a permission stops until someone answers: Answer opens it.
                 const notify = config().notify;
+                if (worker.waiting && !previous.waiting.has(worker.name)) ctx.pushNotify(`Todo: ${worker.name} waits for you`, worker.asking ? `${worker.asking.tool}: ${worker.asking.text}` : "input needed");
+                if (worker.limited && !previous.limited.has(worker.name)) ctx.pushNotify(`Todo: ${worker.name} hit the usage limit`, worker.limited.resets ? `resets ${worker.limited.resets}` : worker.limited.text || "");
                 if (worker.waiting && !previous.waiting.has(worker.name)) addFeed("waiting", `${worker.name} waits for you: ${worker.asking ? `${worker.asking.tool}: ${worker.asking.text}` : "input needed"}`, { entry: worker.entry ? worker.entry.id : null });
                 if (worker.limited && !previous.limited.has(worker.name)) addFeed("limited", `${worker.name} hit the usage limit${worker.limited.resets ? `, resets ${worker.limited.resets}` : ""}`);
                 if (previous.active.get(worker.name) && !worker.active && !worker.limited && !worker.stopped) addFeed("ended", `${worker.name}: the loop ended${worker.entry ? ` (${worker.entry.id}, ${worker.entry.status})` : ""}`, { entry: worker.entry ? worker.entry.id : null });

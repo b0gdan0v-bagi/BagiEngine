@@ -14,11 +14,14 @@
         area: saved.area || "checkout",
         statuses: new Set(saved.statuses || ["open", "in progress", "review", "deferred"]),
         text: saved.text || "",
+        // entries whose branch lives in another checkout or on another machine: hidden unless the owner turns them on
+        elsewhere: saved.elsewhere === true,
     };
+    const isAway = (entry) => (payload.elsewhere || []).includes(entry.id);
     const open = new Set(saved.open || []);
 
     function save() {
-        vscode.setState({ area: filter.area, statuses: [...filter.statuses], text: filter.text, open: [...open] });
+        vscode.setState({ area: filter.area, statuses: [...filter.statuses], text: filter.text, elsewhere: filter.elsewhere, open: [...open] });
     }
 
     function el(tag, className, text) {
@@ -97,6 +100,7 @@
         if (filter.area === "checkout" && areas && !areas.includes(entry.area)) return false;
         if (filter.area !== "checkout" && filter.area !== "all" && entry.area !== filter.area) return false;
         if (!filter.statuses.has(entry.status)) return false;
+        if (!filter.elsewhere && isAway(entry)) return false;
         const text = filter.text.trim().toLowerCase();
         if (!text) return true;
         return [entry.id, entry.title, entry.summary, entry.body].some((v) => v && String(v).toLowerCase().includes(text));
@@ -131,11 +135,22 @@
 
         const chips = el("span", "chips");
         for (const status of STATUSES) {
-            const count = entries.filter((e) => e.status === status && matchesArea(e)).length;
+            const count = entries.filter((e) => e.status === status && matchesArea(e) && (filter.elsewhere || !isAway(e))).length;
             const chip = el("button", `chip status-${status.replace(" ", "-")}${filter.statuses.has(status) ? " on" : ""}`, `${status} ${count}`);
             chip.addEventListener("click", () => {
                 if (filter.statuses.has(status)) filter.statuses.delete(status);
                 else filter.statuses.add(status);
+                save();
+                render();
+            });
+            chips.appendChild(chip);
+        }
+        const awayCount = entries.filter((e) => isAway(e) && matchesArea(e)).length;
+        if (awayCount) {
+            const chip = el("button", `chip away${filter.elsewhere ? " on" : ""}`, `other checkouts ${awayCount}`);
+            chip.title = "entries whose branch lives in another checkout or on another machine (or was cut from another base): hidden unless this is on";
+            chip.addEventListener("click", () => {
+                filter.elsewhere = !filter.elsewhere;
                 save();
                 render();
             });

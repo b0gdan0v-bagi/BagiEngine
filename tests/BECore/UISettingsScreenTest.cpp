@@ -1,9 +1,12 @@
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Input/UIInput.h>
 #include <BECore/Reflection/XmlDeserializer.h>
+#include <BECore/Renderer/RendererManager.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/UI/UICanvasComponent.h>
+#include <BECore/UI/UIEnvironment.h>
 #include <BECore/UI/UIInputClicker.h>
 #include <BECore/UI/UIProgressBar.h>
 #include <BECore/UI/UISegmented.h>
@@ -13,6 +16,7 @@
 #include <BECore/UI/UISwitchComponent.h>
 #include <BECore/UI/UITextComponent.h>
 #include <BECore/UI/UIToggleComponent.h>
+#include <BECore/UI/UIVars.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -24,7 +28,7 @@
 namespace BECore::Tests {
 
     /*
-     * The screen test of a settings panel, the template for a screen with the controls of stage 6.4 and with translations (.claude/rules/ui-layout.md, "A screen test").
+     * The screen test of a settings panel, the template for a screen with controls and translations (.claude/rules/ui-layout.md, "A screen test").
      * The shape of the panel (the choice panel of UISelectorScreenTest with other rows):
      *
      *  - a small canvas `Hud` with one button, `Open`, whose action shows the panel;
@@ -221,10 +225,9 @@ namespace BECore::Tests {
 
         const Language kLanguages[] = {{"en", "Settings", "LanguageEn"}, {"ru", "Настройки", "LanguageRu"}, {"de", "Einstellungen ändern", "LanguageDe"}};
 
-        // Every control of the panel that shows a text of the table
         constexpr const char* kTextControlNames[] = {"Title", "SoundCaption", "MusicCaption", "DownloadCaption", "Percent", "LanguageCaption", "LanguageEn", "LanguageRu", "LanguageDe", "Ok"};
 
-        String SceneXml(float viewWidth, float viewHeight, const std::function<void(String&)>& edit = {}) {
+        String SceneXml(float viewWidth, float viewHeight, FunctionRef<void(String&)> edit = NoTextEdit) {
             String xml = kSettingsXml;
             const auto replace = [&xml](const String& what, const String& with) {
                 for (size_t at = xml.find(what); at != String::npos; at = xml.find(what, at + with.size())) {
@@ -233,9 +236,7 @@ namespace BECore::Tests {
             };
             replace("@VIEW_W@", ToString(static_cast<int>(viewWidth)));
             replace("@VIEW_H@", ToString(static_cast<int>(viewHeight)));
-            if (edit) {
-                edit(xml);
-            }
+            edit(xml);
             return xml;
         }
 
@@ -462,7 +463,7 @@ namespace BECore::Tests {
         }
 
         /// The scene of the panel with a view of this size; the output has the same size, so a point of the view is a pixel
-        void LoadScene(float viewWidth = kViewWidth, float viewHeight = kViewHeight, const std::function<void(String&)>& edit = {}) {
+        void LoadScene(float viewWidth = kViewWidth, float viewHeight = kViewHeight, FunctionRef<void(String&)> edit = NoTextEdit) {
             _game.reset();
             _hud.Reset();
             _settings.Reset();
@@ -982,9 +983,7 @@ namespace BECore::Tests {
             EXPECT_EQ(ShownText(*_hud->GetRoot().FindByName("Open"_intern)), *CoreManager::GetUIStrings().Find("settings.open")) << "the button of the other canvas follows too";
             EXPECT_TRUE(El(language.segment).selected);
             EXPECT_EQ(Get<UISegmented>("Language").GetSelectedValue(), language.id);
-            // The names of the languages are the same in every language
             EXPECT_EQ(ShownText(El("LanguageDe")), "Deutsch");
-            // The layout is still valid in the narrowest window, in the language that is set now
             UICanvasLayout& layout = _settings->GetLayout();
             LayOutInTheNarrowestWindow(layout);
             EXPECT_TRUE(Problems(layout).empty()) << language.id << ": " << Problems(layout).c_str();

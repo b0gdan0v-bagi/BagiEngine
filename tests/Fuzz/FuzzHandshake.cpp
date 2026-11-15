@@ -67,7 +67,7 @@ namespace BECore::Fuzz {
                 FUZZ_CHECK(IsTidyMessage(parsed.error().message));
                 const String reject = BuildRejectResponse(parsed.error());
                 FUZZ_CHECK(StringView(reject).starts_with("HTTP/1.1 "));
-                FUZZ_CHECK(!CheckServerHandshakeResponse(reject, WebSocketInput::kHandshakeKey).has_value());  // a refusal is never an accepted answer
+                FUZZ_CHECK(!CheckServerHandshakeResponse(reject, WebSocketInput::kHandshakeKey).has_value());
                 return;
             }
 

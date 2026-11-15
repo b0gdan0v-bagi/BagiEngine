@@ -284,6 +284,8 @@ class ClassData:
     register_self: bool = False
     # Lucide icon name from ICON=<name> in BE_CLASS (kebab case); empty when the class names none.
     icon: str = ""
+    # Asset part from PURPOSE=<sim|visual|editor> in BE_CLASS, lower case; "common" when the class names none.
+    purpose: str = "common"
     # Resolved at generation time (not stored in cache): FQN of the factory base this
     # class derives from, e.g. "BECore::ILogSink". Empty string when not a factory child.
     factory_base_fqn: str = ""
@@ -307,6 +309,7 @@ class ClassData:
             "element_name": self.element_name,
             "register_self": self.register_self,
             "icon": self.icon,
+            "purpose": self.purpose,
         }
     
     @classmethod
@@ -331,6 +334,7 @@ class ClassData:
             element_name=data.get("element_name"),
             register_self=data.get("register_self", False),
             icon=data.get("icon", ""),
+            purpose=data.get("purpose", "common"),
         )
 
 

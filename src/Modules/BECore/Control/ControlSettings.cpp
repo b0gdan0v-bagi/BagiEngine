@@ -42,7 +42,6 @@ namespace BECore {
         settings.manualClock = file.config._manualClock;
         settings.headless = file.config._headless;
 
-        // The flags are parsed by hand; a later stage replaces this loop with a name to value source
         bool portOnCommandLine = false;
         for (const String& arg : args) {
             const StringView argument(arg.data(), arg.size());

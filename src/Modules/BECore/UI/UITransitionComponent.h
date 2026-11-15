@@ -8,10 +8,10 @@ namespace BECore {
     /**
      * @brief Shows and hides its element with a transition instead of a pop: `<component type="UITransitionComponent" duration="0.2" scaleFrom="0.9" slideY="24"/>`.
      *
-     * The authored state stays the truth: `visible` of the element (after the variants) is the target and this component only delays the effect of a change, so the ways of changing it are the
-     * old ones (`SetElementVisible`, a field edit and `Invalidate()`, a variant). The canvas layout `Sync`s the run on every layout; the first layout snaps (nothing animates on load). While the
-     * element leaves, the layout keeps it visible, so it keeps its rect and is drawn (`UITransitionRun::IsLeaving`); the canvas lays out again when the run ends and the element goes for good.
-     * The canvas draws a transitioning element and its subtree through `UITransition::Evaluate` / `Compose` (opacity, scale about the centre of its rect, slide).
+     * The authored state stays the truth: `visible` of the element (after the variants) is the target and this component only delays the effect of a change, which comes from `SetElementVisible`, a
+     * field edit and `Invalidate()`, or a variant. The canvas layout `Sync`s the run on every layout; the first layout snaps (nothing animates on load). While the element leaves, the layout keeps it
+     * visible, so it keeps its rect and is drawn (`UITransitionRun::IsLeaving`); the canvas lays out again when the run ends and the element goes for good. The canvas draws a transitioning element
+     * and its subtree through `UITransition::Evaluate` / `Compose` (opacity, scale about the centre of its rect, slide).
      *
      * Input: with `inputDuringTransition` off the element and its subtree take no hover, press, click or tooltip while the run is on, but still consume the events that land on a hit-testable
      * element, so what lies below stays shielded (`UIElement::inputLocked`). With it on the element is as live as any other, in its laid-out rect: **the rect is not scaled or slid** for input.

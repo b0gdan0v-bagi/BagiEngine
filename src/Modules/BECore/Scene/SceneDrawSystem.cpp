@@ -9,6 +9,7 @@
 #include <BECore/Scene/Components/TransformComponent.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneRenderData.h>
+#include <entt/entt.hpp>
 
 namespace BECore {
 

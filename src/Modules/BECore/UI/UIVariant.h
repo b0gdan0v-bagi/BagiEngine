@@ -56,7 +56,7 @@ namespace BECore {
 
     namespace PropVisit {
 
-        /// The inspector does not edit variants yet (editor tooling is stage 7 of the UI plan): they are shown as nothing
+        /// The inspector does not edit variants: they are shown as nothing
         inline bool Visit(IPropertyVisitor& /*v*/, Vector<UIVariant>& /*variants*/, StringView /*key*/) {
             return false;
         }

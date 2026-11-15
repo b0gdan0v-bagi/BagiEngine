@@ -24,8 +24,8 @@ namespace BECore {
      * Everybody who joins takes the lowest free seat at once, so every member has a seat and there are no spectators.
      * Strings that come from a client (names, tokens) are checked here again: the room does not rely on the parser.
      *
-     * The room is in the lobby until the host calls Start(); then it owns the game (made by the factory) and plays it. Every call that
-     * acts for a person names the PlayerId. A seat nobody holds (an empty one, one whose player left, one whose player has been away
+     * The room is in the lobby until the host calls Start(); then it owns the game (made by the factory) and plays it.
+     * A seat nobody holds (an empty one, one whose player left, one whose player has been away
      * longer than the grace) is played by a computer through StepComputers().
      */
     class Room {

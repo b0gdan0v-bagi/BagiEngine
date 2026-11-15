@@ -8,6 +8,7 @@
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
 #include <Common/Printers.h>
+#include <Common/SharedPtr.h>
 #include <EASTL/optional.h>
 #include <Generated/ReflectionAliasesTest.gen.hpp>
 
@@ -522,7 +523,6 @@ namespace BECore::Tests {
         EXPECT_TRUE(PropVisit::Visit(editor, roomy, "roomy"));
         EXPECT_EQ(roomy, "0123456789ABCDEF-too-long");
 
-        // A visit of an alias field of a reflected class compiles and edits the text
         AliasState state;
         state.fixedText = "kept";
         EXPECT_TRUE(state.AcceptPropertyVisitor(editor));

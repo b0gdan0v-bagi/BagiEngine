@@ -23,19 +23,11 @@ The engine's own lock and thread types, in the PCH (`namespace BECore`): `Mutex`
 
 ## Allowed raw uses
 
-For the check of raw types (the entry `ci-raw-types-check`): outside `Threading/`, `std::mutex`, `std::shared_mutex`, `std::recursive_mutex`, `std::lock_guard`, `std::unique_lock`, `std::shared_lock`, `std::scoped_lock`, `std::thread`, `std::condition_variable` are allowed only in:
+`CI/scripts/check_types.py` (ids `lock` and `thread`, ctest `BagiTypesCheck`) finds a raw `std::mutex` / `shared_mutex` / `recursive_mutex`, the std guards and condition variables, and `std::thread` / `std::jthread` outside this layer. The rule allows them by itself in `tests/` (a test thread is not engine code) and in `BECore/Threading/` (the layer that wraps them). Everything else is a `Mutex` / `Thread`, or says `//-NoStd: <why>` on its line:
 
-- `Profiler/Profiler.cpp` (`g_backendMutex`, `constinit`), `Profiler/Backends/ChromeTraceBackend.*` (the registry mutex and `std::thread::id`), `Profiler/Ring/FrameRingBackend.*` (its three mutexes and `std::thread::id`), each marked `// raw: the profiler cannot profile itself (Threading/CLAUDE.md)`.
-- `std::once_flag` / `std::call_once` in `Utils/EnumUtils.h` (not a lock a thread waits on in the sense of this layer).
-- `std::this_thread` (`sleep_for`, `yield`) and `std::thread::id` as an identity are not locks or threads: free to use; the main thread names itself with `BE_PROFILE_THREAD_ORDER("Main", 0)` in `Application`.
-- The vendored zones (`todo-project.md`) and `tests/`: a test thread is not engine code, tests keep raw `std::thread` / `std::mutex`.
-- The game repositories have locks and threads of their own; they move to these types on their own branches.
-
-The inventory (empty outside these, and `Threading/` itself):
-
-```bash
-grep -rnE "std::(mutex|shared_mutex|recursive_mutex|lock_guard|unique_lock|shared_lock|scoped_lock|thread|condition_variable)\b" src --include='*.h' --include='*.cpp'
-```
+- `Profiler/Profiler.cpp` (`g_backendMutex`, `constinit`), `Profiler/Backends/ChromeTraceBackend.*` and `Profiler/Ring/FrameRingBackend.*` (their mutexes and guards) are marked `//-NoStd: the profiler cannot profile itself (Threading/CLAUDE.md)`.
+- No hit, so no marker: `std::thread::id` and `std::this_thread` (an identity, sleeping; the main thread names itself with `BE_PROFILE_THREAD_ORDER("Main", 0)` in `Application`), `std::once_flag` / `std::call_once` (`Utils/EnumUtils.h`: not a lock a thread waits on in the sense of this layer), the vendored zones (`todo-project.md`).
+- The game repositories run the same check with a baseline of their own: a game's raw locks and threads are its hits until it moves them to these types or lists them.
 
 ## Tests
 

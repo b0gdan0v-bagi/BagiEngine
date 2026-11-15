@@ -4,19 +4,21 @@
     python3 CI/scripts/check_comment_only.py --base <rev> --root <R> [paths...]
     python3 engine/CI/scripts/check_comment_only.py --base games/mahjong --root engine       (from a game checkout)
 
-Compared: every file of `.h .hpp .inl .cpp .mm .c` that differs between the merge-base of `<rev>` and `HEAD` (so a base branch that moved on
-after the work branch was cut does not count; read with `git show`, git runs in `--root`) and the working tree, committed or not, untracked
-files included; with `paths` (files or folders relative to `--root`) only
-those, otherwise all. Each side is read with the comments (`//`, `/* */`, a `\\` continuation extends a `//` comment) removed and the
-whitespace collapsed to tokens, so `clang-format` re-wrapping and the removal of whole comments pass; a changed token, a renamed
-identifier, a removed line of code or an added or deleted file fail. A string, a character or a raw string literal is code, comment signs and
-whitespace inside it included (`"x  y"` and `"x y"` differ). These markers are code too and stay in the compared text, so they cannot be cut or edited by a comment cleanup: `//-NoStd:`,
+Compared: every file of `.h .hpp .inl .cpp .mm .c` that differs between the merge-base of `<rev>` and `HEAD` (so a base branch that moved
+on after the work branch was cut does not count; read with `git show`, git runs in `--root`) and the working tree, committed or not,
+untracked files included; with `paths` (files or folders relative to `--root`) only those, otherwise all. Each side is read with the
+comments (`//`, `/* */`, a `\\` continuation extends a `//` comment) removed and the whitespace collapsed to tokens, so `clang-format`
+re-wrapping and the removal of whole comments pass; a changed token, a renamed identifier, a removed line of code or an added or deleted
+file fail. A string, a character or a raw string literal is code, comment signs and whitespace inside it included (`"x  y"` and `"x y"`
+differ). These markers are code too and stay in the compared text, so they cannot be cut or edited by a comment cleanup: `//-NoStd:`,
 `NOLINT` (also `NOLINTNEXTLINE`, `NOLINTBEGIN`), `clang-format off` / `on`. A preprocessor line ends at its own line end, so `#define X 1`
-and `#define X` / `1` differ.
+and `#define X` / `1` differ. A source that holds a character of U+F0000..U+F3000 (the block the scanner shifts the whitespace of literals
+into) is a finding too: the scanner cannot compare it.
 Not compared: Python, CMake, Markdown and every other file; a file that changed in a way no comment explains is a finding all the same.
 
-Output: `path:line: <what differs>` per file (the line is in the working-tree file; for a missing token the last line of it), then a summary.
-Exit code 0 when every file is the same without comments, 1 with findings, 2 on a bad argument or a git failure. Standard library only.
+Output: `path:line: <what differs>` per file (the line is in the working-tree file; for a missing token the last line of it), then a
+summary. Exit code 0 when every file is the same without comments, 1 with findings, 2 on a bad argument or a git failure. Standard
+library only.
 """
 
 from __future__ import annotations
@@ -42,6 +44,8 @@ TOKEN = re.compile(r"\S+")
 LITERAL_KINDS = ("raw", "str", "chr")
 # The whitespace of a literal is shifted into this block; no source holds it, and `str.isspace` is false there
 PRIVATE_USE = 0xF0000
+# The last whitespace code point of Unicode is U+3000, so the shifted whitespace fills PRIVATE_USE..SHIFTED_END
+SHIFTED_END = PRIVATE_USE + 0x3000
 # A logical line ends at a newline that no backslash continues
 LOGICAL_LINE_END = re.compile(r"(?<!\\)\n|\Z")
 DIRECTIVE_END = "\n"
@@ -94,8 +98,21 @@ def tokens(source: str) -> List[Token]:
     return result
 
 
+def shifted_character(source: str) -> Optional[Tuple[int, str]]:
+    """The line and the code point of the first character the scanner shifts literal whitespace to, None when the source has none."""
+    for offset, ch in enumerate(source):
+        if PRIVATE_USE <= ord(ch) <= SHIFTED_END:
+            return source.count("\n", 0, offset) + 1, f"U+{ord(ch):X}"
+    return None
+
+
 def first_difference(old: str, new: str) -> Optional[Tuple[int, str]]:
-    """None when the two sources are the same without comments, otherwise the line in `new` and what differs there."""
+    """None when the two sources are the same without comments, otherwise the line in `new` (in `old` for a character that only the
+    base holds) and what differs there."""
+    for side, source in (("now", new), ("before", old)):
+        found = shifted_character(source)
+        if found is not None:
+            return found[0], f"the source {side} holds {found[1]}, which the scanner uses for literal whitespace: it cannot compare"
     old_tokens, new_tokens = tokens(old), tokens(new)
     for index in range(min(len(old_tokens), len(new_tokens))):
         if old_tokens[index][0] != new_tokens[index][0]:
