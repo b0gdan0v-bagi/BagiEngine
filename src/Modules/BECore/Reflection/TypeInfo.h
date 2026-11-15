@@ -169,7 +169,8 @@ namespace BECore {
          * The one place of the reflection that is formally not defined behaviour: @p project is called on an aligned address where no
          * object lives and only forms the address of a part, it never reads. Every compiler lays a non-virtual base and a member
          * out at a fixed distance, which is the thing wanted; the well defined twin is `FieldDesc::address`, and a test compares the
-         * two on live objects.
+         * two on live objects. **Non-virtual bases only**: the part of a virtual base is found through the object's vtable, so on
+         * the dummy address this would crash (at static initialization, since the registration calls it).
          */
         template <typename T, typename Project>
         size_t SubobjectOffset(Project project) {
@@ -224,28 +225,25 @@ namespace BECore {
         template <typename R>
         concept SavableResult = std::is_void_v<R> || (Describable<std::remove_cvref_t<R>> && Ser::HasDataAccessor<std::remove_cvref_t<R>>);
 
+        /// What a method's declaration tells the registry; @p Const is the `const` of the member function
+        template <bool Const, typename R, typename... A>
+        struct MethodSignatureOf {
+            using Result = R;
+            static constexpr bool kConst = Const;
+            static constexpr size_t kParamCount = sizeof...(A);
+            static constexpr bool kCallable = (LoadableParam<A> && ...) && SavableResult<R>;
+            template <size_t I>
+            using Param = std::tuple_element_t<I, Tuple<A...>>;
+        };
+
         template <typename Info>
         struct MethodSignature;
 
         template <typename C, typename R, typename... A>
-        struct MethodSignature<MethodInfo<C, R, A...>> {
-            using Result = R;
-            static constexpr bool kConst = false;
-            static constexpr size_t kParamCount = sizeof...(A);
-            static constexpr bool kCallable = (LoadableParam<A> && ...) && SavableResult<R>;
-            template <size_t I>
-            using Param = std::tuple_element_t<I, Tuple<A...>>;
-        };
+        struct MethodSignature<MethodInfo<C, R, A...>> : MethodSignatureOf<false, R, A...> {};
 
         template <typename C, typename R, typename... A>
-        struct MethodSignature<ConstMethodInfo<C, R, A...>> {
-            using Result = R;
-            static constexpr bool kConst = true;
-            static constexpr size_t kParamCount = sizeof...(A);
-            static constexpr bool kCallable = (LoadableParam<A> && ...) && SavableResult<R>;
-            template <size_t I>
-            using Param = std::tuple_element_t<I, Tuple<A...>>;
-        };
+        struct MethodSignature<ConstMethodInfo<C, R, A...>> : MethodSignatureOf<true, R, A...> {};
 
         /// The @p index-th name of the comma separated @p names; empty when there is none
         constexpr StringView ParamNameAt(StringView names, size_t index) {
@@ -266,6 +264,7 @@ namespace BECore {
         /// `arg<Index>`, in static storage
         template <size_t Index>
         struct GeneratedArgName {
+            static constexpr StringView kPrefix = "arg";
             static constexpr size_t kDigits = [] {
                 size_t digits = 1;
                 for (size_t rest = Index; rest >= 10; rest /= 10) {
@@ -273,14 +272,14 @@ namespace BECore {
                 }
                 return digits;
             }();
-            static constexpr size_t kLength = 3 + kDigits;
+            static constexpr size_t kLength = kPrefix.size() + kDigits;
             static constexpr Array<char, kLength + 1> kText = [] {
                 Array<char, kLength + 1> text{};
-                text.data()[0] = 'a';
-                text.data()[1] = 'r';
-                text.data()[2] = 'g';
+                for (size_t i = 0; i < kPrefix.size(); ++i) {
+                    text.data()[i] = kPrefix[i];
+                }
                 size_t rest = Index;
-                for (size_t position = kLength; position > 3; --position) {
+                for (size_t position = kLength; position > kPrefix.size(); --position) {
                     text.data()[position - 1] = static_cast<char>('0' + rest % 10);
                     rest /= 10;
                 }

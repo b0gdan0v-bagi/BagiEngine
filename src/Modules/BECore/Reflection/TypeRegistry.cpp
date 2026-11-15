@@ -98,13 +98,13 @@ namespace BECore {
     }
 
     bool TypeRegistry::IsDerivedFrom(const TypeInfo& derived, const TypeInfo& base) const {
-        if (derived.Hash() == base.Hash()) {
-            return true;
-        }
-        for (const TypeInfo* ancestor : Bases(derived)) {
-            if (ancestor->Hash() == base.Hash()) {
+        const TypeInfo* current = &derived;
+        // The bound stops a parent cycle from looping
+        for (size_t step = 0; current != nullptr && step <= _infos.size(); ++step) {
+            if (current->Hash() == base.Hash()) {
                 return true;
             }
+            current = Parent(*current);
         }
         return false;
     }

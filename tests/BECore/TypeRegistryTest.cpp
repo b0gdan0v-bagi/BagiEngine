@@ -4,12 +4,14 @@
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Reflection/TypeInfo.h>
 #include <BECore/Reflection/TypeRegistry.h>
+#include <BECore/Reflection/TypedRef.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/Scene/Components/SpriteRendererComponent.h>
 #include <BECore/Scene/Components/TransformComponent.h>
 #include <BECore/Scene/IComponent.h>
 #include <BECore/Scene/SceneNode.h>
+#include <BECore/Widgets/IWidget.h>
 #include <Common/Printers.h>
 #include <Generated/TypeRegistryTest.gen.hpp>
 #include <gtest/gtest.h>
@@ -32,7 +34,7 @@ namespace BECore::Tests {
 
     namespace {
 
-        /// A registry of its own with every test type, the parents named by hand (the registration the generator writes comes later)
+        /// A registry of its own with every test type, the parents named by hand
         class TypeRegistryTest : public ::testing::Test {
         protected:
             void SetUp() override {
@@ -278,6 +280,68 @@ namespace BECore::Tests {
         EXPECT_FALSE(registry.IsDerivedFrom(derived, Get("RegInner")));
     }
 
+    TEST_F(TypeRegistryTest, TypedRefOfADerivedObjectThroughItsBase) {
+        RegDerived derived;
+        RegBase& asBase = derived;
+        const TypedRef ref = TypedRef::Of(asBase, registry);
+        ASSERT_TRUE(ref);
+        EXPECT_EQ(ref.type, &Get("RegDerived"));
+        EXPECT_EQ(ref.Address(), static_cast<void*>(&derived));
+        EXPECT_EQ(ref.ConstAddress(), static_cast<const void*>(&derived));
+        EXPECT_FALSE(ref.isConst);
+    }
+
+    TEST_F(TypeRegistryTest, TypedRefMovesBackWhenTheBaseIsNotAtOffsetZero) {
+        RegShifted shifted;
+        RegBase& asBase = shifted;
+        ASSERT_NE(static_cast<void*>(&asBase), static_cast<void*>(&shifted));
+        const TypedRef ref = TypedRef::Of(asBase, registry);
+        ASSERT_TRUE(ref);
+        EXPECT_EQ(ref.type, &Get("RegShifted"));
+        EXPECT_EQ(ref.Address(), static_cast<void*>(&shifted));
+
+        const TypedRef base = ref.Base(Get("RegBase"), registry);
+        ASSERT_TRUE(base);
+        EXPECT_EQ(base.type, &Get("RegBase"));
+        EXPECT_EQ(base.Address(), static_cast<void*>(&asBase));
+        EXPECT_EQ(ref.Base(Get("RegShifted"), registry).Address(), ref.Address());
+        EXPECT_FALSE(ref.Base(Get("RegInner"), registry));
+        EXPECT_FALSE(base.Base(Get("RegShifted"), registry));
+    }
+
+    TEST_F(TypeRegistryTest, TypedRefOfAConstObjectIsConst) {
+        const RegDerived derived;
+        const RegBase& asBase = derived;
+        const TypedRef ref = TypedRef::Of(asBase, registry);
+        ASSERT_TRUE(ref);
+        EXPECT_TRUE(ref.isConst);
+        EXPECT_EQ(ref.type, &Get("RegDerived"));
+        EXPECT_TRUE(ref.Base(Get("RegBase"), registry).isConst);
+    }
+
+    TEST_F(TypeRegistryTest, TypedRefOfATypeWithoutAVtableIsItsStaticType) {
+        RegInner inner;
+        const TypedRef ref = TypedRef::Of(inner, registry);
+        ASSERT_TRUE(ref);
+        EXPECT_EQ(ref.type, &Get("RegInner"));
+        EXPECT_EQ(ref.Address(), static_cast<void*>(&inner));
+    }
+
+    TEST_F(TypeRegistryTest, TypedRefOfAnUnregisteredTypeIsEmpty) {
+        const TypeRegistry empty;
+        RegDerived derived;
+        EXPECT_FALSE(TypedRef::Of(derived, empty));
+        EXPECT_FALSE(TypedRef{});
+
+        // The static type is known and the object's own type is not
+        TypeRegistry onlyBase;
+        onlyBase.Register(MakeTypeInfo<RegBase, void>());
+        RegBase& asBase = derived;
+        EXPECT_FALSE(TypedRef::Of(asBase, onlyBase));
+        RegBase plain;
+        EXPECT_TRUE(TypedRef::Of(plain, onlyBase));
+    }
+
     TEST_F(TypeRegistryTest, DerivedListsFollowALaterRegistration) {
         TypeRegistry late;
         late.Register(MakeTypeInfo<RegBase, void>());
@@ -519,6 +583,43 @@ namespace BECore::Tests {
         // Registered and creatable, but not a component
         EXPECT_FALSE(registry.CreateAs<IComponent>("SceneNode"));
         EXPECT_TRUE(registry.CreateAs<SceneNode>("SceneNode"));
+    }
+
+    namespace {
+
+        /// The registry's offset of every creatable type under @p Base against the compiler's own conversion made by the factory
+        template <typename Base>
+        size_t CheckParentOffsetsAgainstTheCompiler() {
+            const TypeRegistry& registry = TypeRegistry::GetInstance();
+            const TypeInfo* baseInfo = registry.Find(Base::GetStaticTypeMeta().typeHash);
+            EXPECT_NE(baseInfo, nullptr);
+            size_t checked = 0;
+            for (const TypeInfo* info : registry.All()) {
+                if (baseInfo == nullptr || info->create == nullptr || info->factoryBase != baseInfo->Hash()) {
+                    continue;
+                }
+                const auto made = AbstractFactory<Base>::GetInstance().Create(info->Name());
+                if (!made) {
+                    continue;
+                }
+                // The most derived object's address is the compiler's, not the registry's
+                char* const most = static_cast<char*>(dynamic_cast<void*>(made.Get()));
+                const Optional<size_t> offset = registry.OffsetOfBase(*info, *baseInfo);
+                EXPECT_TRUE(offset.has_value()) << String(info->Name()).c_str();
+                if (offset.has_value()) {
+                    EXPECT_EQ(most + *offset, reinterpret_cast<char*>(made.Get())) << String(info->Name()).c_str();
+                    EXPECT_EQ(TypedRef::Of(*made).Address(), static_cast<void*>(most)) << String(info->Name()).c_str();
+                }
+                ++checked;
+            }
+            return checked;
+        }
+
+    }  // namespace
+
+    TEST(TypeRegistryEngineTest, BaseOffsetsAgreeWithTheCompilersConversion) {
+        EXPECT_GT(CheckParentOffsetsAgainstTheCompiler<IComponent>(), 5U);
+        EXPECT_GT(CheckParentOffsetsAgainstTheCompiler<IWidget>(), 0U);
     }
 
     // The live check of the offset rule on the real classes (IWidget has two bases, the UI tree a vtable and nested structs)
