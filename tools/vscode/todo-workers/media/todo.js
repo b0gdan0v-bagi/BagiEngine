@@ -199,10 +199,11 @@
         return filter.area === "all" || entry.area === filter.area;
     }
 
-    // `**Waits for:**` ids of an open entry that no dependency link covers (the queue and the loop only see links).
+    // `**Waits for:**` ids of an open entry that no dependency link covers (the queue and the loop only see links),
+    // as `worker.py doctor` says them; none until its first answer.
     function unlinked(entry) {
         if (entry.status === "closed") return [];
-        return TodoRuns.unlinkedWaits(entry, new Map((payload.entries || []).map((e) => [e.id, e])));
+        return (payload.waitsUnlinked || {})[entry.id] || [];
     }
 
     function row(entry) {
