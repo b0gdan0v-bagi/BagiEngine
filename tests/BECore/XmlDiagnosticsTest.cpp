@@ -307,6 +307,90 @@ namespace BECore::Tests {
     }
 
     // =========================================================================
+    // `range` on the numeric elements of a container
+    // =========================================================================
+
+    namespace {
+
+        /// A `RangedContainers` whose every number is inside its range by default; each parameter is the text of one of its numbers
+        String RangedDocument(StringView ratio = "0.5", StringView count = "3", StringView maybe = "0.25", StringView weight = "1", StringView choice = "2") {
+            return Format("<RangedContainers maybe=\"{}\">"
+                          "<ratios><item value=\"0\"/><item value=\"{}\"/><item value=\"1\"/></ratios>"
+                          "<counts><item value=\"1\"/><item value=\"10\"/><item value=\"{}\"/></counts>"
+                          "<weights><entry key=\"a\" value=\"0\"/><entry key=\"b\" value=\"{}\"/></weights>"
+                          "<choice index=\"0\" value=\"{}\"/>"
+                          "<leaves><item leafValue=\"99\"/></leaves>"
+                          "</RangedContainers>",
+                          maybe, ratio, count, weight, choice);
+        }
+
+    }  // namespace
+
+    TEST(XmlDiagnosticsTest, ContainerElementsInsideTheRangeAreSilent) {
+        LoadedDocument<RangedContainers> loaded(DiagnosticsMode::Warn, RangedDocument());
+        EXPECT_TRUE(loaded.Findings().empty());
+        EXPECT_FALSE(loaded.reader.HasErrors());
+    }
+
+    TEST(XmlDiagnosticsTest, AnElementOutsideTheRangeIsOneFindingAtItsPosition) {
+        LoadedDocument<RangedContainers> ratio(DiagnosticsMode::Warn, RangedDocument("1.5"));
+        EXPECT_EQ(ratio.Findings(), Vector<String>{"ratios[1]: Value 1.5 is outside the range [0, 1]"});
+        ASSERT_EQ(ratio.value.ratios.size(), 3u);
+        EXPECT_FLOAT_EQ(ratio.value.ratios[1], 1.5f);
+
+        LoadedDocument<RangedContainers> count(DiagnosticsMode::Warn, RangedDocument("0.5", "11"));
+        EXPECT_EQ(count.Findings(), Vector<String>{"counts[2]: Value 11 is outside the range [1, 10]"});
+        EXPECT_EQ(count.value.counts[2], 11);
+
+        LoadedDocument<RangedContainers> maybe(DiagnosticsMode::Warn, RangedDocument("0.5", "3", "-1"));
+        EXPECT_EQ(maybe.Findings(), Vector<String>{"maybe: Value -1 is outside the range [0, 1]"});
+        ASSERT_TRUE(maybe.value.maybe.has_value());
+        EXPECT_FLOAT_EQ(*maybe.value.maybe, -1.0f);
+
+        LoadedDocument<RangedContainers> weight(DiagnosticsMode::Warn, RangedDocument("0.5", "3", "0.25", "2"));
+        EXPECT_EQ(weight.Findings(), Vector<String>{"weights[1]: Value 2 is outside the range [0, 1]"});
+        EXPECT_FLOAT_EQ(weight.value.weights["b"], 2.0f);
+
+        LoadedDocument<RangedContainers> choice(DiagnosticsMode::Warn, RangedDocument("0.5", "3", "0.25", "1", "12"));
+        EXPECT_EQ(choice.Findings(), Vector<String>{"choice.value: Value 12 is outside the range [1, 10]"});
+        EXPECT_EQ(choice.value.choice, (Variant<int32_t, String>{std::in_place_index<0>, 12}));
+    }
+
+    TEST(XmlDiagnosticsTest, TwoElementsOutsideTheRangeAreTwoFindings) {
+        LoadedDocument<RangedContainers> loaded(DiagnosticsMode::Warn, "<RangedContainers><ratios><item value=\"2\"/><item value=\"0.5\"/><item value=\"-3\"/></ratios></RangedContainers>");
+        EXPECT_EQ(loaded.Findings(), (Vector<String>{"ratios[0]: Value 2 is outside the range [0, 1]", "ratios[2]: Value -3 is outside the range [0, 1]"}));
+    }
+
+    TEST(XmlDiagnosticsTest, ANotANumberElementIsOutsideTheRange) {
+        LoadedDocument<RangedContainers> loaded(DiagnosticsMode::Warn, RangedDocument("nan"));
+        ASSERT_EQ(loaded.Findings().size(), 1u);
+        EXPECT_NE(loaded.Findings()[0].find("ratios[1]: Value "), String::npos);
+        EXPECT_NE(loaded.Findings()[0].find("is outside the range [0, 1]"), String::npos);
+    }
+
+    TEST(XmlDiagnosticsTest, ContainerElementsOutsideTheRangeAreErrorsUnderErrorAndNothingUnderOff) {
+        const String outside = RangedDocument("1.5", "11", "-1", "2", "12");
+        LoadedDocument<RangedContainers> failed(DiagnosticsMode::Error, outside);
+        EXPECT_EQ(failed.Findings().size(), 5u);
+        EXPECT_TRUE(failed.reader.HasErrors());
+
+        LoadedDocument<RangedContainers> off(DiagnosticsMode::Off, outside);
+        EXPECT_TRUE(off.reader.GetWarnings().empty());
+        EXPECT_FALSE(off.reader.HasErrors());
+        EXPECT_FLOAT_EQ(off.value.ratios[1], 1.5f);
+        EXPECT_EQ(off.value.counts[2], 11);
+        EXPECT_EQ(off.value.choice, (Variant<int32_t, String>{std::in_place_index<0>, 12}));
+    }
+
+    TEST(XmlDiagnosticsTest, RangeOnAListOfObjectsOrATextAlternativeReportsNothing) {
+        LoadedDocument<RangedContainers> loaded(DiagnosticsMode::Warn, "<RangedContainers><leaves><item leafValue=\"-5\"/></leaves><choice index=\"1\" value=\"999\"/></RangedContainers>");
+        EXPECT_TRUE(loaded.Findings().empty());
+        ASSERT_EQ(loaded.value.leaves.size(), 1u);
+        EXPECT_EQ(loaded.value.leaves[0].leafValue, -5);
+        EXPECT_EQ(loaded.value.choice, (Variant<int32_t, String>{std::in_place_index<1>, String("999")}));
+    }
+
+    // =========================================================================
     // Unknown keys
     // =========================================================================
 

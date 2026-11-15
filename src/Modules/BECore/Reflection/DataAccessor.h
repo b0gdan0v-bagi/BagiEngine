@@ -1067,6 +1067,87 @@ namespace BECore {
                 }
             }
 
+            template <typename T>
+            struct IsOptionalType : std::false_type {};
+
+            template <typename T>
+            struct IsOptionalType<eastl::optional<T>> : std::true_type {};
+
+            template <typename T>
+            struct IsOptionalType<std::optional<T>> : std::true_type {};
+
+            /// A map: its mapped values are checked, the keys are not
+            template <typename T>
+            concept IsRangeMap = requires(const T& map) {
+                typename T::mapped_type;
+                map.begin()->second;
+            };
+
+            /// A vector-like or an array; a string is text, not a sequence of numbers
+            template <typename T>
+            concept IsRangeSequence = !IsRangeMap<T> && requires(const T& sequence) {
+                sequence.begin();
+                sequence.end();
+                requires(!std::is_same_v<typename T::value_type, char>);
+            };
+
+            /// Where a checked number sits in its field: the key, then `[i]` per element and `.value` per variant; text only for a finding
+            struct RangeSite {
+                const RangeSite* parent = nullptr;
+                StringView name;
+                size_t index = 0;
+                bool isIndex = false;
+            };
+
+            inline void AppendRangeSite(String& out, const RangeSite& site) {
+                if (site.parent != nullptr) {
+                    AppendRangeSite(out, *site.parent);
+                }
+                if (site.isIndex) {
+                    out += Format("[{}]", site.index);
+                } else {
+                    if (site.parent != nullptr) {
+                        out += '.';
+                    }
+                    out.append(site.name.data(), site.name.size());
+                }
+            }
+
+            /// Reports every number of @p value outside the range of @p attributes, walking containers, an engaged optional and the active alternative of a variant
+            template <typename T>
+            void CheckRange(IDeserializer& d, const T& value, const RangeSite& site, const FieldAttributes& attributes) {
+                if constexpr (std::is_arithmetic_v<T> && !std::is_same_v<T, bool>) {
+                    const double number = static_cast<double>(value);
+                    if (!(number >= attributes.rangeMin && number <= attributes.rangeMax)) {
+                        const String message = Format("Value {} is outside the range [{}, {}]", AsReportedNumber(value), attributes.rangeMin, attributes.rangeMax);
+                        if (site.parent == nullptr) {
+                            d.ReportFinding(site.name, message);
+                        } else {
+                            String path;
+                            AppendRangeSite(path, site);
+                            d.ReportFinding(path, message);
+                        }
+                    }
+                } else if constexpr (IsVariant<T>) {
+                    const RangeSite alternative{&site, kVariantValueKey};
+                    std::visit([&](const auto& active) { CheckRange(d, active, alternative, attributes); }, value);
+                } else if constexpr (IsOptionalType<T>::value) {
+                    if (value.has_value()) {
+                        CheckRange(d, *value, site, attributes);
+                    }
+                } else if constexpr (IsRangeMap<T>) {
+                    size_t position = 0;
+                    for (const auto& entry : value) {
+                        CheckRange(d, entry.second, RangeSite{&site, {}, position++, true}, attributes);
+                    }
+                } else if constexpr (IsRangeSequence<T>) {
+                    size_t position = 0;
+                    for (const auto& element : value) {
+                        CheckRange(d, element, RangeSite{&site, {}, position++, true}, attributes);
+                    }
+                }
+            }
+
         }  // namespace Detail
 
         /**
@@ -1075,6 +1156,9 @@ namespace BECore {
          * The checks run only when d.GetDiagnostics() is not Off, and only report (IDeserializer::ReportFinding): the field keeps
          * what was read, and the result is that of the plain Load. `required` reports a key the scope does not have (IDeserializer::HasKey);
          * `range` reports a number that was read and lies outside [rangeMin, rangeMax], a NaN included. bool is not a number here.
+         * `range` reaches the numeric elements of a container (at `key[i]`, `i` the position in the container's own iteration, which for a
+         * hash map is no sorted order), the mapped values of a map, an engaged optional and a variant's active alternative (`key.value`);
+         * objects, pairs and strings are not walked.
          */
         template <typename T>
         bool Load(IDeserializer& d, T& value, eastl::string_view key, const FieldAttributes& attributes) {
@@ -1085,13 +1169,8 @@ namespace BECore {
             if (attributes.required && !d.HasKey(key)) {
                 d.ReportFinding(key, "Required field is missing");
             }
-            if constexpr (std::is_arithmetic_v<T> && !std::is_same_v<T, bool>) {
-                if (loaded && attributes.hasRange) {
-                    const double number = static_cast<double>(value);
-                    if (!(number >= attributes.rangeMin && number <= attributes.rangeMax)) {
-                        d.ReportFinding(key, Format("Value {} is outside the range [{}, {}]", Detail::AsReportedNumber(value), attributes.rangeMin, attributes.rangeMax));
-                    }
-                }
+            if (loaded && attributes.hasRange) {
+                Detail::CheckRange(d, value, Detail::RangeSite{nullptr, key}, attributes);
             }
             return loaded;
         }

@@ -52,6 +52,18 @@ namespace BECore {
             BE_REFLECT_FIELD BE_FIELD_ATTRS(range(0, 3)) int32_t own = 0;
         };
 
+        /// `range` on containers: it reaches their numeric elements, the mapped values, an engaged optional and a variant's alternative
+        struct RangedContainers {
+            BE_CLASS(RangedContainers)
+
+            BE_REFLECT_FIELD BE_FIELD_ATTRS(range(0, 1)) Vector<float> ratios;
+            BE_REFLECT_FIELD BE_FIELD_ATTRS(range(1, 10)) Array<int32_t, 3> counts{};
+            BE_REFLECT_FIELD BE_FIELD_ATTRS(range(0, 1)) Optional<float> maybe;
+            BE_REFLECT_FIELD BE_FIELD_ATTRS(range(0, 1)) Map<String, float> weights;
+            BE_REFLECT_FIELD BE_FIELD_ATTRS(range(1, 10)) Variant<int32_t, String> choice;
+            BE_REFLECT_FIELD BE_FIELD_ATTRS(range(0, 1)) Vector<Leaf> leaves;
+        };
+
         /// Two names a typo can be mistaken for each other
         struct TileConfig {
             BE_CLASS(TileConfig)
@@ -108,6 +120,27 @@ namespace BECore {
 
         /// The visitor edits no list of objects; the generated `AcceptPropertyVisitor` of `Constrained` needs something to call
         inline bool Visit(IPropertyVisitor& /*v*/, Vector<XmlDiagnosticsTestData::Leaf>& /*value*/, StringView /*key*/) {
+            return false;
+        }
+
+        /// The visitor edits none of the containers of `RangedContainers`; its generated `AcceptPropertyVisitor` needs something to call
+        inline bool Visit(IPropertyVisitor& /*v*/, Vector<float>& /*value*/, StringView /*key*/) {
+            return false;
+        }
+
+        inline bool Visit(IPropertyVisitor& /*v*/, Array<int32_t, 3>& /*value*/, StringView /*key*/) {
+            return false;
+        }
+
+        inline bool Visit(IPropertyVisitor& /*v*/, Optional<float>& /*value*/, StringView /*key*/) {
+            return false;
+        }
+
+        inline bool Visit(IPropertyVisitor& /*v*/, Map<String, float>& /*value*/, StringView /*key*/) {
+            return false;
+        }
+
+        inline bool Visit(IPropertyVisitor& /*v*/, Variant<int32_t, String>& /*value*/, StringView /*key*/) {
             return false;
         }
 
