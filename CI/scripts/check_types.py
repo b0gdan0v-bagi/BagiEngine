@@ -113,8 +113,8 @@ LOCK_FOLDERS = (TESTS_FOLDER, "BECore/Threading")
 RULES: Tuple[Rule, ...] = (
     # the types the type layer replaces
     *(Rule("type", qualified(names), TYPE_ADVICE.format(alias=alias)) for alias, names in TYPES),
-    # no alias yet (`callables-move-only` makes the type)
-    Rule("function", qualified("function"), "no alias exists yet (entry `callables-move-only`); " + MARK_ADVICE),
+    # the callable types of BECore/Utils
+    Rule("function", qualified("function"), "use `MoveOnlyFunction` for a stored callback, `FunctionRef` for a parameter called only during the call, `FixedFunction` where it must never allocate (Utils/CLAUDE.md), or " + MARK_ADVICE),
     # allocating calls
     Rule("to_string", qualified("to_string"), "use `ToString` or `Format` (Format/CLAUDE.md), or " + MARK_ADVICE),
     Rule("sto", qualified(r"sto[ifdlu]+"), "parses through a temporary `std::string`; " + MARK_ADVICE),
