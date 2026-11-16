@@ -13,25 +13,9 @@ namespace BECore::Tests {
 
     namespace {
 
-        /// The context of the tests: `caster` of the stats type and `cast` of the second type
-        struct World {
-            ContextDecl declaration;
-            ValueUnitStats caster;
-            ValueCastInfo cast;
-            Context context;
-
-            World() {
-                EXPECT_TRUE(declaration.Add<ValueUnitStats>("caster").has_value());
-                EXPECT_TRUE(declaration.Add<ValueCastInfo>("cast").has_value());
-                context = Context(declaration);
-                context.Set(0, caster);
-                context.Set(1, cast);
-            }
-        };
-
         /// A slot value of `path` reads the very member, whatever its type
         template <typename T, typename Member>
-        void ExpectSlotReadsMember(const World& world, StringView path, const Member& member) {
+        void ExpectSlotReadsMember(const ValueWorld& world, StringView path, const Member& member) {
             static_assert(std::is_same_v<T, Member>);
             Value<T> value;
             const auto linked = value.Link(world.declaration, path);
@@ -44,7 +28,7 @@ namespace BECore::Tests {
 
         /// The literal of a value is read back as it was given, in every kind of construction
         template <typename T>
-        void ExpectConstReadsLiteral(const T& literal, const T& other, const World& world) {
+        void ExpectConstReadsLiteral(const T& literal, const T& other, const ValueWorld& world) {
             const Value<T> implicitValue = literal;
             const Value<T> named = Value<T>::Const(literal);
             EXPECT_EQ(implicitValue.Kind(), ValueKind::Const);
@@ -64,7 +48,7 @@ namespace BECore::Tests {
     static_assert(!ValueType<String> && !ValueType<Vector<int32_t>> && !ValueType<HashMap<String, int32_t>> && !ValueType<Value<float>>);
 
     TEST(ValueTest, ALiteralOfEveryValueTypeIsReadBackFromAConst) {
-        const World world;
+        const ValueWorld world;
         ExpectConstReadsLiteral<bool>(true, false, world);
         ExpectConstReadsLiteral<int32_t>(12, 13, world);
         ExpectConstReadsLiteral<uint32_t>(12U, 13U, world);
@@ -83,7 +67,7 @@ namespace BECore::Tests {
     }
 
     TEST(ValueTest, APoolStringLiteralIsReadBackFromAConst) {
-        const World world;
+        const ValueWorld world;
         const Value<PoolString> value = PoolString::Intern("Hero");
         EXPECT_TRUE(value.IsConst());
         EXPECT_EQ(value.Get(world.context), "Hero"_intern);
@@ -91,7 +75,7 @@ namespace BECore::Tests {
     }
 
     TEST(ValueTest, ADefaultValueIsAConstOfTheDefaultOfItsType) {
-        const World world;
+        const ValueWorld world;
         const Value<int32_t> number;
         const Value<Vec3> vector;
         EXPECT_TRUE(number.IsConst());
@@ -100,7 +84,7 @@ namespace BECore::Tests {
     }
 
     TEST(ValueTest, ASlotOfEveryValueTypeReadsTheMemberOfTheContextObject) {
-        const World world;
+        const ValueWorld world;
         ExpectSlotReadsMember<bool>(world, "caster.alive", world.caster.alive);
         ExpectSlotReadsMember<int32_t>(world, "caster.attack", world.caster.attack);
         ExpectSlotReadsMember<uint32_t>(world, "caster.count", world.caster.count);
@@ -120,7 +104,7 @@ namespace BECore::Tests {
     }
 
     TEST(ValueTest, ASlotIntoAStructAndIntoAnotherLevelReadsThatMember) {
-        const World world;
+        const ValueWorld world;
         ExpectSlotReadsMember<int32_t>(world, "caster.span.high", world.caster.span.high);
         ExpectSlotReadsMember<Vec2>(world, "caster.span.offset", world.caster.span.offset);
         ExpectSlotReadsMember<int32_t>(world, "cast.level", world.cast.level);
@@ -128,7 +112,7 @@ namespace BECore::Tests {
     }
 
     TEST(ValueTest, ASlotKnowsItsLevelAndItsOffsetAndWhereItsPathIs) {
-        const World world;
+        const ValueWorld world;
         Value<int32_t> value;
         ASSERT_TRUE(value.Link(world.declaration, "cast.level").has_value());
         EXPECT_EQ(value.Level(), LevelIndex{1});
@@ -137,7 +121,7 @@ namespace BECore::Tests {
     }
 
     TEST(ValueTest, ASlotSeesALaterWriteToTheObject) {
-        World world;
+        ValueWorld world;
         Value<int32_t> attack;
         Value<Vec3> velocity;
         ASSERT_TRUE(attack.Link(world.declaration, "caster.attack").has_value());
@@ -150,8 +134,8 @@ namespace BECore::Tests {
     }
 
     TEST(ValueTest, TheSameSlotReadsTheObjectOfEachContext) {
-        World first;
-        World second;
+        ValueWorld first;
+        ValueWorld second;
         second.caster.attack = 5;
         Value<int32_t> attack;
         ASSERT_TRUE(attack.Link(first.declaration, "caster.attack").has_value());
@@ -176,7 +160,7 @@ namespace BECore::Tests {
     }
 
     TEST(ValueTest, ALinkOfAWrongTypeIsRefusedAndTheValueIsUnchanged) {
-        const World world;
+        const ValueWorld world;
         Value<float> value = 3.5f;
         const auto linked = value.Link(world.declaration, "caster.attack");
         ASSERT_FALSE(linked.has_value());
@@ -192,7 +176,7 @@ namespace BECore::Tests {
     }
 
     TEST(ValueTest, ALinkOfABadPathIsRefusedAndTheValueIsUnchanged) {
-        const World world;
+        const ValueWorld world;
         Value<int32_t> value;
         ASSERT_TRUE(value.Link(world.declaration, "caster.attack").has_value());
         const uint32_t offset = value.Offset();
@@ -215,7 +199,7 @@ namespace BECore::Tests {
     }
 
     TEST(ValueTest, AValueIsEqualToAnotherOfTheSameKindAndContent) {
-        const World world;
+        const ValueWorld world;
         Value<int32_t> a;
         Value<int32_t> b;
         ASSERT_TRUE(a.Link(world.declaration, "caster.attack").has_value());

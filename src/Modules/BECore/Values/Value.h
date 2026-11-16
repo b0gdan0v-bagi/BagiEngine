@@ -2,6 +2,7 @@
 
 #include <BECore/Assert/AssertMacros.h>
 #include <BECore/PoolString/PoolString.h>
+#include <BECore/Reflection/PropertyVisitorDispatch.h>
 #include <BECore/Reflection/TypeDesc.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
@@ -116,6 +117,15 @@ namespace BECore {
             return _constant == other._constant;
         }
 
+        /// The editor shows the literal of a `Const` as a compound `value`; a `Slot` is not a literal and is not edited as one
+        template <typename Visitor>
+        bool VisitProperties(Visitor& v) {
+            if (_kind != ValueKind::Const) {
+                return false;
+            }
+            return PropVisit::Visit(v, _constant, "value");
+        }
+
     private:
         T _constant{};
         PoolString _path;
@@ -125,3 +135,6 @@ namespace BECore {
     };
 
 }  // namespace BECore
+
+// The accessor is part of the type: a generated .gen.hpp that names a Value field sees it by including this header
+#include <BECore/Values/ValueAccessor.h>

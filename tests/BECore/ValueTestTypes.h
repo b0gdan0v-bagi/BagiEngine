@@ -12,6 +12,8 @@
 #include <BECore/Reflection/TypeTraits.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
+#include <BECore/Values/Context.h>
+#include <BECore/Values/Value.h>
 #include <cstdint>
 
 namespace BECore::ValueTestData {
@@ -117,6 +119,53 @@ namespace BECore::ValueTestData {
         BE_REFLECT_FIELD HashMap<String, int32_t> table;
         BE_REFLECT_FIELD Optional<int32_t> maybe;
         BE_REFLECT_FIELD ValueSpan span;
+    };
+
+    /// A struct with a `Value` field of the kinds a content file spells: the defaults are not what the tests load, so a field a load left shows
+    struct ValueSkill {
+        BE_CLASS(ValueSkill)
+
+        BE_REFLECT_FIELD Value<int32_t> damage = 7;
+        BE_REFLECT_FIELD Value<float> scale = 1.0f;
+        BE_REFLECT_FIELD Value<bool> critical = false;
+        BE_REFLECT_FIELD Value<PoolString> label;
+        BE_REFLECT_FIELD Value<ValueElement> element = ValueElement::Earth;
+        BE_REFLECT_FIELD Value<Vec3> aim = Vec3{9.0f, 9.0f, 9.0f};
+        BE_REFLECT_FIELD Value<Color> tint = Color{1, 2, 3, 4};
+        BE_REFLECT_FIELD Value<ValuePoint> spot = ValuePoint{9, 9};
+    };
+
+    /// The same fields as plain values: what `ValueSkill` loads from a file of plain attributes must be what this loads
+    struct ValuePlainSkill {
+        BE_CLASS(ValuePlainSkill)
+
+        BE_REFLECT_FIELD int32_t damage = 7;
+        BE_REFLECT_FIELD float scale = 1.0f;
+        BE_REFLECT_FIELD bool critical = false;
+        BE_REFLECT_FIELD PoolString label;
+        BE_REFLECT_FIELD ValueElement element = ValueElement::Earth;
+        BE_REFLECT_FIELD Vec3 aim{9.0f, 9.0f, 9.0f};
+        BE_REFLECT_FIELD Color tint{1, 2, 3, 4};
+        BE_REFLECT_FIELD ValuePoint spot{9, 9};
+    };
+
+    /// A context of two levels, `caster` (stats) and `cast` (what is cast), with an object behind each; the declaration is checked by the tests that build it
+    struct ValueWorld {
+        ContextDecl declaration;
+        ValueUnitStats caster;
+        ValueCastInfo cast;
+        Context context;
+
+        ValueWorld() {
+            static_cast<void>(declaration.Add<ValueUnitStats>("caster"));
+            static_cast<void>(declaration.Add<ValueCastInfo>("cast"));
+            context = Context(declaration);
+            context.Set(0, caster);
+            context.Set(1, cast);
+        }
+
+        ValueWorld(const ValueWorld&) = delete;
+        ValueWorld& operator=(const ValueWorld&) = delete;
     };
 
 }  // namespace BECore::ValueTestData
