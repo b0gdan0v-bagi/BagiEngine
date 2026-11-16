@@ -63,6 +63,9 @@ namespace BECore {
         Span<const TypeDesc* const> alternatives{};
         /// Enum: the names of the values, in declaration order
         Span<const StringView> names{};
+        /// Enum: `sizeof` of the enum (its underlying type); 0 for every other kind. Part of the identity: two enums of the same
+        /// names and different underlying types are two types, and a reader of the field by offset needs the width.
+        size_t enumBytes = 0;
         /// Object and Pointer: the `ClassMeta` of the (pointee) type, null for an Opaque type or a pointee that is no `BE_CLASS`.
         /// A function, not a value: the type's own `.gen.hpp` may be in another translation unit than the field's, so a value
         /// read here could differ between translation units. For the same reason a Pointer does not say whether its pointee has an
@@ -87,7 +90,7 @@ namespace BECore {
         }
     };
 
-    /// Whether two descriptors describe the same type: kind, element, key, alternatives, enum names, class hash, opaque identity and limits.
+    /// Whether two descriptors describe the same type: kind, element, key, alternatives, enum names and size, class hash, opaque identity and limits.
     bool SameType(const TypeDesc& a, const TypeDesc& b);
 
     namespace Detail {
@@ -346,6 +349,7 @@ namespace BECore {
                 desc.kind = TypeKind::Enum;
                 const auto& enumNames = EnumUtils<T>::Names();
                 desc.names = Span<const StringView>(enumNames.data(), enumNames.size());
+                desc.enumBytes = sizeof(T);
             } else if constexpr (IsListType<T>) {
                 desc.kind = TypeKind::List;
                 desc.resizable = ListTraits<T>::kResizable;
