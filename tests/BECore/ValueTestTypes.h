@@ -8,6 +8,7 @@
 #include <BECore/Math/Vec3.h>
 #include <BECore/Math/Vec4.h>
 #include <BECore/PoolString/PoolString.h>
+#include <BECore/RefCounted/RefCounted.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Reflection/TypeTraits.h>
 #include <BECore/Types/Types.h>
@@ -152,6 +153,16 @@ namespace BECore::ValueTestData {
     /// A document that declares its context (`<context>`) before the values that read it; the defaults are not what the tests load
     struct ValueDocument {
         BE_CLASS(ValueDocument)
+
+        BE_REFLECT_FIELD ContextDecl context;
+        BE_REFLECT_FIELD Value<int32_t> damage = 7;
+        BE_REFLECT_FIELD Value<float> power = 1.0f;
+        BE_REFLECT_FIELD Value<Vec3> aim = Vec3{9.0f, 9.0f, 9.0f};
+    };
+
+    /// The document of a named config (`MakeFromConfig` needs a `RefCounted`): the same fields as `ValueDocument`
+    struct ValueConfigDocument : RefCounted {
+        BE_CLASS(ValueConfigDocument)
 
         BE_REFLECT_FIELD ContextDecl context;
         BE_REFLECT_FIELD Value<int32_t> damage = 7;
