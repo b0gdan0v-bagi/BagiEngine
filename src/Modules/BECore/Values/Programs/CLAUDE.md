@@ -1,6 +1,6 @@
 # Programs: computed values compiled into typed code
 
-A formula of a content file (`expr="caster.attack * 2"`, later) becomes a `Program`: straight-line typed instructions over registers, run by a `switch` interpreter. This folder holds the instruction set, the program and its pool, the builder and the interpreter; the text front end and the compiler come with later work of the entry `data-values-programs` (`Values/CLAUDE.md` is the value and the context).
+A formula of a content file (`expr="caster.attack * 2"`, later) becomes a `Program`: straight-line typed instructions over registers, run by a `switch` interpreter. This folder holds the instruction set, the program and its pool, the builder and the interpreter; the text front end is below, the type checker and the compiler come with later work of the entry `data-values-programs` (`Values/CLAUDE.md` is the value and the context).
 
 ## Files
 
@@ -12,6 +12,8 @@ A formula of a content file (`expr="caster.attack * 2"`, later) becomes a `Progr
 | `Program.h/.cpp` | `Program` (immutable), `ProgramPool`, `ProgramError` |
 | `ProgramBuilder.h/.cpp` | registers, constants, `Emit`, `Finish`; what the compiler and the tests assemble programs with |
 | `Interpreter.h/.cpp` | `Run`: the only `switch` |
+| `ExprAst.h/.cpp` | the untyped tree (`ExprNode` arena), `ExprLimits`, `PrintExpression` |
+| `ExprLexer.h/.cpp`, `ExprParser.h/.cpp` | text to tokens, tokens to the tree |
 
 ## The frame and the pool
 
@@ -21,7 +23,7 @@ Registers are `alignas(16)` objects of 16 bytes (the biggest value a program hol
 
 ## One list, one meaning
 
-`Opcode.h` lists every typed instruction once (`BE_PROGRAM_ROWS`: operation x type, by groups of types), and the opcode enum, the interpreter's `switch`, `kHasRow` and the matrix of `ProgramInterpreterTest` are all expanded from it. An operation has a type when its C++ operator or function does (a concept in the struct, `Add<bool>` has none); `Kernels.h` ends with a `static_assert` that the rows and the concepts agree for every operation and every type, so a type that gains an operator, or a row that names an operation a type lacks, is a compile error. A new type is a row of `BE_PROGRAM_TYPES`, a value of `ProgramType` and rows in the groups.
+`Opcode.h` lists every typed instruction once (`BE_PROGRAM_ROWS`: operation x type, by groups of types), and the opcode enum, the interpreter's `switch`, `kHasRow` and the matrix of `ProgramInterpreterTest` are all expanded from it. An operation has a type when its C++ operator or function does (a concept in the struct, `Add<bool>` has none); `Kernels.h` ends with a `static_assert` that the rows and the concepts agree for every operation and every type, so a type that gains an operator, or a row that names an operation a type lacks, is a compile error. `ProgramOperation` names the operations apart from the type and `OpcodeOf(operation, type)` is the row lookup (`Invalid` when the type has none), so the checker keeps no table of its own. A new type is a row of `BE_PROGRAM_TYPES`, a value of `ProgramType` and rows in the groups.
 
 ## Meaning of the operations
 
@@ -37,3 +39,9 @@ Every row has a test against a plain C++ reference (`ProgramInterpreterTest`). O
 - `Select` takes the condition in its first operand register, then the two values.
 
 A constant is the 16-byte image of the value, zero-padded, so equal constants are equal bytes and the builder keeps one entry for them.
+
+## The text of a formula
+
+Loosest first: `||`; `&&`; `== !=`; `< <= > >=`; `+ -`; `* / %`; unary `- !`; postfix call and member. Binary operators group to the left; parentheses leave no node. Numbers are `12`, `1.5`, `.5`, `1e3` with no suffix and no sign (a sign is the unary operator, so a literal never carries one); `true` and `false` are literals. `a.b.c` is one `Name`, `a.b(c)` a `Call` of the name `a.b` (the checker says why that is no function), `.x` after anything that is not a bare name (`f(x).y`, `(a).b`) is a `Member`. `[` is refused by the lexer: a path must name a fixed field. Only ASCII is part of the language; any other byte is an error that names it (an invalid UTF-8 byte by its hex value, never copied into the message).
+
+`PrintExpression` is the canonical text: one space around a binary operator, `, ` between arguments, every binary operand that is itself a binary in parentheses, numbers as written; parsing it gives the same tree. Limits against hostile content, each an error that names it: 4096 bytes of text, 64 levels of nesting (parentheses, call arguments, chained unary operators), 512 nodes. An error is `ProgramError{message, column}`, the column the 1-based byte of the token or node; the node of a binary or unary operator is at its operator.

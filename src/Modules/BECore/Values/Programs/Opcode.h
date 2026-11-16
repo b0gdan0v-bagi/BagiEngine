@@ -83,6 +83,31 @@ namespace BECore {
      */
     CORE_ENUM(Opcode, uint16_t, Invalid, LoadConst, Copy BE_PROGRAM_ROWS(BE_PROGRAM_OPCODE_ROW) BE_PROGRAM_CONVERSIONS(BE_PROGRAM_OPCODE_CONVERSION))
 
+    /// The operations of `BE_PROGRAM_ROWS` by name, apart from the type: what the text of a formula says (`+`, `min`) before a type is known
+    CORE_ENUM(ProgramOperation, uint8_t, LoadSlot, Add, Sub, Mul, Div, Mod, Neg, Abs, Eq, Ne, Lt, Le, Gt, Ge, And, Or, Not, Min, Max, Clamp, Select, Lerp, Floor, Ceil, Round, Sqrt)
+
+    /// The opcode of an operation on a type, `Invalid` when the type has no row: the checker asks it instead of keeping a table of its own
+    [[nodiscard]] constexpr Opcode OpcodeOf(ProgramOperation operation, ProgramType type) {
+#define BE_PROGRAM_OPCODE_OF(Op, Type, Cpp)                                                                                                                                                            \
+    if (operation == ProgramOperation::Op && type == ProgramType::Type) {                                                                                                                              \
+        return Opcode::Op##Type;                                                                                                                                                                       \
+    }
+        BE_PROGRAM_ROWS(BE_PROGRAM_OPCODE_OF)
+#undef BE_PROGRAM_OPCODE_OF
+        return Opcode::Invalid;
+    }
+
+    /// The conversion between two numbers, `Invalid` for the same type or a type that is no number
+    [[nodiscard]] constexpr Opcode ConversionOpcode(ProgramType from, ProgramType to) {
+#define BE_PROGRAM_CONVERSION_OF(Src, SrcCpp, Dst, DstCpp)                                                                                                                                             \
+    if (from == ProgramType::Src && to == ProgramType::Dst) {                                                                                                                                          \
+        return Opcode::Src##To##Dst;                                                                                                                                                                   \
+    }
+        BE_PROGRAM_CONVERSIONS(BE_PROGRAM_CONVERSION_OF)
+#undef BE_PROGRAM_CONVERSION_OF
+        return Opcode::Invalid;
+    }
+
     /// The program type of a C++ type, specialized for each row of `BE_PROGRAM_TYPES`; a type without a specialization is no program type
     template <typename T>
     struct ProgramTypeTraits;

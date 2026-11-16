@@ -1,0 +1,327 @@
+// The text front end of formulas (Values/Programs/ExprLexer, ExprParser, ExprAst): the grammar, the printer, the errors with their columns and the limits.
+
+#include <BECore/Values/Programs/ExprAst.h>
+#include <BECore/Values/Programs/ExprParser.h>
+#include <gtest/gtest.h>
+
+namespace BECore::Tests {
+
+    namespace {
+
+        bool Contains(const String& text, StringView part) {
+            return text.find(part.data(), 0, part.size()) != String::npos;
+        }
+
+        ExprAst Parse(StringView text) {
+            auto parsed = ParseExpression(text);
+            EXPECT_TRUE(parsed.has_value()) << String(text).c_str() << ": " << (parsed.has_value() ? String{} : parsed.error().message).c_str();
+            return parsed.has_value() ? std::move(*parsed) : ExprAst{};
+        }
+
+        String Printed(StringView text) {
+            return PrintExpression(Parse(text));
+        }
+
+        /// The tree without its columns: the same shape written differently has the same nodes
+        bool SameTree(const ExprAst& a, const ExprAst& b) {
+            if (a.nodes.size() != b.nodes.size() || a.root != b.root || a.arguments != b.arguments) {
+                return false;
+            }
+            for (size_t i = 0; i < a.nodes.size(); ++i) {
+                const ExprNode& x = a.nodes[i];
+                const ExprNode& y = b.nodes[i];
+                if (x.kind != y.kind || x.operation != y.operation || x.isFloat != y.isFloat || x.boolValue != y.boolValue || x.first != y.first || x.second != y.second ||
+                    x.firstArgument != y.firstArgument || x.argumentCount != y.argumentCount || x.text != y.text) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        ProgramError ExpectError(StringView text, uint32_t column, StringView words) {
+            const auto parsed = ParseExpression(text);
+            EXPECT_FALSE(parsed.has_value()) << String(text).c_str();
+            if (parsed.has_value()) {
+                return {};
+            }
+            EXPECT_EQ(parsed.error().column, column) << String(text).c_str() << ": " << parsed.error().message.c_str();
+            EXPECT_TRUE(Contains(parsed.error().message, words)) << String(text).c_str() << ": " << parsed.error().message.c_str() << " does not say '" << String(words).c_str() << "'";
+            return parsed.error();
+        }
+
+        String Repeated(StringView part, size_t count) {
+            String text;
+            for (size_t i = 0; i < count; ++i) {
+                text.append(part.data(), part.size());
+            }
+            return text;
+        }
+
+    }  // namespace
+
+    TEST(ProgramParserTest, EveryOperatorParsesToItsOperation) {
+        struct Row {
+            StringView symbol;
+            ProgramOperation operation;
+        };
+        const Row rows[] = {{"||", ProgramOperation::Or}, {"&&", ProgramOperation::And}, {"==", ProgramOperation::Eq}, {"!=", ProgramOperation::Ne}, {"<", ProgramOperation::Lt},
+                            {"<=", ProgramOperation::Le}, {">", ProgramOperation::Gt},   {">=", ProgramOperation::Ge}, {"+", ProgramOperation::Add}, {"-", ProgramOperation::Sub},
+                            {"*", ProgramOperation::Mul}, {"/", ProgramOperation::Div},  {"%", ProgramOperation::Mod}};
+        for (const Row& row : rows) {
+            const String text = Format("a {} b", row.symbol);
+            const ExprAst ast = Parse(text);
+            ASSERT_EQ(ast.nodes.size(), 3U) << text.c_str();
+            EXPECT_EQ(ast[ast.root].kind, ExprNodeKind::Binary) << text.c_str();
+            EXPECT_EQ(ast[ast.root].operation, row.operation) << text.c_str();
+            EXPECT_EQ(PrintExpression(ast), text) << "the printer writes the symbol back";
+            EXPECT_EQ(OperatorSymbol(row.operation), row.symbol);
+        }
+    }
+
+    TEST(ProgramParserTest, PrecedenceAndAssociativityAreTheTableSaysAsFullyParenthesizedText) {
+        struct Row {
+            StringView text;
+            StringView expected;
+        };
+        const Row rows[] = {
+            {"a || b && c", "a || (b && c)"},
+            {"a && b || c", "(a && b) || c"},
+            {"a && b == c", "a && (b == c)"},
+            {"a == b < c", "a == (b < c)"},
+            {"a < b + c", "a < (b + c)"},
+            {"a + b * c", "a + (b * c)"},
+            {"a * b + c", "(a * b) + c"},
+            {"a - b - c", "(a - b) - c"},
+            {"a / b / c", "(a / b) / c"},
+            {"a % b * c", "(a % b) * c"},
+            {"a || b || c", "(a || b) || c"},
+            {"a && b && c", "(a && b) && c"},
+            {"a == b == c", "(a == b) == c"},
+            {"a < b <= c", "(a < b) <= c"},
+            {"(a + b) * c", "(a + b) * c"},
+            {"a * (b + c)", "a * (b + c)"},
+            {"a - (b - c)", "a - (b - c)"},
+            {"((a))", "a"},
+            {"-a * b", "-a * b"},
+            {"-(a * b)", "-(a * b)"},
+            {"!a && b", "!a && b"},
+            {"!a == b", "!a == b"},
+            {"a + b == c * d", "(a + b) == (c * d)"},
+            {"a < b == c > d", "(a < b) == (c > d)"},
+            {"a || b && c == d + e * f", "a || (b && (c == (d + (e * f))))"},
+            {"-f(x) + 1", "-f(x) + 1"},
+        };
+        for (const Row& row : rows) {
+            EXPECT_EQ(Printed(row.text), row.expected) << String(row.text).c_str();
+        }
+    }
+
+    TEST(ProgramParserTest, UnaryMinusBeforeALiteralIsAnOperatorAboveTheNumber) {
+        const ExprAst ast = Parse("-5");
+        ASSERT_EQ(ast.nodes.size(), 2U);
+        EXPECT_EQ(ast[ast.root].kind, ExprNodeKind::Unary);
+        EXPECT_EQ(ast[ast.root].operation, ProgramOperation::Neg);
+        EXPECT_EQ(ast[ast[ast.root].first].kind, ExprNodeKind::Number);
+        EXPECT_EQ(ast[ast[ast.root].first].text, "5");
+        EXPECT_EQ(PrintExpression(ast), "-5");
+        EXPECT_EQ(Printed("- -5"), "-(-5)");
+        EXPECT_EQ(Printed("a - -5"), "a - -5");
+        EXPECT_EQ(Printed("!!a"), "!(!a)");
+        EXPECT_EQ(Parse("!a")[Parse("!a").root].operation, ProgramOperation::Not);
+    }
+
+    TEST(ProgramParserTest, NumbersKeepTheirTextAndTellFloatsFromIntegers) {
+        struct Row {
+            StringView text;
+            bool isFloat;
+        };
+        const Row rows[] = {{"12", false}, {"0", false}, {"1.5", true}, {".5", true}, {"1e3", true}, {"1E3", true}, {"1.5e-3", true}, {"2e+8", true}, {"007", false}, {"3.0", true}};
+        for (const Row& row : rows) {
+            const ExprAst ast = Parse(row.text);
+            ASSERT_EQ(ast.nodes.size(), 1U) << String(row.text).c_str();
+            EXPECT_EQ(ast[ast.root].kind, ExprNodeKind::Number);
+            EXPECT_EQ(ast[ast.root].isFloat, row.isFloat) << String(row.text).c_str();
+            EXPECT_EQ(ast[ast.root].text, row.text) << "the text is kept as written";
+        }
+        EXPECT_EQ(Printed("1 + .5"), "1 + .5");
+        EXPECT_EQ(Printed("(.5)"), ".5");
+        EXPECT_EQ(Printed("x*.5"), "x * .5");
+    }
+
+    TEST(ProgramParserTest, BoolLiteralsAreNotNames) {
+        const ExprAst yes = Parse("true");
+        EXPECT_EQ(yes[yes.root].kind, ExprNodeKind::Bool);
+        EXPECT_TRUE(yes[yes.root].boolValue);
+        const ExprAst no = Parse("false");
+        EXPECT_EQ(no[no.root].kind, ExprNodeKind::Bool);
+        EXPECT_FALSE(no[no.root].boolValue);
+        EXPECT_EQ(Printed("true && !false"), "true && !false");
+        const ExprAst name = Parse("trueish");
+        EXPECT_EQ(name[name.root].kind, ExprNodeKind::Name);
+    }
+
+    TEST(ProgramParserTest, AFunctionCallHasZeroOneOrManyArguments) {
+        const ExprAst none = Parse("f()");
+        EXPECT_EQ(none[none.root].kind, ExprNodeKind::Call);
+        EXPECT_EQ(none[none.root].text, "f");
+        EXPECT_EQ(none[none.root].argumentCount, 0U);
+
+        const ExprAst one = Parse("abs(x)");
+        EXPECT_EQ(one[one.root].argumentCount, 1U);
+
+        const ExprAst many = Parse("clamp(a + 1, 0, min(b, c))");
+        ASSERT_EQ(many[many.root].kind, ExprNodeKind::Call);
+        ASSERT_EQ(many[many.root].argumentCount, 3U);
+        EXPECT_EQ(many[many.arguments[many[many.root].firstArgument]].kind, ExprNodeKind::Binary);
+        EXPECT_EQ(many[many.arguments[many[many.root].firstArgument + 2]].kind, ExprNodeKind::Call);
+        EXPECT_EQ(PrintExpression(many), "clamp(a + 1, 0, min(b, c))");
+        EXPECT_EQ(Printed("f(  1 ,2,   g( ) )"), "f(1, 2, g())");
+    }
+
+    TEST(ProgramParserTest, ADottedNameIsOneNameAndACallOfADottedNameIsACall) {
+        const ExprAst path = Parse("a.b.c");
+        ASSERT_EQ(path.nodes.size(), 1U);
+        EXPECT_EQ(path[path.root].kind, ExprNodeKind::Name);
+        EXPECT_EQ(path[path.root].text, "a.b.c");
+
+        const ExprAst call = Parse("a.b(c)");
+        EXPECT_EQ(call[call.root].kind, ExprNodeKind::Call);
+        EXPECT_EQ(call[call.root].text, "a.b");
+        EXPECT_EQ(call[call.root].argumentCount, 1U);
+        EXPECT_EQ(PrintExpression(call), "a.b(c)");
+
+        EXPECT_EQ(Printed("caster.span.low + cast.level"), "caster.span.low + cast.level");
+    }
+
+    TEST(ProgramParserTest, AMemberOnAnExpressionThatIsNoNameIsAMember) {
+        const ExprAst ast = Parse("f(x).y.z");
+        ASSERT_EQ(ast[ast.root].kind, ExprNodeKind::Member);
+        EXPECT_EQ(ast[ast.root].text, "z");
+        EXPECT_EQ(ast[ast[ast.root].first].kind, ExprNodeKind::Member);
+        EXPECT_EQ(ast[ast[ast[ast.root].first].first].kind, ExprNodeKind::Call);
+        EXPECT_EQ(PrintExpression(ast), "f(x).y.z");
+
+        const ExprAst parenthesized = Parse("(a).b");
+        EXPECT_EQ(parenthesized[parenthesized.root].kind, ExprNodeKind::Member) << "parentheses stop a name from taking the member";
+        EXPECT_EQ(PrintExpression(parenthesized), "(a).b");
+        EXPECT_EQ(Printed("(a + b).x"), "(a + b).x");
+        EXPECT_EQ(Printed("(-a).x"), "(-a).x");
+    }
+
+    TEST(ProgramParserTest, WhitespaceAndTabsAreOnlySeparators) {
+        EXPECT_EQ(Printed("  a\t+\tb  "), "a + b");
+        EXPECT_EQ(Printed("a+b*c"), "a + (b * c)");
+        EXPECT_EQ(Printed("a\n+\r\nb"), "a + b");
+        EXPECT_EQ(Printed("a&&b||!c"), "(a && b) || !c");
+        EXPECT_EQ(Printed("a<=b"), "a <= b");
+        EXPECT_EQ(Printed("a != b"), "a != b");
+    }
+
+    TEST(ProgramParserTest, APrintedTextParsesToTheSameTreeAndPrintsAgain) {
+        const StringView texts[] = {"caster.attack * (100 + cast.level * 10) / 100",
+                                    "a || b && c == d + e * f",
+                                    "-(-5) - - 3",
+                                    "!(a && b) || c",
+                                    "clamp(x, -1.5, f(y).z + .25e2)",
+                                    "((a)).b",
+                                    "min(1, max(2, 3)) % 4",
+                                    "select(a < b, 1, 2) >= 3 == true",
+                                    "a - (b - (c - d))"};
+        for (const StringView text : texts) {
+            const ExprAst first = Parse(text);
+            const String printed = PrintExpression(first);
+            const ExprAst second = Parse(printed);
+            EXPECT_TRUE(SameTree(first, second)) << String(text).c_str() << " -> " << printed.c_str();
+            EXPECT_EQ(PrintExpression(second), printed);
+        }
+    }
+
+    TEST(ProgramParserTest, ColumnsAreOneBasedBytesOfTheNodes) {
+        const ExprAst ast = Parse("ab + cd.e");
+        EXPECT_EQ(ast[ast.root].column, 4U) << "a binary node is at its operator";
+        EXPECT_EQ(ast[ast[ast.root].first].column, 1U);
+        EXPECT_EQ(ast[ast[ast.root].second].column, 6U);
+        const ExprAst sign = Parse("  -x");
+        EXPECT_EQ(sign[sign.root].column, 3U);
+    }
+
+    TEST(ProgramParserTest, ErrorsNameWhatWasExpectedAndFoundAndWhere) {
+        ExpectError("1 $ 2", 3, "unexpected '$'");
+        ExpectError("(1 + 2", 7, "expected ')'");
+        EXPECT_TRUE(Contains(ExpectError("(1 + 2", 7, "end of the text").message, "column 1"));
+        ExpectError("1 + 2)", 6, "unexpected ')'");
+        ExpectError("1 +", 4, "expected a value, found the end of the text");
+        ExpectError("*1", 1, "expected a value, found '*'");
+        ExpectError("(1 + )", 6, "expected a value, found ')'");
+        ExpectError("1 2", 3, "expected an operator or the end of the formula, found '2'");
+        ExpectError("f(1 2)", 5, "expected ',' or ')' after the arguments of 'f'");
+        ExpectError("f(1,)", 5, "expected a value, found ')'");
+        ExpectError("f(1", 4, "found the end of the text");
+        ExpectError("a.", 3, "expected a name after '.'");
+        ExpectError("a.5", 3, "expected a name after '.', found '5'");
+        ExpectError("f(x).", 6, "expected a member name after '.'");
+        ExpectError("a = 1", 3, "'=='");
+        ExpectError("a & b", 3, "'&&'");
+        ExpectError("a | b", 3, "'||'");
+        ExpectError("a # b", 3, "unexpected '#'");
+        ExpectError("true(1)", 5, "expected an operator");
+    }
+
+    TEST(ProgramParserTest, MalformedNumbersAreErrorsAtTheBadByte) {
+        ExpectError("1..2", 3, "expected a digit after the decimal point, found '.'");
+        ExpectError("1.", 3, "expected a digit after the decimal point, found the end of the text");
+        ExpectError("1.x", 3, "found 'x'");
+        ExpectError("1e", 3, "expected a digit in the exponent");
+        ExpectError("1e+", 4, "expected a digit in the exponent");
+        ExpectError("1e-x", 4, "expected a digit in the exponent, found 'x'");
+        ExpectError("12abc", 3, "after the number");
+        ExpectError("1 + 3f", 6, "after the number");
+    }
+
+    TEST(ProgramParserTest, AnEmptyTextIsAnError) {
+        ExpectError("", 1, "empty");
+        ExpectError("   \t ", 1, "empty");
+    }
+
+    TEST(ProgramParserTest, AnIndexIsRefusedAndTheMessageSaysAPathMustBeFixed) {
+        const ProgramError error = ExpectError("caster.buffs[0]", 13, "'[' is not allowed");
+        EXPECT_TRUE(Contains(error.message, "fixed field")) << error.message.c_str();
+        ExpectError("a[\"k\"]", 2, "'['");
+    }
+
+    TEST(ProgramParserTest, TheLimitsAreErrorsThatNameThem) {
+        EXPECT_TRUE(ParseExpression(Repeated("a", ExprLimits::kMaxTextBytes)).has_value());
+        const ProgramError longText = ExpectError(Repeated("a", ExprLimits::kMaxTextBytes + 1), ExprLimits::kMaxTextBytes + 1, "longer than 4096 bytes");
+        EXPECT_FALSE(longText.message.empty());
+
+        EXPECT_TRUE(ParseExpression(Repeated("(", ExprLimits::kMaxNesting) + "1" + Repeated(")", ExprLimits::kMaxNesting)).has_value());
+        ExpectError(Repeated("(", ExprLimits::kMaxNesting + 1) + "1" + Repeated(")", ExprLimits::kMaxNesting + 1), ExprLimits::kMaxNesting + 2, "nested deeper than 64 levels");
+        EXPECT_TRUE(ParseExpression(Repeated("-", ExprLimits::kMaxNesting) + "1").has_value());
+        ExpectError(Repeated("-", ExprLimits::kMaxNesting + 1) + "1", ExprLimits::kMaxNesting + 2, "nested deeper than 64 levels");
+        const String calls = Repeated("f(", ExprLimits::kMaxNesting + 1) + "1" + Repeated(")", ExprLimits::kMaxNesting + 1);
+        ExpectError(calls, 2 * (ExprLimits::kMaxNesting + 1) + 1, "nested deeper");
+
+        // n numbers and n - 1 operators make 2n - 1 nodes
+        const size_t fits = (ExprLimits::kMaxNodes + 1) / 2;
+        const auto sum = [](size_t count) { return "1" + Repeated(" + 1", count - 1); };
+        EXPECT_EQ(Parse(sum(fits)).nodes.size(), ExprLimits::kMaxNodes - 1);
+        const auto parsed = ParseExpression(sum(fits + 1));
+        ASSERT_FALSE(parsed.has_value());
+        EXPECT_TRUE(Contains(parsed.error().message, "more than 512 parts")) << parsed.error().message.c_str();
+        EXPECT_GT(parsed.error().column, 0U);
+    }
+
+    TEST(ProgramParserTest, InvalidUtf8AndForeignCharactersAreErrorsNotCrashes) {
+        const ProgramError invalid = ExpectError("1 + \xFF", 5, "invalid UTF-8 byte 0xff");
+        EXPECT_FALSE(Contains(invalid.message, "\xFF")) << "the bad byte is never copied into the message";
+        ExpectError("1 + \xE2\x82", 5, "invalid UTF-8 byte 0xe2");
+        ExpectError("\xC0\x80", 1, "invalid UTF-8 byte 0xc0");
+        ExpectError("\xED\xA0\x80", 1, "invalid UTF-8 byte 0xed");
+        ExpectError("\x80", 1, "invalid UTF-8 byte 0x80");
+        ExpectError("a + \xC3\xA9", 5, "the character '\xC3\xA9'");
+        ExpectError("a + \xF0\x9F\x98\x80", 5, "the character");
+        ExpectError("a +\x07 b", 4, "control character 0x07");
+        ExpectError(String("a +\0 b", 6), 4, "control character 0x00");
+    }
+
+}  // namespace BECore::Tests
