@@ -4,7 +4,7 @@ Completion and checking of `config/*.xml` in an editor, from the reflection of t
 
 | File | Purpose |
 |------|---------|
-| `export_schema.py` | Starts a built game (`<exe>` or `--preset P --game G [--root R]`, `--headless` on the manual clock, with the helpers of `tools/control`), calls the control method `schema` (`src/Modules/BECore/Control/CLAUDE.md`), asks it to quit and writes the JSON (`--out`, else stdout). Exit 0, 1 the game did not start or refused `schema`, 2 a schema of another version, 77 the executable does not exist |
+| `export_schema.py` | Starts a built game (`<exe>` or `--preset P --game G [--root R]`, `--headless` on the manual clock, with the helpers of `tools/control`), calls the control method `schema` (shapes: `src/Modules/BECore/Reflection/CLAUDE.md`, "Schema export"), asks it to quit and writes the JSON (`--out`, else stdout). Exit 0, 1 the game did not start or refused `schema`, 2 a schema of another version, 77 the executable does not exist |
 | `schema_to_xsd.py` | The JSON to one XSD 1.0 per config file; `--check` validates each covered file with `xmllint`; the functions (`build_xsd`, `convert_config_dir`, `check_files`) are what the control smoke of `BagiStress` calls |
 | `schema_common.py` | The schema version, the names the XML serializers write, the exit codes |
 
@@ -25,6 +25,6 @@ The second command prints `covered N, not covered M`, one line per file, and wit
 
 ## The engine's own files
 
-The control smoke of `BagiStress` (`tools/stress/tests/stress_smoke.py`, scene `reflection`) exports the live schema, makes the XSDs of the engine's `config/` and validates every covered file; the bindings it passes are the engine's whole list of files whose type is not named like their stem (`LoggerConfig` is `LoggerManager`, `AssertHandlersConfig` `AssertHandlerManager`, `TestsConfig` `TestList`, `WidgetsConfig` and `GameWidgetsConfig` `WidgetList`, `SDLWindowConfig` its type inside `<window>`; `ApplicationConfig` and `SceneConfig` need none). A game that wants the check calls the same functions with its own bindings.
+The control smoke of `BagiStress` (`tools/stress/tests/stress_smoke.py`, scene `reflection`) exports the live schema, makes the XSDs of the engine's `config/` and validates every covered file; the bindings it passes are the engine's whole list of files whose type is not named like their stem (`LoggerConfig` is `LoggerManager`, `AssertHandlersConfig` `AssertHandlerManager`, `TestsConfig` `TestList`, `WidgetsConfig` and `GameWidgetsConfig` `WidgetList`, `SDLWindowConfig` its type inside `<window>`, `AudioConfig` `AudioSettings`; `ApplicationConfig` and `SceneConfig` need none). A game that wants the check calls the same functions with its own bindings.
 
-**Not covered**, and why: `AudioConfig.xml`, `TextConfig.xml` and `UIConfig.xml` are read by hand (the sound settings, the text system and the UI environment have no reflected type). A game's `UIStrings.xml` is the same case: its keys are the data. The smoke fails when the set of uncovered engine files changes, so a new file says how it is read.
+**Not covered**, and why: `TextConfig.xml` and `UIConfig.xml` are read by hand (the text system and the UI environment have no reflected type). A game's `UIStrings.xml` is the same case: its keys are the data. The smoke fails when the set of uncovered engine files changes, so a new file says how it is read.

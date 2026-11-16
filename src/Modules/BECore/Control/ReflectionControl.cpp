@@ -389,7 +389,7 @@ namespace BECore {
                                                {"recursive", "boolean", false, "With base: the whole subtree (default true), else only the direct children"},
                                                {"creatable", "boolean", false, "Only the types a client can make by name (default false)"}}});
         service.DescribeMethod("describe_type", {"The fields and methods of a reflected type", {{"name", "string", true, "The name of the type"}}});
-        service.DescribeMethod("schema", {"The roots, the types they reach and their methods, as JSON", {}});
+        service.DescribeMethod("schema", {"Every reflected type, the factories and the roots (with the type each holds now), as JSON", {}});
     }
 
 }  // namespace BECore
