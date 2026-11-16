@@ -18,7 +18,18 @@ namespace BECore {
         constexpr StringView kExcerptIndent = "  ";
         constexpr char kUnprintable = '?';
 
-        /// The register image of what an operation gives: the same kernels as `Run`, so a folded value is what the program would have computed
+        /// The images of the entries of a table node, which the lowering has checked are constants
+        Vector<RegisterImage> EntryImages(const TypedNode& node, const Vector<RegisterImage>& images) {
+            Vector<RegisterImage> run;
+            run.reserve(node.entries.size());
+            for (const TypedNodeId entry : node.entries) {
+                run.push_back(images[entry]);
+            }
+            return run;
+        }
+
+        /// The register image of what an operation gives: the same kernels as `Run`, so a folded value is what the program would have computed; a table is folded by running its own
+        /// instruction over its own run of constants
         std::expected<RegisterImage, ProgramError> Fold(const TypedNode& node, const Vector<RegisterImage>& images) {
             ProgramBuilder builder;
             Array<uint8_t, kMaxTypedOperands> regs{};
@@ -30,7 +41,13 @@ namespace BECore {
                 regs[i] = *reg;
                 builder.Emit(Opcode::LoadConst, *reg, 0, 0, 0, builder.AddConstant(images[node.operands[i]]));
             }
-            builder.Emit(node.opcode, regs[0], regs[0], regs[1], regs[2], node.immediate);
+            if (node.opcode == Opcode::LoadTable) {
+                const Vector<RegisterImage> run = EntryImages(node, images);
+                const uint32_t first = builder.AddConstantRun(Span<const RegisterImage>(run.data(), run.size()));
+                builder.EmitLoadTable(regs[0], regs[0], first, static_cast<uint32_t>(run.size()));
+            } else {
+                builder.Emit(node.opcode, regs[0], regs[0], regs[1], regs[2], node.immediate);
+            }
             const auto program = builder.Finish(node.type.program, regs[0]);
             if (!program.has_value()) {
                 return std::unexpected(program.error());
@@ -96,6 +113,9 @@ namespace BECore {
                         _isConstant[i] = true;
                         _images[i] = node.constant;
                     } else if (node.kind == TypedNodeKind::Operation) {
+                        if (const auto entries = RequireConstantEntries(node); !entries.has_value()) {
+                            return entries;
+                        }
                         const bool allConstant = std::all_of(node.operands.begin(), node.operands.begin() + node.operandCount, [this](TypedNodeId operand) { return _isConstant[operand]; });
                         if (!allConstant) {
                             continue;
@@ -106,6 +126,16 @@ namespace BECore {
                         }
                         _isConstant[i] = true;
                         _images[i] = *image;
+                    }
+                }
+                return {};
+            }
+
+            /// A table is a run of constants of the program: an entry that did not fold to one (a path, say) is refused at its own column
+            std::expected<void, ProgramError> RequireConstantEntries(const TypedNode& node) const {
+                for (const TypedNodeId entry : node.entries) {
+                    if (!_isConstant[entry]) {
+                        return Failure(ProgramError{"a table entry must be a constant: a number, a literal or an operation on them, not a value read from the context", _expr[entry].column});
                     }
                 }
                 return {};
@@ -141,7 +171,13 @@ namespace BECore {
                         return lowered;
                     }
                 }
-                _builder.Emit(node.opcode, dst, regs[0], regs[1], regs[2], node.immediate);
+                if (node.opcode == Opcode::LoadTable) {
+                    const Vector<RegisterImage> run = EntryImages(node, _images);
+                    const uint32_t first = _builder.AddConstantRun(Span<const RegisterImage>(run.data(), run.size()));
+                    _builder.EmitLoadTable(dst, regs[0], first, static_cast<uint32_t>(run.size()));
+                } else {
+                    _builder.Emit(node.opcode, dst, regs[0], regs[1], regs[2], node.immediate);
+                }
                 ReleaseAbove(dst, acquired);
                 return {};
             }

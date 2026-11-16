@@ -56,8 +56,9 @@ namespace BECore {
      * @brief A node of a checked formula: it has a program type and is one of three things
      *
      * `Constant`: the register image of a literal already of its type. `Slot`: a field of a context object (`slot`, and the path as written). `Operation`: an opcode
-     * applied to `operandCount` earlier nodes, a conversion included; `Select` has its condition first, a mixed operation (`vec3 * float`) its left operand first. Nothing is
-     * left untyped: a literal took the type of its place.
+     * applied to `operandCount` earlier nodes, a conversion included; `Select` has its condition first, a mixed operation (`vec3 * float`) its left operand first. An inline
+     * table (`at`) is an `Operation` of `LoadTable` with the index as its one operand and its entries in `entries`: whether they are constants is the lowering's to say. Nothing
+     * is left untyped: a literal took the type of its place.
      */
     struct TypedNode {
         TypedNodeKind kind = TypedNodeKind::Constant;
@@ -70,6 +71,8 @@ namespace BECore {
         String path;
         /// `Operation`: the immediate of the instruction when the opcode has one (the index of a component for `Extract`)
         uint32_t immediate = 0;
+        /// `LoadTable`: the nodes of the entries, in order
+        Vector<TypedNodeId> entries;
         uint32_t column = 0;
     };
 

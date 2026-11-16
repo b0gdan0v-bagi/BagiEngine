@@ -203,6 +203,25 @@ namespace BECore {
             return Format("; convert one side explicitly: {}(x) or {}(x)", ProgramTypeName(to.program), ProgramTypeName(from.program));
         }
 
+        /// The names of the functions, `at` included, as a message lists them
+        Vector<String> FunctionNames() {
+            Vector<String> names;
+            for (const ExprFunction& function : kExprFunctions) {
+                names.push_back(String(function.name));
+            }
+            names.push_back(String(kTableFunction));
+            return names;
+        }
+
+        String JoinNames(const Vector<String>& names) {
+            String text;
+            for (const String& name : names) {
+                text += text.empty() ? "" : ", ";
+                text += name;
+            }
+            return text;
+        }
+
         bool IsComparison(ProgramOperation operation) {
             return operation == ProgramOperation::Eq || operation == ProgramOperation::Ne || operation == ProgramOperation::Lt || operation == ProgramOperation::Le ||
                    operation == ProgramOperation::Gt || operation == ProgramOperation::Ge;
@@ -602,7 +621,7 @@ namespace BECore {
                     const auto slot = LinkSlot(_declaration, name, DescribeType<int32_t>());
                     return Refuse(node.column, slot.has_value() ? Format("'{}' is a level, a path names a field of it ({}.field)", name, name) : slot.error().message);
                 }
-                if (FindExprFunction(name) != nullptr) {
+                if (FindExprFunction(name) != nullptr || name == kTableFunction) {
                     return Refuse(node.column, Format("'{}' is a function: call it as {}(...)", name, name));
                 }
                 if (hint.has_value() && hint->program == ProgramType::Enum && hint->enumeration != nullptr) {
@@ -615,12 +634,9 @@ namespace BECore {
                     levels += levels.empty() ? "" : ", ";
                     levels += level.name;
                 }
-                String functions;
-                for (const ExprFunction& function : kExprFunctions) {
-                    known.push_back(String(function.name));
-                    functions += functions.empty() ? "" : ", ";
-                    functions.append(function.name.data(), function.name.size());
-                }
+                const Vector<String> functionNames = FunctionNames();
+                known.insert(known.end(), functionNames.begin(), functionNames.end());
+                const String functions = JoinNames(functionNames);
                 const String hintText = IDeserializer::MakeDidYouMeanHint(name, {&known});
                 return Refuse(node.column, Format("unknown name '{}'{}; the declared levels are: {}; the functions are: {}; an enumerator is a name too, but it needs an enum beside it", name,
                                                   hintText, levels.empty() ? String("none") : levels, functions));
@@ -826,17 +842,15 @@ namespace BECore {
 
             TypedResult CheckCall(ExprNodeId id, Optional<ExprType> hint) {
                 const ExprNode& node = _ast[id];
+                if (node.text == kTableFunction) {
+                    return CheckTable(node, hint);
+                }
                 const ExprFunction* function = FindExprFunction(node.text);
                 if (function == nullptr) {
                     if (_declaration.IndexOf(node.text).has_value()) {
                         return Refuse(node.column, Format("'{}' is a level, not a function", node.text));
                     }
-                    String names;
-                    for (const ExprFunction& known : kExprFunctions) {
-                        names += names.empty() ? "" : ", ";
-                        names.append(known.name.data(), known.name.size());
-                    }
-                    return Refuse(node.column, Format("unknown function '{}'; the functions are: {}", node.text, names));
+                    return Refuse(node.column, Format("unknown function '{}'; the functions are: {}", node.text, JoinNames(FunctionNames())));
                 }
                 if (node.argumentCount != function->arity) {
                     return Refuse(node.column, Format("'{}' takes {} argument{}, but {} {} given", function->name, function->arity, function->arity == 1 ? "" : "s", node.argumentCount,
@@ -879,6 +893,47 @@ namespace BECore {
                     result.operands[result.operandCount++] = operand;
                 }
                 return Emit(std::move(result));
+            }
+
+            /**
+             * `at(i, e0, e1, ...)`: an `int` index and at least one entry, every entry of one type. That type is the hint (the operand beside the table, else the type the field
+             * expects) or, with none, the one of the first typed entry; a literal entry takes it as a literal does anywhere. Whether an entry is a constant is the lowering's to say.
+             */
+            TypedResult CheckTable(const ExprNode& node, Optional<ExprType> hint) {
+                const String subject = Format("the function '{}'", kTableFunction);
+                if (node.argumentCount < 2) {
+                    return Refuse(node.column, Format("{} takes an index and at least one entry, as at(i, e0, e1, ...), but {} {} given", subject, node.argumentCount,
+                                                      node.argumentCount == 1 ? "argument is" : "arguments are"));
+                }
+                const size_t entryCount = node.argumentCount - 1;
+                if (entryCount > kMaxTableEntries) {
+                    return Refuse(node.column, Format("{} has {} entries, but a table has at most {}", subject, entryCount, kMaxTableEntries));
+                }
+                const ExprNodeId indexSource = _ast.arguments[node.firstArgument];
+                const TypedResult index = Check(indexSource, ProgramType::Int32);
+                if (!index.has_value()) {
+                    return index;
+                }
+                if (TypeOf(*index) != ProgramType::Int32) {
+                    const String convert = IsNumberType(TypeOf(*index).program) ? "; convert it with int(x)" : "";
+                    return Refuse(_ast[indexSource].column, Format("{} needs an int as its index, but it is {}{}", subject, Typed(TypeOf(*index)), convert));
+                }
+                Vector<ExprNodeId> sources;
+                for (size_t i = 0; i < entryCount; ++i) {
+                    sources.push_back(_ast.arguments[node.firstArgument + 1 + i]);
+                }
+                auto entries = CheckSameType(sources, hint, subject);
+                if (!entries.has_value()) {
+                    return std::unexpected(entries.error());
+                }
+                TypedNode table;
+                table.kind = TypedNodeKind::Operation;
+                table.type = TypeOf((*entries)[0]);
+                table.opcode = Opcode::LoadTable;
+                table.column = node.column;
+                table.operands[table.operandCount++] = *index;
+                table.entries = std::move(*entries);
+                return Emit(std::move(table));
             }
 
             /// `vec3(a, b, c)`: one argument per component, each of the component's type; a literal takes it

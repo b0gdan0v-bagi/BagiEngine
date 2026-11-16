@@ -42,6 +42,9 @@ namespace BECore {
         {"color", ExprFunctionShape::Pack, 4, ProgramOperation::Pack, ProgramType::Color},
     }};
 
+    /// `at(i, e0, e1, ...)`, an inline table: it takes any number of arguments, so it has no row in `kExprFunctions` and the checker reads it on its own
+    inline constexpr StringView kTableFunction = "at";
+
     /// The function of this name, null when there is none
     [[nodiscard]] constexpr const ExprFunction* FindExprFunction(StringView name) {
         for (const ExprFunction& function : kExprFunctions) {

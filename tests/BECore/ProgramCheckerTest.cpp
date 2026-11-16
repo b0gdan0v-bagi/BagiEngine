@@ -529,7 +529,7 @@ namespace BECore::Tests {
         Refused(context.declaration, "abs(1, 2)", ProgramType::Int32, 1, {"'abs' takes 1 argument,", "2 are given"});
         Refused(context.declaration, "select(1)", ProgramType::Int32, 1, {"'select' takes 3"});
         Refused(context.declaration, "round()", ProgramType::Float, 1, {"takes 1 argument", "0 are given"});
-        const ProgramError unknown = Refused(context.declaration, "frobnicate(1)", ProgramType::Int32, 1, {"unknown function 'frobnicate'", "min", "clamp", "double"});
+        const ProgramError unknown = Refused(context.declaration, "frobnicate(1)", ProgramType::Int32, 1, {"unknown function 'frobnicate'", "min", "clamp", "double", "color, at"});
         EXPECT_FALSE(unknown.message.empty());
         Refused(context.declaration, "caster(1)", ProgramType::Int32, 1, {"'caster' is a level, not a function"});
         Refused(context.declaration, "caster.attack(1)", ProgramType::Int32, 1, {"unknown function 'caster.attack'"});
@@ -541,6 +541,7 @@ namespace BECore::Tests {
         Refused(context.declaration, "1 + castr", ProgramType::Int32, 5, {"unknown name 'castr'", "did you mean 'caster'"});
         Refused(context.declaration, "caster", ProgramType::Int32, 1, {"'caster' is a level", "field"});
         Refused(context.declaration, "min", ProgramType::Int32, 1, {"'min' is a function", "min(...)"});
+        Refused(context.declaration, "at", ProgramType::Int32, 1, {"'at' is a function", "at(...)"});
         const ContextDecl empty;
         Refused(empty, "caster.attack", ProgramType::Int32, 1, {"unknown level 'caster'"});
         Refused(empty, "x", ProgramType::Int32, 1, {"declared levels are: none"});
@@ -1193,6 +1194,79 @@ namespace BECore::Tests {
             EXPECT_TRUE(outcome.checked) << text.c_str();
             EXPECT_TRUE(outcome.compiled) << text.c_str();
         }
+    }
+
+    TEST(ProgramCheckerTest, AnInlineTableIsTypedByItsEntriesAndTakesAnIntIndex) {
+        const CheckerContext context;
+        const TypedExpr plain = Accepted(context.declaration, "at(cast.level, 10, 20, 30)", ProgramType::Int32);
+        EXPECT_EQ(Root(plain).opcode, Opcode::LoadTable);
+        EXPECT_EQ(Root(plain).operandCount, 1);
+        ASSERT_EQ(Root(plain).entries.size(), 3U);
+        EXPECT_EQ(ConstantOf<int32_t>(plain[Root(plain).entries[2]]), 30);
+        EXPECT_EQ(Root(plain).type, ExprType(ProgramType::Int32));
+
+        EXPECT_EQ(Root(Accepted(context.declaration, "at(cast.level, 1.5, 2)", ProgramType::Float)).type, ExprType(ProgramType::Float));
+        EXPECT_EQ(Root(Accepted(context.declaration, "caster.score + at(0, 1, 2)", ProgramType::Int64)).type, ExprType(ProgramType::Int64));
+        EXPECT_EQ(Root(Accepted(context.declaration, "at(cast.level, vec3(1, 0, 0), caster.velocity)", ProgramType::Vec3)).type, ExprType(ProgramType::Vec3));
+        EXPECT_EQ(Root(Accepted(context.declaration, "at(cast.level, 'a', 'b')", ProgramType::String)).type, ExprType(ProgramType::String));
+        const TypedExpr elements = AcceptedAs(context.declaration, "at(cast.level, Fire, Water)", DescribeType<ValueElement>());
+        EXPECT_EQ(Root(elements).type.program, ProgramType::Enum);
+        EXPECT_EQ(ConstantOf<ProgramEnum>(elements[Root(elements).entries[1]]).index, 1U);
+        // The operand that reads the context comes first, so the enumerators beside it are its enum's
+        EXPECT_EQ(Root(Accepted(context.declaration, "caster.element == at(cast.level, Fire, Water)", ProgramType::Bool)).type, ExprType(ProgramType::Bool));
+    }
+
+    TEST(ProgramCheckerTest, AnInlineTableThatIsNotWellFormedIsRefusedAtTheNodeThatIsWrong) {
+        const CheckerContext context;
+        Refused(context.declaration, "at(cast.level)", ProgramType::Int32, 1, {"'at'", "an index and at least one entry", "1 argument is given"});
+        Refused(context.declaration, "at()", ProgramType::Int32, 1, {"'at'", "an index and at least one entry", "0 arguments are given"});
+        Refused(context.declaration, "at(caster.score, 1, 2)", ProgramType::Int32, 4, {"'at'", "an int as its index", "an int64", "int(x)"});
+        Refused(context.declaration, "at(cast.power, 1, 2)", ProgramType::Int32, 4, {"an int as its index", "a float", "int(x)"});
+        Refused(context.declaration, "at(1.5, 1, 2)", ProgramType::Int32, 4, {"float literal", "an int"});
+        Refused(context.declaration, "at(caster.alive, 1, 2)", ProgramType::Int32, 4, {"an int as its index", "a bool"});
+        Refused(context.declaration, "at(cast.level, 1, 2.5)", ProgramType::Int32, 19, {"2.5", "float literal", "an int"});
+        Refused(context.declaration, "at(cast.level, 1, true)", ProgramType::Int32, 19, {"'at'", "operands of one type", "int and bool"});
+        Refused(context.declaration, "at(cast.level, 'a', 2)", ProgramType::String, 21, {"operands of one type", "string and int"});
+        Refused(context.declaration, "at(cast.level, vec3(1, 0, 0), 2)", ProgramType::Vec3, 31, {"operands of one type", "vec3 and int"});
+        Refused(context.declaration, "at(cast.level, Fire, Mud)", ProgramType::Enum, 22, {"unknown name 'Mud'"});
+        Refused(context.declaration, "at(cast.level, 1, 2)", ProgramType::Bool, 1, {"the formula is an int", "bool"});
+        Refused(context.declaration, "at(cast.level, 1, 2) + 1.5", ProgramType::Int32, 24, {"float literal"});
+    }
+
+    TEST(ProgramCheckerTest, ATableOverTheLimitIsRefusedAndOneAtTheLimitIsNot) {
+        const CheckerContext context;
+        const auto table = [](size_t entries) {
+            ExprAst ast;
+            ExprNode index;
+            index.kind = ExprNodeKind::Name;
+            index.text = "cast.level";
+            index.column = 4;
+            ast.nodes.push_back(index);
+            ast.arguments.push_back(0);
+            for (size_t i = 0; i < entries; ++i) {
+                ExprNode entry;
+                entry.kind = ExprNodeKind::Number;
+                entry.text = "1";
+                entry.column = 1;
+                ast.nodes.push_back(entry);
+                ast.arguments.push_back(static_cast<ExprNodeId>(ast.nodes.size() - 1));
+            }
+            ExprNode call;
+            call.kind = ExprNodeKind::Call;
+            call.text = "at";
+            call.column = 1;
+            call.firstArgument = 0;
+            call.argumentCount = static_cast<uint32_t>(ast.arguments.size());
+            ast.nodes.push_back(call);
+            ast.root = static_cast<ExprNodeId>(ast.nodes.size() - 1);
+            return ast;
+        };
+        EXPECT_TRUE(CheckExpression(table(kMaxTableEntries), context.declaration, DescribeType<int32_t>()).has_value());
+        const auto over = CheckExpression(table(kMaxTableEntries + 1), context.declaration, DescribeType<int32_t>());
+        ASSERT_FALSE(over.has_value());
+        EXPECT_EQ(over.error().column, 1U);
+        EXPECT_TRUE(Contains(over.error().message, Format("{} entries", kMaxTableEntries + 1))) << over.error().message.c_str();
+        EXPECT_TRUE(Contains(over.error().message, Format("at most {}", kMaxTableEntries))) << over.error().message.c_str();
     }
 
 }  // namespace BECore::Tests
