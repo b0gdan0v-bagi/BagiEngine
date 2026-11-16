@@ -11,6 +11,21 @@ namespace BECore {
         /// A list in a message is cut here, so a type with a hundred fields does not bury the line
         constexpr size_t kMaxListedNames = 24;
 
+        /// The start of every key: a mask with no level has this key, whatever the counters do
+        constexpr uint64_t kFoldSeed = 0x9e3779b97f4a7c15ULL;
+
+        /// The finalizer of splitmix64: a bijection of 64 bits in which every input bit moves about half of the output bits
+        constexpr uint64_t MixBits(uint64_t value) {
+            constexpr uint64_t kFirstMultiplier = 0xbf58476d1ce4e5b9ULL;
+            constexpr uint64_t kSecondMultiplier = 0x94d049bb133111ebULL;
+            constexpr unsigned kFirstShift = 30;
+            constexpr unsigned kSecondShift = 27;
+            constexpr unsigned kLastShift = 31;
+            value = (value ^ (value >> kFirstShift)) * kFirstMultiplier;
+            value = (value ^ (value >> kSecondShift)) * kSecondMultiplier;
+            return value ^ (value >> kLastShift);
+        }
+
         std::unexpected<LinkError> Refuse(LinkErrorCode code, String message) {
             return std::unexpected(LinkError{code, std::move(message)});
         }
@@ -127,13 +142,33 @@ namespace BECore {
         return std::nullopt;
     }
 
-    void Context::SetObject(LevelIndex level, const void* object, const ClassMeta& type) {
+    void Context::Store(LevelIndex level, const void* object, const uint64_t* version) {
+        _objects[level] = object;
+        _versions[level] = version;
+        ++_sets[level];
+    }
+
+    uint64_t Context::VersionKey(LevelMask levels) const {
+        uint64_t key = kFoldSeed;
+        for (LevelIndex level = 0; level < kMaxContextLevels; ++level) {
+            if ((levels & LevelBit(level)) == 0) {
+                continue;
+            }
+            // Each part goes through the mix on its own, so two parts of one level cannot cancel each other and the levels keep their place
+            key = MixBits(key ^ level);
+            key = MixBits(key ^ Version(level));
+            key = MixBits(key ^ _sets[level]);
+        }
+        return key;
+    }
+
+    void Context::SetObject(LevelIndex level, const void* object, const ClassMeta& type, const uint64_t* version) {
         ASSERT(level < kMaxContextLevels);
         if (level >= kMaxContextLevels) {
             return;
         }
         if (_declaration == nullptr) {
-            _objects[level] = object;
+            Store(level, object, version);
             return;
         }
         ASSERT(level < _declaration->Size(), "Context::Set: the level is not declared");
@@ -142,7 +177,7 @@ namespace BECore {
         }
         const TypeInfo& declared = *_declaration->Levels()[level].type;
         if (declared.Hash() == type.typeHash) {
-            _objects[level] = object;
+            Store(level, object, version);
             return;
         }
         // An object of a derived type is stored at the subobject of the declared type, which is where the offsets of the declared type apply
@@ -150,7 +185,7 @@ namespace BECore {
         const TypeInfo* actual = registry.Find(type.typeHash);
         const Optional<size_t> offset = actual != nullptr ? registry.OffsetOfBase(*actual, declared) : std::nullopt;
         ASSERT(offset.has_value(), "Context::Set: the object is not of the type the level declares, nor derived from it");
-        _objects[level] = offset.has_value() ? static_cast<const char*>(object) + *offset : nullptr;
+        Store(level, offset.has_value() ? static_cast<const char*>(object) + *offset : nullptr, version);
     }
 
     std::expected<SlotRef, LinkError> LinkSlot(const ContextDecl& declaration, StringView path, const TypeDesc& expected, const TypeRegistry& registry) {

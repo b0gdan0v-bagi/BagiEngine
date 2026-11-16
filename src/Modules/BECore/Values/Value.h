@@ -86,6 +86,11 @@ namespace BECore {
             return _offset;
         }
 
+        /// The levels a `Slot` reads (a set of one bit), none for a `Const`: what to ask `Context::VersionKey` about
+        [[nodiscard]] constexpr LevelMask Reads() const {
+            return _kind == ValueKind::Slot ? LevelBit(_level) : LevelMask{0};
+        }
+
         /// The literal; of a value that is not a `Const` it is the default of `T`
         [[nodiscard]] constexpr const T& GetConst() const {
             return _constant;
@@ -132,6 +137,23 @@ namespace BECore {
         uint32_t _offset = 0;
         LevelIndex _level = 0;
         ValueKind _kind = ValueKind::Const;
+    };
+
+    /// The levels a set of values reads, for `Context::VersionKey`: add each value of a view, then ask for the mask
+    class ValueDependencies {
+    public:
+        template <ValueType T>
+        ValueDependencies& Add(const Value<T>& value) {
+            _mask |= value.Reads();
+            return *this;
+        }
+
+        [[nodiscard]] constexpr LevelMask Mask() const {
+            return _mask;
+        }
+
+    private:
+        LevelMask _mask = 0;
     };
 
 }  // namespace BECore

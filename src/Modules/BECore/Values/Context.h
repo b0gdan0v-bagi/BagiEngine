@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <limits>
 #include <memory>
 
 namespace BECore {
@@ -17,6 +18,14 @@ namespace BECore {
     using LevelIndex = uint8_t;
 
     inline constexpr size_t kMaxContextLevels = 8;
+
+    /// A set of levels, bit `i` for level `i`: what a set of values reads from, as one byte
+    using LevelMask = uint8_t;
+    static_assert(kMaxContextLevels <= std::numeric_limits<LevelMask>::digits, "a LevelMask holds a bit per level");
+
+    [[nodiscard]] constexpr LevelMask LevelBit(LevelIndex level) {
+        return static_cast<LevelMask>(LevelMask{1} << level);
+    }
 
     CORE_ENUM(LinkErrorCode, uint8_t, invalid_path, unknown_type, duplicate_level, too_many_levels, unknown_level, unknown_field, not_fixed, type_mismatch, too_far)
 
@@ -76,6 +85,10 @@ namespace BECore {
      * Nothing is copied: the context holds the address of each object, so the game writes its own plain fields and a value reads
      * them where they are. The objects and the declaration outlive the context. A level holds the address of the object **as the
      * declared type**, so an object of a derived type is stored at its base subobject.
+     *
+     * A level may also name a version counter the owner of the object bumps when the object changes; the
+     * counter outlives the context and only grows. `VersionKey` folds the counters of some levels into one number that tells whether
+     * anything those levels hold has changed, so a screen rebuilds only when its key moves.
      */
     class Context {
     public:
@@ -84,12 +97,13 @@ namespace BECore {
         /// With a declaration `Set` checks the level and the type of the object
         explicit Context(const ContextDecl& declaration) : _declaration(&declaration) {}
 
+        /// Puts @p object at @p level; @p version is the counter its owner bumps on a change, null for an object nobody versions (version 0)
         template <typename T>
         requires requires {
             T::GetStaticTypeMeta();
         }
-        void Set(LevelIndex level, const T& object) {
-            SetObject(level, std::addressof(object), T::GetStaticTypeMeta());
+        void Set(LevelIndex level, const T& object, const uint64_t* version = nullptr) {
+            SetObject(level, std::addressof(object), T::GetStaticTypeMeta(), version);
         }
 
         /// The object of the level as the declared type, null while none is set
@@ -98,10 +112,29 @@ namespace BECore {
             return _objects[level];
         }
 
+        /// The counter of the level now, 0 for a level that has none
+        [[nodiscard]] uint64_t Version(LevelIndex level) const {
+            ASSERT(level < kMaxContextLevels);
+            return _versions[level] != nullptr ? *_versions[level] : 0;
+        }
+
+        /**
+         * @brief One number for the levels of @p levels: it changes when a counter of one of them moves or one of them is given another object
+         *
+         * A level's own count of `Set` calls is part of the fold, so putting another object (or another counter) at a level that is read
+         * changes the key, while a `Set` of a level that is not in the mask does not. The counters only grow, so a key that differs
+         * after any one of them moved is what a rebuild needs; the fold is a hash, so the number itself means nothing and two keys are
+         * only compared for equality. A level with no counter adds a constant: it never moves the key by itself.
+         */
+        [[nodiscard]] uint64_t VersionKey(LevelMask levels) const;
+
     private:
-        void SetObject(LevelIndex level, const void* object, const ClassMeta& type);
+        void SetObject(LevelIndex level, const void* object, const ClassMeta& type, const uint64_t* version);
+        void Store(LevelIndex level, const void* object, const uint64_t* version);
 
         Array<const void*, kMaxContextLevels> _objects{};
+        Array<const uint64_t*, kMaxContextLevels> _versions{};
+        Array<uint32_t, kMaxContextLevels> _sets{};
         const ContextDecl* _declaration = nullptr;
     };
 
