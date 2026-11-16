@@ -18,6 +18,7 @@ namespace BECore {
      *
      * The methods are list_games, switch_game, reset, get_state, list_actions, perform_action, set_state and run_until (frames until
      * a condition of the state, its version or a pushed event holds); their params and results are in Games/CLAUDE.md ("Control API").
+     * The recording methods record_start and record_stop (ReplayControl.h) are registered with them.
      *
      * It also installs a frame end hook that pushes {"event":"state_changed","data":{"game","version","state"}} when the state
      * version of the active game moved (an action, a reset, a click of a person); see GameControlEvents.

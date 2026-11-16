@@ -7,6 +7,7 @@
 #include <BECore/Time/Time.h>
 #include <Games/GameManager.h>
 #include <Games/IControllableGame.h>
+#include <Games/ReplayControl.h>
 #include <Games/SessionRecorder.h>
 
 namespace BECore {
@@ -511,6 +512,8 @@ namespace BECore {
                "Exactly one of {pointer, equals} (a JSON pointer into the answer of get_state), {versionMoved: true} or {event: {name, equal?}} (a pushed event whose data has these members)"},
               {"maxFrames", "integer", false, Format("Most frames to wait, 1 to {} (default {})", kMaxStepFrames, kDefaultRunUntilFrames)},
               {"dt", "number", false, Format("Seconds each frame lasts on the manual clock, 0 to {} (default 1/60)", Time::kMaxFrameTime)}}});
+
+        RegisterReplayControl(service);
 
         service.SetFrameEndHook(GameControlEvents::kStateChanged, [watcher = MakeUnique<StateChangeWatcher>(service)] { watcher->OnFrameEnd(); });
     }
