@@ -10,7 +10,7 @@
 namespace BECore {
 
     void DebugBreakHandler::Initialize() {
-        UnsubscribeAll();
+        Disconnect();
         Subscribe<AssertEvent, &DebugBreakHandler::OnAssert>(this);
     }
 
@@ -25,25 +25,21 @@ namespace BECore {
     }
 
     void LogHandler::Initialize() {
-        UnsubscribeAll();
+        Disconnect();
         Subscribe<AssertEvent, &LogHandler::OnAssert>(this);
     }
 
     void LogHandler::OnAssert(const AssertEvent& event) {
-        LogLevel level = LogLevel::Error;
         const char* typeStr = "ASSERT";
 
         switch (event.type) {
             case AssertType::Assert:
-                level = LogLevel::Error;
                 typeStr = "ASSERT";
                 break;
             case AssertType::Expect:
-                level = LogLevel::Warning;
                 typeStr = "EXPECT";
                 break;
             case AssertType::FatalError:
-                level = LogLevel::Fatal;
                 typeStr = "FATAL";
                 break;
         }
@@ -66,16 +62,25 @@ namespace BECore {
             }
         }
 
-        LogEvent::Emit(level, message, MakeLogSite(event.file, event.line));
+        const LogSite site = MakeLogSite(event.file, event.line);
 
         // A failed assert may be followed by a trap or an abort, so its line has to reach the sinks first; an Expect is a warning and the frame flush takes it
-        if (event.type != AssertType::Expect) {
-            Logger::FlushOnMainThread();
+        switch (event.type) {
+            case AssertType::Assert:
+                Logger::Error(message, site);
+                Logger::FlushOnMainThread();
+                break;
+            case AssertType::Expect:
+                Logger::Warning(message, site);
+                break;
+            case AssertType::FatalError:
+                Logger::Fatal(message, site);  // flushes on the main thread itself
+                break;
         }
     }
 
     void StackTraceHandler::Initialize() {
-        UnsubscribeAll();
+        Disconnect();
         Subscribe<AssertEvent, &StackTraceHandler::OnAssert>(this);
     }
 
@@ -109,8 +114,11 @@ namespace BECore {
 
         SortHandlersByPriority();
 
-        // The deserializer has called Initialize() of each handler in config order already. Publish calls the last connected listener first, so
-        // connecting again from the highest priority number to the lowest makes the lowest run first.
+        // Publish calls the last connected listener first, and a disconnect moves the last entry into the freed slot, so the order the deserializer left
+        // depends on the config. Disconnect every handler first, then connect from the highest priority number to the lowest: the lowest runs first.
+        for (const auto& handler : _handlers) {
+            handler->Disconnect();
+        }
         for (size_t pos = _handlers.size(); pos > 0; --pos) {
             _handlers[pos - 1]->Initialize();
         }

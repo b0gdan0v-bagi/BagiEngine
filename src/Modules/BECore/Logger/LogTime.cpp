@@ -4,7 +4,6 @@
 
 namespace BECore {
 
-    // The fields are read out of a `tm`, not printed with {:%H:%M:%S}: the Emscripten build cannot use fmt/chrono.h
     LocalLogTime GetLocalLogTime() {
         const auto now = std::chrono::system_clock::now();
         const auto time = std::chrono::system_clock::to_time_t(now);

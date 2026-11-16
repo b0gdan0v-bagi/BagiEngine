@@ -5,15 +5,13 @@
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <Common/AssertBridge.h>
 #include <Common/LogRecorder.h>
+#include <Common/ShippedConfig.h>
 #include <Generated/AssertHandlerOrderTest.gen.hpp>
-#include <filesystem>
-#include <fstream>
-#include <iterator>
 
 namespace BECore::Tests {
 
     void OrderHandler::Initialize() {
-        UnsubscribeAll();
+        Disconnect();
         Subscribe<AssertEvent, &OrderHandler::OnAssert>(this);
     }
 
@@ -48,6 +46,16 @@ namespace BECore::Tests {
             EXPECT_FALSE(deserializer.HasErrors());
             manager->Initialize();
             return manager;
+        }
+
+        /// Three handlers of the priorities 0, 50 and 100 with ids 1, 2, 3, listed in the order of @p priorities
+        String MakeThreeHandlersXml(const int (&priorities)[3]) {
+            String xml = "<root><handlers>";
+            for (int slot = 0; slot < 3; ++slot) {
+                xml += Format("<handler type=\"OrderHandler\" id=\"{}\" priority=\"{}\"/>", priorities[slot] / 50 + 1, priorities[slot]);
+            }
+            xml += "</handlers></root>";
+            return xml;
         }
 
         void EmitAnAssert(AssertType type) {
@@ -96,16 +104,62 @@ namespace BECore::Tests {
         EXPECT_EQ(priorities, expected);
     }
 
+    TEST_F(AssertHandlerOrderTest, AConfigThatIsAlreadyAscendingKeepsItsOrder) {
+        const auto manager = MakeManager(MakeThreeHandlersXml({0, 50, 100}));
+
+        EmitAnAssert(AssertType::Assert);
+
+        const Vector<int32_t> expected = {1, 2, 3};
+        EXPECT_EQ(OrderHandler::order, expected);
+    }
+
+    TEST_F(AssertHandlerOrderTest, ADisconnectedHandlerGetsNoAssert) {
+        const auto manager = MakeManager(MakeThreeHandlersXml({0, 50, 100}));
+        for (const auto& handler : manager->GetHandlers()) {
+            if (handler->GetPriority() == 50) {
+                handler->Disconnect();
+            }
+        }
+
+        EmitAnAssert(AssertType::Assert);
+
+        const Vector<int32_t> expected = {1, 3};
+        EXPECT_EQ(OrderHandler::order, expected);
+    }
+
+    TEST_F(AssertHandlerOrderTest, EveryOrderOfTheConfigRunsTheLowestPriorityFirst) {
+        constexpr int kOrders[6][3] = {{0, 50, 100}, {0, 100, 50}, {50, 0, 100}, {50, 100, 0}, {100, 0, 50}, {100, 50, 0}};
+        for (const auto& priorities : kOrders) {
+            OrderHandler::order.clear();
+            const auto manager = MakeManager(MakeThreeHandlersXml(priorities));
+
+            EmitAnAssert(AssertType::Assert);
+
+            const Vector<int32_t> expected = {1, 2, 3};
+            EXPECT_EQ(OrderHandler::order, expected) << "config order " << priorities[0] << ", " << priorities[1] << ", " << priorities[2];
+        }
+    }
+
+    TEST_F(AssertHandlerOrderTest, TheShippedConfigRunsTheEntriesInTheOrderOfTheirPriority) {
+        const String text = ReadShippedConfig("AssertHandlersConfig.xml");
+        ASSERT_FALSE(text.empty());
+        const auto manager = MakeManager(NumberEntries(text, "handler", "OrderHandler"));
+
+        EmitAnAssert(AssertType::Assert);
+
+        // LogHandler (priority 0) is the first entry of the file, DebugBreakHandler (100) the second
+        const Vector<int32_t> expected = {1, 2};
+        EXPECT_EQ(OrderHandler::order, expected);
+    }
+
     TEST_F(AssertHandlerOrderTest, TheShippedConfigLogsBeforeItBreaks) {
-        const std::filesystem::path file = std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() / "config" / "AssertHandlersConfig.xml";
-        std::ifstream stream(file);                                                                          //-NoStd: reads the shipped file as text
-        const std::string text((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());  //-NoStd: the text of the shipped file
-        ASSERT_FALSE(text.empty()) << file.string();
+        const String text = ReadShippedConfig("AssertHandlersConfig.xml");
+        ASSERT_FALSE(text.empty());
 
         // The probe of priority 50 goes between the two handlers of the file
         constexpr StringView kEnd = "</handlers>";
         const size_t end = text.find(kEnd.data());
-        ASSERT_NE(end, std::string::npos);  //-NoStd: the text of the shipped file
+        ASSERT_NE(end, String::npos);
         String xml(text.data(), end);
         xml += R"(<handler type="OrderHandler" id="9" priority="50" flushLog="true"/>)";
         xml += String(text.data() + end, text.size() - end);

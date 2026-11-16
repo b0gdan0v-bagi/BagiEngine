@@ -20,8 +20,11 @@ namespace BECore {
 
         SortSinksByPriority();
 
-        // The deserializer has called Initialize() of each sink in config order already. Publish calls the last connected listener first, so
-        // connecting again from the highest priority number to the lowest makes the lowest receive a line first.
+        // Publish calls the last connected listener first, and a disconnect moves the last entry into the freed slot, so the order the deserializer left
+        // depends on the config. Disconnect every sink first, then connect from the highest priority number to the lowest: the lowest gets a line first.
+        for (const auto& sink : _sinks) {
+            sink->Disconnect();
+        }
         for (size_t pos = _sinks.size(); pos > 0; --pos) {
             _sinks[pos - 1]->Initialize();
         }

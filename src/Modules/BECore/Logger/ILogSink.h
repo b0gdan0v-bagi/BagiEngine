@@ -14,9 +14,15 @@ namespace BECore {
     public:
         ~ILogSink() override = default;
 
-        /// Connects the sink to LogEvent. Called when the entry is deserialized and again by LoggerManager::Initialize, which fixes the order of delivery by connecting
-        /// again: an override must connect (after UnsubscribeAll()) on every call and keep any one-time setup behind its own flag.
+        /// Connects the sink to LogEvent. Called when the entry is deserialized and again by LoggerManager::Initialize, which fixes the order of delivery by
+        /// disconnecting every sink and connecting them again in order: an override must connect (after UnsubscribeAll()) on every call and keep any one-time setup
+        /// behind its own flag.
         virtual void Initialize() = 0;
+
+        /// Drops every connection of the sink; LoggerManager::Initialize does it for all sinks before it connects them in order.
+        void Disconnect() {
+            UnsubscribeAll();
+        }
 
         virtual void Write(LogLevel level, StringView message) = 0;
 
