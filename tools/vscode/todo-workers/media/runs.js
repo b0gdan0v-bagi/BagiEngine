@@ -105,6 +105,8 @@
         if (w.dirty) return "uncommitted changes";
         if (w.limited) return "usage limit";
         if (w.stopped) return "stopped";
+        // worker.py start writes a `starting` mark into the queue file before its session shows in `list` (CLI 2026-11-16)
+        if (w.starting) return `a start is under way${w.starting.entry ? ` (${w.starting.entry})` : ""}`;
         if (w.entry && w.entry.status !== "review") return `holds ${w.entry.id} (${w.entry.status})`;
         const branch = heldBranch(w);
         if (branch && !(w.entry && w.entry.status === "review")) return `holds ${branch}`;
