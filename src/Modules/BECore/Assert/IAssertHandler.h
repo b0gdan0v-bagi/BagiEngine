@@ -18,6 +18,8 @@ namespace BECore {
         /// delivery by connecting again: an override must connect (after UnsubscribeAll()) on every call.
         virtual void Initialize() = 0;
 
+        /// Runs on the thread that failed the assert, one handler call at a time across all threads (AssertEvent holds a lock), so state that only the handlers touch
+        /// needs no lock of its own. It may fail an assert itself. Keep it short: other threads that fail an assert wait for it.
         virtual void OnAssert(const AssertEvent& event) = 0;
 
         /// Lower runs first; handlers of equal priority run in config order.

@@ -79,9 +79,10 @@ Nested `CLAUDE.md` files in `BECore/`: `Animation/` (easing, `Lerp`, `TweenManag
 ## Assert (CRTDebugHook, StackTrace)
 
 - **CRTDebugHook** (`InstallCRTDebugHooks()`): captures CRT debug reports (heap corruption, invalid params) with a stack trace. Windows Debug builds only; installed first in `InitializeCoreServices()`. Every other build is a no-op; only a Windows Release build prints one stderr line ("Skipped"). Other platforms print nothing, because the browser console shows stderr as an error and the web smoke rejects it.
-- **StackTrace** (`CaptureAndPrintStackTrace()`): cross-platform stack capture for assertion failures; uses DbgHelp/PDB on Windows.
+- **StackTrace** (`CaptureAndPrintStackTrace()`): cross-platform stack capture for assertion failures; uses DbgHelp/PDB on Windows, where one lock covers the init and every `Sym*` call (DbgHelp is single-threaded).
 - **PlatformDebug.h** (`DebugBreak()`, `ENGINE_DEBUG_BREAK()`): the debug break per platform; on the web (`PLATFORM_WEB`) it is `__builtin_trap()` (the page stops with a wasm trap), the same as on Linux. `StackTrace.cpp` and `OutputSink.cpp` have no web branch of their own: their `#else` fallbacks (no trace, no output) are what the page gets.
 - **LogHandler** writes the assert line with the file and line of the assert and flushes it on the main thread, so a trap right after loses nothing.
+- **Threads**: any thread may fail an assert. `AssertEvent` takes one recursive lock of its own around `Emit`, `Subscribe`, `Unsubscribe` and `UnsubscribeAll` (the channel is "one thread only"), so handlers run on the failing thread one at a time and need no lock for state only they touch; the lock is raw because an engine `Mutex` asserts in its own lock-order check. A connection dropped by a `SubscriptionHolder` takes no lock, which holds for handlers that live to shutdown (the task pool is joined first); remove one earlier with `AssertEvent::UnsubscribeAll(handler)` first.
 - Macros, handlers and `AssertEvent`: `.claude/rules/tests-module.md`.
 
 ## Logging before the sinks exist
