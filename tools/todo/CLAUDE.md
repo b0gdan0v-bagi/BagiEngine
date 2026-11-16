@@ -12,7 +12,7 @@ The files are copied as they are from the loader of BagiTodo (`loader/` there) a
 
 ## The loader
 
-Each run asks the service `GET /api/v1/cli` for the version it hands out (the names and sha256 of its files: `todo.py`, `todo_markdown.py`, `worker.py`, `worker_insights.py`), downloads a version it has not seen (`GET /api/v1/cli/<file>`) into the cache, checks every hash and runs the script with the same arguments. The answer is trusted for a minute, so a burst of calls asks once. When the service does not answer, the last version that ran is used, with a line on stderr; with none yet, it is an error. Versions unused for two weeks are removed. Updating the loader itself is a copy of BagiTodo's `loader/` again.
+Each run asks the service `GET /api/v1/cli` for the version it hands out (the names and sha256 of its files: `todo.py`, `todo_markdown.py`, `worker.py`, `worker_insights.py`), downloads a version it has not seen (`GET /api/v1/cli/<file>`) into the cache, checks every hash, runs a smoke check of the new version (`python -I`, every file imported, 15 s; a failure keeps `current` on the old version with one warning and retries later) and runs the script with the same arguments. `BAGITODO_CLI_PIN=<version>` runs that version from the cache without asking the service (downloaded only when the service hands out exactly that one, else an error). The answer is trusted for a minute, so a burst of calls asks once. When the service does not answer, the last version that ran is used, with a line on stderr; with none yet, it is an error. Versions unused for two weeks are removed. Updating the loader itself is a copy of BagiTodo's `loader/` again.
 
 ## Settings
 
