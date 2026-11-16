@@ -13,8 +13,9 @@ The image generator of the games' art is **ComfyUI**, today on the owner's Windo
 | `artgen_bridge.py` | The link to the editor's Generate panel: a control API client that pulls requests (`artgen_poll`) and reports progress, images and the end |
 | `artgen.py` | The service on the command line: `status`, `presets`, `generate` (`--json` prints one progress event per line, then `done`) |
 | `artgen_service.py` | `generate(request, generator, on_progress, cancel)`: N images of one preset and subject, each written with its provenance file as soon as it is there |
-| `artgen_preset.py` | Presets and workflows: load and check them, `build_graph` (the graph of one image), `models_of` |
-| `artgen_generators.py` | The generator interface (`status`, `info`, `run`), `ComfyUIGenerator`, `FakeGenerator` (tests, `--generator fake`), `make_generator` |
+| `artgen_preset.py` | Presets and workflows: load and check them (`parse_preset` on a file's content or a draft's), find them in the game and the engine (`find_presets`, `find_workflows`), `Workflow.describe` (the inputs and their defaults for the editor's form), `build_graph` (the graph of one image), `models_of` |
+| `artgen_generators.py` | The generator interface (`status`, `info`, `run`, `choices`: the values of its combo inputs), `ComfyUIGenerator`, `FakeGenerator` (tests, `--generator fake`), `make_generator` |
+| `presets/` | The engine's starter presets (`sprite`: one object cut out on a transparent background, `icon`: a flat icon), so a game without presets can generate at once |
 | `artgen_ws.py` | A minimal WebSocket client for ComfyUI's progress stream; the frame codec is `tools/control/bagi_control_client.py`'s |
 | `workflows/` | The engine's workflows: `<name>.json` is a graph in ComfyUI's API format (what `POST /prompt` takes; the UI loads it by drag and drop), `<name>.inputs.json` names its inputs. `sdxl_basic` is the SDXL one; `sdxl_cutout` is the same with the background removed (an RGBA PNG) |
 | `tests/` | pytest: a fake ComfyUI with a real WebSocket stream, the setup pipeline (fake platforms, a local download server, a fake ComfyUI to start and stop), the fake generator, the presets, the manifest and workflow rules |
@@ -50,7 +51,7 @@ Only models whose licence lets the generated images ship in a commercial game, e
 
 ## Presets
 
-A game's style lives in its own repository: `<game root>/artgen/presets/<name>.json`.
+A game's style lives in its own repository: `<game root>/artgen/presets/<name>.json`. The engine's starters in `tools/artgen/presets/` come after them (a game's preset of the same name wins); the editor's form saves a starter as the game's own copy. A preset name is 1 to 64 of `A-Z a-z 0-9 _ -`.
 
 ```json
 {"preset": 1, "title": "Carved wooden pieces", "workflow": "sdxl_basic",
@@ -61,6 +62,8 @@ A game's style lives in its own repository: `<game root>/artgen/presets/<name>.j
 - `preset` is the format version; `workflow` and `prompt` are required. `{subject}` in the prompt is replaced by the request's subject (without it the subject goes first). `size` sets the workflow's `width` / `height`.
 - `params` sets any other named input of the workflow (`steps`, `cfg`, `sampler`, `scheduler`, `checkpoint`, `vae` for `sdxl_basic`). A name the workflow does not have, or one the service sets (`prompt`, `negative`, `seed`, `width`, `height`), is refused with the file named, so a typo never silently changes nothing.
 - The workflow is looked up in `<game root>/artgen/workflows/` first, then here: a game brings its own graph (a LoRA loader, img2img) with its own `.inputs.json`, and the preset stays node-id free. The `.inputs.json` must name `prompt`, `seed` and `output` (the node whose images are the result; its `filename_prefix` is set by the service).
+- **A draft** is a preset's content sent inline (the editor's form, saved or not): `parse_preset` checks it with the same rules as a file, errors name `the draft of '<form name>'`, and its provenance says `preset: draft`.
+- **The form is driven by the workflow.** `Workflow.describe(choices)` lists every named input but `output` with the graph's own value as `default`, and for a combo input the values the generator offers (`choices`: ComfyUI's `/object_info`, read once the generator is ready; `combo_choices` takes both its forms), so a new input of a workflow gets its field in the editor without code there.
 - Models and LoRAs named by a preset must be on the generator's machine; the manifest holds the ones the engine knows, and a game's extra model is the game's to list with its licence.
 
 ## Generators
@@ -69,7 +72,7 @@ A game's style lives in its own repository: `<game root>/artgen/presets/<name>.j
 
 ## The service
 
-One prompt per image, seeds `seed, seed + 1, ...` (random first seed when none is given), so every image can be made again alone from its provenance. `<stem>_<seed>.png` and `<stem>_<seed>.artgen.json` go into the output folder (default `<game root>/artgen/out`; the editor's Accept moves the chosen one into the game's assets). The provenance holds the preset and its file hash, subject, final prompt, negative, seed, size, params, the model files the graph loads, the workflow and its hash, the generator (name, version, address), its own file name and the date. What is done stays on disk when a later image fails or is cancelled.
+One prompt per image, seeds `seed, seed + 1, ...` (random first seed when none is given), so every image can be made again alone from its provenance. `<stem>_<seed>.png` and `<stem>_<seed>.artgen.json` go into the output folder (default `<game root>/artgen/out`; the editor's Accept moves the chosen one into the game's assets). The provenance holds the preset (its name or `draft`, its source `game` / `engine` / `draft`, its content as `presetData`) and its hash (of the file's bytes, of a draft's canonical JSON), subject, final prompt, negative, seed, size, params, the model files the graph loads, the workflow and its hash, the generator (name, version, address), its own file name and the date. What is done stays on disk when a later image fails or is cancelled.
 
 ## The editor bridge
 
@@ -78,7 +81,7 @@ python tools/artgen/artgen_bridge.py --port 8765        # the editor started wit
 python tools/artgen/artgen_bridge.py --port 8765 --exit-with-editor --log FILE   # what the panel's Start the service runs (pythonw on Windows): ends with that editor, prints into FILE
 ```
 
-The contract is the editor's (`src/Widgets/ArtGen/CLAUDE.md`, "The contract"): the bridge calls `artgen_poll` about twice a second with the generator's status (refreshed every few seconds) and the presets of the game root the editor answered, runs a handed-over request on a worker thread with `artgen_service.generate` into `<game root>/artgen/out`, and forwards its progress, each image and the end. A run that fails (a missing preset, the generator not ready, a ComfyUI error, a bug of ours) ends with `artgen_done` `failed` and its reason; the bridge stays up. A cancel seen in a poll, a lost editor and Ctrl+C cancel the run on the generator. While the editor has no Generate panel (`unknown_method`: it started in Game mode) the bridge waits. A game ignores `artgen/out/` in its `.gitignore`.
+The contract is the editor's (`src/Widgets/ArtGen/CLAUDE.md`, "The contract"): the bridge calls `artgen_poll` about twice a second with the generator's status, the presets (the game's and the engine's, with their source and content; a broken one with its error) and the workflows with their inputs (all refreshed every few seconds, at once when the answer says `refresh`: the editor saved a preset) of the game root the editor answered, runs a handed-over request (a preset by name, or a draft inline: `load_request_preset`) on a worker thread with `artgen_service.generate` into `<game root>/artgen/out`, and forwards its progress, each image and the end. A run that fails (a missing preset, the generator not ready, a ComfyUI error, a bug of ours) ends with `artgen_done` `failed` and its reason; the bridge stays up. A cancel seen in a poll, a lost editor and Ctrl+C cancel the run on the generator. While the editor has no Generate panel (`unknown_method`: it started in Game mode) the bridge waits. A game ignores `artgen/out/` in its `.gitignore`.
 
 **Setup actions.** A `setup` in a poll's answer (`Plan`, `Install`, `Start`, `Stop`; the panel's Set up / Start / Stop) runs on a worker thread of its own through `artgen_setup.LocalSetup` (the root of `local.json`, the address the bridge uses) and reports each event of `install --json` with `artgen_setup_report`, then `done` with `ok` and the reason; the status is read again after it. `Install` plans again and installs without asking (the panel showed the plan and the owner pressed Download), `setupCancel` stops it between chunks (the next install resumes). Every poll also says `startedHere`: the running ComfyUI is the one `start` left (`LocalSetup.started_here`, checked once per pid), so the panel offers Stop only for it. A bridge with `--generator fake` refuses every setup action. A `shutdown` in a poll's answer (the panel's Disconnect) cancels what is in work and ends the bridge, with or without `--exit-with-editor`. With `--exit-with-editor` the bridge ends when its editor goes away, or when none answers in its first minute.
 

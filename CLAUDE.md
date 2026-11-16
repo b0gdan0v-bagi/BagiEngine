@@ -28,7 +28,7 @@ ctest --preset macos-debug                 # every test in its own process, 8 at
 BECore → Events → TaskSystem → RemoteControl → SDL / Vulkan → Games → Rooms → RoomClient → RoomServer → Runtime (src/Application, src/Widgets) → game (own repository) → executable
 ```
 
-**Stack:** CMake 3.31+ / Ninja, SDL3 + SDL_image, ImGui, EnTT, EASTL, pugixml, nlohmann/json (control API only), stb_truetype, stb_vorbis, dr_flac, fmt, GoogleTest.
+**Stack:** CMake 3.31+ / Ninja, SDL3 + SDL_image, ImGui, EnTT, EASTL, pugixml, nlohmann/json (control API only), stb, dr_flac, fmt, GoogleTest.
 
 ```
 cmake/            engine setup, be_* functions, build options (cmake/CLAUDE.md)

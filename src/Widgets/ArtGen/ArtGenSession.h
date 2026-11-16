@@ -7,6 +7,7 @@
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/MoveOnlyFunction.h>
 #include <BECore/Utils/Singleton.h>
+#include <Widgets/ArtGen/ArtGenPresetForm.h>
 #include <cstdint>
 #include <expected>
 
@@ -20,20 +21,14 @@ namespace BECore {
     CORE_ENUM(ArtGenSetupAction, uint8_t, None, Plan, Install, Start, Stop)
     CORE_ENUM(ArtGenSetupState, uint8_t, Idle, Queued, Running, Done, Failed)
 
-    /// A style preset of the game as the service reported it; a broken one carries its error and cannot be picked
-    struct ArtGenPreset {
-        String name;
-        String title;
-        String error;
-    };
-
     /// What the generation service last said about itself in a poll
     struct ArtGenServiceStatus {
         String state;  // "ready", "not_running", "not_installed" (tools/artgen/CLAUDE.md, "Generators")
         String reason;
         String generator;
-        Vector<ArtGenPreset> presets;
-        bool startedHere = false;  // the running generator was started by a setup action, so Stop can end it
+        Vector<ArtGenPreset> presets;      // the game's, then the engine's starters it does not override
+        Vector<ArtGenWorkflow> workflows;  // what a preset may name, with the inputs the form shows
+        bool startedHere = false;          // the running generator was started by a setup action, so Stop can end it
     };
 
     struct ArtGenVariant {
@@ -73,7 +68,8 @@ namespace BECore {
     struct ArtGenRun {
         uint32_t id = 0;
         ArtGenRunState state = ArtGenRunState::Idle;
-        String preset;
+        String preset;    // the name; with presetData, the name of the form the draft came from
+        Json presetData;  // a draft sent inline (the form as it is, saved or not); null: the preset by name
         String subject;
         int32_t count = 0;
         Optional<int64_t> seed;
@@ -120,6 +116,18 @@ namespace BECore {
         /// Queues a request; the error says why not (a run in work, a bad count or preset). @p keepVariants starts the new run with the
         /// variants of the last one, so a few more can be made without losing the ones on screen
         std::expected<uint32_t, String> Request(StringView preset, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants = false);
+        /// The same with the preset's content inline (the panel's form, saved or not): the service checks it as it checks a file, and the
+        /// provenance names it `draft`. @p name is the form's, for the messages
+        std::expected<uint32_t, String> RequestDraft(StringView name, const Json& preset, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants = false);
+
+        /// Writes @p preset as `<game root>/artgen/presets/<name>.json` (an engine starter saved under its name becomes the game's own) and
+        /// shows it at once; the service checks it at its next look (asked for in the next poll). The path, or why not: a bad name, a shape
+        /// that is not a preset (CheckArtGenPresetShape), no game root, a write that failed
+        std::expected<String, String> SavePreset(StringView name, const Json& preset);
+        /// The workflow the service described by that name, or null
+        [[nodiscard]] const ArtGenWorkflow* FindWorkflow(StringView name) const;
+        /// The preset the service reported by that name, or null
+        [[nodiscard]] const ArtGenPreset* FindPreset(StringView name) const;
         /// Asks the service to stop the run; the images already made stay
         void Cancel();
 
@@ -183,11 +191,14 @@ namespace BECore {
         std::expected<Json, ControlError> HandleAccept(const Json& params);
         std::expected<Json, ControlError> HandleSetupReport(const Json& params);
         std::expected<Json, ControlError> HandleSetup(const Json& params);
+        std::expected<Json, ControlError> HandleSavePreset(const Json& params);
         [[nodiscard]] Json StateJson() const;
 
     private:
         /// The run a report of the service is about, or null when it is about an older one (a late message after a new request)
         ArtGenRun* RunOf(const Json& params);
+        std::expected<uint32_t, String> Queue(StringView preset, Json presetData, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants);
+        void ReadCatalog(const Json& params);
 
         Clock _clock;
         Acceptor _acceptor = nullptr;
@@ -198,6 +209,8 @@ namespace BECore {
         ArtGenSetup _setup;
         uint32_t _nextId = 1;
         bool _stopService = false;
+        bool _refreshCatalog = false;  // a preset was saved: the next poll asks the service to look at the files again
+        Json _catalog;                 // the presets and workflows of the last poll, so an unchanged list is not read again
         double _lastPollSeconds = -1.0;
         uint64_t _pollCount = 0;
         uint64_t _version = 0;

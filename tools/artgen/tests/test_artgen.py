@@ -19,6 +19,7 @@ ARTGEN_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ARTGEN_DIR))
 
 import artgen  # noqa: E402
+import artgen_generators  # noqa: E402
 import artgen_preset  # noqa: E402
 import artgen_service  # noqa: E402
 import comfyui_check  # noqa: E402
@@ -117,7 +118,84 @@ def test_find_presets_reports_a_broken_one(game):
     found = artgen_preset.find_presets(game)
     assert isinstance(found["wood"], artgen_preset.Preset)
     assert isinstance(found["zbroken"], artgen_preset.PresetError)
-    assert artgen_preset.find_presets(game / "missing") == {}
+    assert set(artgen_preset.find_presets(game / "missing")) == {"icon", "sprite"}, "a game without presets gets the engine's starters"
+    assert found["wood"].source == "game" and found["sprite"].source == "engine"
+    assert found["zbroken"].source == "game" and found["zbroken"].data["workflow"] == "nope"
+
+
+def test_every_engine_starter_preset_loads():
+    for name, preset in artgen_preset.find_presets(None).items():
+        assert isinstance(preset, artgen_preset.Preset), f"{name}: {preset}"
+        assert preset.source == "engine" and artgen_preset.SUBJECT_TOKEN in preset.prompt
+
+
+def test_a_game_preset_wins_over_the_engine_starter_of_its_name(game):
+    write_preset(game, "sprite", {**PRESET, "title": "Ours"})
+    found = artgen_preset.find_presets(game)
+    assert found["sprite"].title == "Ours" and found["sprite"].source == "game"
+    assert artgen_preset.find_preset("sprite", game).title == "Ours"
+    assert artgen_preset.find_preset("icon", game).source == "engine"
+    with pytest.raises(artgen_preset.PresetError, match="no preset 'nope'"):
+        artgen_preset.find_preset("nope", game)
+    with pytest.raises(artgen_preset.PresetError, match="no preset"):
+        artgen_preset.find_preset("../wood", game)
+
+
+def test_a_draft_is_checked_like_a_file_and_hashed_by_content(game):
+    draft = artgen_preset.parse_preset(dict(PRESET), artgen_preset.DRAFT, game, label="the draft", source=artgen_preset.DRAFT)
+    from_file = preset_of(game)
+    assert draft.path is None and draft.source == "draft" and draft.data == PRESET
+    assert draft.file_hash == artgen_preset.content_hash(PRESET)
+    assert artgen_preset.build_graph(draft, "knight", 7) == artgen_preset.build_graph(from_file, "knight", 7)
+    cases = (
+        ({**PRESET, "params": {"stepz": 3}}, "has no input 'stepz'"),
+        ({**PRESET, "preset": 2}, "format version"),
+        ({**PRESET, "params": []}, "must be an object"),
+        ({**PRESET, "size": [True, 4]}, "width, height"),
+        ([], "JSON object"),
+    )
+    for broken, message in cases:
+        with pytest.raises(artgen_preset.PresetError, match=message) as error:
+            artgen_preset.parse_preset(broken, "draft", game, label="the draft")
+        assert str(error.value).startswith("the draft:")
+
+
+def test_a_workflow_describes_its_inputs_with_the_graph_defaults_and_the_choices(game):
+    found = artgen_preset.find_workflows(game)
+    assert {"sdxl_basic", "sdxl_cutout"} <= set(found)
+    choices = {"KSampler": {"sampler_name": ["euler", "dpmpp_2m"]}, "CheckpointLoaderSimple": {"ckpt_name": ["a.safetensors"]}}
+    described = found["sdxl_cutout"].describe(choices)
+    assert described["name"] == "sdxl_cutout" and described["source"] == "engine"
+    inputs = described["inputs"]
+    assert "output" not in inputs
+    assert inputs["steps"] == {"default": 25} and inputs["cfg"] == {"default": 7.0}
+    assert inputs["width"] == {"default": 1024} and inputs["seed"] == {"default": 42}
+    assert inputs["sampler"] == {"default": "dpmpp_2m", "choices": ["euler", "dpmpp_2m"]}
+    assert inputs["checkpoint"]["choices"] == ["a.safetensors"]
+    assert "choices" not in inputs["vae"]
+
+
+def test_a_game_workflow_is_listed_as_the_games_and_a_broken_one_as_its_error(game):
+    folder = game / "artgen" / "workflows"
+    folder.mkdir()
+    shutil.copy(artgen_preset.ENGINE_WORKFLOWS / "sdxl_basic.json", folder / "sdxl_basic.json")
+    shutil.copy(artgen_preset.ENGINE_WORKFLOWS / "sdxl_basic.inputs.json", folder / "sdxl_basic.inputs.json")
+    (folder / "lonely.json").write_text("{}", encoding="utf-8")
+    found = artgen_preset.find_workflows(game)
+    assert found["sdxl_basic"].source == "game" and found["sdxl_cutout"].source == "engine"
+    assert isinstance(found["lonely"], artgen_preset.PresetError)
+
+
+def test_combo_choices_reads_both_forms_of_object_info():
+    info = {
+        "KSampler": {"input": {"required": {
+            "sampler_name": [["euler", "ddim"]],
+            "steps": ["INT", {"default": 20}],
+            "scheduler": ["COMBO", {"options": ["normal", "karras"]}],
+        }}},
+        "Broken": None,
+    }
+    assert artgen_generators.combo_choices(info) == {"KSampler": {"sampler_name": ["euler", "ddim"], "scheduler": ["normal", "karras"]}}
 
 
 # --- the service over the fake generator
@@ -401,7 +479,7 @@ def test_cli_presets_and_errors(game, capsys):
     assert artgen.main(["presets", "--game-root", str(game), "--json"]) == artgen.EXIT_OK
     assert json.loads(capsys.readouterr().out)["wood"]["workflow"] == "sdxl_basic"
     assert artgen.main(["generate", "--generator", "fake", "--game-root", str(game), "--preset", "nope", "--subject", "x"]) == artgen.EXIT_FAILED
-    assert "nope.json" in capsys.readouterr().err
+    assert "no preset 'nope'" in capsys.readouterr().err
 
 
 def test_cli_status_exit_codes(tmp_path, capsys):

@@ -60,7 +60,9 @@ def provenance_of(request, seed, graph, generator_info, source_name, now=None):
     return {
         "provenance": PROVENANCE_FORMAT,
         "preset": preset.name,
+        "presetSource": preset.source,
         "presetHash": preset.file_hash,
+        "presetData": preset.data,
         "subject": request.subject,
         "prompt": artgen_preset.final_prompt(preset, request.subject),
         "negative": preset.negative,

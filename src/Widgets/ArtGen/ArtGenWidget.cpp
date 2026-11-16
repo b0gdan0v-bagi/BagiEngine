@@ -35,6 +35,10 @@ namespace BECore {
         constexpr double kBridgeStartSeconds = 15.0;
         constexpr double kBytesPerGigabyte = 1e9;
         constexpr double kBytesPerMegabyte = 1e6;
+        constexpr float kPromptLines = 4.5f;
+        constexpr float kNegativeLines = 2.5f;
+        constexpr int32_t kMaxImageSide = 8192;
+        constexpr size_t kInputTextSize = 512;
 
         void DrawChecker(ImDrawList* drawList, ImVec2 origin, float size, ImU32 light, ImU32 dark) {
             drawList->AddRectFilled(origin, ImVec2(origin.x + size, origin.y + size), light);
@@ -47,13 +51,20 @@ namespace BECore {
             }
         }
 
-        bool IsUsable(const ArtGenSession& session, StringView preset) {
-            for (const auto& known : session.GetServiceStatus().presets) {
-                if (StringView(known.name) == preset) {
-                    return known.error.empty();
-                }
+        /// A JSON value as the form shows it: a string without quotes, anything else as JSON
+        void FormatJsonValue(const Json& value, char* out, size_t size) {
+            if (value.is_string()) {
+                const auto& text = value.get_ref<const std::string&>();  //-NoStd: nlohmann holds a std::string
+                std::snprintf(out, size, "%.*s", static_cast<int>(text.size()), text.data());
+            } else if (value.is_number_integer()) {
+                std::snprintf(out, size, "%lld", static_cast<long long>(value.get<int64_t>()));
+            } else if (value.is_number_float()) {
+                std::snprintf(out, size, "%g", value.get<double>());
+            } else if (value.is_boolean()) {
+                std::snprintf(out, size, "%s", value.get<bool>() ? "true" : "false");
+            } else {
+                out[0] = '\0';
             }
-            return false;
         }
 
         /// A sprite name from the subject: "White Knight!" -> "white_knight"; the user edits it before Accept
@@ -312,37 +323,11 @@ namespace BECore {
     }
 
     void ArtGenWidget::DrawForm(ArtGenSession& session) {
-        const auto& presets = session.GetServiceStatus().presets;
-        if (!IsUsable(session, _presetName)) {
-            for (const auto& preset : presets) {
-                if (preset.error.empty()) {
-                    _presetName = preset.name;
-                    break;
-                }
-            }
+        DrawPresetBar(session);
+        if (!_form.IsEmpty()) {
+            DrawPresetFields(session);
         }
-        const char* current = _presetName.empty() ? "(no preset)" : _presetName.c_str();
-        for (const auto& preset : presets) {
-            if (preset.name == _presetName) {
-                current = preset.title.c_str();
-            }
-        }
-        if (ImGui::BeginCombo("Preset", current)) {
-            for (const auto& preset : presets) {
-                ImGui::BeginDisabled(!preset.error.empty());
-                if (ImGui::Selectable(preset.title.c_str(), preset.name == _presetName)) {
-                    _presetName = preset.name;
-                }
-                ImGui::EndDisabled();
-                if (!preset.error.empty()) {
-                    ItemTooltip(preset.error.c_str());
-                }
-            }
-            ImGui::EndCombo();
-        }
-        if (presets.empty()) {
-            ImGui::TextDisabled("The game has no presets in artgen/presets/ (tools/artgen/CLAUDE.md, \"Presets\")");
-        }
+        ImGui::Spacing();
 
         ImGui::InputTextWithHint("Subject", "white knight, a red gem, ...", _subject, sizeof(_subject));
         {
@@ -362,10 +347,13 @@ namespace BECore {
         ItemTooltip("The new images are added to the ones shown instead of replacing them");
 
         const bool busy = session.IsBusy();
-        const bool canGenerate = !busy && !_presetName.empty() && _subject[0] != '\0';
+        const bool canGenerate = !busy && !_form.IsEmpty() && _subject[0] != '\0';
         ImGui::BeginDisabled(!canGenerate);
-        if (IconTextButton(ICON_LC_SPARKLES, "Generate", "Ask the service for the images (it may still be starting: the request waits)")) {
-            auto result = session.Request(_presetName, StringView(_subject), _count, _randomSeed ? Optional<int64_t>() : Optional<int64_t>(_seed), _keepVariants);
+        if (IconTextButton(ICON_LC_SPARKLES, "Generate", "Ask the service for the images with the form as it is, saved or not (it may still be starting: the request waits)")) {
+            const Optional<int64_t> seed = _randomSeed ? Optional<int64_t>() : Optional<int64_t>(_seed);
+            // A saved preset goes by name, so its provenance names the file; anything else goes inline as a draft
+            auto result = _form.IsDirty() ? session.RequestDraft(StringView(_form.name), _form.ToJson(), StringView(_subject), _count, seed, _keepVariants)
+                                          : session.Request(StringView(_form.GetBaseName()), StringView(_subject), _count, seed, _keepVariants);
             _requestError = result ? String() : result.error();
         }
         ImGui::EndDisabled();
@@ -379,6 +367,255 @@ namespace BECore {
         }
         if (!_requestError.empty()) {
             ImGui::TextColored(GetImGuiPalette().error, "%s", _requestError.c_str());
+        }
+    }
+
+    void ArtGenWidget::DrawPresetBar(ArtGenSession& session) {
+        const auto& palette = GetImGuiPalette();
+        const auto& presets = session.GetServiceStatus().presets;
+        const auto& workflows = session.GetServiceStatus().workflows;
+        if (_form.IsEmpty()) {
+            // The first preset that loads, else a new one on the first workflow, once the service has said what there is
+            for (const auto& preset : presets) {
+                if (preset.error.empty() && preset.data.is_object()) {
+                    _form.Load(preset);
+                    break;
+                }
+            }
+            if (_form.IsEmpty() && !workflows.empty()) {
+                _form.New(StringView(workflows.front().name));
+            }
+        }
+        const bool dirty = !_form.IsEmpty() && _form.IsDirty();
+        char preview[96];
+        std::snprintf(preview, sizeof(preview), "%s%s", _form.IsEmpty() ? "(no preset)" : _form.name, dirty ? " *" : "");
+        if (ImGui::BeginCombo("Preset", preview)) {
+            for (const auto& preset : presets) {
+                char label[192];
+                std::snprintf(label, sizeof(label), "%s%s  (%s%s)", preset.error.empty() ? "" : ICON_LC_CIRCLE_ALERT " ", preset.title.c_str(), preset.name.c_str(),
+                              preset.source == "engine" ? ", engine" : "");
+                ImGui::BeginDisabled(!preset.data.is_object());
+                if (ImGui::Selectable(label, preset.name == _form.GetBaseName())) {
+                    // Picking another preset drops what the form had unsaved
+                    _form.Load(preset);
+                    _formMessage.clear();
+                }
+                ImGui::EndDisabled();
+                if (!preset.error.empty()) {
+                    ItemTooltip(preset.error.c_str());
+                }
+            }
+            ImGui::EndCombo();
+        }
+        ItemTooltip("The game's presets (artgen/presets/), then the engine's starters; * marks unsaved changes, which picking another one drops");
+
+        ImGui::BeginDisabled(workflows.empty());
+        if (IconButton(ICON_LC_FILE_PLUS, "New preset on the first workflow", "##NewPreset")) {
+            _form.New(StringView(workflows.front().name));
+            _formMessage.clear();
+        }
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        ImGui::BeginDisabled(_form.IsEmpty());
+        if (IconButton(ICON_LC_COPY, "Duplicate: the same settings under a new name, not saved yet", "##DuplicatePreset")) {
+            _form.Duplicate();
+            _formMessage.clear();
+        }
+        ImGui::SameLine();
+        const bool savedHere = !dirty && _form.GetBaseSource() == "game";
+        ImGui::BeginDisabled(savedHere);
+        if (IconButton(ICON_LC_SAVE, "Save as artgen/presets/<name>.json of the game (an engine starter becomes the game's own copy)", "##SavePreset")) {
+            SaveForm(session, StringView(_form.name));
+        }
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (IconButton(ICON_LC_SAVE_ALL, "Save as another name", "##SavePresetAs")) {
+            std::snprintf(_saveAsName, sizeof(_saveAsName), "%s", _form.name);
+            ImGui::OpenPopup("##SavePresetAsPopup");
+        }
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!_form.HasBase() || !dirty);
+        if (IconButton(ICON_LC_UNDO_2, "Revert to the saved preset", "##RevertPreset")) {
+            _form.Revert();
+            _formMessage.clear();
+        }
+        ImGui::EndDisabled();
+        if (ImGui::BeginPopup("##SavePresetAsPopup")) {
+            ImGui::InputTextWithHint("##SaveAsName", "preset_name", _saveAsName, sizeof(_saveAsName));
+            const bool valid = IsValidSpriteName(StringView(_saveAsName));
+            ImGui::BeginDisabled(!valid);
+            if (IconTextButton(ICON_LC_SAVE, "Save", "Write artgen/presets/<name>.json of the game")) {
+                SaveForm(session, StringView(_saveAsName));
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndDisabled();
+            if (!valid) {
+                ImGui::TextColored(palette.warning, "1 to 64 of A-Z a-z 0-9 _ -");
+            }
+            ImGui::EndPopup();
+        }
+
+        if (dirty) {
+            ImGui::SameLine();
+            ImGui::TextColored(palette.warning, _form.HasBase() ? "unsaved changes" : "not saved yet");
+        } else if (_form.GetBaseSource() == "engine") {
+            ImGui::SameLine();
+            ImGui::TextDisabled("an engine starter: Save makes it the game's own");
+        }
+        if (!_formMessage.empty()) {
+            ImGui::TextColored(_formMessageIsError ? palette.error : palette.success, "%s", _formMessage.c_str());
+        }
+        // The service's verdict on the saved file; a draft's is the failure of its run
+        if (const ArtGenPreset* base = session.FindPreset(StringView(_form.GetBaseName())); base != nullptr && !base->error.empty() && !dirty) {
+            ImGui::TextColored(palette.error, ICON_LC_CIRCLE_ALERT " %s", base->error.c_str());
+        }
+        if (presets.empty() && workflows.empty()) {
+            ImGui::TextDisabled("The service has not said which presets and workflows there are yet");
+        }
+    }
+
+    void ArtGenWidget::SaveForm(ArtGenSession& session, StringView name) {
+        auto saved = session.SavePreset(name, _form.ToJson());
+        _formMessageIsError = !saved.has_value();
+        if (saved) {
+            std::snprintf(_form.name, sizeof(_form.name), "%.*s", static_cast<int>(name.size()), name.data());
+            _form.MarkSaved();
+            _formMessage = Format("Saved {}", *saved);
+        } else {
+            _formMessage = saved.error();
+        }
+    }
+
+    void ArtGenWidget::DrawPresetFields(ArtGenSession& session) {
+        const auto& palette = GetImGuiPalette();
+        if (ImGui::InputText("Name", _form.name, sizeof(_form.name))) {
+            _form.Touch();
+        }
+        ItemTooltip("The file name: artgen/presets/<name>.json of the game; 1 to 64 of A-Z a-z 0-9 _ -");
+        if (ImGui::InputText("Title", _form.title, sizeof(_form.title))) {
+            _form.Touch();
+        }
+        const auto& workflows = session.GetServiceStatus().workflows;
+        if (ImGui::BeginCombo("Workflow", _form.GetWorkflow().c_str())) {
+            for (const auto& workflow : workflows) {
+                char label[160];
+                std::snprintf(label, sizeof(label), "%s%s  (%s)", workflow.error.empty() ? "" : ICON_LC_CIRCLE_ALERT " ", workflow.name.c_str(), workflow.source.c_str());
+                ImGui::BeginDisabled(!workflow.error.empty());
+                if (ImGui::Selectable(label, workflow.name == _form.GetWorkflow())) {
+                    _form.SetWorkflow(StringView(workflow.name), &workflow);
+                }
+                ImGui::EndDisabled();
+                if (!workflow.error.empty()) {
+                    ItemTooltip(workflow.error.c_str());
+                }
+            }
+            ImGui::EndCombo();
+        }
+        ItemTooltip("The graph: the game's artgen/workflows/ first, then the engine's tools/artgen/workflows/");
+        const float line = ImGui::GetTextLineHeight();
+        if (ImGui::InputTextMultiline("Prompt", _form.prompt, sizeof(_form.prompt), ImVec2(0.0f, line * kPromptLines))) {
+            _form.Touch();
+        }
+        ItemTooltip("{subject} is replaced by the subject below; without it the subject goes first");
+        if (ImGui::InputTextMultiline("Negative", _form.negative, sizeof(_form.negative), ImVec2(0.0f, line * kNegativeLines))) {
+            _form.Touch();
+        }
+
+        const ArtGenWorkflow* workflow = session.FindWorkflow(StringView(_form.GetWorkflow()));
+        if (workflow == nullptr) {
+            ImGui::TextColored(palette.warning, "The service does not know the workflow '%s'", _form.GetWorkflow().c_str());
+            return;
+        }
+        if (ImGui::TreeNodeEx("Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+            if (workflow->HasSize()) {
+                DrawSizeFields(*workflow);
+            }
+            for (const auto& input : workflow->inputs) {
+                if (!IsArtGenServiceInput(StringView(input.name))) {
+                    DrawInputField(input);
+                }
+            }
+            ImGui::TreePop();
+        }
+    }
+
+    void ArtGenWidget::DrawSizeFields(const ArtGenWorkflow& workflow) {
+        const auto defaultOf = [&](StringView name) {
+            const ArtGenWorkflowInput* input = workflow.FindInput(name);
+            return input != nullptr && input->defaultValue.is_number_integer() ? static_cast<int32_t>(input->defaultValue.get<int64_t>()) : 0;
+        };
+        int32_t size[2] = {_form.width > 0 ? _form.width : defaultOf("width"), _form.height > 0 ? _form.height : defaultOf("height")};
+        bool changed = false;
+        {
+            ScopedMonoFont mono;
+            changed = ImGui::InputInt2("Size", size);
+        }
+        if (changed) {
+            _form.width = std::clamp(size[0], 1, kMaxImageSide);
+            _form.height = std::clamp(size[1], 1, kMaxImageSide);
+            _form.Touch();
+        }
+        DrawResetButton(_form.width > 0, "##ResetSize", [this] {
+            _form.width = _form.height = 0;
+            _form.Touch();
+        });
+    }
+
+    void ArtGenWidget::DrawInputField(const ArtGenWorkflowInput& input) {
+        const Json* override = _form.FindParam(StringView(input.name));
+        const Json& value = override != nullptr ? *override : input.defaultValue;
+        const char* label = input.name.c_str();
+        ImGui::PushID(label);
+        if (input.choices.is_array() && !input.choices.empty()) {
+            char current[160];
+            FormatJsonValue(value, current, sizeof(current));
+            if (ImGui::BeginCombo(label, current)) {
+                for (const Json& choice : input.choices) {
+                    char text[160];
+                    FormatJsonValue(choice, text, sizeof(text));
+                    if (ImGui::Selectable(text, choice == value)) {
+                        _form.SetParam(StringView(input.name), choice);
+                    }
+                }
+                ImGui::EndCombo();
+            }
+        } else if (value.is_boolean()) {
+            bool flag = value.get<bool>();
+            if (ImGui::Checkbox(label, &flag)) {
+                _form.SetParam(StringView(input.name), Json(flag));
+            }
+        } else if (value.is_number_integer()) {
+            int64_t number = value.get<int64_t>();
+            ScopedMonoFont mono;
+            if (ImGui::InputScalar(label, ImGuiDataType_S64, &number)) {
+                _form.SetParam(StringView(input.name), Json(number));
+            }
+        } else if (value.is_number_float()) {
+            double number = value.get<double>();
+            ScopedMonoFont mono;
+            if (ImGui::InputDouble(label, &number, 0.0, 0.0, "%.3f")) {
+                _form.SetParam(StringView(input.name), Json(number));
+            }
+        } else {
+            char text[kInputTextSize];
+            FormatJsonValue(value, text, sizeof(text));
+            if (ImGui::InputText(label, text, sizeof(text))) {
+                _form.SetParam(StringView(input.name), MakeJsonString(StringView(text)));
+            }
+        }
+        ItemTooltip(override != nullptr ? "Set by this preset" : "The workflow's own value");
+        DrawResetButton(override != nullptr, "##Reset", [&] { _form.ClearParam(StringView(input.name)); });
+        ImGui::PopID();
+    }
+
+    void ArtGenWidget::DrawResetButton(bool overridden, const char* id, FunctionRef<void()> reset) {
+        if (!overridden) {
+            return;
+        }
+        ImGui::SameLine();
+        if (IconButton(ICON_LC_ROTATE_CCW, "Back to the workflow's value", id)) {
+            reset();
         }
     }
 

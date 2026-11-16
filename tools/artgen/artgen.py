@@ -46,23 +46,23 @@ def cmd_presets(args):
     found = artgen_preset.find_presets(args.game_root)
     if args.json:
         print(json.dumps({
-            name: ({"error": str(p)} if isinstance(p, Exception) else
-                   {"title": p.title, "workflow": p.workflow.name, "size": [p.width, p.height] if p.width else None})
+            name: ({"error": str(p), "source": getattr(p, "source", None)} if isinstance(p, Exception) else
+                   {"title": p.title, "source": p.source, "workflow": p.workflow.name, "size": [p.width, p.height] if p.width else None})
             for name, p in found.items()
         }, indent=2))
     else:
         if not found:
             print(f"no presets in {Path(args.game_root) / 'artgen' / 'presets'}")
         for name, preset in found.items():
-            print(f"{name}: BROKEN: {preset}" if isinstance(preset, Exception) else f"{name}: {preset.title} ({preset.workflow.name})")
+            print(f"{name}: BROKEN: {preset}" if isinstance(preset, Exception) else f"{name}: {preset.title} ({preset.workflow.name}, {preset.source})")
     return EXIT_FAILED if any(isinstance(p, Exception) for p in found.values()) else EXIT_OK
 
 
 def load_named_preset(game_root, preset):
     path = Path(preset)
-    if path.suffix != ".json":
-        path = Path(game_root) / "artgen" / "presets" / f"{preset}.json"
-    return artgen_preset.load_preset(path, game_root)
+    if path.suffix == ".json":
+        return artgen_preset.load_preset(path, game_root)
+    return artgen_preset.find_preset(preset, game_root)
 
 
 def cmd_generate(args):

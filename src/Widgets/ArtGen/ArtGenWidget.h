@@ -4,7 +4,9 @@
 #include <BECore/Renderer/ITexture.h>
 #include <BECore/Resource/ResourceHandle.h>
 #include <BECore/Types/Types.h>
+#include <BECore/Utils/FunctionRef.h>
 #include <BECore/Widgets/IWidget.h>
+#include <Widgets/ArtGen/ArtGenPresetForm.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <cstdint>
 
@@ -42,6 +44,12 @@ namespace BECore {
         void DrawPlan(ArtGenSession& session, const ArtGenSetup& setup);
         void StartBridge(uint16_t port);
         void DrawForm(ArtGenSession& session);
+        void DrawPresetBar(ArtGenSession& session);
+        void DrawPresetFields(ArtGenSession& session);
+        void DrawSizeFields(const ArtGenWorkflow& workflow);
+        void DrawInputField(const ArtGenWorkflowInput& input);
+        void DrawResetButton(bool overridden, const char* id, FunctionRef<void()> reset);
+        void SaveForm(ArtGenSession& session, StringView name);
         void DrawRun(ArtGenSession& session);
         void DrawVariants(const ArtGenRun& run);
         void DrawAccept(ArtGenSession& session);
@@ -50,7 +58,11 @@ namespace BECore {
 
         bool _open = false;
 
-        String _presetName;
+        // The preset being edited: loaded from the service's list, a new one, or a copy; Generate sends it inline while it is unsaved
+        ArtGenPresetForm _form;
+        char _saveAsName[ArtGenPresetForm::kNameSize] = {};
+        String _formMessage;
+        bool _formMessageIsError = false;
         char _subject[512] = {};
         int32_t _count = 4;
         bool _randomSeed = true;
