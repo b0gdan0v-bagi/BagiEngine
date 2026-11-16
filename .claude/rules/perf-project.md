@@ -96,7 +96,7 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
     },
     {
       "name": "value-get",
-      "about": "The cost of a Get of a Value<T> (ValueBenchTest, int32_t and Vec3): plain is a field read in place, const and slot are the two kinds of Value, tree_field and tree_slot end a chain of three virtual reads in a field or in a slot. Slot is expected within a few percent of plain; the trees show what the virtual calls add. The iterations come from BE_VALUE_BENCH, set by env in the command (a run of about a second in Release). Nothing here gates until the owner records a baseline",
+      "about": "The cost of a Get of a Value<T> (ValueBenchTest, int32_t and Vec3): plain is a field read in place, const and slot are the two kinds of Value, tree_field and tree_slot end a chain of three virtual reads in a field or in a slot. Slot is expected within a few percent of plain; the trees show what the virtual calls add. formula_plain and formula_program (int32_t) are `caster.attack * (100 + cast.level * 10) / 100` as C++ over two objects and as a compiled `expr` run with `Evaluate`; the ratio of the two is the number to watch. The iterations come from BE_VALUE_BENCH, set by env in the command (a run of about a second in Release). Nothing here gates until the owner records a baseline",
       "fast": true,
       "command": ["env", "BE_VALUE_BENCH=100000000", "{bin}/BagiEngineTests", "--gtest_filter=ValueBench*"],
       "metrics": {
@@ -105,6 +105,8 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
         "int32_t_slot_ns": {"source": "regex", "pattern": "^ValueBench int32_t slot ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false},
         "int32_t_tree_field_ns": {"source": "regex", "pattern": "^ValueBench int32_t tree_field ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false},
         "int32_t_tree_slot_ns": {"source": "regex", "pattern": "^ValueBench int32_t tree_slot ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false},
+        "int32_t_formula_plain_ns": {"source": "regex", "pattern": "^ValueBench int32_t formula_plain ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false},
+        "int32_t_formula_program_ns": {"source": "regex", "pattern": "^ValueBench int32_t formula_program ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false},
         "vec3_plain_ns": {"source": "regex", "pattern": "^ValueBench Vec3 plain ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false},
         "vec3_const_ns": {"source": "regex", "pattern": "^ValueBench Vec3 const ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false},
         "vec3_slot_ns": {"source": "regex", "pattern": "^ValueBench Vec3 slot ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false},

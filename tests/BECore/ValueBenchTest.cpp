@@ -1,9 +1,11 @@
 // What a `Get` of a Value<T> costs against a plain field (Values/Value.h). BE_VALUE_BENCH=<iterations> prints a line per case, the form the
 // benchmark set reads (`ValueBench <type> <case> ns_per_get=<x>`); without it a case is a smoke run that checks the results and asserts
 // nothing about time: tests run side by side and a machine drifts, so the time belongs to the perf set (`.claude/rules/perf-project.md`).
+// `formula_plain` and `formula_program` time one formula as plain C++ and as a compiled `expr` run with `Evaluate`.
 
 #include <BECore/ValueTestTypes.h>
 #include <BECore/Values/Context.h>
+#include <BECore/Values/Programs/ProgramCompiler.h>
 #include <BECore/Values/Value.h>
 #include <atomic>
 #include <bit>
@@ -27,6 +29,11 @@ namespace BECore::Tests {
         constexpr size_t kObjects = 64;
         constexpr size_t kObjectMask = kObjects - 1;
         constexpr LevelIndex kCasterLevel = 0;
+        constexpr LevelIndex kCastLevel = 1;
+        constexpr StringView kFormula = "caster.attack * (100 + cast.level * 10) / 100";
+        constexpr int32_t kFormulaBase = 100;
+        constexpr int32_t kFormulaPerLevel = 10;
+        constexpr int32_t kCastLevels = 5;
 
         uint64_t Iterations(bool& printing) {
             const char* text = std::getenv(kBenchVariable);
@@ -214,6 +221,42 @@ namespace BECore::Tests {
             EXPECT_EQ(TimeCase(type, "tree_slot", iterations, printing, [&rig](size_t index) -> const T& { return rig.slotChains[index]->Read(rig.contexts[index]); }), plain) << type << " tree_slot";
         }
 
+        /// `kFormula` written as C++ over the two objects
+        int32_t PlainFormula(const ValueUnitStats& caster, const ValueCastInfo& cast) {
+            return caster.attack * (kFormulaBase + cast.level * kFormulaPerLevel) / kFormulaBase;
+        }
+
+        /// Two levels, an object of each per iteration, and the formula compiled once outside the loop
+        void BenchFormula() {
+            bool printing = false;
+            const uint64_t iterations = Iterations(printing);
+            const char* type = Subject<int32_t>::kName;
+
+            ContextDecl declaration;
+            EXPECT_TRUE(declaration.Add<ValueUnitStats>("caster").has_value());
+            EXPECT_TRUE(declaration.Add<ValueCastInfo>("cast").has_value());
+            Vector<ValueUnitStats> casters(kObjects);
+            Vector<ValueCastInfo> casts(kObjects);
+            Vector<Context> contexts;
+            contexts.reserve(kObjects);
+            for (size_t index = 0; index < kObjects; ++index) {
+                Subject<int32_t>::Fill(casters[index], index);
+                casts[index].level = 1 + static_cast<int32_t>(index) % kCastLevels;
+                Context& context = contexts.emplace_back(declaration);
+                context.Set(kCasterLevel, casters[index]);
+                context.Set(kCastLevel, casts[index]);
+            }
+
+            const auto compiled = CompileValue<int32_t>(kFormula, declaration);
+            ASSERT_TRUE(compiled.has_value());
+            const Value<int32_t>& program = *compiled;
+            ASSERT_EQ(program.Kind(), ValueKind::Program);
+
+            const uint64_t plain = TimeCase(type, "formula_plain", iterations, printing, [&](size_t index) { return PlainFormula(casters[index], casts[index]); });
+            EXPECT_NE(plain, 0U);
+            EXPECT_EQ(TimeCase(type, "formula_program", iterations, printing, [&](size_t index) { return program.Evaluate(contexts[index]); }), plain) << "formula_program";
+        }
+
     }  // namespace
 
     TEST(ValueBenchTest, Int32) {
@@ -222,6 +265,10 @@ namespace BECore::Tests {
 
     TEST(ValueBenchTest, Vec3) {
         BenchType<Vec3>();
+    }
+
+    TEST(ValueBenchTest, Formula) {
+        BenchFormula();
     }
 
 }  // namespace BECore::Tests
