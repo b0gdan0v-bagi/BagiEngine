@@ -87,7 +87,7 @@ namespace BECore {
             return std::unexpected(ControlError{String(kNoVariantCode), Format("the current run has no image of seed {}", seed)});
         }
         if (variant->IsAudio()) {
-            return std::unexpected(ControlError{String(kAcceptFailedCode), String("a sound is not a sprite: accepting it into a clip is not there yet")});
+            return std::unexpected(ControlError{String(kAcceptFailedCode), String("a sound is accepted as a clip (name or clip), not a sprite")});
         }
         if (_acceptor == nullptr) {
             return std::unexpected(ControlError{String(kAcceptFailedCode), String("accepting is not available here")});
@@ -100,6 +100,27 @@ namespace BECore {
             }
         }
         return _acceptor(*variant, sprite, node);
+    }
+
+    std::expected<Json, ControlError> ArtGenSession::AcceptSound(int64_t seed, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, bool useOnSelected) {
+        const ArtGenVariant* variant = FindVariant(seed);
+        if (variant == nullptr) {
+            return std::unexpected(ControlError{String(kNoVariantCode), Format("the current run has no sound of seed {}", seed)});
+        }
+        if (!variant->IsAudio()) {
+            return std::unexpected(ControlError{String(kAcceptFailedCode), String("an image is accepted as a sprite, not a clip")});
+        }
+        if (_soundAcceptor == nullptr) {
+            return std::unexpected(ControlError{String(kAcceptFailedCode), String("accepting a sound is not available here")});
+        }
+        SceneNode* node = nullptr;
+        if (useOnSelected) {
+            node = GetSelectedNodeIfAlive();
+            if (node == nullptr) {
+                return std::unexpected(ControlError{String(kAcceptFailedCode), String("no node is selected in the scene editor")});
+            }
+        }
+        return _soundAcceptor(*variant, target, settings, node);
     }
 
     void ArtGenSession::RegisterControl(ControlService& service) {
@@ -125,9 +146,13 @@ namespace BECore {
                                                   ControlParamInfo{"subject", "string", true, "what to draw; replaces {subject} in the preset's prompt"},
                                                   ControlParamInfo{"count", "integer", false, "images, 1 to 16 (default 4)"},
                                                   ControlParamInfo{"seed", "integer", false, "the first seed; image i takes seed + i (default random)"}}});
-        service.DescribeMethod("artgen_accept", ControlMethodInfo{"Makes an image of the current run a sprite of the game: PNG into assets/artgen, TextureLibrary entry, reload",
-                                                                  {ControlParamInfo{"seed", "integer", true, "the seed of the image (artgen_state.run.variants)"},
-                                                                   ControlParamInfo{"sprite", "string", true, "the sprite name: 1 to 64 of A-Z a-z 0-9 _ -"},
+        service.DescribeMethod("artgen_accept", ControlMethodInfo{"Makes an image of the current run a sprite of the game (PNG into assets/artgen, TextureLibrary entry, reload), "
+                                                                  "or a sound a clip (processed, a WAV into assets/artgen or over a clip path of the game, reload)",
+                                                                  {ControlParamInfo{"seed", "integer", true, "the seed of the image or sound (artgen_state.run.variants)"},
+                                                                   ControlParamInfo{"sprite", "string", false, "an image: the sprite name, 1 to 64 of A-Z a-z 0-9 _ -"},
+                                                                   ControlParamInfo{"name", "string", false, "a sound: the clip assets/artgen/<name>.wav"},
+                                                                   ControlParamInfo{"clip", "string", false, "a sound: instead of name, the game's clip to replace (assets/.../x.wav)"},
+                                                                   ControlParamInfo{"sound", "object", false, "a sound: mono, trimDb, maxSeconds, sampleRate, fadeInMs, fadeOutMs, peakDb (null: off)"},
                                                                    ControlParamInfo{"useOnSelected", "boolean", false, "also put it on the node selected in the scene editor"}}});
         service.DescribeMethod("artgen_cancel", ControlMethodInfo{"Stops the run of the art generation service; the images made stay", {}});
         service.DescribeMethod("artgen_state", ControlMethodInfo{"The art generation service as the editor sees it, and the current run with its images", {}});
@@ -548,15 +573,31 @@ namespace BECore {
 
     std::expected<Json, ControlError> ArtGenSession::HandleAccept(const Json& params) {
         const auto seed = GetJsonInt(params, "seed");
-        const auto sprite = GetJsonString(params, "sprite");
-        if (!seed || !sprite) {
-            return std::unexpected(InvalidParams("'seed' (integer) and 'sprite' (string) are required"));
+        if (!seed) {
+            return std::unexpected(InvalidParams("'seed' (integer) is required"));
         }
         const Json* use = FindJsonMember(params, "useOnSelected");
         if (use != nullptr && !use->is_boolean()) {
             return std::unexpected(InvalidParams("'useOnSelected' must be a boolean"));
         }
-        return Accept(*seed, *sprite, use != nullptr && use->get<bool>());
+        const bool useOnSelected = use != nullptr && use->get<bool>();
+        const ArtGenVariant* variant = FindVariant(*seed);
+        if (variant != nullptr && variant->IsAudio()) {
+            ArtGenSoundTarget target;
+            target.name = GetJsonString(params, "name").value_or(String());
+            target.clip = GetJsonString(params, "clip").value_or(String());
+            const Json* soundJson = FindJsonMember(params, "sound");
+            auto settings = ArtGenSoundSettingsFromJson(soundJson != nullptr ? *soundJson : Json());
+            if (!settings) {
+                return std::unexpected(InvalidParams(settings.error()));
+            }
+            return AcceptSound(*seed, target, *settings, useOnSelected);
+        }
+        const auto sprite = GetJsonString(params, "sprite");
+        if (!sprite) {
+            return std::unexpected(InvalidParams("'sprite' (string) is required for an image"));
+        }
+        return Accept(*seed, *sprite, useOnSelected);
     }
 
     std::expected<Json, ControlError> ArtGenSession::HandleSetupReport(const Json& params) {

@@ -2,6 +2,7 @@
 #include <BECore/Control/Json.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
+#include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
 #include <Widgets/EditorLayout/UserFileIo.h>
 #include <filesystem>
@@ -50,6 +51,25 @@ namespace BECore::Tests {
             int calls = 0;
         };
         AcceptCall gAccepted;
+
+        /// What the fake sound acceptor was called with
+        struct SoundAcceptCall {
+            int64_t seed = -1;
+            ArtGenSoundTarget target;
+            ArtGenSoundSettings settings;
+            int calls = 0;
+        };
+        SoundAcceptCall gSoundAccepted;
+
+        std::expected<Json, ControlError> FakeSoundAcceptor(const ArtGenVariant& variant, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, SceneNode* /*node*/) {
+            gSoundAccepted.seed = variant.seed;
+            gSoundAccepted.target = target;
+            gSoundAccepted.settings = settings;
+            ++gSoundAccepted.calls;
+            Json reply = Json::object();
+            reply["clip"] = ToStdString(target.clip.empty() ? target.name : target.clip);
+            return reply;
+        }
 
         std::expected<Json, ControlError> FakeAcceptor(const ArtGenVariant& variant, StringView sprite, SceneNode* node) {
             gAccepted.seed = variant.seed;
@@ -114,6 +134,7 @@ namespace BECore::Tests {
 
         void SetUp() override {
             gAccepted = AcceptCall{};
+            gSoundAccepted = SoundAcceptCall{};
             session.SetGameRoot("D:/Games/Chess");
             session.RegisterControl(service);
         }
@@ -612,6 +633,39 @@ namespace BECore::Tests {
         ASSERT_FALSE(accepted.has_value());
         EXPECT_EQ(accepted.error().code, "artgen_accept_failed");
         EXPECT_EQ(gAccepted.calls, 0) << "a sound never reaches the sprite acceptor";
+    }
+
+    TEST_F(ArtGenSessionTest, ASoundIsAcceptedAsAClipWithItsSettings) {
+        const uint32_t id = session.Request("wood", "knock", 1, Optional<int64_t>(7)).value();
+        Call("artgen_poll", ReadyPoll());
+        Json sound = Report(id);
+        sound["seed"] = 7;
+        sound["path"] = "D:/out/knock_7.flac";
+        sound["kind"] = "audio";
+        Call("artgen_image", sound);
+        session.SetSoundAcceptor(&FakeSoundAcceptor);
+
+        Json params = Object();
+        params["seed"] = 7;
+        params["clip"] = "assets/sounds/move.wav";
+        params["sound"] = Json{{"mono", false}, {"peakDb", nullptr}, {"maxSeconds", 1.0}};
+        const Json accepted = Call("artgen_accept", params);
+        EXPECT_EQ(GetJsonString(Result(accepted), "clip"), Optional<String>("assets/sounds/move.wav")) << DumpJson(accepted).c_str();
+        ASSERT_EQ(gSoundAccepted.calls, 1);
+        EXPECT_EQ(gSoundAccepted.seed, 7);
+        EXPECT_EQ(gSoundAccepted.target.clip, "assets/sounds/move.wav");
+        EXPECT_FALSE(gSoundAccepted.settings.mono);
+        EXPECT_FALSE(gSoundAccepted.settings.peakDb.has_value());
+        EXPECT_FLOAT_EQ(gSoundAccepted.settings.maxSeconds, 1.0f);
+        EXPECT_EQ(gSoundAccepted.settings.trimDb, ArtGenSoundSettings{}.trimDb) << "a missing key keeps the default";
+
+        params["sound"] = Json{{"fadeInMs", -5}};
+        EXPECT_EQ(ErrorCode(Call("artgen_accept", params)), "invalid_params");
+        EXPECT_EQ(gSoundAccepted.calls, 1);
+        params.erase("sound");
+        params["useOnSelected"] = true;
+        EXPECT_EQ(ErrorCode(Call("artgen_accept", params)), "artgen_accept_failed") << "no node is selected";
+        EXPECT_EQ(session.AcceptSound(8, ArtGenSoundTarget{"x", ""}, ArtGenSoundSettings{}, false).error().code, "artgen_no_variant");
     }
 
 }  // namespace BECore::Tests
