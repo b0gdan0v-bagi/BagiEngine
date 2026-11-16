@@ -61,6 +61,9 @@ namespace BECore {
 
         /// The same with a scratch of its own
         static void Collect(UICanvasLayout& canvas, const UIElement& element, Span<const UILayoutContext> contexts, UIElementShapesResult& result);
+
+        /// @p rect, in the output pixels of @p shape, as the same fractions of an image @p imageWidth x @p imageHeight: where the viewport draws it. None when the shape or the image has no area.
+        [[nodiscard]] static Optional<Rect> FitToImage(const Rect& rect, const UILayoutContext& shape, float imageWidth, float imageHeight);
     };
 
     /**

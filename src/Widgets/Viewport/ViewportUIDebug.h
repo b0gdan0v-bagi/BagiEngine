@@ -16,6 +16,9 @@ namespace BECore {
     class Scene;
     class SceneNode;
 
+    /// A dashed rectangle outline between two screen corners, one pixel wide
+    void AddDashedRect(ImDrawList& drawList, const ImVec2& min, const ImVec2& max, ImU32 color);
+
     /**
      * @brief The UI debug overlays of the viewport: the rect of every element, the anchors and pivots, the design rectangle of the canvas scaler and the findings of the layout validator, drawn over
      *        the image from the marks of UIPreviewOverlay (output pixels), and the tooltips that go with them.

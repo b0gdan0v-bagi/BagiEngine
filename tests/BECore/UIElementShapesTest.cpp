@@ -409,4 +409,21 @@ namespace BECore::Tests {
         EXPECT_EQ(cache.GetProbeRuns(), 5u);
     }
 
+    TEST(UIElementShapesTest, ARectOfAPhoneIsDrawnAsTheSameFractionsOfTheImage) {
+        const UILayoutContext phone = Output(390.0f, 844.0f);
+        const Optional<Rect> fitted = UIElementShapes::FitToImage({39.0f, 84.4f, 195.0f, 422.0f}, phone, 1920.0f, 1080.0f);
+
+        ASSERT_TRUE(fitted.has_value());
+        ExpectRect(*fitted, {192.0f, 108.0f, 960.0f, 540.0f});
+    }
+
+    TEST(UIElementShapesTest, AShapeOrAnImageWithoutAreaHasNoFittedRect) {
+        const Rect rect{1.0f, 2.0f, 3.0f, 4.0f};
+
+        EXPECT_FALSE(UIElementShapes::FitToImage(rect, Output(0.0f, 844.0f), 1920.0f, 1080.0f).has_value());
+        EXPECT_FALSE(UIElementShapes::FitToImage(rect, Output(390.0f, 0.0f), 1920.0f, 1080.0f).has_value());
+        EXPECT_FALSE(UIElementShapes::FitToImage(rect, Output(390.0f, 844.0f), 0.0f, 1080.0f).has_value());
+        EXPECT_FALSE(UIElementShapes::FitToImage(rect, Output(390.0f, 844.0f), 1920.0f, 0.0f).has_value());
+    }
+
 }  // namespace BECore::Tests

@@ -233,6 +233,19 @@ namespace BECore {
         _element = event.element;
     }
 
+    UISelectedElement ViewportUIGizmos::FindSelected(Scene* scene) const {
+        if (!scene || scene != _scene || !_node || !_element) {
+            return {};
+        }
+        SceneNode* const node = HierarchyModel::FindNode(scene->GetRootNode(), _node);
+        IntrusivePtr<UICanvasComponent> canvas = node ? node->GetComponent<UICanvasComponent>() : IntrusivePtr<UICanvasComponent>();
+        UIElement* const element = canvas ? ScenePick::FindElement(*canvas, _element) : nullptr;
+        if (!element) {
+            return {};
+        }
+        return {node, std::move(canvas), element};
+    }
+
     void ViewportUIGizmos::AbortDrag(Scene* activeScene) {
         _session.Abort(activeScene);
     }
@@ -273,20 +286,18 @@ namespace BECore {
             return false;
         }
 
-        if (!context.editMode || !context.scene || context.scene != _scene || !context.primary || context.primary != _node || !_element) {
+        if (!context.editMode || !context.primary || context.primary != _node) {
             return false;
         }
-        SceneNode* const node = HierarchyModel::FindNode(context.scene->GetRootNode(), _node);
-        if (!node || node->HasEditorFlag(EditorFlags::Locked)) {
+        const UISelectedElement selected = FindSelected(context.scene);
+        if (!selected || selected.node->HasEditorFlag(EditorFlags::Locked)) {
             return false;
         }
-        const IntrusivePtr<UICanvasComponent> canvas = node->GetComponent<UICanvasComponent>();
+        SceneNode* const node = selected.node;
+        const IntrusivePtr<UICanvasComponent>& canvas = selected.canvas;
+        UIElement* const element = selected.element;
         // A World canvas follows its node: its elements are not dragged here
-        if (!canvas || !canvas->_visible || canvas->_space == CanvasSpace::World) {
-            return false;
-        }
-        UIElement* const element = ScenePick::FindElement(*canvas, _element);
-        if (!element) {
+        if (!canvas->_visible || canvas->_space == CanvasSpace::World) {
             return false;
         }
 

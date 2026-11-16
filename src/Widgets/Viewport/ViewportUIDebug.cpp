@@ -69,28 +69,6 @@ namespace BECore {
             return {frame.ToScreen({rect.x, rect.y}), frame.ToScreen({rect.x + rect.w, rect.y + rect.h})};
         }
 
-        void AddDashedLine(ImDrawList& drawList, const ImVec2& from, const ImVec2& to, ImU32 color) {
-            const float dx = to.x - from.x;
-            const float dy = to.y - from.y;
-            const float length = std::sqrt(dx * dx + dy * dy);
-            if (length <= 0.0f) {
-                return;
-            }
-            const float stepX = dx / length;
-            const float stepY = dy / length;
-            for (float at = 0.0f; at < length; at += kDashLength + kDashGap) {
-                const float end = std::min(at + kDashLength, length);
-                drawList.AddLine({from.x + stepX * at, from.y + stepY * at}, {from.x + stepX * end, from.y + stepY * end}, color);
-            }
-        }
-
-        void AddDashedRect(ImDrawList& drawList, const ImVec2& min, const ImVec2& max, ImU32 color) {
-            AddDashedLine(drawList, min, {max.x, min.y}, color);
-            AddDashedLine(drawList, {max.x, min.y}, max, color);
-            AddDashedLine(drawList, max, {min.x, max.y}, color);
-            AddDashedLine(drawList, {min.x, max.y}, min, color);
-        }
-
         void AddCornerMarker(ImDrawList& drawList, const ImVec2& at, float half, ImU32 color) {
             drawList.AddRectFilled({at.x - half, at.y - half}, {at.x + half, at.y + half}, color);
         }
@@ -127,6 +105,28 @@ namespace BECore {
         }
 
     }  // namespace
+
+    static void AddDashedLine(ImDrawList& drawList, const ImVec2& from, const ImVec2& to, ImU32 color) {
+        const float dx = to.x - from.x;
+        const float dy = to.y - from.y;
+        const float length = std::sqrt(dx * dx + dy * dy);
+        if (length <= 0.0f) {
+            return;
+        }
+        const float stepX = dx / length;
+        const float stepY = dy / length;
+        for (float at = 0.0f; at < length; at += kDashLength + kDashGap) {
+            const float end = std::min(at + kDashLength, length);
+            drawList.AddLine({from.x + stepX * at, from.y + stepY * at}, {from.x + stepX * end, from.y + stepY * end}, color);
+        }
+    }
+
+    void AddDashedRect(ImDrawList& drawList, const ImVec2& min, const ImVec2& max, ImU32 color) {
+        AddDashedLine(drawList, min, {max.x, min.y}, color);
+        AddDashedLine(drawList, {max.x, min.y}, max, color);
+        AddDashedLine(drawList, max, {min.x, max.y}, color);
+        AddDashedLine(drawList, {min.x, max.y}, min, color);
+    }
 
     void ViewportUIDebug::CollectCanvases(const SceneNode& node, Vector<IntrusivePtr<UICanvasComponent>>& out) {
         if (node.HasEditorFlag(EditorFlags::Hidden)) {

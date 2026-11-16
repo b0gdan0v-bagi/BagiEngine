@@ -567,6 +567,7 @@ namespace BECore {
             ImGui::Checkbox("Design rectangle", &_overlays.designRect);
             ImGui::Checkbox("Findings", &_overlays.findings);
             _uiDebug.DrawCanvasSwitches();
+            _uiShapes.DrawPopupItems();
             ImGui::EndPopup();
         }
     }
@@ -663,7 +664,15 @@ namespace BECore {
             _uiDebug.Release();
         }
 
-        // One tooltip per frame: a finding, a touch target, the element under the pointer, a region
+        // The selected element in the shapes checked in the popup, nothing is probed while none is
+        const UISelectedElement selected = scene && _uiShapes.AnyChecked() ? _uiGizmos.FindSelected(scene) : UISelectedElement{};
+        if (selected && selected.canvas->_visible) {
+            _uiShapes.Draw(*drawList, frame, {outputSize.x, outputSize.y}, selected.canvas->GetLayout(), *selected.element);
+        } else {
+            _uiShapes.Release();
+        }
+
+        // One tooltip per frame: a finding, a touch target, the element under the pointer, an outline of another shape, a region
         bool tooltipShown = uiDebug && _uiDebug.ShowFindingTooltip();
         if (!tooltipShown && hoveredMark) {
             const StringView name = hoveredMark->name.ToStringView();
@@ -672,6 +681,9 @@ namespace BECore {
         }
         if (!tooltipShown && uiDebug) {
             tooltipShown = _uiDebug.ShowElementTooltip();
+        }
+        if (!tooltipShown && hovered) {
+            tooltipShown = _uiShapes.ShowTooltip(mouse);
         }
         if (!tooltipShown && hovered) {
             // The smallest region under the pointer, so a region inside another one stays reachable

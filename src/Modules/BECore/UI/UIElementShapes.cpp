@@ -69,6 +69,15 @@ namespace BECore {
         return context;
     }
 
+    Optional<Rect> UIElementShapes::FitToImage(const Rect& rect, const UILayoutContext& shape, float imageWidth, float imageHeight) {
+        if (shape.outputWidth <= 0.0f || shape.outputHeight <= 0.0f || imageWidth <= 0.0f || imageHeight <= 0.0f) {
+            return std::nullopt;
+        }
+        const float scaleX = imageWidth / shape.outputWidth;
+        const float scaleY = imageHeight / shape.outputHeight;
+        return Rect{rect.x * scaleX, rect.y * scaleY, rect.w * scaleX, rect.h * scaleY};
+    }
+
     void UIElementShapes::Collect(UICanvasLayout& canvas, const UIElement& element, Span<const UILayoutContext> contexts, UIElementShapesResult& result) {
         UIElementShapesScratch scratch;
         Collect(canvas, element, contexts, result, scratch);

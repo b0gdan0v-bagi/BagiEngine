@@ -15,6 +15,7 @@
 #include <Widgets/Viewport/ViewportInput.h>
 #include <Widgets/Viewport/ViewportUIDebug.h>
 #include <Widgets/Viewport/ViewportUIGizmos.h>
+#include <Widgets/Viewport/ViewportUIShapes.h>
 #include <cstdint>
 
 namespace BECore {
@@ -96,8 +97,9 @@ namespace BECore {
         // The overlays over the image, in target pixels through @p frame and clipped to the panel: the view bounds (bars tinted), the bounds of
         // every visible canvas, the regions (named outlines, under the touch targets; the name and the canvas-unit rect on hover), the touch targets
         // (red under UISettings::minTouchSize, the element name on hover, which wins over a region), the UI debug overlays (ViewportUIDebug: element rects, anchors and pivots, the design
-        // rectangle, the findings; one tooltip per frame: a finding, a touch target, the element under the pointer, a region), the safe area. The canvases
-        // are the ones the pass just laid out for this target. @p outputSize is the target's size, @p hovered the pointer is over the image
+        // rectangle, the findings; one tooltip per frame: a finding, a touch target, the element under the pointer, an outline of ViewportUIShapes, a region), the selected element in the checked
+        // shapes of other devices (ViewportUIShapes), the safe area. The canvases are the ones the pass just laid out for this target. @p outputSize is the target's size, @p hovered the pointer is
+        // over the image
         /// The "Paused" mark in the top-left corner of the image while the game is paused (CoreManager::GetPause())
         void DrawPausedMark(const ImVec2& imageMin, const ImVec2& imageMax) const;
         void DrawOverlays(Scene* scene, const ViewportFrame& frame, const ImVec2& outputSize, const Rect& safeArea, bool hovered);
@@ -154,6 +156,7 @@ namespace BECore {
         ViewportCamera _camera;                 // the editor camera; the image is drawn with it while the input mode is Edit
         ViewportCameraInput _cameraInput;
         ViewportGizmos _gizmos;
+        ViewportUIShapes _uiShapes;    // the selected element in other devices' shapes (session state)
         ViewportUIGizmos _uiGizmos;    // handles and anchor petals of the selected canvas element; before _gizmos in a frame, which it disables while it drags or is pointed at
         bool _frameRequested = false;  // viewport.frameSelected, answered in the next Update (it needs the panel size)
         ViewportBoxSelect _boxSelect;

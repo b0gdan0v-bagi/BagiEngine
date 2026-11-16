@@ -148,6 +148,17 @@ namespace BECore {
         bool hovered = false;   ///< the pointer is over the image
     };
 
+    /// The element selected in the "UI elements" section, found alive in the active scene
+    struct UISelectedElement {
+        SceneNode* node = nullptr;
+        IntrusivePtr<UICanvasComponent> canvas;
+        UIElement* element = nullptr;
+
+        explicit operator bool() const {
+            return element != nullptr;
+        }
+    };
+
     /**
      * @brief The handles and the anchor widget of the selected canvas element over the viewport, and the drag that moves, resizes or re-anchors it.
      *
@@ -158,6 +169,9 @@ namespace BECore {
     class ViewportUIGizmos {
     public:
         void OnSelected(const UIElementSelectedEvent& event);
+
+        /// The selected element (the last UIElementSelectedEvent) found in the tree of @p scene; empty when @p scene is not its scene or the node, the canvas or the element is gone
+        [[nodiscard]] UISelectedElement FindSelected(Scene* scene) const;
 
         /// One frame: continues or ends a drag, otherwise draws what the element allows and starts a drag on a press. @return true when the left press of this frame was taken (it is no edit click)
         bool Update(const ViewportUIGizmoContext& context);
