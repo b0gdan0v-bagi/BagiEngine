@@ -57,7 +57,7 @@ A `type` that is not registered in the factory is logged as an error by `MakeFro
 - The macros take one string, so format first: `LOG_ERROR("Failed to load {}"_format(path))` (or `Format(...)`). `LOG_INFO("x {}", v)` does not compile.
 - Pick the level deliberately; `Fatal` is for unrecoverable errors.
 - Sinks receive `StringView`.
-- The sinks write the time of a line as `{:02}:{:02}:{:02}` of `tm_hour`, `tm_min`, `tm_sec` (`FileSink` also the date), not `{:%H:%M:%S}` of `<fmt/chrono.h>`: the Clang of Emscripten refuses the `FMT_STRING` that header uses inside, and nothing else needs the header. Do not bring it back.
+- The sinks get the time of a line from `LogTime.h` (`GetLocalLogTime()`; `FormatLogTimeNow` of `LogHistory.h` makes the `HH:MM:SS.mmm` text) and write it as `{:02}:{:02}:{:02}` of `tm_hour`, `tm_min`, `tm_sec` (`FileSink` also the date), not `{:%H:%M:%S}` of `<fmt/chrono.h>`: the Clang of Emscripten refuses the `FMT_STRING` that header uses inside, and nothing else needs the header. Do not bring it back.
 
 ## Don't
 

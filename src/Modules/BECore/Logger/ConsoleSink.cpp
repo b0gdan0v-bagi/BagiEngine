@@ -1,7 +1,7 @@
 #include "ConsoleSink.h"
 
+#include <BECore/Logger/LogHistory.h>
 #include <Generated/ConsoleSink.gen.hpp>
-#include <chrono>
 #include <cstdio>
 
 #ifdef _WIN32
@@ -46,27 +46,18 @@ namespace BECore {
             return;
         }
 
-        const auto now = std::chrono::system_clock::now();
-        const auto time = std::chrono::system_clock::to_time_t(now);
-        const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
-
-        std::tm tm_buf;
-#ifdef _WIN32
-        localtime_s(&tm_buf, &time);
-#else
-        localtime_r(&time, &tm_buf);
-#endif
+        char timeBuffer[kLogTimeLength];
+        const StringView time = FormatLogTimeNow(timeBuffer);
 
         FILE* stream = (level >= LogLevel::Error) ? stderr : stdout;
 
-        // The time is written out, not {:%H:%M:%S}: the Emscripten build cannot use fmt/chrono.h
         if (_colorEnabled && ColorsStream(stream)) {
             const char* color = LogLevelColor(level);
             const char* reset = LogColorReset;
 
-            Print(stream, "{}[{}]{} [{:02}:{:02}:{:02}.{:03d}] {}\n", color, level, reset, tm_buf.tm_hour, tm_buf.tm_min, tm_buf.tm_sec, ms.count(), message);
+            Print(stream, "{}[{}]{} [{}] {}\n", color, level, reset, time, message);
         } else {
-            Print(stream, "[{}] [{:02}:{:02}:{:02}.{:03d}] {}\n", level, tm_buf.tm_hour, tm_buf.tm_min, tm_buf.tm_sec, ms.count(), message);
+            Print(stream, "[{}] [{}] {}\n", level, time, message);
         }
     }
 

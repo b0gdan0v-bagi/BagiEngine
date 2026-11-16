@@ -1,7 +1,7 @@
 #include "FileSink.h"
 
+#include <BECore/Logger/LogTime.h>
 #include <Generated/FileSink.gen.hpp>
-#include <chrono>
 
 namespace BECore {
 
@@ -45,22 +45,13 @@ namespace BECore {
             return;
         }
 
-        const auto now = std::chrono::system_clock::now();
-        const auto time = std::chrono::system_clock::to_time_t(now);
-        const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
-
-        std::tm tm_buf;
-#ifdef _WIN32
-        localtime_s(&tm_buf, &time);
-#else
-        localtime_r(&time, &tm_buf);
-#endif
+        const LocalLogTime now = GetLocalLogTime();
 
         LockGuard lock(_mutex);
 
         // The time is written out, not {:%Y-%m-%d %H:%M:%S}: the Emscripten build cannot use fmt/chrono.h
-        const String line = Format("[{}] [{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:03d}] {}\n", level, tm_buf.tm_year + 1900, tm_buf.tm_mon + 1, tm_buf.tm_mday, tm_buf.tm_hour, tm_buf.tm_min,
-                                   tm_buf.tm_sec, ms.count(), message.data());
+        const String line = Format("[{}] [{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:03d}] {}\n", level, now.tm.tm_year + 1900, now.tm.tm_mon + 1, now.tm.tm_mday, now.tm.tm_hour, now.tm.tm_min,
+                                   now.tm.tm_sec, now.millisecond, message);
         _file << line.c_str();
     }
 
