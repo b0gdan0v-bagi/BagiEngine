@@ -18,13 +18,10 @@ namespace BECore {
         constexpr StringView kExcerptIndent = "  ";
         constexpr char kUnprintable = '?';
 
-        /// The most operands of an instruction: `Select`, `Clamp` and `Lerp`
-        constexpr size_t kMaxOperands = 3;
-
         /// The register image of what an operation gives: the same kernels as `Run`, so a folded value is what the program would have computed
         std::expected<RegisterImage, ProgramError> Fold(const TypedNode& node, const Vector<RegisterImage>& images) {
             ProgramBuilder builder;
-            Array<uint8_t, kMaxOperands> regs{};
+            Array<uint8_t, kMaxTypedOperands> regs{};
             for (uint8_t i = 0; i < node.operandCount; ++i) {
                 const auto reg = builder.AcquireRegister();
                 if (!reg.has_value()) {
@@ -33,7 +30,7 @@ namespace BECore {
                 regs[i] = *reg;
                 builder.Emit(Opcode::LoadConst, *reg, 0, 0, 0, builder.AddConstant(images[node.operands[i]]));
             }
-            builder.Emit(node.opcode, regs[0], regs[0], regs[1], regs[2]);
+            builder.Emit(node.opcode, regs[0], regs[0], regs[1], regs[2], node.immediate);
             const auto program = builder.Finish(node.type.program, regs[0]);
             if (!program.has_value()) {
                 return std::unexpected(program.error());
@@ -43,7 +40,8 @@ namespace BECore {
             return image;
         }
 
-        /// Turns a checked formula into the compiled result; one instance per formula
+        /// Turns a checked formula into the compiled result; one instance per formula. The operands of a node are in consecutive registers from the first one (the node's own `dst`):
+        /// an instruction names three of them (`a`, `b`, `c`), and `Pack` of four reads them from `a` up.
         class Lowering {
         public:
             Lowering(const TypedExpr& expr, StringView source) : _expr(expr), _source(source) {}
@@ -124,7 +122,7 @@ namespace BECore {
                     _builder.EmitLoadSlot(dst, node.type.program, node.slot, node.type.program == ProgramType::Enum ? static_cast<uint8_t>(node.type.enumeration->enumBytes) : uint8_t{0});
                     return {};
                 }
-                Array<uint8_t, kMaxOperands> regs{};
+                Array<uint8_t, kMaxTypedOperands> regs{};
                 uint8_t acquired = 0;
                 for (uint8_t i = 0; i < node.operandCount; ++i) {
                     if (i == 0) {
@@ -136,12 +134,14 @@ namespace BECore {
                         }
                         regs[i] = *reg;
                         ++acquired;
+                        // `dst` is the top register and an operand gives back what it took, so each operand lands right above the one before it
+                        ASSERT(regs[i] == regs[i - 1] + 1, "Lower: the operands of a node are in consecutive registers");
                     }
                     if (const auto lowered = Lower(node.operands[i], regs[i]); !lowered.has_value()) {
                         return lowered;
                     }
                 }
-                _builder.Emit(node.opcode, dst, regs[0], regs[1], regs[2]);
+                _builder.Emit(node.opcode, dst, regs[0], regs[1], regs[2], node.immediate);
                 ReleaseAbove(dst, acquired);
                 return {};
             }

@@ -2,7 +2,9 @@
 
 #include <BECore/Reflection/CompiledPath.h>
 #include <BECore/Reflection/IDeserializer.h>
+#include <BECore/Values/Programs/Components.h>
 #include <BECore/Values/Programs/ExprFunctions.h>
+#include <BECore/Values/Programs/Kernels.h>
 #include <cmath>
 
 namespace BECore {
@@ -89,6 +91,67 @@ namespace BECore {
             return JoinTypes(types);
         }
 
+        /// The pairs of different types an operation has a row for, as a message lists them (`; mixed pairs: vec3 * float, ...`); empty when it has none
+        String MixedPairsOf(ProgramOperation operation) {
+            String text;
+            for (const ProgramType lhs : AllTypes()) {
+                for (const ProgramType rhs : AllTypes()) {
+                    if (MixedOpcodeOf(operation, lhs, rhs) != Opcode::Invalid) {
+                        text += text.empty() ? "; mixed pairs: " : ", ";
+                        text += Format("{} {} {}", ProgramTypeName(lhs), OperatorSymbol(operation), ProgramTypeName(rhs));
+                    }
+                }
+            }
+            return text;
+        }
+
+        /// Whether the type is an operand of the operation in any row, same-type or mixed
+        bool TakesPartIn(ProgramOperation operation, ProgramType type) {
+            if (OpcodeOf(operation, type) != Opcode::Invalid) {
+                return true;
+            }
+            for (const ProgramType other : AllTypes()) {
+                if (MixedOpcodeOf(operation, type, other) != Opcode::Invalid || MixedOpcodeOf(operation, other, type) != Opcode::Invalid) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// The scalar a vector is scaled by, the type a literal beside the vector takes in `*` and `/`
+        Optional<ProgramType> ScalarOfVector(ProgramType type) {
+            switch (type) {
+                case ProgramType::Vec2:
+                case ProgramType::Vec3:
+                case ProgramType::Vec4:
+                    return ProgramType::Float;
+                case ProgramType::IVec2:
+                    return ProgramType::Int32;
+                default:
+                    return std::nullopt;
+            }
+        }
+
+        /// The types that have components, as the message of a component of another type lists them
+        String TypesWithComponents() {
+            Vector<ProgramType> types;
+            for (const ProgramType type : AllTypes()) {
+                if (ComponentsOf(type).count > 0) {
+                    types.push_back(type);
+                }
+            }
+            return JoinTypes(types);
+        }
+
+        String JoinComponentNames(const ComponentSet& set) {
+            String text;
+            for (uint32_t i = 0; i < set.count; ++i) {
+                text += i == 0 ? "" : ", ";
+                text.append(set.names[i].data(), set.names[i].size());
+            }
+            return text;
+        }
+
         /// The enumerators as a message lists them: `Fire, Water, Earth`, and the number left out of a long list
         String EnumeratorList(const TypeDesc& enumeration) {
             String text;
@@ -143,6 +206,11 @@ namespace BECore {
         bool IsComparison(ProgramOperation operation) {
             return operation == ProgramOperation::Eq || operation == ProgramOperation::Ne || operation == ProgramOperation::Lt || operation == ProgramOperation::Le ||
                    operation == ProgramOperation::Gt || operation == ProgramOperation::Ge;
+        }
+
+        bool IsArithmetic(ProgramOperation operation) {
+            return operation == ProgramOperation::Add || operation == ProgramOperation::Sub || operation == ProgramOperation::Mul || operation == ProgramOperation::Div ||
+                   operation == ProgramOperation::Mod;
         }
 
         bool IsLogic(ProgramOperation operation) {
@@ -245,7 +313,7 @@ namespace BECore {
                     case ExprNodeKind::Call:
                         return CheckCall(id, hint);
                     case ExprNodeKind::Member:
-                        return Refuse(node.column, Format("'.{}': no type has components in a formula yet, only a whole value can be read", node.text));
+                        return CheckMember(id);
                     case ExprNodeKind::Unary:
                         return CheckUnary(id, hint);
                     case ExprNodeKind::Binary:
@@ -263,6 +331,21 @@ namespace BECore {
                     return true;
                 }
                 return node.kind == ExprNodeKind::Unary && node.operation == ProgramOperation::Neg && IsLiteral(node.first);
+            }
+
+            /// Numbers and arithmetic over them only: such a subtree has no type of its own and takes the one of the operand beside it
+            [[nodiscard]] bool IsUntypedNumber(ExprNodeId id) const {
+                const ExprNode& node = _ast[id];
+                switch (node.kind) {
+                    case ExprNodeKind::Number:
+                        return true;
+                    case ExprNodeKind::Unary:
+                        return node.operation == ProgramOperation::Neg && IsUntypedNumber(node.first);
+                    case ExprNodeKind::Binary:
+                        return IsArithmetic(node.operation) && IsUntypedNumber(node.first) && IsUntypedNumber(node.second);
+                    default:
+                        return false;
+                }
             }
 
             [[nodiscard]] bool ContainsFloatLiteral(ExprNodeId id) const {
@@ -390,9 +473,12 @@ namespace BECore {
                     }
                     const auto slot = LinkSlot(_declaration, text, *descriptor);
                     if (slot.has_value()) {
-                        return EmitSlot(node, type, *slot);
+                        return EmitSlot(node.text, type, *slot, node.column);
                     }
                     if (slot.error().code != LinkErrorCode::type_mismatch) {
+                        if (const Optional<TypedResult> component = CheckComponentPath(node)) {
+                            return *component;
+                        }
                         return Refuse(node.column, slot.error().message);
                     }
                 }
@@ -403,19 +489,93 @@ namespace BECore {
                     if (!slot.has_value()) {
                         return Refuse(node.column, slot.error().message);
                     }
-                    return EmitSlot(node, ExprType::OfEnum(*field), *slot);
+                    return EmitSlot(node.text, ExprType::OfEnum(*field), *slot, node.column);
                 }
                 return Refuse(node.column, FieldOfAnotherType(text, field));
             }
 
-            TypedNodeId EmitSlot(const ExprNode& node, const ExprType& type, SlotRef slot) {
+            TypedNodeId EmitSlot(StringView path, const ExprType& type, SlotRef slot, uint32_t column) {
                 TypedNode typed;
                 typed.kind = TypedNodeKind::Slot;
                 typed.type = type;
                 typed.slot = slot;
-                typed.path = node.text;
-                typed.column = node.column;
+                typed.path = String(path);
+                typed.column = column;
                 return Emit(std::move(typed));
+            }
+
+            // Components
+
+            /// The index of the component @p name of @p type, or the error that says what the type has
+            std::expected<uint32_t, ProgramError> ComponentIndex(const ExprType& type, StringView name, uint32_t column) const {
+                const ComponentSet set = ComponentsOf(type.program);
+                if (set.count == 0) {
+                    return Refuse(column, Format("'.{}': {} has no components; only {} have them", name, Typed(type), TypesWithComponents()));
+                }
+                const Optional<uint32_t> index = set.Find(name);
+                if (!index.has_value()) {
+                    return Refuse(column, Format("'.{}' is not a component of {}; it has {}", name, DescribeExprType(type), JoinComponentNames(set)));
+                }
+                return *index;
+            }
+
+            /// The component @p index of the value of @p base, computed by the program
+            TypedNodeId EmitExtract(TypedNodeId base, const ExprType& type, uint32_t index, uint32_t column) {
+                const TypedNodeId id = EmitOperation(OpcodeOf(ProgramOperation::Extract, type.program), ComponentsOf(type.program).type, column, {base});
+                _out.nodes[id].immediate = index;
+                return id;
+            }
+
+            /// `lerp(a, b, t).y`, `(a + b).z`: a component of an expression
+            TypedResult CheckMember(ExprNodeId id) {
+                const ExprNode& node = _ast[id];
+                const TypedResult base = Check(node.first, std::nullopt);
+                if (!base.has_value()) {
+                    return base;
+                }
+                const ExprType type = TypeOf(*base);
+                const auto index = ComponentIndex(type, node.text, node.column);
+                if (!index.has_value()) {
+                    return std::unexpected(index.error());
+                }
+                return EmitExtract(*base, type, *index, node.column);
+            }
+
+            /**
+             * A path that names no field as a whole may be a field of a type with components and one more segment (`caster.velocity.x`, `caster.span.offset.x`). Where the field
+             * stores the component as the program computes with it, the component is a slot of its own at its offset: one load. A `Color` channel is a byte, so it is an `Extract` of
+             * the field. Null when the path is no such thing (the message of the whole path is then the better one).
+             */
+            Optional<TypedResult> CheckComponentPath(const ExprNode& node) {
+                const StringView text = node.text;
+                const size_t last = text.rfind('.');
+                if (last == text.find('.')) {
+                    return std::nullopt;
+                }
+                const StringView prefix = text.substr(0, last);
+                const StringView name = text.substr(last + 1);
+                const TypeDesc* field = FieldDescriptor(prefix);
+                const Optional<ExprType> type = field != nullptr ? ProgramTypeFor(*field) : std::nullopt;
+                if (!type.has_value()) {
+                    return std::nullopt;
+                }
+                const auto index = ComponentIndex(*type, name, node.column);
+                if (!index.has_value()) {
+                    return TypedResult(std::unexpected(index.error()));
+                }
+                const ComponentSet set = ComponentsOf(type->program);
+                const auto slot = LinkSlot(_declaration, prefix, *field);
+                if (!slot.has_value()) {
+                    return Refuse(node.column, slot.error().message);
+                }
+                if (set.stride != ProgramTypeSize(set.type)) {
+                    return EmitExtract(EmitSlot(prefix, *type, *slot, node.column), *type, *index, node.column);
+                }
+                const uint64_t offset = uint64_t{slot->offset} + set.Offset(*index);
+                if (offset > std::numeric_limits<uint32_t>::max()) {
+                    return Refuse(node.column, Format("path '{}': the field is {} bytes into its level, more than a slot can address", text, offset));
+                }
+                return EmitSlot(text, ExprType(set.type), SlotRef{slot->level, static_cast<uint32_t>(offset)}, node.column);
             }
 
             /// The type of the fixed field at the end of @p path, null when the path does not name one: the answers of `LinkSlot` stay the messages of every other case
@@ -489,13 +649,24 @@ namespace BECore {
 
             // Operands of one type
 
+            /// The hint for the operand after one of type @p common: in `*` and `/` a literal beside a vector is the scalar the vector is scaled by
+            static ExprType BesideHint(const ExprType& common, bool scalarBesideVector) {
+                if (scalarBesideVector) {
+                    if (const Optional<ProgramType> scalar = ScalarOfVector(common.program)) {
+                        return ExprType(*scalar);
+                    }
+                }
+                return common;
+            }
+
             /**
-             * @brief Checks operands that must have one type and returns their typed nodes in source order
+             * @brief Checks operands and returns their typed nodes in source order, whatever types they have
              *
-             * Operands that read the context come first, so a literal beside them takes their type; a constant subtree beside no typed operand takes the hint, or float when
-             * it holds a float literal. @p subject names the operator or function in a message.
+             * The operands that read the context come first, then the other typed ones, then the subtrees of numbers alone, so a literal beside any of them takes its type; a
+             * constant subtree beside no typed operand takes the hint, or float when it holds a float literal.
              */
-            std::expected<Vector<TypedNodeId>, ProgramError> CheckSameType(const Vector<ExprNodeId>& operands, Optional<ExprType> hint, const String& subject) {
+            std::expected<Vector<TypedNodeId>, ProgramError> CheckOperands(const Vector<ExprNodeId>& operands, Optional<ExprType> hint, bool scalarBesideVector) {
+                constexpr int kPasses = 3;
                 Vector<TypedNodeId> typed(operands.size(), 0);
                 Optional<ExprType> common;
                 Optional<ExprType> anchor = hint;
@@ -510,12 +681,13 @@ namespace BECore {
                         }
                     }
                 }
-                for (const bool named : {true, false}) {
+                for (int pass = 0; pass < kPasses; ++pass) {
                     for (size_t i = 0; i < operands.size(); ++i) {
-                        if (_hasName[operands[i]] != named) {
+                        const int own = _hasName[operands[i]] ? 0 : (IsUntypedNumber(operands[i]) ? 2 : 1);
+                        if (own != pass) {
                             continue;
                         }
-                        const TypedResult result = Check(operands[i], common.has_value() ? common : anchor);
+                        const TypedResult result = Check(operands[i], common.has_value() ? Optional<ExprType>(BesideHint(*common, scalarBesideVector)) : anchor);
                         if (!result.has_value()) {
                             return std::unexpected(result.error());
                         }
@@ -525,17 +697,34 @@ namespace BECore {
                         }
                     }
                 }
+                return typed;
+            }
+
+            /// The error at the first operand whose type is not the first one's
+            std::expected<void, ProgramError> RequireSameType(const Vector<ExprNodeId>& operands, const Vector<TypedNodeId>& typed, const String& subject) const {
                 for (size_t i = 1; i < operands.size(); ++i) {
                     if (!(TypeOf(typed[i]) == TypeOf(typed[0]))) {
                         return Refuse(_ast[operands[i]].column, Format("{} needs operands of one type, but they are {} and {}: there is no implicit conversion between types{}", subject,
                                                                        DescribeExprType(TypeOf(typed[0])), DescribeExprType(TypeOf(typed[i])), ConvertHint(TypeOf(typed[i]), TypeOf(typed[0]))));
                     }
                 }
+                return {};
+            }
+
+            /// Operands that must have one type: @p subject names the operator or function in a message
+            std::expected<Vector<TypedNodeId>, ProgramError> CheckSameType(const Vector<ExprNodeId>& operands, Optional<ExprType> hint, const String& subject) {
+                auto typed = CheckOperands(operands, hint, false);
+                if (!typed.has_value()) {
+                    return typed;
+                }
+                if (const auto same = RequireSameType(operands, *typed, subject); !same.has_value()) {
+                    return std::unexpected(same.error());
+                }
                 return typed;
             }
 
             std::unexpected<ProgramError> NotDefined(uint32_t column, const String& subject, ProgramOperation operation, const ExprType& type) const {
-                return Refuse(column, Format("{} is not defined for {}; it works on {}", subject, DescribeExprType(type), TypesWith(operation)));
+                return Refuse(column, Format("{} is not defined for {}; it works on {}{}", subject, DescribeExprType(type), TypesWith(operation), MixedPairsOf(operation)));
             }
 
             // Operators
@@ -590,6 +779,9 @@ namespace BECore {
                 if ((operation == ProgramOperation::Div || operation == ProgramOperation::Mod) && IsLiteral(node.second) && LiteralIsZero(node.second)) {
                     return Refuse(_ast[node.second].column, Format("{} by a literal zero", operation == ProgramOperation::Div ? "division" : "modulo"));
                 }
+                if (IsArithmetic(operation)) {
+                    return CheckArithmetic(node, hint, subject);
+                }
                 const auto operands = CheckSameType({node.first, node.second}, IsComparison(operation) ? Optional<ExprType>{} : hint, subject);
                 if (!operands.has_value()) {
                     return std::unexpected(operands.error());
@@ -600,6 +792,34 @@ namespace BECore {
                     return NotDefined(node.column, subject, operation, common);
                 }
                 return EmitOperation(opcode, IsComparison(operation) ? ProgramType::Bool : common, node.column, {(*operands)[0], (*operands)[1]});
+            }
+
+            /// `+ - * / %`: two operands of one type, or a pair of `BE_PROGRAM_MIXED_ROWS` (`vec3 * float`), whose literal side is the scalar of the vector
+            TypedResult CheckArithmetic(const ExprNode& node, Optional<ExprType> hint, const String& subject) {
+                const ProgramOperation operation = node.operation;
+                const Vector<ExprNodeId> sources{node.first, node.second};
+                const auto operands = CheckOperands(sources, hint, operation == ProgramOperation::Mul || operation == ProgramOperation::Div);
+                if (!operands.has_value()) {
+                    return std::unexpected(operands.error());
+                }
+                const ExprType left = TypeOf((*operands)[0]);
+                const ExprType right = TypeOf((*operands)[1]);
+                if (left == right) {
+                    const Opcode opcode = OpcodeOf(operation, left.program);
+                    if (opcode == Opcode::Invalid) {
+                        return NotDefined(node.column, subject, operation, left);
+                    }
+                    return EmitOperation(opcode, left, node.column, {(*operands)[0], (*operands)[1]});
+                }
+                const Opcode mixed = left.program != right.program ? MixedOpcodeOf(operation, left.program, right.program) : Opcode::Invalid;
+                if (mixed != Opcode::Invalid) {
+                    return EmitOperation(mixed, ExprType(*ResultTypeOf(mixed)), node.column, {(*operands)[0], (*operands)[1]});
+                }
+                if (!TakesPartIn(operation, left.program)) {
+                    return NotDefined(node.column, subject, operation, left);
+                }
+                return Refuse(_ast[node.second].column, Format("{} needs operands of one type, but they are {} and {}: there is no implicit conversion between types{}{}", subject,
+                                                               DescribeExprType(left), DescribeExprType(right), ConvertHint(right, left), MixedPairsOf(operation)));
             }
 
             // Functions
@@ -632,6 +852,10 @@ namespace BECore {
                         return CheckConversion(node, *function, arguments[0]);
                     case ExprFunctionShape::Select:
                         return CheckSelect(node, arguments, hint, subject);
+                    case ExprFunctionShape::Pack:
+                        return CheckPack(node, *function, arguments, subject);
+                    case ExprFunctionShape::Blend:
+                        return CheckBlend(node, arguments, hint, subject);
                     case ExprFunctionShape::SameType:
                         break;
                 }
@@ -644,15 +868,87 @@ namespace BECore {
                 if (opcode == Opcode::Invalid) {
                     return NotDefined(node.column, subject, function->operation, type);
                 }
+                // The row says what it gives: `length` of a vector is a float
+                const ProgramType resultType = *ResultTypeOf(opcode);
                 TypedNode result;
                 result.kind = TypedNodeKind::Operation;
-                result.type = type;
+                result.type = resultType == type.program ? type : ExprType(resultType);
                 result.opcode = opcode;
                 result.column = node.column;
                 for (const TypedNodeId operand : *typed) {
                     result.operands[result.operandCount++] = operand;
                 }
                 return Emit(std::move(result));
+            }
+
+            /// `vec3(a, b, c)`: one argument per component, each of the component's type; a literal takes it
+            TypedResult CheckPack(const ExprNode& node, const ExprFunction& function, const Vector<ExprNodeId>& arguments, const String& subject) {
+                const ExprType componentType = ComponentsOf(function.target).type;
+                TypedNode result;
+                result.kind = TypedNodeKind::Operation;
+                result.type = function.target;
+                result.opcode = OpcodeOf(ProgramOperation::Pack, function.target);
+                result.column = node.column;
+                for (size_t i = 0; i < arguments.size(); ++i) {
+                    const TypedResult operand = Check(arguments[i], componentType);
+                    if (!operand.has_value()) {
+                        return operand;
+                    }
+                    if (!(TypeOf(*operand) == componentType)) {
+                        const String convert = IsNumberType(TypeOf(*operand).program) ? Format("; convert it with {}(x)", ProgramTypeName(componentType.program)) : String();
+                        return Refuse(_ast[arguments[i]].column,
+                                      Format("{} takes {} arguments, but argument {} is {}{}", subject, DescribeExprType(componentType), i + 1, Typed(TypeOf(*operand)), convert));
+                    }
+                    result.operands[result.operandCount++] = *operand;
+                }
+                return Emit(std::move(result));
+            }
+
+            /// `lerp(a, b, t)`: two values of one type and the weight, a float (the type itself for a float or a double); `t` is not clamped, a `quat` is blended by `Slerp`
+            TypedResult CheckBlend(const ExprNode& node, const Vector<ExprNodeId>& arguments, Optional<ExprType> hint, const String& subject) {
+                const bool pairIsUntyped = IsUntypedNumber(arguments[0]) && IsUntypedNumber(arguments[1]);
+                Optional<ExprType> pairHint = hint;
+                Optional<TypedNodeId> weight;
+                if (pairIsUntyped && _hasName[arguments[2]]) {
+                    // The weight tells which number the literals beside it are
+                    const TypedResult named = Check(arguments[2], std::nullopt);
+                    if (!named.has_value()) {
+                        return named;
+                    }
+                    weight = *named;
+                    if (IsFloatType(TypeOf(*named).program)) {
+                        pairHint = TypeOf(*named);
+                    }
+                } else if (pairIsUntyped && !(hint.has_value() && IsNumberType(hint->program)) && ContainsFloatLiteral(arguments[2])) {
+                    pairHint = ProgramType::Float;
+                }
+                const auto pair = CheckSameType({arguments[0], arguments[1]}, pairHint, subject);
+                if (!pair.has_value()) {
+                    return std::unexpected(pair.error());
+                }
+                const ExprType type = TypeOf((*pair)[0]);
+                const Opcode opcode = OpcodeOf(ProgramOperation::Lerp, type.program);
+                if (opcode == Opcode::Invalid) {
+                    return NotDefined(node.column, subject, ProgramOperation::Lerp, type);
+                }
+                const ExprType weightType = IsFloatType(type.program) ? type : ExprType(ProgramType::Float);
+                if (!weight.has_value()) {
+                    const TypedResult checked = Check(arguments[2], weightType);
+                    if (!checked.has_value()) {
+                        return checked;
+                    }
+                    weight = *checked;
+                }
+                if (!(TypeOf(*weight) == weightType)) {
+                    const uint32_t column = _ast[arguments[2]].column;
+                    if (IsFloatType(type.program)) {
+                        return Refuse(column, Format("{} needs operands of one type, but they are {} and {}: there is no implicit conversion between types{}", subject, DescribeExprType(type),
+                                                     DescribeExprType(TypeOf(*weight)), ConvertHint(TypeOf(*weight), type)));
+                    }
+                    return Refuse(column, Format("{} needs a float as its third argument when it blends {}, but it is {}{}", subject, DescribeExprType(type), Typed(TypeOf(*weight)),
+                                                 ConvertHint(TypeOf(*weight), weightType)));
+                }
+                return EmitOperation(opcode, type, node.column, {(*pair)[0], (*pair)[1], *weight});
             }
 
             TypedResult CheckSelect(const ExprNode& node, const Vector<ExprNodeId>& arguments, Optional<ExprType> hint, const String& subject) {

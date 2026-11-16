@@ -5,6 +5,7 @@
 #include <BECore/Values/Programs/ExprChecker.h>
 #include <BECore/Values/Programs/ExprFunctions.h>
 #include <BECore/Values/Programs/ExprParser.h>
+#include <BECore/Values/Programs/Kernels.h>
 #include <Common/Printers.h>
 #include <cstring>
 #include <gtest/gtest.h>
@@ -557,7 +558,7 @@ namespace BECore::Tests {
     TEST(ProgramCheckerTest, AFieldOfAnotherTypeIsNamedWithItsTypeAndWhatAFormulaReads) {
         const CheckerContext context;
         Refused(context.declaration, "caster.count", ProgramType::Int32, 1, {"caster.count", "uint32", "int, int64, float, double, vec2, vec3, vec4, ivec2, quat, color, enum or string"});
-        Refused(context.declaration, "caster.velocity.x + 1", ProgramType::Float, 1, {"caster.velocity.x"});
+        Refused(context.declaration, "caster.spawn.x + 1", ProgramType::Float, 1, {"caster.spawn.x"});
         Refused(context.declaration, "caster.span", ProgramType::Int32, 1, {"ValueSpan", "reads only fields of the types"});
         Refused(context.declaration, "caster.bounds", ProgramType::Int32, 1, {"Rect", "reads only fields of the types"});
         Refused(context.declaration, "caster.spawn", ProgramType::Int32, 1, {"ValuePoint"});
@@ -743,7 +744,7 @@ namespace BECore::Tests {
     TEST(ProgramCheckerTest, ListElementsAndMembersNeverReachTheChecker) {
         EXPECT_FALSE(ParseExpression("caster.buffs[0]").has_value()) << "an index is refused by the lexer";
         const CheckerContext context;
-        Refused(context.declaration, "(caster.attack).x", ProgramType::Int32, 16, {"'.x'", "no type has components"});
+        Refused(context.declaration, "(caster.attack).x", ProgramType::Int32, 16, {"'.x'", "an int has no components"});
         Refused(context.declaration, "min(caster.attack, 1).y + 1", ProgramType::Int32, 22, {"'.y'"});
     }
 
@@ -757,6 +758,365 @@ namespace BECore::Tests {
         Refused(context.declaration, logic, ProgramType::Bool, ColumnOf(logic, "caster.attack"), {"right one is an int"});
         const String zero = "caster.attack + caster.attack / 0";
         Refused(context.declaration, zero, ProgramType::Int32, ColumnOf(zero, "0"), {"division"});
+    }
+
+    // Components, Pack, mixed pairs and the vector functions
+
+    namespace {
+
+        struct ComponentRow {
+            ProgramType type;
+            StringView path;
+            Array<StringView, 4> names;
+            uint32_t count;
+        };
+
+        const ComponentRow kComponentRows[] = {{ProgramType::Vec2, "caster.position", {"x", "y", "", ""}, 2},  {ProgramType::IVec2, "caster.cell", {"x", "y", "", ""}, 2},
+                                               {ProgramType::Vec3, "caster.velocity", {"x", "y", "z", ""}, 3}, {ProgramType::Vec4, "caster.plane", {"x", "y", "z", "w"}, 4},
+                                               {ProgramType::Quat, "caster.facing", {"x", "y", "z", "w"}, 4},  {ProgramType::Color, "caster.tint", {"r", "g", "b", "a"}, 4},
+                                               {ProgramType::Vec3, "cast.target", {"x", "y", "z", ""}, 3},     {ProgramType::Vec2, "caster.span.offset", {"x", "y", "", ""}, 2}};
+
+        /// The program type a component of @p type has: `int` for a `Color` channel and an `ivec2` component, else `float`
+        ProgramType ComponentTypeOf(ProgramType type) {
+            return type == ProgramType::IVec2 || type == ProgramType::Color ? ProgramType::Int32 : ProgramType::Float;
+        }
+
+        uint32_t ByteOffsetOfComponent(ProgramType type, uint32_t index) {
+            return type == ProgramType::Color ? index * static_cast<uint32_t>(sizeof(unsigned char)) : index * static_cast<uint32_t>(sizeof(float));
+        }
+
+        float FloatConstant(const TypedExpr& expr, TypedNodeId id) {
+            return ConstantOf<float>(expr[id]);
+        }
+
+    }  // namespace
+
+    TEST(ProgramCheckerTest, AComponentOfAFieldIsASlotAtTheComponentsOffsetAndAColorChannelAnExtract) {
+        const CheckerContext context;
+        for (const ComponentRow& row : kComponentRows) {
+            const auto whole = LinkSlot(context.declaration, row.path, DescriptorOf(row.type));
+            ASSERT_TRUE(whole.has_value()) << String(row.path).c_str();
+            for (uint32_t i = 0; i < row.count; ++i) {
+                const String text = Format("{}.{}", row.path, row.names[i]);
+                const ProgramType componentType = ComponentTypeOf(row.type);
+                const TypedExpr expr = Accepted(context.declaration, text, componentType);
+                if (row.type == ProgramType::Color) {
+                    ASSERT_EQ(expr.nodes.size(), 2U) << text.c_str();
+                    EXPECT_EQ(expr[0].kind, TypedNodeKind::Slot);
+                    EXPECT_EQ(expr[0].type, ProgramType::Color);
+                    EXPECT_EQ(expr[0].slot.offset, whole->offset);
+                    EXPECT_EQ(Root(expr).kind, TypedNodeKind::Operation);
+                    EXPECT_EQ(Root(expr).opcode, Opcode::ExtractColor);
+                    EXPECT_EQ(Root(expr).immediate, i) << text.c_str();
+                    continue;
+                }
+                ASSERT_EQ(expr.nodes.size(), 1U) << text.c_str();
+                EXPECT_EQ(Root(expr).kind, TypedNodeKind::Slot) << text.c_str();
+                EXPECT_EQ(Root(expr).path, text) << "the path stays as written";
+                EXPECT_EQ(Root(expr).slot.level, whole->level);
+                EXPECT_EQ(Root(expr).slot.offset, whole->offset + ByteOffsetOfComponent(row.type, i)) << text.c_str();
+            }
+        }
+        // The offsets are the members' own
+        const auto velocity = LinkSlot(context.declaration, "caster.velocity", DescribeType<Vec3>());
+        ASSERT_TRUE(velocity.has_value());
+        EXPECT_EQ(Root(Accepted(context.declaration, "caster.velocity.y", ProgramType::Float)).slot.offset, velocity->offset + offsetof(Vec3, y));
+        const auto plane = LinkSlot(context.declaration, "caster.plane", DescribeType<Vec4>());
+        EXPECT_EQ(Root(Accepted(context.declaration, "caster.plane.w", ProgramType::Float)).slot.offset, plane->offset + offsetof(Vec4, w));
+        const auto cell = LinkSlot(context.declaration, "caster.cell", DescribeType<IVec2>());
+        EXPECT_EQ(Root(Accepted(context.declaration, "caster.cell.y", ProgramType::Int32)).slot.offset, cell->offset + offsetof(IVec2, y));
+        const auto offset = LinkSlot(context.declaration, "caster.span.offset", DescribeType<Vec2>());
+        EXPECT_EQ(Root(Accepted(context.declaration, "caster.span.offset.y", ProgramType::Float)).slot.offset, offset->offset + offsetof(Vec2, y));
+    }
+
+    TEST(ProgramCheckerTest, AComponentOfAnExpressionIsAnExtractWithItsIndex) {
+        const CheckerContext context;
+        for (const ComponentRow& row : kComponentRows) {
+            for (uint32_t i = 0; i < row.count; ++i) {
+                const String text = Format("({}).{}", row.path, row.names[i]);
+                const TypedExpr expr = Accepted(context.declaration, text, ComponentTypeOf(row.type));
+                EXPECT_EQ(Root(expr).kind, TypedNodeKind::Operation) << text.c_str();
+                EXPECT_EQ(Root(expr).opcode, OpcodeOf(ProgramOperation::Extract, row.type)) << text.c_str();
+                EXPECT_EQ(Root(expr).immediate, i) << text.c_str();
+                EXPECT_EQ(Root(expr).operandCount, 1U);
+                EXPECT_EQ(expr[Root(expr).operands[0]].type, row.type);
+            }
+        }
+        const TypedExpr blended = Accepted(context.declaration, "lerp(caster.velocity, cast.target, 0.5).y", ProgramType::Float);
+        EXPECT_EQ(Root(blended).opcode, Opcode::ExtractVec3);
+        EXPECT_EQ(Root(blended).immediate, 1U);
+        const TypedExpr sum = Accepted(context.declaration, "(caster.velocity + cast.target).z + 1", ProgramType::Float);
+        EXPECT_EQ(Root(sum).opcode, Opcode::AddFloat);
+        const TypedExpr product = Accepted(context.declaration, "caster.velocity.x * length(cast.target)", ProgramType::Float);
+        EXPECT_EQ(Root(product).opcode, Opcode::MulFloat);
+    }
+
+    TEST(ProgramCheckerTest, ANameThatIsNotAComponentSaysWhatTheTypeHas) {
+        const CheckerContext context;
+        Refused(context.declaration, "caster.velocity.q", ProgramType::Float, 1, {"'.q' is not a component of vec3", "it has x, y, z"});
+        Refused(context.declaration, "caster.plane.v", ProgramType::Float, 1, {"not a component of vec4", "x, y, z, w"});
+        Refused(context.declaration, "caster.tint.x", ProgramType::Int32, 1, {"not a component of color", "r, g, b, a"});
+        Refused(context.declaration, "caster.position.z", ProgramType::Float, 1, {"not a component of vec2", "x, y"});
+        Refused(context.declaration, "(caster.velocity).w", ProgramType::Float, 18, {"'.w'", "x, y, z"});
+        Refused(context.declaration, "caster.attack.x", ProgramType::Int32, 1, {"'.x'", "an int has no components", "vec2, vec3, vec4, ivec2, quat or color"});
+        Refused(context.declaration, "caster.velocity.x.y", ProgramType::Float, 1, {"caster.velocity.x.y", "no members"});
+        Refused(context.declaration, "caster.element.x", ProgramType::Int32, 1, {"'.x'", "an enum {Fire, Water, Earth} has no components"});
+        Refused(context.declaration, "caster.title.length", ProgramType::Int32, 1, {"a string has no components"});
+        Refused(context.declaration, "(1 < 2).x", ProgramType::Float, 8, {"a bool has no components"});
+        // A path that is wrong before its last segment keeps the message of the whole path
+        Refused(context.declaration, "caster.nope.x", ProgramType::Float, 1, {"caster.nope.x", "has no field 'nope'"});
+        Refused(context.declaration, "caster.span.nope.x", ProgramType::Float, 1, {"nope"});
+        Refused(context.declaration, "hero.velocity.x", ProgramType::Float, 1, {"unknown level 'hero'"});
+        Refused(context.declaration, "caster.span.low.x", ProgramType::Float, 1, {"an int has no components"});
+        Refused(context.declaration, "behind.spans.x", ProgramType::Float, 1, {"behind.spans.x"});
+    }
+
+    TEST(ProgramCheckerTest, EveryPackBuildsItsTypeFromTheComponentsInOrder) {
+        const CheckerContext context;
+        struct Row {
+            StringView text;
+            ProgramType type;
+            uint32_t count;
+        };
+        const Row rows[] = {{"vec2(1, 2)", ProgramType::Vec2, 2},   {"vec3(1, 2, 3)", ProgramType::Vec3, 3},    {"vec4(1, 2, 3, 4)", ProgramType::Vec4, 4},
+                            {"ivec2(1, 2)", ProgramType::IVec2, 2}, {"quat(0, 0, 0, 1)", ProgramType::Quat, 4}, {"color(255, 0, 0, 255)", ProgramType::Color, 4}};
+        for (const Row& row : rows) {
+            const TypedExpr expr = Accepted(context.declaration, row.text, row.type);
+            EXPECT_EQ(Root(expr).opcode, OpcodeOf(ProgramOperation::Pack, row.type)) << String(row.text).c_str();
+            ASSERT_EQ(Root(expr).operandCount, row.count) << String(row.text).c_str();
+            for (uint32_t i = 0; i < row.count; ++i) {
+                EXPECT_EQ(expr[Root(expr).operands[i]].type, ComponentTypeOf(row.type)) << String(row.text).c_str();
+            }
+        }
+        const TypedExpr three = Accepted(context.declaration, "vec3(1, 2, 3)", ProgramType::Vec3);
+        EXPECT_EQ(FloatConstant(three, Root(three).operands[2]), 3.0f);
+        const TypedExpr mixed = Accepted(context.declaration, "vec3(caster.speed, cast.power * 2, 1.5)", ProgramType::Vec3);
+        EXPECT_EQ(Root(mixed).operandCount, 3U);
+        const TypedExpr colored = Accepted(context.declaration, "color(caster.attack, cast.level * 2, 0, 255)", ProgramType::Color);
+        EXPECT_EQ(Root(colored).operandCount, 4U);
+        const TypedExpr nested = Accepted(context.declaration, "vec4(vec2(1, 2).x, 0, 0, vec3(1, 2, 3).z)", ProgramType::Vec4);
+        EXPECT_EQ(Root(nested).operandCount, 4U);
+        EXPECT_EQ(Root(Accepted(context.declaration, "vec3(1, 2, 3).y", ProgramType::Float)).opcode, Opcode::ExtractVec3);
+    }
+
+    TEST(ProgramCheckerTest, APackWithTheWrongArgumentsSaysWhatItNeeds) {
+        const CheckerContext context;
+        Refused(context.declaration, "vec3(1, 2)", ProgramType::Vec3, 1, {"'vec3' takes 3 arguments", "2 are given"});
+        Refused(context.declaration, "quat(1, 2, 3, 4, 5)", ProgramType::Quat, 1, {"'quat' takes 4 arguments", "5 are given"});
+        Refused(context.declaration, "vec3()", ProgramType::Vec3, 1, {"takes 3 arguments", "0 are given"});
+        Refused(context.declaration, "vec3(caster.attack, 1, 2)", ProgramType::Vec3, 6, {"'vec3' takes float arguments", "argument 1 is an int", "float(x)"});
+        Refused(context.declaration, "ivec2(1, caster.speed)", ProgramType::IVec2, 10, {"takes int arguments", "argument 2 is a float", "int(x)"});
+        Refused(context.declaration, "vec2(caster.alive, 1)", ProgramType::Vec2, 6, {"argument 1 is a bool"});
+        Refused(context.declaration, "vec3(caster.velocity, 1, 2)", ProgramType::Vec3, 6, {"argument 1 is a vec3"});
+        Refused(context.declaration, "ivec2(1.5, 2)", ProgramType::IVec2, 7, {"1.5", "float literal", "an int is needed"});
+        Refused(context.declaration, "color(1, 2, 3, 0.5)", ProgramType::Color, 16, {"0.5", "float literal"});
+        Refused(context.declaration, "vec3(1, 2, 3)", ProgramType::Vec2, 1, {"the formula is a vec3", "vec2"});
+        Refused(context.declaration, "vec3", ProgramType::Vec3, 1, {"'vec3' is a function"});
+    }
+
+    TEST(ProgramCheckerTest, TwoTypesOfAMixedPairUseItsRow) {
+        const CheckerContext context;
+        struct Row {
+            StringView text;
+            Opcode opcode;
+            ProgramType type;
+        };
+        const Row rows[] = {{"caster.velocity * cast.power", Opcode::MulVec3Float, ProgramType::Vec3}, {"cast.power * caster.velocity", Opcode::MulFloatVec3, ProgramType::Vec3},
+                            {"caster.velocity / cast.power", Opcode::DivVec3Float, ProgramType::Vec3}, {"caster.position * cast.power", Opcode::MulVec2Float, ProgramType::Vec2},
+                            {"caster.plane * cast.power", Opcode::MulVec4Float, ProgramType::Vec4},    {"cast.power * caster.plane", Opcode::MulFloatVec4, ProgramType::Vec4},
+                            {"caster.plane / cast.power", Opcode::DivVec4Float, ProgramType::Vec4},    {"caster.cell * cast.level", Opcode::MulIVec2Int32, ProgramType::IVec2},
+                            {"cast.level * caster.cell", Opcode::MulInt32IVec2, ProgramType::IVec2},   {"caster.facing * cast.target", Opcode::MulQuatVec3, ProgramType::Vec3}};
+        for (const Row& row : rows) {
+            const TypedExpr expr = Accepted(context.declaration, row.text, row.type);
+            EXPECT_EQ(Root(expr).opcode, row.opcode) << String(row.text).c_str();
+            EXPECT_EQ(Root(expr).operandCount, 2U);
+        }
+        // The pair in the order of the text: the left operand is the first one whichever was checked first
+        const TypedExpr scaled = Accepted(context.declaration, "cast.power * caster.velocity", ProgramType::Vec3);
+        EXPECT_EQ(scaled[Root(scaled).operands[1]].path, "caster.velocity");
+        EXPECT_EQ(scaled[Root(scaled).operands[0]].path, "cast.power");
+        // Same-type rows are not mixed
+        EXPECT_EQ(Root(Accepted(context.declaration, "caster.facing * caster.facing", ProgramType::Quat)).opcode, Opcode::MulQuat);
+        EXPECT_EQ(Root(Accepted(context.declaration, "caster.velocity + cast.target", ProgramType::Vec3)).opcode, Opcode::AddVec3);
+    }
+
+    TEST(ProgramCheckerTest, ALiteralBesideAVectorTakesTheScalarOfThePair) {
+        const CheckerContext context;
+        struct Row {
+            StringView text;
+            Opcode opcode;
+            ProgramType type;
+            uint32_t literalOperand;
+        };
+        const Row rows[] = {{"caster.velocity * 2", Opcode::MulVec3Float, ProgramType::Vec3, 1},       {"2 * caster.velocity", Opcode::MulFloatVec3, ProgramType::Vec3, 0},
+                            {"caster.velocity / 2", Opcode::DivVec3Float, ProgramType::Vec3, 1},       {"caster.velocity * 2.5", Opcode::MulVec3Float, ProgramType::Vec3, 1},
+                            {"caster.cell * 2", Opcode::MulIVec2Int32, ProgramType::IVec2, 1},         {"2 * caster.cell", Opcode::MulInt32IVec2, ProgramType::IVec2, 0},
+                            {"caster.velocity * (1 + 2)", Opcode::MulVec3Float, ProgramType::Vec3, 1}, {"(1 + 2) * caster.velocity", Opcode::MulFloatVec3, ProgramType::Vec3, 0},
+                            {"caster.velocity * -2", Opcode::MulVec3Float, ProgramType::Vec3, 1}};
+        for (const Row& row : rows) {
+            const TypedExpr expr = Accepted(context.declaration, row.text, row.type);
+            EXPECT_EQ(Root(expr).opcode, row.opcode) << String(row.text).c_str();
+            const TypedNode& literal = expr[Root(expr).operands[row.literalOperand]];
+            EXPECT_EQ(literal.type, row.type == ProgramType::IVec2 ? ProgramType::Int32 : ProgramType::Float) << String(row.text).c_str();
+        }
+        EXPECT_EQ(FloatConstant(Accepted(context.declaration, "caster.velocity * 2", ProgramType::Vec3), 1), 2.0f);
+        // A constant vector beside a literal: the vector is typed by its own call
+        const TypedExpr folded = Accepted(context.declaration, "vec3(1, 2, 3) * 2", ProgramType::Vec3);
+        EXPECT_EQ(Root(folded).opcode, Opcode::MulVec3Float);
+        EXPECT_EQ(Root(Accepted(context.declaration, "2 * vec3(1.5, 2, 3)", ProgramType::Vec3)).opcode, Opcode::MulFloatVec3);
+        // Beside an addition a literal is not a scalar of the pair
+        Refused(context.declaration, "caster.velocity + 1", ProgramType::Vec3, 19, {"vec3 and int", "no implicit conversion"});
+        Refused(context.declaration, "caster.cell * 2.5", ProgramType::IVec2, 15, {"2.5", "float literal", "an int is needed"});
+    }
+
+    TEST(ProgramCheckerTest, APairWithoutARowIsRefusedAndListsTheMixedPairs) {
+        const CheckerContext context;
+        const String vectorByInt = "caster.velocity * caster.attack";
+        Refused(context.declaration, vectorByInt, ProgramType::Vec3, ColumnOf(vectorByInt, "caster.attack"),
+                {"'*'", "vec3 and int", "no implicit conversion", "mixed pairs", "vec3 * float", "float * vec3", "ivec2 * int", "quat * vec3"});
+        // A rotation turns a vector, not the other way round
+        const String backwards = "cast.target * caster.facing";
+        Refused(context.declaration, backwards, ProgramType::Vec3, ColumnOf(backwards, "caster.facing"), {"vec3 and quat", "quat * vec3"});
+        Refused(context.declaration, "caster.velocity * caster.position", ProgramType::Vec3, 19, {"vec3 and vec2"});
+        Refused(context.declaration, "caster.cell * cast.power", ProgramType::IVec2, 15, {"ivec2 and float"});
+        Refused(context.declaration, "caster.velocity / caster.velocity", ProgramType::Vec3, 17, {"'/'", "not defined for vec3", "mixed pairs", "vec3 / float"});
+        Refused(context.declaration, "caster.velocity * caster.velocity", ProgramType::Vec3, 17, {"'*'", "not defined for vec3", "int, int64, float, double or quat"});
+        Refused(context.declaration, "caster.cell / 2", ProgramType::IVec2, 13, {"'/'", "not defined for ivec2", "int, int64, float or double", "vec4 / float"});
+        Refused(context.declaration, "caster.velocity % 2.0", ProgramType::Vec3, 17, {"'%'", "not defined for vec3", "int or int64"});
+        Refused(context.declaration, "caster.position / 2", ProgramType::Vec2, 17, {"'/'", "not defined for vec2"});
+        Refused(context.declaration, "caster.tint + caster.tint", ProgramType::Color, 13, {"'+'", "not defined for color"});
+        Refused(context.declaration, "caster.facing + caster.facing", ProgramType::Quat, 15, {"'+'", "not defined for quat"});
+        Refused(context.declaration, "caster.title + caster.title", ProgramType::String, 14, {"'+'", "not defined for string"});
+        Refused(context.declaration, "caster.velocity < caster.velocity", ProgramType::Bool, 17, {"'<'", "not defined for vec3", "int, int64, float or double"});
+        Refused(context.declaration, "caster.tint * 2", ProgramType::Color, 13, {"'*'", "not defined for color"});
+    }
+
+    TEST(ProgramCheckerTest, DotLengthAndNormalizeTakeTheResultTypeFromTheirRow) {
+        const CheckerContext context;
+        const TypedExpr dot = Accepted(context.declaration, "dot(caster.velocity, cast.target)", ProgramType::Float);
+        EXPECT_EQ(Root(dot).opcode, Opcode::DotVec3);
+        EXPECT_EQ(Root(dot).type, ProgramType::Float);
+        EXPECT_EQ(Root(Accepted(context.declaration, "dot(caster.plane, caster.plane)", ProgramType::Float)).opcode, Opcode::DotVec4);
+        EXPECT_EQ(Root(Accepted(context.declaration, "dot(caster.facing, caster.facing)", ProgramType::Float)).opcode, Opcode::DotQuat);
+        const TypedExpr length = Accepted(context.declaration, "length(cast.target - caster.velocity)", ProgramType::Float);
+        EXPECT_EQ(Root(length).opcode, Opcode::LengthVec3);
+        EXPECT_EQ(length[Root(length).operands[0]].type, ProgramType::Vec3);
+        EXPECT_EQ(Root(Accepted(context.declaration, "length(caster.plane)", ProgramType::Float)).opcode, Opcode::LengthVec4);
+        EXPECT_EQ(Root(Accepted(context.declaration, "normalize(caster.velocity)", ProgramType::Vec3)).opcode, Opcode::NormalizeVec3);
+        EXPECT_EQ(Root(Accepted(context.declaration, "normalize(caster.plane)", ProgramType::Vec4)).opcode, Opcode::NormalizeVec4);
+        EXPECT_EQ(Root(Accepted(context.declaration, "normalize(caster.facing)", ProgramType::Quat)).opcode, Opcode::NormalizeQuat);
+        // A float result goes on as a float
+        EXPECT_EQ(Root(Accepted(context.declaration, "length(cast.target) * 2", ProgramType::Float)).opcode, Opcode::MulFloat);
+        Refused(context.declaration, "length(cast.target)", ProgramType::Vec3, 1, {"the formula is a float", "vec3"});
+        Refused(context.declaration, "dot(caster.position, caster.position)", ProgramType::Float, 1, {"'dot'", "not defined for vec2", "vec3, vec4 or quat"});
+        Refused(context.declaration, "length(caster.position)", ProgramType::Float, 1, {"'length'", "not defined for vec2", "vec3 or vec4"});
+        Refused(context.declaration, "length(caster.facing)", ProgramType::Float, 1, {"'length'", "not defined for quat"});
+        Refused(context.declaration, "normalize(caster.position)", ProgramType::Vec2, 1, {"'normalize'", "not defined for vec2", "vec3, vec4 or quat"});
+        Refused(context.declaration, "normalize(caster.attack)", ProgramType::Int32, 1, {"'normalize'", "not defined for int"});
+        Refused(context.declaration, "dot(caster.velocity, caster.plane)", ProgramType::Float, 22, {"'dot'", "vec3 and vec4"});
+        Refused(context.declaration, "dot(caster.velocity)", ProgramType::Float, 1, {"'dot' takes 2 arguments", "1 is given"});
+    }
+
+    TEST(ProgramCheckerTest, LerpTakesAWeightThatIsAFloatForAVectorAndTheTypeForAScalar) {
+        const CheckerContext context;
+        struct Row {
+            StringView text;
+            Opcode opcode;
+            ProgramType type;
+        };
+        const Row rows[] = {{"lerp(caster.speed, caster.speed, 0.5)", Opcode::LerpFloat, ProgramType::Float},
+                            {"lerp(caster.precise, caster.precise, 0.5)", Opcode::LerpDouble, ProgramType::Double},
+                            {"lerp(caster.position, caster.position, 0.5)", Opcode::LerpVec2, ProgramType::Vec2},
+                            {"lerp(caster.velocity, cast.target, 0.5)", Opcode::LerpVec3, ProgramType::Vec3},
+                            {"lerp(caster.plane, caster.plane, cast.power)", Opcode::LerpVec4, ProgramType::Vec4},
+                            {"lerp(caster.tint, color(0, 0, 0, 255), 0.5)", Opcode::LerpColor, ProgramType::Color},
+                            {"lerp(caster.facing, quat(0, 0, 0, 1), cast.power)", Opcode::LerpQuat, ProgramType::Quat},
+                            {"lerp(caster.velocity, cast.target, 1)", Opcode::LerpVec3, ProgramType::Vec3},
+                            {"lerp(caster.precise, 1, 0.25)", Opcode::LerpDouble, ProgramType::Double},
+                            {"lerp(0, 10, caster.speed)", Opcode::LerpFloat, ProgramType::Float},
+                            {"lerp(0, 10, caster.precise)", Opcode::LerpDouble, ProgramType::Double}};
+        for (const Row& row : rows) {
+            const TypedExpr expr = Accepted(context.declaration, row.text, row.type);
+            EXPECT_EQ(Root(expr).opcode, row.opcode) << String(row.text).c_str();
+            ASSERT_EQ(Root(expr).operandCount, 3U) << String(row.text).c_str();
+        }
+        const TypedExpr weight = Accepted(context.declaration, "lerp(caster.velocity, cast.target, 1)", ProgramType::Vec3);
+        EXPECT_EQ(weight[Root(weight).operands[2]].type, ProgramType::Float);
+        Refused(context.declaration, "lerp(caster.cell, caster.cell, 0.5)", ProgramType::IVec2, 1, {"'lerp'", "not defined for ivec2", "float, double"});
+        Refused(context.declaration, "lerp(caster.attack, caster.attack, 0.5)", ProgramType::Int32, 1, {"'lerp'", "not defined for int"});
+        Refused(context.declaration, "lerp(caster.velocity, cast.target, caster.precise)", ProgramType::Vec3, 36, {"third argument", "blends vec3", "a double", "float(x)"});
+        Refused(context.declaration, "lerp(caster.velocity, cast.target, caster.attack)", ProgramType::Vec3, 36, {"third argument", "an int"});
+        Refused(context.declaration, "lerp(caster.speed, caster.speed, caster.precise)", ProgramType::Float, 34, {"'lerp'", "float and double"});
+        Refused(context.declaration, "lerp(caster.velocity, caster.position, 0.5)", ProgramType::Vec3, 23, {"'lerp'", "vec3 and vec2"});
+    }
+
+    TEST(ProgramCheckerTest, EveryOperatorAndFunctionIsAcceptedExactlyForTheTypesThatHaveARow) {
+        const CheckerContext context;
+        struct Field {
+            ProgramType type;
+            StringView path;
+        };
+        const Field fields[] = {{ProgramType::Bool, "caster.alive"},     {ProgramType::Int32, "caster.attack"},  {ProgramType::Int64, "caster.score"},   {ProgramType::Float, "caster.speed"},
+                                {ProgramType::Double, "caster.precise"}, {ProgramType::Vec2, "caster.position"}, {ProgramType::Vec3, "caster.velocity"}, {ProgramType::Vec4, "caster.plane"},
+                                {ProgramType::IVec2, "caster.cell"},     {ProgramType::Quat, "caster.facing"},   {ProgramType::Color, "caster.tint"},    {ProgramType::Enum, "caster.element"},
+                                {ProgramType::String, "caster.title"}};
+        // Every ProgramOperation that has a text form, as the operator or the function that spells it
+        struct Spelling {
+            ProgramOperation operation;
+            StringView symbol;
+            uint32_t arguments;
+            bool infix;
+        };
+        const Spelling spellings[] = {{ProgramOperation::Add, "+", 2, true},          {ProgramOperation::Sub, "-", 2, true},
+                                      {ProgramOperation::Mul, "*", 2, true},          {ProgramOperation::Div, "/", 2, true},
+                                      {ProgramOperation::Mod, "%", 2, true},          {ProgramOperation::Eq, "==", 2, true},
+                                      {ProgramOperation::Ne, "!=", 2, true},          {ProgramOperation::Lt, "<", 2, true},
+                                      {ProgramOperation::Le, "<=", 2, true},          {ProgramOperation::Gt, ">", 2, true},
+                                      {ProgramOperation::Ge, ">=", 2, true},          {ProgramOperation::And, "&&", 2, true},
+                                      {ProgramOperation::Or, "||", 2, true},          {ProgramOperation::Neg, "-", 1, false},
+                                      {ProgramOperation::Not, "!", 1, false},         {ProgramOperation::Abs, "abs", 1, false},
+                                      {ProgramOperation::Min, "min", 2, false},       {ProgramOperation::Max, "max", 2, false},
+                                      {ProgramOperation::Clamp, "clamp", 3, false},   {ProgramOperation::Floor, "floor", 1, false},
+                                      {ProgramOperation::Ceil, "ceil", 1, false},     {ProgramOperation::Round, "round", 1, false},
+                                      {ProgramOperation::Sqrt, "sqrt", 1, false},     {ProgramOperation::Dot, "dot", 2, false},
+                                      {ProgramOperation::Length, "length", 1, false}, {ProgramOperation::Normalize, "normalize", 1, false}};
+        for (const Spelling& spelling : spellings) {
+            for (const Field& field : fields) {
+                String text;
+                if (spelling.infix) {
+                    text = Format("{} {} {}", field.path, spelling.symbol, field.path);
+                } else if (spelling.arguments == 1 && (spelling.operation == ProgramOperation::Neg || spelling.operation == ProgramOperation::Not)) {
+                    text = Format("{}{}", spelling.symbol, field.path);
+                } else {
+                    text = Format("{}(", spelling.symbol);
+                    for (uint32_t i = 0; i < spelling.arguments; ++i) {
+                        text += Format("{}{}", i == 0 ? "" : ", ", field.path);
+                    }
+                    text += ")";
+                }
+                const Opcode opcode = OpcodeOf(spelling.operation, field.type);
+                if (opcode != Opcode::Invalid) {
+                    const ProgramType result = *ResultTypeOf(opcode);
+                    const TypedExpr expr = Accepted(context.declaration, text, result);
+                    EXPECT_EQ(Root(expr).opcode, opcode) << text.c_str();
+                    continue;
+                }
+                const auto refused = Check(context.declaration, text, DescriptorOf(field.type));
+                ASSERT_FALSE(refused.has_value()) << text.c_str() << " has no row and must be refused";
+                const String& message = refused.error().message;
+                EXPECT_TRUE(Contains(message, spelling.symbol)) << text.c_str() << ": " << message.c_str();
+                EXPECT_TRUE(Contains(message, ProgramTypeName(field.type))) << text.c_str() << ": " << message.c_str();
+                const bool logic = spelling.operation == ProgramOperation::And || spelling.operation == ProgramOperation::Or || spelling.operation == ProgramOperation::Not;
+                if (!logic) {
+                    EXPECT_TRUE(Contains(message, "it works on")) << text.c_str() << ": " << message.c_str();
+                    for (const ProgramType type : EnumUtils<ProgramType>::Values()) {
+                        if (OpcodeOf(spelling.operation, type) != Opcode::Invalid) {
+                            EXPECT_TRUE(Contains(message, ProgramTypeName(type))) << text.c_str() << ": " << message.c_str() << " does not list " << String(ProgramTypeName(type)).c_str();
+                        }
+                    }
+                }
+            }
+        }
     }
 
 }  // namespace BECore::Tests
