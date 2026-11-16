@@ -170,6 +170,32 @@ namespace BECore::ValueTestData {
         BE_REFLECT_FIELD Value<Vec3> aim = Vec3{9.0f, 9.0f, 9.0f};
     };
 
+    /// A document whose fields are written as formulas (`expr`): one field of each type a program computes, and a `Vec3` that refuses it in this stage; the defaults are not what the tests load
+    struct ValueFormulaDocument {
+        BE_CLASS(ValueFormulaDocument)
+
+        BE_REFLECT_FIELD ContextDecl context;
+        BE_REFLECT_FIELD Value<int32_t> damage = 7;
+        BE_REFLECT_FIELD Value<int64_t> total = 7;
+        BE_REFLECT_FIELD Value<float> power = 1.0f;
+        BE_REFLECT_FIELD Value<double> precise = 1.0;
+        BE_REFLECT_FIELD Value<bool> ready = false;
+        BE_REFLECT_FIELD Value<Vec3> aim = Vec3{9.0f, 9.0f, 9.0f};
+    };
+
+    /// The document of a named config (`MakeFromConfig` needs a `RefCounted`): the same fields as `ValueFormulaDocument`
+    struct ValueFormulaConfigDocument : RefCounted {
+        BE_CLASS(ValueFormulaConfigDocument)
+
+        BE_REFLECT_FIELD ContextDecl context;
+        BE_REFLECT_FIELD Value<int32_t> damage = 7;
+        BE_REFLECT_FIELD Value<int64_t> total = 7;
+        BE_REFLECT_FIELD Value<float> power = 1.0f;
+        BE_REFLECT_FIELD Value<double> precise = 1.0;
+        BE_REFLECT_FIELD Value<bool> ready = false;
+        BE_REFLECT_FIELD Value<Vec3> aim = Vec3{9.0f, 9.0f, 9.0f};
+    };
+
     /// The mistake a document can make: a value is read before the element that declares what it reads
     struct ValueLateDocument {
         BE_CLASS(ValueLateDocument)

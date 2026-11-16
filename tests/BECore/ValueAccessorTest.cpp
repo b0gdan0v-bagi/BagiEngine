@@ -362,11 +362,12 @@ namespace BECore::Tests {
         ExpectDefaultDamage(attribute);
     }
 
-    TEST(ValueAccessorTest, TheKindEntryIsCheckedAndAProgramIsRefused) {
+    TEST(ValueAccessorTest, TheKindEntryIsCheckedAndAProgramNeedsAFormula) {
         const ValueWorld world;
         ValueSkill program;
         XmlLoad programLoad("", R"(<damage kind="Program" value="1"/>)", program, {.declaration = &world.declaration});
-        EXPECT_TRUE(HasText(programLoad.Reports(), "data-values-programs")) << programLoad.Reports().c_str();
+        EXPECT_TRUE(HasText(programLoad.Reports(), "State.damage.expr")) << programLoad.Reports().c_str();
+        EXPECT_TRUE(HasText(programLoad.Reports(), "needs the formula in 'expr'")) << programLoad.Reports().c_str();
         ExpectDefaultDamage(program);
 
         ValueSkill unknown;
@@ -636,7 +637,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(loaded.aim.IsConst());
     }
 
-    TEST(ValueAccessorTest, AProgramOrAnUnknownKindInBinaryIsAnErrorThatKeepsTheField) {
+    TEST(ValueAccessorTest, AProgramWithoutAFormulaOrAnUnknownKindInBinaryIsAnErrorThatKeepsTheField) {
         for (const StringView kind : {StringView("Program"), StringView("Formula")}) {
             BinarySerializer serializer;
             ASSERT_TRUE(serializer.BeginObject(kState));
