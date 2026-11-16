@@ -2,7 +2,7 @@
     "name": "todo-workers",
     "displayName": "Todo Workers",
     "description": "The parallel todo-loop workers of BagiEngine: their sessions, entries and branches, and the entries waiting for /todo-merge.",
-    "version": "0.27.0",
+    "version": "0.28.0",
     "publisher": "bagiengine",
     "license": "UNLICENSED",
     "private": true,
@@ -102,7 +102,7 @@
                 "todoWorkers.autoStartQueue": {
                     "type": "boolean",
                     "default": true,
-                    "description": "Start the next queued entry of a worker (worker.py queue) as soon as the worker is free: no session running, no uncommitted changes, its entry in review or none."
+                    "description": "Start the next queued entry of a worker (worker.py queue) as soon as the worker is free: no session running, no uncommitted changes, its entry in review or none, no todo/* branch held by a loop, no session started in the last 3 minutes, free for 45 s."
                 },
                 "todoWorkers.preset": {
                     "type": "string",
