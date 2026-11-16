@@ -2,6 +2,11 @@
 
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
+#include <BECore/GameManager/CoreManager.h>
+#include <BECore/Scene/Scene.h>
+#include <BECore/Scene/SceneManager.h>
+#include <BECore/Scene/SceneNode.h>
+#include <Widgets/SceneEditor/HierarchyModel.h>
 #include <chrono>
 
 namespace BECore {
@@ -10,6 +15,8 @@ namespace BECore {
 
         constexpr StringView kBusyCode = "artgen_busy";
         constexpr StringView kNoRunCode = "artgen_no_run";
+        constexpr StringView kNoVariantCode = "artgen_no_variant";
+        constexpr StringView kAcceptFailedCode = "artgen_accept_failed";
 
         double SteadySeconds() {
             const auto now = std::chrono::steady_clock::now().time_since_epoch();
@@ -46,6 +53,47 @@ namespace BECore {
 
     ArtGenSession::ArtGenSession(Clock clock) : _clock(clock ? std::move(clock) : Clock(&SteadySeconds)) {}
 
+    ArtGenSession::~ArtGenSession() = default;
+
+    void ArtGenSession::SetSelectedNode(IntrusivePtr<SceneNode> node) {
+        _selectedNode = std::move(node);
+    }
+
+    SceneNode* ArtGenSession::GetSelectedNodeIfAlive() const {
+        if (!_selectedNode) {
+            return nullptr;
+        }
+        Scene* scene = CoreManager::GetSceneManager().GetActiveScene();
+        return scene != nullptr ? HierarchyModel::FindNode(scene->GetRootNode(), _selectedNode.Get()) : nullptr;
+    }
+
+    const ArtGenVariant* ArtGenSession::FindVariant(int64_t seed) const {
+        for (const auto& variant : _run.variants) {
+            if (variant.seed == seed) {
+                return &variant;
+            }
+        }
+        return nullptr;
+    }
+
+    std::expected<Json, ControlError> ArtGenSession::Accept(int64_t seed, StringView sprite, bool useOnSelected) {
+        const ArtGenVariant* variant = FindVariant(seed);
+        if (variant == nullptr) {
+            return std::unexpected(ControlError{String(kNoVariantCode), Format("the current run has no image of seed {}", seed)});
+        }
+        if (_acceptor == nullptr) {
+            return std::unexpected(ControlError{String(kAcceptFailedCode), String("accepting is not available here")});
+        }
+        SceneNode* node = nullptr;
+        if (useOnSelected) {
+            node = GetSelectedNodeIfAlive();
+            if (node == nullptr) {
+                return std::unexpected(ControlError{String(kAcceptFailedCode), String("no node is selected in the scene editor")});
+            }
+        }
+        return _acceptor(*variant, sprite, node);
+    }
+
     void ArtGenSession::RegisterControl(ControlService& service) {
         if (_registeredOn == &service) {
             return;
@@ -57,6 +105,7 @@ namespace BECore {
         Register<&ArtGenSession::HandleDone>(service, *this, "artgen_done");
         Register<&ArtGenSession::HandleGenerate>(service, *this, "artgen_generate");
         Register<&ArtGenSession::HandleCancel>(service, *this, "artgen_cancel");
+        Register<&ArtGenSession::HandleAccept>(service, *this, "artgen_accept");
         service.RegisterHandler("artgen_state", [this](ControlCall& call) { call.Reply(StateJson()); });
 
         service.DescribeMethod("artgen_generate", ControlMethodInfo{"Asks the art generation service for images of a style preset of the game (the Generate panel's button)",
@@ -64,12 +113,16 @@ namespace BECore {
                                                                      ControlParamInfo{"subject", "string", true, "what to draw; replaces {subject} in the preset's prompt"},
                                                                      ControlParamInfo{"count", "integer", false, "images, 1 to 16 (default 4)"},
                                                                      ControlParamInfo{"seed", "integer", false, "the first seed; image i takes seed + i (default random)"}}});
+        service.DescribeMethod("artgen_accept", ControlMethodInfo{"Makes an image of the current run a sprite of the game: PNG into assets/artgen, TextureLibrary entry, reload",
+                                                                  {ControlParamInfo{"seed", "integer", true, "the seed of the image (artgen_state.run.variants)"},
+                                                                   ControlParamInfo{"sprite", "string", true, "the sprite name: 1 to 64 of A-Z a-z 0-9 _ -"},
+                                                                   ControlParamInfo{"useOnSelected", "boolean", false, "also put it on the node selected in the scene editor"}}});
         service.DescribeMethod("artgen_cancel", ControlMethodInfo{"Stops the run of the art generation service; the images made stay", {}});
         service.DescribeMethod("artgen_state", ControlMethodInfo{"The art generation service as the editor sees it, and the current run with its images", {}});
         service.DescribeMethod("artgen_poll", ControlMethodInfo{"Called by the art generation service: its status in, the game root and a new request or a cancel out", {}});
     }
 
-    std::expected<uint32_t, String> ArtGenSession::Request(StringView preset, StringView subject, int32_t count, Optional<int64_t> seed) {
+    std::expected<uint32_t, String> ArtGenSession::Request(StringView preset, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants) {
         if (IsBusy()) {
             return std::unexpected(String("a run is in work; cancel it or wait"));
         }
@@ -87,7 +140,13 @@ namespace BECore {
                 return std::unexpected(Format("the preset '{}' is broken: {}", preset, known.error));
             }
         }
+        Vector<ArtGenVariant> kept;
+        if (keepVariants) {
+            kept = std::move(_run.variants);
+        }
         _run = ArtGenRun{};
+        _run.variants = std::move(kept);
+        _run.keptVariants = static_cast<int32_t>(_run.variants.size());
         _run.id = _nextId++;
         _run.state = ArtGenRunState::Queued;
         _run.preset = String(preset);
@@ -256,6 +315,19 @@ namespace BECore {
         reply["id"] = *id;
         reply["serviceConnected"] = IsServiceConnected();
         return reply;
+    }
+
+    std::expected<Json, ControlError> ArtGenSession::HandleAccept(const Json& params) {
+        const auto seed = GetJsonInt(params, "seed");
+        const auto sprite = GetJsonString(params, "sprite");
+        if (!seed || !sprite) {
+            return std::unexpected(InvalidParams("'seed' (integer) and 'sprite' (string) are required"));
+        }
+        const Json* use = FindJsonMember(params, "useOnSelected");
+        if (use != nullptr && !use->is_boolean()) {
+            return std::unexpected(InvalidParams("'useOnSelected' must be a boolean"));
+        }
+        return Accept(*seed, *sprite, use != nullptr && use->get<bool>());
     }
 
     std::expected<Json, ControlError> ArtGenSession::HandleCancel(const Json& /*params*/) {

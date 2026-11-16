@@ -5,12 +5,15 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Renderer/ITexture.h>
 #include <BECore/Resource/ResourceManager.h>
+#include <BECore/Scene/SceneNode.h>
 #include <Generated/ArtGenWidget.gen.hpp>
+#include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
 #include <Widgets/EditorLayout/EditorControls.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/ImGuiFonts.h>
 #include <Widgets/ImGuiTheme.h>
+#include <Widgets/SceneEditor/SceneSelectionEvents.h>
 #include <algorithm>
 #include <cstdio>
 #include <imgui.h>
@@ -22,7 +25,7 @@ namespace BECore {
         constexpr float kThumbnailSize = 160.0f;
         constexpr float kSelectedBorder = 3.0f;
         constexpr float kDefaultWidth = 520.0f;
-        constexpr float kDefaultHeight = 640.0f;
+        constexpr float kDefaultHeight = 700.0f;
 
         bool IsUsable(const ArtGenSession& session, StringView preset) {
             for (const auto& known : session.GetServiceStatus().presets) {
@@ -33,6 +36,25 @@ namespace BECore {
             return false;
         }
 
+        /// A sprite name from the subject: "White Knight!" -> "white_knight"; the user edits it before Accept
+        void SpriteNameFromSubject(const char* subject, char* out, size_t size) {
+            size_t length = 0;
+            bool underscore = false;
+            for (const char* c = subject; *c != '\0' && length + 1 < size; ++c) {
+                const char lower = (*c >= 'A' && *c <= 'Z') ? static_cast<char>(*c - 'A' + 'a') : *c;
+                if ((lower >= 'a' && lower <= 'z') || (lower >= '0' && lower <= '9')) {
+                    if (underscore && length > 0 && length + 2 < size) {
+                        out[length++] = '_';
+                    }
+                    out[length++] = lower;
+                    underscore = false;
+                } else {
+                    underscore = true;
+                }
+            }
+            out[length] = '\0';
+        }
+
     }  // namespace
 
     ArtGenWidget::~ArtGenWidget() {
@@ -41,9 +63,11 @@ namespace BECore {
 
     bool ArtGenWidget::Initialize(IDeserializer& /*deserializer*/) {
         Subscribe<EditorCommandEvent, &ArtGenWidget::OnCommand>(this);
+        Subscribe<SceneSelectionChangedEvent, &ArtGenWidget::OnSelectionChanged>(this);
         auto& session = ArtGenSession::GetInstance();
         const std::string root = CoreManager::GetFileSystem().GetRootPath().generic_string();  //-NoStd: std::filesystem gives a std::string
         session.SetGameRoot(StringView(root.data(), root.size()));
+        session.SetAcceptor(&AcceptForControl);
         session.RegisterControl(CoreManager::GetControlService());
         return true;
     }
@@ -52,6 +76,11 @@ namespace BECore {
         if (event.commandId == EditorCommandIds::kViewGenerate) {
             _open = !_open;
         }
+    }
+
+    void ArtGenWidget::OnSelectionChanged(const SceneSelectionChangedEvent& event) {
+        // The pointers are valid for this event only: the session holds the node and checks it alive before use
+        ArtGenSession::GetInstance().SetSelectedNode(event.nodes.empty() ? IntrusivePtr<SceneNode>() : IntrusivePtr<SceneNode>(event.nodes.back()));
     }
 
     void ArtGenWidget::Draw() {}
@@ -145,12 +174,14 @@ namespace BECore {
             ImGui::InputScalar("##seed", ImGuiDataType_S64, &_seed);
             _seed = std::max<int64_t>(_seed, 0);
         }
+        ImGui::Checkbox("Keep the variants on screen", &_keepVariants);
+        ItemTooltip("The new images are added to the ones shown instead of replacing them");
 
         const bool busy = session.IsBusy();
         const bool canGenerate = !busy && !_presetName.empty() && _subject[0] != '\0';
         ImGui::BeginDisabled(!canGenerate);
         if (IconTextButton(ICON_LC_SPARKLES, "Generate", "Ask the service for the images (it may still be starting: the request waits)")) {
-            auto result = session.Request(_presetName, StringView(_subject), _count, _randomSeed ? Optional<int64_t>() : Optional<int64_t>(_seed));
+            auto result = session.Request(_presetName, StringView(_subject), _count, _randomSeed ? Optional<int64_t>() : Optional<int64_t>(_seed), _keepVariants);
             _requestError = result ? String() : result.error();
         }
         ImGui::EndDisabled();
@@ -179,10 +210,11 @@ namespace BECore {
                 ImGui::TextDisabled("Waiting for the service to take the request...");
                 break;
             case ArtGenRunState::Running: {
+                const int32_t made = static_cast<int32_t>(run.variants.size()) - run.keptVariants;
                 const float perImage = run.steps > 0 ? static_cast<float>(run.step) / static_cast<float>(run.steps) : 0.0f;
-                const float fraction = run.count > 0 ? (static_cast<float>(run.variants.size()) + perImage) / static_cast<float>(run.count) : 0.0f;
+                const float fraction = run.count > 0 ? (static_cast<float>(made) + perImage) / static_cast<float>(run.count) : 0.0f;
                 char overlay[96];
-                std::snprintf(overlay, sizeof(overlay), "image %d of %d, step %d of %d", static_cast<int>(run.variants.size()) + 1, run.count, run.step, run.steps);
+                std::snprintf(overlay, sizeof(overlay), "image %d of %d, step %d of %d", static_cast<int>(made) + 1, run.count, run.step, run.steps);
                 ImGui::ProgressBar(fraction, ImVec2(-1.0f, 0.0f), overlay);
                 if (run.cancelRequested) {
                     ImGui::TextDisabled("Cancelling...");
@@ -201,7 +233,53 @@ namespace BECore {
             default:
                 break;
         }
+        DrawAccept(session);
         DrawVariants(run);
+    }
+
+    void ArtGenWidget::DrawAccept(ArtGenSession& session) {
+        const auto& palette = GetImGuiPalette();
+        if (!_selectedSeed || session.FindVariant(*_selectedSeed) == nullptr) {
+            ImGui::TextDisabled("Click an image to accept it into the game");
+            return;
+        }
+        ImGui::SeparatorText("Accept");
+        {
+            ScopedMonoFont mono;
+            ImGui::TextDisabled("seed %lld", static_cast<long long>(*_selectedSeed));
+        }
+        ImGui::InputTextWithHint("Sprite", "white_knight", _spriteName, sizeof(_spriteName));
+        ItemTooltip("The TextureLibrary name; the file goes to assets/artgen/<name>.png with its .artgen.json");
+        const bool validName = IsValidSpriteName(StringView(_spriteName));
+        const bool haveNode = session.GetSelectedNodeIfAlive() != nullptr;
+        if (!haveNode) {
+            _useOnSelected = false;
+        }
+        ImGui::BeginDisabled(!haveNode);
+        ImGui::Checkbox("Use on the selected node", &_useOnSelected);
+        ImGui::EndDisabled();
+        ItemTooltip(haveNode ? "Put the sprite on the SpriteRendererComponent of the node selected in the Scene Editor" : "Select a node in the Scene Editor first");
+
+        ImGui::BeginDisabled(!validName);
+        if (IconTextButton(ICON_LC_CHECK, "Accept", "Copy the image into the game's assets, add or replace the sprite and reload it")) {
+            auto result = session.Accept(*_selectedSeed, StringView(_spriteName), _useOnSelected);
+            _acceptFailed = !result.has_value();
+            if (result) {
+                const auto reloaded = GetJsonInt(*result, "reloadedSprites").value_or(0);
+                const auto texture = GetJsonString(*result, "texturePath").value_or(String());
+                _acceptMessage = Format("Accepted as '{}' ({}); {} sprite(s) reloaded", StringView(_spriteName), texture, reloaded);
+            } else {
+                _acceptMessage = result.error().message;
+            }
+        }
+        ImGui::EndDisabled();
+        if (!validName && _spriteName[0] != '\0') {
+            ImGui::SameLine();
+            ImGui::TextColored(palette.warning, "1 to 64 of A-Z a-z 0-9 _ -");
+        }
+        if (!_acceptMessage.empty()) {
+            ImGui::TextColored(_acceptFailed ? palette.error : palette.success, "%s", _acceptMessage.c_str());
+        }
     }
 
     void ArtGenWidget::DrawVariants(const ArtGenRun& run) {
@@ -216,27 +294,39 @@ namespace BECore {
             if (i % static_cast<size_t>(columns) != 0) {
                 ImGui::SameLine();
             }
+            const auto& variant = run.variants[i];
             ImGui::PushID(static_cast<int>(i));
             ImGui::BeginGroup();
             const ImVec2 origin = ImGui::GetCursorScreenPos();
             if (ImGui::InvisibleButton("##thumb", ImVec2(kThumbnailSize, kThumbnailSize))) {
-                _selected = static_cast<int32_t>(i);
+                if (_selectedSeed != variant.seed) {
+                    _acceptMessage.clear();
+                }
+                _selectedSeed = variant.seed;
+                if (_spriteName[0] == '\0') {
+                    SpriteNameFromSubject(run.subject.c_str(), _spriteName, sizeof(_spriteName));
+                }
             }
             ImDrawList* drawList = ImGui::GetWindowDrawList();
             const ImVec2 corner(origin.x + kThumbnailSize, origin.y + kThumbnailSize);
             const ITexture* texture = i < _thumbnails.size() ? _thumbnails[i].Get() : nullptr;
-            if (texture != nullptr && _thumbnails[i]->GetState() == ResourceState::Loaded) {
+            if (texture != nullptr && texture->GetState() == ResourceState::Loaded) {
                 const auto id = static_cast<ImTextureID>(reinterpret_cast<std::uintptr_t>(texture->GetNativeHandle()));
                 drawList->AddImage(id, origin, corner);
             } else {
                 drawList->AddRectFilled(origin, corner, ImGui::GetColorU32(palette.frameBg));
             }
-            if (_selected == static_cast<int32_t>(i)) {
+            if (_selectedSeed == variant.seed) {
                 drawList->AddRect(origin, corner, ImGui::GetColorU32(palette.accent), 0.0f, 0, kSelectedBorder);
             }
+            if (IconButton(ICON_LC_DICES, "Use this seed for the next Generate (with another subject, a close picture)", "##seed")) {
+                _randomSeed = false;
+                _seed = variant.seed;
+            }
+            ImGui::SameLine();
             {
                 ScopedMonoFont mono;
-                ImGui::TextDisabled("seed %lld", static_cast<long long>(run.variants[i].seed));
+                ImGui::TextDisabled("%lld", static_cast<long long>(variant.seed));
             }
             ImGui::EndGroup();
             ImGui::PopID();
@@ -245,10 +335,13 @@ namespace BECore {
     }
 
     void ArtGenWidget::SyncThumbnails(const ArtGenRun& run) {
-        if (run.id != _thumbRunId) {
+        // Keep the thumbnails of the paths still in the run (a run that kept the variants), drop the rest, load the new ones
+        bool same = _thumbnailPaths.size() <= run.variants.size();
+        for (size_t i = 0; same && i < _thumbnailPaths.size(); ++i) {
+            same = _thumbnailPaths[i] == run.variants[i].path;
+        }
+        if (!same) {
             DropThumbnails();
-            _thumbRunId = run.id;
-            _selected = -1;
         }
         auto& resources = CoreManager::GetResourceManager();
         while (_thumbnails.size() < run.variants.size()) {

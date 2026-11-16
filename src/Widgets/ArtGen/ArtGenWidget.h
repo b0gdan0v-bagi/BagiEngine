@@ -12,14 +12,15 @@ namespace BECore {
 
     class ArtGenSession;
     struct ArtGenRun;
+    struct SceneSelectionChangedEvent;
 
     /**
      * @brief The editor's Generate panel: a style preset of the game and a subject become image variants through the art generation
-     * service (tools/artgen), shown as a grid.
+     * service (tools/artgen), shown as a grid; a chosen one is accepted into the game as a sprite.
      *
      * Hidden at start; the command `view.generate` shows and hides it. The state lives in ArtGenSession, not here, so a switch of the run
      * mode that re-creates the panel loses nothing; the panel only draws it and turns clicks into requests. The thumbnails are loaded from
-     * the files the service wrote and dropped from the resource cache when the run is replaced (src/Widgets/ArtGen/CLAUDE.md).
+     * the files the service wrote and dropped from the resource cache when they leave the run (src/Widgets/ArtGen/CLAUDE.md).
      */
     class ArtGenWidget : public IWidget {
         BE_CLASS(ArtGenWidget)
@@ -33,11 +34,13 @@ namespace BECore {
 
     private:
         void OnCommand(const EditorCommandEvent& event);
+        void OnSelectionChanged(const SceneSelectionChangedEvent& event);
 
         void DrawServiceLine(const ArtGenSession& session);
         void DrawForm(ArtGenSession& session);
         void DrawRun(ArtGenSession& session);
         void DrawVariants(const ArtGenRun& run);
+        void DrawAccept(ArtGenSession& session);
         void SyncThumbnails(const ArtGenRun& run);
         void DropThumbnails();
 
@@ -48,12 +51,18 @@ namespace BECore {
         int32_t _count = 4;
         bool _randomSeed = true;
         int64_t _seed = 0;
+        bool _keepVariants = false;
         String _requestError;
 
-        uint32_t _thumbRunId = 0;
+        // One thumbnail per variant of the run, in its order; a path that leaves the run is evicted
         Vector<ResourceHandle<ITexture>> _thumbnails;
         Vector<String> _thumbnailPaths;
-        int32_t _selected = -1;
+        Optional<int64_t> _selectedSeed;
+
+        char _spriteName[65] = {};
+        bool _useOnSelected = false;
+        String _acceptMessage;
+        bool _acceptFailed = false;
     };
 
 }  // namespace BECore

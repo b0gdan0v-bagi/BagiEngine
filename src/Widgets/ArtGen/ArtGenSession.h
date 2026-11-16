@@ -2,6 +2,7 @@
 
 #include <BECore/Control/ControlTypes.h>
 #include <BECore/Control/Json.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/MoveOnlyFunction.h>
@@ -12,6 +13,7 @@
 namespace BECore {
 
     class ControlService;
+    class SceneNode;
 
     CORE_ENUM(ArtGenRunState, uint8_t, Idle, Queued, Running, Done, Failed, Cancelled)
 
@@ -49,6 +51,7 @@ namespace BECore {
         int32_t steps = 0;
         String error;
         Vector<ArtGenVariant> variants;
+        int32_t keptVariants = 0;  // the variants of the last run it started with (Request with keepVariants)
         bool cancelRequested = false;
     };
 
@@ -68,9 +71,12 @@ namespace BECore {
         static constexpr int32_t kMaxCount = 16;
 
         using Clock = MoveOnlyFunction<double()>;
+        /// Accepts a variant as the sprite @p sprite and, when @p node is given, puts it on that node; the answer of `artgen_accept`
+        using Acceptor = std::expected<Json, ControlError> (*)(const ArtGenVariant& variant, StringView sprite, SceneNode* node);
 
         /// @param clock monotonic seconds; the default is the steady clock (a test passes its own). The editor's one session is GetInstance()
         explicit ArtGenSession(Clock clock = {});
+        ~ArtGenSession() override;
 
         /// Registers the methods on @p service (once per service; a second call with the same service does nothing)
         void RegisterControl(ControlService& service);
@@ -80,10 +86,25 @@ namespace BECore {
             _gameRoot = String(root);
         }
 
-        /// Queues a request; the error says why not (a run in work, a bad count or preset)
-        std::expected<uint32_t, String> Request(StringView preset, StringView subject, int32_t count, Optional<int64_t> seed);
+        /// Queues a request; the error says why not (a run in work, a bad count or preset). @p keepVariants starts the new run with the
+        /// variants of the last one, so a few more can be made without losing the ones on screen
+        std::expected<uint32_t, String> Request(StringView preset, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants = false);
         /// Asks the service to stop the run; the images already made stay
         void Cancel();
+
+        /// What `artgen_accept` and the panel's Accept run (ArtGenAccept.h in the editor; a fake in the tests); without one `artgen_accept` fails
+        void SetAcceptor(Acceptor acceptor) {
+            _acceptor = acceptor;
+        }
+        /// The node "Use on selected" puts the sprite on (the scene editor's primary selection); null for none. Held, so it is checked alive
+        /// in the active scene before use
+        void SetSelectedNode(IntrusivePtr<SceneNode> node);
+        /// The selected node when it is still in the tree of the active scene, else null
+        [[nodiscard]] SceneNode* GetSelectedNodeIfAlive() const;
+        /// The variant of the current run with @p seed, or null
+        [[nodiscard]] const ArtGenVariant* FindVariant(int64_t seed) const;
+        /// Accepts the variant @p seed as @p sprite, and puts it on the selected node when @p useOnSelected
+        std::expected<Json, ControlError> Accept(int64_t seed, StringView sprite, bool useOnSelected);
 
         [[nodiscard]] bool IsServiceConnected() const;
         [[nodiscard]] const ArtGenServiceStatus& GetServiceStatus() const {
@@ -110,6 +131,7 @@ namespace BECore {
         std::expected<Json, ControlError> HandleDone(const Json& params);
         std::expected<Json, ControlError> HandleGenerate(const Json& params);
         std::expected<Json, ControlError> HandleCancel(const Json& params);
+        std::expected<Json, ControlError> HandleAccept(const Json& params);
         [[nodiscard]] Json StateJson() const;
 
     private:
@@ -117,6 +139,8 @@ namespace BECore {
         ArtGenRun* RunOf(const Json& params);
 
         Clock _clock;
+        Acceptor _acceptor = nullptr;
+        IntrusivePtr<SceneNode> _selectedNode;
         String _gameRoot;
         ArtGenServiceStatus _status;
         ArtGenRun _run;

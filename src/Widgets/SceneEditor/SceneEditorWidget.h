@@ -66,6 +66,7 @@ namespace BECore {
 
         /// Answers the end of a gizmo drag: a Commit marks the scene as changed (Begin, Change and Cancel leave the nodes as the drag found them or put them back)
         void OnTransformEdit(const NodeTransformEditEvent& event);
+        void OnSceneEdited(const SceneEditedEvent& event);
 
         /// Brings the selection and HierarchyState::selected back in line after the hierarchy panel or a handler changed one of them: applies the clicked row, drops the nodes
         /// that are no longer in the tree, takes a node that only HierarchyState::selected names (a created, duplicated or revealed one) as the whole selection, and makes the

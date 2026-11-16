@@ -3,6 +3,7 @@
 #include <Common/Printers.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
 #include <gtest/gtest.h>
+#include <initializer_list>
 
 namespace BECore::Tests {
 
@@ -38,6 +39,25 @@ namespace BECore::Tests {
             return params;
         }
 
+        /// What the fake acceptor was called with (a function pointer cannot capture, so the test reads it here)
+        struct AcceptCall {
+            int64_t seed = -1;
+            String sprite;
+            bool withNode = false;
+            int calls = 0;
+        };
+        AcceptCall gAccepted;
+
+        std::expected<Json, ControlError> FakeAcceptor(const ArtGenVariant& variant, StringView sprite, SceneNode* node) {
+            gAccepted.seed = variant.seed;
+            gAccepted.sprite = String(sprite);
+            gAccepted.withNode = node != nullptr;
+            ++gAccepted.calls;
+            Json reply = Json::object();
+            reply["sprite"] = ToStdString(sprite);
+            return reply;
+        }
+
     }  // namespace
 
     class ArtGenSessionTest : public ::testing::Test {
@@ -62,6 +82,22 @@ namespace BECore::Tests {
             return response ? std::move(*response) : Json();
         }
 
+        /// Runs a request to its end with images of @p seeds, as the service would
+        uint32_t RunWithImages(std::initializer_list<int64_t> seeds, bool keep = false) {
+            const uint32_t id = session.Request("wood", "queen", static_cast<int32_t>(seeds.size()), *seeds.begin(), keep).value();
+            Call("artgen_poll", ReadyPoll());
+            for (int64_t seed : seeds) {
+                Json image = Report(id);
+                image["seed"] = seed;
+                image["path"] = Format("D:/out/queen_{}.png", seed).c_str();
+                Call("artgen_image", image);
+            }
+            Json done = Report(id);
+            done["status"] = "ok";
+            Call("artgen_done", done);
+            return id;
+        }
+
         static const Json& Result(const Json& response) {
             static const Json kNull;
             const Json* result = FindJsonMember(response, "result");
@@ -74,6 +110,7 @@ namespace BECore::Tests {
         }
 
         void SetUp() override {
+            gAccepted = AcceptCall{};
             session.SetGameRoot("D:/Games/Chess");
             session.RegisterControl(service);
         }
@@ -251,6 +288,49 @@ namespace BECore::Tests {
         Call("artgen_poll", ReadyPoll());
         EXPECT_EQ(session.PollCount(), 1u);
         EXPECT_NE(FindJsonMember(Result(Call("artgen_state")), "service"), nullptr);
+    }
+
+    TEST_F(ArtGenSessionTest, AcceptGoesToTheAcceptorWithTheVariantOfThatSeed) {
+        RunWithImages({21, 22});
+        Json params = Object();
+        params["seed"] = 22;
+        params["sprite"] = "white_queen";
+        EXPECT_EQ(ErrorCode(Call("artgen_accept", params)), "artgen_accept_failed");  // no acceptor yet
+        session.SetAcceptor(&FakeAcceptor);
+        const Json reply = Call("artgen_accept", params);
+        EXPECT_EQ(GetJsonString(Result(reply), "sprite"), Optional<String>("white_queen"));
+        EXPECT_EQ(gAccepted.seed, 22);
+        EXPECT_EQ(gAccepted.sprite, "white_queen");
+        EXPECT_FALSE(gAccepted.withNode);
+    }
+
+    TEST_F(ArtGenSessionTest, AcceptRefusesAnUnknownSeedOrAMissingSelection) {
+        session.SetAcceptor(&FakeAcceptor);
+        RunWithImages({5});
+        Json params = Object();
+        params["seed"] = 6;
+        params["sprite"] = "q";
+        EXPECT_EQ(ErrorCode(Call("artgen_accept", params)), "artgen_no_variant");
+        params["seed"] = 5;
+        params["useOnSelected"] = true;
+        EXPECT_EQ(ErrorCode(Call("artgen_accept", params)), "artgen_accept_failed");
+        params["useOnSelected"] = "yes";
+        EXPECT_EQ(ErrorCode(Call("artgen_accept", params)), "invalid_params");
+        params.erase("sprite");
+        EXPECT_EQ(ErrorCode(Call("artgen_accept", params)), "invalid_params");
+        EXPECT_EQ(gAccepted.calls, 0);
+    }
+
+    TEST_F(ArtGenSessionTest, ARunCanKeepTheVariantsOfTheLastOne) {
+        RunWithImages({1, 2});
+        RunWithImages({10}, true);
+        ASSERT_EQ(session.GetRun().variants.size(), 3u);
+        EXPECT_EQ(session.GetRun().keptVariants, 2);
+        EXPECT_EQ(session.GetRun().variants[2].seed, 10);
+        EXPECT_NE(session.FindVariant(1), nullptr);
+        RunWithImages({20});
+        ASSERT_EQ(session.GetRun().variants.size(), 1u);
+        EXPECT_EQ(session.FindVariant(1), nullptr);
     }
 
 }  // namespace BECore::Tests
