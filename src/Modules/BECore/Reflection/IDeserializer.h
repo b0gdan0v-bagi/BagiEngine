@@ -147,6 +147,26 @@ namespace BECore {
         }
 
         /**
+         * @brief Append the names of the attributes of the current scope, in document order
+         *
+         * For a loader that takes every attribute as an entry (`<context caster="UnitStats"/>`). It is not an ask of the keys: a name that
+         * the caller then reads is asked by that read, so the unknown-key finding stays right. The caller passes an empty list. The
+         * default adds none (binary and JSON have no attributes apart from the members), so such a loader keeps its list form there.
+         */
+        virtual void AttributeNames(Vector<String>& /*names*/) const {}
+
+        /**
+         * @brief Whether the current scope has @p name as a plain value that BeginObject would refuse with an error
+         *
+         * The default is false: a text and a binary reader open an object around a plain value without an error. A reader that is
+         * strict about the shape of a member (JSON) says true for a member that is neither an object nor an array, so a loader that accepts
+         * both forms (`Value<T>`: `damage="12"` and `<damage value="12"/>`) can read the plain one without opening it.
+         */
+        virtual bool IsScalarMember(StringView /*name*/) const {
+            return false;
+        }
+
+        /**
          * @brief Tell the reader that the current scope has a key that the caller reads by hand
          *
          * A reader that finds keys nobody read (the unknown-key finding) counts it as read. The default does nothing.
@@ -332,6 +352,7 @@ namespace BECore {
          */
         static StringView CutText(StringView text, size_t maxBytes);
 
+    public:
         /**
          * @brief ", did you mean 'y'?" for an unknown key, or an empty text
          *

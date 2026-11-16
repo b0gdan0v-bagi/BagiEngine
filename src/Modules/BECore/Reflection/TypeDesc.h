@@ -7,6 +7,7 @@
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
+#include <BECore/Utils/StringUtils.h>
 #include <EASTL/fixed_hash_map.h>
 #include <EASTL/fixed_string.h>
 #include <EASTL/fixed_vector.h>
@@ -16,6 +17,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -66,6 +68,13 @@ namespace BECore {
         /// read here could differ between translation units. For the same reason a Pointer does not say whether its pointee has an
         /// `AbstractFactory`: the type registry knows the factory bases.
         const ClassMeta& (*objectMeta)() = nullptr;
+        /// Opaque: `sizeof` of the type and a hash of its name as the compiler spells it (0 for a kind that is told apart by other members).
+        /// Without them every self-serializing type (`Vec2`, `Vec3`, `Color`) would be one type to `SameType`. Never an address:
+        /// equal in every translation unit and every shared library.
+        size_t opaqueSize = 0;
+        uint64_t opaqueHash = 0;
+        /// Opaque: the name the hash was made of, for messages only (its address is not the same in every translation unit, so `SameType` never looks at it)
+        StringView opaqueName{};
 
         /// The name of the class of an Object or a Pointer; empty when the type has none.
         [[nodiscard]] StringView ObjectName() const {
@@ -78,7 +87,7 @@ namespace BECore {
         }
     };
 
-    /// Whether two descriptors describe the same type: kind, element, key, alternatives, enum names, class hash and limits.
+    /// Whether two descriptors describe the same type: kind, element, key, alternatives, enum names, class hash, opaque identity and limits.
     bool SameType(const TypeDesc& a, const TypeDesc& b);
 
     namespace Detail {
@@ -245,6 +254,41 @@ namespace BECore {
             {T::GetStaticTypeMeta()}->std::convertible_to<const ClassMeta&>;
         };
 
+        /// The name of `T` as the compiler spells it, cut out of the signature text of this function (`BECore::Vec2`)
+        template <typename T>
+        consteval auto OpaqueTypeNameText() {
+#if defined(__clang__)
+            // auto BECore::Detail::OpaqueTypeNameText() [T = BECore::Vec2]
+            constexpr std::string_view sv{__PRETTY_FUNCTION__};  //-NoStd: eastl::string_view::find_last_of is not constexpr
+            constexpr size_t last = sv.find_last_of(']');
+            constexpr size_t first = sv.find("T = ") + 4;
+#elif defined(_MSC_VER)
+            // auto __cdecl BECore::Detail::OpaqueTypeNameText<struct BECore::Vec2>(void)
+            constexpr std::string_view sv{__FUNCSIG__};  //-NoStd: as above  // NOLINT(clang-diagnostic-language-extension-token)
+            constexpr size_t last = sv.find_last_of('>');
+            constexpr size_t first = sv.find("NameText<") + 9;
+#else
+            // consteval auto BECore::Detail::OpaqueTypeNameText() [with T = BECore::Vec2]
+            constexpr std::string_view sv{__PRETTY_FUNCTION__};  //-NoStd: as above
+            constexpr size_t last = sv.find_last_of(']');
+            constexpr size_t first = sv.find("T = ") + 4;
+#endif
+            Array<char, last - first + 1> buf{};  // +1 '\0' terminated
+            for (size_t i = 0; i < last - first; ++i) {
+                buf[i] = sv[first + i];
+            }
+            return buf;
+        }
+
+        template <typename T>
+        inline constexpr auto kOpaqueTypeName{OpaqueTypeNameText<T>()};
+
+        /// The name of `T`, in static storage; the identity of an opaque type is the hash of it (`TypeDesc::opaqueHash`)
+        template <typename T>
+        constexpr StringView OpaqueTypeName() {
+            return StringView{kOpaqueTypeName<T>.data(), kOpaqueTypeName<T>.size() - 1};
+        }
+
         template <typename T>
         struct DescHolder;
 
@@ -339,6 +383,9 @@ namespace BECore {
                     desc.objectMeta = &T::GetStaticTypeMeta;
                 } else {
                     desc.kind = TypeKind::Opaque;
+                    desc.opaqueSize = sizeof(T);
+                    desc.opaqueName = OpaqueTypeName<T>();
+                    desc.opaqueHash = StringUtils::GetHash(desc.opaqueName);
                 }
             }
             return desc;

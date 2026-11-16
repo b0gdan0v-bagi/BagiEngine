@@ -1,6 +1,8 @@
 // Compiled paths (Reflection/CompiledPath.h): the fixed part of a path resolved once, and agreement with GetProperty and the real member.
 // The generated code of the test types is included in TypeRegistryTest.cpp and PropertyAccessTest.cpp; here the types are found by name.
 
+#include <BECore/Math/IVec2.h>
+#include <BECore/Math/Vec4.h>
 #include <BECore/PropertyAccessTest.h>
 #include <BECore/Reflection/CompiledPath.h>
 #include <BECore/TypeRegistryTest.h>
@@ -294,6 +296,22 @@ namespace BECore::Tests {
         using RightCapacity = FixedString<4, false>;
         EXPECT_EQ(CompileProperty<WrongCapacity>(info, "fixedText").error().code, PropertyErrorCode::type_mismatch);
         EXPECT_TRUE(CompileProperty<RightCapacity>(info, "fixedText").has_value());
+    }
+
+    TEST(CompiledPathTest, AnOpaqueFieldIsOnlyReadAsItsOwnType) {
+        const TypeInfo& info = InfoOf("PaVectors");
+        PaVectors vectors;
+        ExpectSame<Vec2>(vectors, "PaVectors", "planar", vectors.planar);
+        ExpectSame<Vec3>(vectors, "PaVectors", "spatial", vectors.spatial);
+        ExpectSame<Color>(vectors, "PaVectors", "tint", vectors.tint);
+
+        const auto wrong = CompileProperty<Vec3>(info, "planar");
+        ASSERT_FALSE(wrong.has_value());
+        EXPECT_EQ(wrong.error().code, PropertyErrorCode::type_mismatch);
+        EXPECT_EQ(CompileProperty<Vec2>(info, "spatial").error().code, PropertyErrorCode::type_mismatch);
+        EXPECT_EQ(CompileProperty<Vec4>(info, "spatial").error().code, PropertyErrorCode::type_mismatch);
+        EXPECT_EQ(CompileProperty<Color>(info, "planar").error().code, PropertyErrorCode::type_mismatch);
+        EXPECT_EQ(CompileProperty<IVec2>(info, "planar").error().code, PropertyErrorCode::type_mismatch);
     }
 
     TEST(CompiledPathTest, SetStillChecksReadOnlyHiddenAndRange) {

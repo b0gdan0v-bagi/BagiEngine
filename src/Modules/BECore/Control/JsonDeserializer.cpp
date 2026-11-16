@@ -85,6 +85,12 @@ namespace BECore {
         return FindMember(name) != nullptr;
     }
 
+    bool JsonDeserializer::IsScalarMember(StringView name) const {
+        NoteAsked(name);
+        const Json* member = FindMember(name);
+        return member != nullptr && !member->is_object() && !member->is_array();
+    }
+
     void JsonDeserializer::NoteKnownKey(StringView name) {
         NoteAsked(name);
     }
