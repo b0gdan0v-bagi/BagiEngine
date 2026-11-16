@@ -37,5 +37,5 @@ The vendored code: `src/Modules/EABase/`, `EnTT/`, `fmt/`, `imgui/`, `nlohmann/`
 
 `eligible` is a concrete, bounded piece of engine or tool work. Examples of reasons:
 
-- `owner decision`: renderer backends, nominal ECS, moving games to their own repositories, and similar.
-- Example answer lines: `{"area": "engine", "id": "no-ci", "verdict": "eligible", "size": "M", "reason": "one line"}`, `{"area": "engine", "id": "renderer-backends", "verdict": "skip", "size": null, "reason": "owner decision: the entry waits for the choice of backends"}`.
+- `owner decision`: an entry that names what is "to be decided with the owner first" (for example the binary form of sound assets, `audio-binarization`), and similar.
+- Example answer lines: `{"area": "engine", "id": "no-ci", "verdict": "eligible", "size": "M", "reason": "one line"}`, `{"area": "engine", "id": "audio-binarization", "verdict": "skip", "size": null, "reason": "owner decision: the binary form of sound assets is to be decided with the owner"}`.

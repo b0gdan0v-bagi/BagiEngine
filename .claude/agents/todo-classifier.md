@@ -54,7 +54,7 @@ Only a JSON object, no text around it:
   "next": "<id of the first eligible candidate, or null>",
   "entries": [
     {"area": "<area>", "id": "no-ci", "verdict": "eligible", "size": "M", "level": "normal", "touches": ["CMakeLists.txt", "cmake/BagiEngine.cmake"], "reason": "one line"},
-    {"area": "<area>", "id": "renderer-backends", "verdict": "skip", "size": null, "reason": "owner decision: the entry waits for the choice of backends"}
+    {"area": "<area>", "id": "audio-binarization", "verdict": "skip", "size": null, "reason": "owner decision: the binary form of sound assets is to be decided with the owner"}
   ]
 }
 ```

@@ -2,7 +2,7 @@
 
 Extended patterns and idioms for BagiEngine game engine development.
 
-**Project Requirements**: Use `IntrusivePtr<T>` with `BECore::New<T>()` (or `BECore::NewAtomic<T>()` for thread-safe), EASTL containers, `BE_ASSERT()`, deducing this over CRTP. BagiEngine is built **without exceptions** — use `std::expected<T, E>`, `ASSERT`, or `FATALERROR`. `dynamic_cast` only as last resort.
+**Project Requirements**: Use `IntrusivePtr<T>` with `BECore::New<T>()` (or `BECore::NewAtomic<T>()` for thread-safe), the `BECore` type names (`Vector`, `HashMap`, `String`), `BE_ASSERT()`, deducing this over CRTP. BagiEngine is built **without exceptions** — use `std::expected<T, E>`, `ASSERT`, or `FATALERROR`. `dynamic_cast` only as last resort.
 
 ## Patterns Already in Codebase
 
@@ -20,18 +20,18 @@ These patterns are implemented in the project - see source code for details:
 ```cpp
 template<typename Base, typename... Args>
 class Factory {
-    using Creator = eastl::function<IntrusivePtr<Base>(Args...)>;
-    eastl::hash_map<PoolString, Creator> _creators;
+    using Creator = MoveOnlyFunction<IntrusivePtr<Base>(Args...)>;
+    HashMap<PoolString, Creator> _creators;
     
 public:
     template<typename Derived>
-    void Register(std::string_view name) {
+    void Register(StringView name) {
         _creators[PoolString(name)] = [](Args... args) {
             return IntrusivePtr<Derived>(BECore::New<Derived>(std::forward<Args>(args)...));
         };
     }
     
-    IntrusivePtr<Base> Create(std::string_view name, Args... args) {
+    IntrusivePtr<Base> Create(StringView name, Args... args) {
         auto it = _creators.find(PoolString(name));
         return it != _creators.end() ? it->second(std::forward<Args>(args)...) : nullptr;
     }
@@ -44,7 +44,7 @@ public:
 template<typename T, size_t PoolSize = 1024>
 class ObjectPool {
     std::array<std::aligned_storage_t<sizeof(T), alignof(T)>, PoolSize> _storage;
-    eastl::vector<T*> _available;
+    Vector<T*> _available;
     
 public:
     ObjectPool() {
@@ -151,7 +151,7 @@ public:
 };
 
 class CommandHistory {
-    eastl::vector<IntrusivePtr<Command>> _history;
+    Vector<IntrusivePtr<Command>> _history;
     size_t _current = 0;
     
 public:
@@ -178,14 +178,14 @@ public:
 ```cpp
 template<typename... Args>
 class Signal {
-    using Slot = eastl::function<void(Args...)>;
+    using Slot = MoveOnlyFunction<void(Args...)>;
     
     struct Observer : RefCounted {
         Slot callback;
         Observer(Slot cb) : callback(eastl::move(cb)) {}
     };
     
-    eastl::vector<IntrusivePtr<Observer>> _observers;
+    Vector<IntrusivePtr<Observer>> _observers;
     
 public:
     using Handle = IntrusivePtr<Observer>;
@@ -214,9 +214,9 @@ public:
 template<typename StateEnum>
 class StateMachine {
     StateEnum _current;
-    eastl::hash_map<StateEnum, eastl::function<void()>> _onEnter;
-    eastl::hash_map<StateEnum, eastl::function<void()>> _onExit;
-    eastl::hash_map<StateEnum, eastl::function<void(float)>> _onUpdate;
+    HashMap<StateEnum, MoveOnlyFunction<void()>> _onEnter;
+    HashMap<StateEnum, MoveOnlyFunction<void()>> _onExit;
+    HashMap<StateEnum, MoveOnlyFunction<void(float)>> _onUpdate;
     
 public:
     void SetState(StateEnum newState) {
@@ -232,13 +232,13 @@ public:
             it->second(dt);
     }
     
-    void OnEnter(StateEnum state, eastl::function<void()> fn) { 
+    void OnEnter(StateEnum state, MoveOnlyFunction<void()> fn) { 
         _onEnter[state] = eastl::move(fn); 
     }
-    void OnExit(StateEnum state, eastl::function<void()> fn) { 
+    void OnExit(StateEnum state, MoveOnlyFunction<void()> fn) { 
         _onExit[state] = eastl::move(fn); 
     }
-    void OnUpdate(StateEnum state, eastl::function<void(float)> fn) { 
+    void OnUpdate(StateEnum state, MoveOnlyFunction<void(float)> fn) { 
         _onUpdate[state] = eastl::move(fn); 
     }
 };
@@ -250,7 +250,7 @@ public:
 
 ```cpp
 class Arena {
-    eastl::vector<std::byte> _buffer;
+    Vector<std::byte> _buffer;
     size_t _offset = 0;
     
 public:
@@ -324,7 +324,7 @@ public:
 
 ```cpp
 class TreeNode : public RefCounted {
-    eastl::vector<IntrusivePtr<TreeNode>> _children;
+    Vector<IntrusivePtr<TreeNode>> _children;
     PoolString _name;
     
 public:
