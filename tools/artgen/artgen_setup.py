@@ -172,8 +172,56 @@ def model_path(root, model):
     return Path(root) / "ComfyUI" / "models" / model["folder"] / model["name"]
 
 
-def make_plan(manifest, key, root, skip_models=False):
-    """The steps of an install of platform `key` into `root`, or SetupError when something there is not this tool's."""
+KIND_IMAGE = "image"
+KIND_AUDIO = "audio"
+HF_API = "https://huggingface.co/api/models"
+
+
+def model_kind(model):
+    """What a model of the manifest is for: `image` (the default) or `audio`."""
+    return model.get("kind", KIND_IMAGE)
+
+
+def hf_token(env=None, settings_path=None):
+    """The owner's Hugging Face token for a gated model: `HF_TOKEN`, else `hfToken` of the git-ignored local.json; never in git."""
+    env = os.environ if env is None else env
+    if env.get("HF_TOKEN"):
+        return env["HF_TOKEN"]
+    settings_path = Path(settings_path or comfyui_check.LOCAL_SETTINGS)
+    try:
+        return json.loads(settings_path.read_text(encoding="utf-8")).get("hfToken") or None
+    except (OSError, ValueError):
+        return None
+
+
+def _hf_repo_and_revision(url):
+    """`https://huggingface.co/<owner>/<repo>/resolve/<commit>/<path>` -> (owner/repo, commit, path)."""
+    parts = urllib.parse.urlparse(url).path.strip("/").split("/")
+    if len(parts) < 5 or parts[2] != "resolve":
+        raise SetupError(f"{url} is not a Hugging Face file URL with a pinned commit")
+    return f"{parts[0]}/{parts[1]}", parts[3], "/".join(parts[4:])
+
+
+def gated_sha256(model, token, opener=None):
+    """The SHA256 of a gated model's file at the manifest's commit, from the Hugging Face API (it shows it only to an account with access):
+    the same source as every other hash of the manifest. The download is checked against it; the install prints it to be pinned."""
+    repo, revision, path = _hf_repo_and_revision(model["url"])
+    request = urllib.request.Request(f"{HF_API}/{repo}/paths-info/{revision}", data=urllib.parse.urlencode({"paths": path}).encode("ascii"),
+                                     headers={"Authorization": f"Bearer {token}"})
+    try:
+        with (opener or urllib.request.urlopen)(request, timeout=60) as response:
+            entries = json.loads(response.read().decode("utf-8"))
+    except (urllib.error.URLError, ConnectionError, TimeoutError, ValueError) as error:
+        raise SetupError(f"could not read the hash of {model['name']} from Hugging Face ({getattr(error, 'reason', error)})") from error
+    oid = next((e.get("lfs", {}).get("oid") for e in entries if e.get("path") == path), None)
+    if not (isinstance(oid, str) and len(oid) == 64 and all(c in "0123456789abcdef" for c in oid)):
+        raise SetupError(f"Hugging Face shows no hash of {model['name']} to this token: accept its licence at {model['source']} first")
+    return oid
+
+
+def make_plan(manifest, key, root, skip_models=False, kinds=(KIND_IMAGE,)):
+    """The steps of an install of platform `key` into `root`, or SetupError when something there is not this tool's. `kinds` picks the
+    models: the image ones by default, `audio` adds the sound effects model (gated: it needs a token, `hf_token`)."""
     root = Path(root)
     comfy = manifest["comfyui"]
     var = variant(manifest, key)
@@ -194,6 +242,8 @@ def make_plan(manifest, key, root, skip_models=False):
                           "present" if done else "install", 0, comfy["licence"], comfy["repo"]))
     if not skip_models:
         for model in manifest["models"]:
+            if model_kind(model) not in kinds:
+                continue
             dest = model_path(root, model)
             if dest.is_file():
                 steps.append(Step("model", f"{model['folder']}/{model['name']}", str(dest), "verify", 0, model["licence"], model["url"]))
@@ -233,16 +283,33 @@ def sha256_of(path, on_bytes=None):
     return digest.hexdigest()
 
 
-def download(url, dest, size, sha256, on_progress=None, clock=time.monotonic, cancel=None):
-    """`url` into `dest` through `dest.part` (resumed by a Range request), checked for size and hash before the rename."""
+class _DropAuthOnRedirect(urllib.request.HTTPRedirectHandler):
+    """Hugging Face answers a file with a redirect to its CDN: the token goes to huggingface.co only, never to another host."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        new = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new is not None and urllib.parse.urlparse(newurl).hostname != urllib.parse.urlparse(req.full_url).hostname:
+            new.remove_header("Authorization")
+        return new
+
+
+_AUTH_OPENER = urllib.request.build_opener(_DropAuthOnRedirect)
+
+
+def download(url, dest, size, sha256, on_progress=None, clock=time.monotonic, cancel=None, token=None):
+    """`url` into `dest` through `dest.part` (resumed by a Range request), checked for size and hash before the rename. A `token` is sent
+    to the URL's own host only."""
     dest = Path(dest)
     part = dest.with_name(dest.name + ".part")
     dest.parent.mkdir(parents=True, exist_ok=True)
     have = part.stat().st_size if part.is_file() else 0
     if have < size:
-        request = urllib.request.Request(url, headers={"Range": f"bytes={have}-"} if have else {})
+        headers = {"Range": f"bytes={have}-"} if have else {}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        request = urllib.request.Request(url, headers=headers)
         try:
-            with urllib.request.urlopen(request, timeout=60) as response:
+            with (_AUTH_OPENER.open if token else urllib.request.urlopen)(request, timeout=60) as response:
                 if have and response.status != 206:
                     have = 0  # the server ignored the range: start over
                 last = 0.0
@@ -254,6 +321,11 @@ def download(url, dest, size, sha256, on_progress=None, clock=time.monotonic, ca
                         if on_progress and clock() - last >= PROGRESS_EVERY_S:
                             last = clock()
                             on_progress(have, size)
+        except urllib.error.HTTPError as error:
+            if error.code in (401, 403):
+                raise SetupError(f"{url} refused the download (HTTP {error.code}): a gated model needs its licence accepted on Hugging Face "
+                                 "and a token in HF_TOKEN or hfToken of tools/artgen/local.json") from error
+            raise SetupError(f"the download of {url} stopped (HTTP {error.code}); run again to resume") from error
         except (urllib.error.URLError, ConnectionError, TimeoutError) as error:
             raise SetupError(f"the download of {url} stopped ({getattr(error, 'reason', error)}); run again to resume") from error
     if on_progress:
@@ -301,7 +373,7 @@ class Installer:
     """Carries out a plan. `unpack`, `run` and `git_head` are the outside world; tests replace them."""
 
     def __init__(self, manifest, key, root, downloads=None, emit=None, unpack=unpack_7z, run=run_checked, git_head=None, python=sys.executable,
-                 cancel=None, clock=time.monotonic):
+                 cancel=None, clock=time.monotonic, token=None, hash_of_gated=gated_sha256):
         self.manifest = manifest
         self.key = key
         self.root = Path(root)
@@ -313,6 +385,8 @@ class Installer:
         self.python = python
         self.cancel = cancel  # a threading.Event: set, the install stops between chunks and steps
         self.clock = clock
+        self.token = token  # for a gated model (hf_token)
+        self.hash_of_gated = hash_of_gated
 
     def install(self, steps, keep_downloads=False):
         for index, step in enumerate(steps):
@@ -327,7 +401,8 @@ class Installer:
                 self._verify_model(index, step)
             elif step.state == "download":
                 model = self._model(step)
-                download(model["url"], step.dest, model["size"], model["sha256"], self._progress(index), cancel=self.cancel)
+                download(model["url"], step.dest, model["size"], self._expected_sha(model, step.dest), self._progress(index), cancel=self.cancel,
+                         token=self.token if model.get("gated") else None)
             self.emit({"event": "step_done", "index": index, "what": step.what})
         var = variant(self.manifest, self.key)
         if var["kind"] == "portable" and START_BAT.is_file() and installed_version(self.root):
@@ -349,6 +424,20 @@ class Installer:
     def _model(self, step):
         return next(m for m in self.manifest["models"] if str(model_path(self.root, m)) == step.dest)
 
+    def _expected_sha(self, model, dest):
+        """The manifest's hash; for a gated model whose hash the manifest cannot hold yet (Hugging Face hides it without access), the
+        one Hugging Face shows to the owner's token, printed so it can be pinned."""
+        if model.get("sha256"):
+            return model["sha256"]
+        if not model.get("gated"):
+            raise SetupError(f"the manifest has no sha256 of {model['name']}")
+        if not self.token:
+            raise SetupError(f"{model['name']} is gated: accept its licence at {model['source']}, then set HF_TOKEN (or hfToken in "
+                             f"tools/artgen/local.json) and run again; or put the file at {dest} by hand")
+        sha = self.hash_of_gated(model, self.token)
+        self.emit({"event": "log", "text": f"{model['name']}: SHA256 {sha} (from Hugging Face; pin it in comfyui/manifest.json)"})
+        return sha
+
     def _verify_model(self, index, step):
         model = self._model(step)
         done = [0]
@@ -361,8 +450,15 @@ class Installer:
             progress(done[0], model["size"])
 
         actual = sha256_of(step.dest, on_bytes)
-        if actual != model["sha256"]:
-            raise SetupError(f"{step.dest} has SHA256 {actual}, the manifest says {model['sha256']}: it is not this tool's file; move it away and run again")
+        if not model.get("sha256") and model.get("gated") and not self.token:
+            # A file the owner placed by hand, with no hash to compare yet: its size is checked, its hash said
+            if Path(step.dest).stat().st_size != model["size"]:
+                raise SetupError(f"{step.dest} has {Path(step.dest).stat().st_size} bytes, the manifest says {model['size']}: not the file of {model['source']}")
+            self.emit({"event": "log", "text": f"{model['name']}: placed by hand, SHA256 {actual} (not checked: the manifest pins none yet)"})
+            return
+        expected = self._expected_sha(model, step.dest)
+        if actual != expected:
+            raise SetupError(f"{step.dest} has SHA256 {actual}, the manifest says {expected}: it is not this tool's file; move it away and run again")
 
     def _portable(self, index, keep_downloads):
         var = variant(self.manifest, self.key)
@@ -633,6 +729,7 @@ def main(argv=None, probe=probe_machine, ask=input):
     install.add_argument("--yes", action="store_true", help="do not ask (the editor asked)")
     install.add_argument("--dry-run", action="store_true", help="only print the plan")
     install.add_argument("--skip-models", action="store_true")
+    install.add_argument("--audio", action="store_true", help="also the sound effects model (Stable Audio Open: gated, needs HF_TOKEN)")
     install.add_argument("--keep-downloads", action="store_true")
     install.add_argument("--json", action="store_true", help="one JSON event per line")
     for name in ("start", "stop", "status"):
@@ -658,7 +755,8 @@ def main(argv=None, probe=probe_machine, ask=input):
         root = args.root or default_root()
         if args.command == "install":
             key = args.platform or detect(probe())
-            steps = make_plan(manifest, key, root, args.skip_models)
+            kinds = (KIND_IMAGE, KIND_AUDIO) if args.audio else (KIND_IMAGE,)
+            steps = make_plan(manifest, key, root, args.skip_models, kinds)
             if args.json:
                 emit({"event": "plan", "platform": key, "root": str(root), "steps": [s.to_json() for s in steps],
                       "downloadBytes": sum(s.size for s in steps)})
@@ -673,7 +771,7 @@ def main(argv=None, probe=probe_machine, ask=input):
                 if ask("go on? [y/N] ").strip().lower() not in ("y", "yes"):
                     print("nothing changed")
                     return EXIT_DECLINED
-            Installer(manifest, key, root, args.downloads, emit).install(steps, args.keep_downloads)
+            Installer(manifest, key, root, args.downloads, emit, token=hf_token()).install(steps, args.keep_downloads)
             emit({"event": "done", "ok": True, "root": str(root)})
             if not args.json:
                 print(f"done. Start: python {Path(__file__).name} start")

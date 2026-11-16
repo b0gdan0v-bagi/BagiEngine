@@ -50,6 +50,14 @@ file. A new library adds its row here in the same commit.
 The OFL lets a font be bundled and shipped with any software, not sold on its own; a font changed under a Reserved Font Name must be
 renamed.
 
+## Generated content
+
+The art generation tools (`tools/artgen/`) ship nothing: ComfyUI and its models stay on the generator's machine, pinned with their licences
+in `tools/artgen/comfyui/manifest.json`. What they make can go into a game, under the licence of the model that made it: the image
+models allow commercial use of their output; **Stable Audio Open 1.0** (the sound effects) is under the Stability AI Community License,
+which allows commercial use only while the business makes under USD 1M a year (above it, Stability's Enterprise licence). The provenance
+file next to every generated asset names its model.
+
 ## Open points for the owner
 
 - **The Vulkan loader binaries** carry no licence file in `external/Vulkan-Loader` and no exact version (the macOS dylib says 1.4.0; the

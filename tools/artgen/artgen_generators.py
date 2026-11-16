@@ -43,8 +43,10 @@ class GeneratorStatus:
 
 @dataclass
 class Image:
+    """One output file of a run: an image, or a sound (the name's extension says which)."""
+
     data: bytes
-    name: str  # the generator's own file name, for the log
+    name: str  # the generator's own file name, for the log and the extension
 
 
 class GenerationError(Exception):
@@ -125,7 +127,7 @@ class ComfyUIGenerator(Generator):
 
     def status(self):
         report = comfyui_check.check(self.url, self.manifest)
-        details = {"url": self.url, "version": report.get("version"), "warnings": report["warnings"]}
+        details = {"url": self.url, "version": report.get("version"), "warnings": report["warnings"], "kinds": report.get("kinds", [])}
         if report["reachable"]:
             self._version = report.get("version")
             if report["ready"]:
@@ -223,13 +225,14 @@ class ComfyUIGenerator(Generator):
         entry = self._http(f"/history/{prompt_id}").get(prompt_id) or {}
         images = []
         for output in entry.get("outputs", {}).values():
-            for image in output.get("images", []):
+            # SaveImage reports "images", SaveAudio "audio"; both are fetched by /view
+            for image in output.get("images", []) + output.get("audio", []):
                 if image.get("type") != "output":
                     continue
                 query = urllib.parse.urlencode({k: image.get(k, "") for k in ("filename", "subfolder", "type")})
                 images.append(Image(self._http(f"/view?{query}", raw=True), image["filename"]))
         if not images:
-            raise GenerationError("ComfyUI finished without an output image (does the workflow end in SaveImage?)")
+            raise GenerationError("ComfyUI finished without an output file (does the workflow end in SaveImage or SaveAudio?)")
         return images
 
     def _cancel(self, prompt_id):
@@ -253,8 +256,77 @@ def tiny_png(width, height, rgb):
     return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", raw) + chunk(b"IEND", b"")
 
 
+FLAC_RATE = 44100
+FLAC_BLOCK = 4096
+FAKE_MAX_SECONDS = 0.5
+
+
+def _crc8(data):
+    crc = 0
+    for byte in data:
+        crc ^= byte
+        for _ in range(8):
+            crc = ((crc << 1) ^ 0x07) & 0xFF if crc & 0x80 else (crc << 1) & 0xFF
+    return crc
+
+
+def _crc16(data):
+    crc = 0
+    for byte in data:
+        crc ^= byte << 8
+        for _ in range(8):
+            crc = ((crc << 1) ^ 0x8005) & 0xFFFF if crc & 0x8000 else (crc << 1) & 0xFFFF
+    return crc
+
+
+def _utf8_number(value):
+    """FLAC's frame number coding (UTF-8 extended to 36 bits); a fake sound has few frames."""
+    if value < 0x80:
+        return bytes([value])
+    if value < 0x800:
+        return bytes([0xC0 | (value >> 6), 0x80 | (value & 0x3F)])
+    return bytes([0xE0 | (value >> 12), 0x80 | ((value >> 6) & 0x3F), 0x80 | (value & 0x3F)])
+
+
+def tiny_flac(seconds, frequency=440.0, rate=FLAC_RATE):
+    """A stereo 16-bit FLAC of a tone (the fake generator's sounds): verbatim subframes, real CRCs, so any decoder reads it."""
+    import math
+
+    total = max(1, int(rate * seconds))
+    samples = [int(0.3 * 32767 * math.sin(2 * math.pi * frequency * i / rate)) for i in range(total)]
+    info = struct.pack(">HH", FLAC_BLOCK, FLAC_BLOCK) + bytes(6)  # the frame sizes: unknown
+    # 20 bits rate, 3 bits channels - 1, 5 bits bits - 1, 36 bits total samples
+    packed = (rate << 44) | (1 << 41) | (15 << 36) | total
+    info += packed.to_bytes(8, "big") + bytes(16)
+    out = bytearray(b"fLaC" + bytes([0x80]) + len(info).to_bytes(3, "big") + info)
+    for number, start in enumerate(range(0, total, FLAC_BLOCK)):
+        block = samples[start:start + FLAC_BLOCK]
+        # sync, fixed block size; block size from the 16-bit field, rate and depth from STREAMINFO; independent stereo
+        header = bytearray([0xFF, 0xF8, 0x70, 0x10]) + _utf8_number(number) + struct.pack(">H", len(block) - 1)
+        header.append(_crc8(header))
+        frame = bytearray(header)
+        for sign in (1, -1):
+            frame.append(0x02)  # verbatim subframe, no wasted bits
+            frame += b"".join(struct.pack(">h", sign * s) for s in block)
+        frame += struct.pack(">H", _crc16(frame))
+        out += frame
+    return bytes(out)
+
+
+def flac_info(data):
+    """(sample rate, channels, seconds) of a FLAC's STREAMINFO, or None when the bytes are not FLAC."""
+    if len(data) < 42 or data[:4] != b"fLaC" or data[4] & 0x7F != 0:
+        return None
+    packed = int.from_bytes(data[18:26], "big")
+    rate = packed >> 44
+    channels = ((packed >> 41) & 0x7) + 1
+    total = packed & ((1 << 36) - 1)
+    return rate, channels, (total / rate if rate else 0.0)
+
+
 class FakeGenerator(Generator):
-    """Records the graphs and answers each with a small PNG whose colour follows the seed; `state` and `fail` steer it."""
+    """Records the graphs and answers each with a small PNG whose colour follows the seed, or a short FLAC tone for a graph that saves
+    audio; `state` and `fail` steer it."""
 
     name = "fake"
 
@@ -265,7 +337,7 @@ class FakeGenerator(Generator):
         self.graphs = []
 
     def status(self):
-        return GeneratorStatus(self.state, "" if self.state == GeneratorState.READY else f"fake: {self.state}")
+        return GeneratorStatus(self.state, "" if self.state == GeneratorState.READY else f"fake: {self.state}", {"kinds": ["audio", "image"]})
 
     def info(self):
         return {"name": self.name, "version": "1"}
@@ -288,6 +360,9 @@ class FakeGenerator(Generator):
         if self.fail:
             raise GenerationError(self.fail)
         seed = next((n["inputs"]["seed"] for n in graph.values() if "seed" in n.get("inputs", {})), 0)
+        if any(str(n.get("class_type", "")).startswith("SaveAudio") for n in graph.values()):
+            seconds = next((n["inputs"]["seconds"] for n in graph.values() if n.get("class_type") == "EmptyLatentAudio"), 1.0)
+            return [Image(tiny_flac(min(float(seconds), FAKE_MAX_SECONDS), 220.0 + seed % 440), f"fake_{seed}.flac")]
         rgb = (seed % 256, (seed // 256) % 256, 128)
         return [Image(tiny_png(8, 8, rgb), f"fake_{seed}.png")]
 

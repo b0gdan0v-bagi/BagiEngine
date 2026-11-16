@@ -270,7 +270,9 @@ class FakeComfy:
     def __init__(self):
         self.mode = "ok"
         self.ws = True
-        self.models = {m["folder"]: [m["name"]] for m in comfyui_check.load_manifest()["models"]}
+        self.models = {}
+        for m in comfyui_check.load_manifest()["models"]:
+            self.models.setdefault(m["folder"], []).append(m["name"])
         self.prompts = []
         self.cancels = []
         self.streams = {}
@@ -485,3 +487,81 @@ def test_cli_presets_and_errors(game, capsys):
 def test_cli_status_exit_codes(tmp_path, capsys):
     assert artgen.main(["status", "--generator", "fake"]) == artgen.EXIT_OK
     assert artgen.main(["status", "--url", f"http://127.0.0.1:{closed_port()}", "--json"]) in (artgen.EXIT_NOT_INSTALLED, artgen.EXIT_FAILED)
+
+
+# --- sounds
+
+
+AUDIO = {"preset": 1, "title": "Knock", "workflow": "sao_sfx", "prompt": "a {subject} on wood", "params": {"duration": 1.5, "steps": 8}}
+
+
+def test_the_sound_workflow_is_audio_and_duration_reaches_both_nodes(game):
+    write_preset(game, "knock", AUDIO)
+    preset = preset_of(game, "knock")
+    assert preset.kind == "audio" and preset.workflow.kind == "audio" and preset.duration == 1.5
+    graph = artgen_preset.build_graph(preset, "pawn", 9)
+    assert graph["5"]["inputs"]["seconds"] == 1.5 and graph["11"]["inputs"]["seconds_total"] == 1.5
+    assert graph["6"]["inputs"]["text"] == "a pawn on wood" and graph["3"]["inputs"]["seed"] == 9
+    assert artgen_preset.models_of(graph) == {"ckpt_name": ["stable-audio-open-1.0.safetensors"], "clip_name": ["t5_base.safetensors"]}
+    described = artgen_preset.find_workflows(game)["sao_sfx"].describe()
+    assert described["kind"] == "audio" and described["inputs"]["duration"] == {"default": 2.0}
+    assert "kind" not in described["inputs"]
+    write_preset(game, "plain", {**AUDIO, "params": {}})
+    assert preset_of(game, "plain").duration == 2.0, "the workflow's own length"
+    assert preset_of(game).kind == "image" and preset_of(game).duration is None
+
+
+@pytest.mark.parametrize("change, message", [
+    ({"size": [64, 64]}, "\"size\" is for an image"),
+    ({"params": {"duration": 0}}, "positive number"),
+    ({"params": {"duration": "long"}}, "positive number"),
+    ({"kind": "image"}, "cannot use the workflow 'sao_sfx'"),
+    ({"kind": "video"}, "must be one of"),
+])
+def test_what_a_sound_preset_cannot_say(game, change, message):
+    write_preset(game, "knock", {**AUDIO, **change})
+    with pytest.raises(artgen_preset.PresetError, match=message):
+        preset_of(game, "knock")
+
+
+def test_an_image_preset_has_no_duration(game):
+    write_preset(game, "wood", {**PRESET, "params": {"duration": 2}})
+    with pytest.raises(artgen_preset.PresetError, match="is for a sound"):
+        preset_of(game)
+    write_preset(game, "wood", {**PRESET, "kind": "audio"})
+    with pytest.raises(artgen_preset.PresetError, match="makes image"):
+        preset_of(game)
+
+
+def test_a_sound_is_written_as_flac_with_its_length_in_the_provenance(game, tmp_path):
+    write_preset(game, "knock", AUDIO)
+    request = artgen_service.Request(preset_of(game, "knock"), "pawn", 2, 4, tmp_path / "out")
+    events = []
+    results = artgen_service.generate(request, FakeGenerator(), events.append)
+    assert [r.path.name for r in results] == ["pawn_4.flac", "pawn_5.flac"]
+    assert results[0].path.read_bytes()[:4] == b"fLaC"
+    provenance = results[0].provenance
+    assert provenance["kind"] == "audio" and provenance["duration"] == 1.5
+    assert provenance["sampleRate"] == 44100 and provenance["channels"] == 2
+    assert provenance["seconds"] == pytest.approx(0.5), "the fake makes half a second at most"
+    assert provenance["size"] is None
+    assert [e["output"] for e in events if e["kind"] == "image"] == ["audio", "audio"]
+
+
+def test_a_generator_without_the_audio_models_refuses_a_sound(game, tmp_path):
+    class ImagesOnly(FakeGenerator):
+        def status(self):
+            status = super().status()
+            status.details["kinds"] = ["image"]
+            return status
+
+    write_preset(game, "knock", AUDIO)
+    with pytest.raises(artgen_service.RequestError, match="install --audio"):
+        artgen_service.generate(artgen_service.Request(preset_of(game, "knock"), "pawn", 1, 1, tmp_path), ImagesOnly())
+    assert artgen_service.generate(artgen_service.Request(preset_of(game), "pawn", 1, 1, tmp_path), ImagesOnly())
+
+
+def test_the_fake_flac_is_a_real_stream():
+    data = artgen_generators.tiny_flac(0.2)
+    assert artgen_generators.flac_info(data) == (44100, 2, pytest.approx(0.2))
+    assert artgen_generators.flac_info(b"RIFF....") is None

@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import artgen_preset
-from artgen_generators import GeneratorState
+from artgen_generators import GeneratorState, flac_info
 
 PROVENANCE_FORMAT = 1
 PROVENANCE_SUFFIX = ".artgen.json"
@@ -55,14 +55,15 @@ def check_request(request):
         raise RequestError("seed must be a non-negative integer below 2**63")
 
 
-def provenance_of(request, seed, graph, generator_info, source_name, now=None):
+def provenance_of(request, seed, graph, generator_info, source_name, now=None, data=b""):
     preset = request.preset
-    return {
+    record = {
         "provenance": PROVENANCE_FORMAT,
         "preset": preset.name,
         "presetSource": preset.source,
         "presetHash": preset.file_hash,
         "presetData": preset.data,
+        "kind": preset.kind,
         "subject": request.subject,
         "prompt": artgen_preset.final_prompt(preset, request.subject),
         "negative": preset.negative,
@@ -76,19 +77,29 @@ def provenance_of(request, seed, graph, generator_info, source_name, now=None):
         "generatorFile": source_name,
         "date": (now or datetime.now(timezone.utc)).isoformat(timespec="seconds"),
     }
+    if preset.kind == artgen_preset.KIND_AUDIO:
+        # The asked length and what the file holds (FLAC: read from its STREAMINFO)
+        record["duration"] = preset.duration
+        info = flac_info(data)
+        record["sampleRate"], record["channels"], record["seconds"] = info if info else (None, None, None)
+    return record
 
 
 def generate(request, generator, on_progress=None, cancel=None, rng=random):
     """Runs the images one by one and writes each as soon as it is there, so a cancel keeps what was done.
 
     `on_progress(event)` gets dicts: {"kind": "step", "image": i, "count": n, "step": s, "steps": m, "seed": seed} while an
-    image runs and {"kind": "image", "image": i, "count": n, "seed": seed, "path": str} when it is written. Returns the
+    image (or a sound) runs and {"kind": "image", "image": i, "count": n, "seed": seed, "path": str, "output": "image" | "audio"} when it
+    is written. Returns the
     results; `Cancelled` and `GenerationError` of the generator pass through after the images done so far are written.
     """
     check_request(request)
     status = generator.status()
     if status.state != GeneratorState.READY:
         raise RequestError(f"the generator is {status.state}: {status.reason}")
+    kinds = status.details.get("kinds")
+    if kinds is not None and request.preset.kind not in kinds:
+        raise RequestError(f"the generator makes no {request.preset.kind}: its models are missing (artgen_setup.py install --{request.preset.kind})")
     first_seed = request.seed if request.seed is not None else rng.randrange(SEED_RANGE)
     out_dir = Path(request.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -105,12 +116,14 @@ def generate(request, generator, on_progress=None, cancel=None, rng=random):
 
         images = generator.run(graph, on_progress=step, cancel=cancel)
         image = images[0]
-        path = out_dir / f"{stem}_{seed}.png"
+        default_suffix = ".flac" if request.preset.kind == artgen_preset.KIND_AUDIO else ".png"
+        suffix = Path(image.name).suffix.lower() or default_suffix
+        path = out_dir / f"{stem}_{seed}{suffix}"
         path.write_bytes(image.data)
-        provenance = provenance_of(request, seed, graph, info, image.name)
+        provenance = provenance_of(request, seed, graph, info, image.name, data=image.data)
         provenance_path = path.with_name(path.stem + PROVENANCE_SUFFIX)
         provenance_path.write_text(json.dumps(provenance, indent=2) + "\n", encoding="utf-8")
         results.append(Result(path, provenance_path, seed, provenance))
         if on_progress:
-            on_progress({"kind": "image", "image": index, "count": request.count, "seed": seed, "path": str(path)})
+            on_progress({"kind": "image", "image": index, "count": request.count, "seed": seed, "path": str(path), "output": request.preset.kind})
     return results

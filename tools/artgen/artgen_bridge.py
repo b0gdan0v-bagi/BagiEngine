@@ -104,7 +104,7 @@ class Bridge:
                         entry["preset"] = preset.data
                     self._presets.append(entry)
                 else:
-                    self._presets.append({"name": name, "title": preset.title, "source": preset.source, "preset": preset.data})
+                    self._presets.append({"name": name, "title": preset.title, "source": preset.source, "kind": preset.kind, "preset": preset.data})
             for name, workflow in artgen_preset.find_workflows(self.game_root).items():
                 if isinstance(workflow, Exception):
                     self._workflows.append({"name": name, "error": str(workflow)})
@@ -159,7 +159,7 @@ class Bridge:
                 self._reports.put(("artgen_progress", {**report, "step": event["step"], "steps": event["steps"]}))
             else:
                 provenance = str(Path(event["path"]).with_name(Path(event["path"]).stem + artgen_service.PROVENANCE_SUFFIX))
-                self._reports.put(("artgen_image", {**report, "path": event["path"], "provenance": provenance}))
+                self._reports.put(("artgen_image", {**report, "path": event["path"], "provenance": provenance, "kind": event.get("output", "image")}))
 
         done = {"id": run_id, "status": "ok"}
         try:

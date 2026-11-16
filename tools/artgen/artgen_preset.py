@@ -23,8 +23,16 @@ SUBJECT_TOKEN = "{subject}"
 # Named inputs the service fills itself; a preset sets the rest through "params".
 SERVICE_INPUTS = ("prompt", "negative", "seed", "width", "height")
 REQUIRED_INPUTS = ("prompt", "seed")
-# The output node is named too: the service sets its file prefix and reads its images.
+# The output node is named too: the service sets its file prefix and reads its images (or sounds).
 OUTPUT_INPUT = "output"
+# What the workflow makes; a reserved key of `.inputs.json` like "output". A preset of another kind cannot use it.
+KIND_KEY = "kind"
+KIND_IMAGE = "image"
+KIND_AUDIO = "audio"
+KINDS = (KIND_IMAGE, KIND_AUDIO)
+RESERVED_KEYS = (OUTPUT_INPUT, KIND_KEY)
+# The length of a sound in seconds: an input of an audio workflow, refused for an image
+DURATION_INPUT = "duration"
 # Inputs whose values are model files: they go into the provenance.
 MODEL_INPUT_NAMES = ("ckpt_name", "vae_name", "lora_name", "unet_name", "clip_name", "control_net_name", "bg_removal_name")
 # What a preset is called on disk and in a request: a safe file name on every platform
@@ -43,8 +51,14 @@ class Workflow:
     name: str
     path: Path
     graph: dict
-    inputs: dict  # named input -> [node id, input name]
+    inputs: dict  # named input -> [node id, input name], or a list of them when one value goes to several nodes
     source: str = SOURCE_ENGINE
+    kind: str = KIND_IMAGE
+
+    def targets(self, key):
+        """Every [node id, input name] the named input sets."""
+        target = self.inputs[key]
+        return target if isinstance(target[0], list) else [target]
 
     @property
     def hash(self):
@@ -56,16 +70,17 @@ class Workflow:
         """What the editor's form needs: every named input but the output, with the graph's own value as its default, and the values
         the generator offers for a combo input (`choices`: {node class: {input name: [values]}}, from ComfyUI's /object_info)."""
         inputs = {}
-        for key, target in self.inputs.items():
-            if key == OUTPUT_INPUT:
+        for key in self.inputs:
+            if key in RESERVED_KEYS:
                 continue
+            target = self.targets(key)[0]
             node = self.graph[target[0]]
             entry = {"default": node["inputs"][target[1]]}
             offered = (choices or {}).get(node.get("class_type"), {}).get(target[1])
             if offered:
                 entry["choices"] = list(offered)
             inputs[key] = entry
-        return {"name": self.name, "source": self.source, "inputs": inputs}
+        return {"name": self.name, "source": self.source, "kind": self.kind, "inputs": inputs}
 
 
 @dataclass
@@ -82,6 +97,17 @@ class Preset:
     file_hash: str = ""
     source: str = SOURCE_GAME  # game, engine or draft
     data: dict = field(default_factory=dict)  # the preset as written, for the form and the provenance
+    kind: str = KIND_IMAGE  # the workflow's: what the preset makes
+
+    @property
+    def duration(self):
+        """The seconds of a sound: the preset's `duration`, else the workflow's own; None for an image."""
+        if self.kind != KIND_AUDIO or DURATION_INPUT not in self.workflow.inputs:
+            return None
+        if DURATION_INPUT in self.params:
+            return self.params[DURATION_INPUT]
+        node, name = self.workflow.targets(DURATION_INPUT)[0]
+        return self.workflow.graph[node]["inputs"][name]
 
 
 def _read_json(path):
@@ -110,19 +136,26 @@ def load_workflow(name, game_root=None):
     inputs = _read_json(inputs_path)
     if not isinstance(graph, dict) or not isinstance(inputs, dict):
         raise PresetError(f"{path}: the graph and its inputs must be JSON objects")
+    kind = inputs.get(KIND_KEY, KIND_IMAGE)
+    if kind not in KINDS:
+        raise PresetError(f"{inputs_path}: \"kind\" must be one of {', '.join(KINDS)}")
     for key, target in inputs.items():
+        if key == KIND_KEY:
+            continue
         if key == OUTPUT_INPUT:
             if target not in graph:
                 raise PresetError(f"{inputs_path}: the output node '{target}' is not in the graph")
             continue
-        if not (isinstance(target, list) and len(target) == 2 and target[0] in graph):
-            raise PresetError(f"{inputs_path}: '{key}' must be [node id, input name] of a node of the graph")
-        if target[1] not in graph[target[0]].get("inputs", {}):
-            raise PresetError(f"{inputs_path}: node {target[0]} has no input '{target[1]}' for '{key}'")
+        targets = target if isinstance(target, list) and target and isinstance(target[0], list) else [target]
+        for one in targets:
+            if not (isinstance(one, list) and len(one) == 2 and one[0] in graph):
+                raise PresetError(f"{inputs_path}: '{key}' must be [node id, input name] of a node of the graph, or a list of them")
+            if one[1] not in graph[one[0]].get("inputs", {}):
+                raise PresetError(f"{inputs_path}: node {one[0]} has no input '{one[1]}' for '{key}'")
     for key in REQUIRED_INPUTS + (OUTPUT_INPUT,):
         if key not in inputs:
             raise PresetError(f"{inputs_path}: the input '{key}' is not named")
-    return Workflow(name=name, path=path, graph=graph, inputs=inputs, source=source)
+    return Workflow(name=name, path=path, graph=graph, inputs=inputs, source=source, kind=kind)
 
 
 def find_workflows(game_root=None):
@@ -163,6 +196,13 @@ def parse_preset(data, name, game_root=None, label=None, path=None, source=SOURC
         workflow = load_workflow(data["workflow"], game_root)
     except PresetError as error:
         raise PresetError(f"{label}: {error}") from error
+    kind = data.get(KIND_KEY, workflow.kind)
+    if kind not in KINDS:
+        raise PresetError(f"{label}: \"kind\" must be one of {', '.join(KINDS)}")
+    if kind != workflow.kind:
+        raise PresetError(f"{label}: an {kind} preset cannot use the workflow '{workflow.name}', which makes {workflow.kind}")
+    if kind == KIND_AUDIO and data.get("size") is not None:
+        raise PresetError(f"{label}: \"size\" is for an image; a sound has \"params\": {{\"duration\": seconds}}")
     size = data.get("size")
     if size is not None and not (isinstance(size, list) and len(size) == 2 and all(type(v) is int and v > 0 for v in size)):
         raise PresetError(f"{label}: \"size\" must be [width, height]")
@@ -173,11 +213,15 @@ def parse_preset(data, name, game_root=None, label=None, path=None, source=SOURC
     params = data.get("params", {})
     if not isinstance(params, dict):
         raise PresetError(f"{label}: \"params\" must be an object")
+    if kind == KIND_IMAGE and DURATION_INPUT in params:
+        raise PresetError(f"{label}: \"duration\" is for a sound, not an image")
+    if kind == KIND_AUDIO and DURATION_INPUT in params and not (type(params[DURATION_INPUT]) in (int, float) and params[DURATION_INPUT] > 0):
+        raise PresetError(f"{label}: \"duration\" must be a positive number of seconds")
     for key in params:
-        if key in SERVICE_INPUTS or key == OUTPUT_INPUT:
+        if key in SERVICE_INPUTS or key in RESERVED_KEYS:
             raise PresetError(f"{label}: \"{key}\" is set by the service or by \"size\", not in \"params\"")
         if key not in workflow.inputs:
-            known = ", ".join(k for k in workflow.inputs if k not in SERVICE_INPUTS and k != OUTPUT_INPUT)
+            known = ", ".join(k for k in workflow.inputs if k not in SERVICE_INPUTS and k not in RESERVED_KEYS)
             raise PresetError(f"{label}: the workflow '{workflow.name}' has no input '{key}' (it has: {known})")
     return Preset(
         name=name,
@@ -192,6 +236,7 @@ def parse_preset(data, name, game_root=None, label=None, path=None, source=SOURC
         file_hash=file_hash or content_hash(data),
         source=source,
         data=data,
+        kind=kind,
     )
 
 
@@ -256,8 +301,8 @@ def build_graph(preset, subject, seed, file_prefix="artgen"):
     if preset.width is not None:
         values["width"], values["height"] = preset.width, preset.height
     for key, value in values.items():
-        node, name = preset.workflow.inputs[key]
-        graph[node]["inputs"][name] = value
+        for node, name in preset.workflow.targets(key):
+            graph[node]["inputs"][name] = value
     output = graph[preset.workflow.inputs[OUTPUT_INPUT]]
     if "filename_prefix" in output.get("inputs", {}):
         output["inputs"]["filename_prefix"] = file_prefix

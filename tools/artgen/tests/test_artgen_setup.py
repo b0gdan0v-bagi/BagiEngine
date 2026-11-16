@@ -51,6 +51,8 @@ class Files:
     def __init__(self):
         self.blobs = {}
         self.requests = []
+        self.auth = []  # the Authorization header of each request, by path
+        self.redirects = {}  # path -> URL answered with 302
 
     def add(self, path, data):
         self.blobs[path] = data
@@ -67,6 +69,12 @@ def server():
 
         def do_GET(self):
             files.requests.append((self.path, self.headers.get("Range")))
+            files.auth.append((self.path, self.headers.get("Authorization")))
+            if self.path in files.redirects:
+                self.send_response(302)
+                self.send_header("Location", files.redirects[self.path])
+                self.end_headers()
+                return
             data = files.blobs.get(self.path)
             if data is None:
                 self.send_response(404)
@@ -348,3 +356,125 @@ def test_started_here_is_only_a_comfyui_this_tool_started(tmp_path, monkeypatch)
     monkeypatch.setattr(artgen_setup, "_ours", lambda r, pid: asked.append(pid) or True)
     assert setup.started_here() and setup.started_here()
     assert asked == [4242]  # checked once per pid
+
+
+# --- the audio models (gated) -------------------------------------------------------------------------------------------
+
+
+def gated(manifest, server, sha=True):
+    data = b"gated audio model" * 4000
+    model = {"name": "sao.safetensors", "folder": "checkpoints", "kind": "audio", "gated": True, "url": f"{server.url}/sao",
+             "size": len(data), "sha256": server.add("/sao", data) if sha else None, "licence": "Community", "source": "https://hf.invalid/sao"}
+    if not sha:
+        server.add("/sao", data)
+    manifest["models"].append(model)
+    return model, data
+
+
+def test_the_audio_models_are_planned_only_when_asked(manifest, server, tmp_path):
+    model, _ = gated(manifest, server)
+    names = lambda steps: [s.what for s in steps if s.kind == "model"]  # noqa: E731
+    assert "checkpoints/sao.safetensors" not in names(artgen_setup.make_plan(manifest, "windows-nvidia", tmp_path / "r"))
+    both = artgen_setup.make_plan(manifest, "windows-nvidia", tmp_path / "r", kinds=("image", "audio"))
+    assert "checkpoints/sao.safetensors" in names(both)
+
+
+def test_a_gated_model_needs_a_token_and_says_how(manifest, server, tmp_path):
+    gated(manifest, server)
+    root = tmp_path / "root"
+    steps = artgen_setup.make_plan(manifest, "windows-nvidia", root, skip_models=False, kinds=("audio",))
+    with pytest.raises(SetupError, match="HF_TOKEN"):
+        # The server serves it without a token: the refusal is ours, before a byte, when the manifest has no hash
+        manifest["models"][-1]["sha256"] = None
+        Installer(manifest, "windows-nvidia", root, unpack=fake_unpack()).install(steps)
+
+
+def test_a_gated_model_is_fetched_with_the_token_and_its_hash_read_from_hugging_face(manifest, server, tmp_path):
+    model, data = gated(manifest, server, sha=False)
+    root = tmp_path / "root"
+    events = []
+    asked = []
+
+    def hash_of(m, token):
+        asked.append((m["name"], token))
+        return hashlib.sha256(data).hexdigest()
+
+    steps = artgen_setup.make_plan(manifest, "windows-nvidia", root, kinds=("audio",))
+    Installer(manifest, "windows-nvidia", root, emit=events.append, unpack=fake_unpack(), token="secret", hash_of_gated=hash_of).install(steps)
+    assert artgen_setup.model_path(root, model).read_bytes() == data
+    assert asked == [("sao.safetensors", "secret")]
+    assert ("/sao", "Bearer secret") in server.auth
+    assert ("/portable.7z", None) in server.auth, "the token goes only with a gated model"
+    assert any("pin it" in e.get("text", "") for e in events)
+
+
+def test_the_token_never_follows_a_redirect_to_another_host(manifest, server, tmp_path):
+    model, data = gated(manifest, server)
+    # 127.0.0.1 and localhost are one server but two hosts, as huggingface.co and its CDN are
+    server.redirects["/sao"] = server.url.replace("127.0.0.1", "localhost") + "/cdn"
+    server.add("/cdn", data)
+    artgen_setup.download(model["url"], tmp_path / "sao.safetensors", model["size"], model["sha256"], token="secret")
+    assert (tmp_path / "sao.safetensors").read_bytes() == data
+    assert ("/sao", "Bearer secret") in server.auth and ("/cdn", None) in server.auth
+
+
+def test_a_refused_gated_download_says_what_to_do(manifest, server, tmp_path):
+    with pytest.raises(SetupError, match="HTTP 404"):
+        artgen_setup.download(f"{server.url}/missing", tmp_path / "x", 10, "0" * 64, token="secret")
+
+
+def test_a_gated_model_placed_by_hand_is_checked_by_size_without_a_token(manifest, server, tmp_path):
+    model, data = gated(manifest, server, sha=False)
+    root = tmp_path / "root"
+    events = []
+    Installer(manifest, "windows-nvidia", root, unpack=fake_unpack()).install(artgen_setup.make_plan(manifest, "windows-nvidia", root, skip_models=True))
+    dest = artgen_setup.model_path(root, model)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(data)
+    steps = artgen_setup.make_plan(manifest, "windows-nvidia", root, kinds=("audio",))
+    assert [s.state for s in steps if s.kind == "model"] == ["verify"]
+    Installer(manifest, "windows-nvidia", root, emit=events.append, unpack=fake_unpack()).install(steps)
+    assert any("placed by hand" in e.get("text", "") for e in events)
+    dest.write_bytes(data[:-1])
+    with pytest.raises(SetupError, match="bytes"):
+        Installer(manifest, "windows-nvidia", root, unpack=fake_unpack()).install(steps)
+
+
+def test_the_token_comes_from_the_environment_or_local_json(local_settings):
+    assert artgen_setup.hf_token(env={"HF_TOKEN": "a"}) == "a"
+    assert artgen_setup.hf_token(env={}) is None
+    local_settings.write_text(json.dumps({"hfToken": "b"}), encoding="utf-8")
+    assert artgen_setup.hf_token(env={}) == "b"
+    assert artgen_setup.hf_token(env={"HF_TOKEN": "a"}) == "a"
+
+
+def test_the_hash_of_a_gated_file_is_read_at_the_pinned_commit():
+    seen = {}
+
+    class Answer:
+        def __init__(self, body):
+            self.body = body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return self.body
+
+    def opener(request, timeout):
+        seen["url"], seen["auth"], seen["data"] = request.full_url, request.get_header("Authorization"), request.data
+        return Answer(json.dumps([{"path": "model.safetensors", "lfs": {"oid": "a" * 64}}]).encode())
+
+    model = {"name": "m", "url": "https://huggingface.co/org/repo/resolve/" + "c" * 40 + "/model.safetensors", "source": "x"}
+    assert artgen_setup.gated_sha256(model, "tok", opener) == "a" * 64
+    assert seen["url"] == "https://huggingface.co/api/models/org/repo/paths-info/" + "c" * 40
+    assert seen["auth"] == "Bearer tok" and seen["data"] == b"paths=model.safetensors"
+
+    def masked(request, timeout):
+        return Answer(json.dumps([{"path": "model.safetensors", "lfs": {"oid": "*" * 64}}]).encode())
+
+    with pytest.raises(SetupError, match="accept its licence"):
+        artgen_setup.gated_sha256(model, "tok", masked)

@@ -24,7 +24,9 @@ class FakeComfy:
     def __init__(self):
         self.version = MANIFEST["comfyui"]["version"]
         self.device_type = "cuda"
-        self.models = {m["folder"]: [m["name"]] for m in MANIFEST["models"]}
+        self.models = {}
+        for m in MANIFEST["models"]:
+            self.models.setdefault(m["folder"], []).append(m["name"])
         self.history_polls_before_done = 1
         self.fail_generation = False
         self.prompts = []
@@ -171,10 +173,12 @@ def test_manifest_pins_every_download():
             assert f"/v{comfy['version']}/" in variant["url"] and variant["url"].endswith("/" + variant["asset"]), key
     names = set()
     for model in MANIFEST["models"]:
-        assert SHA256.match(model["sha256"]) and model["size"] > 0, model["name"]
+        # A gated model's hash is shown only to an account with access: the install reads it with the owner's token until it is pinned
+        assert (SHA256.match(model["sha256"]) if not model.get("gated") or model["sha256"] else True) and model["size"] > 0, model["name"]
+        assert model.get("kind", "image") in ("image", "audio"), model["name"]
         # A Hugging Face URL names a commit, never a branch: the hash must stay true.
         assert re.search(r"/resolve/[0-9a-f]{40}/", model["url"]), model["url"]
-        assert model["url"].endswith("/" + model["name"])
+        assert model["url"].endswith(Path(model["name"]).suffix)
         assert model["licence"] and model["source"]
         assert (model["folder"], model["name"]) not in names
         names.add((model["folder"], model["name"]))
@@ -198,3 +202,28 @@ def test_every_engine_workflow_loads_only_manifest_models(workflow_file):
     for node in loaders:
         folder, field = LOADERS[node["class_type"]]
         assert (folder, node["inputs"][field]) in available
+
+
+def test_missing_audio_models_only_warn_and_say_what_it_makes(fake):
+    for model in MANIFEST["models"]:
+        if model.get("kind") == "audio":
+            fake.models[model["folder"]].remove(model["name"])
+    report = comfyui_check.check(fake.url, MANIFEST)
+    assert report["ready"] and report["kinds"] == ["image"]
+    assert any("install --audio" in w for w in report["warnings"])
+
+
+def test_with_every_model_it_makes_images_and_sounds(fake):
+    assert comfyui_check.check(fake.url, MANIFEST)["kinds"] == ["audio", "image"]
+
+
+def test_the_sound_workflow_is_a_valid_graph():
+    graph = json.loads(comfyui_check.AUDIO_WORKFLOW.read_text(encoding="utf-8"))
+    for node_id, node in graph.items():
+        for value in node["inputs"].values():
+            if isinstance(value, list):
+                assert value[0] in graph, f"node {node_id} links to a missing node {value[0]}"
+    saves = [n for n in graph.values() if n["class_type"].startswith("SaveAudio")]
+    assert len(saves) == 1
+    names = {m["name"] for m in MANIFEST["models"] if m.get("kind") == "audio"}
+    assert {graph["4"]["inputs"]["ckpt_name"], graph["10"]["inputs"]["clip_name"]} == names

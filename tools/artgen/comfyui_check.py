@@ -2,11 +2,13 @@
 """
 The health check of the ComfyUI that art generation uses (tools/artgen/CLAUDE.md). Standard library only.
 
-    python3 tools/artgen/comfyui_check.py [--url http://127.0.0.1:8188] [--json] [--generate] [--timeout 300]
+    python3 tools/artgen/comfyui_check.py [--url http://127.0.0.1:8188] [--json] [--generate [image|audio]] [--timeout 300]
 
 It asks ComfyUI for its version and devices (`/system_stats`) and for the files of every model folder the manifest names
-(`/models/<folder>`), and compares both with `comfyui/manifest.json`. `--generate` also queues `workflows/sdxl_basic.json`
-(`POST /prompt`) and waits for its image (`/history/<id>`), so the GPU path is proven, not only the server.
+(`/models/<folder>`), and compares both with `comfyui/manifest.json`: the image models make it ready, the audio models (installed
+with `artgen_setup.py install --audio`) are reported in `kinds`. `--generate` also queues `workflows/sdxl_basic.json` (`--generate
+audio`: `workflows/sao_sfx.json`) (`POST /prompt`) and waits for its output (`/history/<id>`), so the GPU path is proven, not only the
+server.
 
 Exit code: 0 ready, 1 reachable but not ready (a model missing, the generation failed), 2 unreachable (not started). A version
 other than the manifest's is a warning, not a failure: a newer ComfyUI may still run the workflows.
@@ -27,6 +29,7 @@ from pathlib import Path
 ARTGEN_DIR = Path(__file__).resolve().parent
 MANIFEST = ARTGEN_DIR / "comfyui" / "manifest.json"
 WORKFLOW = ARTGEN_DIR / "workflows" / "sdxl_basic.json"
+AUDIO_WORKFLOW = ARTGEN_DIR / "workflows" / "sao_sfx.json"
 LOCAL_SETTINGS = ARTGEN_DIR / "local.json"
 DEFAULT_URL = "http://127.0.0.1:8188"
 REQUEST_TIMEOUT_S = 10.0
@@ -102,11 +105,20 @@ def check(url, manifest):
             report["problems"].append(str(error))
             present[folder] = set()
     report["models"] = []
+    kinds = {}
     for model in manifest["models"]:
+        kind = model.get("kind", "image")
         found = model["name"] in present[model["folder"]]
-        report["models"].append({"name": model["name"], "folder": model["folder"], "present": found})
-        if not found:
+        report["models"].append({"name": model["name"], "folder": model["folder"], "kind": kind, "present": found})
+        kinds[kind] = kinds.get(kind, True) and found
+        if found:
+            continue
+        if kind == "image":
             report["problems"].append(f"model {model['folder']}/{model['name']} is missing: run artgen_setup.py install")
+        else:
+            report["warnings"].append(f"{kind} model {model['folder']}/{model['name']} is missing: no {kind} until artgen_setup.py install --{kind}")
+    # What it can make: the image models are the generator; the others add a kind
+    report["kinds"] = sorted(kind for kind, ok in kinds.items() if ok and not report["problems"])
     report["ready"] = not report["problems"]
     return report
 
@@ -132,7 +144,7 @@ def generate(url, workflow, timeout_s, clock=time.monotonic, sleep=time.sleep):
             if status.get("status_str") == "error":
                 raise RuntimeError(f"the generation failed: {json.dumps(status.get('messages', []))[:500]}")
             if status.get("completed"):
-                files = [image["filename"] for output in entry.get("outputs", {}).values() for image in output.get("images", [])]
+                files = [item["filename"] for output in entry.get("outputs", {}).values() for key in ("images", "audio") for item in output.get(key, [])]
                 return clock() - started, files
         sleep(POLL_INTERVAL_S)
     raise RuntimeError(f"no image after {timeout_s:.0f} s")
@@ -148,7 +160,8 @@ def print_report(report):
             free = (device["vramFree"] or 0) / 2**30
             print(f"  device {device['name']} ({device['type']}), VRAM {free:.1f} of {total:.1f} GiB free")
         for model in report.get("models", []):
-            print(f"  {'ok     ' if model['present'] else 'MISSING'} {model['folder']}/{model['name']}")
+            print(f"  {'ok     ' if model['present'] else 'MISSING'} {model['folder']}/{model['name']} ({model['kind']})")
+        print(f"  makes: {', '.join(report.get('kinds', [])) or 'nothing'}")
     for warning in report["warnings"]:
         print(f"  warning: {warning}")
     for problem in report["problems"]:
@@ -165,15 +178,19 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--url", help=f"the ComfyUI address (default: COMFYUI_URL, local.json, {DEFAULT_URL})")
     parser.add_argument("--json", action="store_true", help="print the report as JSON")
-    parser.add_argument("--generate", action="store_true", help="also generate one image with workflows/sdxl_basic.json")
+    parser.add_argument("--generate", nargs="?", const="image", choices=["image", "audio"],
+                        help="also generate one image with workflows/sdxl_basic.json (audio: one sound with workflows/sao_sfx.json)")
     parser.add_argument("--timeout", type=float, default=300.0, help="seconds to wait for the image (default 300)")
     args = parser.parse_args(argv)
 
     url = resolve_url(args.url)
     report = check(url, load_manifest())
+    if args.generate == "audio" and report["ready"] and "audio" not in report["kinds"]:
+        report["problems"].append("generation: the audio models are missing (artgen_setup.py install --audio)")
+        report["ready"] = False
     if args.generate and report["ready"]:
         try:
-            workflow = with_fresh_seed(json.loads(WORKFLOW.read_text(encoding="utf-8")))
+            workflow = with_fresh_seed(json.loads((AUDIO_WORKFLOW if args.generate == "audio" else WORKFLOW).read_text(encoding="utf-8")))
             seconds, files = generate(url, workflow, args.timeout)
             report["generation"] = {"seconds": seconds, "files": files}
         except (RuntimeError, Unreachable) as error:

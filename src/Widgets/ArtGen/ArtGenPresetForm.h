@@ -18,6 +18,7 @@ namespace BECore {
     struct ArtGenWorkflow {
         String name;
         String source;  // "game" or "engine"
+        String kind;    // what it makes: "image" or "audio"
         String error;
         Vector<ArtGenWorkflowInput> inputs;
 
@@ -32,6 +33,7 @@ namespace BECore {
         String name;
         String title;
         String source;
+        String kind;  // "image" or "audio": its workflow's
         String error;
         Json data;
     };
