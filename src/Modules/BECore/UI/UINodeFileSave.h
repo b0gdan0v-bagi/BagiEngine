@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/PoolString/PoolString.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/FunctionRef.h>
@@ -36,6 +37,12 @@ namespace BECore {
      * @return true when @p patched differs from @p fileText
      */
     bool PatchNodeFileText(StringView fileText, const SceneNode& node, Span<const IntrusivePtr<UIElement>> edited, String& patched, size_t& elementsPatched, Vector<String>& notes);
+
+    /// How many elements of @p edited lie in a canvas of @p node (the inspector's "will be written" count)
+    size_t CountEditedElements(const SceneNode& node, Span<const IntrusivePtr<UIElement>> edited);
+
+    /// How many nodes of @p scene are instances of the node file @p ref: a file with more than one is never written by SaveUIRectsToNodeFiles
+    size_t CountNodeInstances(Scene& scene, PoolString ref);
 
     /**
      * @brief Writes the rect edits of @p edited into the node files their nodes came from

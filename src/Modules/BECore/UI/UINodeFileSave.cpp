@@ -37,15 +37,18 @@ namespace BECore {
             return Format("UI '{}/{}'", node.GetName().ToStringView(), element.name.ToStringView());
         }
 
-        bool HoldsEditedElement(const SceneNode& node, Span<const IntrusivePtr<UIElement>> edited) {
+        size_t CountEdited(const SceneNode& node, Span<const IntrusivePtr<UIElement>> edited) {
+            size_t count = 0;
             for (const UICanvasComponent* canvas : CanvasesOf(node)) {
                 for (const auto& element : edited) {
-                    if (TreeHolds(*canvas->GetLayout().root, *element)) {
-                        return true;
-                    }
+                    count += TreeHolds(*canvas->GetLayout().root, *element) ? 1 : 0;
                 }
             }
-            return false;
+            return count;
+        }
+
+        bool HoldsEditedElement(const SceneNode& node, Span<const IntrusivePtr<UIElement>> edited) {
+            return CountEdited(node, edited) > 0;
         }
 
         void CollectNodes(SceneNode& node, Vector<SceneNode*>& out) {
@@ -112,6 +115,20 @@ namespace BECore {
         return patched != fileText;
     }
 
+    size_t CountEditedElements(const SceneNode& node, Span<const IntrusivePtr<UIElement>> edited) {
+        return CountEdited(node, edited);
+    }
+
+    size_t CountNodeInstances(Scene& scene, PoolString ref) {
+        Vector<SceneNode*> nodes;
+        CollectNodes(scene.GetRootNode(), nodes);
+        size_t instances = 0;
+        for (const SceneNode* node : nodes) {
+            instances += node->GetSourceRef() == ref ? 1 : 0;
+        }
+        return instances;
+    }
+
     UINodeFileReport SaveUIRectsToNodeFiles(Scene& scene, Span<const IntrusivePtr<UIElement>> edited, const UINodeFileIo& io) {
         UINodeFileReport report;
         Vector<SceneNode*> nodes;
@@ -126,10 +143,7 @@ namespace BECore {
             handled.push_back(ref);
             const String refText(ref.ToStringView());
 
-            size_t instances = 0;
-            for (const SceneNode* other : nodes) {
-                instances += other->GetSourceRef() == ref ? 1 : 0;
-            }
+            const size_t instances = CountNodeInstances(scene, ref);
             if (instances > 1) {
                 report.notes.push_back(
                     Format("UI '{}': not written to {}: the file has {} instances in the scene, so the edit stays an override in the scene file", node->GetName().ToStringView(), refText, instances));

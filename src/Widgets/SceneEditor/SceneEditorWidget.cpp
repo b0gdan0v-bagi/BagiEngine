@@ -20,6 +20,7 @@
 #include <Widgets/SceneEditor/HierarchyPanel.h>
 #include <Widgets/SceneEditor/SceneConfigWriter.h>
 #include <Widgets/SceneEditor/ScenePick.h>
+#include <Widgets/SceneEditor/UIEditEvents.h>
 #include <Widgets/SceneEditor/UIRectInspector.h>
 #include <imgui.h>
 
@@ -164,6 +165,7 @@ namespace BECore {
             _selection.Clear();
             _contextMenuTargetNode = nullptr;
             ResetUISelection();
+            _uiFileSession.Clear();
             _lastScene = scene;
         }
 
@@ -247,6 +249,29 @@ namespace BECore {
         }
     }
 
+    void SceneEditorWidget::DrawUIFileStatus() {
+        const SceneNode* const node = _hierarchy.selected;
+        if (!node || !_lastScene) {
+            return;
+        }
+        const UINodeFileSession::Status status = _uiFileSession.StatusFor(*_lastScene, *node);
+        switch (status.target) {
+            case UINodeFileSession::Target::Inline:
+                ImGui::TextDisabled("Edits the authored rect, live; saved in the scene file");
+                break;
+            case UINodeFileSession::Target::Shared:
+                ImGui::TextDisabled("%s has %zu instances in the scene: edits are saved as an override in the scene file", status.ref.CStr(), status.instances);
+                break;
+            case UINodeFileSession::Target::File:
+                if (status.elements > 0) {
+                    ImGui::TextDisabled("%zu element(s) will be written into %s on Save", status.elements, status.ref.CStr());
+                } else {
+                    ImGui::TextDisabled("Edits of the rect are written into %s on Save", status.ref.CStr());
+                }
+                break;
+        }
+    }
+
     void SceneEditorWidget::ResetUISelection() {
         _selectedUIElement = nullptr;
         _inexactUIElement = nullptr;
@@ -256,14 +281,19 @@ namespace BECore {
     bool SceneEditorWidget::RenderUIElements(UICanvasComponent& canvas) {
         bool changed = false;
         if (ImGui::TreeNodeEx("UI elements", ImGuiTreeNodeFlags_DefaultOpen)) {
-            ImGui::TextDisabled("Edits the authored style, live; saved in the scene file (an instance: as an override), not in the node file");
+            DrawUIFileStatus();
             ImGui::BeginChild("##ui_tree", ImVec2(0.0f, kUITreeHeight), true);
             DrawUIElementTree(canvas, _selectedUIElement);
             ImGui::EndChild();
 
             if (_selectedUIElement) {
                 if (ImGui::CollapsingHeader("Rect", ImGuiTreeNodeFlags_DefaultOpen)) {
+                    const UIRectSpec before = _selectedUIElement->style.rect;
                     changed = InspectUIRect(canvas, *_selectedUIElement, _inexactUIElement);
+                    if (changed) {
+                        _uiFileSession.Note(_selectedUIElement);
+                        UIRectEditEvent::Emit(_lastScene, _hierarchy.selected, _selectedUIElement.Get(), before, _selectedUIElement->style.rect);
+                    }
                 }
             } else {
                 EmptyState(ICON_LC_MOUSE_POINTER_CLICK, "Select an element");
@@ -449,6 +479,9 @@ namespace BECore {
         if (!scene) {
             return;
         }
+
+        // The node files first: an instance whose rects are in its file then has nothing to override in the scene file. A failure here is logged and never stops the scene
+        _uiFileSession.Save(*scene);
 
         auto& configManager = CoreManager::GetConfigManager();
         auto xmlRoot = configManager.GetConfig("SceneConfig"_intern);

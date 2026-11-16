@@ -10,6 +10,7 @@
 #include <Widgets/SceneEditor/HierarchyPanel.h>
 #include <Widgets/SceneEditor/SceneSelection.h>
 #include <Widgets/SceneEditor/SceneSelectionEvents.h>
+#include <Widgets/SceneEditor/UINodeFileSession.h>
 #include <Widgets/Viewport/ViewportEvents.h>
 
 namespace pugi {
@@ -39,11 +40,15 @@ namespace BECore {
         /**
          * @brief The "UI elements" section of a node with a canvas: the element tree and the rect inspector of the selected element
          *
-         * Edits the authored `style` of the element, live. It is saved in the scene file (for an instance of a node file the whole `<elements>` list as an override); the node file and a `.ui.xml` are
-         * never edited.
+         * Edits the authored `style.rect` of the element, live, and sends UIRectEditEvent for each changed frame. Save writes the rect into the node file the node is an instance of when
+         * nothing else in the scene uses that file (UINodeFileSession); otherwise, and for a node written in the scene file, the edit is saved in the scene file (an instance: as an `<elements>`
+         * override). A `.ui.xml` is never edited.
          * @return true when an element changed
          */
         bool RenderUIElements(UICanvasComponent& canvas);
+
+        /// One line under the "UI elements" title that says where the edit of the selected node goes on Save (its node file, or the scene file and why)
+        void DrawUIFileStatus();
 
         /// Forgets the selected canvas element (the node changed or the scene was replaced)
         void ResetUISelection();
@@ -109,6 +114,7 @@ namespace BECore {
         Scene* _lastScene = nullptr;                           // the scene the selection belongs to: a replaced scene drops it
         SceneNode* _uiSelectionNode = nullptr;                 // the node whose canvas `_selectedUIElement` belongs to
         IntrusivePtr<UIElement> _selectedUIElement;            // held, so that a tree edit cannot leave it dangling
+        UINodeFileSession _uiFileSession;                      // the elements changed since the last save, whose rects go into their node files
         IntrusivePtr<UIElement> _inexactUIElement;             // the element whose last edit the layout limits kept from being exact (the inspector warns)
         SceneNode* _contextMenuTargetNode = nullptr;           // node to add a child to (null = root)
         char _nodeNameBuffer[256] = {};
