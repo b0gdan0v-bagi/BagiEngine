@@ -231,3 +231,22 @@ def test_a_call_the_game_refuses_is_a_recorded_line(qa_game_exe, out_dir):
     assert session.calls == before + 1
     session.finish()
     assert recorded(session)[-1].method == "nonsense" and len(recorded(session)) == session.calls
+
+
+def test_call_of_an_unknown_method_is_an_outcome_and_no_finding(qa_game_exe, out_dir):
+    session = make(qa_game_exe, out_dir)
+    before = session.calls
+    outcome = session.call("nonsense", {"a": 1})
+    session.finish()
+    assert (outcome.accepted, outcome.error_code) == (False, "unknown_method")
+    assert session.calls == before + 1 and session.findings == []
+
+
+def test_call_of_step_runs_the_checks(qa_game_exe, out_dir, monkeypatch):
+    monkeypatch.setenv("QA_FAKE_WARN_AT", "1")
+    session = make(qa_game_exe, out_dir)
+    session._call("perform_action", INC)  # past the checks of `act`: only the call that follows may show the Warning
+    assert session.findings == []
+    assert session.call("step", {"frames": 1}).accepted
+    session.finish()
+    assert names(session) == ["generic.log_warning"]

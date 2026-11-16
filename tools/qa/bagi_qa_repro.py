@@ -237,6 +237,30 @@ def check_written(exe: str | Path, path: str | Path, finding: Finding) -> str | 
     return None
 
 
+def write_reproduction(
+    exe: str | Path,
+    scenario_path: str | Path,
+    finding_name: str,
+    invariants: Invariants | None,
+    out: str | Path,
+    max_probes: int = DEFAULT_MAX_PROBES,
+    extra: Sequence[str] = (),
+) -> tuple[Shrunk, list[scenario.Step]]:
+    """Cuts the scenario to what the finding needs and writes it to `out` as a scenario that `bagi_play.py` plays; the cut and the calls written.
+
+    The file is played with `bagi_play` before this returns and is removed when it does not fail on its last line. ReproError for any problem
+    (nothing is left at `out`).
+    """
+    shrunk = shrink_finding(exe, scenario_path, finding_name, invariants, max_probes, extra)
+    calls = settle(exe, shrunk.header, with_check_call(shrunk.calls, shrunk.finding), extra)
+    write_repro(out, merged_header(shrunk.header, extra), calls, shrunk.finding)
+    problem = check_written(exe, out, shrunk.finding)
+    if problem is not None:
+        Path(out).unlink(missing_ok=True)
+        raise ReproError(problem)
+    return shrunk, calls
+
+
 def command_replay(args: argparse.Namespace) -> int:
     """`bagi_qa.py replay`: plays the scenario with the checks and says what it found. Exit 0 nothing (known deviations apart), 1 findings, 2 a bad file, 77 no game."""
     try:
@@ -285,13 +309,7 @@ def command_shrink(args: argparse.Namespace) -> int:
         if png_ops.inside_git_work_tree(out.parent.resolve()):
             raise ReproError(f"--out {out} is inside a git work tree: a reproduction is written outside every repository")
         print(f"shrinking '{name}': {len(steps)} calls, up to {args.max_probes} probes", flush=True)
-        shrunk = shrink_finding(exe, args.scenario, name, module, args.max_probes, args.flag)
-        calls = settle(exe, shrunk.header, with_check_call(shrunk.calls, shrunk.finding), args.flag)
-        write_repro(out, merged_header(shrunk.header, args.flag), calls, shrunk.finding)
-        problem = check_written(exe, out, shrunk.finding)
-        if problem is not None:
-            out.unlink(missing_ok=True)
-            raise ReproError(problem)
+        shrunk, calls = write_reproduction(exe, args.scenario, name, module, out, args.max_probes, args.flag)
     except ReproError as error:
         print(f"ERROR {error}")
         return EXIT_USAGE

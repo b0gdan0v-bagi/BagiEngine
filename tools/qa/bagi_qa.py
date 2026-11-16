@@ -168,13 +168,20 @@ class QaSession:
         return outcome
 
     def replay_call(self, method: str, params: dict[str, Any] | None = None) -> ActOutcome:
-        """Sends a recorded call as it was, then checks what it shows (the `ui_tree` after a `step` and from its own answer).
+        """Sends a recorded call as it was, then checks what it shows (for playing a scenario back, bagi_qa_repro).
 
-        For playing a scenario back (bagi_qa_repro): an action goes through `act`, any other call that the game refuses is an outcome, not an exception.
-        The checks add read-only calls (`get_state`, `list_actions`, `ui_tree`), which change nothing in the game.
+        An action goes through `act`, any other call through `call`. The checks add read-only calls (`get_state`, `list_actions`, `ui_tree`),
+        which change nothing in the game.
         """
         if method == PERFORM_ACTION_METHOD:
             return self.act(params or {})
+        return self.call(method, params)
+
+    def call(self, method: str, params: dict[str, Any] | None = None) -> ActOutcome:
+        """Any control call a script or the monkey makes that has no method of its own (`ui_click`, `set_window`, ...): a refusal is an outcome, not an exception.
+
+        The version of the answer is checked, the `ui_tree` too when the call is one, then `check` (with the `ui_tree` after a `step`).
+        """
         try:
             result = self._call(method, params)
         except ControlError as error:
