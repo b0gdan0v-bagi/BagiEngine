@@ -53,9 +53,8 @@ namespace BECore::Tests {
         //   icon child CRightIcon and a caption child CRightCaption) and CGone (a disabled clicker); Mix (100, 200, 304 x 56, `uiApiMix`) holds a segment with a text and a clicker and one with the
         //   same parts under other names; CLevel (100, 300, 240 x 56, `uiApiCLevel`, action UIControlApiCLevel) is a dropdown of the composed options CEasy, CHard (icon child and caption child) and
         //   CLocked (a disabled clicker); CBelow (500, 500, 80 x 40) is a button the open list does not cover.
-        // "Targets": 800 x 600 in window pixels. A canvas (layer 10) with the buttons Press (100, 100, 80 x 40) and Covered (450, 120, 80 x 40) between two scene targets: Back (layer 5, 0, 0, 300 x
-        // 300)
-        //   lies below the canvas and Press is on it; Front (layer 15, 480, 100, 200 x 100) lies above the canvas and Covered is under it.
+        // "Targets": 800 x 600 in window pixels. A canvas (layer 10) with the buttons Press (100, 100, 80 x 40) and Covered (450, 120, 80 x 40) between two scene targets: Back (layer 5,
+        //   0, 0, 300 x 300) lies below the canvas and Press is on it; Front (layer 15, 480, 100, 200 x 100) lies above the canvas and Covered is under it.
         // "Empty": a scene without canvases.
         constexpr const char* kScenesXml = R"(
 <SceneManager><scenes>

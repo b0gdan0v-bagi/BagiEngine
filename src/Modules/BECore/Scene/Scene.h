@@ -49,9 +49,9 @@ namespace BECore {
         /**
          * @brief The place of @p node in the draw order: how many nodes Draw() draws before it. A higher rank is drawn later, so on top.
          *
-         * Always what the tree says now, no draw needed. After a Draw() it is read from the pass (O(1)) until the tree changes (a node added,
-         * removed or moved, a layer set with SceneNode::SetLayer()); then, and before the first draw, it is a walk of the tree. 0 for a node
-         * that is not in this scene.
+         * No draw needed. After a Draw() it is read from the pass (O(1)) until the tree changes (a node added, removed or moved, a layer set
+         * with SceneNode::SetLayer()); then, and before the first draw, it is a walk of the tree. A layer field written without SetLayer()
+         * is seen for the asked node at once, for the ranks of the others after the next Draw(). 0 for a node that is not in this scene.
          */
         int32_t GetDrawRank(const SceneNode& node) const;
 

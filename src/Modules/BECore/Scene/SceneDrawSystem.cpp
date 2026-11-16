@@ -128,14 +128,6 @@ namespace BECore {
             registry.sort<SceneDrawItem>([](const SceneDrawItem& a, const SceneDrawItem& b) { return a.layer != b.layer ? a.layer < b.layer : a.order < b.order; });
         }
 
-        {
-            int32_t rank = 0;
-            for (const auto [entity, item] : registry.view<SceneDrawItem>().each()) {
-                item.rank = rank++;
-            }
-            scene.DrawRanksWritten({});
-        }
-
         // The rank is the index in the sorted storage; written before the first OnDraw() because a component may ask for it there.
         {
             int32_t rank = 0;
