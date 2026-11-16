@@ -161,8 +161,14 @@ SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 def test_manifest_pins_every_download():
     comfy = MANIFEST["comfyui"]
-    assert SHA256.match(comfy["sha256"]) and comfy["size"] > 0
-    assert f"/v{comfy['version']}/" in comfy["url"] and comfy["url"].endswith(comfy["asset"])
+    assert re.match(r"^[0-9a-f]{40}$", comfy["commit"]) and comfy["repo"].startswith("https://")
+    assert comfy["platforms"]
+    for key, variant in comfy["platforms"].items():
+        assert variant["kind"] in ("portable", "source"), key
+        if variant["kind"] == "portable":
+            # A release asset of the pinned version, never `latest`: the hash must stay true.
+            assert SHA256.match(variant["sha256"]) and variant["size"] > 0, key
+            assert f"/v{comfy['version']}/" in variant["url"] and variant["url"].endswith("/" + variant["asset"]), key
     names = set()
     for model in MANIFEST["models"]:
         assert SHA256.match(model["sha256"]) and model["size"] > 0, model["name"]

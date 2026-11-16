@@ -15,6 +15,7 @@ import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import artgen_setup
 import comfyui_check
 from artgen_ws import OP_TEXT, WebSocketClient, WebSocketClosed
 
@@ -72,12 +73,8 @@ class Generator:
 
 
 def default_install_root(settings_path=comfyui_check.LOCAL_SETTINGS):
-    """Where a local ComfyUI is installed: `comfyuiRoot` of local.json, else the default of install.ps1 on Windows."""
-    if settings_path.is_file():
-        root = json.loads(settings_path.read_text(encoding="utf-8")).get("comfyuiRoot")
-        if root:
-            return Path(root)
-    return Path("D:/ComfyUI") if os.name == "nt" else None
+    """Where a local ComfyUI is installed (`artgen_setup.default_root`)."""
+    return artgen_setup.default_root(settings_path)
 
 
 class ComfyUIGenerator(Generator):
@@ -115,9 +112,9 @@ class ComfyUIGenerator(Generator):
         root = self.install_root
         if root is not None and (root / "ComfyUI" / "main.py").is_file():
             details["installRoot"] = str(root)
-            return GeneratorStatus(GeneratorState.NOT_RUNNING, f"ComfyUI is installed in {root} but not started (start-local.bat)", details)
+            return GeneratorStatus(GeneratorState.NOT_RUNNING, f"ComfyUI is installed in {root} but not started (artgen_setup.py start)", details)
         where = f" in {root}" if root else ""
-        return GeneratorStatus(GeneratorState.NOT_INSTALLED, f"no ComfyUI installed{where} (comfyui/install.ps1)", details)
+        return GeneratorStatus(GeneratorState.NOT_INSTALLED, f"no ComfyUI installed{where} (artgen_setup.py install)", details)
 
     def info(self):
         if self._version is None:
