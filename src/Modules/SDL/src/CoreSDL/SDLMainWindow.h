@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/MainWindow/IMainWindow.h>
+#include <BECore/MainWindow/WindowSimulation.h>
 #include <BECore/Math/Rect.h>
 #include <BECore/Types/Types.h>
 #include <Events/SubscriptionHolder.h>
@@ -22,6 +23,10 @@ namespace BECore {
         float GetDisplayScale() const override;
         Rect GetSafeArea() const override;
         void SetTitle(StringView title) override;
+        bool IsHeadless() const override {
+            return _headless;
+        }
+        std::expected<void, String> Simulate(const WindowSimulation& simulation) override;
         StringView GetConfiguredTitle() const override {
             return _configuredTitle;
         }
@@ -36,8 +41,13 @@ namespace BECore {
             _headless = headless;
         }
 
-        [[nodiscard]] bool IsHeadless() const {
-            return _headless;
+        /**
+         * @brief Gives a headless window the size and density it starts with instead of the config's size at density 1.
+         *
+         * Call it before Initialize(); the values have passed ValidateWindowSimulation. A window that is not headless ignores it.
+         */
+        void SetHeadlessSimulation(int width, int height, float density) {
+            _initialSimulation = WindowSimulation{.width = width, .height = height, .density = density};
         }
 
         SDL_Window* GetSDLWindow() const {
@@ -47,12 +57,21 @@ namespace BECore {
     private:
         void RenderPresent() const;
 
+        /// A headless window is asked for its simulation; the SDL window of the dummy driver is in output pixels, not in window units
+        [[nodiscard]] bool IsSimulated() const {
+            return _headless && _window != nullptr;
+        }
+
         SDL_Window* _window = nullptr;
-        // The size of the config: the answer of GetWidth() / GetHeight() while there is no window or SDL cannot tell
+        // The start size: the answer of GetWidth() / GetHeight() of a real window while there is no window or SDL cannot tell
         int _width = 0;
         int _height = 0;
         String _configuredTitle;
         bool _headless = false;
+        /// What SetHeadlessSimulation() asked for; kept over Destroy(), like _headless
+        Optional<WindowSimulation> _initialSimulation;
+        /// The state of a headless window while it exists: the answers of GetWidth(), GetHeight(), GetPixelDensity() and GetSafeArea()
+        WindowSimulation _simulation;
     };
 
 }  // namespace BECore
