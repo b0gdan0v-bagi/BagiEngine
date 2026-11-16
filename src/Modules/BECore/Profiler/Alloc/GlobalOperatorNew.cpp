@@ -1,8 +1,21 @@
-// The replacement of every form of the global operator new / delete, only with ENGINE_PROFILER_ALLOC (AllocTracker).
+// The replacement of every form of the global operator new / delete. It is compiled with ENGINE_PROFILER_ALLOC (AllocTracker counts
+// the blocks) and on Windows in every build: the MSVC runtime's plain operator delete is free(), which does not take a block of its
+// aligned operator new, and EASTL frees its over-aligned arrays that way. Here every block is AllocPlatform memory, so whichever
+// delete frees it is right.
+// Not in an AddressSanitizer build: the sanitizer's runtime defines these operators too (a duplicate symbol at link time).
+// It reports EASTL's pair, an aligned new freed by a plain delete, as new-delete-type-mismatch (EastlAlignedAllocTest skips there).
 // BECoreModule is linked WHOLE_ARCHIVE into every executable, so these definitions win over the C++ runtime's.
 // Nothing here may log, assert or allocate: it runs before main, on every thread and inside the logger.
 
-#if BE_PROFILER_ALLOC
+#if defined(__SANITIZE_ADDRESS__)
+#define BE_GLOBAL_OPERATORS_UNDER_ASAN 1
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define BE_GLOBAL_OPERATORS_UNDER_ASAN 1
+#endif
+#endif
+
+#if BE_PROFILER_ALLOC || (defined(_WIN32) && !defined(BE_GLOBAL_OPERATORS_UNDER_ASAN))
 
 #include <BECore/Profiler/Alloc/AllocPlatform.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
@@ -19,7 +32,9 @@ namespace {
         for (;;) {
             void* ptr = alignment > __STDCPP_DEFAULT_NEW_ALIGNMENT__ ? AllocPlatform::AllocateAligned(size, alignment) : AllocPlatform::Allocate(size);
             if (ptr != nullptr) {
-                AllocTracker::OnAlloc(ptr, size);
+                if constexpr (AllocTracker::kEnabled) {
+                    AllocTracker::OnAlloc(ptr, size);
+                }
                 return ptr;
             }
             std::new_handler handler = std::get_new_handler();
@@ -32,15 +47,19 @@ namespace {
 
     void* AllocateOrNull(std::size_t size, std::size_t alignment) noexcept {
         void* ptr = alignment > __STDCPP_DEFAULT_NEW_ALIGNMENT__ ? AllocPlatform::AllocateAligned(size, alignment) : AllocPlatform::Allocate(size);
-        if (ptr != nullptr) {
-            AllocTracker::OnAlloc(ptr, size);
+        if constexpr (AllocTracker::kEnabled) {
+            if (ptr != nullptr) {
+                AllocTracker::OnAlloc(ptr, size);
+            }
         }
         return ptr;
     }
 
     void Release(void* ptr) noexcept {
         if (ptr != nullptr) {
-            AllocTracker::OnFree(ptr);
+            if constexpr (AllocTracker::kEnabled) {
+                AllocTracker::OnFree(ptr);
+            }
             AllocPlatform::Free(ptr);
         }
     }

@@ -4,8 +4,9 @@
 #include <new>
 
 // EASTL frees what they return with the plain operator delete[] even when it was allocated over-aligned. That is harmless with
-// the C++ runtime's operators on macOS and Linux (posix_memalign memory goes to free()) and with the profiler's replacement
-// (BECore/Profiler/Alloc/AllocPlatform.h), but not with the MSVC runtime, whose aligned blocks need the aligned delete.
+// the C++ runtime's operators on macOS and Linux (posix_memalign memory goes to free()) and with the replacement of the global
+// operators (BECore/Profiler/Alloc/GlobalOperatorNew.cpp, in every Windows build), which frees every block through one path; it
+// would not be with the MSVC runtime's own operators, whose aligned blocks need the aligned delete.
 
 void* operator new[](std::size_t size, const char* /*pName*/, int /*flags*/, unsigned int /*debugFlags*/, const char* /*pFile*/, int /*line*/) {
     return ::operator new[](size);
