@@ -104,7 +104,9 @@ namespace BECore::Ser {
                 d.ReportError(kValueExprKey, ValueLinkScope::AtDocument(Format("No context is declared where this value is read, so the formula '{}' names nothing", text)));
                 return false;
             }
-            const auto compiled = CompileValue<T>(text, *declaration);
+            CompileOptions options;
+            options.tables = ValueLinkScope::Tables();
+            const auto compiled = CompileValue<T>(text, *declaration, options);
             if (!compiled.has_value()) {
                 d.ReportError(kValueExprKey, ValueLinkScope::AtDocument(DescribeProgramError(compiled.error())));
                 return false;

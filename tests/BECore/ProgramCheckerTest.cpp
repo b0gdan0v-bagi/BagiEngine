@@ -3,12 +3,14 @@
 
 #include <BECore/Threading/Thread.h>
 #include <BECore/ValueTestTypes.h>
+#include <BECore/Values/Programs/CompileOptions.h>
 #include <BECore/Values/Programs/ExprAst.h>
 #include <BECore/Values/Programs/ExprChecker.h>
 #include <BECore/Values/Programs/ExprFunctions.h>
 #include <BECore/Values/Programs/ExprParser.h>
 #include <BECore/Values/Programs/Kernels.h>
 #include <BECore/Values/Programs/ProgramCompiler.h>
+#include <BECore/Values/ValueTables.h>
 #include <Common/Printers.h>
 #include <cstring>
 #include <gtest/gtest.h>
@@ -1267,6 +1269,44 @@ namespace BECore::Tests {
         EXPECT_EQ(over.error().column, 1U);
         EXPECT_TRUE(Contains(over.error().message, Format("{} entries", kMaxTableEntries + 1))) << over.error().message.c_str();
         EXPECT_TRUE(Contains(over.error().message, Format("at most {}", kMaxTableEntries))) << over.error().message.c_str();
+    }
+
+    TEST(ProgramCheckerTest, ANamedTableIsCopiedIntoConstantEntriesOfTheTypeBesideIt) {
+        const CheckerContext context;
+        ValueTableSet tables;
+        tables.Add("Damage", {10.0, 20.0, 30.0});
+        CompileOptions options;
+        options.tables = &tables;
+        const auto check = [&](StringView text, ProgramType expected) {
+            const auto parsed = ParseExpression(text);
+            EXPECT_TRUE(parsed.has_value()) << String(text).c_str();
+            return parsed.has_value() ? CheckExpression(*parsed, context.declaration, DescriptorOf(expected), options) : std::unexpected(parsed.error());
+        };
+        const auto asInt = check("ByLevel('Damage', cast.level)", ProgramType::Int32);
+        ASSERT_TRUE(asInt.has_value()) << asInt.error().message.c_str();
+        EXPECT_EQ(Root(*asInt).opcode, Opcode::LoadTable);
+        EXPECT_EQ(Root(*asInt).type, ExprType(ProgramType::Int32));
+        ASSERT_EQ(Root(*asInt).entries.size(), 3U);
+        EXPECT_EQ(ConstantOf<int32_t>((*asInt)[Root(*asInt).entries[1]]), 20);
+        EXPECT_EQ((*asInt)[Root(*asInt).operands[0]].path, "cast.level");
+
+        const auto asDouble = check("ByLevel('Damage', 1) > 15", ProgramType::Bool);
+        ASSERT_TRUE(asDouble.has_value()) << asDouble.error().message.c_str();
+        const TypedNode& table = (*asDouble)[Root(*asDouble).operands[0]];
+        EXPECT_EQ(table.type, ExprType(ProgramType::Double));
+        EXPECT_EQ(ConstantOf<double>((*asDouble)[table.entries[2]]), 30.0);
+
+        const auto beside = check("ByLevel('Damage', cast.level) + caster.speed", ProgramType::Float);
+        ASSERT_TRUE(beside.has_value()) << beside.error().message.c_str();
+        EXPECT_EQ(ConstantOf<float>((*beside)[(*beside)[Root(*beside).operands[0]].entries[0]]), 10.0f);
+
+        // Without the provider of the options the same text is the one error, at the name of the call
+        const auto parsed = ParseExpression("ByLevel('Damage', cast.level)");
+        ASSERT_TRUE(parsed.has_value());
+        const auto bare = CheckExpression(*parsed, context.declaration, DescribeType<int32_t>());
+        ASSERT_FALSE(bare.has_value());
+        EXPECT_EQ(bare.error().column, 1U);
+        EXPECT_TRUE(Contains(bare.error().message, "no tables are declared where this formula is read")) << bare.error().message.c_str();
     }
 
 }  // namespace BECore::Tests

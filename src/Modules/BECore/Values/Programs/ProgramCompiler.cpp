@@ -202,7 +202,7 @@ namespace BECore {
 
     }  // namespace
 
-    std::expected<CompiledExpression, ProgramError> CompileExpression(StringView text, const ContextDecl& declaration, const TypeDesc& expected) {
+    std::expected<CompiledExpression, ProgramError> CompileExpression(StringView text, const ContextDecl& declaration, const TypeDesc& expected, const CompileOptions& options) {
         const auto wanted = CheckExpectedType(expected);
         if (!wanted.has_value()) {
             return std::unexpected(wanted.error());
@@ -211,7 +211,7 @@ namespace BECore {
         if (!ast.has_value()) {
             return std::unexpected(ast.error());
         }
-        const auto typed = CheckExpression(*ast, declaration, expected);
+        const auto typed = CheckExpression(*ast, declaration, expected, options);
         if (!typed.has_value()) {
             return std::unexpected(typed.error());
         }

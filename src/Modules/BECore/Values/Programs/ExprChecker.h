@@ -4,6 +4,7 @@
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <BECore/Values/Context.h>
+#include <BECore/Values/Programs/CompileOptions.h>
 #include <BECore/Values/Programs/ExprAst.h>
 #include <BECore/Values/Programs/Instruction.h>
 #include <BECore/Values/Programs/Opcode.h>
@@ -98,8 +99,11 @@ namespace BECore {
      * an `Extract`; two operands of two types are a mixed pair (`vec3 * float`) when `BE_PROGRAM_MIXED_ROWS` has it, and a literal beside a vector takes its scalar. A division or a
      * modulo by a literal zero, an operator or a function a type lacks, a component a type lacks, a wrong number of arguments and an @p expected outside the program types are
      * errors. An error is `{message, column of the node}`; the one about @p expected has column 0.
+     *
+     * `ByLevel('Name', i)` is read from `options.tables` here: its entries are copied into constant nodes of the type beside it (an `int`, `int64`, `float` or `double`, else `double`),
+     * so the lowering sees an inline table and the program keeps nothing of the provider.
      */
-    [[nodiscard]] std::expected<TypedExpr, ProgramError> CheckExpression(const ExprAst& ast, const ContextDecl& declaration, const TypeDesc& expected);
+    [[nodiscard]] std::expected<TypedExpr, ProgramError> CheckExpression(const ExprAst& ast, const ContextDecl& declaration, const TypeDesc& expected, const CompileOptions& options = {});
 
     /// The type a field of the type @p expected has in a formula (for an enum, with its descriptor), or the error that lists the types a formula can have: asked before the text is read, so a field no
     /// formula can fill says so first

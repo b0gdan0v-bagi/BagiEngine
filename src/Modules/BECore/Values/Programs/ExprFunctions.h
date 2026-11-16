@@ -45,6 +45,9 @@ namespace BECore {
     /// `at(i, e0, e1, ...)`, an inline table: it takes any number of arguments, so it has no row in `kExprFunctions` and the checker reads it on its own
     inline constexpr StringView kTableFunction = "at";
 
+    /// `ByLevel('Name', i)`, an entry of a named table the game supplies (`IValueTables`): a string literal and an `int`, so it has no row either
+    inline constexpr StringView kNamedTableFunction = "ByLevel";
+
     /// The function of this name, null when there is none
     [[nodiscard]] constexpr const ExprFunction* FindExprFunction(StringView name) {
         for (const ExprFunction& function : kExprFunctions) {

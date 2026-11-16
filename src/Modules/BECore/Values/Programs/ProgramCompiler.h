@@ -6,6 +6,7 @@
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <BECore/Values/Context.h>
+#include <BECore/Values/Programs/CompileOptions.h>
 #include <BECore/Values/Programs/Instruction.h>
 #include <BECore/Values/Programs/Opcode.h>
 #include <BECore/Values/Programs/Program.h>
@@ -45,9 +46,9 @@ namespace BECore {
      * (`a - a` runs). A tree stays a tree: equal subexpressions are computed twice, equal constants are one entry of the program's table. The registers are used
      * like a stack, post-order. A formula that is a constant or one field is not a program (`2 * 6` is the constant 12, `caster.attack` the slot), and a program is
      * interned by its code: the same code is one id however it was written, and a slot offset is part of the code, so the same text under two declarations is two programs.
-     * Nothing is added to the pool when the text is refused. Allocates; it runs when content is loaded.
+     * Nothing is added to the pool when the text is refused. Allocates; it runs when content is loaded. The tables @p options names are copied into the program: it keeps no pointer to the provider.
      */
-    [[nodiscard]] std::expected<CompiledExpression, ProgramError> CompileExpression(StringView text, const ContextDecl& declaration, const TypeDesc& expected);
+    [[nodiscard]] std::expected<CompiledExpression, ProgramError> CompileExpression(StringView text, const ContextDecl& declaration, const TypeDesc& expected, const CompileOptions& options = {});
 
     /**
      * @brief The error as one line and a caret under the place: `<message> (column N)`, the text around it, `^`
@@ -58,8 +59,8 @@ namespace BECore {
 
     /// `CompileExpression` for a field of the C++ type @p T: the result as a `Value<T>` (`Const`, `Slot` or `Program`); a type no program computes is the error that lists the ones that can be
     template <ValueType T>
-    [[nodiscard]] std::expected<Value<T>, ProgramError> CompileValue(StringView text, const ContextDecl& declaration) {
-        const auto compiled = CompileExpression(text, declaration, DescribeType<T>());
+    [[nodiscard]] std::expected<Value<T>, ProgramError> CompileValue(StringView text, const ContextDecl& declaration, const CompileOptions& options = {}) {
+        const auto compiled = CompileExpression(text, declaration, DescribeType<T>(), options);
         if (!compiled.has_value()) {
             return std::unexpected(compiled.error());
         }

@@ -189,13 +189,14 @@ namespace BECore {
             return Format("; convert one side explicitly: {}(x) or {}(x)", ProgramTypeName(to.program), ProgramTypeName(from.program));
         }
 
-        /// The names of the functions, `at` included, as a message lists them
+        /// The names of the functions, `at` and `ByLevel` included, as a message lists them
         Vector<String> FunctionNames() {
             Vector<String> names;
             for (const ExprFunction& function : kExprFunctions) {
                 names.push_back(String(function.name));
             }
             names.push_back(String(kTableFunction));
+            names.push_back(String(kNamedTableFunction));
             return names;
         }
 
@@ -224,7 +225,7 @@ namespace BECore {
 
         class Checker {
         public:
-            Checker(const ExprAst& ast, const ContextDecl& declaration) : _ast(ast), _declaration(declaration) {
+            Checker(const ExprAst& ast, const ContextDecl& declaration, const CompileOptions& options) : _ast(ast), _declaration(declaration), _options(options) {
                 // The children of a node come before it, so one pass in order sees the children's answers
                 _hasName.resize(ast.nodes.size(), false);
                 for (size_t i = 0; i < ast.nodes.size(); ++i) {
@@ -235,6 +236,10 @@ namespace BECore {
                             _hasName[i] = node.text.find('.') != String::npos;
                             break;
                         case ExprNodeKind::Call:
+                            // The type of a `ByLevel` is the one beside it, however its index is read, so it waits for the operands that have a type of their own
+                            if (node.text == kNamedTableFunction) {
+                                break;
+                            }
                             for (uint32_t a = 0; a < node.argumentCount; ++a) {
                                 _hasName[i] = _hasName[i] || _hasName[ast.arguments[node.firstArgument + a]];
                             }
@@ -599,7 +604,7 @@ namespace BECore {
                     const auto slot = LinkSlot(_declaration, name, DescribeType<int32_t>());
                     return Refuse(node.column, slot.has_value() ? Format("'{}' is a level, a path names a field of it ({}.field)", name, name) : slot.error().message);
                 }
-                if (FindExprFunction(name) != nullptr || name == kTableFunction) {
+                if (FindExprFunction(name) != nullptr || name == kTableFunction || name == kNamedTableFunction) {
                     return Refuse(node.column, Format("'{}' is a function: call it as {}(...)", name, name));
                 }
                 if (hint.has_value() && hint->program == ProgramType::Enum && hint->enumeration != nullptr) {
@@ -823,6 +828,9 @@ namespace BECore {
                 if (node.text == kTableFunction) {
                     return CheckTable(node, hint);
                 }
+                if (node.text == kNamedTableFunction) {
+                    return CheckNamedTable(node, hint);
+                }
                 const ExprFunction* function = FindExprFunction(node.text);
                 if (function == nullptr) {
                     if (_declaration.IndexOf(node.text).has_value()) {
@@ -911,6 +919,99 @@ namespace BECore {
                 table.column = node.column;
                 table.operands[table.operandCount++] = *index;
                 table.entries = std::move(*entries);
+                return Emit(std::move(table));
+            }
+
+            /// A number of a named table as the register image of @p type; the message says what is wrong with it, for the entry @p index of table @p name
+            static std::expected<RegisterImage, String> NamedTableEntry(StringView name, size_t index, double value, ProgramType type) {
+                const auto refuse = [&](StringView why) { return std::unexpected(Format("the table '{}' holds {} at entry {}, which is {}", name, value, index, why)); };
+                switch (type) {
+                    case ProgramType::Double:
+                        return ImageOf<double>(value);
+                    case ProgramType::Float:
+                        if (std::isfinite(value) && std::abs(value) > static_cast<double>(std::numeric_limits<float>::max())) {
+                            return refuse("out of the range of a float");
+                        }
+                        return ImageOf<float>(static_cast<float>(value));
+                    case ProgramType::Int32:
+                    case ProgramType::Int64: {
+                        // 2^31 and 2^63 are the first values past the range, and exact in a double
+                        const double limit = type == ProgramType::Int32 ? static_cast<double>(kInt32MagnitudeLimit) : static_cast<double>(kInt64MagnitudeLimit);
+                        if (!std::isfinite(value) || std::trunc(value) != value) {
+                            return refuse(Format("no whole number, and {} needs one; round it in the table or ask for a float", Typed(type)));
+                        }
+                        if (value < -limit || value >= limit) {
+                            return refuse(Format("out of the range of {}", Typed(type)));
+                        }
+                        return type == ProgramType::Int32 ? ImageOf<int32_t>(static_cast<int32_t>(value)) : ImageOf<int64_t>(static_cast<int64_t>(value));
+                    }
+                    default:
+                        return std::unexpected(String("not a number type"));
+                }
+            }
+
+            /**
+             * `ByLevel('Name', i)`: entry `i` (an `int`, 0-based, clamped to the ends) of the table the provider has under that name. The result has the type of the operand beside it or
+             * of the field when that is a number, else `double`; the entries are copied into constant nodes, so what follows is an inline table.
+             */
+            TypedResult CheckNamedTable(const ExprNode& node, Optional<ExprType> hint) {
+                const String subject = Format("the function '{}'", kNamedTableFunction);
+                if (node.argumentCount != 2) {
+                    return Refuse(node.column, Format("{} takes the name of a table and an index, as {}('Name', i), but {} {} given", subject, kNamedTableFunction, node.argumentCount,
+                                                      node.argumentCount == 1 ? "argument is" : "arguments are"));
+                }
+                const ExprNodeId nameSource = _ast.arguments[node.firstArgument];
+                const ExprNodeId indexSource = _ast.arguments[node.firstArgument + 1];
+                if (_ast[nameSource].kind != ExprNodeKind::String) {
+                    return Refuse(_ast[nameSource].column, Format("{} needs the name of the table as a 'text' literal, as {}('Name', i)", subject, kNamedTableFunction));
+                }
+                const String name = _ast[nameSource].text;
+                if (hint.has_value() && !IsNumberType(hint->program)) {
+                    return Refuse(node.column, Format("{} gives a number, but {} is needed here: a named table holds numbers, use at(i, ...) for other types", subject, Typed(*hint)));
+                }
+                const ProgramType type = hint.has_value() ? hint->program : ProgramType::Double;
+                if (_options.tables == nullptr) {
+                    return Refuse(node.column,
+                                  Format("the table '{}' is named, but no tables are declared where this formula is read: open a ValueLinkScope with UseTables, or pass CompileOptions::tables", name));
+                }
+                const Optional<Span<const double>> found = _options.tables->Find(name);
+                if (!found.has_value()) {
+                    Vector<String> known;
+                    _options.tables->Names(known);
+                    const String hintText = IDeserializer::MakeDidYouMeanHint(name, {&known});
+                    return Refuse(_ast[nameSource].column, Format("there is no table '{}'{}; the tables are: {}", name, hintText, known.empty() ? String("none") : JoinNames(known)));
+                }
+                if (found->empty()) {
+                    return Refuse(_ast[nameSource].column, Format("the table '{}' is empty", name));
+                }
+                if (found->size() > kMaxTableEntries) {
+                    return Refuse(_ast[nameSource].column, Format("the table '{}' has {} entries, but a table has at most {}", name, found->size(), kMaxTableEntries));
+                }
+                const TypedResult index = Check(indexSource, ProgramType::Int32);
+                if (!index.has_value()) {
+                    return index;
+                }
+                if (TypeOf(*index) != ProgramType::Int32) {
+                    const String convert = IsNumberType(TypeOf(*index).program) ? "; convert it with int(x)" : "";
+                    return Refuse(_ast[indexSource].column, Format("{} needs an int as its index, but it is {}{}", subject, Typed(TypeOf(*index)), convert));
+                }
+                TypedNode table;
+                table.kind = TypedNodeKind::Operation;
+                table.type = type;
+                table.opcode = Opcode::LoadTable;
+                table.column = node.column;
+                table.operands[table.operandCount++] = *index;
+                for (size_t i = 0; i < found->size(); ++i) {
+                    const auto image = NamedTableEntry(name, i, (*found)[i], type);
+                    if (!image.has_value()) {
+                        return Refuse(_ast[nameSource].column, image.error());
+                    }
+                    TypedNode entry;
+                    entry.type = type;
+                    entry.constant = *image;
+                    entry.column = node.column;
+                    table.entries.push_back(Emit(std::move(entry)));
+                }
                 return Emit(std::move(table));
             }
 
@@ -1022,6 +1123,7 @@ namespace BECore {
 
             const ExprAst& _ast;
             const ContextDecl& _declaration;
+            const CompileOptions& _options;
             Vector<bool> _hasName;
             TypedExpr _out;
         };
@@ -1036,8 +1138,8 @@ namespace BECore {
         return *want;
     }
 
-    std::expected<TypedExpr, ProgramError> CheckExpression(const ExprAst& ast, const ContextDecl& declaration, const TypeDesc& expected) {
-        Checker checker(ast, declaration);
+    std::expected<TypedExpr, ProgramError> CheckExpression(const ExprAst& ast, const ContextDecl& declaration, const TypeDesc& expected, const CompileOptions& options) {
+        Checker checker(ast, declaration, options);
         return checker.Run(expected);
     }
 
