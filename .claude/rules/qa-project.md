@@ -56,6 +56,18 @@ A charter is one sentence; the skill takes the first one when the user names non
 | A count sweep up to the maximum | `set_count` through small counts, the listed half and double, and `maxCount`, in each scene; a refused `0` and `maxCount + 1`; at a large count the `ui` scene needs tens of seconds in a Debug build, so take it one scene at a time and keep the session to a few hundred calls |
 | Reset and the manual clock | `reset` with and without `scene` / `count` from every scene, `step` with several `frames` and `dt`, the state the same after a `reset` as after a start, no frame advancing between two calls that do not `step` |
 
+## Monkey
+
+`tools/qa/bagi_monkey.py` (`tools/qa/CLAUDE.md`, "The monkey") walks the game at random from a seed and stops at the first bug. What it reads from the game: `list_actions` and `ui_tree` for the generic moves, `list_methods` (the `window` moves only when `set_window` is listed, `click` only with `ui_click`, `reset` only with `reset`) and the optional `monkey_moves(answer, moves)` of `<invariants>`, which drops what is too slow and adds the game's own moves. The charter text of a run is the one of the table; `--start` and `--kinds` are its columns.
+
+| Charter | Start | Kinds |
+|---------|-------|-------|
+| Every scene and every language switch | `{"scene": "sprites", "count": 20}` | all |
+| A count sweep up to the maximum | not a monkey charter: a walk cannot keep a big count and a Debug `ui` scene at it in a minute, so `monkey_moves` caps `set_count` | none |
+| Reset and the manual clock | `{"count": 20}` | `action,reset,step` |
+
+Budget per seed: 200 steps (the runner's default) and 3 minutes (`--minutes 3`), whichever ends first. Engine, `BagiStress`: `monkey_moves` drops a `set_count` above `MONKEY_MAX_COUNT` and adds a `reset` to each scene of `state.scenes` with a small count. A game's file has the same headings: its charters, start parameters and kinds, and what its `monkey_moves` does.
+
 ## Known deviations
 
 What is not a bug. The module's `KNOWN_DEVIATIONS` holds the names; the reason for each is written here, never a name without one.

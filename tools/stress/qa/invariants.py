@@ -4,7 +4,9 @@ The rules are those of tools/stress/CLAUDE.md, "Control API" and "The arguments 
 {"scene", "count", "language", "maxCount", "scenes"}; an action changes one of the first three.
 """
 
-from bagi_qa_checks import Violation
+import json
+
+from bagi_qa_checks import Move, Violation
 
 LANGUAGES = frozenset({"en", "ru"})
 SET_SCENE = "set_scene"
@@ -13,6 +15,12 @@ SET_LANGUAGE = "set_language"
 # The action type, the key that carries the value and the state member that shows it
 ASKED = {SET_SCENE: ("scene", "scene"), SET_COUNT: ("count", "count"), SET_LANGUAGE: ("language", "language")}
 SHOWN_KEYS = ("scene", "count", "language")
+# A count above this takes tens of seconds a frame in a Debug build of the `ui` scene, which no walk can afford
+MONKEY_MAX_COUNT = 100
+MONKEY_RESET_COUNT = 20
+RESET_KIND = "reset"
+RESET_METHOD = "reset"
+PERFORM_ACTION = "perform_action"
 
 KNOWN_DEVIATIONS: set[str] = set()
 
@@ -61,6 +69,21 @@ def check_action(action, result, before, after):
     if outcome != shown:
         found.append(Violation("action_answer_differs", f"the outcome of {action!r} is {outcome}, the state after it is {shown}"))
     return found
+
+
+def monkey_moves(answer, moves):
+    """The generic moves without a `set_count` above `MONKEY_MAX_COUNT`, plus a `reset` to each scene at `MONKEY_RESET_COUNT`."""
+    state = answer.get("state") if isinstance(answer, dict) else None
+    scenes = state.get("scenes") if isinstance(state, dict) else None
+    kept = [move for move in moves if not _too_big(move)]
+    added = [Move(RESET_KIND, RESET_METHOD, {"scene": scene, "count": MONKEY_RESET_COUNT}, f"reset {scene}") for scene in scenes if isinstance(scene, str)] if isinstance(scenes, list) else []
+    unique = {(move.kind, move.method, json.dumps(move.params, sort_keys=True)): move for move in kept + added}
+    return [unique[key] for key in sorted(unique)]
+
+
+def _too_big(move):
+    action = move.params if move.method == PERFORM_ACTION else {}
+    return action.get("type") == SET_COUNT and is_int(action.get("count")) and action["count"] > MONKEY_MAX_COUNT
 
 
 def _version_follows_state(previous, answer):
