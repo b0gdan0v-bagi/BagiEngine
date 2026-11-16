@@ -57,10 +57,10 @@ namespace BECore {
     /**
      * @brief The sound of the game (CoreManager::GetAudio()): plays clips on a fixed set of voices of an IAudioBackend, under bus and master volumes.
      *
-     * A sound gets a free voice, or else the one that started first; the gain of a voice is its volume times its bus's times the master's, 0 when
-     * either is muted, and a change of a bus or of the master reaches the sounds that play. Without a backend (none set, or one that did not open)
-     * every call is a no-op and Play() gives an invalid handle, but the request is still recorded (GetRecentPlays()), so a test or a control
-     * client sees what a game asked for on a machine without sound. Main thread only. A frame that plays nothing allocates nothing.
+     * A sound gets a free voice, or else the one that started first; the levels of a bus and of the master are slider positions: the gain of a
+     * voice is its volume times the curve (LevelToGain()) of its bus's position times that of the master's, 0 when either is muted, and a change of a bus or of the master reaches the sounds that
+     * play. Without a backend (none set, or one that did not open) every call is a no-op and Play() gives an invalid handle, but the request is still recorded (GetRecentPlays()), so a test or a
+     * control client sees what a game asked for on a machine without sound. Main thread only. A frame that plays nothing allocates nothing.
      */
     class AudioManager : public SubscriptionHolder {
     public:
@@ -139,13 +139,18 @@ namespace BECore {
         /// Replaces the volumes and mutes (the backend name and the voice count are read only by SetBackend())
         void ApplySettings(const AudioSettings& settings);
 
+        /// @p volume is a slider position (0 to 1), not a gain: the gain is LevelToGain() of it
         void SetMasterVolume(float volume);
         void SetMasterMuted(bool muted);
+        /// @p volume is a slider position (0 to 1), not a gain: the gain is LevelToGain() of it
         void SetBusVolume(AudioBus bus, float volume);
         void SetBusMuted(AudioBus bus, bool muted);
 
-        /// The gain a sound of @p volume on @p bus gets now
+        /// The gain a sound of @p volume (a linear trim) on @p bus gets now: @p volume times the curve of the bus's and of the master's position
         [[nodiscard]] float GetGain(AudioBus bus, float volume) const;
+
+        /// The amplitude gain of a slider position (clamped to 0 to 1, NaN is 0): 0 is silence, 1 is unity, monotonic
+        [[nodiscard]] static float LevelToGain(float level);
 
         /// How many sounds Play() has started since the start: a sound leaves no other trace a test can wait for
         [[nodiscard]] uint64_t GetStartedCount() const {
