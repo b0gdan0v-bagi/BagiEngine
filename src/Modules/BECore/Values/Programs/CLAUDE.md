@@ -1,6 +1,6 @@
 # Programs: computed values compiled into typed code
 
-A formula of a content file (`expr="caster.attack * 2"`, later) becomes a `Program`: straight-line typed instructions over registers, run by a `switch` interpreter. This folder holds the instruction set, the program and its pool, the builder and the interpreter; the text front end is below, the type checker is below, the compiler comes with later work of the entry `data-values-programs` (`Values/CLAUDE.md` is the value and the context).
+A formula of a content file (`expr="caster.attack * 2"`, later) becomes a `Program`: straight-line typed instructions over registers, run by a `switch` interpreter. This folder holds the instruction set, the program and its pool, the builder and the interpreter; the text front end, the type checker and the compiler are below (`Values/CLAUDE.md` is the value and the context).
 
 ## Files
 
@@ -15,6 +15,7 @@ A formula of a content file (`expr="caster.attack * 2"`, later) becomes a `Progr
 | `ExprAst.h/.cpp` | the untyped tree (`ExprNode` arena), `ExprLimits`, `PrintExpression` |
 | `ExprLexer.h/.cpp`, `ExprParser.h/.cpp` | text to tokens, tokens to the tree |
 | `ExprChecker.h/.cpp`, `ExprFunctions.h` | the tree to a typed tree (`TypedExpr`); the table of functions |
+| `ProgramCompiler.h/.cpp` | `CompileExpression`, `CompileValue<T>`, `FormatProgramError` |
 
 ## The frame and the pool
 
@@ -55,3 +56,9 @@ Loosest first: `||`; `&&`; `== !=`; `< <= > >=`; `+ -`; `* / %`; unary `- !`; po
 - **Literals** have no type of their own: an integer literal becomes the type of the operand beside it, else the expected type when that is a number, else `int` (`int64` when it does not fit); a float literal is `float` or `double` and an error where an integer is needed. The operands that read the context are checked first, so a literal beside one takes its type whichever side it is on; a subtree of literals beside no such operand takes the expected number type, else `float` when it holds a float literal. A sign before a literal is part of the literal (`-2147483648` is an `int`). An integer or float that does not fit its type is an error. The argument of a conversion that is a literal is read as what it spells (a float literal as `double`, so `double(0.1)` is exact).
 - **Paths** are linked with `LinkSlot` for each program type in turn, so its messages (`did you mean`, the fields of the type, the declared levels) are the ones shown; a field of any other type, and a bare level or function name, say what they are. A bare unknown name lists the levels and the functions. `.x` on an expression is an error until a type has components.
 - A division or modulo by a **literal** zero is an error at the divisor; every error is `{message, column of the node}`, and an expected type outside the program types (column 0) lists the types. The limit of 32 registers is the compiler's, not the checker's.
+
+## Compiling
+
+`CompileExpression(text, declaration, expected)` is parse, check, fold, lower; the answer is a `CompiledExpression` of one of three kinds, and `CompileValue<T>` makes the `Value<T>` of it (`Const`, `Slot` or `Program`). The type asked for is checked first (`CheckExpectedType`), so a field no formula can fill says so whatever the text. **Folding** runs a node whose operands are all constants through the interpreter on a one-instruction program, so the folded value is what the program would compute; there is no algebra (`a - a`, `x * 1` run), and a divisor that folds to zero is a run-time 0, not an error. A formula that folds to a constant is a `Constant` (the register image), one that is a single field a `Slot` (the path as written), so `expr="caster.attack"` loads and saves like `from`. **Lowering** is a recursive post-order walk: an operation writes into the register of its first operand and its other operands go into the registers above it, which are given back after the instruction, so a left-leaning chain needs two registers and a right-nested one a register per level. The 32-register limit is the lowering's error (column of the node that did not fit). The source text of the program is the text as written; the pool does not intern by it, and the slot offsets are part of the code, so one text under two declarations is two programs.
+
+`FormatProgramError(text, error)` is `<message> (column N)`, the text around the column (a window for a long one, a byte that is not printable ASCII as `?`) and a caret line; an error without a column is the message alone.

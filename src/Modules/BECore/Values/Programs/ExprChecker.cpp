@@ -144,20 +144,21 @@ namespace BECore {
             }
 
             std::expected<TypedExpr, ProgramError> Run(const TypeDesc& expected) {
-                const Optional<ProgramType> want = ProgramTypeFor(expected);
-                if (!want.has_value()) {
-                    return Refuse(0, Format("a formula can have the type {}, not '{}'", JoinTypes(AllTypes()), DescribeDescriptor(expected)));
+                const auto wanted = CheckExpectedType(expected);
+                if (!wanted.has_value()) {
+                    return std::unexpected(wanted.error());
                 }
-                const TypedResult root = Check(_ast.root, *want);
+                const ProgramType want = *wanted;
+                const TypedResult root = Check(_ast.root, want);
                 if (!root.has_value()) {
                     return std::unexpected(root.error());
                 }
                 const TypedNode& node = _out.nodes[*root];
-                if (node.type != *want) {
-                    return Refuse(_ast[_ast.root].column, Format("the formula is {}, but a value of {} is asked for{}", Typed(node.type), ProgramTypeName(*want), ConvertHint(node.type, *want)));
+                if (node.type != want) {
+                    return Refuse(_ast[_ast.root].column, Format("the formula is {}, but a value of {} is asked for{}", Typed(node.type), ProgramTypeName(want), ConvertHint(node.type, want)));
                 }
                 _out.root = *root;
-                _out.type = *want;
+                _out.type = want;
                 return std::move(_out);
             }
 
@@ -606,6 +607,14 @@ namespace BECore {
         };
 
     }  // namespace
+
+    std::expected<ProgramType, ProgramError> CheckExpectedType(const TypeDesc& expected) {
+        const Optional<ProgramType> want = ProgramTypeFor(expected);
+        if (!want.has_value()) {
+            return Refuse(0, Format("a formula can have the type {}, not '{}'", JoinTypes(AllTypes()), DescribeDescriptor(expected)));
+        }
+        return *want;
+    }
 
     std::expected<TypedExpr, ProgramError> CheckExpression(const ExprAst& ast, const ContextDecl& declaration, const TypeDesc& expected) {
         Checker checker(ast, declaration);

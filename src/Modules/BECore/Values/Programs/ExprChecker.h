@@ -58,4 +58,7 @@ namespace BECore {
      */
     [[nodiscard]] std::expected<TypedExpr, ProgramError> CheckExpression(const ExprAst& ast, const ContextDecl& declaration, const TypeDesc& expected);
 
+    /// The program type a field of the type @p expected has, or the error that lists the types a formula can have: asked before the text is read, so a field no formula can fill says so first
+    [[nodiscard]] std::expected<ProgramType, ProgramError> CheckExpectedType(const TypeDesc& expected);
+
 }  // namespace BECore
