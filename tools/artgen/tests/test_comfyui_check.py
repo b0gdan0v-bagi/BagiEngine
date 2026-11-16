@@ -174,12 +174,21 @@ def test_manifest_pins_every_download():
         names.add((model["folder"], model["name"]))
 
 
-def test_workflow_uses_only_manifest_models():
-    workflow = json.loads(comfyui_check.WORKFLOW.read_text(encoding="utf-8"))
-    by_folder = {"CheckpointLoaderSimple": ("checkpoints", "ckpt_name"), "VAELoader": ("vae", "vae_name")}
+LOADERS = {
+    "CheckpointLoaderSimple": ("checkpoints", "ckpt_name"),
+    "VAELoader": ("vae", "vae_name"),
+    "LoadBackgroundRemovalModel": ("background_removal", "bg_removal_name"),
+}
+
+
+@pytest.mark.parametrize("workflow_file", sorted(comfyui_check.WORKFLOW.parent.glob("*.json")), ids=lambda p: p.name)
+def test_every_engine_workflow_loads_only_manifest_models(workflow_file):
+    if workflow_file.name.endswith(".inputs.json"):
+        pytest.skip("an input map, not a graph")
+    workflow = json.loads(workflow_file.read_text(encoding="utf-8"))
     available = {(m["folder"], m["name"]) for m in MANIFEST["models"]}
-    loaders = [node for node in workflow.values() if node["class_type"] in by_folder]
+    loaders = [node for node in workflow.values() if node["class_type"] in LOADERS]
     assert loaders
     for node in loaders:
-        folder, field = by_folder[node["class_type"]]
+        folder, field = LOADERS[node["class_type"]]
         assert (folder, node["inputs"][field]) in available

@@ -26,6 +26,15 @@
       "sha256": "235745af8d86bf4a4c1b5b4f529868b37019a10f7c0b2e79ad0abca3a22bc6e1",
       "licence": "MIT",
       "source": "https://huggingface.co/madebyollin/sdxl-vae-fp16-fix"
+    },
+    {
+      "name": "birefnet.safetensors",
+      "folder": "background_removal",
+      "url": "https://huggingface.co/Comfy-Org/BiRefNet/resolve/884af709e9b795d89dafbf97f29c8d6a2386f5c6/background_removal/birefnet.safetensors",
+      "size": 444473596,
+      "sha256": "9ab37426bf4de0567af6b5d21b16151357149139362e6e8992021b8ce356a154",
+      "licence": "MIT (BiRefNet, ZhengPeng7/BiRefNet; repackaged by Comfy-Org)",
+      "source": "https://huggingface.co/Comfy-Org/BiRefNet"
     }
   ],
   "customNodes": []

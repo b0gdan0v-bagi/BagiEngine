@@ -37,6 +37,7 @@ The control API cannot drop a handler and the panel is re-created at every switc
 
 - The service line says why nothing can happen: the control API off (`--control`), the service not connected (with the command to start it), or the generator not ready with its reason. A request can still be queued while the service is away.
 - Thumbnails are loaded from the paths the service reported with `ResourceManager::Load` (an absolute path resolves as itself) and **evicted** (`ResourceManager::Evict`) when the run is replaced or the panel dies, so the generated textures do not stay in the cache until the editor closes.
+- A thumbnail is drawn over a checkerboard, so a cut-out (RGBA) variant shows its transparency; Accept copies the PNG as it is, alpha included.
 - A click selects a variant (the frame and its seed); the dice button under it puts its seed into the form (random off) for the next Generate. Thumbnails are kept by path, so a run that kept the variants loads only the new ones.
 
 ## Accept
