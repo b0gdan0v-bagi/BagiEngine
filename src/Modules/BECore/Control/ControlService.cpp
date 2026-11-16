@@ -119,7 +119,50 @@ namespace BECore {
         _eventSinkGeneration = ++_registrations;
     }
 
+    ControlService::PublishObserverId ControlService::AddPublishObserver(PublishObserver observer) {
+        auto entry = MakeUnique<ObserverEntry>();
+        entry->id = ++_lastPublishObserverId;
+        entry->observer = std::move(observer);
+        _publishObservers.push_back(std::move(entry));
+        return _publishObservers.back()->id;
+    }
+
+    void ControlService::PrunePublishObservers() {
+        eastl::erase_if(_publishObservers, [](const UniquePtr<ObserverEntry>& entry) { return entry->id == kNoPublishObserver; });
+    }
+
+    void ControlService::RemovePublishObserver(PublishObserverId id) {
+        if (id == kNoPublishObserver) {
+            return;
+        }
+        for (UniquePtr<ObserverEntry>& entry : _publishObservers) {
+            if (entry->id == id) {
+                entry->id = kNoPublishObserver;
+                break;
+            }
+        }
+        if (!_notifyingObservers) {
+            PrunePublishObservers();
+        }
+    }
+
+    void ControlService::NotifyPublishObservers(StringView event, const Json& data) {
+        _notifyingObservers = true;
+        const size_t count = _publishObservers.size();  // an observer added by an observer waits for the next Publish
+        for (size_t i = 0; i < count; ++i) {
+            ObserverEntry& entry = *_publishObservers[i];
+            if (entry.id != kNoPublishObserver) {
+                entry.observer(event, data);
+            }
+        }
+        _notifyingObservers = false;
+        PrunePublishObservers();
+    }
+
     void ControlService::Publish(StringView event, const Json& data) {
+        if (!_publishObservers.empty() && !_notifyingObservers) {
+            NotifyPublishObservers(event, data);
+        }
         if (!_eventSink) {
             return;
         }

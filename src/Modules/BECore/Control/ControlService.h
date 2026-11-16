@@ -41,6 +41,11 @@ namespace BECore {
         using Handler = MoveOnlyFunction<void(ControlCall&)>;
         using EventSink = MoveOnlyFunction<void(const String&)>;
         using FrameEndHook = MoveOnlyFunction<void()>;
+        using PublishObserver = MoveOnlyFunction<void(StringView event, const Json& data)>;
+        using PublishObserverId = uint64_t;
+
+        /// What AddPublishObserver() never returns; RemovePublishObserver() of it does nothing
+        static constexpr PublishObserverId kNoPublishObserver = 0;
 
         ControlService();
         ~ControlService();
@@ -95,6 +100,17 @@ namespace BECore {
 
         /// Sends {"event":..,"data":..} to the event sink, if there is one. A sink may replace or clear itself; a Publish from inside the sink sends nothing
         void Publish(StringView event, const Json& data);
+
+        /**
+         * @brief Calls @p observer with the name and the data of every Publish() from now on, whether or not an event sink is set.
+         *
+         * For a module that waits for an event of its own process (`run_until`). Main thread. An observer runs before the sink and may remove itself or add
+         * others (an added one sees the next Publish); a Publish from inside an observer reaches the sink but no observer. Returns the id for RemovePublishObserver().
+         */
+        [[nodiscard]] PublishObserverId AddPublishObserver(PublishObserver observer);
+
+        /// Stops calling the observer of @p id; an unknown or already removed id is ignored. Main thread. A running observer's capture lives until it returns
+        void RemovePublishObserver(PublishObserverId id);
 
         /// Runs @p hook at the end of every frame, before a deferred call is completed. A hook of the same @p name is replaced, so registering a module again adds nothing
         void SetFrameEndHook(StringView name, FrameEndHook hook);
@@ -173,6 +189,10 @@ namespace BECore {
             bool bypassBarrier = false;
             uint64_t generation = 0;  // the registration that made this entry; a running handler goes back only if it is still the current one
         };
+        struct ObserverEntry {
+            PublishObserverId id = kNoPublishObserver;  // reset to none by a removal while Publish runs the observers
+            PublishObserver observer;
+        };
         struct HookEntry {
             String name;
             FrameEndHook hook;
@@ -186,6 +206,8 @@ namespace BECore {
         void InvokeHandler(HandlerEntry& entry, ControlCall& call);
         Optional<ControlAnswer> AwaitNested(ControlCall& outer, UniquePtr<ControlCall>& nested, NestedContinuation& onAnswer);
         void Settle(UniquePtr<ControlCall> call);
+        void PrunePublishObservers();
+        void NotifyPublishObservers(StringView event, const Json& data);
 
         Mutex _mutex{BE_LOCK_SITE("Control queue")};
         ConditionVariable _posted;                // notified by Post(); WaitForRequests() waits on it
@@ -208,6 +230,9 @@ namespace BECore {
         EventSink _eventSink;               // empty while the sink runs (Publish moves it out)
         uint64_t _eventSinkGeneration = 0;  // the registration of the current sink; a running sink goes back only if no other was set
         Vector<HookEntry> _frameEndHooks;
+        Vector<UniquePtr<ObserverEntry>> _publishObservers;  // entries do not move, so a running observer stays where it is when others are added
+        PublishObserverId _lastPublishObserverId = kNoPublishObserver;
+        bool _notifyingObservers = false;
         uint64_t _registrations = 0;  // counts RegisterHandler, SetFrameEndHook and SetEventSink calls; the source of the generations
     };
 
