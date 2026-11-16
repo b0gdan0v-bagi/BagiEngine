@@ -300,4 +300,27 @@ namespace BECore::Tests {
         input.Unregister(taker);
     }
 
+    TEST_F(UICanvasClickableOrderTest, ABlockingClickableWithNoActionShieldsTheCanvasBelowItAndEmitsNothing) {
+        Recorder recorder;
+        ClickableComponent* over = nullptr;
+        for (const auto& node : _manager->GetActiveScene()->GetRootNode().GetChildren()) {
+            if (node->GetName() == "Over"_intern) {
+                over = node->GetComponent<ClickableComponent>().Get();
+            }
+        }
+        ASSERT_TRUE(over);
+        over->_actionName = PoolString();
+        over->_blocksInput = true;
+        const float x = kCoveredX + kInsideSquare;
+        const float y = kSquareY + kInsideSquare;
+
+        EXPECT_TRUE(CoreManager::GetUIInput().DispatchMouseMotion(Motion(x, y)));
+        EXPECT_TRUE(Press(x, y));
+        EXPECT_TRUE(Release(x, y));
+
+        EXPECT_FALSE(_covered->hovered);
+        EXPECT_EQ(_covered->presses, 0);
+        EXPECT_TRUE(recorder.actions.empty());
+    }
+
 }  // namespace BECore::Tests

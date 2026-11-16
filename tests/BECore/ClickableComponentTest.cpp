@@ -4,6 +4,7 @@
 #include <BECore/Input/PointerTracker.h>
 #include <BECore/Input/UIInput.h>
 #include <BECore/Reflection/XmlDeserializer.h>
+#include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Renderer/RendererManager.h>
 #include <BECore/Scene/Components/ClickableComponent.h>
@@ -453,6 +454,125 @@ namespace BECore::Tests {
         EXPECT_EQ(recorder.rawUps, 1);
         EXPECT_TRUE(Release(kInside, kInside, SDL_BUTTON_LEFT, 1));
         EXPECT_EQ(recorder.rawUps, 1);
+    }
+
+    TEST_F(ClickableComponentTest, ANodeWrittenBeforeTheShapeAndBlocksInputFieldsBehavesAsBefore) {
+        const String old = R"(<node name="Old"><components>
+  <component type="TransformComponent" x="0" y="0" width="100" height="100"/>
+  <component type="ClickableComponent" actionName="ActOld"/>
+</components></node>)";
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(old));
+        Draw();
+        const auto clickable = Node("Old").GetComponent<ClickableComponent>();
+        ASSERT_TRUE(clickable);
+        EXPECT_EQ(clickable->_shape, ClickableShape::Rect);
+        EXPECT_FALSE(clickable->_blocksInput);
+        InputRecorder recorder;
+
+        EXPECT_TRUE(Press(0.0f, 0.0f)) << "a corner of the rect is inside";
+        EXPECT_TRUE(Release(0.0f, 0.0f));
+
+        ASSERT_EQ(recorder.actions.size(), 1u);
+        EXPECT_EQ(recorder.actions[0], "ActOld"_intern);
+    }
+
+    TEST_F(ClickableComponentTest, AnEllipseTakesTheCentreAndLeavesTheCornersToWhatIsBelow) {
+        const String ellipse = R"(<node name="Round" layer="1"><components>
+  <component type="TransformComponent" x="0" y="0" width="100" height="100"/>
+  <component type="ClickableComponent" actionName="ActRound" shape="Ellipse"/>
+</components></node>)";
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(ClickableNode("Under", "ActUnder", 0.0f) + ellipse));
+        Draw();
+        InputRecorder recorder;
+
+        EXPECT_TRUE(Press(kBoxSize * 0.5f, kBoxSize * 0.5f));
+        EXPECT_TRUE(Release(kBoxSize * 0.5f, kBoxSize * 0.5f));
+        EXPECT_TRUE(Press(1.0f, 1.0f));
+        EXPECT_TRUE(Release(1.0f, 1.0f));
+
+        ASSERT_EQ(recorder.actions.size(), 2u);
+        EXPECT_EQ(recorder.actions[0], "ActRound"_intern);
+        EXPECT_EQ(recorder.actions[1], "ActUnder"_intern) << "the corner is outside the ellipse";
+    }
+
+    TEST_F(ClickableComponentTest, AnEllipseOfANonSquareRectFollowsBothSides) {
+        const String wide = R"(<node name="Wide"><components>
+  <component type="TransformComponent" x="0" y="0" width="200" height="40"/>
+  <component type="ClickableComponent" actionName="ActWide" shape="Ellipse"/>
+</components></node>)";
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(wide));
+        Draw();
+
+        EXPECT_TRUE(Move(190.0f, 20.0f)) << "near the end of the long axis, on the centre line";
+        EXPECT_FALSE(Move(190.0f, 2.0f));
+    }
+
+    TEST_F(ClickableComponentTest, ABlockingClickableWithNoActionShieldsWhatIsBelowAndEmitsNothing) {
+        const String shield = R"(<node name="Shield" layer="1"><components>
+  <component type="TransformComponent" x="0" y="0" width="100" height="100"/>
+  <component type="ClickableComponent" blocksInput="true"/>
+</components></node>)";
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(ClickableNode("Under", "ActUnder", 0.0f) + shield));
+        Draw();
+        InputRecorder recorder;
+
+        EXPECT_TRUE(Move(kInside, kInside)) << "the motion is taken";
+        EXPECT_TRUE(Press(kInside, kInside));
+        EXPECT_TRUE(Release(kInside, kInside));
+
+        EXPECT_TRUE(recorder.actions.empty());
+        EXPECT_EQ(recorder.rawDowns, 0);
+        EXPECT_EQ(recorder.rawUps, 0);
+        EXPECT_FALSE(Press(kOutside, kInside)) << "outside the shape it shields nothing";
+    }
+
+    TEST_F(ClickableComponentTest, ABlockingClickableOfAnEllipseShieldsOnlyTheEllipse) {
+        const String shield = R"(<node name="Shield"><components>
+  <component type="TransformComponent" x="0" y="0" width="100" height="100"/>
+  <component type="ClickableComponent" blocksInput="true" shape="Ellipse"/>
+</components></node>)";
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(shield));
+        Draw();
+
+        EXPECT_TRUE(Move(kBoxSize * 0.5f, kBoxSize * 0.5f));
+        EXPECT_FALSE(Move(1.0f, 1.0f));
+    }
+
+    TEST_F(ClickableComponentTest, ANodeWithNoActionAndNoBlocksInputStillTakesNothing) {
+        const String silent = R"(<node name="Silent"><components>
+  <component type="TransformComponent" x="0" y="0" width="100" height="100"/>
+  <component type="ClickableComponent" shape="Ellipse"/>
+</components></node>)";
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(silent));
+        Draw();
+
+        EXPECT_FALSE(Move(kBoxSize * 0.5f, kBoxSize * 0.5f));
+        EXPECT_FALSE(Press(kBoxSize * 0.5f, kBoxSize * 0.5f));
+    }
+
+    TEST_F(ClickableComponentTest, TheFieldsSurviveASaveAndALoad) {
+        auto source = BECore::New<ClickableComponent>();
+        source->_actionName = "ActSaved"_intern;
+        source->_shape = ClickableShape::Ellipse;
+        source->_blocksInput = true;
+
+        XmlSerializer serializer;
+        ASSERT_TRUE(serializer.BeginObject("component"));
+        source->Serialize(serializer);
+        serializer.EndObject();
+        const String text = serializer.SaveToString();
+
+        XmlDeserializer deserializer;
+        ASSERT_TRUE(deserializer.LoadFromString(text)) << text.c_str();
+        ASSERT_TRUE(deserializer.BeginObject("component"));
+        auto copy = BECore::New<ClickableComponent>();
+        copy->Deserialize(deserializer);
+        deserializer.EndObject();
+        ASSERT_FALSE(deserializer.HasErrors());
+
+        EXPECT_EQ(copy->_actionName, "ActSaved"_intern);
+        EXPECT_EQ(copy->_shape, ClickableShape::Ellipse);
+        EXPECT_TRUE(copy->_blocksInput);
     }
 
 }  // namespace BECore::Tests
