@@ -159,7 +159,6 @@ namespace BECore::Tests {
     // =========================================================================
 
     TEST(ValueTreeLoadTest, ATreeLoadsAsTheProgramOfTheSameText) {
-        const size_t pooled = ProgramPool::Count();
         ValueFormulaDocument document;
         {
             const ValueLinkScope scope(kDocumentName);
@@ -169,14 +168,15 @@ namespace BECore::Tests {
         ExpectAttackTimesTwo(document.damage);
         EXPECT_EQ(document.damage.Path(), PoolString::Intern("caster.attack * 2"));
 
-        // The text form of the same formula is that program: one entry of the pool, and `==`
+        // The text form of the same formula is that program: no new entry of the pool, and `==`
+        const size_t pooled = ProgramPool::Count();
         ValueFormulaDocument fromText;
         {
             const ValueLinkScope scope(kDocumentName);
             EXPECT_TRUE(LoadXml(Format("{}{}", kContext, R"(<damage expr="caster.attack * 2"/>)"), fromText).empty());
         }
         EXPECT_EQ(document.damage, fromText.damage);
-        EXPECT_EQ(ProgramPool::Count(), pooled + 1);
+        EXPECT_EQ(ProgramPool::Count(), pooled);
     }
 
     TEST(ValueTreeLoadTest, ATreeOfEachTypeGivesTheValueOfItsText) {

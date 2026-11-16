@@ -262,7 +262,13 @@ namespace BECore::Tests {
         const auto other = CompileValue<int32_t>("caster.attack * (100 + cast.level * 10) / 100", swapped);
         ASSERT_TRUE(other.has_value());
         EXPECT_NE(other->Id(), first->Id());
-        EXPECT_EQ(ProgramPool::Count(), count + 1);
+        // Another test of the process may have pooled this program already: at most one new entry, and none on a repeat
+        const size_t afterOther = ProgramPool::Count();
+        EXPECT_LE(afterOther, count + 1);
+        const auto again = CompileValue<int32_t>("caster.attack * (100 + cast.level * 10) / 100", swapped);
+        ASSERT_TRUE(again.has_value());
+        EXPECT_EQ(again->Id(), other->Id());
+        EXPECT_EQ(ProgramPool::Count(), afterOther);
     }
 
     TEST(ProgramCompilerTest, ReadsIsTheLevelsTheFormulaUses) {
