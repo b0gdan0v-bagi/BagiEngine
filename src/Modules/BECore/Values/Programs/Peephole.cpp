@@ -33,11 +33,18 @@ namespace BECore {
             }
         }
 
+        /// The registers a fused instruction reads: the weight of `LerpSlots`; the others read fields only
+        RegisterMask FusedReads(const Instruction& ins) {
+            return IsLerpSlots(ins.op) ? RegisterBit(ins.c) : RegisterMask{0};
+        }
+
         /// Every register the instruction reads: what must stay intact for it. A new opcode that this switch lacks is a compile error
         RegisterMask Reads(const Instruction& ins) {
             switch (ins.op) {
                 case Opcode::Invalid:
                 case Opcode::LoadConst:
+                    return 0;
+                case Opcode::LoadTableSlot:
                     return 0;
                 case Opcode::Copy:
                 case Opcode::LoadTable:
@@ -49,7 +56,7 @@ namespace BECore {
 #undef BE_PEEPHOLE_READS_ROW
 #define BE_PEEPHOLE_READS_FUSED(Op, Type, Cpp)                                                                                                                                                         \
     case Opcode::Op##Type:                                                                                                                                                                             \
-        return 0;
+        return FusedReads(ins);
                     BE_PROGRAM_FUSED_ROWS(BE_PEEPHOLE_READS_FUSED)
 #undef BE_PEEPHOLE_READS_FUSED
 #define BE_PEEPHOLE_READS_MIXED(Op, LName, LCpp, RName, RCpp)                                                                                                                                          \
@@ -137,11 +144,91 @@ namespace BECore {
             return true;
         }
 
+        /// The opcodes of `lerp(slot, slot, t)` over one float type
+        struct LerpRow {
+            Opcode load;
+            Opcode lerp;
+            Opcode fused;
+        };
+
+#define BE_PEEPHOLE_LERP_ROW(Op, Type, Cpp) LerpRow{Opcode::LoadSlot##Type, Opcode::Lerp##Type, Opcode::LerpSlots##Type},
+        constexpr Array<LerpRow, 2> kLerpRows{{BE_PROGRAM_TYPES_FLOATS(BE_PEEPHOLE_LERP_ROW, LerpSlots)}};
+#undef BE_PEEPHOLE_LERP_ROW
+
+        const LerpRow* LerpRowOf(Opcode load) {
+            const auto found = std::find_if(kLerpRows.begin(), kLerpRows.end(), [load](const LerpRow& row) { return row.load == load; });
+            return found == kLerpRows.end() ? nullptr : &*found;
+        }
+
+        /// `LoadSlot from; LoadSlot to; <the code of t>; Lerp from, to, t` from @p at: the two loads go and the `Lerp` becomes the fused instruction, which reads the fields where the
+        /// `Lerp` stood. The code of `t` stays; it must neither read nor write the two registers (a read would see a register the fusion no longer fills, a write would change what the
+        /// `Lerp` read), and `t` must not be one of them.
+        bool FuseLerp(Vector<Instruction>& code, size_t at, uint8_t resultRegister) {
+            constexpr size_t kLoads = 2;
+            if (at + kLoads >= code.size()) {
+                return false;
+            }
+            const Instruction from = code[at];
+            const Instruction to = code[at + 1];
+            const LerpRow* row = LerpRowOf(from.op);
+            if (row == nullptr || to.op != from.op || to.dst == from.dst) {
+                return false;
+            }
+            const RegisterMask watched = RegisterBit(from.dst) | RegisterBit(to.dst);
+            for (size_t i = at + kLoads; i < code.size(); ++i) {
+                const Instruction& ins = code[i];
+                const bool isLerp = ins.op == row->lerp && ins.a == from.dst && ins.b == to.dst;
+                if (!isLerp) {
+                    if (((Reads(ins) | RegisterBit(ins.dst)) & watched) != 0) {
+                        return false;
+                    }
+                    continue;
+                }
+                if ((RegisterBit(ins.c) & watched) != 0 || from.imm > kMaxFusedHalf || to.imm > kMaxFusedHalf) {
+                    return false;
+                }
+                const Array<uint8_t, 2> dropped{from.dst, to.dst};
+                if (!AreDeadAfter(code, i, Span<const uint8_t>(dropped.data(), dropped.size()), ins.dst, resultRegister)) {
+                    return false;
+                }
+                code[i] = Instruction{row->fused, ins.dst, from.a, to.a, ins.c, PackHalves(from.imm, to.imm)};
+                code.erase(code.begin() + static_cast<ptrdiff_t>(at), code.begin() + static_cast<ptrdiff_t>(at + kLoads));
+                return true;
+            }
+            return false;
+        }
+
+        /// `LoadSlot index; LoadTable` at @p at: a table indexed by a field, written as one `LoadTableSlot`
+        bool FuseTable(Vector<Instruction>& code, size_t at, uint8_t resultRegister) {
+            if (at + 1 >= code.size() || code[at].op != Opcode::LoadSlotInt32 || code[at + 1].op != Opcode::LoadTable) {
+                return false;
+            }
+            const Instruction& load = code[at];
+            const Instruction& table = code[at + 1];
+            if (table.a != load.dst || load.imm > kMaxFusedHalf || table.imm > kMaxFusedHalf) {
+                return false;
+            }
+            const Array<uint8_t, 1> dropped{load.dst};
+            if (!AreDeadAfter(code, at + 1, Span<const uint8_t>(dropped.data(), dropped.size()), table.dst, resultRegister)) {
+                return false;
+            }
+            const Instruction fused{Opcode::LoadTableSlot, table.dst, load.a, table.b, table.c, PackHalves(load.imm, table.imm)};
+            code[at] = fused;
+            code.erase(code.begin() + static_cast<ptrdiff_t>(at) + 1);
+            return true;
+        }
+
     }  // namespace
 
     void Fuse(Vector<Instruction>& code, uint8_t resultRegister) {
-        for (size_t at = 0; at < code.size(); ++at) {
-            static_cast<void>(FuseMulAdd(code, at, resultRegister));
+        size_t at = 0;
+        while (at < code.size()) {
+            // A `Lerp` leaves the code of its weight where it was, so what starts at @p at now is looked at again; a fused instruction starts no sequence
+            if (FuseLerp(code, at, resultRegister)) {
+                continue;
+            }
+            static_cast<void>(FuseMulAdd(code, at, resultRegister) || FuseTable(code, at, resultRegister));
+            ++at;
         }
     }
 

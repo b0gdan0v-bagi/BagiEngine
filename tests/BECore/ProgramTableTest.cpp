@@ -298,9 +298,13 @@ namespace BECore::Tests {
 
     TEST(ProgramTableTest, ATableOverAFieldIsALoadAndATable) {
         ValueWorld world;
-        const Value<int32_t> value = Compiled<int32_t>(world, "at(cast.level, 10, 20, 30)");
-        ASSERT_EQ(value.Kind(), ValueKind::Program);
-        const Program& program = ProgramPool::Get(value.Id());
+        // The load and the table are two instructions as the lowering writes them; the peephole pass makes them one (`ProgramFusionTest`), so this is the code without it
+        CompileOptions unfused;
+        unfused.fuse = false;
+        const auto compiled = CompileExpression("at(cast.level, 10, 20, 30)", world.declaration, DescribeType<int32_t>(), unfused);
+        ASSERT_TRUE(compiled.has_value());
+        ASSERT_EQ(compiled->kind, CompiledKind::Program);
+        const Program& program = ProgramPool::Get(compiled->program);
         ASSERT_EQ(program.Code().size(), 2U) << program.Disassemble().c_str();
         EXPECT_EQ(program.Code()[0].op, Opcode::LoadSlotInt32);
         EXPECT_EQ(program.Code()[1].op, Opcode::LoadTable);
@@ -309,6 +313,11 @@ namespace BECore::Tests {
         const String text = program.Disassemble();
         EXPECT_NE(text.find("LoadTable r0 <- r0 [3 entries from constant 0]"), String::npos) << text;
         EXPECT_NE(text.find("result Int32 in r0"), String::npos) << text;
+
+        const Value<int32_t> value = Compiled<int32_t>(world, "at(cast.level, 10, 20, 30)");
+        ASSERT_EQ(value.Kind(), ValueKind::Program);
+        EXPECT_EQ(ProgramPool::Get(value.Id()).Code().size(), 1U);
+        EXPECT_EQ(ProgramPool::Get(value.Id()).Code()[0].op, Opcode::LoadTableSlot);
     }
 
     TEST(ProgramTableTest, TwoTextsThatMakeTheSameCodeAreOnePoolEntry) {

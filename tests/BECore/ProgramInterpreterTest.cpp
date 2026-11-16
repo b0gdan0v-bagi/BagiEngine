@@ -699,12 +699,12 @@ namespace BECore::Tests {
 #define BE_CHECK_CONVERSION(Src, SrcCpp, Dst, DstCpp) CheckConversion<SrcCpp, DstCpp>(Opcode::Src##To##Dst);
         BE_PROGRAM_CONVERSIONS(BE_CHECK_CONVERSION)
 #undef BE_CHECK_CONVERSION
-        // Every opcode but the four untyped ones (`Invalid`, `LoadConst`, `Copy`, `LoadTable`) and the fused ones (`ProgramFusionTest` compares them with the code they replace) is a
-        // row or a conversion: a row that the matrix skipped would leave the count short
+        // Every opcode but the five untyped ones (`Invalid`, `LoadConst`, `Copy`, `LoadTable`, `LoadTableSlot`) and the typed fused ones (`ProgramFusionTest` compares them with the code they replace)
+        // is a row or a conversion: a row that the matrix skipped would leave the count short
 #define BE_COUNT_FUSED(Op, Type, Cpp) +1
         constexpr size_t kFusedRows = 0 BE_PROGRAM_FUSED_ROWS(BE_COUNT_FUSED);
 #undef BE_COUNT_FUSED
-        EXPECT_EQ(static_cast<size_t>(g_rowsChecked) + 4 + kFusedRows, EnumUtils<Opcode>::Count());
+        EXPECT_EQ(static_cast<size_t>(g_rowsChecked) + 5 + kFusedRows, EnumUtils<Opcode>::Count());
     }
 
     TEST(ProgramInterpreterTest, TheVectorsOfIntegersWrapLikeIntegers) {
@@ -1218,9 +1218,9 @@ namespace BECore::Tests {
         static_assert(ResultTypeOf(Opcode::AddInt32) == ProgramType::Int32);
         static_assert(ResultTypeOf(Opcode::FloatToInt32) == ProgramType::Int32);
         static_assert(!ResultTypeOf(Opcode::LoadConst).has_value() && !ResultTypeOf(Opcode::Copy).has_value() && !ResultTypeOf(Opcode::LoadTable).has_value() &&
-                      !ResultTypeOf(Opcode::Invalid).has_value());
+                      !ResultTypeOf(Opcode::LoadTableSlot).has_value() && !ResultTypeOf(Opcode::Invalid).has_value());
         for (const Opcode op : EnumUtils<Opcode>::Values()) {
-            if (op != Opcode::Invalid && op != Opcode::LoadConst && op != Opcode::Copy && op != Opcode::LoadTable) {
+            if (op != Opcode::Invalid && op != Opcode::LoadConst && op != Opcode::Copy && op != Opcode::LoadTable && op != Opcode::LoadTableSlot) {
                 EXPECT_TRUE(ResultTypeOf(op).has_value()) << String(EnumUtils<Opcode>::ToString(op)).c_str();
             }
         }

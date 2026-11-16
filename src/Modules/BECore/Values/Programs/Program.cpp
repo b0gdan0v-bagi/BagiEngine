@@ -119,6 +119,15 @@ namespace BECore {
                 text += Format("{}: {} r{} <- level {} offset {} * constant {} + constant {}\n", i, EnumUtils<Opcode>::ToString(ins.op), ins.dst, ins.a, ins.imm, ins.b, ins.c);
                 continue;
             }
+            if (IsLerpSlots(ins.op)) {
+                text +=
+                    Format("{}: {} r{} <- level {} offset {}, level {} offset {}, t r{}\n", i, EnumUtils<Opcode>::ToString(ins.op), ins.dst, ins.a, LowHalf(ins.imm), ins.b, HighHalf(ins.imm), ins.c);
+                continue;
+            }
+            if (ins.op == Opcode::LoadTableSlot) {
+                text += Format("{}: LoadTableSlot r{} <- level {} offset {} [{} entries from constant {}]\n", i, ins.dst, ins.a, LowHalf(ins.imm), TableEntryCount(ins), HighHalf(ins.imm));
+                continue;
+            }
             text += Format("{}: {} r{} <- r{} r{} r{} imm {}\n", i, EnumUtils<Opcode>::ToString(ins.op), ins.dst, ins.a, ins.b, ins.c, ins.imm);
         }
         text += Format("result {} in r{}\n", EnumUtils<ProgramType>::ToString(_resultType), _resultRegister);

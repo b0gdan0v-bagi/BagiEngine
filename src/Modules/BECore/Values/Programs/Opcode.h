@@ -94,9 +94,9 @@
     BE_PROGRAM_TYPES_MATH(X, Extract)                                                                                                                                                                  \
     BE_PROGRAM_TYPES_MATH(X, Pack)
 
-/// The instructions the peephole pass (`Peephole.h`) writes: `X(operation, type name, C++ type)`. Each computes what the instructions it replaces compute, bit for bit; none is in
-/// `BE_PROGRAM_ROWS`, which are the operations of the language
-#define BE_PROGRAM_FUSED_ROWS(X) BE_PROGRAM_TYPES_NUMBERS(X, MulAddSlot)
+/// The typed instructions the peephole pass (`Peephole.h`) writes: `X(operation, type name, C++ type)`; `LoadTableSlot`, which holds any type, is an opcode of its own. Each
+/// computes what the instructions it replaces compute, bit for bit; none is in `BE_PROGRAM_ROWS`, which are the operations of the language
+#define BE_PROGRAM_FUSED_ROWS(X) BE_PROGRAM_TYPES_NUMBERS(X, MulAddSlot) BE_PROGRAM_TYPES_FLOATS(X, LerpSlots)
 
 /// The operations whose two operands have different types: `X(operation, lhs name, lhs C++ type, rhs name, rhs C++ type)`; the opcode is `MulVec3Float`.
 /// A vector by its scalar (`float` for `Vec2` .. `Vec4`, `int` for `IVec2`) and `Quat * Vec3` (a rotation), each where the C++ operator or function exists
@@ -152,12 +152,12 @@ namespace BECore {
     /**
      * @brief One instruction of a program
      *
-     * `LoadConst`, `Copy` and `LoadTable` move a whole register whatever it holds (`LoadTable` picks it from a run of constants by an index);
+     * `LoadConst`, `Copy`, `LoadTable` and `LoadTableSlot` move a whole register whatever it holds (a table picks it from a run of constants by an index);
      * `LoadSlot<type>` reads a field of a context object; every other opcode is an operation applied to one type (`AddInt32`), a conversion
      * (`Int32ToFloat`) or a fused instruction (`BE_PROGRAM_FUSED_ROWS`; `Instruction.h` says how each is encoded). `Invalid` is never emitted: a zeroed instruction is caught.
      */
-    CORE_ENUM(Opcode, uint16_t, Invalid, LoadConst, Copy,
-              LoadTable BE_PROGRAM_ROWS(BE_PROGRAM_OPCODE_ROW) BE_PROGRAM_FUSED_ROWS(BE_PROGRAM_OPCODE_ROW) BE_PROGRAM_MIXED_ROWS(BE_PROGRAM_OPCODE_MIXED)
+    CORE_ENUM(Opcode, uint16_t, Invalid, LoadConst, Copy, LoadTable,
+              LoadTableSlot BE_PROGRAM_ROWS(BE_PROGRAM_OPCODE_ROW) BE_PROGRAM_FUSED_ROWS(BE_PROGRAM_OPCODE_ROW) BE_PROGRAM_MIXED_ROWS(BE_PROGRAM_OPCODE_MIXED)
                   BE_PROGRAM_CONVERSIONS(BE_PROGRAM_OPCODE_CONVERSION))
 
     /// The operations of `BE_PROGRAM_ROWS` by name, apart from the type: what the text of a formula says (`+`, `min`) before a type is known
@@ -278,6 +278,20 @@ namespace BECore {
         return true;
             BE_PROGRAM_TYPES_NUMBERS(BE_PROGRAM_IS_MULADD, MulAddSlot)
 #undef BE_PROGRAM_IS_MULADD
+            default:
+                break;
+        }
+        return false;
+    }
+
+    /// `lerp(slot, slot, t)` over a float
+    [[nodiscard]] constexpr bool IsLerpSlots(Opcode op) {
+        switch (op) {
+#define BE_PROGRAM_IS_LERPSLOTS(Op, Type, Cpp)                                                                                                                                                         \
+    case Opcode::Op##Type:                                                                                                                                                                             \
+        return true;
+            BE_PROGRAM_TYPES_FLOATS(BE_PROGRAM_IS_LERPSLOTS, LerpSlots)
+#undef BE_PROGRAM_IS_LERPSLOTS
             default:
                 break;
         }

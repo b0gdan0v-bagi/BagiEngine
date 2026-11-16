@@ -27,6 +27,13 @@ namespace BECore {
                     regs[ins.dst] = constants[ins.imm + Kernel::TableIndex(Kernel::Load<int32_t>(regs[ins.a]), count)];
                     break;
                 }
+                case Opcode::LoadTableSlot: {
+                    const uint32_t count = TableEntryCount(ins);
+                    const uint32_t first = HighHalf(ins.imm);
+                    ASSERT(count > 0 && first + count <= constants.size());
+                    regs[ins.dst] = constants[first + Kernel::TableIndex(Kernel::LoadField<int32_t>(context, ins.a, LowHalf(ins.imm)), count)];
+                    break;
+                }
 #define BE_PROGRAM_CASE_ROW(Op, Type, Cpp)                                                                                                                                                             \
     case Opcode::Op##Type:                                                                                                                                                                             \
         Kernel::Execute<Kernel::Op, Cpp>(regs, ins, context);                                                                                                                                          \

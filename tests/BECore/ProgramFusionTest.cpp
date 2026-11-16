@@ -8,10 +8,12 @@
 #include <BECore/Values/Programs/ProgramBuilder.h>
 #include <BECore/Values/Programs/ProgramCompiler.h>
 #include <BECore/Values/Value.h>
+#include <BECore/Values/ValueTables.h>
 #include <Common/Printers.h>
 #include <Generated/ProgramFusionTest.gen.hpp>
 #include <algorithm>
 #include <bit>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <gtest/gtest.h>
@@ -123,11 +125,13 @@ namespace BECore::Tests {
             stats.f32b = Generate<float>(generator);
             stats.f64 = Generate<double>(generator);
             stats.f64b = Generate<double>(generator);
+            stats.dir = Vec3{Generate<float>(generator), Generate<float>(generator), Generate<float>(generator)};
+            stats.dirb = Vec3{Generate<float>(generator), Generate<float>(generator), Generate<float>(generator)};
         }
 
         /// Every instruction `Fuse` writes
         bool IsFused(Opcode op) {
-            return IsMulAddSlot(op);
+            return IsMulAddSlot(op) || IsLerpSlots(op) || op == Opcode::LoadTableSlot;
         }
 
         size_t CountOf(const Program& program, Opcode op) {
@@ -138,9 +142,10 @@ namespace BECore::Tests {
             return static_cast<size_t>(std::count_if(program.Code().begin(), program.Code().end(), [](const Instruction& ins) { return IsFused(ins.op); }));
         }
 
-        const Program* Compile(const FusionWorld& world, StringView text, ProgramType type, bool fuse, const TypeDesc& wanted) {
+        const Program* Compile(const FusionWorld& world, StringView text, ProgramType type, bool fuse, const TypeDesc& wanted, const IValueTables* tables = nullptr) {
             CompileOptions options;
             options.fuse = fuse;
+            options.tables = tables;
             const auto compiled = CompileExpression(text, world.declaration, wanted, options);
             EXPECT_TRUE(compiled.has_value()) << String(text).c_str() << ": " << (compiled.has_value() ? String{} : compiled.error().message).c_str();
             if (!compiled.has_value()) {
@@ -154,10 +159,10 @@ namespace BECore::Tests {
         /// Compiles @p text with and without fusion, checks that the fused program has @p expected once and the plain one no fused instruction, then runs both over generated inputs
         /// and compares the bytes of the results
         template <typename T>
-        void ExpectSameBits(StringView text, Opcode expected, size_t iterations = kInputs) {
+        void ExpectSameBits(StringView text, Opcode expected, const IValueTables* tables = nullptr, size_t iterations = kInputs) {
             FusionWorld world;
-            const Program* fused = Compile(world, text, kProgramTypeOf<T>, true, DescribeType<T>());
-            const Program* plain = Compile(world, text, kProgramTypeOf<T>, false, DescribeType<T>());
+            const Program* fused = Compile(world, text, kProgramTypeOf<T>, true, DescribeType<T>(), tables);
+            const Program* plain = Compile(world, text, kProgramTypeOf<T>, false, DescribeType<T>(), tables);
             ASSERT_NE(fused, nullptr);
             ASSERT_NE(plain, nullptr);
             EXPECT_EQ(CountOf(*fused, expected), 1U) << String(text).c_str() << "\n" << fused->Disassemble().c_str();
@@ -182,6 +187,24 @@ namespace BECore::Tests {
 
         Vector<Instruction> Int32MulAddCode() {
             return MulAddCode(Opcode::LoadSlotInt32, Opcode::MulInt32, Opcode::AddInt32);
+        }
+
+        /// `lerp(a-field, b-field, t)` as the lowering writes it when the weight is one constant: loads into r0 and r1, the weight in r2
+        Vector<Instruction> LerpCode(Opcode load = Opcode::LoadSlotFloat, Opcode lerp = Opcode::LerpFloat) {
+            return {Instruction{load, 0, 0, 0, 0, 4}, Instruction{load, 1, 1, 0, 0, 8}, Instruction{Opcode::LoadConst, 2, 0, 0, 0, 0}, Instruction{lerp, 0, 0, 1, 2, 0}};
+        }
+
+        /// A table over a field as the lowering writes it: the index into r0, the table of @p count constants from constant 3 over it
+        Vector<Instruction> TableCode(uint32_t first = 3, uint32_t count = 5) {
+            Instruction table{Opcode::LoadTable, 0, 0, 0, 0, first};
+            SetTableEntryCount(table, count);
+            return {Instruction{Opcode::LoadSlotInt32, 0, 1, 0, 0, 8}, table};
+        }
+
+        void ExpectUnchanged(Vector<Instruction> code, uint8_t resultRegister) {
+            const Vector<Instruction> before = code;
+            Fuse(code, resultRegister);
+            EXPECT_EQ(code, before);
         }
 
     }  // namespace
@@ -424,6 +447,252 @@ namespace BECore::Tests {
         static_cast<void>(tooHigh.AddConstant(int32_t{3}));
         tooHigh.Emit(Opcode::MulAddSlotInt32, high, static_cast<uint8_t>(kMaxContextLevels), 0, 0, 4);
         EXPECT_FALSE(tooHigh.Finish(ProgramType::Int32, high).has_value());
+    }
+
+    TEST(ProgramFusionTest, ALerpOfTwoSlotsIsOneInstructionWithTheSameBits) {
+        ExpectSameBits<float>("lerp(a.f32, b.f32b, a.f32b)", Opcode::LerpSlotsFloat);
+        ExpectSameBits<float>("lerp(b.f32, b.f32b, 0.25)", Opcode::LerpSlotsFloat);
+        ExpectSameBits<double>("lerp(a.f64, b.f64b, a.f64b)", Opcode::LerpSlotsDouble);
+        ExpectSameBits<double>("lerp(b.f64, a.f64, 0.5)", Opcode::LerpSlotsDouble);
+        // A weight that is a formula of its own, fused itself, stays in place between the two
+        ExpectSameBits<float>("lerp(a.f32, b.f32b, b.f32 * 0.5 + 0.25)", Opcode::LerpSlotsFloat);
+    }
+
+    TEST(ProgramFusionTest, ALerpInsideTheWeightOfAnotherIsFusedToo) {
+        FusionWorld world;
+        const StringView text = "lerp(a.f64, b.f64b, lerp(a.f64b, b.f64, b.f64b))";
+        const Program* fused = Compile(world, text, ProgramType::Double, true, DescribeType<double>());
+        const Program* plain = Compile(world, text, ProgramType::Double, false, DescribeType<double>());
+        ASSERT_NE(fused, nullptr);
+        ASSERT_NE(plain, nullptr);
+        EXPECT_EQ(CountOf(*fused, Opcode::LerpSlotsDouble), 2U) << fused->Disassemble().c_str();
+        Generator generator;
+        for (size_t i = 0; i < kInputs; ++i) {
+            Randomize(world.a, generator);
+            Randomize(world.b, generator);
+            const double withFusion = Run<double>(*fused, world.context);
+            const double without = Run<double>(*plain, world.context);
+            ASSERT_EQ(std::memcmp(&withFusion, &without, sizeof(double)), 0) << i;
+        }
+    }
+
+    TEST(ProgramFusionTest, ALerpIsExactAtTheEndsAndDoesNotClampTheWeight) {
+        FusionWorld world;
+        const Program* program = Compile(world, "lerp(a.f32, b.f32, a.f32b)", ProgramType::Float, true, DescribeType<float>());
+        ASSERT_NE(program, nullptr);
+        ASSERT_EQ(CountOf(*program, Opcode::LerpSlotsFloat), 1U);
+        world.a.f32 = 0.1f;
+        world.b.f32 = 7.0f;
+        world.a.f32b = 0.0f;
+        EXPECT_EQ(Run<float>(*program, world.context), 0.1f);
+        world.a.f32b = 1.0f;
+        EXPECT_EQ(Run<float>(*program, world.context), 7.0f);
+        world.a.f32b = 2.0f;
+        EXPECT_EQ(Run<float>(*program, world.context), std::lerp(0.1f, 7.0f, 2.0f));
+    }
+
+    TEST(ProgramFusionTest, ALerpWithOneSlotOrOfAVectorStaysUnfused) {
+        FusionWorld world;
+        const Program* oneSlot = Compile(world, "lerp(a.f32, 5.0, a.f32b)", ProgramType::Float, true, DescribeType<float>());
+        ASSERT_NE(oneSlot, nullptr);
+        EXPECT_EQ(CountFused(*oneSlot), 0U) << oneSlot->Disassemble().c_str();
+        const Program* otherSlot = Compile(world, "lerp(5.0, a.f32, a.f32b)", ProgramType::Float, true, DescribeType<float>());
+        ASSERT_NE(otherSlot, nullptr);
+        EXPECT_EQ(CountFused(*otherSlot), 0U) << otherSlot->Disassemble().c_str();
+        const Program* vectors = Compile(world, "lerp(a.dir, b.dirb, a.f32)", ProgramType::Vec3, true, DescribeType<Vec3>());
+        ASSERT_NE(vectors, nullptr);
+        EXPECT_EQ(CountFused(*vectors), 0U) << vectors->Disassemble().c_str();
+    }
+
+    TEST(ProgramFusionTest, ALerpReadsTheLevelOfBothSlots) {
+        FusionWorld world;
+        const Program* fused = Compile(world, "lerp(a.f32, b.f32b, 0.25)", ProgramType::Float, true, DescribeType<float>());
+        const Program* plain = Compile(world, "lerp(a.f32, b.f32b, 0.25)", ProgramType::Float, false, DescribeType<float>());
+        ASSERT_NE(fused, nullptr);
+        ASSERT_NE(plain, nullptr);
+        EXPECT_EQ(CountOf(*fused, Opcode::LerpSlotsFloat), 1U);
+        EXPECT_EQ(fused->Reads(), static_cast<LevelMask>(LevelBit(0) | LevelBit(1)));
+        EXPECT_EQ(fused->Reads(), plain->Reads());
+        const Program* second = Compile(world, "lerp(b.f32, b.f32b, 0.25)", ProgramType::Float, true, DescribeType<float>());
+        ASSERT_NE(second, nullptr);
+        EXPECT_EQ(second->Reads(), LevelBit(1));
+    }
+
+    TEST(ProgramFusionTest, TheLerpSequenceByHandKeepsTheCodeOfTheWeightWhereItIs) {
+        Vector<Instruction> code = LerpCode();
+        Fuse(code, 0);
+        ASSERT_EQ(code.size(), 2U);
+        EXPECT_EQ(code[0].op, Opcode::LoadConst);
+        EXPECT_EQ(code[1], (Instruction{Opcode::LerpSlotsFloat, 0, 0, 1, 2, PackHalves(4, 8)}));
+    }
+
+    TEST(ProgramFusionTest, TheWeightThatTouchesAFusedRegisterKeepsTheLerp) {
+        // The weight reads r1, which the fusion no longer fills
+        Vector<Instruction> reads = LerpCode();
+        reads[2] = Instruction{Opcode::Copy, 2, 1, 0, 0, 0};
+        ExpectUnchanged(reads, 0);
+        // The weight overwrites r0, which the `Lerp` reads as its first operand
+        Vector<Instruction> writes = LerpCode();
+        writes[2] = Instruction{Opcode::LoadConst, 0, 0, 0, 0, 0};
+        writes[3].c = 0;
+        writes[3].a = 0;
+        ExpectUnchanged(writes, 0);
+        // The weight is one of the two slots
+        Vector<Instruction> weight = LerpCode();
+        weight[3].c = 1;
+        ExpectUnchanged(weight, 0);
+    }
+
+    TEST(ProgramFusionTest, ASlotRegisterThatIsReadLaterOrIsTheResultKeepsTheLerp) {
+        Vector<Instruction> later = LerpCode();
+        later.push_back(Instruction{Opcode::AddFloat, 3, 0, 1, 0, 0});
+        ExpectUnchanged(later, 3);
+
+        Vector<Instruction> rewritten = LerpCode();
+        rewritten.push_back(Instruction{Opcode::LoadConst, 1, 0, 0, 0, 0});
+        rewritten.push_back(Instruction{Opcode::AddFloat, 3, 0, 1, 0, 0});
+        Fuse(rewritten, 3);
+        EXPECT_EQ(rewritten.size(), 4U);
+        EXPECT_EQ(rewritten[1].op, Opcode::LerpSlotsFloat);
+
+        Vector<Instruction> result = LerpCode();
+        ExpectUnchanged(result, 1);
+    }
+
+    TEST(ProgramFusionTest, AnOffsetThatDoesNotFitAHalfLeavesTheLerpAndTheTable) {
+        Vector<Instruction> fits = LerpCode();
+        fits[0].imm = kMaxFusedHalf;
+        fits[1].imm = kMaxFusedHalf;
+        Fuse(fits, 0);
+        EXPECT_EQ(fits.size(), 2U);
+        EXPECT_EQ(fits[1], (Instruction{Opcode::LerpSlotsFloat, 0, 0, 1, 2, PackHalves(kMaxFusedHalf, kMaxFusedHalf)}));
+
+        Vector<Instruction> tooFar = LerpCode();
+        tooFar[1].imm = kMaxFusedHalf + 1;
+        ExpectUnchanged(tooFar, 0);
+
+        Vector<Instruction> table = TableCode();
+        table[0].imm = kMaxFusedHalf + 1;
+        ExpectUnchanged(table, 0);
+        table = TableCode(kMaxFusedHalf + 1);
+        ExpectUnchanged(table, 0);
+        table = TableCode(kMaxFusedHalf);
+        Fuse(table, 0);
+        EXPECT_EQ(table.size(), 1U);
+    }
+
+    TEST(ProgramFusionTest, ALerpOfAnotherTypeOrInsideAnotherLerpFusesOnlyWhatItMatches) {
+        ExpectUnchanged(LerpCode(Opcode::LoadSlotVec3, Opcode::LerpVec3), 0);
+        ExpectUnchanged(LerpCode(Opcode::LoadSlotInt32, Opcode::LerpFloat), 0);
+
+        // lerp(a, b, lerp(c, d, e)): r0 r1 outside, r2 r3 inside, the weight of the inner in r4
+        const Vector<Instruction> code = {Instruction{Opcode::LoadSlotFloat, 0, 0, 0, 0, 0},  Instruction{Opcode::LoadSlotFloat, 1, 0, 0, 0, 4},  Instruction{Opcode::LoadSlotFloat, 2, 0, 0, 0, 8},
+                                          Instruction{Opcode::LoadSlotFloat, 3, 0, 0, 0, 12}, Instruction{Opcode::LoadSlotFloat, 4, 0, 0, 0, 16}, Instruction{Opcode::LerpFloat, 2, 2, 3, 4, 0},
+                                          Instruction{Opcode::LerpFloat, 0, 0, 1, 2, 0}};
+        Vector<Instruction> fused = code;
+        Fuse(fused, 0);
+        ASSERT_EQ(fused.size(), 3U);
+        EXPECT_EQ(fused[0].op, Opcode::LoadSlotFloat);
+        EXPECT_EQ(fused[1], (Instruction{Opcode::LerpSlotsFloat, 2, 0, 0, 4, PackHalves(8, 12)}));
+        EXPECT_EQ(fused[2], (Instruction{Opcode::LerpSlotsFloat, 0, 0, 0, 2, PackHalves(0, 4)}));
+    }
+
+    TEST(ProgramFusionTest, ATableIndexedByASlotIsOneInstructionWithTheSameBits) {
+        ValueTableSet tables;
+        tables.Add("Damage", {10.0, 20.0, 30.0, 45.0});
+        tables.Add("Rates", {0.5, 0.25});
+        ExpectSameBits<int32_t>("at(a.i32, 10, 20, 30, 40, 50)", Opcode::LoadTableSlot);
+        ExpectSameBits<int32_t>("at(b.i32b, 7)", Opcode::LoadTableSlot);
+        ExpectSameBits<int32_t>("at(a.i32, -5, 0, 5) * 3", Opcode::LoadTableSlot);
+        ExpectSameBits<float>("at(a.i32, 0.5, 1.5, 2.5)", Opcode::LoadTableSlot);
+        ExpectSameBits<int32_t>("ByLevel('Damage', b.i32)", Opcode::LoadTableSlot, &tables);
+        ExpectSameBits<int64_t>("ByLevel('Damage', a.i32) + 1", Opcode::LoadTableSlot, &tables);
+        ExpectSameBits<double>("ByLevel('Rates', a.i32)", Opcode::LoadTableSlot, &tables);
+        ExpectSameBits<Vec3>("at(a.i32, vec3(1, 0, 0), vec3(0, 1, 0))", Opcode::LoadTableSlot);
+    }
+
+    TEST(ProgramFusionTest, ATableOverASlotClampsTheIndexToTheEnds) {
+        ValueTableSet tables;
+        tables.Add("Damage", {10.0, 20.0, 30.0});
+        FusionWorld world;
+        const Program* program = Compile(world, "ByLevel('Damage', a.i32)", ProgramType::Int32, true, DescribeType<int32_t>(), &tables);
+        ASSERT_NE(program, nullptr);
+        ASSERT_EQ(CountOf(*program, Opcode::LoadTableSlot), 1U);
+        const Pair<int32_t, int32_t> cases[] = {{std::numeric_limits<int32_t>::min(), 10}, {-1, 10}, {0, 10}, {1, 20}, {2, 30}, {3, 30}, {std::numeric_limits<int32_t>::max(), 30}};
+        for (const auto& [index, expected] : cases) {
+            world.a.i32 = index;
+            EXPECT_EQ(Run<int32_t>(*program, world.context), expected) << index;
+        }
+        EXPECT_EQ(program->Reads(), LevelBit(0));
+    }
+
+    TEST(ProgramFusionTest, ATableSequenceByHandAndWhatKeepsItUnfused) {
+        Vector<Instruction> code = TableCode();
+        Fuse(code, 0);
+        ASSERT_EQ(code.size(), 1U);
+        Instruction expected{Opcode::LoadTableSlot, 0, 1, 0, 0, PackHalves(8, 3)};
+        SetTableEntryCount(expected, 5);
+        EXPECT_EQ(code[0], expected);
+
+        // The index register is read after the table instruction: its load must stay
+        Vector<Instruction> later = TableCode();
+        later[1].dst = 1;
+        later.push_back(Instruction{Opcode::AddInt32, 2, 0, 1, 0, 0});
+        ExpectUnchanged(later, 2);
+
+        // Another type of index, and a table whose index is not the loaded register
+        Vector<Instruction> wide = TableCode();
+        wide[0].op = Opcode::LoadSlotInt64;
+        ExpectUnchanged(wide, 0);
+        Vector<Instruction> other = TableCode();
+        other[1].a = 2;
+        ExpectUnchanged(other, 0);
+    }
+
+    TEST(ProgramFusionTest, FinishCountsAndChecksTheFieldsOfTheNewInstructions) {
+        ProgramBuilder builder;
+        const uint8_t reg = builder.AcquireRegister().value();
+        const uint8_t weight = builder.AcquireRegister().value();
+        builder.EmitLoadConst(weight, 0.5f);
+        builder.Emit(Opcode::LerpSlotsFloat, reg, 1, 2, weight, PackHalves(0, 4));
+        const auto program = builder.Finish(ProgramType::Float, reg);
+        ASSERT_TRUE(program.has_value());
+        EXPECT_EQ(program->Reads(), static_cast<LevelMask>(LevelBit(1) | LevelBit(2)));
+
+        ProgramBuilder beyond;
+        const uint8_t out = beyond.AcquireRegister().value();
+        beyond.Emit(Opcode::LerpSlotsFloat, out, 0, static_cast<uint8_t>(kMaxContextLevels), out, 0);
+        EXPECT_FALSE(beyond.Finish(ProgramType::Float, out).has_value());
+
+        ProgramBuilder outside;
+        const uint8_t dst = outside.AcquireRegister().value();
+        static_cast<void>(outside.AddConstant(int32_t{1}));
+        Instruction table{Opcode::LoadTableSlot, dst, 0, 0, 0, PackHalves(0, 0)};
+        SetTableEntryCount(table, 2);
+        outside.Emit(table);
+        EXPECT_FALSE(outside.Finish(ProgramType::Int32, dst).has_value());
+
+        ProgramBuilder empty;
+        const uint8_t result = empty.AcquireRegister().value();
+        static_cast<void>(empty.AddConstant(int32_t{1}));
+        empty.Emit(Opcode::LoadTableSlot, result, 0, 0, 0, PackHalves(0, 0));
+        EXPECT_FALSE(empty.Finish(ProgramType::Int32, result).has_value());
+
+        ProgramBuilder fits;
+        const uint8_t value = fits.AcquireRegister().value();
+        const Array<int32_t, 2> entries = {5, 6};
+        Vector<RegisterImage> images(entries.size());
+        std::memcpy(images[0].bytes.data(), &entries[0], sizeof(int32_t));
+        std::memcpy(images[1].bytes.data(), &entries[1], sizeof(int32_t));
+        const uint32_t first = fits.AddConstantRun(Span<const RegisterImage>(images.data(), images.size()));
+        Instruction good{Opcode::LoadTableSlot, value, 1, 0, 0, PackHalves(4, first)};
+        SetTableEntryCount(good, 2);
+        fits.Emit(good);
+        const auto tableProgram = fits.Finish(ProgramType::Int32, value);
+        ASSERT_TRUE(tableProgram.has_value());
+        EXPECT_EQ(tableProgram->Reads(), LevelBit(1));
+        const String text = tableProgram->Disassemble();
+        EXPECT_NE(text.find("LoadTableSlot"), String::npos) << text.c_str();
     }
 
 }  // namespace BECore::Tests

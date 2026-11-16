@@ -43,6 +43,8 @@ namespace BECore {
      *
      * The fused instructions (`BE_PROGRAM_FUSED_ROWS`, written only by `Fuse`) read a field of the context themselves, so a field of theirs that does not fit makes the
      * sequence stay unfused. `MulAddSlot<T>`: the field at offset `imm` of level `a` times the constant `b` plus the constant `c` (both constant indexes are bytes).
+     * `LerpSlots<T>`: `lerp(field, field, t)`, `t` in register `c`, the first field at the low half of `imm` in level `a`, the second at its high half in level `b`.
+     * `LoadTableSlot`: `LoadTable` of a field: the `int32_t` index at the low half of `imm` in level `a`, the first constant in its high half, the count in `b` and `c` as `LoadTable`.
      */
     struct Instruction {
         Opcode op = Opcode::Invalid;
@@ -73,6 +75,21 @@ namespace BECore {
 
     /// The largest constant index a field of a fused instruction holds (a byte)
     inline constexpr uint32_t kMaxFusedConstantIndex = std::numeric_limits<uint8_t>::max();
+
+    /// The largest value a half of `imm` holds: two offsets, or an offset and a constant index, share it in a fused instruction
+    inline constexpr uint32_t kMaxFusedHalf = std::numeric_limits<uint16_t>::max();
+
+    [[nodiscard]] constexpr uint32_t PackHalves(uint32_t low, uint32_t high) {
+        return low | high << 16;
+    }
+
+    [[nodiscard]] constexpr uint32_t LowHalf(uint32_t imm) {
+        return imm & kMaxFusedHalf;
+    }
+
+    [[nodiscard]] constexpr uint32_t HighHalf(uint32_t imm) {
+        return imm >> 16;
+    }
 
     static_assert(kMaxTableEntries <= std::numeric_limits<uint16_t>::max(), "the count of a table is 16 bits");
     static_assert(sizeof(Instruction) == 12 && alignof(Instruction) == 4 && std::is_trivially_copyable_v<Instruction>);

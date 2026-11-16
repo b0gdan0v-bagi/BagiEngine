@@ -766,6 +766,14 @@ namespace BECore::Kernel {
         Store<T>(regs[ins.dst], Add::Apply(product, Load<T>(constants[ins.c])));
     }
 
+    /// Runs `LerpSlots<T>`: `Lerp` of the two fields and the weight in register `c`, so the result is the one of the typed row
+    template <std::floating_point T>
+    inline void ExecuteLerpSlots(RegisterImage* regs, const Instruction& ins, Span<const RegisterImage> /*constants*/, const Context& context) {
+        const T from = LoadField<T>(context, ins.a, LowHalf(ins.imm));
+        const T to = LoadField<T>(context, ins.b, HighHalf(ins.imm));
+        Store<T>(regs[ins.dst], Lerp::Apply(from, to, Load<T>(regs[ins.c])));
+    }
+
     /// Whether `BE_PROGRAM_ROWS` has a row for the operation and the type
     template <typename Op, typename T>
     inline constexpr bool kHasRow = false;
@@ -837,6 +845,7 @@ namespace BECore {
             case Opcode::LoadConst:
             case Opcode::Copy:
             case Opcode::LoadTable:
+            case Opcode::LoadTableSlot:
                 break;
         }
         return std::nullopt;

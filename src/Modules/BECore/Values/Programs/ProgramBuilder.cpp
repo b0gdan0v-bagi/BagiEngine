@@ -67,16 +67,17 @@ namespace BECore {
             if (ins.op == Opcode::LoadConst && ins.imm >= _constants.size()) {
                 return refuse(i, ins, Format("reads constant {}, but there are {}", ins.imm, _constants.size()));
             }
-            if (ins.op == Opcode::LoadTable) {
+            if (ins.op == Opcode::LoadTable || ins.op == Opcode::LoadTableSlot) {
                 const uint32_t count = TableEntryCount(ins);
+                const uint32_t first = ins.op == Opcode::LoadTable ? ins.imm : HighHalf(ins.imm);
                 if (count == 0) {
                     return refuse(i, ins, "reads a table with no entry");
                 }
                 if (count > kMaxTableEntries) {
                     return refuse(i, ins, Format("reads a table of {} entries, but a table has at most {}", count, kMaxTableEntries));
                 }
-                if (static_cast<size_t>(ins.imm) + count > _constants.size()) {
-                    return refuse(i, ins, Format("reads constants {} to {}, but there are {}", ins.imm, static_cast<size_t>(ins.imm) + count - 1, _constants.size()));
+                if (static_cast<size_t>(first) + count > _constants.size()) {
+                    return refuse(i, ins, Format("reads constants {} to {}, but there are {}", first, static_cast<size_t>(first) + count - 1, _constants.size()));
                 }
             }
             if (const Optional<ProgramType> componentType = ComponentOpcodeType(ins.op)) {
@@ -88,14 +89,18 @@ namespace BECore {
                     return refuse(i, ins, Format("takes component {} of a value that has {}", ins.imm, count));
                 }
             }
-            if (IsMulAddSlot(ins.op)) {
-                if (ins.a >= kMaxContextLevels) {
-                    return refuse(i, ins, Format("reads level {}, but a context has {}", ins.a, kMaxContextLevels));
-                }
-                if (ins.b >= _constants.size() || ins.c >= _constants.size()) {
-                    return refuse(i, ins, Format("reads constants {} and {}, but there are {}", ins.b, ins.c, _constants.size()));
+            if (IsMulAddSlot(ins.op) && (ins.b >= _constants.size() || ins.c >= _constants.size())) {
+                return refuse(i, ins, Format("reads constants {} and {}, but there are {}", ins.b, ins.c, _constants.size()));
+            }
+            const bool lerpSlots = IsLerpSlots(ins.op);
+            if (lerpSlots || IsMulAddSlot(ins.op) || ins.op == Opcode::LoadTableSlot) {
+                if (ins.a >= kMaxContextLevels || (lerpSlots && ins.b >= kMaxContextLevels)) {
+                    return refuse(i, ins, Format("reads a level beyond the {} of a context", kMaxContextLevels));
                 }
                 reads |= LevelBit(ins.a);
+                if (lerpSlots) {
+                    reads |= LevelBit(ins.b);
+                }
             }
             if (IsLoadSlot(ins.op)) {
                 if (ins.a >= kMaxContextLevels) {
