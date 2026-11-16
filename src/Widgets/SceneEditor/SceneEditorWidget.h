@@ -61,6 +61,12 @@ namespace BECore {
         /// Answers SelectSceneNodeRequestEvent: selects and reveals the node when it is alive in the active scene, else does nothing
         void OnSelectRequest(const SelectSceneNodeRequestEvent& event);
 
+        /// Answers SelectUIElementRequestEvent: like OnSelectRequest, and the element is shown in the "UI elements" section when it is still in the canvas of the node
+        void OnSelectUIElementRequest(const SelectUIElementRequestEvent& event);
+
+        /// Shows @p element (compared by pointer, so a stale one is safe) of the canvas of @p node in the "UI elements" section, when @p node is the primary selection and has a canvas
+        void SelectUIElement(SceneNode& node, const UIElement* element);
+
         /// Answers a left click of the viewport in the Edit input mode: picks the topmost node or canvas element under it (ScenePick) and applies it with ApplyClick (Ctrl toggles, Shift
         /// adds, a plain click replaces the selection; a plain click on nothing clears it, with Ctrl or Shift a click on nothing changes nothing). The primary node is revealed like a
         /// request does, only if it stays selected. A hit on a canvas element also selects that element in the "UI elements" section

@@ -3,6 +3,7 @@
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Input/InputControl.h>
 #include <BECore/Input/UIInput.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
@@ -445,16 +446,9 @@ namespace BECore {
             return Format("'{}' cannot be clicked", text);
         }
 
-        SDL_MouseButtonEvent MakeButtonEvent(float x, float y, bool down) {
-            SDL_MouseButtonEvent event{};
-            event.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
-            event.button = SDL_BUTTON_LEFT;
-            event.down = down;
-            event.clicks = 1;
-            event.x = x;
-            event.y = y;
-            return event;
-        }
+        constexpr StringView kTakenByNone = "none";
+        constexpr StringView kTakenByElement = "element";
+        constexpr StringView kTakenByTarget = "target";
 
         void HandleUIClick(ControlCall& call) {
             const auto nameText = GetJsonString(call.Params(), "name");
@@ -521,14 +515,11 @@ namespace BECore {
                 const PoolString optionValue = optionEmits ? UIChoice::GetValue(*target.element) : PoolString{};
                 const bool onlyClosesList = PressOnlyClosesList(target.canvas->GetLayout(), *target.element);
 
-                UIInput& input = CoreManager::GetUIInput();
-                SDL_MouseMotionEvent motion{};
-                motion.type = SDL_EVENT_MOUSE_MOTION;
-                motion.x = outputX;
-                motion.y = outputY;
-                static_cast<void>(input.DispatchMouseMotion(motion));
-                const bool consumed = input.DispatchMouseButtonDown(MakeButtonEvent(outputX, outputY, true));
-                static_cast<void>(input.DispatchMouseButtonUp(MakeButtonEvent(outputX, outputY, false)));
+                const IUIInputHandler* const canvasHandler = target.canvas.Get();
+                const PointClick click = ClickOutputPoint(CoreManager::GetUIInput(), outputX, outputY, SDL_BUTTON_LEFT, kControlPointerId);
+                const bool consumed = click.consumed;
+                // A handler above the element (a scene target, a modal canvas) that took the press left the element nothing to emit
+                const bool takenAbove = consumed && click.taker != canvasHandler;
 
                 Json result = Json::object();
                 result["clicked"] = MakeJsonString(StringView(nameText->c_str(), nameText->size()));
@@ -536,6 +527,7 @@ namespace BECore {
                 result["x"] = outputX;
                 result["y"] = outputY;
                 result["consumed"] = consumed;
+                result["takenBy"] = MakeJsonString(!consumed ? kTakenByNone : takenAbove ? kTakenByTarget : kTakenByElement);
                 if (owner != nullptr) {
                     result["action"] = MakeJsonString(optionAction.ToStringView());
                     result["value"] = MakeJsonString(optionValue.ToStringView());
@@ -550,8 +542,8 @@ namespace BECore {
                     result["action"] = MakeJsonString(clickerAction.ToStringView());
                     result["value"] = MakeJsonString(clickerValue.ToStringView());
                 }
-                if (onlyClosesList && result.contains("action")) {
-                    // The press only closed the open list and reached nothing below it: no action, no value
+                if ((onlyClosesList || takenAbove) && result.contains("action")) {
+                    // The press only closed the open list, or a handler above took it: the element emitted nothing
                     result["action"] = MakeJsonString(StringView{});
                     result["value"] = MakeJsonString(StringView{});
                 }

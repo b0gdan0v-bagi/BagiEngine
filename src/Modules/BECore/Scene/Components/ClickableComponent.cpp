@@ -2,36 +2,35 @@
 
 #include <BECore/Input/ActionsLibrary.h>
 #include <BECore/Scene/Components/TransformComponent.h>
-#include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneNode.h>
-#include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
 #include <Generated/ClickableComponent.gen.hpp>
 
 namespace BECore {
 
-    void ClickableComponent::OnAttached() {
+    void ClickableComponent::OnTargetAttached() {
         if (!_actionName.Empty()) {
             ActionsLibrary::GetInstance().Add(_actionName);
         }
-        SubscribeInScene<SDLEvents::MouseButtonDownEvent, &ClickableComponent::OnMouseButtonDown>(this);
     }
 
-    void ClickableComponent::OnMouseButtonDown(const SDLEvents::MouseButtonDownEvent& e) {
-        if (_actionName.Empty()) {
-            return;
+    bool ClickableComponent::ContainsScenePoint(float sceneX, float sceneY) const {
+        if (_actionName.Empty() && !_blocksInput) {
+            return false;
         }
+        if (_shape == ClickableShape::Ellipse) {
+            const auto transform = GetNode().GetComponent<TransformComponent>();
+            return transform && PointerShape{PointerShapeKind::Ellipse}.Contains(Rect{transform->_x, transform->_y, transform->_width, transform->_height}, sceneX, sceneY);
+        }
+        return PointerTargetComponent::ContainsScenePoint(sceneX, sceneY);
+    }
 
-        auto transform = GetNode().GetComponent<TransformComponent>();
-        if (!transform) {
-            return;
+    bool ClickableComponent::OnPointerPress(const PointerEvent& /*event*/) {
+        const PoolString action = _actionName;  // a copy: a handler of the event may switch the scene and destroy this component
+        if (!action.Empty()) {
+            InputEvents::ActionEvent::Emit(action);
         }
-
-        const float x = GetScene().ScreenToSceneX(e.button.x);
-        const float y = GetScene().ScreenToSceneY(e.button.y);
-        if (x >= transform->_x && x <= transform->_x + transform->_width && y >= transform->_y && y <= transform->_y + transform->_height) {
-            InputEvents::ActionEvent::Emit(_actionName);
-        }
+        return true;
     }
 
 }  // namespace BECore

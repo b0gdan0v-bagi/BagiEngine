@@ -624,7 +624,7 @@ namespace BECore::Tests {
             }
         }
         ASSERT_NE(board, nullptr);
-        EXPECT_LT(main.GetDrawRank(*board), hud->GetInputOrder());
+        EXPECT_LT(main.GetDrawRank(*board) * Scene::kMaxComponentsPerNode, hud->GetInputOrder());
         EXPECT_LT(hud->GetInputOrder(), menu->GetInputOrder());
     }
 

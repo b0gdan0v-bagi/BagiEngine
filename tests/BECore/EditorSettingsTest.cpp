@@ -249,7 +249,7 @@ namespace BECore::Tests {
         changed.viewportPreview.shape.customHeight = 1234;
         changed.viewportPreview.shape.rotated = true;
         changed.viewportPreview.safeArea = SafeAreaSimulation::SideInsets;
-        changed.viewportPreview.overlays = {false, true, true, true, true};
+        changed.viewportPreview.overlays = {false, true, true, true, true, true, true, true, true};
 
         EditorSettings writer(_directory);
         writer.SetPreferences(changed);
@@ -276,8 +276,12 @@ namespace BECore::Tests {
         EXPECT_EQ(preview.safeArea, SafeAreaSimulation::None);
         EXPECT_TRUE(preview.shape.rotated);
         EXPECT_TRUE(preview.overlays.touchTargets);
-        // An old file has no regions key
+        // An old file has no regions key, nor the keys of the UI debug overlays
         EXPECT_FALSE(preview.overlays.regions);
+        EXPECT_FALSE(preview.overlays.elementRects);
+        EXPECT_FALSE(preview.overlays.anchors);
+        EXPECT_FALSE(preview.overlays.designRect);
+        EXPECT_FALSE(preview.overlays.findings);
     }
 
     TEST_F(EditorSettingsTest, PreviewMembersOfTheWrongTypeGiveTheirDefaultAndSizesAreClamped) {
@@ -319,6 +323,26 @@ namespace BECore::Tests {
         const Json file = ReadJsonFile("preferences.json");
         EXPECT_EQ(file["viewportPreview"]["future"]["a"], 1);
         EXPECT_EQ(file["viewportPreview"]["overlayViewBounds"], true);
+    }
+
+    TEST_F(EditorSettingsTest, TheUIDebugOverlayKeysAreKnownAndAreWrittenBack) {
+        WriteFile("preferences.json", R"({"viewportPreview":{"overlayAnchors":true,"overlayFindings":true,"overlayTouchTargets":true}})");
+        EditorSettings settings(_directory);
+        settings.Load();
+        PreviewOverlays expected;
+        expected.touchTargets = true;
+        expected.anchors = true;
+        expected.findings = true;
+        EXPECT_EQ(settings.GetPreferences().viewportPreview.overlays, expected);
+
+        ASSERT_TRUE(settings.SavePreferences());
+        const Json object = ReadJsonFile("preferences.json")["viewportPreview"];
+        EXPECT_EQ(object["overlayElementRects"], false);
+        EXPECT_EQ(object["overlayAnchors"], true);
+        EXPECT_EQ(object["overlayDesignRect"], false);
+        EXPECT_EQ(object["overlayFindings"], true);
+        EXPECT_EQ(object["overlayTouchTargets"], true);
+        EXPECT_EQ(object["overlayViewBounds"], false);
     }
 
     TEST_F(EditorSettingsTest, AnOldFileGainsOnlyTheKeysOfLaterBuilds) {

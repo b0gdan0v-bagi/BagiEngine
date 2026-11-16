@@ -71,6 +71,69 @@ namespace BECore {
             return e;
         }
 
+        // SDL sends the mouse event it synthesizes from the first finger (SDL_TOUCH_MOUSEID) just before that finger's own event, so a
+        // "first finger event seen" latch would let the first tap through twice. While SDL sends finger events the synthesized ones
+        // are the same touch again and are dropped; an application that disabled them keeps the mouse events as its only source.
+        bool FingerEventsAreSent() {
+            return SDL_EventEnabled(SDL_EVENT_FINGER_DOWN) && SDL_EventEnabled(SDL_EVENT_FINGER_MOTION) && SDL_EventEnabled(SDL_EVENT_FINGER_UP);
+        }
+
+        bool IsDuplicateOfFinger(SDL_MouseID which) {
+            return which == SDL_TOUCH_MOUSEID && FingerEventsAreSent();
+        }
+
+        // A touch screen of a window. A trackpad of macOS (touch id SDL_MOUSE_TOUCHID, no window) and a pen's touch are not fingers on the
+        // scene: the mouse cursor and the pen events carry them
+        bool IsFingerOnWindow(const SDL_TouchFingerEvent& finger) {
+            return finger.windowID != 0 && finger.touchID != SDL_MOUSE_TOUCHID && finger.touchID != SDL_PEN_TOUCHID;
+        }
+
+        // The position of a finger is normalized to the window; its output position is that times the window size (units) times the density
+        struct FingerPlace {
+            float x = 0.0f;
+            float y = 0.0f;
+            float dx = 0.0f;
+            float dy = 0.0f;
+        };
+
+        Optional<FingerPlace> PlaceOf(const SDL_TouchFingerEvent& finger) {
+            const IntrusivePtr<IMainWindow>& window = CoreManager::GetMainWindow();
+            if (!window) {
+                return std::nullopt;
+            }
+            const float scaleX = static_cast<float>(window->GetWidth()) * window->GetPixelDensity();
+            const float scaleY = static_cast<float>(window->GetHeight()) * window->GetPixelDensity();
+            return FingerPlace{finger.x * scaleX, finger.y * scaleY, finger.dx * scaleX, finger.dy * scaleY};
+        }
+
+        SDL_MouseMotionEvent MotionOf(const SDL_TouchFingerEvent& finger, uint32_t which, const FingerPlace& place, SDL_MouseButtonFlags state) {
+            SDL_MouseMotionEvent motion{};
+            motion.type = SDL_EVENT_MOUSE_MOTION;
+            motion.timestamp = finger.timestamp;
+            motion.windowID = finger.windowID;
+            motion.which = which;
+            motion.state = state;
+            motion.x = place.x;
+            motion.y = place.y;
+            motion.xrel = place.dx;
+            motion.yrel = place.dy;
+            return motion;
+        }
+
+        SDL_MouseButtonEvent ButtonOf(const SDL_TouchFingerEvent& finger, uint32_t which, const FingerPlace& place, bool down) {
+            SDL_MouseButtonEvent button{};
+            button.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
+            button.timestamp = finger.timestamp;
+            button.windowID = finger.windowID;
+            button.which = which;
+            button.button = SDL_BUTTON_LEFT;
+            button.down = down;
+            button.clicks = 1;
+            button.x = place.x;
+            button.y = place.y;
+            return button;
+        }
+
     }  // namespace
 
     bool SDLEventsProvider::Initialize() {
@@ -84,6 +147,7 @@ namespace BECore {
 
     void SDLEventsProvider::Destroy() {
         _isInitialized = false;
+        _fingers = FingerPointers();
     }
 
     void SDLEventsProvider::ProcessEvents() {
@@ -110,19 +174,19 @@ namespace BECore {
             // Editor: ViewportWidget re-emits with viewport-local coords when the image is hovered.
             // Game: no ImGui, the positions are the output pixels (window units times the pixel density).
             case SDL_EVENT_MOUSE_BUTTON_DOWN:
-                if (MouseReachesGame()) {
+                if (MouseReachesGame() && !IsDuplicateOfFinger(sdlEvent.button.which)) {
                     CoreManager::GetUIInput().DispatchMouseButtonDown(InOutputPixels(sdlEvent.button));
                 }
                 break;
 
             case SDL_EVENT_MOUSE_BUTTON_UP:
-                if (MouseReachesGame()) {
+                if (MouseReachesGame() && !IsDuplicateOfFinger(sdlEvent.button.which)) {
                     CoreManager::GetUIInput().DispatchMouseButtonUp(InOutputPixels(sdlEvent.button));
                 }
                 break;
 
             case SDL_EVENT_MOUSE_MOTION:
-                if (MouseReachesGame()) {
+                if (MouseReachesGame() && !IsDuplicateOfFinger(sdlEvent.motion.which)) {
                     CoreManager::GetUIInput().DispatchMouseMotion(InOutputPixels(sdlEvent.motion));
                 }
                 break;
@@ -131,6 +195,14 @@ namespace BECore {
                 if (MouseReachesGame()) {
                     CoreManager::GetUIInput().DispatchMouseWheel(InOutputPixels(sdlEvent.wheel));
                 }
+                break;
+
+            // A finger is a pointer of its own (FingerPointers) and takes the same road as the mouse, under the same gates.
+            case SDL_EVENT_FINGER_DOWN:
+            case SDL_EVENT_FINGER_MOTION:
+            case SDL_EVENT_FINGER_UP:
+            case SDL_EVENT_FINGER_CANCELED:
+                ConvertFingerEvent(sdlEvent.tfinger, static_cast<SDL_EventType>(sdlEvent.type));
                 break;
 
             case SDL_EVENT_KEY_DOWN:
@@ -171,6 +243,60 @@ namespace BECore {
             case SDL_EVENT_DISPLAY_ORIENTATION:
                 SDLEvents::DisplayOrientationChangedEvent::Emit(sdlEvent.display.displayID, static_cast<SDL_DisplayOrientation>(sdlEvent.display.data1));
                 break;
+
+            default:
+                break;
+        }
+    }
+
+    void SDLEventsProvider::ConvertFingerEvent(const SDL_TouchFingerEvent& finger, SDL_EventType type) {
+        if (!IsFingerOnWindow(finger)) {
+            return;
+        }
+        const Optional<FingerPlace> place = PlaceOf(finger);
+        if (!place) {
+            return;
+        }
+        UIInput& input = CoreManager::GetUIInput();
+
+        switch (type) {
+            case SDL_EVENT_FINGER_DOWN: {
+                if (!MouseReachesGame()) {
+                    return;
+                }
+                const Optional<uint32_t> which = _fingers.Begin(finger.fingerID);
+                if (!which) {
+                    return;
+                }
+                // The arrival first, as SDL's own mouse emulation does it, so the target under the finger gets its enter
+                input.DispatchMouseMotion(MotionOf(finger, *which, FingerPlace{place->x, place->y, 0.0f, 0.0f}, 0));
+                input.DispatchMouseButtonDown(ButtonOf(finger, *which, *place, true));
+                break;
+            }
+
+            case SDL_EVENT_FINGER_MOTION: {
+                const Optional<uint32_t> which = _fingers.Find(finger.fingerID);
+                if (which && MouseReachesGame()) {
+                    input.DispatchMouseMotion(MotionOf(finger, *which, *place, SDL_BUTTON_LMASK));
+                }
+                break;
+            }
+
+            // A cancelled finger releases its press like an up, so no capture stays; the place is free in either case
+            // even when the gates dropped the release (a pause that began while the finger was down)
+            case SDL_EVENT_FINGER_UP:
+            case SDL_EVENT_FINGER_CANCELED: {
+                const Optional<uint32_t> which = _fingers.End(finger.fingerID);
+                if (!which) {
+                    return;
+                }
+                if (MouseReachesGame()) {
+                    input.DispatchMouseButtonUp(ButtonOf(finger, *which, *place, false));
+                }
+                // SDL sends no leave for a lifted finger, and its place is reused by the next one
+                input.EndHover(*which);
+                break;
+            }
 
             default:
                 break;

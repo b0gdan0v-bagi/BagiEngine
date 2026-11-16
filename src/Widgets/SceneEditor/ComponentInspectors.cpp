@@ -234,7 +234,28 @@ namespace BECore {
         }
 
         bool InspectClickable(ClickableComponent& c) {
-            return ActionCombo("Action##clickable_action", c._actionName, "(none)", true);
+            bool changed = ActionCombo("Action##clickable_action", c._actionName, "(none)", true);
+
+            const auto& shapeNames = EnumUtils<ClickableShape>::Names();
+            const auto& shapeValues = EnumUtils<ClickableShape>::Values();
+            if (ImGui::BeginCombo("Shape##clickable_shape", EnumUtils<ClickableShape>::ToString(c._shape).data())) {
+                for (size_t i = 0; i < shapeNames.size(); ++i) {
+                    const bool isSelected = (c._shape == shapeValues[i]);
+                    if (ImGui::Selectable(shapeNames[i].data(), isSelected)) {
+                        c._shape = shapeValues[i];
+                        changed = true;
+                    }
+                    if (isSelected) {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                }
+                ImGui::EndCombo();
+            }
+
+            if (ImGui::Checkbox("Blocks input##clickable_blocks_input", &c._blocksInput)) {
+                changed = true;
+            }
+            return changed;
         }
 
         const bool _registeredClickable = [] {

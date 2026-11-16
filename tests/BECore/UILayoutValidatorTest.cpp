@@ -83,6 +83,8 @@ namespace BECore::Tests {
             return options;
         }
 
+        constexpr size_t UILayoutIssueKindCount = EnumUtils<UILayoutIssueKind>::Count();
+
     }  // namespace
 
     TEST(UILayoutValidatorTest, ACleanLayoutHasNoIssues) {
@@ -612,6 +614,55 @@ namespace BECore::Tests {
         canvas.Update(Output(1000.0f, 500.0f));
 
         EXPECT_TRUE(canvas.Validate({}).empty());
+    }
+
+    TEST(UILayoutValidatorTest, EveryIssueNamesTheElementAtFaultInTheTree) {
+        UILayoutContext context = Output(1000.0f, 500.0f);
+        context.safeArea = {0.0f, 40.0f, 1000.0f, 420.0f};
+        UICanvasLayout canvas = MakeCanvas();
+        canvas.params.useSafeArea = true;
+        canvas.regions.Set("board"_intern, {600.0f, 300.0f, 50.0f, 50.0f});
+        AddBox(*canvas.root, "Notch", 0.0f, -20.0f, 100.0f, 30.0f);
+        AddBox(*canvas.root, "Out", 950.0f, 100.0f, 100.0f, 50.0f);
+        AddBox(*canvas.root, "Tiny", 100.0f, 100.0f, 10.0f, 10.0f)->interactive = true;
+        auto stuck = New<ContentElement>();
+        stuck->name = "Stuck"_intern;
+        stuck->fit = {true, false, false};
+        stuck->style.rect.x = UILength::Px(300.0f);
+        stuck->style.rect.y = UILength::Px(100.0f);
+        stuck->style.rect.width = UILength::Px(20.0f);
+        stuck->style.rect.height = UILength::Px(20.0f);
+        canvas.root->children.push_back(stuck);
+        auto row = AddBox(*canvas.root, "Row", 200.0f, 200.0f, 200.0f, 200.0f);
+        row->layout = UILayoutKind::Stack;
+        row->style.stack.spacing = -10.0f;
+        AddBox(*row, "First", 0.0f, 0.0f, 100.0f, 40.0f);
+        AddBox(*row, "Second", 0.0f, 0.0f, 100.0f, 40.0f);
+        AddBox(*row, "Cell", 0.0f, 0.0f, 20.0f, 20.0f)->style.rect.region = "board"_intern;
+        AddBox(*canvas.root, "Plate", 500.0f, 100.0f, 50.0f, 50.0f)->style.rect.region = "gone"_intern;
+        AddBox(*canvas.root, "Wide", 0.0f, 0.0f, 120.0f, 60.0f)->style.rect.region = "board"_intern;
+        UICanvasLayout extended = MakeExtendedCanvas();
+        AddBottomRow(*extended.root, "Bar", 200.0f);
+        canvas.Update(context);
+        extended.Update(TallOutputWithBars());
+
+        Vector<UILayoutIssue> issues = canvas.Validate({});
+        const Vector<UILayoutIssue> viewIssues = extended.Validate(KeepOff("Bar"));
+        issues.insert(issues.end(), viewIssues.begin(), viewIssues.end());
+
+        bool seen[UILayoutIssueKindCount] = {};
+        for (const UILayoutIssue& issue : issues) {
+            seen[static_cast<size_t>(issue.kind)] = true;
+            ASSERT_NE(issue.source, nullptr) << String(EnumUtils<UILayoutIssueKind>::ToString(issue.kind)).c_str();
+            EXPECT_EQ(issue.source->name, issue.element);
+            EXPECT_FLOAT_EQ(issue.source->rect.x, issue.rect.x);
+            EXPECT_FLOAT_EQ(issue.source->rect.w, issue.rect.w);
+            // A stable pointer into one of the two trees
+            EXPECT_TRUE(canvas.root->FindByName(issue.element) == issue.source || extended.root->FindByName(issue.element) == issue.source);
+        }
+        for (size_t kind = 0; kind < UILayoutIssueKindCount; ++kind) {
+            EXPECT_TRUE(seen[kind]) << "no issue of kind " << String(EnumUtils<UILayoutIssueKind>::ToString(static_cast<UILayoutIssueKind>(kind))).c_str();
+        }
     }
 
     TEST(UILayoutValidatorTest, CompileTimeChecks) {}

@@ -32,7 +32,7 @@ namespace BECore {
 
         private:
             void Report(UILayoutIssueKind kind, const UIElement& element, PoolString other = {}) {
-                _issues.push_back({kind, element.name, other, element.rect});
+                _issues.push_back({kind, element.name, other, element.rect, &element});
             }
 
             // @p ignoresSafeArea: a child of the root asked for the whole canvas (`ignoreSafeArea`), and so does everything under it; the flag of a deeper element means nothing

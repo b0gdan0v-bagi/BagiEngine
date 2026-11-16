@@ -5,6 +5,16 @@
 
 namespace BECore {
 
+    /// The properties of an element that a variant can override, named as in a file (`visible`, `anchorMin`, ...) with the first letter in capitals
+    CORE_ENUM(UIOverrideProperty, uint8_t, Visible, Anchor, AnchorMin, AnchorMax, Pivot, X, Y, Width, Height, Margin, Region, Direction, FontSize)
+
+    /// A set of UIOverrideProperty, a bit per property (`1 << property`)
+    using UIOverrideMask = uint32_t;
+
+    [[nodiscard]] constexpr UIOverrideMask OverrideBit(UIOverrideProperty property) {
+        return UIOverrideMask{1} << static_cast<uint32_t>(property);
+    }
+
     /// The properties of one named element that a variant replaces; an unset one is left as it is
     struct UIElementOverride {
         PoolString element;
@@ -23,6 +33,9 @@ namespace BECore {
         Optional<float> fontSize;
 
         void ApplyTo(UIElementStyle& style) const;
+
+        /// The properties this override sets, the same ones ApplyTo() writes
+        [[nodiscard]] UIOverrideMask Properties() const;
 
         /// In a file: `<set element="Hud" anchor="Top" x="0" width="90%"/>`, only the set properties are attributes
         void Serialize(ISerializer& s) const;
@@ -63,6 +76,14 @@ namespace BECore {
 
     }  // namespace PropVisit
 
+    /// One variant that overrides an element, as UIVariants::Sources() finds it
+    struct UIVariantSource {
+        size_t index = 0;               ///< the place of the variant in the list, from 0
+        UIOverrideMask properties = 0;  ///< what the variant sets on the element (all its overrides that name it, together)
+
+        [[nodiscard]] bool operator==(const UIVariantSource&) const = default;
+    };
+
     class UIVariants {
     public:
         /**
@@ -73,6 +94,18 @@ namespace BECore {
          * @return how many variants matched
          */
         static size_t Apply(UIElement& root, Span<const UIVariant> variants, const Rect& bounds);
+
+        /**
+         * @brief The variants that Apply() would let override the element named @p element, in the order of the list, with the properties each sets. Empty: the style is authored.
+         *
+         * A variant counts when its `when` holds for @p bounds (UIVariantCondition::Matches, the test Apply() uses) and one of its overrides names @p element. It reads no tree, so it is
+         * the same for every element of that name, as Apply() is. @p sources is cleared first and keeps its capacity.
+         */
+        static void Sources(Span<const UIVariant> variants, const Rect& bounds, PoolString element, Vector<UIVariantSource>& sources);
+
+        /// The one-line text of Sources() for a tooltip: `authored`, or `variant 2: width, anchor` per variant (the index of the list, from 0; properties in the files' spelling), joined by `; `.
+        /// @p text is cleared first and keeps its capacity.
+        static void DescribeSources(Span<const UIVariantSource> sources, String& text);
     };
 
 }  // namespace BECore

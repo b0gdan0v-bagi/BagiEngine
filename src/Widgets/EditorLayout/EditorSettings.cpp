@@ -40,6 +40,10 @@ namespace BECore {
         constexpr StringView kOverlayCanvasBoundsKey = "overlayCanvasBounds";
         constexpr StringView kOverlayTouchTargetsKey = "overlayTouchTargets";
         constexpr StringView kOverlayRegionsKey = "overlayRegions";
+        constexpr StringView kOverlayElementRectsKey = "overlayElementRects";
+        constexpr StringView kOverlayAnchorsKey = "overlayAnchors";
+        constexpr StringView kOverlayDesignRectKey = "overlayDesignRect";
+        constexpr StringView kOverlayFindingsKey = "overlayFindings";
 
         // Reads the file at @p path into @p content. Missing file: false, no warning. A file that cannot be read or
         // parsed, or whose root is not an object: false, one warning, @p unreadable set.
@@ -134,7 +138,8 @@ namespace BECore {
         // Reads the "viewportPreview" object into @p preview and gives the members it does not know to @p extra
         void ReadViewportPreview(const Json& object, PreviewSettings& preview, Json& extra) {
             extra = UnknownMembers(object, {kPreviewAspectKey, kPreviewDeviceKey, kPreviewCustomKey, kPreviewCustomWidthKey, kPreviewCustomHeightKey, kPreviewRotatedKey, kPreviewSafeAreaKey,
-                                            kOverlaySafeAreaKey, kOverlayViewBoundsKey, kOverlayCanvasBoundsKey, kOverlayTouchTargetsKey, kOverlayRegionsKey});
+                                            kOverlaySafeAreaKey, kOverlayViewBoundsKey, kOverlayCanvasBoundsKey, kOverlayTouchTargetsKey, kOverlayRegionsKey, kOverlayElementRectsKey,
+                                            kOverlayAnchorsKey, kOverlayDesignRectKey, kOverlayFindingsKey});
             PreviewShape& shape = preview.shape;
             ReadEnum(object, kPreviewAspectKey, shape.aspect);
             ReadBool(object, kPreviewCustomKey, shape.custom);
@@ -147,6 +152,10 @@ namespace BECore {
             ReadBool(object, kOverlayCanvasBoundsKey, preview.overlays.canvasBounds);
             ReadBool(object, kOverlayTouchTargetsKey, preview.overlays.touchTargets);
             ReadBool(object, kOverlayRegionsKey, preview.overlays.regions);
+            ReadBool(object, kOverlayElementRectsKey, preview.overlays.elementRects);
+            ReadBool(object, kOverlayAnchorsKey, preview.overlays.anchors);
+            ReadBool(object, kOverlayDesignRectKey, preview.overlays.designRect);
+            ReadBool(object, kOverlayFindingsKey, preview.overlays.findings);
 
             // The device is stored by name, so a table that changed between builds never gives another device
             if (object.contains(ToStdString(kPreviewDeviceKey))) {
@@ -259,6 +268,10 @@ namespace BECore {
             object[ToStdString(kOverlayCanvasBoundsKey)] = preview.overlays.canvasBounds;
             object[ToStdString(kOverlayTouchTargetsKey)] = preview.overlays.touchTargets;
             object[ToStdString(kOverlayRegionsKey)] = preview.overlays.regions;
+            object[ToStdString(kOverlayElementRectsKey)] = preview.overlays.elementRects;
+            object[ToStdString(kOverlayAnchorsKey)] = preview.overlays.anchors;
+            object[ToStdString(kOverlayDesignRectKey)] = preview.overlays.designRect;
+            object[ToStdString(kOverlayFindingsKey)] = preview.overlays.findings;
             return object;
         }
 

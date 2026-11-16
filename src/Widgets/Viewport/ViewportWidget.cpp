@@ -21,6 +21,7 @@
 #include <Widgets/SceneEditor/HierarchyModel.h>
 #include <Widgets/SceneEditor/ScenePick.h>
 #include <Widgets/Viewport/ViewportGizmos.h>
+#include <Widgets/Viewport/ViewportUIDebug.h>
 #include <imgui.h>
 
 namespace BECore {
@@ -86,7 +87,8 @@ namespace BECore {
         constexpr const char* kSizeTooltip = "The shape of the image: free (fills the panel), an aspect ratio, a device or a custom size";
         constexpr const char* kRotateTooltip = "Swap the width and the height of a device or custom size, turn the ratio of an aspect (not for Free)";
         constexpr const char* kSafeAreaTooltip = "Simulate a safe area for the canvases: a notch, side insets or the cut-out of the chosen device";
-        constexpr const char* kOverlaysTooltip = "What is drawn over the image: the safe area, the bounds of the view and the canvases, the touch targets, the regions";
+        constexpr const char* kOverlaysTooltip =
+            "What is drawn over the image: the safe area, the bounds of the view and the canvases, the touch targets, the regions, the rects, anchors and findings of the UI elements";
         constexpr const char* kViewTooltip = "Force a view variant of the scene; Auto picks it by the size of the image";
         constexpr const char* kWidthTooltip = "The width of the image in pixels";
         constexpr const char* kHeightTooltip = "The height of the image in pixels";
@@ -114,20 +116,6 @@ namespace BECore {
                 return DeviceLabel(*device);
             }
             return kAspectLabels[static_cast<size_t>(shape.aspect)];
-        }
-
-        // The canvases of a subtree in the order of the scene (the walk of CollectCanvases in UIControl.cpp), without the subtree of a
-        // node hidden in the editor: it draws nothing, so it gets no overlay
-        void CollectCanvases(const SceneNode& node, Vector<IntrusivePtr<UICanvasComponent>>& out) {
-            if (node.HasEditorFlag(EditorFlags::Hidden)) {
-                return;
-            }
-            if (auto canvas = node.GetComponent<UICanvasComponent>()) {
-                out.push_back(std::move(canvas));
-            }
-            for (const auto& child : node.GetChildren()) {
-                CollectCanvases(*child, out);
-            }
         }
 
         // A region drawn this frame, with the rect as the game published it (canvas units) for the tooltip
@@ -226,6 +214,14 @@ namespace BECore {
 
     void ViewportWidget::Update() {
         BE_PROFILE_SCOPE("ViewportWidget::Update");
+        DrawViewportWindow();
+        // Its own window, so it can be docked beside the viewport; drawn from the findings the viewport's pass just made
+        if (_overlays.findings && !_uiDebug.DrawFindingsWindow()) {
+            _overlays.findings = false;
+        }
+    }
+
+    void ViewportWidget::DrawViewportWindow() {
         ImGui::SetNextWindowSize({800.0f, 600.0f}, ImGuiCond_FirstUseEver);
         if (!ImGui::Begin("Viewport")) {
             ImGui::End();
@@ -554,11 +550,17 @@ namespace BECore {
             ImGui::Checkbox("Canvas bounds", &_overlays.canvasBounds);
             ImGui::Checkbox("Touch targets", &_overlays.touchTargets);
             ImGui::Checkbox("Regions", &_overlays.regions);
+            ImGui::Separator();
+            ImGui::Checkbox("Element rects", &_overlays.elementRects);
+            ImGui::Checkbox("Anchors and pivots", &_overlays.anchors);
+            ImGui::Checkbox("Design rectangle", &_overlays.designRect);
+            ImGui::Checkbox("Findings", &_overlays.findings);
+            _uiDebug.DrawCanvasSwitches();
             ImGui::EndPopup();
         }
     }
 
-    void ViewportWidget::DrawOverlays(Scene* scene, const ViewportFrame& frame, const ImVec2& outputSize, const Rect& safeArea, bool hovered) const {
+    void ViewportWidget::DrawOverlays(Scene* scene, const ViewportFrame& frame, const ImVec2& outputSize, const Rect& safeArea, bool hovered) {
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         drawList->PushClipRect(frame.imageMin, frame.imageMax, true);
 
@@ -587,14 +589,14 @@ namespace BECore {
             outline(viewRect, kViewOutlineColor);
         }
 
+        const ImVec2 mouse = ImGui::GetIO().MousePos;
+        const TouchMark* hoveredMark = nullptr;
+        Vector<TouchMark> marks;
+        Vector<HoverRegion> regionHits;
         if (scene && (_overlays.canvasBounds || _overlays.touchTargets || _overlays.regions)) {
             Vector<IntrusivePtr<UICanvasComponent>> canvases;
-            CollectCanvases(scene->GetRootNode(), canvases);
+            ViewportUIDebug::CollectCanvases(scene->GetRootNode(), canvases);
             const float minTouchSize = CoreManager::GetUIEnvironment().GetSettings().minTouchSize;
-            const ImVec2 mouse = ImGui::GetIO().MousePos;
-            const TouchMark* hoveredMark = nullptr;
-            Vector<TouchMark> marks;
-            Vector<HoverRegion> regionHits;
             for (const auto& canvas : canvases) {
                 const UICanvasLayout& layout = canvas->GetLayout();
                 if (!canvas->_visible || !layout.HasLayout()) {
@@ -639,24 +641,41 @@ namespace BECore {
                     hoveredMark = &mark;
                 }
             }
-            if (hoveredMark) {
-                const StringView name = hoveredMark->name.ToStringView();
-                ImGui::SetTooltip("%.*s", static_cast<int>(name.size()), name.data());
-            } else if (hovered) {
-                // The smallest region under the pointer, so a region inside another one stays reachable
-                const HoverRegion* smallest = nullptr;
-                for (const HoverRegion& hit : regionHits) {
-                    const auto [min, max] = toScreen(hit.mark.rect);
-                    const bool under = mouse.x >= min.x && mouse.x < max.x && mouse.y >= min.y && mouse.y < max.y;
-                    if (under && (!smallest || hit.mark.rect.w * hit.mark.rect.h < smallest->mark.rect.w * smallest->mark.rect.h)) {
-                        smallest = &hit;
-                    }
+        }
+
+        // The UI debug overlays go over the touch targets; nothing is collected or validated while all four are off
+        const bool uiDebug = scene && ViewportUIDebug::AnyOn(_overlays);
+        if (uiDebug) {
+            _uiDebug.Collect(scene);
+            _uiDebug.Draw(*drawList, frame, _overlays, hovered, mouse);
+        } else {
+            _uiDebug.Release();
+        }
+
+        // One tooltip per frame: a finding, a touch target, the element under the pointer, a region
+        bool tooltipShown = uiDebug && _uiDebug.ShowFindingTooltip();
+        if (!tooltipShown && hoveredMark) {
+            const StringView name = hoveredMark->name.ToStringView();
+            ImGui::SetTooltip("%.*s", static_cast<int>(name.size()), name.data());
+            tooltipShown = true;
+        }
+        if (!tooltipShown && uiDebug) {
+            tooltipShown = _uiDebug.ShowElementTooltip();
+        }
+        if (!tooltipShown && hovered) {
+            // The smallest region under the pointer, so a region inside another one stays reachable
+            const HoverRegion* smallest = nullptr;
+            for (const HoverRegion& hit : regionHits) {
+                const auto [min, max] = toScreen(hit.mark.rect);
+                const bool under = mouse.x >= min.x && mouse.x < max.x && mouse.y >= min.y && mouse.y < max.y;
+                if (under && (!smallest || hit.mark.rect.w * hit.mark.rect.h < smallest->mark.rect.w * smallest->mark.rect.h)) {
+                    smallest = &hit;
                 }
-                if (smallest) {
-                    const StringView name = smallest->mark.name.ToStringView();
-                    const Rect& rect = smallest->canvasRect;
-                    ImGui::SetTooltip("%.*s\nx %g  y %g  w %g  h %g", static_cast<int>(name.size()), name.data(), rect.x, rect.y, rect.w, rect.h);
-                }
+            }
+            if (smallest) {
+                const StringView name = smallest->mark.name.ToStringView();
+                const Rect& rect = smallest->canvasRect;
+                ImGui::SetTooltip("%.*s\nx %g  y %g  w %g  h %g", static_cast<int>(name.size()), name.data(), rect.x, rect.y, rect.w, rect.h);
             }
         }
 
