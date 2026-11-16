@@ -52,6 +52,7 @@ namespace BECore {
         void Draw() override;
 
     private:
+        bool _open = true;  // the window's close button and its `view.*` command; a closed panel is skipped like a hidden dock tab
         // The grid preference and the stored preview choice of the editor (EditorLayoutWidget sends them on its first frame and on every change)
         void OnPreferencesChanged(const EditorPreferencesChangedEvent& event);
 

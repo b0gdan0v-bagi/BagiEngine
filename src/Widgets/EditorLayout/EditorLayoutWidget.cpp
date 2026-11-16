@@ -233,8 +233,14 @@ namespace BECore {
         if (ImGui::BeginMenu("View")) {
             CommandMenuItem(kViewCommandPalette, "Command Palette...");
             CommandMenuItem(kViewPreferences, "Preferences...");
-            CommandMenuItem(kViewConsole, "Console");
+            ImGui::Separator();
+            CommandMenuItem(kViewViewport, "Viewport");
+            CommandMenuItem(kViewSceneEditor, "Scene Editor");
+            CommandMenuItem(kViewConfigEditor, "Config Editor");
+            CommandMenuItem(kViewSpriteLibrary, "Sprite Library");
             CommandMenuItem(kViewGame, "Game Panel");
+            CommandMenuItem(kViewConsole, "Console");
+            CommandMenuItem(kViewProfiler, "Profiler");
             ImGui::Separator();
             DrawLayoutsMenu();
             ImGui::EndMenu();

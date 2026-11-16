@@ -42,6 +42,10 @@ namespace BECore {
                 {kViewProfiler, "Profiler", kCtrlShiftP, false},
                 {kViewConsole, "Console", kCtrlShiftL, true},
                 {kViewGame, "Game Panel", kCtrlShiftG, true},
+                {kViewSceneEditor, "Scene Editor", std::nullopt, true},
+                {kViewConfigEditor, "Config Editor", std::nullopt, true},
+                {kViewSpriteLibrary, "Sprite Library", std::nullopt, true},
+                {kViewViewport, "Viewport", std::nullopt, true},
             };
             return table;
         }

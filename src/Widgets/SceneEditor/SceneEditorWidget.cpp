@@ -47,6 +47,9 @@ namespace BECore {
     }
 
     void SceneEditorWidget::OnCommand(const EditorCommandEvent& event) {
+        if (event.commandId == EditorCommandIds::kViewSceneEditor) {
+            _open = !_open;
+        }
         // The same rule as the Save button: nothing to save while there are no unsaved changes
         if (event.commandId == EditorCommandIds::kSceneSave && _isDirty) {
             SaveScene();
@@ -145,12 +148,19 @@ namespace BECore {
     }
 
     void SceneEditorWidget::Update() {
+        // A reveal (a pick in the viewport, a request) opens a closed panel too
+        if (_focusRequested) {
+            _open = true;
+        }
+        if (!_open) {
+            return;
+        }
         ImGui::SetNextWindowSize(ImVec2(1000.0f, 600.0f), ImGuiCond_FirstUseEver);
         if (_focusRequested) {
             ImGui::SetNextWindowFocus();
             _focusRequested = false;
         }
-        if (!ImGui::Begin("Scene Editor")) {
+        if (!ImGui::Begin("Scene Editor", &_open)) {
             ImGui::End();
             return;
         }
