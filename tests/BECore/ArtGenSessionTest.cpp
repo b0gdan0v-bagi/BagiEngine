@@ -440,4 +440,22 @@ namespace BECore::Tests {
         EXPECT_GT(session.Version(), before);
     }
 
+    TEST_F(ArtGenSessionTest, DisconnectTellsTheServiceToExitAndEndsWhatItWasDoing) {
+        session.RequestServiceStop();  // not connected: nothing to tell
+        EXPECT_EQ(FindJsonMember(Result(Call("artgen_poll", ReadyPoll())), "shutdown"), nullptr);
+
+        ASSERT_TRUE(session.Request("wood", "queen", 1, 1).has_value());
+        Call("artgen_poll", ReadyPoll());
+        ASSERT_EQ(session.GetRun().state, ArtGenRunState::Running);
+        session.RequestServiceStop();
+        const Json answer = Call("artgen_poll", ReadyPoll());
+        EXPECT_EQ(GetJsonBool(Result(answer), "shutdown"), Optional<bool>(true));
+        EXPECT_FALSE(session.IsServiceConnected());
+        EXPECT_EQ(session.GetRun().state, ArtGenRunState::Cancelled);
+
+        // Started again, the service is told nothing more
+        EXPECT_EQ(FindJsonMember(Result(Call("artgen_poll", ReadyPoll())), "shutdown"), nullptr);
+        EXPECT_TRUE(session.IsServiceConnected());
+    }
+
 }  // namespace BECore::Tests

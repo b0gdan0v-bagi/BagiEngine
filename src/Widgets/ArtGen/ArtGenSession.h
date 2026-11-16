@@ -128,6 +128,10 @@ namespace BECore {
         std::expected<uint32_t, String> RequestSetup(ArtGenSetupAction action);
         /// Asks the service to stop an install; what is downloaded stays and the next install resumes
         void CancelSetup();
+        /// Asks the service to exit (the panel's Disconnect): the next poll answers `shutdown`, and from then the service counts as gone; a run or
+        /// a setup action in work ends there (the service cancels it and says nothing more)
+        void RequestServiceStop();
+
         /// Forgets the last setup action (a plan the owner turned down, an old error); nothing while one is in work
         void ClearSetup();
         [[nodiscard]] const ArtGenSetup& GetSetup() const {
@@ -193,6 +197,7 @@ namespace BECore {
         ArtGenRun _run;
         ArtGenSetup _setup;
         uint32_t _nextId = 1;
+        bool _stopService = false;
         double _lastPollSeconds = -1.0;
         uint64_t _pollCount = 0;
         uint64_t _version = 0;

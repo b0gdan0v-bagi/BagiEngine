@@ -40,6 +40,10 @@ FIRST_CONNECT_S = 60.0
 UNKNOWN_METHOD = "unknown_method"
 
 
+class ShutdownRequested(Exception):
+    """The editor's panel asked the bridge to exit (Disconnect)."""
+
+
 class Bridge:
     """One editor connection. `tick()` is one pass: refresh the status when due, poll, start or cancel a run, forward what the worker
     reported. The client, the generator and the clock are injected, so a test drives it without sockets or a GPU."""
@@ -88,6 +92,9 @@ class Bridge:
         self._forward_reports()
         answer = self.client.call("artgen_poll", {**self._status, "presets": self._presets})
         self.client.events.clear()  # pushes of the game (state_changed) are not ours
+        if answer.get("shutdown"):
+            self.stop()
+            raise ShutdownRequested()
         root = answer.get("gameRoot") or None
         if root != self.game_root:
             self.game_root = root
@@ -231,6 +238,9 @@ def serve(host, port, generator, log=print, setup=None, exit_with_editor=False, 
                         log("the editor has no Generate panel yet (Game mode?): waiting")
                         waiting_for_panel = True
                     time.sleep(RECONNECT_S)
+        except ShutdownRequested:
+            log("the editor asked the service to stop: exiting")
+            return
         except (ConnectionClosed, OSError) as error:
             bridge.stop()
             if exit_with_editor:

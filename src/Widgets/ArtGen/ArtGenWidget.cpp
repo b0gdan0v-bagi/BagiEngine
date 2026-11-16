@@ -180,19 +180,28 @@ namespace BECore {
         const auto& status = session.GetServiceStatus();
         if (status.state == "ready") {
             ImGui::TextColored(palette.success, ICON_LC_PLUG " Service ready (%s)", status.generator.c_str());
-            ImGui::SameLine();
-            ImGui::BeginDisabled(session.IsSetupBusy() || session.IsBusy() || !status.startedHere);
-            const char* stopTip = status.startedHere ? "Stop the generator (frees the GPU)" : "This ComfyUI was started by hand: close its window to stop it (then Start here can run it)";
-            if (IconButton(ICON_LC_POWER_OFF, stopTip, "##StopGenerator")) {
+        } else {
+            ImGui::TextColored(palette.warning, ICON_LC_CIRCLE_ALERT " Generator %s", status.state.c_str());
+        }
+        ImGui::SameLine();
+        if (IconTextButton(ICON_LC_UNPLUG, "Disconnect", "Stop the generation service (a run or an install in work is cancelled); Start the service runs it again")) {
+            session.RequestServiceStop();
+        }
+        if (status.state != "ready") {
+            if (!status.reason.empty()) {
+                ImGui::TextWrapped("%s", status.reason.c_str());
+            }
+            return;
+        }
+        if (status.startedHere) {
+            ImGui::BeginDisabled(session.IsSetupBusy() || session.IsBusy());
+            if (IconTextButton(ICON_LC_SQUARE, "Stop ComfyUI", "Stop the generator started from here; frees the GPU")) {
                 auto requested = session.RequestSetup(ArtGenSetupAction::Stop);
                 _setupError = requested ? String() : requested.error();
             }
             ImGui::EndDisabled();
         } else {
-            ImGui::TextColored(palette.warning, ICON_LC_CIRCLE_ALERT " Generator %s", status.state.c_str());
-            if (!status.reason.empty()) {
-                ImGui::TextWrapped("%s", status.reason.c_str());
-            }
+            ImGui::TextDisabled("ComfyUI was started by hand: close its window to stop it");
         }
     }
 

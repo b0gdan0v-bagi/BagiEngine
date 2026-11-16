@@ -293,3 +293,26 @@ def test_the_status_says_whether_the_generator_was_started_here(game):
     bridge._status_at = None
     bridge.tick()
     assert editor.polls[-1]["startedHere"] is True
+
+
+def test_the_editor_can_tell_the_bridge_to_exit(game, monkeypatch):
+    class ShuttingEditor(FakeEditor):
+        def call(self, method, params=None):
+            answer = super().call(method, params)
+            if method == "artgen_poll" and len(self.polls) >= 2:
+                answer["shutdown"] = True
+            return answer
+
+        def connect(self):
+            pass
+
+        def close(self):
+            self.closed = True
+
+    editor = ShuttingEditor(game)
+    monkeypatch.setattr(artgen_bridge, "BagiControlClient", lambda host, port: editor)
+    monkeypatch.setattr(artgen_bridge.time, "sleep", lambda s: None)
+    lines = []
+    artgen_bridge.serve("127.0.0.1", 1, FakeGenerator(), log=lines.append)  # returns: no reconnect after a shutdown
+    assert len(editor.polls) == 2 and editor.closed
+    assert any("asked the service to stop" in line for line in lines)

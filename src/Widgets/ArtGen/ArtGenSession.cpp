@@ -203,6 +203,13 @@ namespace BECore {
         return _setup.id;
     }
 
+    void ArtGenSession::RequestServiceStop() {
+        if (IsServiceConnected() && !_stopService) {
+            _stopService = true;
+            ++_version;
+        }
+    }
+
     void ArtGenSession::ClearSetup() {
         if (!IsSetupBusy() && _setup.action != ArtGenSetupAction::None) {
             _setup = ArtGenSetup{};
@@ -259,6 +266,22 @@ namespace BECore {
 
         Json reply = Json::object();
         reply["gameRoot"] = ToJsonString(_gameRoot);
+        if (_stopService) {
+            // The service exits on this answer and reports nothing more: what it was doing ends here, and it is gone at once
+            _stopService = false;
+            reply["shutdown"] = true;
+            if (_run.state == ArtGenRunState::Running) {
+                _run.state = ArtGenRunState::Cancelled;
+                _run.step = 0;
+            }
+            if (_setup.state == ArtGenSetupState::Running) {
+                _setup.state = ArtGenSetupState::Failed;
+                _setup.error = "the service was stopped";
+            }
+            _lastPollSeconds = -1.0;
+            ++_version;
+            return reply;
+        }
         if (_run.state == ArtGenRunState::Queued) {
             Json request = Json::object();
             request["id"] = _run.id;
