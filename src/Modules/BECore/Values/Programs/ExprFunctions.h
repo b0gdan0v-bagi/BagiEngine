@@ -65,16 +65,32 @@ namespace BECore {
                 return "float";
             case ProgramType::Double:
                 return "double";
+            case ProgramType::Vec2:
+                return "vec2";
+            case ProgramType::Vec3:
+                return "vec3";
+            case ProgramType::Vec4:
+                return "vec4";
+            case ProgramType::IVec2:
+                return "ivec2";
+            case ProgramType::Quat:
+                return "quat";
+            case ProgramType::Color:
+                return "color";
+            case ProgramType::Enum:
+                return "enum";
+            case ProgramType::String:
+                return "string";
         }
         return "?";
     }
 
-    [[nodiscard]] constexpr bool IsNumberType(ProgramType type) {
-        return type != ProgramType::Bool;
-    }
-
     [[nodiscard]] constexpr bool IsFloatType(ProgramType type) {
         return type == ProgramType::Float || type == ProgramType::Double;
+    }
+
+    [[nodiscard]] constexpr bool IsNumberType(ProgramType type) {
+        return type == ProgramType::Int32 || type == ProgramType::Int64 || IsFloatType(type);
     }
 
 }  // namespace BECore

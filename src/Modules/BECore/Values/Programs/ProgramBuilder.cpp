@@ -58,6 +58,9 @@ namespace BECore {
                 if (ins.a >= kMaxContextLevels) {
                     return refuse(i, ins, Format("reads level {}, but a context has {}", ins.a, kMaxContextLevels));
                 }
+                if (ins.op == Opcode::LoadSlotEnum && !IsEnumFieldBytes(ins.b)) {
+                    return refuse(i, ins, Format("loads an enum of {} bytes, but an enum field is 1, 2, 4 or 8", ins.b));
+                }
                 reads |= LevelBit(ins.a);
             }
         }

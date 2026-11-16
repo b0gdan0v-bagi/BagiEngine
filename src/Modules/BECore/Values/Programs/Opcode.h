@@ -1,5 +1,12 @@
 #pragma once
 
+#include <BECore/Math/Color.h>
+#include <BECore/Math/IVec2.h>
+#include <BECore/Math/Quat.h>
+#include <BECore/Math/Vec2.h>
+#include <BECore/Math/Vec3.h>
+#include <BECore/Math/Vec4.h>
+#include <BECore/PoolString/PoolString.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <cstddef>
 #include <cstdint>
@@ -7,13 +14,22 @@
 // The one list of what a program can do. The opcode enum, the kernel table (`Kernels.h`), the interpreter's `switch`, the program printer and the matrix
 // of `ProgramInterpreterTest` are all expanded from the lists below, so none of them can name an operation another lacks.
 
-/// The types a program computes with: `X(name, C++ type)`. A new type is a row here, a value of `ProgramType` and rows in `BE_PROGRAM_ROWS`.
+/// The types a program computes with: `X(name, C++ type)`, in the order of `ProgramType`. A new type is a row here, a value of `ProgramType` and rows in `BE_PROGRAM_ROWS`.
+/// `ProgramEnum` stands for every reflected enum and `PoolString` is the text.
 #define BE_PROGRAM_TYPES(X)                                                                                                                                                                            \
     X(Bool, bool)                                                                                                                                                                                      \
     X(Int32, int32_t)                                                                                                                                                                                  \
     X(Int64, int64_t)                                                                                                                                                                                  \
     X(Float, float)                                                                                                                                                                                    \
-    X(Double, double)
+    X(Double, double)                                                                                                                                                                                  \
+    X(Vec2, Vec2)                                                                                                                                                                                      \
+    X(Vec3, Vec3)                                                                                                                                                                                      \
+    X(Vec4, Vec4)                                                                                                                                                                                      \
+    X(IVec2, IVec2)                                                                                                                                                                                    \
+    X(Quat, Quat)                                                                                                                                                                                      \
+    X(Color, Color)                                                                                                                                                                                    \
+    X(Enum, ProgramEnum)                                                                                                                                                                               \
+    X(String, PoolString)
 
 // The types an operation is listed for: `X(operation, type name, C++ type)` per type. The kernels say whether the operation exists for a type
 // (`Kernels.h`, by concepts); `kHasRow` and a `static_assert` there hold the list and the concepts together.
@@ -21,7 +37,11 @@
 #define BE_PROGRAM_TYPES_INTEGERS(X, Op) X(Op, Int32, int32_t) X(Op, Int64, int64_t)
 #define BE_PROGRAM_TYPES_FLOATS(X, Op) X(Op, Float, float) X(Op, Double, double)
 #define BE_PROGRAM_TYPES_NUMBERS(X, Op) BE_PROGRAM_TYPES_INTEGERS(X, Op) BE_PROGRAM_TYPES_FLOATS(X, Op)
-#define BE_PROGRAM_TYPES_ALL(X, Op) BE_PROGRAM_TYPES_BOOL(X, Op) BE_PROGRAM_TYPES_NUMBERS(X, Op)
+#define BE_PROGRAM_TYPES_SCALARS(X, Op) BE_PROGRAM_TYPES_BOOL(X, Op) BE_PROGRAM_TYPES_NUMBERS(X, Op)
+#define BE_PROGRAM_TYPES_MATH(X, Op) X(Op, Vec2, Vec2) X(Op, Vec3, Vec3) X(Op, Vec4, Vec4) X(Op, IVec2, IVec2) X(Op, Quat, Quat) X(Op, Color, Color)
+#define BE_PROGRAM_TYPES_ENUM(X, Op) X(Op, Enum, ProgramEnum)
+#define BE_PROGRAM_TYPES_STRING(X, Op) X(Op, String, PoolString)
+#define BE_PROGRAM_TYPES_ALL(X, Op) BE_PROGRAM_TYPES_SCALARS(X, Op) BE_PROGRAM_TYPES_MATH(X, Op) BE_PROGRAM_TYPES_ENUM(X, Op) BE_PROGRAM_TYPES_STRING(X, Op)
 
 /// Every typed instruction: `X(operation, type name, C++ type)`; the opcode is the two names written together (`AddInt32`)
 #define BE_PROGRAM_ROWS(X)                                                                                                                                                                             \
@@ -72,8 +92,20 @@
 
 namespace BECore {
 
+    /**
+     * @brief The register image of an enum: the index of the enumerator
+     *
+     * The values of a `CORE_ENUM` are 0..N-1 in declaration order, so the index is the value and the names are `TypeDesc::names`. Which enum it is
+     * is not in the image or the opcode: the checker keeps the descriptor beside the type, so two enums never mix.
+     */
+    struct ProgramEnum {
+        uint32_t index = 0;
+
+        [[nodiscard]] constexpr bool operator==(const ProgramEnum&) const = default;
+    };
+
     /// What a program register holds; the order is the order of the `LoadSlot` rows (`LoadSlotOpcode`)
-    CORE_ENUM(ProgramType, uint8_t, Bool, Int32, Int64, Float, Double)
+    CORE_ENUM(ProgramType, uint8_t, Bool, Int32, Int64, Float, Double, Vec2, Vec3, Vec4, IVec2, Quat, Color, Enum, String)
 
     /**
      * @brief One instruction of a program
@@ -120,13 +152,19 @@ namespace BECore {
     BE_PROGRAM_TYPES(BE_PROGRAM_TYPE_TRAITS)
 #undef BE_PROGRAM_TYPE_TRAITS
 
-    /// A C++ type a program can compute with
+    /// Every reflected enum is the program type `Enum`; the register holds its index (`Run<E>` and `ProgramBuilder` cast)
+    template <IsReflectedEnum T>
+    struct ProgramTypeTraits<T> {
+        static constexpr ProgramType kType = ProgramType::Enum;
+    };
+
+    /// A C++ type a program can compute with: a row of `BE_PROGRAM_TYPES` or a reflected enum
     template <typename T>
-    concept ProgramScalar = requires {
+    concept ProgramValue = requires {
         ProgramTypeTraits<T>::kType;
     };
 
-    template <ProgramScalar T>
+    template <ProgramValue T>
     inline constexpr ProgramType kProgramTypeOf = ProgramTypeTraits<T>::kType;
 
     /// The size in bytes of a value of the type, what `Run` writes to its result
@@ -157,11 +195,22 @@ namespace BECore {
         return Opcode::Invalid;
     }
 
-    static_assert(static_cast<size_t>(Opcode::LoadSlotDouble) - static_cast<size_t>(Opcode::LoadSlotBool) + 1 == EnumUtils<ProgramType>::Count(),
+    static_assert(static_cast<size_t>(Opcode::LoadSlotString) - static_cast<size_t>(Opcode::LoadSlotBool) + 1 == EnumUtils<ProgramType>::Count(),
                   "the LoadSlot rows are one run, in the order of ProgramType");
 
+    [[nodiscard]] constexpr bool LoadSlotRowsFollowTheTypes() {
+        for (const ProgramType type : EnumUtils<ProgramType>::Values()) {
+            if (static_cast<size_t>(LoadSlotOpcode(type)) - static_cast<size_t>(Opcode::LoadSlotBool) != static_cast<size_t>(type)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    static_assert(LoadSlotRowsFollowTheTypes(), "LoadSlotOpcode(type) is the row at the position of the type");
+
     [[nodiscard]] constexpr bool IsLoadSlot(Opcode op) {
-        return op >= Opcode::LoadSlotBool && op <= Opcode::LoadSlotDouble;
+        return op >= Opcode::LoadSlotBool && op <= Opcode::LoadSlotString;
     }
 
 }  // namespace BECore

@@ -16,13 +16,19 @@ namespace BECore {
      */
     void Run(const Program& program, const Context& context, void* result);
 
-    /// `Run` for a result of the C++ type @p T, which must be the program's result type
-    template <ProgramScalar T>
+    /// `Run` for a result of the C++ type @p T, which must be the program's result type; for an enum the result is the enumerator of the index (the program does not know which enum it is)
+    template <ProgramValue T>
     [[nodiscard]] T Run(const Program& program, const Context& context) {
         ASSERT(program.ResultType() == kProgramTypeOf<T>, "Run: the program does not compute this type");
-        T result{};
-        Run(program, context, &result);
-        return result;
+        if constexpr (IsReflectedEnum<T>) {
+            ProgramEnum result;
+            Run(program, context, &result);
+            return static_cast<T>(result.index);
+        } else {
+            T result{};
+            Run(program, context, &result);
+            return result;
+        }
     }
 
 }  // namespace BECore

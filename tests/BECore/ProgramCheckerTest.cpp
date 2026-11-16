@@ -53,6 +53,8 @@ namespace BECore::Tests {
                     return DescribeType<float>();
                 case ProgramType::Double:
                     return DescribeType<double>();
+                default:
+                    break;
             }
             return {};
         }

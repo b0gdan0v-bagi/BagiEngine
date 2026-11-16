@@ -27,6 +27,11 @@ namespace BECore::ValueTestData {
 
     CORE_ENUM(ValueElement, uint8_t, Fire, Water, Earth)
 
+    /// The same three enumerators over each width a program loads an enum field with
+    CORE_ENUM(ValueNarrowEnum, uint8_t, Low, Mid, High)
+    CORE_ENUM(ValueShortEnum, uint16_t, Low, Mid, High)
+    CORE_ENUM(ValueWideEnum, int32_t, Low, Mid, High)
+
     /// A game's own value type: it saves itself and has no `BE_CLASS`, so the reflection sees it as opaque
     struct ValuePoint {
         int32_t column = 0;
@@ -90,6 +95,15 @@ namespace BECore::ValueTestData {
         BE_REFLECT_FIELD ValuePoint spawn{6, 7};
         BE_REFLECT_FIELD ValueSpan span;
         BE_REFLECT_FIELD Vector<int32_t> buffs;
+    };
+
+    /// A context object with an enum field of each underlying width
+    struct ValueEnumWidths {
+        BE_CLASS(ValueEnumWidths)
+
+        BE_REFLECT_FIELD ValueNarrowEnum narrow = ValueNarrowEnum::High;
+        BE_REFLECT_FIELD ValueShortEnum wide16 = ValueShortEnum::Mid;
+        BE_REFLECT_FIELD ValueWideEnum wide32 = ValueWideEnum::High;
     };
 
     /// A derived context object: its parent's fields are its own for a path

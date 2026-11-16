@@ -63,12 +63,18 @@ namespace BECore {
         if (!compiled.has_value()) {
             return std::unexpected(compiled.error());
         }
-        if constexpr (ProgramScalar<T>) {
+        if constexpr (ProgramValue<T>) {
             switch (compiled->kind) {
                 case CompiledKind::Constant: {
-                    T literal{};
-                    std::memcpy(&literal, compiled->constant.bytes.data(), sizeof(T));
-                    return Value<T>::Const(literal);
+                    if constexpr (IsReflectedEnum<T>) {
+                        ProgramEnum index;
+                        std::memcpy(&index, compiled->constant.bytes.data(), sizeof(index));
+                        return Value<T>::Const(static_cast<T>(index.index));
+                    } else {
+                        T literal{};
+                        std::memcpy(&literal, compiled->constant.bytes.data(), sizeof(T));
+                        return Value<T>::Const(literal);
+                    }
                 }
                 case CompiledKind::Slot:
                     return Value<T>::FromSlot(compiled->slot, PoolString::Intern(compiled->path));

@@ -6,7 +6,7 @@ A formula of a content file (`expr="caster.attack * 2"`) becomes a `Program`: st
 
 | File | Holds |
 |------|-------|
-| `Opcode.h` | the X-macro lists (`BE_PROGRAM_TYPES`, `BE_PROGRAM_ROWS`, `BE_PROGRAM_CONVERSIONS`), `ProgramType`, `Opcode`, `ProgramScalar` |
+| `Opcode.h` | the X-macro lists (`BE_PROGRAM_TYPES`, `BE_PROGRAM_ROWS`, `BE_PROGRAM_CONVERSIONS`), `ProgramType`, `Opcode`, `ProgramValue` |
 | `Instruction.h` | `Instruction` (12 bytes: opcode, `dst`, `a`, `b`, `c`, a 32-bit immediate), `RegisterImage` |
 | `Kernels.h` | one struct per operation with its rule (`Apply`) and the types that have it (`kSupports`), `Execute`, `Convert` |
 | `Program.h/.cpp` | `Program` (immutable), `ProgramPool`, `ProgramError` |

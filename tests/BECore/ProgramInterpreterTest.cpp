@@ -11,6 +11,7 @@
 #include <Common/Printers.h>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <gtest/gtest.h>
 #include <limits>
 #include <type_traits>
@@ -78,6 +79,55 @@ namespace BECore::Tests {
                     kDoubleNaN};
         }
 
+        template <>
+        Vector<Vec2> Edges<Vec2>() {
+            return {Vec2{0.0f, 0.0f}, Vec2{1.0f, 2.0f}, Vec2{1.0f, 3.0f}, Vec2{2.0f, 2.0f}, Vec2{kNaN, 0.0f}, Vec2{0.0f, kNaN}, Vec2{kInf, -kInf}, Vec2{-0.0f, 0.0f}};
+        }
+
+        template <>
+        Vector<Vec3> Edges<Vec3>() {
+            return {Vec3{0.0f, 0.0f, 0.0f}, Vec3{1.0f, 2.0f, 3.0f}, Vec3{1.0f, 2.0f, 4.0f},  Vec3{1.0f, 3.0f, 3.0f}, Vec3{2.0f, 2.0f, 3.0f},
+                    Vec3{kNaN, 0.0f, 0.0f}, Vec3{0.0f, 0.0f, kNaN}, Vec3{kInf, -kInf, 0.0f}, Vec3{-0.0f, 0.0f, 0.0f}};
+        }
+
+        template <>
+        Vector<Vec4> Edges<Vec4>() {
+            return {Vec4{0.0f, 0.0f, 0.0f, 0.0f}, Vec4{1.0f, 2.0f, 3.0f, 4.0f}, Vec4{1.0f, 2.0f, 3.0f, 5.0f},  Vec4{1.0f, 2.0f, 4.0f, 4.0f},
+                    Vec4{kNaN, 0.0f, 0.0f, 0.0f}, Vec4{0.0f, 0.0f, 0.0f, kNaN}, Vec4{kInf, -kInf, 0.0f, 1.0f}, Vec4{0.0f, -0.0f, 0.0f, 0.0f}};
+        }
+
+        template <>
+        Vector<IVec2> Edges<IVec2>() {
+            return {IVec2{0, 0}, IVec2{1, 2}, IVec2{1, 3}, IVec2{2, 2}, IVec2{kInt32Min, kInt32Max}, IVec2{kInt32Max, kInt32Min}, IVec2{-1, -1}};
+        }
+
+        template <>
+        Vector<Quat> Edges<Quat>() {
+            return {Quat{0.0f, 0.0f, 0.0f, 1.0f}, Quat{0.0f, 0.0f, 0.0f, 0.0f}, Quat{0.0f, 0.0f, 0.70710678f, 0.70710678f}, Quat{0.0f, 0.0f, 0.70710678f, -0.70710678f}, Quat{1.0f, 0.0f, 0.0f, 0.0f},
+                    Quat{0.0f, 0.0f, 0.0f, kNaN}, Quat{0.0f, -0.0f, 0.0f, 1.0f}};
+        }
+
+        template <>
+        Vector<Color> Edges<Color>() {
+            return {Color{0, 0, 0, 0}, Color{255, 255, 255, 255}, Color{10, 20, 30, 255}, Color{10, 20, 30, 254}, Color{10, 20, 31, 255}, Color{11, 20, 30, 255}, Color{10, 21, 30, 255}};
+        }
+
+        template <>
+        Vector<ProgramEnum> Edges<ProgramEnum>() {
+            return {ProgramEnum{0}, ProgramEnum{1}, ProgramEnum{2}, ProgramEnum{3}, ProgramEnum{std::numeric_limits<uint32_t>::max()}};
+        }
+
+        template <>
+        Vector<PoolString> Edges<PoolString>() {
+            return {PoolString{},
+                    PoolString::Intern(""),
+                    PoolString::Intern("Fire"),
+                    PoolString::Intern("fire"),
+                    PoolString::Intern("Fire "),
+                    PoolString::Intern("Water"),
+                    PoolString::Intern("a longer text that is not a name of anything")};
+        }
+
         /// What a conversion sees besides the edges of its source: the values around the range of each target and the threshold at which a `double` is out of `float`
         template <typename T>
         Vector<T> ConversionEdges() {
@@ -114,13 +164,54 @@ namespace BECore::Tests {
             return values;
         }
 
+        /// Floats are the same when equal or both NaN; every other type moves as bytes (none has padding), which is what `Select` and a constant do
         template <typename T>
         bool Same(T a, T b) {
             if constexpr (std::floating_point<T>) {
                 return (a != a && b != b) || a == b;
-            } else {
+            } else if constexpr (std::is_arithmetic_v<T>) {
                 return a == b;
+            } else {
+                return std::memcmp(&a, &b, sizeof(T)) == 0;
             }
+        }
+
+        /// Equality of the types a program compares, spelled member by member (`Color` has no `operator==`)
+        template <typename T>
+        bool ReferenceEqual(const T& a, const T& b) {
+            return a == b;
+        }
+
+        bool ReferenceEqual(const Vec2& a, const Vec2& b) {
+            return a.x == b.x && a.y == b.y;
+        }
+
+        bool ReferenceEqual(const Vec3& a, const Vec3& b) {
+            return a.x == b.x && a.y == b.y && a.z == b.z;
+        }
+
+        bool ReferenceEqual(const Vec4& a, const Vec4& b) {
+            return a.x == b.x && a.y == b.y && a.z == b.z && a.w == b.w;
+        }
+
+        bool ReferenceEqual(const IVec2& a, const IVec2& b) {
+            return a.x == b.x && a.y == b.y;
+        }
+
+        bool ReferenceEqual(const Quat& a, const Quat& b) {
+            return a.x == b.x && a.y == b.y && a.z == b.z && a.w == b.w;
+        }
+
+        bool ReferenceEqual(const Color& a, const Color& b) {
+            return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+        }
+
+        bool ReferenceEqual(const ProgramEnum& a, const ProgramEnum& b) {
+            return a.index == b.index;
+        }
+
+        bool ReferenceEqual(const PoolString& a, const PoolString& b) {
+            return a.ToStringView() == b.ToStringView();
         }
 
         template <typename T>
@@ -190,9 +281,9 @@ namespace BECore::Tests {
                     return a < 0 ? WrapTo<T>(Word(T{0}) - Word(a)) : a;
                 }
             } else if constexpr (std::is_same_v<Op, K::Eq>) {
-                return a == b;
+                return ReferenceEqual(a, b);
             } else if constexpr (std::is_same_v<Op, K::Ne>) {
-                return a != b;
+                return !ReferenceEqual(a, b);
             } else if constexpr (std::is_same_v<Op, K::Lt>) {
                 return a < b;
             } else if constexpr (std::is_same_v<Op, K::Le>) {
@@ -268,7 +359,17 @@ namespace BECore::Tests {
 
         template <typename T>
         String Show(T value) {
-            return Format("{}", value);
+            if constexpr (std::is_arithmetic_v<T>) {
+                return Format("{}", value);
+            } else {
+                String text;
+                Array<uint8_t, sizeof(T)> bytes{};
+                std::memcpy(bytes.data(), &value, sizeof(T));
+                for (const uint8_t byte : bytes) {
+                    text += Format("{:02x}", byte);
+                }
+                return text;
+            }
         }
 
         int g_rowsChecked = 0;
@@ -520,6 +621,199 @@ namespace BECore::Tests {
         load(ProgramType::Double, "caster.precise", DescribeType<double>(), -0.125);
         load(ProgramType::Int32, "cast.level", DescribeType<int32_t>(), int32_t{3});
         load(ProgramType::Int32, "caster.span.high", DescribeType<int32_t>(), int32_t{9});
+    }
+
+    TEST(ProgramInterpreterTest, SlotLoadsReadTheMathTypesTextAndEnums) {
+        ValueWorld world;
+        world.caster.position = Vec2{-1.5f, 8.25f};
+        world.caster.cell = IVec2{-7, 40000};
+        world.caster.velocity = Vec3{0.5f, -2.0f, 9.0f};
+        world.caster.plane = Vec4{1.0f, 2.0f, 3.0f, -4.0f};
+        world.caster.facing = Quat{0.0f, 0.70710678f, 0.0f, 0.70710678f};
+        world.caster.tint = Color{1, 2, 3, 250};
+        world.caster.title = PoolString::Intern("Scorch");
+        world.caster.element = ValueElement::Earth;
+
+        const auto load = [&](ProgramType type, StringView path, const TypeDesc& desc, auto expected) {
+            using T = decltype(expected);
+            ProgramBuilder builder;
+            const uint8_t reg = builder.AcquireRegister().value();
+            builder.EmitLoadSlot(reg, type, Link(world, path, desc), static_cast<uint8_t>(desc.enumBytes));
+            const Program program = builder.Finish(type, reg).value();
+            EXPECT_TRUE(Same<T>(Run<T>(program, world.context), expected)) << String(path).c_str();
+        };
+        load(ProgramType::Vec2, "caster.position", DescribeType<Vec2>(), Vec2{-1.5f, 8.25f});
+        load(ProgramType::IVec2, "caster.cell", DescribeType<IVec2>(), IVec2{-7, 40000});
+        load(ProgramType::Vec3, "caster.velocity", DescribeType<Vec3>(), Vec3{0.5f, -2.0f, 9.0f});
+        load(ProgramType::Vec4, "caster.plane", DescribeType<Vec4>(), Vec4{1.0f, 2.0f, 3.0f, -4.0f});
+        load(ProgramType::Quat, "caster.facing", DescribeType<Quat>(), Quat{0.0f, 0.70710678f, 0.0f, 0.70710678f});
+        load(ProgramType::Color, "caster.tint", DescribeType<Color>(), Color{1, 2, 3, 250});
+        load(ProgramType::String, "caster.title", DescribeType<PoolString>(), PoolString::Intern("Scorch"));
+        load(ProgramType::Enum, "caster.element", DescribeType<ValueElement>(), ValueElement::Earth);
+        load(ProgramType::Vec2, "caster.span.offset", DescribeType<Vec2>(), world.caster.span.offset);
+        load(ProgramType::Vec3, "cast.target", DescribeType<Vec3>(), Vec3{7.0f, 8.0f, 9.0f});
+    }
+
+    TEST(ProgramInterpreterTest, AnEnumFieldOfEveryWidthLoadsItsIndex) {
+        ContextDecl declaration;
+        static_cast<void>(declaration.Add<ValueEnumWidths>("widths"));
+        ValueEnumWidths widths;
+        Context context(declaration);
+        context.Set(0, widths);
+
+        const auto load = [&](StringView path, const TypeDesc& desc, auto expected) {
+            using E = decltype(expected);
+            const auto slot = LinkSlot(declaration, path, desc);
+            ASSERT_TRUE(slot.has_value()) << String(path).c_str();
+            ProgramBuilder builder;
+            const uint8_t reg = builder.AcquireRegister().value();
+            builder.EmitLoadSlot(reg, ProgramType::Enum, *slot, static_cast<uint8_t>(desc.enumBytes));
+            const Program program = builder.Finish(ProgramType::Enum, reg).value();
+            EXPECT_EQ(Run<E>(program, context), expected) << String(path).c_str();
+            EXPECT_EQ(Run<ProgramEnum>(program, context).index, static_cast<uint32_t>(expected)) << "the index is the value of a CORE_ENUM";
+        };
+        for (const ValueNarrowEnum value : EnumUtils<ValueNarrowEnum>::Values()) {
+            widths.narrow = value;
+            load("widths.narrow", DescribeType<ValueNarrowEnum>(), value);
+        }
+        for (const ValueShortEnum value : EnumUtils<ValueShortEnum>::Values()) {
+            widths.wide16 = value;
+            load("widths.wide16", DescribeType<ValueShortEnum>(), value);
+        }
+        for (const ValueWideEnum value : EnumUtils<ValueWideEnum>::Values()) {
+            widths.wide32 = value;
+            load("widths.wide32", DescribeType<ValueWideEnum>(), value);
+        }
+        EXPECT_EQ(DescribeType<ValueNarrowEnum>().enumBytes, 1U);
+        EXPECT_EQ(DescribeType<ValueShortEnum>().enumBytes, 2U);
+        EXPECT_EQ(DescribeType<ValueWideEnum>().enumBytes, 4U);
+    }
+
+    TEST(ProgramInterpreterTest, AnEnumLoadZeroExtendsAndKeepsTheLowBits) {
+        ValueWorld world;
+        const auto index = [&](StringView path, const TypeDesc& desc, uint8_t bytes) {
+            ProgramBuilder builder;
+            const uint8_t reg = builder.AcquireRegister().value();
+            builder.EmitLoadSlot(reg, ProgramType::Enum, Link(world, path, desc), bytes);
+            return Run<ProgramEnum>(builder.Finish(ProgramType::Enum, reg).value(), world.context).index;
+        };
+        world.caster.attack = -1;
+        EXPECT_EQ(index("caster.attack", DescribeType<int32_t>(), 4), 0xFFFFFFFFU) << "four bytes, zero-extended: no sign";
+        EXPECT_EQ(index("caster.attack", DescribeType<int32_t>(), 2), 0xFFFFU);
+        EXPECT_EQ(index("caster.attack", DescribeType<int32_t>(), 1), 0xFFU);
+        world.caster.score = 0x100000002LL;
+        EXPECT_EQ(index("caster.score", DescribeType<int64_t>(), 8), 2U) << "the low 32 bits of a wider value";
+    }
+
+    TEST(ProgramInterpreterTest, TheBuilderRefusesAnEnumLoadOfAnOddSize) {
+        ValueWorld world;
+        for (const uint8_t bytes : {uint8_t{0}, uint8_t{3}, uint8_t{16}}) {
+            ProgramBuilder builder;
+            const uint8_t reg = builder.AcquireRegister().value();
+            builder.Emit(Opcode::LoadSlotEnum, reg, 0, bytes, 0, 0);
+            const auto program = builder.Finish(ProgramType::Enum, reg);
+            ASSERT_FALSE(program.has_value()) << static_cast<int>(bytes);
+            EXPECT_NE(program.error().message.find("enum field"), String::npos) << program.error().message;
+        }
+    }
+
+    TEST(ProgramInterpreterTest, EnumsAreTheirIndexAndRunReturnsTheEnumerator) {
+        static_assert(kProgramTypeOf<ValueElement> == ProgramType::Enum && kProgramTypeOf<ProgramEnum> == ProgramType::Enum);
+        static_assert(kProgramTypeOf<PoolString> == ProgramType::String && kProgramTypeOf<Vec3> == ProgramType::Vec3);
+        static_assert(!ProgramValue<ValuePoint> && !ProgramValue<Rect> && !ProgramValue<String>, "a type outside the list is no program type");
+        const auto values = EnumUtils<ValueElement>::Values();
+        for (size_t i = 0; i < values.size(); ++i) {
+            EXPECT_EQ(static_cast<size_t>(values[i]), i) << "the values of a CORE_ENUM are 0..N-1 in declaration order";
+            EXPECT_EQ(Eval<ValueElement>(Opcode::Copy, values[i]), values[i]);
+        }
+        EXPECT_EQ(Eval<ValueElement>(Opcode::SelectEnum, true, ValueElement::Fire, ValueElement::Earth), ValueElement::Fire);
+        EXPECT_EQ(Eval<ValueElement>(Opcode::SelectEnum, false, ValueElement::Fire, ValueElement::Earth), ValueElement::Earth);
+        EXPECT_TRUE(Eval<bool>(Opcode::EqEnum, ValueElement::Water, ValueElement::Water));
+        EXPECT_TRUE(Eval<bool>(Opcode::NeEnum, ValueElement::Water, ValueElement::Fire));
+    }
+
+    TEST(ProgramInterpreterTest, EqualityOfTheVectorsIsExactAndNanIsNeverEqual) {
+        const Vec3 withNan{kNaN, 1.0f, 2.0f};
+        EXPECT_FALSE(Eval<bool>(Opcode::EqVec3, withNan, withNan));
+        EXPECT_TRUE(Eval<bool>(Opcode::NeVec3, withNan, withNan));
+        EXPECT_TRUE(Eval<bool>(Opcode::EqVec3, Vec3{-0.0f, 1.0f, 2.0f}, Vec3{0.0f, 1.0f, 2.0f})) << "-0 equals 0 as in C++";
+        EXPECT_FALSE(Eval<bool>(Opcode::EqVec3, Vec3{0.0f, 1.0f, 2.0f}, Vec3{0.0f, 1.0f, 2.5f}));
+        EXPECT_FALSE(Eval<bool>(Opcode::EqQuat, Quat{0.0f, 0.0f, 0.0f, 1.0f}, Quat{0.0f, 0.0f, 0.0f, -1.0f})) << "q and -q are not equal";
+        EXPECT_FALSE(Eval<bool>(Opcode::EqColor, Color{1, 2, 3, 4}, Color{1, 2, 3, 5}));
+        EXPECT_TRUE(Eval<bool>(Opcode::EqString, PoolString::Intern("Fire"), PoolString::Intern("Fire")));
+        EXPECT_FALSE(Eval<bool>(Opcode::EqString, PoolString::Intern("Fire"), PoolString{}));
+        EXPECT_TRUE(Eval<bool>(Opcode::EqString, PoolString{}, PoolString::Intern(""))) << "the empty text is one string";
+    }
+
+    TEST(ProgramInterpreterTest, AnOperationAProgramTypeLacksHasNoRow) {
+        EXPECT_EQ(OpcodeOf(ProgramOperation::Add, ProgramType::Bool), Opcode::Invalid);
+        EXPECT_EQ(OpcodeOf(ProgramOperation::Add, ProgramType::String), Opcode::Invalid);
+        EXPECT_EQ(OpcodeOf(ProgramOperation::Add, ProgramType::Enum), Opcode::Invalid);
+        EXPECT_EQ(OpcodeOf(ProgramOperation::Lt, ProgramType::Vec3), Opcode::Invalid);
+        EXPECT_EQ(OpcodeOf(ProgramOperation::Lt, ProgramType::String), Opcode::Invalid);
+        EXPECT_EQ(OpcodeOf(ProgramOperation::Neg, ProgramType::Color), Opcode::Invalid);
+        for (const ProgramType type : EnumUtils<ProgramType>::Values()) {
+            const String name(EnumUtils<ProgramType>::ToString(type));
+            EXPECT_NE(OpcodeOf(ProgramOperation::LoadSlot, type), Opcode::Invalid) << name;
+            EXPECT_NE(OpcodeOf(ProgramOperation::Eq, type), Opcode::Invalid) << name;
+            EXPECT_NE(OpcodeOf(ProgramOperation::Ne, type), Opcode::Invalid) << name;
+            EXPECT_NE(OpcodeOf(ProgramOperation::Select, type), Opcode::Invalid) << name;
+            EXPECT_EQ(OpcodeOf(ProgramOperation::LoadSlot, type), LoadSlotOpcode(type)) << name;
+        }
+    }
+
+    TEST(ProgramInterpreterTest, TheResultTypeOfAnOpcodeComesFromItsKernel) {
+        static_assert(ResultTypeOf(Opcode::EqVec3) == ProgramType::Bool);
+        static_assert(ResultTypeOf(Opcode::LtInt64) == ProgramType::Bool);
+        static_assert(ResultTypeOf(Opcode::SelectVec3) == ProgramType::Vec3);
+        static_assert(ResultTypeOf(Opcode::LoadSlotQuat) == ProgramType::Quat);
+        static_assert(ResultTypeOf(Opcode::LoadSlotEnum) == ProgramType::Enum);
+        static_assert(ResultTypeOf(Opcode::AddInt32) == ProgramType::Int32);
+        static_assert(ResultTypeOf(Opcode::FloatToInt32) == ProgramType::Int32);
+        static_assert(!ResultTypeOf(Opcode::LoadConst).has_value() && !ResultTypeOf(Opcode::Copy).has_value() && !ResultTypeOf(Opcode::Invalid).has_value());
+        for (const Opcode op : EnumUtils<Opcode>::Values()) {
+            if (op != Opcode::Invalid && op != Opcode::LoadConst && op != Opcode::Copy) {
+                EXPECT_TRUE(ResultTypeOf(op).has_value()) << String(EnumUtils<Opcode>::ToString(op)).c_str();
+            }
+        }
+    }
+
+    TEST(ProgramInterpreterTest, EveryProgramTypeFitsARegister) {
+        EXPECT_EQ(ProgramTypeSize(ProgramType::Vec2), sizeof(Vec2));
+        EXPECT_EQ(ProgramTypeSize(ProgramType::Vec3), 12U);
+        EXPECT_EQ(ProgramTypeSize(ProgramType::Vec4), 16U);
+        EXPECT_EQ(ProgramTypeSize(ProgramType::Quat), 16U);
+        EXPECT_EQ(ProgramTypeSize(ProgramType::Color), 4U);
+        EXPECT_EQ(ProgramTypeSize(ProgramType::Enum), sizeof(uint32_t));
+        EXPECT_EQ(ProgramTypeSize(ProgramType::String), sizeof(PoolString));
+        for (const ProgramType type : EnumUtils<ProgramType>::Values()) {
+            EXPECT_GT(ProgramTypeSize(type), 0U);
+            EXPECT_LE(ProgramTypeSize(type), kProgramRegisterBytes);
+        }
+    }
+
+    TEST(ProgramInterpreterTest, ConstantsOfTheNewTypesAreZeroPaddedAndInternedByBytes) {
+        const auto constantProgram = [](auto value) {
+            ProgramBuilder builder;
+            const uint8_t reg = builder.AcquireRegister().value();
+            builder.EmitLoadConst(reg, value);
+            return builder.Finish(kProgramTypeOf<decltype(value)>, reg).value();
+        };
+        const Program vec = constantProgram(Vec3{1.0f, 2.0f, 3.0f});
+        ASSERT_EQ(vec.Constants().size(), 1U);
+        const Vec3 expected{1.0f, 2.0f, 3.0f};
+        EXPECT_EQ(std::memcmp(vec.Constants()[0].bytes.data(), &expected, sizeof(expected)), 0);
+        for (size_t i = sizeof(expected); i < kProgramRegisterBytes; ++i) {
+            EXPECT_EQ(vec.Constants()[0].bytes[i], 0) << i;
+        }
+        EXPECT_EQ(ProgramPool::Intern(constantProgram(Vec3{1.0f, 2.0f, 3.0f})).value(), ProgramPool::Intern(constantProgram(Vec3{1.0f, 2.0f, 3.0f})).value());
+        EXPECT_NE(ProgramPool::Intern(constantProgram(Vec3{1.0f, 2.0f, 3.0f})).value(), ProgramPool::Intern(constantProgram(Vec3{1.0f, 2.0f, 4.0f})).value());
+        EXPECT_EQ(ProgramPool::Intern(constantProgram(PoolString::Intern("burn"))).value(), ProgramPool::Intern(constantProgram(PoolString::Intern("burn"))).value());
+        EXPECT_NE(ProgramPool::Intern(constantProgram(PoolString::Intern("burn"))).value(), ProgramPool::Intern(constantProgram(PoolString::Intern("chill"))).value());
+        EXPECT_NE(ProgramPool::Intern(constantProgram(ValueElement::Fire)).value(), ProgramPool::Intern(constantProgram(ValueElement::Water)).value());
+        EXPECT_EQ(Run<ValueElement>(constantProgram(ValueElement::Earth), Context{}), ValueElement::Earth);
+        EXPECT_EQ(Run<PoolString>(constantProgram(PoolString::Intern("burn")), Context{}), PoolString::Intern("burn"));
+        EXPECT_NE(constantProgram(Vec3{1.0f, 2.0f, 3.0f}).Disassemble().find("Vec3"), String::npos);
     }
 
     TEST(ProgramInterpreterTest, AFormulaOverTwoLevelsAndItsReads) {

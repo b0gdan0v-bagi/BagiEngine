@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Assert/AssertMacros.h>
 #include <BECore/Values/Programs/Program.h>
 #include <cstdint>
 #include <cstring>
@@ -26,11 +27,16 @@ namespace BECore {
         /// The index of the constant in the program's table; a value that is there already is not added again
         [[nodiscard]] uint32_t AddConstant(const RegisterImage& image);
 
-        /// The constant of a value of a program type, zero-padded to a register
-        template <ProgramScalar T>
+        /// The constant of a value of a program type, zero-padded to a register; an enum is its index
+        template <ProgramValue T>
         [[nodiscard]] uint32_t AddConstant(T value) {
             RegisterImage image{};
-            std::memcpy(image.bytes.data(), &value, sizeof(T));
+            if constexpr (IsReflectedEnum<T>) {
+                const ProgramEnum index{static_cast<uint32_t>(value)};
+                std::memcpy(image.bytes.data(), &index, sizeof(index));
+            } else {
+                std::memcpy(image.bytes.data(), &value, sizeof(T));
+            }
             return AddConstant(image);
         }
 
@@ -40,13 +46,15 @@ namespace BECore {
             Emit(Instruction{op, dst, a, b, c, imm});
         }
 
-        template <ProgramScalar T>
+        template <ProgramValue T>
         void EmitLoadConst(uint8_t dst, T value) {
             Emit(Opcode::LoadConst, dst, 0, 0, 0, AddConstant(value));
         }
 
-        void EmitLoadSlot(uint8_t dst, ProgramType type, SlotRef slot) {
-            Emit(LoadSlotOpcode(type), dst, slot.level, 0, 0, slot.offset);
+        /// @p enumBytes is the size of the field (`TypeDesc::enumBytes`) and is for a `ProgramType::Enum` only: the load needs the width of the underlying type
+        void EmitLoadSlot(uint8_t dst, ProgramType type, SlotRef slot, uint8_t enumBytes = 0) {
+            ASSERT((type == ProgramType::Enum) == IsEnumFieldBytes(enumBytes), "EmitLoadSlot: an enum load names the size of its field, no other load does");
+            Emit(LoadSlotOpcode(type), dst, slot.level, enumBytes, 0, slot.offset);
         }
 
         /// The program, with the result in @p resultRegister; an error names the instruction that is not valid (an operand beyond the registers, a constant that is not there)

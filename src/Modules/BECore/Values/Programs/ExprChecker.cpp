@@ -25,24 +25,26 @@ namespace BECore {
             return image;
         }
 
-        /// The program type a descriptor stands for, by the rows of `BE_PROGRAM_TYPES`
+        /// The program type a descriptor stands for, among the scalars: the checker does not type the other program types yet
         Optional<ProgramType> ProgramTypeFor(const TypeDesc& type) {
-#define BE_PROGRAM_TYPE_FOR(Name, Cpp)                                                                                                                                                                 \
+#define BE_PROGRAM_TYPE_FOR(Unused, Name, Cpp)                                                                                                                                                         \
     if (SameType(type, DescribeType<Cpp>())) {                                                                                                                                                         \
         return ProgramType::Name;                                                                                                                                                                      \
     }
-            BE_PROGRAM_TYPES(BE_PROGRAM_TYPE_FOR)
+            BE_PROGRAM_TYPES_SCALARS(BE_PROGRAM_TYPE_FOR, Unused)
 #undef BE_PROGRAM_TYPE_FOR
             return std::nullopt;
         }
 
         TypeDesc DescriptorOf(ProgramType type) {
             switch (type) {
-#define BE_PROGRAM_DESCRIPTOR(Name, Cpp)                                                                                                                                                               \
+#define BE_PROGRAM_DESCRIPTOR(Unused, Name, Cpp)                                                                                                                                                       \
     case ProgramType::Name:                                                                                                                                                                            \
         return DescribeType<Cpp>();
-                BE_PROGRAM_TYPES(BE_PROGRAM_DESCRIPTOR)
+                BE_PROGRAM_TYPES_SCALARS(BE_PROGRAM_DESCRIPTOR, Unused)
 #undef BE_PROGRAM_DESCRIPTOR
+                default:
+                    break;
             }
             return {};
         }
@@ -61,8 +63,8 @@ namespace BECore {
 
         Vector<ProgramType> AllTypes() {
             Vector<ProgramType> types;
-#define BE_PROGRAM_ALL_TYPES(Name, Cpp) types.push_back(ProgramType::Name);
-            BE_PROGRAM_TYPES(BE_PROGRAM_ALL_TYPES)
+#define BE_PROGRAM_ALL_TYPES(Unused, Name, Cpp) types.push_back(ProgramType::Name);
+            BE_PROGRAM_TYPES_SCALARS(BE_PROGRAM_ALL_TYPES, Unused)
 #undef BE_PROGRAM_ALL_TYPES
             return types;
         }
@@ -309,8 +311,8 @@ namespace BECore {
                     case ProgramType::Double:
                         constant.constant = ImageOf<double>(negative ? -static_cast<double>(*magnitude) : static_cast<double>(*magnitude));
                         break;
-                    case ProgramType::Bool:
-                        return Refuse(column, "a number is no bool");
+                    default:
+                        return Refuse(column, Format("a number is no {}", ProgramTypeName(type)));
                 }
                 return Emit(std::move(constant));
             }

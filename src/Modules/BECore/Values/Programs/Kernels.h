@@ -89,6 +89,45 @@ namespace BECore::Kernel {
         }
     }
 
+    /// The index of an enumerator from the @p bytes of the enum's field (1, 2, 4 or 8), zero-extended; a stored value beyond 32 bits keeps its low bits (the interpreter never traps)
+    [[nodiscard]] inline uint32_t LoadEnumIndex(const uint8_t* field, uint8_t bytes) {
+        switch (bytes) {
+            case sizeof(uint8_t):
+                return field[0];
+            case sizeof(uint16_t): {
+                uint16_t value = 0;
+                std::memcpy(&value, field, sizeof(value));
+                return value;
+            }
+            case sizeof(uint32_t): {
+                uint32_t value = 0;
+                std::memcpy(&value, field, sizeof(value));
+                return value;
+            }
+            default: {
+                ASSERT(bytes == sizeof(uint64_t), "Program: an enum field is 1, 2, 4 or 8 bytes");
+                uint64_t value = 0;
+                std::memcpy(&value, field, sizeof(value));
+                return static_cast<uint32_t>(value);
+            }
+        }
+    }
+
+    /// `Color` has no `operator==`: it is equal when its four channels are
+    template <typename T>
+    concept EqualityComparable = std::is_same_v<T, Color> || requires(T a, T b) {
+        {a == b}->std::convertible_to<bool>;
+    };
+
+    template <EqualityComparable T>
+    [[nodiscard]] constexpr bool Equal(const T& a, const T& b) {
+        if constexpr (std::is_same_v<T, Color>) {
+            return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+        } else {
+            return a == b;
+        }
+    }
+
     struct LoadSlot {
         static constexpr OpShape kShape = OpShape::Slot;
         template <typename T>
@@ -224,26 +263,23 @@ namespace BECore::Kernel {
     struct Eq {
         static constexpr OpShape kShape = OpShape::Compare;
         template <typename T>
-        static constexpr bool kSupports = requires(T a, T b) {
-            {a == b}->std::convertible_to<bool>;
-        };
+        static constexpr bool kSupports = EqualityComparable<T>;
 
+        /// Exact and componentwise for the vectors: a NaN component makes two vectors unequal
         template <typename T>
         [[nodiscard]] static bool Apply(T a, T b) {
-            return a == b;
+            return Equal(a, b);
         }
     };
 
     struct Ne {
         static constexpr OpShape kShape = OpShape::Compare;
         template <typename T>
-        static constexpr bool kSupports = requires(T a, T b) {
-            {a != b}->std::convertible_to<bool>;
-        };
+        static constexpr bool kSupports = EqualityComparable<T>;
 
         template <typename T>
         [[nodiscard]] static bool Apply(T a, T b) {
-            return a != b;
+            return !Equal(a, b);
         }
     };
 
@@ -455,21 +491,30 @@ namespace BECore::Kernel {
         }
     };
 
+    /// The C++ type an operation on @p T writes: `bool` for a comparison, else @p T
+    template <typename Op, typename T>
+    using ResultOf = std::conditional_t<Op::kShape == OpShape::Compare, bool, T>;
+
     /// Runs one typed row of the instruction set: the shape of the operation says which registers it reads and writes
     template <typename Op, typename T>
     inline void Execute(RegisterImage* regs, const Instruction& ins, const Context& context) {
         if constexpr (Op::kShape == OpShape::Slot) {
             const void* object = context.Object(ins.a);
             ASSERT(object != nullptr, "Program: the context has no object at the level the program reads from");
-            T value{};
-            std::memcpy(&value, static_cast<const uint8_t*>(object) + ins.imm, sizeof(T));
-            Store<T>(regs[ins.dst], value);
+            const uint8_t* field = static_cast<const uint8_t*>(object) + ins.imm;
+            if constexpr (std::is_same_v<T, ProgramEnum>) {
+                Store<ProgramEnum>(regs[ins.dst], ProgramEnum{LoadEnumIndex(field, ins.b)});
+            } else {
+                T value{};
+                std::memcpy(&value, field, sizeof(T));
+                Store<T>(regs[ins.dst], value);
+            }
         } else if constexpr (Op::kShape == OpShape::Unary) {
             Store<T>(regs[ins.dst], Op::Apply(Load<T>(regs[ins.a])));
         } else if constexpr (Op::kShape == OpShape::Binary) {
             Store<T>(regs[ins.dst], Op::Apply(Load<T>(regs[ins.a]), Load<T>(regs[ins.b])));
         } else if constexpr (Op::kShape == OpShape::Compare) {
-            Store<bool>(regs[ins.dst], Op::Apply(Load<T>(regs[ins.a]), Load<T>(regs[ins.b])));
+            Store<ResultOf<Op, T>>(regs[ins.dst], Op::Apply(Load<T>(regs[ins.a]), Load<T>(regs[ins.b])));
         } else if constexpr (Op::kShape == OpShape::Ternary) {
             Store<T>(regs[ins.dst], Op::Apply(Load<T>(regs[ins.a]), Load<T>(regs[ins.b]), Load<T>(regs[ins.c])));
         } else {
@@ -498,3 +543,28 @@ namespace BECore::Kernel {
 #undef BE_PROGRAM_CHECK_ROW
 
 }  // namespace BECore::Kernel
+
+namespace BECore {
+
+    /// The type an instruction writes to its destination register: a row's result (`bool` for a comparison), a conversion's target; `nullopt` for `LoadConst`, `Copy` and `Invalid`
+    [[nodiscard]] constexpr Optional<ProgramType> ResultTypeOf(Opcode op) {
+        switch (op) {
+#define BE_PROGRAM_RESULT_ROW(Op, Type, Cpp)                                                                                                                                                           \
+    case Opcode::Op##Type:                                                                                                                                                                             \
+        return kProgramTypeOf<Kernel::ResultOf<Kernel::Op, Cpp>>;
+            BE_PROGRAM_ROWS(BE_PROGRAM_RESULT_ROW)
+#undef BE_PROGRAM_RESULT_ROW
+#define BE_PROGRAM_RESULT_CONVERSION(Src, SrcCpp, Dst, DstCpp)                                                                                                                                         \
+    case Opcode::Src##To##Dst:                                                                                                                                                                         \
+        return ProgramType::Dst;
+            BE_PROGRAM_CONVERSIONS(BE_PROGRAM_RESULT_CONVERSION)
+#undef BE_PROGRAM_RESULT_CONVERSION
+            case Opcode::Invalid:
+            case Opcode::LoadConst:
+            case Opcode::Copy:
+                break;
+        }
+        return std::nullopt;
+    }
+
+}  // namespace BECore
