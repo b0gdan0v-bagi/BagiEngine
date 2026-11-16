@@ -1,6 +1,7 @@
 #include "UICanvasComponent.h"
 
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Input/PointerId.h>
 #include <BECore/Input/UIInput.h>
 #include <BECore/MainWindow/IMainWindow.h>
 #include <BECore/Renderer/IRenderer.h>
@@ -24,10 +25,9 @@ namespace BECore {
             return button < 32 ? 1u << button : 0u;
         }
 
-        /// SDL tells a finger by the id of the mouse its events are made for
         template <typename TEvent>
         bool IsTouch(const TEvent& event) {
-            return event.which == SDL_TOUCH_MOUSEID;
+            return IsTouchPointer(event.which);
         }
 
         bool SetVisibleIn(SceneNode& node, PoolString nodeName, bool visible) {

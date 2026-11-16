@@ -9,7 +9,8 @@ namespace BECore {
     class IUIInputHandler;
     class UIInput;
 
-    /// The pointer id of a click made over the control API (`click_at`, `ui_click`): the first mouse, so a handler that tells pointers apart sees one person
+    /// The pointer id of a click made over the control API (`click_at`, `ui_click`): an id no real mouse has (SDL numbers mice from 1), so a handler that tells pointers apart sees one pointer of its
+    /// own
     inline constexpr uint32_t kControlPointerId = 0;
 
     /// What a click at a point came to
