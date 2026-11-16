@@ -138,8 +138,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--seed", type=int, required=True, help="the seed of the walk: the same seed on the same game walks the same way")
     parser.add_argument("--steps", type=int, default=DEFAULT_STEPS, help="moves to make (default %(default)s)")
     parser.add_argument("--minutes", type=float, help="stop after this many minutes, checked between moves")
-    parser.add_argument("--start", type=_json_object, metavar="JSON", help="the parameters of `reset` the walk starts with (and its `reset` moves use)")
-    parser.add_argument("--kinds", type=_kinds, metavar="a,b", help=f"only these kinds of moves ({', '.join(moves_module.KINDS)}; default all)")
+    parser.add_argument("--start", type=json_object, metavar="JSON", help="the parameters of `reset` the walk starts with (and its `reset` moves use)")
+    parser.add_argument("--kinds", type=kinds_option, metavar="a,b", help=f"only these kinds of moves ({', '.join(moves_module.KINDS)}; default all)")
     parser.add_argument("--charter", help=f"the text the report names as the charter (default: {DEFAULT_CHARTER})")
     parser.add_argument("--out", type=Path, help="the session folder, outside every repository (default: ~/.claude/plans/qa/<date>-monkey-s<seed>)")
     parser.add_argument("--max-probes", type=int, default=repro.DEFAULT_MAX_PROBES, help="game launches a reproduction may spend (default %(default)s)")
@@ -279,7 +279,7 @@ def _print(result: MonkeyResult) -> None:
     print(f"OUT {result.out}")
 
 
-def _json_object(text: str) -> dict[str, Any]:
+def json_object(text: str) -> dict[str, Any]:
     try:
         value = json.loads(text)
     except json.JSONDecodeError as error:
@@ -289,7 +289,7 @@ def _json_object(text: str) -> dict[str, Any]:
     return value
 
 
-def _kinds(text: str) -> list[str]:
+def kinds_option(text: str) -> list[str]:
     names = [name for name in text.split(",") if name]
     unknown = [name for name in names if name not in moves_module.KINDS]
     if unknown or not names:

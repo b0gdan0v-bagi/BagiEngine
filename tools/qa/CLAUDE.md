@@ -11,6 +11,7 @@ The library behind the skill `/qa` (`.claude/skills/qa/SKILL.md`): a charter scr
 | `bagi_monkey.py` | the monkey runner: `run_monkey` and the command line (see "The monkey") |
 | `bagi_monkey_log.py` | the seed log of the QA loop as markdown (`parse`, `render`, `add_run`, `next_seeds`, `next_charter`): pure text, no file or store |
 | `bagi_monkey_dupes.py` | the signature of a reproduction (finding name, one string per call, last call) and `similar`: the rule of "already filed" |
+| `bagi_monkey_loop.py` | the command line of the QA loop: `next-seeds`, `log-add`, `dupes`, `sweep` (see "The loop") |
 | `bagi_qa_report.py` | the report (`report.md`, `report.json`) and the bug drafts; never calls the todo store |
 | `tests/` | pytest (`.venv/bin/python -m pytest tools/qa/tests`); `qa_fake_game.py` is the game of the session tests (knobs by environment variable, listed in its docstring) |
 
@@ -88,3 +89,14 @@ A **flagged** finding is not replayed or shrunk: its draft names the recording a
 - **Stopping**: the budget (`--steps`, `--minutes`) is checked between moves; the walk ends at the first move after which `session.bugs` is not empty (a bug the launch or `--start` already showed ends it before the first move). Then the session finishes, each of the first three distinct bug names gets `repro/<name>.jsonl` through `write_reproduction` (a bug that does not come back, or `--no-shrink`, is in `unshrunk` and its draft keeps the recording), and the drafts are written again.
 - **A lost game** (`SessionError` on a move) is the finding `monkey.game_lost`, flagged like `QaSession.flag`: it is not shrunk, the draft names the recording.
 - **Exit codes**: 0 the budget ended with no bug (known deviations do not count), 1 a bug, 2 a bad option, a start the game refused or a session folder inside a git work tree, 77 the executable is missing. The default `--out` is `~/.claude/plans/qa/<date>-monkey-s<seed>/`; nothing outside it is written.
+
+## The loop
+
+`/qa-loop` (the skill moves the files to and from the store; `bagi_monkey_loop.py` never touches it) walks the monkey over seeds, charter after charter. The log is the store plan `qa-loop-log-<product>.md`: a title `# QA loop log: <product>`, free text, and one table `| date | charter | seeds | moves | build | result |` with a row per sweep (`a..b`, both walked). The next seeds of a charter go after the highest one any row of it covered; the next charter is the first with no row, else the one walked longest ago.
+
+`python3 tools/qa/bagi_monkey_loop.py <command>`, exit 0 nothing found, 1 a bug (`dupes`: a match), 2 a bad option or file or a start the game refused, 77 no executable (`sweep`):
+
+- `next-seeds --log F --charter T [--charter T ...] --count N` prints `{"charter", "first", "last"}`; a missing log is empty.
+- `log-add --log F --product P (--sweep sweep.json | --charter T --seeds A..B --moves N) [--build] [--result] [--date]` appends a row (the result is `clean`, `bugs: <names>` or `error: <text>`); the file is written whole through a temp file and a rename.
+- `dupes --repro F --known F...` prints `DUPLICATE <known>: <finding>` per similar file and `SKIPPED <file>: <why>` for an unreadable one. The rule (`bagi_monkey_dupes.similar`): the same finding name, and most of the calls in common or the same last call; a file with no finding name never matches.
+- `sweep (--exe E | --preset P --game G) --charter T --first S --count N` runs `run_monkey` for the seeds in order, seed `s` into `<out-root>/s<s>`, and writes and prints `<out-root>/sweep.json` (`charter`, `first`, `last` the last seed walked, `moves`, `stopped`, `seeds[]` with `bugs`, `known`, `repros`, `drafts`). `--minutes` is the total, checked between seeds and also the limit of the seed that runs; it ends on `count`, `minutes`, `bugs` (`--stop-after-bugs`, distinct finding names, default 3) or `error` (a game that does not start, exit 2: the seeds before it stay).
