@@ -13,10 +13,10 @@ The core of the external control API: a program or a model sends commands, the e
 | `ReflectionControl` | `RegisterReflectionControl()`: the by-name methods, called by `RegisterControlBuiltins` |
 | `SchemaExport` | The type registry as JSON (`TypeDescJson`, `TypeEntryJson`, `DescribeTypeJson`, `ListTypesJson`, `BuildSchemaJson`); pure over a `TypeRegistry`; its rules: `Reflection/CLAUDE.md`, "Schema export" |
 | `ControlBuiltins` | `RegisterControlBuiltins()`: `ping`, `status`, `step`, `pause`, `resume`, `list_methods`, `log_mark`, `log_since`, `log_subscribe`, `batch`, `quit` |
-| `ControlSettings` | `ResolveControlSettings(args, ApplicationConfigLoad)`: the start-up flags and the settings of the reflected `ApplicationConfig` (`Application/ApplicationConfig.h`), the manual clock included (see "Starting the API"), a pure function |
+| `ControlSettings` | `ResolveControlSettings(args, ApplicationConfigLoad)`: the start-up flags and the settings of the reflected `ApplicationConfig` (`Application/ApplicationConfig.h`), the manual clock included, a pure function |
 | `ControlTypes.h` | `ControlError`, `ControlErrors::k*` (error codes), `ControlReplyFn`, `ControlServerStatus` (listening, port, clients; see "Starting the API"), `ControlParamInfo` / `ControlMethodInfo` (what a module says about a method) and `ControlMethodListing` (what `GetMethods()` returns) |
 | `JsonSerializer` | `ISerializer` into a `Json` document (`Take()`); interim, DOM-backed: the allocation-free path is the entry `json-deserializer` |
-| `JsonDeserializer` | `IDeserializer` over a `const Json&` the caller keeps alive; always strict, with findings; interim like the writer, its internals are replaced by `json-deserializer` |
+| `JsonDeserializer` | `IDeserializer` over a `const Json&` the caller keeps alive; always strict, with findings; interim, like the writer (entry `json-deserializer`) |
 | `Json.h`, `JsonFwd.h` | nlohmann/json behind checked helpers (see "JSON rules") |
 | `Utils/Base64.h` (one level up) | Base64 for the screenshot and the WebSocket handshake |
 
@@ -60,7 +60,7 @@ The engine builds without exceptions, so nlohmann/json is built with `JSON_NOEXC
 
 ## Manual clock and `step`
 
-`step {"frames": N, "dt": seconds}` is a deferred call: it answers when `N` frames (1 to `kMaxStepFrames`, default 1) have ended, with the clock as `status` reports it (`frame`, `totalTime`, `deltaTime`, `fixedDeltaTime`). `dt` is 0 to `Time::kMaxFrameTime` (default 1/60). Both are checked as client data: out of range, fractional (`frames: 1.5`), the wrong type or `null` is `invalid_params`.
+`step {"frames": N, "dt": seconds}` is a deferred call: it answers when `N` frames (1 to `kMaxStepFrames`, default 1) have ended, with the clock as `status` reports it (`frame`, `totalTime`, `deltaTime`, `fixedDeltaTime`). `dt` is 0 to `Time::kMaxFrameTime` (default 1/60). Both are client data: out of range, fractional, mistyped or `null` is `invalid_params`.
 
 The two clocks differ in who runs the frames:
 
@@ -91,6 +91,7 @@ The API is off by default: a game has to be asked for it. `Application::Initiali
 | `--control-port=N` | `controlPort="N"` | port 0 to 65535; 0 asks the system for a free one; default `kDefaultControlPort` (8765) |
 | `--headless` | `headless="true"` (or `false`, `1`, `0`) | no window: the SDL software renderer on the dummy video driver, a screenshot is the way to see the game (`SDL/CLAUDE.md`, "Headless and screenshots"); needs the API and the Game run mode |
 | `--manual-clock` | `manualClock="true"` (or `false`, `1`, `0`) | frames run only on `step` (see "Manual clock and `step`"); needs the API. The flag only turns it on, so a game that has `manualClock="true"` in its config cannot switch it off from the command line |
+| `--replay=FILE`, `--replay-exit` | none | plays a replay file once the game is up, then quits and sets the exit code; both need the API and the manual clock (`Games/CLAUDE.md`, "Record and replay") |
 
 `Application::PublishControlStatus()` copies the server's state (`IsRunning()`, `GetPort()`, `WebSocketServer::GetClientCount()`) into `ControlService::SetServerStatus()` every frame, the idle pass of the manual clock included, and `Cleanup` resets it. Main thread only; the editor's status bar reads `GetServerStatus()`. A build without `BE_WITH_REMOTE_CONTROL`, or with the API off, never sets it (`listening == false`).
 
@@ -107,9 +108,9 @@ The file half is the reflected `ApplicationConfig` read with strict values (`ref
 | `BECore/Profiler/ProfilerControl` | `frame_stats` (`{frames?}` 1..240: the last frames, oldest first, with stage times, draws, allocations, named counters), `profiler_dump` (`{path?}` relative, no `..`: writes the Chrome trace; `not_recording` unless the game runs with `--trace=` or `--profiler=chrome`), `zone_allocs` (`{top?, reset?}`: allocations per zone and the totals; `enabled` false without `ENGINE_PROFILER_ALLOC`); `Profiler/CLAUDE.md` |
 | `BECore/Control/ReflectionControl` | `get_property` (`{root, path}`), `set_property` (`{root, path, value}`), `call_method` (`{root, method, arguments?}`) over a root; `list_types` (`{base?, recursive?, creatable?}`), `describe_type` (`{name}`), `schema`; shapes and codes in `Reflection/CLAUDE.md`, "Reflection methods" |
 | `BECore/Audio/AudioControl` | `audio_state` (the backend, the levels, the last sounds asked for, played or not), `audio_set` (`{bus, volume?, muted?}`); `Audio/CLAUDE.md` |
-| `Games/GameControl` | `list_games`, `switch_game`, `reset`, `get_state`, `list_actions`, `perform_action`, `set_state`, `run_until` (`Games/CLAUDE.md`; shape: `.claude/rules/control-qa-api.md`) |
+| `Games/GameControl` | `list_games`, `switch_game`, `reset`, `get_state`, `list_actions`, `perform_action`, `set_state`, `run_until`, `record_start`, `record_stop`, `replay` (`Games/CLAUDE.md`; shape of `run_until`: `.claude/rules/control-qa-api.md`) |
 
-Each module's register function also calls `DescribeMethod` for its methods (`list_methods` answers it); the game methods describe only what `GameControl` itself reads, the parameters of `perform_action` and `set_state` are the game's.
+The game methods describe only what `GameControl` itself reads; the parameters of `perform_action` and `set_state` are the game's.
 
 ## Adding a method
 
@@ -124,4 +125,4 @@ An object a client may read or write by name is offered as a root: `service.Root
 
 ## Tests
 
-`tests/BECore/ControlServiceTest.cpp` is the pattern (a service of its own, a lambda as the reply, `RunDueFrames` for the manual clock); `GameControlTest.cpp`, `ReflectionControlTest.cpp`, `ControlRootsTest.cpp`, `JsonTest.cpp`, `Base64Test.cpp` and `ControlSettingsTest.cpp` sit beside it. The transport has its own tests, see `RemoteControl/CLAUDE.md`.
+`tests/BECore/ControlServiceTest.cpp` is the pattern (a service of its own, a lambda as the reply, `RunDueFrames` for the manual clock); the other `Control*Test.cpp`, `GameControlTest.cpp`, `JsonTest.cpp` and `ControlSettingsTest.cpp` sit beside it. The transport has its own tests, see `RemoteControl/CLAUDE.md`.
