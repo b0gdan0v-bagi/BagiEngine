@@ -3,6 +3,8 @@
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Reflection/ISerializer.h>
 #include <BECore/UI/UIAttributeIO.h>
+#include <cctype>
+#include <limits>
 
 namespace BECore {
 
@@ -121,6 +123,29 @@ namespace BECore {
         }
     }
 
+    UIOverrideMask UIElementOverride::Properties() const {
+        UIOverrideMask mask = 0;
+        const auto add = [&mask](bool isSet, UIOverrideProperty property) {
+            if (isSet) {
+                mask |= OverrideBit(property);
+            }
+        };
+        add(visible.has_value(), UIOverrideProperty::Visible);
+        add(anchor.has_value(), UIOverrideProperty::Anchor);
+        add(anchorMin.has_value(), UIOverrideProperty::AnchorMin);
+        add(anchorMax.has_value(), UIOverrideProperty::AnchorMax);
+        add(pivot.has_value(), UIOverrideProperty::Pivot);
+        add(x.has_value(), UIOverrideProperty::X);
+        add(y.has_value(), UIOverrideProperty::Y);
+        add(width.has_value(), UIOverrideProperty::Width);
+        add(height.has_value(), UIOverrideProperty::Height);
+        add(margin.has_value(), UIOverrideProperty::Margin);
+        add(region.has_value(), UIOverrideProperty::Region);
+        add(direction.has_value(), UIOverrideProperty::Direction);
+        add(fontSize.has_value(), UIOverrideProperty::FontSize);
+        return mask;
+    }
+
     void UIElementOverride::Serialize(ISerializer& s) const {
         Ser::DataAccessor<PoolString>::Save(s, element, "element");
         SaveOptional(s, "visible", visible);
@@ -203,6 +228,52 @@ namespace BECore {
             }
         }
         return matched;
+    }
+
+    void UIVariants::Sources(Span<const UIVariant> variants, const Rect& bounds, PoolString element, Vector<UIVariantSource>& sources) {
+        sources.clear();
+        for (size_t index = 0; index < variants.size(); ++index) {
+            const UIVariant& variant = variants[index];
+            if (!variant.when.Matches(bounds)) {
+                continue;
+            }
+            UIOverrideMask properties = 0;
+            for (const UIElementOverride& override : variant.overrides) {
+                if (override.element == element) {
+                    properties |= override.Properties();
+                }
+            }
+            if (properties != 0) {
+                sources.push_back({index, properties});
+            }
+        }
+    }
+
+    void UIVariants::DescribeSources(Span<const UIVariantSource> sources, String& text) {
+        static_assert(EnumUtils<UIOverrideProperty>::Count() <= std::numeric_limits<UIOverrideMask>::digits, "UIOverrideMask has a bit per property");
+        text.clear();
+        if (sources.empty()) {
+            text += "authored";
+            return;
+        }
+        bool firstSource = true;
+        for (const UIVariantSource& source : sources) {
+            text += firstSource ? "variant " : "; variant ";
+            firstSource = false;
+            FormatTo(eastl::back_inserter(text), "{}", source.index);
+            bool firstProperty = true;
+            for (const UIOverrideProperty property : EnumUtils<UIOverrideProperty>::Values()) {
+                if ((source.properties & OverrideBit(property)) == 0) {
+                    continue;
+                }
+                text += firstProperty ? ": " : ", ";
+                firstProperty = false;
+                const StringView name = EnumUtils<UIOverrideProperty>::ToString(property);
+                // The files spell a property with a small first letter (anchorMin)
+                text += static_cast<char>(std::tolower(static_cast<unsigned char>(name[0])));
+                text.append(name.data() + 1, name.size() - 1);
+            }
+        }
     }
 
 }  // namespace BECore

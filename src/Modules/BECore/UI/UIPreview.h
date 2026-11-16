@@ -46,6 +46,10 @@ namespace BECore {
         bool canvasBounds = false;  ///< the bounds (and the content bounds, when they differ) of every visible canvas
         bool touchTargets = false;  ///< every visible interactive element, red where it is under UISettings::minTouchSize
         bool regions = false;       ///< the rects a game published for each visible canvas, with their names
+        bool elementRects = false;  ///< the rect of every visible UI element, tinted by depth
+        bool anchors = false;       ///< the anchor box, anchor corners and pivot of every element (strong for the one under the pointer)
+        bool designRect = false;    ///< the design rectangle of a Screen canvas in ScaleWithScreen (referenceWidth x referenceHeight)
+        bool findings = false;      ///< the findings of the layout validator drawn in place, and the "UI Findings" window
 
         bool operator==(const PreviewOverlays&) const = default;
     };

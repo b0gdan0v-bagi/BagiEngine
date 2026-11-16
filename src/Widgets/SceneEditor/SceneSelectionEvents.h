@@ -6,6 +6,7 @@ namespace BECore {
 
     class Scene;
     class SceneNode;
+    class UIElement;
 
     /**
      * @brief The node selected in the scene editor changed (a click in the hierarchy, a delete that cleared it, a request to reveal a node, a scene change)
@@ -49,6 +50,21 @@ namespace BECore {
 
         SelectSceneNodeRequestEvent() = default;
         SelectSceneNodeRequestEvent(const Scene* s, const SceneNode* n) : scene(s), node(n) {}
+    };
+
+    /**
+     * @brief Asks the scene editor to select a node and one element of its canvas, so the "UI elements" section shows it
+     *
+     * Answered like SelectSceneNodeRequestEvent (only for a node alive in the tree of the active scene, which becomes the selection and is revealed). The element is looked up in the canvas of
+     * that node by pointer compare, never dereferenced before it is found: an element that is gone (a stale pointer of a finding after an edit) leaves the node selected alone.
+     */
+    struct SelectUIElementRequestEvent : public EventBase<SelectUIElementRequestEvent> {
+        const Scene* scene = nullptr;
+        const SceneNode* node = nullptr;
+        const UIElement* element = nullptr;
+
+        SelectUIElementRequestEvent() = default;
+        SelectUIElementRequestEvent(const Scene* s, const SceneNode* n, const UIElement* e) : scene(s), node(n), element(e) {}
     };
 
 }  // namespace BECore

@@ -13,6 +13,7 @@
 #include <Widgets/SceneEditor/SceneSelectionEvents.h>
 #include <Widgets/Viewport/ViewportGizmos.h>
 #include <Widgets/Viewport/ViewportInput.h>
+#include <Widgets/Viewport/ViewportUIDebug.h>
 #include <cstdint>
 
 namespace BECore {
@@ -29,7 +30,8 @@ namespace BECore {
     // and simulates a safe area, so a UI layout can be looked at in several shapes without resizing the window. The safe
     // area canvases see during the scene pass is the simulated one; a device or custom size renders the target at exactly
     // that size and shows it scaled down to fit the panel (never above 100%), the mouse is mapped back through that zoom.
-    // The "Overlays" popup toggles what is drawn over the image (UIPreviewOverlay), a combo forces one of the scene's view
+    // The "Overlays" popup toggles what is drawn over the image (UIPreviewOverlay; the rects of the elements, their anchors, the design rectangle and the validator's findings
+    // can also be switched per canvas, ViewportUIDebug), a combo forces one of the scene's view
     // variants (Scene::SetViewOverride) around the viewport's own pass only.
     //
     // The image is covered by an InvisibleButton (an item with an id: a press on it is always seen and never moves the
@@ -52,6 +54,9 @@ namespace BECore {
         void Draw() override;
 
     private:
+        /// The "Viewport" window: toolbar, image, overlays and input
+        void DrawViewportWindow();
+
         // The grid preference and the stored preview choice of the editor (EditorLayoutWidget sends them on its first frame and on every change)
         void OnPreferencesChanged(const EditorPreferencesChangedEvent& event);
 
@@ -88,11 +93,12 @@ namespace BECore {
 
         // The overlays over the image, in target pixels through @p frame and clipped to the panel: the view bounds (bars tinted), the bounds of
         // every visible canvas, the regions (named outlines, under the touch targets; the name and the canvas-unit rect on hover), the touch targets
-        // (red under UISettings::minTouchSize, the element name on hover, which wins over a region), the safe area. The canvases
+        // (red under UISettings::minTouchSize, the element name on hover, which wins over a region), the UI debug overlays (ViewportUIDebug: element rects, anchors and pivots, the design
+        // rectangle, the findings; one tooltip per frame: a finding, a touch target, the element under the pointer, a region), the safe area. The canvases
         // are the ones the pass just laid out for this target. @p outputSize is the target's size, @p hovered the pointer is over the image
         /// The "Paused" mark in the top-left corner of the image while the game is paused (CoreManager::GetPause())
         void DrawPausedMark(const ImVec2& imageMin, const ImVec2& imageMax) const;
-        void DrawOverlays(Scene* scene, const ViewportFrame& frame, const ImVec2& outputSize, const Rect& safeArea, bool hovered) const;
+        void DrawOverlays(Scene* scene, const ViewportFrame& frame, const ImVec2& outputSize, const Rect& safeArea, bool hovered);
 
         // The simulated safe area (in target pixels) as an outline over the image, so it is clear what the canvases were given
         void DrawSafeAreaOutline(const ViewportFrame& frame, const Rect& safeArea) const;
@@ -125,6 +131,7 @@ namespace BECore {
         PreviewShape _shape;
         SafeAreaSimulation _safeAreaSimulation = SafeAreaSimulation::None;
         PreviewOverlays _overlays;
+        ViewportUIDebug _uiDebug;        // element rects, anchors, design rectangle and findings (they keep their marks between frames)
         PreviewSettings _storedPreview;  // the choice the editor last stored (applied from a preferences event, or sent by us)
         Optional<int32_t> _forcedView;   // the index of the forced view variant, -1 the default, nullopt Auto
         PoolString _forcedViewScene;     // the scene the choice was made for

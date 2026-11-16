@@ -40,6 +40,7 @@ namespace BECore {
     bool SceneEditorWidget::Initialize(IDeserializer& /*deserializer*/) {
         Subscribe<EditorCommandEvent, &SceneEditorWidget::OnCommand>(this);
         Subscribe<SelectSceneNodeRequestEvent, &SceneEditorWidget::OnSelectRequest>(this);
+        Subscribe<SelectUIElementRequestEvent, &SceneEditorWidget::OnSelectUIElementRequest>(this);
         Subscribe<ViewportEditClickEvent, &SceneEditorWidget::OnViewportClick>(this);
         Subscribe<ViewportBoxSelectEvent, &SceneEditorWidget::OnViewportBoxSelect>(this);
         Subscribe<NodeTransformEditEvent, &SceneEditorWidget::OnTransformEdit>(this);
@@ -79,15 +80,32 @@ namespace BECore {
         }
         _hierarchy.selected = _selection.Primary();
         _focusRequested = true;
-        if (!hit.element || hit.node != _selection.Primary()) {
+        SelectUIElement(*hit.node, hit.element);
+    }
+
+    void SceneEditorWidget::OnSelectUIElementRequest(const SelectUIElementRequestEvent& event) {
+        Scene* scene = CoreManager::GetSceneManager().GetActiveScene();
+        if (!scene || !HierarchyPanel::Reveal(*scene, _hierarchy, event.scene, event.node)) {
             return;
         }
+        _focusRequested = true;
+        SyncSelection(*scene);
+        // Reveal only validated the pointer; the writable node is the one the selection now holds
+        if (SceneNode* const node = _selection.Primary(); node == event.node) {
+            SelectUIElement(*node, event.element);
+        }
+    }
+
+    void SceneEditorWidget::SelectUIElement(SceneNode& node, const UIElement* element) {
         // The node is the primary now: show the element in the "UI elements" section (RenderInspector keeps a UI selection of the selected node)
-        if (const IntrusivePtr<UICanvasComponent> canvas = hit.node->GetComponent<UICanvasComponent>()) {
-            if (UIElement* const element = ScenePick::FindElement(*canvas, hit.element)) {
+        if (!element || &node != _selection.Primary()) {
+            return;
+        }
+        if (const IntrusivePtr<UICanvasComponent> canvas = node.GetComponent<UICanvasComponent>()) {
+            if (UIElement* const found = ScenePick::FindElement(*canvas, element)) {
                 ResetUISelection();
-                _uiSelectionNode = hit.node;
-                _selectedUIElement = IntrusivePtr<UIElement>(element);
+                _uiSelectionNode = &node;
+                _selectedUIElement = IntrusivePtr<UIElement>(found);
             }
         }
     }

@@ -464,6 +464,135 @@ namespace BECore::Tests {
         ExpectRect(inner->rect, 0.0f, 0.0f, 0.0f, 0.0f);  // nor is what is inside it
     }
 
+    // ---- where a style comes from -----------------------------------------------------------------------------------------
+
+    namespace {
+
+        UIVariant VariantSetting(UIVariantCondition when, PoolString element, UIOverrideMask properties) {
+            UIVariant variant;
+            variant.when = when;
+            UIElementOverride override;
+            override.element = element;
+            if ((properties & OverrideBit(UIOverrideProperty::Width)) != 0) {
+                override.width = UILength::Px(50.0f);
+            }
+            if ((properties & OverrideBit(UIOverrideProperty::Anchor)) != 0) {
+                override.anchor = UIAnchor::Bottom;
+            }
+            if ((properties & OverrideBit(UIOverrideProperty::FontSize)) != 0) {
+                override.fontSize = 21.0f;
+            }
+            variant.overrides.push_back(override);
+            return variant;
+        }
+
+        UIVariantCondition Portrait() {
+            UIVariantCondition when;
+            when.orientation = UIOrientation::Portrait;
+            return when;
+        }
+
+        Vector<UIVariantSource> SourcesOf(Span<const UIVariant> variants, const Rect& bounds, const char* element) {
+            Vector<UIVariantSource> sources;
+            UIVariants::Sources(variants, bounds, PoolString::Intern(element), sources);
+            return sources;
+        }
+
+        String Describe(Span<const UIVariantSource> sources) {
+            String text;
+            UIVariants::DescribeSources(sources, text);
+            return text;
+        }
+
+    }  // namespace
+
+    TEST(UIVariantSourcesTest, AnElementNoVariantNamesIsAuthored) {
+        const UIVariant variants[] = {PortraitHudVariant()};
+
+        const auto sources = SourcesOf(variants, kPortrait, "Score");
+
+        EXPECT_TRUE(sources.empty());
+        EXPECT_EQ(Describe(sources), "authored");
+        EXPECT_TRUE(SourcesOf({}, kPortrait, "Hud").empty());
+    }
+
+    TEST(UIVariantSourcesTest, OneMatchingOverrideListsItsVariantAndProperties) {
+        const UIVariant variants[] = {PortraitHudVariant()};
+
+        const auto sources = SourcesOf(variants, kPortrait, "Hud");
+
+        ASSERT_EQ(sources.size(), 1u);
+        EXPECT_EQ(sources[0].index, 0u);
+        EXPECT_EQ(sources[0].properties, OverrideBit(UIOverrideProperty::Anchor) | OverrideBit(UIOverrideProperty::X) | OverrideBit(UIOverrideProperty::Width));
+        EXPECT_EQ(Describe(sources), "variant 0: anchor, x, width");
+    }
+
+    TEST(UIVariantSourcesTest, TwoVariantsOnTheSameElementAreBothListedInTheOrderOfTheList) {
+        const UIVariant variants[] = {VariantSetting({}, "Hud"_intern, OverrideBit(UIOverrideProperty::FontSize)), VariantSetting({}, "Other"_intern, OverrideBit(UIOverrideProperty::Width)),
+                                      VariantSetting(Portrait(), "Hud"_intern, OverrideBit(UIOverrideProperty::Width) | OverrideBit(UIOverrideProperty::Anchor))};
+
+        const auto sources = SourcesOf(variants, kPortrait, "Hud");
+
+        ASSERT_EQ(sources.size(), 2u);
+        EXPECT_EQ(sources[0].index, 0u);
+        EXPECT_EQ(sources[1].index, 2u);
+        EXPECT_EQ(Describe(sources), "variant 0: fontSize; variant 2: anchor, width");
+    }
+
+    TEST(UIVariantSourcesTest, AVariantThatDoesNotMatchTheBoundsIsNotASource) {
+        const UIVariant variants[] = {PortraitHudVariant()};
+
+        EXPECT_TRUE(SourcesOf(variants, kLandscape, "Hud").empty());
+    }
+
+    TEST(UIVariantSourcesTest, SeveralOverridesOfOneVariantOnTheElementAreOneSource) {
+        UIVariant variant = VariantSetting({}, "Hud"_intern, OverrideBit(UIOverrideProperty::Width));
+        variant.overrides.push_back(VariantSetting({}, "Hud"_intern, OverrideBit(UIOverrideProperty::Anchor)).overrides[0]);
+        const UIVariant variants[] = {variant};
+
+        const auto sources = SourcesOf(variants, kLandscape, "Hud");
+
+        ASSERT_EQ(sources.size(), 1u);
+        EXPECT_EQ(Describe(sources), "variant 0: anchor, width");
+    }
+
+    TEST(UIVariantSourcesTest, AnOverrideThatSetsNothingIsNoSource) {
+        UIVariant variant;
+        variant.overrides.push_back({});
+        variant.overrides[0].element = "Hud"_intern;
+        const UIVariant variants[] = {variant};
+
+        EXPECT_TRUE(SourcesOf(variants, kLandscape, "Hud").empty());
+    }
+
+    TEST(UIVariantSourcesTest, TheListedPropertiesAreTheOnesApplyChangesInActive) {
+        auto root = MakeHudTree();
+        const UIVariant variants[] = {PortraitHudVariant(), VariantSetting({}, "Hud"_intern, OverrideBit(UIOverrideProperty::FontSize) | OverrideBit(UIOverrideProperty::Anchor)),
+                                      VariantSetting(Portrait(), "Reset"_intern, OverrideBit(UIOverrideProperty::Width))};
+        UIVariants::Apply(*root, variants, kPortrait);
+
+        for (const char* name : {"Hud", "Score", "Reset"}) {
+            const UIElement* element = root->FindByName(PoolString::Intern(name));
+            ASSERT_NE(element, nullptr) << name;
+            UIOverrideMask changed = 0;
+            const auto note = [&changed](bool differs, UIOverrideProperty property) {
+                if (differs) {
+                    changed |= OverrideBit(property);
+                }
+            };
+            note(element->active.rect.anchor != element->style.rect.anchor, UIOverrideProperty::Anchor);
+            note(!(element->active.rect.x == element->style.rect.x), UIOverrideProperty::X);
+            note(!(element->active.rect.width == element->style.rect.width), UIOverrideProperty::Width);
+            note(element->active.fontSize != element->style.fontSize, UIOverrideProperty::FontSize);
+
+            UIOverrideMask listed = 0;
+            for (const UIVariantSource& source : SourcesOf(variants, kPortrait, name)) {
+                listed |= source.properties;
+            }
+            EXPECT_EQ(listed, changed) << name;
+        }
+    }
+
     TEST(UITreeLayoutTest, AVariantCanHideAnElement) {
         auto root = MakeHudTree();
         UIVariant variant;
