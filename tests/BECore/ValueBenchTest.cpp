@@ -4,6 +4,8 @@
 // A formula of about five operations over two objects is timed as `formula_plain` (C++), `formula_tree` (a virtual node per operation, a heap object each),
 // `formula_program` (the compiled `expr`, fused), `formula_unfused` (the same with `CompileOptions::fuse = false`) and `formula_cached` (a `CachedValue` read with nothing
 // changed). `madd_plain`, `madd_program` and `madd_unfused` time `slot * k + b` alone, so what the peephole gains is one number. Every case must sum to what the plain one does.
+// The same lines are printed for `int32_t` (`caster.attack * (100 + cast.level * 10) / 100`, `caster.attack * 3 + 7`) and for `Vec3`
+// (`(caster.velocity + cast.target) * cast.power - caster.velocity * 0.5`, `caster.velocity * 2 + vec3(1, 2, 3)`: every step is one `Vec3` instruction and no conversion).
 
 #include <BECore/ValueTestTypes.h>
 #include <BECore/Values/CachedValue.h>
@@ -37,6 +39,11 @@ namespace BECore::Tests {
         constexpr int32_t kFormulaPerLevel = 10;
         constexpr int32_t kCastLevels = 5;
         constexpr StringView kMadd = "caster.attack * 3 + 7";
+        constexpr StringView kVec3Formula = "(caster.velocity + cast.target) * cast.power - caster.velocity * 0.5";
+        constexpr StringView kVec3Madd = "caster.velocity * 2 + vec3(1, 2, 3)";
+        constexpr float kVec3Half = 0.5f;
+        constexpr float kVec3Scale = 2.0f;
+        constexpr Vec3 kVec3Term{1.0f, 2.0f, 3.0f};
         constexpr int32_t kMaddFactor = 3;
         constexpr int32_t kMaddTerm = 7;
         constexpr float kPowerBase = 0.5f;
@@ -447,6 +454,34 @@ namespace BECore::Tests {
             BenchFormulaCases<int32_t>(world, kMadd, kMaddNames, [&](size_t index) { return PlainMadd(world.casters[index]); }, nullptr, true);
         }
 
+        /// `kVec3Formula` as C++: the multiplications and the subtraction in the order the program runs them, so the sums agree bit for bit
+        Vec3 PlainVec3Formula(const ValueUnitStats& caster, const ValueCastInfo& cast) {
+            return (caster.velocity + cast.target) * cast.power - caster.velocity * kVec3Half;
+        }
+
+        TreePtr<Vec3> Vec3FormulaTree(const ContextDecl& declaration) {
+            TreePtr<Vec3> sum = Binary<AddOp, Vec3>(Read<Vec3>(declaration, "caster.velocity"), Read<Vec3>(declaration, "cast.target"));
+            TreePtr<Vec3> scaled = Binary<MulOp, Vec3>(std::move(sum), Read<float>(declaration, "cast.power"));
+            TreePtr<Vec3> half = Binary<MulOp, Vec3>(Read<Vec3>(declaration, "caster.velocity"), Constant<float>(kVec3Half));
+            return Binary<SubOp, Vec3>(std::move(scaled), std::move(half));
+        }
+
+        void BenchVec3Formula() {
+            const FormulaWorld world;
+            const TreePtr<Vec3> tree = Vec3FormulaTree(world.declaration);
+            BenchFormulaCases<Vec3>(world, kVec3Formula, kFormulaNames, [&](size_t index) { return PlainVec3Formula(world.casters[index], world.casts[index]); }, tree.get(), Optional<bool>{});
+        }
+
+        Vec3 PlainVec3Madd(const ValueUnitStats& caster) {
+            return caster.velocity * kVec3Scale + kVec3Term;
+        }
+
+        /// No `Vec3` instruction is fused, so the two programs are one program
+        void BenchVec3Madd() {
+            const FormulaWorld world;
+            BenchFormulaCases<Vec3>(world, kVec3Madd, kMaddNames, [&](size_t index) { return PlainVec3Madd(world.casters[index]); }, nullptr, false);
+        }
+
     }  // namespace
 
     TEST(ValueBenchTest, Int32) {
@@ -463,6 +498,14 @@ namespace BECore::Tests {
 
     TEST(ValueBenchTest, Madd) {
         BenchMadd();
+    }
+
+    TEST(ValueBenchTest, Vec3Formula) {
+        BenchVec3Formula();
+    }
+
+    TEST(ValueBenchTest, Vec3Madd) {
+        BenchVec3Madd();
     }
 
 }  // namespace BECore::Tests
