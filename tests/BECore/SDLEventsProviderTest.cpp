@@ -4,11 +4,14 @@
 #include <BECore/Input/UIInput.h>
 #include <BECore/MainWindow/IMainWindow.h>
 #include <BECore/MainWindow/MainWindowManager.h>
+#include <BECore/Reflection/XmlDeserializer.h>
+#include <BECore/Scene/SceneManager.h>
 #include <BECore/Time/GamePause.h>
 #include <Common/Printers.h>
 #include <CoreSDL/SDLEvents.h>
 #include <CoreSDL/SDLEventsProvider.h>
 #include <Events/ClipboardEvents.h>
+#include <Events/InputEvents.h>
 #include <imgui.h>
 
 namespace BECore::Tests {
@@ -318,6 +321,47 @@ namespace BECore::Tests {
         pushAndProcess();
         ASSERT_EQ(recorder.clicks.size(), 1u);
         EXPECT_FLOAT_EQ(recorder.clicks[0].x, 30.0f);
+    }
+
+    TEST_F(SDLEventsProviderTest, ASceneTargetTakesTheConvertedClickAndGameCodeGetsNoRawEvent) {
+        XmlDeserializer deserializer;
+        ASSERT_TRUE(deserializer.LoadFromString(R"(<SceneManager><scenes><scene type="Scene" name="S"><nodes>
+  <node name="Pad"><components>
+    <component type="TransformComponent" x="0" y="0" width="100" height="100"/>
+    <component type="ClickableComponent" actionName="ProviderPad"/>
+  </components></node>
+</nodes></scene></scenes></SceneManager>)"));
+        IntrusivePtrAtomic<SceneManager> manager = New<SceneManager>();
+        manager->Deserialize(deserializer);
+        ASSERT_FALSE(deserializer.HasErrors());
+        manager->Initialize();
+        struct ActionCounter : SubscriptionHolder {
+            ActionCounter() {
+                Subscribe<InputEvents::ActionEvent, &ActionCounter::OnAction>(this);
+            }
+            void OnAction(const InputEvents::ActionEvent& event) {
+                if (event.action == "ProviderPad"_intern) {
+                    ++count;
+                }
+            }
+            int count = 0;
+        } actions;
+        MouseRecorder downs;
+        InputRecorder ups;
+
+        ASSERT_NO_FATAL_FAILURE(PushMouseButton(SDL_EVENT_MOUSE_BUTTON_DOWN, 30.0f, 40.0f));
+        ASSERT_NO_FATAL_FAILURE(PushMouseButton(SDL_EVENT_MOUSE_BUTTON_UP, 30.0f, 40.0f));
+        _provider.ProcessEvents();
+
+        EXPECT_EQ(actions.count, 1);
+        EXPECT_TRUE(downs.clicks.empty());
+        EXPECT_TRUE(ups.ups.empty()) << "the release of a press that a target took is its own";
+
+        ASSERT_NO_FATAL_FAILURE(PushMouseButton(SDL_EVENT_MOUSE_BUTTON_DOWN, 500.0f, 400.0f));
+        _provider.ProcessEvents();
+
+        EXPECT_EQ(actions.count, 1);
+        EXPECT_EQ(downs.clicks.size(), 1u) << "a press outside every target reaches the game";
     }
 
     TEST_F(SDLEventsProviderTest, GameModeForwardsReleaseMotionAndWheel) {

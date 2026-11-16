@@ -19,7 +19,7 @@ namespace BECore::Tests {
 
     namespace {
 
-        // Screen units equal pixels (800 x 600). One button, Box (100, 100, 200 x 80); the rest of the image is empty ground.
+        // Screen units equal pixels (800 x 600). One button, Box (100, 100, 200 x 80), and a scene target, Pad (20, 300, 100 x 100); the rest of the image is empty ground.
         constexpr const char* kSceneXml = R"(
 <SceneManager><scenes>
   <scene type="Scene" name="Main"><nodes>
@@ -31,6 +31,10 @@ namespace BECore::Tests {
           </element>
         </elements>
       </component>
+    </components></node>
+    <node name="Pad" layer="5"><components>
+      <component type="TransformComponent" x="20" y="300" width="100" height="100"/>
+      <component type="ClickableComponent" actionName="Padded"/>
     </components></node>
   </nodes></scene>
 </scenes></SceneManager>)";
@@ -50,6 +54,7 @@ namespace BECore::Tests {
             }
 
             int actions = 0;
+            int pads = 0;
             Vector<SDL_MouseButtonEvent> downs;
             Vector<SDL_MouseButtonEvent> ups;
             int motions = 0;
@@ -59,6 +64,8 @@ namespace BECore::Tests {
             void OnAction(const InputEvents::ActionEvent& event) {
                 if (event.action == "Boxed"_intern) {
                     ++actions;
+                } else if (event.action == "Padded"_intern) {
+                    ++pads;
                 }
             }
             void OnDown(const SDLEvents::MouseButtonDownEvent& event) {
@@ -146,6 +153,8 @@ namespace BECore::Tests {
 
         static constexpr float kBoxX = 200.0f;  // the middle of Box
         static constexpr float kBoxY = 140.0f;
+        static constexpr float kPadX = 70.0f;  // the middle of Pad
+        static constexpr float kPadY = 350.0f;
 
         IntrusivePtr<RecordingRenderer> _renderer;
         IntrusivePtrAtomic<SceneManager> _manager;
@@ -184,6 +193,26 @@ namespace BECore::Tests {
         EXPECT_TRUE(_recorder.downs.empty());
         EXPECT_TRUE(_editClicks.empty());
         EXPECT_FALSE(_pointer.IsGameHeld());
+    }
+
+    TEST_F(ViewportInputTest, PlayClickOnASceneTargetReachesItAndTheGameSeesNoPress) {
+        Click(kPadX, kPadY, ViewportInputMode::Play);
+
+        EXPECT_EQ(_recorder.pads, 1);
+        EXPECT_TRUE(_recorder.downs.empty());
+        EXPECT_TRUE(_recorder.ups.empty());
+        EXPECT_TRUE(_editClicks.empty());
+        EXPECT_FALSE(_pointer.IsGameHeld());
+    }
+
+    TEST_F(ViewportInputTest, EditClickOnASceneTargetGoesToTheEditorOnly) {
+        Click(kPadX, kPadY, ViewportInputMode::Edit);
+
+        EXPECT_EQ(_recorder.pads, 0);
+        EXPECT_TRUE(_recorder.downs.empty());
+        ASSERT_EQ(_editClicks.size(), 1u);
+        EXPECT_EQ(_editClicks[0].x, kPadX);
+        EXPECT_EQ(_editClicks[0].y, kPadY);
     }
 
     TEST_F(ViewportInputTest, PlayClickOnEmptyGroundReachesTheGameWithTheSameCoordinates) {
