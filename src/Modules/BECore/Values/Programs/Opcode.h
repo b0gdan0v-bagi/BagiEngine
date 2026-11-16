@@ -38,6 +38,7 @@
 #define BE_PROGRAM_TYPES_FLOATS(X, Op) X(Op, Float, float) X(Op, Double, double)
 #define BE_PROGRAM_TYPES_NUMBERS(X, Op) BE_PROGRAM_TYPES_INTEGERS(X, Op) BE_PROGRAM_TYPES_FLOATS(X, Op)
 #define BE_PROGRAM_TYPES_SCALARS(X, Op) BE_PROGRAM_TYPES_BOOL(X, Op) BE_PROGRAM_TYPES_NUMBERS(X, Op)
+#define BE_PROGRAM_TYPES_FLOAT_VECTORS(X, Op) X(Op, Vec2, Vec2) X(Op, Vec3, Vec3) X(Op, Vec4, Vec4)
 #define BE_PROGRAM_TYPES_MATH(X, Op) X(Op, Vec2, Vec2) X(Op, Vec3, Vec3) X(Op, Vec4, Vec4) X(Op, IVec2, IVec2) X(Op, Quat, Quat) X(Op, Color, Color)
 #define BE_PROGRAM_TYPES_ENUM(X, Op) X(Op, Enum, ProgramEnum)
 #define BE_PROGRAM_TYPES_STRING(X, Op) X(Op, String, PoolString)
@@ -47,11 +48,19 @@
 #define BE_PROGRAM_ROWS(X)                                                                                                                                                                             \
     BE_PROGRAM_TYPES_ALL(X, LoadSlot)                                                                                                                                                                  \
     BE_PROGRAM_TYPES_NUMBERS(X, Add)                                                                                                                                                                   \
+    BE_PROGRAM_TYPES_FLOAT_VECTORS(X, Add)                                                                                                                                                             \
+    X(Add, IVec2, IVec2)                                                                                                                                                                               \
     BE_PROGRAM_TYPES_NUMBERS(X, Sub)                                                                                                                                                                   \
+    BE_PROGRAM_TYPES_FLOAT_VECTORS(X, Sub)                                                                                                                                                             \
+    X(Sub, IVec2, IVec2)                                                                                                                                                                               \
     BE_PROGRAM_TYPES_NUMBERS(X, Mul)                                                                                                                                                                   \
+    X(Mul, Quat, Quat)                                                                                                                                                                                 \
     BE_PROGRAM_TYPES_NUMBERS(X, Div)                                                                                                                                                                   \
     BE_PROGRAM_TYPES_INTEGERS(X, Mod)                                                                                                                                                                  \
     BE_PROGRAM_TYPES_NUMBERS(X, Neg)                                                                                                                                                                   \
+    X(Neg, Vec3, Vec3)                                                                                                                                                                                 \
+    X(Neg, Vec4, Vec4)                                                                                                                                                                                 \
+    X(Neg, IVec2, IVec2)                                                                                                                                                                               \
     BE_PROGRAM_TYPES_NUMBERS(X, Abs)                                                                                                                                                                   \
     BE_PROGRAM_TYPES_ALL(X, Eq)                                                                                                                                                                        \
     BE_PROGRAM_TYPES_ALL(X, Ne)                                                                                                                                                                        \
@@ -67,10 +76,36 @@
     BE_PROGRAM_TYPES_NUMBERS(X, Clamp)                                                                                                                                                                 \
     BE_PROGRAM_TYPES_ALL(X, Select)                                                                                                                                                                    \
     BE_PROGRAM_TYPES_FLOATS(X, Lerp)                                                                                                                                                                   \
+    BE_PROGRAM_TYPES_FLOAT_VECTORS(X, Lerp)                                                                                                                                                            \
+    X(Lerp, Color, Color)                                                                                                                                                                              \
+    X(Lerp, Quat, Quat)                                                                                                                                                                                \
     BE_PROGRAM_TYPES_FLOATS(X, Floor)                                                                                                                                                                  \
     BE_PROGRAM_TYPES_FLOATS(X, Ceil)                                                                                                                                                                   \
     BE_PROGRAM_TYPES_FLOATS(X, Round)                                                                                                                                                                  \
-    BE_PROGRAM_TYPES_FLOATS(X, Sqrt)
+    BE_PROGRAM_TYPES_FLOATS(X, Sqrt)                                                                                                                                                                   \
+    X(Dot, Vec3, Vec3)                                                                                                                                                                                 \
+    X(Dot, Vec4, Vec4)                                                                                                                                                                                 \
+    X(Dot, Quat, Quat)                                                                                                                                                                                 \
+    X(Length, Vec3, Vec3)                                                                                                                                                                              \
+    X(Length, Vec4, Vec4)                                                                                                                                                                              \
+    X(Normalize, Vec3, Vec3)                                                                                                                                                                           \
+    X(Normalize, Vec4, Vec4)                                                                                                                                                                           \
+    X(Normalize, Quat, Quat)
+
+/// The operations whose two operands have different types: `X(operation, lhs name, lhs C++ type, rhs name, rhs C++ type)`; the opcode is `MulVec3Float`.
+/// A vector by its scalar (`float` for `Vec2` .. `Vec4`, `int` for `IVec2`) and `Quat * Vec3` (a rotation), each where the C++ operator or function exists
+/// (`Kernels.h` holds the list and the concepts together). Two numbers never mix: that is the explicit conversion of the language.
+#define BE_PROGRAM_MIXED_ROWS(X)                                                                                                                                                                       \
+    X(Mul, Vec2, Vec2, Float, float)                                                                                                                                                                   \
+    X(Mul, Vec3, Vec3, Float, float)                                                                                                                                                                   \
+    X(Mul, Vec4, Vec4, Float, float)                                                                                                                                                                   \
+    X(Mul, Float, float, Vec3, Vec3)                                                                                                                                                                   \
+    X(Mul, Float, float, Vec4, Vec4)                                                                                                                                                                   \
+    X(Mul, IVec2, IVec2, Int32, int32_t)                                                                                                                                                               \
+    X(Mul, Int32, int32_t, IVec2, IVec2)                                                                                                                                                               \
+    X(Mul, Quat, Quat, Vec3, Vec3)                                                                                                                                                                     \
+    X(Div, Vec3, Vec3, Float, float)                                                                                                                                                                   \
+    X(Div, Vec4, Vec4, Float, float)
 
 /// The conversions between the four numbers: `X(from name, from C++ type, to name, to C++ type)`; the opcode is `Int32ToFloat`
 #define BE_PROGRAM_CONVERSIONS(X)                                                                                                                                                                      \
@@ -89,6 +124,7 @@
 
 #define BE_PROGRAM_OPCODE_ROW(Op, Type, Cpp) , Op##Type
 #define BE_PROGRAM_OPCODE_CONVERSION(Src, SrcCpp, Dst, DstCpp) , Src##To##Dst
+#define BE_PROGRAM_OPCODE_MIXED(Op, LName, LCpp, RName, RCpp) , Op##LName##RName
 
 namespace BECore {
 
@@ -113,10 +149,11 @@ namespace BECore {
      * `LoadConst` and `Copy` move a whole register whatever it holds; `LoadSlot<type>` reads a field of a context object; every other opcode is
      * an operation applied to one type (`AddInt32`), a conversion (`Int32ToFloat`). `Invalid` is never emitted: a zeroed instruction is caught.
      */
-    CORE_ENUM(Opcode, uint16_t, Invalid, LoadConst, Copy BE_PROGRAM_ROWS(BE_PROGRAM_OPCODE_ROW) BE_PROGRAM_CONVERSIONS(BE_PROGRAM_OPCODE_CONVERSION))
+    CORE_ENUM(Opcode, uint16_t, Invalid, LoadConst, Copy BE_PROGRAM_ROWS(BE_PROGRAM_OPCODE_ROW) BE_PROGRAM_MIXED_ROWS(BE_PROGRAM_OPCODE_MIXED) BE_PROGRAM_CONVERSIONS(BE_PROGRAM_OPCODE_CONVERSION))
 
     /// The operations of `BE_PROGRAM_ROWS` by name, apart from the type: what the text of a formula says (`+`, `min`) before a type is known
-    CORE_ENUM(ProgramOperation, uint8_t, LoadSlot, Add, Sub, Mul, Div, Mod, Neg, Abs, Eq, Ne, Lt, Le, Gt, Ge, And, Or, Not, Min, Max, Clamp, Select, Lerp, Floor, Ceil, Round, Sqrt)
+    CORE_ENUM(ProgramOperation, uint8_t, LoadSlot, Add, Sub, Mul, Div, Mod, Neg, Abs, Eq, Ne, Lt, Le, Gt, Ge, And, Or, Not, Min, Max, Clamp, Select, Lerp, Floor, Ceil, Round, Sqrt, Dot, Length,
+              Normalize)
 
     /// The opcode of an operation on a type, `Invalid` when the type has no row: the checker asks it instead of keeping a table of its own
     [[nodiscard]] constexpr Opcode OpcodeOf(ProgramOperation operation, ProgramType type) {
@@ -126,6 +163,17 @@ namespace BECore {
     }
         BE_PROGRAM_ROWS(BE_PROGRAM_OPCODE_OF)
 #undef BE_PROGRAM_OPCODE_OF
+        return Opcode::Invalid;
+    }
+
+    /// The opcode of an operation on two operands of different types, `Invalid` when the pair has no row (`BE_PROGRAM_MIXED_ROWS`)
+    [[nodiscard]] constexpr Opcode MixedOpcodeOf(ProgramOperation operation, ProgramType lhs, ProgramType rhs) {
+#define BE_PROGRAM_MIXED_OPCODE_OF(Op, LName, LCpp, RName, RCpp)                                                                                                                                       \
+    if (operation == ProgramOperation::Op && lhs == ProgramType::LName && rhs == ProgramType::RName) {                                                                                                 \
+        return Opcode::Op##LName##RName;                                                                                                                                                               \
+    }
+        BE_PROGRAM_MIXED_ROWS(BE_PROGRAM_MIXED_OPCODE_OF)
+#undef BE_PROGRAM_MIXED_OPCODE_OF
         return Opcode::Invalid;
     }
 

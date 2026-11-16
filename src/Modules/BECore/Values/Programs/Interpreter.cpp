@@ -27,6 +27,12 @@ namespace BECore {
         break;
                     BE_PROGRAM_ROWS(BE_PROGRAM_CASE_ROW)
 #undef BE_PROGRAM_CASE_ROW
+#define BE_PROGRAM_CASE_MIXED(Op, LName, LCpp, RName, RCpp)                                                                                                                                            \
+    case Opcode::Op##LName##RName:                                                                                                                                                                     \
+        Kernel::ExecuteMixed<Kernel::Op, LCpp, RCpp>(regs, ins);                                                                                                                                       \
+        break;
+                    BE_PROGRAM_MIXED_ROWS(BE_PROGRAM_CASE_MIXED)
+#undef BE_PROGRAM_CASE_MIXED
 #define BE_PROGRAM_CASE_CONVERSION(Src, SrcCpp, Dst, DstCpp)                                                                                                                                           \
     case Opcode::Src##To##Dst:                                                                                                                                                                         \
         Kernel::Store<DstCpp>(regs[ins.dst], Kernel::Convert<SrcCpp, DstCpp>(Kernel::Load<SrcCpp>(regs[ins.a])));                                                                                      \

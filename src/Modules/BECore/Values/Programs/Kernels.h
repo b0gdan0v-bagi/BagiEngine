@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Animation/Lerp.h>
 #include <BECore/Assert/AssertMacros.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <BECore/Values/Context.h>
@@ -11,6 +12,7 @@
 #include <cstring>
 #include <limits>
 #include <type_traits>
+#include <utility>
 
 /**
  * The meaning of every operation of a program, one struct per operation, over every type that has it. Each is total: no operation has undefined
@@ -21,7 +23,7 @@
 namespace BECore::Kernel {
 
     /// How an operation reads its registers and what it writes
-    CORE_ENUM(OpShape, uint8_t, Slot, Unary, Binary, Compare, Ternary, Select)
+    CORE_ENUM(OpShape, uint8_t, Slot, Unary, Binary, Compare, Ternary, Blend, Select)
 
     template <typename T>
     concept Integer = std::is_integral_v<T> && !std::is_same_v<T, bool>;
@@ -47,6 +49,55 @@ namespace BECore::Kernel {
         using U = std::make_unsigned_t<T>;
         return static_cast<T>(static_cast<U>(U{0} - static_cast<U>(a)));
     }
+
+    template <Integer T>
+    [[nodiscard]] constexpr T WrapAdd(T a, T b) {
+        using U = std::make_unsigned_t<T>;
+        return static_cast<T>(static_cast<U>(static_cast<U>(a) + static_cast<U>(b)));
+    }
+
+    template <Integer T>
+    [[nodiscard]] constexpr T WrapSub(T a, T b) {
+        using U = std::make_unsigned_t<T>;
+        return static_cast<T>(static_cast<U>(static_cast<U>(a) - static_cast<U>(b)));
+    }
+
+    template <Integer T>
+    [[nodiscard]] constexpr T WrapMul(T a, T b) {
+        using U = std::make_unsigned_t<T>;
+        return static_cast<T>(static_cast<U>(static_cast<U>(a) * static_cast<U>(b)));
+    }
+
+    /// The scalar a vector is multiplied by: `float` for the float vectors, `int` for `IVec2`, `void` for every other type
+    template <typename V>
+    struct VectorScalarTraits {
+        using Type = void;
+    };
+
+    template <>
+    struct VectorScalarTraits<Vec2> {
+        using Type = float;
+    };
+
+    template <>
+    struct VectorScalarTraits<Vec3> {
+        using Type = float;
+    };
+
+    template <>
+    struct VectorScalarTraits<Vec4> {
+        using Type = float;
+    };
+
+    template <>
+    struct VectorScalarTraits<IVec2> {
+        using Type = int32_t;
+    };
+
+    /// A vector and exactly its scalar, in either order: the C++ operators also take any other number (`Vec3 * int`), which a program refuses (no implicit conversion)
+    template <typename L, typename R>
+    concept VectorAndScalar = (!std::is_void_v<typename VectorScalarTraits<L>::Type> && std::is_same_v<R, typename VectorScalarTraits<L>::Type>) ||
+                              (!std::is_void_v<typename VectorScalarTraits<R>::Type> && std::is_same_v<L, typename VectorScalarTraits<R>::Type>);
 
     /// The float to integer rule: toward zero, saturating at the range of @p To, 0 for NaN
     template <Integer To, std::floating_point From>
@@ -137,15 +188,17 @@ namespace BECore::Kernel {
     struct Add {
         static constexpr OpShape kShape = OpShape::Binary;
         template <typename T>
-        static constexpr bool kSupports = Number<T> && requires(T a, T b) {
+        static constexpr bool kSupports = requires(T a, T b) {
             {a + b}->std::same_as<T>;
         };
 
+        /// `IVec2` wraps like the integers: the engine's `operator+` overflows signed, so the kernel adds through unsigned words
         template <typename T>
         [[nodiscard]] static T Apply(T a, T b) {
             if constexpr (Integer<T>) {
-                using U = std::make_unsigned_t<T>;
-                return static_cast<T>(static_cast<U>(static_cast<U>(a) + static_cast<U>(b)));
+                return WrapAdd(a, b);
+            } else if constexpr (std::is_same_v<T, IVec2>) {
+                return IVec2{WrapAdd(a.x, b.x), WrapAdd(a.y, b.y)};
             } else {
                 return a + b;
             }
@@ -155,15 +208,16 @@ namespace BECore::Kernel {
     struct Sub {
         static constexpr OpShape kShape = OpShape::Binary;
         template <typename T>
-        static constexpr bool kSupports = Number<T> && requires(T a, T b) {
+        static constexpr bool kSupports = requires(T a, T b) {
             {a - b}->std::same_as<T>;
         };
 
         template <typename T>
         [[nodiscard]] static T Apply(T a, T b) {
             if constexpr (Integer<T>) {
-                using U = std::make_unsigned_t<T>;
-                return static_cast<T>(static_cast<U>(static_cast<U>(a) - static_cast<U>(b)));
+                return WrapSub(a, b);
+            } else if constexpr (std::is_same_v<T, IVec2>) {
+                return IVec2{WrapSub(a.x, b.x), WrapSub(a.y, b.y)};
             } else {
                 return a - b;
             }
@@ -173,15 +227,31 @@ namespace BECore::Kernel {
     struct Mul {
         static constexpr OpShape kShape = OpShape::Binary;
         template <typename T>
-        static constexpr bool kSupports = Number<T> && requires(T a, T b) {
+        static constexpr bool kSupports = requires(T a, T b) {
             {a * b}->std::same_as<T>;
         };
+
+        /// A vector with its scalar, or a rotation with the vector it turns (`Quat::Rotate`)
+        template <typename L, typename R>
+        static constexpr bool kSupportsMixed = (VectorAndScalar<L, R> && requires(L a, R b) { a* b; }) || (std::is_same_v<L, Quat> && std::is_same_v<R, Vec3> && requires(L a, R b) { a.Rotate(b); });
 
         template <typename T>
         [[nodiscard]] static T Apply(T a, T b) {
             if constexpr (Integer<T>) {
-                using U = std::make_unsigned_t<T>;
-                return static_cast<T>(static_cast<U>(static_cast<U>(a) * static_cast<U>(b)));
+                return WrapMul(a, b);
+            } else {
+                return a * b;
+            }
+        }
+
+        template <typename L, typename R>
+        [[nodiscard]] static auto ApplyMixed(L a, R b) {
+            if constexpr (std::is_same_v<L, Quat>) {
+                return a.Rotate(b);
+            } else if constexpr (std::is_same_v<L, IVec2>) {
+                return IVec2{WrapMul(a.x, b), WrapMul(a.y, b)};
+            } else if constexpr (std::is_same_v<R, IVec2>) {
+                return IVec2{WrapMul(a, b.x), WrapMul(a, b.y)};
             } else {
                 return a * b;
             }
@@ -191,8 +261,13 @@ namespace BECore::Kernel {
     struct Div {
         static constexpr OpShape kShape = OpShape::Binary;
         template <typename T>
-        static constexpr bool kSupports = Number<T> && requires(T a, T b) {
+        static constexpr bool kSupports = requires(T a, T b) {
             {a / b}->std::same_as<T>;
+        };
+
+        template <typename L, typename R>
+        static constexpr bool kSupportsMixed = VectorAndScalar<L, R> && requires(L a, R b) {
+            a / b;
         };
 
         /// Integers: a zero divisor gives 0 and `-1` negates with wrap-around, so the minimum divided by -1 is the minimum. Floats: IEEE
@@ -206,6 +281,11 @@ namespace BECore::Kernel {
                     return WrapNegate(a);
                 }
             }
+            return a / b;
+        }
+
+        template <typename L, typename R>
+        [[nodiscard]] static auto ApplyMixed(L a, R b) {
             return a / b;
         }
     };
@@ -230,7 +310,7 @@ namespace BECore::Kernel {
     struct Neg {
         static constexpr OpShape kShape = OpShape::Unary;
         template <typename T>
-        static constexpr bool kSupports = Number<T> && requires(T a) {
+        static constexpr bool kSupports = requires(T a) {
             {-a}->std::same_as<T>;
         };
 
@@ -238,6 +318,8 @@ namespace BECore::Kernel {
         [[nodiscard]] static T Apply(T a) {
             if constexpr (Integer<T>) {
                 return WrapNegate(a);
+            } else if constexpr (std::is_same_v<T, IVec2>) {
+                return IVec2{WrapNegate(a.x), WrapNegate(a.y)};
             } else {
                 return -a;
             }
@@ -433,15 +515,37 @@ namespace BECore::Kernel {
         }
     };
 
-    struct Lerp {
-        static constexpr OpShape kShape = OpShape::Ternary;
-        template <typename T>
-        static constexpr bool kSupports = std::floating_point<T>;
+    /// One channel of `Lerp(Color)`: the engine's rounding and clamp, with a NaN (from a NaN or infinite `t`) as 0, where the engine's cast of it is undefined
+    [[nodiscard]] inline unsigned char LerpColorChannel(unsigned char from, unsigned char to, float t) {
+        const float value = std::round(std::lerp(static_cast<float>(from), static_cast<float>(to), t));
+        if (value != value) {
+            return 0;
+        }
+        return static_cast<unsigned char>(std::clamp(value, 0.0f, kColorChannelMax));
+    }
 
-        /// `std::lerp`: exact at 0 and 1, monotonic, @p t is not clamped
+    struct Lerp {
+        static constexpr OpShape kShape = OpShape::Blend;
+        /// The floats, the types the engine has a `Lerp` for, and `Quat` (`Slerp`)
         template <typename T>
-        [[nodiscard]] static T Apply(T from, T to, T t) {
-            return std::lerp(from, to, t);
+        static constexpr bool kSupports = std::floating_point<T> || std::is_same_v<T, Quat> || (!std::is_arithmetic_v<T> && requires(T a, T b, float t) { {BECore::Lerp(a, b, t)}->std::same_as<T>; });
+
+        /// The type of the third operand: the number itself for a float, `float` for everything else
+        template <typename T>
+        using Weight = std::conditional_t<std::floating_point<T>, T, float>;
+
+        /// `std::lerp` for a float (exact at 0 and 1, monotonic) and the engine's `Lerp` per component; `Quat` takes the shortest arc (`Slerp`). @p t is not clamped
+        template <typename T>
+        [[nodiscard]] static T Apply(T from, T to, Weight<T> t) {
+            if constexpr (std::floating_point<T>) {
+                return std::lerp(from, to, t);
+            } else if constexpr (std::is_same_v<T, Quat>) {
+                return BECore::Slerp(from, to, t);
+            } else if constexpr (std::is_same_v<T, Color>) {
+                return Color{LerpColorChannel(from.r, to.r, t), LerpColorChannel(from.g, to.g, t), LerpColorChannel(from.b, to.b, t), LerpColorChannel(from.a, to.a, t)};
+            } else {
+                return BECore::Lerp(from, to, t);
+            }
         }
     };
 
@@ -491,9 +595,74 @@ namespace BECore::Kernel {
         }
     };
 
-    /// The C++ type an operation on @p T writes: `bool` for a comparison, else @p T
+    struct Dot {
+        static constexpr OpShape kShape = OpShape::Binary;
+        template <typename T>
+        static constexpr bool kSupports = requires(T a, T b) {
+            {BECore::Dot(a, b)}->std::same_as<float>;
+        };
+
+        template <typename T>
+        using Result = float;
+
+        template <typename T>
+        [[nodiscard]] static float Apply(T a, T b) {
+            return BECore::Dot(a, b);
+        }
+    };
+
+    struct Length {
+        static constexpr OpShape kShape = OpShape::Unary;
+        template <typename T>
+        static constexpr bool kSupports = requires(T a) {
+            {a.Length()}->std::same_as<float>;
+        };
+
+        template <typename T>
+        using Result = float;
+
+        template <typename T>
+        [[nodiscard]] static float Apply(T a) {
+            return a.Length();
+        }
+    };
+
+    struct Normalize {
+        static constexpr OpShape kShape = OpShape::Unary;
+        template <typename T>
+        static constexpr bool kSupports = requires(T a) {
+            {a.Normalized()}->std::same_as<T>;
+        };
+
+        /// The engine's `Normalized`: a vector of length 0 gives the zero vector, a zero `Quat` the identity, a NaN stays NaN
+        template <typename T>
+        [[nodiscard]] static T Apply(T a) {
+            return a.Normalized();
+        }
+    };
+
+    namespace Details {
+
+        template <typename Op, typename T>
+        consteval auto ResultTag() {
+            if constexpr (requires { typename Op::template Result<T>; }) {
+                return std::type_identity<typename Op::template Result<T>>{};
+            } else if constexpr (Op::kShape == OpShape::Compare) {
+                return std::type_identity<bool>{};
+            } else {
+                return std::type_identity<T>{};
+            }
+        }
+
+    }  // namespace Details
+
+    /// The C++ type an operation on @p T writes: its own `Result<T>` (`float` for `Dot` and `Length`), `bool` for a comparison, else @p T
     template <typename Op, typename T>
-    using ResultOf = std::conditional_t<Op::kShape == OpShape::Compare, bool, T>;
+    using ResultOf = typename decltype(Details::ResultTag<Op, T>())::type;
+
+    /// The C++ type an operation on a pair of different types writes
+    template <typename Op, typename L, typename R>
+    using MixedResultOf = decltype(Op::template ApplyMixed<L, R>(std::declval<L>(), std::declval<R>()));
 
     /// Runs one typed row of the instruction set: the shape of the operation says which registers it reads and writes
     template <typename Op, typename T>
@@ -510,16 +679,22 @@ namespace BECore::Kernel {
                 Store<T>(regs[ins.dst], value);
             }
         } else if constexpr (Op::kShape == OpShape::Unary) {
-            Store<T>(regs[ins.dst], Op::Apply(Load<T>(regs[ins.a])));
-        } else if constexpr (Op::kShape == OpShape::Binary) {
-            Store<T>(regs[ins.dst], Op::Apply(Load<T>(regs[ins.a]), Load<T>(regs[ins.b])));
-        } else if constexpr (Op::kShape == OpShape::Compare) {
+            Store<ResultOf<Op, T>>(regs[ins.dst], Op::Apply(Load<T>(regs[ins.a])));
+        } else if constexpr (Op::kShape == OpShape::Binary || Op::kShape == OpShape::Compare) {
             Store<ResultOf<Op, T>>(regs[ins.dst], Op::Apply(Load<T>(regs[ins.a]), Load<T>(regs[ins.b])));
         } else if constexpr (Op::kShape == OpShape::Ternary) {
             Store<T>(regs[ins.dst], Op::Apply(Load<T>(regs[ins.a]), Load<T>(regs[ins.b]), Load<T>(regs[ins.c])));
+        } else if constexpr (Op::kShape == OpShape::Blend) {
+            Store<T>(regs[ins.dst], Op::Apply(Load<T>(regs[ins.a]), Load<T>(regs[ins.b]), Load<typename Op::template Weight<T>>(regs[ins.c])));
         } else {
             Store<T>(regs[ins.dst], Op::Apply(Load<bool>(regs[ins.a]), Load<T>(regs[ins.b]), Load<T>(regs[ins.c])));
         }
+    }
+
+    /// Runs one row of `BE_PROGRAM_MIXED_ROWS`: the left operand is in `a`, the right in `b`
+    template <typename Op, typename L, typename R>
+    inline void ExecuteMixed(RegisterImage* regs, const Instruction& ins) {
+        Store<MixedResultOf<Op, L, R>>(regs[ins.dst], Op::ApplyMixed(Load<L>(regs[ins.a]), Load<R>(regs[ins.b])));
     }
 
     /// Whether `BE_PROGRAM_ROWS` has a row for the operation and the type
@@ -542,6 +717,26 @@ namespace BECore::Kernel {
     BE_PROGRAM_ROWS(BE_PROGRAM_CHECK_ROW)
 #undef BE_PROGRAM_CHECK_ROW
 
+    /// Whether `BE_PROGRAM_MIXED_ROWS` has a row for the operation and the pair
+    template <typename Op, typename L, typename R>
+    inline constexpr bool kHasMixedRow = false;
+
+#define BE_PROGRAM_HAS_MIXED_ROW(Op, LName, LCpp, RName, RCpp)                                                                                                                                         \
+    template <>                                                                                                                                                                                        \
+    inline constexpr bool kHasMixedRow<Op, LCpp, RCpp> = true;
+    BE_PROGRAM_MIXED_ROWS(BE_PROGRAM_HAS_MIXED_ROW)
+#undef BE_PROGRAM_HAS_MIXED_ROW
+
+    /// Over every pair of program types: a pair is a mixed row exactly when the operation supports it
+#define BE_PROGRAM_MIXED_AGREE_RIGHT(LCpp, RName, RCpp) &&(Op::template kSupportsMixed<LCpp, RCpp> == kHasMixedRow<Op, LCpp, RCpp>)
+#define BE_PROGRAM_MIXED_AGREE_LEFT(LName, LCpp) BE_PROGRAM_TYPES_ALL(BE_PROGRAM_MIXED_AGREE_RIGHT, LCpp)
+    template <typename Op>
+    inline constexpr bool kMixedRowsAgree = true BE_PROGRAM_TYPES(BE_PROGRAM_MIXED_AGREE_LEFT);
+#undef BE_PROGRAM_MIXED_AGREE_LEFT
+#undef BE_PROGRAM_MIXED_AGREE_RIGHT
+
+    static_assert(kMixedRowsAgree<Mul> && kMixedRowsAgree<Div>, "BE_PROGRAM_MIXED_ROWS and the mixed pairs the kernels support disagree");
+
 }  // namespace BECore::Kernel
 
 namespace BECore {
@@ -554,6 +749,11 @@ namespace BECore {
         return kProgramTypeOf<Kernel::ResultOf<Kernel::Op, Cpp>>;
             BE_PROGRAM_ROWS(BE_PROGRAM_RESULT_ROW)
 #undef BE_PROGRAM_RESULT_ROW
+#define BE_PROGRAM_RESULT_MIXED(Op, LName, LCpp, RName, RCpp)                                                                                                                                          \
+    case Opcode::Op##LName##RName:                                                                                                                                                                     \
+        return kProgramTypeOf<Kernel::MixedResultOf<Kernel::Op, LCpp, RCpp>>;
+            BE_PROGRAM_MIXED_ROWS(BE_PROGRAM_RESULT_MIXED)
+#undef BE_PROGRAM_RESULT_MIXED
 #define BE_PROGRAM_RESULT_CONVERSION(Src, SrcCpp, Dst, DstCpp)                                                                                                                                         \
     case Opcode::Src##To##Dst:                                                                                                                                                                         \
         return ProgramType::Dst;

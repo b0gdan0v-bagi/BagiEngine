@@ -9,11 +9,13 @@
 #include <BECore/Values/Programs/Program.h>
 #include <BECore/Values/Programs/ProgramBuilder.h>
 #include <Common/Printers.h>
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <gtest/gtest.h>
 #include <limits>
+#include <numbers>
 #include <type_traits>
 
 namespace BECore::Tests {
@@ -103,8 +105,8 @@ namespace BECore::Tests {
 
         template <>
         Vector<Quat> Edges<Quat>() {
-            return {Quat{0.0f, 0.0f, 0.0f, 1.0f}, Quat{0.0f, 0.0f, 0.0f, 0.0f}, Quat{0.0f, 0.0f, 0.70710678f, 0.70710678f}, Quat{0.0f, 0.0f, 0.70710678f, -0.70710678f}, Quat{1.0f, 0.0f, 0.0f, 0.0f},
-                    Quat{0.0f, 0.0f, 0.0f, kNaN}, Quat{0.0f, -0.0f, 0.0f, 1.0f}};
+            return {Quat{0.0f, 0.0f, 0.0f, 1.0f}, Quat{0.0f, 0.0f, 0.0f, 0.0f},  Quat{0.0f, 0.0f, 0.70710678f, 0.70710678f}, Quat{0.0f, 0.0f, 0.70710678f, -0.70710678f}, Quat{1.0f, 0.0f, 0.0f, 0.0f},
+                    Quat{0.0f, 0.0f, 0.0f, kNaN}, Quat{0.0f, -0.0f, 0.0f, 1.0f}, Quat{0.0f, 0.0f, 0.01f, 0.99995f}};
         }
 
         template <>
@@ -164,13 +166,31 @@ namespace BECore::Tests {
             return values;
         }
 
-        /// Floats are the same when equal or both NaN; every other type moves as bytes (none has padding), which is what `Select` and a constant do
+        /// The vectors of floats: their members are `sizeof(T) / sizeof(float)` floats one after the other
+        template <typename T>
+        constexpr bool kIsFloatVector = std::is_same_v<T, Vec2> || std::is_same_v<T, Vec3> || std::is_same_v<T, Vec4> || std::is_same_v<T, Quat>;
+
+        /// Floats are the same when equal or both NaN; a vector of floats when each member is, bit for bit apart from the NaNs (`-0` is not `0`); every other type moves as bytes (none has padding),
+        /// which is what `Select` and a constant do
         template <typename T>
         bool Same(T a, T b) {
             if constexpr (std::floating_point<T>) {
                 return (a != a && b != b) || a == b;
             } else if constexpr (std::is_arithmetic_v<T>) {
                 return a == b;
+            } else if constexpr (kIsFloatVector<T>) {
+                constexpr size_t kLanes = sizeof(T) / sizeof(float);
+                Array<float, kLanes> left{};
+                Array<float, kLanes> right{};
+                std::memcpy(left.data(), &a, sizeof(T));
+                std::memcpy(right.data(), &b, sizeof(T));
+                for (size_t i = 0; i < kLanes; ++i) {
+                    const bool bothNan = left[i] != left[i] && right[i] != right[i];
+                    if (!bothNan && std::memcmp(&left[i], &right[i], sizeof(float)) != 0) {
+                        return false;
+                    }
+                }
+                return true;
             } else {
                 return std::memcmp(&a, &b, sizeof(T)) == 0;
             }
@@ -232,10 +252,71 @@ namespace BECore::Tests {
             return value != value;
         }
 
-        /// The plain C++ meaning of every operation, written another way than the kernel: integers through 64-bit words, the rules of the stage plan spelled out
-        template <typename Op, typename T>
-        auto Reference(T a, T b = T{}, T c = T{}) {
-            if constexpr (std::is_same_v<Op, K::Add>) {
+        bool IsNanValue(float value) {
+            return value != value;
+        }
+
+        /// `Lerp(Color)` of the engine for a finite @p t; the engine's cast of a NaN channel is undefined, so a NaN or infinite @p t is spelled out here with the channel 0 for a NaN
+        Color ReferenceColorLerp(const Color& from, const Color& to, float t) {
+            if (std::isfinite(t)) {
+                return Lerp(from, to, t);
+            }
+            const auto channel = [t](unsigned char a, unsigned char b) {
+                const float value = std::round(std::lerp(static_cast<float>(a), static_cast<float>(b), t));
+                return IsNanValue(value) ? static_cast<unsigned char>(0) : static_cast<unsigned char>(std::clamp(value, 0.0f, 255.0f));
+            };
+            return {channel(from.r, to.r), channel(from.g, to.g), channel(from.b, to.b), channel(from.a, to.a)};
+        }
+
+        /// The operations of the math types and the rest that are not numbers, through the engine's own operators and functions; `IVec2` through 64-bit words
+        template <typename Op, typename T, typename W>
+        auto ReferenceOfObjects(T a, T b, W c) {
+            if constexpr (std::is_same_v<Op, K::Eq>) {
+                return ReferenceEqual(a, b);
+            } else if constexpr (std::is_same_v<Op, K::Ne>) {
+                return !ReferenceEqual(a, b);
+            } else if constexpr (std::is_same_v<T, IVec2>) {
+                if constexpr (std::is_same_v<Op, K::Add>) {
+                    return IVec2{WrapTo<int32_t>(Word(a.x) + Word(b.x)), WrapTo<int32_t>(Word(a.y) + Word(b.y))};
+                } else if constexpr (std::is_same_v<Op, K::Sub>) {
+                    return IVec2{WrapTo<int32_t>(Word(a.x) - Word(b.x)), WrapTo<int32_t>(Word(a.y) - Word(b.y))};
+                } else {
+                    static_assert(std::is_same_v<Op, K::Neg>, "a row of IVec2 without a reference");
+                    return IVec2{WrapTo<int32_t>(Word(int32_t{0}) - Word(a.x)), WrapTo<int32_t>(Word(int32_t{0}) - Word(a.y))};
+                }
+            } else if constexpr (std::is_same_v<Op, K::Add>) {
+                return a + b;
+            } else if constexpr (std::is_same_v<Op, K::Sub>) {
+                return a - b;
+            } else if constexpr (std::is_same_v<Op, K::Mul>) {
+                return a * b;
+            } else if constexpr (std::is_same_v<Op, K::Neg>) {
+                return -a;
+            } else if constexpr (std::is_same_v<Op, K::Dot>) {
+                return Dot(a, b);
+            } else if constexpr (std::is_same_v<Op, K::Length>) {
+                return a.Length();
+            } else if constexpr (std::is_same_v<Op, K::Normalize>) {
+                return a.Normalized();
+            } else {
+                static_assert(std::is_same_v<Op, K::Lerp>, "a row without a reference");
+                if constexpr (std::is_same_v<T, Quat>) {
+                    return Slerp(a, b, c);
+                } else if constexpr (std::is_same_v<T, Color>) {
+                    return ReferenceColorLerp(a, b, c);
+                } else {
+                    return Lerp(a, b, c);
+                }
+            }
+        }
+
+        /// The plain C++ meaning of every operation, written another way than the kernel: integers through 64-bit words, the rules of the stage plan spelled out; @p c is the third operand, the weight
+        /// of a `Lerp`
+        template <typename Op, typename T, typename W = T>
+        auto Reference(T a, T b = T{}, W c = W{}) {
+            if constexpr (!std::is_arithmetic_v<T>) {
+                return ReferenceOfObjects<Op, T, W>(a, b, c);
+            } else if constexpr (std::is_same_v<Op, K::Add>) {
                 if constexpr (std::floating_point<T>) {
                     return a + b;
                 } else {
@@ -334,12 +415,15 @@ namespace BECore::Tests {
             }
         }
 
+        /// The most operands a hand-assembled instruction loads: `Pack` takes four, in consecutive registers
+        constexpr size_t kMaxOperandRegisters = 4;
+
         /// Runs one instruction over constants: the operands are loaded into the first registers, the result is read from the next one
         template <typename R, typename... Args>
         R RunOpcode(Opcode op, Args... args) {
             ProgramBuilder builder;
-            static_assert(sizeof...(Args) <= 3);
-            Array<uint8_t, 3> registers{};
+            static_assert(sizeof...(Args) <= kMaxOperandRegisters);
+            Array<uint8_t, kMaxOperandRegisters> registers{};
             size_t index = 0;
             const auto load = [&](auto value) {
                 registers[index] = builder.AcquireRegister().value();
@@ -377,7 +461,7 @@ namespace BECore::Tests {
         template <typename Op, typename T>
         void CheckRow(Opcode op) {
             ++g_rowsChecked;
-            using Result = std::conditional_t<Op::kShape == K::OpShape::Compare, bool, T>;
+            using Result = K::ResultOf<Op, T>;
             const String name(EnumUtils<Opcode>::ToString(op));
             if constexpr (Op::kShape == K::OpShape::Slot) {
                 return;  // SlotLoadsReadEveryType
@@ -404,6 +488,17 @@ namespace BECore::Tests {
                         }
                     }
                 }
+            } else if constexpr (Op::kShape == K::OpShape::Blend) {
+                using Weight = typename Op::template Weight<T>;
+                for (const T a : Edges<T>()) {
+                    for (const T b : Edges<T>()) {
+                        for (const Weight t : Edges<Weight>()) {
+                            const T got = RunOpcode<T>(op, a, b, t);
+                            EXPECT_TRUE(Same<T>(got, (Reference<Op, T, Weight>(a, b, t))))
+                                << name << "(" << Show(a) << ", " << Show(b) << ", " << Show(t) << ") gave " << Show(got) << ", the reference " << Show((Reference<Op, T, Weight>(a, b, t)));
+                        }
+                    }
+                }
             } else {
                 for (const bool condition : Edges<bool>()) {
                     for (const T a : Edges<T>()) {
@@ -412,6 +507,36 @@ namespace BECore::Tests {
                             EXPECT_TRUE(Same<T>(got, condition ? a : b)) << name << " of " << condition << " gave " << Show(got);
                         }
                     }
+                }
+            }
+        }
+
+        /// The plain C++ meaning of a mixed pair; `IVec2` through 64-bit words
+        template <typename Op, typename L, typename R>
+        auto ReferenceMixed(L a, R b) {
+            if constexpr (std::is_same_v<Op, K::Div>) {
+                return a / b;
+            } else if constexpr (std::is_same_v<L, Quat>) {
+                return a.Rotate(b);
+            } else if constexpr (std::is_same_v<L, IVec2>) {
+                return IVec2{WrapTo<int32_t>(Word(a.x) * Word(b)), WrapTo<int32_t>(Word(a.y) * Word(b))};
+            } else if constexpr (std::is_same_v<R, IVec2>) {
+                return IVec2{WrapTo<int32_t>(Word(a) * Word(b.x)), WrapTo<int32_t>(Word(a) * Word(b.y))};
+            } else {
+                return a * b;
+            }
+        }
+
+        template <typename Op, typename L, typename R>
+        void CheckMixedRow(Opcode op) {
+            ++g_rowsChecked;
+            using Result = K::MixedResultOf<Op, L, R>;
+            const String name(EnumUtils<Opcode>::ToString(op));
+            for (const L a : Edges<L>()) {
+                for (const R b : Edges<R>()) {
+                    const Result got = RunOpcode<Result>(op, a, b);
+                    const Result expected = ReferenceMixed<Op, L, R>(a, b);
+                    EXPECT_TRUE(Same<Result>(got, expected)) << name << "(" << Show(a) << ", " << Show(b) << ") gave " << Show(got) << ", the reference " << Show(expected);
                 }
             }
         }
@@ -482,11 +607,125 @@ namespace BECore::Tests {
 #define BE_CHECK_ROW(Op, Type, Cpp) CheckRow<Kernel::Op, Cpp>(Opcode::Op##Type);
         BE_PROGRAM_ROWS(BE_CHECK_ROW)
 #undef BE_CHECK_ROW
+#define BE_CHECK_MIXED(Op, LName, LCpp, RName, RCpp) CheckMixedRow<Kernel::Op, LCpp, RCpp>(Opcode::Op##LName##RName);
+        BE_PROGRAM_MIXED_ROWS(BE_CHECK_MIXED)
+#undef BE_CHECK_MIXED
 #define BE_CHECK_CONVERSION(Src, SrcCpp, Dst, DstCpp) CheckConversion<SrcCpp, DstCpp>(Opcode::Src##To##Dst);
         BE_PROGRAM_CONVERSIONS(BE_CHECK_CONVERSION)
 #undef BE_CHECK_CONVERSION
         // Every opcode but the three untyped ones is a row or a conversion: a row that the matrix skipped would leave the count short
         EXPECT_EQ(static_cast<size_t>(g_rowsChecked) + 3, EnumUtils<Opcode>::Count());
+    }
+
+    TEST(ProgramInterpreterTest, TheVectorsOfIntegersWrapLikeIntegers) {
+        const IVec2 high{kInt32Max, kInt32Min};
+        EXPECT_EQ(Eval<IVec2>(Opcode::AddIVec2, high, IVec2{1, -1}), (IVec2{kInt32Min, kInt32Max}));
+        EXPECT_EQ(Eval<IVec2>(Opcode::SubIVec2, IVec2{kInt32Min, 0}, IVec2{1, 1}), (IVec2{kInt32Max, -1}));
+        EXPECT_EQ(Eval<IVec2>(Opcode::NegIVec2, IVec2{kInt32Min, 5}), (IVec2{kInt32Min, -5}));
+        EXPECT_EQ(Eval<IVec2>(Opcode::MulIVec2Int32, IVec2{65536, kInt32Min}, 65536), (IVec2{0, 0}));
+        EXPECT_EQ(Eval<IVec2>(Opcode::MulIVec2Int32, IVec2{3, -4}, -2), (IVec2{-6, 8}));
+        EXPECT_EQ(Eval<IVec2>(Opcode::MulInt32IVec2, kInt32Max, IVec2{2, 3}), (IVec2{-2, kInt32Max - 2}));
+    }
+
+    TEST(ProgramInterpreterTest, AQuarterTurnAboutZRotatesXToY) {
+        const Quat quarter = Quat::FromAxisAngle(Vec3{0.0f, 0.0f, 1.0f}, std::numbers::pi_v<float> / 2.0f);
+        const Vec3 rotated = Eval<Vec3>(Opcode::MulQuatVec3, quarter, Vec3{1.0f, 0.0f, 0.0f});
+        EXPECT_NEAR(rotated.x, 0.0f, 1e-6f);
+        EXPECT_NEAR(rotated.y, 1.0f, 1e-6f);
+        EXPECT_NEAR(rotated.z, 0.0f, 1e-6f);
+        const Vec3 same = quarter.Rotate(Vec3{1.0f, 0.0f, 0.0f});
+        EXPECT_TRUE(Same<Vec3>(rotated, same)) << "Quat * Vec3 is Quat::Rotate";
+        EXPECT_TRUE(Same<Vec3>(Eval<Vec3>(Opcode::MulQuatVec3, Quat{}, Vec3{4.0f, 5.0f, 6.0f}), (Vec3{4.0f, 5.0f, 6.0f}))) << "the identity turns nothing";
+        // A non-unit quaternion is no rotation, but it is still a value and never a trap
+        EXPECT_TRUE(Same<Vec3>(Eval<Vec3>(Opcode::MulQuatVec3, Quat{}, Vec3{kNaN, kInf, 1.0f}), (Quat{}.Rotate(Vec3{kNaN, kInf, 1.0f}))));
+        EXPECT_TRUE(Same<Vec3>(Eval<Vec3>(Opcode::MulQuatVec3, Quat{0.0f, 0.0f, 0.0f, 0.0f}, Vec3{1.0f, 2.0f, 3.0f}), (Vec3{1.0f, 2.0f, 3.0f}))) << "a zero quaternion rotates by nothing";
+    }
+
+    TEST(ProgramInterpreterTest, QuatProductIsHamiltonAndAppliesTheRightOperandFirst) {
+        const Quat quarterZ = Quat::FromAxisAngle(Vec3{0.0f, 0.0f, 1.0f}, std::numbers::pi_v<float> / 2.0f);
+        const Quat quarterX = Quat::FromAxisAngle(Vec3{1.0f, 0.0f, 0.0f}, std::numbers::pi_v<float> / 2.0f);
+        const Quat product = Eval<Quat>(Opcode::MulQuat, quarterZ, quarterX);
+        EXPECT_TRUE(Same<Quat>(product, quarterZ * quarterX));
+        const Vec3 viaProduct = product.Rotate(Vec3{0.0f, 1.0f, 0.0f});
+        const Vec3 oneByOne = quarterZ.Rotate(quarterX.Rotate(Vec3{0.0f, 1.0f, 0.0f}));
+        EXPECT_NEAR(viaProduct.x, oneByOne.x, 1e-6f);
+        EXPECT_NEAR(viaProduct.y, oneByOne.y, 1e-6f);
+        EXPECT_NEAR(viaProduct.z, oneByOne.z, 1e-6f);
+    }
+
+    TEST(ProgramInterpreterTest, LengthDotAndNormalizeOfVectors) {
+        EXPECT_EQ(Eval<float>(Opcode::LengthVec3, Vec3{2.0f, 3.0f, 6.0f}), 7.0f);
+        EXPECT_EQ(Eval<float>(Opcode::LengthVec4, Vec4{1.0f, 2.0f, 2.0f, 4.0f}), 5.0f);
+        EXPECT_EQ(Eval<float>(Opcode::DotVec3, Vec3{1.0f, 2.0f, 3.0f}, Vec3{4.0f, -5.0f, 6.0f}), 12.0f);
+        EXPECT_EQ(Eval<float>(Opcode::DotVec4, Vec4{1.0f, 0.0f, 0.0f, 1.0f}, Vec4{2.0f, 7.0f, 7.0f, 3.0f}), 5.0f);
+        EXPECT_EQ(Eval<float>(Opcode::DotQuat, Quat{}, Quat{0.0f, 0.0f, 0.0f, -1.0f}), -1.0f);
+        EXPECT_TRUE(std::isnan(Eval<float>(Opcode::LengthVec3, Vec3{kNaN, 0.0f, 0.0f})));
+        EXPECT_TRUE(std::isinf(Eval<float>(Opcode::LengthVec3, Vec3{kInf, 0.0f, 0.0f})));
+        EXPECT_TRUE(Same<Vec3>(Eval<Vec3>(Opcode::NormalizeVec3, Vec3{0.0f, 3.0f, 4.0f}), (Vec3{0.0f, 0.6f, 0.8f})));
+        EXPECT_TRUE(Same<Vec3>(Eval<Vec3>(Opcode::NormalizeVec3, Vec3{}), Vec3{})) << "a zero vector normalizes to zero";
+        EXPECT_TRUE(Same<Vec4>(Eval<Vec4>(Opcode::NormalizeVec4, Vec4{}), Vec4{}));
+        EXPECT_TRUE(Same<Quat>(Eval<Quat>(Opcode::NormalizeQuat, Quat{0.0f, 0.0f, 0.0f, 0.0f}), Quat{})) << "the engine's Normalized of a zero quaternion is the identity";
+        EXPECT_TRUE(Same<Quat>(Eval<Quat>(Opcode::NormalizeQuat, Quat{0.0f, 0.0f, 0.0f, 2.0f}), Quat{}));
+    }
+
+    TEST(ProgramInterpreterTest, LerpOfTheVectorsIsPerComponentAndQuatTakesTheShortestArc) {
+        EXPECT_TRUE(Same<Vec3>(Eval<Vec3>(Opcode::LerpVec3, Vec3{0.0f, 2.0f, -4.0f}, Vec3{4.0f, 2.0f, 4.0f}, 0.25f), (Vec3{1.0f, 2.0f, -2.0f})));
+        EXPECT_TRUE(Same<Vec2>(Eval<Vec2>(Opcode::LerpVec2, Vec2{0.0f, 0.0f}, Vec2{2.0f, 4.0f}, 2.0f), (Vec2{4.0f, 8.0f}))) << "t is not clamped";
+        EXPECT_TRUE(Same<Vec4>(Eval<Vec4>(Opcode::LerpVec4, Vec4{1.0f, 2.0f, 3.0f, 4.0f}, Vec4{5.0f, 6.0f, 7.0f, 8.0f}, 0.0f), (Vec4{1.0f, 2.0f, 3.0f, 4.0f})));
+        const Quat identity;
+        const Quat quarter = Quat::FromAxisAngle(Vec3{0.0f, 0.0f, 1.0f}, std::numbers::pi_v<float> / 2.0f);
+        EXPECT_TRUE(Same<Quat>(Eval<Quat>(Opcode::LerpQuat, identity, quarter, 0.5f), Slerp(identity, quarter, 0.5f)));
+        const Quat eighth = Eval<Quat>(Opcode::LerpQuat, identity, quarter, 0.5f);
+        EXPECT_NEAR(eighth.z, std::sin(std::numbers::pi_v<float> / 8.0f), 1e-6f) << "half way is half the angle: a spherical, not a linear, interpolation";
+        const Quat negated{-quarter.x, -quarter.y, -quarter.z, -quarter.w};
+        EXPECT_TRUE(Same<Quat>(Eval<Quat>(Opcode::LerpQuat, identity, negated, 0.5f), Slerp(identity, negated, 0.5f))) << "q and -q are one rotation: the short way round";
+    }
+
+    TEST(ProgramInterpreterTest, LerpOfAColorRoundsClampsAndNeverCastsANan) {
+        const Color from{0, 100, 255, 10};
+        const Color to{255, 200, 0, 11};
+        EXPECT_TRUE(Same<Color>(Eval<Color>(Opcode::LerpColor, from, to, 0.0f), from));
+        EXPECT_TRUE(Same<Color>(Eval<Color>(Opcode::LerpColor, from, to, 1.0f), to));
+        EXPECT_TRUE(Same<Color>(Eval<Color>(Opcode::LerpColor, from, to, 0.5f), Lerp(from, to, 0.5f)));
+        EXPECT_TRUE(Same<Color>(Eval<Color>(Opcode::LerpColor, from, to, 4.0f), (Color{255, 255, 0, 14}))) << "an overshooting t clamps to the byte";
+        EXPECT_TRUE(Same<Color>(Eval<Color>(Opcode::LerpColor, from, to, -4.0f), (Color{0, 0, 255, 6})));
+        EXPECT_TRUE(Same<Color>(Eval<Color>(Opcode::LerpColor, Color{}, Color{}, kInf), Color{})) << "0 * infinity is NaN, which is the channel 0 and not a cast of a NaN";
+        EXPECT_TRUE(Same<Color>(Eval<Color>(Opcode::LerpColor, Color{}, Color{}, kNaN), Color{}));
+    }
+
+    TEST(ProgramInterpreterTest, AnOperationATypeLacksHasNoRowAndMixedPairsAreListed) {
+        EXPECT_EQ(OpcodeOf(ProgramOperation::Add, ProgramType::Quat), Opcode::Invalid);
+        EXPECT_EQ(OpcodeOf(ProgramOperation::Add, ProgramType::Color), Opcode::Invalid);
+        EXPECT_EQ(OpcodeOf(ProgramOperation::Sub, ProgramType::Quat), Opcode::Invalid);
+        EXPECT_EQ(OpcodeOf(ProgramOperation::Lt, ProgramType::Vec3), Opcode::Invalid);
+        EXPECT_EQ(OpcodeOf(ProgramOperation::Lerp, ProgramType::IVec2), Opcode::Invalid);
+        EXPECT_EQ(OpcodeOf(ProgramOperation::Lerp, ProgramType::Int32), Opcode::Invalid);
+        EXPECT_EQ(OpcodeOf(ProgramOperation::Neg, ProgramType::Vec2), Opcode::Invalid) << "the engine's Vec2 has no unary minus";
+        EXPECT_EQ(OpcodeOf(ProgramOperation::Mul, ProgramType::Vec3), Opcode::Invalid) << "a vector times a vector is neither a dot nor a cross";
+        EXPECT_EQ(OpcodeOf(ProgramOperation::Div, ProgramType::Vec3), Opcode::Invalid);
+        EXPECT_EQ(OpcodeOf(ProgramOperation::Mod, ProgramType::IVec2), Opcode::Invalid);
+        EXPECT_EQ(OpcodeOf(ProgramOperation::Abs, ProgramType::Vec3), Opcode::Invalid);
+        EXPECT_EQ(OpcodeOf(ProgramOperation::Dot, ProgramType::Vec2), Opcode::Invalid) << "the engine has no Dot of Vec2";
+        EXPECT_EQ(OpcodeOf(ProgramOperation::Dot, ProgramType::Float), Opcode::Invalid);
+        EXPECT_EQ(OpcodeOf(ProgramOperation::Length, ProgramType::Quat), Opcode::Invalid);
+        EXPECT_EQ(OpcodeOf(ProgramOperation::Normalize, ProgramType::Color), Opcode::Invalid);
+        EXPECT_EQ(OpcodeOf(ProgramOperation::Mul, ProgramType::Quat), Opcode::MulQuat);
+        EXPECT_EQ(OpcodeOf(ProgramOperation::Lerp, ProgramType::Quat), Opcode::LerpQuat);
+        EXPECT_EQ(OpcodeOf(ProgramOperation::Neg, ProgramType::IVec2), Opcode::NegIVec2);
+
+        EXPECT_EQ(MixedOpcodeOf(ProgramOperation::Mul, ProgramType::Vec3, ProgramType::Float), Opcode::MulVec3Float);
+        EXPECT_EQ(MixedOpcodeOf(ProgramOperation::Mul, ProgramType::Float, ProgramType::Vec3), Opcode::MulFloatVec3);
+        EXPECT_EQ(MixedOpcodeOf(ProgramOperation::Div, ProgramType::Vec3, ProgramType::Float), Opcode::DivVec3Float);
+        EXPECT_EQ(MixedOpcodeOf(ProgramOperation::Mul, ProgramType::IVec2, ProgramType::Int32), Opcode::MulIVec2Int32);
+        EXPECT_EQ(MixedOpcodeOf(ProgramOperation::Mul, ProgramType::Int32, ProgramType::IVec2), Opcode::MulInt32IVec2);
+        EXPECT_EQ(MixedOpcodeOf(ProgramOperation::Mul, ProgramType::Quat, ProgramType::Vec3), Opcode::MulQuatVec3);
+        EXPECT_EQ(MixedOpcodeOf(ProgramOperation::Mul, ProgramType::Vec3, ProgramType::Quat), Opcode::Invalid) << "the rotation is on the left";
+        EXPECT_EQ(MixedOpcodeOf(ProgramOperation::Mul, ProgramType::Vec3, ProgramType::Int32), Opcode::Invalid) << "a vector takes exactly its scalar";
+        EXPECT_EQ(MixedOpcodeOf(ProgramOperation::Mul, ProgramType::IVec2, ProgramType::Float), Opcode::Invalid);
+        EXPECT_EQ(MixedOpcodeOf(ProgramOperation::Div, ProgramType::IVec2, ProgramType::Int32), Opcode::Invalid);
+        EXPECT_EQ(MixedOpcodeOf(ProgramOperation::Div, ProgramType::Float, ProgramType::Vec3), Opcode::Invalid);
+        EXPECT_EQ(MixedOpcodeOf(ProgramOperation::Mul, ProgramType::Float, ProgramType::Double), Opcode::Invalid) << "two numbers never mix";
+        EXPECT_EQ(MixedOpcodeOf(ProgramOperation::Add, ProgramType::Vec3, ProgramType::Float), Opcode::Invalid);
     }
 
     TEST(ProgramInterpreterTest, IntegerArithmeticWraps) {
