@@ -2,6 +2,7 @@
 #include <BECore/Input/UIInput.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Renderer/RendererManager.h>
+#include <BECore/Scene/Components/ClickableComponent.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Time/Time.h>
@@ -61,6 +62,19 @@ namespace BECore::Tests {
       <component type="RmlUiDocumentComponent" space="Screen" scaleMode="ConstantPixelSize" extendToOutput="true"/>
     </components></node>
   </nodes></scene>
+  <scene type="Scene" name="Stacked"><nodes>
+    <node name="Under" layer="5"><components>
+      <component type="TransformComponent" x="0" y="0" width="300" height="300"/>
+      <component type="ClickableComponent" actionName="ActUnder"/>
+    </components></node>
+    <node name="Doc" layer="10"><components>
+      <component type="RmlUiDocumentComponent" space="Screen" scaleMode="ConstantPixelSize"/>
+    </components></node>
+    <node name="Over" layer="15"><components>
+      <component type="TransformComponent" x="500" y="300" width="200" height="200"/>
+      <component type="ClickableComponent" actionName="ActOver"/>
+    </components></node>
+  </nodes></scene>
   <scene type="Scene" name="Scaled"><nodes>
     <node name="Doc"><components>
       <component type="RmlUiDocumentComponent" space="Screen" scaleMode="ScaleWithScreen" referenceWidth="1280" referenceHeight="720" match="0.5"/>
@@ -116,6 +130,25 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
                 ++gameDowns;
             }
         };
+
+        /// A handler above the document that takes the motion over a rect when `take` is set
+        class Taker : public IUIInputHandler {
+        public:
+            [[nodiscard]] bool ContainsPoint(float x, float y) const override {
+                return x >= area.x && x <= area.x + area.w && y >= area.y && y <= area.y + area.h;
+            }
+            bool OnMouseMotion(const SDL_MouseMotionEvent&) override {
+                return take;
+            }
+
+            Rect area;
+            bool take = false;
+        };
+
+        constexpr const char* kStackedMarkup = R"(<button id="play" data-action="GamePlay">Play</button><button id="far" data-action="GameFar">Far</button>)";
+        constexpr const char* kStackedStyle = "#play { position: absolute; left: 100dp; top: 100dp; width: 120dp; height: 40dp; background-color: #112233; pointer-events: auto; }\n"
+                                              "#play:hover { background-color: #aabbcc; }\n"
+                                              "#far { position: absolute; left: 550dp; top: 350dp; width: 100dp; height: 40dp; background-color: #285a3c; pointer-events: auto; }";
 
     }  // namespace
 
@@ -613,6 +646,94 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
         EXPECT_EQ(recorder.gameDowns, 0);
     }
 
+    TEST_F(RmlUiHostTest, ADocumentAboveAClickableShieldsItAndTheClickableTakesTheRest) {
+        auto doc = Doc("Stacked");
+        ASSERT_TRUE(doc->SetMarkup(Document(kStackedMarkup, kStackedStyle)));
+        Draw("Stacked");
+        Recorder recorder;
+        UIInput& input = CoreManager::GetUIInput();
+
+        EXPECT_TRUE(input.DispatchMouseButtonDown(Button(150.0f, 120.0f, true)));
+        input.DispatchMouseButtonUp(Button(150.0f, 120.0f, false));
+        ASSERT_EQ(recorder.actions.size(), 1u);
+        EXPECT_EQ(recorder.actions[0], "GamePlay"_intern) << "the button over the clickable got the click";
+
+        recorder.actions.clear();
+        EXPECT_TRUE(input.DispatchMouseButtonDown(Button(20.0f, 20.0f, true)));
+        input.DispatchMouseButtonUp(Button(20.0f, 20.0f, false));
+        ASSERT_EQ(recorder.actions.size(), 1u);
+        EXPECT_EQ(recorder.actions[0], "ActUnder"_intern);
+        EXPECT_EQ(recorder.gameDowns, 0);
+    }
+
+    TEST_F(RmlUiHostTest, ADocumentBelowAClickableGetsNoClickWhereTheClickableIs) {
+        auto doc = Doc("Stacked");
+        ASSERT_TRUE(doc->SetMarkup(Document(kStackedMarkup, kStackedStyle)));
+        Draw("Stacked");
+        Recorder recorder;
+        UIInput& input = CoreManager::GetUIInput();
+
+        EXPECT_TRUE(input.DispatchMouseButtonDown(Button(580.0f, 370.0f, true)));
+        input.DispatchMouseButtonUp(Button(580.0f, 370.0f, false));
+
+        ASSERT_EQ(recorder.actions.size(), 1u);
+        EXPECT_EQ(recorder.actions[0], "ActOver"_intern) << "the button under the clickable got the click";
+    }
+
+    TEST_F(RmlUiHostTest, TheInputOrderOfADocumentIsBetweenThePlacesOfTheTargetsAroundIt) {
+        auto doc = Doc("Stacked");
+        Draw("Stacked");
+        Scene& scene = GetScene("Stacked");
+        const auto& nodes = scene.GetRootNode().GetChildren();
+        ASSERT_EQ(nodes.size(), 3u);
+
+        EXPECT_LT(scene.GetInputOrder(*nodes[0]->GetComponent<ClickableComponent>()), doc->GetInputOrder());
+        EXPECT_LT(doc->GetInputOrder(), scene.GetInputOrder(*nodes[2]->GetComponent<ClickableComponent>()));
+    }
+
+    TEST_F(RmlUiHostTest, AHandlerAboveTheDocumentTakingThePointerEndsTheHover) {
+        auto doc = Doc("Stacked");
+        ASSERT_TRUE(doc->SetMarkup(Document(kStackedMarkup, kStackedStyle)));
+        Draw("Stacked");
+        const auto colorOfButton = [this]() {
+            for (const DrawCall& call : _renderer->calls) {
+                if (call.kind == DrawKind::Geometry && call.texture == nullptr) {
+                    return call.color;
+                }
+            }
+            return Color{};
+        };
+        Taker taker;
+        taker.area = Rect{100.0f, 100.0f, 120.0f, 40.0f};
+        UIInput& input = CoreManager::GetUIInput();
+        input.Register(taker, doc->GetInputOrder() + 1);
+
+        input.DispatchMouseMotion(Motion(150.0f, 120.0f));
+        Draw("Stacked");
+        ASSERT_EQ(colorOfButton().r, 0xAA);
+
+        taker.take = true;
+        input.DispatchMouseMotion(Motion(150.0f, 120.0f));
+        Draw("Stacked");
+
+        EXPECT_EQ(colorOfButton().r, 0x11) << "the document got the leave";
+        input.Unregister(taker);
+    }
+
+    TEST_F(RmlUiHostTest, ALeaveKeepsThePressThatTheDocumentTook) {
+        auto doc = Doc("Stacked");
+        ASSERT_TRUE(doc->SetMarkup(Document(kStackedMarkup, kStackedStyle)));
+        Draw("Stacked");
+        Recorder recorder;
+        UIInput& input = CoreManager::GetUIInput();
+        ASSERT_TRUE(input.DispatchMouseButtonDown(Button(150.0f, 120.0f, true)));
+
+        doc->OnPointerLeave(0);
+
+        EXPECT_TRUE(input.DispatchMouseButtonUp(Button(700.0f, 550.0f, false))) << "the release of a press the document took is still its own";
+        EXPECT_EQ(recorder.gameDowns, 0);
+    }
+
     // ---- UIVars --------------------------------------------------------------------------------------------------------------
 
     TEST_F(RmlUiHostTest, ALabelFollowsTheVariablesOfTheGame) {
@@ -871,7 +992,7 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
         {
             auto doc = Doc("Main");
             ASSERT_TRUE(doc->SetMarkup(Document("<p>x</p>")));
-            EXPECT_EQ(RmlUiRuntime::GetInstance().GetHolderCount(), 7) << "each of the seven components of the scenes holds the runtime";
+            EXPECT_EQ(RmlUiRuntime::GetInstance().GetHolderCount(), 8) << "each of the eight components of the scenes holds the runtime";
         }
         _manager.Reset();
 
