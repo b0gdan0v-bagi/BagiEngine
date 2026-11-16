@@ -379,6 +379,20 @@ namespace BECore::Fuzz {
             return params;
         }
 
+        constexpr int kNestedWithinLimit = 30;
+        constexpr int kBeyondRequestDepth = 70;
+
+        /// A `ProbeNode` holding @p depth nodes in a chain, each one a level of object and a level of array
+        Json NodeChain(int depth) {
+            Json node = Params({{"id", 1}});
+            for (int level = 0; level < depth; ++level) {
+                Json parent = Params({{"id", level}});
+                parent["children"] = Json::array({std::move(node)});
+                node = std::move(parent);
+            }
+            return node;
+        }
+
         void AddControlSeeds(Vector<FuzzSeedFile>& seeds) {
             const auto add = [&seeds](const char* name, FuzzBytes bytes) { seeds.push_back({kControlRequestFolder, name, std::move(bytes)}); };
             add("ping.bin", Request(1, "ping"));
@@ -401,6 +415,23 @@ namespace BECore::Fuzz {
             add("frame-stats.bin", Request(17, "frame_stats", Params({{"frames", 10}})));
             add("profiler-dump.bin", Request(18, "profiler_dump", Params({{"path", "trace.json"}})));
             add("zone-allocs.bin", Request(19, "zone_allocs", Params({{"top", 5}, {"reset", false}})));
+            add("list-types.bin", Request(22, "list_types", Params({{"base", "IWidget"}, {"recursive", false}, {"creatable", true}})));
+            add("list-types-bad-flag.bin", Request(23, "list_types", Params({{"base", 5}, {"recursive", "yes"}})));
+            add("describe-type.bin", Request(24, "describe_type", Params({{"name", "ProbeState"}})));
+            add("describe-type-unknown.bin", Request(25, "describe_type", Params({{"name", "NoSuchType"}})));
+            add("schema.bin", Request(26, "schema"));
+            add("get-property.bin", Request(27, "get_property", Params({{"root", "state"}, {"path", "leaves[0].label"}})));
+            add("get-property-bad-path.bin", Request(28, "get_property", Params({{"root", "state"}, {"path", "tree.children[99999999999999999999]..x"}})));
+            add("set-property.bin", Request(29, "set_property", Params({{"root", "state"}, {"path", "i32"}, {"value", 7}})));
+            add("set-property-bad-value.bin", Request(30, "set_property", Params({{"root", "state"}, {"path", "i8"}, {"value", Json::array({1, 2})}})));
+            add("set-property-huge.bin", Request(31, "set_property", Params({{"root", "state"}, {"path", "u64"}, {"value", std::numeric_limits<uint64_t>::max()}})));
+            add("set-property-interning.bin", Request(32, "set_property", Params({{"root", "state"}, {"path", "name"}, {"value", "fuzz_seed_name"}})));
+            add("call-method.bin", Request(33, "call_method", Params({{"root", "probe"}, {"method", "Total"}, {"arguments", Params({{"numbers", Json::array({1, 2, 3})}})}})));
+            add("call-method-bad-argument.bin", Request(34, "call_method", Params({{"root", "probe"}, {"method", "Echo"}, {"arguments", Params({{"text", 5}, {"extra", true}})}})));
+            add("call-method-deep.bin", Request(35, "call_method", Params({{"root", "probe"}, {"method", "Leaves"}, {"arguments", Params({{"node", NodeChain(kBeyondRequestDepth)}})}})));
+            add("call-method-nested.bin", Request(38, "call_method", Params({{"root", "probe"}, {"method", "Leaves"}, {"arguments", Params({{"node", NodeChain(kNestedWithinLimit)}})}})));
+            add("call-method-unknown-root.bin", Request(36, "call_method", Params({{"root", "nowhere"}, {"method", "Touch"}})));
+            add("call-method-game-root.bin", Request(37, "call_method", Params({{"root", "game"}, {"method", "Anything"}})));
             add("unknown-method.bin", Request(20, "no_such_method", Params({{"x", Json::object()}})));
             add("params-not-an-object.bin", Request(21, "ping", Json::array({1, 2})));
             add("id-is-a-float.bin", Request(1.5, "ping"));

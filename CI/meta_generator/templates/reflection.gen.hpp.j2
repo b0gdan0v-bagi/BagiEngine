@@ -12,6 +12,8 @@
 #include <BECore/Reflection/MethodInfo.h>
 #include <BECore/Reflection/DataAccessor.h>
 #include <BECore/Reflection/PropertyVisitorDispatch.h>
+#include <BECore/Reflection/TypeInfo.h>
+#include <BECore/Reflection/TypeRegistry.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <BECore/Utils/StringUtils.h>
 #include <EASTL/string_view.h>
@@ -91,6 +93,9 @@ struct ReflectionTraits<{{ cls.qualified_name }}> {
     static constexpr bool reflected = true;
     static constexpr eastl::string_view name = "{{ cls.name }}";
     static constexpr AssetPurpose purpose = AssetPurpose::{{ cls.purpose }};
+{% if cls.parent_has_be_class %}
+    using Parent = {{ cls.parent_full_qualified_name }};
+{% endif %}
     
     static constexpr auto fields = std::make_tuple(
 {% for field in cls.fields %}
@@ -104,9 +109,9 @@ struct ReflectionTraits<{{ cls.qualified_name }}> {
     static constexpr auto methods = std::make_tuple(
 {% for method in cls.methods %}
 {% if method.is_const %}
-        ConstMethodInfo{ eastl::string_view{"{{ method.name }}"}, &{{ cls.qualified_name }}::{{ method.name }} }{{ "," if not loop.last else "" }}
+        ConstMethodInfo{ eastl::string_view{"{{ method.name }}"}, &{{ cls.qualified_name }}::{{ method.name }}{% if method.params %}, eastl::string_view{"{{ method.params | map(attribute='name') | join(',') }}"}{% endif %} }{{ "," if not loop.last else "" }}
 {% else %}
-        MethodInfo{ eastl::string_view{"{{ method.name }}"}, &{{ cls.qualified_name }}::{{ method.name }} }{{ "," if not loop.last else "" }}
+        MethodInfo{ eastl::string_view{"{{ method.name }}"}, &{{ cls.qualified_name }}::{{ method.name }}{% if method.params %}, eastl::string_view{"{{ method.params | map(attribute='name') | join(',') }}"}{% endif %} }{{ "," if not loop.last else "" }}
 {% endif %}
 {% endfor %}
     );
@@ -187,6 +192,14 @@ void {{ cls.full_qualified_name }}::Deserialize(::BECore::IDeserializer& d) {
 {% endfor %}
 }
 {% endif %}
+
+// ============================================================================
+// Type registry: {{ cls.name }} -> TypeRegistry
+// ============================================================================
+namespace {
+const bool _regType_{{ cls.name }} = ::BECore::TypeRegistry::GetInstance().Register(
+    ::BECore::MakeTypeInfo<{{ cls.full_qualified_name }}>());
+}  // namespace
 
 {% else %}
 // ============================================================================
@@ -297,6 +310,16 @@ const bool _reg_{{ cls.name }} = [] {
 }();
 }  // namespace
 {% endif %}
+
+// ============================================================================
+// Type registry: {{ cls.name }} -> TypeRegistry
+// Static initializer like the factory registration; the base of the AbstractFactory (when there is one) gives the type
+// its creator, so a client can make an object by the name of its class.
+// ============================================================================
+namespace {
+const bool _regType_{{ cls.name }} = ::BECore::TypeRegistry::GetInstance().Register(
+    ::BECore::MakeTypeInfo<{{ cls.full_qualified_name }}, ::BECore::ReflectedParentOf<{{ cls.full_qualified_name }}>{% if cls.factory_base_fqn %}, {{ cls.factory_base_fqn }}{% endif %}>());
+}  // namespace
 
 {% endif %}
 {% endfor %}

@@ -11,12 +11,12 @@
 
 namespace BECore::Tests {
 
-    using ReflectionVariantTestData::Point;
+    using ReflectionVariantTestData::VariantPoint;
 
     namespace {
 
         /// One alternative of every kind: empty, scalars, a string, an object
-        using Choice = Variant<std::monostate, int32_t, float, String, Point>;
+        using Choice = Variant<std::monostate, int32_t, float, String, VariantPoint>;
         using ChoiceList = Vector<Choice>;
         using ChoiceTable = HashMap<String, Choice>;
         using ChoiceOrder = Map<int32_t, Choice>;
@@ -24,8 +24,8 @@ namespace BECore::Tests {
 
         constexpr size_t kChoiceCount = std::variant_size_v<Choice>;
 
-        Point MakePoint(int32_t x, int32_t y) {
-            Point point;
+        VariantPoint MakePoint(int32_t x, int32_t y) {
+            VariantPoint point;
             point.x = x;
             point.y = y;
             return point;
@@ -302,7 +302,7 @@ namespace BECore::Tests {
         Choice point{std::in_place_index<1>, 5};
         XmlLoad object("<root><State><choice index=\"4\"/></State></root>", point);
         EXPECT_FALSE(object.loaded);
-        EXPECT_EQ(point, (Choice{std::in_place_index<4>, Point{}}));
+        EXPECT_EQ(point, (Choice{std::in_place_index<4>, VariantPoint{}}));
     }
 
     TEST(ReflectionVariantTest, AStrictReadOfAMalformedIndexIsOneError) {

@@ -1,0 +1,40 @@
+<?xml version="1.0"?>
+<root nickname="Bob" title="Much too long" volume="0.5" level="3" mode="Hard" enabled="true" id="18446744073709551615">
+  <!-- every shape the serializers write -->
+  <origin x="1" y="2.5" />
+  <tags>
+    <item value="a" />
+    <item value="b" />
+  </tags>
+  <points>
+    <item x="0" y="0" />
+  </points>
+  <scores>
+    <item value="0" />
+    <item value="100" />
+  </scores>
+  <limits>
+    <entry key="width" value="640" />
+  </limits>
+  <byPoint>
+    <entry key="1" x="1" y="2" />
+  </byPoint>
+  <choice index="1">
+    <value x="3" y="4" />
+  </choice>
+  <span first="4" second="0.25" />
+  <widgets>
+    <widget type="Label" enabled="true" priority="2" text="Hello" size="12">
+      <style x="1" y="1" />
+    </widget>
+    <widget type="Button" text="Go" size="1.5" />
+  </widgets>
+  <tree name="top">
+    <children>
+      <leaf name="inner" />
+    </children>
+  </tree>
+  <extra anything="goes">
+    <whatever />
+  </extra>
+</root>

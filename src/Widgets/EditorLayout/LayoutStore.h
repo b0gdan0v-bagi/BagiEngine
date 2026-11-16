@@ -63,4 +63,46 @@ namespace BECore {
         std::filesystem::path _folder;
     };
 
+    /**
+     * @brief The names of a LayoutStore kept between frames, so a menu that is open reads the folder once, not on every draw.
+     *
+     * Names() scans the store only when the list is stale (at the start, or after Invalidate()). Whoever changes the layouts
+     * (save, delete) or opens a menu calls Invalidate(); a change made behind the cache's back shows at the next one.
+     */
+    class LayoutNameCache {
+    public:
+        /// The sorted names of @p store (LayoutStore::List()), scanned again only when stale. The reference holds until the next Names() call.
+        [[nodiscard]] const Vector<String>& Names(const LayoutStore& store);
+
+        /// Marks the list stale: the next Names() reads the folder
+        void Invalidate() {
+            _stale = true;
+        }
+
+    private:
+        Vector<String> _names;
+        bool _stale = true;
+    };
+
+    /**
+     * @brief Tells whether a menu that is drawn only while open has just opened.
+     *
+     * A menu is drawn open on consecutive frames; it is not drawn at all while a parent menu is closed, so a flag cleared in the
+     * "closed" branch can stay set. Opened() compares frame numbers instead: any gap since the last open draw means it was closed.
+     */
+    class MenuOpenTracker {
+    public:
+        /// Call on every frame the menu is drawn open, with the frame's number; true on the first such frame after a gap (or ever)
+        [[nodiscard]] bool Opened(int frame) {
+            const bool newlyOpened = !_seen || frame - _lastFrame != 1;
+            _seen = true;
+            _lastFrame = frame;
+            return newlyOpened;
+        }
+
+    private:
+        int _lastFrame = 0;
+        bool _seen = false;
+    };
+
 }  // namespace BECore

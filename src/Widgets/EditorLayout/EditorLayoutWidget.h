@@ -35,9 +35,9 @@ namespace BECore {
         /// Resumes a pause set from the editor (unless the manual clock holds it), so Game mode is never left frozen without a button
         ~EditorLayoutWidget() override;
 
-        BE_FUNCTION bool Initialize(IDeserializer& deserializer) override;
-        BE_FUNCTION void Update() override;
-        BE_FUNCTION void Draw() override;
+        bool Initialize(IDeserializer& deserializer) override;
+        void Update() override;
+        void Draw() override;
 
     private:
         void BuildDefaultLayout(ImGuiID dockspaceId, ImVec2 size);
@@ -47,6 +47,8 @@ namespace BECore {
         void OnViewportPreviewChanged(const ViewportPreviewChangedEvent& event);
         /// Keeps the viewport's input mode (Play or Edit) in the preferences and saves them
         void OnViewportInputModeChanged(const ViewportInputModeChangedEvent& event);
+        /// Appends the command to the saved Console history and saves the preferences
+        void OnConsoleCommandSubmitted(const ConsoleCommandSubmittedEvent& event);
         /// Runs before ImGui::NewFrame (RenderEvents::ImGuiNewFrameEvent): the only safe moment to load an ini
         void OnImGuiNewFrame();
 
@@ -76,6 +78,9 @@ namespace BECore {
 
         Optional<EditorSettings> _settings;
         Optional<LayoutStore> _layouts;  // none when the system gives no per-user folder
+        LayoutNameCache _layoutNames;    // stale when a Layouts menu opens and after a save or a delete
+        MenuOpenTracker _layoutsMenuOpen;
+        MenuOpenTracker _deleteLayoutMenuOpen;
 
         EditorPlayModel _playModel;
         MainToolbar _toolbar;

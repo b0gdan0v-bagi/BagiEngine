@@ -38,9 +38,9 @@ namespace BECore {
         ProfilerWidget() = default;
         ~ProfilerWidget() override;
 
-        BE_FUNCTION bool Initialize(IDeserializer& deserializer) override;
-        BE_FUNCTION void Update() override;
-        BE_FUNCTION void Draw() override;
+        bool Initialize(IDeserializer& deserializer) override;
+        void Update() override;
+        void Draw() override;
 
     private:
         void OnCommand(const EditorCommandEvent& event);

@@ -19,7 +19,10 @@ namespace BECore {
      * | step   | {"frames": 1 to kMaxStepFrames (default 1), "dt": 0 to Time::kMaxFrameTime seconds (default 1/60)} | the clock as `status` gives it, after the last frame |
      * | pause  | none | {"paused":true}; the game holds from the next frame (a no-op that answers ok with the manual clock, which is a pause) |
      * | resume | none | {"paused":false}; the code `manual_clock` with the manual clock, which only `step` advances |
+     * | list_methods | none | {"methods":[{"name","summary","params":[{"name","type","required","description"}]}]}, sorted by name |
      * | quit   | none | {}; then ApplicationEvents::QuitEvent, so the application stops at the end of the frame. Bypasses the barrier |
+     *
+     * It also registers the by-name methods (`RegisterReflectionControl`).
      *
      * `step` is a barrier; what it means on the real and the manual clock: Control/CLAUDE.md, "Manual clock and `step`".
      *

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Logger/LogEvent.h>
+#include <BECore/Logger/LogSite.h>
 #include <BECore/Types/Types.h>
 #include <Events/SubscriptionHolder.h>
 
@@ -13,6 +14,7 @@ namespace BECore::Tests {
         struct Entry {
             LogLevel level = LogLevel::Debug;
             String message;
+            LogSite site;
         };
 
         LogRecorder() {
@@ -50,7 +52,7 @@ namespace BECore::Tests {
         }
 
         void OnLog(const LogEvent& event) {
-            _entries.push_back({event.level, String(event.message.data(), event.message.size())});
+            _entries.push_back({event.level, String(event.message.data(), event.message.size()), event.site});
         }
 
         Vector<Entry> _entries;

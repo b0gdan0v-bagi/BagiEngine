@@ -1,5 +1,6 @@
 #include "GameControlTest.h"
 
+#include <BECore/Control/ControlRoots.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
 #include <BECore/GameManager/CoreManager.h>
@@ -196,6 +197,39 @@ namespace BECore::Tests {
         static_assert(std::is_base_of_v<IControllableGame, FakeControllableGame>);
 
     }  // namespace
+
+    TEST_F(GameControlTest, TheGameRootResolvesTheActiveGameToItsMostDerivedType) {
+        const ControlRoots& roots = CoreManager::GetControlService().Roots();
+        ASSERT_NE(roots.Find(kGameRootName), nullptr);
+        EXPECT_FALSE(roots.Find(kGameRootName)->allowInterning);
+
+        const TypedRef ref = roots.Resolve(kGameRootName);
+        ASSERT_TRUE(ref);
+        ASSERT_NE(Controllable(), nullptr);
+        EXPECT_EQ(ref.type->Name(), "FakeControllableGame");
+        EXPECT_EQ(ref.Address(), static_cast<void*>(Controllable()));
+    }
+
+    TEST_F(GameControlTest, TheGameRootFollowsTheActiveGame) {
+        GameManager::GetInstance().SwitchTo("FakePlain"_intern);
+        const TypedRef ref = CoreManager::GetControlService().Roots().Resolve(kGameRootName);
+        ASSERT_TRUE(ref);
+        EXPECT_EQ(ref.type->Name(), "FakePlainGame");
+    }
+
+    TEST_F(GameControlTest, TheGameRootIsEmptyWithoutAnActiveGame) {
+        GameManager::GetInstance().Shutdown();
+        EXPECT_FALSE(CoreManager::GetControlService().Roots().Resolve(kGameRootName));
+    }
+
+    TEST_F(GameControlTest, RegisteringGameControlAgainReplacesTheGameRoot) {
+        ControlService service;
+        RegisterGameControl(service);
+        RegisterGameControl(service);
+
+        EXPECT_EQ(service.Roots().Names().size(), 1U);
+        EXPECT_TRUE(service.Roots().Resolve(kGameRootName));
+    }
 
     TEST(GameControlDefaultsTest, SetStateIsUnsupportedUnlessTheGameOverridesIt) {
         MinimalControl control;

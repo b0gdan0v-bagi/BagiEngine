@@ -10,6 +10,7 @@ namespace BECore::Fuzz {
         static const FuzzTarget targets[] = {
             {"BinaryDeserializer", &FuzzBinaryDeserializer, "binary", 1},
             {"XmlDeserializer", &FuzzXmlDeserializer, "xml", 2},
+            {"JsonDeserializer", &FuzzJsonDeserializer, "json", 2},
             {"SaveEnvelope", &FuzzSaveEnvelope, "save", 10},
             {"SceneNode", &FuzzSceneNode, "scene", 1},
             {"WebSocketFrame", &FuzzWebSocketFrame, "ws_frame", 1},
@@ -20,6 +21,7 @@ namespace BECore::Fuzz {
             {"WebUi", &FuzzWebUi, "web_ui", 15},
             {"UiTables", &FuzzUiTables, "ui_tables", 2},
             {"UiGeometry", &FuzzUiGeometry, "ui_geometry", 8},
+            {"AudioWav", &FuzzAudioWav, "audio_wav", 1},
         };
         return targets;
     }

@@ -5,6 +5,7 @@
 #include <BECore/Reflection/ISerializer.h>
 #include <BECore/Reflection/ReaderLimits.h>
 #include <BECore/Utils/EnumUtils.h>
+#include <initializer_list>
 
 namespace BECore {
 
@@ -321,7 +322,8 @@ namespace BECore {
          * @brief Append an error to @p errors within the limits of ReaderLimits
          *
          * The path and the message are cut to kMaxErrorTextBytes (they are interned into the PoolString table, which is never freed, and
-         * they can hold text of the input). The list holds at most kMaxRecordedErrors: the last place says once that the rest were dropped.
+         * they can hold text of the input), and a control character in them is replaced by '?' (they reach a log line and a reply). The list holds at most kMaxRecordedErrors: the last place says once
+         * that the rest were dropped.
          */
         static void StoreError(Vector<DeserializeError>& errors, StringView path, StringView message, int32_t line);
 
@@ -329,6 +331,14 @@ namespace BECore {
          * @brief The first @p maxBytes of @p text, or fewer so that no UTF-8 sequence is split
          */
         static StringView CutText(StringView text, size_t maxBytes);
+
+        /**
+         * @brief ", did you mean 'y'?" for an unknown key, or an empty text
+         *
+         * y is the nearest name of @p askedKeys (at most 2 edits away and under half the length of @p unknown, case of ASCII letters
+         * ignored). Both sides are cut before the comparison, so the work of one hint is bounded whatever the input.
+         */
+        static String MakeDidYouMeanHint(StringView unknown, std::initializer_list<const Vector<String>*> askedKeys);
 
     private:
         void RecordFinding(StringView key, StringView message);

@@ -1,0 +1,1 @@
+{"choice":{"index":9},"entry":{"first":9,"second":"nine"},"few":[4,5],"maybe":7,"maybeLeaf":{"id":3,"label":"in an optional","weight":0.5},"ordered":[{"key":-1,"value":"minus"},{"key":2,"value":"two"}],"table":[{"key":"a","value":1},{"key":"b","value":2}],"triple":[1,2,3]}

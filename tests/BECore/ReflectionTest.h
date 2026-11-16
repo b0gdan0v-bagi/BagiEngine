@@ -63,8 +63,8 @@ namespace BECore {
         /**
          * @brief Class with nested object for testing
          */
-        struct GameState {
-            BE_CLASS(GameState)
+        struct SavedGameState {
+            BE_CLASS(SavedGameState)
 
             BE_REFLECT_FIELD Player player;
             BE_REFLECT_FIELD Inventory inventory;

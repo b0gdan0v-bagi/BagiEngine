@@ -26,6 +26,27 @@ namespace BECore {
         [[nodiscard]] bool operator==(const ControlServerStatus& other) const = default;
     };
 
+    /// One parameter of a control method as its module describes it. For people and for the completion of a console: nothing checks it against the handler,
+    /// which stays the judge of its parameters
+    struct ControlParamInfo {
+        String name;
+        String type;  // "string", "integer", "number", "boolean", "object", "array" or "any"; free text for people
+        bool required = false;
+        String description;
+    };
+
+    /// What a module says about a control method (ControlService::DescribeMethod). For people and for completion, never checked against the handler
+    struct ControlMethodInfo {
+        String summary;  // one line
+        Vector<ControlParamInfo> params;
+    };
+
+    /// A registered method and its description, if its module gave one (ControlService::GetMethods)
+    struct ControlMethodListing {
+        String name;
+        const ControlMethodInfo* info = nullptr;  // null without a description
+    };
+
     /// Error codes of the control protocol. They are part of the protocol: clients match on them.
     namespace ControlErrors {
         inline constexpr StringView kParseError = "parse_error";

@@ -321,7 +321,7 @@ namespace BECore::Tests {
         EXPECT_EQ(file["viewportPreview"]["overlayViewBounds"], true);
     }
 
-    TEST_F(EditorSettingsTest, AnOldFileGainsOnlyThePreviewAndInputModeKeys) {
+    TEST_F(EditorSettingsTest, AnOldFileGainsOnlyTheKeysOfLaterBuilds) {
         WriteFile("preferences.json", R"({"version":1,"theme":"Classic","fontScale":1.5,"viewportGrid":true,"viewportGridStep":16,"futureOption":7})");
         EditorSettings settings(_directory);
         settings.Load();
@@ -337,6 +337,10 @@ namespace BECore::Tests {
         file.erase("viewportPreview");
         EXPECT_EQ(file["viewportInputMode"], "play");
         file.erase("viewportInputMode");
+        EXPECT_EQ(file["externalEditor"], "");
+        file.erase("externalEditor");
+        EXPECT_TRUE(file["consoleHistory"].is_array());
+        file.erase("consoleHistory");
         const Json oldFile = *ParseJson(R"({"version":1,"theme":"Classic","fontScale":1.5,"viewportGrid":true,"viewportGridStep":16,"futureOption":7})");
         EXPECT_EQ(file, oldFile);
     }
@@ -371,6 +375,126 @@ namespace BECore::Tests {
             EXPECT_EQ(settings.GetPreferences().viewportInputMode, ViewportInputMode::Play) << text;
             EXPECT_EQ(settings.GetPreferences().fontScale, 1.5f) << text;
         }
+    }
+
+    // ---- The Console: externalEditor and consoleHistory
+
+    TEST_F(EditorSettingsTest, TheConsoleKeysAreEmptyWhenTheFileLacksThem) {
+        WriteFile("preferences.json", R"({"version":1,"fontScale":1.5})");
+        EditorSettings settings(_directory);
+        settings.Load();
+        EXPECT_TRUE(settings.GetPreferences().externalEditor.empty());
+        EXPECT_TRUE(settings.GetPreferences().consoleHistory.empty());
+    }
+
+    TEST_F(EditorSettingsTest, TheConsoleKeysRoundTrip) {
+        EditorPreferences changed;
+        changed.externalEditor = "cmd /c code -g {file}:{line}";
+        changed.consoleHistory = {"ping", "step frames=3", "echo {\"a\":1}"};
+        EditorSettings writer(_directory);
+        writer.SetPreferences(changed);
+        ASSERT_TRUE(writer.SavePreferences());
+
+        const Json file = ReadJsonFile("preferences.json");
+        EXPECT_EQ(file["externalEditor"], "cmd /c code -g {file}:{line}");
+        ASSERT_TRUE(file["consoleHistory"].is_array());
+        EXPECT_EQ(file["consoleHistory"].size(), 3u);
+
+        EditorSettings reader(_directory);
+        reader.Load();
+        EXPECT_EQ(reader.GetPreferences(), changed);
+    }
+
+    TEST_F(EditorSettingsTest, AConsoleValueOfTheWrongTypeGivesItsDefaultAndKeepsTheFile) {
+        struct Case {
+            const char* text;
+            const char* editor;
+            size_t historySize;
+        };
+        const Case cases[] = {
+            {R"({"externalEditor":5,"consoleHistory":["ping"]})", "", 1},
+            {R"({"externalEditor":"code","consoleHistory":"ping"})", "code", 0},
+            {R"({"externalEditor":"code","consoleHistory":["ping",3]})", "code", 0},
+            {R"({"externalEditor":["code"],"consoleHistory":{"a":1}})", "", 0},
+        };
+        for (const Case& item : cases) {
+            WriteFile("preferences.json", item.text);
+            EditorSettings settings(_directory);
+            settings.Load();
+            EXPECT_EQ(settings.GetPreferences().externalEditor, item.editor) << item.text;
+            EXPECT_EQ(settings.GetPreferences().consoleHistory.size(), item.historySize) << item.text;
+            EXPECT_EQ(ReadFile("preferences.json"), item.text);
+            EXPECT_FALSE(Exists("preferences.json.bad"));
+        }
+    }
+
+    TEST_F(EditorSettingsTest, UnknownKeysBesideTheConsoleKeysSurviveASave) {
+        WriteFile("preferences.json", R"({"version":1,"externalEditor":"code","consoleHistory":["ping"],"futureOption":{"a":1}})");
+        EditorSettings settings(_directory);
+        settings.Load();
+        ASSERT_TRUE(settings.SavePreferences());
+
+        const Json file = ReadJsonFile("preferences.json");
+        EXPECT_EQ(file["futureOption"]["a"], 1);
+        EXPECT_EQ(file["externalEditor"], "code");
+        EXPECT_EQ(file["consoleHistory"].size(), 1u);
+        EXPECT_EQ(file.size(), 9u);  // version, the seven known keys, futureOption: no key is written twice
+    }
+
+    TEST_F(EditorSettingsTest, AnExternalEditorOverTheLimitIsCutAtACharacter) {
+        const String longText(kMaxExternalEditorLength + 40, 'x');
+        WriteFile("preferences.json", String(R"({"externalEditor":")") + longText + R"("})");
+        EditorSettings settings(_directory);
+        settings.Load();
+        EXPECT_EQ(settings.GetPreferences().externalEditor.size(), kMaxExternalEditorLength);
+
+        // A two-byte character that straddles the limit goes whole
+        EditorPreferences wild;
+        wild.externalEditor = String(kMaxExternalEditorLength - 1, 'x') + "\xC3\xA9" + "yyy";
+        settings.SetPreferences(wild);
+        EXPECT_EQ(settings.GetPreferences().externalEditor, String(kMaxExternalEditorLength - 1, 'x'));
+    }
+
+    TEST_F(EditorSettingsTest, TheHistoryDropsEmptyAndTooLongEntriesAndKeepsTheNewest) {
+        EditorPreferences wild;
+        wild.consoleHistory.push_back("");
+        wild.consoleHistory.push_back(String(kMaxConsoleCommandLength + 1, 'a'));
+        wild.consoleHistory.push_back(String(kMaxConsoleCommandLength, 'b'));
+        EditorSettings settings(_directory);
+        settings.SetPreferences(wild);
+        ASSERT_EQ(settings.GetPreferences().consoleHistory.size(), 1u);
+        EXPECT_EQ(settings.GetPreferences().consoleHistory[0].size(), kMaxConsoleCommandLength);
+
+        wild.consoleHistory.clear();
+        for (size_t i = 0; i < 100; ++i) {
+            wild.consoleHistory.push_back(Format("cmd{}", i));
+        }
+        settings.SetPreferences(wild);
+        const Vector<String>& kept = settings.GetPreferences().consoleHistory;
+        ASSERT_EQ(kept.size(), kMaxConsoleHistory);
+        EXPECT_EQ(kept.front(), "cmd36");
+        EXPECT_EQ(kept.back(), "cmd99");
+    }
+
+    TEST_F(EditorSettingsTest, AddConsoleHistoryMovesAnEqualCommandToTheEndAndBoundsTheList) {
+        EditorPreferences preferences;
+        AddConsoleHistory(preferences, "a");
+        AddConsoleHistory(preferences, "b");
+        AddConsoleHistory(preferences, "a");
+        ASSERT_EQ(preferences.consoleHistory.size(), 2u);
+        EXPECT_EQ(preferences.consoleHistory[0], "b");
+        EXPECT_EQ(preferences.consoleHistory[1], "a");
+
+        AddConsoleHistory(preferences, "");
+        AddConsoleHistory(preferences, String(kMaxConsoleCommandLength + 1, 'z'));
+        EXPECT_EQ(preferences.consoleHistory.size(), 2u);
+
+        for (size_t i = 0; i < 2 * kMaxConsoleHistory; ++i) {
+            AddConsoleHistory(preferences, Format("c{}", i));
+        }
+        ASSERT_EQ(preferences.consoleHistory.size(), kMaxConsoleHistory);
+        EXPECT_EQ(preferences.consoleHistory.back(), Format("c{}", 2 * kMaxConsoleHistory - 1));
+        EXPECT_EQ(preferences.consoleHistory.front(), Format("c{}", kMaxConsoleHistory));
     }
 
     TEST_F(EditorSettingsTest, BadHotkeyEntriesAreDropped) {

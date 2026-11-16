@@ -2,6 +2,7 @@
 
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
+#include <BECore/Control/ReflectionControl.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Time/Time.h>
 #include <Events/ApplicationEvents.h>
@@ -110,6 +111,32 @@ namespace BECore {
             call.Reply(std::move(result));
         }
 
+        /// `list_methods`: every method of the service with the description its module gave it. The answer is built from the table only, no client data is read
+        void HandleListMethods(ControlCall& call, const ControlService& service) {
+            Json methods = Json::array();
+            for (const ControlMethodListing& listing : service.GetMethods()) {
+                Json method = Json::object();
+                method["name"] = MakeJsonString(listing.name);
+                method["summary"] = MakeJsonString(listing.info != nullptr ? StringView(listing.info->summary) : StringView());
+                Json params = Json::array();
+                if (listing.info != nullptr) {
+                    for (const ControlParamInfo& param : listing.info->params) {
+                        Json entry = Json::object();
+                        entry["name"] = MakeJsonString(param.name);
+                        entry["type"] = MakeJsonString(param.type);
+                        entry["required"] = param.required;
+                        entry["description"] = MakeJsonString(param.description);
+                        params.push_back(std::move(entry));
+                    }
+                }
+                method["params"] = std::move(params);
+                methods.push_back(std::move(method));
+            }
+            Json result = Json::object();
+            result["methods"] = std::move(methods);
+            call.Reply(std::move(result));
+        }
+
         void HandleQuit(ControlCall& call) {
             // The answer first: it is queued for the transport before the application starts to stop
             call.Reply(Json::object());
@@ -124,7 +151,19 @@ namespace BECore {
         service.RegisterHandler("step", [&service](ControlCall& call) { HandleStep(call, service); });
         service.RegisterHandler("pause", [&service](ControlCall& call) { HandlePause(call, service); });
         service.RegisterHandler("resume", [&service](ControlCall& call) { HandleResume(call, service); });
+        service.RegisterHandler("list_methods", [&service](ControlCall& call) { HandleListMethods(call, service); });
         service.RegisterHandler("quit", HandleQuit, /*bypassBarrier=*/true);
+        RegisterReflectionControl(service);
+
+        service.DescribeMethod("ping", {"Answers pong and the protocol version", {}});
+        service.DescribeMethod("status", {"The frame clock, whether the clock is manual and whether the game is paused", {}});
+        service.DescribeMethod("step", {"Runs frames and answers with the clock after the last one",
+                                        {{"frames", "integer", false, Format("Frames to run, 1 to {} (default 1)", kMaxStepFrames)},
+                                         {"dt", "number", false, Format("Seconds each frame lasts, 0 to {} (default 1/60)", Time::kMaxFrameTime)}}});
+        service.DescribeMethod("pause", {"Holds the game from the next frame", {}});
+        service.DescribeMethod("resume", {"Lets the game run again (refused with the manual clock)", {}});
+        service.DescribeMethod("list_methods", {"Lists the methods with their summaries and parameters", {}});
+        service.DescribeMethod("quit", {"Answers, then stops the application at the end of the frame", {}});
     }
 
 }  // namespace BECore

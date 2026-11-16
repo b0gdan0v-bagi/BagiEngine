@@ -48,6 +48,9 @@ namespace BECore::Fuzz {
     /// XmlDeserializer::LoadFromString, lenient and strict: every read over the whole document, strict refusals against a grammar of the values, a reflected probe type
     void FuzzXmlDeserializer(const uint8_t* data, size_t size);
 
+    /// JsonDeserializer over a JSON document: the probe types read under every mode of diagnostics, a round trip through JsonSerializer, and the document as the arguments of CallMethod
+    void FuzzJsonDeserializer(const uint8_t* data, size_t size);
+
     /// SaveGameService on a folder of the process: the bytes as a slot file, Peek and Load of a reflected state
     void FuzzSaveEnvelope(const uint8_t* data, size_t size);
 
@@ -79,6 +82,9 @@ namespace BECore::Fuzz {
 
     /// The numbers of a content file in the pure UI geometry (box mesh, nine-slice, rect and stack layout, canvas scale and layout), as raw float bits: bounded results, no NaN or infinity
     void FuzzUiGeometry(const uint8_t* data, size_t size);
+
+    /// DecodeWav (BECore/Audio): every RIFF WAVE file that decodes has a sound the engine plays (channels, rate, finite samples), the same twice; a refusal says why
+    void FuzzAudioWav(const uint8_t* data, size_t size);
 
     /// A save file as the seeds make it: the bytes SaveGameService::Save writes for the probe state under the given game id and schema version
     Vector<uint8_t> MakeSaveFileBytes(StringView game, uint32_t version);

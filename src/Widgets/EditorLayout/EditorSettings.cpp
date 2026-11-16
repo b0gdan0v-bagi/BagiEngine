@@ -22,6 +22,10 @@ namespace BECore {
         constexpr StringView kViewportInputModeKey = "viewportInputMode";
         constexpr StringView kInputModePlayName = "play";
         constexpr StringView kInputModeEditName = "edit";
+        constexpr StringView kExternalEditorKey = "externalEditor";
+        constexpr StringView kConsoleHistoryKey = "consoleHistory";
+        constexpr unsigned char kUtf8ContinuationMask = 0xC0;
+        constexpr unsigned char kUtf8ContinuationBits = 0x80;
 
         // The members of the "viewportPreview" object
         constexpr StringView kPreviewAspectKey = "aspect";
@@ -185,6 +189,58 @@ namespace BECore {
             }
         }
 
+        // The string member @p key: left in @p value when absent, a warning and left when of another type
+        void ReadString(const Json& object, StringView key, String& value) {
+            if (!object.contains(ToStdString(key))) {
+                return;
+            }
+            if (Optional<String> read = GetJsonString(object, key)) {
+                value = std::move(*read);
+            } else {
+                WarnWrongType(kPreferencesFileName, key, "a text");
+            }
+        }
+
+        // The array of strings @p key: left in @p value when absent, a warning and left when it is not an array or holds a non-string
+        void ReadStringArray(const Json& object, StringView key, Vector<String>& value) {
+            if (!object.contains(ToStdString(key))) {
+                return;
+            }
+            const Json* array = FindJsonMember(object, key);
+            const bool onlyStrings = array != nullptr && array->is_array() && std::ranges::all_of(*array, [](const Json& item) { return item.is_string(); });
+            if (!onlyStrings) {
+                WarnWrongType(kPreferencesFileName, key, "a list of texts");
+                return;
+            }
+            value.clear();
+            for (const Json& item : *array) {
+                //-NoStd: nlohmann's string
+                const std::string& text = item.get_ref<const std::string&>();
+                value.push_back(String(text.data(), text.size()));
+            }
+        }
+
+        // Shortens @p text to at most @p limit bytes without cutting a UTF-8 sequence in the middle
+        void CutToBytes(String& text, size_t limit) {
+            if (text.size() <= limit) {
+                return;
+            }
+            size_t end = limit;
+            while (end > 0 && (static_cast<unsigned char>(text[end]) & kUtf8ContinuationMask) == kUtf8ContinuationBits) {
+                --end;
+            }
+            text.resize(end);
+        }
+
+        Json StringsToJson(const Vector<String>& strings) {
+            Json array = Json::array();
+            for (const String& text : strings) {
+                //-NoStd: a JSON string of nlohmann
+                array.push_back(std::string(text.data(), text.size()));
+            }
+            return array;
+        }
+
         Json ViewportPreviewToJson(const PreviewSettings& preview, const Json& extra) {
             Json object = extra;
             const PreviewShape& shape = preview.shape;
@@ -217,7 +273,25 @@ namespace BECore {
         if (shape.device < 0 || static_cast<size_t>(shape.device) >= UIPreview::GetDevices().size()) {
             shape.device = -1;
         }
+        CutToBytes(preferences.externalEditor, kMaxExternalEditorLength);
+        Vector<String>& history = preferences.consoleHistory;
+        history.erase(eastl::remove_if(history.begin(), history.end(), [](const String& command) { return command.empty() || command.size() > kMaxConsoleCommandLength; }), history.end());
+        if (history.size() > kMaxConsoleHistory) {
+            history.erase(history.begin(), history.end() - static_cast<ptrdiff_t>(kMaxConsoleHistory));
+        }
         return preferences;
+    }
+
+    void AddConsoleHistory(EditorPreferences& preferences, StringView command) {
+        if (command.empty() || command.size() > kMaxConsoleCommandLength) {
+            return;
+        }
+        Vector<String>& history = preferences.consoleHistory;
+        history.erase(eastl::remove_if(history.begin(), history.end(), [command](const String& entry) { return StringView(entry.data(), entry.size()) == command; }), history.end());
+        history.push_back(String(command.data(), command.size()));
+        if (history.size() > kMaxConsoleHistory) {
+            history.erase(history.begin(), history.end() - static_cast<ptrdiff_t>(kMaxConsoleHistory));
+        }
     }
 
     std::filesystem::path EditorUserDirectory() {
@@ -254,7 +328,8 @@ namespace BECore {
         if (!ReadJsonObject(_directory / ToStdString(kPreferencesFileName), content, _preferencesUnreadable)) {
             return;
         }
-        _extraPreferences = UnknownMembers(content, {kVersionKey, kFontScaleKey, kViewportGridKey, kViewportGridStepKey, kViewportPreviewKey, kViewportInputModeKey});
+        _extraPreferences =
+            UnknownMembers(content, {kVersionKey, kFontScaleKey, kViewportGridKey, kViewportGridStepKey, kViewportPreviewKey, kViewportInputModeKey, kExternalEditorKey, kConsoleHistoryKey});
 
         EditorPreferences preferences;
         if (content.contains(ToStdString(kFontScaleKey))) {
@@ -287,6 +362,8 @@ namespace BECore {
             }
         }
         ReadInputMode(content, kViewportInputModeKey, preferences.viewportInputMode);
+        ReadString(content, kExternalEditorKey, preferences.externalEditor);
+        ReadStringArray(content, kConsoleHistoryKey, preferences.consoleHistory);
         _preferences = ClampPreferences(preferences);
     }
 
@@ -409,6 +486,8 @@ namespace BECore {
         content[ToStdString(kViewportGridStepKey)] = _preferences.viewportGridStep;
         content[ToStdString(kViewportPreviewKey)] = ViewportPreviewToJson(_preferences.viewportPreview, _extraViewportPreview);
         content[ToStdString(kViewportInputModeKey)] = ToStdString(InputModeName(_preferences.viewportInputMode));
+        content[ToStdString(kExternalEditorKey)] = ToStdString(_preferences.externalEditor);
+        content[ToStdString(kConsoleHistoryKey)] = StringsToJson(_preferences.consoleHistory);
         return Save(_directory / ToStdString(kPreferencesFileName), content, _preferencesUnreadable);
     }
 

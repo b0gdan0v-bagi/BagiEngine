@@ -62,6 +62,8 @@ namespace BECore {
         /// Shows and hides the Profiler panel. Fixed like mode.toggle: ProfilerWidget reads Ctrl+Shift+P from the raw SDL event
         /// (Profiler/ProfilerToggle.h), the palette runs it through this command
         inline constexpr auto kViewProfiler = "view.profiler"_intern;
+        /// Shows and hides the Console panel (the log). ConsoleWidget owns the action
+        inline constexpr auto kViewConsole = "view.console"_intern;
     }  // namespace EditorCommandIds
 
     /// A command was asked for, by the palette, a menu item or a hotkey. Emitted, not enqueued: it runs inside a frame.
@@ -94,13 +96,16 @@ namespace BECore {
         BE_REFLECT_FIELD bool overlayTouchTargets = false;
         BE_REFLECT_FIELD bool overlayRegions = false;
         BE_REFLECT_FIELD ViewportInputMode viewportInputMode = ViewportInputMode::Play;
+        BE_REFLECT_FIELD String externalEditor;
+        BE_REFLECT_FIELD Vector<String> consoleHistory;
 
         EditorPreferencesChangedEvent() = default;
-        EditorPreferencesChangedEvent(bool grid, int32_t step, const PreviewSettings& preview, ViewportInputMode inputMode)
+        EditorPreferencesChangedEvent(bool grid, int32_t step, const PreviewSettings& preview, ViewportInputMode inputMode, String editor, Vector<String> history)
             : viewportGrid(grid), viewportGridStep(step), previewAspect(preview.shape.aspect), previewDevice(preview.shape.device), previewCustom(preview.shape.custom),
               previewWidth(preview.shape.customWidth), previewHeight(preview.shape.customHeight), previewRotated(preview.shape.rotated), previewSafeArea(preview.safeArea),
               overlaySafeArea(preview.overlays.safeArea), overlayViewBounds(preview.overlays.viewBounds), overlayCanvasBounds(preview.overlays.canvasBounds),
-              overlayTouchTargets(preview.overlays.touchTargets), overlayRegions(preview.overlays.regions), viewportInputMode(inputMode) {}
+              overlayTouchTargets(preview.overlays.touchTargets), overlayRegions(preview.overlays.regions), viewportInputMode(inputMode), externalEditor(std::move(editor)),
+              consoleHistory(std::move(history)) {}
 
         /// The viewport preview choice carried by the event
         [[nodiscard]] PreviewSettings GetPreview() const {
@@ -151,6 +156,16 @@ namespace BECore {
 
         ViewportInputModeChangedEvent() = default;
         explicit ViewportInputModeChangedEvent(ViewportInputMode inputMode) : mode(inputMode) {}
+    };
+
+    /// The Console ran a command line that parsed: sent by ConsoleWidget. EditorLayoutWidget keeps it in the saved history and does not
+    /// answer with an EditorPreferencesChangedEvent (the Console already holds its own history).
+    struct ConsoleCommandSubmittedEvent : public EventBase<ConsoleCommandSubmittedEvent> {
+        BE_EVENT(ConsoleCommandSubmittedEvent)
+        BE_REFLECT_FIELD String command;
+
+        ConsoleCommandSubmittedEvent() = default;
+        explicit ConsoleCommandSubmittedEvent(String text) : command(std::move(text)) {}
     };
 
 }  // namespace BECore
