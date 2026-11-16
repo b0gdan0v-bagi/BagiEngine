@@ -44,10 +44,12 @@ namespace BECore {
         /**
          * @brief Gives a headless window the size and density it starts with instead of the config's size at density 1.
          *
-         * Call it before Initialize(); the values have passed ValidateWindowSimulation. A window that is not headless ignores it.
+         * Call it before Initialize(); a value that is not given stays the config's. Initialize() fails when the two together break
+         * ValidateWindowSimulation (the output side of a config size times a density is only known there). A window that is not headless ignores it.
          */
-        void SetHeadlessSimulation(int width, int height, float density) {
-            _initialSimulation = WindowSimulation{.width = width, .height = height, .density = density};
+        void SetHeadlessSimulation(Optional<WindowSize> size, Optional<float> density) {
+            _startSize = size;
+            _startDensity = density;
         }
 
         SDL_Window* GetSDLWindow() const {
@@ -69,7 +71,8 @@ namespace BECore {
         String _configuredTitle;
         bool _headless = false;
         /// What SetHeadlessSimulation() asked for; kept over Destroy(), like _headless
-        Optional<WindowSimulation> _initialSimulation;
+        Optional<WindowSize> _startSize;
+        Optional<float> _startDensity;
         /// The state of a headless window while it exists: the answers of GetWidth(), GetHeight(), GetPixelDensity() and GetSafeArea()
         WindowSimulation _simulation;
     };

@@ -52,4 +52,15 @@ Client data, so a violation is `invalid_params` whose message names the field an
 - **What it reports while the window exists.** `GetWidth()` / `GetHeight()` the units that were set (the config's size at density 1 before any simulation, or what `SetHeadlessSimulation` gave), `GetPixelDensity()` the simulated density, `GetSafeArea()` `SimulatedSafeRect` (the whole window until insets are set). `GetDisplayScale()` stays SDL's (1). `Destroy()` resets all of it; a new `Initialize()` starts from the config again (or from `SetHeadlessSimulation`, which survives `Destroy()` like `SetHeadless`).
 - **A real window** keeps asking SDL for all of it, and `Simulate` on it is an error. A window without a handle is an error too.
 - **Events.** `Simulate` emits `SDLEvents::SafeAreaChangedEvent` when the safe rect changed (a resize alone moves it), once per change. The resize and pixel-size events come from SDL on the next poll, the same path as a real resize. Mouse events stay in window units times the density, which is now the simulated one.
-- **Start size.** `SetHeadlessSimulation(width, height, density)` before `Initialize()` creates the window at that size (the caller validated it: `--window` / `--density`).
+- **Start size.** `SetHeadlessSimulation(Optional<WindowSize>, Optional<float>)` before `Initialize()` creates the window at that size (a value not given stays the config's size / density 1); `Initialize()` validates the result and fails with a log line when it is outside the limits.
+
+## Start-up flags `--window` and `--density`
+
+| Flag | Value | Meaning |
+|------|-------|---------|
+| `--window=WxH` | two integers, `x` lower case | the start size of a headless window in window units; without it the size of `SDLWindowConfig.xml` |
+| `--density=D` | a finite number | the start pixel density; without it 1 |
+
+- Both need `--headless` (and so `--control`), else the start-up stops with the `ControlSettings` message: a real window's size and density belong to the system. They are flags only, no `ApplicationConfig` attributes (a per-run QA choice, not a game setting); a game's `headless="true"` in its config does satisfy them.
+- `ResolveControlSettings` reads them with the limits of `WindowLimits` (`ValidateWindowSimulation`): a bare flag, a value that is not `WxH` of integers (or a number), a size or density outside its range, and the output side of both together are errors that name the flag. A flag that appears twice: the last wins. Unknown lookalikes (`--windows=`) are ignored like every unknown flag.
+- Path: `ControlSettings` -> `ApplicationOptions` -> `SDL3ApplicationFabric::Create` -> `SDLMainWindow::SetHeadlessSimulation` before `Initialize()`, which creates the dummy window at `round(size * density)` pixels. `--density` alone keeps the config's size, whose output side only `Initialize()` can check (the check of the previous section).

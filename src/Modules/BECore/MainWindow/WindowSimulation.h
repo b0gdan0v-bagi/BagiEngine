@@ -17,6 +17,12 @@ namespace BECore {
         static constexpr int kMaxOutputSide = 8192;
     };
 
+    /// A window size in window units; the optional start size of a headless run (`--window=WxH`)
+    struct WindowSize {
+        int width = 0;
+        int height = 0;
+    };
+
     /// How far the notch, the rounded corners and the system bars cover each edge, in window units
     struct WindowInsets {
         float top = 0.0f;

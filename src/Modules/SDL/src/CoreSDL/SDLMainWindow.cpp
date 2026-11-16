@@ -81,8 +81,17 @@ namespace BECore {
         const String firstTitle = ComposeWindowTitle(windowConfig._title, {}, false);
         // The dummy driver has no density, so its window is as big as the output in pixels
         _simulation = WindowSimulation{.width = windowConfig._width, .height = windowConfig._height};
-        if (_headless && _initialSimulation) {
-            _simulation = *_initialSimulation;
+        if (_headless && (_startSize || _startDensity)) {
+            if (_startSize) {
+                _simulation.width = _startSize->width;
+                _simulation.height = _startSize->height;
+            }
+            _simulation.density = _startDensity.value_or(1.0f);
+            if (const auto valid = ValidateWindowSimulation(_simulation); !valid) {
+                LOG_ERROR(Format("[SDLMainWindow] the start size of the headless window: {}", valid.error()).c_str());
+                _simulation = WindowSimulation{};
+                return false;
+            }
         }
         const int createWidth = _headless ? SimulatedOutputPixels(_simulation.width, _simulation.density) : windowConfig._width;
         const int createHeight = _headless ? SimulatedOutputPixels(_simulation.height, _simulation.density) : windowConfig._height;

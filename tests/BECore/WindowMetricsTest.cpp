@@ -178,7 +178,7 @@ namespace BECore::Tests {
 
     TEST_F(SDLWindowMetricsTest, ASimulationBeforeInitializeGivesTheStartSize) {
         window->Destroy();
-        window->SetHeadlessSimulation(480, 320, 2.0f);
+        window->SetHeadlessSimulation(WindowSize{480, 320}, 2.0f);
         ASSERT_TRUE(window->Initialize(kWindowConfig));
 
         int pixelWidth = 0;
@@ -189,6 +189,27 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(window->GetPixelDensity(), 2.0f);
         EXPECT_EQ(pixelWidth, 960);
         EXPECT_EQ(pixelHeight, 640);
+    }
+
+    TEST_F(SDLWindowMetricsTest, ADensityAloneKeepsTheSizeOfTheConfig) {
+        const int configWidth = window->GetWidth();
+        window->Destroy();
+        window->SetHeadlessSimulation(std::nullopt, 0.5f);
+        ASSERT_TRUE(window->Initialize(kWindowConfig));
+
+        int pixelWidth = 0;
+        ASSERT_TRUE(SDL_GetWindowSizeInPixels(window->GetSDLWindow(), &pixelWidth, nullptr));
+        EXPECT_EQ(window->GetWidth(), configWidth);
+        EXPECT_FLOAT_EQ(window->GetPixelDensity(), 0.5f);
+        EXPECT_EQ(pixelWidth, configWidth / 2);
+    }
+
+    TEST_F(SDLWindowMetricsTest, AStartSizeWhoseOutputIsTooLargeFailsInitialize) {
+        window->Destroy();
+        window->SetHeadlessSimulation(WindowSize{4096, 4096}, 3.0f);
+
+        EXPECT_FALSE(window->Initialize(kWindowConfig));
+        EXPECT_FALSE(window->IsValid());
     }
 
     TEST_F(SDLWindowMetricsTest, ASecondWindowStartsFromTheConfigAgainAfterDestroy) {
