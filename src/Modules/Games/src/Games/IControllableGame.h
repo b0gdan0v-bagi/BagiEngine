@@ -16,6 +16,7 @@ namespace BECore {
         inline constexpr StringView kNoActiveModel = "no_active_model";
         inline constexpr StringView kIllegalAction = "illegal_action";
         inline constexpr StringView kUnsupported = "unsupported";
+        inline constexpr StringView kReplayNeedsManualClock = "replay_needs_manual_clock";
     }  // namespace GameControlErrors
 
     /// Events that the game layer pushes to the clients of the control API
@@ -62,6 +63,16 @@ namespace BECore {
 
         /// Grows with every change a controller has to see (a new game, a committed action); never goes back
         [[nodiscard]] virtual uint64_t GetStateVersion() const = 0;
+
+        /**
+         * @brief Whether a recorded session of this game plays back to the same state (Games/CLAUDE.md, "Record and replay").
+         *
+         * True only when all randomness comes from the seed of Reset() and delayed tasks follow game time. The default is false.
+         */
+        [[nodiscard]] virtual bool IsReplayable() const;
+
+        /// The options of Reset() that start this same game again, the seed it drew included; read right after a Reset(). The default is an empty object
+        [[nodiscard]] virtual Json GetReplayStart() const;
     };
 
 }  // namespace BECore

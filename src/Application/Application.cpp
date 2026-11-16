@@ -6,6 +6,7 @@
 #include <BECore/Application/RunMode.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/ControlSettings.h>
+#include <BECore/Control/Json.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/LogEvent.h>
 #include <BECore/MainWindow/IMainWindow.h>
@@ -31,6 +32,11 @@
 #endif
 
 namespace BECore {
+
+    namespace {
+        // The only request the application posts to itself, so its id needs no other meaning
+        constexpr int64_t kReplayRequestId = 1;
+    }  // namespace
 
     Application::Application() = default;
     Application::~Application() = default;
@@ -134,7 +140,38 @@ namespace BECore {
         }
 #endif
 
+        if (!controlSettings->replayPath.empty()) {
+            PostReplay(controlSettings->replayPath, controlSettings->replayExit);
+        }
+
         return _isRunning;
+    }
+
+    void Application::PostReplay(const String& path, bool quitWhenDone) {
+        Json request = Json::object();
+        request["id"] = kReplayRequestId;
+        request["method"] = "replay";
+        request["params"] = Json::object({{"path", MakeJsonString(path)}});
+
+        // Answered on the main thread, from a frame or from Shutdown(); the application outlives the control service
+        CoreManager::GetControlService().Post(DumpJson(request), [this, quitWhenDone](String text) {
+            const auto answer = ParseJson(text);
+            const Json* result = answer ? FindJsonMember(*answer, "result") : nullptr;
+            const Json* error = answer ? FindJsonMember(*answer, "error") : nullptr;
+            if (result != nullptr && GetJsonBool(*result, "ok").value_or(false)) {
+                LOG_INFO("Replay: {} entries played"_format(GetJsonInt(*result, "entries").value_or(0)));
+            } else if (error != nullptr && GetJsonString(*error, "code").value_or(String()) == ControlErrors::kShuttingDown) {
+                return;  // the application ended before the replay did: nothing to report, and the exit code stays
+            } else {
+                const Json* mismatch = result != nullptr ? FindJsonMember(*result, "mismatch") : nullptr;
+                const Json* named = mismatch != nullptr ? mismatch : error;
+                LOG_ERROR("Replay: {} {}"_format(mismatch != nullptr ? "mismatch" : "failed", named != nullptr ? DumpJson(*named) : text));
+                SetExitCode(1);
+            }
+            if (quitWhenDone) {
+                ApplicationEvents::QuitEvent::Emit();
+            }
+        });
     }
 
     void Application::Run() {

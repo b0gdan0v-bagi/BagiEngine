@@ -1,0 +1,7 @@
+{"replay":1,"game":"ReplayTest","engine":"0.1.5","title":"replay test game"}
+{"op":"reset","params":{"seed":8},"gap":{"frames":0,"seconds":0.0}}
+{"op":"action","params":{"type":"roll"},"outcome":{"value":5},"gap":{"frames":1,"seconds":0.25}}
+{"op":"action","params":{"type":"arm"},"outcome":{"locked":true},"gap":{"frames":0,"seconds":0.0}}
+{"op":"action","params":{"type":"roll"},"outcome":{"value":6},"gap":{"frames":2,"seconds":0.5}}
+{"op":"state","params":{"rolls":[6,6]},"gap":{"frames":0,"seconds":0.0}}
+{"op":"action","params":{"type":"roll"},"outcome":{"value":2},"gap":{"frames":0,"seconds":0.0}}

@@ -52,5 +52,6 @@ target_link_libraries(BagiEngineTestSupport PUBLIC
     BECoreModule
     EventsModule
     TaskSystemModule
+    GamesModule
     GTest::gtest
 )

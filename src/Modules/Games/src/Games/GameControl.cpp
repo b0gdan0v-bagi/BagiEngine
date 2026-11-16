@@ -7,6 +7,8 @@
 #include <BECore/Time/Time.h>
 #include <Games/GameManager.h>
 #include <Games/IControllableGame.h>
+#include <Games/ReplayControl.h>
+#include <Games/SessionRecorder.h>
 
 namespace BECore {
 
@@ -123,6 +125,11 @@ namespace BECore {
             GameManager& manager = GameManager::GetInstance();
             for (const IntrusivePtr<IGame>& game : manager.GetAll()) {
                 if (game->GetName().ToStringView() == StringView(name->c_str(), name->size())) {
+                    if (manager.GetActive() != game.Get() && SessionRecorder::GetInstance().IsRecording()) {
+                        // A file is of one game
+                        LOG_INFO("The recording ended: the game switches to '{}'"_format(game->GetName().ToStringView()));
+                        SessionRecorder::GetInstance().Stop();
+                    }
                     manager.SwitchTo(game->GetName());
                     Json result = Json::object();
                     result["active"] = MakeJsonString(game->GetName().ToStringView());
@@ -149,7 +156,7 @@ namespace BECore {
                 return;
             }
 
-            if (auto reset = control->Reset(call.Params()); !reset) {
+            if (auto reset = ControlledReset(*control, call.Params()); !reset) {
                 call.Fail(reset.error());
                 return;
             }
@@ -192,7 +199,7 @@ namespace BECore {
                 call.Fail(active.error());
                 return;
             }
-            auto outcome = active->control->PerformAction(call.Params());
+            auto outcome = ControlledAction(*active->control, call.Params());
             if (!outcome) {
                 call.Fail(outcome.error());
                 return;
@@ -208,7 +215,7 @@ namespace BECore {
                 call.Fail(active.error());
                 return;
             }
-            if (auto loaded = active->control->SetState(call.Params()); !loaded) {
+            if (auto loaded = ControlledSetState(*active->control, call.Params()); !loaded) {
                 call.Fail(loaded.error());
                 return;
             }
@@ -450,6 +457,30 @@ namespace BECore {
 
     }  // namespace
 
+    std::expected<void, ControlError> ControlledReset(IControllableGame& game, const Json& options) {
+        auto reset = game.Reset(options);
+        if (reset && SessionRecorder::GetInstance().IsRecording()) {
+            SessionRecorder::GetInstance().ReportReset(game.GetReplayStart());
+        }
+        return reset;
+    }
+
+    std::expected<Json, ControlError> ControlledAction(IControllableGame& game, const Json& action) {
+        auto outcome = game.PerformAction(action);
+        if (outcome) {
+            SessionRecorder::GetInstance().ReportAction(action, *outcome);
+        }
+        return outcome;
+    }
+
+    std::expected<void, ControlError> ControlledSetState(IControllableGame& game, const Json& state) {
+        auto loaded = game.SetState(state);
+        if (loaded) {
+            SessionRecorder::GetInstance().ReportSetState(state);
+        }
+        return loaded;
+    }
+
     void RegisterGameControl(ControlService& service) {
         service.RegisterHandler("list_games", HandleListGames);
         service.RegisterHandler("switch_game", HandleSwitchGame);
@@ -481,6 +512,8 @@ namespace BECore {
                "Exactly one of {pointer, equals} (a JSON pointer into the answer of get_state), {versionMoved: true} or {event: {name, equal?}} (a pushed event whose data has these members)"},
               {"maxFrames", "integer", false, Format("Most frames to wait, 1 to {} (default {})", kMaxStepFrames, kDefaultRunUntilFrames)},
               {"dt", "number", false, Format("Seconds each frame lasts on the manual clock, 0 to {} (default 1/60)", Time::kMaxFrameTime)}}});
+
+        RegisterReplayControl(service);
 
         service.SetFrameEndHook(GameControlEvents::kStateChanged, [watcher = MakeUnique<StateChangeWatcher>(service)] { watcher->OnFrameEnd(); });
     }

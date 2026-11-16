@@ -15,8 +15,13 @@ namespace BECore {
             GetInstance()._updateFunctions.push_back(updateFunc);
         }
 
+        /// Runs the updates registered when it started. A handler may enqueue a type queued for the first time, which
+        /// registers it (and can reallocate the list); that type is first updated by the next call.
         static void UpdateAll() {
-            for (auto& func : GetInstance()._updateFunctions) {
+            Vector<UpdateFunction>& functions = GetInstance()._updateFunctions;
+            const size_t count = functions.size();
+            for (size_t i = 0; i < count; ++i) {
+                const UpdateFunction func = functions[i];
                 func();
             }
         }
