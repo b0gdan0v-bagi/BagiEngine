@@ -16,6 +16,7 @@ namespace BECore {
         inline constexpr StringView kNoActiveModel = "no_active_model";
         inline constexpr StringView kIllegalAction = "illegal_action";
         inline constexpr StringView kUnsupported = "unsupported";
+        inline constexpr StringView kReplayNeedsManualClock = "replay_needs_manual_clock";
     }  // namespace GameControlErrors
 
     /// Events that the game layer pushes to the clients of the control API
