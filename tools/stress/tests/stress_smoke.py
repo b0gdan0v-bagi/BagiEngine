@@ -47,7 +47,7 @@ ENGINE_CONFIG_BINDINGS = {
     "GameWidgetsConfig": Binding("WidgetList"),
     "SDLWindowConfig": Binding("SDLWindowConfig", "window"),
 }
-ENGINE_CONFIG_BY_HAND = {"TextConfig", "UIConfig"}  # read by hand: no reflected type, so no XSD
+ENGINE_CONFIG_BY_HAND = {"AudioConfig", "TextConfig", "UIConfig"}  # read by hand: no reflected type, so no XSD
 
 
 def last_frame(client: BagiControlClient) -> dict:
