@@ -136,9 +136,10 @@ namespace BECore::Ser {
      * An object or opaque `T` keeps its own form as the literal (`<pos x=".." y=".." z=".."/>`) and `<pos from="caster.position"/>` reads.
      * A literal of one attribute saves as that attribute, so a file written before the field became a `Value` saves as it was. A formula that
      * folds to a constant or to one field loads as that `Const` or `Slot` and saves as such; a program saves as its text. The object form may carry `kind` (`Const`,
-     * `Slot` or `Program`); the keys `kind`, `from`, `value` and `expr` are reserved, and only one of the last three may be there. `expr` on a type no program
-     * computes is the error that lists the types that can. A `from` links against the declaration of the
-     * `ValueLinkScope` of the load (`ContextDecl` in `ContextDeclAccessor.h` declares it from the document). A load that fails leaves the field as it was, with the error under the path of the field.
+     * `Slot` or `Program`); the keys `kind`, `from`, `value` and `expr` are reserved, and only one of the last three may be there. `expr` is looked for before the literal of an object type, so `<aim
+     * expr=".."/>` of a `Value<Vec3>` is never read as the element form of the literal. `expr` on a type no program computes is the error that lists the types that can. A `from` links against the
+     * declaration of the `ValueLinkScope` of the load (`ContextDecl` in `ContextDeclAccessor.h` declares it from the document). A load that fails leaves the field as it was, with the error under the
+     * path of the field.
      */
     template <typename T>
     struct DataAccessor<Value<T>> {

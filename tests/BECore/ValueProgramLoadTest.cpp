@@ -1,19 +1,23 @@
 // `expr` in content (Values/ValueAccessor.h): a formula read from XML, binary and JSON, compiled against the declaration of the link scope; the saved forms,
 // the refusals and the line a mistake gives. The document types are those of ValueTestTypes.h (their generated code is included in ValueContextTest.cpp).
 
+#include <BECore/Animation/Lerp.h>
 #include <BECore/Config/ConfigFactory.h>
 #include <BECore/Control/Json.h>
 #include <BECore/Control/JsonDeserializer.h>
+#include <BECore/Control/JsonSerializer.h>
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/BinarySerializer.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/ValueTestTypes.h>
+#include <BECore/Values/Programs/Program.h>
 #include <BECore/Values/ValueLinkScope.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/LogRecorder.h>
 #include <Common/Printers.h>
 #include <cmath>
+#include <cstring>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -27,6 +31,17 @@ namespace BECore::Tests {
         constexpr StringView kContext = R"(<context caster="ValueUnitStats" cast="ValueCastInfo"/>)";
         constexpr StringView kFormulas = R"x(<damage expr="caster.attack * (100 + cast.level * 10) / 100"/><total expr="caster.score / 3 + 1"/><power expr="lerp(caster.speed, cast.power, 0.25)"/>)x"
                                          R"x(<precise expr="caster.precise * 2 + sqrt(2.0)"/><ready expr="caster.alive &amp;&amp; cast.level &gt; 2"/>)x";
+
+        /// One formula for each type a program computes besides the five numbers and bools of `kFormulas`
+        constexpr StringView kTypedFormulas = R"x(<shift expr="caster.position * 2 + vec2(1, 0)"/><aim expr="caster.velocity * 2 + cast.target"/>)x"
+                                              R"x(<plane expr="caster.plane / 2 + vec4(1, 2, 3, 4)"/><cell expr="ivec2(caster.cell.x + 1, 2)"/>)x"
+                                              R"x(<facing expr="lerp(caster.facing, quat(0, 0, 1, 0), 0.25)"/><tint expr="lerp(caster.tint, color(0, 0, 0, 255), 0.5)"/>)x"
+                                              R"x(<element expr="select(caster.alive, Fire, caster.element)"/><label expr="select(caster.alive, 'burn', 'chill')"/>)x";
+
+        /// Formulas that fold: each is a constant, so the file keeps the value and not the text
+        constexpr StringView kFoldedFormulas = R"x(<shift expr="vec2(1, 2) * 2"/><aim expr="vec3(1, 2, 3) * 2"/><plane expr="vec4(1, 2, 3, 4) / 2"/>)x"
+                                               R"x(<cell expr="ivec2(1, 2) * 3"/><facing expr="quat(0, 0, 0, 1)"/><tint expr="color(1, 2, 3, 255)"/>)x"
+                                               R"x(<element expr="select(1 &lt; 2, Fire, Water)"/><label expr="'a' "/>)x";
 
         struct Refusal {
             StringView name;
@@ -179,6 +194,81 @@ namespace BECore::Tests {
             ExpectSameFormula(actual.ready, expected.ready, "ready");
         }
 
+        template <typename T>
+        bool SameBytes(const T& left, const T& right) {
+            return std::memcmp(&left, &right, sizeof(T)) == 0;
+        }
+
+        /// `Evaluate` of every typed field against the same formulas written in plain C++; a `Color` has no `==`, so the values compare by bytes
+        template <typename Document>
+        void ExpectTypedFormulasEqualPlainCode(const Document& document) {
+            ASSERT_EQ(document.shift.Kind(), ValueKind::Program);
+            ASSERT_EQ(document.element.Kind(), ValueKind::Program);
+            ASSERT_EQ(document.label.Kind(), ValueKind::Program);
+            ValueWorld world;
+            for (const bool second : {false, true}) {
+                if (second) {
+                    world.caster.alive = false;
+                    world.caster.position = Vec2{-1.5f, 4.0f};
+                    world.caster.velocity = Vec3{0.5f, -2.0f, 8.0f};
+                    world.caster.cell = IVec2{-3, 40};
+                    world.caster.plane = Vec4{1.0f, 2.0f, 3.0f, 4.0f};
+                    world.caster.tint = Color{200, 100, 0, 17};
+                    world.caster.element = ValueElement::Fire;
+                    world.cast.target = Vec3{-1.0f, -2.0f, -3.0f};
+                }
+                const ValueUnitStats& caster = world.caster;
+                EXPECT_TRUE(SameBytes(document.shift.Evaluate(world.context), caster.position * 2.0f + Vec2{1.0f, 0.0f}));
+                EXPECT_TRUE(SameBytes(document.aim.Evaluate(world.context), caster.velocity * 2.0f + world.cast.target));
+                EXPECT_TRUE(SameBytes(document.plane.Evaluate(world.context), caster.plane / 2.0f + Vec4{1.0f, 2.0f, 3.0f, 4.0f}));
+                EXPECT_TRUE(SameBytes(document.cell.Evaluate(world.context), IVec2{caster.cell.x + 1, 2}));
+                EXPECT_TRUE(SameBytes(document.facing.Evaluate(world.context), Slerp(caster.facing, Quat{0.0f, 0.0f, 1.0f, 0.0f}, 0.25f)));
+                EXPECT_TRUE(SameBytes(document.tint.Evaluate(world.context), Lerp(caster.tint, Color{0, 0, 0, 255}, 0.5f)));
+                EXPECT_EQ(document.element.Evaluate(world.context), caster.alive ? ValueElement::Fire : caster.element);
+                EXPECT_EQ(document.label.Evaluate(world.context), PoolString::Intern(caster.alive ? "burn" : "chill"));
+            }
+        }
+
+        /// The same kind, and the same formula, field or literal bytes; the literal of a `Color` is compared by bytes
+        template <typename T>
+        void ExpectSameTyped(const Value<T>& actual, const Value<T>& expected, const char* field) {
+            ASSERT_EQ(actual.Kind(), expected.Kind()) << field;
+            if (expected.Kind() == ValueKind::Program) {
+                EXPECT_EQ(actual.Id(), expected.Id()) << field;
+                EXPECT_EQ(actual.Path(), expected.Path()) << field;
+            } else if (expected.Kind() == ValueKind::Slot) {
+                EXPECT_EQ(actual.Level(), expected.Level()) << field;
+                EXPECT_EQ(actual.Offset(), expected.Offset()) << field;
+            } else {
+                EXPECT_TRUE(SameBytes(actual.GetConst(), expected.GetConst())) << field;
+            }
+        }
+
+        void ExpectSameTypedDocument(const ValueFormulaDocument& actual, const ValueFormulaDocument& expected) {
+            ExpectSameTyped(actual.shift, expected.shift, "shift");
+            ExpectSameTyped(actual.aim, expected.aim, "aim");
+            ExpectSameTyped(actual.plane, expected.plane, "plane");
+            ExpectSameTyped(actual.cell, expected.cell, "cell");
+            ExpectSameTyped(actual.facing, expected.facing, "facing");
+            ExpectSameTyped(actual.tint, expected.tint, "tint");
+            ExpectSameTyped(actual.element, expected.element, "element");
+            ExpectSameTyped(actual.label, expected.label, "label");
+        }
+
+        /// What the folded formulas of `kFoldedFormulas` are
+        void ExpectFoldedConstants(const ValueFormulaDocument& document) {
+            EXPECT_TRUE(document.shift.IsConst() && document.aim.IsConst() && document.plane.IsConst() && document.cell.IsConst());
+            EXPECT_TRUE(document.facing.IsConst() && document.tint.IsConst() && document.element.IsConst() && document.label.IsConst());
+            EXPECT_TRUE(SameBytes(document.shift.GetConst(), Vec2{2.0f, 4.0f}));
+            EXPECT_TRUE(SameBytes(document.aim.GetConst(), Vec3{2.0f, 4.0f, 6.0f}));
+            EXPECT_TRUE(SameBytes(document.plane.GetConst(), Vec4{0.5f, 1.0f, 1.5f, 2.0f}));
+            EXPECT_TRUE(SameBytes(document.cell.GetConst(), IVec2{3, 6}));
+            EXPECT_TRUE(SameBytes(document.facing.GetConst(), Quat{0.0f, 0.0f, 0.0f, 1.0f}));
+            EXPECT_TRUE(SameBytes(document.tint.GetConst(), Color{1, 2, 3, 255}));
+            EXPECT_EQ(document.element.GetConst(), ValueElement::Fire);
+            EXPECT_EQ(document.label.GetConst(), PoolString::Intern("a"));
+        }
+
     }  // namespace
 
     // =========================================================================
@@ -287,6 +377,231 @@ namespace BECore::Tests {
         const ValueLinkScope scope(kDocumentName);
         EXPECT_TRUE(LoadXmlDocument(saved, loaded).empty());
         ExpectSameDocument(loaded, document);
+    }
+
+    // =========================================================================
+    // The types of a formula beside the numbers: vectors, quaternion, color, enum, string
+    // =========================================================================
+
+    TEST(ValueProgramLoadTest, FormulasOfEveryTypeFromXmlEvaluateLikePlainCode) {
+        ValueFormulaDocument document;
+        const ValueLinkScope scope(kDocumentName);
+        const String reports = LoadXml(Format("{}{}", kContext, kTypedFormulas), document, DiagnosticsMode::Warn, true);
+        EXPECT_TRUE(reports.empty()) << reports.c_str();
+        ExpectTypedFormulasEqualPlainCode(document);
+        EXPECT_EQ(document.label.Path(), PoolString::Intern("select(caster.alive, 'burn', 'chill')"));
+    }
+
+    TEST(ValueProgramLoadTest, TheKindProgramBesideExprLoadsEveryType) {
+        // The object form of a field whose literal is an element too (`<aim x= y= z=/>`) must not take `expr` for part of the literal
+        struct Field {
+            StringView name;
+            StringView text;
+        };
+        const Field fields[] = {
+            {"shift", "caster.position * 2 + vec2(1, 0)"},
+            {"aim", "caster.velocity * 2 + cast.target"},
+            {"plane", "caster.plane / 2 + vec4(1, 2, 3, 4)"},
+            {"cell", "ivec2(caster.cell.x + 1, 2)"},
+            {"facing", "lerp(caster.facing, quat(0, 0, 1, 0), 0.25)"},
+            {"tint", "lerp(caster.tint, color(0, 0, 0, 255), 0.5)"},
+            {"element", "select(caster.alive, Fire, caster.element)"},
+            {"label", "select(caster.alive, 'burn', 'chill')"},
+        };
+        String body;
+        for (const Field& field : fields) {
+            AppendFormat(body, "<{} kind=\"Program\" expr=\"{}\"/>", field.name, field.text);
+        }
+        ValueFormulaDocument document;
+        const ValueLinkScope scope(kDocumentName);
+        const String reports = LoadXml(Format("{}{}", kContext, body), document);
+        EXPECT_TRUE(reports.empty()) << reports.c_str();
+        ExpectTypedFormulasEqualPlainCode(document);
+    }
+
+    TEST(ValueProgramLoadTest, TypedFormulasSaveTheirTextAndLoadAgainEqualInXmlBinaryAndJson) {
+        ValueFormulaDocument document;
+        {
+            const ValueLinkScope scope(kDocumentName);
+            ASSERT_TRUE(LoadXml(Format("{}{}", kContext, kTypedFormulas), document).empty());
+        }
+        const String saved = SaveXml(document);
+        EXPECT_TRUE(HasText(saved, "<shift expr=\"caster.position * 2 + vec2(1, 0)\"")) << saved.c_str();
+        EXPECT_TRUE(HasText(saved, "<label expr=\"select(caster.alive, 'burn', 'chill')\"")) << saved.c_str();
+        EXPECT_TRUE(HasText(saved, "<element expr=\"select(caster.alive, Fire, caster.element)\"")) << saved.c_str();
+
+        ValueFormulaDocument fromXml;
+        {
+            const ValueLinkScope scope(kDocumentName);
+            const String reports = LoadXmlDocument(saved, fromXml);
+            EXPECT_TRUE(reports.empty()) << reports.c_str();
+        }
+        ExpectSameTypedDocument(fromXml, document);
+        ExpectTypedFormulasEqualPlainCode(fromXml);
+
+        ValueFormulaDocument fromBinary;
+        {
+            const ValueLinkScope scope(kDocumentName);
+            const String reports = LoadBinary(SaveBinary(document), fromBinary);
+            EXPECT_TRUE(reports.empty()) << reports.c_str();
+        }
+        ExpectSameTypedDocument(fromBinary, document);
+        ExpectTypedFormulasEqualPlainCode(fromBinary);
+
+        JsonSerializer serializer;
+        document.Serialize(serializer);
+        const Json json = serializer.Take();
+        ValueFormulaDocument fromJson;
+        {
+            const ValueLinkScope scope(kDocumentName);
+            JsonDeserializer reader(json);
+            fromJson.Deserialize(reader);
+            EXPECT_FALSE(reader.HasErrors()) << ReportsOf(reader).c_str();
+        }
+        ExpectSameTypedDocument(fromJson, document);
+        ExpectTypedFormulasEqualPlainCode(fromJson);
+    }
+
+    TEST(ValueProgramLoadTest, JsonReadsTheObjectWithExprOfEveryType) {
+        const auto parsed = ParseJson(R"x({"context": [{"name": "caster", "type": "ValueUnitStats"}, {"name": "cast", "type": "ValueCastInfo"}],
+                                          "shift": {"expr": "caster.position * 2 + vec2(1, 0)"}, "aim": {"expr": "caster.velocity * 2 + cast.target"},
+                                          "plane": {"expr": "caster.plane / 2 + vec4(1, 2, 3, 4)"}, "cell": {"expr": "ivec2(caster.cell.x + 1, 2)"},
+                                          "facing": {"expr": "lerp(caster.facing, quat(0, 0, 1, 0), 0.25)"}, "tint": {"expr": "lerp(caster.tint, color(0, 0, 0, 255), 0.5)"},
+                                          "element": {"expr": "select(caster.alive, Fire, caster.element)"}, "label": {"expr": "select(caster.alive, 'burn', 'chill')"}})x");
+        ASSERT_TRUE(parsed.has_value());
+        ValueFormulaDocument document;
+        const ValueLinkScope scope(kDocumentName);
+        JsonDeserializer reader(*parsed);
+        document.Deserialize(reader);
+        EXPECT_FALSE(reader.HasErrors()) << ReportsOf(reader).c_str();
+        ExpectTypedFormulasEqualPlainCode(document);
+    }
+
+    TEST(ValueProgramLoadTest, FoldedFormulasOfEveryTypeSaveAsTheirOwnFormAndNotAsExpr) {
+        ValueFormulaDocument document;
+        {
+            const ValueLinkScope scope(kDocumentName);
+            const String reports = LoadXml(Format("{}{}", kContext, kFoldedFormulas), document);
+            EXPECT_TRUE(reports.empty()) << reports.c_str();
+        }
+        ExpectFoldedConstants(document);
+
+        const String saved = SaveXml(document);
+        EXPECT_FALSE(HasText(saved, "expr")) << saved.c_str();
+        ValueFormulaDocument fromXml;
+        {
+            const ValueLinkScope scope(kDocumentName);
+            const String reports = LoadXmlDocument(saved, fromXml);
+            EXPECT_TRUE(reports.empty()) << reports.c_str();
+        }
+        ExpectFoldedConstants(fromXml);
+
+        ValueFormulaDocument fromBinary;
+        {
+            const ValueLinkScope scope(kDocumentName);
+            EXPECT_TRUE(LoadBinary(SaveBinary(document), fromBinary).empty());
+        }
+        ExpectFoldedConstants(fromBinary);
+
+        JsonSerializer serializer;
+        document.Serialize(serializer);
+        const Json json = serializer.Take();
+        ValueFormulaDocument fromJson;
+        {
+            const ValueLinkScope scope(kDocumentName);
+            JsonDeserializer reader(json);
+            fromJson.Deserialize(reader);
+            EXPECT_FALSE(reader.HasErrors()) << ReportsOf(reader).c_str();
+        }
+        ExpectFoldedConstants(fromJson);
+    }
+
+    TEST(ValueProgramLoadTest, AFormulaThatIsOneFieldOfAnyTypeLoadsAsASlotAndSavesAsFrom) {
+        ValueFormulaDocument document;
+        {
+            const ValueLinkScope scope(kDocumentName);
+            const String reports = LoadXml(Format("{}{}", kContext,
+                                                  R"x(<shift expr="caster.position"/><aim expr="caster.velocity"/><cell expr="caster.cell"/><tint expr="caster.tint"/>)x"
+                                                  R"x(<element expr="caster.element"/><label expr="caster.title"/>)x"),
+                                           document);
+            EXPECT_TRUE(reports.empty()) << reports.c_str();
+        }
+        EXPECT_TRUE(document.shift.IsSlot() && document.aim.IsSlot() && document.cell.IsSlot() && document.tint.IsSlot());
+        EXPECT_TRUE(document.element.IsSlot() && document.label.IsSlot());
+        const String saved = SaveXml(document);
+        EXPECT_TRUE(HasText(saved, "<tint from=\"caster.tint\"")) << saved.c_str();
+        EXPECT_FALSE(HasText(saved, "expr")) << saved.c_str();
+        ValueFormulaDocument loaded;
+        const ValueLinkScope scope(kDocumentName);
+        EXPECT_TRUE(LoadXmlDocument(saved, loaded).empty());
+        ExpectSameTyped(loaded.element, document.element, "element");
+        ExpectSameTyped(loaded.label, document.label, "label");
+        ExpectSameTyped(loaded.cell, document.cell, "cell");
+    }
+
+    TEST(ValueProgramLoadTest, AMisspelledEnumeratorListsTheEnumeratorsAndNamesTheDocument) {
+        ValueFormulaDocument document;
+        const ValueLinkScope scope(kDocumentName);
+        const String reports = LoadXml(Format("{}{}", kContext, R"x(<element expr="select(caster.alive, Fyre, caster.element)"/>)x"), document);
+        EXPECT_TRUE(HasText(reports, "State.element.expr")) << reports.c_str();
+        EXPECT_TRUE(HasText(reports, "unknown name 'Fyre'")) << reports.c_str();
+        EXPECT_TRUE(HasText(reports, "did you mean 'Fire'")) << reports.c_str();
+        EXPECT_TRUE(HasText(reports, "{Fire, Water, Earth}")) << reports.c_str();
+        EXPECT_TRUE(HasText(reports, "(document 'units/skill.xml')")) << reports.c_str();
+        ASSERT_TRUE(document.element.IsConst());
+        EXPECT_EQ(document.element.GetConst(), ValueElement::Earth);
+    }
+
+    TEST(ValueProgramLoadTest, ExprOnATypeNoProgramComputesIsRefusedInBinaryAndJsonToo) {
+        ValueFormulaDocument document;
+        const ValueLinkScope scope(kDocumentName);
+        const String reports = LoadXml(Format("{}{}", kContext, R"(<spot expr="caster.spawn"/>)"), document);
+        EXPECT_TRUE(HasText(reports, "vec2, vec3, vec4, ivec2, quat, color, enum or string")) << reports.c_str();
+
+        const Vector<uint8_t> data = [] {
+            BinarySerializer serializer;
+            EXPECT_TRUE(serializer.BeginObject(kState));
+            EXPECT_TRUE(serializer.BeginObject("spot"));
+            serializer.WriteAttribute("expr", StringView("caster.spawn"));
+            serializer.EndObject();
+            serializer.EndObject();
+            return serializer.GetData();
+        }();
+        ValueFormulaDocument fromBinary;
+        ValueWorld world;
+        const ValueLinkScope binaryScope(world.declaration);
+        const String binaryReports = LoadBinary(data, fromBinary);
+        EXPECT_TRUE(HasText(binaryReports, "State.spot.expr")) << binaryReports.c_str();
+        EXPECT_TRUE(HasText(binaryReports, "ValuePoint")) << binaryReports.c_str();
+        EXPECT_TRUE(fromBinary.spot.IsConst());
+
+        const auto parsed = ParseJson(R"({"spot": {"expr": "caster.spawn"}})");
+        ASSERT_TRUE(parsed.has_value());
+        ValueFormulaDocument fromJson;
+        JsonDeserializer reader(*parsed);
+        fromJson.Deserialize(reader);
+        EXPECT_TRUE(reader.HasErrors());
+        EXPECT_TRUE(fromJson.spot.IsConst());
+    }
+
+    TEST(ValueProgramLoadTest, AFailedTypedLoadLeavesTheFieldsAndThePoolAsTheyWere) {
+        ValueFormulaDocument document;
+        const ValueLinkScope scope(kDocumentName);
+        ASSERT_TRUE(LoadXml(Format("{}{}", kContext, kTypedFormulas), document).empty());
+        ValueFormulaDocument before;
+        before.shift = document.shift;
+        before.element = document.element;
+        const size_t pool = ProgramPool::Count();
+
+        XmlDeserializer reader;
+        ASSERT_TRUE(reader.LoadFromString(R"(<root><State><shift expr="caster.position * 3 + caster.cell"/><element expr="caster.element == Fire"/></State></root>)"));
+        ASSERT_TRUE(reader.BeginObject(kState));
+        document.Deserialize(reader);
+        reader.EndObject();
+        EXPECT_TRUE(reader.HasErrors());
+        ExpectSameTyped(document.shift, before.shift, "shift");
+        ExpectSameTyped(document.element, before.element, "element");
+        EXPECT_EQ(ProgramPool::Count(), pool);
     }
 
     // =========================================================================
@@ -461,9 +776,8 @@ namespace BECore::Tests {
             ASSERT_TRUE(reader.BeginObject(kState));
             document.Deserialize(reader);
             reader.EndObject();
-            if (reader.HasErrors()) {
-                ExpectDefaults(document);
-            }
+            EXPECT_TRUE(reader.HasErrors()) << "no error for a hostile text of " << text.size() << " bytes";
+            ExpectDefaults(document);
         }
     }
 
@@ -505,7 +819,7 @@ namespace BECore::Tests {
     TEST_F(ValueProgramConfigTest, AConfigLoadsItsFormulas) {
         Install(Format("{}{}", kContext, kFormulas));
         LogRecorder recorder;
-        const auto document = MakeFromConfig<ValueFormulaConfigDocument>(kConfig);
+        const auto document = MakeFromConfig<ValueFormulaDocument>(kConfig);
         LogEvent::Flush();
 
         EXPECT_EQ(recorder.Count(LogLevel::Error, {kConfigPrefix}), 0U);
@@ -515,7 +829,7 @@ namespace BECore::Tests {
     TEST_F(ValueProgramConfigTest, AMistakeInAFormulaLogsTheConfigTheFieldAndTheColumn) {
         Install(Format("{}{}", kContext, R"(<damage expr="caster.attack @ 2"/><power expr="cast.power * 2"/>)"));
         LogRecorder recorder;
-        const auto document = MakeFromConfig<ValueFormulaConfigDocument>(kConfig);
+        const auto document = MakeFromConfig<ValueFormulaDocument>(kConfig);
         LogEvent::Flush();
 
         EXPECT_EQ(recorder.Count(LogLevel::Error, {kConfigPrefix}), 1U);
@@ -528,7 +842,7 @@ namespace BECore::Tests {
     TEST_F(ValueProgramConfigTest, AFormulaWithNoContextNamesTheConfig) {
         Install(R"(<damage expr="caster.attack"/>)");
         LogRecorder recorder;
-        const auto document = MakeFromConfig<ValueFormulaConfigDocument>(kConfig);
+        const auto document = MakeFromConfig<ValueFormulaDocument>(kConfig);
         LogEvent::Flush();
 
         EXPECT_NE(recorder.Find(LogLevel::Error, {kConfigPrefix, "No context is declared", "caster.attack", "(document 'TestsConfig')"}), nullptr);

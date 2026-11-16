@@ -185,9 +185,9 @@ namespace BECore::ValueTestData {
         BE_REFLECT_FIELD Value<Vec3> aim = Vec3{9.0f, 9.0f, 9.0f};
     };
 
-    /// A document whose fields are written as formulas (`expr`): one field of each type a program computes up to `Vec3`, and a `ValuePoint` that no program computes; the defaults are not what the
-    /// tests load
-    struct ValueFormulaDocument {
+    /// A document whose fields are written as formulas (`expr`): one field of each type a program computes, and a `ValuePoint` that no program computes; the defaults are
+    /// not what the tests load. It is a `RefCounted` so that `MakeFromConfig` makes it as well as a test builds it on the stack
+    struct ValueFormulaDocument : RefCounted {
         BE_CLASS(ValueFormulaDocument)
 
         BE_REFLECT_FIELD ContextDecl context;
@@ -196,21 +196,14 @@ namespace BECore::ValueTestData {
         BE_REFLECT_FIELD Value<float> power = 1.0f;
         BE_REFLECT_FIELD Value<double> precise = 1.0;
         BE_REFLECT_FIELD Value<bool> ready = false;
+        BE_REFLECT_FIELD Value<Vec2> shift = Vec2{9.0f, 9.0f};
         BE_REFLECT_FIELD Value<Vec3> aim = Vec3{9.0f, 9.0f, 9.0f};
-        BE_REFLECT_FIELD Value<ValuePoint> spot = ValuePoint{9, 9};
-    };
-
-    /// The document of a named config (`MakeFromConfig` needs a `RefCounted`): the same fields as `ValueFormulaDocument`
-    struct ValueFormulaConfigDocument : RefCounted {
-        BE_CLASS(ValueFormulaConfigDocument)
-
-        BE_REFLECT_FIELD ContextDecl context;
-        BE_REFLECT_FIELD Value<int32_t> damage = 7;
-        BE_REFLECT_FIELD Value<int64_t> total = 7;
-        BE_REFLECT_FIELD Value<float> power = 1.0f;
-        BE_REFLECT_FIELD Value<double> precise = 1.0;
-        BE_REFLECT_FIELD Value<bool> ready = false;
-        BE_REFLECT_FIELD Value<Vec3> aim = Vec3{9.0f, 9.0f, 9.0f};
+        BE_REFLECT_FIELD Value<Vec4> plane = Vec4{9.0f, 9.0f, 9.0f, 9.0f};
+        BE_REFLECT_FIELD Value<IVec2> cell = IVec2{9, 9};
+        BE_REFLECT_FIELD Value<Quat> facing = Quat{0.0f, 1.0f, 0.0f, 0.0f};
+        BE_REFLECT_FIELD Value<Color> tint = Color{9, 9, 9, 9};
+        BE_REFLECT_FIELD Value<ValueElement> element = ValueElement::Earth;
+        BE_REFLECT_FIELD Value<PoolString> label;
         BE_REFLECT_FIELD Value<ValuePoint> spot = ValuePoint{9, 9};
     };
 
