@@ -46,4 +46,4 @@ A reflected document type that declares a context has a field `ContextDecl conte
 
 ## Not here
 
-The cache of a program's result per version key (`Programs/CLAUDE.md`, "Not yet"). The explanation of a value (why it is what it is), screens that rebuild on a version key: later entries (`data-values-explain`, `-reactive`). No scene loader of the engine opens a scope, so a `Value` field in a component of a scene or node file needs the entry that wires them. Reading or writing a `Value` field by name through the control API treats it as an opaque value, not a leaf.
+The cache of a program's result per version key and a `Vec3` fusion (`Programs/CLAUDE.md`, "Not yet"); a file format for named tables (the game supplies a provider). The explanation of a value (why it is what it is), screens that rebuild on a version key: later entries (`data-values-explain`, `-reactive`). No scene loader of the engine opens a scope, so a `Value` field in a component of a scene or node file needs the entry that wires them. Reading or writing a `Value` field by name through the control API treats it as an opaque value, not a leaf.
