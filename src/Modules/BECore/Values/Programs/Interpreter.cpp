@@ -21,6 +21,12 @@ namespace BECore {
                 case Opcode::Copy:
                     regs[ins.dst] = regs[ins.a];
                     break;
+                case Opcode::LoadTable: {
+                    const uint32_t count = TableEntryCount(ins);
+                    ASSERT(count > 0 && ins.imm + count <= constants.size());
+                    regs[ins.dst] = constants[ins.imm + Kernel::TableIndex(Kernel::Load<int32_t>(regs[ins.a]), count)];
+                    break;
+                }
 #define BE_PROGRAM_CASE_ROW(Op, Type, Cpp)                                                                                                                                                             \
     case Opcode::Op##Type:                                                                                                                                                                             \
         Kernel::Execute<Kernel::Op, Cpp>(regs, ins, context);                                                                                                                                          \

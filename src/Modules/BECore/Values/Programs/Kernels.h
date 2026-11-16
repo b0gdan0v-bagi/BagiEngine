@@ -7,6 +7,7 @@
 #include <BECore/Values/Programs/Components.h>
 #include <BECore/Values/Programs/Instruction.h>
 #include <BECore/Values/Programs/Opcode.h>
+#include <algorithm>
 #include <cmath>
 #include <concepts>
 #include <cstdint>
@@ -644,6 +645,14 @@ namespace BECore::Kernel {
         }
     };
 
+    /// The entry of a table of @p count entries that `LoadTable` takes for @p index: a negative index is the first, one past the end the last (never zero entries: `Finish` refuses)
+    [[nodiscard]] constexpr uint32_t TableIndex(int32_t index, uint32_t count) {
+        if (index < 0) {
+            return 0;
+        }
+        return std::min(static_cast<uint32_t>(index), count - 1);
+    }
+
     /// One component of a value of a type with components; the index is in the instruction's `imm`
     struct Extract {
         static constexpr OpShape kShape = OpShape::Extract;
@@ -817,6 +826,7 @@ namespace BECore {
             case Opcode::Invalid:
             case Opcode::LoadConst:
             case Opcode::Copy:
+            case Opcode::LoadTable:
                 break;
         }
         return std::nullopt;

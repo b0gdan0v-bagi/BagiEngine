@@ -699,8 +699,8 @@ namespace BECore::Tests {
 #define BE_CHECK_CONVERSION(Src, SrcCpp, Dst, DstCpp) CheckConversion<SrcCpp, DstCpp>(Opcode::Src##To##Dst);
         BE_PROGRAM_CONVERSIONS(BE_CHECK_CONVERSION)
 #undef BE_CHECK_CONVERSION
-        // Every opcode but the three untyped ones is a row or a conversion: a row that the matrix skipped would leave the count short
-        EXPECT_EQ(static_cast<size_t>(g_rowsChecked) + 3, EnumUtils<Opcode>::Count());
+        // Every opcode but the four untyped ones (`Invalid`, `LoadConst`, `Copy`, `LoadTable`) is a row or a conversion: a row that the matrix skipped would leave the count short
+        EXPECT_EQ(static_cast<size_t>(g_rowsChecked) + 4, EnumUtils<Opcode>::Count());
     }
 
     TEST(ProgramInterpreterTest, TheVectorsOfIntegersWrapLikeIntegers) {
@@ -1213,9 +1213,10 @@ namespace BECore::Tests {
         static_assert(ResultTypeOf(Opcode::LoadSlotEnum) == ProgramType::Enum);
         static_assert(ResultTypeOf(Opcode::AddInt32) == ProgramType::Int32);
         static_assert(ResultTypeOf(Opcode::FloatToInt32) == ProgramType::Int32);
-        static_assert(!ResultTypeOf(Opcode::LoadConst).has_value() && !ResultTypeOf(Opcode::Copy).has_value() && !ResultTypeOf(Opcode::Invalid).has_value());
+        static_assert(!ResultTypeOf(Opcode::LoadConst).has_value() && !ResultTypeOf(Opcode::Copy).has_value() && !ResultTypeOf(Opcode::LoadTable).has_value() &&
+                      !ResultTypeOf(Opcode::Invalid).has_value());
         for (const Opcode op : EnumUtils<Opcode>::Values()) {
-            if (op != Opcode::Invalid && op != Opcode::LoadConst && op != Opcode::Copy) {
+            if (op != Opcode::Invalid && op != Opcode::LoadConst && op != Opcode::Copy && op != Opcode::LoadTable) {
                 EXPECT_TRUE(ResultTypeOf(op).has_value()) << String(EnumUtils<Opcode>::ToString(op)).c_str();
             }
         }

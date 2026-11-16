@@ -27,6 +27,12 @@ namespace BECore {
         return static_cast<uint32_t>(_constants.size() - 1);
     }
 
+    uint32_t ProgramBuilder::AddConstantRun(Span<const RegisterImage> images) {
+        const auto first = static_cast<uint32_t>(_constants.size());
+        _constants.insert(_constants.end(), images.begin(), images.end());
+        return first;
+    }
+
     void ProgramBuilder::Emit(const Instruction& instruction) {
         _code.push_back(instruction);
     }
@@ -55,6 +61,18 @@ namespace BECore {
             }
             if (ins.op == Opcode::LoadConst && ins.imm >= _constants.size()) {
                 return refuse(i, ins, Format("reads constant {}, but there are {}", ins.imm, _constants.size()));
+            }
+            if (ins.op == Opcode::LoadTable) {
+                const uint32_t count = TableEntryCount(ins);
+                if (count == 0) {
+                    return refuse(i, ins, "reads a table with no entry");
+                }
+                if (count > kMaxTableEntries) {
+                    return refuse(i, ins, Format("reads a table of {} entries, but a table has at most {}", count, kMaxTableEntries));
+                }
+                if (static_cast<size_t>(ins.imm) + count > _constants.size()) {
+                    return refuse(i, ins, Format("reads constants {} to {}, but there are {}", ins.imm, static_cast<size_t>(ins.imm) + count - 1, _constants.size()));
+                }
             }
             if (const Optional<ProgramType> componentType = ComponentOpcodeType(ins.op)) {
                 const uint32_t count = ComponentsOf(*componentType).count;

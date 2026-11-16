@@ -48,6 +48,8 @@ Every row has a test against a plain C++ reference (`ProgramInterpreterTest`). O
 
 A constant is the register image, so the builder keeps one entry for equal constants.
 
+**Tables.** `LoadTable` (untyped, like `LoadConst`) writes entry `clamp(index, 0, count - 1)` of a run of constants to `dst`, the `int32_t` index in `a`, the first constant in `imm`, the 16-bit count in `b` and `c`. A table is consecutive, so `AddConstantRun` appends without sharing; `Finish` refuses an empty run, one outside the pool and one over `kMaxTableEntries`.
+
 ## The text of a formula
 
 Loosest first: `||`; `&&`; `== !=`; `< <= > >=`; `+ -`; `* / %`; unary `- !`; postfix call and member. Binary operators group to the left; parentheses leave no node. Numbers are `12`, `1.5`, `.5`, `1e3` with no suffix and no sign (a sign is the unary operator, so a literal never carries one); `true` and `false` are literals, `'text'` a string: printable ASCII from space to `~`, no escapes and no `'` inside (an XML-friendly quote), `''` is the empty string; an unterminated one is an error at its opening quote. `a.b.c` is one `Name`, `a.b(c)` a `Call` of the name `a.b` (the checker says why that is no function), `.x` after anything that is not a bare name (`f(x).y`, `(a).b`) is a `Member`. `[` is refused by the lexer: a path must name a fixed field. Only ASCII is part of the language; any other byte is an error that names it (an invalid UTF-8 byte by its hex value, never copied into the message).

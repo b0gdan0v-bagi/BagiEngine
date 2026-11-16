@@ -27,6 +27,9 @@ namespace BECore {
         /// The index of the constant in the program's table; a value that is there already is not added again
         [[nodiscard]] uint32_t AddConstant(const RegisterImage& image);
 
+        /// The index of the first of @p images, which are appended as they are: a table must be consecutive, so the run is not looked up among the constants and its entries are not shared
+        [[nodiscard]] uint32_t AddConstantRun(Span<const RegisterImage> images);
+
         /// The constant of a value of a program type, zero-padded to a register; an enum is its index
         template <ProgramValue T>
         [[nodiscard]] uint32_t AddConstant(T value) {
@@ -55,6 +58,14 @@ namespace BECore {
         void EmitLoadSlot(uint8_t dst, ProgramType type, SlotRef slot, uint8_t enumBytes = 0) {
             ASSERT((type == ProgramType::Enum) == IsEnumFieldBytes(enumBytes), "EmitLoadSlot: an enum load names the size of its field, no other load does");
             Emit(LoadSlotOpcode(type), dst, slot.level, enumBytes, 0, slot.offset);
+        }
+
+        /// @p dst takes entry `index` of the @p count constants from @p first, the `int32_t` index being in register @p indexReg; `Finish` refuses an empty table, a run that is not in the pool and a
+        /// table over `kMaxTableEntries`
+        void EmitLoadTable(uint8_t dst, uint8_t indexReg, uint32_t first, uint32_t count) {
+            Instruction ins{Opcode::LoadTable, dst, indexReg, 0, 0, first};
+            SetTableEntryCount(ins, count);
+            Emit(ins);
         }
 
         /// The program, with the result in @p resultRegister; an error names the instruction that is not valid (an operand beyond the registers, a constant that is not there)

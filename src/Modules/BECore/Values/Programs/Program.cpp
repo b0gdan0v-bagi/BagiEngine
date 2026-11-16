@@ -111,6 +111,10 @@ namespace BECore {
         String text;
         for (size_t i = 0; i < _code.size(); ++i) {
             const Instruction& ins = _code[i];
+            if (ins.op == Opcode::LoadTable) {
+                text += Format("{}: LoadTable r{} <- r{} [{} entries from constant {}]\n", i, ins.dst, ins.a, TableEntryCount(ins), ins.imm);
+                continue;
+            }
             text += Format("{}: {} r{} <- r{} r{} r{} imm {}\n", i, EnumUtils<Opcode>::ToString(ins.op), ins.dst, ins.a, ins.b, ins.c, ins.imm);
         }
         text += Format("result {} in r{}\n", EnumUtils<ProgramType>::ToString(_resultType), _resultRegister);

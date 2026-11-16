@@ -148,10 +148,12 @@ namespace BECore {
     /**
      * @brief One instruction of a program
      *
-     * `LoadConst` and `Copy` move a whole register whatever it holds; `LoadSlot<type>` reads a field of a context object; every other opcode is
-     * an operation applied to one type (`AddInt32`), a conversion (`Int32ToFloat`). `Invalid` is never emitted: a zeroed instruction is caught.
+     * `LoadConst`, `Copy` and `LoadTable` move a whole register whatever it holds (`LoadTable` picks it from a run of constants by an index);
+     * `LoadSlot<type>` reads a field of a context object; every other opcode is an operation applied to one type (`AddInt32`), a conversion
+     * (`Int32ToFloat`). `Invalid` is never emitted: a zeroed instruction is caught.
      */
-    CORE_ENUM(Opcode, uint16_t, Invalid, LoadConst, Copy BE_PROGRAM_ROWS(BE_PROGRAM_OPCODE_ROW) BE_PROGRAM_MIXED_ROWS(BE_PROGRAM_OPCODE_MIXED) BE_PROGRAM_CONVERSIONS(BE_PROGRAM_OPCODE_CONVERSION))
+    CORE_ENUM(Opcode, uint16_t, Invalid, LoadConst, Copy,
+              LoadTable BE_PROGRAM_ROWS(BE_PROGRAM_OPCODE_ROW) BE_PROGRAM_MIXED_ROWS(BE_PROGRAM_OPCODE_MIXED) BE_PROGRAM_CONVERSIONS(BE_PROGRAM_OPCODE_CONVERSION))
 
     /// The operations of `BE_PROGRAM_ROWS` by name, apart from the type: what the text of a formula says (`+`, `min`) before a type is known
     CORE_ENUM(ProgramOperation, uint8_t, LoadSlot, Add, Sub, Mul, Div, Mod, Neg, Abs, Eq, Ne, Lt, Le, Gt, Ge, And, Or, Not, Min, Max, Clamp, Select, Lerp, Floor, Ceil, Round, Sqrt, Dot, Length,
