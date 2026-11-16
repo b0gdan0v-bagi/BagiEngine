@@ -3,7 +3,7 @@
     <!-- 
         Logger Sinks Configuration
         
-        type: Sink class name (OutputSink, ConsoleSink, FileSink)
+        type: Sink class name (OutputSink, ConsoleSink, FileSink, LogHistorySink)
         enabled: Whether sink is active (default: true)
         priority: Execution order, lower values run first (default: 0)
         minLevel: Minimum log level to output (Debug, Info, Warning, Error, Fatal)
@@ -15,6 +15,9 @@
             filename: Path to log file (default: engine.log)
             append: Append to existing file (default: false)
         
+        LogHistorySink-specific:
+            capacity: Lines the editor Console panel keeps, 64..65536 (default: 2048)
+
         Output-specific:
             Platform-specific debug output sink.
             On Windows: Outputs to Visual Studio Output window using OutputDebugString
@@ -31,5 +34,8 @@
         
         <!-- File sink runs after Output -->
         <sink type="FileSink" enabled="true" priority="100" minLevel="Info" filename="engine.log" append="false" />
+
+        <!-- History sink: the lines the Console panel of the editor shows -->
+        <sink type="LogHistorySink" enabled="true" priority="50" minLevel="Debug" capacity="2048" />
     </sinks>
 </root>

@@ -53,7 +53,7 @@ namespace BECore::Tests {
         const FieldHint hint = schema.Resolve(kLoggerConfig, kSinkTypePath, "ConsoleSink");
         EXPECT_EQ(hint.type, FieldType::Enum);
 
-        const Vector<String> expected{"ConsoleSink", "FileSink", "OutputSink"};
+        const Vector<String> expected{"ConsoleSink", "FileSink", "LogHistorySink", "OutputSink"};
         EXPECT_EQ(hint.options, expected);
 
         // The names of the removed hand-written enum are not class names, the loader would drop them
@@ -105,7 +105,7 @@ namespace BECore::Tests {
         const ConfigFieldSchema& schema = ConfigFieldSchema::GetInstance();
         const FieldHint types = schema.Resolve(kLoggerConfig, kSinkTypePath, "ConsoleSink");
         EXPECT_EQ(types.type, FieldType::Enum);
-        const Vector<String> expectedTypes{"ConsoleSink", "FileSink", "OutputSink"};
+        const Vector<String> expectedTypes{"ConsoleSink", "FileSink", "LogHistorySink", "OutputSink"};
         EXPECT_EQ(types.options, expectedTypes);
 
         const FieldHint levels = schema.Resolve(kLoggerConfig, kSinkMinLevelPath, "Debug");

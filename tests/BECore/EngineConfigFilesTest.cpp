@@ -1,5 +1,6 @@
 #include <BECore/Application/ApplicationConfig.h>
 #include <BECore/Assert/AssertHandlers.h>
+#include <BECore/Audio/AudioSettings.h>
 #include <BECore/Config/ContentVersion.h>
 #include <BECore/Logger/LoggerManager.h>
 #include <BECore/Scene/SceneManager.h>
@@ -42,6 +43,7 @@ namespace BECore::Tests {
                 ApplicationConfigReader(),
                 {"LoggerConfig", [](IDeserializer& d) { New<LoggerManager>()->Deserialize(d); }},
                 {"AssertHandlersConfig", [](IDeserializer& d) { New<AssertHandlerManager>()->Deserialize(d); }},
+                {"AudioConfig", [](IDeserializer& d) { AudioSettings{}.Deserialize(d); }},
                 {"TestsConfig", [](IDeserializer& d) { New<Tests::TestList>()->Deserialize(d); }},
                 {"SDLWindowConfig",
                  [](IDeserializer& d) {

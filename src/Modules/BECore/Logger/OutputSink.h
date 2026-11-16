@@ -5,10 +5,6 @@
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Types/Types.h>
 
-#ifdef PLATFORM_WINDOWS
-#include <windows.h>
-#endif
-
 namespace BECore {
 
     /**

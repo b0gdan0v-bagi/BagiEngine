@@ -147,6 +147,10 @@ namespace BECore {
 
     void RegisterScreenshotControl(ControlService& service) {
         service.RegisterHandler("screenshot", HandleScreenshot);
+
+        service.DescribeMethod("screenshot",
+                               {"A PNG of the next presented frame, as base64",
+                                {{"maxSize", "integer", false, Format("The longer side in pixels, {} to {} (default {})", kMinScreenshotSize, kMaxScreenshotSize, kDefaultScreenshotSize)}}});
     }
 
 }  // namespace BECore
