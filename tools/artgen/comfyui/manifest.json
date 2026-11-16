@@ -1,12 +1,57 @@
 {
-  "manifest": 1,
+  "manifest": 2,
   "comfyui": {
     "version": "0.45.0",
-    "asset": "ComfyUI_windows_portable_nvidia.7z",
-    "url": "https://github.com/Comfy-Org/ComfyUI/releases/download/v0.45.0/ComfyUI_windows_portable_nvidia.7z",
-    "size": 2071479423,
-    "sha256": "60c12e8c7af778047ad0413722dd3dc0f6ca773a41cbf5cb229ee9bc92c44a6f",
-    "licence": "GPL-3.0 (ComfyUI itself: a separate program reached over HTTP, never linked or shipped)"
+    "repo": "https://github.com/Comfy-Org/ComfyUI.git",
+    "commit": "989d93d0d968e704c589ce0146bb18c77f6b50cc",
+    "licence": "GPL-3.0 (ComfyUI itself: a separate program reached over HTTP, never linked or shipped)",
+    "platforms": {
+      "windows-nvidia": {
+        "kind": "portable",
+        "asset": "ComfyUI_windows_portable_nvidia.7z",
+        "url": "https://github.com/Comfy-Org/ComfyUI/releases/download/v0.45.0/ComfyUI_windows_portable_nvidia.7z",
+        "size": 2071479423,
+        "sha256": "60c12e8c7af778047ad0413722dd3dc0f6ca773a41cbf5cb229ee9bc92c44a6f",
+        "note": "Python 3.13, PyTorch CUDA 13.0: NVIDIA 20 series and newer, a current driver"
+      },
+      "windows-nvidia-arm64": {
+        "kind": "portable",
+        "asset": "ComfyUI_windows_portable_nvidia_arm64.7z",
+        "url": "https://github.com/Comfy-Org/ComfyUI/releases/download/v0.45.0/ComfyUI_windows_portable_nvidia_arm64.7z",
+        "size": 1913294288,
+        "sha256": "f6d763bf5bc031aad25bd97ae99cb2a68fa0a6c383ebd7de2e3930b783277087",
+        "note": "Windows on ARM with an NVIDIA GPU"
+      },
+      "windows-amd": {
+        "kind": "portable",
+        "asset": "ComfyUI_windows_portable_amd.7z",
+        "url": "https://github.com/Comfy-Org/ComfyUI/releases/download/v0.45.0/ComfyUI_windows_portable_amd.7z",
+        "size": 1688825308,
+        "sha256": "636f41a1975ad40cf226868ae06a62f7f5bb157532cc10cf3475ff54547e063e",
+        "note": "PyTorch ROCm: a current AMD driver"
+      },
+      "windows-intel": {
+        "kind": "portable",
+        "asset": "ComfyUI_windows_portable_intel.7z",
+        "url": "https://github.com/Comfy-Org/ComfyUI/releases/download/v0.45.0/ComfyUI_windows_portable_intel.7z",
+        "size": 1503750967,
+        "sha256": "89e4e879248ec5165c6fbe69713b23d8d99b3cbb8bf21630a92d494d98cd8db1",
+        "note": "PyTorch XPU: Intel Arc and newer integrated graphics"
+      },
+      "macos-arm64": {
+        "kind": "source",
+        "torch": [],
+        "note": "Apple Silicon: PyTorch from PyPI runs on Metal (MPS)"
+      },
+      "linux-nvidia": {
+        "kind": "source",
+        "torch": [
+          "--extra-index-url",
+          "https://download.pytorch.org/whl/cu130"
+        ],
+        "note": "PyTorch CUDA 13.0: a current NVIDIA driver"
+      }
+    }
   },
   "models": [
     {

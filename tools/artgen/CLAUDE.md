@@ -2,13 +2,13 @@
 
 ## Overview
 
-The image generator of the games' art is **ComfyUI on the owner's Windows PC** (RTX 3070, 8 GB VRAM). This folder installs it, starts it and checks it, and holds the service that turns a game's style preset and a subject into images. The editor and the agent reach the generator only through that service; it talks to ComfyUI over its HTTP API and its WebSocket. Nothing here is built or linked into the engine: ComfyUI (GPL-3.0) is a separate program, and its models stay on that PC, never in git. Python 3.10+, standard library only.
+The image generator of the games' art is **ComfyUI**, today on the owner's Windows PC (RTX 3070, 8 GB VRAM). This folder installs it on any supported machine, starts it and checks it, and holds the service that turns a game's style preset and a subject into images. The editor and the agent reach the generator only through that service; it talks to ComfyUI over its HTTP API and its WebSocket. Nothing here is built or linked into the engine: ComfyUI (GPL-3.0) is a separate program, and its models stay on that PC, never in git. Python 3.10+, standard library only.
 
 | File | Purpose |
 |------|---------|
-| `comfyui/manifest.json` | What is installed: the pinned portable release (URL, size, SHA256) and every model (folder, pinned Hugging Face commit URL, size, SHA256, licence, source). The one place to change a version or add a model |
-| `comfyui/install.ps1` | Installs the release into `-Root` (default `D:\ComfyUI`) and downloads the models, each checked against the manifest. Idempotent: a second run only verifies |
-| `comfyui/start-local.bat` | Starts ComfyUI on `127.0.0.1:8188` without a browser; the installer copies it into the root. Extra arguments go to ComfyUI (`--lowvram`) |
+| `comfyui/manifest.json` | What is installed: the pinned ComfyUI version and commit, a variant per platform (a portable release asset with URL, size, SHA256; or a source install with its PyTorch index) and every model (folder, pinned Hugging Face commit URL, size, SHA256, licence, source). The one place to change a version or add a model |
+| `artgen_setup.py` | The setup pipeline: `detect` (the platform key), `install` (plan, consent, downloads checked against the manifest; idempotent), `start` / `stop` (a background ComfyUI on the address of `local.json`), `status` |
+| `comfyui/start-local.bat` | Starts a portable ComfyUI on `127.0.0.1:8188` by hand, in a window; the installer copies it into the root. Extra arguments go to ComfyUI (`--lowvram`) |
 | `comfyui_check.py` | The health check: reachable, version, devices, every manifest model present; `--generate` makes one image; `--json` for the service and the editor panel |
 | `artgen_bridge.py` | The link to the editor's Generate panel: a control API client that pulls requests (`artgen_poll`) and reports progress, images and the end |
 | `artgen.py` | The service on the command line: `status`, `presets`, `generate` (`--json` prints one progress event per line, then `done`) |
@@ -17,19 +17,24 @@ The image generator of the games' art is **ComfyUI on the owner's Windows PC** (
 | `artgen_generators.py` | The generator interface (`status`, `info`, `run`), `ComfyUIGenerator`, `FakeGenerator` (tests, `--generator fake`), `make_generator` |
 | `artgen_ws.py` | A minimal WebSocket client for ComfyUI's progress stream; the frame codec is `tools/control/bagi_control_client.py`'s |
 | `workflows/` | The engine's workflows: `<name>.json` is a graph in ComfyUI's API format (what `POST /prompt` takes; the UI loads it by drag and drop), `<name>.inputs.json` names its inputs. `sdxl_basic` is the SDXL one; `sdxl_cutout` is the same with the background removed (an RGBA PNG) |
-| `tests/` | pytest: a fake ComfyUI with a real WebSocket stream, the fake generator, the presets, the manifest and workflow rules |
+| `tests/` | pytest: a fake ComfyUI with a real WebSocket stream, the setup pipeline (fake platforms, a local download server, a fake ComfyUI to start and stop), the fake generator, the presets, the manifest and workflow rules |
 
-## Setup on the Windows PC
+## Setup
 
-```powershell
-powershell -ExecutionPolicy Bypass -File tools\artgen\comfyui\install.ps1 -Root D:\ComfyUI   # about 9 GB the first time
-D:\ComfyUI\start-local.bat                                                                    # leave the window open
-python tools\artgen\comfyui_check.py --generate                                               # exit 0: ready
+```bash
+python tools/artgen/artgen_setup.py install --dry-run    # the platform, what would be downloaded and where (about 9 GB the first time)
+python tools/artgen/artgen_setup.py install              # asks, then installs; a second run only checks the hashes
+python tools/artgen/artgen_setup.py start                # in the background; `stop` ends it
+python tools/artgen/comfyui_check.py --generate          # exit 0: ready
 ```
 
+- **One pipeline, a variant per platform.** `detect` reads the OS, the CPU and the GPU names and picks a key of `comfyui.platforms`: `windows-nvidia` (also `-arm64`), `windows-amd`, `windows-intel` take the portable release asset of the pinned version; `macos-arm64` (PyTorch from PyPI on Metal) and `linux-nvidia` (the CUDA index) clone the pinned tag, check that it is the manifest's commit, and build `venv/` with PyTorch and ComfyUI's `requirements.txt` (PyPI versions are not pinned: only ComfyUI and the models are). A discrete NVIDIA or AMD GPU wins over the Intel graphics beside it; an Intel Mac, Linux without NVIDIA and a machine without a GPU have no variant and are told to use a generator on another machine. `--platform` overrides the detection.
+- **Consent.** `install` prints every download (size, destination, licence) and asks before the first byte; `--yes` is for a caller that asked already (the editor), `--json` prints the plan and one event per line (`plan`, `step`, `progress`, `step_done`, `log`, `done`) and needs `--yes`. A run that only checks hashes asks nothing.
+- **The root** is `--root`, else `comfyuiRoot` of `local.json`, else `D:\ComfyUI` on a Windows PC with a D: drive, else `~/ComfyUI`; a finished install writes its root into `local.json`. Both layouts keep ComfyUI in `<root>/ComfyUI` (models in `ComfyUI/models/<folder>/`); `<root>/.artgen-setup.json` records the platform of a finished install.
+- **Start and stop.** `start` runs the portable's embedded Python or the venv's, on the host and port of the address (`resolve_url`), logs to `<root>/artgen-comfyui.log`, keeps the pid in `<root>/artgen-comfyui.pid`, and waits until it answers (a ComfyUI that exits is reported with its log). Arguments after `--` go to ComfyUI (`--lowvram`; a second instance beside a running one needs `--disable-assets`, they share a database). `stop` ends only the process it started, after checking that pid still is that ComfyUI; one started by hand is closed by hand.
 - **Local only.** ComfyUI listens on `127.0.0.1`: no LAN port, no firewall rule (the PC is on a network that is not the owner's). If Windows asks to let Python through the firewall, cancel. The Mac reaches it through the todo service and this machine's worker agent (entry `comfyui-remote-via-todo`), never by a port.
-- **Started by hand.** No service, no scheduled task: the GPU is free while ComfyUI is closed, and the check says `unreachable` (exit 2) until it is started.
-- **The version is pinned.** Never run the `update\*.bat` of the portable folder: it moves ComfyUI off the manifest. To upgrade, change `comfyui` in the manifest (URL, size and the `sha256` GitHub shows in the release API's `digest`) and install into a new root.
+- **Started on demand.** No service, no scheduled task: the GPU is free while ComfyUI is closed, and the check says `unreachable` (exit 2) until it is started.
+- **The version is pinned.** Never run the `update\*.bat` of the portable folder: it moves ComfyUI off the manifest. To upgrade, change `comfyui` in the manifest (the version, the tag's commit, and per portable variant the URL, size and the `sha256` GitHub shows in the release API's `digest`) and install into a new root.
 - The installer never overwrites or deletes what it did not download: another ComfyUI version in the root, a non-empty root or a model file with another hash stops it with what to do. A broken download stays as `<file>.part` and is resumed by the next run.
 - The portable release opens its UI with a Z-Image Turbo template whose "Download all" wants 19 GB of models that do not fit 8 GB: do not use it; load `workflows/sdxl_basic.json` instead.
 
@@ -41,7 +46,7 @@ Only models whose licence lets the generated images ship in a commercial game, e
 
 ## The health check
 
-`comfyui_check.py` reads the address from `--url`, else `COMFYUI_URL`, else `comfyuiUrl` of the git-ignored `tools/artgen/local.json`, else `http://127.0.0.1:8188`. Exit 0 ready, 1 reachable but not ready (a model missing, the generation failed), 2 unreachable. Another ComfyUI version or no CUDA device is a warning. `--generate` puts a fresh seed into every sampler: ComfyUI caches node results, and a repeated graph would return at once without touching the GPU.
+`comfyui_check.py` reads the address from `--url`, else `COMFYUI_URL`, else `comfyuiUrl` of the git-ignored `tools/artgen/local.json`, else `http://127.0.0.1:8188`. Exit 0 ready, 1 reachable but not ready (a model missing, the generation failed), 2 unreachable. Another ComfyUI version or only a CPU device is a warning. `--generate` puts a fresh seed into every sampler: ComfyUI caches node results, and a repeated graph would return at once without touching the GPU.
 
 ## Presets
 
@@ -60,7 +65,7 @@ A game's style lives in its own repository: `<game root>/artgen/presets/<name>.j
 
 ## Generators
 
-`status()` answers `ready`, `not_running` (installed or remote, not answering: offer **Start**) or `not_installed` (no install, or a manifest model missing: offer **Set up**, entry `artgen-setup-pipelines`), with a reason; the service refuses a request unless the state is `ready`. `ComfyUIGenerator` finds a local install by `comfyuiRoot` of `local.json` (default `D:\ComfyUI` on Windows); for another host it cannot know and says `not_running`. A run queues the graph with a `client_id`, follows its progress on `/ws` (falling back to polling `/history` when the stream fails), and fetches the `output` images by `/view` (previews of type `temp` are skipped). A cancel, a timeout or Ctrl+C deletes the prompt from the queue and interrupts it by its id, so ComfyUI does not keep the GPU busy for nobody and another client's run is left alone.
+`status()` answers `ready`, `not_running` (installed or remote, not answering: offer **Start**) or `not_installed` (no install, or a manifest model missing: offer **Set up**, `artgen_setup.py install`), with a reason; the service refuses a request unless the state is `ready`. `ComfyUIGenerator` finds a local install at `artgen_setup.default_root()`; for another host it cannot know and says `not_running`. A run queues the graph with a `client_id`, follows its progress on `/ws` (falling back to polling `/history` when the stream fails), and fetches the `output` images by `/view` (previews of type `temp` are skipped). A cancel, a timeout or Ctrl+C deletes the prompt from the queue and interrupts it by its id, so ComfyUI does not keep the GPU busy for nobody and another client's run is left alone.
 
 ## The service
 

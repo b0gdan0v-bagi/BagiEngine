@@ -91,8 +91,8 @@ def check(url, manifest):
     expected = manifest["comfyui"]["version"]
     if version != expected:
         report["warnings"].append(f"ComfyUI {version}, the manifest pins {expected}")
-    if not any(d["type"] == "cuda" for d in report["devices"]):
-        report["warnings"].append("no CUDA device: ComfyUI runs on the CPU (the wrong portable build?)")
+    if all(d["type"] == "cpu" for d in report["devices"]):
+        report["warnings"].append("no GPU device: ComfyUI runs on the CPU (the wrong platform variant?)")
 
     present = {}
     for folder in sorted({m["folder"] for m in manifest["models"]}):
@@ -106,7 +106,7 @@ def check(url, manifest):
         found = model["name"] in present[model["folder"]]
         report["models"].append({"name": model["name"], "folder": model["folder"], "present": found})
         if not found:
-            report["problems"].append(f"model {model['folder']}/{model['name']} is missing: run comfyui/install.ps1")
+            report["problems"].append(f"model {model['folder']}/{model['name']} is missing: run artgen_setup.py install")
     report["ready"] = not report["problems"]
     return report
 
