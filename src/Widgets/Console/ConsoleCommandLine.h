@@ -23,6 +23,9 @@ namespace BECore {
      */
     [[nodiscard]] std::expected<ConsoleCommand, String> ParseConsoleCommand(StringView text);
 
+    /// The parameters alone, as ParseConsoleCommand reads them after the method: a JSON object or `key=value ...`; blank text is an empty object
+    [[nodiscard]] std::expected<Json, String> ParseConsoleParams(StringView text);
+
     /// What Tab does: the line to put in the input and the candidates to show above it (empty when there is nothing to choose from)
     struct ConsoleCompletion {
         String text;

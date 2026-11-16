@@ -22,6 +22,9 @@ namespace BECore {
     }
 
     void TextureEditorWidget::OnCommand(const EditorCommandEvent& event) {
+        if (event.commandId == EditorCommandIds::kViewSpriteLibrary) {
+            _open = !_open;
+        }
         // The same rule as the Save button: nothing to save while there are no unsaved changes
         if (event.commandId == EditorCommandIds::kTextureSave && _isDirty) {
             SaveLibrary();
@@ -35,8 +38,11 @@ namespace BECore {
     }
 
     void TextureEditorWidget::Update() {
+        if (!_open) {
+            return;
+        }
         ImGui::SetNextWindowSize(ImVec2(700.0f, 500.0f), ImGuiCond_FirstUseEver);
-        if (!ImGui::Begin("Sprite Library")) {
+        if (!ImGui::Begin("Sprite Library", &_open)) {
             ImGui::End();
             return;
         }

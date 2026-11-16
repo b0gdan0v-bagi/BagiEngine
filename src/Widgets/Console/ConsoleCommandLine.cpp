@@ -262,18 +262,22 @@ namespace BECore {
             return std::unexpected(Format("'{}' is not a method name (letters, digits, '_' and '.')", method));
         }
 
-        ConsoleCommand command;
-        command.method = String(method);
-        command.params = Json::object();
+        auto params = ParseConsoleParams(text.substr(methodEnd));
+        if (!params) {
+            return std::unexpected(std::move(params.error()));
+        }
+        return ConsoleCommand{String(method), std::move(*params)};
+    }
 
-        const size_t restStart = SkipBlanks(text, methodEnd);
+    std::expected<Json, String> ParseConsoleParams(StringView text) {
+        const size_t restStart = SkipBlanks(text, 0);
         size_t restEnd = text.size();
         while (restEnd > restStart && IsBlank(text[restEnd - 1])) {
             --restEnd;
         }
         const StringView rest = text.substr(restStart, restEnd - restStart);
         if (rest.empty()) {
-            return command;
+            return Json::object();
         }
 
         if (rest.front() == '{') {
@@ -287,8 +291,7 @@ namespace BECore {
             if (!parsed->is_object()) {
                 return std::unexpected(String("the parameters have to be a JSON object"));
             }
-            command.params = std::move(*parsed);
-            return command;
+            return std::move(*parsed);
         }
 
         const WordScan scan = ScanWords(rest);
@@ -298,12 +301,13 @@ namespace BECore {
         if (scan.open) {
             return std::unexpected(String("a quote or a bracket is not closed"));
         }
+        Json params = Json::object();
         for (const Word& word : scan.words) {
-            if (auto read = ReadAssignment(rest.substr(word.begin, word.end - word.begin), command.params); !read) {
+            if (auto read = ReadAssignment(rest.substr(word.begin, word.end - word.begin), params); !read) {
                 return std::unexpected(std::move(read.error()));
             }
         }
-        return command;
+        return params;
     }
 
     ConsoleCompletion CompleteConsoleCommand(StringView text, Span<const ControlMethodListing> methods) {

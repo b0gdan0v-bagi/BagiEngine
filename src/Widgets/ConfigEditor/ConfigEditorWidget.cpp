@@ -42,6 +42,9 @@ namespace BECore {
     }
 
     void ConfigEditorWidget::OnCommand(const EditorCommandEvent& event) {
+        if (event.commandId == EditorCommandIds::kViewConfigEditor) {
+            _open = !_open;
+        }
         // The same rule as the Save button: a config is selected and has staged changes
         if (event.commandId == EditorCommandIds::kConfigSave && !_selectedConfig.Empty() && !_staged.IsEmpty()) {
             SaveSelectedConfig();
@@ -60,8 +63,11 @@ namespace BECore {
     }
 
     void ConfigEditorWidget::Update() {
+        if (!_open) {
+            return;
+        }
         ImGui::SetNextWindowSize(ImVec2(900.0f, 550.0f), ImGuiCond_FirstUseEver);
-        if (!ImGui::Begin("Config Editor")) {
+        if (!ImGui::Begin("Config Editor", &_open)) {
             ImGui::End();
             return;
         }

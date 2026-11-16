@@ -36,6 +36,7 @@ namespace BECore {
         void Draw() override;
 
     private:
+        bool _open = true;  // the window's close button and its `view.*` command; a closed panel is skipped like a hidden dock tab
         /**
          * @brief The "UI elements" section of a node with a canvas: the element tree and the rect inspector of the selected element
          *

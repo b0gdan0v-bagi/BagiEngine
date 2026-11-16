@@ -64,6 +64,13 @@ namespace BECore {
         inline constexpr auto kViewProfiler = "view.profiler"_intern;
         /// Shows and hides the Console panel (the log). ConsoleWidget owns the action
         inline constexpr auto kViewConsole = "view.console"_intern;
+        /// Shows and hides the Game panel (the active game's state, actions, fields and methods). GamePanelWidget owns the action
+        inline constexpr auto kViewGame = "view.game"_intern;
+        /// Show and hide the always-present panels; each panel owns its command. No default chord
+        inline constexpr auto kViewSceneEditor = "view.sceneEditor"_intern;
+        inline constexpr auto kViewConfigEditor = "view.configEditor"_intern;
+        inline constexpr auto kViewSpriteLibrary = "view.spriteLibrary"_intern;
+        inline constexpr auto kViewViewport = "view.viewport"_intern;
     }  // namespace EditorCommandIds
 
     /// A command was asked for, by the palette, a menu item or a hotkey. Emitted, not enqueued: it runs inside a frame.

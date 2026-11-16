@@ -33,6 +33,7 @@ namespace BECore {
         void Draw() override;
 
     private:
+        bool _open = true;  // the window's close button and its `view.*` command; a closed panel is skipped like a hidden dock tab
         /**
          * @brief Runs `config.save` like the Save button (only with staged changes)
          */

@@ -28,6 +28,7 @@ namespace BECore {
         void Draw() override;
 
     private:
+        bool _open = true;  // the window's close button and its `view.*` command; a closed panel is skipped like a hidden dock tab
         // Runs `texture.save` like the Save button (only with unsaved changes)
         void OnCommand(const EditorCommandEvent& event);
         // The one path of the button and the command

@@ -173,7 +173,9 @@ namespace BECore {
     }
 
     void ViewportWidget::OnCommand(const EditorCommandEvent& event) {
-        if (event.commandId == EditorCommandIds::kViewportInputMode) {
+        if (event.commandId == EditorCommandIds::kViewViewport) {
+            _open = !_open;
+        } else if (event.commandId == EditorCommandIds::kViewportInputMode) {
             _inputMode = _inputMode == ViewportInputMode::Play ? ViewportInputMode::Edit : ViewportInputMode::Play;
         } else if (event.commandId == EditorCommandIds::kViewportToolTranslate) {
             _gizmos.SetTool(Gizmo::Tool::Translate);
@@ -226,8 +228,11 @@ namespace BECore {
 
     void ViewportWidget::Update() {
         BE_PROFILE_SCOPE("ViewportWidget::Update");
+        if (!_open) {
+            return;
+        }
         ImGui::SetNextWindowSize({800.0f, 600.0f}, ImGuiCond_FirstUseEver);
-        if (!ImGui::Begin("Viewport")) {
+        if (!ImGui::Begin("Viewport", &_open)) {
             ImGui::End();
             return;
         }
