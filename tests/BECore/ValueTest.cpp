@@ -42,7 +42,7 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    static_assert(sizeof(Value<float>) == 24, "Value<float> grew: the layout is a decision (Values/CLAUDE.md), the benchmark shows what it costs");
+    static_assert(sizeof(Value<float>) == 24, "Value<float> grew: the layout of Value is a size decision, change this number only on purpose");
     static_assert(std::is_trivially_copyable_v<Value<Vec3>>);
     static_assert(ValueType<ValueElement> && ValueType<ValuePoint>);
     static_assert(!ValueType<String> && !ValueType<Vector<int32_t>> && !ValueType<HashMap<String, int32_t>> && !ValueType<Value<float>>);

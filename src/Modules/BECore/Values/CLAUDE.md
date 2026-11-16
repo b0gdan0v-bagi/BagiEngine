@@ -4,7 +4,7 @@
 
 ## Kinds
 
-`ValueKind`: `Const` (the literal), `Slot` (a field of a context object), `Program` (reserved for formulas; `Get` asserts, the loader refuses it). The literal is a plain member beside the slot, not a union, so every `Value` is a valid literal of its type; `sizeof(Value<float>)` is pinned in a test so growth is noticed. `Get(const Context&)` returns `const T&` into the literal or into the context object: copy out what must outlive the object. It is a branch and an addition, with no lookup and no allocation. A `Value<T>` converts implicitly from `T`.
+`ValueKind`: `Const` (the literal), `Slot` (a field of a context object), `Program` (reserved for formulas; `Get` asserts, the loader refuses it). The literal is a plain member beside the slot, not a union, so every `Value` is a valid literal of its type. `Get(const Context&)` returns `const T&` into the literal or into the context object: copy out what must outlive the object. It is a branch and an addition, with no lookup and no allocation. A `Value<T>` converts implicitly from `T`.
 
 ## Context
 
@@ -20,12 +20,10 @@ A path is `level.property.path` (`caster.position.x`). `LinkSlot` splits the lev
 
 ## Loading
 
-`ValueAccessor.h` is `Ser::DataAccessor<Value<T>>`; `Value.h` includes it, so a generated `.gen.hpp` that names a `Value` field sees it. Grammar: the plain attribute `damage="12"` and `<damage value="12"/>` are a `Const`; `<damage from="caster.attack"/>` is a `Slot`. An object or opaque `T` keeps its own form as the literal (`<pos x=".." y=".." z=".."/>`) and `<pos from="caster.position"/>` reads. Another key beside `from` is an error. `Save` writes a scalar `Const` as the plain attribute, so a file written before the field became a `Value` loads and saves as before: **no migration step and no `kContentVersion` bump is needed to turn a field into a `Value`**. Binary has the same shapes; its object form may carry a `kind` (`Const` or `Slot`), and `Program` or an unknown kind is an error. A load that fails leaves the field as it was and reports under the field's own path and line (`IDeserializer::ReportError`). `from` and `value` are known keys for strict mode and the diagnostics of `XmlDeserializer`; a typo beside them is a finding.
+`ValueAccessor.h` is `Ser::DataAccessor<Value<T>>`; `Value.h` includes it, so a generated `.gen.hpp` that names a `Value` field sees it. Grammar: the plain attribute `damage="12"` and `<damage value="12"/>` are a `Const`; `<damage from="caster.attack"/>` is a `Slot`. An object or opaque `T` keeps its own form as the literal (`<pos x=".." y=".." z=".."/>`) and `<pos from="caster.position"/>` reads. `value` beside `from` is an error. `kind` (`Const` or `Slot`) is an optional key that XML and binary accept; no writer emits it. The keys `kind`, `from` and `value` are reserved: an object type used as a `Value<T>` literal (a game's own `Point`) cannot have an attribute of one of these names. `Save` writes a scalar `Const` as the plain attribute, so a file written before the field became a `Value` loads and saves as before: **no migration step and no `kContentVersion` bump is needed to turn a field into a `Value`**. Binary has the same shapes; `Program` or an unknown `kind` is an error in either format. A load that fails leaves the field as it was and reports under the field's own path and line (`IDeserializer::ReportError`). `kind`, `from` and `value` are the known keys for strict mode and the diagnostics of `XmlDeserializer`; any other key is an unknown key those diagnostics report.
 
 `ValueLinkScope` (RAII) says which `ContextDecl` the `from` of a load is linked against. It is a stack **per thread**: the accessor has no parameter to carry a declaration through the generated code, and two threads loading at once must never see each other's context. A `from` read with no scope is a load error. In this stage the caller of a load opens the scope from code.
 
 ## Not here
 
 The `<context>` element in content, the config loader opening a scope, versions of levels (a key for "did anything I read change"), the benchmark, formulas (`Program`) and the explanation of a value (why it is what it is): later entries (`data-values-*`). Reading or writing a `Value` field by name through the control API treats it as an opaque value, not a leaf.
-
-Tests: `tests/BECore/ValueContextTest.cpp`, `ValueTest.cpp`, `ValueAccessorTest.cpp`, `ValueMatrixTest.cpp` (every value type through every kind, format and error); the reflected context types are `ValueTestTypes.h`.
