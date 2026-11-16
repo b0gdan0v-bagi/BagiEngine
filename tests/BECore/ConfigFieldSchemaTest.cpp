@@ -5,14 +5,18 @@
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <CoreSDL/SDLUtils.h>
 #include <Widgets/ConfigEditor/ConfigEditorWidget.h>
 #include <Widgets/ConfigEditor/ConfigFieldSchema.h>
+#include <Widgets/ConfigEditor/FlagValue.h>
 
 namespace BECore::Tests {
 
     namespace {
 
         const PoolString kLoggerConfig = "LoggerConfig"_intern;
+        const PoolString kWindowConfig = "SDLWindowConfig"_intern;
+        constexpr StringView kWindowFlagsPath = "window/@windowFlags";
         constexpr StringView kSinkTypePath = "sink/@type";
         constexpr StringView kSinkMinLevelPath = "sink/@minLevel";
 
@@ -130,6 +134,46 @@ namespace BECore::Tests {
         const FieldHint unknown = schema.Resolve(kLoggerConfig, kSinkTypePath, "NoSuchSink");
         EXPECT_EQ(unknown.type, FieldType::Enum);
         EXPECT_FALSE(Contains(unknown.options, "NoSuchSink"));
+    }
+
+    TEST_F(ConfigFieldSchemaTest, SplitFlagTokensTrimsAndSkipsEmpty) {
+        const Vector<String> expected{"A", "B C", "D"};
+        EXPECT_EQ(SplitFlagTokens(" A | B C ||D |"), expected);
+        EXPECT_TRUE(SplitFlagTokens("").empty());
+        EXPECT_TRUE(SplitFlagTokens(" | ").empty());
+    }
+
+    TEST_F(ConfigFieldSchemaTest, UnknownFlagTokensKeepsOrderAndSkipsOptions) {
+        const Vector<String> options{"A", "B"};
+        const Vector<String> expected{"Z", "Y"};
+        EXPECT_EQ(UnknownFlagTokens("Z|A|Y|B|Z", options), expected);
+        EXPECT_TRUE(UnknownFlagTokens("B|A", options).empty());
+        EXPECT_TRUE(UnknownFlagTokens("", options).empty());
+    }
+
+    TEST_F(ConfigFieldSchemaTest, JoinFlagTokensJoinsWithABar) {
+        EXPECT_EQ(JoinFlagTokens({"A", "B", "C"}), "A|B|C");
+        EXPECT_EQ(JoinFlagTokens({"A"}), "A");
+        EXPECT_EQ(JoinFlagTokens({}), "");
+    }
+
+    TEST_F(ConfigFieldSchemaTest, WindowFlagNamesAreAllKnownToTheLoader) {
+        const Vector<String> names = SDLUtils::GetWindowFlagNames();
+        ASSERT_FALSE(names.empty());
+        for (const String& name : names) {
+            EXPECT_NE(SDLUtils::GetWindowFlagValue(StringView{name.c_str(), name.size()}), 0u) << name.c_str();
+        }
+        EXPECT_TRUE(Contains(names, "SDL_WINDOW_MOUSE_RELATIVE_MODE"));
+    }
+
+    TEST_F(ConfigFieldSchemaTest, WindowFlagsFieldOffersEveryLoaderFlag) {
+        XmlDeserializer deserializer;
+        auto widget = New<ConfigEditorWidget>();
+        ASSERT_TRUE(widget->Initialize(deserializer));
+
+        const FieldHint hint = ConfigFieldSchema::GetInstance().Resolve(kWindowConfig, kWindowFlagsPath, "SDL_WINDOW_RESIZABLE");
+        EXPECT_EQ(hint.type, FieldType::Flags);
+        EXPECT_EQ(hint.options, SDLUtils::GetWindowFlagNames());
     }
 
 }  // namespace BECore::Tests

@@ -4,6 +4,7 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/ILogSink.h>
 #include <BECore/Reflection/IDeserializer.h>
+#include <CoreSDL/SDLUtils.h>
 #include <Generated/ConfigEditorWidget.gen.hpp>
 #include <Widgets/ConfigEditor/ConfigFieldSchema.h>
 #include <Widgets/ConfigEditor/FieldInspectors.h>
@@ -24,18 +25,7 @@ namespace BECore {
 
         schema.RegisterFactoryTypes<ILogSink>("LoggerConfig"_intern, "sink/@type");
         schema.RegisterEnum<LogLevel>("LoggerConfig"_intern, "sink/@minLevel");
-        schema.RegisterFlags("SDLWindowConfig"_intern, "window/@windowFlags", {"SDL_WINDOW_FULLSCREEN",    "SDL_WINDOW_OPENGL",
-                                                                               "SDL_WINDOW_OCCLUDED",      "SDL_WINDOW_HIDDEN",
-                                                                               "SDL_WINDOW_BORDERLESS",    "SDL_WINDOW_RESIZABLE",
-                                                                               "SDL_WINDOW_MINIMIZED",     "SDL_WINDOW_MAXIMIZED",
-                                                                               "SDL_WINDOW_MOUSE_GRABBED", "SDL_WINDOW_INPUT_FOCUS",
-                                                                               "SDL_WINDOW_MOUSE_FOCUS",   "SDL_WINDOW_EXTERNAL",
-                                                                               "SDL_WINDOW_MODAL",         "SDL_WINDOW_HIGH_PIXEL_DENSITY",
-                                                                               "SDL_WINDOW_MOUSE_CAPTURE", "SDL_WINDOW_ALWAYS_ON_TOP",
-                                                                               "SDL_WINDOW_UTILITY",       "SDL_WINDOW_TOOLTIP",
-                                                                               "SDL_WINDOW_POPUP_MENU",    "SDL_WINDOW_KEYBOARD_GRABBED",
-                                                                               "SDL_WINDOW_VULKAN",        "SDL_WINDOW_METAL",
-                                                                               "SDL_WINDOW_TRANSPARENT",   "SDL_WINDOW_NOT_FOCUSABLE"});
+        schema.RegisterFlags("SDLWindowConfig"_intern, "window/@windowFlags", SDLUtils::GetWindowFlagNames());
 
         Subscribe<EditorCommandEvent, &ConfigEditorWidget::OnCommand>(this);
         return true;

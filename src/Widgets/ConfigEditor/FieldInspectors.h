@@ -21,7 +21,8 @@ namespace BECore {
      * - Int    -> InputInt
      * - Float  -> InputFloat
      * - Enum   -> Combo dropdown; a current value that is not an option is shown in the combo and marked "(not a known value)"
-     * - Flags  -> Checkbox per flag, joined with '|'
+     * - Flags  -> Checkbox per option, joined with '|'; a token of the value that is not an option stays as a checked row marked
+     *             "(not a known value)" until the user unchecks it
      * - String -> InputText (confirmed on Enter)
      *
      * @param widgetId Unique per-attribute string used as ImGui widget ID (## prefix applied internally)
