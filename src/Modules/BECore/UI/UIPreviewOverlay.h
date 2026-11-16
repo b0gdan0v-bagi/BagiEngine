@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Math/Rect.h>
+#include <BECore/Math/Vec2.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/Types/Types.h>
 #include <BECore/UI/UICanvasLayout.h>
@@ -18,6 +19,21 @@ namespace BECore {
     struct RegionMark {
         PoolString name;
         Rect rect;  ///< in render output pixels
+    };
+
+    /// One visible element of a canvas as the element rects overlay of the viewport shows it
+    struct ElementMark {
+        Rect rect;  ///< in render output pixels
+        PoolString name;
+        uint32_t depth = 0;                  ///< 0 for a child of the canvas root
+        const UIElement* element = nullptr;  ///< a pointer into the tree: valid until the tree is edited; compare it, never keep it
+    };
+
+    /// The anchors an element hangs on, as the anchors overlay of the viewport shows them
+    struct AnchorMark {
+        Rect box;      ///< the box the anchors are fractions of, in render output pixels
+        Rect anchors;  ///< the rect between `anchorMin` and `anchorMax` inside the box; zero-sized on an axis where they are equal (a point)
+        Vec2 pivot;    ///< the pivot point of the element's rect, in render output pixels
     };
 
     /**
@@ -42,6 +58,31 @@ namespace BECore {
          * The rects follow the canvas transform like CanvasBounds: a region partly outside the canvas is not clipped, a zero-sized one gives a zero-sized rect.
          */
         [[nodiscard]] static Vector<RegionMark> RegionMarks(const UICanvasLayout& canvas);
+
+        /**
+         * @brief Every visible element with a non-empty rect of a canvas that has a layout, in draw order, in output pixels. The canvas root is not listed.
+         *
+         * The same walk as TouchTargets(): a hidden element skips its subtree, the children of a closed popup are not walked. @p marks is cleared first and keeps its capacity.
+         */
+        static void ElementMarks(const UICanvasLayout& canvas, Vector<ElementMark>& marks);
+        [[nodiscard]] static Vector<ElementMark> ElementMarks(const UICanvasLayout& canvas);
+
+        /**
+         * @brief The anchors of @p element in output pixels, or none when it has none to show.
+         *
+         * An element has anchors when it is visible and its parent lays children out by anchors: not a stack, not an element with popup children (a popup places its children itself), and
+         * @p element is in the tree of @p canvas. The box is what UITreeLayout lays the element out in: the region it names when the canvas published it, else the parent's rect (for a child of the
+         * root with `ignoreSafeArea`, the whole canvas `bounds`). The pivot is `rect.x + pivot.x * rect.w`, with the pivot of UILayout::EffectiveAnchors.
+         */
+        [[nodiscard]] static Optional<AnchorMark> AnchorsOf(const UICanvasLayout& canvas, const UIElement& element);
+
+        /**
+         * @brief The design rectangle of the canvas scaler in output pixels: `referenceWidth` x `referenceHeight` centred in the canvas `bounds`. None unless the canvas has a layout, is a
+         *        Screen canvas and uses `ScaleWithScreen`.
+         *
+         * With `match` 0 its width equals the canvas width, with `match` 1 its height equals the canvas height; between them it sticks out on one axis or the other.
+         */
+        [[nodiscard]] static Optional<Rect> DesignRect(const UICanvasLayout& canvas);
 
         /// The bounds of the whole canvas in output pixels
         [[nodiscard]] static Rect CanvasBounds(const UICanvasResolved& resolved);

@@ -1,5 +1,6 @@
 #include <BECore/UI/UICanvasLayout.h>
 #include <BECore/UI/UIPreviewOverlay.h>
+#include <Common/UILayoutMatrix.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -58,6 +59,72 @@ namespace BECore::Tests {
                 }
             }
             return nullptr;
+        }
+
+        const ElementMark* FindMark(const Vector<ElementMark>& marks, const char* name) {
+            for (const ElementMark& mark : marks) {
+                if (mark.name == PoolString::Intern(name)) {
+                    return &mark;
+                }
+            }
+            return nullptr;
+        }
+
+        Rect ToOutput(const UICanvasLayout& canvas, const Rect& rect) {
+            return canvas.GetResolved().transform.ToOutput(rect.x, rect.y, rect.w, rect.h);
+        }
+
+        void ExpectPoint(const Vec2& actual, float x, float y) {
+            EXPECT_NEAR(actual.x, x, kTolerance);
+            EXPECT_NEAR(actual.y, y, kTolerance);
+        }
+
+        /// A canvas of every kind of parent the marks tell apart: a corner button, a bar between two anchors, a stack with a child, a popup, and a hidden group
+        struct MarksFixture {
+            UICanvasLayout canvas = MakeCanvas(CanvasScaleMode::ScaleWithScreen);
+            IntrusivePtr<UIElement> corner;
+            IntrusivePtr<UIElement> bar;
+            IntrusivePtr<UIElement> stack;
+            IntrusivePtr<UIElement> item;
+            IntrusivePtr<PopupElement> popup;
+            IntrusivePtr<UIElement> option;
+            IntrusivePtr<UIElement> hidden;
+            IntrusivePtr<UIElement> inner;
+
+            MarksFixture() {
+                canvas.params.useSafeArea = true;
+                corner = AddBox(*canvas.root, "Corner", -10.0f, -10.0f, 100.0f, 50.0f);
+                corner->style.rect.anchor = UIAnchor::BottomRight;
+                bar = AddBox(*canvas.root, "Bar", 0.0f, 0.0f, 0.0f, 40.0f);
+                bar->style.rect.anchorMin = Vec2(0.1f, 1.0f);
+                bar->style.rect.anchorMax = Vec2(0.9f, 1.0f);
+                bar->style.rect.pivot = Vec2(0.5f, 1.0f);
+                stack = AddBox(*canvas.root, "Stack", 20.0f, 20.0f, 200.0f, 200.0f);
+                stack->layout = UILayoutKind::Stack;
+                item = AddBox(*stack, "Item", 0.0f, 0.0f, 60.0f, 30.0f);
+                popup = New<PopupElement>();
+                popup->name = "Popup"_intern;
+                popup->style.rect.x = UILength::Px(300.0f);
+                popup->style.rect.y = UILength::Px(20.0f);
+                popup->style.rect.width = UILength::Px(80.0f);
+                popup->style.rect.height = UILength::Px(30.0f);
+                canvas.root->children.push_back(popup);
+                option = AddBox(*popup, "Option", 0.0f, 0.0f, 100.0f, 40.0f);
+                hidden = AddBox(*canvas.root, "Hidden", 400.0f, 20.0f, 100.0f, 100.0f);
+                hidden->style.visible = false;
+                inner = AddBox(*hidden, "Inner", 0.0f, 0.0f, 50.0f, 50.0f);
+            }
+
+            void Update(const UILayoutContext& context) {
+                canvas.Update(context);
+                option->rect = {310.0f, 60.0f, 100.0f, 40.0f};  // as an open popup would place it
+            }
+        };
+
+        UILayoutContext NotchOutput(float width, float height) {
+            UILayoutContext context = Output(width, height);
+            context.safeArea = UIPreview::SimulatedSafeArea(SafeAreaSimulation::TopNotch, width, height);
+            return context;
         }
 
     }  // namespace
@@ -296,6 +363,198 @@ namespace BECore::Tests {
         const auto marks = UIPreviewOverlay::RegionMarks(canvas);
         ASSERT_EQ(marks.size(), 1u);
         ExpectRect(marks[0].rect, {0.0f, 0.0f, 100.0f, 50.0f});
+    }
+
+    TEST(UIPreviewOverlayTest, ElementMarksAreTheRectsOfTheVisibleElementsThroughTheTransformOnTheWholeMatrix) {
+        MarksFixture fixture;
+        for (const Tests::UIMatrixCase& matrixCase : Tests::UILayoutMatrix()) {
+            SCOPED_TRACE(matrixCase.label.c_str());
+            fixture.Update(matrixCase.context);
+
+            const auto marks = UIPreviewOverlay::ElementMarks(fixture.canvas);
+
+            // Draw order: the tree in order, the root left out, the hidden subtree and the closed popup's child skipped
+            ASSERT_EQ(marks.size(), 5u);
+            const char* const order[] = {"Corner", "Bar", "Stack", "Item", "Popup"};
+            for (size_t i = 0; i < marks.size(); ++i) {
+                EXPECT_EQ(marks[i].name, PoolString::Intern(order[i]));
+                ASSERT_NE(marks[i].element, nullptr);
+                EXPECT_EQ(marks[i].element->name, marks[i].name);
+                ExpectRect(marks[i].rect, ToOutput(fixture.canvas, marks[i].element->rect));
+            }
+            EXPECT_EQ(marks[0].depth, 0u);
+            EXPECT_EQ(marks[3].depth, 1u);
+            EXPECT_EQ(marks[3].element, fixture.item.Get());
+        }
+    }
+
+    TEST(UIPreviewOverlayTest, ElementMarksOfAnOpenPopupListItsChildren) {
+        MarksFixture fixture;
+        fixture.Update(Output(1000.0f, 600.0f));
+        fixture.popup->open = true;
+
+        const auto marks = UIPreviewOverlay::ElementMarks(fixture.canvas);
+
+        ASSERT_EQ(marks.size(), 6u);
+        const ElementMark* option = FindMark(marks, "Option");
+        ASSERT_NE(option, nullptr);
+        EXPECT_EQ(option->depth, 1u);
+        ExpectRect(option->rect, ToOutput(fixture.canvas, fixture.option->rect));
+    }
+
+    TEST(UIPreviewOverlayTest, ElementMarksSkipAnElementWithNoRectAndKeepTheCapacityOfTheList) {
+        UICanvasLayout canvas = MakeCanvas();
+        AddBox(*canvas.root, "Empty", 10.0f, 10.0f, 0.0f, 20.0f);
+        AddBox(*canvas.root, "Shown", 10.0f, 40.0f, 30.0f, 20.0f);
+        EXPECT_TRUE(UIPreviewOverlay::ElementMarks(canvas).empty());  // no layout yet
+        canvas.Update(Output(1000.0f, 500.0f));
+
+        Vector<ElementMark> marks;
+        UIPreviewOverlay::ElementMarks(canvas, marks);
+        ASSERT_EQ(marks.size(), 1u);
+        EXPECT_EQ(marks[0].name, "Shown"_intern);
+        const size_t capacity = marks.capacity();
+        UIPreviewOverlay::ElementMarks(canvas, marks);
+        EXPECT_EQ(marks.size(), 1u);
+        EXPECT_EQ(marks.capacity(), capacity);
+    }
+
+    TEST(UIPreviewOverlayTest, TheAnchorsOfACornerElementAreAPointOfTheContentBoxAndThePivotIsItsCorner) {
+        MarksFixture fixture;
+        fixture.Update(NotchOutput(390.0f, 844.0f));
+        const Rect box = ToOutput(fixture.canvas, fixture.canvas.GetResolved().contentBounds);
+
+        const auto mark = UIPreviewOverlay::AnchorsOf(fixture.canvas, *fixture.corner);
+
+        ASSERT_TRUE(mark.has_value());
+        ExpectRect(mark->box, box);
+        ExpectRect(mark->anchors, {box.x + box.w, box.y + box.h, 0.0f, 0.0f});
+        const Rect rect = ToOutput(fixture.canvas, fixture.corner->rect);
+        ExpectPoint(mark->pivot, rect.x + rect.w, rect.y + rect.h);
+    }
+
+    TEST(UIPreviewOverlayTest, TheAnchorsOfAStretchedAxisSpanTheFractionsOfTheBox) {
+        MarksFixture fixture;
+        fixture.Update(Output(1000.0f, 600.0f));
+        const Rect box = ToOutput(fixture.canvas, fixture.canvas.root->rect);
+
+        const auto mark = UIPreviewOverlay::AnchorsOf(fixture.canvas, *fixture.bar);
+
+        ASSERT_TRUE(mark.has_value());
+        ExpectRect(mark->anchors, {box.x + 0.1f * box.w, box.y + box.h, 0.8f * box.w, 0.0f});
+        const Rect rect = ToOutput(fixture.canvas, fixture.bar->rect);
+        ExpectPoint(mark->pivot, rect.x + 0.5f * rect.w, rect.y + rect.h);
+    }
+
+    TEST(UIPreviewOverlayTest, TheAnchorBoxOfANestedElementIsItsParentAndOfARootChildThatIgnoresTheSafeAreaTheCanvas) {
+        MarksFixture fixture;
+        auto group = AddBox(*fixture.canvas.root, "Group", 50.0f, 300.0f, 200.0f, 100.0f);
+        auto nested = AddBox(*group, "Nested", 10.0f, 10.0f, 40.0f, 20.0f);
+        auto full = AddBox(*fixture.canvas.root, "Full", 0.0f, 0.0f, 50.0f, 50.0f);
+        full->ignoreSafeArea = true;
+        fixture.Update(NotchOutput(390.0f, 844.0f));
+
+        const auto nestedMark = UIPreviewOverlay::AnchorsOf(fixture.canvas, *nested);
+        ASSERT_TRUE(nestedMark.has_value());
+        ExpectRect(nestedMark->box, ToOutput(fixture.canvas, group->rect));
+
+        const auto fullMark = UIPreviewOverlay::AnchorsOf(fixture.canvas, *full);
+        ASSERT_TRUE(fullMark.has_value());
+        ExpectRect(fullMark->box, ToOutput(fixture.canvas, fixture.canvas.GetResolved().bounds));
+        EXPECT_NE(fullMark->box.y, UIPreviewOverlay::ContentBounds(fixture.canvas.GetResolved()).y);
+    }
+
+    TEST(UIPreviewOverlayTest, TheAnchorBoxOfAnElementThatNamesAPublishedRegionIsTheRegion) {
+        MarksFixture fixture;
+        auto named = AddBox(*fixture.canvas.root, "Named", 0.0f, 0.0f, 20.0f, 20.0f);
+        named->style.rect.region = "Board"_intern;
+        auto unpublished = AddBox(*fixture.canvas.root, "Unpublished", 0.0f, 0.0f, 20.0f, 20.0f);
+        unpublished->style.rect.region = "Nowhere"_intern;
+        fixture.canvas.regions.Set("Board"_intern, {100.0f, 120.0f, 300.0f, 200.0f});
+        fixture.Update(Output(1000.0f, 600.0f));
+
+        const auto mark = UIPreviewOverlay::AnchorsOf(fixture.canvas, *named);
+        ASSERT_TRUE(mark.has_value());
+        ExpectRect(mark->box, ToOutput(fixture.canvas, {100.0f, 120.0f, 300.0f, 200.0f}));
+
+        const auto fallback = UIPreviewOverlay::AnchorsOf(fixture.canvas, *unpublished);
+        ASSERT_TRUE(fallback.has_value());
+        ExpectRect(fallback->box, ToOutput(fixture.canvas, fixture.canvas.root->rect));
+    }
+
+    TEST(UIPreviewOverlayTest, AnElementWithNoAnchorsToShowGivesNone) {
+        MarksFixture fixture;
+        fixture.Update(Output(1000.0f, 600.0f));
+        fixture.popup->open = true;
+
+        EXPECT_TRUE(UIPreviewOverlay::AnchorsOf(fixture.canvas, *fixture.stack).has_value());    // its parent is the root
+        EXPECT_FALSE(UIPreviewOverlay::AnchorsOf(fixture.canvas, *fixture.item).has_value());    // a stack child has none
+        EXPECT_FALSE(UIPreviewOverlay::AnchorsOf(fixture.canvas, *fixture.option).has_value());  // a popup places its children itself
+        EXPECT_FALSE(UIPreviewOverlay::AnchorsOf(fixture.canvas, *fixture.hidden).has_value());
+
+        auto stranger = New<UIElement>();
+        EXPECT_FALSE(UIPreviewOverlay::AnchorsOf(fixture.canvas, *stranger).has_value());
+
+        UICanvasLayout noLayout = MakeCanvas();
+        auto box = AddBox(*noLayout.root, "Box", 0.0f, 0.0f, 10.0f, 10.0f);
+        EXPECT_FALSE(UIPreviewOverlay::AnchorsOf(noLayout, *box).has_value());
+    }
+
+    TEST(UIPreviewOverlayTest, TheAnchorsOfTheChildrenOfAStackRootAreNone) {
+        UICanvasLayout canvas = MakeCanvas();
+        canvas.root->layout = UILayoutKind::Stack;
+        auto child = AddBox(*canvas.root, "Child", 0.0f, 0.0f, 50.0f, 50.0f);
+        canvas.Update(Output(400.0f, 600.0f));
+
+        EXPECT_FALSE(UIPreviewOverlay::AnchorsOf(canvas, *child).has_value());
+    }
+
+    TEST(UIPreviewOverlayTest, TheDesignRectIsTheReferenceSizeCenteredInTheBounds) {
+        UICanvasLayout canvas = MakeCanvas(CanvasScaleMode::ScaleWithScreen);
+        canvas.params.referenceWidth = 1280.0f;
+        canvas.params.referenceHeight = 720.0f;
+        canvas.params.minScale = 0.0f;
+        canvas.params.maxScale = 0.0f;
+        for (const float match : {0.0f, 1.0f}) {
+            canvas.params.match = match;
+            canvas.Update(Output(390.0f, 844.0f));
+            const Rect bounds = UIPreviewOverlay::CanvasBounds(canvas.GetResolved());
+
+            const auto design = UIPreviewOverlay::DesignRect(canvas);
+
+            ASSERT_TRUE(design.has_value());
+            const float scale = canvas.GetResolved().scale;
+            EXPECT_NEAR(design->w, 1280.0f * scale, kTolerance);
+            EXPECT_NEAR(design->h, 720.0f * scale, kTolerance);
+            EXPECT_NEAR(design->x + design->w * 0.5f, bounds.x + bounds.w * 0.5f, kTolerance);
+            EXPECT_NEAR(design->y + design->h * 0.5f, bounds.y + bounds.h * 0.5f, kTolerance);
+            if (match == 0.0f) {
+                EXPECT_NEAR(design->w, bounds.w, kTolerance);
+            } else {
+                EXPECT_NEAR(design->h, bounds.h, kTolerance);
+            }
+        }
+    }
+
+    TEST(UIPreviewOverlayTest, TheDesignRectIsNoneForOtherScaleModesSpacesAndACanvasWithNoLayout) {
+        UICanvasLayout constant = MakeCanvas(CanvasScaleMode::ConstantPixelSize);
+        constant.Update(Output(400.0f, 600.0f));
+        EXPECT_FALSE(UIPreviewOverlay::DesignRect(constant).has_value());
+
+        UICanvasLayout physical = MakeCanvas(CanvasScaleMode::ConstantPhysicalSize);
+        physical.Update(Output(400.0f, 600.0f));
+        EXPECT_FALSE(UIPreviewOverlay::DesignRect(physical).has_value());
+
+        UICanvasLayout sceneView = MakeCanvas(CanvasScaleMode::ScaleWithScreen);
+        sceneView.params.space = CanvasSpace::SceneView;
+        UILayoutContext context = Output(400.0f, 600.0f);
+        context.sceneViewWidth = 400.0f;
+        context.sceneViewHeight = 300.0f;
+        sceneView.Update(context);
+        EXPECT_FALSE(UIPreviewOverlay::DesignRect(sceneView).has_value());
+
+        UICanvasLayout noLayout = MakeCanvas(CanvasScaleMode::ScaleWithScreen);
+        EXPECT_FALSE(UIPreviewOverlay::DesignRect(noLayout).has_value());
     }
 
 }  // namespace BECore::Tests
