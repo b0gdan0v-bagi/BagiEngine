@@ -86,6 +86,10 @@ namespace BECore::Fuzz {
     /// DecodeWav (BECore/Audio): every RIFF WAVE file that decodes has a sound the engine plays (channels, rate, finite samples), the same twice; a refusal says why
     void FuzzAudioWav(const uint8_t* data, size_t size);
 
+    /// DecodeFlac (BECore/Audio, the vendored dr_flac) with a frame limit: a sound the engine plays or a refusal that says why, the same twice, the same
+    /// samples read as a stream, and a lossless round trip through EncodeWav
+    void FuzzAudioFlac(const uint8_t* data, size_t size);
+
     /// A save file as the seeds make it: the bytes SaveGameService::Save writes for the probe state under the given game id and schema version
     Vector<uint8_t> MakeSaveFileBytes(StringView game, uint32_t version);
 

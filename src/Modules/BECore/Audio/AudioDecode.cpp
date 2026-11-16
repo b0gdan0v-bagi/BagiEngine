@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <utility>
 
 // The one translation unit that holds the stb_vorbis implementation (src/Modules/stb/README.md). No stdio (the engine reads the bytes) and no
 // push-data API (a clip is decoded whole). stb_vorbis has no static option: its functions (stb_vorbis_decode_memory, ...) have external C
@@ -26,6 +27,13 @@
 #pragma clang diagnostic ignored "-Wcomma"
 #pragma clang diagnostic ignored "-Wzero-as-null-pointer-constant"
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#pragma clang diagnostic ignored "-Wunused-macros"
+#pragma clang diagnostic ignored "-Wcast-align"
+#pragma clang diagnostic ignored "-Wdouble-promotion"
+#pragma clang diagnostic ignored "-Wimplicit-int-conversion"
+#pragma clang diagnostic ignored "-Wshorten-64-to-32"
+#pragma clang diagnostic ignored "-Wextra-semi-stmt"
+#pragma clang diagnostic ignored "-Wunreachable-code"
 #elif defined(_MSC_VER)
 #pragma warning(push, 0)
 #endif
@@ -34,6 +42,14 @@
 #undef L
 #undef C
 #undef R
+// The one translation unit that holds dr_flac (src/Modules/dr_libs/README.md). Every function static, so another copy in a game links; no
+// stdio (the engine reads the bytes), no Ogg FLAC (an `OggS` file is Vorbis here)
+#define DR_FLAC_IMPLEMENTATION
+#define DR_FLAC_NO_STDIO
+#define DR_FLAC_NO_OGG
+#define DRFLAC_API static
+#define DRFLAC_PRIVATE static
+#include <dr_flac.h>
 #if defined(__clang__)
 #pragma clang diagnostic pop
 #elif defined(_MSC_VER)
@@ -238,12 +254,173 @@ namespace BECore {
 
     namespace {
 
+        /// Frames read from dr_flac at a time while a whole file is decoded
+        constexpr size_t kFlacReadFrames = 4096;
+
+        /// Closes the dr_flac decoder it holds
+        class FlacDecoder {
+        public:
+            explicit FlacDecoder(drflac* decoder) : _decoder(decoder) {}
+
+            ~FlacDecoder() {
+                if (_decoder != nullptr) {
+                    drflac_close(_decoder);
+                }
+            }
+
+            FlacDecoder(FlacDecoder&& other) noexcept : _decoder(std::exchange(other._decoder, nullptr)) {}
+            FlacDecoder(const FlacDecoder&) = delete;
+            FlacDecoder& operator=(const FlacDecoder&) = delete;
+            FlacDecoder& operator=(FlacDecoder&&) = delete;
+
+            [[nodiscard]] drflac* Get() const {
+                return _decoder;
+            }
+
+        private:
+            drflac* _decoder = nullptr;
+        };
+
+        /// Opens @p bytes (which must outlive the decoder) and checks the stream against the limits of a clip
+        std::expected<FlacDecoder, String> OpenFlac(Span<const uint8_t> bytes) {
+            FlacDecoder decoder(drflac_open_memory(bytes.data(), bytes.size(), nullptr));
+            if (decoder.Get() == nullptr) {
+                return std::unexpected(String("not a FLAC file dr_flac can open"));
+            }
+            const drflac& info = *decoder.Get();
+            if (info.channels == 0 || info.channels > kMaxAudioChannels || info.sampleRate < kMinAudioSampleRate || info.sampleRate > kMaxAudioSampleRate) {
+                return std::unexpected(Format("{} channels at {} Hz is not a sound the engine plays", info.channels, info.sampleRate));
+            }
+            return decoder;
+        }
+
+        void ZeroNonFinite(Span<float> samples) {
+            for (float& sample : samples) {
+                if (!std::isfinite(sample)) {
+                    sample = 0.0f;
+                }
+            }
+        }
+
+    }  // namespace
+
+    AudioDecodeResult DecodeFlac(Span<const uint8_t> bytes, size_t maxFrames) {
+        auto opened = OpenFlac(bytes);
+        if (!opened) {
+            return std::unexpected(std::move(opened.error()));
+        }
+        drflac* decoder = opened->Get();
+        DecodedAudio decoded;
+        decoded.format = AudioFormat{decoder->sampleRate, decoder->channels};
+        const size_t channels = decoder->channels;
+        // The frame count of the header is not trusted (it may be 0 or a lie): the vector grows by what the decoder gives, one frame past the
+        // limit at most, so a file over it is seen
+        size_t frames = 0;
+        while (true) {
+            const size_t want = eastl::min(kFlacReadFrames, maxFrames - frames + 1);
+            decoded.samples.resize((frames + want) * channels);
+            const auto read = static_cast<size_t>(drflac_read_pcm_frames_f32(decoder, want, decoded.samples.data() + frames * channels));
+            frames += read;
+            if (frames > maxFrames) {
+                return std::unexpected(Format("longer than {} frames", maxFrames));
+            }
+            if (read < want) {
+                break;
+            }
+        }
+        if (frames == 0) {
+            return std::unexpected(String("the FLAC file holds no sample frame"));
+        }
+        decoded.samples.resize(frames * channels);
+        ZeroNonFinite(decoded.samples);
+        return decoded;
+    }
+
+    namespace {
+
+        constexpr uint16_t kWavFmtSize = 16;
+        constexpr size_t kWavHeaderSize = kRiffHeaderSize + kChunkHeaderSize + kWavFmtSize + kChunkHeaderSize;
+        constexpr float kEncodeScale16 = 32767.0f;
+        constexpr uint32_t kByteMask = 0xFFU;
+        constexpr uint32_t kBitsPerWord = 32;
+
+        void PutU16(Vector<uint8_t>& out, uint16_t value) {
+            out.push_back(static_cast<uint8_t>(value & kByteMask));
+            out.push_back(static_cast<uint8_t>(value >> kBitsPerByte));
+        }
+
+        void PutU32(Vector<uint8_t>& out, uint32_t value) {
+            for (uint32_t shift = 0; shift < kBitsPerWord; shift += kBitsPerByte) {
+                out.push_back(static_cast<uint8_t>((value >> shift) & kByteMask));
+            }
+        }
+
+        void PutTag(Vector<uint8_t>& out, const char* tag) {
+            out.insert(out.end(), tag, tag + kTagSize);
+        }
+
+    }  // namespace
+
+    AudioEncodeResult EncodeWav(Span<const float> samples, AudioFormat format, WavSampleFormat sampleFormat) {
+        if (format.channels == 0 || format.channels > kMaxAudioChannels) {
+            return std::unexpected(Format("{} channels, not 1 to {}", format.channels, kMaxAudioChannels));
+        }
+        if (format.sampleRate < kMinAudioSampleRate || format.sampleRate > kMaxAudioSampleRate) {
+            return std::unexpected(Format("the sample rate {} is not {} to {}", format.sampleRate, kMinAudioSampleRate, kMaxAudioSampleRate));
+        }
+        if (samples.empty() || samples.size() % format.channels != 0) {
+            return std::unexpected(Format("{} samples are not whole frames of {} channels", samples.size(), format.channels));
+        }
+        const bool pcm = sampleFormat == WavSampleFormat::Pcm16;
+        const uint16_t bits = pcm ? kBits16 : kBits32;
+        const size_t sampleBytes = bits / kBitsPerByte;
+        const size_t dataSize = samples.size() * sampleBytes;
+        if (dataSize > UINT32_MAX - kWavHeaderSize) {
+            return std::unexpected(String("the sound is too long for a WAVE file (over 4 GiB)"));
+        }
+        const auto blockAlign = static_cast<uint16_t>(format.channels * sampleBytes);
+
+        Vector<uint8_t> out;
+        out.reserve(kWavHeaderSize + dataSize);
+        PutTag(out, "RIFF");
+        PutU32(out, static_cast<uint32_t>(kWavHeaderSize - kChunkHeaderSize + dataSize));
+        PutTag(out, "WAVE");
+        PutTag(out, "fmt ");
+        PutU32(out, kWavFmtSize);
+        PutU16(out, pcm ? kFormatPcm : kFormatFloat);
+        PutU16(out, format.channels);
+        PutU32(out, format.sampleRate);
+        PutU32(out, format.sampleRate * blockAlign);
+        PutU16(out, blockAlign);
+        PutU16(out, bits);
+        PutTag(out, "data");
+        PutU32(out, static_cast<uint32_t>(dataSize));
+        for (const float sample : samples) {
+            const float value = std::isfinite(sample) ? sample : 0.0f;
+            if (pcm) {
+                const auto quantized = static_cast<int16_t>(std::lrint(eastl::clamp(value, -1.0f, 1.0f) * kEncodeScale16));
+                PutU16(out, static_cast<uint16_t>(quantized));
+            } else {
+                uint32_t word = 0;
+                std::memcpy(&word, &value, sizeof(word));
+                PutU32(out, word);
+            }
+        }
+        return out;
+    }
+
+    namespace {
+
         bool IsWave(Span<const uint8_t> bytes) {
             return bytes.size() >= kRiffHeaderSize && HasTag(bytes.data(), "RIFF") && HasTag(bytes.data() + 8, "WAVE");
         }
 
         bool IsOgg(Span<const uint8_t> bytes) {
             return bytes.size() >= kTagSize && HasTag(bytes.data(), "OggS");
+        }
+
+        bool IsFlac(Span<const uint8_t> bytes) {
+            return bytes.size() >= kTagSize && HasTag(bytes.data(), "fLaC");
         }
 
         /// A sound decoded whole, read from memory
@@ -310,6 +487,35 @@ namespace BECore {
             AudioFormat _format;
         };
 
+        /// FLAC decoded as it is read, by dr_flac over the bytes it keeps
+        class FlacSampleSource final : public IAudioSampleSource {
+        public:
+            FlacSampleSource(Vector<uint8_t> bytes, FlacDecoder decoder) : _bytes(std::move(bytes)), _decoder(std::move(decoder)) {}
+
+            [[nodiscard]] AudioFormat GetFormat() const override {
+                return AudioFormat{_decoder.Get()->sampleRate, _decoder.Get()->channels};
+            }
+
+            size_t Read(Span<float> out) override {
+                const size_t channels = _decoder.Get()->channels;
+                const size_t frames = out.size() / channels;
+                if (frames == 0) {
+                    return 0;
+                }
+                const auto read = static_cast<size_t>(drflac_read_pcm_frames_f32(_decoder.Get(), frames, out.data()));
+                ZeroNonFinite(out.first(read * channels));
+                return read;
+            }
+
+            bool Rewind() override {
+                return drflac_seek_to_pcm_frame(_decoder.Get(), 0) != DRFLAC_FALSE;
+            }
+
+        private:
+            Vector<uint8_t> _bytes;  ///< dr_flac reads from these: declared first, so they outlive the decoder
+            FlacDecoder _decoder;
+        };
+
     }  // namespace
 
     AudioDecodeResult DecodeAudio(Span<const uint8_t> bytes) {
@@ -319,7 +525,10 @@ namespace BECore {
         if (IsOgg(bytes)) {
             return DecodeOgg(bytes);
         }
-        return std::unexpected(String("neither a WAVE nor an Ogg file"));
+        if (IsFlac(bytes)) {
+            return DecodeFlac(bytes);
+        }
+        return std::unexpected(String("neither a WAVE, an Ogg nor a FLAC file"));
     }
 
     AudioSampleSourceResult OpenAudioStream(Vector<uint8_t> bytes) {
@@ -330,8 +539,16 @@ namespace BECore {
             }
             return UniquePtr<IAudioSampleSource>(MakeUnique<MemorySampleSource>(std::move(*decoded)));
         }
+        if (IsFlac(bytes)) {
+            auto opened = OpenFlac(bytes);
+            if (!opened) {
+                return std::unexpected(std::move(opened.error()));
+            }
+            // The decoder points into the heap block of the vector, which the move keeps in place
+            return UniquePtr<IAudioSampleSource>(MakeUnique<FlacSampleSource>(std::move(bytes), std::move(*opened)));
+        }
         if (!IsOgg(bytes)) {
-            return std::unexpected(String("neither a WAVE nor an Ogg file"));
+            return std::unexpected(String("neither a WAVE, an Ogg nor a FLAC file"));
         }
         if (bytes.size() > static_cast<size_t>(INT_MAX)) {
             return std::unexpected(String("the Ogg file is larger than stb_vorbis can read"));

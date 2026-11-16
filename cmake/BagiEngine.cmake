@@ -107,7 +107,7 @@ add_subdirectory(${BAGI_ENGINE_DIR}/external/SDL_image)
 message(STATUS "Configuring Vulkan-Headers (vendored)...")
 add_subdirectory(${BAGI_ENGINE_DIR}/external/Vulkan-Headers)
 
-# Vendored libraries (EnTT, pugixml, ImGui, fmt, nlohmann/json, stb)
+# Vendored libraries (EnTT, pugixml, ImGui, fmt, nlohmann/json, stb, dr_libs)
 message(STATUS "Configuring vendored libraries...")
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/EnTT)
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/pugixml)
@@ -115,6 +115,7 @@ add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/imgui)
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/fmt)
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/nlohmann)
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/stb)
+add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/dr_libs)
 
 # The vendored imgui CMakeLists points at ${CMAKE_SOURCE_DIR}/external/SDL/include, which is only right when
 # the engine is the top-level project. Vendored code is not edited, so add the correct path here.
