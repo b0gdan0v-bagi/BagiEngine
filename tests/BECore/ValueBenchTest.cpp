@@ -1,19 +1,21 @@
 // What a `Get` of a Value<T> costs against a plain field (Values/Value.h). BE_VALUE_BENCH=<iterations> prints a line per case, the form the
 // benchmark set reads (`ValueBench <type> <case> ns_per_get=<x>`); without it a case is a smoke run that checks the results and asserts
 // nothing about time: tests run side by side and a machine drifts, so the time belongs to the perf set (`.claude/rules/perf-project.md`).
-// `formula_plain` and `formula_program` time one formula as plain C++ and as a compiled `expr` run with `Evaluate`.
+// A formula of about five operations over two objects is timed as `formula_plain` (C++), `formula_tree` (a virtual node per operation, a heap object each),
+// `formula_program` (the compiled `expr`, fused), `formula_unfused` (the same with `CompileOptions::fuse = false`) and `formula_cached` (a `CachedValue` read with nothing
+// changed). `madd_plain`, `madd_program` and `madd_unfused` time `slot * k + b` alone, so what the peephole gains is one number. Every case must sum to what the plain one does.
 
 #include <BECore/ValueTestTypes.h>
+#include <BECore/Values/CachedValue.h>
 #include <BECore/Values/Context.h>
+#include <BECore/Values/Programs/Opcode.h>
+#include <BECore/Values/Programs/Program.h>
 #include <BECore/Values/Programs/ProgramCompiler.h>
 #include <BECore/Values/Value.h>
-#include <atomic>
 #include <bit>
-#include <charconv>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
-#include <cstring>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -34,6 +36,14 @@ namespace BECore::Tests {
         constexpr int32_t kFormulaBase = 100;
         constexpr int32_t kFormulaPerLevel = 10;
         constexpr int32_t kCastLevels = 5;
+        constexpr StringView kMadd = "caster.attack * 3 + 7";
+        constexpr int32_t kMaddFactor = 3;
+        constexpr int32_t kMaddTerm = 7;
+        constexpr float kPowerBase = 0.5f;
+        constexpr float kPowerStep = 0.25f;
+        constexpr size_t kPowerSteps = 7;
+        constexpr float kTargetY = 4.5f;
+        constexpr float kTargetZ = -2.0f;
 
         uint64_t Iterations(bool& printing) {
             const char* text = std::getenv(kBenchVariable);
@@ -221,40 +231,220 @@ namespace BECore::Tests {
             EXPECT_EQ(TimeCase(type, "tree_slot", iterations, printing, [&rig](size_t index) -> const T& { return rig.slotChains[index]->Read(rig.contexts[index]); }), plain) << type << " tree_slot";
         }
 
+        /// A formula as a tree of heap objects with a virtual `Eval` per step: the shape of a formula held as parts (a node per operation)
+        template <typename T>
+        class TreeNode {
+        public:
+            virtual ~TreeNode() = default;
+            [[nodiscard]] virtual T Eval(const Context& context) const = 0;
+        };
+
+        template <typename T>
+        class ConstNode final : public TreeNode<T> {
+        public:
+            explicit ConstNode(T value) : _value(value) {}
+            [[nodiscard]] T Eval(const Context& /*context*/) const override {
+                return _value;
+            }
+
+        private:
+            T _value;
+        };
+
+        /// A field of a context object, read through the linked slot
+        template <typename T>
+        class ReadNode final : public TreeNode<T> {
+        public:
+            explicit ReadNode(const Value<T>& slot) : _slot(slot) {}
+            [[nodiscard]] T Eval(const Context& context) const override {
+                return _slot.Get(context);
+            }
+
+        private:
+            Value<T> _slot;
+        };
+
+        struct AddOp {
+            template <typename L, typename R>
+            auto operator()(const L& left, const R& right) const {
+                return left + right;
+            }
+        };
+
+        struct SubOp {
+            template <typename L, typename R>
+            auto operator()(const L& left, const R& right) const {
+                return left - right;
+            }
+        };
+
+        struct MulOp {
+            template <typename L, typename R>
+            auto operator()(const L& left, const R& right) const {
+                return left * right;
+            }
+        };
+
+        struct DivOp {
+            template <typename L, typename R>
+            auto operator()(const L& left, const R& right) const {
+                return left / right;
+            }
+        };
+
+        template <typename TOut, typename TLeft, typename TRight, typename TOp>
+        class BinaryNode final : public TreeNode<TOut> {
+        public:
+            BinaryNode(UniquePtr<TreeNode<TLeft>> left, UniquePtr<TreeNode<TRight>> right) : _left(std::move(left)), _right(std::move(right)) {}
+            [[nodiscard]] TOut Eval(const Context& context) const override {
+                return TOp{}(_left->Eval(context), _right->Eval(context));
+            }
+
+        private:
+            UniquePtr<TreeNode<TLeft>> _left;
+            UniquePtr<TreeNode<TRight>> _right;
+        };
+
+        template <typename T>
+        using TreePtr = UniquePtr<TreeNode<T>>;
+
+        template <typename T>
+        TreePtr<T> Constant(T value) {
+            return MakeUnique<ConstNode<T>>(value);
+        }
+
+        template <typename T>
+        TreePtr<T> Read(const ContextDecl& declaration, StringView path) {
+            Value<T> slot;
+            EXPECT_TRUE(slot.Link(declaration, path).has_value()) << String(path).c_str();
+            return MakeUnique<ReadNode<T>>(slot);
+        }
+
+        template <typename TOp, typename TOut, typename TLeft, typename TRight>
+        TreePtr<TOut> Binary(TreePtr<TLeft> left, TreePtr<TRight> right) {
+            return MakeUnique<BinaryNode<TOut, TLeft, TRight, TOp>>(std::move(left), std::move(right));
+        }
+
+        /// Two levels, an object of each per iteration: a context without counters, and one with a counter per level for the cached reads
+        struct FormulaWorld {
+            ContextDecl declaration;
+            Vector<ValueUnitStats> casters;
+            Vector<ValueCastInfo> casts;
+            Vector<uint64_t> casterVersions;
+            Vector<uint64_t> castVersions;
+            Vector<Context> contexts;
+            Vector<Context> versionedContexts;
+
+            FormulaWorld() : casters(kObjects), casts(kObjects), casterVersions(kObjects, 1), castVersions(kObjects, 1) {
+                EXPECT_TRUE(declaration.Add<ValueUnitStats>("caster").has_value());
+                EXPECT_TRUE(declaration.Add<ValueCastInfo>("cast").has_value());
+                contexts.reserve(kObjects);
+                versionedContexts.reserve(kObjects);
+                for (size_t index = 0; index < kObjects; ++index) {
+                    Subject<int32_t>::Fill(casters[index], index);
+                    Subject<Vec3>::Fill(casters[index], index);
+                    casts[index].level = 1 + static_cast<int32_t>(index) % kCastLevels;
+                    casts[index].power = kPowerBase + static_cast<float>(index % kPowerSteps) * kPowerStep;
+                    casts[index].target = Vec3{static_cast<float>(index), kTargetY, kTargetZ};
+                    Context& context = contexts.emplace_back(declaration);
+                    context.Set(kCasterLevel, casters[index]);
+                    context.Set(kCastLevel, casts[index]);
+                    Context& versioned = versionedContexts.emplace_back(declaration);
+                    versioned.Set(kCasterLevel, casters[index], &casterVersions[index]);
+                    versioned.Set(kCastLevel, casts[index], &castVersions[index]);
+                }
+            }
+
+            FormulaWorld(const FormulaWorld&) = delete;
+            FormulaWorld& operator=(const FormulaWorld&) = delete;
+        };
+
+        /// The names of the lines one formula prints; a null name is a case that is not timed
+        struct FormulaNames {
+            const char* plain;
+            const char* tree;
+            const char* program;
+            const char* unfused;
+            const char* cached;
+        };
+
+        constexpr FormulaNames kFormulaNames{"formula_plain", "formula_tree", "formula_program", "formula_unfused", "formula_cached"};
+        constexpr FormulaNames kMaddNames{"madd_plain", nullptr, "madd_program", "madd_unfused", nullptr};
+
+        size_t CountMulAddSlot(const Program& program) {
+            return static_cast<size_t>(std::count_if(program.Code().begin(), program.Code().end(), [](const Instruction& instruction) { return IsMulAddSlot(instruction.op); }));
+        }
+
+        /// Times @p text as plain C++, as a tree (when @p tree is given), as the fused program, as the program with `fuse = false` and as a cached read (with the tree), and checks that
+        /// every case gives the sum of the plain one. @p expectFused says whether the default compile has a `MulAddSlot` and the unfused one never has: a benchmark of two
+        /// equal programs would say nothing, and where there is no such fusion yet the two must be the same code
+        template <typename T, typename TPlain>
+        void BenchFormulaCases(const FormulaWorld& world, StringView text, const FormulaNames& names, TPlain&& plainRead, const TreeNode<T>* tree, Optional<bool> expectFused) {
+            bool printing = false;
+            const uint64_t iterations = Iterations(printing);
+            const char* type = Subject<T>::kName;
+
+            const auto fusedCompiled = CompileValue<T>(text, world.declaration);
+            ASSERT_TRUE(fusedCompiled.has_value()) << String(text).c_str();
+            const Value<T>& fused = *fusedCompiled;
+            const auto unfusedCompiled = CompileValue<T>(text, world.declaration, CompileOptions{.fuse = false});
+            ASSERT_TRUE(unfusedCompiled.has_value()) << String(text).c_str();
+            const Value<T>& unfused = *unfusedCompiled;
+            ASSERT_EQ(fused.Kind(), ValueKind::Program) << names.program;
+            ASSERT_EQ(unfused.Kind(), ValueKind::Program) << names.unfused;
+            EXPECT_EQ(CountMulAddSlot(ProgramPool::Get(unfused.Id())), 0U) << names.unfused;
+            if (expectFused.has_value()) {
+                EXPECT_EQ(CountMulAddSlot(ProgramPool::Get(fused.Id())) > 0, *expectFused) << names.program;
+                EXPECT_EQ(fused.Id() == unfused.Id(), !*expectFused) << names.program << " and " << names.unfused << " are the same program or not as the fusion says";
+            }
+
+            const uint64_t plain = TimeCase(type, names.plain, iterations, printing, plainRead);
+            EXPECT_NE(plain, 0U) << names.plain;
+            EXPECT_EQ(TimeCase(type, names.program, iterations, printing, [&](size_t index) { return fused.Evaluate(world.contexts[index]); }), plain) << names.program;
+            EXPECT_EQ(TimeCase(type, names.unfused, iterations, printing, [&](size_t index) { return unfused.Evaluate(world.contexts[index]); }), plain) << names.unfused;
+            if (tree == nullptr) {
+                return;
+            }
+            EXPECT_EQ(TimeCase(type, names.tree, iterations, printing, [&](size_t index) { return tree->Eval(world.contexts[index]); }), plain) << names.tree;
+
+            Vector<CachedValue<T>> cached;
+            cached.reserve(kObjects);
+            for (size_t index = 0; index < kObjects; ++index) {
+                cached.emplace_back(fused);
+                (void)cached.back().Evaluate(world.versionedContexts[index]);
+            }
+            EXPECT_EQ(TimeCase(type, names.cached, iterations, printing, [&](size_t index) { return cached[index].Evaluate(world.versionedContexts[index]); }), plain) << names.cached;
+            for (const CachedValue<T>& value : cached) {
+                EXPECT_EQ(value.Computations(), 1U) << names.cached << " ran its program again with nothing changed";
+            }
+        }
+
         /// `kFormula` written as C++ over the two objects
         int32_t PlainFormula(const ValueUnitStats& caster, const ValueCastInfo& cast) {
             return caster.attack * (kFormulaBase + cast.level * kFormulaPerLevel) / kFormulaBase;
         }
 
-        /// Two levels, an object of each per iteration, and the formula compiled once outside the loop
+        /// `kFormula` as a tree of nodes of the same shape
+        TreePtr<int32_t> FormulaTree(const ContextDecl& declaration) {
+            TreePtr<int32_t> perLevel = Binary<MulOp, int32_t>(Read<int32_t>(declaration, "cast.level"), Constant<int32_t>(kFormulaPerLevel));
+            TreePtr<int32_t> factor = Binary<AddOp, int32_t>(Constant<int32_t>(kFormulaBase), std::move(perLevel));
+            TreePtr<int32_t> scaled = Binary<MulOp, int32_t>(Read<int32_t>(declaration, "caster.attack"), std::move(factor));
+            return Binary<DivOp, int32_t>(std::move(scaled), Constant<int32_t>(kFormulaBase));
+        }
+
         void BenchFormula() {
-            bool printing = false;
-            const uint64_t iterations = Iterations(printing);
-            const char* type = Subject<int32_t>::kName;
+            const FormulaWorld world;
+            const TreePtr<int32_t> tree = FormulaTree(world.declaration);
+            BenchFormulaCases<int32_t>(world, kFormula, kFormulaNames, [&](size_t index) { return PlainFormula(world.casters[index], world.casts[index]); }, tree.get(), Optional<bool>{});
+        }
 
-            ContextDecl declaration;
-            EXPECT_TRUE(declaration.Add<ValueUnitStats>("caster").has_value());
-            EXPECT_TRUE(declaration.Add<ValueCastInfo>("cast").has_value());
-            Vector<ValueUnitStats> casters(kObjects);
-            Vector<ValueCastInfo> casts(kObjects);
-            Vector<Context> contexts;
-            contexts.reserve(kObjects);
-            for (size_t index = 0; index < kObjects; ++index) {
-                Subject<int32_t>::Fill(casters[index], index);
-                casts[index].level = 1 + static_cast<int32_t>(index) % kCastLevels;
-                Context& context = contexts.emplace_back(declaration);
-                context.Set(kCasterLevel, casters[index]);
-                context.Set(kCastLevel, casts[index]);
-            }
+        int32_t PlainMadd(const ValueUnitStats& caster) {
+            return caster.attack * kMaddFactor + kMaddTerm;
+        }
 
-            const auto compiled = CompileValue<int32_t>(kFormula, declaration);
-            ASSERT_TRUE(compiled.has_value());
-            const Value<int32_t>& program = *compiled;
-            ASSERT_EQ(program.Kind(), ValueKind::Program);
-
-            const uint64_t plain = TimeCase(type, "formula_plain", iterations, printing, [&](size_t index) { return PlainFormula(casters[index], casts[index]); });
-            EXPECT_NE(plain, 0U);
-            EXPECT_EQ(TimeCase(type, "formula_program", iterations, printing, [&](size_t index) { return program.Evaluate(contexts[index]); }), plain) << "formula_program";
+        void BenchMadd() {
+            const FormulaWorld world;
+            BenchFormulaCases<int32_t>(world, kMadd, kMaddNames, [&](size_t index) { return PlainMadd(world.casters[index]); }, nullptr, true);
         }
 
     }  // namespace
@@ -269,6 +459,10 @@ namespace BECore::Tests {
 
     TEST(ValueBenchTest, Formula) {
         BenchFormula();
+    }
+
+    TEST(ValueBenchTest, Madd) {
+        BenchMadd();
     }
 
 }  // namespace BECore::Tests
