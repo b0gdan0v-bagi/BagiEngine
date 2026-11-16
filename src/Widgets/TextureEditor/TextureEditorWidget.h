@@ -33,6 +33,11 @@ namespace BECore {
         // The one path of the button and the command
         void SaveLibrary();
 
+        // The one place that changes the selection: the Name field follows it and a refused rename is forgotten.
+        // An index outside the list selects nothing.
+        void Select(int index);
+        void SelectByName(PoolString name);
+
         void RenderLeftPanel();
         void RenderRightPanel();
         void RefreshAssetList();
@@ -45,6 +50,8 @@ namespace BECore {
 
         char _nameEditBuffer[256] = {};
         bool _nameDirty = false;
+        // The name a rename was refused for (a sprite has it already); the panel warns until the selection or the typed name changes
+        PoolString _renameRefused;
 
         // Texture preview and drag state
         ResourceHandle<ITexture> _previewTexture;

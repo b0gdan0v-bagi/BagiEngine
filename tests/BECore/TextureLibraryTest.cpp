@@ -257,6 +257,66 @@ namespace BECore::Tests {
         EXPECT_FALSE(sprites.first_child().next_sibling());
     }
 
+    TEST(TextureLibraryTest, RenameKeepsPositionAndData) {
+        TextureLibrary library;
+        library.AddOrUpdate(MakeEntry("A", "a.png", Rect(1, 2, 3, 4)));
+        library.AddOrUpdate(MakeEntry("B", "b.png", Rect(5, 6, 7, 8)));
+        library.AddOrUpdate(MakeEntry("C", "c.png", Rect(9, 10, 11, 12)));
+
+        EXPECT_TRUE(library.Rename(PoolString::Intern("B"), PoolString::Intern("Renamed")));
+
+        ASSERT_EQ(library.GetAll().size(), 3u);
+        EXPECT_EQ(library.GetAll()[1].name.ToStringView(), "Renamed");
+        EXPECT_EQ(library.GetAll()[1].texturePath.ToStringView(), "b.png");
+        EXPECT_FLOAT_EQ(library.GetAll()[1].srcRect.w, 7.0f);
+        EXPECT_EQ(library.GetSprite(PoolString::Intern("B")), nullptr);
+        EXPECT_EQ(library.GetSprite(PoolString::Intern("Renamed")), &library.GetAll()[1]);
+        EXPECT_EQ(library.GetSprite(PoolString::Intern("C")), &library.GetAll()[2]);
+
+        EXPECT_TRUE(library.Rename(PoolString::Intern("A"), PoolString::Intern("A")));
+        EXPECT_EQ(library.GetAll()[0].name.ToStringView(), "A");
+    }
+
+    TEST(TextureLibraryTest, RenameOntoAnExistingNameChangesNothing) {
+        TextureLibrary library;
+        library.AddOrUpdate(MakeEntry("A", "a.png", Rect(1, 2, 3, 4)));
+        library.AddOrUpdate(MakeEntry("B", "b.png", Rect(5, 6, 7, 8)));
+
+        EXPECT_FALSE(library.Rename(PoolString::Intern("A"), PoolString::Intern("B")));
+
+        ASSERT_EQ(library.GetAll().size(), 2u);
+        EXPECT_EQ(library.GetAll()[0].name.ToStringView(), "A");
+        EXPECT_EQ(library.GetAll()[0].texturePath.ToStringView(), "a.png");
+        EXPECT_EQ(library.GetAll()[1].name.ToStringView(), "B");
+        EXPECT_EQ(library.GetAll()[1].texturePath.ToStringView(), "b.png");
+        EXPECT_EQ(library.GetSprite(PoolString::Intern("A")), &library.GetAll()[0]);
+        EXPECT_EQ(library.GetSprite(PoolString::Intern("B")), &library.GetAll()[1]);
+    }
+
+    TEST(TextureLibraryTest, RenameRefusesAnEmptyOrMissingName) {
+        TextureLibrary library;
+        library.AddOrUpdate(MakeEntry("A", "a.png", Rect(1, 2, 3, 4)));
+
+        EXPECT_FALSE(library.Rename(PoolString::Intern("A"), PoolString{}));
+        EXPECT_FALSE(library.Rename(PoolString::Intern("Missing"), PoolString::Intern("Other")));
+
+        ASSERT_EQ(library.GetAll().size(), 1u);
+        EXPECT_EQ(library.GetAll()[0].name.ToStringView(), "A");
+        EXPECT_EQ(library.GetSprite(PoolString::Intern("Other")), nullptr);
+    }
+
+    TEST(TextureLibraryTest, MakeUniqueNameSkipsTakenNames) {
+        TextureLibrary library;
+        EXPECT_EQ(library.MakeUniqueName("new_sprite").ToStringView(), "new_sprite");
+
+        library.AddOrUpdate(MakeEntry("new_sprite", "", Rect{}));
+        EXPECT_EQ(library.MakeUniqueName("new_sprite").ToStringView(), "new_sprite_2");
+
+        library.AddOrUpdate(MakeEntry("new_sprite_2", "", Rect{}));
+        library.AddOrUpdate(MakeEntry("new_sprite_4", "", Rect{}));
+        EXPECT_EQ(library.MakeUniqueName("new_sprite").ToStringView(), "new_sprite_3");
+    }
+
     TEST(TextureLibraryTest, ASpriteEntryRoundTripsThroughAnObject) {
         const SpriteEntry entry = MakeEntry("Solo", "assets/solo.png", Rect(1.5f, 2.5f, 3.5f, 4.5f));
 
