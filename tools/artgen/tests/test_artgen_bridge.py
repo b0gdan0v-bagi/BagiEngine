@@ -40,7 +40,7 @@ class FakeEditor:
             self.polls.append(params)
             answer = {"gameRoot": self.game_root}
             if self.run and self.run["state"] == "Queued":
-                answer["request"] = {k: self.run[k] for k in ("id", "preset", "subject", "count", "seed")}
+                answer["request"] = {k: self.run[k] for k in ("id", "preset", "presetName", "subject", "count", "seed") if k in self.run}
                 self.run["state"] = "Running"
             elif self.run and self.run["state"] == "Running" and self.cancel_requested:
                 answer["cancel"] = self.run["id"]
@@ -83,8 +83,37 @@ def test_the_first_poll_learns_the_game_and_the_next_reports_its_presets(game):
     assert editor.polls[0]["state"] == GeneratorState.READY and editor.polls[0]["presets"] == []
     bridge.tick()
     presets = {p["name"]: p for p in editor.polls[1]["presets"]}
-    assert presets["wood"] == {"name": "wood", "title": "Wood"}
-    assert "no workflow 'nope'" in presets["broken"]["error"]
+    assert presets["wood"]["title"] == "Wood" and presets["wood"]["source"] == "game"
+    assert presets["wood"]["preset"]["prompt"] == "a {subject}"
+    assert "no workflow 'nope'" in presets["broken"]["error"] and presets["broken"]["preset"]["workflow"] == "nope"
+    assert presets["sprite"]["source"] == "engine", "the engine's starters come after the game's"
+    workflows = {w["name"]: w for w in editor.polls[1]["workflows"]}
+    assert workflows["sdxl_basic"]["inputs"]["steps"] == {"default": 25}
+    assert workflows["sdxl_basic"]["inputs"]["sampler"]["choices"] == ["euler", "dpmpp_2m"], "the fake generator's choices"
+
+
+def test_a_draft_runs_with_its_content_in_the_provenance(game):
+    editor = FakeEditor(game)
+    bridge = artgen_bridge.Bridge(editor, FakeGenerator(), log=lambda *a: None)
+    bridge.tick()
+    draft = {"preset": 1, "workflow": "sdxl_basic", "prompt": "a draft {subject}", "params": {"steps": 9}}
+    editor.request(draft, "knight", count=1, seed=11)
+    editor.run["presetName"] = "wood"
+    run_until(bridge, editor, lambda: editor.run["state"] not in ("Queued", "Running"))
+    assert editor.run["state"] == "Done", editor.run["error"]
+    provenance = json.loads(Path(editor.run["variants"][0]["provenance"]).read_text(encoding="utf-8"))
+    assert provenance["preset"] == "draft" and provenance["presetSource"] == "draft"
+    assert provenance["presetData"] == draft and provenance["prompt"] == "a draft knight"
+
+
+def test_a_broken_draft_fails_the_run_with_the_reason(game):
+    editor = FakeEditor(game)
+    bridge = artgen_bridge.Bridge(editor, FakeGenerator(), log=lambda *a: None)
+    bridge.tick()
+    editor.request({"preset": 1, "workflow": "sdxl_basic", "prompt": "x", "params": {"stepz": 2}}, "knight", count=1)
+    editor.run["presetName"] = "wood"
+    run_until(bridge, editor, lambda: editor.run["state"] == "Failed")
+    assert editor.run["error"].startswith("the draft of 'wood':") and "stepz" in editor.run["error"]
 
 
 def test_a_request_runs_and_reports_back(game):
@@ -142,7 +171,7 @@ def test_an_unknown_preset_fails_the_run_not_the_bridge(game):
     bridge.tick()
     editor.request("nope", "knight", count=1)
     run_until(bridge, editor, lambda: editor.run["state"] == "Failed")
-    assert "nope.json" in editor.run["error"]
+    assert "no preset 'nope'" in editor.run["error"]
     editor.request("wood", "knight", count=1)
     run_until(bridge, editor, lambda: editor.run["state"] == "Done")
 
@@ -316,3 +345,24 @@ def test_the_editor_can_tell_the_bridge_to_exit(game, monkeypatch):
     artgen_bridge.serve("127.0.0.1", 1, FakeGenerator(), log=lines.append)  # returns: no reconnect after a shutdown
     assert len(editor.polls) == 2 and editor.closed
     assert any("asked the service to stop" in line for line in lines)
+
+
+def test_a_refresh_from_the_editor_reads_the_presets_again_at_once(game):
+    editor = FakeEditor(game)
+    bridge = artgen_bridge.Bridge(editor, FakeGenerator(), log=lambda *a: None)
+    bridge.tick()
+    bridge.tick()
+    (game / "artgen" / "presets" / "saved.json").write_text(json.dumps({"preset": 1, "workflow": "sdxl_basic", "prompt": "x"}), encoding="utf-8")
+    bridge.tick()
+    assert "saved" not in {p["name"] for p in editor.polls[-1]["presets"]}, "the list is read every few seconds"
+    original = editor.call
+
+    def refreshing(method, params=None):
+        answer = original(method, params)
+        return {**answer, "refresh": True} if method == "artgen_poll" else answer
+
+    editor.call = refreshing
+    bridge.tick()
+    editor.call = original
+    bridge.tick()
+    assert "saved" in {p["name"] for p in editor.polls[-1]["presets"]}

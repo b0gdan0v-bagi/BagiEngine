@@ -71,6 +71,31 @@ class Generator:
     def run(self, graph, on_progress=None, cancel=None, timeout_s=DEFAULT_RUN_TIMEOUT_S):
         raise NotImplementedError
 
+    def choices(self):
+        """The values the generator offers for its combo inputs, {node class: {input name: [values]}} (checkpoints, samplers, ...);
+        {} when it cannot say. Asked when it becomes ready, not every poll."""
+        return {}
+
+
+def combo_choices(object_info):
+    """{node class: {input: [values]}} of the combo inputs in ComfyUI's /object_info: `[[values], {...}]`, or the newer
+    `["COMBO", {"options": [values]}]`."""
+    found = {}
+    for node_class, info in (object_info or {}).items():
+        inputs = (info or {}).get("input", {}) if isinstance(info, dict) else {}
+        for group in ("required", "optional"):
+            for name, spec in (inputs.get(group) or {}).items():
+                if not isinstance(spec, list) or not spec:
+                    continue
+                values = None
+                if isinstance(spec[0], list):
+                    values = spec[0]
+                elif spec[0] == "COMBO" and len(spec) > 1 and isinstance(spec[1], dict):
+                    values = spec[1].get("options")
+                if isinstance(values, list) and all(isinstance(v, (str, int, float)) for v in values):
+                    found.setdefault(node_class, {})[name] = values
+    return found
+
 
 def default_install_root(settings_path=comfyui_check.LOCAL_SETTINGS):
     """Where a local ComfyUI is installed (`artgen_setup.default_root`)."""
@@ -123,6 +148,12 @@ class ComfyUIGenerator(Generator):
             except GenerationError:
                 pass
         return {"name": self.name, "version": self._version, "url": self.url}
+
+    def choices(self):
+        try:
+            return combo_choices(self._http("/object_info"))
+        except (GenerationError, ValueError):
+            return {}
 
     def _open_progress(self, client_id):
         parsed = urllib.parse.urlparse(self.url)
@@ -238,6 +269,14 @@ class FakeGenerator(Generator):
 
     def info(self):
         return {"name": self.name, "version": "1"}
+
+    def choices(self):
+        return {
+            "CheckpointLoaderSimple": {"ckpt_name": ["sd_xl_base_1.0.safetensors", "fake_model.safetensors"]},
+            "VAELoader": {"vae_name": ["sdxl.vae.safetensors"]},
+            "KSampler": {"sampler_name": ["euler", "dpmpp_2m"], "scheduler": ["normal", "karras"]},
+            "LoadBackgroundRemovalModel": {"bg_removal_name": ["birefnet.safetensors"]},
+        }
 
     def run(self, graph, on_progress=None, cancel=None, timeout_s=DEFAULT_RUN_TIMEOUT_S):
         self.graphs.append(graph)

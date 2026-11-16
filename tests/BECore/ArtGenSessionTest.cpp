@@ -1,7 +1,10 @@
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
 #include <Common/Printers.h>
+#include <Common/TempPath.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
+#include <Widgets/EditorLayout/UserFileIo.h>
+#include <filesystem>
 #include <gtest/gtest.h>
 #include <initializer_list>
 
@@ -456,6 +459,126 @@ namespace BECore::Tests {
         // Started again, the service is told nothing more
         EXPECT_EQ(FindJsonMember(Result(Call("artgen_poll", ReadyPoll())), "shutdown"), nullptr);
         EXPECT_TRUE(session.IsServiceConnected());
+    }
+
+    namespace {
+
+        Json DraftPreset() {
+            return Json{{"preset", 1}, {"workflow", "sdxl_basic"}, {"prompt", "a {subject}"}, {"params", Json{{"steps", 9}}}};
+        }
+
+        Json CatalogPoll() {
+            Json params = ReadyPoll();
+            Json wood = Preset("wood");
+            wood["source"] = "game";
+            wood["preset"] = Json{{"preset", 1}, {"title", "Wood"}, {"workflow", "sdxl_basic"}, {"prompt", "carved {subject}"}};
+            Json sprite = Preset("sprite");
+            sprite["source"] = "engine";
+            sprite["preset"] = Json{{"preset", 1}, {"workflow", "sdxl_cutout"}, {"prompt", "{subject}"}};
+            params["presets"] = Json::array({wood, sprite});
+            Json inputs = Json{{"steps", Json{{"default", 25}}}, {"sampler", Json{{"default", "euler"}, {"choices", Json::array({"euler", "ddim"})}}}};
+            params["workflows"] = Json::array({Json{{"name", "sdxl_basic"}, {"source", "engine"}, {"inputs", inputs}}, Json{{"name", "broken"}, {"source", "game"}, {"error", "no inputs"}}});
+            return params;
+        }
+
+    }  // namespace
+
+    TEST_F(ArtGenSessionTest, ThePollCarriesThePresetsWithTheirContentAndTheWorkflowsWithTheirInputs) {
+        Call("artgen_poll", CatalogPoll());
+        const auto& status = session.GetServiceStatus();
+        ASSERT_EQ(status.presets.size(), 2u);
+        const ArtGenPreset* sprite = session.FindPreset("sprite");
+        ASSERT_NE(sprite, nullptr);
+        EXPECT_EQ(sprite->source, "engine");
+        EXPECT_EQ(GetJsonString(sprite->data, "workflow"), Optional<String>("sdxl_cutout"));
+        const ArtGenWorkflow* basic = session.FindWorkflow("sdxl_basic");
+        ASSERT_NE(basic, nullptr);
+        const ArtGenWorkflowInput* sampler = basic->FindInput("sampler");
+        ASSERT_NE(sampler, nullptr);
+        EXPECT_EQ(sampler->defaultValue, Json("euler"));
+        EXPECT_EQ(sampler->choices, Json::array({"euler", "ddim"}));
+        EXPECT_EQ(basic->FindInput("steps")->defaultValue, Json(25));
+        EXPECT_EQ(session.FindWorkflow("broken")->error, "no inputs");
+
+        // The same lists again change nothing the panel draws
+        const uint64_t version = session.Version();
+        Call("artgen_poll", CatalogPoll());
+        EXPECT_EQ(session.Version(), version);
+    }
+
+    TEST_F(ArtGenSessionTest, ADraftGoesInlineWithTheNameItCameFrom) {
+        Call("artgen_poll", CatalogPoll());
+        Json params = Object();
+        params["preset"] = DraftPreset();
+        params["presetName"] = "wood";
+        params["subject"] = "knight";
+        params["count"] = 1;
+        ASSERT_TRUE(GetJsonInt(Result(Call("artgen_generate", params)), "id").has_value());
+        EXPECT_EQ(session.GetRun().presetData, DraftPreset());
+
+        const Json poll = Call("artgen_poll", CatalogPoll());
+        const Json* request = FindJsonMember(Result(poll), "request");
+        ASSERT_NE(request, nullptr);
+        EXPECT_EQ(*FindJsonMember(*request, "preset"), DraftPreset());
+        EXPECT_EQ(GetJsonString(*request, "presetName"), Optional<String>("wood"));
+        const Json state = Call("artgen_state");
+        EXPECT_EQ(GetJsonBool(*FindJsonMember(Result(state), "run"), "draft"), Optional<bool>(true));
+    }
+
+    TEST_F(ArtGenSessionTest, ADraftThatIsNotAPresetIsRefusedHere) {
+        Json noPrompt = DraftPreset();
+        noPrompt.erase("prompt");
+        auto refused = session.RequestDraft("wood", noPrompt, "knight", 1, Optional<int64_t>());
+        ASSERT_FALSE(refused.has_value());
+        EXPECT_NE(refused.error().find("\"prompt\" is required"), String::npos) << refused.error().c_str();
+        Json params = Object();
+        params["preset"] = Json::array();
+        params["subject"] = "knight";
+        EXPECT_EQ(ErrorCode(Call("artgen_generate", params)), "invalid_params");
+    }
+
+    TEST_F(ArtGenSessionTest, SaveWritesTheGamesPresetFileShowsItAndAsksTheServiceToLookAgain) {
+        const std::filesystem::path root = TestTempDirectory("artgen_save");
+        std::filesystem::remove_all(root);
+        const std::string rootText = root.generic_string();  //-NoStd: std::filesystem gives a std::string
+        session.SetGameRoot(FromStd(rootText));
+        Call("artgen_poll", CatalogPoll());
+
+        Json preset = DraftPreset();
+        preset["title"] = "Mine";
+        Json params = Object();
+        params["name"] = "sprite";  // the engine starter's name: the game's own copy now
+        params["preset"] = preset;
+        const Json saved = Call("artgen_save_preset", params);
+        const auto path = GetJsonString(Result(saved), "path");
+        ASSERT_TRUE(path.has_value()) << DumpJson(saved).c_str();
+        const std::filesystem::path file = root / "artgen" / "presets" / "sprite.json";
+        EXPECT_EQ(*path, String(FromStd(file.generic_string())));
+        const auto text = ReadTextFile(file);
+        ASSERT_TRUE(text.has_value()) << text.error().c_str();
+        EXPECT_EQ(text->find("{\n  \"preset\": 1,\n  \"title\": \"Mine\",\n  \"workflow\": \"sdxl_basic\""), 0u) << text->c_str();
+        const auto reread = ParseJson(*text);
+        ASSERT_TRUE(reread.has_value());
+        EXPECT_EQ(*reread, preset);
+
+        const ArtGenPreset* shown = session.FindPreset("sprite");
+        ASSERT_NE(shown, nullptr);
+        EXPECT_EQ(shown->source, "game");
+        EXPECT_EQ(shown->title, "Mine");
+        EXPECT_EQ(GetJsonBool(Result(Call("artgen_poll", CatalogPoll())), "refresh"), Optional<bool>(true));
+        EXPECT_EQ(FindJsonMember(Result(Call("artgen_poll", CatalogPoll())), "refresh"), nullptr) << "asked once";
+        std::filesystem::remove_all(root);
+    }
+
+    TEST_F(ArtGenSessionTest, SaveRefusesABadNameOrAShapeThatIsNotAPreset) {
+        EXPECT_FALSE(session.SavePreset("../escape", DraftPreset()).has_value());
+        EXPECT_FALSE(session.SavePreset("", DraftPreset()).has_value());
+        Json badSize = DraftPreset();
+        badSize["size"] = Json::array({0, 10});
+        EXPECT_FALSE(session.SavePreset("ok", badSize).has_value());
+        Json params = Object();
+        params["name"] = "ok";
+        EXPECT_EQ(ErrorCode(Call("artgen_save_preset", params)), "invalid_params");
     }
 
 }  // namespace BECore::Tests

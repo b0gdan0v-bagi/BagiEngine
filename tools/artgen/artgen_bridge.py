@@ -44,6 +44,18 @@ class ShutdownRequested(Exception):
     """The editor's panel asked the bridge to exit (Disconnect)."""
 
 
+def load_request_preset(request, game_root):
+    """The preset of a request: a name (the game's file, else the engine's starter) or the form's content inline, checked by the
+    same rules as a file; a draft is named `draft` in the provenance."""
+    preset = request.get("preset")
+    if isinstance(preset, dict):
+        label = f"the draft of '{request.get('presetName')}'" if request.get("presetName") else "the draft"
+        return artgen_preset.parse_preset(preset, artgen_preset.DRAFT, game_root, label=label, source=artgen_preset.DRAFT)
+    if isinstance(preset, str):
+        return artgen_preset.find_preset(preset, game_root)
+    raise artgen_service.RequestError("the request names no preset")
+
+
 class Bridge:
     """One editor connection. `tick()` is one pass: refresh the status when due, poll, start or cancel a run, forward what the worker
     reported. The client, the generator and the clock are injected, so a test drives it without sockets or a GPU."""
@@ -57,6 +69,8 @@ class Bridge:
         self.game_root = None
         self._status = None
         self._presets = []
+        self._workflows = []
+        self._choices = None  # the generator's combo values, asked once it is ready
         self._status_at = None
         self._worker = None
         self._run_id = None
@@ -76,13 +90,26 @@ class Bridge:
         self._status = {"state": status.state, "reason": status.reason, "generator": " ".join(str(v) for v in (info.get("name"), info.get("version")) if v)}
         # Whether the panel's Stop can end it: only a ComfyUI started by the setup actions, never one started by hand
         self._status["startedHere"] = bool(self.setup is not None and status.state == "ready" and self.setup.started_here())
+        if status.state != "ready":
+            self._choices = None
+        elif self._choices is None:
+            self._choices = self.generator.choices()
         self._presets = []
+        self._workflows = []
         if self.game_root:
             for name, preset in artgen_preset.find_presets(self.game_root).items():
                 if isinstance(preset, Exception):
-                    self._presets.append({"name": name, "title": name, "error": str(preset)})
+                    entry = {"name": name, "title": name, "source": getattr(preset, "source", "game"), "error": str(preset)}
+                    if isinstance(getattr(preset, "data", None), dict):
+                        entry["preset"] = preset.data
+                    self._presets.append(entry)
                 else:
-                    self._presets.append({"name": name, "title": preset.title})
+                    self._presets.append({"name": name, "title": preset.title, "source": preset.source, "preset": preset.data})
+            for name, workflow in artgen_preset.find_workflows(self.game_root).items():
+                if isinstance(workflow, Exception):
+                    self._workflows.append({"name": name, "error": str(workflow)})
+                else:
+                    self._workflows.append(workflow.describe(self._choices))
         self._status_at = self.clock()
 
     def tick(self):
@@ -90,11 +117,13 @@ class Bridge:
         if self._status_at is None or self.clock() - self._status_at >= STATUS_REFRESH_S:
             self._refresh_status()
         self._forward_reports()
-        answer = self.client.call("artgen_poll", {**self._status, "presets": self._presets})
+        answer = self.client.call("artgen_poll", {**self._status, "presets": self._presets, "workflows": self._workflows})
         self.client.events.clear()  # pushes of the game (state_changed) are not ours
         if answer.get("shutdown"):
             self.stop()
             raise ShutdownRequested()
+        if answer.get("refresh"):
+            self._status_at = None  # the editor saved a preset: look at the files again on the next tick
         root = answer.get("gameRoot") or None
         if root != self.game_root:
             self.game_root = root
@@ -115,7 +144,9 @@ class Bridge:
     def _start(self, request):
         self._run_id = request["id"]
         self._cancel = threading.Event()
-        self.log(f"request {self._run_id}: {request.get('count')} x '{request.get('subject')}' with preset '{request.get('preset')}'")
+        preset = request.get("preset")
+        named = preset if isinstance(preset, str) else f"a draft of '{request.get('presetName') or artgen_preset.DRAFT}'"
+        self.log(f"request {self._run_id}: {request.get('count')} x '{request.get('subject')}' with preset {named}")
         self._worker = threading.Thread(target=self._run, args=(request, self._cancel), daemon=True)
         self._worker.start()
 
@@ -134,7 +165,7 @@ class Bridge:
         try:
             if not self.game_root:
                 raise artgen_service.RequestError("the editor gave no game root")
-            preset = artgen_preset.load_preset(Path(self.game_root) / "artgen" / "presets" / f"{request['preset']}.json", self.game_root)
+            preset = load_request_preset(request, self.game_root)
             service_request = artgen_service.Request(
                 preset, request.get("subject", ""), int(request.get("count") or 1), request.get("seed"), Path(self.game_root) / "artgen" / "out"
             )

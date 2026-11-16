@@ -1,0 +1,9 @@
+{
+  "preset": 1,
+  "title": "Flat icon",
+  "workflow": "sdxl_basic",
+  "prompt": "{subject}, a flat vector icon, bold simple shapes, thick outline, limited palette, centered, plain white background",
+  "negative": "blurry, low quality, watermark, text, photo, realistic, gradient noise, cropped",
+  "size": [1024, 1024],
+  "params": {"steps": 25, "cfg": 7.0}
+}
