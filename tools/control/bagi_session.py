@@ -19,6 +19,7 @@ the hook is GameSession.call, so the file holds what was called and how the game
 import base64
 import collections
 import copy
+import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -40,6 +41,11 @@ BATCH_METHOD = "batch"
 RUN_UNTIL_METHOD = "run_until"
 DEFAULT_RUN_UNTIL_FRAMES = 600  # the game's default for maxFrames, which the timeout of a run_until counts when none is given
 LOG_LEVEL_WARNING = "warning"
+SET_WINDOW_METHOD = "set_window"
+WINDOW_FLAG = "--window="
+DENSITY_FLAG = "--density="
+WINDOW_SIZE_PATTERN = re.compile(r"\d+x\d+")  # "WxH", the form of the engine's --window flag
+SAFE_AREA_SIDES = ("top", "right", "bottom", "left")
 
 
 @dataclass
@@ -104,16 +110,20 @@ class GameSession:
         extra: Sequence[str] = (),
         record: str | None = None,
         record_expect: str = scenario.RECORD_MINIMAL,
+        window: str | None = None,
+        density: float | None = None,
     ) -> dict[str, Any]:
         """Starts a game with the control API on a free port and connects to it. A game that this session started earlier is stopped.
 
         The game is given either as `exe` (a path) or as `preset` + `game` (build/<preset>/bin/<game>, see preset_executable); exactly one of the two.
-        `extra` are more start flags for the game. `record` is the path of a scenario file to record the session to (start_recording).
+        `window` ("WxH" in window units) and `density` are the start size and pixel density of a headless window (`--window=`, `--density=`), which
+        set_window changes later. `extra` are more start flags for the game. `record` is the path of a scenario file to record the session to (start_recording).
         """
         by_path = bool(exe)
         by_preset = bool(preset) or bool(game)
         if by_path == by_preset or (by_preset and not (preset and game)):
             raise SessionError("name the game either by `exe` (the path of the built executable) or by `preset` and `game` together (build/<preset>/bin/<game>), not both and not neither")
+        window_flags = self._window_flags(window, density, headless)
         self.close()
         if record is not None:
             self._check_record_target(Path(record), record_expect)
@@ -123,7 +133,7 @@ class GameSession:
             raise SessionError(f"there is no game executable at {exe_path}{hint}")
 
         port = free_port()
-        process = GameProcess(build_game_command(exe_path, port, headless, manual_clock, tuple(extra)), cwd=exe_path.parent)
+        process = GameProcess(build_game_command(exe_path, port, headless, manual_clock, (*window_flags, *extra)), cwd=exe_path.parent)
         try:
             process.start()
             client = process.connect(port, startup_timeout)
@@ -132,7 +142,7 @@ class GameSession:
             raise SessionError(str(error)) from error
         client.timeout = CALL_TIMEOUT_SECONDS
         self._game, self._client = process, client
-        self._begin_session(["--headless"] * headless + ["--manual-clock"] * manual_clock + list(extra))
+        self._begin_session(["--headless"] * headless + ["--manual-clock"] * manual_clock + window_flags + list(extra))
         description = self._describe(port)
         if record is not None:
             self._start_recording_or_close(record, record_expect, description)
@@ -212,6 +222,29 @@ class GameSession:
         if dt is not None:
             params["dt"] = dt
         return self.call(STEP_METHOD, params)
+
+    def set_window(
+        self,
+        width: int,
+        height: int,
+        density: float | None = None,
+        user_scale: float | None = None,
+        safe_area: dict[str, float] | Sequence[float] | None = None,
+    ) -> dict[str, Any]:
+        """Changes the window of a headless game and answers its `window` object (as `status` has it), one frame later.
+
+        `width` and `height` are window units; the picture is `round(size * density)` pixels. A value left out stays as it is. `safe_area` is a dict
+        `{top, right, bottom, left}` or a tuple in that order, all four given (`{0,0,0,0}` clears it). A real window answers `not_headless`; a value
+        outside the engine's limits is `invalid_params` and nothing changes (.claude/rules/control-window-api.md).
+        """
+        params: dict[str, Any] = {"width": width, "height": height}
+        if density is not None:
+            params["density"] = density
+        if user_scale is not None:
+            params["userScale"] = user_scale
+        if safe_area is not None:
+            params["safeArea"] = self._safe_area_object(safe_area)
+        return self.call(SET_WINDOW_METHOD, params)
 
     def log_counts(self) -> dict[str, int]:
         """The warnings and errors the game has logged since its start: `{warnings, errors}` (`log` of `status`)."""
@@ -405,6 +438,28 @@ class GameSession:
             frames = [count for count in waited if count is not None]
             return sum(frames) if frames else None
         return None
+
+    @staticmethod
+    def _window_flags(window: str | None, density: float | None, headless: bool) -> list[str]:
+        """The start flags of a simulated window; both need a headless game, as the engine says at its start-up."""
+        flags: list[str] = []
+        if window is not None:
+            if not WINDOW_SIZE_PATTERN.fullmatch(window):
+                raise SessionError(f"window has to be 'WxH' in window units, e.g. '480x480', not '{window}'")
+            flags.append(WINDOW_FLAG + window)
+        if density is not None:
+            flags.append(f"{DENSITY_FLAG}{density}")
+        if flags and not headless:
+            raise SessionError("window and density simulate a headless window; a real window's size and density belong to the system (leave headless on)")
+        return flags
+
+    @staticmethod
+    def _safe_area_object(safe_area: dict[str, float] | Sequence[float]) -> dict[str, float]:
+        if isinstance(safe_area, dict):
+            return dict(safe_area)
+        if len(safe_area) != len(SAFE_AREA_SIDES):
+            raise SessionError(f"safe_area is a dict or {len(SAFE_AREA_SIDES)} numbers in the order {', '.join(SAFE_AREA_SIDES)}, not {len(safe_area)}")
+        return dict(zip(SAFE_AREA_SIDES, safe_area))
 
     @staticmethod
     def _count(value: Any, default: int) -> int:

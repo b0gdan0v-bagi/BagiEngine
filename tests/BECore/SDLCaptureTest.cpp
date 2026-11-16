@@ -4,6 +4,8 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Renderer/RendererManager.h>
+#include <BECore/UI/UICanvasLayout.h>
+#include <BECore/UI/UIEnvironment.h>
 #include <Common/DestroyTally.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
@@ -259,6 +261,67 @@ namespace BECore::Tests {
         EXPECT_EQ(PixelAt(image, 150, 80), AsPixel(kRed));
         EXPECT_EQ(PixelAt(image, 5, 5), AsPixel(kBackground));
         EXPECT_EQ(PixelAt(image, 400, 300), AsPixel(kBackground));
+    }
+
+    TEST_F(SDLCaptureTest, TheRendererAndTheCaptureFollowASimulatedSize) {
+        ASSERT_TRUE(window->Simulate(WindowSimulation{.width = 480, .height = 480}));
+
+        EXPECT_EQ(renderer->GetOutputWidth(), 480.0f);
+        EXPECT_EQ(renderer->GetOutputHeight(), 480.0f);
+        DrawFrame();
+        const PixelBuffer image = PresentAndRead();
+        ASSERT_EQ(image.width, 480u);
+        ASSERT_EQ(image.height, 480u);
+        EXPECT_EQ(PixelAt(image, 150, 80), AsPixel(kRed));
+        EXPECT_EQ(PixelAt(image, 300, 80), AsPixel(kBackground));
+        EXPECT_EQ(PixelAt(image, 479, 479), AsPixel(kBackground));
+    }
+
+    TEST_F(SDLCaptureTest, TheOutputIsInPixelsWhenTheSimulatedDensityIsTwo) {
+        ASSERT_TRUE(window->Simulate(WindowSimulation{.width = 300, .height = 200, .density = 2.0f}));
+
+        EXPECT_EQ(renderer->GetOutputWidth(), 600.0f);
+        EXPECT_EQ(renderer->GetOutputHeight(), 400.0f);
+        renderer->Clear(kBackground);
+        renderer->DrawFilledRect(500.0f, 300.0f, 100.0f, 100.0f, kRed);  // the bottom right corner of the output
+        const PixelBuffer image = PresentAndRead();
+        ASSERT_EQ(image.width, 600u);
+        ASSERT_EQ(image.height, 400u);
+        EXPECT_EQ(PixelAt(image, 599, 399), AsPixel(kRed));
+        EXPECT_EQ(PixelAt(image, 500, 300), AsPixel(kRed));
+        EXPECT_EQ(PixelAt(image, 499, 299), AsPixel(kBackground));
+    }
+
+    TEST_F(SDLCaptureTest, TheRendererFollowsEveryResizeInARow) {
+        for (const auto& [width, height] : {Pair<int, int>{480, 480}, {64, 4096}, {1000, 120}, {300, 200}}) {
+            ASSERT_TRUE(window->Simulate(WindowSimulation{.width = width, .height = height}));
+            EXPECT_EQ(renderer->GetOutputWidth(), static_cast<float>(width));
+            EXPECT_EQ(renderer->GetOutputHeight(), static_cast<float>(height));
+        }
+    }
+
+    TEST_F(SDLCaptureTest, AScreenCanvasLaysOutForTheSimulatedWindow) {
+        const WindowInsets notch{.top = 40.0f};
+        ASSERT_TRUE(window->Simulate(WindowSimulation{.width = 300, .height = 200, .density = 2.0f, .safeArea = notch}));
+
+        UICanvasLayout layout;
+        layout.params.space = CanvasSpace::Screen;
+        layout.params.scaleMode = CanvasScaleMode::ConstantPixelSize;
+        layout.params.useSafeArea = true;
+        layout.Update(CoreManager::GetUIEnvironment().MakeContext(window.Get(), renderer->GetOutputWidth(), renderer->GetOutputHeight()));
+
+        const UICanvasResolved& resolved = layout.GetResolved();
+        EXPECT_FLOAT_EQ(resolved.scale, 2.0f);
+        EXPECT_FLOAT_EQ(resolved.bounds.w, 300.0f);
+        EXPECT_FLOAT_EQ(resolved.bounds.h, 200.0f);
+        EXPECT_FLOAT_EQ(resolved.safeBounds.y, 40.0f);
+        EXPECT_FLOAT_EQ(resolved.safeBounds.h, 160.0f);
+
+        ASSERT_TRUE(window->Simulate(WindowSimulation{.width = 480, .height = 480}));
+        layout.Update(CoreManager::GetUIEnvironment().MakeContext(window.Get(), renderer->GetOutputWidth(), renderer->GetOutputHeight()));
+        EXPECT_FLOAT_EQ(layout.GetResolved().scale, 1.0f);
+        EXPECT_FLOAT_EQ(layout.GetResolved().bounds.w, 480.0f);
+        EXPECT_FLOAT_EQ(layout.GetResolved().safeBounds.y, 0.0f);
     }
 
     TEST_F(SDLCaptureTest, CaptureIsServedAtThePresentAndOnlyOnce) {
@@ -1042,6 +1105,24 @@ namespace BECore::Tests {
         ASSERT_NE(Result(0), nullptr);
         EXPECT_EQ(GetJsonInt(*Result(0), "width").value_or(0), 200);
         EXPECT_EQ(GetJsonInt(*Result(0), "height").value_or(0), 113);
+    }
+
+    TEST_F(ScreenshotControlTest, AScreenshotIsOfTheSimulatedOutputSize) {
+        for (const auto& [simulation, expectedWidth, expectedHeight] :
+             {Tuple<WindowSimulation, int64_t, int64_t>{WindowSimulation{.width = 480, .height = 480}, 480, 480}, {WindowSimulation{.width = 300, .height = 200, .density = 2.0f}, 600, 400}}) {
+            ASSERT_TRUE(window->Simulate(simulation));
+            responses.clear();
+            DrawFrame();
+            Post("screenshot");
+            service.Drain();
+            renderer->Present();
+            service.EndFrame();
+
+            ASSERT_EQ(responses.size(), 1u);
+            ASSERT_NE(Result(0), nullptr);
+            EXPECT_EQ(GetJsonInt(*Result(0), "width").value_or(0), expectedWidth);
+            EXPECT_EQ(GetJsonInt(*Result(0), "height").value_or(0), expectedHeight);
+        }
     }
 
     TEST_F(ScreenshotControlTest, MaxSizeOutOfRangeIsRefusedAndAsksForNoFrame) {

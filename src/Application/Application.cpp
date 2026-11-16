@@ -113,6 +113,8 @@ namespace BECore {
 
         ApplicationOptions options;
         options.headless = controlSettings->headless;
+        options.windowSize = controlSettings->windowSize;
+        options.density = controlSettings->density;
         if (!ApplicationFabric::GetInstance().Create(load.config, options)) {
             // The reason is in the log buffer; there is no frame to deliver it to the sinks
             LogEvent::Flush();
