@@ -7,11 +7,26 @@
 #include <crtdbg.h>
 #endif
 
+#if defined(__SANITIZE_ADDRESS__)
+#define BE_TEST_UNDER_ASAN 1
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define BE_TEST_UNDER_ASAN 1
+#endif
+#endif
+
 namespace BECore::Tests {
 
     namespace {
 
         constexpr size_t kAlignment = 64;
+#if defined(BE_TEST_UNDER_ASAN)
+        // The sanitizer's own operators run (GlobalOperatorNew.cpp is left out) and ASan reports an aligned new freed by a plain delete
+        // as new-delete-type-mismatch
+        constexpr bool kUnderAsan = true;
+#else
+        constexpr bool kUnderAsan = false;
+#endif
         constexpr size_t kGrowthSteps = 100;
 
         struct alignas(kAlignment) Wide {
@@ -92,6 +107,9 @@ namespace BECore::Tests {
     // run that pair on every platform; under the Windows Debug CRT a block the CRT's free does not know ends the process (above).
 
     TEST(EastlAlignedAllocTest, AnOverAlignedVectorStaysAlignedThroughGrowthAndIsFreed) {
+        if constexpr (kUnderAsan) {
+            GTEST_SKIP() << "ASan reports the aligned new / plain delete pair of EASTL";
+        }
         CrtHeapWatch watch;
         {
             Vector<Wide> wide;
@@ -104,6 +122,9 @@ namespace BECore::Tests {
     }
 
     TEST(EastlAlignedAllocTest, APlainDeleteFreesAnAlignedNew) {
+        if constexpr (kUnderAsan) {
+            GTEST_SKIP() << "ASan reports the aligned new / plain delete pair";
+        }
         CrtHeapWatch watch;
         constexpr size_t kSize = 3 * kAlignment;
 
