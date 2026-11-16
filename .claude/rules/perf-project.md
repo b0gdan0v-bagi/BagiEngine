@@ -96,7 +96,7 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
     },
     {
       "name": "value-get",
-      "about": "The cost of a Get of a Value<T> (ValueBenchTest, int32_t and Vec3): plain is a field read in place, const and slot are the two kinds of Value, tree_field and tree_slot end a chain of three virtual reads in a field or in a slot. Slot is expected within a few percent of plain; the trees show what the virtual calls add. formula_plain and formula_program (int32_t) are `caster.attack * (100 + cast.level * 10) / 100` as C++ over two objects and as a compiled `expr` run with `Evaluate`; the ratio of the two is the number to watch. The iterations come from BE_VALUE_BENCH, set by env in the command (a run of about a second in Release). Nothing here gates until the owner records a baseline",
+      "about": "The cost of a Get of a Value<T> (ValueBenchTest, int32_t and Vec3): plain is a field read in place, const and slot are the two kinds of Value, tree_field and tree_slot end a chain of three virtual reads in a field or in a slot. Slot is expected within a few percent of plain; the trees show what the virtual calls add. The formula_* lines time one formula of about five operations over two objects: int32_t `caster.attack * (100 + cast.level * 10) / 100`, Vec3 `(caster.velocity + cast.target) * cast.power - caster.velocity * 0.5`; plain is C++, tree a heap object and a virtual Eval per step (the shape of a formula held as parts), program the compiled `expr` run with `Evaluate`, unfused the same with `CompileOptions::fuse = false`, cached a `CachedValue` read with nothing changed. The madd_* lines time `slot * k + b` alone (int32_t `caster.attack * 3 + 7`, Vec3 `caster.velocity * 2 + vec3(1, 2, 3)`): program against unfused is what the peephole gains. The ratios to watch: program against plain and against tree, unfused against program, cached against program. On the machine of the loop (lowest of three, a quiet moment): the program costs about 12 to 14 times plain C++ and about 1.8 to 2.1 times the virtual tree, (a program of one fused instruction already costs about 5 ns); fusing `slot * k + b` is worth 1.37 times for int32_t, and a cached read of two levels costs about as much as running a formula of this size (1.2 times the program for int32_t, 0.84 for Vec3). The iterations come from BE_VALUE_BENCH, set by env in the command (a run of about fifteen seconds in Release). Nothing here gates until the owner records a baseline",
       "fast": true,
       "command": ["env", "BE_VALUE_BENCH=100000000", "{bin}/BagiEngineTests", "--gtest_filter=ValueBench*"],
       "metrics": {
@@ -107,11 +107,25 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
         "int32_t_tree_slot_ns": {"source": "regex", "pattern": "^ValueBench int32_t tree_slot ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false},
         "int32_t_formula_plain_ns": {"source": "regex", "pattern": "^ValueBench int32_t formula_plain ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false},
         "int32_t_formula_program_ns": {"source": "regex", "pattern": "^ValueBench int32_t formula_program ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false},
+        "int32_t_formula_tree_ns": {"source": "regex", "pattern": "^ValueBench int32_t formula_tree ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false},
+        "int32_t_formula_unfused_ns": {"source": "regex", "pattern": "^ValueBench int32_t formula_unfused ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false},
+        "int32_t_formula_cached_ns": {"source": "regex", "pattern": "^ValueBench int32_t formula_cached ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false},
+        "int32_t_madd_plain_ns": {"source": "regex", "pattern": "^ValueBench int32_t madd_plain ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false},
+        "int32_t_madd_program_ns": {"source": "regex", "pattern": "^ValueBench int32_t madd_program ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false},
+        "int32_t_madd_unfused_ns": {"source": "regex", "pattern": "^ValueBench int32_t madd_unfused ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false},
         "vec3_plain_ns": {"source": "regex", "pattern": "^ValueBench Vec3 plain ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false},
         "vec3_const_ns": {"source": "regex", "pattern": "^ValueBench Vec3 const ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false},
         "vec3_slot_ns": {"source": "regex", "pattern": "^ValueBench Vec3 slot ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false},
         "vec3_tree_field_ns": {"source": "regex", "pattern": "^ValueBench Vec3 tree_field ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false},
-        "vec3_tree_slot_ns": {"source": "regex", "pattern": "^ValueBench Vec3 tree_slot ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false}
+        "vec3_tree_slot_ns": {"source": "regex", "pattern": "^ValueBench Vec3 tree_slot ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false},
+        "vec3_formula_plain_ns": {"source": "regex", "pattern": "^ValueBench Vec3 formula_plain ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false},
+        "vec3_formula_tree_ns": {"source": "regex", "pattern": "^ValueBench Vec3 formula_tree ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false},
+        "vec3_formula_program_ns": {"source": "regex", "pattern": "^ValueBench Vec3 formula_program ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false},
+        "vec3_formula_unfused_ns": {"source": "regex", "pattern": "^ValueBench Vec3 formula_unfused ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false},
+        "vec3_formula_cached_ns": {"source": "regex", "pattern": "^ValueBench Vec3 formula_cached ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false},
+        "vec3_madd_plain_ns": {"source": "regex", "pattern": "^ValueBench Vec3 madd_plain ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false},
+        "vec3_madd_program_ns": {"source": "regex", "pattern": "^ValueBench Vec3 madd_program ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false},
+        "vec3_madd_unfused_ns": {"source": "regex", "pattern": "^ValueBench Vec3 madd_unfused ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false}
       }
     },
     {
@@ -130,4 +144,5 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
 
 - Headless, the present of the SDL software renderer is most of a frame whatever the scene draws; `work_ms` (the frame without the present) is the number that moves with scene and UI code.
 - The `stress-*` benchmarks run `BagiStress` (`tools/stress/CLAUDE.md`) through `tools/perf/stress_frames.py`; the game measures itself (`work_ms` is the CPU time of a frame without the present, nearest-rank percentiles) and the ramp is a number per scene and machine (the scenes do not compare with one another). The stress scenes are the engine's frame benchmarks; the engine has no game of its own. Their baseline is the owner's word, like every other.
+- `value-get` has a line per case and type (`ValueBench <type> <case> ns_per_get=<x>`: `plain`, `const`, `slot`, `tree_field`, `tree_slot`, then `formula_plain`, `formula_tree`, `formula_program`, `formula_unfused`, `formula_cached` and `madd_plain`, `madd_program`, `madd_unfused`; `Vec3` has no `Vec3` fusion, so its two `madd` programs are one program and differ by noise). Nothing in it gates. Only the ratios of one run mean anything, and a loaded machine (other worker loops) moves every one: take the lowest of several runs.
 - The sentinel (`todo-merge`): `ask`.
