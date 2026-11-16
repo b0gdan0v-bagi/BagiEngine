@@ -3,12 +3,19 @@
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/Types/Types.h>
 #include <BECore/UI/UINodeFileSave.h>
+#include <BECore/Utils/EnumUtils.h>
 
 namespace BECore {
 
     class Scene;
     class SceneNode;
     class UIElement;
+
+    /// Where the edits of one node go on Save
+    CORE_ENUM(UINodeFileTarget, uint8_t,
+              Inline,  ///< the node is written in the scene file: the scene file holds its elements
+              File,    ///< an instance of a node file that nothing else in the scene uses: the rect attributes are patched into the file
+              Shared)  ///< a node file with several instances in the scene: the edit stays an override in the scene file
 
     /**
      * @brief The canvas elements the inspector changed since the last save, and the write of their rects into the node files
@@ -17,15 +24,8 @@ namespace BECore {
      */
     class UINodeFileSession {
     public:
-        /// Where the edits of one node go on Save
-        enum class Target : uint8_t {
-            Inline,  ///< the node is written in the scene file: the scene file holds its elements
-            File,    ///< an instance of a node file that nothing else in the scene uses: the rect attributes are patched into the file
-            Shared   ///< a node file with several instances in the scene: the edit stays an override in the scene file
-        };
-
         struct Status {
-            Target target = Target::Inline;
+            UINodeFileTarget target = UINodeFileTarget::Inline;
             PoolString ref;        ///< the node file; empty for Inline
             size_t instances = 0;  ///< the nodes of the scene that use @c ref
             size_t elements = 0;   ///< the pending elements of this node

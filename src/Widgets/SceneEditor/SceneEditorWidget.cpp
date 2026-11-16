@@ -256,13 +256,13 @@ namespace BECore {
         }
         const UINodeFileSession::Status status = _uiFileSession.StatusFor(*_lastScene, *node);
         switch (status.target) {
-            case UINodeFileSession::Target::Inline:
+            case UINodeFileTarget::Inline:
                 ImGui::TextDisabled("Edits the authored rect, live; saved in the scene file");
                 break;
-            case UINodeFileSession::Target::Shared:
+            case UINodeFileTarget::Shared:
                 ImGui::TextDisabled("%s has %zu instances in the scene: edits are saved as an override in the scene file", status.ref.CStr(), status.instances);
                 break;
-            case UINodeFileSession::Target::File:
+            case UINodeFileTarget::File:
                 if (status.elements > 0) {
                     ImGui::TextDisabled("%zu element(s) will be written into %s on Save", status.elements, status.ref.CStr());
                 } else {

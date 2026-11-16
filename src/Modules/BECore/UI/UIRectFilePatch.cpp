@@ -37,7 +37,7 @@ namespace BECore {
                 if (child.type() != pugi::node_element || StringView{child.name()} != name) {
                     continue;
                 }
-                if (!typeValue.empty() && StringView{child.attribute(String(kComponentTypeName).c_str()).value()} != typeValue) {
+                if (!typeValue.empty() && StringView{child.attribute(kComponentTypeName.data()).value()} != typeValue) {
                     continue;
                 }
                 if (seen++ == ordinal) {
@@ -101,13 +101,13 @@ namespace BECore {
             why = "no path";
             return {};
         }
-        const pugi::xml_node canvasEl = NthChild(nodeEl.child(String(kNodeComponentsName).c_str()), kNodeComponentName, canvasOrdinal, kCanvasTypeName);
+        const pugi::xml_node canvasEl = NthChild(nodeEl.child(kNodeComponentsName.data()), kNodeComponentName, canvasOrdinal, kCanvasTypeName);
         if (!canvasEl) {
             why = Format("the file has no canvas number {}", canvasOrdinal);
             return {};
         }
 
-        pugi::xml_node list = canvasEl.child(String(kElementsName).c_str());
+        pugi::xml_node list = canvasEl.child(kElementsName.data());
         pugi::xml_node element;
         for (size_t depth = 0; depth < path.size(); ++depth) {
             element = NthChild(list, kElementName, path[depth]);
@@ -115,16 +115,16 @@ namespace BECore {
                 why = Format("the file has no element number {} at depth {}", path[depth], depth);
                 return {};
             }
-            list = element.child(String(kChildrenName).c_str());
+            list = element.child(kChildrenName.data());
         }
 
-        const StringView fileType = element.attribute(String(kComponentTypeName).c_str()).value();
+        const StringView fileType = element.attribute(kComponentTypeName.data()).value();
         const StringView liveType = live.GetTypeMeta().typeName;
         if (fileType != liveType) {
             why = Format("the file's element is a '{}', the scene's a '{}'", fileType, liveType);
             return {};
         }
-        const StringView fileName = element.attribute(String(kNameAttribute).c_str()).value();
+        const StringView fileName = element.attribute(kNameAttribute.data()).value();
         if (fileName != live.name.ToStringView()) {
             why = Format("the file's element is called '{}', the scene's '{}'", fileName, live.name.ToStringView());
             return {};

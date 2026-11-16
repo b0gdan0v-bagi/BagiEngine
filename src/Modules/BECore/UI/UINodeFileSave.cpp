@@ -58,6 +58,14 @@ namespace BECore {
             }
         }
 
+        size_t CountWithSourceRef(const Vector<SceneNode*>& nodes, PoolString ref) {
+            size_t count = 0;
+            for (const SceneNode* node : nodes) {
+                count += node->GetSourceRef() == ref ? 1 : 0;
+            }
+            return count;
+        }
+
     }  // namespace
 
     bool PatchNodeFileText(StringView fileText, const SceneNode& node, Span<const IntrusivePtr<UIElement>> edited, String& patched, size_t& elementsPatched, Vector<String>& notes) {
@@ -122,11 +130,7 @@ namespace BECore {
     size_t CountNodeInstances(Scene& scene, PoolString ref) {
         Vector<SceneNode*> nodes;
         CollectNodes(scene.GetRootNode(), nodes);
-        size_t instances = 0;
-        for (const SceneNode* node : nodes) {
-            instances += node->GetSourceRef() == ref ? 1 : 0;
-        }
-        return instances;
+        return CountWithSourceRef(nodes, ref);
     }
 
     UINodeFileReport SaveUIRectsToNodeFiles(Scene& scene, Span<const IntrusivePtr<UIElement>> edited, const UINodeFileIo& io) {
@@ -143,7 +147,7 @@ namespace BECore {
             handled.push_back(ref);
             const String refText(ref.ToStringView());
 
-            const size_t instances = CountNodeInstances(scene, ref);
+            const size_t instances = CountWithSourceRef(nodes, ref);
             if (instances > 1) {
                 report.notes.push_back(
                     Format("UI '{}': not written to {}: the file has {} instances in the scene, so the edit stays an override in the scene file", node->GetName().ToStringView(), refText, instances));

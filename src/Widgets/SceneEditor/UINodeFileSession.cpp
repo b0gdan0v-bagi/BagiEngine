@@ -32,7 +32,7 @@ namespace BECore {
             return status;
         }
         status.instances = CountNodeInstances(scene, status.ref);
-        status.target = status.instances > 1 ? Target::Shared : Target::File;
+        status.target = status.instances > 1 ? UINodeFileTarget::Shared : UINodeFileTarget::File;
         status.elements = CountEditedElements(node, Span<const IntrusivePtr<UIElement>>(_elements.data(), _elements.size()));
         return status;
     }
