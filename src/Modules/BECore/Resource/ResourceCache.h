@@ -13,7 +13,7 @@ namespace BECore {
     /**
      * @brief Thread-safe cache of loaded resources by virtual path (shared lock for reads, exclusive for writes).
      *
-     * There is no eviction: a resource stays until Clear() or shutdown.
+     * Nothing is evicted by itself: a resource stays until Remove(), Clear() or shutdown.
      */
     class ResourceCache {
     public:
@@ -33,6 +33,9 @@ namespace BECore {
         void Put(PoolString path, IntrusivePtr<IResource> resource);
 
         bool Contains(PoolString path) const;
+
+        /** @return Whether there was an entry; a handle already given out keeps its resource alive. */
+        bool Remove(PoolString path);
 
         void Clear();
 

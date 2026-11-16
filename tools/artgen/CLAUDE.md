@@ -10,6 +10,7 @@ The image generator of the games' art is **ComfyUI on the owner's Windows PC** (
 | `comfyui/install.ps1` | Installs the release into `-Root` (default `D:\ComfyUI`) and downloads the models, each checked against the manifest. Idempotent: a second run only verifies |
 | `comfyui/start-local.bat` | Starts ComfyUI on `127.0.0.1:8188` without a browser; the installer copies it into the root. Extra arguments go to ComfyUI (`--lowvram`) |
 | `comfyui_check.py` | The health check: reachable, version, devices, every manifest model present; `--generate` makes one image; `--json` for the service and the editor panel |
+| `artgen_bridge.py` | The link to the editor's Generate panel: a control API client that pulls requests (`artgen_poll`) and reports progress, images and the end |
 | `artgen.py` | The service on the command line: `status`, `presets`, `generate` (`--json` prints one progress event per line, then `done`) |
 | `artgen_service.py` | `generate(request, generator, on_progress, cancel)`: N images of one preset and subject, each written with its provenance file as soon as it is there |
 | `artgen_preset.py` | Presets and workflows: load and check them, `build_graph` (the graph of one image), `models_of` |
@@ -62,6 +63,14 @@ A game's style lives in its own repository: `<game root>/artgen/presets/<name>.j
 ## The service
 
 One prompt per image, seeds `seed, seed + 1, ...` (random first seed when none is given), so every image can be made again alone from its provenance. `<stem>_<seed>.png` and `<stem>_<seed>.artgen.json` go into the output folder (default `<game root>/artgen/out`; the editor's Accept moves the chosen one into the game's assets). The provenance holds the preset and its file hash, subject, final prompt, negative, seed, size, params, the model files the graph loads, the workflow and its hash, the generator (name, version, address), its own file name and the date. What is done stays on disk when a later image fails or is cancelled.
+
+## The editor bridge
+
+```bash
+python tools/artgen/artgen_bridge.py --port 8765        # the editor started with --control (--control-port); waits and reconnects
+```
+
+The contract is the editor's (`src/Widgets/ArtGen/CLAUDE.md`, "The contract"): the bridge calls `artgen_poll` about twice a second with the generator's status (refreshed every few seconds) and the presets of the game root the editor answered, runs a handed-over request on a worker thread with `artgen_service.generate` into `<game root>/artgen/out`, and forwards its progress, each image and the end. A run that fails (a missing preset, the generator not ready, a ComfyUI error, a bug of ours) ends with `artgen_done` `failed` and its reason; the bridge stays up. A cancel seen in a poll, a lost editor and Ctrl+C cancel the run on the generator. While the editor has no Generate panel (`unknown_method`: it started in Game mode) the bridge waits. A game ignores `artgen/out/` in its `.gitignore`.
 
 ## Running the tests
 
