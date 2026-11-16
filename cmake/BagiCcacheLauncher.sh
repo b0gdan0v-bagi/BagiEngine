@@ -10,6 +10,8 @@
 # every object (ccache reads them from the preprocessor), so the checksum can be a constant: a header that changed is a miss anyway.
 # The PCH is not taken from the cache either: a PCH of another checkout names that checkout's files and Clang refuses it
 # ("file has been modified since the precompiled header was built"); compiling it takes seconds.
+# The same rule in cmake/BagiCcacheLauncher.py (Windows has no sh): keep the sloppiness, the variables, the way the -o of the PCH is
+# found (the argument after the last "-o") and the exit code in step.
 ccache=$1
 base_dir=$2
 shift 2
