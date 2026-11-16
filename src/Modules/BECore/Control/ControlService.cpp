@@ -1,6 +1,7 @@
 #include "ControlService.h"
 
 #include <BECore/Control/ControlCall.h>
+#include <BECore/Control/ControlLog.h>
 #include <BECore/Control/ControlRoots.h>
 #include <EASTL/sort.h>
 
@@ -21,7 +22,7 @@ namespace BECore {
         ControlReplyFn reply;
     };
 
-    ControlService::ControlService() : _roots(MakeUnique<ControlRoots>()) {}
+    ControlService::ControlService() : _roots(MakeUnique<ControlRoots>()), _log(MakeUnique<ControlLog>()) {}
     ControlService::~ControlService() = default;
 
     void ControlService::ParseRequest(StringView text, Request& request) {

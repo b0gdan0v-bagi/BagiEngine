@@ -11,6 +11,7 @@
 namespace BECore {
 
     class ControlCall;
+    class ControlLog;
     class ControlRoots;
 
     /**
@@ -66,6 +67,15 @@ namespace BECore {
 
         [[nodiscard]] const ControlRoots& Roots() const {
             return *_roots;
+        }
+
+        /// The warnings and errors of the log, counted and kept for the log methods; starts listening when RegisterControlBuiltins runs. Main thread only
+        [[nodiscard]] ControlLog& Log() {
+            return *_log;
+        }
+
+        [[nodiscard]] const ControlLog& Log() const {
+            return *_log;
         }
 
         /// Says what @p method does and which parameters it reads (for list_methods and the completion of a console). Kept apart from the handler: registering the
@@ -166,6 +176,7 @@ namespace BECore {
         eastl::deque<UniquePtr<Request>> _inbox;  // taken from _queue, in order, waiting for the barrier
         HashMap<String, HandlerEntry> _handlers;
         UniquePtr<ControlRoots> _roots;                    // behind a pointer so this header does not pull in the reflection registry
+        UniquePtr<ControlLog> _log;                        // behind a pointer so this header does not pull in the logger
         HashMap<String, ControlMethodInfo> _descriptions;  // beside the handlers, so a handler registered again keeps its description
         uint64_t _methodsVersion = 0;
         UniquePtr<ControlCall> _pending;
