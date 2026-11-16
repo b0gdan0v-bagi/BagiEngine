@@ -72,6 +72,9 @@
         } else if (worker.stopped) {
             word = "stopped";
             kind = "stopped";
+        } else if (worker.noClaim) {
+            word = "took nothing";
+            kind = "noclaim";
         } else if ((s && s.state === "done") || worker.endedTurn) {
             word = "done";
             kind = "done";
@@ -87,30 +90,28 @@
         }
         // A finished session can stay in `claude agents` for hours: its age is no run time, so it shows when
         // its last step was (the transcript), and a running one how long it has run.
-        const ended = kind === "done" && worker.activity ? ago(worker.activity.updated) : "";
-        const text = kind === "stopped" ? `stopped · ${ago(worker.stopped)}` : kind === "limited" ? (worker.limited.resets ? `usage limit · resets ${worker.limited.resets}` : "usage limit") : kind === "done" ? (ended ? `done · ended ${ended}` : "done") : s && s.startedAt ? `${word} · ${duration(s.startedAt)}` : word;
+        const ended = (kind === "done" || kind === "noclaim") && worker.activity ? ago(worker.activity.updated) : "";
+        const text = kind === "noclaim" ? (ended ? `took nothing · ended ${ended}` : "took nothing") : kind === "stopped" ? `stopped · ${ago(worker.stopped)}` : kind === "limited" ? (worker.limited.resets ? `usage limit · resets ${worker.limited.resets}` : "usage limit") : kind === "done" ? (ended ? `done · ended ${ended}` : "done") : s && s.startedAt ? `${word} · ${duration(s.startedAt)}` : word;
         const badge = el("span", `badge ${kind}`, text);
         if (kind === "idle") badge.title = "Idle: waiting for an agent of its own (a reviewer, a build)";
         if (kind === "waiting") badge.title = `The loop waits for your answer (${(s && s.waitingFor) || "input needed"}): Answer opens it`;
         if (kind === "limited") badge.title = `${worker.limited.text}. Relaunch continues the loop after the reset`;
+        if (kind === "noclaim") badge.title = "The loop ended without claiming an entry; the line below says which one it tried and why not";
         if (kind === "stopped") badge.title = "worker.py stop ended this session; its entry stays in progress on its branch: Relaunch or Fast start continues it";
         if (kind === "done") badge.title = worker.endedTurn ? "The run ended its turn (claude agents still lists it as blocked, but nothing waits): Stop clears it, Log shows it" : "The session has finished; Log shows it, Update and Fast start begin anew";
         return badge;
     }
 
-    // The bar is the whole entry when it has several slice plans ("slice 3: 120/190 over 3 slices"), else its plan.
+    // The bar and its words are TodoRuns.progressOf: a through entry's stages, else its slice plans, else its plan.
     function progress(entry) {
-        const p = entry && entry.planProgress;
-        const all = entry && entry.slices && entry.slices.count > 1 ? entry.slices : null;
-        const shown = all || p;
-        if (!shown || !shown.total) return null;
+        const shown = TodoRuns.progressOf(entry);
+        if (!shown) return null;
         const box = el("div", "progress");
         const bar = el("div", "bar");
         const fill = el("div", "fill");
         fill.style.width = `${Math.round((100 * shown.done) / shown.total)}%`;
         bar.appendChild(fill);
-        const text = all ? `${all.count} slices ${all.done}/${all.total}${p && p.total ? ` · this slice ${p.done}/${p.total}` : ""}` : `plan ${p.done}/${p.total}`;
-        box.append(bar, el("span", "muted", text));
+        box.append(bar, el("span", "muted", shown.text));
         return box;
     }
 
@@ -244,11 +245,23 @@
         return box;
     }
 
+    // A run that ended without claiming an entry: which one it tried, and why not (`worker.noClaim` of `worker.py list --store`).
+    function noClaimLine(worker) {
+        const nc = worker.noClaim;
+        const ask = el("div", "ask noclaim");
+        const text = el("span", "", `Took nothing: ${nc.entry ? `${nc.entry}: ` : ""}${nc.reason || TodoRuns.NO_REASON}`);
+        text.title = nc.reason ? "said by the loop (NOT TAKEN line)" : "seen at start: the entry the loop was started on";
+        ask.appendChild(text);
+        if (nc.entry) ask.appendChild(button("Open entry", { cmd: "todoList", entry: nc.entry }, "open it in the Todo list"));
+        ask.appendChild(button("Fast start", { cmd: "fastStart", worker: worker.k }, "worker.py start <k> now: /todo-loop with the slices, loop arguments and report session of the settings (todoWorkers.*)", "primary"));
+        return ask;
+    }
+
     function workerCard(worker) {
         const entry = worker.entry;
         const folded = isFolded(worker.name);
         const sick = !worker.waiting && !worker.limited && (worker.problems || []).length ? " sick" : "";
-        const card = el("section", (worker.waiting ? "card waiting" : worker.limited ? "card limited" : "card") + sick + (folded ? " collapsed" : ""));
+        const card = el("section", (worker.waiting ? "card waiting" : worker.limited ? "card limited" : worker.noClaim ? "card noclaim" : "card") + sick + (folded ? " collapsed" : ""));
         card.id = `card-${worker.name}`;
         const top = el("div", "card-top");
         const fold = el("button", "fold", folded ? "\u25B8" : "\u25BE");
@@ -283,6 +296,7 @@
             );
             card.appendChild(ask);
         }
+        if (worker.noClaim) card.appendChild(noClaimLine(worker));
         if (folded) {
             // a few lines: the top, the title, the review note or the plan, what the loop said last
             if (entry && entry.status === "review") card.appendChild(el("div", "note ok", "in review" + (entry.statusNote ? `: ${entry.statusNote}` : "")));
@@ -359,7 +373,7 @@
         if (worker.session && !worker.limited && worker.session.status !== "busy" && entry && entry.status !== "review")
             actions.append(button("Relaunch", { cmd: "relaunch", worker: worker.k }, "worker.py relaunch <k>: continue this session's conversation in the background (a loop that ended before its entry reached review)"));
         if (worker.active) actions.append(button("Stop", { cmd: "stop", worker: worker.k }, "worker.py stop", true));
-        else actions.append(button("Fast start", { cmd: "fastStart", worker: worker.k }, "worker.py start <k> now: /todo-loop with the slices, loop arguments and report session of the settings (todoWorkers.*)", "primary"));
+        else actions.append(button("Fast start", { cmd: "fastStart", worker: worker.k }, "worker.py start <k> now: /todo-loop with the slices, loop arguments and report session of the settings (todoWorkers.*)", worker.noClaim ? "" : "primary")); // the Took nothing line carries the main one
         actions.append(more([
             worker.session && button("Log", { cmd: "logs", worker: worker.k }, "claude logs"),
             entry && button("Plan", { cmd: "plan", entry: entry.id }, "the plan the entry shows (its newest slice plan)"),
@@ -375,7 +389,7 @@
 
     // The one action a folded card offers: what the worker needs from the owner, else what it can do next.
     function mainAction(worker) {
-        if (worker.waiting || worker.limited) return null; // their own lines carry Answer and Relaunch
+        if (worker.waiting || worker.limited || worker.noClaim) return null; // their own lines carry Answer, Relaunch and Fast start
         const entry = worker.entry;
         if (entry && entry.status === "review") return button("Review", { cmd: "review", entry: entry.id }, "the changes of the branch against its base, in one diff editor", "primary");
         if (worker.active) return null;

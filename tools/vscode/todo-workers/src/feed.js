@@ -4,12 +4,19 @@
 
 const vscode = require("vscode");
 const { config, sessionWord } = require("./tools");
+const Runs = require("../media/runs");
 
 const FEED_KEY = "todoWorkers.feed";
 const FEED_KEEP = 200;
 
+// `<id>: <reason>` of a run that took nothing; the id is left out when the loop chose none.
+function noClaimText(worker) {
+    const nc = worker.noClaim;
+    return `${nc.entry ? `${nc.entry}: ` : ""}${nc.reason || Runs.NO_REASON}`;
+}
+
 function attach(ctx) {
-    let previous = null; // {review: Set, active: Map, waiting: Set, limited: Set}
+    let previous = null; // {review: Set, active: Map, waiting: Set, limited: Set, noClaim: Set}
 
     function feed() {
         return ctx.context.globalState.get(FEED_KEY, []);
@@ -32,6 +39,7 @@ function attach(ctx) {
             active: new Map(state.workers.map((w) => [w.name, w.active])),
             waiting: new Set(state.workers.filter((w) => w.waiting).map((w) => w.name)),
             limited: new Set(state.workers.filter((w) => w.limited).map((w) => w.name)),
+            noClaim: new Set(state.workers.filter((w) => w.noClaim).map((w) => w.name)),
         };
         if (previous) {
             for (const entry of state.review) {
@@ -55,7 +63,14 @@ function attach(ctx) {
                 if (worker.limited && !previous.limited.has(worker.name)) ctx.pushNotify(`Todo: ${worker.name} hit the usage limit`, worker.limited.resets ? `resets ${worker.limited.resets}` : worker.limited.text || "");
                 if (worker.waiting && !previous.waiting.has(worker.name)) addFeed("waiting", `${worker.name} waits for you: ${worker.asking ? `${worker.asking.tool}: ${worker.asking.text}` : "input needed"}`, { entry: worker.entry ? worker.entry.id : null });
                 if (worker.limited && !previous.limited.has(worker.name)) addFeed("limited", `${worker.name} hit the usage limit${worker.limited.resets ? `, resets ${worker.limited.resets}` : ""}`);
-                if (previous.active.get(worker.name) && !worker.active && !worker.limited && !worker.stopped) addFeed("ended", `${worker.name}: the loop ended${worker.entry ? ` (${worker.entry.id}, ${worker.entry.status})` : ""}`, { entry: worker.entry ? worker.entry.id : null });
+                // A run that took nothing says so once, in place of the plain "ended" line of the same transition.
+                const tookNothing = worker.noClaim && !previous.noClaim.has(worker.name);
+                if (tookNothing) {
+                    const what = noClaimText(worker);
+                    addFeed("noclaim", `${worker.name}: the loop took nothing: ${what}`, { entry: worker.noClaim.entry });
+                    ctx.pushNotify(`Todo: ${worker.name} took nothing`, what);
+                }
+                if (!tookNothing && previous.active.get(worker.name) && !worker.active && !worker.limited && !worker.stopped) addFeed("ended", `${worker.name}: the loop ended${worker.entry ? ` (${worker.entry.id}, ${worker.entry.status})` : ""}`, { entry: worker.entry ? worker.entry.id : null });
                 if (!notify) continue;
                 if (worker.waiting && !previous.waiting.has(worker.name)) {
                     const what = worker.asking ? `${worker.asking.tool}: ${worker.asking.text}` : (worker.session && worker.session.waitingFor) || "input needed";
@@ -67,7 +82,9 @@ function attach(ctx) {
                     const when = worker.limited.resets ? `, resets ${worker.limited.resets}` : "";
                     vscode.window.showWarningMessage(`Todo: ${worker.name} was stopped by the usage limit${when}. Relaunch it after the reset.`, "Relaunch").then((pick) => pick && ctx.relaunch(ctx.workerOf(worker.k) || worker));
                 }
-                if (previous.active.get(worker.name) && !worker.active && !worker.limited && !worker.stopped) {
+                if (tookNothing) {
+                    vscode.window.showWarningMessage(`Todo: the loop of ${worker.name} took nothing: ${noClaimText(worker)}`, "Show log").then((pick) => pick && ctx.openSessionTerminal(worker, "logs"));
+                } else if (previous.active.get(worker.name) && !worker.active && !worker.limited && !worker.stopped) {
                     vscode.window.showInformationMessage(`Todo: the session of ${worker.name} has ended`, "Show log").then((pick) => pick && ctx.openSessionTerminal(worker, "logs"));
                 }
             }
@@ -98,7 +115,7 @@ function attach(ctx) {
         if (count("stopped")) parts.push(`${count("stopped")} stopped`);
         parts.push(`${state.review.length} review`);
         status.text = `$(server-process) todo ${parts.join(" · ")}`;
-        const lines = state.workers.map((w) => `${w.name}: ${w.entry ? w.entry.id : "no entry"} (${sessionWord(w)})`);
+        const lines = state.workers.map((w) => `${w.name}: ${w.entry ? w.entry.id : "no entry"} (${w.noClaim ? "took nothing" : sessionWord(w)})`);
         if (state.usage && state.usage.total.total) {
             const m = (n) => `${((n || 0) / 1e6).toFixed(1)}M`;
             lines.push(`tokens: ${m(state.usage.total.total)}, ${m(state.usage.recent.total)} in the last ${state.usage.recentMinutes} min`);

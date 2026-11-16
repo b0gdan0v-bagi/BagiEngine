@@ -6,6 +6,9 @@ const vscode = require("vscode");
 const fs = require("fs");
 const path = require("path");
 const { config, findTool, runTool, runGit, branchId, planFile, shellQuote, toolEnv } = require("./tools");
+const Runs = require("../media/runs");
+
+const QUEUE_ANYWAY = "Queue anyway";
 
 function attach(ctx) {
     const busy = ctx.busy;
@@ -21,6 +24,37 @@ function attach(ctx) {
     }
 
     // --- queues: the next entries of each worker, started by the panel as soon as the worker is free ----------
+
+    // Puts the entry in the queue of worker k. worker.py refuses what no start would take, with its reason: an entry
+    // that waits for an open blocker is asked about (the owner's yes repeats the add with `--force`), one taken
+    // elsewhere or closed stays refused. true: queued.
+    async function addToQueue(tool, id, worker) {
+        const add = (extra) => runTool(tool, ["queue", String(worker.k), "--add", id, ...extra], 30000);
+        try {
+            await add([]);
+            return true;
+        } catch (error) {
+            const refusal = Runs.queueRefusal(error.message);
+            if (!refusal) {
+                vscode.window.showErrorMessage(`worker.py queue: ${error.message}`);
+                return false;
+            }
+            if (!refusal.force) {
+                vscode.window.showWarningMessage(`${id} is not queued: ${refusal.why}`, { modal: true, detail: "Continue it in the checkout that took it, or let it be closed; a queue holds only what a start can take." });
+                return false;
+            }
+            const pick = await vscode.window.showWarningMessage(`Queue ${id} anyway?`, { modal: true, detail: `It is ${refusal.why}. The panel keeps it queued until the loop can take it; a stacked or paired entry starts at once.` }, QUEUE_ANYWAY);
+            if (pick !== QUEUE_ANYWAY) return false;
+        }
+        try {
+            await add(["--force"]);
+            return true;
+        } catch (error) {
+            vscode.window.showErrorMessage(`worker.py queue: ${error.message}`);
+            return false;
+        }
+    }
+
     async function queueEntry(id, k) {
         const tool = findTool();
         if (!tool || !id || !/^[A-Za-z0-9_-]+$/.test(id)) return;
@@ -39,11 +73,8 @@ function attach(ctx) {
             worker = state.workers.find((w) => label(w) === picked);
         }
         if (!worker) return;
-        try {
-            await runTool(tool, ["queue", String(worker.k), "--add", id], 30000);
+        if (await addToQueue(tool, id, worker)) {
             ctx.addFeed("queued", `${id} queued for ${worker.name}${overlaps.length ? ` (meets ${overlaps.length} busy entr${overlaps.length === 1 ? "y" : "ies"})` : ""}`, { entry: id });
-        } catch (error) {
-            vscode.window.showErrorMessage(`worker.py queue: ${error.message}`);
         }
         await ctx.refresh();
     }
@@ -59,44 +90,69 @@ function attach(ctx) {
         await ctx.refresh();
     }
 
-    // A new order of one worker's queue (drag and drop in the Todo list): cleared and added again in that order.
+    // A new order of one worker's queue (drag and drop in the Todo list): `--add` moves a queued id to the end, so
+    // adding every id in the new order ends with that order and nothing is cleared, nothing can be lost. `--force`:
+    // the owner said yes to each entry when it was queued, a blocker that came since must not fail the drag. Never
+    // `--resume`: the queue stays paused when it was.
     async function reorderQueue(k, ids) {
         const tool = findTool();
         if (!tool || !Array.isArray(ids) || !ids.every((id) => /^[A-Za-z0-9_-]+$/.test(id))) return;
         try {
-            await runTool(tool, ["queue", String(k), "--clear"], 30000);
-            for (const id of ids) await runTool(tool, ["queue", String(k), "--add", id], 30000);
+            for (const id of ids) await runTool(tool, ["queue", String(k), "--add", id, "--force"], 30000);
         } catch (error) {
             vscode.window.showErrorMessage(`worker.py queue: ${error.message}`);
         }
         await ctx.refresh();
     }
 
-    // A free worker with a queue that is not paused (`worker.py queue --pause`) gets its next entry; one start per
-    // refresh, so the loops do not choose at once.
+    // What `autoStartQueues` last asked of a worker and got no start for: k -> key of its queue. The same queue (ids,
+    // their waits, the streak) is not asked again until it changes or the worker is busy again, so a queue blocked for
+    // hours costs one call and not one per refresh. Without `queueItems` (a list read without `--store`) the key
+    // holds the ids only.
+    const asked = new Map();
+
+    function queueKey(w) {
+        const waits = Array.isArray(w.queueItems) ? w.queueItems.map((item) => `${item.id}:${item.wait || ""}`) : w.queue;
+        return JSON.stringify([waits, w.queueStreak || []]);
+    }
+
+    // A free worker with a queue that is not paused (`worker.py queue --pause`) gets its next entry from
+    // `worker.py start <k> --queued-only`: the first one it can take, the closed and the taken-elsewhere ones dropped
+    // with a reason, the entry put back when the start fails, the streak counted (after QUEUE_STREAK_LIMIT entries
+    // in a row the queue pauses). One start per refresh, so the loops do not choose at once.
     let autoStarting = false;
     async function autoStartQueues() {
         const c = config();
         const tool = findTool();
         const state = ctx.state;
         if (!c.autoStartQueue || !tool || !state || autoStarting) return;
-        const worker = state.workers.find(
-            (w) => w.queue && w.queue.length && !w.queuePaused && !w.active && !w.dirty && !w.limited && !w.stopped && !busy.has(w.k) && (!w.entry || w.entry.status === "review")
-        );
+        const free = (w) => w.queue && w.queue.length && !w.queuePaused && !w.active && !w.dirty && !w.limited && !w.stopped && !busy.has(w.k) && (!w.entry || w.entry.status === "review");
+        for (const w of state.workers) if (!free(w)) asked.delete(w.k);
+        const worker = state.workers.find((w) => free(w) && asked.get(w.k) !== queueKey(w));
         if (!worker) return;
+        const key = queueKey(worker);
         autoStarting = true;
         busy.add(worker.k);
         try {
-            const popped = JSON.parse(await runTool(tool, ["queue", String(worker.k), "--pop", "--json"], 30000)).popped;
-            if (!popped) return;
-            const loopArgs = [popped, c.loopArgs].filter(Boolean).join(" ");
-            const args = ["start", String(worker.k), "--delay", "0", "--slices", "1", "--loop-args", loopArgs, "--claude", c.claude];
+            const args = ["start", String(worker.k), "--queued-only", "--delay", "0", "--slices", "1", "--claude", c.claude];
+            if (c.loopArgs) args.push("--loop-args", c.loopArgs);
             if (c.reportTo) args.push("--report-to", c.reportTo);
-            await runTool(tool, args, 90000);
-            ctx.addFeed("started", `${worker.name} took ${popped} from its queue`, { entry: popped });
-            if (c.notify) vscode.window.showInformationMessage(`Todo: ${worker.name} started ${popped} from its queue`);
+            const output = await runTool(tool, args, 90000);
+            const started = Runs.startedEntry(output);
+            for (const line of Runs.queueNotes(output)) ctx.addFeed("queue", line);
+            if (!started) {
+                asked.set(worker.k, key);
+                return;
+            }
+            asked.delete(worker.k);
+            ctx.addFeed("started", `${worker.name} took ${started} from its queue`, { entry: started });
+            if (c.notify) vscode.window.showInformationMessage(`Todo: ${worker.name} started ${started} from its queue`);
         } catch (error) {
+            // worker.py put the entry back at the head of the queue; the same queue is not tried again until it changes
+            asked.set(worker.k, key);
+            for (const line of Runs.queueNotes(error.output)) ctx.addFeed("queue", line);
             ctx.addFeed("error", `${worker.name}: the queued start failed: ${error.message}`);
+            vscode.window.showErrorMessage(`${worker.name}: the queued start failed: ${error.message}`);
         } finally {
             busy.delete(worker.k);
             autoStarting = false;
@@ -243,8 +299,9 @@ function attach(ctx) {
             k: w.k, name: w.name, active: w.active, waiting: w.waiting, stopped: w.stopped, endedTurn: w.endedTurn,
             limited: w.limited ? { resets: w.limited.resets } : null,
             session: w.session ? { state: w.session.state, status: w.session.status, startedAt: w.session.startedAt } : null,
-            entry: e ? { id: e.id, title: e.title, status: e.status, statusNote: e.statusNote, blockedBy: e.blockedBy, planProgress: e.planProgress, slices: e.slices } : null,
+            entry: e ? { id: e.id, title: e.title, status: e.status, statusNote: e.statusNote, blockedBy: e.blockedBy, planProgress: e.planProgress, slices: e.slices, slicing: e.slicing, stagesPlan: e.stagesPlan, planShown: e.planShown } : null,
             queue: w.queue || [], queueItems: w.queueItems || null, queuePaused: w.queuePaused || null, queueStreak: w.queueStreak || [],
+            noClaim: w.noClaim || null,
         };
     }
 

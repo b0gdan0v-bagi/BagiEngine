@@ -28,6 +28,7 @@ For each candidate read it with `python3 <engine>/tools/todo/todo.py show <id>` 
   - the extra skip reasons of the rules file (for example a game entry that waits for an engine entry), with the wording it gives
   - `needs platform`: the work can be checked only on Windows, on Vulkan, with a GPU, a device or a browser.
   - `blocked by <id>`: `todo.py show` prints a line `blocked by: <id> (<status>)` with a blocker that is not `closed` and is not the candidate's `stackedOn` or `pairedOn` (the conductor leaves such entries out; this is the safety net).
+  - `waits for <ids>`: the `show` text has a `**Waits for:**` line naming entries that are not `closed`, and no dependency link exists (no `blocked by:` line for them; a stacked or paired parent does not count).
   - `depends on unmerged`: it needs code that exists only in a branch `todo/*` not merged into its base branch, other than the branch of its `stackedOn` parent or its `pairedOn` engine entry (`git -C <R> branch --no-merged <base> --list 'todo/*'`, `<R>` and `<base>` from the area row).
   - `umbrella`: the entry only gathers other entries (it says so, the title has `(umbrella)`, or the body is a list of child entries with "nothing is done here directly"); the work is in the children. Say which open children are candidates in the `reason`.
   - `too large`: it is a whole subsystem with no first slice you can name (a large entry with a plan of the owner is not this: the architect cuts the slice).

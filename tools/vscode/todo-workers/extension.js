@@ -9,8 +9,8 @@
 //   src/workers.js   sessions, update, fast start, relaunch, queues, start in a free worker, the engine pointer
 //   src/review.js    review, Review with Claude, Quick merge, Merge with Claude, Return with remarks
 //   src/todoList.js  the Todo list tab and the owner's writes to the store
-//   src/insights.js  the slower views (busy files, the day, the timeline, review rounds), the doctor's fixes, the merge
-//                    train, the end of the day, Dispatch, the push to a phone
+//   src/insights.js  the slower views (busy files, the day, the timeline, review rounds, the doctor's list of unlinked
+//                    waits), the doctor's fixes, the merge train, the end of the day, Dispatch, the push to a phone
 // Both views read again at once when todo.py signals a write (~/.claude/todo/changed.json), besides the timer.
 "use strict";
 
@@ -34,7 +34,7 @@ class WorkersView {
     resolveWebviewView(view) {
         this.view = view;
         view.webview.options = { enableScripts: true };
-        view.webview.html = pageHtml(this.context, ["graph.js", "insights.js", "panel.js"], ["panel.css", "graph.css"], "Asking worker.py ...");
+        view.webview.html = pageHtml(this.context, ["runs.js", "graph.js", "insights.js", "panel.js"], ["panel.css", "graph.css"], "Asking worker.py ...");
         view.webview.onDidReceiveMessage((message) => this.actions(message));
         view.onDidChangeVisibility(() => {
             if (view.visible) this.actions({ cmd: "refresh" });
