@@ -12,14 +12,16 @@ namespace BECore {
         int32_t layer = 0;   ///< SceneNode::GetLayer() when the pass started
         uint32_t order = 0;  ///< index of the node in the depth-first walk of the tree (the scene order)
         SceneNode* node = nullptr;
+        int32_t rank = 0;     ///< index in the sorted storage: how many nodes draw before this one (Scene::GetDrawRank())
         bool hidden = false;  ///< the node or an ancestor has EditorFlags::Hidden: the node keeps its place in the order but draws nothing
     };
 
     /**
      * @brief The draw pass of a scene as a system over the registry.
      *
-     * Run() writes a SceneDrawItem for every node of the tree, sorts that storage by (layer, order) and walks a view over
-     * it. The order is the one documented at Scene::Draw(); nothing keeps a second list of the nodes.
+     * Run() writes a SceneDrawItem for every node of the tree, sorts that storage by (layer, order), writes each item's `rank` (its index
+     * in the sorted storage, before any OnDraw() so a component can ask Scene::GetDrawRank()) and walks a view over it. The order is the
+     * one documented at Scene::Draw(); nothing keeps a second list of the nodes.
      *
      * The same walk mirrors TransformComponent, QuadRendererComponent and SpriteRendererComponent into the registry as
      * TransformData, QuadDrawData and SpriteDrawData (SceneRenderData.h); the components stay the source of truth.

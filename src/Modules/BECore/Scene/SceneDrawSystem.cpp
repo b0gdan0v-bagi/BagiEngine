@@ -102,7 +102,7 @@ namespace BECore {
         // or flag show up and does not allocate once the node has its item. A hidden node hides its whole subtree but keeps its rank.
         void WriteDrawItems(entt::registry& registry, SceneNode& node, uint32_t& order, bool ancestorHidden) {
             const bool hidden = ancestorHidden || node.HasEditorFlag(EditorFlags::Hidden);
-            registry.emplace_or_replace<SceneDrawItem>(node.GetEntity(), node.GetLayer(), order++, &node, hidden);
+            registry.emplace_or_replace<SceneDrawItem>(node.GetEntity(), node.GetLayer(), order++, &node, 0, hidden);
             SyncRenderData(registry, node);
             for (const auto& child : node.GetChildren()) {
                 WriteDrawItems(registry, *child, order, hidden);
@@ -126,6 +126,23 @@ namespace BECore {
         {
             BE_PROFILE_SCOPE("Sort draw items");
             registry.sort<SceneDrawItem>([](const SceneDrawItem& a, const SceneDrawItem& b) { return a.layer != b.layer ? a.layer < b.layer : a.order < b.order; });
+        }
+
+        {
+            int32_t rank = 0;
+            for (const auto [entity, item] : registry.view<SceneDrawItem>().each()) {
+                item.rank = rank++;
+            }
+            scene.DrawRanksWritten({});
+        }
+
+        // The rank is the index in the sorted storage; written before the first OnDraw() because a component may ask for it there.
+        {
+            int32_t rank = 0;
+            for (const auto [entity, item] : registry.view<SceneDrawItem>().each()) {
+                item.rank = rank++;
+            }
+            scene.DrawRanksWritten({});
         }
 
         // The quad and the sprite are drawn from their registry data at the place of their component in the node; any other

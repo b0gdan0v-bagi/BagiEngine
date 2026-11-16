@@ -19,6 +19,7 @@
 namespace BECore {
 
     class SceneManager;
+    class SceneDrawSystem;
 
     class Scene : public RefCounted {
         BE_CLASS(Scene, FACTORY_BASE)
@@ -48,9 +49,30 @@ namespace BECore {
         /**
          * @brief The place of @p node in the draw order: how many nodes Draw() draws before it. A higher rank is drawn later, so on top.
          *
-         * Computed from the tree as it is now, no draw needed. Input handlers use it to ask the topmost first. 0 for a node that is not in this scene.
+         * Always what the tree says now, no draw needed. After a Draw() it is read from the pass (O(1)) until the tree changes (a node added,
+         * removed or moved, a layer set with SceneNode::SetLayer()); then, and before the first draw, it is a walk of the tree. 0 for a node
+         * that is not in this scene.
          */
         int32_t GetDrawRank(const SceneNode& node) const;
+
+        /// Components of one node that GetInputOrder() tells apart: a later one is drawn on top. The factor of a node's rank in the key
+        static constexpr int32_t kMaxComponentsPerNode = 256;
+
+        /**
+         * @brief The key of @p component in the input order of the scene: `GetDrawRank(node) * kMaxComponentsPerNode + index`, the index being its place in the node's components.
+         *
+         * A higher key is drawn later, so on top. Every handler of UIInput that has a place in this scene registers with it, so a canvas and
+         * a scene target are asked in the order they cover each other. A component past the last place shares the key of the last one.
+         */
+        int32_t GetInputOrder(const IComponent& component) const;
+
+        /**
+         * @brief How many times Draw() started a pass; 0 while the scene never drew.
+         *
+         * A component that is a target of the pointer stamps it in OnDraw() and counts as drawn only while its stamp is the current pass: a node that
+         * did not draw (hidden, a scene that is not active) takes no input. While it is 0 nothing was drawn at all (a test) and everything counts as drawn.
+         */
+        uint32_t GetDrawPass() const;
 
         /**
          * @brief Size of the scene's **active** view in scene units, 0 when it has none (then a unit is an output pixel).
@@ -182,6 +204,12 @@ namespace BECore {
         /// Called by SceneNode::RemoveChild() only: destroys the entity of @p node and of its descendants and resets their GetEntity() to entt::null.
         void DestroyNodeEntities(SceneNode& node, PassKey<SceneNode>);
 
+        /// Called by SceneNode::SetLayer() only: the ranks of the last pass no longer hold
+        void NodeLayerChanged(PassKey<SceneNode>);
+
+        /// Called by SceneDrawSystem::Run() only, once it has written SceneDrawItem::rank of every node
+        void DrawRanksWritten(PassKey<SceneDrawSystem>);
+
     private:
         bool IsLiveNode(const SceneNode& node) const;
         void DestroyEntities(SceneNode& node);
@@ -200,6 +228,8 @@ namespace BECore {
         uint32_t _announcedViewVersion = 0;  // the version Update() last sent SceneViewChangedEvent for
         Optional<int32_t> _viewOverride;     // a tool's forced view, see SetViewOverride(); never saved
         bool _active = false;
+        uint32_t _drawPass = 0;
+        bool _drawRanksValid = false;  // SceneDrawItem::rank is what the tree says: set by the draw system, cleared by every edit of the tree
     };
 
 }  // namespace BECore

@@ -18,6 +18,7 @@ namespace BECore {
     Scene::~Scene() = default;
 
     void Scene::Initialize() {
+        _drawRanksValid = false;
         _rootNode = BECore::New<SceneNode>();
         _rootNode->_name = "Root"_intern;
         _rootNode->_scene = this;
@@ -50,6 +51,8 @@ namespace BECore {
         if (!_rootNode) {
             return;
         }
+
+        ++_drawPass;
 
         // The view and its fit follow the output size of every frame, so a resized window or viewport needs no event. The pick comes first:
         // everything drawn below (and every canvas that lays out) reads the active view.
@@ -96,11 +99,38 @@ namespace BECore {
         if (!_rootNode) {
             return 0;
         }
+        if (_drawRanksValid && node._scene == this && _registry->valid(node._entity)) {
+            // The layer is the one thing a node's item could hold that differs from the node itself (a field written without SetLayer())
+            const SceneDrawItem* item = _registry->try_get<SceneDrawItem>(node._entity);
+            if (item && item->node == &node && item->layer == node.GetLayer()) {
+                return item->rank;
+            }
+        }
         RankWalk walk;
         walk.target = &node;
         walk.targetLayer = node.GetLayer();
         walk.Visit(*_rootNode);
         return walk.found ? walk.rank : 0;
+    }
+
+    int32_t Scene::GetInputOrder(const IComponent& component) const {
+        const SceneNode& node = component.GetNode();
+        const auto& components = node.GetComponents();
+        const auto at = eastl::find_if(components.begin(), components.end(), [&component](const IntrusivePtr<IComponent>& other) { return other.Get() == &component; });
+        const int32_t index = at == components.end() ? 0 : static_cast<int32_t>(at - components.begin());
+        return GetDrawRank(node) * kMaxComponentsPerNode + eastl::min(index, kMaxComponentsPerNode - 1);
+    }
+
+    uint32_t Scene::GetDrawPass() const {
+        return _drawPass;
+    }
+
+    void Scene::NodeLayerChanged(PassKey<SceneNode>) {
+        _drawRanksValid = false;
+    }
+
+    void Scene::DrawRanksWritten(PassKey<SceneDrawSystem>) {
+        _drawRanksValid = true;
     }
 
     void Scene::PickView(float outputWidth, float outputHeight) {
@@ -183,6 +213,7 @@ namespace BECore {
     }
 
     IntrusivePtr<SceneNode> Scene::CreateNode(PoolString name, SceneNode* parent) {
+        _drawRanksValid = false;
         auto node = BECore::New<SceneNode>();
         node->_name = name;
         node->_entity = _registry->create();
@@ -219,6 +250,7 @@ namespace BECore {
         }
 
         auto node = DeserializeNode(expanded.document_element(), Format("{} instance of {}", _name.CStr(), ref));
+        _drawRanksValid = false;
         node->WireToScene(this, target);
         const size_t place = eastl::min(index, target->_children.size());
         target->_children.insert(target->_children.begin() + static_cast<ptrdiff_t>(place), node);
@@ -248,6 +280,7 @@ namespace BECore {
             return false;
         }
 
+        _drawRanksValid = false;
         auto& oldSiblings = node._parent->_children;
         const auto it = eastl::find_if(oldSiblings.begin(), oldSiblings.end(), [&node](const IntrusivePtr<SceneNode>& child) { return child.Get() == &node; });
         if (it == oldSiblings.end()) {
@@ -294,6 +327,7 @@ namespace BECore {
         copy->SetName(FreeSiblingName(*parent, Format("{} (copy", node.GetName().CStr()), ")"));
         copy->SetSourceRef(node.GetSourceRef());
 
+        _drawRanksValid = false;
         copy->WireToScene(this, parent);
         const auto at = eastl::find_if(parent->_children.begin(), parent->_children.end(), [&node](const IntrusivePtr<SceneNode>& child) { return child.Get() == &node; });
         parent->_children.insert(at == parent->_children.end() ? at : at + 1, copy);
@@ -314,6 +348,7 @@ namespace BECore {
     }
 
     void Scene::DestroyNodeEntities(SceneNode& node, PassKey<SceneNode>) {
+        _drawRanksValid = false;
         DestroyEntities(node);
     }
 
