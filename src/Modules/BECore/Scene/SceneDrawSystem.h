@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 namespace BECore {
@@ -12,8 +13,9 @@ namespace BECore {
         int32_t layer = 0;   ///< SceneNode::GetLayer() when the pass started
         uint32_t order = 0;  ///< index of the node in the depth-first walk of the tree (the scene order)
         SceneNode* node = nullptr;
-        int32_t rank = 0;     ///< index in the sorted storage: how many nodes draw before this one (Scene::GetDrawRank())
-        bool hidden = false;  ///< the node or an ancestor has EditorFlags::Hidden: the node keeps its place in the order but draws nothing
+        int32_t rank = 0;                 ///< index in the sorted storage: how many nodes draw before this one (Scene::GetDrawRank())
+        bool hidden = false;              ///< the node or an ancestor has EditorFlags::Hidden: the node keeps its place in the order but draws nothing
+        const SceneNode* clip = nullptr;  ///< the nearest self-or-ancestor with a ClipRectComponent and a TransformComponent, or null
     };
 
     /**
@@ -36,9 +38,16 @@ namespace BECore {
      * A node with a rotation or a sprite flip is drawn with DrawTransformedRect() / DrawTransformedTexture() about the pivot of
      * the node's rect. The quad's or sprite's blend mode is set on the renderer
      * around that one draw only (ScopedBlendMode), so the next node and every OnDraw() see Alpha again.
+     *
+     * A ClipRectComponent clips its node and the subtree, whatever the layers of the nodes in it: each item names its clip owner, and
+     * while the walk goes from item to item the system pushes the owner's chain on the renderer (outermost first, the transform rects
+     * through the scene's view transform) and pops what no longer applies. Nothing stays pushed when Run() returns.
      */
     class SceneDrawSystem {
     public:
+        /// The deepest chain of nested clip owners that is applied; a deeper one loses its outermost clips
+        static constexpr size_t kMaxClipDepth = 8;
+
         /// Draws @p scene, whose root node must exist. Nothing may add or remove nodes while this runs.
         static void Run(Scene& scene);
     };
