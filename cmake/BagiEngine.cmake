@@ -905,7 +905,7 @@ if(ENGINE_BUILD_TESTS)
         )
     endfunction()
 
-    # be_add_game_scenario_tests(<ExeTarget> DIR <folder>)
+    # be_add_game_scenario_tests(<ExeTarget> DIR <folder> [INVARIANTS <module>])
     # One ctest entry <ExeTarget>Scenario.<file name without extension> per *.jsonl file of DIR (relative to the calling
     # CMakeLists): a scenario file (a recorded control session, tools/control/CLAUDE.md, "Scenario files") that
     # tools/control/bagi_play.py plays against the game executable. A new file shows up at the next build (the glob is
@@ -913,8 +913,13 @@ if(ENGINE_BUILD_TESTS)
     # a missing executable is a skip (77), a folder without files registers nothing. The scenarios share the lock of the
     # smoke test: each starts a game with the control API, and one lock keeps the games of one ctest run apart while the
     # unit tests run beside them (a port is chosen free per run; the player retries once when it was taken in between).
+    # INVARIANTS (a Python module of the game, relative to the calling CMakeLists) adds a second entry per file,
+    # <ExeTarget>QaReplay.<file name>: tools/qa/bagi_qa.py replay plays the same scenario with the generic checks and the
+    # module's invariants after every call. A defect whose scenario has no `expect` that fails (a version that goes back,
+    # a game's invariant) stays fixed too, which bagi_play alone does not see. The replay starts a fresh game from the
+    # scenario header, so the header's flags must hold --headless and --manual-clock. Without INVARIANTS nothing changes.
     function(be_add_game_scenario_tests EXE_TARGET)
-        cmake_parse_arguments(ARG "" "DIR" "" ${ARGN})
+        cmake_parse_arguments(ARG "" "DIR;INVARIANTS" "" ${ARGN})
         if(NOT ARG_DIR)
             message(FATAL_ERROR "be_add_game_scenario_tests(${EXE_TARGET}): DIR is required")
         endif()
@@ -924,6 +929,12 @@ if(ENGINE_BUILD_TESTS)
         endif()
 
         cmake_path(ABSOLUTE_PATH ARG_DIR BASE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} NORMALIZE OUTPUT_VARIABLE SCENARIO_DIR)
+        if(ARG_INVARIANTS)
+            cmake_path(ABSOLUTE_PATH ARG_INVARIANTS BASE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} NORMALIZE OUTPUT_VARIABLE INVARIANTS_MODULE)
+            if(NOT EXISTS ${INVARIANTS_MODULE})
+                message(FATAL_ERROR "be_add_game_scenario_tests(${EXE_TARGET}): INVARIANTS file ${INVARIANTS_MODULE} does not exist")
+            endif()
+        endif()
         file(GLOB SCENARIO_FILES CONFIGURE_DEPENDS "${SCENARIO_DIR}/*.jsonl")
         foreach(SCENARIO_FILE IN LISTS SCENARIO_FILES)
             get_filename_component(SCENARIO_NAME ${SCENARIO_FILE} NAME_WE)
@@ -935,6 +946,16 @@ if(ENGINE_BUILD_TESTS)
                 RESOURCE_LOCK bagi_control_smoke
                 ENVIRONMENT "BAGI_ENGINE_DIR=${BAGI_ENGINE_DIR}"
             )
+            if(ARG_INVARIANTS)
+                set(REPLAY_NAME ${EXE_TARGET}QaReplay.${SCENARIO_NAME})
+                add_test(NAME ${REPLAY_NAME} COMMAND ${Python3_EXECUTABLE} ${BAGI_ENGINE_DIR}/tools/qa/bagi_qa.py replay --exe $<TARGET_FILE:${EXE_TARGET}> --invariants ${INVARIANTS_MODULE} ${SCENARIO_FILE})
+                set_tests_properties(${REPLAY_NAME} PROPERTIES
+                    SKIP_RETURN_CODE 77
+                    TIMEOUT 120
+                    RESOURCE_LOCK bagi_control_smoke
+                    ENVIRONMENT "BAGI_ENGINE_DIR=${BAGI_ENGINE_DIR}"
+                )
+            endif()
         endforeach()
     endfunction()
 endif()

@@ -39,6 +39,12 @@ TRACEBACK_LINES = 6  # the end of a module's traceback that a module_error findi
 
 STATE_CHECK = "check_state"
 ACTION_CHECK = "check_action"
+MONKEY_MOVES = "monkey_moves"
+PERFORM_ACTION_METHOD = "perform_action"  # the control methods every QA module sends or reads the answer of
+STEP_METHOD = "step"
+UI_CLICK_METHOD = "ui_click"
+SET_WINDOW_METHOD = "set_window"
+UI_TREE_METHOD = "ui_tree"
 KNOWN_MEMBER = "KNOWN_DEVIATIONS"
 
 
@@ -51,6 +57,15 @@ class Violation(NamedTuple):
 
     name: str
     message: str
+
+
+class Move(NamedTuple):
+    """One thing the monkey may do next: `kind` is its class (`action`, `click`, `step`, `reset`, `window`), `method` and `params` the control call, `label` a short text for notes."""
+
+    kind: str
+    method: str
+    params: dict[str, Any]
+    label: str = ""
 
 
 FLAGGED_KEY = "flagged"  # details of a finding the charter script raised itself (`QaSession.flag`): no replay shows it
@@ -99,6 +114,7 @@ class Invariants:
     path: str
     check_state: Callable[..., Any] | None = None
     check_action: Callable[..., Any] | None = None
+    monkey_moves: Callable[..., Any] | None = None
     known_deviations: frozenset[str] = frozenset()
 
 
@@ -212,6 +228,7 @@ def load_invariants(path: str | Path) -> Invariants:
         str(file),
         _callable_member(module, STATE_CHECK, file),
         _callable_member(module, ACTION_CHECK, file),
+        _callable_member(module, MONKEY_MOVES, file),
         _known_member(module, file),
     )
 
@@ -233,21 +250,45 @@ def run_action_checks(module: Invariants | None, action: dict[str, Any], result:
     return _run(module, ACTION_CHECK, module.check_action, action, result, before, after)
 
 
+def run_monkey_moves(module: Invariants | None, answer: dict[str, Any], moves: list[Move]) -> tuple[list[Move], list[Finding]]:
+    """The game's `monkey_moves(answer, moves)`: the list the monkey picks from, and the findings of the call.
+
+    `answer` is the full `get_state` result, `moves` the generic candidates. No module or no such function: `moves` unchanged. A module that raises
+    or returns anything but a list of `Move` leaves `moves` as they were and reports a `qa.module_error` finding, as the checks do.
+    """
+    if module is None or module.monkey_moves is None:
+        return moves, []
+    try:
+        returned = module.monkey_moves(answer, list(moves))
+        if not isinstance(returned, list) or not all(isinstance(move, Move) for move in returned):
+            raise TypeError(f"{MONKEY_MOVES} has to return a list of Move, not {_describe(returned)}")
+    except Exception as error:  # noqa: BLE001  (the game's code is not ours to trust)
+        return moves, [_module_error(module, MONKEY_MOVES, error)]
+    return returned, []
+
+
 def _run(module: Invariants, function_name: str, function: Callable[..., Any], *arguments: Any) -> list[Finding]:
     try:
         returned = function(*arguments)
         violations = [Violation(*_pair(item)) for item in (returned or [])]
     except Exception as error:  # noqa: BLE001  (the game's code is not ours to trust)
-        tail = traceback.format_exc().strip().splitlines()[-TRACEBACK_LINES:]
-        return [
-            Finding(
-                KIND_INVARIANT,
-                NAME_MODULE_ERROR,
-                f"{function_name} of {module.path} raised {type(error).__name__}: {error}",
-                details={"function": function_name, "traceback": tail},
-            )
-        ]
+        return [_module_error(module, function_name, error)]
     return [Finding(KIND_INVARIANT, violation.name, violation.message) for violation in violations]
+
+
+def _module_error(module: Invariants, function_name: str, error: Exception) -> Finding:
+    """The finding for a module function that raised: called from the `except` of the call, so the traceback is the error's."""
+    tail = traceback.format_exc().strip().splitlines()[-TRACEBACK_LINES:]
+    return Finding(
+        KIND_INVARIANT,
+        NAME_MODULE_ERROR,
+        f"{function_name} of {module.path} raised {type(error).__name__}: {error}",
+        details={"function": function_name, "traceback": tail},
+    )
+
+
+def _describe(value: Any) -> str:
+    return "a list with an item that is not a Move" if isinstance(value, list) else type(value).__name__
 
 
 def _pair(item: Any) -> tuple[str, str]:

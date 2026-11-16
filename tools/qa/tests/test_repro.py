@@ -193,6 +193,24 @@ def test_the_reproduction_is_not_written_inside_a_work_tree(qa_game_exe, tmp_pat
         repro.write_repro(inside, HEADER, [INC], finding)
 
 
+def test_write_reproduction_writes_a_file_that_fails_on_its_last_line(qa_game_exe, tmp_path, monkeypatch):
+    monkeypatch.setenv("QA_FAKE_WARN_AT", "2")
+    path = write_scenario(tmp_path)
+    out = tmp_path / "repro" / "generic.log_warning.jsonl"
+    shrunk, calls = repro.write_reproduction(qa_game_exe, path, "generic.log_warning", None, out, 20, [])
+    assert shrunk.finding.name == "generic.log_warning" and len(scenario.load(out)[1]) == len(calls) == 2
+    assert played(qa_game_exe, out).failed_step == len(calls) - 1
+
+
+def test_write_reproduction_leaves_no_file_when_the_written_one_does_not_fail(qa_game_exe, tmp_path, monkeypatch):
+    monkeypatch.setenv("QA_FAKE_WARN_AT", "2")
+    monkeypatch.setattr(repro, "check_written", lambda exe, path, finding: "it does not reproduce")
+    out = tmp_path / "repro.jsonl"
+    with pytest.raises(repro.ReproError, match="does not reproduce"):
+        repro.write_reproduction(qa_game_exe, write_scenario(tmp_path), "generic.log_warning", None, out)
+    assert not out.exists()
+
+
 def test_write_repro_puts_the_expectation_on_the_last_line_only(tmp_path):
     finding = Finding("action_refused", "generic.action_refused", "refused", expect={})
     calls = [Step("perform_action", {"type": "noop"}, {"error": "illegal_action"}), Step("perform_action", {"type": "inc"}, {"versionStep": 1}, note="mine")]
