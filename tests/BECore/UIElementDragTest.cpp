@@ -1,3 +1,4 @@
+#include <BECore/UI/UIAnchorPresets.h>
 #include <BECore/UI/UICanvasLayout.h>
 #include <BECore/UI/UIElementDrag.h>
 #include <BECore/UI/UILayout.h>
@@ -415,6 +416,125 @@ namespace BECore::Tests {
         EXPECT_EQ(result.spec.x.unit, UIUnit::Percent);
         EXPECT_NEAR(result.spec.width.value, (100.0f + 40.0f) / 400.0f * 100.0f, 1e-2f);
         ExpectRect(UILayout::ResolveRect(box, result.spec), wanted);
+    }
+
+    // ---- the anchor widget -----------------------------------------------------------------------------------------------
+
+    namespace {
+
+        AnchorMark MarkOf(const Rect& box, const Vec2& anchorMin, const Vec2& anchorMax) {
+            AnchorMark mark;
+            mark.box = box;
+            mark.anchors = {box.x + anchorMin.x * box.w, box.y + anchorMin.y * box.h, (anchorMax.x - anchorMin.x) * box.w, (anchorMax.y - anchorMin.y) * box.h};
+            return mark;
+        }
+
+    }  // namespace
+
+    TEST(UIElementDragTest, TheFractionOfAPointIsRelativeToTheBox) {
+        const AnchorMark mark = MarkOf({100.0f, 50.0f, 400.0f, 200.0f}, {0.0f, 0.0f}, {1.0f, 1.0f});
+        const Optional<Vec2> fraction = UIElementDrag::AnchorFraction(mark, {300.0f, 100.0f});
+        ASSERT_TRUE(fraction.has_value());
+        EXPECT_NEAR(fraction->x, 0.5f, kTolerance);
+        EXPECT_NEAR(fraction->y, 0.25f, kTolerance);
+        EXPECT_FALSE(UIElementDrag::AnchorFraction(MarkOf({0.0f, 0.0f, 0.0f, 200.0f}, {0.0f, 0.0f}, {1.0f, 1.0f}), {1.0f, 1.0f}).has_value());
+        EXPECT_FALSE(UIElementDrag::AnchorFraction(MarkOf({0.0f, 0.0f, 100.0f, 0.0f}, {0.0f, 0.0f}, {1.0f, 1.0f}), {1.0f, 1.0f}).has_value());
+    }
+
+    TEST(UIElementDragTest, AFourPetalWidgetHitsEachCornerAndMissesBetween) {
+        const AnchorMark mark = MarkOf({0.0f, 0.0f, 400.0f, 200.0f}, {0.25f, 0.25f}, {0.75f, 0.75f});  // corners at (100, 50) (300, 50) (100, 150) (300, 150)
+        EXPECT_EQ(UIElementDrag::HitAnchorCorner(mark, {102.0f, 52.0f}, 8.0f), AnchorCorner::TopLeft);
+        EXPECT_EQ(UIElementDrag::HitAnchorCorner(mark, {298.0f, 52.0f}, 8.0f), AnchorCorner::TopRight);
+        EXPECT_EQ(UIElementDrag::HitAnchorCorner(mark, {98.0f, 148.0f}, 8.0f), AnchorCorner::BottomLeft);
+        EXPECT_EQ(UIElementDrag::HitAnchorCorner(mark, {305.0f, 150.0f}, 8.0f), AnchorCorner::BottomRight);
+        EXPECT_FALSE(UIElementDrag::HitAnchorCorner(mark, {200.0f, 100.0f}, 8.0f).has_value());
+        EXPECT_FALSE(UIElementDrag::HitAnchorCorner(mark, {112.0f, 50.0f}, 8.0f).has_value());
+    }
+
+    TEST(UIElementDragTest, TheNearestCornerWinsWhereTwoReachThePointer) {
+        const AnchorMark mark = MarkOf({0.0f, 0.0f, 400.0f, 200.0f}, {0.5f, 0.5f}, {0.55f, 0.5f});         // two corners 20 apart on a point axis of Y
+        EXPECT_EQ(UIElementDrag::HitAnchorCorner(mark, {208.0f, 100.0f}, 30.0f), AnchorCorner::TopLeft);   // closer to x = 200
+        EXPECT_EQ(UIElementDrag::HitAnchorCorner(mark, {214.0f, 100.0f}, 30.0f), AnchorCorner::TopRight);  // closer to x = 220
+    }
+
+    TEST(UIElementDragTest, ASingleMarkIsHitAndAnyCornerMovesBothAxes) {
+        const AnchorMark mark = MarkOf({0.0f, 0.0f, 400.0f, 200.0f}, {0.5f, 0.5f}, {0.5f, 0.5f});
+        const Optional<AnchorCorner> hit = UIElementDrag::HitAnchorCorner(mark, {201.0f, 99.0f}, 8.0f);
+        ASSERT_TRUE(hit.has_value());
+        const UIAnchorDragResult result = UIElementDrag::DragAnchorCorner({0.5f, 0.5f}, {0.5f, 0.5f}, *hit, {0.2f, 0.9f}, false);
+        EXPECT_EQ(result.min, (Vec2{0.2f, 0.9f}));
+        EXPECT_EQ(result.max, (Vec2{0.2f, 0.9f}));
+    }
+
+    TEST(UIElementDragTest, AStretchedAxisMovesOneEdgeAndAPointAxisMovesBoth) {
+        // Stretched on X (0.2..0.6), a point on Y (0.5)
+        const Vec2 min{0.2f, 0.5f};
+        const Vec2 max{0.6f, 0.5f};
+        UIAnchorDragResult result = UIElementDrag::DragAnchorCorner(min, max, AnchorCorner::TopLeft, {0.1f, 0.8f}, false);
+        EXPECT_EQ(result.min, (Vec2{0.1f, 0.8f}));
+        EXPECT_EQ(result.max, (Vec2{0.6f, 0.8f}));
+
+        result = UIElementDrag::DragAnchorCorner(min, max, AnchorCorner::BottomRight, {0.9f, 0.3f}, false);
+        EXPECT_EQ(result.min, (Vec2{0.2f, 0.3f}));
+        EXPECT_EQ(result.max, (Vec2{0.9f, 0.3f}));
+    }
+
+    TEST(UIElementDragTest, TheAnchorsStayInTheBoxAndNeverCross) {
+        const Vec2 min{0.2f, 0.2f};
+        const Vec2 max{0.6f, 0.6f};
+        UIAnchorDragResult result = UIElementDrag::DragAnchorCorner(min, max, AnchorCorner::TopLeft, {-0.5f, 1.5f}, false);
+        EXPECT_EQ(result.min.x, 0.0f);
+        EXPECT_EQ(result.min.y, 0.6f);  // up to the max, not past it
+        EXPECT_EQ(result.max, max);
+
+        result = UIElementDrag::DragAnchorCorner(min, max, AnchorCorner::BottomRight, {0.0f, 2.0f}, false);
+        EXPECT_EQ(result.max.x, 0.2f);
+        EXPECT_EQ(result.max.y, 1.0f);
+        EXPECT_EQ(result.min, min);
+    }
+
+    TEST(UIElementDragTest, SnapRoundsTheAnchorsToTheEdgesAndTheMiddleAndOntoTheOtherEdge) {
+        const Vec2 min{0.2f, 0.2f};
+        const Vec2 max{0.6f, 0.6f};
+        UIAnchorDragResult result = UIElementDrag::DragAnchorCorner(min, max, AnchorCorner::TopLeft, {0.43f, 0.04f}, true);
+        EXPECT_EQ(result.min, (Vec2{0.5f, 0.0f}));
+
+        // Within the threshold of the other edge the corner goes onto it: the axis becomes a point
+        result = UIElementDrag::DragAnchorCorner(min, max, AnchorCorner::TopLeft, {0.6f - 0.01f, 0.5f}, true);
+        EXPECT_EQ(result.min.x, 0.6f);
+        EXPECT_EQ(result.max.x, 0.6f);
+
+        result = UIElementDrag::DragAnchorCorner(min, max, AnchorCorner::BottomRight, {0.9f, 0.97f}, true);
+        EXPECT_EQ(result.max, (Vec2{1.0f, 1.0f}));
+    }
+
+    TEST(UIElementDragTest, AWholeAnchorDragThroughSetAnchorsKeepsTheRectOfTheElement) {
+        DragFixture f;
+        const Rect box = *UIElementDrag::BoxOf(f.canvas, *f.child);
+        const Rect before = f.child->rect;
+        const UIEffectiveAnchors anchors = UILayout::EffectiveAnchors(f.child->style.rect);
+        const AnchorMark mark = *UIPreviewOverlay::AnchorsOf(f.canvas, *f.child);
+        ASSERT_TRUE(UIElementDrag::HitAnchorCorner(mark, CenterOf(mark.anchors), 5.0f).has_value());
+
+        // Press on the single mark, drag it to the middle of the box, then stretch it on X
+        const Vec2 pointer = {mark.box.x + mark.box.w * 0.5f, mark.box.y + mark.box.h * 0.5f};
+        const Optional<Vec2> fraction = UIElementDrag::AnchorFraction(mark, pointer);
+        ASSERT_TRUE(fraction.has_value());
+        const UIAnchorDragResult dragged = UIElementDrag::DragAnchorCorner(anchors.min, anchors.max, AnchorCorner::TopLeft, *fraction, false);
+        EXPECT_EQ(dragged.min, (Vec2{0.5f, 0.5f}));
+
+        const UIRectEditResult result = UIAnchorPresets::SetAnchors(box, f.child->style.rect, dragged.min, dragged.max);
+        EXPECT_TRUE(result.exact);
+        ExpectRect(UILayout::ResolveRect(box, result.spec), before);
+
+        // A point axis moves as one; from a stretched span a corner moves one edge, and the rect still stays
+        const UIRectEditResult spanned = UIAnchorPresets::SetAnchors(box, result.spec, {0.2f, 0.5f}, {0.6f, 0.5f});
+        ExpectRect(UILayout::ResolveRect(box, spanned.spec), before);
+        const UIAnchorDragResult stretched = UIElementDrag::DragAnchorCorner({0.2f, 0.5f}, {0.6f, 0.5f}, AnchorCorner::TopRight, {0.9f, 0.5f}, false);
+        EXPECT_EQ(stretched.min.x, 0.2f);
+        EXPECT_EQ(stretched.max.x, 0.9f);
+        const UIRectEditResult second = UIAnchorPresets::SetAnchors(box, spanned.spec, stretched.min, stretched.max);
+        ExpectRect(UILayout::ResolveRect(box, second.spec), before);
     }
 
 }  // namespace BECore::Tests

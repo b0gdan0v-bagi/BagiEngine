@@ -19,6 +19,9 @@ namespace BECore {
     /// What a press on the rect of an element grabs: the body moves it, a corner or an edge resizes it
     CORE_ENUM(UIDragHandle, uint8_t, None, Body, TopLeft, Top, TopRight, Right, BottomRight, Bottom, BottomLeft, Left)
 
+    /// A corner of the rect between `anchorMin` and `anchorMax`: the petal of the anchor widget
+    CORE_ENUM(AnchorCorner, uint8_t, TopLeft, TopRight, BottomLeft, BottomRight)
+
     /// One grab area of the handles of a rect
     struct UIHandleRect {
         UIDragHandle handle = UIDragHandle::None;
@@ -53,6 +56,12 @@ namespace BECore {
         Rect rect;
         Optional<float> guideX;
         Optional<float> guideY;
+    };
+
+    /// The new `anchorMin` and `anchorMax` of a drag of one anchor corner
+    struct UIAnchorDragResult {
+        Vec2 min;
+        Vec2 max;
     };
 
     /**
@@ -120,6 +129,25 @@ namespace BECore {
          * opposite sides stay and the size keeps `kMinSize`. A caller that keeps the aspect does not snap: a snapped edge would break it.
          */
         [[nodiscard]] static UISnapResult Snap(const Rect& wanted, UIDragHandle handle, const UISnapLines& lines, float threshold);
+
+        /// The corners of the anchor widget within @p radius output pixels of @p point: the nearest centre wins. On a point axis the corners share a position; the pick then is the first of them
+        [[nodiscard]] static Optional<AnchorCorner> HitAnchorCorner(const AnchorMark& mark, const Vec2& point, float radius);
+
+        /// The position of a corner of the anchor widget in output pixels
+        [[nodiscard]] static Vec2 AnchorCornerPoint(const AnchorMark& mark, AnchorCorner corner);
+
+        /// @p point (output pixels) as fractions of the anchors' box: `(point - box.xy) / box.wh`; none for a box without area
+        [[nodiscard]] static Optional<Vec2> AnchorFraction(const AnchorMark& mark, const Vec2& point);
+
+        /**
+         * @brief The anchors after a drag of @p corner to the fraction @p fractionPoint, from the anchors at the press.
+         *
+         * The fractions stay in 0..1 and min never passes max. An axis that is a point (min equals max) moves as one: both follow. With @p snap the value is rounded to 0, 0.5 or 1 and, within
+         * `kAnchorSnapThreshold` of the other edge of the axis, goes onto it.
+         */
+        [[nodiscard]] static UIAnchorDragResult DragAnchorCorner(const Vec2& startMin, const Vec2& startMax, AnchorCorner corner, const Vec2& fractionPoint, bool snap);
+
+        static constexpr float kAnchorSnapThreshold = 0.03f;  ///< a fraction of the box
     };
 
 }  // namespace BECore

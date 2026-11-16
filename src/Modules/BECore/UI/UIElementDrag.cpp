@@ -7,6 +7,8 @@ namespace BECore {
     namespace {
 
         constexpr float kHalf = 0.5f;
+        constexpr Array<float, 3> kAnchorSnapValues = {0.0f, 0.5f, 1.0f};
+
         const UIElement* FindParent(const UIElement& node, const UIElement& target) {
             for (const auto& child : node.children) {
                 if (child.Get() == &target) {
@@ -74,6 +76,30 @@ namespace BECore {
                 }
             }
             return best;
+        }
+
+        struct AxisResult {
+            float min = 0.0f;
+            float max = 0.0f;
+        };
+
+        AxisResult DragAnchorAxis(float startMin, float startMax, bool movesMin, float fraction, bool snap) {
+            float value = std::clamp(fraction, 0.0f, 1.0f);
+            const bool point = startMin >= startMax;
+            if (snap) {
+                float snapped = kAnchorSnapValues[0];
+                for (const float candidate : kAnchorSnapValues) {
+                    if (std::abs(candidate - value) < std::abs(snapped - value)) {
+                        snapped = candidate;
+                    }
+                }
+                const float other = movesMin ? startMax : startMin;
+                value = !point && std::abs(value - other) <= UIElementDrag::kAnchorSnapThreshold ? other : snapped;
+            }
+            if (point) {
+                return {value, value};
+            }
+            return movesMin ? AxisResult{std::min(value, startMax), startMax} : AxisResult{startMin, std::max(value, startMin)};
         }
 
     }  // namespace
@@ -262,6 +288,43 @@ namespace BECore {
             }
         }
         return result;
+    }
+
+    Vec2 UIElementDrag::AnchorCornerPoint(const AnchorMark& mark, AnchorCorner corner) {
+        const bool right = corner == AnchorCorner::TopRight || corner == AnchorCorner::BottomRight;
+        const bool bottom = corner == AnchorCorner::BottomLeft || corner == AnchorCorner::BottomRight;
+        return {mark.anchors.x + (right ? mark.anchors.w : 0.0f), mark.anchors.y + (bottom ? mark.anchors.h : 0.0f)};
+    }
+
+    Optional<AnchorCorner> UIElementDrag::HitAnchorCorner(const AnchorMark& mark, const Vec2& point, float radius) {
+        Optional<AnchorCorner> best;
+        float bestDistance = radius * radius;
+        for (const AnchorCorner corner : {AnchorCorner::TopLeft, AnchorCorner::TopRight, AnchorCorner::BottomLeft, AnchorCorner::BottomRight}) {
+            const Vec2 center = AnchorCornerPoint(mark, corner);
+            const float dx = point.x - center.x;
+            const float dy = point.y - center.y;
+            const float distance = dx * dx + dy * dy;
+            if (distance <= bestDistance && (!best || distance < bestDistance)) {
+                best = corner;
+                bestDistance = distance;
+            }
+        }
+        return best;
+    }
+
+    Optional<Vec2> UIElementDrag::AnchorFraction(const AnchorMark& mark, const Vec2& point) {
+        if (mark.box.IsEmpty()) {
+            return {};
+        }
+        return Vec2{(point.x - mark.box.x) / mark.box.w, (point.y - mark.box.y) / mark.box.h};
+    }
+
+    UIAnchorDragResult UIElementDrag::DragAnchorCorner(const Vec2& startMin, const Vec2& startMax, AnchorCorner corner, const Vec2& fractionPoint, bool snap) {
+        const bool movesMinX = corner == AnchorCorner::TopLeft || corner == AnchorCorner::BottomLeft;
+        const bool movesMinY = corner == AnchorCorner::TopLeft || corner == AnchorCorner::TopRight;
+        const AxisResult x = DragAnchorAxis(startMin.x, startMax.x, movesMinX, fractionPoint.x, snap);
+        const AxisResult y = DragAnchorAxis(startMin.y, startMax.y, movesMinY, fractionPoint.y, snap);
+        return {{x.min, y.min}, {x.max, y.max}};
     }
 
 }  // namespace BECore
