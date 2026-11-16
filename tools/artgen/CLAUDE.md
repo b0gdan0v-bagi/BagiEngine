@@ -16,7 +16,7 @@ The image generator of the games' art is **ComfyUI on the owner's Windows PC** (
 | `artgen_preset.py` | Presets and workflows: load and check them, `build_graph` (the graph of one image), `models_of` |
 | `artgen_generators.py` | The generator interface (`status`, `info`, `run`), `ComfyUIGenerator`, `FakeGenerator` (tests, `--generator fake`), `make_generator` |
 | `artgen_ws.py` | A minimal WebSocket client for ComfyUI's progress stream; the frame codec is `tools/control/bagi_control_client.py`'s |
-| `workflows/` | The engine's workflows: `<name>.json` is a graph in ComfyUI's API format (what `POST /prompt` takes; the UI loads it by drag and drop), `<name>.inputs.json` names its inputs. `sdxl_basic` is the SDXL one |
+| `workflows/` | The engine's workflows: `<name>.json` is a graph in ComfyUI's API format (what `POST /prompt` takes; the UI loads it by drag and drop), `<name>.inputs.json` names its inputs. `sdxl_basic` is the SDXL one; `sdxl_cutout` is the same with the background removed (an RGBA PNG) |
 | `tests/` | pytest: a fake ComfyUI with a real WebSocket stream, the fake generator, the presets, the manifest and workflow rules |
 
 ## Setup on the Windows PC
@@ -36,6 +36,8 @@ python tools\artgen\comfyui_check.py --generate                                 
 ## Models
 
 Only models whose licence lets the generated images ship in a commercial game, each with its licence and source in the manifest. A fine-tune or a LoRA is added only after its licence was read for that; Flux and other models above 8 GB are out for now. A Hugging Face URL names a commit, not `main`, so the hash stays true (a test holds it).
+
+**Transparent sprites.** ComfyUI removes backgrounds by itself (`LoadBackgroundRemovalModel`, `RemoveBackground`) with BiRefNet (`models/background_removal/birefnet.safetensors`, MIT, in the manifest). `sdxl_cutout` runs it after the VAE decode: `RemoveBackground` gives 1 on the subject and `JoinImageWithAlpha` takes 1 as transparent, so `InvertMask` sits between them; `SaveImage` then writes an RGBA PNG. A preset picks it with `"workflow": "sdxl_cutout"`; a prompt that asks for one subject on a plain background cuts best (several objects stay several objects). Its named input `bg_model` swaps the removal model.
 
 ## The health check
 

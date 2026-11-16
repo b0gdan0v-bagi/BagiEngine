@@ -26,6 +26,19 @@ namespace BECore {
         constexpr float kSelectedBorder = 3.0f;
         constexpr float kDefaultWidth = 520.0f;
         constexpr float kDefaultHeight = 700.0f;
+        // Squares behind a thumbnail, so a transparent background (a cut-out sprite) shows as transparent
+        constexpr float kCheckerCell = 10.0f;
+
+        void DrawChecker(ImDrawList* drawList, ImVec2 origin, float size, ImU32 light, ImU32 dark) {
+            drawList->AddRectFilled(origin, ImVec2(origin.x + size, origin.y + size), light);
+            const int cells = static_cast<int>(size / kCheckerCell);
+            for (int y = 0; y < cells; ++y) {
+                for (int x = (y % 2); x < cells; x += 2) {
+                    const ImVec2 min(origin.x + static_cast<float>(x) * kCheckerCell, origin.y + static_cast<float>(y) * kCheckerCell);
+                    drawList->AddRectFilled(min, ImVec2(min.x + kCheckerCell, min.y + kCheckerCell), dark);
+                }
+            }
+        }
 
         bool IsUsable(const ArtGenSession& session, StringView preset) {
             for (const auto& known : session.GetServiceStatus().presets) {
@@ -312,6 +325,7 @@ namespace BECore {
             const ITexture* texture = i < _thumbnails.size() ? _thumbnails[i].Get() : nullptr;
             if (texture != nullptr && texture->GetState() == ResourceState::Loaded) {
                 const auto id = static_cast<ImTextureID>(reinterpret_cast<std::uintptr_t>(texture->GetNativeHandle()));
+                DrawChecker(drawList, origin, kThumbnailSize, ImGui::GetColorU32(palette.panelBg), ImGui::GetColorU32(palette.frameBg));
                 drawList->AddImage(id, origin, corner);
             } else {
                 drawList->AddRectFilled(origin, corner, ImGui::GetColorU32(palette.frameBg));

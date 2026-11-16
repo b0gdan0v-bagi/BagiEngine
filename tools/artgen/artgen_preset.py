@@ -22,7 +22,7 @@ REQUIRED_INPUTS = ("prompt", "seed")
 # The output node is named too: the service sets its file prefix and reads its images.
 OUTPUT_INPUT = "output"
 # Inputs whose values are model files: they go into the provenance.
-MODEL_INPUT_NAMES = ("ckpt_name", "vae_name", "lora_name", "unet_name", "clip_name", "control_net_name")
+MODEL_INPUT_NAMES = ("ckpt_name", "vae_name", "lora_name", "unet_name", "clip_name", "control_net_name", "bg_removal_name")
 
 
 class PresetError(Exception):
