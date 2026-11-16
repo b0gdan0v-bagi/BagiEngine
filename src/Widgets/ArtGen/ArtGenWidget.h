@@ -1,5 +1,7 @@
 #pragma once
 
+#include <BECore/Audio/AudioClip.h>
+#include <BECore/Audio/AudioTypes.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Renderer/ITexture.h>
 #include <BECore/Resource/ResourceHandle.h>
@@ -7,6 +9,7 @@
 #include <BECore/Utils/FunctionRef.h>
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/ArtGen/ArtGenPresetForm.h>
+#include <Widgets/ArtGen/ArtGenSound.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <cstdint>
 
@@ -55,6 +58,13 @@ namespace BECore {
         void DrawAccept(ArtGenSession& session);
         void SyncThumbnails(const ArtGenRun& run);
         void DropThumbnails();
+        void DrawSounds(const ArtGenRun& run);
+        void DrawSoundAccept(ArtGenSession& session);
+        void DrawSoundSettings();
+        void SyncSounds(const ArtGenRun& run);
+        void DropSounds();
+        void PlaySound(const AudioClip& clip, int32_t row);
+        void StopSound();
 
         bool _open = false;
 
@@ -74,6 +84,23 @@ namespace BECore {
         Vector<ResourceHandle<ITexture>> _thumbnails;
         Vector<String> _thumbnailPaths;
         Optional<int64_t> _selectedSeed;
+
+        /// One sound variant: its clip (loaded from the FLAC the service wrote), and once loaded its waveform and numbers
+        struct SoundRow {
+            String path;
+            ResourceHandle<AudioClip> clip;
+            Vector<float> waveform;
+            ArtGenSoundStats stats;
+            bool measured = false;
+        };
+        Vector<SoundRow> _sounds;
+        AudioHandle _playing;
+        int32_t _playingRow = -1;          // the row that plays; kPreviewRow: the processed preview
+        IntrusivePtr<AudioClip> _preview;  // the selected sound as Accept would write it
+        ArtGenSoundSettings _soundSettings;
+        bool _replaceClip = false;  // Accept over a clip path of the game instead of assets/artgen/<name>.wav
+        char _clipPath[256] = "assets/sounds/";
+        String _previewError;
 
         char _spriteName[65] = {};
         bool _useOnSelected = false;

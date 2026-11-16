@@ -305,9 +305,9 @@ def tiny_flac(seconds, frequency=440.0, rate=FLAC_RATE):
         header = bytearray([0xFF, 0xF8, 0x70, 0x10]) + _utf8_number(number) + struct.pack(">H", len(block) - 1)
         header.append(_crc8(header))
         frame = bytearray(header)
-        for sign in (1, -1):
+        for divisor in (1, 2):  # the right channel is the left at half level: in phase, so a mix to mono keeps it
             frame.append(0x02)  # verbatim subframe, no wasted bits
-            frame += b"".join(struct.pack(">h", sign * s) for s in block)
+            frame += b"".join(struct.pack(">h", s // divisor) for s in block)
         frame += struct.pack(">H", _crc16(frame))
         out += frame
     return bytes(out)

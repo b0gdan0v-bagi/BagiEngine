@@ -38,7 +38,7 @@ The sound of a game: `CoreManager::GetAudio()` (`AudioManager`) plays `AudioClip
 
 ## The source component
 
-`AudioSourceComponent` holds one clip and plays it: `Play()`, an `InputEvents::ActionEvent` of `playAction` while its scene is active, and `playOnStart` at the first `SceneUpdateEvent` of its scene as the active one (not at attach: every loaded scene attaches). A change of `clip` (the inspector) loads at the next `Play()`; `Stop()` and `IsPlaying()` are about the latest sound it started.
+`AudioSourceComponent` holds one clip and plays it: `Play()`, an `InputEvents::ActionEvent` of `playAction` while its scene is active, and `playOnStart` at the first `SceneUpdateEvent` of its scene as the active one (not at attach: every loaded scene attaches). A change of `clip` (the inspector) loads at the next `Play()`; `ReloadClip()` loads it again after its file changed under the same path (the cache evicted first: the Generate panel's Accept of a sound); `Stop()` and `IsPlaying()` are about the latest sound it started.
 
 ## The player's levels
 

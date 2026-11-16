@@ -8,6 +8,7 @@
 #include <BECore/Utils/MoveOnlyFunction.h>
 #include <BECore/Utils/Singleton.h>
 #include <Widgets/ArtGen/ArtGenPresetForm.h>
+#include <Widgets/ArtGen/ArtGenSound.h>
 #include <cstdint>
 #include <expected>
 
@@ -15,6 +16,7 @@ namespace BECore {
 
     class ControlService;
     class SceneNode;
+    struct ArtGenSoundTarget;
 
     CORE_ENUM(ArtGenRunState, uint8_t, Idle, Queued, Running, Done, Failed, Cancelled)
     /// What the service is asked to do to the generator itself (tools/artgen/artgen_setup.py)
@@ -105,6 +107,8 @@ namespace BECore {
         using Clock = MoveOnlyFunction<double()>;
         /// Accepts a variant as the sprite @p sprite and, when @p node is given, puts it on that node; the answer of `artgen_accept`
         using Acceptor = std::expected<Json, ControlError> (*)(const ArtGenVariant& variant, StringView sprite, SceneNode* node);
+        /// Accepts a sound variant as a clip at @p target, processed by @p settings, and puts it on @p node's AudioSourceComponent when given
+        using SoundAcceptor = std::expected<Json, ControlError> (*)(const ArtGenVariant& variant, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, SceneNode* node);
 
         /// @param clock monotonic seconds; the default is the steady clock (a test passes its own). The editor's one session is GetInstance()
         explicit ArtGenSession(Clock clock = {});
@@ -158,6 +162,10 @@ namespace BECore {
         void SetAcceptor(Acceptor acceptor) {
             _acceptor = acceptor;
         }
+        /// What a sound variant's Accept runs (ArtGenAccept.h in the editor; a fake in the tests)
+        void SetSoundAcceptor(SoundAcceptor acceptor) {
+            _soundAcceptor = acceptor;
+        }
         /// The node "Use on selected" puts the sprite on (the scene editor's primary selection); null for none. Held, so it is checked alive
         /// in the active scene before use
         void SetSelectedNode(IntrusivePtr<SceneNode> node);
@@ -167,6 +175,9 @@ namespace BECore {
         [[nodiscard]] const ArtGenVariant* FindVariant(int64_t seed) const;
         /// Accepts the variant @p seed as @p sprite, and puts it on the selected node when @p useOnSelected
         std::expected<Json, ControlError> Accept(int64_t seed, StringView sprite, bool useOnSelected);
+        /// Accepts the sound variant @p seed as a clip at @p target, processed by @p settings; on the selected node's AudioSourceComponent
+        /// when @p useOnSelected
+        std::expected<Json, ControlError> AcceptSound(int64_t seed, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, bool useOnSelected);
 
         [[nodiscard]] bool IsServiceConnected() const;
         [[nodiscard]] const ArtGenServiceStatus& GetServiceStatus() const {
@@ -207,6 +218,7 @@ namespace BECore {
 
         Clock _clock;
         Acceptor _acceptor = nullptr;
+        SoundAcceptor _soundAcceptor = nullptr;
         IntrusivePtr<SceneNode> _selectedNode;
         String _gameRoot;
         ArtGenServiceStatus _status;
