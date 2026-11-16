@@ -311,6 +311,74 @@ namespace BECore::Tests {
         EXPECT_GT(parsed.error().column, 0U);
     }
 
+    TEST(ProgramParserTest, AStringIsAnOperandWithItsTextBetweenTheQuotes) {
+        const ExprAst ast = Parse("a == 'Fire'");
+        ASSERT_EQ(ast.nodes.size(), 3U);
+        EXPECT_EQ(ast[ast[ast.root].second].kind, ExprNodeKind::String);
+        EXPECT_EQ(ast[ast[ast.root].second].text, "Fire");
+        EXPECT_EQ(ast[ast[ast.root].second].column, 6U) << "the column is the opening quote";
+
+        const ExprAst select = Parse("select(c, 'a', 'b')");
+        EXPECT_EQ(select[select.root].argumentCount, 3U);
+        EXPECT_EQ(PrintExpression(select), "select(c, 'a', 'b')");
+        EXPECT_EQ(Printed("'x' != a"), "'x' != a");
+    }
+
+    TEST(ProgramParserTest, AStringMayBeEmptyAndHoldSpacesOperatorsAndDotsAsText) {
+        const ExprAst empty = Parse("''");
+        ASSERT_EQ(empty.nodes.size(), 1U);
+        EXPECT_EQ(empty[empty.root].kind, ExprNodeKind::String);
+        EXPECT_TRUE(empty[empty.root].text.empty());
+        EXPECT_EQ(Printed("''"), "''");
+
+        const ExprAst text = Parse("'a + b.c (d) && \"e\" [0] = 1  '");
+        ASSERT_EQ(text.nodes.size(), 1U) << "what is inside the quotes is never parsed as code";
+        EXPECT_EQ(text[text.root].text, "a + b.c (d) && \"e\" [0] = 1  ");
+        EXPECT_EQ(Printed("'a + b'"), "'a + b'");
+        EXPECT_EQ(Printed("'ab'.x"), "('ab').x");
+    }
+
+    TEST(ProgramParserTest, APrintedStringParsesToTheSameTree) {
+        const StringView texts[] = {"a == 'Fire'", "select(a < b, 'x y', '')", "'a' == 'b' || c", "'it.s'.x", "f('a', 'b + c', 1)"};
+        for (const StringView text : texts) {
+            const ExprAst first = Parse(text);
+            const String printed = PrintExpression(first);
+            const ExprAst second = Parse(printed);
+            EXPECT_TRUE(SameTree(first, second)) << String(text).c_str() << " -> " << printed.c_str();
+            EXPECT_EQ(PrintExpression(second), printed);
+        }
+    }
+
+    TEST(ProgramParserTest, ABadStringIsAnErrorAtTheRightByte) {
+        ExpectError("a == 'Fire", 6, "unterminated string, expected ' to close it");
+        ExpectError("'", 1, "unterminated string");
+        ExpectError("a + 'b' + 'c", 11, "unterminated string");
+        ExpectError("a == 'x\ny'", 8, "control character 0x0a");
+        ExpectError("'a\tb'", 3, "control character 0x09");
+        ExpectError("'a\x07'", 3, "control character 0x07");
+        ExpectError("'a\x7f'", 3, "control character 0x7f");
+        ExpectError(String("'a\0b'", 5), 3, "control character 0x00");
+        const ProgramError invalid = ExpectError("'a\xFFz'", 3, "invalid UTF-8 byte 0xff");
+        EXPECT_FALSE(Contains(invalid.message, "\xFF")) << "the bad byte is never copied into the message";
+        ExpectError("'caf\xC3\xA9'", 5, "the character '\xC3\xA9'");
+        ExpectError("'a' 'b'", 5, "expected an operator or the end of the formula, found the string 'b'");
+        ExpectError("a 'b'", 3, "found the string 'b'");
+    }
+
+    TEST(ProgramParserTest, AStringCountsInTheLimits) {
+        const String longest = "'" + Repeated("a", ExprLimits::kMaxTextBytes - 2) + "'";
+        const ExprAst fits = Parse(longest);
+        EXPECT_EQ(fits[fits.root].text.size(), ExprLimits::kMaxTextBytes - 2);
+        ExpectError(longest + " ", ExprLimits::kMaxTextBytes + 1, "longer than 4096 bytes");
+        ExpectError("'" + Repeated("a", ExprLimits::kMaxTextBytes) + "'", ExprLimits::kMaxTextBytes + 1, "longer than 4096 bytes");
+
+        const auto list = [](size_t count) { return "f('a'" + Repeated(", 'a'", count - 1) + ")"; };
+        EXPECT_EQ(Parse(list(ExprLimits::kMaxNodes - 1)).nodes.size(), ExprLimits::kMaxNodes);
+        const auto parsed = ParseExpression(list(ExprLimits::kMaxNodes));
+        ASSERT_FALSE(parsed.has_value());
+        EXPECT_TRUE(Contains(parsed.error().message, "more than 512 parts")) << parsed.error().message.c_str();
+    }
+
     TEST(ProgramParserTest, InvalidUtf8AndForeignCharactersAreErrorsNotCrashes) {
         const ProgramError invalid = ExpectError("1 + \xFF", 5, "invalid UTF-8 byte 0xff");
         EXPECT_FALSE(Contains(invalid.message, "\xFF")) << "the bad byte is never copied into the message";

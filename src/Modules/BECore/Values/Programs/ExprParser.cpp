@@ -186,6 +186,14 @@ namespace BECore {
                         node.text = String(token.text);
                         return Add(std::move(node));
                     }
+                    case ExprTokenKind::String: {
+                        Take();
+                        ExprNode node;
+                        node.kind = ExprNodeKind::String;
+                        node.column = token.column;
+                        node.text = String(token.text);
+                        return Add(std::move(node));
+                    }
                     case ExprTokenKind::Name:
                         return ParseName();
                     case ExprTokenKind::LeftParen: {

@@ -17,14 +17,14 @@ namespace BECore {
     /// The place of a node in `ExprAst::nodes`; a node's operands are always earlier nodes, so a walk from the first to the last is a post-order
     using ExprNodeId = uint32_t;
 
-    CORE_ENUM(ExprNodeKind, uint8_t, Number, Bool, Name, Call, Member, Unary, Binary)
+    CORE_ENUM(ExprNodeKind, uint8_t, Number, Bool, String, Name, Call, Member, Unary, Binary)
 
     /**
      * @brief One node of the untyped syntax tree
      *
-     * `Number` keeps its text (`text`) and whether it is a float literal; a sign is a `Unary` above it. `Name` is a whole dotted path (`caster.attack`) and
-     * `Call` a call of a dotted name (`min`, or `a.b` as a mistake the checker names); `Member` is `.x` on an expression that is not a name, `first` its base.
-     * `column` is the 1-based byte of the node in the text: the operator for `Unary` and `Binary`, the dot for `Member`, the start of the rest.
+     * `Number` keeps its text (`text`) and whether it is a float literal; a sign is a `Unary` above it. `String` is `'text'` and keeps the text between the quotes. `Name` is a whole dotted path
+     * (`caster.attack`) and `Call` a call of a dotted name (`min`, or `a.b` as a mistake the checker names); `Member` is `.x` on an expression that is not a name, `first` its base. `column` is the
+     * 1-based byte of the node in the text: the operator for `Unary` and `Binary`, the dot for `Member`, the start of the rest.
      */
     struct ExprNode {
         ExprNodeKind kind = ExprNodeKind::Number;
@@ -39,7 +39,7 @@ namespace BECore {
         /// `Call`: the arguments are `ExprAst::arguments[firstArgument, firstArgument + argumentCount)`
         uint32_t firstArgument = 0;
         uint32_t argumentCount = 0;
-        /// `Number`: the digits as written; `Name`, `Call`: the dotted name; `Member`: the member
+        /// `Number`: the digits as written; `String`: the characters between the quotes; `Name`, `Call`: the dotted name; `Member`: the member
         String text;
     };
 

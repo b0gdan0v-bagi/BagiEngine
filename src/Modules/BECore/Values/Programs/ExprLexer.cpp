@@ -138,7 +138,7 @@ namespace BECore {
                     return false;
                 }
                 const ExprTokenKind kind = _tokens.back().kind;
-                return kind == ExprTokenKind::Number || kind == ExprTokenKind::Name || kind == ExprTokenKind::RightParen;
+                return kind == ExprTokenKind::Number || kind == ExprTokenKind::String || kind == ExprTokenKind::Name || kind == ExprTokenKind::RightParen;
             }
 
             [[nodiscard]] char At(size_t offset) const {
@@ -185,6 +185,8 @@ namespace BECore {
                     return true;
                 }
                 switch (c) {
+                    case '\'':
+                        return QuotedString();
                     case '(':
                         return Single(ExprTokenKind::LeftParen);
                     case ')':
@@ -225,6 +227,25 @@ namespace BECore {
                     default:
                         return FailHere(_position, Format("unexpected {}", DescribeByteAt(_text, _position)));
                 }
+            }
+
+            /// `'text'`: printable ASCII up to the next quote, no escapes
+            bool QuotedString() {
+                const size_t start = _position;
+                ++_position;
+                while (_position < _text.size() && _text[_position] != '\'') {
+                    const auto byte = static_cast<unsigned char>(_text[_position]);
+                    if (byte < kFirstPrintable || byte >= kDelete) {
+                        return FailHere(_position, Format("unexpected {} in a string: a string holds printable ASCII only", DescribeByteAt(_text, _position)));
+                    }
+                    ++_position;
+                }
+                if (_position >= _text.size()) {
+                    return FailHere(start, "unterminated string, expected ' to close it");
+                }
+                _tokens.push_back(ExprToken{ExprTokenKind::String, static_cast<uint32_t>(start + 1), _text.substr(start + 1, _position - start - 1), false});
+                ++_position;
+                return true;
             }
 
             /// `12`, `1.5`, `.5`, `1e3`, `1.5e-3`: no suffix, no sign (a sign is an operator)
@@ -284,6 +305,9 @@ namespace BECore {
     String DescribeToken(const ExprToken& token) {
         if (token.kind == ExprTokenKind::End) {
             return "the end of the text";
+        }
+        if (token.kind == ExprTokenKind::String) {
+            return Format("the string '{}'", token.text);
         }
         return Format("'{}'", token.text);
     }

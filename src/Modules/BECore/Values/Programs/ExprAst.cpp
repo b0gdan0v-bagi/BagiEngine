@@ -31,6 +31,11 @@ namespace BECore {
                     case ExprNodeKind::Bool:
                         out += node.boolValue ? "true" : "false";
                         return;
+                    case ExprNodeKind::String:
+                        out += '\'';
+                        out += node.text;
+                        out += '\'';
+                        return;
                     case ExprNodeKind::Call:
                         out += node.text;
                         out += '(';

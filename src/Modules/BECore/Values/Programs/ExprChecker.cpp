@@ -199,6 +199,8 @@ namespace BECore {
                         constant.column = node.column;
                         return Emit(std::move(constant));
                     }
+                    case ExprNodeKind::String:
+                        return Refuse(node.column, "a string literal is not a value of a program type yet");
                     case ExprNodeKind::Name:
                         return CheckName(id);
                     case ExprNodeKind::Call:
