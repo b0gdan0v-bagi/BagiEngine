@@ -55,3 +55,36 @@ test("the notes of a start are the lines about the queue, not the session line",
     assert.deepStrictEqual(Runs.queueNotes("  failed: boom\n  e back at the head of the queue of w2"), ["e back at the head of the queue of w2"]);
     assert.deepStrictEqual(Runs.queueNotes(undefined), []);
 });
+
+const NOW = 10_000_000;
+const FREE = { k: 1, queue: ["next"], queuePaused: null, active: false, waiting: false, dirty: false, limited: null, stopped: null, entry: null, head: { branch: null }, engine: { branch: null }, session: { startedAt: NOW - 3_600_000 } };
+const SETTLED = NOW - Runs.FREE_SETTLE_MS;
+
+test("a free worker that stayed free long enough may start its queue", () => {
+    assert.strictEqual(Runs.queueStartBlock(FREE, NOW, SETTLED), null);
+});
+
+test("a worker whose engine holds a todo branch with no entry known is not free, even when its session looks idle", () => {
+    const w = { ...FREE, engine: { branch: "todo/data-values-core" } };
+    assert.strictEqual(Runs.queueStartBlock(w, NOW, SETTLED), "holds todo/data-values-core");
+    assert.strictEqual(Runs.queueStartBlock({ ...FREE, head: { branch: "todo/x" } }, NOW, SETTLED), "holds todo/x");
+});
+
+test("a held branch whose entry is in review leaves the worker free; one in progress does not", () => {
+    const branch = { ...FREE, head: { branch: "todo/x" } };
+    assert.strictEqual(Runs.queueStartBlock({ ...branch, entry: { id: "x", status: "review" } }, NOW, SETTLED), null);
+    assert.strictEqual(Runs.queueStartBlock({ ...branch, entry: { id: "x", status: "in progress" } }, NOW, SETTLED), "holds x (in progress)");
+});
+
+test("a session started moments ago, or a worker that just turned free, waits", () => {
+    assert.strictEqual(Runs.queueStartBlock({ ...FREE, session: { startedAt: NOW - 10_000 } }, NOW, SETTLED), "a session started moments ago");
+    assert.strictEqual(Runs.queueStartBlock(FREE, NOW, NOW - 1000), "settling");
+    assert.strictEqual(Runs.queueStartBlock(FREE, NOW, undefined), "settling");
+});
+
+test("the plain reasons come first", () => {
+    assert.strictEqual(Runs.queueStartBlock({ ...FREE, queue: [] }, NOW, SETTLED), "empty queue");
+    assert.strictEqual(Runs.queueStartBlock({ ...FREE, queuePaused: "by hand" }, NOW, SETTLED), "queue paused");
+    assert.strictEqual(Runs.queueStartBlock({ ...FREE, active: true }, NOW, SETTLED), "a session runs");
+    assert.strictEqual(Runs.queueStartBlock({ ...FREE, dirty: true }, NOW, SETTLED), "uncommitted changes");
+});

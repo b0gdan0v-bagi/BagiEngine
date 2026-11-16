@@ -4,6 +4,7 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/OpenDeserializer.h>
 #include <BECore/Types/Types.h>
+#include <BECore/Values/ValueLinkScope.h>
 #include <utility>
 
 namespace BECore {
@@ -15,6 +16,8 @@ namespace BECore {
      * `type`, a malformed value) and its findings (an unknown key, a missing `required` field, a value outside `range`:
      * ConfigManager::GetDiagnostics) go to the log through LogDeserializeErrors(); the object keeps what could be read. A
      * message logged before LoggerManager has its sinks waits in the log ring buffer, so this also works for LoggerConfig.
+     * The read runs under a ValueLinkScope named @p configName: a `<context>` of the document lands in it, and the errors of its `Value`
+     * fields end with the config's name.
      *
      * @note Include from .cpp files only: it pulls in CoreManager.h.
      *
@@ -26,8 +29,11 @@ namespace BECore {
     auto MakeFromConfig(StringView configName, Args&&... args) {
         auto obj = BECore::New<T>(std::forward<Args>(args)...);
         if (auto deserializer = CoreManager::GetConfigManager().CreateDeserializer(configName)) {
-            obj->Deserialize(*deserializer);
-            deserializer->FinishLoad();
+            {
+                const ValueLinkScope scope(configName);
+                obj->Deserialize(*deserializer);
+                deserializer->FinishLoad();
+            }
             LogDeserializeErrors(configName, *deserializer);
         }
         return obj;

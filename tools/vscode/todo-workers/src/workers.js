@@ -66,7 +66,7 @@ function attach(ctx) {
         if (!worker) {
             const label = (w) => `${w.name}${w.entry ? ` (now ${w.entry.id})` : ""}${w.queue && w.queue.length ? `, ${w.queue.length} queued` : ""}`;
             const detail = [
-                "The panel starts /todo-loop 1 " + id + " there as soon as that worker is free (no session running, no uncommitted changes, its entry in review or none).",
+                "The panel starts /todo-loop 1 " + id + " there as soon as that worker is free (no session running, no uncommitted changes, its entry in review or none, no todo/* branch held by a loop).",
                 ...(overlaps.length ? ["", "Busy entries name the same files (the loop will see them as busy):", ...overlaps.map((o) => `  ${o}`)] : []),
             ].join("\n");
             const picked = await vscode.window.showInformationMessage(`Queue ${id} for which worker?`, { modal: true, detail }, ...state.workers.map(label));
@@ -121,12 +121,20 @@ function attach(ctx) {
     // with a reason, the entry put back when the start fails, the streak counted (after QUEUE_STREAK_LIMIT entries
     // in a row the queue pauses). One start per refresh, so the loops do not choose at once.
     let autoStarting = false;
+    const freeSince = new Map();
     async function autoStartQueues() {
         const c = config();
         const tool = findTool();
         const state = ctx.state;
         if (!c.autoStartQueue || !tool || !state || autoStarting) return;
-        const free = (w) => w.queue && w.queue.length && !w.queuePaused && !w.active && !w.dirty && !w.limited && !w.stopped && !busy.has(w.k) && (!w.entry || w.entry.status === "review");
+        const now = Date.now();
+        // freeSince: since when each worker has looked free without a break (Runs.queueStartBlock, "settling")
+        for (const w of state.workers) {
+            const looksFree = !busy.has(w.k) && Runs.queueStartBlock(w, now, 0) === null; // 0: every rule but "settling"
+            if (!looksFree) freeSince.delete(w.k);
+            else if (!freeSince.has(w.k)) freeSince.set(w.k, now);
+        }
+        const free = (w) => !busy.has(w.k) && Runs.queueStartBlock(w, now, freeSince.get(w.k)) === null;
         for (const w of state.workers) if (!free(w)) asked.delete(w.k);
         const worker = state.workers.find((w) => free(w) && asked.get(w.k) !== queueKey(w));
         if (!worker) return;
