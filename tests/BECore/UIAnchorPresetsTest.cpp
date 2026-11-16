@@ -240,4 +240,83 @@ namespace BECore::Tests {
         }
     }
 
+    // ---- custom anchors -----------------------------------------------------------------------------------------------------
+
+    /// Every grid spec, to a stretch, a point and a custom edge anchor: the rect stays where it was, and the pivot too
+    TEST(UIAnchorPresetsTest, SetAnchorsKeepsTheRectAndThePivot) {
+        const Vec2 anchorSets[][2] = {{{0.0f, 0.0f}, {1.0f, 1.0f}}, {{0.5f, 0.5f}, {0.5f, 0.5f}}, {{0.25f, 0.0f}, {0.75f, 0.0f}}, {{0.0f, 0.3f}, {0.0f, 0.9f}}, {{0.2f, 0.4f}, {0.6f, 0.4f}}};
+        for (const UIRectSpec& spec : Specs()) {
+            for (const Rect& parent : kParents) {
+                const Rect before = UILayout::ResolveRect(parent, spec);
+                for (const auto& anchors : anchorSets) {
+                    const UIRectEditResult result = UIAnchorPresets::SetAnchors(parent, spec, anchors[0], anchors[1]);
+                    EXPECT_TRUE(result.exact);
+                    ExpectRect(UILayout::ResolveRect(parent, result.spec), before);
+                    const UIEffectiveAnchors effective = UILayout::EffectiveAnchors(result.spec);
+                    EXPECT_EQ(effective.min, anchors[0]);
+                    EXPECT_EQ(effective.max, anchors[1]);
+                    EXPECT_EQ(effective.pivot, UILayout::EffectiveAnchors(spec).pivot);
+                }
+            }
+        }
+    }
+
+    TEST(UIAnchorPresetsTest, SetAnchorsWritesTheShorthandWhenTheAnchorsAreOneOfTheTen) {
+        UIRectSpec spec;
+        spec.anchor = UIAnchor::TopLeft;
+        spec.width = UILength::Px(50.0f);
+        spec.height = UILength::Px(20.0f);
+        const Rect parent{0.0f, 0.0f, 400.0f, 200.0f};
+
+        // The pivot stays at the top left, so the bottom right point is no shorthand yet: the explicit fields are written
+        const UIRectSpec custom = UIAnchorPresets::SetAnchors(parent, spec, {1.0f, 1.0f}, {1.0f, 1.0f}).spec;
+        EXPECT_EQ(custom.anchor, UIAnchor::TopLeft);
+        ASSERT_TRUE(custom.anchorMin.has_value());
+        EXPECT_EQ(*custom.anchorMin, (Vec2{1.0f, 1.0f}));
+        EXPECT_EQ(*custom.pivot, (Vec2{0.0f, 0.0f}));
+
+        UIRectSpec centered = spec;
+        centered.pivot = Vec2{1.0f, 1.0f};
+        const UIRectSpec shorthand = UIAnchorPresets::SetAnchors(parent, centered, {1.0f, 1.0f}, {1.0f, 1.0f}).spec;
+        EXPECT_EQ(shorthand.anchor, UIAnchor::BottomRight);
+        EXPECT_FALSE(shorthand.anchorMin.has_value() || shorthand.anchorMax.has_value() || shorthand.pivot.has_value());
+    }
+
+    TEST(UIAnchorPresetsTest, SetAnchorsFromAPointToAStretchAndBack) {
+        UIRectSpec spec;
+        spec.anchor = UIAnchor::TopLeft;
+        spec.width = UILength::Px(100.0f);
+        spec.height = UILength::Px(50.0f);
+        spec.x = UILength::Px(20.0f);
+        spec.y = UILength::Px(10.0f);
+        const Rect parent{0.0f, 0.0f, 400.0f, 200.0f};
+
+        const UIRectSpec stretched = UIAnchorPresets::SetAnchors(parent, spec, {0.0f, 0.0f}, {1.0f, 0.0f}).spec;
+        EXPECT_NEAR(stretched.margin.left, 20.0f, 1e-3f);
+        EXPECT_NEAR(stretched.margin.right, 280.0f, 1e-3f);
+        ExpectRect(UILayout::ResolveRect(parent, stretched), {20.0f, 10.0f, 100.0f, 50.0f});
+
+        const UIRectSpec back = UIAnchorPresets::SetAnchors(parent, stretched, {0.0f, 0.0f}, {0.0f, 0.0f}).spec;
+        EXPECT_EQ(back.anchor, UIAnchor::TopLeft);
+        EXPECT_NEAR(back.x.value, 20.0f, 1e-3f);
+        EXPECT_NEAR(back.width.value, 100.0f, 1e-3f);
+        ExpectRect(UILayout::ResolveRect(parent, back), {20.0f, 10.0f, 100.0f, 50.0f});
+    }
+
+    TEST(UIAnchorPresetsTest, SetAnchorsKeepsAPercentLengthAPercent) {
+        UIRectSpec spec;
+        spec.anchor = UIAnchor::TopLeft;
+        spec.width = UILength::Percent(25.0f);
+        spec.height = UILength::Px(30.0f);
+        spec.x = UILength::Percent(10.0f);
+        const Rect parent{0.0f, 0.0f, 400.0f, 200.0f};
+
+        const UIRectSpec result = UIAnchorPresets::SetAnchors(parent, spec, {0.5f, 0.0f}, {0.5f, 0.0f}).spec;
+
+        EXPECT_EQ(result.width, spec.width);
+        EXPECT_EQ(result.x.unit, UIUnit::Percent);
+        EXPECT_NEAR(result.x.value, (40.0f - 200.0f) / 400.0f * 100.0f, 1e-3f);  // the left edge at 40, the anchor at 200
+        ExpectRect(UILayout::ResolveRect(parent, result), UILayout::ResolveRect(parent, spec));
+    }
+
 }  // namespace BECore::Tests

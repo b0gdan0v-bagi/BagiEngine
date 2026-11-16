@@ -120,4 +120,15 @@ namespace BECore {
         return UIRectEdit::SpecForRect(parent, next, wanted);
     }
 
+    UIRectEditResult UIAnchorPresets::SetAnchors(const Rect& parent, const UIRectSpec& spec, const Vec2& anchorMin, const Vec2& anchorMax) {
+        const Rect wanted = UILayout::ResolveRect(parent, spec);
+        UIRectSpec next = spec;
+        next.pivot = UILayout::EffectiveAnchors(spec).pivot;
+        next.anchorMin = anchorMin;
+        next.anchorMax = anchorMax;
+        UIRectEditResult result = UIRectEdit::SpecForRect(parent, next, wanted);
+        Simplify(result.spec);
+        return result;
+    }
+
 }  // namespace BECore

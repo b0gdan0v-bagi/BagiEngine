@@ -1,6 +1,7 @@
 #include "UIRectInspector.h"
 
 #include <BECore/UI/UIAnchorPresets.h>
+#include <BECore/UI/UIElementDrag.h>
 #include <BECore/UI/UILayout.h>
 #include <BECore/UI/UIRectEdit.h>
 #include <Widgets/ImGuiFonts.h>
@@ -60,17 +61,6 @@ namespace BECore {
                 }
             }
             return false;
-        }
-
-        /// The box the element lays out in, as UITreeLayout picks it: the published region it names, the whole canvas for `ignoreSafeArea` under the root, else the parent
-        Rect BoxOf(const UICanvasComponent& canvas, const UIElement& parent, const UIElement& element) {
-            if (const Rect* region = canvas.GetRegions().Find(element.style.rect.region)) {
-                return *region;
-            }
-            if (&parent == canvas.GetLayout().root.Get() && element.ignoreSafeArea) {
-                return canvas.GetLayout().GetResolved().bounds;
-            }
-            return parent.rect;
         }
 
         void DrawPresetCell(ImDrawList& draw, const ImVec2& origin, const UIAnchorPreset& preset, bool current, bool hovered) {
@@ -286,7 +276,7 @@ namespace BECore {
             return changed;
         }
 
-        const Rect box = BoxOf(canvas, *parent, element);
+        const Rect box = UIElementDrag::BoxOf(canvas.GetLayout(), *parent, element, element.style.rect.region);  // of the style the inspector edits, not of `active`
         const bool hasBox = !box.IsEmpty();
         if (!hasBox) {
             ImGui::TextColored(GetImGuiPalette().warning, "The box of the element has no size now (a hidden parent?): the anchor presets and the unit switch are off");

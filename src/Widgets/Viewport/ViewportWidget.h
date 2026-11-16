@@ -14,6 +14,8 @@
 #include <Widgets/Viewport/ViewportGizmos.h>
 #include <Widgets/Viewport/ViewportInput.h>
 #include <Widgets/Viewport/ViewportUIDebug.h>
+#include <Widgets/Viewport/ViewportUIGizmos.h>
+#include <Widgets/Viewport/ViewportUIShapes.h>
 #include <cstdint>
 
 namespace BECore {
@@ -40,6 +42,7 @@ namespace BECore {
     // Selected nodes (SceneSelectionChangedEvent) are outlined over the image, the primary in the accent colour. In Edit the
     // image has an editor camera (ViewportCamera), a drag on empty ground draws a rubber band, and the gizmo
     // (ViewportGizmos) moves, turns and scales the selected nodes; its keys and commands are in EditorCommands.h.
+    // The selected canvas element (UIElementSelectedEvent) gets eight handles and an anchor widget (ViewportUIGizmos): a drag writes its style.rect and tells UIRectDragEvent.
     class ViewportWidget : public IWidget {
         BE_CLASS(ViewportWidget)
     public:
@@ -94,8 +97,9 @@ namespace BECore {
         // The overlays over the image, in target pixels through @p frame and clipped to the panel: the view bounds (bars tinted), the bounds of
         // every visible canvas, the regions (named outlines, under the touch targets; the name and the canvas-unit rect on hover), the touch targets
         // (red under UISettings::minTouchSize, the element name on hover, which wins over a region), the UI debug overlays (ViewportUIDebug: element rects, anchors and pivots, the design
-        // rectangle, the findings; one tooltip per frame: a finding, a touch target, the element under the pointer, a region), the safe area. The canvases
-        // are the ones the pass just laid out for this target. @p outputSize is the target's size, @p hovered the pointer is over the image
+        // rectangle, the findings; one tooltip per frame: a finding, a touch target, the element under the pointer, an outline of ViewportUIShapes, a region), the selected element in the checked
+        // shapes of other devices (ViewportUIShapes), the safe area. The canvases are the ones the pass just laid out for this target. @p outputSize is the target's size, @p hovered the pointer is
+        // over the image
         /// The "Paused" mark in the top-left corner of the image while the game is paused (CoreManager::GetPause())
         void DrawPausedMark(const ImVec2& imageMin, const ImVec2& imageMax) const;
         void DrawOverlays(Scene* scene, const ViewportFrame& frame, const ImVec2& outputSize, const Rect& safeArea, bool hovered);
@@ -105,6 +109,9 @@ namespace BECore {
 
         // Keeps the nodes the scene editor selected (raw pointers, only compared until DrawSelectionOutlines finds each node alive)
         void OnSelectionChanged(const SceneSelectionChangedEvent& event);
+
+        // The UI element the scene editor selected (UIElementSelectedEvent), for the handles and the anchor widget of ViewportUIGizmos
+        void OnUIElementSelected(const UIElementSelectedEvent& event);
 
         // The outline of every selected node (ScenePick::SelectionOutlines: its rect and, for a canvas, the canvas bounds) over the image, the primary (the last) in the accent colour and the
         // others in its muted one, clipped to the panel. Nothing for no selection, another scene, or a node that is no longer in the tree of @p scene; a node hidden by the editor flag is outlined too
@@ -149,6 +156,8 @@ namespace BECore {
         ViewportCamera _camera;                 // the editor camera; the image is drawn with it while the input mode is Edit
         ViewportCameraInput _cameraInput;
         ViewportGizmos _gizmos;
+        ViewportUIShapes _uiShapes;    // the selected element in other devices' shapes (session state)
+        ViewportUIGizmos _uiGizmos;    // handles and anchor petals of the selected canvas element; before _gizmos in a frame, which it disables while it drags or is pointed at
         bool _frameRequested = false;  // viewport.frameSelected, answered in the next Update (it needs the panel size)
         ViewportBoxSelect _boxSelect;
         float _shownScale = 1.0f;  // screen units per target pixel of the last frame, for the zoom label
