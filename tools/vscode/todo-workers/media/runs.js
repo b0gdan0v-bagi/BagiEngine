@@ -8,12 +8,13 @@
     const NO_REASON = "no reason said: Log shows the run";
 
     // The progress an entry shows, as the bar's fill and its words, from the `slices` and `planProgress` of the store.
-    // A through entry is one branch over many slices: `slices.by` is "stages" when it has a stage plan (the whole is
-    // the stages and the slice plan is "this slice"), else its slice plans of the past say nothing about it. An entry
-    // cut slice by slice shows its slice plans together. A shown plan that is the stage plan has no slice to show.
+    // Only a stage plan (`slices.by` "stages", any slicing; the loop writes one for every entry) knows the whole entry:
+    // the stages approved plus the share of this slice. Without one the percent covers only what is planned so far
+    // (this slice of a through entry, the slice plans of one cut slice by slice, or the one plan), so it is `whole:
+    // false` and its text says `slice`. A shown plan that is the stage plan has no slice to count.
     // The owner reads one approximate number (`~45%`); the counts it comes from are `detail`, for a tooltip.
     // `percent` is rounded to 5 (it is an estimate), at least 5 once anything is ticked, and 100 only when every box of
-    // the whole is ticked: a through entry whose slice is done while its stage is not approved yet stops at 95.
+    // the whole is ticked: an entry whose slice is done while its stage is not approved yet stops at 95.
     function progressOf(entry) {
         if (!entry) return null;
         const slices = entry.slices || null;
@@ -22,22 +23,22 @@
         const all = slices && slices.by !== "stages" && slices.count > 1 && slices.total ? slices : null;
         const sliceShown = Boolean(entry.planShown) && entry.planShown === entry.stagesPlan ? null : p;
         const slice = sliceShown ? `this slice ${sliceShown.done}/${sliceShown.total}` : "";
-        if (entry.slicing === "through") {
-            if (stages) {
-                const part = sliceShown && stages.done < stages.total ? sliceShown.done / sliceShown.total : 0;
-                return shown((stages.done + part) / stages.total, stages.done >= stages.total, [`stage ${stages.done}/${stages.total}`, slice].filter(Boolean).join(" · "));
-            }
-            return sliceShown ? shown(sliceShown.done / sliceShown.total, sliceShown.done >= sliceShown.total, slice) : null;
+        if (stages) {
+            const part = sliceShown && stages.done < stages.total ? sliceShown.done / sliceShown.total : 0;
+            return shown((stages.done + part) / stages.total, stages.done >= stages.total, [`stage ${stages.done}/${stages.total}`, slice].filter(Boolean).join(" · "), true);
         }
-        if (all) return shown(all.done / all.total, all.done >= all.total, `${all.count} slices ${all.done}/${all.total}${sliceShown ? ` · ${slice}` : ""}`);
-        return p ? shown(p.done / p.total, p.done >= p.total, `plan ${p.done}/${p.total}`) : null;
+        if (entry.slicing === "through") return sliceShown ? shown(sliceShown.done / sliceShown.total, sliceShown.done >= sliceShown.total, slice, false) : null;
+        if (all) return shown(all.done / all.total, all.done >= all.total, `${all.count} slices ${all.done}/${all.total}${sliceShown ? ` · ${slice}` : ""}`, false);
+        return p ? shown(p.done / p.total, p.done >= p.total, `plan ${p.done}/${p.total}`, false) : null;
     }
 
-    function shown(fraction, complete, detail) {
+    const SLICE_ONLY = "no stage plan: the percent covers only what is planned so far";
+
+    function shown(fraction, complete, counts, whole) {
         let percent = Math.round((100 * Math.min(Math.max(fraction, 0), 1)) / 5) * 5;
         if (complete) percent = 100;
         else percent = Math.min(Math.max(percent, fraction > 0 ? 5 : 0), 95);
-        return { percent, text: `~${percent}%`, detail };
+        return { percent, whole, text: whole ? `~${percent}%` : `~${percent}% · slice`, detail: whole ? counts : `${counts} (${SLICE_ONLY})` };
     }
 
     function progressText(entry) {
