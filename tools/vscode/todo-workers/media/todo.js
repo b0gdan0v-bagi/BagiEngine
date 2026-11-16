@@ -217,8 +217,12 @@
         );
         if (entry.priority in PRIORITY_RANK) top.appendChild(el("span", `badge prio prio-${entry.priority}`, entry.priority));
         if (entry.stage !== null && entry.stage !== undefined) top.appendChild(el("span", "muted", `stage ${entry.stage}`));
-        const progress = TodoRuns.progressText(entry);
-        if (progress) top.appendChild(el("span", "muted", progress));
+        const progress = TodoRuns.progressOf(entry);
+        if (progress) {
+            const words = el("span", "muted", progress.text);
+            words.title = progress.detail;
+            top.appendChild(words);
+        }
         if (entry.slicing === "through") top.appendChild(el("span", "badge through", entry.costCap ? `through · cap $${entry.costCap}` : "through"));
         const blockers = (entry.blockedBy || []).filter((b) => b.status !== "closed");
         if (blockers.length) top.appendChild(el("span", "badge blocked", `blocked by ${blockers.map((b) => b.id).join(", ")}`));

@@ -81,6 +81,11 @@
         return n("title", {}, [], text);
     }
 
+    // The tooltip line of an entry's progress: the percent and the counts it comes from.
+    function progressTip(shown) {
+        return shown ? `${shown.text} (${shown.detail})` : "";
+    }
+
     function textNode(x, y, cls, text) {
         return n("text", { x, y, class: cls }, [], text);
     }
@@ -182,7 +187,7 @@
                 const ebox = box(cx, y, NODE_W, `g-node g-entry g-held st-${slug(status)}${over ? ` over-${over.kind}` : ""}`, true);
                 const sub = [status, over ? over.word : "", Runs.progressText(entry)].filter(Boolean).join(" · ");
                 ebox.kids.push(textNode(cx + 11, y + 18, "g-id", trunc(entry.id, NODE_W - 18, ID_CHAR_PX)), textNode(cx + 11, y + 34, "g-sub", trunc(sub, NODE_W - 18)));
-                ebox.kids.push(tip([`${entry.id} (${status}, held by ${w.name}, session ${sess.word})`, entry.title, Runs.progressText(entry), entry.statusNote].filter(Boolean).join("\n")));
+                ebox.kids.push(tip([`${entry.id} (${status}, held by ${w.name}, session ${sess.word})`, entry.title, progressTip(Runs.progressOf(entry)), entry.statusNote].filter(Boolean).join("\n")));
                 ebox.act = { type: "entry", entry: entry.id, worker: w.k, name: w.name, held: true };
                 boxes.push(ebox);
                 const at = { id: entry.id, x: cx, y, w: NODE_W, lane };
