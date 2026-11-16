@@ -1,5 +1,7 @@
 #include "ProgramBuilder.h"
 
+#include <BECore/Values/Programs/Components.h>
+
 namespace BECore {
 
     std::expected<uint8_t, ProgramError> ProgramBuilder::AcquireRegister() {
@@ -53,6 +55,15 @@ namespace BECore {
             }
             if (ins.op == Opcode::LoadConst && ins.imm >= _constants.size()) {
                 return refuse(i, ins, Format("reads constant {}, but there are {}", ins.imm, _constants.size()));
+            }
+            if (const Optional<ProgramType> componentType = ComponentOpcodeType(ins.op)) {
+                const uint32_t count = ComponentsOf(*componentType).count;
+                if (IsPack(ins.op) && ins.a + count > _highWater) {
+                    return refuse(i, ins, Format("packs {} operands from r{}, but only {} registers were acquired", count, ins.a, _highWater));
+                }
+                if (!IsPack(ins.op) && ins.imm >= count) {
+                    return refuse(i, ins, Format("takes component {} of a value that has {}", ins.imm, count));
+                }
             }
             if (IsLoadSlot(ins.op)) {
                 if (ins.a >= kMaxContextLevels) {

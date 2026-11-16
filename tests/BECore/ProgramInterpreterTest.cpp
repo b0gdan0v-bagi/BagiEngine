@@ -4,6 +4,7 @@
 #include <BECore/Reflection/TypeDesc.h>
 #include <BECore/Threading/Thread.h>
 #include <BECore/ValueTestTypes.h>
+#include <BECore/Values/Programs/Components.h>
 #include <BECore/Values/Programs/Interpreter.h>
 #include <BECore/Values/Programs/Kernels.h>
 #include <BECore/Values/Programs/Program.h>
@@ -456,6 +457,64 @@ namespace BECore::Tests {
             }
         }
 
+        /// `Extract` of @p value: the component index is the immediate of the instruction
+        template <typename R, typename T>
+        R RunExtract(Opcode op, T value, uint32_t index) {
+            ProgramBuilder builder;
+            const uint8_t source = builder.AcquireRegister().value();
+            builder.EmitLoadConst(source, value);
+            const uint8_t dst = builder.AcquireRegister().value();
+            builder.Emit(op, dst, source, 0, 0, index);
+            const auto program = builder.Finish(kProgramTypeOf<R>, dst);
+            EXPECT_TRUE(program.has_value());
+            return program.has_value() ? Run<R>(*program, Context{}) : R{};
+        }
+
+        /// `Pack` of @p values, loaded into consecutive registers: the instruction names the first
+        template <typename T, typename Value, size_t N>
+        T RunPack(Opcode op, const Array<Value, N>& values) {
+            ProgramBuilder builder;
+            uint8_t first = 0;
+            for (size_t i = 0; i < N; ++i) {
+                const uint8_t reg = builder.AcquireRegister().value();
+                builder.EmitLoadConst(reg, values[i]);
+                first = i == 0 ? reg : first;
+            }
+            const uint8_t dst = builder.AcquireRegister().value();
+            builder.Emit(op, dst, first);
+            const auto program = builder.Finish(kProgramTypeOf<T>, dst);
+            EXPECT_TRUE(program.has_value());
+            return program.has_value() ? Run<T>(*program, Context{}) : T{};
+        }
+
+        /// The component of a value by its member, to compare with what `Extract` reads at an offset
+        template <typename T>
+        auto ReferenceComponent(const T& value, uint32_t index) {
+            if constexpr (std::is_same_v<T, Color>) {
+                return static_cast<int32_t>(index == 0 ? value.r : (index == 1 ? value.g : (index == 2 ? value.b : value.a)));
+            } else if constexpr (std::is_same_v<T, Vec2> || std::is_same_v<T, IVec2>) {
+                return index == 0 ? value.x : value.y;
+            } else if constexpr (std::is_same_v<T, Vec3>) {
+                return index == 0 ? value.x : (index == 1 ? value.y : value.z);
+            } else {
+                return index == 0 ? value.x : (index == 1 ? value.y : (index == 2 ? value.z : value.w));
+            }
+        }
+
+        template <typename T, typename Value, size_t N>
+        T ReferencePack(const Array<Value, N>& v) {
+            if constexpr (std::is_same_v<T, Color>) {
+                const auto channel = [](int32_t value) { return static_cast<unsigned char>(std::clamp(value, 0, 255)); };
+                return Color{channel(v[0]), channel(v[1]), channel(v[2]), channel(v[3])};
+            } else if constexpr (N == 2) {
+                return T{v[0], v[1]};
+            } else if constexpr (N == 3) {
+                return T{v[0], v[1], v[2]};
+            } else {
+                return T{v[0], v[1], v[2], v[3]};
+            }
+        }
+
         int g_rowsChecked = 0;
 
         template <typename Op, typename T>
@@ -487,6 +546,33 @@ namespace BECore::Tests {
                                 << name << "(" << Show(a) << ", " << Show(b) << ", " << Show(c) << ") gave " << Show(got) << ", the reference " << Show(Reference<Op, T>(a, b, c));
                         }
                     }
+                }
+            } else if constexpr (Op::kShape == K::OpShape::Extract) {
+                for (const T a : Edges<T>()) {
+                    for (uint32_t index = 0; index < ComponentTraits<T>::kCount; ++index) {
+                        const Result got = RunExtract<Result>(op, a, index);
+                        EXPECT_TRUE(Same<Result>(got, ReferenceComponent(a, index))) << name << "(" << Show(a) << ", " << index << ") gave " << Show(got);
+                    }
+                }
+            } else if constexpr (Op::kShape == K::OpShape::Pack) {
+                using Value = typename ComponentTraits<T>::Value;
+                constexpr size_t kCount = ComponentTraits<T>::kCount;
+                // Distinct operands, so a swapped pair shows; each position then takes every edge in turn
+                Array<Value, kCount> base{};
+                for (size_t i = 0; i < kCount; ++i) {
+                    base[i] = static_cast<Value>(3 * (i + 1));
+                }
+                Vector<Array<Value, kCount>> cases{base};
+                for (size_t position = 0; position < kCount; ++position) {
+                    for (const Value edge : Edges<Value>()) {
+                        Array<Value, kCount> operands = base;
+                        operands[position] = edge;
+                        cases.push_back(operands);
+                    }
+                }
+                for (const auto& operands : cases) {
+                    const T got = RunPack<T>(op, operands);
+                    EXPECT_TRUE(Same<T>(got, ReferencePack<T>(operands))) << name << " gave " << Show(got);
                 }
             } else if constexpr (Op::kShape == K::OpShape::Blend) {
                 using Weight = typename Op::template Weight<T>;
@@ -691,6 +777,124 @@ namespace BECore::Tests {
         EXPECT_TRUE(Same<Color>(Eval<Color>(Opcode::LerpColor, from, to, -4.0f), (Color{0, 0, 255, 6})));
         EXPECT_TRUE(Same<Color>(Eval<Color>(Opcode::LerpColor, Color{}, Color{}, kInf), Color{})) << "0 * infinity is NaN, which is the channel 0 and not a cast of a NaN";
         EXPECT_TRUE(Same<Color>(Eval<Color>(Opcode::LerpColor, Color{}, Color{}, kNaN), Color{}));
+    }
+
+    TEST(ProgramInterpreterTest, TheComponentTableNamesTheComponentsOfTheSixTypes) {
+        const auto names = [](ProgramType type) {
+            String text;
+            const ComponentSet set = ComponentsOf(type);
+            for (uint32_t i = 0; i < set.count; ++i) {
+                text += String(set.names[i]);
+            }
+            return text;
+        };
+        EXPECT_EQ(names(ProgramType::Vec2), "xy");
+        EXPECT_EQ(names(ProgramType::Vec3), "xyz");
+        EXPECT_EQ(names(ProgramType::Vec4), "xyzw");
+        EXPECT_EQ(names(ProgramType::IVec2), "xy");
+        EXPECT_EQ(names(ProgramType::Quat), "xyzw");
+        EXPECT_EQ(names(ProgramType::Color), "rgba");
+        EXPECT_EQ(ComponentsOf(ProgramType::Vec3).type, ProgramType::Float);
+        EXPECT_EQ(ComponentsOf(ProgramType::Quat).type, ProgramType::Float);
+        EXPECT_EQ(ComponentsOf(ProgramType::IVec2).type, ProgramType::Int32);
+        EXPECT_EQ(ComponentsOf(ProgramType::Color).type, ProgramType::Int32) << "a channel is an int to a program";
+        EXPECT_EQ(ComponentsOf(ProgramType::Color).Offset(3), 3U) << "a channel is a byte in the value";
+        EXPECT_EQ(ComponentsOf(ProgramType::Vec4).Offset(3), 3 * sizeof(float));
+        EXPECT_EQ(ComponentsOf(ProgramType::Vec3).Find("z"), 2U);
+        EXPECT_FALSE(ComponentsOf(ProgramType::Vec3).Find("w").has_value());
+        EXPECT_FALSE(ComponentsOf(ProgramType::Vec3).Find("").has_value()) << "the unused slots of the table are not names";
+        EXPECT_FALSE(ComponentsOf(ProgramType::Color).Find("x").has_value());
+        for (const ProgramType type : EnumUtils<ProgramType>::Values()) {
+            const bool hasComponents =
+                type == ProgramType::Vec2 || type == ProgramType::Vec3 || type == ProgramType::Vec4 || type == ProgramType::IVec2 || type == ProgramType::Quat || type == ProgramType::Color;
+            const String name(EnumUtils<ProgramType>::ToString(type));
+            EXPECT_EQ(ComponentsOf(type).count > 0, hasComponents) << name;
+            EXPECT_EQ(OpcodeOf(ProgramOperation::Extract, type) != Opcode::Invalid, hasComponents) << name;
+            EXPECT_EQ(OpcodeOf(ProgramOperation::Pack, type) != Opcode::Invalid, hasComponents) << name;
+            if (hasComponents) {
+                EXPECT_EQ(ComponentOpcodeType(OpcodeOf(ProgramOperation::Extract, type)), type) << name;
+                EXPECT_EQ(ComponentOpcodeType(OpcodeOf(ProgramOperation::Pack, type)), type) << name;
+                EXPECT_TRUE(IsPack(OpcodeOf(ProgramOperation::Pack, type))) << name;
+                EXPECT_FALSE(IsPack(OpcodeOf(ProgramOperation::Extract, type))) << name;
+            }
+        }
+        EXPECT_FALSE(ComponentOpcodeType(Opcode::AddInt32).has_value());
+    }
+
+    TEST(ProgramInterpreterTest, ExtractReadsTheComponentsOfALoadedField) {
+        ValueWorld world;
+        world.caster.position = Vec2{-1.5f, 8.25f};
+        world.caster.cell = IVec2{-7, 40000};
+        world.caster.velocity = Vec3{0.5f, -2.0f, 9.0f};
+        world.caster.plane = Vec4{1.0f, 2.0f, 3.0f, -4.0f};
+        world.caster.facing = Quat{0.1f, 0.2f, 0.3f, 0.4f};
+        world.caster.tint = Color{1, 2, 3, 250};
+
+        const auto extract = [&](ProgramType type, StringView path, const TypeDesc& desc, uint32_t index) {
+            const ComponentSet set = ComponentsOf(type);
+            ProgramBuilder builder;
+            const uint8_t value = builder.AcquireRegister().value();
+            builder.EmitLoadSlot(value, type, Link(world, path, desc));
+            const uint8_t dst = builder.AcquireRegister().value();
+            builder.Emit(OpcodeOf(ProgramOperation::Extract, type), dst, value, 0, 0, index);
+            return builder.Finish(set.type, dst).value();
+        };
+        EXPECT_EQ(Run<float>(extract(ProgramType::Vec2, "caster.position", DescribeType<Vec2>(), 1), world.context), 8.25f);
+        EXPECT_EQ(Run<int32_t>(extract(ProgramType::IVec2, "caster.cell", DescribeType<IVec2>(), 0), world.context), -7);
+        EXPECT_EQ(Run<int32_t>(extract(ProgramType::IVec2, "caster.cell", DescribeType<IVec2>(), 1), world.context), 40000);
+        EXPECT_EQ(Run<float>(extract(ProgramType::Vec3, "caster.velocity", DescribeType<Vec3>(), 2), world.context), 9.0f);
+        EXPECT_EQ(Run<float>(extract(ProgramType::Vec4, "caster.plane", DescribeType<Vec4>(), 3), world.context), -4.0f);
+        EXPECT_EQ(Run<float>(extract(ProgramType::Quat, "caster.facing", DescribeType<Quat>(), 2), world.context), 0.3f);
+        EXPECT_EQ(Run<int32_t>(extract(ProgramType::Color, "caster.tint", DescribeType<Color>(), 3), world.context), 250);
+        EXPECT_EQ(Run<int32_t>(extract(ProgramType::Color, "caster.tint", DescribeType<Color>(), 0), world.context), 1);
+    }
+
+    TEST(ProgramInterpreterTest, PackThenExtractRoundTripsAndPackDoesNotNormalize) {
+        const Quat packed = RunPack<Quat>(Opcode::PackQuat, Array<float, 4>{3.0f, 4.0f, 0.0f, 12.0f});
+        EXPECT_TRUE(Same<Quat>(packed, (Quat{3.0f, 4.0f, 0.0f, 12.0f}))) << "a quaternion is packed as given, even one that is no rotation";
+        for (uint32_t index = 0; index < 4; ++index) {
+            EXPECT_EQ(RunExtract<float>(Opcode::ExtractQuat, packed, index), ReferenceComponent(packed, index));
+        }
+        const Vec3 vec3 = RunPack<Vec3>(Opcode::PackVec3, Array<float, 3>{-1.5f, 0.0f, kInf});
+        const Vec3 expected{-1.5f, 0.0f, kInf};
+        EXPECT_EQ(std::memcmp(&vec3, &expected, sizeof(expected)), 0) << "the bytes of the C++ value";
+        const IVec2 cell = RunPack<IVec2>(Opcode::PackIVec2, Array<int32_t, 2>{kInt32Min, kInt32Max});
+        EXPECT_EQ(RunExtract<int32_t>(Opcode::ExtractIVec2, cell, 0), kInt32Min);
+        EXPECT_EQ(RunExtract<int32_t>(Opcode::ExtractIVec2, cell, 1), kInt32Max);
+    }
+
+    TEST(ProgramInterpreterTest, PackColorClampsEachChannelToAByte) {
+        const Color clamped = RunPack<Color>(Opcode::PackColor, Array<int32_t, 4>{-1, 0, 255, 256});
+        EXPECT_TRUE(Same<Color>(clamped, (Color{0, 0, 255, 255})));
+        EXPECT_TRUE(Same<Color>(RunPack<Color>(Opcode::PackColor, Array<int32_t, 4>{kInt32Min, kInt32Max, 1, 254}), (Color{0, 255, 1, 254})));
+    }
+
+    TEST(ProgramInterpreterTest, FinishRefusesAComponentThatIsNotThere) {
+        ProgramBuilder extract;
+        const uint8_t value = extract.AcquireRegister().value();
+        extract.EmitLoadConst(value, Vec3{});
+        const uint8_t dst = extract.AcquireRegister().value();
+        extract.Emit(Opcode::ExtractVec3, dst, value, 0, 0, 3);
+        const auto refusedExtract = extract.Finish(ProgramType::Float, dst);
+        ASSERT_FALSE(refusedExtract.has_value());
+        EXPECT_NE(refusedExtract.error().message.find("component 3"), String::npos) << refusedExtract.error().message;
+
+        ProgramBuilder pack;
+        const uint8_t first = pack.AcquireRegister().value();
+        pack.EmitLoadConst(first, 1.0f);
+        const uint8_t second = pack.AcquireRegister().value();
+        pack.EmitLoadConst(second, 2.0f);
+        const uint8_t out = pack.AcquireRegister().value();
+        pack.Emit(Opcode::PackVec3, out, first);
+        const auto refusedPack = pack.Finish(ProgramType::Vec3, out);
+        EXPECT_TRUE(refusedPack.has_value()) << "three registers are acquired: the operands are r0, r1 and r2";
+        ProgramBuilder tooFar;
+        const uint8_t only = tooFar.AcquireRegister().value();
+        tooFar.EmitLoadConst(only, 1.0f);
+        tooFar.Emit(Opcode::PackVec2, only, only);
+        const auto refusedTooFar = tooFar.Finish(ProgramType::Vec2, only);
+        ASSERT_FALSE(refusedTooFar.has_value());
+        EXPECT_NE(refusedTooFar.error().message.find("packs 2 operands"), String::npos) << refusedTooFar.error().message;
     }
 
     TEST(ProgramInterpreterTest, AnOperationATypeLacksHasNoRowAndMixedPairsAreListed) {

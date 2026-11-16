@@ -34,6 +34,7 @@ namespace BECore {
      * Which fields an opcode uses: `dst` is the register it writes; `a`, `b`, `c` the registers it reads (`Select` reads `a` as the condition);
      * `imm` is the index of a constant for `LoadConst` and the offset of the field for `LoadSlot`, whose `a` is the level and, for an enum, `b` the
      * size of the field in bytes (1, 2, 4 or 8).
+     * `Extract` takes component `imm` of the value in `a`; `Pack` reads its components from the consecutive registers `a`, `a + 1`, ... (as many as the type has).
      */
     struct Instruction {
         Opcode op = Opcode::Invalid;

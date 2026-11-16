@@ -4,6 +4,7 @@
 #include <BECore/Assert/AssertMacros.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <BECore/Values/Context.h>
+#include <BECore/Values/Programs/Components.h>
 #include <BECore/Values/Programs/Instruction.h>
 #include <BECore/Values/Programs/Opcode.h>
 #include <cmath>
@@ -23,7 +24,7 @@
 namespace BECore::Kernel {
 
     /// How an operation reads its registers and what it writes
-    CORE_ENUM(OpShape, uint8_t, Slot, Unary, Binary, Compare, Ternary, Blend, Select)
+    CORE_ENUM(OpShape, uint8_t, Slot, Unary, Binary, Compare, Ternary, Blend, Select, Extract, Pack)
 
     template <typename T>
     concept Integer = std::is_integral_v<T> && !std::is_same_v<T, bool>;
@@ -515,6 +516,8 @@ namespace BECore::Kernel {
         }
     };
 
+    inline constexpr int32_t kColorByteMax = 255;
+
     /// One channel of `Lerp(Color)`: the engine's rounding and clamp, with a NaN (from a NaN or infinite `t`) as 0, where the engine's cast of it is undefined
     [[nodiscard]] inline unsigned char LerpColorChannel(unsigned char from, unsigned char to, float t) {
         const float value = std::round(std::lerp(static_cast<float>(from), static_cast<float>(to), t));
@@ -641,6 +644,54 @@ namespace BECore::Kernel {
         }
     };
 
+    /// One component of a value of a type with components; the index is in the instruction's `imm`
+    struct Extract {
+        static constexpr OpShape kShape = OpShape::Extract;
+        template <typename T>
+        static constexpr bool kSupports = HasComponents<T>;
+
+        template <typename T>
+        using Result = typename ComponentTraits<T>::Value;
+
+        /// The components are the members one after the other (`Components.h` pins it); an index beyond them (never in a program that passed `Finish`) reads the last one
+        template <typename T>
+        [[nodiscard]] static Result<T> Apply(const T& value, uint32_t index) {
+            using Storage = typename ComponentTraits<T>::Storage;
+            const uint32_t at = index < ComponentTraits<T>::kCount ? index : ComponentTraits<T>::kCount - 1;
+            Storage component{};
+            std::memcpy(&component, reinterpret_cast<const uint8_t*>(&value) + at * sizeof(Storage), sizeof(Storage));
+            return static_cast<Result<T>>(component);
+        }
+    };
+
+    /// A value of a type with components from its components, which are in the registers `a`, `a + 1`, ... of the instruction; the engine's constructors, so nothing is normalized
+    struct Pack {
+        static constexpr OpShape kShape = OpShape::Pack;
+        template <typename T>
+        static constexpr bool kSupports = HasComponents<T>;
+
+        /// A `Color` channel is an `int` to a program and a byte in the value: it is clamped to 0..255
+        template <typename T>
+        [[nodiscard]] static T Apply(const RegisterImage* operands) {
+            using Value = typename ComponentTraits<T>::Value;
+            constexpr uint32_t kCount = ComponentTraits<T>::kCount;
+            Array<Value, kCount> v{};
+            for (uint32_t i = 0; i < kCount; ++i) {
+                v[i] = Load<Value>(operands[i]);
+            }
+            if constexpr (std::is_same_v<T, Color>) {
+                const auto channel = [](int32_t value) { return static_cast<unsigned char>(value < 0 ? 0 : (value > kColorByteMax ? kColorByteMax : value)); };
+                return Color{channel(v[0]), channel(v[1]), channel(v[2]), channel(v[3])};
+            } else if constexpr (kCount == 2) {
+                return T{v[0], v[1]};
+            } else if constexpr (kCount == 3) {
+                return T{v[0], v[1], v[2]};
+            } else {
+                return T{v[0], v[1], v[2], v[3]};
+            }
+        }
+    };
+
     namespace Details {
 
         template <typename Op, typename T>
@@ -684,6 +735,10 @@ namespace BECore::Kernel {
             Store<ResultOf<Op, T>>(regs[ins.dst], Op::Apply(Load<T>(regs[ins.a]), Load<T>(regs[ins.b])));
         } else if constexpr (Op::kShape == OpShape::Ternary) {
             Store<T>(regs[ins.dst], Op::Apply(Load<T>(regs[ins.a]), Load<T>(regs[ins.b]), Load<T>(regs[ins.c])));
+        } else if constexpr (Op::kShape == OpShape::Extract) {
+            Store<ResultOf<Op, T>>(regs[ins.dst], Op::Apply(Load<T>(regs[ins.a]), ins.imm));
+        } else if constexpr (Op::kShape == OpShape::Pack) {
+            Store<T>(regs[ins.dst], Op::template Apply<T>(&regs[ins.a]));
         } else if constexpr (Op::kShape == OpShape::Blend) {
             Store<T>(regs[ins.dst], Op::Apply(Load<T>(regs[ins.a]), Load<T>(regs[ins.b]), Load<typename Op::template Weight<T>>(regs[ins.c])));
         } else {

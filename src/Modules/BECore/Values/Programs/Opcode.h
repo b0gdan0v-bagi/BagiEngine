@@ -90,7 +90,9 @@
     X(Length, Vec4, Vec4)                                                                                                                                                                              \
     X(Normalize, Vec3, Vec3)                                                                                                                                                                           \
     X(Normalize, Vec4, Vec4)                                                                                                                                                                           \
-    X(Normalize, Quat, Quat)
+    X(Normalize, Quat, Quat)                                                                                                                                                                           \
+    BE_PROGRAM_TYPES_MATH(X, Extract)                                                                                                                                                                  \
+    BE_PROGRAM_TYPES_MATH(X, Pack)
 
 /// The operations whose two operands have different types: `X(operation, lhs name, lhs C++ type, rhs name, rhs C++ type)`; the opcode is `MulVec3Float`.
 /// A vector by its scalar (`float` for `Vec2` .. `Vec4`, `int` for `IVec2`) and `Quat * Vec3` (a rotation), each where the C++ operator or function exists
@@ -153,7 +155,7 @@ namespace BECore {
 
     /// The operations of `BE_PROGRAM_ROWS` by name, apart from the type: what the text of a formula says (`+`, `min`) before a type is known
     CORE_ENUM(ProgramOperation, uint8_t, LoadSlot, Add, Sub, Mul, Div, Mod, Neg, Abs, Eq, Ne, Lt, Le, Gt, Ge, And, Or, Not, Min, Max, Clamp, Select, Lerp, Floor, Ceil, Round, Sqrt, Dot, Length,
-              Normalize)
+              Normalize, Extract, Pack)
 
     /// The opcode of an operation on a type, `Invalid` when the type has no row: the checker asks it instead of keeping a table of its own
     [[nodiscard]] constexpr Opcode OpcodeOf(ProgramOperation operation, ProgramType type) {
