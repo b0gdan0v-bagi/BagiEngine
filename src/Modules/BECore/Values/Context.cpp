@@ -106,7 +106,13 @@ namespace BECore {
         }
         const TypeInfo* type = registry.Find(typeName);
         if (type == nullptr) {
-            return Refuse(LinkErrorCode::unknown_type, Format("the level '{}' names the type '{}', which is not a registered reflected type", name, typeName));
+            Vector<String> typeNames;
+            typeNames.reserve(registry.All().size());
+            for (const TypeInfo* known : registry.All()) {
+                typeNames.push_back(String(known->Name()));
+            }
+            return Refuse(LinkErrorCode::unknown_type,
+                          Format("the level '{}' names the type '{}', which is not a registered reflected type{}", name, typeName, IDeserializer::MakeDidYouMeanHint(typeName, {&typeNames})));
         }
         _levels.push_back(ContextLevel{String(name), type});
         return static_cast<LevelIndex>(_levels.size() - 1);

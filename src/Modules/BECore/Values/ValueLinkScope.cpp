@@ -4,11 +4,15 @@ namespace BECore {
 
     namespace {
 
-        constinit thread_local const ValueLinkScope* t_innermost = nullptr;
+        constinit thread_local ValueLinkScope* t_innermost = nullptr;
 
     }  // namespace
 
-    ValueLinkScope::ValueLinkScope(const ContextDecl& declaration) : _declaration(&declaration), _previous(t_innermost) {
+    ValueLinkScope::ValueLinkScope(const ContextDecl& declaration) : _external(&declaration), _previous(t_innermost) {
+        t_innermost = this;
+    }
+
+    ValueLinkScope::ValueLinkScope(StringView documentName) : _documentName(documentName), _previous(t_innermost) {
         t_innermost = this;
     }
 
@@ -17,7 +21,37 @@ namespace BECore {
     }
 
     const ContextDecl* ValueLinkScope::Current() {
-        return t_innermost != nullptr ? t_innermost->_declaration : nullptr;
+        for (const ValueLinkScope* scope = t_innermost; scope != nullptr; scope = scope->_previous) {
+            if (const ContextDecl* declaration = scope->Declaration()) {
+                return declaration;
+            }
+        }
+        return nullptr;
+    }
+
+    std::expected<void, String> ValueLinkScope::Declare(const ContextDecl& declaration) {
+        if (t_innermost == nullptr) {
+            return std::unexpected(String("<context> is read where no link scope is open: load the document through MakeFromConfig or open a ValueLinkScope"));
+        }
+        if (t_innermost->Declaration() != nullptr) {
+            return std::unexpected(AtDocument("this document already declares a context"));
+        }
+        t_innermost->_owned = declaration;
+        return {};
+    }
+
+    StringView ValueLinkScope::DocumentName() {
+        for (const ValueLinkScope* scope = t_innermost; scope != nullptr; scope = scope->_previous) {
+            if (!scope->_documentName.empty()) {
+                return scope->_documentName;
+            }
+        }
+        return {};
+    }
+
+    String ValueLinkScope::AtDocument(StringView message) {
+        const StringView name = DocumentName();
+        return name.empty() ? String(message) : Format("{} (document '{}')", message, name);
     }
 
 }  // namespace BECore

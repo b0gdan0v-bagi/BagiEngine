@@ -60,7 +60,7 @@ namespace BECore::Ser {
             }
             const ContextDecl* declaration = ValueLinkScope::Current();
             if (declaration == nullptr) {
-                d.ReportError(kValueFromKey, Format("No context is declared where this value is read, so the path '{}' names nothing", path));
+                d.ReportError(kValueFromKey, ValueLinkScope::AtDocument(Format("No context is declared where this value is read, so the path '{}' names nothing", path)));
                 return false;
             }
             Value<T> linked;
@@ -93,8 +93,8 @@ namespace BECore::Ser {
      *
      * An object or opaque `T` keeps its own form as the literal (`<pos x=".." y=".." z=".."/>`) and `<pos from="caster.position"/>` reads.
      * A literal of one attribute saves as that attribute, so a file written before the field became a `Value` saves as it was. The object
-     * form may carry `kind` (`Const` or `Slot`); `Program` is refused until formulas exist. A `from` links against the `ValueLinkScope` of
-     * the caller of the load. A load that fails leaves the field as it was, with the error under the path of the field.
+     * form may carry `kind` (`Const` or `Slot`); `Program` is refused until formulas exist. A `from` links against the declaration of the
+     * `ValueLinkScope` of the load (`ContextDecl` in `ContextDeclAccessor.h` declares it from the document). A load that fails leaves the field as it was, with the error under the path of the field.
      */
     template <typename T>
     struct DataAccessor<Value<T>> {

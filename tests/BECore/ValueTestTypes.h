@@ -149,6 +149,24 @@ namespace BECore::ValueTestData {
         BE_REFLECT_FIELD ValuePoint spot{9, 9};
     };
 
+    /// A document that declares its context (`<context>`) before the values that read it; the defaults are not what the tests load
+    struct ValueDocument {
+        BE_CLASS(ValueDocument)
+
+        BE_REFLECT_FIELD ContextDecl context;
+        BE_REFLECT_FIELD Value<int32_t> damage = 7;
+        BE_REFLECT_FIELD Value<float> power = 1.0f;
+        BE_REFLECT_FIELD Value<Vec3> aim = Vec3{9.0f, 9.0f, 9.0f};
+    };
+
+    /// The mistake a document can make: a value is read before the element that declares what it reads
+    struct ValueLateDocument {
+        BE_CLASS(ValueLateDocument)
+
+        BE_REFLECT_FIELD Value<int32_t> damage = 7;
+        BE_REFLECT_FIELD ContextDecl context;
+    };
+
     /// A context of two levels, `caster` (stats) and `cast` (what is cast), with an object behind each; the declaration is checked by the tests that build it
     struct ValueWorld {
         ContextDecl declaration;

@@ -60,6 +60,12 @@ namespace BECore {
             return _levels.size();
         }
 
+        /// The editor has nothing to edit in a declaration: it is the document's `<context>`, not a property
+        template <typename Visitor>
+        bool VisitProperties(Visitor& /*visitor*/) {
+            return false;
+        }
+
     private:
         FixedVector<ContextLevel, kMaxContextLevels> _levels;
     };
@@ -115,3 +121,6 @@ namespace BECore {
     [[nodiscard]] std::expected<SlotRef, LinkError> LinkSlot(const ContextDecl& declaration, StringView path, const TypeDesc& expected, const TypeRegistry& registry = TypeRegistry::GetInstance());
 
 }  // namespace BECore
+
+// The accessor is part of the type: a generated .gen.hpp that names a ContextDecl field sees it by including this header
+#include <BECore/Values/ContextDeclAccessor.h>

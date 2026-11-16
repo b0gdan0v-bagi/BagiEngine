@@ -6,6 +6,7 @@
 #include <BECore/Reflection/DataAccessor.h>
 #include <BECore/Reflection/TypeDesc.h>
 #include <BECore/TypeRegistryTest.h>
+#include <BECore/Values/Context.h>
 #include <BECore/Values/Value.h>
 #include <Common/Printers.h>
 #include <gtest/gtest.h>
@@ -115,6 +116,7 @@ namespace BECore::Tests {
     static_assert(DescribeType<Vec2>().objectMeta == nullptr);
     static_assert(DescribeType<AccessorOnly>().kind == TypeKind::Opaque);
     static_assert(DescribeType<AccessorOnly>().objectMeta == nullptr);
+    static_assert(DescribeType<ContextDecl>().kind == TypeKind::Opaque);
 
     // A signature type
     static_assert(DescribeSignatureType<void>().kind == TypeKind::Void);
@@ -134,7 +136,7 @@ namespace BECore::Tests {
         static_assert(AgreeWithAccessor<bool, int8_t, uint64_t, float, double, String, FixedString<8>, FixedString<8, false>, PoolString, RegMode, RegInner, Vec2, AccessorOnly, Vector<int32_t>,
                                         SmallVector<int32_t, 2>, FixedVector<int32_t, 2>, Array<int32_t, 2>, HashMap<String, int32_t>, HashMap<int32_t, String>, FixedHashMap<String, int32_t, 4>,
                                         Map<String, int32_t>, Optional<int32_t>, Pair<int32_t, String>, Variant<int32_t, float>, std::monostate, IntrusivePtrNonAtomic<RegNode>,
-                                        IntrusivePtrAtomic<RegNode>, Vector<IntrusivePtrNonAtomic<RegNode>>, Value<float>, Value<Vec3>>());
+                                        IntrusivePtrAtomic<RegNode>, Vector<IntrusivePtrNonAtomic<RegNode>>, Value<float>, Value<Vec3>, ContextDecl>());
 
         // The aliases ReflectionAliasesTest lists as having no accessor
         static_assert(AgreeWithAccessor<FlatMap<String, int32_t>, FlatSet<int32_t>, Span<int32_t>, UniquePtr<int32_t>, HashSet<int32_t>, Set<int32_t>, Tuple<int32_t, float>, int32_t*, void*>());
