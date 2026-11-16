@@ -6,11 +6,13 @@
 #include <BECore/Renderer/ITexture.h>
 #include <BECore/Resource/ResourceManager.h>
 #include <BECore/Scene/SceneNode.h>
+#include <Events/ApplicationEvents.h>
 #include <Generated/ArtGenWidget.gen.hpp>
 #include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/ArtGen/ArtGenLaunch.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
 #include <Widgets/EditorLayout/EditorControls.h>
+#include <Widgets/EditorLayout/EditorSettings.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/ImGuiFonts.h>
 #include <Widgets/ImGuiTheme.h>
@@ -129,7 +131,7 @@ namespace BECore {
             _bridgeError = Format("no {} under the content roots (a packaged build?)", kArtGenBridgeScript);
             return;
         }
-        if (LaunchArtGenBridge(*script, port, _bridgeError)) {
+        if (LaunchArtGenBridge(*script, port, EditorUserDirectory() / "artgen-bridge.log", _bridgeError)) {
             _bridgeStartedAt = ImGui::GetTime();
         }
     }
@@ -138,9 +140,20 @@ namespace BECore {
         const auto& palette = GetImGuiPalette();
         const ControlServerStatus control = CoreManager::GetControlService().GetServerStatus();
         if (!control.listening) {
-            ImGui::TextColored(palette.warning, ICON_LC_PLUG " The control API is off: start the editor with --control");
-            ImGui::TextWrapped("The generation service is a client of it (tools/artgen/artgen_bridge.py).");
+            ImGui::TextColored(palette.warning, ICON_LC_PLUG " The generation service is not connected");
+            if (_bridgeWaitsForControl) {
+                ImGui::TextColored(palette.error, "The control API did not start (the Console says why).");
+            }
+            // The service talks to the editor over the control API, so the button turns it on first and starts the service next frame
+            if (IconTextButton(ICON_LC_POWER, "Start the service", "Turn on the editor's control API and run the generation service for it; it stops when the editor closes")) {
+                _bridgeWaitsForControl = true;
+                ApplicationEvents::StartControlServerRequestEvent::Emit();
+            }
             return;
+        }
+        if (_bridgeWaitsForControl) {
+            _bridgeWaitsForControl = false;
+            StartBridge(control.port);
         }
         if (!session.IsServiceConnected()) {
             const bool starting = _bridgeStartedAt >= 0.0 && ImGui::GetTime() - _bridgeStartedAt < kBridgeStartSeconds;
@@ -153,7 +166,8 @@ namespace BECore {
                 StartBridge(control.port);
             }
             if (_bridgeStartedAt >= 0.0 && _bridgeError.empty()) {
-                ImGui::TextWrapped("It did not connect. Run it by hand to see why: python engine/tools/artgen/artgen_bridge.py --port %u", static_cast<unsigned>(control.port));
+                ImGui::TextWrapped("It did not connect: see artgen-bridge.log in the editor's user folder, or run it by hand: python engine/tools/artgen/artgen_bridge.py --port %u",
+                                   static_cast<unsigned>(control.port));
             } else {
                 ImGui::TextWrapped("Or by hand: python engine/tools/artgen/artgen_bridge.py --port %u", static_cast<unsigned>(control.port));
             }

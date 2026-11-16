@@ -64,6 +64,9 @@ namespace BECore {
 #if BE_WITH_EDITOR
         Subscribe<SDLEvents::SDLEventWrapper, &Application::OnSDLEvent>(this);
 #endif
+#if BE_WITH_REMOTE_CONTROL
+        Subscribe<ApplicationEvents::StartControlServerRequestEvent, &Application::OnStartControlServerRequest>(this);
+#endif
 
         CoreManager::GetInstance().OnApplicationPreInit({});
 
@@ -251,6 +254,17 @@ namespace BECore {
             return false;
         }
         return true;
+    }
+
+    void Application::OnStartControlServerRequest() {
+        if (_controlServer || _headless) {
+            return;
+        }
+        // The default port first, so a client that knows it (an agent, the MCP server) finds the editor; another process may hold it
+        if (StartControlServer(kDefaultControlPort) || StartControlServer(0)) {
+            LOG_INFO("Control API: started on request on port {}"_format(_controlServer->GetPort()));
+            PublishControlStatus();
+        }
     }
 #endif
 

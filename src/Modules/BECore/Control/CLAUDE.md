@@ -82,7 +82,7 @@ What the manual clock means for a client:
 
 ## Starting the API
 
-The API is off by default: a game has to be asked for it. `Application::Initialize()` loads the reflected `ApplicationConfig` (`LoadApplicationConfig()`) and calls `ResolveControlSettings(args, load)` right after the core services are up (before the window exists) and, when the API is enabled, starts the `RemoteControl` server after `GameManager::Initialize()`, so the game methods are registered before the first client connects.
+The API is off by default: a game has to be asked for it. `Application::Initialize()` loads the reflected `ApplicationConfig` (`LoadApplicationConfig()`) and calls `ResolveControlSettings(args, load)` right after the core services are up (before the window exists) and, when the API is enabled, starts the `RemoteControl` server after `GameManager::Initialize()`, so the game methods are registered before the first client connects. An editor panel can also ask for it later with `ApplicationEvents::StartControlServerRequestEvent` (the Generate panel's Start the service): the server starts on `kDefaultControlPort`, or on a free port when that is taken, unless it runs already or the run is headless; the reason of a failure is logged.
 
 | Command line | `ApplicationConfig.xml` root attribute | Meaning |
 |--------------|----------------------------------------|---------|

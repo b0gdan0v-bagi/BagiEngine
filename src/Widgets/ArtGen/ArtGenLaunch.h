@@ -15,13 +15,17 @@ namespace BECore {
      */
     [[nodiscard]] Optional<std::filesystem::path> FindArtGenBridge(const Vector<std::filesystem::path>& configLayers);
 
-    /// The Python to run the bridge with: `$BAGI_PYTHON` when set, else `python` on Windows and `python3` elsewhere (looked up on PATH)
+    /// The Python to run the bridge with: `$BAGI_PYTHON` when set, else `pythonw` on Windows (no console window over the editor) and `python3`
+    /// elsewhere, looked up on PATH
     [[nodiscard]] String ArtGenPython();
 
-    /// The arguments that start the bridge for the editor on @p port; it exits when that editor goes away (`--exit-with-editor`)
-    [[nodiscard]] Vector<String> BuildBridgeLaunch(StringView python, StringView script, uint16_t port);
+    /// The arguments that start the bridge for the editor on @p port, writing its lines to @p log; it exits when that editor goes away
+    [[nodiscard]] Vector<String> BuildBridgeLaunch(StringView python, StringView script, uint16_t port, StringView log);
 
-    /// Starts the bridge as a process of its own, not waited for; false with @p error (from SDL) when it could not be started
-    bool LaunchArtGenBridge(const std::filesystem::path& script, uint16_t port, String& error);
+    /**
+     * @brief Starts the bridge in the background (no standard streams: an editor started from the desktop has none to hand over), not waited
+     * for; its lines go to @p log. False with @p error (from SDL) when the process could not be created.
+     */
+    bool LaunchArtGenBridge(const std::filesystem::path& script, uint16_t port, const std::filesystem::path& log, String& error);
 
 }  // namespace BECore

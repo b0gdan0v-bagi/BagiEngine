@@ -249,7 +249,13 @@ def main(argv=None):
     parser.add_argument("--generator", default="comfyui", choices=["comfyui", "fake"])
     parser.add_argument("--url", help="the ComfyUI address (default: COMFYUI_URL, local.json, the local one)")
     parser.add_argument("--exit-with-editor", action="store_true", help="exit when the editor goes away (the panel started this bridge)")
+    parser.add_argument("--log", type=Path, help="append the bridge's lines to this file (the panel starts it without a console)")
     args = parser.parse_args(argv)
+    if args.log:
+        args.log.parent.mkdir(parents=True, exist_ok=True)
+        # pythonw has no stdout at all: everything the bridge and its errors print goes to the file
+        sys.stdout = sys.stderr = open(args.log, "a", encoding="utf-8", buffering=1)
+        print(f"--- bridge {time.strftime('%Y-%m-%d %H:%M:%S')} for the editor on port {args.port}")
     setup = artgen_setup.LocalSetup(comfyui_check.resolve_url(args.url)) if args.generator == "comfyui" else None
     try:
         serve(args.host, args.port, make_generator(args.generator, args.url), setup=setup, exit_with_editor=args.exit_with_editor)

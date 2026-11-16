@@ -70,6 +70,7 @@ namespace BECore {
 
         // The bridge this panel started: when (ImGui time), so the line says "starting" until it polls; why it could not start
         double _bridgeStartedAt = -1.0;
+        bool _bridgeWaitsForControl = false;  // Start the service turned the control API on: the bridge starts once it listens
         String _bridgeError;
         String _setupError;
     };

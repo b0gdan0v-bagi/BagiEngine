@@ -75,7 +75,7 @@ One prompt per image, seeds `seed, seed + 1, ...` (random first seed when none i
 
 ```bash
 python tools/artgen/artgen_bridge.py --port 8765        # the editor started with --control (--control-port); waits and reconnects
-python tools/artgen/artgen_bridge.py --port 8765 --exit-with-editor   # what the panel's Start the service runs: ends with that editor
+python tools/artgen/artgen_bridge.py --port 8765 --exit-with-editor --log FILE   # what the panel's Start the service runs (pythonw on Windows): ends with that editor, prints into FILE
 ```
 
 The contract is the editor's (`src/Widgets/ArtGen/CLAUDE.md`, "The contract"): the bridge calls `artgen_poll` about twice a second with the generator's status (refreshed every few seconds) and the presets of the game root the editor answered, runs a handed-over request on a worker thread with `artgen_service.generate` into `<game root>/artgen/out`, and forwards its progress, each image and the end. A run that fails (a missing preset, the generator not ready, a ComfyUI error, a bug of ours) ends with `artgen_done` `failed` and its reason; the bridge stays up. A cancel seen in a poll, a lost editor and Ctrl+C cancel the run on the generator. While the editor has no Generate panel (`unknown_method`: it started in Game mode) the bridge waits. A game ignores `artgen/out/` in its `.gitignore`.
