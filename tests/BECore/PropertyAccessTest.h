@@ -1,5 +1,8 @@
 #pragma once
 
+#include <BECore/Math/Color.h>
+#include <BECore/Math/Vec2.h>
+#include <BECore/Math/Vec3.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/RefCounted/RefCounted.h>
@@ -143,6 +146,15 @@ namespace BECore::PropertyAccessData {
         ~PaShifted() override = default;
 
         BE_REFLECT_FIELD int32_t shiftedValue = 3;
+    };
+
+    /// Fields of the self-serializing engine value types: opaque to the reflection, told apart by their identity
+    struct PaVectors {
+        BE_CLASS(PaVectors)
+
+        BE_REFLECT_FIELD Vec2 planar;
+        BE_REFLECT_FIELD Vec3 spatial;
+        BE_REFLECT_FIELD Color tint;
     };
 
     /// A reflected type with no property visitor
