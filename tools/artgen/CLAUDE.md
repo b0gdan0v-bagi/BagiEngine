@@ -2,7 +2,7 @@
 
 ## Overview
 
-The image generator of the games' art is **ComfyUI on the owner's Windows PC** (RTX 3070, 8 GB VRAM). This folder installs it, starts it and checks it; the service that turns a game's style preset into images (entry `art-gen-service`) will live here too and talks to ComfyUI over its HTTP API. Nothing here is built or linked into the engine: ComfyUI (GPL-3.0) is a separate program, and its models stay on that PC, never in git. Python 3.10+, standard library only.
+The image generator of the games' art is **ComfyUI on the owner's Windows PC** (RTX 3070, 8 GB VRAM). This folder installs it, starts it and checks it, and holds the service that turns a game's style preset and a subject into images. The editor and the agent reach the generator only through that service; it talks to ComfyUI over its HTTP API and its WebSocket. Nothing here is built or linked into the engine: ComfyUI (GPL-3.0) is a separate program, and its models stay on that PC, never in git. Python 3.10+, standard library only.
 
 | File | Purpose |
 |------|---------|
@@ -10,8 +10,13 @@ The image generator of the games' art is **ComfyUI on the owner's Windows PC** (
 | `comfyui/install.ps1` | Installs the release into `-Root` (default `D:\ComfyUI`) and downloads the models, each checked against the manifest. Idempotent: a second run only verifies |
 | `comfyui/start-local.bat` | Starts ComfyUI on `127.0.0.1:8188` without a browser; the installer copies it into the root. Extra arguments go to ComfyUI (`--lowvram`) |
 | `comfyui_check.py` | The health check: reachable, version, devices, every manifest model present; `--generate` makes one image; `--json` for the service and the editor panel |
-| `workflows/sdxl_basic.json` | The SDXL test graph in ComfyUI's API format (what `POST /prompt` takes; the UI also loads it by drag and drop) |
-| `tests/` | pytest against a fake ComfyUI, and the manifest and workflow rules |
+| `artgen.py` | The service on the command line: `status`, `presets`, `generate` (`--json` prints one progress event per line, then `done`) |
+| `artgen_service.py` | `generate(request, generator, on_progress, cancel)`: N images of one preset and subject, each written with its provenance file as soon as it is there |
+| `artgen_preset.py` | Presets and workflows: load and check them, `build_graph` (the graph of one image), `models_of` |
+| `artgen_generators.py` | The generator interface (`status`, `info`, `run`), `ComfyUIGenerator`, `FakeGenerator` (tests, `--generator fake`), `make_generator` |
+| `artgen_ws.py` | A minimal WebSocket client for ComfyUI's progress stream; the frame codec is `tools/control/bagi_control_client.py`'s |
+| `workflows/` | The engine's workflows: `<name>.json` is a graph in ComfyUI's API format (what `POST /prompt` takes; the UI loads it by drag and drop), `<name>.inputs.json` names its inputs. `sdxl_basic` is the SDXL one |
+| `tests/` | pytest: a fake ComfyUI with a real WebSocket stream, the fake generator, the presets, the manifest and workflow rules |
 
 ## Setup on the Windows PC
 
@@ -34,6 +39,29 @@ Only models whose licence lets the generated images ship in a commercial game, e
 ## The health check
 
 `comfyui_check.py` reads the address from `--url`, else `COMFYUI_URL`, else `comfyuiUrl` of the git-ignored `tools/artgen/local.json`, else `http://127.0.0.1:8188`. Exit 0 ready, 1 reachable but not ready (a model missing, the generation failed), 2 unreachable. Another ComfyUI version or no CUDA device is a warning. `--generate` puts a fresh seed into every sampler: ComfyUI caches node results, and a repeated graph would return at once without touching the GPU.
+
+## Presets
+
+A game's style lives in its own repository: `<game root>/artgen/presets/<name>.json`.
+
+```json
+{"preset": 1, "title": "Carved wooden pieces", "workflow": "sdxl_basic",
+ "prompt": "a carved wooden chess {subject} piece, studio lighting, plain background",
+ "negative": "blurry, text", "size": [1024, 1024], "params": {"steps": 25, "cfg": 7.0}}
+```
+
+- `preset` is the format version; `workflow` and `prompt` are required. `{subject}` in the prompt is replaced by the request's subject (without it the subject goes first). `size` sets the workflow's `width` / `height`.
+- `params` sets any other named input of the workflow (`steps`, `cfg`, `sampler`, `scheduler`, `checkpoint`, `vae` for `sdxl_basic`). A name the workflow does not have, or one the service sets (`prompt`, `negative`, `seed`, `width`, `height`), is refused with the file named, so a typo never silently changes nothing.
+- The workflow is looked up in `<game root>/artgen/workflows/` first, then here: a game brings its own graph (a LoRA loader, img2img) with its own `.inputs.json`, and the preset stays node-id free. The `.inputs.json` must name `prompt`, `seed` and `output` (the node whose images are the result; its `filename_prefix` is set by the service).
+- Models and LoRAs named by a preset must be on the generator's machine; the manifest holds the ones the engine knows, and a game's extra model is the game's to list with its licence.
+
+## Generators
+
+`status()` answers `ready`, `not_running` (installed or remote, not answering: offer **Start**) or `not_installed` (no install, or a manifest model missing: offer **Set up**, entry `artgen-setup-pipelines`), with a reason; the service refuses a request unless the state is `ready`. `ComfyUIGenerator` finds a local install by `comfyuiRoot` of `local.json` (default `D:\ComfyUI` on Windows); for another host it cannot know and says `not_running`. A run queues the graph with a `client_id`, follows its progress on `/ws` (falling back to polling `/history` when the stream fails), and fetches the `output` images by `/view` (previews of type `temp` are skipped). A cancel, a timeout or Ctrl+C deletes the prompt from the queue and interrupts it by its id, so ComfyUI does not keep the GPU busy for nobody and another client's run is left alone.
+
+## The service
+
+One prompt per image, seeds `seed, seed + 1, ...` (random first seed when none is given), so every image can be made again alone from its provenance. `<stem>_<seed>.png` and `<stem>_<seed>.artgen.json` go into the output folder (default `<game root>/artgen/out`; the editor's Accept moves the chosen one into the game's assets). The provenance holds the preset and its file hash, subject, final prompt, negative, seed, size, params, the model files the graph loads, the workflow and its hash, the generator (name, version, address), its own file name and the date. What is done stays on disk when a later image fails or is cancelled.
 
 ## Running the tests
 
