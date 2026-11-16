@@ -33,3 +33,15 @@ Client data, so a violation is `invalid_params` whose message names the field an
 | `safeArea` insets | finite, not negative; `left + right < width` and `top + bottom < height`, so the safe area is never empty |
 
 `IMainWindow` has two virtuals for it: `IsHeadless()` (false by default) and `Simulate(const WindowSimulation&)` (an error by default: "this window cannot be simulated"). The value passed to `Simulate` has passed `ValidateWindowSimulation`.
+
+## `set_window` and `status.window`
+
+| Method | Params | Answer |
+|--------|--------|--------|
+| `set_window` | `{width, height, density?, userScale?, safeArea?: {top, right, bottom, left}}` | the `window` object of `status`, after one frame |
+| `status` | none | also `window: {width, height, density, displayScale, safeArea: {top, right, bottom, left}, outputWidth, outputHeight, userScale, headless}` |
+
+- `window` reads `IMainWindow`, the renderer (`GetOutputWidth/Height`, 0 without one) and `UIEnvironment`, so it tells a real window's values too (`headless: false`). `width`, `height` and the insets are window units; the insets are made from `GetSafeArea()` against the size. Without a window the shape stays and the numbers are 0 (the density and the scales 1).
+- Errors: `not_headless` for a real window or no window (the message says why; checked first, nothing changes); `invalid_params` for a wrong type, a fractional or missing `width` / `height`, a `safeArea` that is not an object or lacks one of its four members, a value outside the limits above, and a `Simulate()` that refuses. The message names the field.
+- Order inside the handler: read, merge with the current values, validate everything, then `IMainWindow::Simulate`, then `UIEnvironment::SetUserScale`, so a refusal never leaves the user scale changed. The answer is built after the frame, so it is the state `ui_tree` and `screenshot` see next.
+- `ControlWindow.cpp` holds no SDL: a test drives it with a fake headless `IMainWindow` (`tests/BECore/ControlWindowTest.cpp`).
