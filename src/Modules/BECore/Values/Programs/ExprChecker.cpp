@@ -46,20 +46,6 @@ namespace BECore {
             return std::nullopt;
         }
 
-        /// The descriptor of a program type, null for `Enum` (an enum is told by its field)
-        const TypeDesc* DescriptorOf(ProgramType type) {
-            switch (type) {
-#define BE_PROGRAM_DESCRIPTOR(Unused, Name, Cpp)                                                                                                                                                       \
-    case ProgramType::Name:                                                                                                                                                                            \
-        return &DescribeType<Cpp>();
-                BE_CHECKER_DESCRIBABLE_TYPES(BE_PROGRAM_DESCRIPTOR, Unused)
-#undef BE_PROGRAM_DESCRIPTOR
-                default:
-                    break;
-            }
-            return nullptr;
-        }
-
         String JoinTypes(const Vector<ProgramType>& types) {
             String text;
             for (size_t i = 0; i < types.size(); ++i) {
@@ -277,7 +263,7 @@ namespace BECore {
                     return std::unexpected(root.error());
                 }
                 const TypedNode& node = _out.nodes[*root];
-                if (!(node.type == want)) {
+                if (node.type != want) {
                     return Refuse(_ast[_ast.root].column, Format("the formula is {}, but a value of {} is asked for{}", Typed(node.type), DescribeExprType(want), ConvertHint(node.type, want)));
                 }
                 _out.root = *root;
@@ -485,32 +471,24 @@ namespace BECore {
                 if (text.find('.') == StringView::npos) {
                     return CheckBareName(node, hint);
                 }
-                for (const ProgramType type : AllTypes()) {
-                    const TypeDesc* descriptor = DescriptorOf(type);
-                    if (descriptor == nullptr) {
-                        continue;
-                    }
-                    const auto slot = LinkSlot(_declaration, text, *descriptor);
-                    if (slot.has_value()) {
-                        return EmitSlot(node.text, type, *slot, node.column);
-                    }
-                    if (slot.error().code != LinkErrorCode::type_mismatch) {
-                        if (const Optional<TypedResult> component = CheckComponentPath(node)) {
-                            return *component;
-                        }
-                        return Refuse(node.column, slot.error().message);
-                    }
-                }
-                // An enum has no descriptor to ask for: it is the field's own
                 const TypeDesc* field = FieldDescriptor(text);
-                if (field != nullptr && field->kind == TypeKind::Enum) {
-                    const auto slot = LinkSlot(_declaration, text, *field);
-                    if (!slot.has_value()) {
-                        return Refuse(node.column, slot.error().message);
+                if (field == nullptr) {
+                    if (const Optional<TypedResult> component = CheckComponentPath(node)) {
+                        return *component;
                     }
-                    return EmitSlot(node.text, ExprType::OfEnum(*field), *slot, node.column);
+                    // The refusal of a path that names no fixed field does not depend on the type asked for
+                    const auto refused = LinkSlot(_declaration, text, DescribeType<int32_t>());
+                    return Refuse(node.column, refused.has_value() ? FieldOfAnotherType(text, nullptr) : refused.error().message);
                 }
-                return Refuse(node.column, FieldOfAnotherType(text, field));
+                const Optional<ExprType> type = ProgramTypeFor(*field);
+                if (!type.has_value()) {
+                    return Refuse(node.column, FieldOfAnotherType(text, field));
+                }
+                const auto slot = LinkSlot(_declaration, text, *field);
+                if (!slot.has_value()) {
+                    return Refuse(node.column, slot.error().message);
+                }
+                return EmitSlot(node.text, *type, *slot, node.column);
             }
 
             TypedNodeId EmitSlot(StringView path, const ExprType& type, SlotRef slot, uint32_t column) {
@@ -719,7 +697,7 @@ namespace BECore {
             /// The error at the first operand whose type is not the first one's
             std::expected<void, ProgramError> RequireSameType(const Vector<ExprNodeId>& operands, const Vector<TypedNodeId>& typed, const String& subject) const {
                 for (size_t i = 1; i < operands.size(); ++i) {
-                    if (!(TypeOf(typed[i]) == TypeOf(typed[0]))) {
+                    if (TypeOf(typed[i]) != TypeOf(typed[0])) {
                         return Refuse(_ast[operands[i]].column, Format("{} needs operands of one type, but they are {} and {}: there is no implicit conversion between types{}", subject,
                                                                        DescribeExprType(TypeOf(typed[0])), DescribeExprType(TypeOf(typed[i])), ConvertHint(TypeOf(typed[i]), TypeOf(typed[0]))));
                     }
@@ -949,7 +927,7 @@ namespace BECore {
                     if (!operand.has_value()) {
                         return operand;
                     }
-                    if (!(TypeOf(*operand) == componentType)) {
+                    if (TypeOf(*operand) != componentType) {
                         const String convert = IsNumberType(TypeOf(*operand).program) ? Format("; convert it with {}(x)", ProgramTypeName(componentType.program)) : String();
                         return Refuse(_ast[arguments[i]].column,
                                       Format("{} takes {} arguments, but argument {} is {}{}", subject, DescribeExprType(componentType), i + 1, Typed(TypeOf(*operand)), convert));
@@ -994,7 +972,7 @@ namespace BECore {
                     }
                     weight = *checked;
                 }
-                if (!(TypeOf(*weight) == weightType)) {
+                if (TypeOf(*weight) != weightType) {
                     const uint32_t column = _ast[arguments[2]].column;
                     if (IsFloatType(type.program)) {
                         return Refuse(column, Format("{} needs operands of one type, but they are {} and {}: there is no implicit conversion between types{}", subject, DescribeExprType(type),

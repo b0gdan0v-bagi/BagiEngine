@@ -257,7 +257,7 @@ namespace BECore::Tests {
             return value != value;
         }
 
-        /// `Lerp(Color)` of the engine for a finite @p t; the engine's cast of a NaN channel is undefined, so a NaN or infinite @p t is spelled out here with the channel 0 for a NaN
+        /// `Lerp(Color)` of the engine for a finite @p t; a NaN or infinite @p t is spelled out here independently: the channel 0 for a NaN, the clamp for the rest
         Color ReferenceColorLerp(const Color& from, const Color& to, float t) {
             if (std::isfinite(t)) {
                 return Lerp(from, to, t);

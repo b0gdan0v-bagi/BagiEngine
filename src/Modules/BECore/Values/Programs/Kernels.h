@@ -517,17 +517,6 @@ namespace BECore::Kernel {
         }
     };
 
-    inline constexpr int32_t kColorByteMax = 255;
-
-    /// One channel of `Lerp(Color)`: the engine's rounding and clamp, with a NaN (from a NaN or infinite `t`) as 0, where the engine's cast of it is undefined
-    [[nodiscard]] inline unsigned char LerpColorChannel(unsigned char from, unsigned char to, float t) {
-        const float value = std::round(std::lerp(static_cast<float>(from), static_cast<float>(to), t));
-        if (value != value) {
-            return 0;
-        }
-        return static_cast<unsigned char>(std::clamp(value, 0.0f, kColorChannelMax));
-    }
-
     struct Lerp {
         static constexpr OpShape kShape = OpShape::Blend;
         /// The floats, the types the engine has a `Lerp` for, and `Quat` (`Slerp`)
@@ -545,8 +534,6 @@ namespace BECore::Kernel {
                 return std::lerp(from, to, t);
             } else if constexpr (std::is_same_v<T, Quat>) {
                 return BECore::Slerp(from, to, t);
-            } else if constexpr (std::is_same_v<T, Color>) {
-                return Color{LerpColorChannel(from.r, to.r, t), LerpColorChannel(from.g, to.g, t), LerpColorChannel(from.b, to.b, t), LerpColorChannel(from.a, to.a, t)};
             } else {
                 return BECore::Lerp(from, to, t);
             }
@@ -689,7 +676,8 @@ namespace BECore::Kernel {
                 v[i] = Load<Value>(operands[i]);
             }
             if constexpr (std::is_same_v<T, Color>) {
-                const auto channel = [](int32_t value) { return static_cast<unsigned char>(value < 0 ? 0 : (value > kColorByteMax ? kColorByteMax : value)); };
+                constexpr auto kChannelMax = static_cast<int32_t>(kColorChannelMax);
+                const auto channel = [](int32_t value) { return static_cast<unsigned char>(value < 0 ? 0 : (value > kChannelMax ? kChannelMax : value)); };
                 return Color{channel(v[0]), channel(v[1]), channel(v[2]), channel(v[3])};
             } else if constexpr (kCount == 2) {
                 return T{v[0], v[1]};

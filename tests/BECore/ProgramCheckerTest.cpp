@@ -1158,7 +1158,7 @@ namespace BECore::Tests {
             return outcome;
         }
 
-        /// A thread has the smallest stack the engine runs on (512 KB of a macOS secondary thread); without threads the caller's stack has to do
+        /// A thread has the smallest secondary-thread stack the engine runs on; without threads the caller's stack has to do
         PipelineOutcome RunPipelineOnASmallStack(StringView text, const ContextDecl& declaration) {
             PipelineOutcome outcome;
             const auto run = [&] { outcome = RunPipeline(text, declaration); };

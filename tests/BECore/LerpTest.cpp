@@ -1,5 +1,6 @@
 #include <BECore/Animation/Lerp.h>
 #include <gtest/gtest.h>
+#include <limits>
 
 namespace BECore::Tests {
 
@@ -74,6 +75,32 @@ namespace BECore::Tests {
         EXPECT_EQ(under.g, 175);
         EXPECT_EQ(under.b, 75);
         EXPECT_EQ(Lerp(Color{0, 0, 0, 0}, Color{100, 100, 100, 100}, -1.0f).r, 0);
+    }
+
+    TEST(LerpTest, ColorWhoseChannelComesOutNaNIsZeroNotACastOfNaN) {
+        // 0 * infinity is NaN whichever way `std::lerp` is written, so these channels reach the guard
+        for (const float t : {std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity()}) {
+            const Color result = Lerp(Color{0, 0, 0, 0}, Color{0, 0, 0, 0}, t);
+            EXPECT_EQ(result.r, 0);
+            EXPECT_EQ(result.g, 0);
+            EXPECT_EQ(result.b, 0);
+            EXPECT_EQ(result.a, 0);
+        }
+    }
+
+    TEST(LerpTest, ColorWithAnInfiniteWeightSaturatesTheChannelsThatDiffer) {
+        const Color from{10, 200, 20, 250};
+        const Color to{250, 5, 255, 30};
+        const Color high = Lerp(from, to, std::numeric_limits<float>::infinity());
+        EXPECT_EQ(high.r, 255);
+        EXPECT_EQ(high.g, 0);
+        EXPECT_EQ(high.b, 255);
+        EXPECT_EQ(high.a, 0);
+        const Color low = Lerp(from, to, -std::numeric_limits<float>::infinity());
+        EXPECT_EQ(low.r, 0);
+        EXPECT_EQ(low.g, 255);
+        EXPECT_EQ(low.b, 0);
+        EXPECT_EQ(low.a, 255);
     }
 
     TEST(LerpTest, Vec2Operators) {
