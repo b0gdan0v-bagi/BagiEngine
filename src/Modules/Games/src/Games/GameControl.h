@@ -1,10 +1,14 @@
 #pragma once
 
+#include <BECore/Control/ControlTypes.h>
+#include <BECore/Control/JsonFwd.h>
 #include <BECore/Types/Types.h>
+#include <expected>
 
 namespace BECore {
 
     class ControlService;
+    class IControllableGame;
 
     /// The control root of the active game (`ControlService::Roots()`); no active game is an empty reference
     inline constexpr StringView kGameRootName = "game";
@@ -25,5 +29,17 @@ namespace BECore {
      * Registering twice replaces the handlers.
      */
     void RegisterGameControl(ControlService& service);
+
+    /**
+     * @brief The three calls that change a game, with the report to SessionRecorder that makes them part of a recording.
+     *
+     * They call the adapter and, only when it accepts, report (a refused call is never recorded), before the caller answers. The
+     * control methods reset, perform_action and set_state go through them, and so does a person's input that reaches the same
+     * adapter calls. ControlledReset reports IControllableGame::GetReplayStart(), not @p options, so a seed the game drew is in the file.
+     * A game never reports a call twice: input that came through a control method is already reported.
+     */
+    std::expected<void, ControlError> ControlledReset(IControllableGame& game, const Json& options);
+    std::expected<Json, ControlError> ControlledAction(IControllableGame& game, const Json& action);
+    std::expected<void, ControlError> ControlledSetState(IControllableGame& game, const Json& state);
 
 }  // namespace BECore

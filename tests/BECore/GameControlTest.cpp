@@ -257,7 +257,7 @@ namespace BECore::Tests {
         const Json* games = FindJsonMember(*result, "games");
         ASSERT_NE(games, nullptr);
         ASSERT_TRUE(games->is_array());
-        ASSERT_EQ(games->size(), 2u);
+        ASSERT_EQ(games->size(), 3u);  // the two fakes and ReplayTestGame
         int controllable = 0;
         int plain = 0;
         for (const Json& game : *games) {
