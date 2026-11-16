@@ -9,6 +9,7 @@ The library behind the skill `/qa` (`.claude/skills/qa/SKILL.md`): a charter scr
 | `bagi_qa_repro.py` | replay of a recorded scenario with the checks, the cut of it (`scenario_shrink.shrink`), the written reproduction |
 | `bagi_monkey_moves.py` | the monkey's candidate moves and the weighted `pick`, pure functions over control answers |
 | `bagi_monkey.py` | the monkey runner: `run_monkey` and the command line (see "The monkey") |
+| `bagi_monkey_log.py` | the seed log of the QA loop as markdown (`parse`, `render`, `add_run`, `next_seeds`, `next_charter`): pure text, no file or store |
 | `bagi_qa_report.py` | the report (`report.md`, `report.json`) and the bug drafts; never calls the todo store |
 | `tests/` | pytest (`.venv/bin/python -m pytest tools/qa/tests`); `qa_fake_game.py` is the game of the session tests (knobs by environment variable, listed in its docstring) |
 
