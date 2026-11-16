@@ -155,7 +155,7 @@ class QaSession:
         An action the charter invents may be refused on purpose: `expect_refusal=True` skips the listed-action check for it. A refusal is an
         ActOutcome, not an exception.
         """
-        before = self._state if self._state is not None else self.state()
+        before = self.current_state()
         listed = [] if expect_refusal else self.listed_actions()
         outcome = self._perform(action)
         index = self.calls
@@ -248,6 +248,14 @@ class QaSession:
         """
         found = Finding("invariant", name, message, details={**(details or {}), checks.FLAGGED_KEY: True}, expect=expect)
         self._add([found], self.calls)
+
+    def add_findings(self, found: Sequence[Finding]) -> None:
+        """Findings a script got from the checks' functions itself (`run_monkey_moves`), kept at the last call like the session's own."""
+        self._add(found, self.calls)
+
+    def current_state(self) -> dict[str, Any]:
+        """The newest `get_state` answer: every action, step and call of the session refreshes it, so this asks the game only before the first one."""
+        return self._state if self._state is not None else self.state()
 
     def note(self, text: str) -> None:
         """What the charter covered, counted into the report."""

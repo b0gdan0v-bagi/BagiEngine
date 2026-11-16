@@ -15,6 +15,7 @@ Knobs (the number is the 1-based count of `perform_action` calls):
   QA_FAKE_VERSION_BACK_AT=N  the Nth action answers a version lower than before
   QA_FAKE_REFUSE_LISTED=1    `noop`, which is listed, answers `illegal_action`
   QA_FAKE_QUIT_AT=N          the Nth action makes the game quit (answers, then drops the connection)
+  QA_FAKE_REFUSE_RESET=1     `reset` answers `invalid_params`
   QA_FAKE_CRASH_AT=N         the Nth action makes the game exit at once without an answer
   QA_FAKE_NO_UI=1            `ui_tree` has a canvas with no elements
   QA_FAKE_WINDOW=1           the game serves `set_window {width, height}` (a size of 0 is `invalid_params`) and `status` shows `window`
@@ -128,6 +129,8 @@ def main() -> int:
                 raise QuitServer({"game": "Fake", "version": state["version"]})
             return {"game": "Fake", "version": state["version"], "outcome": params}
         if method == "reset":
+            if os.environ.get("QA_FAKE_REFUSE_RESET"):
+                raise FakeError("invalid_params", "no such start")
             state["count"] = params.get("count", 0)
             state["version"] += 1
             return {"game": "Fake", "version": state["version"]}

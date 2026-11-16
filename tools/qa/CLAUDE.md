@@ -8,6 +8,7 @@ The library behind the skill `/qa` (`.claude/skills/qa/SKILL.md`): a charter scr
 | `bagi_qa.py` | `QaSession`, the session a charter script drives; the command line (`replay`, `shrink`, `report`, `drafts`) |
 | `bagi_qa_repro.py` | replay of a recorded scenario with the checks, the cut of it (`scenario_shrink.shrink`), the written reproduction |
 | `bagi_monkey_moves.py` | the monkey's candidate moves and the weighted `pick`, pure functions over control answers |
+| `bagi_monkey.py` | the monkey runner: `run_monkey` and the command line (see "The monkey") |
 | `bagi_qa_report.py` | the report (`report.md`, `report.json`) and the bug drafts; never calls the todo store |
 | `tests/` | pytest (`.venv/bin/python -m pytest tools/qa/tests`); `qa_fake_game.py` is the game of the session tests (knobs by environment variable, listed in its docstring) |
 
@@ -47,6 +48,7 @@ A `Violation` is `(name, message)` (a plain pair does too); `bagi_qa_checks.Viol
 | `act(action, expect_refusal=False)` | `perform_action`; a listed action that is refused, the version of the answer, `check_action`, the state, the log. A refusal is an `ActOutcome`, never an exception; `expect_refusal` is for an action the charter invented. `list_actions` is asked before it when the version moved since the last list |
 | `reset(**params)` | the game's `reset` (a refusal is a `ControlError`), then the state and the log |
 | `call(method, params)` | any other control call (`ui_click`, `set_window`, a method the game may refuse): a refusal is an `ActOutcome` with the error code, never an exception and never a finding; the version of the answer, then `check` (with the `ui_tree` after a `step`). `replay_call` is `act` for an action and this for the rest |
+| `add_findings(found)`, `current_state()` | keep findings a script got from the checks' functions (`run_monkey_moves`); the newest `get_state` answer, with no call of its own once the session has one |
 | `state()`, `listed_actions()`, `check(ui=False)` | read and check; the `ui_tree` needs a frame since the last change, so `step` first |
 | `shot(label)` | two frames, then `shots/<NN>-<label>.png` at `maxSize` 640 |
 | `flag(name, message, details, expect)` | a finding of the script's own, for what no check sees (a HUD against the state): kind `invariant`, `details["flagged"]`; replay never shows it, so its reproduction is a scenario written by hand (see below) |
@@ -73,3 +75,14 @@ A **flagged** finding is not replayed or shrunk: its draft names the recording a
 - **One name, one bug:** findings with the same `name` make one draft (the first one is named, the count is in the body). The id is `bug-` + the words of the name and the first letters-only words of the message, at most about 40 characters, unique in the run (`-2`, ...).
 - **The reproduction in a draft** is `repro/<finding name>.jsonl` when `shrink` wrote it, else the recording up to the finding, which the text says is not cut down. After a `shrink`, `bagi_qa.py drafts DIR` writes the drafts again with the cut file.
 - **Nothing private:** paths in the files are relative to the out folder; the out folder, the home folder and the login name are replaced (`scrub`), so a draft can be pasted into the store.
+
+## The monkey
+
+`python3 tools/qa/bagi_monkey.py (--exe E | --preset P --game G) --seed S [--steps N] [--minutes M] [--invariants MODULE] [--start JSON] [--kinds a,b] [--charter TEXT] [--out DIR] [--max-probes N] [--no-shrink] [--flag F]` is a seeded random walk on a `QaSession` (`ui_every=5`), so the generic checks, the recording, the report, `replay` and the shrinker are the session's. `run_monkey(...)` is the same as a function (`clock` is injected for the tests) and gives a `MonkeyResult` (`stopped` is `steps`, `minutes`, `bug` or `lost`; `repros`, `unshrunk`, `drafts`).
+
+- **Moves** (`bagi_monkey_moves.candidate_moves`, sorted, with a weight per kind): `action` (a listed action), `click` (`ui_click {name, canvas}` on an element that is named, visible, interactive and not disabled in a visible canvas; a slider, which carries `UISliderComponent`, gets `at` from a fixed grid), `step` (a frame count from a fixed set), `reset` (the `--start` parameters; only when `list_methods` lists `reset`) and `window` (`set_window {width, height}` from a fixed matrix; only when listed). A click or a window move is followed by a `step`, since nothing changes until a frame; the `ui_tree` for the clicks is read only when a frame has run since the last change, so no canvas shows up unlaid-out.
+- **The game's say**: `monkey_moves(answer, moves)` of the invariants module returns the list to pick from. Move kinds the module invents are never picked (`WEIGHTS` names the five); when it leaves nothing, the walk steps one frame.
+- **Determinism**: the walk depends only on the seed and the game's answers (sorted candidates, `rng.random()` and integers, never `choice`), so the same seed on the same game writes the same `session.jsonl`. A game that answers differently, a timing-dependent game or a different build is another walk.
+- **Stopping**: the budget (`--steps`, `--minutes`) is checked between moves; the first move after which `session.bugs` is not empty ends the walk. Then the session finishes, each of the first three distinct bug names gets `repro/<name>.jsonl` through `write_reproduction` (a bug that does not come back, or `--no-shrink`, is in `unshrunk` and its draft keeps the recording), and the drafts are written again.
+- **A lost game** (`SessionError` on a move) is the finding `monkey.game_lost`, flagged like `QaSession.flag`: it is not shrunk, the draft names the recording.
+- **Exit codes**: 0 the budget ended with no bug (known deviations do not count), 1 a bug, 2 a bad option, a start the game refused or a session folder inside a git work tree, 77 the executable is missing. The default `--out` is `~/.claude/plans/qa/<date>-monkey-s<seed>/`; nothing outside it is written.
