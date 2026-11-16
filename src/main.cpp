@@ -52,6 +52,9 @@ int RunApplication(int argc, const char* const* argv) {
 }
 
 #ifdef PLATFORM_WINDOWS
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <cstdlib>
 #include <windows.h>
 

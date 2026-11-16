@@ -83,6 +83,10 @@ namespace BECore {
         service.RegisterHandler("clipboard_set", HandleSet);
         service.RegisterHandler("clipboard_get", HandleGet);
         service.RegisterHandler("clipboard_paste", HandlePaste);
+
+        service.DescribeMethod("clipboard_set", {"Puts text on the system clipboard", {{"text", "string", true, "The text to copy"}}});
+        service.DescribeMethod("clipboard_get", {"Reads the system clipboard, answered after some frames", {}});
+        service.DescribeMethod("clipboard_paste", {"Delivers a paste to the game as the paste shortcut would", {}});
     }
 
 }  // namespace BECore

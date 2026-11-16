@@ -14,6 +14,10 @@ namespace BECore {
     inline constexpr float kMaxFontScale = 2.0f;
     inline constexpr int32_t kMinViewportGridStep = 4;
     inline constexpr int32_t kMaxViewportGridStep = 256;
+    /// Byte limits of the command template that opens a file and of the Console's saved commands
+    inline constexpr size_t kMaxExternalEditorLength = 512;
+    inline constexpr size_t kMaxConsoleHistory = 64;
+    inline constexpr size_t kMaxConsoleCommandLength = 1024;
 
     /// The look of the editor, chosen in the preferences window. There is one theme (ImGuiTheme.h) and no setting for it; the
     /// `theme` key of an older `preferences.json` is kept as an unknown member and written back, never applied.
@@ -25,13 +29,21 @@ namespace BECore {
         PreviewSettings viewportPreview;
         /// Whether a press in the viewport goes to the game (Play) or to the editor (Edit); stored as "play" or "edit"
         ViewportInputMode viewportInputMode = ViewportInputMode::Play;
+        /// The program that opens a file from the Console: a template such as `code -g {file}:{line}`; empty means the system opener
+        String externalEditor;
+        /// The commands typed in the Console, oldest first
+        Vector<String> consoleHistory;
 
         [[nodiscard]] bool operator==(const EditorPreferences& other) const = default;
     };
 
-    /// @p preferences with fontScale, viewportGridStep and the custom preview sides brought into their ranges, and a preview device index
-    /// this build lacks turned into none
+    /// @p preferences with fontScale, viewportGridStep and the custom preview sides brought into their ranges, a preview device index
+    /// this build lacks turned into none, externalEditor cut to its limit and the history cleaned (empty and too long entries dropped,
+    /// the newest kMaxConsoleHistory kept)
     [[nodiscard]] EditorPreferences ClampPreferences(EditorPreferences preferences);
+
+    /// Appends @p command to the history; an equal one is moved to the end, the oldest go over the limit. An empty or too long command is not kept.
+    void AddConsoleHistory(EditorPreferences& preferences, StringView command);
 
     /// Names of the user files in the editor folder
     inline constexpr StringView kPreferencesFileName = "preferences.json";
@@ -60,7 +72,8 @@ namespace BECore {
      *
      * The viewport's preview choice is one object, `viewportPreview`, in `preferences.json`; its device is stored by name, and a
      * name this build lacks gives the Free shape, never another device. `viewportInputMode` is `"play"` or `"edit"`; a file without
-     * the key (an older build) or with another text reads Play.
+     * the key (an older build) or with another text reads Play. `externalEditor` is a string and `consoleHistory` an array of strings;
+     * a wrong type gives the empty default.
      *
      * Save writes atomically (UserFileIo.h). On failure it keeps the old file, logs the error and returns false; the
      * text is in GetLastSaveError().

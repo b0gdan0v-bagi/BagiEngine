@@ -29,5 +29,7 @@
       type="TextureEditorWidget" />
     <widget
       type="ProfilerWidget" />
+    <widget
+      type="ConsoleWidget" />
   </widgets>
 </root>

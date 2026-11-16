@@ -167,7 +167,8 @@ namespace BECore::Tests {
     TEST_F(WidgetListTest, EditorModeConfigListsTheEditorWidgetsInOrder) {
         const auto types = WidgetTypes(GetWidgetsConfigName(RunMode::Editor));
 
-        const Vector<String> expected{"ImGuiWidget", "EditorLayoutWidget", "ViewportWidget", "ClearScreenWidget", "ConfigEditorWidget", "SceneEditorWidget", "TextureEditorWidget", "ProfilerWidget"};
+        const Vector<String> expected{"ImGuiWidget",       "EditorLayoutWidget",  "ViewportWidget", "ClearScreenWidget", "ConfigEditorWidget",
+                                      "SceneEditorWidget", "TextureEditorWidget", "ProfilerWidget", "ConsoleWidget"};
         EXPECT_EQ(types, expected);
     }
 

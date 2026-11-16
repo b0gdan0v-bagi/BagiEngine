@@ -5,8 +5,9 @@
 
 namespace BECore {
 
-    /// The independent streams of numbers one particle draws at birth: the same particle asks each stream for its own number
-    CORE_ENUM(ParticleStream, uint8_t, Lifetime, Angle, Speed, SizeJitter, RotationJitter, ShapeA, ShapeB)
+    /// The independent streams of numbers one particle draws at birth: the same particle asks each stream for its own number.
+    /// A new stream goes at the end: the position in the enum is part of the hash, so the others keep their numbers
+    CORE_ENUM(ParticleStream, uint8_t, Lifetime, Angle, Speed, SizeJitter, RotationJitter, ShapeA, ShapeB, StartFrame)
 
     /**
      * @brief A random number that is a pure function of (seed, serial, stream): no state, no order, the same on every platform.

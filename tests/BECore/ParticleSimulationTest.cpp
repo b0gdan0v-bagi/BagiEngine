@@ -54,6 +54,28 @@ namespace BECore::Tests {
             return effect;
         }
 
+        ParticleFlipbook MakeFlipbook(int32_t columns, int32_t rows, int32_t frames = 0, ParticleFlipbookMode mode = ParticleFlipbookMode::OverLife) {
+            ParticleFlipbook flipbook;
+            flipbook.columns = columns;
+            flipbook.rows = rows;
+            flipbook.frames = frames;
+            flipbook.mode = mode;
+            return flipbook;
+        }
+
+        /// The four vertices of the particle's quad: the UV of the top left corner is (u0, v0), of the bottom right (u1, v1)
+        void ExpectQuadUv(const Vector<GeometryVertex>& vertices, size_t quad, float u0, float v0, float u1, float v1) {
+            const GeometryVertex* out = vertices.data() + quad * 4;
+            EXPECT_FLOAT_EQ(out[0].u, u0) << quad;
+            EXPECT_FLOAT_EQ(out[0].v, v0) << quad;
+            EXPECT_FLOAT_EQ(out[1].u, u1) << quad;
+            EXPECT_FLOAT_EQ(out[1].v, v0) << quad;
+            EXPECT_FLOAT_EQ(out[2].u, u1) << quad;
+            EXPECT_FLOAT_EQ(out[2].v, v1) << quad;
+            EXPECT_FLOAT_EQ(out[3].u, u0) << quad;
+            EXPECT_FLOAT_EQ(out[3].v, v1) << quad;
+        }
+
         void Step(ParticleSimulation& sim, const ParticleEffect& effect, const Rect& area, float dt, int count) {
             for (int i = 0; i < count; ++i) {
                 sim.Update(effect, area, dt);
@@ -77,6 +99,8 @@ namespace BECore::Tests {
         static_assert(ParticleRandom::Hash(1, 1, ParticleStream::Angle) == 0x4B6D18C1EF2A27F8ull);
         static_assert(ParticleRandom::Hash(42, 7, ParticleStream::Speed) == 0x5BC7E8AE4FD36BB0ull);
         static_assert(ParticleRandom::Hash(0xFFFFFFFFu, (1ull << 63) | 3, ParticleStream::ShapeB) == 0xF11DEA949C23A47Cull);
+        static_assert(ParticleRandom::Hash(7, 3, ParticleStream::StartFrame) == 0x0067E3E6DBB053A6ull);
+        static_assert(ParticleRandom::Hash(1, (1ull << 63) | 2, ParticleStream::StartFrame) == 0xC53B68B8206FDC44ull);
 
     }  // namespace
 
@@ -427,6 +451,217 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(vertices[2].v, 1.0f);
     }
 
+    TEST(ParticleSimulationTest, OverLifeShowsEveryFrameOnceAtTheBoundariesOfTheCells) {
+        const ParticleFlipbook grid = MakeFlipbook(4, 2);
+        EXPECT_EQ(ParticleSimulation::FrameOf(grid, 0.0f, 0.0f, 0.0f), 0);
+        EXPECT_EQ(ParticleSimulation::FrameOf(grid, 0.124f, 0.0f, 0.0f), 0);
+        EXPECT_EQ(ParticleSimulation::FrameOf(grid, 0.125f, 0.0f, 0.0f), 1);
+        EXPECT_EQ(ParticleSimulation::FrameOf(grid, 0.5f, 0.0f, 0.0f), 4);
+        EXPECT_EQ(ParticleSimulation::FrameOf(grid, 0.99f, 0.0f, 0.0f), 7);
+        EXPECT_EQ(ParticleSimulation::FrameOf(grid, 1.0f, 0.0f, 0.0f), 7);
+        EXPECT_EQ(ParticleSimulation::FrameOf(grid, 5.0f, 0.0f, 0.0f), 7);
+        EXPECT_EQ(ParticleSimulation::FrameOf(grid, -1.0f, 0.0f, 0.0f), 0);
+
+        // `frames` below the grid: the strip is shared by fewer cells
+        const ParticleFlipbook five = MakeFlipbook(4, 2, 5);
+        EXPECT_EQ(ParticleSimulation::FrameOf(five, 0.19f, 0.0f, 0.0f), 0);
+        EXPECT_EQ(ParticleSimulation::FrameOf(five, 0.2f, 0.0f, 0.0f), 1);
+        EXPECT_EQ(ParticleSimulation::FrameOf(five, 0.99f, 0.0f, 0.0f), 4);
+        EXPECT_EQ(ParticleSimulation::FrameOf(five, 1.0f, 0.0f, 0.0f), 4);
+
+        // `frames` above the grid never reads past the last cell
+        EXPECT_EQ(ParticleSimulation::FrameOf(MakeFlipbook(2, 2, 99), 1.0f, 0.0f, 0.0f), 3);
+    }
+
+    TEST(ParticleSimulationTest, LoopAdvancesByTheRateOfTheAgeAndWraps) {
+        const ParticleFlipbook loop = MakeFlipbook(4, 2, 6, ParticleFlipbookMode::Loop);
+        ParticleFlipbook fast = loop;
+        fast.fps = 10.0f;
+        EXPECT_EQ(ParticleSimulation::FrameOf(fast, 0.0f, 0.0f, 0.0f), 0);
+        EXPECT_EQ(ParticleSimulation::FrameOf(fast, 0.0f, 0.05f, 0.0f), 0);
+        EXPECT_EQ(ParticleSimulation::FrameOf(fast, 0.0f, 0.15f, 0.0f), 1);
+        EXPECT_EQ(ParticleSimulation::FrameOf(fast, 0.0f, 0.55f, 0.0f), 5);
+        EXPECT_EQ(ParticleSimulation::FrameOf(fast, 0.0f, 0.65f, 0.0f), 0);
+        EXPECT_EQ(ParticleSimulation::FrameOf(fast, 0.0f, 1.45f, 0.0f), 2);
+        EXPECT_EQ(ParticleSimulation::FrameOf(fast, 1.0f, 0.15f, 0.0f), 1);  // the progress is not read
+
+        ParticleFlipbook still = loop;
+        still.fps = 0.0f;
+        EXPECT_EQ(ParticleSimulation::FrameOf(still, 0.5f, 100.0f, 0.0f), 0);
+    }
+
+    TEST(ParticleSimulationTest, ARandomStartShiftsTheFrameModuloTheCount) {
+        ParticleFlipbook grid = MakeFlipbook(4, 2);
+        grid.randomStart = true;
+        EXPECT_EQ(ParticleSimulation::FrameOf(grid, 0.0f, 0.0f, 0.0f), 0);
+        EXPECT_EQ(ParticleSimulation::FrameOf(grid, 0.0f, 0.0f, 0.5f), 4);
+        EXPECT_EQ(ParticleSimulation::FrameOf(grid, 0.0f, 0.0f, 0.99f), 7);
+        EXPECT_EQ(ParticleSimulation::FrameOf(grid, 0.5f, 0.0f, 0.5f), 0);   // 4 + 4 wraps
+        EXPECT_EQ(ParticleSimulation::FrameOf(grid, 1.0f, 0.0f, 0.25f), 1);  // 7 + 2 wraps
+
+        ParticleFlipbook loop = MakeFlipbook(4, 2, 6, ParticleFlipbookMode::Loop);
+        loop.fps = 10.0f;
+        loop.randomStart = true;
+        EXPECT_EQ(ParticleSimulation::FrameOf(loop, 0.0f, 0.35f, 0.5f), 0);   // 3 + 3 wraps at 6
+        EXPECT_EQ(ParticleSimulation::FrameOf(loop, 0.0f, 0.35f, 0.99f), 2);  // 3 + 5 wraps at 6
+
+        // A change of `frames` keeps the seed valid
+        grid.frames = 3;
+        EXPECT_EQ(ParticleSimulation::FrameOf(grid, 0.0f, 0.0f, 0.99f), 2);
+    }
+
+    TEST(ParticleSimulationTest, FrameOfSurvivesValuesNoFileShouldHold) {
+        const float nan = std::numeric_limits<float>::quiet_NaN();
+        const float inf = std::numeric_limits<float>::infinity();
+        ParticleFlipbook hostile = MakeFlipbook(0, -4, -2, static_cast<ParticleFlipbookMode>(9));
+        hostile.fps = nan;
+        hostile.randomStart = true;
+        EXPECT_EQ(ParticleSimulation::FrameOf(hostile, nan, nan, nan), 0);
+
+        ParticleFlipbook loop = MakeFlipbook(64, 64, 0, ParticleFlipbookMode::Loop);
+        loop.fps = inf;
+        loop.randomStart = true;
+        for (const float age : {0.0f, 1.0f, 1e30f, inf, nan}) {
+            const int32_t frame = ParticleSimulation::FrameOf(loop, age, age, 1.0f);
+            EXPECT_GE(frame, 0);
+            EXPECT_LT(frame, 64 * 64);
+        }
+    }
+
+    TEST(ParticleSimulationTest, TheFlipbookPutsTheUVsOfTheCellOfTheFrame) {
+        ParticleEffect effect = MakeFixedEffect();  // lifetime 2: the frame changes every 0.25 s of the eight
+        effect.flipbook = MakeFlipbook(4, 2);
+        // A source rect away from the origin: 4 x 2 cells of 8 x 8 pixels inside a 64 x 32 texture
+        const Rect source(16.0f, 8.0f, 32.0f, 16.0f);
+        const Vec2 textureSize(64.0f, 32.0f);
+
+        struct Case {
+            int frame;
+            float u0;
+            float v0;
+        };
+        const Case cases[] = {{0, 0.25f, 0.25f}, {1, 0.375f, 0.25f}, {5, 0.375f, 0.5f}, {7, 0.625f, 0.5f}};
+        for (const Case& expected : cases) {
+            ParticleSimulation sim;
+            sim.Play();
+            sim.Update(effect, kPointArea, 0.0f);
+            Step(sim, effect, kPointArea, kStep, 8 * expected.frame + 4);  // the middle of the cell: age (frame + 0.5) / 4
+            Vector<GeometryVertex> vertices;
+            Vector<int> indices;
+            const size_t quads = sim.BuildGeometry(effect, source, textureSize, vertices, indices);
+            ASSERT_EQ(quads, 4u);
+            for (size_t quad = 0; quad < quads; ++quad) {
+                ExpectQuadUv(vertices, quad, expected.u0, expected.v0, expected.u0 + 0.125f, expected.v0 + 0.25f);
+            }
+        }
+    }
+
+    TEST(ParticleSimulationTest, AFlipbookThatIsOffDrawsTheWholeSourceRect) {
+        ParticleEffect plain = MakeFixedEffect();
+        ParticleEffect single = MakeFixedEffect();
+        single.flipbook.mode = ParticleFlipbookMode::Loop;  // every other field is moot with one cell
+        single.flipbook.randomStart = true;
+        single.flipbook.fps = 30.0f;
+        ParticleSimulation sim;
+        sim.Play();
+        Step(sim, plain, kPointArea, kStep, 12);
+
+        Vector<GeometryVertex> plainVertices;
+        Vector<GeometryVertex> singleVertices;
+        Vector<int> indices;
+        const Rect source(16.0f, 8.0f, 16.0f, 16.0f);
+        const Vec2 textureSize(64.0f, 32.0f);
+        const size_t quads = sim.BuildGeometry(plain, source, textureSize, plainVertices, indices);
+        ASSERT_EQ(sim.BuildGeometry(single, source, textureSize, singleVertices, indices), quads);
+        for (size_t quad = 0; quad < quads; ++quad) {
+            ExpectQuadUv(plainVertices, quad, 0.25f, 0.25f, 0.5f, 0.75f);
+            ExpectQuadUv(singleVertices, quad, 0.25f, 0.25f, 0.5f, 0.75f);
+        }
+    }
+
+    TEST(ParticleSimulationTest, TheSameGameTimeGivesTheSameFramesAtAnyFrameRate) {
+        ParticleEffect effect = MakeRandomEffect();
+        effect.flipbook = MakeFlipbook(4, 2, 0, ParticleFlipbookMode::Loop);
+        effect.flipbook.fps = 8.0f;
+        effect.flipbook.randomStart = true;
+        const Rect area{0.0f, 0.0f, 40.0f, 20.0f};
+        const Rect source(0.0f, 0.0f, 64.0f, 32.0f);
+        const Vec2 textureSize(64.0f, 32.0f);
+
+        ParticleSimulation fine;
+        fine.Play();
+        Step(fine, effect, area, kStep, 24);
+        ParticleSimulation coarse;
+        coarse.Play();
+        Step(coarse, effect, area, 0.25f, 3);
+
+        Vector<GeometryVertex> fineVertices;
+        Vector<GeometryVertex> coarseVertices;
+        Vector<int> indices;
+        const size_t quads = fine.BuildGeometry(effect, source, textureSize, fineVertices, indices);
+        ASSERT_GT(quads, 3u);
+        ASSERT_EQ(coarse.BuildGeometry(effect, source, textureSize, coarseVertices, indices), quads);
+        for (size_t i = 0; i < quads * 4; ++i) {
+            EXPECT_FLOAT_EQ(fineVertices[i].u, coarseVertices[i].u) << i;
+            EXPECT_FLOAT_EQ(fineVertices[i].v, coarseVertices[i].v) << i;
+        }
+    }
+
+    TEST(ParticleSimulationTest, TheStartFramesComeFromTheSeedAndOnlyFromIt) {
+        constexpr int32_t kBurst = 64;
+        ParticleEffect effect = MakeFixedEffect();
+        effect.burstCount = kBurst;
+        effect.maxParticles = kBurst;
+        effect.flipbook = MakeFlipbook(4, 2);
+        effect.flipbook.randomStart = true;
+
+        const auto framesOf = [&](const ParticleEffect& which) {
+            ParticleSimulation sim;
+            sim.Play();
+            Step(sim, which, kPointArea, kStep, 8);  // age 0.25 s, 1/8 of the life
+            Vector<int32_t> frames;
+            for (const Particle& particle : sim.GetParticles()) {
+                frames.push_back(ParticleSimulation::FrameOf(which.flipbook, 0.125f, 0.25f, particle.frameSeed));
+            }
+            return frames;
+        };
+
+        const Vector<int32_t> first = framesOf(effect);
+        ASSERT_EQ(first.size(), static_cast<size_t>(kBurst));
+        EXPECT_EQ(framesOf(effect), first);
+        effect.seed = 2;
+        EXPECT_NE(framesOf(effect), first);
+        effect.seed = 1;
+
+        const int32_t firstFrame = first[0];
+        EXPECT_TRUE(eastl::any_of(first.begin(), first.end(), [firstFrame](int32_t frame) { return frame != firstFrame; }));
+        for (const int32_t frame : first) {
+            EXPECT_GE(frame, 0);
+            EXPECT_LT(frame, 8);
+        }
+
+        // The seed is drawn from its own stream, whether or not it is used: the other numbers of the particle do not move
+        ParticleSimulation withStart;
+        ParticleSimulation without;
+        ParticleEffect off = effect;
+        off.flipbook.randomStart = false;
+        withStart.Play();
+        without.Play();
+        withStart.Update(effect, kPointArea, 0.0f);
+        without.Update(off, kPointArea, 0.0f);
+        ASSERT_EQ(withStart.GetLiveCount(), without.GetLiveCount());
+        for (size_t i = 0; i < withStart.GetLiveCount(); ++i) {
+            const Particle& a = withStart.GetParticles()[i];
+            const Particle& b = without.GetParticles()[i];
+            EXPECT_FLOAT_EQ(a.frameSeed, b.frameSeed);
+            EXPECT_FLOAT_EQ(a.lifetime, b.lifetime);
+            EXPECT_FLOAT_EQ(a.velocityX, b.velocityX);
+            EXPECT_FLOAT_EQ(a.sizeScale, b.sizeScale);
+            constexpr uint64_t kBurstBit = 1ull << 63;
+            EXPECT_FLOAT_EQ(a.frameSeed, ParticleRandom::Unit(effect.seed, kBurstBit | i, ParticleStream::StartFrame));
+        }
+    }
+
     TEST(ParticleSimulationTest, TheColorFollowsTheCurveOfTheAge) {
         ParticleEffect effect = MakeFixedEffect();
         effect.color.from = Color(255, 255, 255, 255);
@@ -542,6 +777,8 @@ namespace BECore::Tests {
         effect.maxParticles = 64;
         effect.lifetimeMin = 30.0f;
         effect.lifetimeMax = 30.0f;
+        effect.flipbook = MakeFlipbook(4, 2, 0, ParticleFlipbookMode::Loop);
+        effect.flipbook.randomStart = true;
 
         ParticleSimulation sim;
         Vector<GeometryVertex> vertices;

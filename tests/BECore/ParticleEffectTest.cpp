@@ -59,6 +59,12 @@ namespace BECore::Tests {
             effect.color.ease = EaseType::CubicIn;
             effect.spriteId = PoolString::Intern("Spark");
             effect.texturePath = PoolString::Intern("assets/spark.png");
+            effect.flipbook.columns = 4;
+            effect.flipbook.rows = 2;
+            effect.flipbook.frames = 7;
+            effect.flipbook.mode = ParticleFlipbookMode::Loop;
+            effect.flipbook.fps = 24.0f;
+            effect.flipbook.randomStart = true;
             effect.blend = BlendMode::Add;
             effect.frameClass = ParticleFrameClass::DecorativeLoop;
             return effect;
@@ -75,6 +81,15 @@ namespace BECore::Tests {
             EXPECT_EQ(actual.g, expected.g);
             EXPECT_EQ(actual.b, expected.b);
             EXPECT_EQ(actual.a, expected.a);
+        }
+
+        void ExpectFlipbookEq(const ParticleFlipbook& actual, const ParticleFlipbook& expected) {
+            EXPECT_EQ(actual.columns, expected.columns);
+            EXPECT_EQ(actual.rows, expected.rows);
+            EXPECT_EQ(actual.frames, expected.frames);
+            EXPECT_EQ(actual.mode, expected.mode);
+            EXPECT_FLOAT_EQ(actual.fps, expected.fps);
+            EXPECT_EQ(actual.randomStart, expected.randomStart);
         }
 
         void ExpectEffectEq(const ParticleEffect& actual, const ParticleEffect& expected) {
@@ -102,6 +117,7 @@ namespace BECore::Tests {
             EXPECT_EQ(actual.color.ease, expected.color.ease);
             EXPECT_EQ(actual.spriteId, expected.spriteId);
             EXPECT_EQ(actual.texturePath, expected.texturePath);
+            ExpectFlipbookEq(actual.flipbook, expected.flipbook);
             EXPECT_EQ(actual.blend, expected.blend);
             EXPECT_EQ(actual.frameClass, expected.frameClass);
         }
@@ -119,6 +135,7 @@ namespace BECore::Tests {
       <from r="255" g="200" b="50" a="255"/>
       <to r="200" g="20" b="10" a="0"/>
     </color>
+    <flipbook columns="4" rows="2" frames="7" mode="Loop" fps="24" randomStart="true"/>
   </effect>
 </root>)";
 
@@ -138,6 +155,11 @@ namespace BECore::Tests {
         EXPECT_EQ(effect.frameClass, ParticleFrameClass::FiniteEffect);
         EXPECT_TRUE(effect.spriteId.Empty());
         EXPECT_TRUE(effect.texturePath.Empty());
+        EXPECT_EQ(effect.flipbook.columns, 1);
+        EXPECT_EQ(effect.flipbook.rows, 1);
+        EXPECT_EQ(effect.flipbook.frames, 0);
+        EXPECT_EQ(effect.flipbook.mode, ParticleFlipbookMode::OverLife);
+        EXPECT_FALSE(effect.flipbook.randomStart);
 
         // Nothing for Sanitize to change: the defaults are inside every range
         ExpectEffectEq(effect.Sanitized(), effect);
@@ -170,6 +192,16 @@ namespace BECore::Tests {
         EXPECT_EQ(loaded.burstCount, defaults.burstCount);
         ExpectCurveEq(loaded.size, defaults.size);
         ExpectColorEq(loaded.color.to, defaults.color.to);
+        ExpectFlipbookEq(loaded.flipbook, defaults.flipbook);
+    }
+
+    TEST(ParticleEffectTest, BadFlipbookModeTextIsReportedAndKeepsTheDefault) {
+        ParticleEffect loaded;
+        Vector<DeserializeError> errors;
+        ASSERT_NO_FATAL_FAILURE(LoadEffect(R"(<root><effect><flipbook columns="3" mode="PingPong"/></effect></root>)", loaded, &errors));
+        EXPECT_FALSE(errors.empty());
+        EXPECT_EQ(loaded.flipbook.mode, ParticleFlipbookMode::OverLife);
+        EXPECT_EQ(loaded.flipbook.columns, 3);
     }
 
     TEST(ParticleEffectTest, BadEnumTextIsReportedAndKeepsTheDefault) {
@@ -270,6 +302,50 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(effect.size.from, 0.0f);
         EXPECT_FLOAT_EQ(effect.size.to, kMaxSize);
         EXPECT_FLOAT_EQ(effect.gravityX, kMaxGravity);
+    }
+
+    TEST(ParticleEffectTest, SanitizeBringsTheFlipbookIntoRange) {
+        using namespace ParticleLimits;
+        const ParticleEffect defaults;
+        ParticleEffect effect;
+
+        effect.flipbook.columns = 0;
+        effect.flipbook.rows = -3;
+        effect.flipbook.frames = -1;
+        ParticleEffect clamped = effect.Sanitized();
+        EXPECT_EQ(clamped.flipbook.columns, 1);
+        EXPECT_EQ(clamped.flipbook.rows, 1);
+        EXPECT_EQ(clamped.flipbook.frames, 0);
+
+        effect.flipbook.columns = 1000;
+        effect.flipbook.rows = std::numeric_limits<int32_t>::max();
+        effect.flipbook.frames = std::numeric_limits<int32_t>::max();
+        clamped = effect.Sanitized();
+        EXPECT_EQ(clamped.flipbook.columns, kMaxFlipbookAxis);
+        EXPECT_EQ(clamped.flipbook.rows, kMaxFlipbookAxis);
+        EXPECT_EQ(clamped.flipbook.frames, kMaxFlipbookAxis * kMaxFlipbookAxis);
+
+        effect.flipbook.columns = 4;
+        effect.flipbook.rows = 2;
+        effect.flipbook.frames = 9;
+        EXPECT_EQ(effect.Sanitized().flipbook.frames, 8);
+        effect.flipbook.frames = 5;
+        EXPECT_EQ(effect.Sanitized().flipbook.frames, 5);
+
+        for (const float notFinite : {kNaN, kInfinity, -kInfinity}) {
+            effect.flipbook.fps = notFinite;
+            EXPECT_FLOAT_EQ(effect.Sanitized().flipbook.fps, defaults.flipbook.fps);
+        }
+        effect.flipbook.fps = -5.0f;
+        EXPECT_FLOAT_EQ(effect.Sanitized().flipbook.fps, 0.0f);
+        effect.flipbook.fps = 1e9f;
+        EXPECT_FLOAT_EQ(effect.Sanitized().flipbook.fps, kMaxFlipbookFps);
+
+        effect.flipbook.mode = static_cast<ParticleFlipbookMode>(99);
+        EXPECT_EQ(effect.Sanitized().flipbook.mode, ParticleFlipbookMode::OverLife);
+
+        // The effect keeps what was written
+        EXPECT_EQ(effect.flipbook.frames, 5);
     }
 
     TEST(ParticleEffectTest, SanitizeReplacesAnEnumThatIsNoName) {

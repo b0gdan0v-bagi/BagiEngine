@@ -20,6 +20,7 @@ namespace BECore::Tests {
         constexpr const char* kWindowConfig = "config/SDLWindowConfig.xml";
         constexpr const char* kParticlesDoc = "src/Modules/BECore/Particles/CLAUDE.md";
         constexpr const char* kSparkSprite = "ParticleCaptureSpark";
+        constexpr const char* kStripSprite = "ParticleCaptureStrip";
         constexpr double kFrame = 1.0 / 32.0;  // a power of two, so the sums of frames are exact
         constexpr double kMaxFrame = 0.25;
         constexpr int kFramesToHalfASecond = 16;
@@ -27,8 +28,9 @@ namespace BECore::Tests {
         constexpr uint32_t kTextureSize = 16;
         constexpr size_t kChannels = 4;
         constexpr int kBlendTolerance = 6;
-        constexpr int kEdgeTolerance = 1;  // pixels: the software rasterizer rounds the edges of a triangle
-        constexpr int kSpark = 100;        // the color of a particle, per channel (Add puts this on the background)
+        constexpr int kEdgeTolerance = 1;        // pixels: the software rasterizer rounds the edges of a triangle
+        constexpr int kSpark = 100;              // the color of a particle, per channel (Add puts this on the background)
+        constexpr int kStripBoundTolerance = 3;  // pixels: linear filtering spreads the edge of a lit half of a frame
 
         // The example effect of Particles/CLAUDE.md: the doc quotes this text, and a test below checks that it still does. Every range has min = max and the cone
         // has no width, so every particle of a burst flies the same way and the picture follows from the closed form of the motion:
@@ -114,6 +116,21 @@ namespace BECore::Tests {
                 for (uint32_t x = kTextureSize / 2; x < kTextureSize; ++x) {
                     const size_t offset = (static_cast<size_t>(y) * kTextureSize + x) * kChannels;
                     std::fill_n(pixels.begin() + static_cast<ptrdiff_t>(offset), kChannels, uint8_t{255});
+                }
+            }
+            return pixels;
+        }
+
+        /// A strip of two frames of 8 by 16 in a 16 by 16 texture: frame 0 is lit in its left half (texels 0..3), frame 1 in its right half (texels 12..15)
+        Vector<uint8_t> TwoFrameStrip() {
+            constexpr uint32_t kLitWidth = kTextureSize / 4;
+            Vector<uint8_t> pixels(static_cast<size_t>(kTextureSize) * kTextureSize * kChannels, 0);
+            for (uint32_t y = 0; y < kTextureSize; ++y) {
+                for (uint32_t x = 0; x < kTextureSize; ++x) {
+                    if (x < kLitWidth || x >= kTextureSize - kLitWidth) {
+                        const size_t offset = (static_cast<size_t>(y) * kTextureSize + x) * kChannels;
+                        std::fill_n(pixels.begin() + static_cast<ptrdiff_t>(offset), kChannels, uint8_t{255});
+                    }
                 }
             }
             return pixels;
@@ -264,6 +281,75 @@ namespace BECore::Tests {
 
         ASSERT_EQ(coarse.rgba.size(), fine.rgba.size());
         EXPECT_TRUE(std::equal(fine.rgba.begin(), fine.rgba.end(), coarse.rgba.begin())) << "the same game time must give the same pixels";
+    }
+
+    TEST_F(ParticleCaptureTest, AFlipbookShowsAnotherFrameAtAnotherAgeAndTheSameOneAtAnyFrameStep) {
+        struct StripSprite {
+            StripSprite() {
+                SpriteEntry strip;
+                strip.name = PoolString::Intern(kStripSprite);
+                strip.srcRect = Rect(0.0f, 0.0f, static_cast<float>(kTextureSize), static_cast<float>(kTextureSize));
+                CoreManager::GetTextureLibrary().AddOrUpdate(strip);
+            }
+            ~StripSprite() {
+                CoreManager::GetTextureLibrary().Remove(PoolString::Intern(kStripSprite));
+            }
+        } stripSprite;
+
+        // The example's motion over the two frames of the strip: frame 0 in the first half of the life, frame 1 in the second
+        emitter->_effect.spriteId = PoolString::Intern(kStripSprite);
+        emitter->_effect.flipbook.columns = 2;
+        Step(0.0);  // the update loads the sprite again, which drops the texture of the fixture
+        const auto pixels = TwoFrameStrip();
+        emitter->SetTexture(renderer->CreateTexture(pixels.data(), kTextureSize, kTextureSize));
+
+        const auto pictureAt = [this](double seconds, int steps) {
+            emitter->Clear();
+            for (int i = 0; i < kFramesToOutliveTheEffect; ++i) {
+                Step(kMaxFrame);
+            }
+            emitter->Burst(kBurstX, kBurstY, 1);
+            for (int i = 0; i < steps; ++i) {
+                Step(seconds / steps);
+            }
+            return Render();
+        };
+        const auto expectHalf = [](const PixelBuffer& image, double seconds, bool left) {
+            ASSERT_FALSE(image.rgba.empty());
+            const float centerX = kBurstX + 100.0f * static_cast<float>(seconds);
+            const float centerY = kBurstY + 40.0f * static_cast<float>(seconds * seconds);
+            const Bounds bounds = LitBounds(image);
+            ASSERT_FALSE(bounds.Empty()) << "the picture is the background";
+            const float litLeft = left ? centerX - kSize / 2.0f : centerX;
+            const float litRight = left ? centerX : centerX + kSize / 2.0f;
+            EXPECT_NEAR(bounds.left, litLeft, kStripBoundTolerance);
+            EXPECT_NEAR(bounds.right, litRight, kStripBoundTolerance);
+
+            const int y = static_cast<int>(centerY);
+            const int quarter = static_cast<int>(kSize / 4.0f);
+            const Pixel lit{kBackground.r + kSpark, kBackground.g + kSpark, kBackground.b + kSpark};
+            EXPECT_TRUE(IsNear(PixelAt(image, static_cast<int>(centerX) + (left ? -quarter : quarter), y), lit, kBlendTolerance));
+            EXPECT_TRUE(IsNear(PixelAt(image, static_cast<int>(centerX) + (left ? quarter : -quarter), y), kBackgroundPixel, kBlendTolerance));
+        };
+
+        const PixelBuffer firstFine = pictureAt(0.25, 8);
+        expectHalf(firstFine, 0.25, true);
+        const PixelBuffer secondFine = pictureAt(0.75, 24);
+        expectHalf(secondFine, 0.75, false);
+
+        const PixelBuffer firstCoarse = pictureAt(0.25, 2);
+        const PixelBuffer secondCoarse = pictureAt(0.75, 3);
+        EXPECT_TRUE(firstFine.rgba == firstCoarse.rgba) << "the same game time must give the same pixels";
+        EXPECT_TRUE(secondFine.rgba == secondCoarse.rgba) << "the same game time must give the same pixels";
+
+        emitter->Clear();
+        Step(kMaxFrame);
+        emitter->Burst(kBurstX, kBurstY, 1);
+        for (int i = 0; i < 2 * kFramesToHalfASecond; ++i) {
+            Step(kFrame);
+        }
+        EXPECT_EQ(emitter->GetLiveCount(), 0u);
+        EXPECT_TRUE(LitBounds(Render()).Empty());
     }
 
     TEST_F(ParticleCaptureTest, WhenTheEffectHasEndedTheSceneIsTheBackgroundAgain) {

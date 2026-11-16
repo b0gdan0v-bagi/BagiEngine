@@ -10,7 +10,7 @@ A 2D particle effect in three layers; this folder holds the first two (`Particle
 
 ## The effect (`ParticleEffect`)
 
-Reflected like `SpriteEntry`: the field names have no underscore, so they are the attribute names of the file. `BE_CLASS` gives the struct and its helpers a vptr, so none is an aggregate (`ParticleCurve` has a constructor for that). Helpers: `ParticleCurve` (`from`, `to`, `ease` of a float) and `ParticleColorCurve` (the same for a `Color`), both written as child elements; the enums `ParticleShape` (`Point`, `Rect`, `Circle`) and `ParticleFrameClass` (`Interactive`, `FiniteEffect`, `DecorativeLoop`) are attributes. The defaults are a usable small burst: a one-shot of 24 white squares flying out in all directions and fading in about half a second.
+Reflected like `SpriteEntry`: the field names have no underscore, so they are the attribute names of the file. `BE_CLASS` gives the struct and its helpers a vptr, so none is an aggregate (`ParticleCurve` has a constructor for that). Helpers: `ParticleCurve` (`from`, `to`, `ease` of a float), `ParticleColorCurve` (the same for a `Color`) and `ParticleFlipbook` (a grid of frames in the sprite, "The simulation"), all written as child elements; the enums `ParticleShape` (`Point`, `Rect`, `Circle`) and `ParticleFrameClass` (`Interactive`, `FiniteEffect`, `DecorativeLoop`) are attributes. The defaults are a usable small burst: a one-shot of 24 white squares flying out in all directions and fading in about half a second.
 
 - **Units:** scene units and seconds; angles in degrees, 0 is right and positive is clockwise (the direction of `TransformComponent::_rotation`, y points down). `spread` is the full width of the cone around `direction`, 360 is all around.
 - **Sprite:** `spriteId` (a `TextureLibrary` entry) wins over `texturePath` (the whole texture); neither draws plain squares.
@@ -18,7 +18,7 @@ Reflected like `SpriteEntry`: the field names have no underscore, so they are th
 
 ### Sanitizing
 
-`ParticleEffect::Sanitize()` / `Sanitized()` bring any values into the ranges of `ParticleLimits`: a float that is not finite becomes the field's default, the others are clamped; a min above its max swaps with it; `maxParticles` is `1..kMaxParticles`, `burstCount` does not exceed it, rates and counts are not negative; lifetimes are at least `kMinLifetime` (so `age / lifetime` is finite); an enum that is no name (a cast of a bad number) becomes its default. The simulation runs on a sanitized copy and the effect keeps what was written, so a typo in a file or in the inspector never loops or allocates without bound and the inspector still shows the typo. A bad enum *text* in a file is a reader error and the field keeps its default.
+`ParticleEffect::Sanitize()` / `Sanitized()` bring any values into the ranges of `ParticleLimits`: a float that is not finite becomes the field's default, the others are clamped; a min above its max swaps with it; `maxParticles` is `1..kMaxParticles`, `burstCount` does not exceed it, rates and counts are not negative; lifetimes are at least `kMinLifetime` (so `age / lifetime` is finite); an enum that is no name (a cast of a bad number) becomes its default; a flipbook has `columns` and `rows` in `1..kMaxFlipbookAxis`, `frames` in `0..columns * rows` and `fps` in `0..kMaxFlipbookFps`. The simulation runs on a sanitized copy and the effect keeps what was written, so a typo in a file or in the inspector never loops or allocates without bound and the inspector still shows the typo. A bad enum *text* in a file is a reader error and the field keeps its default.
 
 ### File shape
 
@@ -35,7 +35,13 @@ Reflected like `SpriteEntry`: the field names have no underscore, so they are th
 </effect>
 ```
 
-Every attribute and element is optional. Tests: `tests/BECore/ParticleEffectTest.cpp`.
+Every attribute and element is optional. A flipbook is one more child element (the attributes are its fields, the defaults are off):
+
+```xml
+<flipbook columns="4" rows="2" frames="7" mode="Loop" fps="24" randomStart="true"/>
+```
+
+Tests: `tests/BECore/ParticleEffectTest.cpp`.
 
 ## The simulation (`ParticleSimulation`)
 
@@ -47,6 +53,7 @@ Plain C++ over `ParticleEffect`: `Update(effect, area, dt)`, `Burst(effect, cent
 - **The pool.** At most `maxParticles` live (reserved by `Reserve`, or at the first `Update`, and again only when the field grows); a particle that does not fit is dropped and counted (`GetDroppedCount()`), never grows the pool, and a hostile count of a burst or a due number of a loop is counted in one step, not looped. Dead particles are removed by a stable compaction, only in an update where one died (the earliest death is remembered), so spawn order is draw order, older first. `BuildGeometry` and `Update` allocate nothing once `Reserve` and `ReserveGeometry` have run, with or without live particles.
 - **World space.** A particle keeps the place it was born at. `Point` and `Circle` use the center of the `area` of the update, `Rect` fills it; `Burst` takes the center from the call.
 - **`NeedsFrames()`** is what the frame loop will ask (render-on-demand): true from `Play()` or a burst until the last particle died, for a looping emitter while it plays. The activity token itself and the cap of a `DecorativeLoop` belong to that entry.
+- **Flipbook.** `flipbook` cuts the sprite's source rect (the whole texture when there is none) into `columns x rows` equal cells, counted row by row from the top left; the first `frames` of them (0 is all) are the frames, and the default 1 x 1 is off: the whole rect, the UVs of a plain sprite. The frame is a function of the age too: `OverLife` shows every frame once over the life (`floor(progress * count)`), `Loop` advances `fps` frames a second and wraps; `randomStart` shifts it by `floor(frameSeed * count)`, the seed being one more `ParticleRandom` stream (`StartFrame`, last in the enum so no other stream moves) that is drawn at birth whether or not `randomStart` is set. The offset is made at draw time, so an edit of `frames` keeps every particle valid. Still one `DrawGeometry` per emitter: only the UVs of each quad change (`ParticleSimulation::FrameOf`). **Trap:** with linear filtering the edge of a cell mixes in its neighbour, so a strip needs padding between frames or a sampler without filtering; the engine does not pad. Two frames are never blended (the 2D path has no shader for two samples).
 - **Tint:** the tint of a `Burst` multiplies the whole color curve of the particles of that burst and no other.
 - **Not there:** drag, collisions, sub-emitters, local space (particles that follow a moving node), trails. Tests: `tests/BECore/ParticleSimulationTest.cpp`.
 

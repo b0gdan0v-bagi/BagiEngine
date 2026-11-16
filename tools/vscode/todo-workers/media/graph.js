@@ -5,9 +5,9 @@
 // Everything shown is text from the store or the transcripts, so it goes in as text nodes only.
 // The layout is built as a plain tree first, so node can turn it into an SVG string (a sample render) without a DOM.
 (function (root, factory) {
-    if (typeof module === "object" && module.exports) module.exports = factory();
-    else root.TodoGraph = factory();
-})(typeof self !== "undefined" ? self : this, function () {
+    if (typeof module === "object" && module.exports) module.exports = factory(require("./runs"));
+    else root.TodoGraph = factory(root.TodoRuns);
+})(typeof self !== "undefined" ? self : this, function (Runs) {
     const SVG_NS = "http://www.w3.org/2000/svg";
     const WORKER_W = 90;
     const NODE_W = 160;
@@ -45,6 +45,7 @@
         const s = w.session;
         if (w.limited) return { kind: "limited", word: w.limited.resets ? `limit · ${w.limited.resets}` : "usage limit" };
         if (w.stopped) return { kind: "stopped", word: "stopped" };
+        if (w.noClaim) return { kind: "noclaim", word: "took nothing" };
         if ((s && s.state === "done") || w.endedTurn) return { kind: "done", word: "done" };
         if (w.waiting) return { kind: "waiting", word: "waits for you" };
         if (s && s.status === "busy") return { kind: "busy", word: s.startedAt ? `busy · ${minutes(s.startedAt)}` : "busy" };
@@ -52,11 +53,14 @@
         return { kind: "none", word: "no session" };
     }
 
-    function progressOf(entry) {
-        const all = entry.slices && entry.slices.count > 1 ? entry.slices : null;
-        const p = entry.planProgress;
-        if (all && all.total) return `${all.done}/${all.total}`;
-        return p && p.total ? `plan ${p.done}/${p.total}` : "";
+    // What a run that took nothing says in a tooltip: the tried entry, the reason in full and where it came from.
+    function noClaimTip(nc) {
+        return [
+            nc.entry ? `${nc.entry}: not taken` : "The run took nothing: no entry was eligible",
+            `Reason: ${nc.reason || Runs.NO_REASON}`,
+            nc.reason ? "said by the loop (NOT TAKEN line)" : "seen at start: the entry the loop was started on",
+            nc.entry ? "Click: open the entry in the Todo list" : "",
+        ].filter(Boolean).join("\n");
     }
 
     function openBlockers(entry) {
@@ -176,14 +180,23 @@
                 const status = entry.starting ? "starting" : entry.status || "?";
                 const over = ["stopped", "done", "waiting", "limited"].includes(sess.kind) ? sess : null;
                 const ebox = box(cx, y, NODE_W, `g-node g-entry g-held st-${slug(status)}${over ? ` over-${over.kind}` : ""}`, true);
-                const sub = [status, over ? over.word : "", progressOf(entry)].filter(Boolean).join(" · ");
+                const sub = [status, over ? over.word : "", Runs.progressText(entry)].filter(Boolean).join(" · ");
                 ebox.kids.push(textNode(cx + 11, y + 18, "g-id", trunc(entry.id, NODE_W - 18, ID_CHAR_PX)), textNode(cx + 11, y + 34, "g-sub", trunc(sub, NODE_W - 18)));
-                ebox.kids.push(tip([`${entry.id} (${status}, held by ${w.name}, session ${sess.word})`, entry.title, entry.statusNote].filter(Boolean).join("\n")));
+                ebox.kids.push(tip([`${entry.id} (${status}, held by ${w.name}, session ${sess.word})`, entry.title, Runs.progressText(entry), entry.statusNote].filter(Boolean).join("\n")));
                 ebox.act = { type: "entry", entry: entry.id, worker: w.k, name: w.name, held: true };
                 boxes.push(ebox);
                 const at = { id: entry.id, x: cx, y, w: NODE_W, lane };
                 pos.set(entry.id, at);
                 blocked.push({ at, blockers: openBlockers(entry) });
+            } else if (w.noClaim) {
+                // the entry the finished run tried and did not take, in place of the empty ghost
+                const nc = w.noClaim;
+                const nbox = box(cx, y, NODE_W, "g-node g-noclaim", true);
+                const sub = `not taken · ${nc.reason || Runs.NO_REASON}`;
+                nbox.kids.push(textNode(cx + 11, y + 18, "g-id", trunc(nc.entry || "nothing eligible", NODE_W - 18, ID_CHAR_PX)), textNode(cx + 11, y + 34, "g-sub", trunc(sub, NODE_W - 18)));
+                nbox.kids.push(tip(noClaimTip(nc)));
+                if (nc.entry) nbox.act = { type: "entry", entry: nc.entry, worker: w.k, name: w.name, held: false };
+                boxes.push(nbox);
             } else {
                 const ghost = box(cx, y, NODE_W, "g-node g-ghost", false);
                 ghost.kids.push(textNode(cx + 11, y + 27, "g-sub", "no entry"));
@@ -360,7 +373,8 @@
             legendItem("kind-stacked", "stacked on (cut from its branch in review)"),
             legendItem("kind-waits", "waits for (merge or close first)"),
             legendItem("kind-paired", "paired (engine → game)"),
-            legendItem("pause", "queue paused")
+            legendItem("pause", "queue paused"),
+            legendItem("noclaim", "took nothing")
         );
         wrap.append(scroller, legend);
         return wrap;

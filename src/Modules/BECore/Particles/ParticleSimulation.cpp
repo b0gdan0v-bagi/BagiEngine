@@ -17,6 +17,7 @@ namespace BECore {
         constexpr int kQuadIndices = 6;
         constexpr uint64_t kBurstSerialBit = 1ull << 63;  ///< burst particles draw from serials a looping particle number never reaches
         constexpr double kMaxScheduleCount = 1e15;        ///< the largest number of looping particles one play counts: far past anything a double of seconds reaches
+        constexpr double kMaxFrameTicks = 1e15;           ///< a cap before the cast to an integer: far past `kMaxLifetime * kMaxFlipbookFps`
         constexpr Color kWhite{255, 255, 255, 255};
 
         float Unit(const ParticleEffect& effect, uint64_t serial, ParticleStream stream) {
@@ -49,6 +50,22 @@ namespace BECore {
             const float age = static_cast<float>(time - particle.spawnTime);
             const float halfAgeSquared = kHalf * age * age;
             return {particle.originX + particle.velocityX * age + gravityX * halfAgeSquared, particle.originY + particle.velocityY * age + gravityY * halfAgeSquared};
+        }
+
+        struct UvRect {
+            float u0 = 0.0f;
+            float v0 = 0.0f;
+            float u1 = 0.0f;
+            float v1 = 0.0f;
+        };
+
+        /// The UVs of cell @p frame of the grid inside @p part; a single cell is @p part itself, with the same floats as no grid at all
+        UvRect CellUv(const Rect& part, Vec2 textureSize, int32_t columns, int32_t rows, int32_t frame) {
+            const float cellW = part.w / static_cast<float>(columns);
+            const float cellH = part.h / static_cast<float>(rows);
+            const float x = part.x + static_cast<float>(frame % columns) * cellW;
+            const float y = part.y + static_cast<float>(frame / columns) * cellH;
+            return {x / textureSize.x, y / textureSize.y, (x + cellW) / textureSize.x, (y + cellH) / textureSize.y};
         }
 
         void WriteIndexPattern(Vector<int>& indices, size_t quads) {
@@ -131,6 +148,25 @@ namespace BECore {
         return PositionAt(particle, _time, clean.gravityX, clean.gravityY);
     }
 
+    int32_t ParticleSimulation::FrameOf(const ParticleFlipbook& flipbook, float progress, float age, float frameSeed) {
+        const int64_t cells = static_cast<int64_t>(std::max(flipbook.columns, 1)) * std::max(flipbook.rows, 1);
+        const int64_t count = flipbook.frames > 0 ? std::min<int64_t>(flipbook.frames, cells) : cells;
+
+        int64_t frame = 0;
+        if (flipbook.mode == ParticleFlipbookMode::Loop) {
+            const double ticks = std::floor(static_cast<double>(FiniteOrZero(age)) * static_cast<double>(FiniteOrZero(flipbook.fps)));
+            frame = static_cast<int64_t>(std::clamp(ticks, 0.0, kMaxFrameTicks));
+        } else {
+            const double scaled = std::floor(static_cast<double>(FiniteOrZero(progress)) * static_cast<double>(count));
+            frame = static_cast<int64_t>(std::clamp(scaled, 0.0, static_cast<double>(count - 1)));
+        }
+        if (flipbook.randomStart) {
+            const double seed = std::clamp(static_cast<double>(FiniteOrZero(frameSeed)), 0.0, 1.0);
+            frame += std::min(static_cast<int64_t>(seed * static_cast<double>(count)), count - 1);
+        }
+        return static_cast<int32_t>(frame % count);
+    }
+
     ParticleLook ParticleSimulation::SampleLook(const ParticleEffect& effect, float progress) {
         ParticleLook look;
         look.size = std::max(0.0f, Lerp(effect.size.from, effect.size.to, Ease(effect.size.ease, progress)));
@@ -154,17 +190,9 @@ namespace BECore {
             WriteIndexPattern(indices, quads);
         }
 
-        float u0 = 0.0f;
-        float v0 = 0.0f;
-        float u1 = 0.0f;
-        float v1 = 0.0f;
-        if (textureSize.x > 0.0f && textureSize.y > 0.0f) {
-            const Rect part = source.IsEmpty() ? Rect(0.0f, 0.0f, textureSize.x, textureSize.y) : source;
-            u0 = part.x / textureSize.x;
-            v0 = part.y / textureSize.y;
-            u1 = (part.x + part.w) / textureSize.x;
-            v1 = (part.y + part.h) / textureSize.y;
-        }
+        const bool textured = textureSize.x > 0.0f && textureSize.y > 0.0f;
+        const Rect part = source.IsEmpty() ? Rect(0.0f, 0.0f, textureSize.x, textureSize.y) : source;
+        const ParticleFlipbook& flipbook = clean.flipbook;
 
         for (size_t i = 0; i < quads; ++i) {
             const Particle& particle = _particles[i];
@@ -176,11 +204,16 @@ namespace BECore {
             const float cosA = std::cos(angle);
             const float sinA = std::sin(angle);
             const Color color = Multiply(look.color, particle.tint);
+            UvRect uv;
+            if (textured) {
+                const int32_t frame = FrameOf(flipbook, age / particle.lifetime, age, particle.frameSeed);
+                uv = CellUv(part, textureSize, flipbook.columns, flipbook.rows, frame);
+            }
 
             const float cornerX[kQuadVertices] = {-half, half, half, -half};
             const float cornerY[kQuadVertices] = {-half, -half, half, half};
-            const float cornerU[kQuadVertices] = {u0, u1, u1, u0};
-            const float cornerV[kQuadVertices] = {v0, v0, v1, v1};
+            const float cornerU[kQuadVertices] = {uv.u0, uv.u1, uv.u1, uv.u0};
+            const float cornerV[kQuadVertices] = {uv.v0, uv.v0, uv.v1, uv.v1};
             GeometryVertex* out = vertices.data() + i * kQuadVertices;
             for (int corner = 0; corner < kQuadVertices; ++corner) {
                 out[corner].x = center.x + cornerX[corner] * cosA - cornerY[corner] * sinA;
@@ -235,6 +268,7 @@ namespace BECore {
 
         particle.sizeScale = 1.0f + effect.sizeJitter * Signed(effect, serial, ParticleStream::SizeJitter);
         particle.rotationOffset = effect.rotationJitter * Signed(effect, serial, ParticleStream::RotationJitter);
+        particle.frameSeed = Unit(effect, serial, ParticleStream::StartFrame);
         particle.tint = tint;
 
         _particles.push_back(particle);

@@ -18,3 +18,10 @@
 - **`FunctionRef` is never stored** (a member, a captured value, a returned one): it points at the callable, which a temporary lambda keeps only to the end of the full expression that calls. A `FunctionRef` built from a `FunctionRef` is a plain copy.
 - **`ScopeGuard` runs its callable in the destructor** and cannot be copied or dismissed; `ScopeGuard guard([&] { ... });` deduces the type.
 - `tests/BECore/CallablesBenchTest.cpp` times the types against `eastl::function`; `BE_CALLABLES_BENCH=<iterations>` prints the numbers. It asserts nothing on time and is not a member of the perf set (`tools/perf/CLAUDE.md`).
+
+## The engine version
+
+`EngineVersion.h` holds `MAJOR.MINOR.PATCH` of the engine (`0.MINOR.PATCH` while it is young: a breaking change raises MINOR, anything else PATCH).
+
+- A game may rely on the macros `BE_ENGINE_VERSION_MAJOR/MINOR/PATCH` and `BE_ENGINE_VERSION_AT_LEAST(a, b, c)` in `#if` (the constants cannot be used there), on `BE_ENGINE_VERSION_STRING`, and on the constants `kEngineVersionMajor/Minor/Patch` and `kEngineVersion`. The string is built from the macros, so it cannot drift from the numbers.
+- The numbers are changed only by `tools/changelog/changelog.py` (run by `todo-merge` with the changelog fragment of the merged entry), which rewrites the three `#define` lines; a developer never edits them.
