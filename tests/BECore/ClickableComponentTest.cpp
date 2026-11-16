@@ -1,6 +1,7 @@
 #include "ClickableComponentTest.h"
 
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Input/PointerTracker.h>
 #include <BECore/Input/UIInput.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Renderer/IRenderer.h>
@@ -420,6 +421,37 @@ namespace BECore::Tests {
         EXPECT_EQ(recorder.rawUps, 1);
 
         EXPECT_TRUE(Release(200.0f + kInside, kInside));
+        EXPECT_EQ(recorder.rawUps, 1);
+    }
+
+    TEST_F(ClickableComponentTest, ARightPressOfTheGameThenALeftPressOnTheClickableThenTheRightReleaseOverItReachesTheGameOnce) {
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(ClickableNode("A", "ActA", 200.0f)));
+        Draw();
+        InputRecorder recorder;
+        ASSERT_FALSE(Press(kInside, kInside, SDL_BUTTON_RIGHT));
+        ASSERT_TRUE(Press(200.0f + kInside, kInside, SDL_BUTTON_LEFT));
+
+        EXPECT_FALSE(Release(200.0f + kInside, kInside, SDL_BUTTON_RIGHT));
+        EXPECT_EQ(recorder.rawUps, 1);
+        EXPECT_FALSE(Release(kInside, kInside, SDL_BUTTON_RIGHT)) << "the right press is already released";
+        EXPECT_EQ(recorder.rawUps, 2);
+    }
+
+    TEST_F(ClickableComponentTest, APressTakenWhileEveryPlaceOfTheCaptureIsFullHasItsReleaseRaw) {
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(ClickableNode("A", "ActA", 0.0f)));
+        Draw();
+        InputRecorder recorder;
+        constexpr uint32_t kPlaces = static_cast<uint32_t>(PointerTracker::kMaxEntries);
+        for (uint32_t which = 1; which <= kPlaces; ++which) {
+            ASSERT_TRUE(Press(kInside, kInside, SDL_BUTTON_LEFT, which));
+        }
+        const uint32_t overflow = kPlaces + 1;
+        ASSERT_TRUE(Press(kInside, kInside, SDL_BUTTON_LEFT, overflow));
+        ASSERT_EQ(recorder.actions.size(), kPlaces + 1u);
+
+        EXPECT_FALSE(Release(kInside, kInside, SDL_BUTTON_LEFT, overflow)) << "no capture was recorded, so the release is the game's";
+        EXPECT_EQ(recorder.rawUps, 1);
+        EXPECT_TRUE(Release(kInside, kInside, SDL_BUTTON_LEFT, 1));
         EXPECT_EQ(recorder.rawUps, 1);
     }
 
