@@ -371,6 +371,25 @@ namespace BECore::Tests {
         EXPECT_EQ(b.leaves, Vector<uint32_t>({2}));
     }
 
+    TEST_F(UIInputPointerTest, EndHoverTellsTheHoverOfThatPointerToLeaveOnce) {
+        ShapeHandler a(&_callLog, 1);
+        ShapeHandler b(&_callLog, 2);
+        a.consumeMotion = true;
+        b.minX = 20.0f;
+        b.consumeMotion = true;
+        Register(a, 1);
+        Register(b, 2);
+        _input.DispatchMouseMotion(Motion(5.0f, 1));
+        _input.DispatchMouseMotion(Motion(25.0f, 2));
+
+        _input.EndHover(2);
+        _input.EndHover(2);
+        _input.EndHover(7);
+
+        EXPECT_TRUE(a.leaves.empty());
+        EXPECT_EQ(b.leaves, Vector<uint32_t>({2}));
+    }
+
     TEST_F(UIInputPointerTest, ThePointerOverTheHolderKeepsItsHoverAfterTheUp) {
         ShapeHandler holder(&_callLog, 1);
         holder.maxX = 10.0f;

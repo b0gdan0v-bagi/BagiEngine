@@ -91,6 +91,10 @@ namespace BECore {
         /// "the release of my press" from a release that is the game's. A dispatch nested inside the up answers for itself
         [[nodiscard]] bool IsDeliveringCapture(const IUIInputHandler& handler) const;
 
+        /// The pointer `which` is gone (a finger was lifted): the handler it was over gets OnPointerLeave once and the hover is
+        /// forgotten. A mouse has no such moment; a press the pointer still holds is not touched
+        void EndHover(uint32_t which);
+
         /// @return true when a handler consumed the event, so game code did not get it
         bool DispatchMouseButtonDown(const SDL_MouseButtonEvent& event);
         bool DispatchMouseButtonUp(const SDL_MouseButtonEvent& event);

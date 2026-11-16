@@ -145,6 +145,14 @@ namespace BECore {
         return result.consumed;
     }
 
+    void UIInput::EndHover(uint32_t which) {
+        BeginDispatch();
+        if (IUIInputHandler* previous = _tracker.SetHover(which, nullptr)) {
+            previous->OnPointerLeave(which);
+        }
+        EndDispatch();
+    }
+
     bool UIInput::DispatchMouseWheel(const SDL_MouseWheelEvent& event) {
         BeginDispatch();
         const bool consumed = Walk(event, event.mouse_x, event.mouse_y, &IUIInputHandler::OnMouseWheel, nullptr).consumed;
