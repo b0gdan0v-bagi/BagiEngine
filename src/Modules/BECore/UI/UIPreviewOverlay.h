@@ -36,6 +36,15 @@ namespace BECore {
         Vec2 pivot;    ///< the pivot point of the element's rect, in render output pixels
     };
 
+    /// One finding of UILayoutValidator as the findings overlay of the viewport shows it
+    struct FindingMark {
+        UILayoutIssueKind kind = UILayoutIssueKind::OutsideCanvas;
+        PoolString element;
+        PoolString other;                   ///< the sibling or the region name (UILayoutIssue::other)
+        Rect rect;                          ///< the rect of `element`, in render output pixels; an OutsideCanvas rect is not clipped
+        const UIElement* source = nullptr;  ///< UILayoutIssue::source: compare it, never keep it past an edit of the tree
+    };
+
     /**
      * @brief The pure part of the editor viewport's overlays: the rects it draws over the image, in render output pixels of the target, from the top left of the output. No ImGui, no scene.
      */
@@ -84,11 +93,54 @@ namespace BECore {
          */
         [[nodiscard]] static Optional<Rect> DesignRect(const UICanvasLayout& canvas);
 
+        /**
+         * @brief One FindingMark per issue of @p issues (the result of validating @p canvas), in the order of the validator, with the rect in output pixels.
+         *
+         * @p marks is cleared first and keeps its capacity.
+         */
+        static void FindingMarks(const UICanvasLayout& canvas, Span<const UILayoutIssue> issues, Vector<FindingMark>& marks);
+        [[nodiscard]] static Vector<FindingMark> FindingMarks(const UICanvasLayout& canvas, Span<const UILayoutIssue> issues);
+
+        /**
+         * @brief The one-line text of a finding for a list row: `<kind>: <element>[ / <other>] (<w> x <h>)`, the size in canvas units, e.g. `TouchTargetTooSmall: Button (48 x 24)`.
+         *
+         * @p text is cleared first and keeps its capacity.
+         */
+        static void FindingText(const UILayoutIssue& issue, String& text);
+
         /// The bounds of the whole canvas in output pixels
         [[nodiscard]] static Rect CanvasBounds(const UICanvasResolved& resolved);
 
         /// The content bounds (where the layout puts the elements, inside the safe area when the canvas uses it) in output pixels
         [[nodiscard]] static Rect ContentBounds(const UICanvasResolved& resolved);
+    };
+
+    /**
+     * @brief The validator's issues of one canvas, kept until something that they depend on changes, so a steady frame validates nothing.
+     *
+     * Keyed by the canvas (its address), `GetLayoutRuns()` (every re-layout: a new context, an Invalidate() followed by an Update(), a change of regions) and the minimum touch size. Validates at
+     * density 1, the density of the viewport's pass. A canvas that is destroyed is followed by Reset() (or a different canvas takes the address with the same count of layouts).
+     */
+    class UIFindingsCache {
+    public:
+        /// The issues of @p canvas for @p minTouchSize; empty for a canvas that has no layout yet. The reference is valid until the next call.
+        [[nodiscard]] const Vector<UILayoutIssue>& Get(const UICanvasLayout& canvas, float minTouchSize);
+
+        /// Forgets the issues, so the next Get() validates
+        void Reset();
+
+        /// How many times Get() validated: tests read it to show that a steady canvas pays nothing
+        [[nodiscard]] uint32_t GetValidationRuns() const {
+            return _validationRuns;
+        }
+
+    private:
+        const UICanvasLayout* _canvas = nullptr;
+        uint32_t _layoutRuns = 0;
+        float _minTouchSize = 0.0f;
+        bool _hasIssues = false;
+        uint32_t _validationRuns = 0;
+        Vector<UILayoutIssue> _issues;
     };
 
 }  // namespace BECore

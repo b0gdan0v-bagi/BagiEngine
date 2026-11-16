@@ -137,12 +137,61 @@ namespace BECore {
         return canvas.GetResolved().transform.ToOutput(x, y, params.referenceWidth, params.referenceHeight);
     }
 
+    void UIPreviewOverlay::FindingMarks(const UICanvasLayout& canvas, Span<const UILayoutIssue> issues, Vector<FindingMark>& marks) {
+        marks.clear();
+        const ViewTransform& transform = canvas.GetResolved().transform;
+        for (const UILayoutIssue& issue : issues) {
+            marks.push_back({issue.kind, issue.element, issue.other, transform.ToOutput(issue.rect.x, issue.rect.y, issue.rect.w, issue.rect.h), issue.source});
+        }
+    }
+
+    Vector<FindingMark> UIPreviewOverlay::FindingMarks(const UICanvasLayout& canvas, Span<const UILayoutIssue> issues) {
+        Vector<FindingMark> marks;
+        FindingMarks(canvas, issues, marks);
+        return marks;
+    }
+
+    void UIPreviewOverlay::FindingText(const UILayoutIssue& issue, String& text) {
+        text.clear();
+        auto out = eastl::back_inserter(text);
+        FormatTo(out, "{}: {}", EnumUtils<UILayoutIssueKind>::ToString(issue.kind), issue.element.ToStringView());
+        if (!issue.other.Empty()) {
+            FormatTo(out, " / {}", issue.other.ToStringView());
+        }
+        FormatTo(out, " ({:g} x {:g})", issue.rect.w, issue.rect.h);
+    }
+
     Rect UIPreviewOverlay::CanvasBounds(const UICanvasResolved& resolved) {
         return resolved.transform.ToOutput(resolved.bounds.x, resolved.bounds.y, resolved.bounds.w, resolved.bounds.h);
     }
 
     Rect UIPreviewOverlay::ContentBounds(const UICanvasResolved& resolved) {
         return resolved.transform.ToOutput(resolved.contentBounds.x, resolved.contentBounds.y, resolved.contentBounds.w, resolved.contentBounds.h);
+    }
+
+    const Vector<UILayoutIssue>& UIFindingsCache::Get(const UICanvasLayout& canvas, float minTouchSize) {
+        if (!canvas.HasLayout()) {
+            Reset();
+            return _issues;
+        }
+        if (!_hasIssues || _canvas != &canvas || _layoutRuns != canvas.GetLayoutRuns() || _minTouchSize != minTouchSize) {
+            UILayoutValidatorOptions options;
+            options.minTouchSize = minTouchSize;
+            options.pixelDensity = 1.0f;
+            _issues = canvas.Validate(options);
+            _canvas = &canvas;
+            _layoutRuns = canvas.GetLayoutRuns();
+            _minTouchSize = minTouchSize;
+            _hasIssues = true;
+            ++_validationRuns;
+        }
+        return _issues;
+    }
+
+    void UIFindingsCache::Reset() {
+        _issues.clear();
+        _canvas = nullptr;
+        _hasIssues = false;
     }
 
 }  // namespace BECore

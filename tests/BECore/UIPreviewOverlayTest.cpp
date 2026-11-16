@@ -121,6 +121,40 @@ namespace BECore::Tests {
             }
         };
 
+        class ContentElement : public UIElement {
+        public:
+            UIContentFit CheckContent(float /*width*/, float /*height*/, float /*scale*/) const override {
+                return {true, false, false};
+            }
+        };
+
+        /// A canvas with findings of six kinds: the notch (OutsideSafeArea), an element off the canvas, a small button, content that does not fit, overlapping rows of a stack and a missing region
+        struct FindingsFixture {
+            UICanvasLayout canvas = MakeCanvas();
+            UILayoutContext context = Output(1000.0f, 500.0f);
+
+            FindingsFixture() {
+                context.safeArea = {0.0f, 40.0f, 1000.0f, 420.0f};
+                canvas.params.useSafeArea = true;
+                AddBox(*canvas.root, "Notch", 0.0f, -20.0f, 100.0f, 30.0f);
+                AddBox(*canvas.root, "Out", 950.0f, 100.0f, 100.0f, 50.0f);
+                AddBox(*canvas.root, "Tiny", 100.0f, 100.0f, 10.0f, 10.0f, true);
+                auto stuck = New<ContentElement>();
+                stuck->name = "Stuck"_intern;
+                stuck->style.rect.x = UILength::Px(300.0f);
+                stuck->style.rect.y = UILength::Px(100.0f);
+                stuck->style.rect.width = UILength::Px(20.0f);
+                stuck->style.rect.height = UILength::Px(20.0f);
+                canvas.root->children.push_back(stuck);
+                auto row = AddBox(*canvas.root, "Row", 200.0f, 200.0f, 200.0f, 200.0f);
+                row->layout = UILayoutKind::Stack;
+                row->style.stack.spacing = -10.0f;
+                AddBox(*row, "First", 0.0f, 0.0f, 100.0f, 40.0f);
+                AddBox(*row, "Second", 0.0f, 0.0f, 100.0f, 40.0f);
+                AddBox(*canvas.root, "Plate", 500.0f, 100.0f, 50.0f, 50.0f)->style.rect.region = "gone"_intern;
+            }
+        };
+
         UILayoutContext NotchOutput(float width, float height) {
             UILayoutContext context = Output(width, height);
             context.safeArea = UIPreview::SimulatedSafeArea(SafeAreaSimulation::TopNotch, width, height);
@@ -555,6 +589,109 @@ namespace BECore::Tests {
 
         UICanvasLayout noLayout = MakeCanvas(CanvasScaleMode::ScaleWithScreen);
         EXPECT_FALSE(UIPreviewOverlay::DesignRect(noLayout).has_value());
+    }
+
+    TEST(UIPreviewOverlayTest, FindingMarksAreTheIssuesOfTheValidatorOneForOneThroughTheTransform) {
+        FindingsFixture fixture;
+        for (const CanvasScaleMode mode : {CanvasScaleMode::ConstantPixelSize, CanvasScaleMode::ScaleWithScreen}) {
+            fixture.canvas.params.scaleMode = mode;
+            fixture.canvas.Update(fixture.context);
+            const auto issues = fixture.canvas.Validate({});
+            ASSERT_GE(issues.size(), 5u);
+
+            const auto marks = UIPreviewOverlay::FindingMarks(fixture.canvas, issues);
+
+            ASSERT_EQ(marks.size(), issues.size());
+            for (size_t i = 0; i < issues.size(); ++i) {
+                EXPECT_EQ(marks[i].kind, issues[i].kind);
+                EXPECT_EQ(marks[i].element, issues[i].element);
+                EXPECT_EQ(marks[i].other, issues[i].other);
+                ExpectRect(marks[i].rect, ToOutput(fixture.canvas, issues[i].rect));
+                ASSERT_NE(marks[i].source, nullptr);
+                EXPECT_EQ(marks[i].source, issues[i].source);
+                EXPECT_EQ(marks[i].source, fixture.canvas.root->FindByName(marks[i].element));
+            }
+        }
+    }
+
+    TEST(UIPreviewOverlayTest, AnOutsideCanvasFindingIsNotClippedToTheOutput) {
+        FindingsFixture fixture;
+        fixture.canvas.Update(fixture.context);
+        const auto issues = fixture.canvas.Validate({});
+
+        const auto marks = UIPreviewOverlay::FindingMarks(fixture.canvas, issues);
+
+        const auto out = std::find_if(marks.begin(), marks.end(), [](const FindingMark& mark) { return mark.kind == UILayoutIssueKind::OutsideCanvas; });
+        ASSERT_NE(out, marks.end());
+        ExpectRect(out->rect, {950.0f, 140.0f, 100.0f, 50.0f});  // 40 below the top: the content starts under the notch
+    }
+
+    TEST(UIPreviewOverlayTest, FindingTextNamesTheKindTheElementTheOtherAndTheSize) {
+        UILayoutIssue issue;
+        issue.kind = UILayoutIssueKind::TouchTargetTooSmall;
+        issue.element = "Button"_intern;
+        issue.rect = {0.0f, 0.0f, 48.0f, 24.5f};
+        String text = "left over";
+
+        UIPreviewOverlay::FindingText(issue, text);
+        EXPECT_EQ(text, "TouchTargetTooSmall: Button (48 x 24.5)");
+
+        issue.kind = UILayoutIssueKind::OutsideRegion;
+        issue.other = "table.plate"_intern;
+        UIPreviewOverlay::FindingText(issue, text);
+        EXPECT_EQ(text, "OutsideRegion: Button / table.plate (48 x 24.5)");
+    }
+
+    TEST(UIPreviewOverlayTest, TheFindingsCacheValidatesOnceUntilTheLayoutOrTheMinimumChanges) {
+        FindingsFixture fixture;
+        UIFindingsCache cache;
+        EXPECT_TRUE(cache.Get(fixture.canvas, 32.0f).empty());  // no layout yet
+        EXPECT_EQ(cache.GetValidationRuns(), 0u);
+        fixture.canvas.Update(fixture.context);
+
+        const size_t count = cache.Get(fixture.canvas, 32.0f).size();
+        EXPECT_GE(count, 6u);
+        EXPECT_EQ(cache.GetValidationRuns(), 1u);
+        EXPECT_EQ(cache.Get(fixture.canvas, 32.0f).size(), count);
+        fixture.canvas.Update(fixture.context);  // nothing changed: no layout
+        EXPECT_EQ(cache.Get(fixture.canvas, 32.0f).size(), count);
+        EXPECT_EQ(cache.GetValidationRuns(), 1u);
+
+        fixture.canvas.Invalidate();
+        fixture.canvas.Update(fixture.context);
+        EXPECT_EQ(cache.Get(fixture.canvas, 32.0f).size(), count);
+        EXPECT_EQ(cache.GetValidationRuns(), 2u);
+
+        UILayoutContext other = fixture.context;
+        other.outputHeight = 600.0f;
+        fixture.canvas.Update(other);
+        cache.Get(fixture.canvas, 32.0f);
+        EXPECT_EQ(cache.GetValidationRuns(), 3u);
+
+        cache.Get(fixture.canvas, 1.0f);  // a smaller minimum: the small button is fine now
+        EXPECT_EQ(cache.GetValidationRuns(), 4u);
+        EXPECT_EQ(cache.Get(fixture.canvas, 1.0f).size(), count - 1);
+    }
+
+    TEST(UIPreviewOverlayTest, TheFindingsCacheValidatesAgainForAnotherCanvasAndAfterAReset) {
+        FindingsFixture first;
+        FindingsFixture second;
+        first.canvas.Update(first.context);
+        second.canvas.Update(second.context);
+        UIFindingsCache cache;
+
+        cache.Get(first.canvas, 32.0f);
+        cache.Get(second.canvas, 32.0f);
+        EXPECT_EQ(cache.GetValidationRuns(), 2u);
+        const auto& issues = cache.Get(second.canvas, 32.0f);
+        EXPECT_EQ(cache.GetValidationRuns(), 2u);
+        for (const UILayoutIssue& issue : issues) {
+            EXPECT_EQ(issue.source, second.canvas.root->FindByName(issue.element));
+        }
+
+        cache.Reset();
+        cache.Get(second.canvas, 32.0f);
+        EXPECT_EQ(cache.GetValidationRuns(), 3u);
     }
 
 }  // namespace BECore::Tests
