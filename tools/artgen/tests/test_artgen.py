@@ -118,7 +118,7 @@ def test_find_presets_reports_a_broken_one(game):
     found = artgen_preset.find_presets(game)
     assert isinstance(found["wood"], artgen_preset.Preset)
     assert isinstance(found["zbroken"], artgen_preset.PresetError)
-    assert set(artgen_preset.find_presets(game / "missing")) == {"icon", "sprite"}, "a game without presets gets the engine's starters"
+    assert set(artgen_preset.find_presets(game / "missing")) == {"icon", "sfx", "sprite"}, "a game without presets gets the engine's starters"
     assert found["wood"].source == "game" and found["sprite"].source == "engine"
     assert found["zbroken"].source == "game" and found["zbroken"].data["workflow"] == "nope"
 
