@@ -28,14 +28,14 @@ ctest --preset macos-debug                 # every test in its own process, 8 at
 BECore → Events → TaskSystem → RemoteControl → SDL / Vulkan → Games → Rooms → RoomClient → RoomServer → Runtime (src/Application, src/Widgets) → game (own repository) → executable
 ```
 
-**Stack:** CMake 3.31+ / Ninja, SDL3 + SDL_image, ImGui, EnTT, EASTL, pugixml, nlohmann/json (control API only), stb_truetype, fmt, GoogleTest.
+**Stack:** CMake 3.31+ / Ninja, SDL3 + SDL_image, ImGui, EnTT, EASTL, pugixml, nlohmann/json (control API only), stb_truetype, stb_vorbis, dr_flac, fmt, GoogleTest.
 
 ```
 cmake/            engine setup, be_* functions, build options (cmake/CLAUDE.md)
 src/Application/  the application loop (RuntimeModule)
 src/Widgets/      editor panels and frame widgets — no game UI (.claude/rules/widgets-module.md)
 src/Modules/      BECore, Events, TaskSystem, RemoteControl, SDL, Vulkan, Games, Rooms (online rooms by code, pure code), RoomClient (over a native or a browser transport; built everywhere), RoomServer (WebSocket room server, only with ENGINE_WITH_REMOTE_CONTROL; BagiRoomServer, `tools/rooms/Dockerfile`), RmlUiHost (only with ENGINE_UI_RMLUI)
-                  vendored, never edited, left out of broad searches: EABase, EnTT, fmt, imgui, nlohmann, pugixml, RmlUi, stb, tracy
+                  vendored, never edited, left out of broad searches: EABase, EnTT, fmt, imgui, nlohmann, pugixml, RmlUi, stb, dr_libs, tracy
 config/, assets/  engine content; a game's files of the same name replace the engine's (FileSystem/CLAUDE.md)
 tests/            BagiEngineTests + Common (BagiEngineTestSupport)
 tools/            todo (the todo store), control (control API client, smoke test, MCP server), rooms (BagiRoomServer smoke test, BagiRoomClientProbe, `docker_check.py`), perf (benchmarks, trace summary), sync (helper of `sync-engine`), changelog (version, fragments), shots (before / after pictures of scenes), qa (`/qa`), stress (`BagiStress`, the 2D stress app: benchmarks and a control smoke), migrate (rewrites a game's content files to the engine's format), schema (XSDs from reflection), codemod (moves `eastl::` / `std::` names to the `BECore` aliases), web, dev (`dev.py`: a game's products from its `dev.json`), ccache (shared hits), artgen (AI art: ComfyUI, presets to images), vscode/todo-workers and vscode/bagi-dev (the panels)

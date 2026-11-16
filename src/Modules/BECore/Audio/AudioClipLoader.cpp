@@ -10,7 +10,7 @@
 namespace BECore {
 
     bool AudioClipLoader::CanLoad(StringView extension) const {
-        return extension == ".wav" || extension == ".ogg";
+        return extension == ".wav" || extension == ".ogg" || extension == ".flac";
     }
 
     Task<IntrusivePtr<IResource>> AudioClipLoader::LoadAsync(PoolString path) {

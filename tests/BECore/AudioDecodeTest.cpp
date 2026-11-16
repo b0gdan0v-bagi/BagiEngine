@@ -254,7 +254,9 @@ namespace BECore::Tests {
         EXPECT_TRUE(wav.has_value()) << ErrorOf(wav).c_str();
         const auto ogg = DecodeAudio(ReadFixture("stereo-tone.ogg"));
         EXPECT_TRUE(ogg.has_value()) << ErrorOf(ogg).c_str();
-        EXPECT_EQ(ErrorOf(DecodeAudio(Vector<uint8_t>{'I', 'D', '3', 4, 0, 0})), "neither a WAVE nor an Ogg file");
+        const auto flac = DecodeAudio(ReadFixture("stereo-tone.flac"));
+        EXPECT_TRUE(flac.has_value()) << ErrorOf(flac).c_str();
+        EXPECT_EQ(ErrorOf(DecodeAudio(Vector<uint8_t>{'I', 'D', '3', 4, 0, 0})), "neither a WAVE, an Ogg nor a FLAC file");
     }
 
     namespace {
@@ -322,6 +324,117 @@ namespace BECore::Tests {
         EXPECT_FALSE(OpenAudioStream(Vector<uint8_t>{'O', 'g', 'g', 'S', 0, 2, 0, 0}).has_value());
         EXPECT_FALSE(OpenAudioStream(MakeWav(Fmt{}, Vector<uint8_t>{})).has_value());
         EXPECT_FALSE(OpenAudioStream(Vector<uint8_t>{}).has_value());
+        EXPECT_FALSE(OpenAudioStream(Vector<uint8_t>{'f', 'L', 'a', 'C', 0, 0, 0, 0}).has_value());
+    }
+
+    namespace {
+
+        // The FLAC fixtures, written by PyAV (ffmpeg's encoder, what ComfyUI saves with) for the test: a tone of 0.5
+        constexpr uint32_t kFlacStereoRate = 44100;
+        constexpr size_t kFlacStereoFrames = 11025;  ///< stereo-tone.flac: 440 Hz, 16 bits, a quarter of a second, right = -left
+        constexpr uint32_t kFlacMonoRate = 22050;
+        constexpr size_t kFlacMonoFrames = 2205;  ///< mono-24bit.flac: 660 Hz, 24 bits, a tenth of a second
+        constexpr double kTwoPi = 6.283185307179586;
+
+    }  // namespace
+
+    TEST(AudioDecodeTest, TheStereoFlacFixtureDecodesExactly) {
+        const Vector<uint8_t> bytes = ReadFixture("stereo-tone.flac");
+        ASSERT_FALSE(bytes.empty());
+        const auto result = DecodeFlac(bytes);
+        ASSERT_TRUE(result.has_value()) << ErrorOf(result).c_str();
+        EXPECT_EQ(result->format, (AudioFormat{kFlacStereoRate, 2}));
+        ASSERT_EQ(result->GetFrameCount(), kFlacStereoFrames) << "FLAC is lossless: no padding";
+        for (size_t frame = 0; frame < kFlacStereoFrames; ++frame) {
+            const float left = result->samples[frame * 2];
+            ASSERT_FLOAT_EQ(left, -result->samples[frame * 2 + 1]) << "frame " << frame;
+            const double expected = std::round(0.5 * std::sin(kTwoPi * 440.0 * static_cast<double>(frame) / kFlacStereoRate) * 32767.0) / 32768.0;
+            ASSERT_NEAR(left, expected, 1e-6) << "frame " << frame;
+        }
+    }
+
+    TEST(AudioDecodeTest, A24BitFlacKeepsItsDepth) {
+        const auto result = DecodeFlac(ReadFixture("mono-24bit.flac"));
+        ASSERT_TRUE(result.has_value()) << ErrorOf(result).c_str();
+        EXPECT_EQ(result->format, (AudioFormat{kFlacMonoRate, 1}));
+        ASSERT_EQ(result->GetFrameCount(), kFlacMonoFrames);
+        for (size_t frame = 0; frame < kFlacMonoFrames; ++frame) {
+            const double expected = 0.5 * std::sin(kTwoPi * 660.0 * static_cast<double>(frame) / kFlacMonoRate);
+            // 24 bits: far closer than a 16-bit step (3e-5)
+            ASSERT_NEAR(result->samples[frame], expected, 1e-6) << "frame " << frame;
+        }
+    }
+
+    TEST(AudioDecodeTest, AFlacLongerThanTheLimitIsRefused) {
+        const Vector<uint8_t> bytes = ReadFixture("stereo-tone.flac");
+        EXPECT_EQ(ErrorOf(DecodeFlac(bytes, 1000)), "longer than 1000 frames");
+        EXPECT_EQ(ErrorOf(DecodeFlac(bytes, kFlacStereoFrames - 1)), Format("longer than {} frames", kFlacStereoFrames - 1));
+        EXPECT_TRUE(DecodeFlac(bytes, kFlacStereoFrames).has_value()) << "exactly the limit decodes";
+    }
+
+    TEST(AudioDecodeTest, FlacGarbageIsRefused) {
+        Vector<uint8_t> bytes{'f', 'L', 'a', 'C'};
+        bytes.insert(bytes.end(), 64, uint8_t{0x5A});
+        EXPECT_FALSE(DecodeFlac(bytes).has_value());
+        EXPECT_FALSE(DecodeFlac(Vector<uint8_t>{}).has_value());
+        // Cut after the header: a stream with no frame
+        Vector<uint8_t> cut = ReadFixture("stereo-tone.flac");
+        cut.resize(42);   // "fLaC" and the STREAMINFO block
+        cut[4] |= 0x80U;  // STREAMINFO is the last metadata block
+        EXPECT_EQ(ErrorOf(DecodeFlac(cut)), "the FLAC file holds no sample frame");
+    }
+
+    TEST(AudioDecodeTest, AFlacStreamReadInChunksIsTheWholeDecodeAndRewinds) {
+        const Vector<uint8_t> bytes = ReadFixture("mono-24bit.flac");
+        const auto whole = DecodeFlac(bytes);
+        ASSERT_TRUE(whole.has_value()) << ErrorOf(whole).c_str();
+        auto stream = OpenAudioStream(bytes);
+        ASSERT_TRUE(stream.has_value()) << stream.error().c_str();
+        EXPECT_EQ((*stream)->GetFormat(), whole->format);
+        const Vector<float> read = ReadAll(**stream, 1000);
+        ASSERT_EQ(read.size(), whole->samples.size());
+        for (size_t i = 0; i < read.size(); ++i) {
+            ASSERT_FLOAT_EQ(read[i], whole->samples[i]) << "sample " << i;
+        }
+        Vector<float> after(16);
+        EXPECT_EQ((*stream)->Read(after), 0u) << "the end stays the end";
+        ASSERT_TRUE((*stream)->Rewind());
+        EXPECT_EQ(ReadAll(**stream, 4096).size(), whole->samples.size());
+    }
+
+    TEST(AudioDecodeTest, EncodeWavPcm16RoundTrips) {
+        const Vector<float> samples{0.0f, 0.5f, -0.5f, 1.0f, -1.0f, 2.0f, -3.0f, std::numeric_limits<float>::quiet_NaN()};
+        const auto encoded = EncodeWav(samples, AudioFormat{kRate, 2}, WavSampleFormat::Pcm16);
+        ASSERT_TRUE(encoded.has_value()) << encoded.error().c_str();
+        EXPECT_EQ(encoded->size(), 44u + samples.size() * 2);
+        const auto decoded = DecodeWav(*encoded);
+        ASSERT_TRUE(decoded.has_value()) << ErrorOf(decoded).c_str();
+        EXPECT_EQ(decoded->format, (AudioFormat{kRate, 2}));
+        const Vector<float> expected{0.0f, 0.5f, -0.5f, 1.0f, -1.0f, 1.0f, -1.0f, 0.0f};  // clamped; NaN is silence
+        ASSERT_EQ(decoded->samples.size(), expected.size());
+        for (size_t i = 0; i < expected.size(); ++i) {
+            EXPECT_NEAR(decoded->samples[i], expected[i], 1.0f / 32767.0f) << "sample " << i;
+        }
+    }
+
+    TEST(AudioDecodeTest, EncodeWavFloat32IsLossless) {
+        const auto flac = DecodeFlac(ReadFixture("mono-24bit.flac"));
+        ASSERT_TRUE(flac.has_value()) << ErrorOf(flac).c_str();
+        const auto encoded = EncodeWav(flac->samples, flac->format, WavSampleFormat::Float32);
+        ASSERT_TRUE(encoded.has_value()) << encoded.error().c_str();
+        const auto decoded = DecodeWav(*encoded);
+        ASSERT_TRUE(decoded.has_value()) << ErrorOf(decoded).c_str();
+        EXPECT_EQ(decoded->format, flac->format);
+        EXPECT_EQ(decoded->samples, flac->samples);
+    }
+
+    TEST(AudioDecodeTest, EncodeWavRefusesWhatIsNotAClip) {
+        const Vector<float> three{0.0f, 0.1f, 0.2f};
+        EXPECT_FALSE(EncodeWav(three, AudioFormat{kRate, 2}, WavSampleFormat::Pcm16).has_value()) << "not whole frames";
+        EXPECT_FALSE(EncodeWav({}, AudioFormat{kRate, 1}, WavSampleFormat::Pcm16).has_value()) << "no samples";
+        EXPECT_FALSE(EncodeWav(three, AudioFormat{kRate, 0}, WavSampleFormat::Pcm16).has_value());
+        EXPECT_FALSE(EncodeWav(three, AudioFormat{kRate, 9}, WavSampleFormat::Float32).has_value());
+        EXPECT_FALSE(EncodeWav(three, AudioFormat{999, 1}, WavSampleFormat::Pcm16).has_value());
     }
 
 }  // namespace BECore::Tests

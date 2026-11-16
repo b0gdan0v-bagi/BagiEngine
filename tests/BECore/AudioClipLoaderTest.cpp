@@ -47,6 +47,14 @@ namespace BECore::Tests {
         EXPECT_EQ(clip->GetTypeName(), "AudioClip"_intern);
     }
 
+    TEST_F(AudioClipLoaderTest, AFlacFileLoadsAsAClip) {
+        const auto clip = CoreManager::GetResourceManager().Load<AudioClip>(Format("{}/stereo-tone.flac", kMountPoint));
+        ASSERT_TRUE(clip);
+        ASSERT_EQ(clip->GetState(), ResourceState::Loaded);
+        EXPECT_EQ(clip->GetFormat(), (AudioFormat{44100, 2}));
+        EXPECT_EQ(clip->GetFrameCount(), 11025u);
+    }
+
     TEST_F(AudioClipLoaderTest, AMissingFileIsAFailedClip) {
         const auto clip = CoreManager::GetResourceManager().Load<AudioClip>(Format("{}/missing.wav", kMountPoint));
         ASSERT_TRUE(clip);
