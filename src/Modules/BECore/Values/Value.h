@@ -7,6 +7,8 @@
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <BECore/Values/Context.h>
+#include <BECore/Values/Programs/Interpreter.h>
+#include <BECore/Values/Programs/Program.h>
 #include <BECore/Values/ValueType.h>
 #include <concepts>
 #include <cstdint>
@@ -14,7 +16,7 @@
 
 namespace BECore {
 
-    /// What a value is: a literal, a read of a field of a context object, or (later) a program
+    /// What a value is: a literal, a read of a field of a context object, or a compiled formula (`Programs/`)
     CORE_ENUM(ValueKind, uint8_t, Const, Slot, Program)
 
     /**
@@ -23,7 +25,9 @@ namespace BECore {
      * A field of this type loads `damage="12"` as before, and `<damage from="caster.attack"/>` reads the field `attack` of the object
      * a game puts at the level `caster` of the `Context`: the path is checked against the declared type and turned into an offset once, when
      * the content is loaded, so `Get` is a branch and an addition. It converts from `T` implicitly, so code that fills a field keeps its look.
-     * The literal is a plain member beside the slot (no union), so a `Value` is always a valid literal of its type.
+     * The literal is a plain member beside the slot (no union), so a `Value` is always a valid literal of its type. A `Program` value holds the
+     * id of a compiled formula in the `ProgramPool` (in the field a `Slot` uses for its offset) and its text (in the path field): it stays trivially
+     * copyable, and `Evaluate` runs it.
      */
     template <ValueType T>
     class Value {
@@ -59,6 +63,15 @@ namespace BECore {
             return {};
         }
 
+        /// A value of the program @p id of the `ProgramPool`, written as @p source; the caller made the program for the type `T`
+        [[nodiscard]] static Value FromProgram(ProgramId id, PoolString source) {
+            Value value;
+            value._kind = ValueKind::Program;
+            value._offset = id;
+            value._path = source;
+            return value;
+        }
+
         [[nodiscard]] constexpr ValueKind Kind() const {
             return _kind;
         }
@@ -71,7 +84,7 @@ namespace BECore {
             return _kind == ValueKind::Slot;
         }
 
-        /// The path of a `Slot`, empty for the other kinds
+        /// The path of a `Slot`, the text of a `Program`, empty for a `Const`
         [[nodiscard]] constexpr const PoolString& Path() const {
             return _path;
         }
@@ -81,14 +94,27 @@ namespace BECore {
             return _level;
         }
 
-        /// The distance from the level's object to the field of a `Slot`; 0 for the other kinds
+        /// The distance from the level's object to the field of a `Slot`; 0 for a `Const`. Of a `Program` it is its id, see `Id()`
         [[nodiscard]] constexpr uint32_t Offset() const {
             return _offset;
         }
 
-        /// The levels a `Slot` reads (a set of one bit), none for a `Const`: what to ask `Context::VersionKey` about
+        /// The id of a `Program` in the `ProgramPool`; meaningless for the other kinds
+        [[nodiscard]] constexpr ProgramId Id() const {
+            return _offset;
+        }
+
+        /// The levels the value reads: one for a `Slot`, the program's for a `Program`, none for a `Const`; what to ask `Context::VersionKey` about
         [[nodiscard]] constexpr LevelMask Reads() const {
-            return _kind == ValueKind::Slot ? LevelBit(_level) : LevelMask{0};
+            switch (_kind) {
+                case ValueKind::Slot:
+                    return LevelBit(_level);
+                case ValueKind::Program:
+                    return ProgramPool::Get(_offset).Reads();
+                case ValueKind::Const:
+                    break;
+            }
+            return LevelMask{0};
         }
 
         /// The literal; of a value that is not a `Const` it is the default of `T`
@@ -100,7 +126,7 @@ namespace BECore {
          * @brief The value now: the literal, or the field of the context object a `Slot` names
          *
          * Reads in place, so the reference is valid while the object is: a null level is a bug of the caller (`ASSERT`, compiled out in
-         * Release). A game that runs this per frame copies out what it needs.
+         * Release). A game that runs this per frame copies out what it needs. A `Program` has no object to point into: use `Evaluate`.
          */
         [[nodiscard]] const T& Get(const Context& context) const {
             if (_kind == ValueKind::Slot) {
@@ -108,13 +134,35 @@ namespace BECore {
                 ASSERT(object != nullptr, "Value::Get: the context has no object at the level this value reads from");
                 return *static_cast<const T*>(static_cast<const void*>(static_cast<const char*>(object) + _offset));
             }
-            ASSERT(_kind == ValueKind::Const, "Value::Get: a program has no evaluator yet");
+            ASSERT(_kind == ValueKind::Const, "Value::Get: a program computes its value, it is not stored anywhere: use Evaluate");
             return _constant;
         }
 
+        /**
+         * @brief The value now, by value, for every kind: `Get` for a `Const` and a `Slot`, a run of the program for a `Program`
+         *
+         * Only a type a program can compute (`ProgramScalar`) has programs; asking another `T` for a `Program` is a bug of the loader (`ASSERT`).
+         * A run allocates nothing (`Programs/Interpreter.h`).
+         */
+        [[nodiscard]] T Evaluate(const Context& context) const {
+            if (_kind == ValueKind::Program) {
+                if constexpr (ProgramScalar<T>) {
+                    return Run<T>(ProgramPool::Get(_offset), context);
+                } else {
+                    ASSERT(false, "Value::Evaluate: no program computes this type");
+                    return _constant;
+                }
+            }
+            return Get(context);
+        }
+
+        /// Two programs are equal when they are the same program (its id) written the same way; a `Slot` by where it reads
         [[nodiscard]] constexpr bool operator==(const Value& other) const requires std::equality_comparable<T> {
             if (_kind != other._kind) {
                 return false;
+            }
+            if (_kind == ValueKind::Program) {
+                return _offset == other._offset && _path == other._path;
             }
             if (_kind == ValueKind::Slot) {
                 return _level == other._level && _offset == other._offset && _path == other._path;
