@@ -59,6 +59,24 @@ namespace BECore {
         return std::tuple_size_v<decltype(ReflectionTraits<T>::fields)>;
     }
 
+    namespace Detail {
+        template <typename T, typename = void>
+        struct ReflectedParent {
+            using type = void;
+        };
+
+        template <typename T>
+        struct ReflectedParent<T, std::void_t<typename ReflectionTraits<T>::Parent>> {
+            using type = typename ReflectionTraits<T>::Parent;
+        };
+    }  // namespace Detail
+
+    /**
+     * @brief The reflected (`BE_CLASS`) parent the generator wrote as `ReflectionTraits<T>::Parent`; `void` when the class has none.
+     */
+    template <typename T>
+    using ReflectedParentOf = typename Detail::ReflectedParent<T>::type;
+
     /**
      * @brief Whether a reflected type has a field of this name (the C++ name, with its underscore), at compile time.
      *
@@ -195,6 +213,9 @@ namespace BECore {
 
     /**
      * @brief Invoke the first reflected method named @p name that can take @p args and return @p Ret.
+     *
+     * For a call whose type and argument types are known at compile time. A name and arguments that arrive at run time (a client
+     * request) go through `CallMethod` (`MethodCall.h`), which reads the arguments from an `IDeserializer` and checks them.
      * @return Its result, or a value-initialized @p Ret when no method matches (no error is reported).
      *
      * @example

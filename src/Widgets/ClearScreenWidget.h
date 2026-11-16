@@ -14,9 +14,9 @@ namespace BECore {
         ClearScreenWidget() = default;
         ~ClearScreenWidget() override = default;
 
-        BE_FUNCTION bool Initialize(IDeserializer& deserializer) override;
-        BE_FUNCTION void Draw() override;
-        BE_FUNCTION void Update() override;
+        bool Initialize(IDeserializer& deserializer) override;
+        void Draw() override;
+        void Update() override;
 
     private:
         BE_REFLECT_FIELD BECore::Color _clearColor{20, 20, 100, 255};

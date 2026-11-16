@@ -4,6 +4,14 @@
 
 namespace BECore::Fuzz {
 
+    TypedRef MakeProbeRef(ProbeState& state) {
+        return TypedRef::Of(state);
+    }
+
+    TypedRef MakeProbeRef(ProbeCalls& calls) {
+        return TypedRef::Of(calls);
+    }
+
     namespace {
 
         constexpr uint64_t kFnvOffset = 0xCBF29CE484222325ull;
@@ -50,7 +58,37 @@ namespace BECore::Fuzz {
             hasher.AddText(leaf.label);
         }
 
+        /// The sum of the hashes of the entries, so that the order a hash map iterates in does not matter
+        template <typename Map, typename Entry>
+        uint64_t UnorderedDigest(const Map& map, Entry entryHasher) {
+            uint64_t sum = 0;
+            for (const auto& entry : map) {
+                Hasher hasher;
+                entryHasher(hasher, entry);
+                sum += hasher.Value();
+            }
+            return sum;
+        }
+
     }  // namespace
+
+    ProbeShapes MakeFilledShapes() {
+        using namespace FuzzProbeData;
+        ProbeShapes shapes;
+        shapes.maybe = 7;
+        ProbeLeaf leaf;
+        leaf.id = 3;
+        leaf.weight = 0.5f;
+        leaf.label = "in an optional";
+        shapes.maybeLeaf = leaf;
+        shapes.choice = leaf;
+        shapes.ordered = {{2, "two"}, {-1, "minus"}};
+        shapes.table = {{"a", 1}, {"b", 2}};
+        shapes.triple = {1, 2, 3};
+        shapes.few = {4, 5};
+        shapes.entry = {9, "nine"};
+        return shapes;
+    }
 
     ProbeState MakeFilledProbe() {
         using namespace FuzzProbeData;
@@ -88,6 +126,57 @@ namespace BECore::Fuzz {
         state.tree.children[1].children.resize(1);
         state.tree.children[1].children[0].id = 4;
         return state;
+    }
+
+    uint64_t DigestProbe(const FuzzProbeData::ProbeNode& node) {
+        Hasher hasher;
+        AddNode(hasher, node);
+        return hasher.Value();
+    }
+
+    uint64_t DigestProbe(const ProbeShapes& shapes) {
+        Hasher hasher;
+        hasher.Add(shapes.maybe.has_value());
+        hasher.Add(shapes.maybe.value_or(0));
+        hasher.Add(shapes.maybeLeaf.has_value());
+        if (shapes.maybeLeaf.has_value()) {
+            AddLeaf(hasher, *shapes.maybeLeaf);
+        }
+        hasher.Add(shapes.choice.index());
+        if (const auto* number = std::get_if<int32_t>(&shapes.choice)) {
+            hasher.Add(*number);
+        } else if (const auto* text = std::get_if<String>(&shapes.choice)) {
+            hasher.AddText(*text);
+        } else if (const auto* leaf = std::get_if<FuzzProbeData::ProbeLeaf>(&shapes.choice)) {
+            AddLeaf(hasher, *leaf);
+        }
+        hasher.Add(shapes.ordered.size());
+        for (const auto& entry : shapes.ordered) {
+            hasher.Add(entry.first);
+            hasher.AddText(entry.second);
+        }
+        hasher.Add(shapes.table.size());
+        hasher.Add(UnorderedDigest(shapes.table, [](Hasher& entryHasher, const auto& entry) {
+            entryHasher.AddText(entry.first);
+            entryHasher.Add(entry.second);
+        }));
+        for (const int32_t number : shapes.triple) {
+            hasher.Add(number);
+        }
+        hasher.Add(shapes.few.size());
+        for (const int32_t number : shapes.few) {
+            hasher.Add(number);
+        }
+        hasher.Add(shapes.entry.first);
+        hasher.AddText(shapes.entry.second);
+        return hasher.Value();
+    }
+
+    uint64_t DigestProbe(const ProbeCalls& calls) {
+        Hasher hasher;
+        hasher.Add(calls.calls);
+        hasher.AddText(calls.last);
+        return hasher.Value();
     }
 
     uint64_t DigestProbe(const ProbeState& state) {

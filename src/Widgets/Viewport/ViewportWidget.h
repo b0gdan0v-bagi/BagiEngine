@@ -47,9 +47,9 @@ namespace BECore {
         /// that moment is lost: no button-up reaches the scene.
         ~ViewportWidget() override;
 
-        BE_FUNCTION bool Initialize(IDeserializer& deserializer) override;
-        BE_FUNCTION void Update() override;
-        BE_FUNCTION void Draw() override;
+        bool Initialize(IDeserializer& deserializer) override;
+        void Update() override;
+        void Draw() override;
 
     private:
         // The grid preference and the stored preview choice of the editor (EditorLayoutWidget sends them on its first frame and on every change)

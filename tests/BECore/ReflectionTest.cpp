@@ -21,11 +21,11 @@ namespace BECore::Tests {
 
     static_assert(HasReflection<TestData::Player>, "Player should have reflection");
     static_assert(HasReflection<TestData::Inventory>, "Inventory should have reflection");
-    static_assert(HasReflection<TestData::GameState>, "GameState should have reflection");
+    static_assert(HasReflection<TestData::SavedGameState>, "SavedGameState should have reflection");
 
     static_assert(FieldCount<TestData::Player>() == 4, "Player should have 4 fields");
     static_assert(FieldCount<TestData::Inventory>() == 2, "Inventory should have 2 fields");
-    static_assert(FieldCount<TestData::GameState>() == 3, "GameState should have 3 fields");
+    static_assert(FieldCount<TestData::SavedGameState>() == 3, "SavedGameState should have 3 fields");
 
     static_assert(HasField<TestData::Player>("health"), "Player should have 'health' field");
     static_assert(HasField<TestData::Player>("speed"), "Player should have 'speed' field");
@@ -218,7 +218,7 @@ namespace BECore::Tests {
 
         /// A stream that uses nested objects, arrays of objects, maps, strings and numbers.
         ByteBuffer MakeRichDocument() {
-            TestData::GameState state;
+            TestData::SavedGameState state;
             state.player.health = 64;
             state.player.speed = 2.5f;
             state.player.name = PoolString::Intern("Rich");
@@ -249,7 +249,7 @@ namespace BECore::Tests {
             if (!deserializer.BeginObject("Doc")) {
                 return;
             }
-            TestData::GameState state;
+            TestData::SavedGameState state;
             Ser::Load(deserializer, state, "state");
             Vector<TestData::Player> players;
             Ser::Load(deserializer, players, "players");
@@ -341,7 +341,7 @@ namespace BECore::Tests {
     }
 
     TEST(ReflectionTest, BinaryNestedObjects) {
-        TestData::GameState original;
+        TestData::SavedGameState original;
         original.player.health = 12;
         original.player.speed = 7.25f;
         original.player.name = PoolString::Intern("Nested");
@@ -352,7 +352,7 @@ namespace BECore::Tests {
 
         const ByteBuffer data = SaveToBinary("Save", "state", original);
 
-        TestData::GameState loaded;
+        TestData::SavedGameState loaded;
         loaded.player.health = 0;
         loaded.player.speed = 0.0f;
         loaded.player.isAlive = true;
@@ -402,7 +402,7 @@ namespace BECore::Tests {
     }
 
     TEST(ReflectionTest, BinaryIsSmallerThanXml) {
-        TestData::GameState state;
+        TestData::SavedGameState state;
         state.player.health = 80;
         state.player.speed = 4.5f;
         state.player.name = PoolString::Intern("Compact");
@@ -446,30 +446,16 @@ namespace BECore::Tests {
             ExpectBinaryRoundTrip(original, Array<float, 3>{});
         }
         {
-            SCOPED_TRACE("std::array");
-            //-NoStd: twin case: the reflection reads std::array as well as eastl::array
-            const std::array<float, 3> original = {4.0f, 5.5f, 6.25f};
-            //-NoStd: twin case: the reflection reads std::array as well as eastl::array
-            ExpectBinaryRoundTrip(original, std::array<float, 3>{});
-        }
-        {
             SCOPED_TRACE("eastl::pair");
             const Pair<int32_t, String> original = {42, String("hello")};
             ExpectBinaryRoundTrip(original, Pair<int32_t, String>{0, String{}});
         }
         {
-            SCOPED_TRACE("std::pair");
-            //-NoStd: twin case: the reflection reads std::pair as well as eastl::pair
-            const std::pair<int32_t, String> original = {99, String("world")};
-            //-NoStd: twin case: the reflection reads std::pair as well as eastl::pair
-            ExpectBinaryRoundTrip(original, std::pair<int32_t, String>{0, String{}});
-        }
-        {
-            SCOPED_TRACE("eastl::optional with value");
+            SCOPED_TRACE("Optional with value");
             ExpectBinaryRoundTrip(Optional<int32_t>(77), Optional<int32_t>{});
         }
         {
-            SCOPED_TRACE("eastl::optional without value: the key is absent and loading resets the target");
+            SCOPED_TRACE("Optional without value: the key is absent and loading resets the target");
             ExpectBinaryRoundTrip(Optional<int32_t>{}, Optional<int32_t>(55));
         }
         {
@@ -1101,7 +1087,7 @@ namespace BECore::Tests {
     }
 
     TEST(ReflectionTest, BinaryFileRoundTrip) {
-        TestData::GameState original;
+        TestData::SavedGameState original;
         original.player.health = 33;
         original.player.name = PoolString::Intern("Persistent");
         original.inventory.gold = 12;
@@ -1116,7 +1102,7 @@ namespace BECore::Tests {
         const std::filesystem::path path = TestTempPath("BagiEngineTests_BinaryFileRoundTrip");
         ASSERT_TRUE(serializer.SaveToFile(path));
 
-        TestData::GameState loaded;
+        TestData::SavedGameState loaded;
         {
             BinaryDeserializer deserializer;
             const bool loadedOk = deserializer.LoadFromFile(path);
@@ -1294,21 +1280,6 @@ namespace BECore::Tests {
             }
         }
 
-        {
-            SCOPED_TRACE("std::array");
-            //-NoStd: twin case: the reflection reads std::array as well as eastl::array
-            const std::array<float, 3> original = {4.0f, 5.5f, 6.25f};
-            const String xml = SaveToXml("StdArrTest", "values", original);
-
-            //-NoStd: twin case: the reflection reads std::array as well as eastl::array
-            std::array<float, 3> loaded = {};
-            ASSERT_NO_FATAL_FAILURE(LoadFromXml(xml, "StdArrTest", "values", loaded));
-
-            for (size_t i = 0; i < 3; ++i) {
-                EXPECT_EQ(loaded[i], original[i]) << "index " << i;
-            }
-        }
-
         // Partial load: the XML has fewer elements than the array size
         {
             SCOPED_TRACE("partial load");
@@ -1337,25 +1308,11 @@ namespace BECore::Tests {
             EXPECT_EQ(loaded.first, original.first);
             EXPECT_EQ(loaded.second, original.second);
         }
-
-        {
-            SCOPED_TRACE("std::pair");
-            //-NoStd: twin case: the reflection reads std::pair as well as eastl::pair
-            const std::pair<int32_t, String> original = {99, String("world")};
-            const String xml = SaveToXml("StdPairTest", "entry", original);
-
-            //-NoStd: twin case: the reflection reads std::pair as well as eastl::pair
-            std::pair<int32_t, String> loaded = {0, String{}};
-            ASSERT_NO_FATAL_FAILURE(LoadFromXml(xml, "StdPairTest", "entry", loaded));
-
-            EXPECT_EQ(loaded.first, original.first);
-            EXPECT_EQ(loaded.second, original.second);
-        }
     }
 
     TEST(ReflectionTest, OptionalSerialization) {
         {
-            SCOPED_TRACE("eastl::optional with value");
+            SCOPED_TRACE("Optional with value");
             const Optional<int32_t> original = 77;
             const String xml = SaveToXml("OptTest", "value", original);
 
@@ -1367,7 +1324,7 @@ namespace BECore::Tests {
         }
 
         {
-            SCOPED_TRACE("eastl::optional without value");
+            SCOPED_TRACE("Optional without value");
             const Optional<int32_t> original;
             const String xml = SaveToXml("OptEmptyTest", "value", original);
 

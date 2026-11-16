@@ -26,12 +26,17 @@ namespace BECore::Tests {
         EXPECT_EQ(StringUtils::GetEmptyHash(), 0xcbf29ce484222325ULL);
     }
 
-    TEST(StringUtilsTest, StdStringViewOverloadAgrees) {
-        //-NoStd: the overload that stays for the games
-        constexpr std::string_view text = "BECore";
-        EXPECT_EQ(StringUtils::GetHash(text), StringUtils::GetHash(FromStd(text)));
-        //-NoStd: the overload that stays for the games
-        static_assert(StringUtils::GetHash(std::string_view{"a"}) == 0xaf63dc4c8601ec8cULL);
+    TEST(StringUtilsTest, ParseNumberReadsTheWholeTextOrNothing) {
+        EXPECT_EQ(StringUtils::ParseNumber<int32_t>("42"), Optional<int32_t>(42));
+        EXPECT_EQ(StringUtils::ParseNumber<int32_t>("-7"), Optional<int32_t>(-7));
+        EXPECT_EQ(StringUtils::ParseNumber<uint64_t>("18446744073709551615"), Optional<uint64_t>(18446744073709551615ULL));
+        EXPECT_EQ(StringUtils::ParseNumber<float>("1.5"), Optional<float>(1.5f));
+
+        EXPECT_FALSE(StringUtils::ParseNumber<int32_t>("").has_value());
+        EXPECT_FALSE(StringUtils::ParseNumber<int32_t>("12abc").has_value()) << "the whole text, not a prefix";
+        EXPECT_FALSE(StringUtils::ParseNumber<int32_t>(" 12").has_value());
+        EXPECT_FALSE(StringUtils::ParseNumber<uint16_t>("65536").has_value()) << "out of range";
+        EXPECT_FALSE(StringUtils::ParseNumber<uint32_t>("-1").has_value());
     }
 
 }  // namespace BECore::Tests

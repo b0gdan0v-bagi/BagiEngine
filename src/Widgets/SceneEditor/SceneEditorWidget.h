@@ -31,9 +31,9 @@ namespace BECore {
         /// Clears the editor flags (hidden, locked) of every scene, so Game mode is never left with a hidden node. A switch of the active scene clears nothing by itself
         ~SceneEditorWidget() override;
 
-        BE_FUNCTION bool Initialize(IDeserializer& deserializer) override;
-        BE_FUNCTION void Update() override;
-        BE_FUNCTION void Draw() override;
+        bool Initialize(IDeserializer& deserializer) override;
+        void Update() override;
+        void Draw() override;
 
     private:
         /**

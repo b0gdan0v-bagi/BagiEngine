@@ -81,6 +81,7 @@ namespace BECore {
             }
 
             // Frames come oldest first but a zone may begin together with its parent: the parent goes first
+            //-NoStd: equal zones keep the order they were recorded in; one sort per frozen trace, not per frame
             eastl::stable_sort(lane.zones.begin(), lane.zones.end(),
                                [](const ThreadZone& a, const ThreadZone& b) { return a.zone.beginTicks != b.zone.beginTicks ? a.zone.beginTicks < b.zone.beginTicks : a.zone.depth < b.zone.depth; });
 

@@ -85,9 +85,7 @@ namespace BECore {
 
         template <typename T>
         requires requires(T& t, IPropertyVisitor& visitor) {
-            {
-                t.VisitProperties(visitor)
-            } -> std::same_as<bool>;
+            {t.VisitProperties(visitor)}->std::same_as<bool>;
         }
         bool Visit(IPropertyVisitor& v, T& value, eastl::string_view key) {
             if (v.BeginCompound(key)) {
@@ -100,9 +98,7 @@ namespace BECore {
 
         template <typename Ptr>
         requires(Detail::IsIntrusivePtr<Ptr>&& requires(typename Detail::IntrusivePtrPointee<Ptr>::type& t, IPropertyVisitor& v) {
-            {
-                t.AcceptPropertyVisitor(v)
-            } -> std::same_as<bool>;
+            {t.AcceptPropertyVisitor(v)}->std::same_as<bool>;
         }) bool Visit(IPropertyVisitor& v, Ptr& ptr, eastl::string_view key) {
             if (!ptr) {
                 return false;
@@ -130,11 +126,8 @@ namespace BECore {
         }
 
         template <typename T>
-        requires(!Detail::IsIntrusivePtr<T> && !IsReflectedEnum<T> && !std::is_arithmetic_v<T> && requires(T & t, IPropertyVisitor& v) {
-            {
-                t.AcceptPropertyVisitor(v)
-            } -> std::same_as<bool>;
-        }) bool Visit(IPropertyVisitor& v, T& value, eastl::string_view key) {
+        requires(!Detail::IsIntrusivePtr<T> && !IsReflectedEnum<T> && !std::is_arithmetic_v<T> &&
+                 requires(T & t, IPropertyVisitor& v) { {t.AcceptPropertyVisitor(v)}->std::same_as<bool>; }) bool Visit(IPropertyVisitor& v, T& value, eastl::string_view key) {
             if (v.BeginCompound(key)) {
                 bool changed = value.AcceptPropertyVisitor(v);
                 v.EndCompound();
@@ -202,9 +195,6 @@ namespace BECore {
         template <typename T, size_t N>
         bool Visit(IPropertyVisitor& v, eastl::array<T, N>& items, StringView key);
 
-        template <typename T, size_t N>
-        bool Visit(IPropertyVisitor& v, std::array<T, N>& items, StringView key);
-
         template <typename K, typename V, typename Hash, typename Pred, typename Alloc, bool CacheHashCode>
         bool Visit(IPropertyVisitor& v, eastl::hash_map<K, V, Hash, Pred, Alloc, CacheHashCode>& map, StringView key);
 
@@ -217,12 +207,6 @@ namespace BECore {
 
         template <typename A, typename B>
         bool Visit(IPropertyVisitor& v, eastl::pair<A, B>& value, StringView key);
-
-        template <typename A, typename B>
-        bool Visit(IPropertyVisitor& v, std::pair<A, B>& value, StringView key);
-
-        template <typename T>
-        bool Visit(IPropertyVisitor& v, eastl::optional<T>& value, StringView key);
 
         template <typename T>
         bool Visit(IPropertyVisitor& v, std::optional<T>& value, StringView key);
@@ -469,11 +453,6 @@ namespace BECore {
             return Detail::VisitSequence<false>(v, items, key);
         }
 
-        template <typename T, size_t N>
-        bool Visit(IPropertyVisitor& v, std::array<T, N>& items, StringView key) {
-            return Detail::VisitSequence<false>(v, items, key);
-        }
-
         template <typename K, typename V, typename Hash, typename Pred, typename Alloc, bool CacheHashCode>
         bool Visit(IPropertyVisitor& v, eastl::hash_map<K, V, Hash, Pred, Alloc, CacheHashCode>& map, StringView key) {
             return Detail::VisitMap(v, map, key);
@@ -492,16 +471,6 @@ namespace BECore {
         template <typename A, typename B>
         bool Visit(IPropertyVisitor& v, eastl::pair<A, B>& value, StringView key) {
             return Detail::VisitPair(v, value.first, value.second, key);
-        }
-
-        template <typename A, typename B>
-        bool Visit(IPropertyVisitor& v, std::pair<A, B>& value, StringView key) {
-            return Detail::VisitPair(v, value.first, value.second, key);
-        }
-
-        template <typename T>
-        bool Visit(IPropertyVisitor& v, eastl::optional<T>& value, StringView key) {
-            return Detail::VisitOptional(v, value, key);
         }
 
         template <typename T>

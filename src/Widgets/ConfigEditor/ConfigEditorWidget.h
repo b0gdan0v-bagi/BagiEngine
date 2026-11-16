@@ -28,9 +28,9 @@ namespace BECore {
         ConfigEditorWidget() = default;
         ~ConfigEditorWidget() override = default;
 
-        BE_FUNCTION bool Initialize(IDeserializer& deserializer) override;
-        BE_FUNCTION void Update() override;
-        BE_FUNCTION void Draw() override;
+        bool Initialize(IDeserializer& deserializer) override;
+        void Update() override;
+        void Draw() override;
 
     private:
         /**

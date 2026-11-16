@@ -388,7 +388,7 @@ namespace BECore::Tests {
     }
 
     TEST_P(ContentMigrationAfterTest, TheComposedScreenBehaves) {
-        const Expectation& expectation = Expectations()[static_cast<size_t>(std::stoi(GetParam().c_str()))];
+        const Expectation& expectation = Expectations()[StringUtils::ParseNumber<size_t>(GetParam()).value()];
         const String label = Key(expectation.folder, expectation.name);
         const String xml = SceneManagerXml(ReadFile(FixtureFolder(expectation.folder) / ToStd(String(expectation.name) + ".after.xml")));
         ASSERT_FALSE(xml.empty());
@@ -476,7 +476,7 @@ namespace BECore::Tests {
                                  return indices;
                              }()),
                              [](const ::testing::TestParamInfo<String>& info) {
-                                 const Expectation& expectation = Expectations()[static_cast<size_t>(std::stoi(info.param.c_str()))];
+                                 const Expectation& expectation = Expectations()[StringUtils::ParseNumber<size_t>(info.param).value()];
                                  return std::string(expectation.folder) + "_" + expectation.name;  //-NoStd: gtest takes the test name from a std::string
                              });
 

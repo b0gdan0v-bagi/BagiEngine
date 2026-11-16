@@ -154,10 +154,6 @@ namespace BECore {
             return Tok().ToEnum(str);
         }
 
-        static constexpr Enum FromString(std::string_view str) noexcept {  //-NoStd: the callers that hold a std view
-            return Tok().ToEnum(FromStd(str));
-        }
-
         static constexpr Enum FromString(const char* str) noexcept {
             return Tok().ToEnum(StringView{str});
         }
@@ -173,10 +169,6 @@ namespace BECore {
                 return std::nullopt;
             }
             return result;
-        }
-
-        static constexpr Optional<Enum> Cast(std::string_view str) noexcept {  //-NoStd: the callers that hold a std view
-            return Cast(FromStd(str));
         }
 
         static constexpr Optional<Enum> Cast(const char* str) noexcept {

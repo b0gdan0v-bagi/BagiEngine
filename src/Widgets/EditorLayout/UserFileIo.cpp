@@ -11,14 +11,15 @@ namespace BECore {
         if (!file) {
             return std::unexpected(Format("Cannot open '{}'", path.string()));
         }
-        std::ostringstream content;
-        content << file.rdbuf();
-        if (file.bad()) {
+        const auto size = std::filesystem::file_size(path, ec);
+        if (ec) {
             return std::unexpected(Format("Cannot read '{}'", path.string()));
         }
-        //-NoStd: the text of an std::ostringstream
-        const std::string text = content.str();
-        return String(text.c_str(), text.size());
+        String text(static_cast<size_t>(size), '\0');
+        if (!file.read(text.data(), static_cast<std::streamsize>(size))) {
+            return std::unexpected(Format("Cannot read '{}'", path.string()));
+        }
+        return text;
     }
 
     std::expected<void, String> WriteTextFileAtomically(const std::filesystem::path& path, StringView text) {

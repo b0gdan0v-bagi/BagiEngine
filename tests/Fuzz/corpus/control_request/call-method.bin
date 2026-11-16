@@ -1,0 +1,1 @@
+{"id":33,"method":"call_method","params":{"arguments":{"numbers":[1,2,3]},"method":"Total","root":"probe"}}

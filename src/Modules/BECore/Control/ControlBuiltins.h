@@ -22,6 +22,8 @@ namespace BECore {
      * | list_methods | none | {"methods":[{"name","summary","params":[{"name","type","required","description"}]}]}, sorted by name |
      * | quit   | none | {}; then ApplicationEvents::QuitEvent, so the application stops at the end of the frame. Bypasses the barrier |
      *
+     * It also registers the by-name methods (`RegisterReflectionControl`).
+     *
      * `step` is a barrier; what it means on the real and the manual clock: Control/CLAUDE.md, "Manual clock and `step`".
      *
      * Registering twice replaces the handlers, so calling this again is harmless.

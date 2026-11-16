@@ -1,5 +1,8 @@
 #include "FactoryInitializeTest.h"
 
+#include <BECore/Reflection/BinaryDeserializer.h>
+#include <BECore/Reflection/BinarySerializer.h>
+#include <BECore/Reflection/DataAccessor.h>
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <Common/Printers.h>
@@ -115,6 +118,76 @@ namespace BECore::Tests {
         EXPECT_TRUE(deserializer.HasErrors());
         ASSERT_EQ(list->items.size(), 1u);
         EXPECT_EQ(list->items[0]->GetValue(), 7);
+    }
+
+    namespace {
+
+        // A factory vector is read through the factory only where FactoryTraits<InitProbe> (this file's .gen.hpp) is visible:
+        // a file without it compiles the same Ser:: templates on the non-factory path, an ODR clash that Release inlines
+        static_assert(HasFactory<InitProbe>);
+
+        using ByteBuffer = Vector<uint8_t>;
+
+        constexpr StringView kDroppedItems = "Data lost, the fixed container is full: kept 2 of 4 items";
+
+        void ExpectOneDropReport(const IDeserializer& deserializer, StringView field, StringView message) {
+            ASSERT_TRUE(deserializer.HasErrors());
+            ASSERT_EQ(deserializer.GetErrors().size(), 1u);
+            EXPECT_EQ(deserializer.GetErrors()[0].path.ToStringView(), field);
+            EXPECT_EQ(deserializer.GetErrors()[0].errorMessage.ToStringView(), message);
+        }
+
+        template <typename Value>
+        ByteBuffer SaveBinaryField(const Value& value) {
+            BinarySerializer serializer;
+            if (serializer.BeginObject("State")) {
+                Ser::Save(serializer, value, "value");
+                serializer.EndObject();
+            }
+            return serializer.GetData();
+        }
+
+        template <typename Value>
+        void LoadXmlField(XmlDeserializer& deserializer, const char* xml, Value& value) {
+            ASSERT_TRUE(deserializer.LoadFromString(xml));
+            ASSERT_TRUE(deserializer.BeginObject("State"));
+            Ser::Load(deserializer, value, "value");
+            deserializer.EndObject();
+        }
+
+        template <typename Value>
+        void LoadBinaryField(BinaryDeserializer& deserializer, const ByteBuffer& data, Value& value) {
+            ASSERT_TRUE(deserializer.LoadFromBuffer(data));
+            ASSERT_TRUE(deserializer.BeginObject("State"));
+            Ser::Load(deserializer, value, "value");
+            deserializer.EndObject();
+        }
+
+    }  // namespace
+
+    TEST_F(FactoryInitializeTest, MoreFactoryItemsThanAFixedVectorHoldsAreCutAndReportedFromXml) {
+        FixedVector<IntrusivePtrNonAtomic<InitProbe>, 2> probes;
+        XmlDeserializer deserializer;
+        LoadXmlField(deserializer,
+                     "<root><State><value><probe type=\"InitProbePlain\" id=\"1\"/><probe type=\"InitProbePlain\" id=\"2\"/>"
+                     "<probe type=\"InitProbePlain\" id=\"3\"/><probe type=\"InitProbePlain\" id=\"4\"/></value></State></root>",
+                     probes);
+        ASSERT_EQ(probes.size(), 2u);
+        EXPECT_TRUE(probes[0]->Is<InitProbePlain>());
+        ExpectOneDropReport(deserializer, "State.value", kDroppedItems);
+    }
+
+    TEST_F(FactoryInitializeTest, MoreFactoryItemsThanAFixedVectorHoldsAreCutAndReportedFromBinary) {
+        Vector<IntrusivePtrNonAtomic<InitProbe>> roomy;
+        for (int32_t i = 0; i < 4; ++i) {
+            roomy.push_back(New<InitProbePlain>());
+        }
+        FixedVector<IntrusivePtrNonAtomic<InitProbe>, 2> probes;
+        BinaryDeserializer deserializer;
+        LoadBinaryField(deserializer, SaveBinaryField(roomy), probes);
+        ASSERT_EQ(probes.size(), 2u);
+        EXPECT_TRUE(probes[1]->Is<InitProbePlain>());
+        ExpectOneDropReport(deserializer, "State.value", kDroppedItems);
     }
 
 }  // namespace BECore::Tests
