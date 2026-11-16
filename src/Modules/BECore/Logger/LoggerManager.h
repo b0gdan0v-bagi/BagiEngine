@@ -13,7 +13,7 @@ namespace BECore {
      *
      * Manages log sinks based on XML configuration.
      * Sinks are loaded from config/LoggerConfig.xml
-     * and sorted by priority.
+     * and sorted by priority: the sink with the lowest number gets each line first.
      *
      * @note Access via CoreManager::GetLoggerManager()
      * @note Created via BECore::MakeFromConfig<LoggerManager>("LoggerConfig")
@@ -48,7 +48,7 @@ namespace BECore {
             return nullptr;
         }
 
-        /// Sorted by priority once Initialize() has run
+        /// Sorted ascending by priority (equal ones in config order) once Initialize() has run
         const Vector<IntrusivePtrAtomic<ILogSink>>& GetSinks() const {
             return _sinks;
         }

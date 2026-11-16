@@ -32,7 +32,6 @@ namespace BECore {
 
     private:
         BE_REFLECT_FIELD bool _colorEnabled = true;
-        bool _initialized = false;
     };
 
 }  // namespace BECore

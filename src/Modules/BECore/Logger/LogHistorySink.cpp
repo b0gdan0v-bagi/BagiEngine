@@ -5,12 +5,14 @@
 namespace BECore {
 
     void LogHistorySink::Initialize() {
+        UnsubscribeAll();
+        Subscribe<LogEvent, &LogHistorySink::OnLogEvent>(this);
+
         if (_initialized) {
             return;
         }
 
         _history = MakeUnique<LogHistory>(static_cast<size_t>(std::clamp(_capacity, kMinCapacity, kMaxCapacity)));
-        Subscribe<LogEvent, &LogHistorySink::OnLogEvent>(this);
         _initialized = true;
     }
 

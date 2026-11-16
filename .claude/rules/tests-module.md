@@ -92,7 +92,8 @@ Managed by `TestManager`, which fills a `Tests::TestList` from `TestsConfig` wit
 **Key points:**
 - Always use `ASSERT` instead of `std::assert`
 - Assertions emit `AssertEvent` through event system
-- Handlers configured via `config/AssertHandlersConfig.xml`
+- Handlers configured via `config/AssertHandlersConfig.xml`; the one with the lowest `priority` runs first, equal ones in file order (`AssertHandlerOrderTest`)
+- A test that fails an engine assertion on purpose holds an `AssertBridge::Capture` (RAII; the bridge hands the events to its callback instead of failing the test)
 - Compiled out when `ENGINE_ENABLE_ASSERTS` / `ENGINE_ENABLE_EXPECTS` is 0 (Release presets)
 
 **Built-in handlers:**
