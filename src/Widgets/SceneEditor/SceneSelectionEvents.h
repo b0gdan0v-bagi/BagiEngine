@@ -67,4 +67,20 @@ namespace BECore {
         SelectUIElementRequestEvent(const Scene* s, const SceneNode* n, const UIElement* e) : scene(s), node(n), element(e) {}
     };
 
+    /**
+     * @brief The canvas element selected in the "UI elements" section changed (another element, another node, none, a scene change)
+     *
+     * Sent by SceneEditorWidget once per change of the pair (node, element) or of the scene, never every frame; @c element is null when there is none. The pointers are for comparing and for
+     * looking up, valid for the frame of the event only like those of SceneNodeSelectedEvent: the viewport finds the element again every frame (HierarchyModel::FindNode, ScenePick::FindElement)
+     * and never dereferences what it kept. Emitted, not enqueued.
+     */
+    struct UIElementSelectedEvent : public EventBase<UIElementSelectedEvent> {
+        const Scene* scene = nullptr;
+        const SceneNode* node = nullptr;
+        const UIElement* element = nullptr;
+
+        UIElementSelectedEvent() = default;
+        UIElementSelectedEvent(const Scene* s, const SceneNode* n, const UIElement* e) : scene(s), node(n), element(e) {}
+    };
+
 }  // namespace BECore

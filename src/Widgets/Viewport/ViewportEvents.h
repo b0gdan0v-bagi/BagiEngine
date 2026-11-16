@@ -2,6 +2,7 @@
 
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Types/Types.h>
+#include <BECore/UI/UIRectSpec.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <Events/EventBase.h>
 #include <Widgets/Viewport/GizmoGeometry.h>
@@ -11,6 +12,7 @@ namespace BECore {
 
     class Scene;
     class SceneNode;
+    class UIElement;
 
     /// The viewport was clicked while it was in the Edit input mode (or with the one-off modifier held): the game got nothing, and the
     /// click is for the editor (to pick a node under it). Emitted once per press, in target pixels (the scene's own units, as the game
@@ -66,6 +68,34 @@ namespace BECore {
 
         NodeTransformEditEvent() = default;
         NodeTransformEditEvent(NodeTransformEditPhase editPhase, const Scene* editScene, Span<const NodeTransformEdit> editEdits) : phase(editPhase), scene(editScene), edits(editEdits) {}
+    };
+
+    /// The part of a drag of a canvas element that an event tells
+    CORE_ENUM(UIRectDragPhase, uint8_t, Begin, Change, Commit, Cancel)
+
+    /**
+     * @brief A drag of a canvas element's rect or anchors in the viewport: the hook for an undo stack and for the "unsaved changes" mark
+     *
+     * The phases as for NodeTransformEditEvent, with the authored `style.rect` of the element held by value: @c Begin (the press; both specs are the start), a @c Change per frame in
+     * which the spec differs from the last one (@c before the previous frame's, @c after this frame's), then a @c Commit (the release, only when the spec differs from the start: @c before
+     * the spec at the press, @c after the final one) or a @c Cancel (Esc, a scene change, an element or node that is gone, the node locked, the mode flipping to Play: @c before the last
+     * spec shown, @c after the start, which is the value the element has again). @c exact is false when the layout limits or the aspect ratio keep the spec of @c after from laying out
+     * where the pointer wanted it. Emitted, not enqueued. The pointers are valid for the frame of the event only: a subscriber that keeps a drag copies the specs and finds the node and the
+     * element again through the tree before it writes to them. @c node is null on a @c Cancel that finds the node gone.
+     */
+    struct UIRectDragEvent : public EventBase<UIRectDragEvent> {
+        UIRectDragPhase phase = UIRectDragPhase::Begin;
+        const Scene* scene = nullptr;
+        const SceneNode* node = nullptr;
+        const UIElement* element = nullptr;
+        UIRectSpec before;
+        UIRectSpec after;
+        bool exact = true;
+
+        UIRectDragEvent() = default;
+        UIRectDragEvent(UIRectDragPhase dragPhase, const Scene* dragScene, const SceneNode* dragNode, const UIElement* dragElement, const UIRectSpec& specBefore, const UIRectSpec& specAfter,
+                        bool specExact)
+            : phase(dragPhase), scene(dragScene), node(dragNode), element(dragElement), before(specBefore), after(specAfter), exact(specExact) {}
     };
 
 }  // namespace BECore
