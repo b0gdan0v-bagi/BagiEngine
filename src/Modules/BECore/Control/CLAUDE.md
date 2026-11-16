@@ -45,7 +45,7 @@ Error codes are strings and part of the protocol (`ControlErrors`): `parse_error
 - `SetFrameEndHook(name, hook)` runs `hook` at every `EndFrame()`, before a deferred call completes (the state-change push uses it). Setting a name again replaces its hook, so a module that registers twice (`GameManager::Initialize()` does, once per test) adds nothing. A hook that sets another one is fine: the new one runs in the same frame.
 - `Shutdown()` (from `OnApplicationDeinit`) answers everything queued or deferred with `shutting_down`; a request posted later is answered at once on the posting thread. Stop the transport before it.
 - Never use `ASSERT` / `EXPECT` / `FATALERROR` on data from a client: a bad request is an error response, not a bug in the engine.
-- Method names live in an `eastl::hash_map<eastl::string, ...>`, not in `PoolString`: a client must not be able to grow the pool (`ControlServiceTest` checks this with `PoolString::Find`).
+- Method names live in a `HashMap<String, ...>`, not in `PoolString`: a client must not be able to grow the pool (`ControlServiceTest` checks this with `PoolString::Find`).
 
 ## JSON rules
 
@@ -55,7 +55,7 @@ The engine builds without exceptions, so nlohmann/json is built with `JSON_NOEXC
 - Parse client text with `ParseJson()` only (it uses `allow_exceptions = false`). Read members with `FindJsonMember()`, `GetJsonString/Int/Number/Bool()`, which check the type. `GetJsonInt` rejects `1.5`, `"3"` and numbers that do not fit `int64_t`.
 - Never call `at()`, `get<T>()`, `value()` or the const `operator[]` on client data. Building a response (`Json::object()`, `result["x"] = ...`) and `DumpJson()` are safe; `DumpJson()` replaces invalid UTF-8 instead of aborting.
 - Keep the 1 MiB request limit (`ControlService::kMaxRequestBytes`) at every transport. `ParseJson` itself takes any depth (it parses and frees without recursion), but copying a value recurses once per level, so a reader that keeps client JSON checks `IsJsonNestedDeeperThan` first: a request nested deeper than `ControlService::kMaxRequestDepth` (128) is `invalid_request`, answered without an `id`. The control API is fuzzed: `tests/Fuzz/CLAUDE.md`.
-- nlohmann uses `std::string` inside; convert to `eastl::string` at the edge, which the helpers do.
+- nlohmann uses `std::string` inside; convert to `String` at the edge, which the helpers do.
 
 ## Manual clock and `step`
 
