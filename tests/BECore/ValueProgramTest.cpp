@@ -68,6 +68,48 @@ namespace BECore::Tests {
         EXPECT_EQ(PowerTimesTwo(world).Evaluate(world.context), world.cast.power * 2.0f);
     }
 
+    TEST(ValueProgramTest, AProgramValueOfAVectorAnEnumAndAStringEvaluatesToTheReference) {
+        ValueWorld world;
+        // cast.target + (1, 2, 3)
+        ProgramBuilder vector;
+        const uint8_t target = vector.AcquireRegister().value();
+        vector.EmitLoadSlot(target, ProgramType::Vec3, Link(world, "cast.target", DescribeType<Vec3>()));
+        const uint8_t offset = vector.AcquireRegister().value();
+        vector.EmitLoadConst(offset, Vec3{1.0f, 2.0f, 3.0f});
+        vector.Emit(Opcode::AddVec3, target, target, offset);
+        const ProgramId vectorId = ProgramPool::Intern(vector.Finish(ProgramType::Vec3, target).value()).value();
+        const Value<Vec3> shifted = Value<Vec3>::FromProgram(vectorId, PoolString::Intern("cast.target + vec3(1, 2, 3)"));
+        EXPECT_EQ(shifted.Evaluate(world.context), world.cast.target + Vec3(1.0f, 2.0f, 3.0f));
+
+        // The element of the caster: the register holds the index, the value is the enumerator of its own enum
+        ProgramBuilder element;
+        const uint8_t loaded = element.AcquireRegister().value();
+        element.EmitLoadSlot(loaded, ProgramType::Enum, Link(world, "caster.element", DescribeType<ValueElement>()), static_cast<uint8_t>(DescribeType<ValueElement>().enumBytes));
+        const ProgramId elementId = ProgramPool::Intern(element.Finish(ProgramType::Enum, loaded).value()).value();
+        const Value<ValueElement> chosen = Value<ValueElement>::FromProgram(elementId, PoolString::Intern("caster.element"));
+        for (const ValueElement value : {ValueElement::Fire, ValueElement::Water, ValueElement::Earth}) {
+            world.caster.element = value;
+            EXPECT_EQ(chosen.Evaluate(world.context), value);
+        }
+
+        // select(caster.alive, 'burn', 'chill'): a string is the bytes of an interned text
+        ProgramBuilder text;
+        const uint8_t condition = text.AcquireRegister().value();
+        text.EmitLoadSlot(condition, ProgramType::Bool, Link(world, "caster.alive", DescribeType<bool>()));
+        const uint8_t burn = text.AcquireRegister().value();
+        text.EmitLoadConst(burn, PoolString::Intern("burn"));
+        const uint8_t chill = text.AcquireRegister().value();
+        text.EmitLoadConst(chill, PoolString::Intern("chill"));
+        text.Emit(Opcode::SelectString, condition, condition, burn, chill);
+        const ProgramId textId = ProgramPool::Intern(text.Finish(ProgramType::String, condition).value()).value();
+        const Value<PoolString> label = Value<PoolString>::FromProgram(textId, PoolString::Intern("select(caster.alive, 'burn', 'chill')"));
+        world.caster.alive = true;
+        EXPECT_EQ(label.Evaluate(world.context), PoolString::Intern("burn"));
+        world.caster.alive = false;
+        EXPECT_EQ(label.Evaluate(world.context), PoolString::Intern("chill"));
+        EXPECT_EQ(label.Reads(), LevelBit(0));
+    }
+
     TEST(ValueProgramTest, EvaluateOfAConstAndASlotEqualsGet) {
         ValueWorld world;
         const Value<int32_t> constant = 41;

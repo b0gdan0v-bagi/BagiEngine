@@ -1,7 +1,10 @@
 // The compile function of formulas (Values/Programs/ProgramCompiler): a text becomes a constant, a slot or a program of the pool. Formulas are run in a
 // ValueWorld and compared with the same formula in plain C++; folding, the pool, the register limit and the one-line error are checked on their own.
 
+#include <BECore/Animation/Lerp.h>
 #include <BECore/ValueTestTypes.h>
+#include <BECore/Values/Programs/Components.h>
+#include <BECore/Values/Programs/ExprChecker.h>
 #include <BECore/Values/Programs/ProgramCompiler.h>
 #include <BECore/Values/Value.h>
 #include <Common/Printers.h>
@@ -351,6 +354,361 @@ namespace BECore::Tests {
         const String text = "1 + \x01\xff";
         const String line = FormatProgramError(text, ProgramError{"bad", 5});
         EXPECT_EQ(line, "bad (column 5)\n  1 + ??\n      ^");
+    }
+
+    // The vector, quaternion, color, enum and string types
+
+    namespace {
+
+        /// The fields of the new types a formula is run over
+        struct VectorState {
+            bool alive;
+            Vec2 position;
+            IVec2 cell;
+            Vec3 velocity;
+            Vec4 plane;
+            Quat facing;
+            Color tint;
+            ValueElement element;
+            Vec3 target;
+            float power;
+        };
+
+        constexpr float kQuarterTurn = 0.70710678f;
+
+        const VectorState kVectorStates[] = {
+            {true, {2.0f, 3.0f}, {4, 5}, {1.0f, 2.0f, 3.0f}, {0.0f, 1.0f, 0.0f, -2.0f}, {0.0f, 0.0f, 0.0f, 1.0f}, {10, 20, 30, 255}, ValueElement::Water, {7.0f, 8.0f, 9.0f}, 2.5f},
+            {false,
+             {-1.5f, 0.0f},
+             {-3, 2147483647},
+             {0.0f, 0.0f, 0.0f},
+             {1.0f, 2.0f, 3.0f, 4.0f},
+             {0.0f, 0.0f, kQuarterTurn, kQuarterTurn},
+             {255, 0, 128, 0},
+             ValueElement::Fire,
+             {0.5f, -0.5f, 2.0f},
+             0.0f},
+            {true, {100.0f, -100.0f}, {0, 0}, {-4.0f, 5.0f, -6.0f}, {-1.0f, -1.0f, -1.0f, -1.0f}, {0.0f, 0.0f, 0.0f, 2.0f}, {0, 0, 0, 255}, ValueElement::Earth, {-7.0f, 1.0f, 0.25f}, -4.0f},
+            {false, {0.0f, 0.0f}, {1, -1}, {1e10f, -1e10f, 3.0f}, {0.0f, 0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f, 0.0f}, {1, 2, 3, 4}, ValueElement::Water, {1.0f, 1.0f, 1.0f}, 1.0f},
+        };
+
+        void Apply(ValueWorld& world, const VectorState& state) {
+            world.caster.alive = state.alive;
+            world.caster.position = state.position;
+            world.caster.cell = state.cell;
+            world.caster.velocity = state.velocity;
+            world.caster.plane = state.plane;
+            world.caster.facing = state.facing;
+            world.caster.tint = state.tint;
+            world.caster.element = state.element;
+            world.cast.target = state.target;
+            world.cast.power = state.power;
+        }
+
+        /// The same bytes: a NaN or a `Color` (which has no `==`) is compared as it is stored
+        template <typename T>
+        bool SameBytes(const T& first, const T& second) {
+            return std::memcmp(&first, &second, sizeof(T)) == 0;
+        }
+
+        /// The formula as a `Value<T>` over every state, against the same formula in plain C++
+        template <typename T>
+        const Value<T> ExpectOverVectors(StringView text, T (*reference)(const ValueUnitStats&, const ValueCastInfo&), ValueKind kind = ValueKind::Program) {
+            ValueWorld world;
+            const auto compiled = CompileValue<T>(text, world.declaration);
+            EXPECT_TRUE(compiled.has_value()) << String(text).c_str() << ": " << (compiled.has_value() ? String() : compiled.error().message).c_str();
+            if (!compiled.has_value()) {
+                return {};
+            }
+            EXPECT_EQ(compiled->Kind(), kind) << String(text).c_str();
+            for (const VectorState& state : kVectorStates) {
+                Apply(world, state);
+                const T expected = reference(world.caster, world.cast);
+                const T actual = compiled->Evaluate(world.context);
+                if constexpr (std::is_same_v<T, PoolString>) {
+                    EXPECT_EQ(actual, expected) << String(text).c_str();
+                } else {
+                    EXPECT_TRUE(SameBytes(actual, expected)) << String(text).c_str();
+                }
+            }
+            return *compiled;
+        }
+
+        template <typename T>
+        T ConstantImage(const CompiledExpression& compiled) {
+            T value{};
+            std::memcpy(&value, compiled.constant.bytes.data(), sizeof(T));
+            return value;
+        }
+
+    }  // namespace
+
+    static_assert(ComponentsOf(ProgramType::Vec4).count == kMaxTypedOperands && ComponentsOf(ProgramType::Quat).count == kMaxTypedOperands &&
+                      ComponentsOf(ProgramType::Color).count == kMaxTypedOperands,
+                  "a Pack of four is the widest node: the checker and the lowering carry four operands");
+
+    TEST(ProgramCompilerTest, VectorFormulasEqualPlainCode) {
+        ExpectOverVectors<Vec3>("caster.velocity * 2 + cast.target", [](const ValueUnitStats& caster, const ValueCastInfo& cast) { return caster.velocity * 2.0f + cast.target; });
+        ExpectOverVectors<Vec3>("cast.power * caster.velocity - cast.target / 2",
+                                [](const ValueUnitStats& caster, const ValueCastInfo& cast) { return cast.power * caster.velocity - cast.target / 2.0f; });
+        ExpectOverVectors<Vec3>("-caster.velocity", [](const ValueUnitStats& caster, const ValueCastInfo&) { return -caster.velocity; });
+        ExpectOverVectors<Vec3>("lerp(caster.velocity, cast.target, cast.power)",
+                                [](const ValueUnitStats& caster, const ValueCastInfo& cast) { return Lerp(caster.velocity, cast.target, cast.power); });
+        ExpectOverVectors<Vec3>("normalize(cast.target - caster.velocity)", [](const ValueUnitStats& caster, const ValueCastInfo& cast) { return (cast.target - caster.velocity).Normalized(); });
+        ExpectOverVectors<float>("length(cast.target - caster.velocity)", [](const ValueUnitStats& caster, const ValueCastInfo& cast) { return (cast.target - caster.velocity).Length(); });
+        ExpectOverVectors<float>("dot(caster.velocity, cast.target) + 1", [](const ValueUnitStats& caster, const ValueCastInfo& cast) { return Dot(caster.velocity, cast.target) + 1.0f; });
+        ExpectOverVectors<float>("caster.velocity.x * length(cast.target)", [](const ValueUnitStats& caster, const ValueCastInfo& cast) { return caster.velocity.x * cast.target.Length(); });
+        ExpectOverVectors<float>("lerp(caster.velocity, cast.target, 0.5).y + (caster.position * 2).x",
+                                 [](const ValueUnitStats& caster, const ValueCastInfo& cast) { return Lerp(caster.velocity, cast.target, 0.5f).y + (caster.position * 2.0f).x; });
+        ExpectOverVectors<Vec2>("caster.position * 3", [](const ValueUnitStats& caster, const ValueCastInfo&) { return caster.position * 3.0f; });
+        ExpectOverVectors<Vec2>("lerp(caster.position, vec2(1, 1), 0.25)", [](const ValueUnitStats& caster, const ValueCastInfo&) { return Lerp(caster.position, Vec2{1.0f, 1.0f}, 0.25f); });
+        ExpectOverVectors<Vec4>("caster.plane / 2 + vec4(1, 2, 3, 4)", [](const ValueUnitStats& caster, const ValueCastInfo&) { return caster.plane / 2.0f + Vec4{1.0f, 2.0f, 3.0f, 4.0f}; });
+        ExpectOverVectors<Vec4>("vec4(caster.plane.x, caster.position.y, cast.power, 1)",
+                                [](const ValueUnitStats& caster, const ValueCastInfo& cast) { return Vec4{caster.plane.x, caster.position.y, cast.power, 1.0f}; });
+        ExpectOverVectors<bool>("caster.velocity == cast.target || caster.position != caster.position",
+                                [](const ValueUnitStats& caster, const ValueCastInfo& cast) { return caster.velocity == cast.target || caster.position != caster.position; });
+    }
+
+    TEST(ProgramCompilerTest, IntegerVectorQuaternionColorEnumAndStringFormulasEqualPlainCode) {
+        ExpectOverVectors<IVec2>("ivec2(caster.cell.x + 1, 2)",
+                                 [](const ValueUnitStats& caster, const ValueCastInfo&) { return IVec2{static_cast<int32_t>(static_cast<uint32_t>(caster.cell.x) + 1U), 2}; });
+        ExpectOverVectors<IVec2>("caster.cell * 2 - caster.cell", [](const ValueUnitStats& caster, const ValueCastInfo&) {
+            const auto wrap = [](int32_t a, int32_t b) { return static_cast<int32_t>(static_cast<uint32_t>(a) * static_cast<uint32_t>(b)); };
+            const auto sub = [](int32_t a, int32_t b) { return static_cast<int32_t>(static_cast<uint32_t>(a) - static_cast<uint32_t>(b)); };
+            return IVec2{sub(wrap(caster.cell.x, 2), caster.cell.x), sub(wrap(caster.cell.y, 2), caster.cell.y)};
+        });
+        ExpectOverVectors<Vec3>("caster.facing * cast.target", [](const ValueUnitStats& caster, const ValueCastInfo& cast) { return caster.facing.Rotate(cast.target); });
+        ExpectOverVectors<Quat>("caster.facing * quat(0, 0, 0, 1)", [](const ValueUnitStats& caster, const ValueCastInfo&) { return caster.facing * Quat{0.0f, 0.0f, 0.0f, 1.0f}; });
+        ExpectOverVectors<Quat>("lerp(caster.facing, quat(0, 0, 1, 0), cast.power)",
+                                [](const ValueUnitStats& caster, const ValueCastInfo& cast) { return Slerp(caster.facing, Quat{0.0f, 0.0f, 1.0f, 0.0f}, cast.power); });
+        ExpectOverVectors<Quat>("normalize(caster.facing)", [](const ValueUnitStats& caster, const ValueCastInfo&) { return caster.facing.Normalized(); });
+        ExpectOverVectors<Color>("lerp(caster.tint, color(0, 0, 0, 255), 0.5)", [](const ValueUnitStats& caster, const ValueCastInfo&) { return Lerp(caster.tint, Color{0, 0, 0, 255}, 0.5f); });
+        ExpectOverVectors<Color>("color(caster.tint.r, 300, -4, caster.tint.a)", [](const ValueUnitStats& caster, const ValueCastInfo&) { return Color{caster.tint.r, 255, 0, caster.tint.a}; });
+        ExpectOverVectors<int32_t>("caster.tint.g + caster.tint.a", [](const ValueUnitStats& caster, const ValueCastInfo&) { return int32_t{caster.tint.g} + int32_t{caster.tint.a}; });
+        ExpectOverVectors<PoolString>("select(caster.element == Fire, 'burn', 'chill')", [](const ValueUnitStats& caster, const ValueCastInfo&) {
+            return caster.element == ValueElement::Fire ? PoolString::Intern("burn") : PoolString::Intern("chill");
+        });
+        ExpectOverVectors<PoolString>("select(caster.alive, 'a', 'b')", [](const ValueUnitStats& caster, const ValueCastInfo&) { return PoolString::Intern(caster.alive ? "a" : "b"); });
+        ExpectOverVectors<ValueElement>("select(caster.alive, Fire, caster.element)",
+                                        [](const ValueUnitStats& caster, const ValueCastInfo&) { return caster.alive ? ValueElement::Fire : caster.element; });
+        ExpectOverVectors<bool>("Earth != caster.element && caster.element == caster.element",
+                                [](const ValueUnitStats& caster, const ValueCastInfo&) { return caster.element != ValueElement::Earth; });
+        ExpectOverVectors<bool>("caster.title == 'x' || caster.title == ''",
+                                [](const ValueUnitStats& caster, const ValueCastInfo&) { return caster.title == PoolString::Intern("x") || caster.title.Empty(); });
+    }
+
+    TEST(ProgramCompilerTest, AFormulaOfConstantsOfAnyNewTypeIsAConstant) {
+        const ValueWorld world;
+        const auto constant = [&](auto tag, StringView text) {
+            using T = decltype(tag);
+            const auto value = CompileValue<T>(text, world.declaration);
+            EXPECT_TRUE(value.has_value()) << String(text).c_str() << ": " << (value.has_value() ? String() : value.error().message).c_str();
+            if (value.has_value()) {
+                EXPECT_TRUE(value->IsConst()) << String(text).c_str();
+            }
+            return value.has_value() ? value->GetConst() : T{};
+        };
+        EXPECT_TRUE(SameBytes(constant(Vec2{}, "vec2(1, 2) * 2"), Vec2{2.0f, 4.0f}));
+        EXPECT_TRUE(SameBytes(constant(Vec3{}, "vec3(1, 2, 3) * 2"), Vec3{2.0f, 4.0f, 6.0f}));
+        EXPECT_TRUE(SameBytes(constant(Vec3{}, "2 * vec3(1, 2, 3) + vec3(0, 0, 1)"), Vec3{2.0f, 4.0f, 7.0f}));
+        EXPECT_TRUE(SameBytes(constant(Vec4{}, "vec4(1, 2, 3, 4) / 2"), Vec4{0.5f, 1.0f, 1.5f, 2.0f}));
+        EXPECT_TRUE(SameBytes(constant(IVec2{}, "ivec2(1, 2) * 3"), IVec2{3, 6}));
+        EXPECT_TRUE(SameBytes(constant(Quat{}, "quat(0, 0, 0, 1) * quat(0, 0, 0, 1)"), Quat{0.0f, 0.0f, 0.0f, 1.0f}));
+        EXPECT_TRUE(SameBytes(constant(Vec3{}, "quat(0, 0, 0, 1) * vec3(1, 0, 0)"), Vec3{1.0f, 0.0f, 0.0f}));
+        EXPECT_TRUE(SameBytes(constant(Color{}, "lerp(color(0, 0, 0, 255), color(255, 255, 255, 255), 0.5)"), Lerp(Color{0, 0, 0, 255}, Color{255, 255, 255, 255}, 0.5f)));
+        EXPECT_EQ(constant(ValueElement{}, "select(1 < 2, Fire, Earth)"), ValueElement::Fire);
+        EXPECT_EQ(constant(ValueElement{}, "Earth"), ValueElement::Earth);
+        EXPECT_EQ(constant(PoolString{}, "'chill'"), PoolString::Intern("chill"));
+        EXPECT_EQ(constant(PoolString{}, "select(2 > 1, 'burn', 'chill')"), PoolString::Intern("burn"));
+        EXPECT_TRUE(constant(bool{}, "'a' == 'a'"));
+        EXPECT_FALSE(constant(bool{}, "'a' == 'b'"));
+        EXPECT_EQ(constant(float{}, "vec3(1, 2, 3).y"), 2.0f);
+        EXPECT_EQ(constant(int32_t{}, "color(1, 2, 3, 4).g"), 2);
+        EXPECT_EQ(constant(float{}, "length(vec3(3, 4, 0))"), 5.0f);
+        // What the interpreter computes, not what the text says: a channel is clamped, a wrap wraps
+        EXPECT_TRUE(SameBytes(constant(Color{}, "color(-1, 0, 255, 256)"), Color{0, 0, 255, 255}));
+        EXPECT_TRUE(SameBytes(constant(IVec2{}, "ivec2(2147483647, 0) * 2"), IVec2{-2, 0}));
+        const auto compiled = CompileExpression("vec3(1, 2, 3) * 2", world.declaration, DescribeType<Vec3>());
+        ASSERT_TRUE(compiled.has_value());
+        EXPECT_EQ(compiled->kind, CompiledKind::Constant);
+        EXPECT_EQ(compiled->type, ProgramType::Vec3);
+        EXPECT_TRUE(SameBytes(ConstantImage<Vec3>(*compiled), Vec3{2.0f, 4.0f, 6.0f}));
+        EXPECT_EQ(compiled->constant.bytes[sizeof(Vec3)], 0) << "the image is zero-padded";
+    }
+
+    TEST(ProgramCompilerTest, AFormulaThatIsOneFieldOfAnyNewTypeIsASlot) {
+        ValueWorld world;
+        const auto slot = [&](auto tag, StringView path) {
+            using T = decltype(tag);
+            const auto value = CompileValue<T>(path, world.declaration);
+            EXPECT_TRUE(value.has_value()) << String(path).c_str();
+            if (!value.has_value()) {
+                return;
+            }
+            EXPECT_TRUE(value->IsSlot()) << String(path).c_str();
+            Value<T> linked;
+            EXPECT_TRUE(linked.Link(world.declaration, path).has_value());
+            EXPECT_EQ(value->Level(), linked.Level());
+            EXPECT_EQ(value->Offset(), linked.Offset());
+            EXPECT_EQ(value->Path(), PoolString::Intern(path));
+            EXPECT_TRUE(SameBytes(value->Get(world.context), linked.Get(world.context)));
+        };
+        slot(Vec2{}, "caster.position");
+        slot(Vec3{}, "caster.velocity");
+        slot(Vec3{}, "cast.target");
+        slot(Vec4{}, "caster.plane");
+        slot(IVec2{}, "caster.cell");
+        slot(Quat{}, "caster.facing");
+        slot(Color{}, "caster.tint");
+        slot(ValueElement{}, "caster.element");
+        slot(PoolString{}, "caster.title");
+        slot(Vec2{}, "caster.span.offset");
+    }
+
+    TEST(ProgramCompilerTest, AComponentOfOneFieldIsASlotAtTheComponentsOffset) {
+        ValueWorld world;
+        world.caster.velocity = Vec3{1.0f, 2.0f, 3.0f};
+        const auto velocity = LinkSlot(world.declaration, "caster.velocity", DescribeType<Vec3>());
+        ASSERT_TRUE(velocity.has_value());
+        const auto x = CompileValue<float>("caster.velocity.x", world.declaration);
+        const auto y = CompileValue<float>("caster.velocity.y", world.declaration);
+        const auto z = CompileValue<float>("caster.velocity.z", world.declaration);
+        ASSERT_TRUE(x.has_value() && y.has_value() && z.has_value());
+        EXPECT_TRUE(x->IsSlot() && y->IsSlot() && z->IsSlot());
+        EXPECT_EQ(x->Offset(), velocity->offset + offsetof(Vec3, x));
+        EXPECT_EQ(y->Offset(), velocity->offset + offsetof(Vec3, y));
+        EXPECT_EQ(z->Offset(), velocity->offset + offsetof(Vec3, z));
+        EXPECT_EQ(y->Offset(), x->Offset() + sizeof(float)) << "the next float";
+        EXPECT_EQ(y->Path(), PoolString::Intern("caster.velocity.y"));
+        EXPECT_EQ(x->Get(world.context), 1.0f);
+        EXPECT_EQ(y->Get(world.context), 2.0f);
+        EXPECT_EQ(z->Evaluate(world.context), 3.0f);
+        world.caster.velocity.y = -8.0f;
+        EXPECT_EQ(y->Get(world.context), -8.0f);
+
+        const auto cell = LinkSlot(world.declaration, "caster.cell", DescribeType<IVec2>());
+        ASSERT_TRUE(cell.has_value());
+        const auto cellY = CompileValue<int32_t>("caster.cell.y", world.declaration);
+        ASSERT_TRUE(cellY.has_value());
+        EXPECT_TRUE(cellY->IsSlot());
+        EXPECT_EQ(cellY->Offset(), cell->offset + offsetof(IVec2, y));
+        EXPECT_EQ(cellY->Get(world.context), world.caster.cell.y);
+
+        const auto offset = LinkSlot(world.declaration, "caster.span.offset", DescribeType<Vec2>());
+        ASSERT_TRUE(offset.has_value());
+        const auto through = CompileValue<float>("caster.span.offset.y", world.declaration);
+        ASSERT_TRUE(through.has_value());
+        EXPECT_TRUE(through->IsSlot());
+        EXPECT_EQ(through->Offset(), offset->offset + offsetof(Vec2, y));
+
+        const auto quat = CompileValue<float>("caster.facing.w", world.declaration);
+        ASSERT_TRUE(quat.has_value());
+        EXPECT_TRUE(quat->IsSlot());
+        EXPECT_EQ(quat->Get(world.context), world.caster.facing.w);
+
+        // A channel of a color is a byte, so it is computed: a program of one load and one Extract, reading the color's level
+        const auto channel = CompileValue<int32_t>("caster.tint.g", world.declaration);
+        ASSERT_TRUE(channel.has_value());
+        EXPECT_EQ(channel->Kind(), ValueKind::Program);
+        EXPECT_EQ(channel->Reads(), LevelBit(0));
+        const Program& program = ProgramPool::Get(channel->Id());
+        ASSERT_EQ(program.Code().size(), 2U) << program.Disassemble().c_str();
+        EXPECT_EQ(program.Code()[0].op, Opcode::LoadSlotColor);
+        EXPECT_EQ(program.Code()[1].op, Opcode::ExtractColor);
+        EXPECT_EQ(program.Code()[1].imm, 1U);
+        EXPECT_EQ(channel->Evaluate(world.context), world.caster.tint.g);
+    }
+
+    TEST(ProgramCompilerTest, TheOperandsOfAPackAreInConsecutiveRegisters) {
+        ValueWorld world;
+        const auto value = CompileValue<Vec4>("vec4(caster.plane.x, cast.power, caster.speed, 1)", world.declaration);
+        ASSERT_TRUE(value.has_value()) << value.error().message.c_str();
+        ASSERT_EQ(value->Kind(), ValueKind::Program);
+        const Program& program = ProgramPool::Get(value->Id());
+        const Span<const Instruction> code = program.Code();
+        ASSERT_EQ(code.size(), 5U) << program.Disassemble().c_str();
+        const Instruction& pack = code.back();
+        EXPECT_EQ(pack.op, Opcode::PackVec4);
+        EXPECT_EQ(pack.dst, pack.a) << "the result goes where the first component was";
+        for (size_t i = 0; i < ComponentsOf(ProgramType::Vec4).count; ++i) {
+            EXPECT_EQ(code[i].dst, pack.a + i) << "operand " << i << " is the register above operand " << (i == 0 ? 0 : i - 1) << ": " << program.Disassemble().c_str();
+        }
+        EXPECT_EQ(program.RegisterCount(), 4U);
+        world.cast.power = 5.0f;
+        world.caster.speed = 0.5f;
+        EXPECT_TRUE(SameBytes(value->Evaluate(world.context), Vec4{world.caster.plane.x, 5.0f, 0.5f, 1.0f}));
+    }
+
+    TEST(ProgramCompilerTest, AnOperandThatIsAFourOperandCallKeepsTheRegistersFew) {
+        ValueWorld world;
+        const auto value = CompileValue<Quat>("quat(vec4(caster.plane.x, caster.plane.y, 0, 1).y, caster.facing.y, caster.facing.z, quat(caster.facing.x, 0, 0, 1).w)", world.declaration);
+        ASSERT_TRUE(value.has_value()) << value.error().message.c_str();
+        ASSERT_EQ(value->Kind(), ValueKind::Program);
+        EXPECT_LE(ProgramPool::Get(value->Id()).RegisterCount(), 8U) << ProgramPool::Get(value->Id()).Disassemble().c_str();
+        for (const VectorState& state : kVectorStates) {
+            Apply(world, state);
+            EXPECT_TRUE(SameBytes(value->Evaluate(world.context), Quat{world.caster.plane.y, world.caster.facing.y, world.caster.facing.z, 1.0f})) << state.plane.y;
+        }
+        ExpectOverVectors<Vec4>("vec4(vec4(caster.plane.x, 1, 2, 3).w, vec3(caster.velocity.x, 0, cast.power).z, 0, quat(0, 0, caster.facing.z, 1).z)",
+                                [](const ValueUnitStats& caster, const ValueCastInfo& cast) { return Vec4{3.0f, cast.power, 0.0f, caster.facing.z}; });
+    }
+
+    TEST(ProgramCompilerTest, TheRegisterLimitStillNamesTheNodeOfAPackThatDoesNotFit) {
+        const ValueWorld world;
+        String text = "caster.plane.x";
+        constexpr size_t kLevels = 12;
+        for (size_t i = 0; i < kLevels; ++i) {
+            text = Format("vec4(1, 2, 3, {}).w", text);
+        }
+        const size_t count = ProgramPool::Count();
+        const auto refused = CompileValue<float>(text, world.declaration);
+        ASSERT_FALSE(refused.has_value());
+        EXPECT_TRUE(Contains(refused.error().message, "32 registers")) << refused.error().message.c_str();
+        EXPECT_GT(refused.error().column, 0U);
+        EXPECT_EQ(ProgramPool::Count(), count);
+        const auto fits = CompileValue<float>(Format("vec4(1, 2, 3, {}).w", "caster.plane.x"), world.declaration);
+        EXPECT_TRUE(fits.has_value());
+    }
+
+    TEST(ProgramCompilerTest, ProgramsOfTheNewTypesAreInternedByTheirCode) {
+        const ValueWorld world;
+        const auto first = CompileValue<Vec3>("caster.velocity * 2 + cast.target", world.declaration);
+        const auto respaced = CompileValue<Vec3>("caster.velocity*2+cast.target", world.declaration);
+        const auto folded = CompileValue<Vec3>("caster.velocity * (1 + 1) + cast.target", world.declaration);
+        ASSERT_TRUE(first.has_value() && respaced.has_value() && folded.has_value());
+        EXPECT_EQ(first->Id(), respaced->Id());
+        EXPECT_EQ(first->Id(), folded->Id());
+        EXPECT_NE(first->Path(), respaced->Path());
+        const auto other = CompileValue<Vec3>("caster.velocity * 3 + cast.target", world.declaration);
+        ASSERT_TRUE(other.has_value());
+        EXPECT_NE(other->Id(), first->Id());
+
+        // A string constant is the bytes of an interned text: the same text is one program, another text another
+        const auto burn = CompileValue<PoolString>("select(caster.alive, 'burn', 'chill')", world.declaration);
+        const auto again = CompileValue<PoolString>("select(caster.alive,'burn','chill')", world.declaration);
+        const auto swapped = CompileValue<PoolString>("select(caster.alive, 'chill', 'burn')", world.declaration);
+        ASSERT_TRUE(burn.has_value() && again.has_value() && swapped.has_value());
+        EXPECT_EQ(burn->Id(), again->Id());
+        EXPECT_NE(burn->Id(), swapped->Id());
+        const size_t count = ProgramPool::Count();
+        EXPECT_TRUE(CompileValue<PoolString>("select(caster.alive, 'burn', 'chill')", world.declaration).has_value());
+        EXPECT_EQ(ProgramPool::Count(), count);
+
+        // An enum is its index: the same code under two enums is one program, and the value casts the index back to its own enum
+        const auto element = CompileValue<ValueElement>("select(caster.alive, Fire, Earth)", world.declaration);
+        ASSERT_TRUE(element.has_value());
+        EXPECT_EQ(ProgramPool::Get(element->Id()).ResultType(), ProgramType::Enum);
+    }
+
+    TEST(ProgramCompilerTest, ATypeWithoutAnOperatorIsRefusedWhateverTheValueTypeAsksFor) {
+        const ValueWorld world;
+        const size_t count = ProgramPool::Count();
+        for (const StringView text : {"caster.tint + caster.tint", "caster.facing + caster.facing", "caster.velocity < cast.target", "caster.velocity * cast.target", "caster.cell / 2",
+                                      "caster.title + caster.title", "vec3(1, 2)", "caster.velocity.q", "caster.element < Fire", "select(caster.alive, caster.velocity, caster.position)"}) {
+            const auto compiled = CompileExpression(text, world.declaration, DescribeType<Vec3>());
+            EXPECT_FALSE(compiled.has_value()) << String(text).c_str();
+        }
+        EXPECT_EQ(ProgramPool::Count(), count);
     }
 
 }  // namespace BECore::Tests
