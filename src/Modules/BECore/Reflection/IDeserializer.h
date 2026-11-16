@@ -332,6 +332,7 @@ namespace BECore {
          */
         static StringView CutText(StringView text, size_t maxBytes);
 
+    public:
         /**
          * @brief ", did you mean 'y'?" for an unknown key, or an empty text
          *
