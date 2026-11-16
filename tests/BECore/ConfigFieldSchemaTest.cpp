@@ -176,4 +176,24 @@ namespace BECore::Tests {
         EXPECT_EQ(hint.options, SDLUtils::GetWindowFlagNames());
     }
 
+    TEST_F(ConfigFieldSchemaTest, UnregisteredValueWithABarIsAString) {
+        const ConfigFieldSchema& schema = ConfigFieldSchema::GetInstance();
+        const FieldHint hint = schema.Resolve("OtherConfig"_intern, "node/@mode", "A|B");
+        EXPECT_EQ(hint.type, FieldType::String);
+        EXPECT_TRUE(hint.options.empty());
+    }
+
+    TEST_F(ConfigFieldSchemaTest, RegisteredFlagsStayFlags) {
+        ConfigFieldSchema& schema = ConfigFieldSchema::GetInstance();
+        const Vector<String> names{"A", "B", "C"};
+        schema.RegisterFlags("OtherConfig"_intern, "node/@mode", names);
+
+        // Whatever the value holds, the options are the registered ones
+        for (const StringView value : {"A|B", "A", "", "Z"}) {
+            const FieldHint hint = schema.Resolve("OtherConfig"_intern, "node/@mode", value);
+            EXPECT_EQ(hint.type, FieldType::Flags);
+            EXPECT_EQ(hint.options, names);
+        }
+    }
+
 }  // namespace BECore::Tests
