@@ -311,4 +311,63 @@ namespace BECore::Tests {
         EXPECT_FALSE(settings->headless);
     }
 
+    TEST(ControlSettingsTest, ReplayIsOffByDefault) {
+        const auto settings = Resolve({"--control", "--manual-clock"});
+        ASSERT_TRUE(settings.has_value());
+        EXPECT_TRUE(settings->replayPath.empty());
+        EXPECT_FALSE(settings->replayExit);
+    }
+
+    TEST(ControlSettingsTest, ReplayFlagsGiveTheFileAndTheExit) {
+        const auto settings = Resolve({"--control", "--manual-clock", "--replay=runs/win.jsonl", "--replay-exit"});
+        ASSERT_TRUE(settings.has_value());
+        EXPECT_EQ(settings->replayPath, "runs/win.jsonl");
+        EXPECT_TRUE(settings->replayExit);
+
+        const auto stays = Resolve({"--control", "--manual-clock", "--replay=a=b.jsonl"});
+        ASSERT_TRUE(stays.has_value());
+        EXPECT_EQ(stays->replayPath, "a=b.jsonl");
+        EXPECT_FALSE(stays->replayExit);
+    }
+
+    TEST(ControlSettingsTest, ReplayWithTheManualClockOfTheConfigIsFine) {
+        const auto settings = Resolve({"--replay=win.jsonl"}, R"(<root control="true" manualClock="true"/>)");
+        ASSERT_TRUE(settings.has_value());
+        EXPECT_EQ(settings->replayPath, "win.jsonl");
+    }
+
+    TEST(ControlSettingsTest, ReplayNeedsTheApiAndTheManualClock) {
+        ExpectInvalid(Resolve({"--replay=win.jsonl"}));
+        ExpectInvalid(Resolve({"--manual-clock", "--replay=win.jsonl"}));
+        ExpectInvalid(Resolve({"--control", "--replay=win.jsonl"}));
+    }
+
+    TEST(ControlSettingsTest, ReplayExitNeedsAReplay) {
+        ExpectInvalid(Resolve({"--control", "--manual-clock", "--replay-exit"}));
+    }
+
+    TEST(ControlSettingsTest, AReplayFlagWithoutAFileIsAnError) {
+        ExpectInvalid(Resolve({"--control", "--manual-clock", "--replay"}));
+        ExpectInvalid(Resolve({"--control", "--manual-clock", "--replay="}));
+    }
+
+    TEST(ControlSettingsTest, TheErrorOfAReplayFlagNamesIt) {
+        const auto noFile = Resolve({"--control", "--manual-clock", "--replay="});
+        ASSERT_FALSE(noFile.has_value());
+        EXPECT_NE(noFile.error().message.find("--replay="), String::npos);
+        const auto noClock = Resolve({"--control", "--replay=x.jsonl"});
+        ASSERT_FALSE(noClock.has_value());
+        EXPECT_NE(noClock.error().message.find("--manual-clock"), String::npos);
+        const auto alone = Resolve({"--control", "--manual-clock", "--replay-exit"});
+        ASSERT_FALSE(alone.has_value());
+        EXPECT_NE(alone.error().message.find("--replay-exit"), String::npos);
+    }
+
+    TEST(ControlSettingsTest, ReplayFlagLookalikesAreIgnored) {
+        const auto settings = Resolve({"--control", "--manual-clock", "--replays=x", "--replay-exit=1", "--replay-exits", "replay=x"});
+        ASSERT_TRUE(settings.has_value());
+        EXPECT_TRUE(settings->replayPath.empty());
+        EXPECT_FALSE(settings->replayExit);
+    }
+
 }  // namespace BECore::Tests

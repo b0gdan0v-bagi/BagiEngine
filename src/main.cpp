@@ -48,7 +48,7 @@ int RunApplication(int argc, const char* const* argv) {
     BECore::Application::GetInstance().Run();
 #endif
 
-    return 0;
+    return BECore::Application::GetInstance().GetExitCode();
 }
 
 #ifdef PLATFORM_WINDOWS

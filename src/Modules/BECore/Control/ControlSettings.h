@@ -14,6 +14,8 @@ namespace BECore {
         inline constexpr StringView kControlPortPrefix = "--control-port=";
         inline constexpr StringView kManualClock = "--manual-clock";
         inline constexpr StringView kHeadless = "--headless";
+        inline constexpr StringView kReplayPrefix = "--replay=";
+        inline constexpr StringView kReplayExit = "--replay-exit";
     }  // namespace ControlArguments
 
     struct ApplicationConfigLoad;  // Application/ApplicationConfig.h, which includes this file
@@ -24,6 +26,8 @@ namespace BECore {
         uint16_t port = kDefaultControlPort;  // 0 asks the system for a free port
         bool manualClock = false;             // frames run only on a `step`; ControlService::SetManualClock
         bool headless = false;                // no window: the SDL software renderer on the dummy video driver (ApplicationOptions)
+        String replayPath;                    // --replay=FILE: Application plays this replay file once the game is up; empty is none
+        bool replayExit = false;              // --replay-exit: the application quits when the replay is over
     };
 
     /**
