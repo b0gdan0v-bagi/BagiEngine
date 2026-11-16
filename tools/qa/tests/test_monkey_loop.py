@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 
@@ -107,6 +108,12 @@ def test_dupes_names_the_known_file_of_the_same_finding_and_only_that(tmp_path, 
     assert "DUPLICATE" not in capsys.readouterr().out
 
 
+def test_dupes_with_no_known_file_matches_nothing(tmp_path, capsys):
+    fresh = repro_plan(tmp_path / "fresh.md", "generic.log_warning", [("step", {"frames": 1}), ("perform_action", {"type": "inc"})])
+    assert run("dupes", "--repro", str(fresh), "--known") == 0
+    assert "DUPLICATE" not in capsys.readouterr().out
+
+
 def test_dupes_with_a_bad_repro_is_2(tmp_path, capsys):
     assert run("dupes", "--repro", str(tmp_path / "missing.md"), "--known", str(tmp_path / "other.md")) == 2
     assert "ERROR" in capsys.readouterr().out
@@ -163,6 +170,17 @@ def test_a_game_that_refuses_the_start_ends_the_sweep_with_2(qa_game_exe, out_di
 def test_a_missing_executable_is_77(tmp_path, out_dir, capsys):
     assert sweep(tmp_path / "NoSuchGame", out_dir) == 77
     assert "SKIPPED" in capsys.readouterr().out and not out_dir.exists()
+
+
+def test_an_error_after_a_bug_keeps_the_names_in_the_result():
+    summary = {"seeds": [{"stopped": "bug", "bugs": ["generic.log_warning"]}, {"stopped": "error", "error": "no start", "bugs": []}]}
+    assert loop.sweep_result(summary) == "error: no start (bugs: generic.log_warning)"
+
+
+def test_an_out_root_inside_a_git_work_tree_is_2_and_nothing_is_written(qa_game_exe, capsys):
+    inside = Path(__file__).resolve().parent / "sweep-out"
+    assert sweep(qa_game_exe, inside) == 2
+    assert "git work tree" in capsys.readouterr().out and not inside.exists()
 
 
 @pytest.mark.parametrize("option", [["--count", "0"], ["--stop-after-bugs", "0"], ["--minutes", "0"], ["--minutes-per-seed", "-1"]])

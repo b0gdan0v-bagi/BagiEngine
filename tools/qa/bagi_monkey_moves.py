@@ -16,7 +16,7 @@ from typing import Any, Collection, Iterable, Sequence
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from bagi_qa_checks import PERFORM_ACTION_METHOD, STEP_METHOD, Move  # noqa: E402
+from bagi_qa_checks import PERFORM_ACTION_METHOD, SET_WINDOW_METHOD, STEP_METHOD, UI_CLICK_METHOD, Move  # noqa: E402
 
 KIND_ACTION = "action"
 KIND_CLICK = "click"
@@ -26,9 +26,7 @@ KIND_WINDOW = "window"
 KINDS = (KIND_ACTION, KIND_CLICK, KIND_STEP, KIND_RESET, KIND_WINDOW)
 WEIGHTS = {KIND_ACTION: 50, KIND_CLICK: 30, KIND_STEP: 15, KIND_RESET: 1, KIND_WINDOW: 1}  # a kind's share of the picks, however many moves it has
 
-UI_CLICK_METHOD = "ui_click"
 RESET_METHOD = "reset"
-SET_WINDOW_METHOD = "set_window"
 
 STEP_FRAMES = (1, 2, 5, 30)
 SLIDER_POINTS = (0.0, 0.25, 0.5, 0.75, 1.0)  # `at` of a click on a slider

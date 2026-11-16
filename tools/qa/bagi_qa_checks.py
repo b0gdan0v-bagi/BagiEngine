@@ -42,6 +42,8 @@ ACTION_CHECK = "check_action"
 MONKEY_MOVES = "monkey_moves"
 PERFORM_ACTION_METHOD = "perform_action"  # the control methods every QA module sends or reads the answer of
 STEP_METHOD = "step"
+UI_CLICK_METHOD = "ui_click"
+SET_WINDOW_METHOD = "set_window"
 UI_TREE_METHOD = "ui_tree"
 KNOWN_MEMBER = "KNOWN_DEVIATIONS"
 

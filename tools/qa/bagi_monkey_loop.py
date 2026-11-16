@@ -2,7 +2,7 @@
 
     python3 tools/qa/bagi_monkey_loop.py next-seeds --log FILE --charter TEXT [--charter TEXT ...] --count N
     python3 tools/qa/bagi_monkey_loop.py log-add --log FILE --product P (--sweep FILE | --charter TEXT --seeds A..B --moves N) [--build TEXT] [--result TEXT] [--date D]
-    python3 tools/qa/bagi_monkey_loop.py dupes --repro FILE --known FILE [FILE ...]
+    python3 tools/qa/bagi_monkey_loop.py dupes --repro FILE [--known [FILE ...]]
     python3 tools/qa/bagi_monkey_loop.py sweep (--exe E | --preset P --game G) --charter TEXT --first S --count N [--steps N] [--minutes M]
         [--minutes-per-seed M] [--invariants MODULE] [--start JSON] [--kinds a,b] [--out-root DIR] [--stop-after-bugs K] [--max-probes N] [--no-shrink] [--flag F]
 
@@ -27,6 +27,7 @@ from typing import Any, Callable, Sequence
 
 QA_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(QA_DIR.parent / "control"))
+sys.path.insert(0, str(QA_DIR.parent / "shots"))
 sys.path.insert(0, str(QA_DIR))
 
 import bagi_monkey as monkey  # noqa: E402
@@ -34,6 +35,7 @@ import bagi_monkey_dupes as dupes_module  # noqa: E402
 import bagi_monkey_log as log_module  # noqa: E402
 import bagi_qa_checks as checks  # noqa: E402
 import bagi_qa_repro as repro  # noqa: E402
+import png_ops  # noqa: E402
 from bagi_session import SessionError  # noqa: E402
 
 EXIT_NOTHING = monkey.EXIT_NOTHING
@@ -75,7 +77,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     dupes = commands.add_parser("dupes", help="is this reproduction one of the known ones")
     dupes.add_argument("--repro", type=Path, required=True, help="the reproduction: a .jsonl scenario or a bug-<short>-repro.md plan")
-    dupes.add_argument("--known", type=Path, nargs="+", required=True, metavar="FILE", help="the reproductions already filed")
+    dupes.add_argument("--known", type=Path, nargs="*", default=[], metavar="FILE", help="the reproductions already filed (none: no match)")
 
     sweep = commands.add_parser("sweep", help="walk the monkey over a range of seeds")
     repro.add_game_arguments(sweep)
@@ -174,11 +176,11 @@ def run_sweep(
 
 
 def sweep_result(summary: dict[str, Any]) -> str:
-    """The `result` cell a sweep gets in the log: `clean`, `bugs: <names>` or `error: <text>`."""
+    """The `result` cell a sweep gets in the log: `clean`, `bugs: <names>` or `error: <text>` (then ` (bugs: <names>)` when earlier seeds found some)."""
     errors = [record["error"] for record in summary["seeds"] if record["stopped"] == STOP_ERROR]
-    if errors:
-        return f"error: {errors[0]}"
     names = list(dict.fromkeys(name for record in summary["seeds"] for name in record["bugs"]))
+    if errors:
+        return f"error: {errors[0]} (bugs: {', '.join(names)})" if names else f"error: {errors[0]}"
     return f"bugs: {', '.join(names)}" if names else RESULT_CLEAN
 
 
@@ -242,6 +244,8 @@ def _sweep(args: argparse.Namespace, clock: Callable[[], float]) -> int:
         if value is not None and value <= 0:
             raise ValueError(f"{option} has to be positive")
     out_root = (args.out_root or monkey.OUT_ROOT / f"{datetime.date.today().isoformat()}-loop-{_slug(args.charter)}").expanduser()
+    if png_ops.inside_git_work_tree(out_root):
+        raise ValueError(f"--out-root {out_root} is inside a git work tree: a sweep is written outside every repository")
     summary = run_sweep(
         exe,
         args.charter,

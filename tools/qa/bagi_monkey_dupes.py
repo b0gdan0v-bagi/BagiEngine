@@ -22,10 +22,7 @@ sys.path.insert(0, str(QA_DIR))
 
 import bagi_qa_report as report_module  # noqa: E402
 import scenario  # noqa: E402
-from bagi_qa_checks import PERFORM_ACTION_METHOD  # noqa: E402
-
-UI_CLICK_METHOD = "ui_click"
-SET_WINDOW_METHOD = "set_window"
+from bagi_qa_checks import PERFORM_ACTION_METHOD, SET_WINDOW_METHOD, UI_CLICK_METHOD  # noqa: E402
 
 # Two reproductions of one finding that share this part of their calls (the longer list is the divisor, the calls are a multiset) are taken for one
 # bug: a majority, so one call off in a short cut reproduction (another count, an extra step) still matches and a half of it does not.
