@@ -81,6 +81,16 @@ namespace BECore {
 
         [[nodiscard]] bool IsRegistered(const IUIInputHandler& handler) const;
 
+        /// Whether the handler holds a press (of any button) of the pointer `which`. Asked from a handler's own On* method, it
+        /// tells a motion of its drag from the motion of a pointer that merely passes. The press of an up being delivered
+        /// is already ended: inside OnMouseButtonUp the answer does not count it
+        [[nodiscard]] bool HoldsPress(const IUIInputHandler& handler, uint32_t which) const;
+
+        /// True only inside the OnMouseButtonUp that reaches the handler as the holder of that press. A release that reaches
+        /// it by the walk (another button, another pointer, a press nobody held) is not a delivery, so the handler can tell
+        /// "the release of my press" from a release that is the game's. A dispatch nested inside the up answers for itself
+        [[nodiscard]] bool IsDeliveringCapture(const IUIInputHandler& handler) const;
+
         /// @return true when a handler consumed the event, so game code did not get it
         bool DispatchMouseButtonDown(const SDL_MouseButtonEvent& event);
         bool DispatchMouseButtonUp(const SDL_MouseButtonEvent& event);
@@ -112,6 +122,7 @@ namespace BECore {
         Vector<Entry> _registeredDuringDispatch;
         PointerTracker _tracker;
         int _dispatchDepth = 0;
+        const IUIInputHandler* _deliveringHolder = nullptr;  // the holder DispatchMouseButtonUp is calling now; compared only, never called
     };
 
 }  // namespace BECore

@@ -27,6 +27,10 @@ namespace BECore {
         return it != _captures.end() ? it->handler : nullptr;
     }
 
+    bool PointerTracker::HoldsPress(const IUIInputHandler& handler, uint32_t which) const {
+        return eastl::any_of(_captures.begin(), _captures.end(), [&](const Capture& capture) { return capture.which == which && capture.handler == &handler; });
+    }
+
     void PointerTracker::EndCapture(uint32_t which, uint8_t button) {
         auto it = eastl::find_if(_captures.begin(), _captures.end(), [&](const Capture& capture) { return capture.which == which && capture.button == button; });
         if (it != _captures.end()) {

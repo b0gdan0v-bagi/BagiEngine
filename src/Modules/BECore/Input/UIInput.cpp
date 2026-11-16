@@ -45,6 +45,14 @@ namespace BECore {
         return eastl::any_of(_entries.begin(), _entries.end(), isHandler) || eastl::any_of(_registeredDuringDispatch.begin(), _registeredDuringDispatch.end(), isHandler);
     }
 
+    bool UIInput::HoldsPress(const IUIInputHandler& handler, uint32_t which) const {
+        return _tracker.HoldsPress(handler, which);
+    }
+
+    bool UIInput::IsDeliveringCapture(const IUIInputHandler& handler) const {
+        return _deliveringHolder == &handler;
+    }
+
     bool UIInput::IsLive(const IUIInputHandler& handler) const {
         return eastl::any_of(_entries.begin(), _entries.end(), [&](const Entry& entry) { return entry.handler == &handler; });
     }
@@ -92,14 +100,19 @@ namespace BECore {
     bool UIInput::DispatchMouseButtonUp(const SDL_MouseButtonEvent& event) {
         BeginDispatch();
         bool consumed = false;
+        // A dispatch nested in a handler's up has its own answer to IsDeliveringCapture, so the outer holder is put back after
+        const IUIInputHandler* const outerHolder = _deliveringHolder;
         if (IUIInputHandler* holder = _tracker.FindCapture(event.which, event.button); holder != nullptr) {
             // Ended first: the holder's answer does not matter and it may unregister or dispatch again inside the call
             _tracker.EndCapture(event.which, event.button);
+            _deliveringHolder = holder;
             holder->OnMouseButtonUp(event);
             consumed = true;
         } else {
+            _deliveringHolder = nullptr;
             consumed = Walk(event, event.x, event.y, &IUIInputHandler::OnMouseButtonUp, nullptr).consumed;
         }
+        _deliveringHolder = outerHolder;
         EndDispatch();
 
         if (!consumed) {

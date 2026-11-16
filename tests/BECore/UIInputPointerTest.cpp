@@ -531,4 +531,173 @@ namespace BECore::Tests {
         EXPECT_TRUE(_game.ups.empty());
     }
 
+    TEST_F(UIInputPointerTest, HoldsPressIsTrueForTheHolderAndItsPointerOnly) {
+        ShapeHandler holder(&_callLog, 1);
+        ShapeHandler other(&_callLog, 2);
+        holder.maxX = 10.0f;
+        holder.consumeDown = true;
+        other.minX = 20.0f;
+        other.consumeDown = true;
+        Register(holder, 5);
+        Register(other, 1);
+
+        EXPECT_FALSE(_input.HoldsPress(holder, 1));
+
+        ASSERT_TRUE(_input.DispatchMouseButtonDown(Button(5.0f, 1)));
+        EXPECT_TRUE(_input.HoldsPress(holder, 1));
+        EXPECT_FALSE(_input.HoldsPress(holder, 2));
+        EXPECT_FALSE(_input.HoldsPress(other, 1));
+
+        ASSERT_TRUE(_input.DispatchMouseButtonDown(Button(25.0f, 2, SDL_BUTTON_RIGHT)));
+        EXPECT_TRUE(_input.HoldsPress(other, 2));
+        EXPECT_FALSE(_input.HoldsPress(holder, 2));
+
+        _input.DispatchMouseButtonUp(Button(5.0f, 1));
+        EXPECT_FALSE(_input.HoldsPress(holder, 1));
+        EXPECT_TRUE(_input.HoldsPress(other, 2));
+    }
+
+    TEST_F(UIInputPointerTest, HoldsPressCountsEveryButtonOfThePointer) {
+        ShapeHandler holder(&_callLog, 1);
+        ShapeHandler other(&_callLog, 2);
+        holder.maxX = 10.0f;
+        holder.consumeDown = true;
+        other.minX = 20.0f;
+        other.consumeDown = true;
+        Register(holder, 1);
+        Register(other, 5);
+
+        ASSERT_TRUE(_input.DispatchMouseButtonDown(Button(25.0f, 1, SDL_BUTTON_LEFT)));
+        ASSERT_TRUE(_input.DispatchMouseButtonDown(Button(5.0f, 1, SDL_BUTTON_RIGHT)));
+
+        EXPECT_TRUE(_input.HoldsPress(other, 1));
+        EXPECT_TRUE(_input.HoldsPress(holder, 1));
+
+        _input.DispatchMouseButtonUp(Button(25.0f, 1, SDL_BUTTON_LEFT));
+        EXPECT_FALSE(_input.HoldsPress(other, 1));
+        EXPECT_TRUE(_input.HoldsPress(holder, 1));
+    }
+
+    TEST_F(UIInputPointerTest, HoldsPressIsFalseOnceTheHandlerIsUnregistered) {
+        ShapeHandler holder(&_callLog, 1);
+        holder.consumeDown = true;
+        Register(holder, 0);
+        ASSERT_TRUE(_input.DispatchMouseButtonDown(Button(5.0f)));
+
+        _input.Unregister(holder);
+
+        EXPECT_FALSE(_input.HoldsPress(holder, 1));
+    }
+
+    TEST_F(UIInputPointerTest, IsDeliveringCaptureIsTrueOnlyInsideTheHoldersUp) {
+        ShapeHandler holder(&_callLog, 1);
+        holder.consumeDown = true;
+        bool duringUp = false;
+        bool holdsDuringUp = true;
+        holder.onUp = [&] {
+            duringUp = _input.IsDeliveringCapture(holder);
+            holdsDuringUp = _input.HoldsPress(holder, 1);
+        };
+        Register(holder, 0);
+
+        EXPECT_FALSE(_input.IsDeliveringCapture(holder));
+        ASSERT_TRUE(_input.DispatchMouseButtonDown(Button(5.0f)));
+        EXPECT_FALSE(_input.IsDeliveringCapture(holder));
+
+        _input.DispatchMouseButtonUp(Button(5.0f));
+
+        EXPECT_TRUE(duringUp);
+        EXPECT_FALSE(holdsDuringUp);
+        EXPECT_FALSE(_input.IsDeliveringCapture(holder));
+    }
+
+    TEST_F(UIInputPointerTest, IsDeliveringCaptureIsFalseInAReleaseThatCameByTheWalk) {
+        ShapeHandler holder(&_callLog, 1);
+        holder.maxX = 10.0f;
+        holder.consumeDown = true;
+        holder.consumeUp = true;
+        Vector<bool> delivering;
+        holder.onUp = [&] { delivering.push_back(_input.IsDeliveringCapture(holder)); };
+        Register(holder, 5);
+        ASSERT_TRUE(_input.DispatchMouseButtonDown(Button(5.0f, 1, SDL_BUTTON_LEFT)));
+
+        _input.DispatchMouseButtonUp(Button(5.0f, 1, SDL_BUTTON_RIGHT));
+        _input.DispatchMouseButtonUp(Button(5.0f, 2, SDL_BUTTON_LEFT));
+        EXPECT_EQ(delivering, Vector<bool>({false, false}));
+
+        _input.DispatchMouseButtonUp(Button(5.0f, 1, SDL_BUTTON_LEFT));
+        ASSERT_EQ(delivering.size(), 3u);
+        EXPECT_TRUE(delivering.back());
+    }
+
+    TEST_F(UIInputPointerTest, IsDeliveringCaptureIsRightInADispatchNestedInsideTheUp) {
+        ShapeHandler holder(&_callLog, 1);
+        ShapeHandler walked(&_callLog, 2);
+        holder.maxX = 10.0f;
+        holder.consumeDown = true;
+        walked.minX = 20.0f;
+        walked.consumeUp = true;
+        bool walkedDelivering = true;
+        bool holderInNested = true;
+        bool holderAfterNested = false;
+        walked.onUp = [&] {
+            walkedDelivering = _input.IsDeliveringCapture(walked);
+            holderInNested = _input.IsDeliveringCapture(holder);
+        };
+        holder.onUp = [&] {
+            _input.DispatchMouseButtonUp(Button(25.0f, 2, SDL_BUTTON_LEFT));
+            holderAfterNested = _input.IsDeliveringCapture(holder);
+        };
+        Register(holder, 5);
+        Register(walked, 1);
+        ASSERT_TRUE(_input.DispatchMouseButtonDown(Button(5.0f, 1)));
+
+        _input.DispatchMouseButtonUp(Button(5.0f, 1));
+
+        EXPECT_EQ(walked.ups.size(), 1u);
+        EXPECT_FALSE(walkedDelivering);
+        EXPECT_FALSE(holderInNested);
+        EXPECT_TRUE(holderAfterNested);
+        EXPECT_FALSE(_input.IsDeliveringCapture(holder));
+    }
+
+    TEST_F(UIInputPointerTest, ANestedUpOfAnotherPressOfTheHolderKeepsItDelivering) {
+        ShapeHandler holder(&_callLog, 1);
+        holder.consumeDown = true;
+        Vector<bool> delivering;
+        holder.onUp = [&] {
+            delivering.push_back(_input.IsDeliveringCapture(holder));
+            if (delivering.size() == 1) {
+                _input.DispatchMouseButtonUp(Button(5.0f, 1, SDL_BUTTON_RIGHT));
+                delivering.push_back(_input.IsDeliveringCapture(holder));
+            }
+        };
+        Register(holder, 0);
+        ASSERT_TRUE(_input.DispatchMouseButtonDown(Button(5.0f, 1, SDL_BUTTON_LEFT)));
+        ASSERT_TRUE(_input.DispatchMouseButtonDown(Button(5.0f, 1, SDL_BUTTON_RIGHT)));
+
+        _input.DispatchMouseButtonUp(Button(5.0f, 1, SDL_BUTTON_LEFT));
+
+        EXPECT_EQ(delivering, Vector<bool>({true, true, true}));
+    }
+
+    TEST_F(UIInputPointerTest, TheHolderThatUnregistersInsideItsUpIsNotDeliveringAfterwards) {
+        ShapeHandler holder(&_callLog, 1);
+        holder.consumeDown = true;
+        bool duringUp = false;
+        holder.onUp = [&] {
+            _input.Unregister(holder);
+            duringUp = _input.IsDeliveringCapture(holder);
+        };
+        Register(holder, 0);
+        ASSERT_TRUE(_input.DispatchMouseButtonDown(Button(5.0f)));
+
+        EXPECT_TRUE(_input.DispatchMouseButtonUp(Button(5.0f)));
+
+        EXPECT_TRUE(duringUp);
+        EXPECT_FALSE(_input.IsRegistered(holder));
+        EXPECT_FALSE(_input.IsDeliveringCapture(holder));
+        EXPECT_FALSE(_input.HoldsPress(holder, 1));
+    }
+
 }  // namespace BECore::Tests

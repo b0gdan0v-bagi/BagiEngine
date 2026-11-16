@@ -32,6 +32,9 @@ namespace BECore {
         /// @return the holder, or null when the pointer holds no press
         [[nodiscard]] IUIInputHandler* FindCaptureOfPointer(uint32_t which) const;
 
+        /// Whether the handler holds a press of any button of the pointer `which`
+        [[nodiscard]] bool HoldsPress(const IUIInputHandler& handler, uint32_t which) const;
+
         void EndCapture(uint32_t which, uint8_t button);
 
         /// Sets the handler the pointer is over (null: over nothing)
