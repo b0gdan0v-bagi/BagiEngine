@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Control/ControlTypes.h>
+#include <BECore/MainWindow/WindowSimulation.h>
 #include <cstdint>
 #include <expected>
 
@@ -14,6 +15,8 @@ namespace BECore {
         inline constexpr StringView kControlPortPrefix = "--control-port=";
         inline constexpr StringView kManualClock = "--manual-clock";
         inline constexpr StringView kHeadless = "--headless";
+        inline constexpr StringView kWindowPrefix = "--window=";
+        inline constexpr StringView kDensityPrefix = "--density=";
     }  // namespace ControlArguments
 
     struct ApplicationConfigLoad;  // Application/ApplicationConfig.h, which includes this file
@@ -24,6 +27,8 @@ namespace BECore {
         uint16_t port = kDefaultControlPort;  // 0 asks the system for a free port
         bool manualClock = false;             // frames run only on a `step`; ControlService::SetManualClock
         bool headless = false;                // no window: the SDL software renderer on the dummy video driver (ApplicationOptions)
+        Optional<WindowSize> windowSize;      // --window=WxH: the start size of a headless window, in window units; inside WindowLimits
+        Optional<float> density;              // --density=D: its output pixels per window unit; inside WindowLimits. Both flags need headless
     };
 
     /**

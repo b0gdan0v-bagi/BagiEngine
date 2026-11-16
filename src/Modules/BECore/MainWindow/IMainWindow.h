@@ -1,8 +1,10 @@
 #pragma once
 
+#include <BECore/MainWindow/WindowSimulation.h>
 #include <BECore/Math/Rect.h>
 #include <BECore/RefCounted/RefCounted.h>
 #include <BECore/Types/Types.h>
+#include <expected>
 
 namespace BECore {
     class IRendererHolder;
@@ -44,6 +46,20 @@ namespace BECore {
         /// The part of the window that notches, rounded corners and system bars leave free, in window units; the whole window by default
         virtual Rect GetSafeArea() const {
             return Rect(0.0f, 0.0f, static_cast<float>(GetWidth()), static_cast<float>(GetHeight()));
+        }
+
+        /// A window without a person and a display (the SDL dummy driver) that the control API may resize; a real window belongs to the OS
+        virtual bool IsHeadless() const {
+            return false;
+        }
+
+        /**
+         * @brief Makes a headless window pretend to be @p simulation: the size, the pixel density and the safe area the getters answer.
+         *
+         * @p simulation passed ValidateWindowSimulation. The default refuses: only a headless window can be simulated.
+         */
+        virtual std::expected<void, String> Simulate(const WindowSimulation& /*simulation*/) {
+            return std::unexpected(String("this window cannot be simulated"));
         }
     };
 }  // namespace BECore

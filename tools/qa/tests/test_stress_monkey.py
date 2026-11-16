@@ -6,13 +6,15 @@ The walk is skipped when BagiStress is not built, as `test_stress_session.py` is
 import pytest
 
 from bagi_monkey import run_monkey
-from bagi_monkey_moves import KIND_ACTION, KIND_RESET, KIND_STEP, PERFORM_ACTION_METHOD, STEP_METHOD
+from bagi_monkey_moves import KIND_ACTION, KIND_CLICK, KIND_RESET, KIND_STEP, PERFORM_ACTION_METHOD, STEP_METHOD
 from bagi_qa_checks import Move, load_invariants
 from test_stress_session import GAME, INVARIANTS, built_executable
 
 SCENES = ["sprites", "entities", "ui"]
 WALK_SEED = 2  # a reset is rare (weight 1): this seed draws one within the moves
 WALK_MOVES = 40
+# The ui scene of BagiStress overflows its canvas in a small window (the validator's `OutsideCanvas`), which a `window` move finds: the walk keeps to the moves of the game itself
+WALK_KINDS = (KIND_ACTION, KIND_CLICK, KIND_STEP, KIND_RESET)
 
 
 def answer(scenes=SCENES):
@@ -57,6 +59,6 @@ def test_without_scenes_the_moves_are_only_filtered(module):
 
 
 def test_a_walk_on_the_real_game_finds_nothing_and_covers_action_step_and_reset(stress_exe, tmp_path):
-    result = run_monkey(stress_exe, WALK_SEED, tmp_path / "out", steps=WALK_MOVES, invariants=INVARIANTS)
+    result = run_monkey(stress_exe, WALK_SEED, tmp_path / "out", steps=WALK_MOVES, invariants=INVARIANTS, kinds=WALK_KINDS)
     assert (result.stopped, [bug.name for bug in result.bugs]) == ("steps", [])
     assert {KIND_ACTION, KIND_STEP, KIND_RESET} <= set(result.per_kind)

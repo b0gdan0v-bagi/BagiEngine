@@ -65,7 +65,16 @@ def reports_errors(tool: Callable[..., Any]) -> Callable[..., Any]:
 
 @server.tool()
 @reports_errors
-def launch_game(exe: str = "", headless: bool = True, manual_clock: bool = True, preset: str = "", game: str = "", record: str = "") -> dict[str, Any]:
+def launch_game(
+    exe: str = "",
+    headless: bool = True,
+    manual_clock: bool = True,
+    preset: str = "",
+    game: str = "",
+    record: str = "",
+    window: str = "",
+    density: float | None = None,
+) -> dict[str, Any]:
     """Starts a game executable with the control API and connects to it (a game started earlier by this server is stopped).
 
     exe: path of the built game, relative to where this server runs (the repository root) or absolute.
@@ -73,9 +82,11 @@ def launch_game(exe: str = "", headless: bool = True, manual_clock: bool = True,
     headless: no window, drawn in memory by the software renderer; screenshots work only like this. False opens a real window.
     manual_clock: game time moves only on step (deterministic). False runs it on the real clock.
     record: the path of a scenario file to record the session to, as record_start does (error codes and version steps).
+    window: "WxH" in window units (64 to 4096 each), the start size of the headless window instead of the one in the game's config, e.g. "390x844".
+    density: the start pixel density (0.5 to 4, default 1): the pictures are round(size * density) pixels. Both need headless; set_window changes them later.
     Answers the port, the clock status and the games the executable has.
     """
-    return session.launch(exe, headless=headless, manual_clock=manual_clock, preset=preset, game=game, record=record or None)
+    return session.launch(exe, headless=headless, manual_clock=manual_clock, preset=preset, game=game, record=record or None, window=window or None, density=density)
 
 
 @server.tool()
@@ -149,6 +160,28 @@ def step(frames: int = 1, dt: float | None = None) -> dict[str, Any]:
     On the real clock it waits for that many frames instead and ignores dt.
     """
     return session.step(frames, dt)
+
+
+@server.tool()
+@reports_errors
+def set_window(
+    width: int,
+    height: int,
+    density: float | None = None,
+    user_scale: float | None = None,
+    safe_area: dict[str, float] | list[float] | None = None,
+) -> dict[str, Any]:
+    """Changes the window of a game launched headless (a phone, a Retina display, a notch) and answers its `window` object after one frame.
+
+    width, height: window units, 64 to 4096 integers. density: the pixel density, 0.5 to 4; the picture and `ui_tree` `outputRect` are round(size * density)
+    pixels, at most 8192 a side. user_scale: the UI scale of the player, 0.5 to 3 (out of range is an error, never clamped). safe_area: {top, right, bottom, left} in
+    window units, or a list of four numbers in that order; all four are required, [0, 0, 0, 0] clears it; the insets are not negative and leave the window a
+    non-empty area. A value left out keeps its current value. Everything is checked first: an error changes nothing.
+    ui_tree and screenshot right after the answer are of the new size (the frame has laid the scene out). A real window (launch_game headless=False, connect)
+    answers not_headless; a value outside the limits is invalid_params and the message names it. The answer, like `status`, has width, height, density,
+    displayScale, safeArea, outputWidth, outputHeight, userScale and headless.
+    """
+    return session.set_window(width, height, density, user_scale, safe_area)
 
 
 @server.tool()

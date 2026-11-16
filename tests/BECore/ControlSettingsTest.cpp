@@ -311,4 +311,119 @@ namespace BECore::Tests {
         EXPECT_FALSE(settings->headless);
     }
 
+    TEST(ControlSettingsTest, WindowAndDensityAreOffByDefault) {
+        const auto settings = Resolve({"--control", "--headless"});
+        ASSERT_TRUE(settings.has_value());
+        EXPECT_FALSE(settings->windowSize.has_value());
+        EXPECT_FALSE(settings->density.has_value());
+    }
+
+    TEST(ControlSettingsTest, WindowAndDensityFlagsAreRead) {
+        const auto settings = Resolve({"--control", "--headless", "--window=480x320", "--density=2"});
+        ASSERT_TRUE(settings.has_value());
+        ASSERT_TRUE(settings->windowSize.has_value());
+        EXPECT_EQ(settings->windowSize->width, 480);
+        EXPECT_EQ(settings->windowSize->height, 320);
+        ASSERT_TRUE(settings->density.has_value());
+        EXPECT_FLOAT_EQ(*settings->density, 2.0f);
+    }
+
+    TEST(ControlSettingsTest, EachWindowFlagCanComeAlone) {
+        const auto windowOnly = Resolve({"--control", "--headless", "--window=640x480"});
+        ASSERT_TRUE(windowOnly.has_value());
+        EXPECT_TRUE(windowOnly->windowSize.has_value());
+        EXPECT_FALSE(windowOnly->density.has_value());
+
+        const auto densityOnly = Resolve({"--control", "--headless", "--density=1.5"});
+        ASSERT_TRUE(densityOnly.has_value());
+        EXPECT_FALSE(densityOnly->windowSize.has_value());
+        EXPECT_FLOAT_EQ(*densityOnly->density, 1.5f);
+    }
+
+    TEST(ControlSettingsTest, HeadlessCanComeFromTheConfigForTheWindowFlags) {
+        const auto settings = Resolve({"--window=480x480"}, R"(<root control="true" headless="true"/>)");
+        ASSERT_TRUE(settings.has_value());
+        EXPECT_EQ(settings->windowSize->width, 480);
+    }
+
+    TEST(ControlSettingsTest, TheLastWindowFlagWins) {
+        const auto settings = Resolve({"--control", "--headless", "--window=100x100", "--window=200x300"});
+        ASSERT_TRUE(settings.has_value());
+        EXPECT_EQ(settings->windowSize->width, 200);
+        EXPECT_EQ(settings->windowSize->height, 300);
+    }
+
+    TEST(ControlSettingsTest, WindowFlagsWithoutHeadlessAreAnError) {
+        ExpectInvalid(Resolve({"--control", "--window=480x480"}));
+        ExpectInvalid(Resolve({"--control", "--density=2"}));
+        ExpectInvalid(Resolve({"--control", "--window=480x480", "--density=2"}));
+        ExpectInvalid(Resolve({"--control", "--window=480x480"}, R"(<root headless="false"/>)"));
+    }
+
+    TEST(ControlSettingsTest, WindowFlagsWithoutTheApiAreAnError) {
+        ExpectInvalid(Resolve({"--headless", "--window=480x480"}));
+    }
+
+    TEST(ControlSettingsTest, ABareWindowOrDensityFlagNeedsAValue) {
+        ExpectInvalid(Resolve({"--control", "--headless", "--window"}));
+        ExpectInvalid(Resolve({"--control", "--headless", "--density"}));
+        ExpectInvalid(Resolve({"--control", "--headless", "--window="}));
+        ExpectInvalid(Resolve({"--control", "--headless", "--density="}));
+    }
+
+    TEST(ControlSettingsTest, AWindowThatIsNotTwoIntegersIsAnError) {
+        for (const char* value : {"--window=480", "--window=480x", "--window=x480", "--window=480X480", "--window=480*480", "--window=480x480x2", "--window=4.5x480", "--window=480x 480",
+                                  "--window= 480x480", "--window=+480x480", "--window=abcxdef", "--window=0x0"}) {
+            SCOPED_TRACE(value);
+            ExpectInvalid(Resolve({"--control", "--headless", value}));
+        }
+    }
+
+    TEST(ControlSettingsTest, ADensityThatIsNotANumberIsAnError) {
+        for (const char* value : {"--density=fast", "--density=2x", "--density= 2", "--density=+2", "--density=nan", "--density=inf", "--density=-1", "--density=0"}) {
+            SCOPED_TRACE(value);
+            ExpectInvalid(Resolve({"--control", "--headless", value}));
+        }
+    }
+
+    TEST(ControlSettingsTest, TheWindowLimitsAreCheckedAtTheirEdge) {
+        const auto accepts = [](const char* flag) { return Resolve({"--control", "--headless", flag}).has_value(); };
+
+        EXPECT_TRUE(accepts("--window=64x64"));
+        EXPECT_FALSE(accepts("--window=63x64"));
+        EXPECT_FALSE(accepts("--window=64x63"));
+        EXPECT_TRUE(accepts("--window=4096x4096"));
+        EXPECT_FALSE(accepts("--window=4097x64"));
+        EXPECT_FALSE(accepts("--window=64x4097"));
+        EXPECT_TRUE(accepts("--density=0.5"));
+        EXPECT_FALSE(accepts("--density=0.49"));
+        EXPECT_TRUE(accepts("--density=4"));
+        EXPECT_FALSE(accepts("--density=4.01"));
+    }
+
+    TEST(ControlSettingsTest, TheOutputSideIsCheckedForTheTwoFlagsTogether) {
+        const auto resolves = [](const char* density) { return Resolve({"--control", "--headless", "--window=4096x4096", density}).has_value(); };
+
+        EXPECT_TRUE(resolves("--density=2"));
+        EXPECT_FALSE(resolves("--density=2.01"));
+    }
+
+    TEST(ControlSettingsTest, TheMessageNamesTheFlagAtFault) {
+        const auto tooSmall = Resolve({"--control", "--headless", "--window=10x500"});
+        ASSERT_FALSE(tooSmall.has_value());
+        EXPECT_NE(tooSmall.error().message.find("--window="), String::npos) << tooSmall.error().message.c_str();
+        EXPECT_NE(tooSmall.error().message.find("width"), String::npos) << tooSmall.error().message.c_str();
+
+        const auto tooDense = Resolve({"--control", "--headless", "--density=9"});
+        ASSERT_FALSE(tooDense.has_value());
+        EXPECT_NE(tooDense.error().message.find("--density="), String::npos) << tooDense.error().message.c_str();
+    }
+
+    TEST(ControlSettingsTest, WindowFlagLookalikesAreIgnored) {
+        const auto settings = Resolve({"--control", "--headless", "--windows=480x480", "--windowed", "--density-scale=2", "window=480x480"});
+        ASSERT_TRUE(settings.has_value());
+        EXPECT_FALSE(settings->windowSize.has_value());
+        EXPECT_FALSE(settings->density.has_value());
+    }
+
 }  // namespace BECore::Tests
