@@ -121,6 +121,15 @@ namespace BECore {
         return hasAttribute || hasElement;
     }
 
+    void XmlDeserializer::AttributeNames(Vector<String>& names) const {
+        if (_nodeStack.empty()) {
+            return;
+        }
+        for (const pugi::xml_attribute attribute : _nodeStack.back().attributes()) {
+            names.push_back(String(attribute.name()));
+        }
+    }
+
     // =============================================================================
     // Unknown keys
     // =============================================================================

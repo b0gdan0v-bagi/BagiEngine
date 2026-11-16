@@ -95,6 +95,24 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
       }
     },
     {
+      "name": "value-get",
+      "about": "The cost of a Get of a Value<T> (ValueBenchTest, int32_t and Vec3): plain is a field read in place, const and slot are the two kinds of Value, tree_field and tree_slot end a chain of three virtual reads in a field or in a slot. Slot is expected within a few percent of plain; the trees show what the virtual calls add. The iterations come from BE_VALUE_BENCH, set by env in the command (a run of about a second in Release). Nothing here gates until the owner records a baseline",
+      "fast": true,
+      "command": ["env", "BE_VALUE_BENCH=100000000", "{bin}/BagiEngineTests", "--gtest_filter=ValueBench*"],
+      "metrics": {
+        "int32_t_plain_ns": {"source": "regex", "pattern": "^ValueBench int32_t plain ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false},
+        "int32_t_const_ns": {"source": "regex", "pattern": "^ValueBench int32_t const ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false},
+        "int32_t_slot_ns": {"source": "regex", "pattern": "^ValueBench int32_t slot ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false},
+        "int32_t_tree_field_ns": {"source": "regex", "pattern": "^ValueBench int32_t tree_field ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false},
+        "int32_t_tree_slot_ns": {"source": "regex", "pattern": "^ValueBench int32_t tree_slot ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false},
+        "vec3_plain_ns": {"source": "regex", "pattern": "^ValueBench Vec3 plain ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false},
+        "vec3_const_ns": {"source": "regex", "pattern": "^ValueBench Vec3 const ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false},
+        "vec3_slot_ns": {"source": "regex", "pattern": "^ValueBench Vec3 slot ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false},
+        "vec3_tree_field_ns": {"source": "regex", "pattern": "^ValueBench Vec3 tree_field ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false},
+        "vec3_tree_slot_ns": {"source": "regex", "pattern": "^ValueBench Vec3 tree_slot ns_per_get=([0-9.]+)", "unit": "ns/get", "better": "lower", "gate": false}
+      }
+    },
+    {
       "name": "engine-tests",
       "about": "BagiEngineTests in one process (it waits on threads and sockets, so wall time, not CPU)",
       "command": ["{bin}/BagiEngineTests", "--gtest_brief=1"],
