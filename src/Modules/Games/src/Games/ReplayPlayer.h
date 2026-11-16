@@ -3,6 +3,7 @@
 #include <BECore/Control/ControlTypes.h>
 #include <BECore/Control/Json.h>
 #include <BECore/Types/Types.h>
+#include <BECore/Utils/EnumUtils.h>
 #include <Games/ReplayFile.h>
 #include <expected>
 
@@ -11,11 +12,11 @@ namespace BECore {
     class IControllableGame;
 
     /// How an entry of a replay differs from what the game did
-    enum class ReplayMismatchKind : uint8_t {
-        Refused,         ///< The game refused a call it had accepted when the file was recorded
-        OutcomeDiffers,  ///< The action was accepted and answered something else
-        StartDiffers,    ///< After a `reset` the game does not start from the params of the entry (another seed)
-    };
+    CORE_ENUM(ReplayMismatchKind, uint8_t,
+              Refused,         ///< The game refused a call it had accepted when the file was recorded
+              OutcomeDiffers,  ///< The action was accepted and answered something else
+              StartDiffers     ///< After a `reset` the game does not start from the params of the entry (another seed)
+    );
 
     /// The name of @p kind in an answer of the control API: `refused`, `outcome_differs`, `start_differs`
     [[nodiscard]] StringView ReplayMismatchKindName(ReplayMismatchKind kind);

@@ -33,6 +33,11 @@
 
 namespace BECore {
 
+    namespace {
+        // The only request the application posts to itself, so its id needs no other meaning
+        constexpr int64_t kReplayRequestId = 1;
+    }  // namespace
+
     Application::Application() = default;
     Application::~Application() = default;
 
@@ -142,7 +147,7 @@ namespace BECore {
 
     void Application::PostReplay(const String& path, bool quitWhenDone) {
         Json request = Json::object();
-        request["id"] = 1;
+        request["id"] = kReplayRequestId;
         request["method"] = "replay";
         request["params"] = Json::object({{"path", MakeJsonString(path)}});
 
