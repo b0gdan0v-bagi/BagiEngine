@@ -11,6 +11,9 @@
     // A through entry is one branch over many slices: `slices.by` is "stages" when it has a stage plan (the whole is
     // the stages and the slice plan is "this slice"), else its slice plans of the past say nothing about it. An entry
     // cut slice by slice shows its slice plans together. A shown plan that is the stage plan has no slice to show.
+    // The owner reads one approximate number (`~45%`); the counts it comes from are `detail`, for a tooltip.
+    // `percent` is rounded to 5 (it is an estimate), at least 5 once anything is ticked, and 100 only when every box of
+    // the whole is ticked: a through entry whose slice is done while its stage is not approved yet stops at 95.
     function progressOf(entry) {
         if (!entry) return null;
         const slices = entry.slices || null;
@@ -20,16 +23,31 @@
         const sliceShown = Boolean(entry.planShown) && entry.planShown === entry.stagesPlan ? null : p;
         const slice = sliceShown ? `this slice ${sliceShown.done}/${sliceShown.total}` : "";
         if (entry.slicing === "through") {
-            if (stages) return { done: stages.done, total: stages.total, text: [`stage ${stages.done}/${stages.total}`, slice].filter(Boolean).join(" · ") };
-            return sliceShown ? { done: sliceShown.done, total: sliceShown.total, text: slice } : null;
+            if (stages) {
+                const part = sliceShown && stages.done < stages.total ? sliceShown.done / sliceShown.total : 0;
+                return shown((stages.done + part) / stages.total, stages.done >= stages.total, [`stage ${stages.done}/${stages.total}`, slice].filter(Boolean).join(" · "));
+            }
+            return sliceShown ? shown(sliceShown.done / sliceShown.total, sliceShown.done >= sliceShown.total, slice) : null;
         }
-        if (all) return { done: all.done, total: all.total, text: `${all.count} slices ${all.done}/${all.total}${sliceShown ? ` · ${slice}` : ""}` };
-        return p ? { done: p.done, total: p.total, text: `plan ${p.done}/${p.total}` } : null;
+        if (all) return shown(all.done / all.total, all.done >= all.total, `${all.count} slices ${all.done}/${all.total}${sliceShown ? ` · ${slice}` : ""}`);
+        return p ? shown(p.done / p.total, p.done >= p.total, `plan ${p.done}/${p.total}`) : null;
+    }
+
+    function shown(fraction, complete, detail) {
+        let percent = Math.round((100 * Math.min(Math.max(fraction, 0), 1)) / 5) * 5;
+        if (complete) percent = 100;
+        else percent = Math.min(Math.max(percent, fraction > 0 ? 5 : 0), 95);
+        return { percent, text: `~${percent}%`, detail };
     }
 
     function progressText(entry) {
-        const shown = progressOf(entry);
-        return shown ? shown.text : "";
+        const found = progressOf(entry);
+        return found ? found.text : "";
+    }
+
+    function progressDetail(entry) {
+        const found = progressOf(entry);
+        return found ? found.detail : "";
     }
 
     // The entries whose text says they wait for others while the store has no link, from the answer of `worker.py doctor
@@ -120,5 +138,5 @@
         return null;
     }
 
-    return { NO_REASON, progressOf, progressText, unlinkedWaitsOf, queueRefusal, startedEntry, queueNotes, queueStartBlock, START_GRACE_MS, FREE_SETTLE_MS };
+    return { NO_REASON, progressOf, progressText, progressDetail, unlinkedWaitsOf, queueRefusal, startedEntry, queueNotes, queueStartBlock, START_GRACE_MS, FREE_SETTLE_MS };
 });
