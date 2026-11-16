@@ -1,4 +1,5 @@
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Input/PointerId.h>
 #include <BECore/Input/UIInput.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Renderer/RendererManager.h>
@@ -110,7 +111,7 @@ namespace BECore::Tests {
         SDL_MouseButtonEvent Button(float x, float y, bool down, bool touch) {
             SDL_MouseButtonEvent event{};
             event.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
-            event.which = touch ? SDL_TOUCH_MOUSEID : 0;
+            event.which = touch ? kFingerPointerBase : 0;
             event.button = SDL_BUTTON_LEFT;
             event.down = down;
             event.x = x;
@@ -121,7 +122,7 @@ namespace BECore::Tests {
         SDL_MouseMotionEvent Motion(float x, float y, bool touch, bool held) {
             SDL_MouseMotionEvent event{};
             event.type = SDL_EVENT_MOUSE_MOTION;
-            event.which = touch ? SDL_TOUCH_MOUSEID : 0;
+            event.which = touch ? kFingerPointerBase : 0;
             event.x = x;
             event.y = y;
             event.state = held ? SDL_BUTTON_LMASK : 0;
@@ -430,6 +431,30 @@ namespace BECore::Tests {
         EXPECT_FALSE(Get("Icon").pressed);
         Draw();
         EXPECT_TRUE(Plate().has_value()) << "it lingers after the release";
+    }
+
+    TEST_F(UICanvasTooltipTest, ATouchOfTheMouseSDLSynthesizesIsAFingerToo) {
+        ActionRecorder actions;
+        const Rect at = CenterOf(Get("Icon").rect);
+        SDL_MouseMotionEvent motion = BECore::Tests::Motion(at.x, at.y, true, false);
+        motion.which = SDL_TOUCH_MOUSEID;
+        CoreManager::GetUIInput().DispatchMouseMotion(motion);
+        SDL_MouseButtonEvent down = Button(at.x, at.y, true, true);
+        down.which = SDL_TOUCH_MOUSEID;
+        EXPECT_TRUE(CoreManager::GetUIInput().DispatchMouseButtonDown(down));
+        Wait(UITooltip::kLongPress);
+        ASSERT_TRUE(Plate().has_value());
+        SDL_MouseButtonEvent up = Button(at.x, at.y, false, true);
+        up.which = SDL_TOUCH_MOUSEID;
+        EXPECT_TRUE(CoreManager::GetUIInput().DispatchMouseButtonUp(up));
+        EXPECT_EQ(actions.Total(), 0u) << "the long press is not a click";
+    }
+
+    TEST_F(UICanvasTooltipTest, AFingerAtRestOnAButtonStartsNoHoverTooltip) {
+        const Rect at = CenterOf(Get("Icon").rect);
+        Motion(at.x, at.y, true);
+        Wait(UITooltip::kHoverDelay * 3.0);
+        EXPECT_FALSE(Plate()) << "a finger has no hover";
     }
 
     TEST_F(UICanvasTooltipTest, ATouchTooltipGoesAfterTheLinger) {

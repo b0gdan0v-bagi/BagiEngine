@@ -102,14 +102,15 @@
         return badge;
     }
 
-    // The bar and its words are TodoRuns.progressOf: a through entry's stages, else its slice plans, else its plan.
+    // The bar and its words are TodoRuns.progressOf: one approximate percent, the counts it comes from in the tooltip.
     function progress(entry) {
         const shown = TodoRuns.progressOf(entry);
         if (!shown) return null;
         const box = el("div", "progress");
+        box.title = shown.detail;
         const bar = el("div", "bar");
         const fill = el("div", "fill");
-        fill.style.width = `${Math.round((100 * shown.done) / shown.total)}%`;
+        fill.style.width = `${shown.percent}%`;
         bar.appendChild(fill);
         box.append(bar, el("span", "muted", shown.text));
         return box;

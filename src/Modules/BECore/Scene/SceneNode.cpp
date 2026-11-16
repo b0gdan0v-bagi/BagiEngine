@@ -112,6 +112,9 @@ namespace BECore {
     }
 
     void SceneNode::SetLayer(int32_t layer) {
+        if (_scene && layer != _layer) {
+            _scene->NodeLayerChanged({});
+        }
         _layer = layer;
     }
 

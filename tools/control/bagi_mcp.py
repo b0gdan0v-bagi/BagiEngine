@@ -206,7 +206,9 @@ def ui_click(name: str, canvas: str | None = None, at: float | None = None) -> d
     how to set a slider: 0 asks for its minimum, 1 for its maximum, in between a value on its step grid; the answer's `value` is the text that came out.
     An element that cannot be pressed is an error:
     not_found (no such element), not_clickable (hidden, not a button, covered by another element, or its canvas takes no input; the message says
-    which), no_scene. `consumed` in the answer says whether a canvas took the press; a click that nobody took reaches the game, as a user's would.
+    which), no_scene. `consumed` in the answer says whether a handler took the press and `takenBy` which one: "element" (the element's own canvas),
+    "target" (something drawn above it: a scene target such as a ClickableComponent, or another canvas; `action` and `value` are then empty because the element
+    emitted nothing, the target did) or "none" (the game got the click, as a user's would).
     `action` and `value` in the answer are what the element emitted (a toggle: the value it asks for; a slider: the value under the press). Clicking a
     segment of a choice group, a toggle or a slider changes nothing by itself: the game sets the variable, so `step` and read `ui_tree` again to see the new
     state. A progress bar cannot be clicked. The action runs at once but the picture follows only after a step.
@@ -217,6 +219,31 @@ def ui_click(name: str, canvas: str | None = None, at: float | None = None) -> d
     if at is not None:
         params["at"] = at
     return session.call("ui_click", params)
+
+
+@server.tool()
+@reports_errors
+def click_at(
+    x: float, y: float, space: str = "output", button: str = "left", which: int | None = None
+) -> dict[str, Any]:
+    """Moves the pointer to a point, presses the button and releases it, like a user, with no element name: the way to click a scene object (a tile, a board cell)
+    that `ui_click` cannot name. Answers {x, y, outputX, outputY, consumed}.
+
+    x, y: the point. space "output" (default): the pixels of a `screenshot`; "scene": scene units of the active scene (mapped by the fit of its last drawn frame,
+    so `step` first; no_scene when there is none). button: "left" (default), "right" or "middle". which: the pointer id (default 0, the mouse); another id is
+    another pointer, for a game that tells fingers apart.
+    `consumed` says whether a scene target (ClickableComponent, a game's pointer target) or a canvas took the press, which a click on empty space does
+    not; the game's own raw mouse handlers see an unconsumed click. A number that is not finite or is beyond 1e6, an unknown space or button, or a bad
+    `which` is invalid_params and nothing is pressed. The action runs at once but the picture follows only after a step.
+    """
+    params: dict[str, Any] = {"x": x, "y": y}
+    if space != "output":
+        params["space"] = space
+    if button != "left":
+        params["button"] = button
+    if which is not None:
+        params["which"] = which
+    return session.call("click_at", params)
 
 
 @server.tool()

@@ -25,6 +25,9 @@ namespace BECore {
         PoolString element;  ///< the element at fault
         PoolString other;    ///< SiblingsOverlap: the sibling it overlaps. MissingRegion, OutsideRegion, RegionIgnored: the name of the region
         Rect rect;           ///< the rect of `element`, in canvas units
+        /// The element at fault, in the tree that was validated. Valid until that tree is edited: the name is not unique, so compare the pointer (never dereference a kept one) to tell which element
+        /// it is.
+        const UIElement* source = nullptr;
     };
 
     struct UILayoutValidatorOptions {

@@ -202,6 +202,10 @@ def check_ui_tree(client: BagiControlClient) -> None:
     check(all(canvas["laidOut"] and not canvas["issues"] for canvas in tree["canvases"]), f"a canvas has layout issues: {tree}")
     expect_error("not_found", lambda: client.call("ui_click", {"name": "NoSuchElement"}), "a click on an element that does not exist")
     expect_error("invalid_params", lambda: client.call("ui_click", {}), "a click without a name")
+    # Outside the window: no target or canvas covers it, so nothing takes the press and the game gets it
+    clicked = client.call("click_at", {"x": -10, "y": -10})
+    check(clicked["consumed"] is False, f"click_at outside the window was consumed: {clicked}")
+    expect_error("invalid_params", lambda: client.call("click_at", {"x": "left", "y": 1}), "a click at a point that is not a number")
 
 
 def run_real_clock_scenario(client: BagiControlClient, headless: bool) -> None:

@@ -4,6 +4,7 @@
 #include <BECore/Reflection/ClassMeta.h>
 #include <BECore/Renderer/DrawTransform.h>
 #include <BECore/Renderer/IRenderer.h>
+#include <BECore/Scene/Components/ClipRectComponent.h>
 #include <BECore/Scene/Components/QuadRendererComponent.h>
 #include <BECore/Scene/Components/SpriteRendererComponent.h>
 #include <BECore/Scene/Components/TransformComponent.h>
@@ -20,12 +21,14 @@ namespace BECore {
         // Copies the fields of the node's TransformComponent / QuadRendererComponent / SpriteRendererComponent into the registry, or
         // removes the registry component when the node has no such component (a no-op when it has none). emplace_or_replace does not
         // allocate once the node has the component. One pass over the components; the first of each type counts, as GetComponent<T>().
-        void SyncRenderData(entt::registry& registry, SceneNode& node) {
+        // Returns whether the node clips its subtree: it has a ClipRectComponent and a TransformComponent.
+        bool SyncRenderData(entt::registry& registry, SceneNode& node) {
             const entt::entity entity = node.GetEntity();
 
             const TransformComponent* transform = nullptr;
             const QuadRendererComponent* quad = nullptr;
             const SpriteRendererComponent* sprite = nullptr;
+            bool clipComponent = false;
             for (const auto& component : node.GetComponents()) {
                 const StringView typeName = component->GetTypeMeta().typeName;
                 if (!transform && typeName == TransformComponent::GetStaticTypeName()) {
@@ -34,6 +37,8 @@ namespace BECore {
                     quad = static_cast<const QuadRendererComponent*>(component.Get());
                 } else if (!sprite && typeName == SpriteRendererComponent::GetStaticTypeName()) {
                     sprite = static_cast<const SpriteRendererComponent*>(component.Get());
+                } else if (typeName == ClipRectComponent::GetStaticTypeName()) {
+                    clipComponent = true;
                 }
             }
 
@@ -56,6 +61,8 @@ namespace BECore {
             } else {
                 registry.remove<SpriteDrawData>(entity);
             }
+
+            return clipComponent && transform != nullptr;
         }
 
         // The turn of a node: about the pivot of the node's rect (not of the rect a Contain sprite is fitted into), as an absolute point
@@ -100,14 +107,62 @@ namespace BECore {
 
         // Depth-first, a parent before its children: the traversal index is the scene order. emplace_or_replace makes a changed layer
         // or flag show up and does not allocate once the node has its item. A hidden node hides its whole subtree but keeps its rank.
-        void WriteDrawItems(entt::registry& registry, SceneNode& node, uint32_t& order, bool ancestorHidden) {
+        void WriteDrawItems(entt::registry& registry, SceneNode& node, uint32_t& order, bool ancestorHidden, const SceneNode* ancestorClip) {
             const bool hidden = ancestorHidden || node.HasEditorFlag(EditorFlags::Hidden);
-            registry.emplace_or_replace<SceneDrawItem>(node.GetEntity(), node.GetLayer(), order++, &node, hidden);
-            SyncRenderData(registry, node);
+            const SceneNode* clip = SyncRenderData(registry, node) ? &node : ancestorClip;
+            registry.emplace_or_replace<SceneDrawItem>(node.GetEntity(), node.GetLayer(), order++, &node, 0, hidden, clip);
             for (const auto& child : node.GetChildren()) {
-                WriteDrawItems(registry, *child, order, hidden);
+                WriteDrawItems(registry, *child, order, hidden, clip);
             }
         }
+
+        using ClipChain = FixedVector<const SceneNode*, SceneDrawSystem::kMaxClipDepth>;
+
+        // The clip owners of @p owner and of its ancestors, outermost first. Each node's item names its own nearest owner, so the next
+        // one outwards is that of the parent. Past the depth limit the outermost owners are left out.
+        void CollectClipChain(const entt::registry& registry, const SceneNode* owner, ClipChain& outermostFirst) {
+            outermostFirst.clear();
+            ClipChain nearestFirst;
+            while (owner != nullptr && !nearestFirst.full()) {
+                nearestFirst.push_back(owner);
+                const SceneNode* parent = owner->GetParent();
+                owner = parent != nullptr ? registry.get<SceneDrawItem>(parent->GetEntity()).clip : nullptr;
+            }
+            outermostFirst.assign(nearestFirst.rbegin(), nearestFirst.rend());
+        }
+
+        // The clips the draw loop has pushed on the renderer, for the owner `current` of the item it drew last.
+        struct PushedClips {
+            ClipChain chain;
+            ClipChain wanted;  // kept as a member so a switch builds nothing new
+            const SceneNode* current = nullptr;
+
+            // Makes the renderer's clip the one of @p owner: pops down to the part the two chains share and pushes the rest.
+            void Switch(IRenderer& renderer, const entt::registry& registry, const ViewTransform& view, const SceneNode* owner) {
+                if (owner == current) {
+                    return;
+                }
+                current = owner;
+                CollectClipChain(registry, owner, wanted);
+                size_t shared = 0;
+                while (shared < chain.size() && shared < wanted.size() && chain[shared] == wanted[shared]) {
+                    ++shared;
+                }
+                while (chain.size() > shared) {
+                    renderer.PopClipRect();
+                    chain.pop_back();
+                }
+                for (size_t index = shared; index < wanted.size(); ++index) {
+                    const SceneNode* clipNode = wanted[index];
+                    const auto transform = clipNode->GetComponent<TransformComponent>();
+                    if (!transform) {
+                        continue;  // removed by an OnDraw() of this pass: it clips nothing from now on
+                    }
+                    renderer.PushClipRect(view.ToOutput(transform->_x, transform->_y, transform->_width, transform->_height));
+                    chain.push_back(clipNode);
+                }
+            }
+        };
 
     }  // namespace
 
@@ -118,7 +173,7 @@ namespace BECore {
         {
             BE_PROFILE_SCOPE("Sync draw items");
             uint32_t order = 0;
-            WriteDrawItems(registry, scene.GetRootNode(), order, false);
+            WriteDrawItems(registry, scene.GetRootNode(), order, false, nullptr);
         }
 
         // The keys are unique (order is the traversal index), so the result does not depend on the sort being stable.
@@ -128,12 +183,27 @@ namespace BECore {
             registry.sort<SceneDrawItem>([](const SceneDrawItem& a, const SceneDrawItem& b) { return a.layer != b.layer ? a.layer < b.layer : a.order < b.order; });
         }
 
+        // The rank is the index in the sorted storage; written before the first OnDraw() because a component may ask for it there.
+        {
+            int32_t rank = 0;
+            for (const auto [entity, item] : registry.view<SceneDrawItem>().each()) {
+                item.rank = rank++;
+            }
+            scene.DrawRanksWritten({});
+        }
+
         // The quad and the sprite are drawn from their registry data at the place of their component in the node; any other
         // component draws itself.
         BE_PROFILE_SCOPE("Draw items");
+        IRenderer* const renderer = CoreManager::GetRenderer().Get();
+        const ViewTransform& view = scene.GetViewTransform();
+        PushedClips clips;
         for (const auto [entity, item] : registry.view<SceneDrawItem>().each()) {
             if (item.hidden) {
                 continue;
+            }
+            if (renderer != nullptr) {
+                clips.Switch(*renderer, registry, view, item.clip);
             }
             const TransformData* transform = registry.try_get<TransformData>(entity);
             const QuadDrawData* quad = registry.try_get<QuadDrawData>(entity);
@@ -147,6 +217,9 @@ namespace BECore {
                     component->OnDraw();
                 }
             }
+        }
+        if (renderer != nullptr) {
+            clips.Switch(*renderer, registry, view, nullptr);
         }
     }
 

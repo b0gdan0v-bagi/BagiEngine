@@ -3,6 +3,7 @@
 #include <BECore/Reflection/ClassMeta.h>
 #include <BECore/Scene/Components/ChangeToRandomColorDebugComponent.h>
 #include <BECore/Scene/Components/ClickableComponent.h>
+#include <BECore/Scene/Components/PointerTargetComponent.h>
 #include <BECore/Scene/Components/QuadRendererComponent.h>
 #include <BECore/Scene/Components/RenderProbeComponent.h>
 #include <BECore/Scene/Components/SpriteRendererComponent.h>
@@ -239,8 +240,11 @@ namespace BECore::Tests {
 
     TEST(IconTableTest, EveryIconOfTheEnginesComponentsResolves) {
         const ClassMeta metas[] = {
-            TransformComponent::GetStaticTypeMeta(), SpriteRendererComponent::GetStaticTypeMeta(), QuadRendererComponent::GetStaticTypeMeta(), TextComponent::GetStaticTypeMeta(),
-            UICanvasComponent::GetStaticTypeMeta(),  ClickableComponent::GetStaticTypeMeta(),      RenderProbeComponent::GetStaticTypeMeta(),  ChangeToRandomColorDebugComponent::GetStaticTypeMeta(),
+            TransformComponent::GetStaticTypeMeta(),     SpriteRendererComponent::GetStaticTypeMeta(),
+            QuadRendererComponent::GetStaticTypeMeta(),  TextComponent::GetStaticTypeMeta(),
+            UICanvasComponent::GetStaticTypeMeta(),      ClickableComponent::GetStaticTypeMeta(),
+            RenderProbeComponent::GetStaticTypeMeta(),   ChangeToRandomColorDebugComponent::GetStaticTypeMeta(),
+            PointerTargetComponent::GetStaticTypeMeta(),
         };
         for (const ClassMeta& meta : metas) {
             EXPECT_FALSE(meta.icon.empty()) << meta.typeName.data();

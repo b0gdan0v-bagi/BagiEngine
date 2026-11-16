@@ -60,6 +60,15 @@ namespace BECore {
          */
         [[nodiscard]] static UIRectEditResult Apply(const Rect& parent, const UIRectSpec& spec, const UIAnchorPreset& preset, UIAnchorApplyMode mode = {});
 
+        /**
+         * @brief @p spec with the anchors @p anchorMin and @p anchorMax, laid out in @p parent where it was before: the twin of Apply() for anchors that are not a preset.
+         *
+         * The pivot stays the effective one. The shorthand is written when the anchors are one of the ten, the explicit fields otherwise; the rect is kept through UIRectEdit::SpecForRect.
+         * @param parent the box of the element: its parent, or the region it names
+         * @return the spec; `exact` is false when the limits or the aspect ratio keep the rect from being kept
+         */
+        [[nodiscard]] static UIRectEditResult SetAnchors(const Rect& parent, const UIRectSpec& spec, const Vec2& anchorMin, const Vec2& anchorMax);
+
         /// Writes the shorthand `anchor` and clears the optional fields when the effective anchors of @p spec are one of the ten; nothing else changes
         static void Simplify(UIRectSpec& spec);
     };

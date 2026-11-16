@@ -11,11 +11,13 @@
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Scene/SceneNodeFiles.h>
 #include <BECore/UI/UICanvasComponent.h>
+#include <BECore/UI/UINodeFileSave.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
 #include <Common/TempPath.h>
 #include <Widgets/SceneEditor/SceneConfigWriter.h>
+#include <Widgets/Viewport/ViewportUIGizmos.h>
 
 namespace BECore::Tests {
 
@@ -886,6 +888,150 @@ namespace BECore::Tests {
         EXPECT_EQ(Print(FindSceneElement(ConfigRoot(), "Other")), otherBefore);
         EXPECT_EQ(SceneOrder(ConfigRoot()), "Main,Other");
         EXPECT_EQ(FindSceneElement(ConfigRoot(), "Other").previous_sibling().type(), pugi::node_comment);
+    }
+
+    TEST_F(SceneEditorSaveReferencesTest, AUIEditIsSavedIntoTheNodeFileAndTheSceneKeepsABareReference) {
+        constexpr const char* kCommentedPanel = R"(<?xml version="1.0" encoding="UTF-8"?>
+<!-- The panel: keep these comments. -->
+<node name="Panel">
+  <components>
+    <component type="TransformComponent" x="10" y="20" width="200" height="100"/>
+    <component type="UICanvasComponent" space="Screen" scaleMode="ConstantPixelSize">
+      <elements>
+        <!-- the title -->
+        <element type="UIElement" name="Title"
+                 x="8" y="8"
+                 width="184" height="30" fontSize="24">
+          <components>
+            <component type="UITextComponent" text="Base"/>
+          </components>
+        </element>
+      </elements>
+    </component>
+  </components>
+</node>
+)";
+        constexpr float kEditedTitleX = 33.0f;
+        const std::filesystem::path panelPath = _dir / "nodes" / "Panel.xml";
+        WriteFile(panelPath, kCommentedPanel);
+        ASSERT_NO_FATAL_FAILURE(LoadSplitScenes());
+
+        UICanvasComponent& canvas = *Child("Main", 3).GetComponent<UICanvasComponent>();
+        const IntrusivePtr<UIElement> title = canvas._elements[0];
+        title->style.rect.x = UILength::Px(kEditedTitleX);
+
+        // What UINodeFileSession does, over the temporary folder
+        const auto read = [&](StringView ref, String& text, String&) {
+            std::ifstream stream(_dir / (String(ref) + ".xml").c_str(), std::ios::binary);  //-NoStd: the test reads its own temporary node file
+            std::ostringstream content;
+            content << stream.rdbuf();
+            text = FromStdString(content.str());
+            return true;
+        };
+        const auto write = [&](StringView ref, StringView text, String&) {
+            WriteFile(_dir / (String(ref) + ".xml").c_str(), String(text).c_str());
+            return true;
+        };
+        const UINodeFileIo io{read, write};
+        const Vector<IntrusivePtr<UIElement>> edited = {title};
+        const UINodeFileReport report = SaveUIRectsToNodeFiles(GetScene("Main"), Span<const IntrusivePtr<UIElement>>(edited.data(), edited.size()), io);
+        EXPECT_EQ(report.filesWritten, 1u);
+        EXPECT_EQ(report.elementsPatched, 1u);
+        EXPECT_TRUE(report.notes.empty());
+        ASSERT_TRUE(Save(GetScene("Main")));
+
+        // The file differs from the original in the one start tag; the comments stay
+        String fileText;
+        String ignored;
+        ASSERT_TRUE(read("nodes/Panel", fileText, ignored));
+        EXPECT_NE(fileText, String(kCommentedPanel));
+        EXPECT_NE(fileText.find("<!-- The panel: keep these comments. -->"), String::npos);
+        EXPECT_NE(fileText.find("<!-- the title -->"), String::npos);
+        EXPECT_NE(fileText.find("x=\"33\" y=\"8\""), String::npos) << fileText.c_str();
+        EXPECT_NE(fileText.find("width=\"184\" height=\"30\" fontSize=\"24\""), String::npos);
+
+        // The scene file no longer carries an override
+        EXPECT_EQ(Raw(SavedNode(ConfigRoot(), "Main", 3)), "<node ref=\"nodes/Panel\"/>");
+        EXPECT_TRUE(_notes.empty());
+
+        // A reload through the saved file lays the element out as the edited one did
+        ASSERT_NO_FATAL_FAILURE(SaveAndReloadSplit());
+        const SceneNode& reloadedPanel = *Reloaded("Main").GetRootNode().GetChildren()[3];
+        const UICanvasComponent* reloadedCanvas = reloadedPanel.GetComponent<UICanvasComponent>().Get();
+        ASSERT_NE(reloadedCanvas, nullptr);
+        ASSERT_FALSE(reloadedCanvas->_elements.empty());
+        EXPECT_EQ(reloadedCanvas->_elements[0]->style.rect, title->style.rect);
+    }
+
+    TEST_F(SceneEditorSaveReferencesTest, ADragOfTheViewportIsSavedAsTheOneStartTagOfTheElement) {
+        constexpr const char* kCommentedPanel = R"(<?xml version="1.0" encoding="UTF-8"?>
+<!-- The panel: keep these comments. -->
+<node name="Panel">
+  <components>
+    <component type="TransformComponent" x="10" y="20" width="200" height="100"/>
+    <component type="UICanvasComponent" space="Screen" scaleMode="ConstantPixelSize">
+      <elements>
+        <!-- the title -->
+        <element type="UIElement" name="Title"
+                 x="8" y="8"
+                 width="184" height="30" fontSize="24">
+          <components>
+            <component type="UITextComponent" text="Base"/>
+          </components>
+        </element>
+      </elements>
+    </component>
+  </components>
+</node>
+)";
+        constexpr float kOutputWidth = 800.0f;
+        constexpr float kOutputHeight = 600.0f;
+        const std::filesystem::path panelPath = _dir / "nodes" / "Panel.xml";
+        WriteFile(panelPath, kCommentedPanel);
+        ASSERT_NO_FATAL_FAILURE(LoadSplitScenes());
+
+        SceneNode& panel = Child("Main", 3);
+        const IntrusivePtr<UICanvasComponent> canvas = panel.GetComponent<UICanvasComponent>();
+        ASSERT_TRUE(canvas);
+        canvas->UpdateLayout(kOutputWidth, kOutputHeight);
+        const IntrusivePtr<UIElement> title = canvas->_elements[0];
+
+        // The drag as the viewport runs it: the press, a frame, the release; the commit is what the editor notes for the Save
+        UIElementEditSession session;
+        UIElementDragInput input;
+        input.pointer = {20.0f, 20.0f};
+        input.snap = false;
+        ASSERT_TRUE(session.BeginHandle(GetScene("Main"), panel, *canvas, *title, UIDragHandle::Body, input.pointer));
+        input.pointer = {45.0f, 20.0f};
+        session.Update(input);
+        session.Finish();
+        ASSERT_FALSE(session.IsActive());
+        EXPECT_EQ(title->style.rect.x, UILength::Px(33.0f));
+
+        const auto read = [&](StringView ref, String& text, String&) {
+            std::ifstream stream(_dir / (String(ref) + ".xml").c_str(), std::ios::binary);  //-NoStd: the test reads its own temporary node file
+            std::ostringstream content;
+            content << stream.rdbuf();
+            text = FromStdString(content.str());
+            return true;
+        };
+        const auto write = [&](StringView ref, StringView text, String&) {
+            WriteFile(_dir / (String(ref) + ".xml").c_str(), String(text).c_str());
+            return true;
+        };
+        const UINodeFileIo io{read, write};
+        const Vector<IntrusivePtr<UIElement>> edited = {title};
+        const UINodeFileReport report = SaveUIRectsToNodeFiles(GetScene("Main"), Span<const IntrusivePtr<UIElement>>(edited.data(), edited.size()), io);
+        EXPECT_EQ(report.elementsPatched, 1u);
+
+        String fileText;
+        String ignored;
+        ASSERT_TRUE(read("nodes/Panel", fileText, ignored));
+        String expected = String(kCommentedPanel);
+        const size_t at = expected.find("x=\"8\" y=\"8\"");
+        ASSERT_NE(at, String::npos);
+        expected.replace(at, String("x=\"8\"").size(), "x=\"33\"");
+        EXPECT_EQ(fileText, expected);
     }
 
     TEST_F(SceneEditorSaveReferencesTest, SavingTwiceGivesTheSameDocument) {

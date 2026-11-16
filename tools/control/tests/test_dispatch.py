@@ -43,6 +43,10 @@ def echo_handler(method: str, params: dict | None):
         if (params or {}).get("name") == "Nothing":
             raise FakeError("not_found", "no element named 'Nothing'")
         return {"clicked": (params or {}).get("name"), "params": params}
+    if method == "click_at":
+        if not isinstance((params or {}).get("x"), (int, float)):
+            raise FakeError("invalid_params", "'x' and 'y' have to be finite numbers")
+        return {"consumed": False, "params": params}
     if method == "frame_stats":
         return {"frames": [{"frame": 1, "drawCalls": 5}], "allocTracking": False, "params": params}
     if method == "profiler_dump":
@@ -236,7 +240,7 @@ def test_launch_of_a_missing_executable_names_the_path(session, tmp_path):
 
 
 EXPECTED_TOOLS = {
-    "launch_game", "connect", "status", "get_state", "list_actions", "perform_action", "set_state", "reset", "step", "screenshot", "ui_tree", "ui_click", "game_log", "quit",
+    "launch_game", "connect", "status", "get_state", "list_actions", "perform_action", "set_state", "reset", "step", "screenshot", "ui_tree", "ui_click", "click_at", "game_log", "quit",
     "frame_stats", "profiler_dump", "zone_allocs", "record_start", "record_stop", "image_diff",
 }
 
@@ -285,6 +289,13 @@ def test_the_mcp_server_serves_the_tools_over_stdio(server):
             missing = await client.call_tool("ui_click", {"name": "Nothing"})
             assert missing.is_error and "not_found" in missing.content[0].text
 
+            point = await client.call_tool("click_at", {"x": 10, "y": 20})
+            assert not point.is_error and "consumed" in point.content[0].text
+            right = await client.call_tool("click_at", {"x": 1.5, "y": 2, "space": "scene", "button": "right", "which": 3})
+            assert not right.is_error
+            badpoint = await client.call_tool("click_at", {"x": "left", "y": 2})
+            assert badpoint.is_error
+
             stats = await client.call_tool("frame_stats", {"frames": 3})
             assert not stats.is_error and "drawCalls" in stats.content[0].text
             dumped = await client.call_tool("profiler_dump", {})
@@ -298,6 +309,7 @@ def test_the_mcp_server_serves_the_tools_over_stdio(server):
     assert requests_of(server, "frame_stats")[-1] == {"frames": 3}
     assert requests_of(server, "profiler_dump")[-1] == {"path": "trace.json"}
     assert requests_of(server, "zone_allocs")[-1] == {"top": 5, "reset": True}
+    assert requests_of(server, "click_at")[:2] == [{"x": 10, "y": 20}, {"x": 1.5, "y": 2, "space": "scene", "button": "right", "which": 3}]
     assert requests_of(server, "ui_click")[:3] == [{"name": "Ok"}, {"name": "Ok", "canvas": "Debug"}, {"name": "Volume", "at": 0.25}]
 
 

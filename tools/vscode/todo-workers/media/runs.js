@@ -8,9 +8,13 @@
     const NO_REASON = "no reason said: Log shows the run";
 
     // The progress an entry shows, as the bar's fill and its words, from the `slices` and `planProgress` of the store.
-    // A through entry is one branch over many slices: `slices.by` is "stages" when it has a stage plan (the whole is
-    // the stages and the slice plan is "this slice"), else its slice plans of the past say nothing about it. An entry
-    // cut slice by slice shows its slice plans together. A shown plan that is the stage plan has no slice to show.
+    // Only a stage plan (`slices.by` "stages", any slicing; the loop writes one for every entry) knows the whole entry:
+    // the stages approved plus the share of this slice. Without one the percent covers only what is planned so far
+    // (this slice of a through entry, the slice plans of one cut slice by slice, or the one plan), so it is `whole:
+    // false` and its text says `slice`. A shown plan that is the stage plan has no slice to count.
+    // The owner reads one approximate number (`~45%`); the counts it comes from are `detail`, for a tooltip.
+    // `percent` is rounded to 5 (it is an estimate), at least 5 once anything is ticked, and 100 only when every box of
+    // the whole is ticked: an entry whose slice is done while its stage is not approved yet stops at 95.
     function progressOf(entry) {
         if (!entry) return null;
         const slices = entry.slices || null;
@@ -19,17 +23,32 @@
         const all = slices && slices.by !== "stages" && slices.count > 1 && slices.total ? slices : null;
         const sliceShown = Boolean(entry.planShown) && entry.planShown === entry.stagesPlan ? null : p;
         const slice = sliceShown ? `this slice ${sliceShown.done}/${sliceShown.total}` : "";
-        if (entry.slicing === "through") {
-            if (stages) return { done: stages.done, total: stages.total, text: [`stage ${stages.done}/${stages.total}`, slice].filter(Boolean).join(" · ") };
-            return sliceShown ? { done: sliceShown.done, total: sliceShown.total, text: slice } : null;
+        if (stages) {
+            const part = sliceShown && stages.done < stages.total ? sliceShown.done / sliceShown.total : 0;
+            return shown((stages.done + part) / stages.total, stages.done >= stages.total, [`stage ${stages.done}/${stages.total}`, slice].filter(Boolean).join(" · "), true);
         }
-        if (all) return { done: all.done, total: all.total, text: `${all.count} slices ${all.done}/${all.total}${sliceShown ? ` · ${slice}` : ""}` };
-        return p ? { done: p.done, total: p.total, text: `plan ${p.done}/${p.total}` } : null;
+        if (entry.slicing === "through") return sliceShown ? shown(sliceShown.done / sliceShown.total, sliceShown.done >= sliceShown.total, slice, false) : null;
+        if (all) return shown(all.done / all.total, all.done >= all.total, `${all.count} slices ${all.done}/${all.total}${sliceShown ? ` · ${slice}` : ""}`, false);
+        return p ? shown(p.done / p.total, p.done >= p.total, `plan ${p.done}/${p.total}`, false) : null;
+    }
+
+    const SLICE_ONLY = "no stage plan: the percent covers only what is planned so far";
+
+    function shown(fraction, complete, counts, whole) {
+        let percent = Math.round((100 * Math.min(Math.max(fraction, 0), 1)) / 5) * 5;
+        if (complete) percent = 100;
+        else percent = Math.min(Math.max(percent, fraction > 0 ? 5 : 0), 95);
+        return { percent, whole, text: whole ? `~${percent}%` : `~${percent}% · slice`, detail: whole ? counts : `${counts} (${SLICE_ONLY})` };
     }
 
     function progressText(entry) {
-        const shown = progressOf(entry);
-        return shown ? shown.text : "";
+        const found = progressOf(entry);
+        return found ? found.text : "";
+    }
+
+    function progressDetail(entry) {
+        const found = progressOf(entry);
+        return found ? found.detail : "";
     }
 
     // The entries whose text says they wait for others while the store has no link, from the answer of `worker.py doctor
@@ -80,5 +99,45 @@
             .filter((line) => QUEUE_LINE.test(line) && !/^w\d+: cd /.test(line));
     }
 
-    return { NO_REASON, progressOf, progressText, unlinkedWaitsOf, queueRefusal, startedEntry, queueNotes };
+
+    // Why the panel must not start the next entry of a worker's queue now, or null when it may. `worker.py list`
+    // names one session per worker (the newest of the name todo-w<k>), so a live loop can hide behind a newer session
+    // that ended at once, and a start from the command line is not listed for a few seconds: the session state alone
+    // does not prove the folder free. A checked-out todo/* branch whose entry is not known to be in review means a
+    // loop holds the folder; a session started less than START_GRACE_MS ago may still be claiming; and a worker has to
+    // look free for FREE_SETTLE_MS on end before the start, so one refresh in the middle of a start does not count.
+    const START_GRACE_MS = 3 * 60 * 1000;
+    const FREE_SETTLE_MS = 45 * 1000;
+
+    function heldBranch(w) {
+        for (const repo of [w.head, w.engine]) {
+            const branch = repo && repo.branch;
+            if (typeof branch === "string" && branch.startsWith("todo/")) return branch;
+        }
+        return null;
+    }
+
+    function queueStartBlock(w, now, freeSince) {
+        if (!w.queue || !w.queue.length) return "empty queue";
+        if (w.queuePaused) return "queue paused";
+        if (w.active || w.waiting) return "a session runs";
+        if (w.dirty) return "uncommitted changes";
+        if (w.limited) return "usage limit";
+        if (w.stopped) return "stopped";
+        // worker.py start writes a `starting` mark into the queue file before its session shows in `list` (CLI 2026-11-16)
+        if (w.starting) return `a start is under way${w.starting.entry ? ` (${w.starting.entry})` : ""}`;
+        // the head of the queue may be the entry the worker holds: the next through slice or a remarks round (worker.py
+        // start allows a held branch of the head itself, start_refusal)
+        const head = w.queue[0];
+        const own = w.entry && w.entry.id === head;
+        if (w.entry && !own && w.entry.status !== "review") return `holds ${w.entry.id} (${w.entry.status})`;
+        const branch = heldBranch(w);
+        if (branch && !own && branch !== `todo/${head}` && !(w.entry && w.entry.status === "review")) return `holds ${branch}`;
+        const started = w.session && Number(w.session.startedAt);
+        if (started && now - started < START_GRACE_MS) return "a session started moments ago";
+        if (freeSince === undefined || freeSince === null || now - freeSince < FREE_SETTLE_MS) return "settling";
+        return null;
+    }
+
+    return { NO_REASON, progressOf, progressText, progressDetail, unlinkedWaitsOf, queueRefusal, startedEntry, queueNotes, queueStartBlock, START_GRACE_MS, FREE_SETTLE_MS };
 });

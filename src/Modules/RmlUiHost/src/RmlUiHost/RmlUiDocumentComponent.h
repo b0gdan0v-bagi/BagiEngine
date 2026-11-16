@@ -71,6 +71,7 @@ namespace BECore {
         bool OnMouseButtonUp(const SDL_MouseButtonEvent& event) override;
         bool OnMouseMotion(const SDL_MouseMotionEvent& event) override;
         bool OnMouseWheel(const SDL_MouseWheelEvent& event) override;
+        void OnPointerLeave(uint32_t which) override;
 
         /// Replaces the document with this markup (tests, generated screens). @return false when RmlUi refused it
         bool SetMarkup(const String& markup);

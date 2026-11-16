@@ -1,9 +1,13 @@
+#include <BECore/Math/IVec2.h>
+#include <BECore/Math/Quat.h>
 #include <BECore/Math/Vec2.h>
-#include <BECore/RefCounted/IntrusivePtr.h>
+#include <BECore/Math/Vec3.h>
+#include <BECore/Math/Vec4.h>
 #include <BECore/Reflection/DataAccessor.h>
 #include <BECore/Reflection/TypeDesc.h>
 #include <BECore/TypeRegistryTest.h>
-#include <BECore/Utils/StringUtils.h>
+#include <BECore/Values/Context.h>
+#include <BECore/Values/Value.h>
 #include <Common/Printers.h>
 #include <gtest/gtest.h>
 
@@ -112,6 +116,7 @@ namespace BECore::Tests {
     static_assert(DescribeType<Vec2>().objectMeta == nullptr);
     static_assert(DescribeType<AccessorOnly>().kind == TypeKind::Opaque);
     static_assert(DescribeType<AccessorOnly>().objectMeta == nullptr);
+    static_assert(DescribeType<ContextDecl>().kind == TypeKind::Opaque);
 
     // A signature type
     static_assert(DescribeSignatureType<void>().kind == TypeKind::Void);
@@ -131,7 +136,7 @@ namespace BECore::Tests {
         static_assert(AgreeWithAccessor<bool, int8_t, uint64_t, float, double, String, FixedString<8>, FixedString<8, false>, PoolString, RegMode, RegInner, Vec2, AccessorOnly, Vector<int32_t>,
                                         SmallVector<int32_t, 2>, FixedVector<int32_t, 2>, Array<int32_t, 2>, HashMap<String, int32_t>, HashMap<int32_t, String>, FixedHashMap<String, int32_t, 4>,
                                         Map<String, int32_t>, Optional<int32_t>, Pair<int32_t, String>, Variant<int32_t, float>, std::monostate, IntrusivePtrNonAtomic<RegNode>,
-                                        IntrusivePtrAtomic<RegNode>, Vector<IntrusivePtrNonAtomic<RegNode>>>());
+                                        IntrusivePtrAtomic<RegNode>, Vector<IntrusivePtrNonAtomic<RegNode>>, Value<float>, Value<Vec3>, ContextDecl>());
 
         // The aliases ReflectionAliasesTest lists as having no accessor
         static_assert(AgreeWithAccessor<FlatMap<String, int32_t>, FlatSet<int32_t>, Span<int32_t>, UniquePtr<int32_t>, HashSet<int32_t>, Set<int32_t>, Tuple<int32_t, float>, int32_t*, void*>());
@@ -183,6 +188,58 @@ namespace BECore::Tests {
         EXPECT_FALSE((SameAs<Variant<int32_t, float>, Variant<float, int32_t>>()));
         EXPECT_FALSE((SameAs<RegInner, RegNode>()));
         EXPECT_TRUE((SameAs<IntrusivePtrNonAtomic<RegNode>, IntrusivePtrAtomic<RegNode>>()));
+    }
+
+    namespace {
+
+        template <typename... Ts>
+        constexpr bool AllOpaque() {
+            return ((DescribeType<Ts>().kind == TypeKind::Opaque && DescribeType<Ts>().opaqueSize == sizeof(Ts) && DescribeType<Ts>().opaqueHash != 0) && ...);
+        }
+
+        static_assert(AllOpaque<Vec2, IVec2, Vec3, Vec4, Quat, Rect, Color, AccessorOnly>());
+        static_assert(DescribeType<int32_t>().opaqueHash == 0 && DescribeType<RegInner>().opaqueHash == 0);
+
+        template <typename A, typename Other>
+        void ExpectDifferent() {
+            EXPECT_FALSE((SameAs<A, Other>())) << "an opaque type is a type of its own";
+            EXPECT_FALSE((SameAs<Vector<A>, Vector<Other>>()));
+        }
+
+        template <typename A, typename... Others>
+        void ExpectDifferentFromAll() {
+            EXPECT_TRUE((SameAs<A, A>()));
+            EXPECT_TRUE((SameAs<Vector<A>, Vector<A>>()));
+            EXPECT_TRUE(SameType(*DescribeType<Vector<A>>().element, DescribeType<A>())) << "reached through a list element";
+            EXPECT_TRUE(SameType(*DescribeType<Optional<A>>().element, DescribeType<A>()));
+            (ExpectDifferent<A, Others>(), ...);
+        }
+
+    }  // namespace
+
+    TEST(TypeDescTest, EveryOpaqueEngineTypeIsATypeOfItsOwn) {
+        ExpectDifferentFromAll<Vec2, IVec2, Vec3, Vec4, Quat, Rect, Color, AccessorOnly>();
+        ExpectDifferentFromAll<IVec2, Vec2, Vec3, Vec4, Quat, Rect, Color, AccessorOnly>();
+        ExpectDifferentFromAll<Vec3, Vec2, IVec2, Vec4, Quat, Rect, Color, AccessorOnly>();
+        ExpectDifferentFromAll<Vec4, Vec2, IVec2, Vec3, Quat, Rect, Color, AccessorOnly>();
+        ExpectDifferentFromAll<Quat, Vec2, IVec2, Vec3, Vec4, Rect, Color, AccessorOnly>();
+        ExpectDifferentFromAll<Rect, Vec2, IVec2, Vec3, Vec4, Quat, Color, AccessorOnly>();
+        ExpectDifferentFromAll<Color, Vec2, IVec2, Vec3, Vec4, Quat, Rect, AccessorOnly>();
+        ExpectDifferentFromAll<AccessorOnly, Vec2, IVec2, Vec3, Vec4, Quat, Rect, Color>();
+    }
+
+    TEST(TypeDescTest, AnOpaqueTypeKeepsItsNameForMessages) {
+        EXPECT_NE(DescribeType<Vec2>().opaqueName.find("Vec2"), StringView::npos);
+        EXPECT_NE(DescribeType<Vec3>().opaqueName.find("Vec3"), StringView::npos);
+        EXPECT_EQ(DescribeType<Vec3>().opaqueHash, StringUtils::GetHash(DescribeType<Vec3>().opaqueName));
+        EXPECT_TRUE(DescribeType<int32_t>().opaqueName.empty());
+    }
+
+    TEST(TypeDescTest, AnOpaqueIdentityIsTheSameInACopy) {
+        const TypeDesc copy = DescribeType<Vec3>();
+        EXPECT_NE(&copy, &DescribeType<Vec3>());
+        EXPECT_TRUE(SameType(copy, DescribeType<Vec3>()));
+        EXPECT_FALSE(SameType(copy, DescribeType<Vec4>()));
     }
 
     TEST(TypeDescTest, OnlyAPoolStringInterns) {

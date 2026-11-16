@@ -104,6 +104,10 @@ namespace BECore {
         BE_REFLECT_FIELD bool overlayCanvasBounds = false;
         BE_REFLECT_FIELD bool overlayTouchTargets = false;
         BE_REFLECT_FIELD bool overlayRegions = false;
+        BE_REFLECT_FIELD bool overlayElementRects = false;
+        BE_REFLECT_FIELD bool overlayAnchors = false;
+        BE_REFLECT_FIELD bool overlayDesignRect = false;
+        BE_REFLECT_FIELD bool overlayFindings = false;
         BE_REFLECT_FIELD ViewportInputMode viewportInputMode = ViewportInputMode::Play;
         BE_REFLECT_FIELD String externalEditor;
         BE_REFLECT_FIELD Vector<String> consoleHistory;
@@ -113,14 +117,15 @@ namespace BECore {
             : viewportGrid(grid), viewportGridStep(step), previewAspect(preview.shape.aspect), previewDevice(preview.shape.device), previewCustom(preview.shape.custom),
               previewWidth(preview.shape.customWidth), previewHeight(preview.shape.customHeight), previewRotated(preview.shape.rotated), previewSafeArea(preview.safeArea),
               overlaySafeArea(preview.overlays.safeArea), overlayViewBounds(preview.overlays.viewBounds), overlayCanvasBounds(preview.overlays.canvasBounds),
-              overlayTouchTargets(preview.overlays.touchTargets), overlayRegions(preview.overlays.regions), viewportInputMode(inputMode), externalEditor(std::move(editor)),
-              consoleHistory(std::move(history)) {}
+              overlayTouchTargets(preview.overlays.touchTargets), overlayRegions(preview.overlays.regions), overlayElementRects(preview.overlays.elementRects),
+              overlayAnchors(preview.overlays.anchors), overlayDesignRect(preview.overlays.designRect), overlayFindings(preview.overlays.findings), viewportInputMode(inputMode),
+              externalEditor(std::move(editor)), consoleHistory(std::move(history)) {}
 
         /// The viewport preview choice carried by the event
         [[nodiscard]] PreviewSettings GetPreview() const {
             return {{previewAspect, previewDevice, previewCustom, previewWidth, previewHeight, previewRotated},
                     previewSafeArea,
-                    {overlaySafeArea, overlayViewBounds, overlayCanvasBounds, overlayTouchTargets, overlayRegions}};
+                    {overlaySafeArea, overlayViewBounds, overlayCanvasBounds, overlayTouchTargets, overlayRegions, overlayElementRects, overlayAnchors, overlayDesignRect, overlayFindings}};
         }
     };
 
@@ -141,18 +146,23 @@ namespace BECore {
         BE_REFLECT_FIELD bool overlayCanvasBounds = false;
         BE_REFLECT_FIELD bool overlayTouchTargets = false;
         BE_REFLECT_FIELD bool overlayRegions = false;
+        BE_REFLECT_FIELD bool overlayElementRects = false;
+        BE_REFLECT_FIELD bool overlayAnchors = false;
+        BE_REFLECT_FIELD bool overlayDesignRect = false;
+        BE_REFLECT_FIELD bool overlayFindings = false;
 
         ViewportPreviewChangedEvent() = default;
         explicit ViewportPreviewChangedEvent(const PreviewSettings& preview)
             : previewAspect(preview.shape.aspect), previewDevice(preview.shape.device), previewCustom(preview.shape.custom), previewWidth(preview.shape.customWidth),
               previewHeight(preview.shape.customHeight), previewRotated(preview.shape.rotated), previewSafeArea(preview.safeArea), overlaySafeArea(preview.overlays.safeArea),
               overlayViewBounds(preview.overlays.viewBounds), overlayCanvasBounds(preview.overlays.canvasBounds), overlayTouchTargets(preview.overlays.touchTargets),
-              overlayRegions(preview.overlays.regions) {}
+              overlayRegions(preview.overlays.regions), overlayElementRects(preview.overlays.elementRects), overlayAnchors(preview.overlays.anchors), overlayDesignRect(preview.overlays.designRect),
+              overlayFindings(preview.overlays.findings) {}
 
         [[nodiscard]] PreviewSettings GetPreview() const {
             return {{previewAspect, previewDevice, previewCustom, previewWidth, previewHeight, previewRotated},
                     previewSafeArea,
-                    {overlaySafeArea, overlayViewBounds, overlayCanvasBounds, overlayTouchTargets, overlayRegions}};
+                    {overlaySafeArea, overlayViewBounds, overlayCanvasBounds, overlayTouchTargets, overlayRegions, overlayElementRects, overlayAnchors, overlayDesignRect, overlayFindings}};
         }
     };
 
