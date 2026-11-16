@@ -16,11 +16,11 @@ Event-based logging. `Logger` pushes entries into a lock-free ring buffer, `LogE
 | `ILogSink` | Interface for output destinations (`FACTORY_BASE`) |
 | `LoggerManager` | Creates and sorts sinks from `LoggerConfig`, accessed via `CoreManager::GetLoggerManager()` |
 
-`LogEvent::Flush()` is called once per frame from `Application::RunFrame()` and right after `Fatal`. A message logged from a worker thread appears at the next flush.
+`LogEvent::Flush()` is called once per frame from `Application::RunFrame()` and right after `Fatal` on the main thread. A message logged from a worker thread appears at the next flush.
 
 ## Log Levels
 
-`Debug` → `Info` → `Warning` → `Error` → `Fatal`. `Fatal` flushes the buffer and the sinks immediately.
+`Debug` → `Info` → `Warning` → `Error` → `Fatal`. `Fatal` flushes the buffer and the sinks immediately on the main thread (`Logger::FlushOnMainThread()`: `Flush` has one consumer); `LOG_FATAL` from a worker only pushes, and the frame flush delivers the line. The log line of a failed `ASSERT` / `FATALERROR` (`LogHandler`) carries the site of the assert and is flushed the same way; an `EXPECT` waits for the frame flush. Tests: `tests/BECore/LoggerFatalTest.cpp`.
 
 ## Built-in Sinks
 

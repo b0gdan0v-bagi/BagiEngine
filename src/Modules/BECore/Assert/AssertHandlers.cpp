@@ -66,7 +66,12 @@ namespace BECore {
             }
         }
 
-        LogEvent::Emit(level, message);
+        LogEvent::Emit(level, message, MakeLogSite(event.file, event.line));
+
+        // A failed assert may be followed by a trap or an abort, so its line has to reach the sinks first; an Expect is a warning and the frame flush takes it
+        if (event.type != AssertType::Expect) {
+            Logger::FlushOnMainThread();
+        }
     }
 
     void StackTraceHandler::Initialize() {

@@ -81,11 +81,12 @@ Nested `CLAUDE.md` files in `BECore/`: `Animation/` (easing, `Lerp`, `TweenManag
 - **CRTDebugHook** (`InstallCRTDebugHooks()`): captures CRT debug reports (heap corruption, invalid params) with a stack trace. Windows Debug builds only; installed first in `InitializeCoreServices()`. Every other build is a no-op; only a Windows Release build prints one stderr line ("Skipped"). Other platforms print nothing, because the browser console shows stderr as an error and the web smoke rejects it.
 - **StackTrace** (`CaptureAndPrintStackTrace()`): cross-platform stack capture for assertion failures; uses DbgHelp/PDB on Windows.
 - **PlatformDebug.h** (`DebugBreak()`, `ENGINE_DEBUG_BREAK()`): the debug break per platform; on the web (`PLATFORM_WEB`) it is `__builtin_trap()` (the page stops with a wasm trap), the same as on Linux. `StackTrace.cpp` and `OutputSink.cpp` have no web branch of their own: their `#else` fallbacks (no trace, no output) are what the page gets.
+- **LogHandler** writes the assert line with the file and line of the assert and flushes it on the main thread, so a trap right after loses nothing.
 - Macros, handlers and `AssertEvent`: `.claude/rules/tests-module.md`.
 
 ## Logging before the sinks exist
 
-`LogEvent::Emit` only pushes into a lock-free global ring buffer; sinks get entries when `LogEvent::Flush()` runs on the main thread (once per frame, and after `Fatal`). Logs written during early init therefore reach the sinks once `LoggerManager` has created them. Details in `Logger/CLAUDE.md`.
+`LogEvent::Emit` only pushes into a lock-free global ring buffer; sinks get entries when `LogEvent::Flush()` runs on the main thread (once per frame, and after `Fatal` on the main thread). Logs written during early init therefore reach the sinks once `LoggerManager` has created them. Details in `Logger/CLAUDE.md`.
 
 ## File Organization
 
