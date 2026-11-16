@@ -10,10 +10,10 @@ The core of the external control API: a program or a model sends commands, the e
 | `ControlCall` | One request being handled: `Params()`, `Reply()`, `Fail()`, `DeferFrames()` |
 | `ControlRoots` | The roots of a service: named providers of a `TypedRef` (`game` is the active game) that the by-name methods reach, and nothing else; names held as `String`, never interned; `allowInterning` of a root (default off) lets a write put client text into the `PoolString` pool |
 | `ReflectionControl` | `RegisterReflectionControl()`: the by-name methods, called by `RegisterControlBuiltins` |
-| `SchemaExport` | The type registry as JSON (`TypeDescJson`, `TypeEntryJson`, `DescribeTypeJson`, `ListTypesJson`, `BuildSchemaJson`); pure over a `TypeRegistry`, see "Schema export" |
-| `ControlBuiltins` | `RegisterControlBuiltins()`: `ping`, `status`, `step`, `pause`, `resume`, `quit` |
+| `SchemaExport` | The type registry as JSON (`TypeDescJson`, `TypeEntryJson`, `DescribeTypeJson`, `ListTypesJson`, `BuildSchemaJson`); pure over a `TypeRegistry`; its rules: `Reflection/CLAUDE.md`, "Schema export" |
+| `ControlBuiltins` | `RegisterControlBuiltins()`: `ping`, `status`, `step`, `pause`, `resume`, `list_methods`, `quit` |
 | `ControlSettings` | `ResolveControlSettings(args, ApplicationConfigLoad)`: the start-up flags and the settings of the reflected `ApplicationConfig` (`Application/ApplicationConfig.h`), the manual clock included (see "Starting the API"), a pure function |
-| `ControlTypes.h` | `ControlError`, `ControlErrors::k*` (error codes), `ControlReplyFn`, `ControlServerStatus` (listening, port, clients; see "Starting the API") |
+| `ControlTypes.h` | `ControlError`, `ControlErrors::k*` (error codes), `ControlReplyFn`, `ControlServerStatus` (listening, port, clients; see "Starting the API"), `ControlParamInfo` / `ControlMethodInfo` (what a module says about a method) and `ControlMethodListing` (what `GetMethods()` returns) |
 | `JsonSerializer` | `ISerializer` into a `Json` document (`Take()`); interim, DOM-backed: the allocation-free path is the entry `json-deserializer` |
 | `JsonDeserializer` | `IDeserializer` over a `const Json&` the caller keeps alive; always strict, with findings; interim like the writer, its internals are replaced by `json-deserializer` |
 | `Json.h`, `JsonFwd.h` | nlohmann/json behind checked helpers (see "JSON rules") |
@@ -57,10 +57,6 @@ The engine builds without exceptions, so nlohmann/json is built with `JSON_NOEXC
 - Keep the 1 MiB request limit (`ControlService::kMaxRequestBytes`) at every transport. `ParseJson` itself takes any depth (it parses and frees without recursion), but copying a value recurses once per level, so a reader that keeps client JSON checks `IsJsonNestedDeeperThan` first: a request nested deeper than `ControlService::kMaxRequestDepth` (128) is `invalid_request`, answered without an `id`. The control API is fuzzed: `tests/Fuzz/CLAUDE.md`.
 - nlohmann uses `std::string` inside; convert to `eastl::string` at the edge, which the helpers do.
 
-## Schema export
-
-`SchemaExport.h` writes the registry as JSON for the by-name methods and `tools/schema` (the XSD); every list is sorted by name (fields and parameters keep their order), so the text does not depend on the order types registered in, and no hash is written (a JSON number above 2^53 is not safe). `schema` is `{version, types, factories, roots}`. A type entry is `{name, parent, abstract, creatable, purpose, icon, factoryBase?, fields: [{name, type, attributes}], methods: [{name, const, callable, params: [{name, type}], result}]}`: its **own** fields (the chain is by `parent`; `describe_type` adds `bases`, `derived` and `allFields` with an `owner` each), `creatable` is `TypeInfo::create` (a type of a factory, not abstract), `attributes` holds only what is set. A `type` is `{kind}` with `object` (Object, Pointer), `element`, `key` (a pair's first member), `alternatives`, `values` (an enum has no name in the registry, so its values are inline), `resizable`, `capacity` where they apply. `factories` is `{base, elementName?, derived}` (`elementName` is absent for a base no reflected field holds); `roots` is `{name, type?}`, the type of the object now.
-
 ## Manual clock and `step`
 
 `step {"frames": N, "dt": seconds}` is a deferred call: it answers when `N` frames (1 to `kMaxStepFrames`, default 1) have ended, with the clock as `status` reports it (`frame`, `totalTime`, `deltaTime`, `fixedDeltaTime`). `dt` is 0 to `Time::kMaxFrameTime` (default 1/60). Both are checked as client data: out of range, fractional (`frames: 1.5`), the wrong type or `null` is `invalid_params`.
@@ -103,24 +99,28 @@ The file half is the reflected `ApplicationConfig` read with strict values (`IDe
 
 | Where | Methods |
 |-------|---------|
-| `BECore/Control/ControlBuiltins` | `ping`, `status` (the clock, `manualClock`, `paused`), `step`, `pause` / `resume` (`{paused}`), `quit` |
+| `BECore/Control/ControlBuiltins` | `ping`, `status` (the clock, `manualClock`, `paused`), `step`, `pause` / `resume` (`{paused}`; see "Manual clock and `step`"), `list_methods` (to `{methods: [{name, summary, params: [{name, type, required, description}]}]}`, sorted; a method without a description has `""` and `[]`), `quit` |
 | `SDL/CoreSDL/SDLScreenshot` | `screenshot` (`{maxSize}` to `{width, height, png_base64}`; `capture_failed` where the renderer cannot capture; `SDL/CLAUDE.md`) |
 | `BECore/UI/UIControl` | `ui_tree` (the canvases and elements of the active scene with rects and the validator's findings), `ui_click` (`{name, canvas?, at?}`: a real mouse click on a visible button, toggle or slider, `at` 0..1 the horizontal position, which also sets a slider; the answer has its `action` and `value`; codes `no_scene`, `not_found`, `not_clickable`, `invalid_params`; `UI/CLAUDE.md`, "Control API") |
 | `BECore/Clipboard/ClipboardControl` | `clipboard_set` (`{text}` to `{ok}`), `clipboard_get` (to `{status, text}`; answered after frames, `clipboard_timeout` after 600), `clipboard_paste` (to `{}` once the `PasteEvent` has been delivered, as Cmd+V gives it); `Clipboard/CLAUDE.md` |
 | `BECore/Profiler/ProfilerControl` | `frame_stats` (`{frames?}` 1..240: the last frames, oldest first, with stage times, draws, allocations, named counters), `profiler_dump` (`{path?}` relative, no `..`: writes the Chrome trace; `not_recording` unless the game runs with `--trace=` or `--profiler=chrome`), `zone_allocs` (`{top?, reset?}`: allocations per zone and the totals; `enabled` false without `ENGINE_PROFILER_ALLOC`); `Profiler/CLAUDE.md` |
 | `BECore/Control/ReflectionControl` | `get_property` (`{root, path}`), `set_property` (`{root, path, value}`), `call_method` (`{root, method, arguments?}`) over a root; `list_types` (`{base?, recursive?, creatable?}`), `describe_type` (`{name}`), `schema`; shapes and codes in `Reflection/CLAUDE.md`, "Reflection methods" |
+| `BECore/Audio/AudioControl` | `audio_state` (the backend, the levels, the last sounds asked for, played or not), `audio_set` (`{bus, volume?, muted?}`); `Audio/CLAUDE.md` |
 | `Games/GameControl` | `list_games`, `switch_game`, `reset`, `get_state`, `list_actions`, `perform_action`, `set_state` (`Games/CLAUDE.md`) |
+
+Each module's register function also calls `DescribeMethod` for its methods (`list_methods` answers it); the game methods describe only what `GameControl` itself reads, the parameters of `perform_action` and `set_state` are the game's.
 
 ## Adding a method
 
 1. Write a handler `void(ControlCall&)` in the module that owns the behaviour (BECore only for things that need nothing above it).
 2. Read `call.Params()` with the checked helpers; answer with `call.Reply(Json)` or `call.Fail(code, message)`. For an answer that needs frames to pass (step, screenshot) use `call.DeferFrames(...)`.
 3. Register it with `CoreManager::GetControlService().RegisterHandler("name", handler)` where the owning module starts up (registering again replaces the handler).
-4. Test it with a `ControlService` of its own and a lambda as the reply function: no transport needed.
-5. Write the method and its codes into the protocol description of the owning module.
+4. Describe it with `DescribeMethod("name", {summary, params})` beside the registration, so `list_methods` and the editor's console can offer and complete it. For people only, never checked against the handler; a method without one still runs.
+5. Test it with a `ControlService` of its own and a lambda as the reply function: no transport needed.
+6. Write the method and its codes into the protocol description of the owning module.
 
 An object a client may read or write by name is offered as a root: `service.Roots().Register("name", {provider})` where the owning module starts up (`RegisterGameControl` registers `game`). The provider is called on every request and its `TypedRef` is not kept past the handler.
 
 ## Tests
 
-`tests/BECore/ControlServiceTest.cpp` is the pattern (a service of its own, a lambda as the reply, `RunDueFrames` for the manual clock); `GameControlTest.cpp`, `ReflectionControlTest.cpp`, `JsonTest.cpp`, `ControlSettingsTest.cpp` and `ControlRootsTest.cpp` sit beside it. The transport has its own tests, see `RemoteControl/CLAUDE.md`.
+`tests/BECore/ControlServiceTest.cpp` is the pattern (a service of its own, a lambda as the reply, `RunDueFrames` for the manual clock); `GameControlTest.cpp`, `ReflectionControlTest.cpp`, `ControlRootsTest.cpp`, `JsonTest.cpp`, `Base64Test.cpp` and `ControlSettingsTest.cpp` sit beside it. The transport has its own tests, see `RemoteControl/CLAUDE.md`.

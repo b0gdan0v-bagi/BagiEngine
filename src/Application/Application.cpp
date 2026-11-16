@@ -19,6 +19,7 @@
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/Time/GamePause.h>
 #include <BECore/Time/Time.h>
+#include <BECore/Utils/EngineVersion.h>
 #include <BECore/Widgets/WidgetManager.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/ApplicationEvents.h>
@@ -67,6 +68,7 @@ namespace BECore {
         CoreManager::GetInstance().OnApplicationPreInit({});
 
         LOG_INFO("Game started");
+        LOG_INFO("Engine version {}"_format(kEngineVersion));
 
         // Before the window exists: a flag that cannot be read should not cost a window and a loaded scene.
         // Nothing flushes the log before the first frame, so an error that stops the start-up flushes it itself.

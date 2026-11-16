@@ -1,6 +1,8 @@
 #include "SDL3ApplicationFabric.h"
 
 #include <BECore/Application/ApplicationConfig.h>
+#include <BECore/Audio/AudioManager.h>
+#include <BECore/Audio/NullAudioBackend.h>
 #include <BECore/Clipboard/Clipboard.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/GameManager/CoreManager.h>
@@ -8,6 +10,7 @@
 #include <BECore/Reflection/AbstractFactory.h>
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Renderer/RendererManager.h>
+#include <CoreSDL/SDLAudioBackend.h>
 #include <CoreSDL/SDLClipboard.h>
 #include <CoreSDL/SDLEventsProvider.h>
 #include <CoreSDL/SDLMainWindow.h>
@@ -20,6 +23,24 @@ namespace BECore {
     namespace {
 
         constexpr StringView kSdlRendererName = "SDLRendererBackend";
+        constexpr StringView kSdlAudioName = "SDLAudioBackend";
+
+        /// The backend AudioConfig names (empty: SDL's); one that is not registered or does not open leaves the game silent, never stopped
+        void CreateAudio(bool headless) {
+            AudioManager& audio = CoreManager::GetAudio();
+            const String& configured = audio.GetSettings()._backend;
+            const StringView name = configured.empty() ? kSdlAudioName : StringView(configured);
+            IntrusivePtr<IAudioBackend> backend = AbstractFactory<IAudioBackend>::GetInstance().Create(name);
+            if (!backend) {
+                LOG_ERROR("AudioConfig: backend '{}' is not available in this build"_format(name));
+            } else if (auto* sdl = dynamic_cast<SDLAudioBackend*>(backend.Get())) {
+                sdl->SetHeadless(headless);
+            }
+            audio.SetBackend(std::move(backend));
+            if (!audio.GetBackend()) {
+                audio.SetBackend(New<NullAudioBackend>());
+            }
+        }
 
     }  // namespace
 
@@ -55,6 +76,7 @@ namespace BECore {
         }
         CoreManager::GetRendererManager().SetRenderer(std::move(renderer));
         RegisterScreenshotControl(CoreManager::GetControlService());
+        CreateAudio(options.headless);  // after the window: its clean-up handler runs before the window quits SDL
 
         auto sdlEventsProvider = BECore::New<SDLEventsProvider>();
         if (!sdlEventsProvider->Initialize()) {

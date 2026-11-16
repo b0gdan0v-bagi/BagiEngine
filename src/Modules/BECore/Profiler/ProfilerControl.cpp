@@ -172,6 +172,14 @@ namespace BECore {
         service.RegisterHandler("frame_stats", HandleFrameStats);
         service.RegisterHandler("profiler_dump", HandleProfilerDump);
         service.RegisterHandler("zone_allocs", HandleZoneAllocs);
+
+        service.DescribeMethod("frame_stats", {"The last frames with stage times, draws, allocations and counters, oldest first",
+                                               {{"frames", "integer", false, Format("How many frames, 1 to {} (default 1)", FrameStatsCollector::kFrameHistory)}}});
+        service.DescribeMethod("profiler_dump", {"Writes the Chrome trace of the run (the game has to record one)",
+                                                 {{"path", "string", false, Format("A relative file name without '..' (default {})", kDefaultTracePath)}}});
+        service.DescribeMethod("zone_allocs", {"Allocations per profiler zone and the totals",
+                                               {{"top", "integer", false, Format("How many zones, 1 to {} (default {})", kMaxTopZones, kDefaultTopZones)},
+                                                {"reset", "boolean", false, "Clear the per-zone counts after answering"}}});
     }
 
 }  // namespace BECore

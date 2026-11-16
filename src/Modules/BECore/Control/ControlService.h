@@ -68,6 +68,18 @@ namespace BECore {
             return *_roots;
         }
 
+        /// Says what @p method does and which parameters it reads (for list_methods and the completion of a console). Kept apart from the handler: registering the
+        /// method again keeps it, and a description of a name that has no handler is kept but not listed. Main thread
+        void DescribeMethod(StringView method, ControlMethodInfo info);
+
+        /// Every registered method, sorted by name. The info pointers stay valid until the next DescribeMethod. Main thread
+        [[nodiscard]] Vector<ControlMethodListing> GetMethods() const;
+
+        /// Grows when a method is registered under a new name or described, so a widget rebuilds its copy of GetMethods() only on a change
+        [[nodiscard]] uint64_t GetMethodsVersion() const {
+            return _methodsVersion;
+        }
+
         /// Where Publish() sends its messages (the transport); none by default
         void SetEventSink(EventSink sink);
 
@@ -153,7 +165,9 @@ namespace BECore {
         // Main thread only
         eastl::deque<UniquePtr<Request>> _inbox;  // taken from _queue, in order, waiting for the barrier
         HashMap<String, HandlerEntry> _handlers;
-        UniquePtr<ControlRoots> _roots;  // behind a pointer so this header does not pull in the reflection registry
+        UniquePtr<ControlRoots> _roots;                    // behind a pointer so this header does not pull in the reflection registry
+        HashMap<String, ControlMethodInfo> _descriptions;  // beside the handlers, so a handler registered again keeps its description
+        uint64_t _methodsVersion = 0;
         UniquePtr<ControlCall> _pending;
         uint32_t _pendingFramesLeft = 0;
         double _pendingSeconds = kDefaultStepSeconds;

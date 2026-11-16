@@ -59,11 +59,11 @@ The window cannot be driven by a test. Run `BagiStress` (or a game) with `VK_INS
 
 ## No capture
 
-`VulkanRendererBackend` does not implement `IRenderer::RequestCapture()`: the default answers with an error, and the `screenshot` method of the control API therefore answers `capture_failed` on this backend. A screenshot needs `--headless` (the SDL software renderer) until a Vulkan readback is written. The decision on the backends (the entry `renderer-backends` of the todo store) comes first.
+`VulkanRendererBackend` does not implement `IRenderer::RequestCapture()`: the default answers with an error, and the `screenshot` method of the control API therefore answers `capture_failed` on this backend. A screenshot needs `--headless` (the SDL software renderer) until a Vulkan readback is written. This is a gap, not a policy: the entries `renderer-backends` / `render-3d` bring the backend level with SDL.
 
 ## No blend modes
 
-`IRenderer::SetBlendMode()` (`Alpha`, `Add`, `Multiply`) is not implemented here: `DrawFilledRect()`, `DrawTexture()` and `DrawGeometry()` draw with straight alpha whatever `GetBlendMode()` says, and `WarnIfBlendModeIgnored()` logs one warning per backend, naming the mode, the first time a draw arrives with another one. There is no pipeline, shader or descriptor for a blend mode. The rotated and flipped draws (`DrawTransformedRect()` / `DrawTransformedTexture()`) work, since they are `DrawGeometry()`. The decision on the backends (the entry `renderer-backends`: SDL is the main backend, Vulkan is frozen at its feature level) comes first; a blend pipeline per mode would be the way if this backend is ever brought up.
+`IRenderer::SetBlendMode()` (`Alpha`, `Add`, `Multiply`) is not implemented here: `DrawFilledRect()`, `DrawTexture()` and `DrawGeometry()` draw with straight alpha whatever `GetBlendMode()` says, and `WarnIfBlendModeIgnored()` logs one warning per backend, naming the mode, the first time a draw arrives with another one. There is no pipeline, shader or descriptor for a blend mode. The rotated and flipped draws (`DrawTransformedRect()` / `DrawTransformedTexture()`) work, since they are `DrawGeometry()`. This is a gap, not a policy: Vulkan is the planned GPU backend of the engine's own 2D/3D renderer, alongside SDL3 GPU, and the entries `renderer-backends` / `render-3d` add the blend pipelines (one per mode) and the rest of what SDL has; the generic `IGpuDevice` has no Vulkan implementation yet (`.claude/rules/rendering-module.md`, "Generic GPU interface and 3D").
 
 ## Geometry
 

@@ -60,6 +60,8 @@ A change that renames or removes a reflected class or field a content file can n
 4. `kContentVersion` becomes N+1.
 5. `python3 tools/migrate/migrate.py --root .` in the engine repository for its own content (`config/`, `tools/stress/config/`); the diff goes in the commit. The games are migrated by their owners after the engine is updated.
 
+`todo-merge` names the step and the migrate command in the `Migration` section of the entry's changelog fragment (`tools/changelog/CLAUDE.md`), which is what a game reads before it updates.
+
 ## The text model
 
 `xmltext.py` is a tokenizer, not a pretty printer: the file comes back byte for byte except the start tags a step edited, and new children take the indentation and the line ending of the file. This is why the diff of a migration stays reviewable (a library such as pugixml re-indents the file and rewrites every attribute). `Element.set` keeps an attribute's place and quotes; a new attribute goes last, on a line of its own when the tag spans lines. A malformed file is one `XmlTextError` with line and column and the tool leaves it.

@@ -2,6 +2,7 @@
 
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlRoots.h>
+#include <EASTL/sort.h>
 
 namespace BECore {
 
@@ -90,7 +91,26 @@ namespace BECore {
     }
 
     void ControlService::RegisterHandler(StringView method, Handler handler, bool bypassBarrier) {
+        if (!_handlers.contains(method)) {
+            ++_methodsVersion;
+        }
         _handlers[String(method)] = HandlerEntry{std::move(handler), bypassBarrier, ++_registrations};
+    }
+
+    void ControlService::DescribeMethod(StringView method, ControlMethodInfo info) {
+        _descriptions[String(method)] = std::move(info);
+        ++_methodsVersion;
+    }
+
+    Vector<ControlMethodListing> ControlService::GetMethods() const {
+        Vector<ControlMethodListing> methods;
+        methods.reserve(_handlers.size());
+        for (const auto& handler : _handlers) {
+            const auto description = _descriptions.find(handler.first);
+            methods.push_back(ControlMethodListing{handler.first, description != _descriptions.end() ? &description->second : nullptr});
+        }
+        eastl::sort(methods.begin(), methods.end(), [](const ControlMethodListing& a, const ControlMethodListing& b) { return a.name < b.name; });
+        return methods;
     }
 
     void ControlService::SetEventSink(EventSink sink) {

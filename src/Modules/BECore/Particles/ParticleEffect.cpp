@@ -34,6 +34,15 @@ namespace BECore {
             }
         }
 
+        void SanitizeFlipbook(ParticleFlipbook& flipbook, const ParticleFlipbook& fallback) {
+            using namespace ParticleLimits;
+            flipbook.columns = std::clamp(flipbook.columns, 1, kMaxFlipbookAxis);
+            flipbook.rows = std::clamp(flipbook.rows, 1, kMaxFlipbookAxis);
+            flipbook.frames = std::clamp(flipbook.frames, 0, flipbook.columns * flipbook.rows);
+            flipbook.mode = ValidEnum(flipbook.mode, fallback.mode);
+            flipbook.fps = ClampFinite(flipbook.fps, 0.0f, kMaxFlipbookFps, fallback.fps);
+        }
+
     }  // namespace
 
     void ParticleEffect::Sanitize() {
@@ -61,6 +70,8 @@ namespace BECore {
         SanitizeCurve(rotation, defaults.rotation, kMaxAngle);
         rotationJitter = ClampFinite(rotationJitter, 0.0f, kMaxRotationJitter, defaults.rotationJitter);
         color.ease = ValidEnum(color.ease, defaults.color.ease);
+
+        SanitizeFlipbook(flipbook, defaults.flipbook);
 
         blend = ValidEnum(blend, defaults.blend);
         frameClass = ValidEnum(frameClass, defaults.frameClass);

@@ -377,6 +377,19 @@ namespace BECore {
         service.RegisterHandler("list_types", [](ControlCall& call) { HandleListTypes(call); });
         service.RegisterHandler("describe_type", [](ControlCall& call) { HandleDescribeType(call); });
         service.RegisterHandler("schema", [&service](ControlCall& call) { HandleSchema(call, service); });
+
+        const ControlParamInfo root{"root", "string", true, "A named object, as schema lists the roots"};
+        const ControlParamInfo path{"path", "string", true, "The property path from the root"};
+        service.DescribeMethod("get_property", {"Reads a reflected property of a root by its path", {root, path}});
+        service.DescribeMethod("set_property", {"Writes a reflected property of a root by its path", {root, path, {"value", "any", true, "A boolean, a number or a string"}}});
+        service.DescribeMethod("call_method",
+                               {"Calls a reflected method of a root", {root, {"method", "string", true, "The name of the method"}, {"arguments", "object", false, "The arguments by parameter name"}}});
+        service.DescribeMethod("list_types", {"Lists the reflected types",
+                                              {{"base", "string", false, "Only the types derived from this one"},
+                                               {"recursive", "boolean", false, "With base: the whole subtree (default true), else only the direct children"},
+                                               {"creatable", "boolean", false, "Only the types a client can make by name (default false)"}}});
+        service.DescribeMethod("describe_type", {"The fields and methods of a reflected type", {{"name", "string", true, "The name of the type"}}});
+        service.DescribeMethod("schema", {"The roots, the types they reach and their methods, as JSON", {}});
     }
 
 }  // namespace BECore

@@ -43,8 +43,9 @@ function attach(ctx) {
         try {
             entries = JSON.parse(await runTool(todoTool(tool), ["list", "--all", "--json", "--body"], 30000));
             const state = ctx.state;
-            if (todoPanel) todoPanel.webview.postMessage({ loading: false, entries, areas: state && state.areas ? state.areas : null, workers: ctx.workersForList(), elsewhere: ctx.elsewhereForList(), at: Date.now(), focus: focusNext });
+            if (todoPanel) todoPanel.webview.postMessage({ loading: false, entries, areas: state && state.areas ? state.areas : null, workers: ctx.workersForList(), elsewhere: ctx.elsewhereForList(), waitsUnlinked: ctx.waitsUnlinked(), at: Date.now(), focus: focusNext });
             if (todoPanel) focusNext = null;
+            ctx.readDoctor(false);
         } catch (error) {
             if (todoPanel) todoPanel.webview.postMessage({ loading: false, error: `todo.py list: ${error.message}` });
         } finally {
@@ -57,7 +58,7 @@ function attach(ctx) {
     }
 
     function postWorkersToList() {
-        if (todoPanel) todoPanel.webview.postMessage({ workers: ctx.workersForList(), elsewhere: ctx.elsewhereForList() });
+        if (todoPanel) todoPanel.webview.postMessage({ workers: ctx.workersForList(), elsewhere: ctx.elsewhereForList(), waitsUnlinked: ctx.waitsUnlinked() });
     }
 
     async function showTodoEntry(id) {
@@ -96,7 +97,7 @@ function attach(ctx) {
 
     // --- writes ---------------------------------------------------------------------------------------------
 
-    async function write(what, args, input) {
+    async function write(what, args, input, readsDeps) {
         try {
             const out = await todo(args, input);
             vscode.window.showInformationMessage(out.trim().split("\n")[0] || what);
@@ -105,6 +106,8 @@ function attach(ctx) {
         }
         // the store's write signal reads the list again; this covers a missing watcher
         loadTodoList();
+        // the `no link` chips come from a slow read that the write signal waits a minute for
+        if (readsDeps) ctx.readDoctor(true);
     }
 
     // A text edited in the editor: a draft file outside git, opened, then stored on the owner's word.
@@ -233,13 +236,19 @@ function attach(ctx) {
         if (!pick) return;
         const note = await vscode.window.showInputBox({ prompt: `Why ${id} waits for ${pick.label} (a few words, optional)`, ignoreFocusOut: true });
         if (note === undefined) return;
-        await write(`todo.py dep add ${id}`, ["dep", "add", id, pick.label, ...(note.trim() ? ["--note", note.trim()] : [])]);
+        await write(`todo.py dep add ${id}`, ["dep", "add", id, pick.label, ...(note.trim() ? ["--note", note.trim()] : [])], undefined, true);
+    }
+
+    // The link the text of the entry already names (`**Waits for:**`): the same write as depAdd, without the pickers.
+    async function depLink(id, blocker) {
+        if (!ID_RE.test(id) || !ID_RE.test(blocker)) return;
+        await write(`todo.py dep add ${id}`, ["dep", "add", id, blocker, "--note", "named after Waits for in the text"], undefined, true);
     }
 
     async function depRm(id, blocker) {
         if (!ID_RE.test(id) || !ID_RE.test(blocker)) return;
         const pick = await vscode.window.showWarningMessage(`${id} no longer waits for ${blocker}?`, { modal: true }, "Remove the link");
-        if (pick) await write(`todo.py dep rm ${id}`, ["dep", "rm", id, blocker]);
+        if (pick) await write(`todo.py dep rm ${id}`, ["dep", "rm", id, blocker], undefined, true);
     }
 
     // focus: an entry id to unfold and scroll to (a click on a queued box of the Workers panel's graph); it rides
@@ -252,7 +261,7 @@ function attach(ctx) {
         }
         todoPanel = vscode.window.createWebviewPanel("todoWorkers.todoList", "Todo list", vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true });
         todoPanel.iconPath = vscode.Uri.file(path.join(ctx.context.extensionPath, "media", "workers.svg"));
-        todoPanel.webview.html = pageHtml(ctx.context, ["graph.js", "todo.js"], ["panel.css", "todo.css", "graph.css"], "Asking todo.py ...");
+        todoPanel.webview.html = pageHtml(ctx.context, ["runs.js", "graph.js", "todo.js"], ["panel.css", "todo.css", "graph.css"], "Asking todo.py ...");
         todoPanel.webview.onDidReceiveMessage((message) => {
             switch (message.cmd) {
                 case "ready":
@@ -271,6 +280,7 @@ function attach(ctx) {
                 case "editBody": return editBody(message.entry);
                 case "setThrough": return setThrough(message.entry, Boolean(message.on));
                 case "depAdd": return depAdd(message.entry);
+                case "depLink": return depLink(message.entry, message.blocker);
                 case "depRm": return depRm(message.entry, message.blocker);
             }
         });

@@ -1,4 +1,4 @@
-// The slower views of the panel (worker.py busy, day, timeline, review-stats), read on a
+// The slower views of the panel (worker.py busy, day, timeline, review-stats, doctor), read on a
 // timer of their own and after a write to the store, and the actions around them: the doctor's fixes, the merge train,
 // the end of the day, Dispatch, and the push to a phone (todoWorkers.pushUrl).
 "use strict";
@@ -7,6 +7,7 @@ const vscode = require("vscode");
 const https = require("https");
 const http = require("http");
 const { config, findTool, runTool, shellQuote, terminalWith } = require("./tools");
+const Runs = require("../media/runs");
 const DAY_KEY = "todoWorkers.dayStart"; // when the owner last ended the day (ms): the day view counts from it
 const CACHE_KEY = "todoWorkers.insights";
 const MACHINE_KEY = "todoWorkers.machine";
@@ -21,13 +22,16 @@ const PARTS = {
     busy: { every: 300000, afterWrite: 60000, args: () => ["busy"] },
     reviews: { every: 900000, afterWrite: 120000, args: () => ["review-stats"] },
     timeline: { every: 300000, afterWrite: null, args: () => ["timeline", "--hours", String(config().timelineHours), "--claude", config().claude] },
+    // The store's problems (`waits-unlinked`) come with the workers' own; the read takes about 3 s, so it is a slow view.
+    doctor: { every: 300000, afterWrite: 60000, args: () => ["doctor", "--claude", config().claude] },
 };
 
 function attach(ctx) {
     const cached = ctx.context.globalState.get(CACHE_KEY, null);
-    const insights = cached && cached.read ? cached : { read: {} }; // {day, busy, reviews, timeline: answer, read: {part: ms}}
+    const insights = cached && cached.read ? cached : { read: {} }; // {day, busy, reviews, timeline, doctor: answer, read: {part: ms}}
     const reading = new Set();
     const writePending = new Set();
+    const readAgain = new Set(); // a forced read asked while the part was being read
 
     ctx.dayStart = function dayStart() {
         const ended = ctx.context.globalState.get(DAY_KEY, 0);
@@ -41,9 +45,14 @@ function attach(ctx) {
         ctx.view.show({ ...ctx.view.payload, insights: { ...insights, reading: [...reading] } });
     }
 
-    async function readPart(name) {
+    async function readPart(name, force) {
         const tool = findTool();
-        if (!tool || reading.has(name)) return;
+        if (!tool) return;
+        if (reading.has(name)) {
+            // the answer in flight may predate the write that asked: read once more when it ends
+            if (force) readAgain.add(name);
+            return;
+        }
         reading.add(name);
         publish();
         try {
@@ -57,7 +66,20 @@ function attach(ctx) {
             reading.delete(name);
             ctx.context.globalState.update(CACHE_KEY, { ...insights, reading: undefined });
             publish();
+            if (name === "doctor") ctx.postWorkersToList();
+            if (readAgain.delete(name)) readPart(name, false);
         }
+    }
+
+    // The entry ids the store's text says wait for others without a link, `{id: [missing ids]}`: what the Todo list
+    // shows as `no link`. A read that failed or has not come yet gives none.
+    function waitsUnlinked() {
+        return Runs.unlinkedWaitsOf(insights.doctor);
+    }
+
+    // The Todo list asks for it: `force` after the owner's own dependency write, else only when the answer is old.
+    function readDoctor(force) {
+        if (force || Date.now() - (insights.read.doctor || 0) >= PARTS.doctor.every) readPart("doctor", force);
     }
 
     // The machine (worker.py machine: one ps and one sysctl, about 0.2 s with Python's start) on every refresh, and
@@ -229,7 +251,7 @@ function attach(ctx) {
         }
     }
 
-    Object.assign(ctx, { readMachine, machine: () => ({ machine, machineHistory: history }), readInsights, insights: () => ({ ...insights, reading: [...reading] }), doctorFix, mergeTrain, endDay, copyPush, dispatch, pushNotify });
+    Object.assign(ctx, { readMachine, machine: () => ({ machine, machineHistory: history }), readInsights, readDoctor, waitsUnlinked, insights: () => ({ ...insights, reading: [...reading] }), doctorFix, mergeTrain, endDay, copyPush, dispatch, pushNotify });
 }
 
 module.exports = { attach };

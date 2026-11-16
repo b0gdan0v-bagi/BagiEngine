@@ -83,6 +83,9 @@ namespace BECore::Fuzz {
     /// The numbers of a content file in the pure UI geometry (box mesh, nine-slice, rect and stack layout, canvas scale and layout), as raw float bits: bounded results, no NaN or infinity
     void FuzzUiGeometry(const uint8_t* data, size_t size);
 
+    /// DecodeWav (BECore/Audio): every RIFF WAVE file that decodes has a sound the engine plays (channels, rate, finite samples), the same twice; a refusal says why
+    void FuzzAudioWav(const uint8_t* data, size_t size);
+
     /// A save file as the seeds make it: the bytes SaveGameService::Save writes for the probe state under the given game id and schema version
     Vector<uint8_t> MakeSaveFileBytes(StringView game, uint32_t version);
 
