@@ -2,8 +2,8 @@
 
 Starts the app in a fresh process per scene (sprites 500, entities 500, ui 200), `--headless --control --manual-clock`, and drives
 it over the control API: the state, `set_count` shown in the next frame (`frame_stats` draw calls and the `Stress objects` counter),
-the bad values, screenshots that are not flat, `set_language` rewording the `ui` scene, `set_scene`, `ui_tree`, and a log with no
-Warning or Error. The `reflection` scene drives the by-name methods over `StressGame` (`list_types`, `describe_type`, `schema`,
+the bad values, screenshots that are not flat, `set_language` rewording the `ui` scene, `set_scene`, `ui_tree`, the `set_window` step of smoke.py
+on the `ui` scene (its Screen canvas must follow the simulated window), and a log with no Warning or Error. The `reflection` scene drives the by-name methods over `StressGame` (`list_types`, `describe_type`, `schema`,
 `get_property`, `set_property`, `call_method`) and checks the engine's `config/*.xml` against the XSD made from the live schema (`tools/schema`; printed as skipped when `xmllint` is missing). The helpers are those of tools/control/tests/smoke.py (the default scenario of `smoke.py` is not touched).
 
 Unlike smoke.py's `run_smoke` this script drives the process through `GameProcess`, because the check of the game's log needs the log's
@@ -25,7 +25,7 @@ sys.path.insert(0, str(ENGINE_DIR / "tools" / "schema"))
 from bagi_control_client import BagiControlClient, ConnectionClosed, ControlError  # noqa: E402
 from game_process import PORT_TAKEN_MARKER, GameLaunchError, GameProcess, build_game_command, free_port, preset_executable  # noqa: E402
 from schema_to_xsd import Binding, check_files, convert_config_dir, find_xmllint  # noqa: E402
-from smoke import EXIT_FAILED, EXIT_PASSED, EXIT_SKIPPED, SmokeFailure, check, expect_error, take_screenshot  # noqa: E402
+from smoke import EXIT_FAILED, EXIT_PASSED, EXIT_SKIPPED, SmokeFailure, check, check_window_control, expect_error, take_screenshot  # noqa: E402
 
 STATUS_STARTUP_TIMEOUT = 30.0
 SHUTDOWN_TIMEOUT = 15.0
@@ -125,6 +125,7 @@ def scenario_ui(client: BagiControlClient) -> None:
     check_state(client, "ui", UI_COUNT)
     check(last_frame(client)["drawCalls"] > 0, "the ui scene drew nothing")
     check_ui_tree(client, "StressUi")
+    check_window_control(client, headless=True)  # the scene with a Screen canvas: the layout follows the simulated window
     english = check_not_flat(client, "ui (en)")
     client.call("perform_action", {"type": "set_language", "language": "ru"})
     client.call("step", {"frames": SETTLE_FRAMES})

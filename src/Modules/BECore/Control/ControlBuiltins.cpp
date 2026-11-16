@@ -3,6 +3,7 @@
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlLog.h>
 #include <BECore/Control/ControlService.h>
+#include <BECore/Control/ControlWindow.h>
 #include <BECore/Control/ReflectionControl.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/LogEvent.h>
@@ -67,6 +68,7 @@ namespace BECore {
             result["manualClock"] = service.IsManualClock();
             const GamePause* pause = service.GetPause();
             result["paused"] = pause != nullptr && pause->IsPaused();
+            result["window"] = DescribeWindowStatus();
             call.Reply(std::move(result));
         }
 
@@ -417,9 +419,12 @@ namespace BECore {
         service.SetFrameEndHook("log_push", [&service] { PushLogLines(service); });
         service.Log().Start();
         RegisterReflectionControl(service);
+        RegisterWindowControl(service);
 
         service.DescribeMethod("ping", {"Answers pong and the protocol version", {}});
-        service.DescribeMethod("status", {"The frame clock, whether the clock is manual, whether the game is paused and the totals of warnings and errors logged since the start", {}});
+        service.DescribeMethod("status", {"The frame clock, whether the clock is manual, whether the game is paused, the totals of warnings and errors logged since the start and the window (size, "
+                                          "density, safe area, output, user scale)",
+                                          {}});
         service.DescribeMethod("step", {"Runs frames and answers with the clock after the last one",
                                         {{"frames", "integer", false, Format("Frames to run, 1 to {} (default 1)", kMaxStepFrames)},
                                          {"dt", "number", false, Format("Seconds each frame lasts, 0 to {} (default 1/60)", Time::kMaxFrameTime)}}});

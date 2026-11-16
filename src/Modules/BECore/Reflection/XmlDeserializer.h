@@ -112,6 +112,7 @@ namespace BECore {
         // (EndObject, EndArray, EndArrayElement) or, for the root, at FinishLoad. An array scope checks its own attributes only: its
         // children are taken by position (BeginArrayElement) and are the elements. Children of one name count once. Off tracks nothing.
         bool HasKey(StringView name) const override;
+        void AttributeNames(Vector<String>& names) const override;
         void NoteKnownKey(StringView name) override;
         void FinishLoad() override;
         void SkipScope() override;

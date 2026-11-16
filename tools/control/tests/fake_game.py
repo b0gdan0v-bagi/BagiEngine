@@ -7,7 +7,8 @@ The environment variable FAKE_GAME_EXIT makes it exit at once (code 3) like --ex
 the 2x1 one (a test makes the picture of the game change this way); FAKE_GAME_WINDOW_PICTURE does the same for a start without `--headless` (a window), and
 FAKE_GAME_NO_WINDOW makes such a start exit at once (no display). FAKE_GAME_NO_PICTURE makes `screenshot` answer without a picture.
 
-Methods: ping, status (also `log`: the totals of warnings and errors), list_games, get_state (echoes the flags), list_actions, perform_action (a refusal for {"type": "bad"}, and for
+Methods: ping, status (also `log`: the totals of warnings and errors, and `window`), set_window (the limits of WindowLimits; on a start without `--headless`
+`not_headless`; `--window=WxH` and `--density=D` give the start size, the picture served by `screenshot` keeps its own size), list_games, get_state (echoes the flags), list_actions, perform_action (a refusal for {"type": "bad"}, and for
 {"type": "needs_noop"} until some action has run; it raises the state version by one and pushes state_changed behind its answer; {"type": "later", "frames": N} raises
 it by one after N frames instead), step, screenshot (a 2x1 PNG; one frame on the manual
 clock, as the real game), warn (logs a line of the given level, "Warning" by default: {"level": "Error", "text": "..."}),
@@ -33,6 +34,12 @@ WATCHDOG_SECONDS = 60.0
 MAX_FRAMES = 36000  # kMaxStepFrames of the game
 DEFAULT_RUN_UNTIL_FRAMES = 600
 LOG_LEVELS = {"warning": 1, "error": 2, "fatal": 2}  # the rank of a level name, as the game orders them (error and fatal are both errors)
+MIN_WINDOW_SIZE, MAX_WINDOW_SIZE = 64, 4096  # WindowLimits::kMinSize / kMaxSize
+MIN_DENSITY, MAX_DENSITY = 0.5, 4.0
+MAX_OUTPUT_SIDE = 8192
+MIN_USER_SCALE, MAX_USER_SCALE = 0.5, 3.0  # UISettings::kMinUserScale / kMaxUserScale
+DEFAULT_WINDOW = (1280, 720)
+SAFE_AREA_SIDES = ("top", "right", "bottom", "left")
 PNG_SIZE_OFFSET = 16  # the signature (8 bytes), the IHDR length and name (8 bytes), then width and height
 
 
@@ -80,6 +87,69 @@ class Pointer:
         return True, value
 
 
+def is_number(value) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and value == value and abs(value) != float("inf")
+
+
+def window_object(window: dict, headless: bool) -> dict:
+    """The `window` object of `status` and of `set_window` for the state `window` ({width, height, density, userScale, safeArea})."""
+    return {
+        "width": window["width"],
+        "height": window["height"],
+        "density": window["density"],
+        "displayScale": 1.0,
+        "safeArea": dict(window["safeArea"]),
+        "outputWidth": round(window["width"] * window["density"]),
+        "outputHeight": round(window["height"] * window["density"]),
+        "userScale": window["userScale"],
+        "headless": headless,
+    }
+
+
+def merged_window(window: dict, params: dict) -> dict:
+    """What set_window would make of `window`, or the invalid_params that the engine would answer; nothing is changed."""
+    merged = {"width": window["width"], "height": window["height"], "density": window["density"], "userScale": window["userScale"], "safeArea": dict(window["safeArea"])}
+    for key in ("width", "height"):
+        value = params.get(key)
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise FakeError("invalid_params", f"'{key}' is required and has to be an integer of window units")
+        if not MIN_WINDOW_SIZE <= value <= MAX_WINDOW_SIZE:
+            raise FakeError("invalid_params", f"'{key}' has to be {MIN_WINDOW_SIZE} to {MAX_WINDOW_SIZE} window units, not {value}")
+        merged[key] = value
+    if "density" in params:
+        density = params["density"]
+        if not is_number(density) or not MIN_DENSITY <= density <= MAX_DENSITY:
+            raise FakeError("invalid_params", f"'density' has to be a number from {MIN_DENSITY} to {MAX_DENSITY}")
+        merged["density"] = float(density)
+    if "userScale" in params:
+        scale = params["userScale"]
+        if not is_number(scale) or not MIN_USER_SCALE <= scale <= MAX_USER_SCALE:
+            raise FakeError("invalid_params", f"'userScale' has to be a number from {MIN_USER_SCALE} to {MAX_USER_SCALE}")
+        merged["userScale"] = float(scale)
+    if "safeArea" in params:
+        area = params["safeArea"]
+        if not isinstance(area, dict) or any(not is_number(area.get(side)) or area[side] < 0 for side in SAFE_AREA_SIDES):
+            raise FakeError("invalid_params", "'safeArea' has to be an object with the not negative numbers top, right, bottom and left")
+        if area["left"] + area["right"] >= merged["width"] or area["top"] + area["bottom"] >= merged["height"]:
+            raise FakeError("invalid_params", "'safeArea' leaves no area in the window")
+        merged["safeArea"] = {side: float(area[side]) for side in SAFE_AREA_SIDES}
+    if max(merged["width"], merged["height"]) * merged["density"] > MAX_OUTPUT_SIDE:
+        raise FakeError("invalid_params", f"the output is at most {MAX_OUTPUT_SIDE} pixels a side")
+    return merged
+
+
+def start_window(args: list[str]) -> dict:
+    """The window of a start: the default size, or `--window=WxH`; `--density=D`."""
+    width, height = DEFAULT_WINDOW
+    density = 1.0
+    for arg in args:
+        if arg.startswith("--window="):
+            width, height = (int(side) for side in arg.split("=", 1)[1].split("x"))
+        elif arg.startswith("--density="):
+            density = float(arg.split("=", 1)[1])
+    return {"width": width, "height": height, "density": density, "userScale": 1.0, "safeArea": dict.fromkeys(SAFE_AREA_SIDES, 0.0)}
+
+
 def read_level(params: dict) -> str:
     level = params.get("level", "warning")
     if level not in ("warning", "error"):
@@ -97,6 +167,8 @@ def main() -> int:
         return 3
     port = next((int(arg.split("=", 1)[1]) for arg in args if arg.startswith("--control-port=")), 0)
     manual_clock = "--manual-clock" in args
+    headless = "--headless" in args
+    window = start_window(args)
     flags = [arg for arg in args if arg.startswith("--") and "=" not in arg]
     frame = {"count": 0}
     state = {"version": 1}
@@ -234,7 +306,13 @@ def main() -> int:
         if method == "ping":
             return {"pong": True, "protocol": 1}
         if method == "status":
-            return {"frame": frame["count"], "manualClock": manual_clock, "log": counts()}
+            return {"frame": frame["count"], "manualClock": manual_clock, "log": counts(), "window": window_object(window, headless)}
+        if method == "set_window":
+            if not headless:
+                raise FakeError("not_headless", "the window of a real game cannot be simulated")
+            window.update(merged_window(window, params or {}))
+            tick()  # the answer waits one frame
+            return window_object(window, headless)
         if method == "list_games":
             return {"active": "Fake", "games": [{"name": "Fake", "controllable": True}]}
         if method == "get_state":

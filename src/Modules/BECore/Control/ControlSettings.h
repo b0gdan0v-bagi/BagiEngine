@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Control/ControlTypes.h>
+#include <BECore/MainWindow/WindowSimulation.h>
 #include <cstdint>
 #include <expected>
 
@@ -16,6 +17,8 @@ namespace BECore {
         inline constexpr StringView kHeadless = "--headless";
         inline constexpr StringView kReplayPrefix = "--replay=";
         inline constexpr StringView kReplayExit = "--replay-exit";
+        inline constexpr StringView kWindowPrefix = "--window=";
+        inline constexpr StringView kDensityPrefix = "--density=";
     }  // namespace ControlArguments
 
     struct ApplicationConfigLoad;  // Application/ApplicationConfig.h, which includes this file
@@ -28,6 +31,8 @@ namespace BECore {
         bool headless = false;                // no window: the SDL software renderer on the dummy video driver (ApplicationOptions)
         String replayPath;                    // --replay=FILE: Application plays this replay file once the game is up; empty is none
         bool replayExit = false;              // --replay-exit: the application quits when the replay is over
+        Optional<WindowSize> windowSize;      // --window=WxH: the start size of a headless window, in window units; inside WindowLimits
+        Optional<float> density;              // --density=D: its output pixels per window unit; inside WindowLimits. Both flags need headless
     };
 
     /**

@@ -22,8 +22,49 @@ namespace BECore {
             return port;
         }
 
+        /// The whole of @p text (the value of --window=WxH) as two integers; nullopt for anything else. The limits are checked by the caller
+        Optional<WindowSize> ParseWindowSize(StringView text) {
+            const size_t separator = text.find('x');
+            if (separator == StringView::npos) {
+                return std::nullopt;
+            }
+            const auto width = StringUtils::ParseNumber<int>(text.substr(0, separator));
+            const auto height = StringUtils::ParseNumber<int>(text.substr(separator + 1));
+            if (!width || !height) {
+                return std::nullopt;
+            }
+            return WindowSize{*width, *height};
+        }
+
+        /// The flag without its `=`: what a bare `--window` is told
+        StringView FlagName(StringView prefix) {
+            return prefix.substr(0, prefix.size() - 1);
+        }
+
         ControlError InvalidSetting(String message) {
             return MakeControlError(ControlErrors::kInvalidParams, std::move(message));
+        }
+
+        /// Each flag against its own limits first, so the message names the flag at fault; then the two together (the output side is the size times the density)
+        std::expected<ControlSettings, ControlError> CheckWindowFlags(const ControlSettings& settings) {
+            const auto refuse = [](StringView what, const String& reason) { return std::unexpected(InvalidSetting(Format("{}: {}", what, reason))); };
+            const int size = WindowLimits::kMinSize;
+            if (settings.windowSize) {
+                if (const auto valid = ValidateWindowSimulation({.width = settings.windowSize->width, .height = settings.windowSize->height}); !valid) {
+                    return refuse(ControlArguments::kWindowPrefix, valid.error());
+                }
+            }
+            if (settings.density) {
+                if (const auto valid = ValidateWindowSimulation({.width = size, .height = size, .density = *settings.density}); !valid) {
+                    return refuse(ControlArguments::kDensityPrefix, valid.error());
+                }
+            }
+            if (settings.windowSize && settings.density) {
+                if (const auto valid = ValidateWindowSimulation({.width = settings.windowSize->width, .height = settings.windowSize->height, .density = *settings.density}); !valid) {
+                    return refuse("--window with --density", valid.error());
+                }
+            }
+            return settings;
         }
 
     }  // namespace
@@ -59,7 +100,7 @@ namespace BECore {
                 }
                 settings.port = *port;
                 portOnCommandLine = true;
-            } else if (argument == ControlArguments::kControlPortPrefix.substr(0, ControlArguments::kControlPortPrefix.size() - 1)) {
+            } else if (argument == FlagName(ControlArguments::kControlPortPrefix)) {
                 return std::unexpected(InvalidSetting(Format("'{}' needs a value: {}N", argument, ControlArguments::kControlPortPrefix)));
             } else if (argument.starts_with(ControlArguments::kReplayPrefix)) {
                 const StringView value = argument.substr(ControlArguments::kReplayPrefix.size());
@@ -67,10 +108,25 @@ namespace BECore {
                     return std::unexpected(InvalidSetting(Format("'{}' has no file: {}FILE", argument, ControlArguments::kReplayPrefix)));
                 }
                 settings.replayPath = String(value);
-            } else if (argument == ControlArguments::kReplayPrefix.substr(0, ControlArguments::kReplayPrefix.size() - 1)) {
+            } else if (argument == FlagName(ControlArguments::kReplayPrefix)) {
                 return std::unexpected(InvalidSetting(Format("'{}' needs a file: {}FILE", argument, ControlArguments::kReplayPrefix)));
             } else if (argument == ControlArguments::kReplayExit) {
                 settings.replayExit = true;
+            } else if (argument.starts_with(ControlArguments::kWindowPrefix)) {
+                settings.windowSize = ParseWindowSize(argument.substr(ControlArguments::kWindowPrefix.size()));
+                if (!settings.windowSize) {
+                    return std::unexpected(
+                        InvalidSetting(Format("'{}' is not a window size: two integers, {}WxH (for example {}480x480)", argument, ControlArguments::kWindowPrefix, ControlArguments::kWindowPrefix)));
+                }
+            } else if (argument == FlagName(ControlArguments::kWindowPrefix)) {
+                return std::unexpected(InvalidSetting(Format("'{}' needs a value: {}WxH", argument, ControlArguments::kWindowPrefix)));
+            } else if (argument.starts_with(ControlArguments::kDensityPrefix)) {
+                settings.density = StringUtils::ParseNumber<float>(argument.substr(ControlArguments::kDensityPrefix.size()));
+                if (!settings.density) {
+                    return std::unexpected(InvalidSetting(Format("'{}' is not a number: {}D", argument, ControlArguments::kDensityPrefix)));
+                }
+            } else if (argument == FlagName(ControlArguments::kDensityPrefix)) {
+                return std::unexpected(InvalidSetting(Format("'{}' needs a value: {}D", argument, ControlArguments::kDensityPrefix)));
             }
         }
 
@@ -93,7 +149,12 @@ namespace BECore {
         if (!settings.replayPath.empty() && !settings.manualClock) {
             return std::unexpected(InvalidSetting(Format("{}FILE needs {}: the replay passes the game time of the file on it", ControlArguments::kReplayPrefix, ControlArguments::kManualClock)));
         }
-        return settings;
+
+        if ((settings.windowSize || settings.density) && !settings.headless) {
+            return std::unexpected(InvalidSetting(Format("{} and {} need {}: the size and the density of a real window belong to the system", ControlArguments::kWindowPrefix,
+                                                         ControlArguments::kDensityPrefix, ControlArguments::kHeadless)));
+        }
+        return CheckWindowFlags(settings);
     }
 
 }  // namespace BECore

@@ -53,6 +53,7 @@ namespace BECore {
 
         auto window = BECore::New<SDLMainWindow>();
         window->SetHeadless(options.headless);
+        window->SetHeadlessSimulation(options.windowSize, options.density);
         if (!window->Initialize(config._path)) {
             return false;
         }
