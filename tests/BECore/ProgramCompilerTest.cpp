@@ -204,7 +204,13 @@ namespace BECore::Tests {
         const auto identity = CompileExpression("caster.attack * 1 + 0", world.declaration, DescribeType<int32_t>());
         ASSERT_TRUE(identity.has_value());
         EXPECT_EQ(identity->kind, CompiledKind::Program);
-        EXPECT_EQ(ProgramPool::Get(identity->program).Code().size(), 5U);
+        // `slot * k + b` is one fused instruction now; with `fuse = false` it is the five of the lowering, with nothing removed
+        EXPECT_EQ(ProgramPool::Get(identity->program).Code().size(), 1U);
+        CompileOptions unfused;
+        unfused.fuse = false;
+        const auto plain = CompileExpression("caster.attack * 1 + 0", world.declaration, DescribeType<int32_t>(), unfused);
+        ASSERT_TRUE(plain.has_value());
+        EXPECT_EQ(ProgramPool::Get(plain->program).Code().size(), 5U);
     }
 
     TEST(ProgramCompilerTest, ADivisorThatFoldsToZeroGivesZeroAtRunTime) {

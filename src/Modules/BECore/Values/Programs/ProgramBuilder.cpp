@@ -1,6 +1,7 @@
 #include "ProgramBuilder.h"
 
 #include <BECore/Values/Programs/Components.h>
+#include <BECore/Values/Programs/Peephole.h>
 
 namespace BECore {
 
@@ -35,6 +36,10 @@ namespace BECore {
 
     void ProgramBuilder::Emit(const Instruction& instruction) {
         _code.push_back(instruction);
+    }
+
+    void ProgramBuilder::Fuse(uint8_t resultRegister) {
+        BECore::Fuse(_code, resultRegister);
     }
 
     std::expected<Program, ProgramError> ProgramBuilder::Finish(ProgramType resultType, uint8_t resultRegister, PoolString source) const {
@@ -82,6 +87,15 @@ namespace BECore {
                 if (!IsPack(ins.op) && ins.imm >= count) {
                     return refuse(i, ins, Format("takes component {} of a value that has {}", ins.imm, count));
                 }
+            }
+            if (IsMulAddSlot(ins.op)) {
+                if (ins.a >= kMaxContextLevels) {
+                    return refuse(i, ins, Format("reads level {}, but a context has {}", ins.a, kMaxContextLevels));
+                }
+                if (ins.b >= _constants.size() || ins.c >= _constants.size()) {
+                    return refuse(i, ins, Format("reads constants {} and {}, but there are {}", ins.b, ins.c, _constants.size()));
+                }
+                reads |= LevelBit(ins.a);
             }
             if (IsLoadSlot(ins.op)) {
                 if (ins.a >= kMaxContextLevels) {

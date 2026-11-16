@@ -61,7 +61,7 @@ namespace BECore {
         /// an instruction names three of them (`a`, `b`, `c`), and `Pack` of four reads them from `a` up.
         class Lowering {
         public:
-            Lowering(const TypedExpr& expr, StringView source) : _expr(expr), _source(source) {}
+            Lowering(const TypedExpr& expr, StringView source, bool fuse) : _expr(expr), _source(source), _fuse(fuse) {}
 
             std::expected<CompiledExpression, ProgramError> Compile() {
                 if (const auto folded = FoldConstants(); !folded.has_value()) {
@@ -87,6 +87,9 @@ namespace BECore {
                 }
                 if (const auto lowered = Lower(_expr.root, *resultRegister); !lowered.has_value()) {
                     return std::unexpected(lowered.error());
+                }
+                if (_fuse) {
+                    _builder.Fuse(*resultRegister);
                 }
                 auto program = _builder.Finish(root.type.program, *resultRegister, PoolString::Intern(_source));
                 if (!program.has_value()) {
@@ -191,6 +194,7 @@ namespace BECore {
 
             const TypedExpr& _expr;
             StringView _source;
+            bool _fuse;
             ProgramBuilder _builder;
             Vector<bool> _isConstant;
             Vector<RegisterImage> _images;
@@ -215,7 +219,7 @@ namespace BECore {
         if (!typed.has_value()) {
             return std::unexpected(typed.error());
         }
-        Lowering lowering(*typed, text);
+        Lowering lowering(*typed, text, options.fuse);
         return lowering.Compile();
     }
 

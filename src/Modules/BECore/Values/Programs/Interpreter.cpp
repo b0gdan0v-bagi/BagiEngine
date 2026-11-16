@@ -33,6 +33,12 @@ namespace BECore {
         break;
                     BE_PROGRAM_ROWS(BE_PROGRAM_CASE_ROW)
 #undef BE_PROGRAM_CASE_ROW
+#define BE_PROGRAM_CASE_FUSED(Op, Type, Cpp)                                                                                                                                                           \
+    case Opcode::Op##Type:                                                                                                                                                                             \
+        Kernel::Execute##Op<Cpp>(regs, ins, constants, context);                                                                                                                                       \
+        break;
+                    BE_PROGRAM_FUSED_ROWS(BE_PROGRAM_CASE_FUSED)
+#undef BE_PROGRAM_CASE_FUSED
 #define BE_PROGRAM_CASE_MIXED(Op, LName, LCpp, RName, RCpp)                                                                                                                                            \
     case Opcode::Op##LName##RName:                                                                                                                                                                     \
         Kernel::ExecuteMixed<Kernel::Op, LCpp, RCpp>(regs, ins);                                                                                                                                       \

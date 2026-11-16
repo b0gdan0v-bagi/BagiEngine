@@ -16,6 +16,7 @@ A formula of a content file (`expr="caster.attack * 2"`) becomes a `Program`: st
 | `ExprAst.h/.cpp` | the untyped tree (`ExprNode` arena), `ExprLimits`, `PrintExpression` |
 | `ExprLexer.h/.cpp`, `ExprParser.h/.cpp` | text to tokens, tokens to the tree |
 | `ExprChecker.h/.cpp`, `ExprFunctions.h` | the tree to a typed tree (`TypedExpr`, `ExprType`); the table of functions and the names of the types |
+| `Peephole.h/.cpp` | `Fuse`: the pass that writes the fused instructions (`BE_PROGRAM_FUSED_ROWS`) |
 | `ProgramCompiler.h/.cpp` | `CompileExpression`, `CompileValue<T>`, `FormatProgramError` |
 | `CompileOptions.h` | `CompileOptions`: the table provider and `fuse` |
 
@@ -76,6 +77,10 @@ Loosest first: `||`; `&&`; `== !=`; `< <= > >=`; `+ -`; `* / %`; unary `- !`; po
 `CompileExpression(text, declaration, expected)` is parse, check, fold, lower; the answer is a `CompiledExpression` of one of three kinds, and `CompileValue<T>` makes the `Value<T>` of it (`Const`, `Slot` or `Program`). The type asked for is checked first (`CheckExpectedType`), so a field no formula can fill says so whatever the text. **Folding** runs a node whose operands are all constants through the interpreter on a one-instruction program, so the folded value is what the program would compute; there is no algebra (`a - a`, `x * 1` run), and a divisor that folds to zero is a run-time 0, not an error. A formula that folds to a constant is a `Constant` (the register image), one that is a single field a `Slot` (the path as written), so `expr="caster.attack"` loads and saves like `from`. **Lowering** is a recursive post-order walk: an operation writes into the register of its first operand and its other operands go into the registers above it, one after the other (`Pack` reads its up to four from `a` up), which are given back after the instruction, so a left-leaning chain needs two registers and a right-nested one a register per level. The 32-register limit is the lowering's error (column of the node that did not fit). The source text of the program is the text as written; the pool does not intern by it, and the slot offsets are part of the code, so one text under two declarations is two programs.
 
 `FormatProgramError(text, error)` is `<message> (column N)`, the text around the column (a window for a long one, a byte that is not printable ASCII as `?`) and a caret line; an error without a column is the message alone.
+
+## Fusion
+
+`ProgramBuilder::Fuse` (the lowering calls it before `Finish` unless `CompileOptions::fuse` is false, which tests and benchmarks use) runs `Fuse` of `Peephole.h`: it rewrites `LoadSlot; LoadConst k; Mul; LoadConst b; Add` over `int32_t`, `int64_t`, `float`, `double` into one `MulAddSlot<T>`. **A fused instruction computes what the code it replaces computes, bit for bit** (`ProgramFusionTest` runs both over generated inputs including NaN, infinities, subnormals and the integer extremes): its kernel calls the unfused kernels and keeps the product in a variable of its own, because one expression `x * k + b` may be contracted into a fused multiply-add that rounds once. The pass reads the code, not the lowering's habits: a fusion happens only when every register it stops writing is dead afterwards (not read before the next write, not the result), so a program built by hand is as safe. A field that does not fit (a constant index over a byte, a level beyond the context) leaves the sequence unfused, never an error. `Finish` counts the level of a fused instruction in `Reads()`.
 
 ## Loading and its errors
 

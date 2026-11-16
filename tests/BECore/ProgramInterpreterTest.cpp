@@ -699,8 +699,12 @@ namespace BECore::Tests {
 #define BE_CHECK_CONVERSION(Src, SrcCpp, Dst, DstCpp) CheckConversion<SrcCpp, DstCpp>(Opcode::Src##To##Dst);
         BE_PROGRAM_CONVERSIONS(BE_CHECK_CONVERSION)
 #undef BE_CHECK_CONVERSION
-        // Every opcode but the four untyped ones (`Invalid`, `LoadConst`, `Copy`, `LoadTable`) is a row or a conversion: a row that the matrix skipped would leave the count short
-        EXPECT_EQ(static_cast<size_t>(g_rowsChecked) + 4, EnumUtils<Opcode>::Count());
+        // Every opcode but the four untyped ones (`Invalid`, `LoadConst`, `Copy`, `LoadTable`) and the fused ones (`ProgramFusionTest` compares them with the code they replace) is a
+        // row or a conversion: a row that the matrix skipped would leave the count short
+#define BE_COUNT_FUSED(Op, Type, Cpp) +1
+        constexpr size_t kFusedRows = 0 BE_PROGRAM_FUSED_ROWS(BE_COUNT_FUSED);
+#undef BE_COUNT_FUSED
+        EXPECT_EQ(static_cast<size_t>(g_rowsChecked) + 4 + kFusedRows, EnumUtils<Opcode>::Count());
     }
 
     TEST(ProgramInterpreterTest, TheVectorsOfIntegersWrapLikeIntegers) {

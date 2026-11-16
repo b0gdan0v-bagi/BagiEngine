@@ -94,6 +94,10 @@
     BE_PROGRAM_TYPES_MATH(X, Extract)                                                                                                                                                                  \
     BE_PROGRAM_TYPES_MATH(X, Pack)
 
+/// The instructions the peephole pass (`Peephole.h`) writes: `X(operation, type name, C++ type)`. Each computes what the instructions it replaces compute, bit for bit; none is in
+/// `BE_PROGRAM_ROWS`, which are the operations of the language
+#define BE_PROGRAM_FUSED_ROWS(X) BE_PROGRAM_TYPES_NUMBERS(X, MulAddSlot)
+
 /// The operations whose two operands have different types: `X(operation, lhs name, lhs C++ type, rhs name, rhs C++ type)`; the opcode is `MulVec3Float`.
 /// A vector by its scalar (`float` for `Vec2` .. `Vec4`, `int` for `IVec2`) and `Quat * Vec3` (a rotation), each where the C++ operator or function exists
 /// (`Kernels.h` holds the list and the concepts together). Two numbers never mix: that is the explicit conversion of the language.
@@ -150,10 +154,11 @@ namespace BECore {
      *
      * `LoadConst`, `Copy` and `LoadTable` move a whole register whatever it holds (`LoadTable` picks it from a run of constants by an index);
      * `LoadSlot<type>` reads a field of a context object; every other opcode is an operation applied to one type (`AddInt32`), a conversion
-     * (`Int32ToFloat`). `Invalid` is never emitted: a zeroed instruction is caught.
+     * (`Int32ToFloat`) or a fused instruction (`BE_PROGRAM_FUSED_ROWS`; `Instruction.h` says how each is encoded). `Invalid` is never emitted: a zeroed instruction is caught.
      */
     CORE_ENUM(Opcode, uint16_t, Invalid, LoadConst, Copy,
-              LoadTable BE_PROGRAM_ROWS(BE_PROGRAM_OPCODE_ROW) BE_PROGRAM_MIXED_ROWS(BE_PROGRAM_OPCODE_MIXED) BE_PROGRAM_CONVERSIONS(BE_PROGRAM_OPCODE_CONVERSION))
+              LoadTable BE_PROGRAM_ROWS(BE_PROGRAM_OPCODE_ROW) BE_PROGRAM_FUSED_ROWS(BE_PROGRAM_OPCODE_ROW) BE_PROGRAM_MIXED_ROWS(BE_PROGRAM_OPCODE_MIXED)
+                  BE_PROGRAM_CONVERSIONS(BE_PROGRAM_OPCODE_CONVERSION))
 
     /// The operations of `BE_PROGRAM_ROWS` by name, apart from the type: what the text of a formula says (`+`, `min`) before a type is known
     CORE_ENUM(ProgramOperation, uint8_t, LoadSlot, Add, Sub, Mul, Div, Mod, Neg, Abs, Eq, Ne, Lt, Le, Gt, Ge, And, Or, Not, Min, Max, Clamp, Select, Lerp, Floor, Ceil, Round, Sqrt, Dot, Length,
@@ -263,6 +268,20 @@ namespace BECore {
 
     [[nodiscard]] constexpr bool IsLoadSlot(Opcode op) {
         return op >= Opcode::LoadSlotBool && op <= Opcode::LoadSlotString;
+    }
+
+    /// `slot * k + b` over a number: one load, one multiplication and one addition in one instruction
+    [[nodiscard]] constexpr bool IsMulAddSlot(Opcode op) {
+        switch (op) {
+#define BE_PROGRAM_IS_MULADD(Op, Type, Cpp)                                                                                                                                                            \
+    case Opcode::Op##Type:                                                                                                                                                                             \
+        return true;
+            BE_PROGRAM_TYPES_NUMBERS(BE_PROGRAM_IS_MULADD, MulAddSlot)
+#undef BE_PROGRAM_IS_MULADD
+            default:
+                break;
+        }
+        return false;
     }
 
 }  // namespace BECore

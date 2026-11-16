@@ -68,6 +68,10 @@ namespace BECore {
             Emit(ins);
         }
 
+        /// Runs the peephole pass (`Peephole.h`) over the code so far; @p resultRegister is the register the program will give back, which no fusion may stop writing. Call it after the
+        /// last `Emit` and before `Finish`
+        void Fuse(uint8_t resultRegister);
+
         /// The program, with the result in @p resultRegister; an error names the instruction that is not valid (an operand beyond the registers, a constant that is not there)
         [[nodiscard]] std::expected<Program, ProgramError> Finish(ProgramType resultType, uint8_t resultRegister, PoolString source = {}) const;
 

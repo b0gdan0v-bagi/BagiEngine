@@ -712,19 +712,26 @@ namespace BECore::Kernel {
     template <typename Op, typename L, typename R>
     using MixedResultOf = decltype(Op::template ApplyMixed<L, R>(std::declval<L>(), std::declval<R>()));
 
+    /// The field of type @p T at @p offset of the object of @p level, as `LoadSlot` reads it
+    template <typename T>
+    [[nodiscard]] inline T LoadField(const Context& context, uint8_t level, uint32_t offset) {
+        const void* object = context.Object(level);
+        ASSERT(object != nullptr, "Program: the context has no object at the level the program reads from");
+        T value{};
+        std::memcpy(&value, static_cast<const uint8_t*>(object) + offset, sizeof(T));
+        return value;
+    }
+
     /// Runs one typed row of the instruction set: the shape of the operation says which registers it reads and writes
     template <typename Op, typename T>
     inline void Execute(RegisterImage* regs, const Instruction& ins, const Context& context) {
         if constexpr (Op::kShape == OpShape::Slot) {
-            const void* object = context.Object(ins.a);
-            ASSERT(object != nullptr, "Program: the context has no object at the level the program reads from");
-            const uint8_t* field = static_cast<const uint8_t*>(object) + ins.imm;
             if constexpr (std::is_same_v<T, ProgramEnum>) {
-                Store<ProgramEnum>(regs[ins.dst], ProgramEnum{LoadEnumIndex(field, ins.b)});
+                const void* object = context.Object(ins.a);
+                ASSERT(object != nullptr, "Program: the context has no object at the level the program reads from");
+                Store<ProgramEnum>(regs[ins.dst], ProgramEnum{LoadEnumIndex(static_cast<const uint8_t*>(object) + ins.imm, ins.b)});
             } else {
-                T value{};
-                std::memcpy(&value, field, sizeof(T));
-                Store<T>(regs[ins.dst], value);
+                Store<T>(regs[ins.dst], LoadField<T>(context, ins.a, ins.imm));
             }
         } else if constexpr (Op::kShape == OpShape::Unary) {
             Store<ResultOf<Op, T>>(regs[ins.dst], Op::Apply(Load<T>(regs[ins.a])));
@@ -747,6 +754,16 @@ namespace BECore::Kernel {
     template <typename Op, typename L, typename R>
     inline void ExecuteMixed(RegisterImage* regs, const Instruction& ins) {
         Store<MixedResultOf<Op, L, R>>(regs[ins.dst], Op::ApplyMixed(Load<L>(regs[ins.a]), Load<R>(regs[ins.b])));
+    }
+
+    /// Runs `MulAddSlot<T>`: the field is read where the unfused code read it and the result is `Mul` then `Add` of the same kernels. The product is a variable of its own so
+    /// that no compiler contracts the two into one fused multiply-add, which rounds once and differs in the last bit from the two instructions.
+    template <Number T>
+    inline void ExecuteMulAddSlot(RegisterImage* regs, const Instruction& ins, Span<const RegisterImage> constants, const Context& context) {
+        ASSERT(ins.b < constants.size() && ins.c < constants.size());
+        const T field = LoadField<T>(context, ins.a, ins.imm);
+        const T product = Mul::Apply(field, Load<T>(constants[ins.b]));
+        Store<T>(regs[ins.dst], Add::Apply(product, Load<T>(constants[ins.c])));
     }
 
     /// Whether `BE_PROGRAM_ROWS` has a row for the operation and the type
@@ -811,6 +828,11 @@ namespace BECore {
         return ProgramType::Dst;
             BE_PROGRAM_CONVERSIONS(BE_PROGRAM_RESULT_CONVERSION)
 #undef BE_PROGRAM_RESULT_CONVERSION
+#define BE_PROGRAM_RESULT_FUSED(Op, Type, Cpp)                                                                                                                                                         \
+    case Opcode::Op##Type:                                                                                                                                                                             \
+        return ProgramType::Type;
+            BE_PROGRAM_FUSED_ROWS(BE_PROGRAM_RESULT_FUSED)
+#undef BE_PROGRAM_RESULT_FUSED
             case Opcode::Invalid:
             case Opcode::LoadConst:
             case Opcode::Copy:

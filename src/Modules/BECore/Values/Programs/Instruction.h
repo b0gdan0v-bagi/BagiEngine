@@ -40,6 +40,9 @@ namespace BECore {
      * `Extract` takes component `imm` of the value in `a`; `Pack` reads its components from the consecutive registers `a`, `a + 1`, ... (as many as the type has).
      * `LoadTable` reads the `int32_t` index in `a` and writes to `dst` entry `index` of the run of constants that starts at constant `imm` and has
      * `TableEntryCount` entries (the count is 16 bits, low byte in `b`, high byte in `c`; `SetTableEntryCount` writes it), the index clamped to the ends.
+     *
+     * The fused instructions (`BE_PROGRAM_FUSED_ROWS`, written only by `Fuse`) read a field of the context themselves, so a field of theirs that does not fit makes the
+     * sequence stay unfused. `MulAddSlot<T>`: the field at offset `imm` of level `a` times the constant `b` plus the constant `c` (both constant indexes are bytes).
      */
     struct Instruction {
         Opcode op = Opcode::Invalid;
@@ -67,6 +70,9 @@ namespace BECore {
     static_assert(std::is_trivially_copyable_v<Cpp> && sizeof(Cpp) <= kProgramRegisterBytes, "a program type is a trivially copyable value of at most one register: " #Name);
     BE_PROGRAM_TYPES(BE_PROGRAM_TYPE_FITS_A_REGISTER)
 #undef BE_PROGRAM_TYPE_FITS_A_REGISTER
+
+    /// The largest constant index a field of a fused instruction holds (a byte)
+    inline constexpr uint32_t kMaxFusedConstantIndex = std::numeric_limits<uint8_t>::max();
 
     static_assert(kMaxTableEntries <= std::numeric_limits<uint16_t>::max(), "the count of a table is 16 bits");
     static_assert(sizeof(Instruction) == 12 && alignof(Instruction) == 4 && std::is_trivially_copyable_v<Instruction>);

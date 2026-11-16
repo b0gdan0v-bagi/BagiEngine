@@ -115,6 +115,10 @@ namespace BECore {
                 text += Format("{}: LoadTable r{} <- r{} [{} entries from constant {}]\n", i, ins.dst, ins.a, TableEntryCount(ins), ins.imm);
                 continue;
             }
+            if (IsMulAddSlot(ins.op)) {
+                text += Format("{}: {} r{} <- level {} offset {} * constant {} + constant {}\n", i, EnumUtils<Opcode>::ToString(ins.op), ins.dst, ins.a, ins.imm, ins.b, ins.c);
+                continue;
+            }
             text += Format("{}: {} r{} <- r{} r{} r{} imm {}\n", i, EnumUtils<Opcode>::ToString(ins.op), ins.dst, ins.a, ins.b, ins.c, ins.imm);
         }
         text += Format("result {} in r{}\n", EnumUtils<ProgramType>::ToString(_resultType), _resultRegister);
