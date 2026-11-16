@@ -33,8 +33,13 @@ namespace BECore {
 
     struct ArtGenVariant {
         int64_t seed = 0;
-        String path;  // real path of the PNG the service wrote
+        String path;  // real path of the file the service wrote: a PNG, or a FLAC for a sound
         String provenancePath;
+        String kind = "image";  // "image" or "audio"
+
+        [[nodiscard]] bool IsAudio() const {
+            return kind == "audio";
+        }
     };
 
     /// One thing an install would do, as the service planned it

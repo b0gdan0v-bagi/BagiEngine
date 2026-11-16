@@ -86,6 +86,9 @@ namespace BECore {
         if (variant == nullptr) {
             return std::unexpected(ControlError{String(kNoVariantCode), Format("the current run has no image of seed {}", seed)});
         }
+        if (variant->IsAudio()) {
+            return std::unexpected(ControlError{String(kAcceptFailedCode), String("a sound is not a sprite: accepting it into a clip is not there yet")});
+        }
         if (_acceptor == nullptr) {
             return std::unexpected(ControlError{String(kAcceptFailedCode), String("accepting is not available here")});
         }
@@ -268,6 +271,9 @@ namespace BECore {
         saved.name = String(name);
         saved.title = GetJsonString(preset, "title").value_or(saved.name);
         saved.source = "game";
+        if (const ArtGenWorkflow* workflow = FindWorkflow(StringView(GetJsonString(preset, "workflow").value_or(String()))); workflow != nullptr) {
+            saved.kind = workflow->kind;
+        }
         saved.data = preset;
         auto existing = std::find_if(_status.presets.begin(), _status.presets.end(), [&](const ArtGenPreset& known) { return StringView(known.name) == name; });
         if (existing != _status.presets.end()) {
@@ -400,6 +406,7 @@ namespace BECore {
             preset.name = StringOr(item, "name");
             preset.title = StringOr(item, "title", StringView(preset.name.data(), preset.name.size()));
             preset.source = StringOr(item, "source", "game");
+            preset.kind = StringOr(item, "kind", "image");
             preset.error = StringOr(item, "error");
             if (const Json* data = FindJsonMember(item, "preset"); data != nullptr && data->is_object()) {
                 preset.data = *data;
@@ -416,6 +423,7 @@ namespace BECore {
             ArtGenWorkflow workflow;
             workflow.name = StringOr(item, "name");
             workflow.source = StringOr(item, "source", "engine");
+            workflow.kind = StringOr(item, "kind", "image");
             workflow.error = StringOr(item, "error");
             if (const Json* inputs = FindJsonMember(item, "inputs"); inputs != nullptr && inputs->is_object()) {
                 for (const auto& [name, described] : inputs->items()) {
@@ -470,6 +478,7 @@ namespace BECore {
         ArtGenVariant variant;
         variant.path = StringOr(params, "path");
         variant.provenancePath = StringOr(params, "provenance");
+        variant.kind = StringOr(params, "kind", "image");
         const auto seed = GetJsonInt(params, "seed");
         if (variant.path.empty() || !seed) {
             return std::unexpected(InvalidParams("'path' (string) and 'seed' (integer) are required"));
@@ -667,6 +676,7 @@ namespace BECore {
             item["name"] = ToJsonString(preset.name);
             item["title"] = ToJsonString(preset.title);
             item["source"] = ToJsonString(preset.source);
+            item["kind"] = ToJsonString(preset.kind);
             if (!preset.error.empty()) {
                 item["error"] = ToJsonString(preset.error);
             }
@@ -678,6 +688,7 @@ namespace BECore {
             Json item = Json::object();
             item["name"] = ToJsonString(workflow.name);
             item["source"] = ToJsonString(workflow.source);
+            item["kind"] = ToJsonString(workflow.kind);
             if (!workflow.error.empty()) {
                 item["error"] = ToJsonString(workflow.error);
             }
@@ -704,6 +715,7 @@ namespace BECore {
             item["seed"] = variant.seed;
             item["path"] = ToJsonString(variant.path);
             item["provenance"] = ToJsonString(variant.provenancePath);
+            item["kind"] = ToJsonString(variant.kind);
             variants.push_back(std::move(item));
         }
         run["variants"] = std::move(variants);

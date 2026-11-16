@@ -366,3 +366,20 @@ def test_a_refresh_from_the_editor_reads_the_presets_again_at_once(game):
     editor.call = original
     bridge.tick()
     assert "saved" in {p["name"] for p in editor.polls[-1]["presets"]}
+
+
+def test_a_sound_reaches_the_editor_as_audio(game):
+    (game / "artgen" / "presets" / "knock.json").write_text(json.dumps(
+        {"preset": 1, "workflow": "sao_sfx", "prompt": "a {subject}", "params": {"duration": 1.0}}), encoding="utf-8")
+    editor = FakeEditor(game)
+    bridge = artgen_bridge.Bridge(editor, FakeGenerator(), log=lambda *a: None)
+    bridge.tick()
+    bridge.tick()
+    presets = {p["name"]: p for p in editor.polls[-1]["presets"]}
+    assert presets["knock"]["kind"] == "audio" and presets["wood"]["kind"] == "image"
+    assert {w["name"]: w["kind"] for w in editor.polls[-1]["workflows"]}["sao_sfx"] == "audio"
+    editor.request("knock", "pawn", count=1, seed=2)
+    run_until(bridge, editor, lambda: editor.run["state"] not in ("Queued", "Running"))
+    assert editor.run["state"] == "Done", editor.run["error"]
+    variant = editor.run["variants"][0]
+    assert variant["kind"] == "audio" and variant["path"].endswith("pawn_2.flac")

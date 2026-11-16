@@ -1,0 +1,14 @@
+{
+  "kind": "audio",
+  "prompt": ["6", "text"],
+  "negative": ["7", "text"],
+  "seed": ["3", "seed"],
+  "duration": [["5", "seconds"], ["11", "seconds_total"]],
+  "steps": ["3", "steps"],
+  "cfg": ["3", "cfg"],
+  "sampler": ["3", "sampler_name"],
+  "scheduler": ["3", "scheduler"],
+  "checkpoint": ["4", "ckpt_name"],
+  "text_encoder": ["10", "clip_name"],
+  "output": "9"
+}

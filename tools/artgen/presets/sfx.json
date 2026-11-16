@@ -1,0 +1,8 @@
+{
+  "preset": 1,
+  "title": "Short sound effect",
+  "workflow": "sao_sfx",
+  "prompt": "{subject}, a single short sound effect, dry, close, clean recording",
+  "negative": "music, voice, speech, noise, hiss, reverb",
+  "params": {"duration": 2.0, "steps": 50, "cfg": 5.0}
+}

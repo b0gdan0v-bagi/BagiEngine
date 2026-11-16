@@ -581,4 +581,37 @@ namespace BECore::Tests {
         EXPECT_EQ(ErrorCode(Call("artgen_save_preset", params)), "invalid_params");
     }
 
+    TEST_F(ArtGenSessionTest, KindsComeWithThePresetsTheWorkflowsAndTheImages) {
+        Json params = CatalogPoll();
+        params["presets"][0]["kind"] = "audio";
+        params["workflows"][0]["kind"] = "audio";
+        Call("artgen_poll", params);
+        EXPECT_EQ(session.FindPreset("wood")->kind, "audio");
+        EXPECT_EQ(session.FindPreset("sprite")->kind, "image") << "image when the service says nothing";
+        EXPECT_EQ(session.FindWorkflow("sdxl_basic")->kind, "audio");
+
+        const uint32_t id = session.Request("wood", "knock", 2, Optional<int64_t>(1)).value();
+        Call("artgen_poll", params);
+        Json sound = Report(id);
+        sound["seed"] = 1;
+        sound["path"] = "D:/out/knock_1.flac";
+        sound["kind"] = "audio";
+        Call("artgen_image", sound);
+        Json picture = Report(id);
+        picture["seed"] = 2;
+        picture["path"] = "D:/out/knock_2.png";
+        Call("artgen_image", picture);
+        ASSERT_EQ(session.GetRun().variants.size(), 2u);
+        EXPECT_TRUE(session.GetRun().variants[0].IsAudio());
+        EXPECT_FALSE(session.GetRun().variants[1].IsAudio());
+        const Json state = Call("artgen_state");
+        EXPECT_EQ(GetJsonString((*FindJsonMember(*FindJsonMember(Result(state), "run"), "variants"))[0], "kind"), Optional<String>("audio"));
+
+        session.SetAcceptor(&FakeAcceptor);
+        auto accepted = session.Accept(1, "knock", false);
+        ASSERT_FALSE(accepted.has_value());
+        EXPECT_EQ(accepted.error().code, "artgen_accept_failed");
+        EXPECT_EQ(gAccepted.calls, 0) << "a sound never reaches the sprite acceptor";
+    }
+
 }  // namespace BECore::Tests

@@ -392,8 +392,8 @@ namespace BECore {
         if (ImGui::BeginCombo("Preset", preview)) {
             for (const auto& preset : presets) {
                 char label[192];
-                std::snprintf(label, sizeof(label), "%s%s  (%s%s)", preset.error.empty() ? "" : ICON_LC_CIRCLE_ALERT " ", preset.title.c_str(), preset.name.c_str(),
-                              preset.source == "engine" ? ", engine" : "");
+                std::snprintf(label, sizeof(label), "%s%s%s  (%s%s)", preset.error.empty() ? "" : ICON_LC_CIRCLE_ALERT " ", preset.kind == "audio" ? ICON_LC_AUDIO_LINES " " : "", preset.title.c_str(),
+                              preset.name.c_str(), preset.source == "engine" ? ", engine" : "");
                 ImGui::BeginDisabled(!preset.data.is_object());
                 if (ImGui::Selectable(label, preset.name == _form.GetBaseName())) {
                     // Picking another preset drops what the form had unsaved
@@ -500,7 +500,7 @@ namespace BECore {
         if (ImGui::BeginCombo("Workflow", _form.GetWorkflow().c_str())) {
             for (const auto& workflow : workflows) {
                 char label[160];
-                std::snprintf(label, sizeof(label), "%s%s  (%s)", workflow.error.empty() ? "" : ICON_LC_CIRCLE_ALERT " ", workflow.name.c_str(), workflow.source.c_str());
+                std::snprintf(label, sizeof(label), "%s%s  (%s, %s)", workflow.error.empty() ? "" : ICON_LC_CIRCLE_ALERT " ", workflow.name.c_str(), workflow.kind.c_str(), workflow.source.c_str());
                 ImGui::BeginDisabled(!workflow.error.empty());
                 if (ImGui::Selectable(label, workflow.name == _form.GetWorkflow())) {
                     _form.SetWorkflow(StringView(workflow.name), &workflow);
@@ -664,6 +664,11 @@ namespace BECore {
             ImGui::TextDisabled("Click an image to accept it into the game");
             return;
         }
+        if (session.FindVariant(*_selectedSeed)->IsAudio()) {
+            ImGui::TextDisabled(ICON_LC_AUDIO_LINES " %s", session.FindVariant(*_selectedSeed)->path.c_str());
+            ImGui::TextDisabled("Listening to a sound and accepting it into a clip are not there yet");
+            return;
+        }
         ImGui::SeparatorText("Accept");
         {
             ScopedMonoFont mono;
@@ -731,7 +736,11 @@ namespace BECore {
             ImDrawList* drawList = ImGui::GetWindowDrawList();
             const ImVec2 corner(origin.x + kThumbnailSize, origin.y + kThumbnailSize);
             const ITexture* texture = i < _thumbnails.size() ? _thumbnails[i].Get() : nullptr;
-            if (texture != nullptr && texture->GetState() == ResourceState::Loaded) {
+            if (variant.IsAudio()) {
+                drawList->AddRectFilled(origin, corner, ImGui::GetColorU32(palette.frameBg));
+                const ImVec2 iconSize = ImGui::CalcTextSize(ICON_LC_AUDIO_LINES);
+                drawList->AddText(ImVec2(origin.x + (kThumbnailSize - iconSize.x) * 0.5f, origin.y + (kThumbnailSize - iconSize.y) * 0.5f), ImGui::GetColorU32(palette.accent), ICON_LC_AUDIO_LINES);
+            } else if (texture != nullptr && texture->GetState() == ResourceState::Loaded) {
                 const auto id = static_cast<ImTextureID>(reinterpret_cast<std::uintptr_t>(texture->GetNativeHandle()));
                 DrawChecker(drawList, origin, kThumbnailSize, ImGui::GetColorU32(palette.panelBg), ImGui::GetColorU32(palette.frameBg));
                 drawList->AddImage(id, origin, corner);
@@ -767,17 +776,20 @@ namespace BECore {
         }
         auto& resources = CoreManager::GetResourceManager();
         while (_thumbnails.size() < run.variants.size()) {
-            const String& path = run.variants[_thumbnails.size()].path;
-            _thumbnails.push_back(resources.Load<ITexture>(StringView(path.data(), path.size())));
-            _thumbnailPaths.push_back(path);
+            const ArtGenVariant& variant = run.variants[_thumbnails.size()];
+            // A sound has no picture: its slot stays empty and the grid draws a sound tile (playing it is the sound panel's)
+            _thumbnails.push_back(variant.IsAudio() ? ResourceHandle<ITexture>() : resources.Load<ITexture>(StringView(variant.path.data(), variant.path.size())));
+            _thumbnailPaths.push_back(variant.path);
         }
     }
 
     void ArtGenWidget::DropThumbnails() {
         // The images of a run are seen once: keeping them in the cache would hold every generated texture until the editor closes
         auto& resources = CoreManager::GetResourceManager();
-        for (const auto& path : _thumbnailPaths) {
-            resources.Evict(StringView(path.data(), path.size()));
+        for (size_t i = 0; i < _thumbnailPaths.size(); ++i) {
+            if (_thumbnails[i]) {
+                resources.Evict(StringView(_thumbnailPaths[i].data(), _thumbnailPaths[i].size()));
+            }
         }
         _thumbnails.clear();
         _thumbnailPaths.clear();
