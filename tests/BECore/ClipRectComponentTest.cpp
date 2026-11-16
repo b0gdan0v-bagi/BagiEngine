@@ -1,9 +1,8 @@
 #include "ClipRectComponentTest.h"
 
-#include "PointerTargetComponentTest.h"
-
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Input/UIInput.h>
+#include <BECore/PointerTargetComponentTest.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Renderer/RendererManager.h>
