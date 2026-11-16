@@ -44,6 +44,7 @@ Each file below loads by itself when a file of its area is read; read it by path
 | `UIChoice` | what a child of a `UISegmented` / `UIDropdown` is: `IsOption`, `GetValue`, `GetText` for an element with a clicker (`ui-controls.md`, "Components") |
 | `UIRegionSet` | the named rects (canvas units) a game publishes for a canvas; an element with `region` lays out inside one (`ui-layout.md`, "Named regions") |
 | `UIRectEdit` | the inverse of `UILayout::ResolveRect` (`SpecForRect`: a wanted rect to a spec, only numbers change; `exact` false when limits or aspect forbid it), the px / % switch that keeps the layout, the region names of a picker |
+| `UIRectFilePatch`, `UINodeFileSave` | an element of the scene to its `<element>` in a node file (path, `type` and `name` must match) and the rect attribute edits that make the file read as live; the edits of a scene into the text of its node files through `XmlTextPatch` (`Config/CLAUDE.md`), only `style.rect`, an attribute that parses equal stays as written |
 | `UIAnchorPresets` | the Unity grid of sixteen anchors, `Match` of a spec, `Apply` that changes the anchors and keeps the rect on screen (Shift: pivot, Alt: position) |
 | `UIPreview`, `UIPreviewOverlay` | the viewport's shapes, devices, zoom and safe areas; the rects of its overlays (view, canvas bounds, touch marks, regions) |
 
@@ -90,7 +91,7 @@ The choice (shape, safe area, overlays; not the forced view) is an editor settin
 
 ## Editor
 
-The "UI elements" section of `SceneEditorWidget` (`UIRectInspector`, only with the editor) shows for a node with a `UICanvasComponent` the element tree and, for the selected element, the rect inspector: preset grid, `anchorMin` / `anchorMax` / `pivot`, offsets and sizes with a px / % switch, margins, `region`. It edits the authored `style`, never `active` (a variant of the canvas may still override it: the inspector says how many do) and the canvas is invalidated at every change. The numbers come from `UIRectEdit` and `UIAnchorPresets`, the widget only draws. An edit of an instance of a node file is saved with the scene as an `<elements>` override of the whole list (`Scene/CLAUDE.md`, "Node files"); saving back into the node file itself or a `.ui.xml` is not built.
+The "UI elements" section of `SceneEditorWidget` (`UIRectInspector`, only with the editor) shows for a node with a `UICanvasComponent` the element tree and, for the selected element, the rect inspector: preset grid, `anchorMin` / `anchorMax` / `pivot`, offsets and sizes with a px / % switch, margins, `region`. It edits the authored `style`, never `active` (a variant of the canvas may still override it: the inspector says how many do) and the canvas is invalidated at every change. The numbers come from `UIRectEdit` and `UIAnchorPresets`, the widget only draws. On Save the changed rects of an instance of a node file that nothing else in the scene uses are written into `config/<ref>.xml` as a text patch of the rect attributes of their `<element>` (`UINodeFileSave`), so the scene file then holds a bare `<node ref>`; an instance of a file shared by several nodes, or a node written in the scene file, keeps the edit as an `<elements>` override of the whole list (`Scene/CLAUDE.md`, "Node files"). A `.ui.xml` document is not saved back.
 
 ## Not done
 
