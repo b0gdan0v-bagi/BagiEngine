@@ -383,7 +383,13 @@ namespace BECore {
         if (_settings._master._muted || level._muted) {
             return 0.0f;
         }
-        return ClampVolume(volume) * level._volume * _settings._master._volume;
+        return ClampVolume(volume) * LevelToGain(level._volume) * LevelToGain(_settings._master._volume);
+    }
+
+    float AudioManager::LevelToGain(float level) {
+        // A slider position is heard as loudness, a gain is amplitude: the cube makes equal steps of the position sound like equal steps
+        const float position = ClampVolume(level);
+        return position * position * position;
     }
 
     bool AudioManager::IsCurrent(AudioHandle handle) const {

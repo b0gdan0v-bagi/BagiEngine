@@ -60,7 +60,7 @@ namespace BECore::Tests {
         const AudioHandle handle = manager.Play(*clip, AudioBus::Ui, 0.8f);
         ASSERT_TRUE(handle.IsValid());
         EXPECT_TRUE(manager.IsPlaying(handle));
-        EXPECT_FLOAT_EQ(backend->gains[handle.voice], 0.8f * 0.5f * 0.5f);
+        EXPECT_FLOAT_EQ(backend->gains[handle.voice], 0.8f * 0.125f * 0.125f) << "the levels are positions, the sound's volume is linear";
         EXPECT_EQ(manager.GetStartedCount(), 1u);
 
         backend->playing[handle.voice] = false;  // the sound ended
@@ -103,13 +103,13 @@ namespace BECore::Tests {
         const AudioHandle music = manager.Play(*clip, AudioBus::Music, 0.5f);
         const AudioHandle sfx = manager.Play(*clip, AudioBus::Sfx);
         manager.SetBusVolume(AudioBus::Music, 0.5f);
-        EXPECT_FLOAT_EQ(backend->gains[music.voice], 0.25f);
+        EXPECT_FLOAT_EQ(backend->gains[music.voice], 0.5f * 0.125f);
         EXPECT_FLOAT_EQ(backend->gains[sfx.voice], 1.0f);
 
         manager.SetBusMuted(AudioBus::Music, true);
         EXPECT_FLOAT_EQ(backend->gains[music.voice], 0.0f);
         manager.SetBusMuted(AudioBus::Music, false);
-        EXPECT_FLOAT_EQ(backend->gains[music.voice], 0.25f) << "unmuting gives the volume back";
+        EXPECT_FLOAT_EQ(backend->gains[music.voice], 0.5f * 0.125f) << "unmuting gives the volume back";
 
         manager.SetMasterMuted(true);
         EXPECT_FLOAT_EQ(backend->gains[sfx.voice], 0.0f);
@@ -125,13 +125,44 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(manager.GetGain(AudioBus::Sfx, -2.0f), 0.0f);
     }
 
+    TEST_F(AudioManagerTest, ALevelIsASliderPositionThatTheGainCurves) {
+        EXPECT_FLOAT_EQ(AudioManager::LevelToGain(0.0f), 0.0f);
+        EXPECT_FLOAT_EQ(AudioManager::LevelToGain(1.0f), 1.0f);
+        float previous = AudioManager::LevelToGain(0.0f);
+        for (int step = 1; step <= 10; ++step) {
+            const float gain = AudioManager::LevelToGain(static_cast<float>(step) / 10.0f);
+            EXPECT_GT(gain, previous) << "position " << step << " / 10";
+            previous = gain;
+        }
+        EXPECT_FLOAT_EQ(AudioManager::LevelToGain(std::numeric_limits<float>::quiet_NaN()), 0.0f);
+        EXPECT_FLOAT_EQ(AudioManager::LevelToGain(-0.5f), 0.0f);
+        EXPECT_FLOAT_EQ(AudioManager::LevelToGain(7.0f), 1.0f);
+
+        manager.SetMasterVolume(0.5f);
+        EXPECT_FLOAT_EQ(manager.GetGain(AudioBus::Sfx, 1.0f), 0.125f);
+        manager.SetMasterVolume(1.0f);
+        EXPECT_FLOAT_EQ(manager.GetGain(AudioBus::Sfx, 0.5f), 0.5f) << "the volume of one sound stays linear";
+    }
+
+    TEST_F(AudioManagerTest, MuteWinsAtAnyPositionAndKeepsIt) {
+        manager.SetMasterVolume(0.5f);
+        manager.SetBusVolume(AudioBus::Music, 0.75f);
+        manager.SetBusMuted(AudioBus::Music, true);
+        EXPECT_FLOAT_EQ(manager.GetGain(AudioBus::Music, 1.0f), 0.0f);
+        EXPECT_FLOAT_EQ(manager.GetSettings()._music._volume, 0.75f);
+        manager.SetBusMuted(AudioBus::Music, false);
+        manager.SetMasterMuted(true);
+        EXPECT_FLOAT_EQ(manager.GetGain(AudioBus::Music, 1.0f), 0.0f);
+        EXPECT_FLOAT_EQ(manager.GetSettings()._master._volume, 0.5f);
+    }
+
     TEST_F(AudioManagerTest, ApplySettingsReplacesTheLevels) {
         Open(1);
         const AudioHandle handle = manager.Play(*clip, AudioBus::Sfx);
         AudioSettings settings;
         settings._sfx._volume = 0.25f;
         manager.ApplySettings(settings);
-        EXPECT_FLOAT_EQ(backend->gains[handle.voice], 0.25f);
+        EXPECT_FLOAT_EQ(backend->gains[handle.voice], 0.25f * 0.25f * 0.25f);
         EXPECT_EQ(manager.GetSettings()._voices, 1u) << "the voice count is not a level";
     }
 

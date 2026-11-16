@@ -7,7 +7,8 @@
 
 namespace BECore {
 
-    /// The volume and the mute of one bus (or of the master); a muted bus keeps its volume for when it is unmuted
+    /// The slider position (0 to 1; the gain is AudioManager::LevelToGain() of it) and the mute of one bus (or of the master); a muted bus keeps its
+    /// position for when it is unmuted
     struct AudioLevel {
         BE_CLASS(AudioLevel)
 
