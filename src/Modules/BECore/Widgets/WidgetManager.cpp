@@ -1,6 +1,7 @@
 #include "WidgetManager.h"
 
 #include <BECore/Application/ApplicationConfig.h>
+#include <BECore/Application/CommandLine.h>
 #include <BECore/Application/RunMode.h>
 #include <BECore/Config/ConfigFactory.h>
 #include <BECore/Config/ConfigManager.h>
@@ -67,7 +68,9 @@ namespace BECore {
     }  // namespace
 
     void WidgetManager::CreateWidgets() {
-        const RunMode mode = ResolveRunMode(LoadApplicationConfig().config._mode);
+        // An error of the flags stopped Application::Initialize before this; a test without a command line gets the file's mode
+        const RunMode fileMode = LoadApplicationConfig().config._mode;
+        const RunMode mode = ResolveRunMode(RequestedRunMode(fileMode, CoreManager::GetCommandLine().GetArguments()).value_or(fileMode));
         LOG_INFO("Run mode: {}"_format(EnumUtils<RunMode>::ToString(mode)));
         CreateWidgets(mode);
     }

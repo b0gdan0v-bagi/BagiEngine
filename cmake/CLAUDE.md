@@ -22,7 +22,7 @@ Per-machine settings go in `CMakeUserPresets.json` (git-ignored). Without preset
 - `AUTO` (default): ON except in a single-config `Release` / `RelWithDebInfo` / `MinSizeRel`. A multi-config generator picks sources at configure time, so `AUTO` is ON there.
 - `ON`: also in Release (`-DBE_WITH_EDITOR=ON`, or the `*-release-editor` presets). `OFF`: none; **a Debug build ignores `OFF`** with a configure WARNING (except the web presets: no editor there in any configuration).
 - Configure prints `Editor: ENABLED|DISABLED`. The definition `BE_WITH_EDITOR=1|0` is on every target (`kEditorBuilt` in `BECore/Application/RunMode.h`); code that needs an editor header is guarded with `#if BE_WITH_EDITOR`. ImGui and `ImGuiWidget` are in every build.
-- `mode="Editor"` in a build without the editor starts in Game mode with one warning. With the editor, Ctrl+Shift+E switches modes at run time (`src/Modules/BECore/CLAUDE.md`, "Run mode").
+- `mode="Editor"` (or `--editor`) in a build without the editor starts in Game mode with one warning. With the editor, Ctrl+Shift+E switches modes at run time (`src/Modules/BECore/CLAUDE.md`, "Run mode").
 
 ## Web-like build on the desktop
 
