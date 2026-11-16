@@ -96,7 +96,7 @@
 
 /// The typed instructions the peephole pass (`Peephole.h`) writes: `X(operation, type name, C++ type)`; `LoadTableSlot`, which holds any type, is an opcode of its own. Each
 /// computes what the instructions it replaces compute, bit for bit; none is in `BE_PROGRAM_ROWS`, which are the operations of the language
-#define BE_PROGRAM_FUSED_ROWS(X) BE_PROGRAM_TYPES_NUMBERS(X, MulAddSlot) BE_PROGRAM_TYPES_FLOATS(X, LerpSlots)
+#define BE_PROGRAM_FUSED_ROWS(X) BE_PROGRAM_TYPES_NUMBERS(X, MulAddSlot) X(MulAddSlot, Vec3, Vec3) BE_PROGRAM_TYPES_FLOATS(X, LerpSlots)
 
 /// The operations whose two operands have different types: `X(operation, lhs name, lhs C++ type, rhs name, rhs C++ type)`; the opcode is `MulVec3Float`.
 /// A vector by its scalar (`float` for `Vec2` .. `Vec4`, `int` for `IVec2`) and `Quat * Vec3` (a rotation), each where the C++ operator or function exists
@@ -270,13 +270,14 @@ namespace BECore {
         return op >= Opcode::LoadSlotBool && op <= Opcode::LoadSlotString;
     }
 
-    /// `slot * k + b` over a number: one load, one multiplication and one addition in one instruction
+    /// `slot * k + b` over a number, or over a `Vec3` with a `float` factor: one load, one multiplication and one addition in one instruction
     [[nodiscard]] constexpr bool IsMulAddSlot(Opcode op) {
         switch (op) {
 #define BE_PROGRAM_IS_MULADD(Op, Type, Cpp)                                                                                                                                                            \
     case Opcode::Op##Type:                                                                                                                                                                             \
         return true;
             BE_PROGRAM_TYPES_NUMBERS(BE_PROGRAM_IS_MULADD, MulAddSlot)
+            BE_PROGRAM_IS_MULADD(MulAddSlot, Vec3, Vec3)
 #undef BE_PROGRAM_IS_MULADD
             default:
                 break;

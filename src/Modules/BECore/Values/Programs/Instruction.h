@@ -42,7 +42,7 @@ namespace BECore {
      * `TableEntryCount` entries (the count is 16 bits, low byte in `b`, high byte in `c`; `SetTableEntryCount` writes it), the index clamped to the ends.
      *
      * The fused instructions (`BE_PROGRAM_FUSED_ROWS`, written only by `Fuse`) read a field of the context themselves, so a field of theirs that does not fit makes the
-     * sequence stay unfused. `MulAddSlot<T>`: the field at offset `imm` of level `a` times the constant `b` plus the constant `c` (both constant indexes are bytes).
+     * sequence stay unfused. `MulAddSlot<T>`: the field at offset `imm` of level `a` times the constant `b` plus the constant `c` (both constant indexes are bytes; over `Vec3` `b` is a `float`).
      * `LerpSlots<T>`: `lerp(field, field, t)`, `t` in register `c`, the first field at the low half of `imm` in level `a`, the second at its high half in level `b`.
      * `LoadTableSlot`: `LoadTable` of a field: the `int32_t` index at the low half of `imm` in level `a`, the first constant in its high half, the count in `b` and `c` as `LoadTable`.
      */

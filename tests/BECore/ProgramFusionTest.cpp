@@ -243,6 +243,59 @@ namespace BECore::Tests {
         EXPECT_EQ(Run<int32_t>(*program, world.context), 5);
     }
 
+    TEST(ProgramFusionTest, MulAddOverAVec3IsOneInstructionWithTheSameBits) {
+        ExpectSameBits<Vec3>("a.dir * 2 + vec3(1, 2, 3)", Opcode::MulAddSlotVec3);
+        ExpectSameBits<Vec3>("b.dirb * 0.1 + vec3(0.2, -0.0, 1e30)", Opcode::MulAddSlotVec3);
+        ExpectSameBits<Vec3>("a.dir * 1e30 + vec3(-1e30, 1e-30, 0)", Opcode::MulAddSlotVec3);
+        ExpectSameBits<Vec3>("b.dir * 0 + vec3(0, 0, 0)", Opcode::MulAddSlotVec3);
+    }
+
+    TEST(ProgramFusionTest, TheVec3ProductIsRoundedBeforeTheSumLikeTwoInstructions) {
+        // The same (1 + 2^-23)^2 cancellation as the scalar case, componentwise: a fused multiply-add of any component would leave 2^-46
+        FusionWorld world;
+        const Program* program = Compile(world, "a.dir * 1.0000001 + vec3(-1.0000002, -1.0000002, -1.0000002)", ProgramType::Vec3, true, DescribeType<Vec3>());
+        ASSERT_NE(program, nullptr);
+        ASSERT_EQ(CountOf(*program, Opcode::MulAddSlotVec3), 1U);
+        const float step = 1.0f + std::numeric_limits<float>::epsilon();
+        world.a.dir = Vec3{step, step, step};
+        EXPECT_EQ(Run<Vec3>(*program, world.context), (Vec3{0.0f, 0.0f, 0.0f}));
+    }
+
+    TEST(ProgramFusionTest, AVec3MulAddFusesInsideALargerFormulaAndTheOtherPartsStayAsTheyWere) {
+        ExpectSameBits<Vec3>("(a.dir * 2 + vec3(1, 2, 3)) - b.dirb", Opcode::MulAddSlotVec3);
+        ExpectSameBits<float>("length(b.dir * 0.5 + vec3(1, 2, 3)) + a.f32", Opcode::MulAddSlotVec3);
+
+        FusionWorld world;
+        const Program* program = Compile(world, "(a.dir * 2 + vec3(1, 2, 3)) - b.dirb", ProgramType::Vec3, true, DescribeType<Vec3>());
+        ASSERT_NE(program, nullptr);
+        EXPECT_EQ(CountOf(*program, Opcode::SubVec3), 1U);
+        EXPECT_EQ(CountOf(*program, Opcode::LoadSlotVec3), 1U);
+    }
+
+    TEST(ProgramFusionTest, AVec3ShapeThatIsNotSlotTimesFloatPlusConstantStaysUnfused) {
+        FusionWorld world;
+        // A slot as the addend, the scalar on the left (`MulFloatVec3`), a slot as the factor's own product and a formula as the factor are other shapes
+        for (const StringView text :
+             {StringView{"a.dir * 2 + a.dirb"}, StringView{"2 * a.dir + vec3(1, 2, 3)"}, StringView{"a.dir * a.f32 + vec3(1, 2, 3)"}, StringView{"a.dir * 2 - vec3(1, 2, 3)"}}) {
+            const Program* program = Compile(world, text, ProgramType::Vec3, true, DescribeType<Vec3>());
+            ASSERT_NE(program, nullptr);
+            EXPECT_EQ(CountOf(*program, Opcode::MulAddSlotVec3), 0U) << String(text).c_str() << "\n" << program->Disassemble().c_str();
+        }
+    }
+
+    TEST(ProgramFusionTest, TheVec3MulAddReadsTheLevelOfItsSlotAndIsPrinted) {
+        FusionWorld world;
+        const Program* fused = Compile(world, "b.dir * 2 + vec3(1, 2, 3)", ProgramType::Vec3, true, DescribeType<Vec3>());
+        const Program* plain = Compile(world, "b.dir * 2 + vec3(1, 2, 3)", ProgramType::Vec3, false, DescribeType<Vec3>());
+        ASSERT_NE(fused, nullptr);
+        ASSERT_NE(plain, nullptr);
+        EXPECT_EQ(fused->Reads(), LevelBit(1));
+        EXPECT_EQ(fused->Reads(), plain->Reads());
+        EXPECT_EQ(CountFused(*plain), 0U);
+        const String text = fused->Disassemble();
+        EXPECT_NE(text.find("MulAddSlotVec3"), String::npos) << text.c_str();
+    }
+
     TEST(ProgramFusionTest, ItFusesInsideALargerFormulaAndTheOtherPartsStayAsTheyWere) {
         ExpectSameBits<int32_t>("min(a.i32 * 3 + 7, b.i32)", Opcode::MulAddSlotInt32);
         ExpectSameBits<float>("max(a.f32b, b.f32 * 0.5 + 1.0) + a.f32", Opcode::MulAddSlotFloat);
@@ -359,6 +412,23 @@ namespace BECore::Tests {
         EXPECT_EQ(unchanged, code);
     }
 
+    TEST(ProgramFusionTest, TheVec3SequenceByHandBecomesOneInstructionOnlyWithItsOwnOpcodes) {
+        Vector<Instruction> code = MulAddCode(Opcode::LoadSlotVec3, Opcode::MulVec3Float, Opcode::AddVec3);
+        Fuse(code, 0);
+        ASSERT_EQ(code.size(), 1U);
+        EXPECT_EQ(code[0], (Instruction{Opcode::MulAddSlotVec3, 0, 0, 0, 1, 4}));
+
+        // The scalar on the left, a `Vec4` sum and a `Vec4` field are other rows
+        ExpectUnchanged(MulAddCode(Opcode::LoadSlotVec3, Opcode::MulFloatVec3, Opcode::AddVec3), 0);
+        ExpectUnchanged(MulAddCode(Opcode::LoadSlotVec3, Opcode::MulVec3Float, Opcode::AddVec4), 0);
+        ExpectUnchanged(MulAddCode(Opcode::LoadSlotVec4, Opcode::MulVec3Float, Opcode::AddVec3), 0);
+
+        // The factor register is read later: the write the fusion drops is not dead
+        Vector<Instruction> later = MulAddCode(Opcode::LoadSlotVec3, Opcode::MulVec3Float, Opcode::AddVec3);
+        later.push_back(Instruction{Opcode::AddVec3, 2, 0, 1, 0, 0});
+        ExpectUnchanged(later, 2);
+    }
+
     TEST(ProgramFusionTest, ASequenceWhoseRegistersDoNotChainIsLeftAlone) {
         // The addition reads r2, not the product in r0: the shape is the same, the meaning is not
         Vector<Instruction> code = Int32MulAddCode();
@@ -443,6 +513,23 @@ namespace BECore::Tests {
         static_cast<void>(tooHigh.AddConstant(int32_t{3}));
         tooHigh.Emit(Opcode::MulAddSlotInt32, high, static_cast<uint8_t>(kMaxContextLevels), 0, 0, 4);
         EXPECT_FALSE(tooHigh.Finish(ProgramType::Int32, high).has_value());
+    }
+
+    TEST(ProgramFusionTest, AFinishedProgramOfVec3FusedCodeIsRefusedWhenItsConstantsAreNot) {
+        ProgramBuilder builder;
+        const uint8_t reg = builder.AcquireRegister().value();
+        const uint32_t k = builder.AddConstant(1.0f);
+        builder.Emit(Opcode::MulAddSlotVec3, reg, 0, static_cast<uint8_t>(k), static_cast<uint8_t>(k + 1), 4);
+        EXPECT_FALSE(builder.Finish(ProgramType::Vec3, reg).has_value());
+
+        ProgramBuilder good;
+        const uint8_t out = good.AcquireRegister().value();
+        const uint32_t constK = good.AddConstant(2.0f);
+        const uint32_t constB = good.AddConstant(Vec3{1.0f, 2.0f, 3.0f});
+        good.Emit(Opcode::MulAddSlotVec3, out, 1, static_cast<uint8_t>(constK), static_cast<uint8_t>(constB), 4);
+        const auto program = good.Finish(ProgramType::Vec3, out);
+        ASSERT_TRUE(program.has_value());
+        EXPECT_EQ(program->Reads(), LevelBit(1));
     }
 
     TEST(ProgramFusionTest, ALerpOfTwoSlotsIsOneInstructionWithTheSameBits) {

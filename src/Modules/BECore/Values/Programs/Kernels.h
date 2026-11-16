@@ -757,13 +757,20 @@ namespace BECore::Kernel {
     }
 
     /// Runs `MulAddSlot<T>`: the field is read where the unfused code read it and the result is `Mul` then `Add` of the same kernels. The product is a variable of its own so
-    /// that no compiler contracts the two into one fused multiply-add, which rounds once and differs in the last bit from the two instructions.
-    template <Number T>
+    /// that no compiler contracts the two into one fused multiply-add, which rounds once and differs in the last bit from the two instructions. Over `Vec3` the factor is a
+    /// `float` constant (the mixed `Mul`) and the addend a `Vec3` constant.
+    template <typename T>
     inline void ExecuteMulAddSlot(RegisterImage* regs, const Instruction& ins, Span<const RegisterImage> constants, const Context& context) {
+        static_assert(Number<T> || std::is_same_v<T, Vec3>, "MulAddSlot has rows for the numbers and Vec3");
         ASSERT(ins.b < constants.size() && ins.c < constants.size());
         const T field = LoadField<T>(context, ins.a, ins.imm);
-        const T product = Mul::Apply(field, Load<T>(constants[ins.b]));
-        Store<T>(regs[ins.dst], Add::Apply(product, Load<T>(constants[ins.c])));
+        if constexpr (std::is_same_v<T, Vec3>) {
+            const Vec3 product = Mul::ApplyMixed(field, Load<float>(constants[ins.b]));
+            Store<Vec3>(regs[ins.dst], Add::Apply(product, Load<Vec3>(constants[ins.c])));
+        } else {
+            const T product = Mul::Apply(field, Load<T>(constants[ins.b]));
+            Store<T>(regs[ins.dst], Add::Apply(product, Load<T>(constants[ins.c])));
+        }
     }
 
     /// Runs `LerpSlots<T>`: `Lerp` of the two fields and the weight in register `c`, so the result is the one of the typed row

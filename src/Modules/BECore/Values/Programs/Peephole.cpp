@@ -91,7 +91,7 @@ namespace BECore {
             return std::all_of(dropped.begin(), dropped.end(), [&](uint8_t reg) { return reg == kept || IsDeadAfter(code, from, reg, resultRegister); });
         }
 
-        /// The opcodes of `slot * k + b` over one number type
+        /// The opcodes of `slot * k + b` over one number type, or over `Vec3` with a `float` factor
         struct MulAddRow {
             Opcode load;
             Opcode mul;
@@ -100,7 +100,8 @@ namespace BECore {
         };
 
 #define BE_PEEPHOLE_MULADD_ROW(Op, Type, Cpp) MulAddRow{Opcode::LoadSlot##Type, Opcode::Mul##Type, Opcode::Add##Type, Opcode::MulAddSlot##Type},
-        constexpr Array<MulAddRow, 4> kMulAddRows{{BE_PROGRAM_TYPES_NUMBERS(BE_PEEPHOLE_MULADD_ROW, MulAddSlot)}};
+        constexpr Array<MulAddRow, 5> kMulAddRows{
+            {BE_PROGRAM_TYPES_NUMBERS(BE_PEEPHOLE_MULADD_ROW, MulAddSlot) MulAddRow{Opcode::LoadSlotVec3, Opcode::MulVec3Float, Opcode::AddVec3, Opcode::MulAddSlotVec3}}};
 #undef BE_PEEPHOLE_MULADD_ROW
 
         const MulAddRow* MulAddRowOf(Opcode load) {

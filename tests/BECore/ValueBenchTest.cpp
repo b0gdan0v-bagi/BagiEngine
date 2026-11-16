@@ -384,7 +384,7 @@ namespace BECore::Tests {
 
         /// Times @p text as plain C++, as a tree (when @p tree is given), as the fused program, as the program with `fuse = false` and as a cached read (with the tree), and checks that
         /// every case gives the sum of the plain one. @p expectFused says whether the default compile has a `MulAddSlot` and the unfused one never has: a benchmark of two
-        /// equal programs would say nothing, and where there is no such fusion yet the two must be the same code
+        /// equal programs would say nothing; with no value the formula is not asked
         template <typename T, typename TPlain>
         void BenchFormulaCases(const FormulaWorld& world, StringView text, const FormulaNames& names, TPlain&& plainRead, const TreeNode<T>* tree, Optional<bool> expectFused) {
             bool printing = false;
@@ -476,10 +476,10 @@ namespace BECore::Tests {
             return caster.velocity * kVec3Scale + kVec3Term;
         }
 
-        /// No `Vec3` instruction is fused, so the two programs are one program
+        /// `slot * k + b` over a `Vec3` is fused like the numbers, so the two programs differ
         void BenchVec3Madd() {
             const FormulaWorld world;
-            BenchFormulaCases<Vec3>(world, kVec3Madd, kMaddNames, [&](size_t index) { return PlainVec3Madd(world.casters[index]); }, nullptr, false);
+            BenchFormulaCases<Vec3>(world, kVec3Madd, kMaddNames, [&](size_t index) { return PlainVec3Madd(world.casters[index]); }, nullptr, true);
         }
 
     }  // namespace
