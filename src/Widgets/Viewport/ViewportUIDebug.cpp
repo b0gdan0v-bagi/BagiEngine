@@ -5,6 +5,7 @@
 #include <BECore/Scene/SceneNode.h>
 #include <BECore/UI/UIEnvironment.h>
 #include <BECore/UI/UILayoutValidator.h>
+#include <Widgets/SceneEditor/SceneSelectionEvents.h>
 
 namespace BECore {
 
@@ -56,6 +57,8 @@ namespace BECore {
         constexpr float kFindingHitSlop = 3.0f;  // screen units: a finding with no area is still pointed at
 
         constexpr const char* kUnnamed = "(unnamed)";
+        constexpr const char* kFindingsWindowTitle = "UI Findings";
+        constexpr ImVec2 kFindingsWindowSize{420.0f, 300.0f};
 
         bool Contains(const Rect& rect, const Vec2& point, float slop) {
             return point.x >= rect.x - slop && point.x < rect.x + rect.w + slop && point.y >= rect.y - slop && point.y < rect.y + rect.h + slop;
@@ -248,6 +251,8 @@ namespace BECore {
     void ViewportUIDebug::Draw(ImDrawList& drawList, const ViewportFrame& frame, const PreviewOverlays& overlays, bool hovered, const ImVec2& mouse) {
         _hoverElement.reset();
         _hoverFinding.reset();
+        const Optional<HoverFinding> listHover = _listHover;
+        _listHover.reset();
         _minTouchSize = CoreManager::GetUIEnvironment().GetSettings().minTouchSize;
         const bool elements = overlays.elementRects || overlays.anchors;
 
@@ -307,7 +312,8 @@ namespace BECore {
             for (size_t index = 0; index < _states.size(); ++index) {
                 const CanvasState& state = _states[index];
                 if (state.enabled && state.findingsValid) {
-                    DrawFindings(drawList, frame, state, _hoverFinding && _hoverFinding->canvas == index ? static_cast<int64_t>(_hoverFinding->index) : -1);
+                    const Optional<HoverFinding>& highlighted = _hoverFinding ? _hoverFinding : listHover;
+                    DrawFindings(drawList, frame, state, highlighted && highlighted->canvas == index ? static_cast<int64_t>(highlighted->index) : -1);
                 }
             }
         }
@@ -359,6 +365,50 @@ namespace BECore {
             drawList.AddRectFilled(min, max, WithAlpha(color, kFindingFillAlpha));
             drawList.AddRect(min, max, WithAlpha(color, kFindingLineAlpha), 0.0f, 0, static_cast<int64_t>(index) == hoveredIndex ? kHoveredFindingThickness : kFindingThickness);
         }
+    }
+
+    bool ViewportUIDebug::DrawFindingsWindow() {
+        bool open = true;
+        ImGui::SetNextWindowSize(kFindingsWindowSize, ImGuiCond_FirstUseEver);
+        if (!ImGui::Begin(kFindingsWindowTitle, &open)) {
+            ImGui::End();
+            return open;
+        }
+        bool any = false;
+        for (size_t canvas = 0; canvas < _states.size(); ++canvas) {
+            CanvasState& state = _states[canvas];
+            if (!state.enabled || !state.findingsValid) {
+                continue;
+            }
+            any = true;
+            const Vector<UILayoutIssue>& issues = state.findings.Get(state.canvas->GetLayout(), _minTouchSize);
+            const char* const name = state.name.Empty() ? kUnnamed : state.name.CStr();
+            ImGui::PushID(state.node);
+            if (ImGui::TreeNodeEx("##canvas", ImGuiTreeNodeFlags_DefaultOpen, "%s (%zu)", name, issues.size())) {
+                if (issues.empty()) {
+                    ImGui::TextDisabled("No findings");
+                }
+                for (size_t index = 0; index < issues.size(); ++index) {
+                    UIPreviewOverlay::FindingText(issues[index], _findingText);
+                    const bool underViewportPointer = _hoverFinding && _hoverFinding->canvas == canvas && _hoverFinding->index == index;
+                    ImGui::PushID(static_cast<int>(index));
+                    if (ImGui::Selectable(_findingText.c_str(), underViewportPointer)) {
+                        SelectUIElementRequestEvent::Emit(_scene, state.node, issues[index].source);
+                    }
+                    ImGui::PopID();
+                    if (ImGui::IsItemHovered()) {
+                        _listHover = HoverFinding{canvas, index};
+                    }
+                }
+                ImGui::TreePop();
+            }
+            ImGui::PopID();
+        }
+        if (!any) {
+            ImGui::TextDisabled("No findings");
+        }
+        ImGui::End();
+        return open;
     }
 
     bool ViewportUIDebug::ShowFindingTooltip() {

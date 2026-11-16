@@ -54,6 +54,9 @@ namespace BECore {
         void Draw() override;
 
     private:
+        /// The "Viewport" window: toolbar, image, overlays and input
+        void DrawViewportWindow();
+
         // The grid preference and the stored preview choice of the editor (EditorLayoutWidget sends them on its first frame and on every change)
         void OnPreferencesChanged(const EditorPreferencesChangedEvent& event);
 

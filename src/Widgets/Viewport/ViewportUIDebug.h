@@ -47,6 +47,15 @@ namespace BECore {
          */
         void Draw(ImDrawList& drawList, const ViewportFrame& frame, const PreviewOverlays& overlays, bool hovered, const ImVec2& mouse);
 
+        /**
+         * @brief The "UI Findings" window: per enabled canvas of the last Collect() a header with the count and one row per finding, from the findings of the last Draw() (no second validation).
+         *
+         * The row under the pointer is outlined in the viewport on the next Draw(), the row of the finding under the pointer in the viewport is highlighted; a click on a row emits
+         * SelectUIElementRequestEvent with the node of the canvas and the element at fault. Needs an ImGui frame outside the viewport's window.
+         * @return false when the user closed the window (the caller clears the overlay flag)
+         */
+        bool DrawFindingsWindow();
+
         /// The tooltip of the finding under the pointer at the last Draw(); false when there is none. A finding wins over every other tooltip of the viewport.
         bool ShowFindingTooltip();
 
@@ -95,7 +104,8 @@ namespace BECore {
         float _minTouchSize = 0.0f;                          // of the last Draw(), the key of the findings the tooltip asks for
         Optional<HoverElement> _hoverElement;
         Optional<HoverFinding> _hoverFinding;
-        Vector<UIVariantSource> _sources;  // the scratch of the element tooltip
+        Optional<HoverFinding> _listHover;  // the row of the findings window under the pointer, outlined by the next Draw()
+        Vector<UIVariantSource> _sources;   // the scratch of the element tooltip
         String _sourceText;
         String _findingText;
     };

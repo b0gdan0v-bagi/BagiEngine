@@ -214,6 +214,14 @@ namespace BECore {
 
     void ViewportWidget::Update() {
         BE_PROFILE_SCOPE("ViewportWidget::Update");
+        DrawViewportWindow();
+        // Its own window, so it can be docked beside the viewport; drawn from the findings the viewport's pass just made
+        if (_overlays.findings && !_uiDebug.DrawFindingsWindow()) {
+            _overlays.findings = false;
+        }
+    }
+
+    void ViewportWidget::DrawViewportWindow() {
         ImGui::SetNextWindowSize({800.0f, 600.0f}, ImGuiCond_FirstUseEver);
         if (!ImGui::Begin("Viewport")) {
             ImGui::End();
