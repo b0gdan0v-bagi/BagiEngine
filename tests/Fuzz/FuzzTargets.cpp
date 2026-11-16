@@ -22,6 +22,7 @@ namespace BECore::Fuzz {
             {"UiTables", &FuzzUiTables, "ui_tables", 2},
             {"UiGeometry", &FuzzUiGeometry, "ui_geometry", 8},
             {"AudioWav", &FuzzAudioWav, "audio_wav", 1},
+            {"AudioFlac", &FuzzAudioFlac, "audio_flac", 1},
         };
         return targets;
     }

@@ -86,6 +86,7 @@ target_link_libraries(BECoreModule PUBLIC
     EnTT
     nlohmann_json
     stb
+    dr_libs
     SDL3-shared
 )
 

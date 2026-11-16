@@ -27,6 +27,13 @@ moves), so zero is the verdict that counts; the second build's line "missed obje
 
 The scratch folder stays after the run (look into its logs: `*-build.log`, `ccache-*.log`); `--wipe` removes a scratch folder
 of an earlier probe (only one that holds the marker file this tool writes) before it starts.
+
+Windows (`--preset windows-clang-debug`, Clang with Ninja): every cmake call runs through `CI/scripts/vs_env.py` (the Visual Studio
+environment the Ninja presets leave to the caller), so the probe needs no developer prompt. Use a short scratch folder (`D:/cc/p1`):
+the copy lives under `<scratch>/deeper/two/engine`, and the paths of the build inside SDL's tree reach the 260 characters of a
+Windows path quickly (the probe warns when the scratch path is long). `-DENGINE_CCACHE_BASE_DIR` is passed with forward slashes, the
+form CMake takes. A symlink the account may not make (`.venv`, a tracked link) becomes a directory junction or a plain copy; with
+no `.venv` in the engine folder CMake takes the system Python (it needs jinja2).
 Standard library only.
 """
 
@@ -41,7 +48,7 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePath
 
 ENGINE_ROOT = Path(__file__).resolve().parents[2]
 MARKER = ".ccache_share_probe"
@@ -50,6 +57,9 @@ PCH_TARGET_SUFFIX = ".pch"
 PCH_OWNER = "BECoreModule.dir"
 DIFF_LIST_LIMIT = 12
 MISS_LIST_LIMIT = 200
+VS_ENV_SCRIPT = ENGINE_ROOT / "CI" / "scripts" / "vs_env.py"
+WINDOWS_PATH_LIMIT = 260  # MAX_PATH: a compiler or a tool without long-path support fails on a longer file name
+BUILD_PATH_LENGTH = 140  # the longest file name the build writes, relative to the engine folder (SDL_image's libwebp exports)
 
 ROOT_MARK = b"<ROOT>"
 # a file path as it sits in a PCH: absolute, relative with `../` or under the (replaced) checkout root; at least three
@@ -138,11 +148,53 @@ def copy_working_tree(root: Path, files: list[str], dest: Path) -> int:
         target = dest / name
         target.parent.mkdir(parents=True, exist_ok=True)
         if src.is_symlink():
-            target.symlink_to(os.readlink(src))
+            if not copy_symlink(src, target):
+                continue
         else:
             shutil.copy2(src, target)
         copied += 1
     return copied
+
+
+def copy_symlink(src: Path, target: Path) -> bool:
+    """Make `target` a link like `src`; where that is refused (Windows without the privilege) copy a linked file, skip a folder."""
+    try:
+        target.symlink_to(os.readlink(src))
+        return True
+    except OSError:
+        pass
+    if src.is_file():
+        shutil.copy2(src, target)
+        return True
+    print(f"skipped the link {src}: no symlink here and its target is not a file")
+    return False
+
+
+def link_directory(link: Path, target: Path) -> str:
+    """Make `link` lead to the folder `target`: a symlink, else on Windows a junction (no privilege needed). Returns what was made,
+    or "" when neither worked."""
+    try:
+        link.symlink_to(target, target_is_directory=True)
+        return "symlink"
+    except OSError:
+        pass
+    if is_windows():
+        made = subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(target)], capture_output=True)
+        if made.returncode == 0:
+            return "junction"
+    return ""
+
+
+def is_windows() -> bool:
+    return sys.platform == "win32"
+
+
+def long_path_warning(copy_root: Path, limit: int = WINDOWS_PATH_LIMIT) -> str:
+    """A warning when the longest file the build writes under `copy_root` would pass the Windows path limit; else ''."""
+    estimate = len(str(copy_root)) + 1 + BUILD_PATH_LENGTH
+    if estimate <= limit:
+        return ""
+    return f"warning: {copy_root} plus the longest build path is about {estimate} characters (Windows limit {limit}): use a shorter --work folder (e.g. D:/cc/p1)"
 
 
 def inside_repository(path: Path) -> Path | None:
@@ -307,8 +359,17 @@ def write_ccache_config(scratch: Path, user_config: bool) -> None:
         config.write_text(f"max_size = {CACHE_MAX_SIZE}\n", encoding="utf-8")
 
 
+def tool_command(cmd: list[str], windows: bool | None = None, vs_env: Path = VS_ENV_SCRIPT) -> list[str]:
+    """The command for a cmake call: on Windows through `vs_env.py` (the x64 Visual Studio environment), elsewhere as it is."""
+    if windows is None:
+        windows = is_windows()
+    return [sys.executable, str(vs_env), *cmd] if windows else cmd
+
+
 def run(cmd: list[str], cwd: Path, env: dict[str, str], log: Path | None = None) -> str:
     """Run a command, stdout and stderr to `log` (or captured); raise ProbeError with the tail of the output on failure."""
+    shown = " ".join(cmd)
+    cmd = tool_command(cmd)
     if log is not None:
         with log.open("w", encoding="utf-8") as out:
             result = subprocess.run(cmd, cwd=cwd, env=env, stdout=out, stderr=subprocess.STDOUT)
@@ -318,7 +379,7 @@ def run(cmd: list[str], cwd: Path, env: dict[str, str], log: Path | None = None)
         text = result.stdout + result.stderr
     if result.returncode != 0:
         tail = "\n".join(text.splitlines()[-25:])
-        raise ProbeError(f"`{' '.join(cmd)}` in {cwd} failed ({result.returncode}); last lines:\n{tail}")
+        raise ProbeError(f"`{shown}` in {cwd} failed ({result.returncode}); last lines:\n{tail}")
     return text
 
 
@@ -425,13 +486,22 @@ def make_copies(engine: Path, scratch: Path) -> tuple[Path, Path]:
         count = copy_working_tree(engine, files, dest)
         venv = engine / ".venv"  # git-ignored, so not copied: the reflection generator needs its jinja2
         if venv.is_dir():
-            (dest / ".venv").symlink_to(venv)
+            made = link_directory(dest / ".venv", venv)
+            print(f".venv: {made or 'not linked (no symlink, no junction): CMake takes the system Python'}")
         print(f"copied {count} files to {dest}")
+        warning = long_path_warning(dest) if is_windows() else ""
+        if warning:
+            print(warning)
     return one, two
 
 
+def base_dir_argument(scratch: PurePath) -> str:
+    """Forward slashes: the form CMake and ccache's base_dir take on every platform."""
+    return f"-DENGINE_CCACHE_BASE_DIR={scratch.as_posix()}"
+
+
 def cmake_arguments(args: argparse.Namespace, scratch: Path) -> list[str]:
-    extra = [] if args.no_base_dir else [f"-DENGINE_CCACHE_BASE_DIR={scratch}"]
+    extra = [] if args.no_base_dir else [base_dir_argument(scratch)]
     return extra + list(args.cmake_arg)
 
 

@@ -1,0 +1,111 @@
+#pragma once
+
+#include <BECore/Control/ControlTypes.h>
+#include <BECore/Control/Json.h>
+#include <BECore/PoolString/PoolString.h>
+#include <BECore/Types/Types.h>
+#include <Widgets/ArtGen/ArtGenSound.h>
+#include <cstdint>
+#include <expected>
+#include <filesystem>
+
+namespace BECore {
+
+    class SceneNode;
+    struct ArtGenVariant;
+
+    /// Where accepted images go under the game's assets: `assets/<kArtGenAssetsFolder>/<sprite>.png`
+    inline constexpr StringView kArtGenAssetsFolder = "artgen";
+    inline constexpr size_t kMaxSpriteNameLength = 64;
+
+    /// A sprite name the panel accepts: 1 to kMaxSpriteNameLength of `A-Z a-z 0-9 _ -` (also the file name, so no path can be smuggled in)
+    [[nodiscard]] bool IsValidSpriteName(StringView name);
+
+    /// The pixel size from the IHDR chunk of a PNG file, or empty when the file is not a PNG
+    [[nodiscard]] Optional<Pair<uint32_t, uint32_t>> ReadPngSize(const std::filesystem::path& file);
+
+    /// What CopyVariantIntoAssets wrote
+    struct ArtGenCopied {
+        String texturePath;  // the virtual path a TextureLibrary entry names: "assets/artgen/<sprite>.png"
+        std::filesystem::path pngFile;
+        std::filesystem::path provenanceFile;
+        uint32_t width = 0;
+        uint32_t height = 0;
+    };
+
+    /**
+     * @brief Copies a generated PNG and its provenance file into @p assetsDir (the game's top `assets` layer) as `artgen/<sprite>.png` and
+     * `artgen/<sprite>.artgen.json`, replacing an earlier accept of the same name. No services: the caller names the folder.
+     */
+    std::expected<ArtGenCopied, String> CopyVariantIntoAssets(const std::filesystem::path& png, const std::filesystem::path& provenance, const std::filesystem::path& assetsDir, StringView sprite);
+
+    /// Calls ReloadTexture on every SpriteRendererComponent under @p root that names @p sprite or @p texturePath; returns how many
+    uint32_t ReloadSpritesUsing(SceneNode& root, PoolString sprite, PoolString texturePath);
+
+    /// What AcceptVariant did
+    struct ArtGenAccepted {
+        ArtGenCopied copied;
+        uint32_t reloadedSprites = 0;
+    };
+
+    /**
+     * @brief Accept of the Generate panel and of `artgen_accept`: the variant becomes the game's sprite @p sprite.
+     *
+     * Copies it into the game's assets (CopyVariantIntoAssets), adds or replaces the TextureLibrary entry (the whole image) and saves the library,
+     * drops the old texture of that path from the resource cache and reloads every sprite of the active scene that uses it, so the new picture shows
+     * at once. Fails without changing the library when the game has no assets folder or no TextureLibrary.xml.
+     */
+    std::expected<ArtGenAccepted, String> AcceptVariant(const ArtGenVariant& variant, StringView sprite);
+
+    /// Puts the sprite on @p node's SpriteRendererComponent and reloads it; fails when the node has none
+    std::expected<void, String> UseSpriteOn(SceneNode& node, PoolString sprite);
+
+    /// Where an accepted sound goes: `assets/artgen/<name>.wav` (a sprite name's rules), or over the game's clip at `clip`, a fixed path its
+    /// code plays (`assets/sounds/move.wav`); exactly one of them
+    struct ArtGenSoundTarget {
+        String name;
+        String clip;
+    };
+
+    /// A clip path Accept may write: `assets/<folders>/<file>.wav`, each part of `A-Z a-z 0-9 _ - .` and none `..`, so nothing leaves the
+    /// game's assets
+    [[nodiscard]] bool IsValidClipPath(StringView clip);
+
+    /// What WriteSoundIntoAssets wrote
+    struct ArtGenSoundWritten {
+        String clipPath;  // the virtual path a game plays: "assets/..."
+        std::filesystem::path wavFile;
+        std::filesystem::path provenanceFile;
+        AudioFormat format;
+        double seconds = 0.0;
+        float peakDb = 0.0f;
+    };
+
+    /**
+     * @brief Decodes the generated sound @p sourceFile, processes it (ProcessArtGenSound with @p settings) and writes it as a 16-bit WAV into
+     * @p assetsDir (the game's top `assets` layer) at @p target, with `<file>.artgen.json`: the generation's provenance plus `accepted`
+     * (the settings, the source file, the result). No services: the caller names the folder.
+     */
+    std::expected<ArtGenSoundWritten, String> WriteSoundIntoAssets(const std::filesystem::path& sourceFile, const std::filesystem::path& provenance, const std::filesystem::path& assetsDir,
+                                                                   const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings);
+
+    /// Calls ReloadClip on every AudioSourceComponent under @p root whose clip is @p clip; returns how many
+    uint32_t ReloadAudioSourcesUsing(SceneNode& root, PoolString clip);
+
+    /**
+     * @brief The editor's ArtGenSession::SoundAcceptor: WriteSoundIntoAssets into the game's assets, the old clip of that path evicted from
+     * the resource cache and every AudioSourceComponent of the active scene that names it reloaded; with @p node, the clip put on its
+     * AudioSourceComponent (the scene editor is told the scene changed).
+     *
+     * Answers `{clip, wav, sampleRate, channels, seconds, peakDb, reloadedSources, usedOn}`; a failure is `artgen_accept_failed`.
+     */
+    std::expected<Json, ControlError> AcceptSoundForControl(const ArtGenVariant& variant, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, SceneNode* node);
+
+    /**
+     * @brief The editor's ArtGenSession::Acceptor: AcceptVariant, then UseSpriteOn @p node when one is given (the scene editor is told the scene changed).
+     *
+     * Answers `{sprite, texturePath, png, width, height, reloadedSprites, usedOn}`; a failure is `artgen_accept_failed` with the reason.
+     */
+    std::expected<Json, ControlError> AcceptForControl(const ArtGenVariant& variant, StringView sprite, SceneNode* node);
+
+}  // namespace BECore

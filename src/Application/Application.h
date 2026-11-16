@@ -56,6 +56,8 @@ namespace BECore {
 #if BE_WITH_REMOTE_CONTROL
         /// Starts the WebSocket server of the control API on @p port. False, with the reason in the log, when it cannot listen
         bool StartControlServer(uint16_t port);
+        /// StartControlServerRequestEvent: the default port, else a free one; the reason of a failure goes to the log
+        void OnStartControlServerRequest();
 #endif
 
         bool _isRunning = false;

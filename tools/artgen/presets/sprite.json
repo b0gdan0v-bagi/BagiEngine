@@ -1,0 +1,9 @@
+{
+  "preset": 1,
+  "title": "Sprite on a transparent background",
+  "workflow": "sdxl_cutout",
+  "prompt": "{subject}, a single game sprite, one object, centered, full view, clean silhouette, soft studio light, plain light grey background",
+  "negative": "blurry, low quality, watermark, text, frame, border, several objects, cropped",
+  "size": [1024, 1024],
+  "params": {"steps": 25, "cfg": 7.0}
+}

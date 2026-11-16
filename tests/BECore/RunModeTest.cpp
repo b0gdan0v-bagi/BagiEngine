@@ -32,6 +32,28 @@ namespace BECore::Tests {
 
     }  // namespace
 
+    TEST(RunModeTest, RequestedIsTheFilesModeWithoutAFlag) {
+        const Vector<String> args{"--control", "--editorial", "--game=1"};
+        EXPECT_EQ(RequestedRunMode(RunMode::Game, args), RunMode::Game);
+        EXPECT_EQ(RequestedRunMode(RunMode::Editor, {}), RunMode::Editor);
+    }
+
+    TEST(RunModeTest, AFlagOverridesTheFile) {
+        const Vector<String> editor{"--control", "--editor"};
+        EXPECT_EQ(RequestedRunMode(RunMode::Game, editor), RunMode::Editor);
+        const Vector<String> game{"--game"};
+        EXPECT_EQ(RequestedRunMode(RunMode::Editor, game), RunMode::Game);
+        const Vector<String> twice{"--editor", "--editor"};
+        EXPECT_EQ(RequestedRunMode(RunMode::Game, twice), RunMode::Editor);
+    }
+
+    TEST(RunModeTest, BothFlagsAreAnError) {
+        const Vector<String> args{"--game", "--editor"};
+        const auto mode = RequestedRunMode(RunMode::Game, args);
+        ASSERT_FALSE(mode.has_value());
+        EXPECT_NE(mode.error().find("pick one"), String::npos);
+    }
+
     TEST(RunModeTest, ResolveKeepsGame) {
         EXPECT_EQ(ResolveRunMode(RunMode::Game), RunMode::Game);
     }

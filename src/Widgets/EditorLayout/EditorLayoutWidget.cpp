@@ -240,6 +240,7 @@ namespace BECore {
             CommandMenuItem(kViewSpriteLibrary, "Sprite Library");
             CommandMenuItem(kViewGame, "Game Panel");
             CommandMenuItem(kViewConsole, "Console");
+            CommandMenuItem(kViewGenerate, "Generate Art");
             CommandMenuItem(kViewProfiler, "Profiler");
             ImGui::Separator();
             DrawLayoutsMenu();

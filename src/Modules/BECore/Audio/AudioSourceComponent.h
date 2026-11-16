@@ -43,6 +43,11 @@ namespace BECore {
 
         [[nodiscard]] bool IsPlaying() const;
 
+        /// Loads `_clip` again: after its file changed under the same path, once the old clip was evicted from the resource cache
+        void ReloadClip() {
+            LoadClip();
+        }
+
         /// The clip that plays: null before the component is attached; a failed clip when `_clip` names nothing playable
         [[nodiscard]] const AudioClip* GetLoadedClip() const {
             return _loaded.Get();

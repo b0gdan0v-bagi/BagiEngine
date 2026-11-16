@@ -24,8 +24,9 @@ Library `BagiFuzzTargets`: one plain function per kind of untrusted input, `void
 | `UiTables` | `ui_tables` | `UIStrings::LoadFromXml`, `UIThemes::LoadFromXml` (`BECore/UI`) |
 | `UiGeometry` | `ui_geometry` | the numbers of a content file in `UIBoxMesh`, `UINineSlice`, `UILayout`, `UICanvasScaler`, `UICanvasLayout` (`BECore/UI`) |
 | `AudioWav` | `audio_wav` | `DecodeWav`, the engine's own RIFF WAVE reader (`BECore/Audio`) |
+| `AudioFlac` | `audio_flac` | `DecodeFlac`, its stream, `EncodeWav` |
 
-Not covered: the sockets and threads of the transports (`WebSocketListener`, `RoomWebSocketServer`: `tools/rooms/hostile.py` over real sockets), `LoadFromFile` of both readers (a path is not a byte input), assets (vendored decoders; WAVE is the engine's own, `AudioWav`), the editor's user files (`UserFileIo.h`), the rest of the control methods (`ui_*`, `screenshot`, the profiler: they need a scene, a renderer or a profiler), and the pool of interned strings, which never frees (a long libFuzzer run grows memory by design). Cost weights (the last field of a row) are set by the time of one input: 1 for a plain parser, 2 to 8 for the tables and the geometry, 10 to 15 for the targets that touch the disk or run a hub or the web compiler; a new target keeps its share of `BAGI_FUZZ_ITERATIONS` near 2 s in Debug.
+Not covered: the sockets and threads of the transports (`WebSocketListener`, `RoomWebSocketServer`: `tools/rooms/hostile.py` over real sockets), `LoadFromFile` of both readers (a path is not a byte input), image and Ogg assets (vendored decoders), the editor's user files (`UserFileIo.h`), the other control methods (`ui_*`, `screenshot`, the profiler: they need a scene, renderer or profiler), and the pool of interned strings, which never frees (a long libFuzzer run grows memory). Cost weights (the last field of a row) follow the time of one input: 1 for a plain parser, 2 to 8 for tables and geometry, 10 to 15 for a target on the disk, a hub or the web compiler; a new target keeps its share of `BAGI_FUZZ_ITERATIONS` near 2 s in Debug.
 
 ## A target
 

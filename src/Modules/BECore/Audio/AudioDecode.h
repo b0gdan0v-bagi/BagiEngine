@@ -2,6 +2,7 @@
 
 #include <BECore/Audio/AudioTypes.h>
 #include <BECore/Types/Types.h>
+#include <BECore/Utils/EnumUtils.h>
 #include <cstdint>
 #include <expected>
 
@@ -31,8 +32,29 @@ namespace BECore {
     /// Decodes an Ogg Vorbis file with the vendored stb_vorbis, which trusts its input: only for the assets of the engine and the games
     [[nodiscard]] AudioDecodeResult DecodeOgg(Span<const uint8_t> bytes);
 
-    /// DecodeWav() or DecodeOgg() by the magic of the first bytes (`RIFF....WAVE`, `OggS`)
+    /// The longest sound DecodeFlac() makes by default: ten minutes at 48 kHz. A FLAC frame of a few bytes can stand for 65535 samples, so a
+    /// whole decode is bounded by this and not by the size of the file; longer music is streamed (OpenAudioStream())
+    inline constexpr size_t kMaxFlacClipFrames = size_t{48000} * 60 * 10;
+
+    /// Decodes a native FLAC file (what ComfyUI saves) with the vendored dr_flac; refuses one longer than @p maxFrames. Fuzzed (`AudioFlac`),
+    /// so it may also read generated files
+    [[nodiscard]] AudioDecodeResult DecodeFlac(Span<const uint8_t> bytes, size_t maxFrames = kMaxFlacClipFrames);
+
+    /// DecodeWav(), DecodeOgg() or DecodeFlac() by the magic of the first bytes (`RIFF....WAVE`, `OggS`, `fLaC`)
     [[nodiscard]] AudioDecodeResult DecodeAudio(Span<const uint8_t> bytes);
+
+    /// The sample format EncodeWav() writes: 16-bit PCM (the size of an asset) or 32-bit IEEE float (no loss, for a sound still to be edited)
+    CORE_ENUM(WavSampleFormat, uint8_t, Pcm16, Float32)
+
+    using AudioEncodeResult = std::expected<Vector<uint8_t>, String>;
+
+    /**
+     * @brief Writes @p samples (interleaved, in @p format) as a RIFF WAVE file that DecodeWav() reads back: the inverse of it.
+     *
+     * Samples are clamped to -1..1 for PCM and a sample that is not finite is written as 0. Refused: a format outside the limits of a clip, no
+     * samples, a count that is not whole frames, a file over 4 GiB. Pure.
+     */
+    [[nodiscard]] AudioEncodeResult EncodeWav(Span<const float> samples, AudioFormat format, WavSampleFormat sampleFormat);
 
     /// Samples read a part at a time, as music plays: the source of a stream voice. Main thread only (it keeps decoder state)
     class IAudioSampleSource {
@@ -52,7 +74,7 @@ namespace BECore {
     using AudioSampleSourceResult = std::expected<UniquePtr<IAudioSampleSource>, String>;
 
     /**
-     * @brief A source over the bytes of a file, which it keeps: Ogg Vorbis is decoded while it is read (a few kilobytes of decoder state,
+     * @brief A source over the bytes of a file, which it keeps: Ogg Vorbis and FLAC are decoded while they are read (the decoder's state,
      * not the whole track), a WAVE file is decoded whole by DecodeWav() at once.
      *
      * The same limits as a clip (channels, rate); the Ogg side trusts its input as DecodeOgg() does.

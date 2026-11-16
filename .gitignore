@@ -54,3 +54,6 @@ todo-export/
 
 # Node packages
 node_modules/
+
+# Art generation: the local ComfyUI address (tools/artgen/CLAUDE.md)
+tools/artgen/local.json

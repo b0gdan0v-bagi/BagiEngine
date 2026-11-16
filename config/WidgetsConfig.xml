@@ -33,5 +33,7 @@
       type="ConsoleWidget" />
     <widget
       type="GamePanelWidget" />
+    <widget
+      type="ArtGenWidget" />
   </widgets>
 </root>

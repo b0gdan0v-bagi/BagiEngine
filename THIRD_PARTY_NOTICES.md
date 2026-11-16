@@ -24,6 +24,7 @@ file. A new library adds its row here in the same commit.
 | `src/Modules/RmlUi` | RmlUi (core only) | 6.3 | MIT | `src/Modules/RmlUi/LICENSE.txt` | ships if `ENGINE_UI_RMLUI` |
 | `src/Modules/stb` | stb_truetype (Sean Barrett) | 1.26 | public domain or MIT, the user's choice | `src/Modules/stb/stb_truetype.h` (end of file) | ships |
 | `src/Modules/stb/stb_vorbis.c` | stb_vorbis (Sean Barrett) | 1.24 | public domain or MIT, the user's choice | `src/Modules/stb/stb_vorbis.c` (end of file) | ships |
+| `src/Modules/dr_libs` | dr_flac (David Reid) | 0.13.4 | public domain or MIT No Attribution, the user's choice | `src/Modules/dr_libs/dr_flac.h` (end of file) | ships |
 | `src/Modules/tracy` | Tracy Profiler client (Bartosz Taudul) | 0.15.0 | BSD 3-Clause; its `libbacktrace` BSD 3-Clause | `src/Modules/tracy/LICENSE` | ships if `ENGINE_PROFILER_TRACY` (profile builds only) |
 | `src/Widgets/Icons/IconsLucide.h` | IconFontCppHeaders (Juliette Foucaut, Doug Binks) | commit 780f044 | zlib | `src/Widgets/Icons/IconsLucide.h` (its header) | ships with the editor |
 | `external/SDL` | SDL 3 (Sam Lantinga and contributors) | release-3.2.0 | zlib (its `src/hidapi` is used under its BSD option) | `external/SDL/LICENSE.txt` | ships |
@@ -48,6 +49,14 @@ file. A new library adds its row here in the same commit.
 
 The OFL lets a font be bundled and shipped with any software, not sold on its own; a font changed under a Reserved Font Name must be
 renamed.
+
+## Generated content
+
+The art generation tools (`tools/artgen/`) ship nothing: ComfyUI and its models stay on the generator's machine, pinned with their licences
+in `tools/artgen/comfyui/manifest.json`. What they make can go into a game, under the licence of the model that made it: the image
+models allow commercial use of their output; **Stable Audio Open 1.0** (the sound effects) is under the Stability AI Community License,
+which allows commercial use only while the business makes under USD 1M a year (above it, Stability's Enterprise licence). The provenance
+file next to every generated asset names its model.
 
 ## Open points for the owner
 

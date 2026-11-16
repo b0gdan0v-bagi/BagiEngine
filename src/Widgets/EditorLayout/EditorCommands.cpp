@@ -46,6 +46,7 @@ namespace BECore {
                 {kViewConfigEditor, "Config Editor", std::nullopt, true},
                 {kViewSpriteLibrary, "Sprite Library", std::nullopt, true},
                 {kViewViewport, "Viewport", std::nullopt, true},
+                {kViewGenerate, "Generate Art", std::nullopt, true},
             };
             return table;
         }

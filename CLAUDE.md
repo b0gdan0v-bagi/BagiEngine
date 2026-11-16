@@ -16,7 +16,7 @@ ctest --preset macos-debug                 # every test in its own process, 8 at
 - **Output goes to the build folder of the preset**: executables in `build/<preset>/bin`, static libraries in `build/<preset>/lib`, so Debug and Release sit side by side.
 - Tests: `BagiEngineTests` (`tests/`), `StressTests` (`tools/stress/tests/`), `BagiStressControlSmoke` and `BagiStressScenario.*` (recorded sessions, `tools/stress/tests/scenarios/`; skipped with 77 without `BagiStress`). A game's own tests live in its repository. **They run 8 at a time**, so every test must be safe beside others: temp names from `tests/Common/TempPath.h`, port 0, polls with a time limit, never read `engine.log`. Rules: `.claude/rules/tests-module.md`. Runtime `ITest`s run at game start-up (`config/TestsConfig.xml`).
 - Untrusted input (readers of saves and content, WebSocket transport, room protocol and hub, control API) has fuzz targets: `FuzzCorpusTest` replays and mutates their corpus in every `ctest`; libFuzzer with ASan + UBSan runs long in `macos-fuzz` (`tests/Fuzz/CLAUDE.md`).
-- Python tools have pytest suites outside ctest: `.venv/bin/python -m pytest tools/<t>/tests` for `control`, `perf`, `shots`, `qa`, `sync`, `migrate`, `changelog`, `codemod`, `dev`, `schema`, and `CI/meta_generator/tests`, `CI/scripts/tests`.
+- Python tools have pytest suites outside ctest: `.venv/bin/python -m pytest tools/<t>/tests` for `control`, `perf`, `shots`, `qa`, `sync`, `migrate`, `changelog`, `codemod`, `dev`, `schema`, `artgen`, and `CI/meta_generator/tests`, `CI/scripts/tests`.
 - **Licence:** the engine is Beerware (`LICENSE`); every vendored library, external folder and font has a row in `THIRD_PARTY_NOTICES.md`, held to the tree by ctest `BagiThirdPartyNotices`: a new one adds its row in the same commit.
 
 ## Architecture
@@ -28,17 +28,17 @@ ctest --preset macos-debug                 # every test in its own process, 8 at
 BECore → Events → TaskSystem → RemoteControl → SDL / Vulkan → Games → Rooms → RoomClient → RoomServer → Runtime (src/Application, src/Widgets) → game (own repository) → executable
 ```
 
-**Stack:** CMake 3.31+ / Ninja, SDL3 + SDL_image, ImGui, EnTT, EASTL, pugixml, nlohmann/json (control API only), stb_truetype, fmt, GoogleTest.
+**Stack:** CMake 3.31+ / Ninja, SDL3 + SDL_image, ImGui, EnTT, EASTL, pugixml, nlohmann/json (control API only), stb, dr_flac, fmt, GoogleTest.
 
 ```
 cmake/            engine setup, be_* functions, build options (cmake/CLAUDE.md)
 src/Application/  the application loop (RuntimeModule)
 src/Widgets/      editor panels and frame widgets — no game UI (.claude/rules/widgets-module.md)
 src/Modules/      BECore, Events, TaskSystem, RemoteControl, SDL, Vulkan, Games, Rooms (online rooms by code, pure code), RoomClient (over a native or a browser transport; built everywhere), RoomServer (WebSocket room server, only with ENGINE_WITH_REMOTE_CONTROL; BagiRoomServer, `tools/rooms/Dockerfile`), RmlUiHost (only with ENGINE_UI_RMLUI)
-                  vendored, never edited, left out of broad searches: EABase, EnTT, fmt, imgui, nlohmann, pugixml, RmlUi, stb, tracy
+                  vendored, never edited, left out of broad searches: EABase, EnTT, fmt, imgui, nlohmann, pugixml, RmlUi, stb, dr_libs, tracy
 config/, assets/  engine content; a game's files of the same name replace the engine's (FileSystem/CLAUDE.md)
 tests/            BagiEngineTests + Common (BagiEngineTestSupport)
-tools/            todo (the todo store), control (control API client, smoke test, MCP server), rooms (BagiRoomServer smoke test, BagiRoomClientProbe, `docker_check.py`), perf (benchmarks, trace summary), sync (helper of `sync-engine`), changelog (version, fragments), shots (before / after pictures of scenes), qa (`/qa`), stress (`BagiStress`, the 2D stress app: benchmarks and a control smoke), migrate (rewrites a game's content files to the engine's format), schema (XSDs from reflection), codemod (moves `eastl::` / `std::` names to the `BECore` aliases), web, dev (`dev.py`: a game's products from its `dev.json`), ccache (shared hits), vscode/todo-workers and vscode/bagi-dev (the panels)
+tools/            todo (the todo store), control (control API client, smoke test, MCP server), rooms (BagiRoomServer smoke test, BagiRoomClientProbe, `docker_check.py`), perf (benchmarks, trace summary), sync (helper of `sync-engine`), changelog (version, fragments), shots (before / after pictures of scenes), qa (`/qa`), stress (`BagiStress`, the 2D stress app: benchmarks and a control smoke), migrate (rewrites a game's content files to the engine's format), schema (XSDs from reflection), codemod (moves `eastl::` / `std::` names to the `BECore` aliases), web, dev (`dev.py`: a game's products from its `dev.json`), ccache (shared hits), artgen (AI art: ComfyUI, presets to images), vscode/todo-workers and vscode/bagi-dev (the panels)
 ```
 
 **BECore subsystems** (each has a `CLAUDE.md`): `GameManager/CoreManager` (the service locator), `Scene/`, `UI/` (canvases, scaler, layout, validator), `Text/`, `Animation/` (tweens, timelines), `Particles/` (2D particle effects), `Control/` (the control API core; transport in `RemoteControl`), `Save/`, `Config/`, `FileSystem/`, `Resource/`, `Renderer/` (`IRenderer`, SDL or Vulkan backend by `renderer` in `ApplicationConfig.xml`), `Audio/`, `Reflection/`, `Logger/`, `Profiler/` (the `BE_PROFILE_*` macros; `ENGINE_PROFILER`, preset `macos-profile`).
@@ -77,5 +77,5 @@ tools/            todo (the todo store), control (control API client, smoke test
 
 - **Docs budget:** this file loads into every session and every agent: keep it under 12k characters; a nested `CLAUDE.md` loads whenever a file of its folder is read: keep it under 20k. Put a fact in the nested file of the folder it is about. Write contracts and reasons; do not restate what a test checks, a constant's value, measurements or decision history (those belong to the entry's plan in the todo store). `python3 CI/scripts/check_doc_budget.py --root .` checks it.
 - `.claude/rules/` holds path-scoped guidance (CMake, reflection, rendering, widgets, tests, UI, control API, ...); `build-project.md`, `todo-project.md`, `perf-project.md` and `qa-project.md` are read by the skills by path.
-- `.claude/skills/` (`build`, `clang-format`, `strip-pch-includes`, `tidy-fix`, `context-sanitizer`, `todo-*`, `sync-engine` (the owner's command only; never pushes), `perf` and `perf-investigate` (`tools/perf/CLAUDE.md`), `qa`, `cpp-senior-programmer`) and `.claude/agents/` (the four `todo-loop` agents) are one text shared with games by symlink; the per-repository part is in the four rules files above.
+- `.claude/skills/` (`build`, `clang-format`, `strip-pch-includes`, `tidy-fix`, `context-sanitizer`, `todo-*`, `sync-engine` (the owner's command only; never pushes), `perf` and `perf-investigate` (`tools/perf/CLAUDE.md`), `qa`, `artgen`, `cpp-senior-programmer`) and `.claude/agents/` (the four `todo-loop` agents) are one text shared with games by symlink; the per-repository part is in the four rules files above.
 - The todo list is the **todo store** (the BagiTodo service); `tools/todo/` is only its CLI loader (`tools/todo/CLAUDE.md`). Nothing of it is in git.

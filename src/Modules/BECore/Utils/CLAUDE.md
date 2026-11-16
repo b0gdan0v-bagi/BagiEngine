@@ -19,6 +19,10 @@
 - **`ScopeGuard` runs its callable in the destructor** and cannot be copied or dismissed; `ScopeGuard guard([&] { ... });` deduces the type.
 - `tests/BECore/CallablesBenchTest.cpp` times the types against `eastl::function`; `BE_CALLABLES_BENCH=<iterations>` prints the numbers. It asserts nothing on time and is not a member of the perf set (`tools/perf/CLAUDE.md`).
 
+## EASTL operators
+
+`EASTLOperators.cpp` defines the `operator new` overloads with EASTL's debug parameters (name, flags, file, line) and forwards to the plain and the aligned global operators. EASTL allocates an over-aligned array with the aligned `new[]` but frees it with the plain `delete[]`, so the pair must be safe: on Windows the replacement of the global operators (`Profiler/Alloc/GlobalOperatorNew.cpp`, in every build but the ASan one) frees every block through `_aligned_free`, where the MSVC runtime's `delete` is `free` and corrupts the Debug CRT's heap; on macOS and Linux an aligned block is `posix_memalign` memory, which `free()` takes. `tests/BECore/EastlAlignedAllocTest.cpp` holds it.
+
 ## The engine version
 
 `EngineVersion.h` holds `MAJOR.MINOR.PATCH` of the engine (`0.MINOR.PATCH` while it is young: a breaking change raises MINOR, anything else PATCH).

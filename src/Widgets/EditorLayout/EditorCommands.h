@@ -66,6 +66,8 @@ namespace BECore {
         inline constexpr auto kViewConsole = "view.console"_intern;
         /// Shows and hides the Game panel (the active game's state, actions, fields and methods). GamePanelWidget owns the action
         inline constexpr auto kViewGame = "view.game"_intern;
+        /// Shows and hides the Generate panel (art generation). ArtGenWidget owns the action
+        inline constexpr auto kViewGenerate = "view.generate"_intern;
         /// Show and hide the always-present panels; each panel owns its command. No default chord
         inline constexpr auto kViewSceneEditor = "view.sceneEditor"_intern;
         inline constexpr auto kViewConfigEditor = "view.configEditor"_intern;

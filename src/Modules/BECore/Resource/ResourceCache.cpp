@@ -21,6 +21,16 @@ namespace BECore {
         return _cache.Find(path) != _cache.end();
     }
 
+    bool ResourceCache::Remove(PoolString path) {
+        UniqueLock lock(_mutex);
+        auto it = _cache.find(path);
+        if (it == _cache.end()) {
+            return false;
+        }
+        _cache.erase(it);
+        return true;
+    }
+
     void ResourceCache::Clear() {
         UniqueLock lock(_mutex);
         _cache.clear();

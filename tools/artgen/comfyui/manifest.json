@@ -1,0 +1,107 @@
+{
+  "manifest": 2,
+  "comfyui": {
+    "version": "0.45.0",
+    "repo": "https://github.com/Comfy-Org/ComfyUI.git",
+    "commit": "989d93d0d968e704c589ce0146bb18c77f6b50cc",
+    "licence": "GPL-3.0 (ComfyUI itself: a separate program reached over HTTP, never linked or shipped)",
+    "platforms": {
+      "windows-nvidia": {
+        "kind": "portable",
+        "asset": "ComfyUI_windows_portable_nvidia.7z",
+        "url": "https://github.com/Comfy-Org/ComfyUI/releases/download/v0.45.0/ComfyUI_windows_portable_nvidia.7z",
+        "size": 2071479423,
+        "sha256": "60c12e8c7af778047ad0413722dd3dc0f6ca773a41cbf5cb229ee9bc92c44a6f",
+        "note": "Python 3.13, PyTorch CUDA 13.0: NVIDIA 20 series and newer, a current driver"
+      },
+      "windows-nvidia-arm64": {
+        "kind": "portable",
+        "asset": "ComfyUI_windows_portable_nvidia_arm64.7z",
+        "url": "https://github.com/Comfy-Org/ComfyUI/releases/download/v0.45.0/ComfyUI_windows_portable_nvidia_arm64.7z",
+        "size": 1913294288,
+        "sha256": "f6d763bf5bc031aad25bd97ae99cb2a68fa0a6c383ebd7de2e3930b783277087",
+        "note": "Windows on ARM with an NVIDIA GPU"
+      },
+      "windows-amd": {
+        "kind": "portable",
+        "asset": "ComfyUI_windows_portable_amd.7z",
+        "url": "https://github.com/Comfy-Org/ComfyUI/releases/download/v0.45.0/ComfyUI_windows_portable_amd.7z",
+        "size": 1688825308,
+        "sha256": "636f41a1975ad40cf226868ae06a62f7f5bb157532cc10cf3475ff54547e063e",
+        "note": "PyTorch ROCm: a current AMD driver"
+      },
+      "windows-intel": {
+        "kind": "portable",
+        "asset": "ComfyUI_windows_portable_intel.7z",
+        "url": "https://github.com/Comfy-Org/ComfyUI/releases/download/v0.45.0/ComfyUI_windows_portable_intel.7z",
+        "size": 1503750967,
+        "sha256": "89e4e879248ec5165c6fbe69713b23d8d99b3cbb8bf21630a92d494d98cd8db1",
+        "note": "PyTorch XPU: Intel Arc and newer integrated graphics"
+      },
+      "macos-arm64": {
+        "kind": "source",
+        "torch": [],
+        "note": "Apple Silicon: PyTorch from PyPI runs on Metal (MPS)"
+      },
+      "linux-nvidia": {
+        "kind": "source",
+        "torch": [
+          "--extra-index-url",
+          "https://download.pytorch.org/whl/cu130"
+        ],
+        "note": "PyTorch CUDA 13.0: a current NVIDIA driver"
+      }
+    }
+  },
+  "models": [
+    {
+      "name": "sd_xl_base_1.0.safetensors",
+      "folder": "checkpoints",
+      "url": "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/462165984030d82259a11f4367a4eed129e94a7b/sd_xl_base_1.0.safetensors",
+      "size": 6938078334,
+      "sha256": "31e35c80fc4829d14f90153f4c74cd59c90b779f6afe05a74cd6120b893f7e5b",
+      "licence": "CreativeML OpenRAIL++-M (use restrictions of its attachment A; the output may be used commercially)",
+      "source": "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0"
+    },
+    {
+      "name": "sdxl.vae.safetensors",
+      "folder": "vae",
+      "url": "https://huggingface.co/madebyollin/sdxl-vae-fp16-fix/resolve/207b116dae70ace3637169f1ddd2434b91b3a8cd/sdxl.vae.safetensors",
+      "size": 334641162,
+      "sha256": "235745af8d86bf4a4c1b5b4f529868b37019a10f7c0b2e79ad0abca3a22bc6e1",
+      "licence": "MIT",
+      "source": "https://huggingface.co/madebyollin/sdxl-vae-fp16-fix"
+    },
+    {
+      "name": "birefnet.safetensors",
+      "folder": "background_removal",
+      "url": "https://huggingface.co/Comfy-Org/BiRefNet/resolve/884af709e9b795d89dafbf97f29c8d6a2386f5c6/background_removal/birefnet.safetensors",
+      "size": 444473596,
+      "sha256": "9ab37426bf4de0567af6b5d21b16151357149139362e6e8992021b8ce356a154",
+      "licence": "MIT (BiRefNet, ZhengPeng7/BiRefNet; repackaged by Comfy-Org)",
+      "source": "https://huggingface.co/Comfy-Org/BiRefNet"
+    },
+    {
+      "name": "stable-audio-open-1.0.safetensors",
+      "folder": "checkpoints",
+      "kind": "audio",
+      "gated": true,
+      "url": "https://huggingface.co/stabilityai/stable-audio-open-1.0/resolve/f21265c1e2710b3bd2386596943f0007f55f802e/model.safetensors",
+      "size": 4853889016,
+      "sha256": "7b20458a071231aaf32613b6fbc7945f28f34dbba4f295bb49bad56f5f66b57e",
+      "licence": "Stability AI Community License (commercial use free under USD 1M of annual revenue; above it Stability's Enterprise licence; gated: accept it on Hugging Face and give the install a token)",
+      "source": "https://huggingface.co/stabilityai/stable-audio-open-1.0"
+    },
+    {
+      "name": "t5_base.safetensors",
+      "folder": "text_encoders",
+      "kind": "audio",
+      "url": "https://huggingface.co/google-t5/t5-base/resolve/a9723ea7f1b39c1eae772870f3b547bf6ef7e6c1/model.safetensors",
+      "size": 891646390,
+      "sha256": "a90903540cc02cbeb7ff9f823f1a80eb778c7e22426a0e620b01c77a5ec8f5b4",
+      "licence": "Apache 2.0",
+      "source": "https://huggingface.co/google-t5/t5-base"
+    }
+  ],
+  "customNodes": []
+}

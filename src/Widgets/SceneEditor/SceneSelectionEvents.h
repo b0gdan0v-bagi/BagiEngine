@@ -51,4 +51,16 @@ namespace BECore {
         SelectSceneNodeRequestEvent(const Scene* s, const SceneNode* n) : scene(s), node(n) {}
     };
 
+    /**
+     * @brief A panel other than the scene editor changed the scene (the Generate panel put a sprite on a node): the scene editor marks it unsaved
+     *
+     * SceneEditorWidget acts only when @c scene is the active scene. Emitted, not enqueued.
+     */
+    struct SceneEditedEvent : public EventBase<SceneEditedEvent> {
+        const Scene* scene = nullptr;
+
+        SceneEditedEvent() = default;
+        explicit SceneEditedEvent(const Scene* s) : scene(s) {}
+    };
+
 }  // namespace BECore
