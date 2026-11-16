@@ -88,7 +88,7 @@
       "gated": true,
       "url": "https://huggingface.co/stabilityai/stable-audio-open-1.0/resolve/f21265c1e2710b3bd2386596943f0007f55f802e/model.safetensors",
       "size": 4853889016,
-      "sha256": null,
+      "sha256": "7b20458a071231aaf32613b6fbc7945f28f34dbba4f295bb49bad56f5f66b57e",
       "licence": "Stability AI Community License (commercial use free under USD 1M of annual revenue; above it Stability's Enterprise licence; gated: accept it on Hugging Face and give the install a token)",
       "source": "https://huggingface.co/stabilityai/stable-audio-open-1.0"
     },
