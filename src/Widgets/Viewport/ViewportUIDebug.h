@@ -34,7 +34,7 @@ namespace BECore {
         /// Finds the canvases of @p scene (visible or not: a hidden canvas is listed for its switch and draws nothing). A scene that is not the one of the last call forgets the switches.
         void Collect(Scene* scene);
 
-        /// Lets the canvases go (the overlays are all off, or the scene is gone)
+        /// Lets the canvases go (the overlays are all off, or the scene is gone); the per-canvas switches stay, to be dropped by the next Collect() of another scene
         void Release();
 
         /// A checkbox per canvas of the last Collect(), named by its node: the four new overlays for that canvas. Nothing before the first Collect() after an overlay was switched on.
@@ -78,6 +78,9 @@ namespace BECore {
             bool findingsValid = false;
             Vector<FindingMark> findingMarks;
         };
+
+        // A canvas the overlays show: switched on, visible and laid out. A canvas that is not keeps its old marks but nothing draws, hovers or lists them.
+        [[nodiscard]] static bool IsShown(const CanvasState& state);
 
         // Where the pointer is: a canvas of _states and an index into its findings, or an element picked in a canvas
         struct HoverFinding {

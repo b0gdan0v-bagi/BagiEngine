@@ -140,6 +140,10 @@ namespace BECore {
         }
     }
 
+    bool ViewportUIDebug::IsShown(const CanvasState& state) {
+        return state.enabled && state.canvas->_visible && state.canvas->GetLayout().HasLayout();
+    }
+
     bool ViewportUIDebug::AnyOn(const PreviewOverlays& overlays) {
         return overlays.elementRects || overlays.anchors || overlays.designRect || overlays.findings;
     }
@@ -179,7 +183,6 @@ namespace BECore {
     void ViewportUIDebug::Release() {
         _states.clear();
         _collected.clear();
-        _scene = nullptr;
         _hoverElement.reset();
         _hoverFinding.reset();
     }
@@ -236,10 +239,10 @@ namespace BECore {
         // The last canvas of the scene is drawn on top
         for (size_t index = _states.size(); index-- > 0;) {
             const CanvasState& state = _states[index];
-            const UICanvasLayout& layout = state.canvas->GetLayout();
-            if (!state.enabled || !state.canvas->_visible || !layout.HasLayout()) {
+            if (!IsShown(state)) {
                 continue;
             }
+            const UICanvasLayout& layout = state.canvas->GetLayout();
             const auto [canvasX, canvasY] = layout.OutputToCanvas(target.x, target.y);
             if (const UIElement* element = layout.PickElement(canvasX, canvasY)) {
                 _hoverElement = HoverElement{index, element};
@@ -257,8 +260,7 @@ namespace BECore {
         const bool elements = overlays.elementRects || overlays.anchors;
 
         for (CanvasState& state : _states) {
-            const UICanvasLayout& layout = state.canvas->GetLayout();
-            if (!state.enabled || !state.canvas->_visible || !layout.HasLayout()) {
+            if (!IsShown(state)) {
                 continue;
             }
             if (elements) {
@@ -279,7 +281,7 @@ namespace BECore {
             float smallest = 0.0f;
             for (size_t canvas = _states.size(); canvas-- > 0;) {
                 const CanvasState& state = _states[canvas];
-                if (!state.enabled || !state.findingsValid) {
+                if (!IsShown(state) || !state.findingsValid) {
                     continue;
                 }
                 for (size_t index = 0; index < state.findingMarks.size(); ++index) {
@@ -294,8 +296,7 @@ namespace BECore {
         }
 
         for (const CanvasState& state : _states) {
-            const UICanvasLayout& layout = state.canvas->GetLayout();
-            if (!state.enabled || !state.canvas->_visible || !layout.HasLayout()) {
+            if (!IsShown(state)) {
                 continue;
             }
             if (elements) {
@@ -311,7 +312,7 @@ namespace BECore {
         if (overlays.findings) {
             for (size_t index = 0; index < _states.size(); ++index) {
                 const CanvasState& state = _states[index];
-                if (state.enabled && state.findingsValid) {
+                if (IsShown(state) && state.findingsValid) {
                     const Optional<HoverFinding>& highlighted = _hoverFinding ? _hoverFinding : listHover;
                     DrawFindings(drawList, frame, state, highlighted && highlighted->canvas == index ? static_cast<int64_t>(highlighted->index) : -1);
                 }
@@ -377,7 +378,7 @@ namespace BECore {
         bool any = false;
         for (size_t canvas = 0; canvas < _states.size(); ++canvas) {
             CanvasState& state = _states[canvas];
-            if (!state.enabled || !state.findingsValid) {
+            if (!IsShown(state) || !state.findingsValid) {
                 continue;
             }
             any = true;
