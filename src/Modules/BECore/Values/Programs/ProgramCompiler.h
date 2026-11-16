@@ -57,7 +57,19 @@ namespace BECore {
      */
     [[nodiscard]] String FormatProgramError(StringView text, const ProgramError& error);
 
-    /// `CompileExpression` for a field of the C++ type @p T: the result as a `Value<T>` (`Const`, `Slot` or `Program`); a type no program computes is the error that lists the ones that can be
+    /**
+     * @brief Compiles a formula text into the `Value<T>` a field of type @p T stores: the public entry point for code that holds a text and no document
+     *
+     * `CompileValue<bool>` is a condition, `CompileValue<int32_t>` (or any other `ValueType` a program computes) an argument. The declaration is always explicit: the paths of
+     * @p text name levels of @p declaration, and the level numbers and field offsets are part of the program's code, so the same text under two declarations is two programs. The result is
+     * the very `Value` the accessor of a document stores for `expr`: a `Const` when the text folds to a constant, a `Slot` when it is one field (`Kind()` says which), else a
+     * `Program` of the `ProgramPool` and its text; evaluate any of them with `Evaluate(context)`. @p options carries the tables of `ByLevel` and `fuse`; the entries of a table
+     * are copied, nothing is kept of the provider.
+     *
+     * It allocates (parse, check, lower) and may add one program to the pool: call it when content loads, never per frame. Thread-safe: the pool is, and nothing else is shared.
+     * A refused text adds nothing and gives a `ProgramError` whose column is a byte of @p text (`FormatProgramError` shows it); a type no program computes (`Rect`, a game's
+     * struct) is the error that lists the types that can be.
+     */
     template <ValueType T>
     [[nodiscard]] std::expected<Value<T>, ProgramError> CompileValue(StringView text, const ContextDecl& declaration, const CompileOptions& options = {}) {
         const auto compiled = CompileExpression(text, declaration, DescribeType<T>(), options);
