@@ -29,6 +29,15 @@ namespace BECore {
         return nullptr;
     }
 
+    const IValueTables* ValueLinkScope::Tables() {
+        for (const ValueLinkScope* scope = t_innermost; scope != nullptr; scope = scope->_previous) {
+            if (scope->_tables != nullptr) {
+                return scope->_tables;
+            }
+        }
+        return nullptr;
+    }
+
     std::expected<void, String> ValueLinkScope::Declare(const ContextDecl& declaration) {
         if (t_innermost == nullptr) {
             return std::unexpected(String("<context> is read where no link scope is open: load the document through MakeFromConfig or open a ValueLinkScope"));

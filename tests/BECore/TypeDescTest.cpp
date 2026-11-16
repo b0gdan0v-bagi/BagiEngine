@@ -18,6 +18,11 @@ namespace BECore::Tests {
         float value = 0.0f;
     };
 
+    /// Same names, different underlying types: the width is part of what an enum is
+    CORE_ENUM(DescNarrowElement, uint8_t, Fire, Water)
+    CORE_ENUM(DescWideElement, int32_t, Fire, Water)
+    CORE_ENUM(DescOtherNames, uint8_t, Fire, Ice)
+
 }  // namespace BECore::Tests
 
 namespace BECore::Ser {
@@ -68,6 +73,9 @@ namespace BECore::Tests {
     static_assert(DescribeType<RegMode>().names.size() == 3);
     static_assert(DescribeType<RegMode>().names[0] == "Off");
     static_assert(DescribeType<RegMode>().names[2] == "Auto");
+    static_assert(DescribeType<RegMode>().enumBytes == sizeof(RegMode));
+    static_assert(DescribeType<DescWideElement>().enumBytes == sizeof(int32_t));
+    static_assert(DescribeType<int32_t>().enumBytes == 0 && DescribeType<String>().enumBytes == 0 && DescribeType<RegInner>().enumBytes == 0);
 
     // Lists
     static_assert(DescribeType<Vector<int32_t>>().kind == TypeKind::List);
@@ -188,6 +196,16 @@ namespace BECore::Tests {
         EXPECT_FALSE((SameAs<Variant<int32_t, float>, Variant<float, int32_t>>()));
         EXPECT_FALSE((SameAs<RegInner, RegNode>()));
         EXPECT_TRUE((SameAs<IntrusivePtrNonAtomic<RegNode>, IntrusivePtrAtomic<RegNode>>()));
+    }
+
+    TEST(TypeDescTest, EnumIdentityIsItsNamesAndItsSize) {
+        EXPECT_TRUE((SameAs<DescNarrowElement, DescNarrowElement>()));
+        EXPECT_TRUE((SameAs<DescNarrowElement, const DescNarrowElement>()));
+        EXPECT_FALSE((SameAs<DescNarrowElement, DescWideElement>())) << "the same names over another underlying type";
+        EXPECT_FALSE((SameAs<DescNarrowElement, DescOtherNames>()));
+        EXPECT_FALSE((SameAs<Vector<DescNarrowElement>, Vector<DescWideElement>>()));
+        EXPECT_EQ(DescribeType<DescNarrowElement>().enumBytes, 1U);
+        EXPECT_EQ(DescribeType<DescWideElement>().enumBytes, 4U);
     }
 
     namespace {

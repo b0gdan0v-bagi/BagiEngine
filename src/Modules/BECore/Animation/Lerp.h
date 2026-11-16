@@ -26,11 +26,14 @@ namespace BECore {
     /**
      * @brief Per channel, rounded to the nearest integer (halves away from zero) and clamped to 0..255.
      *
-     * The clamp keeps an overshooting @p t (Back) from wrapping a byte around; the endpoints are exact.
+     * The clamp keeps an overshooting @p t (Back) from wrapping a byte around; the endpoints are exact. A NaN @p t gives 0 in every channel: the cast of a NaN to a byte is undefined.
      */
     [[nodiscard]] inline Color Lerp(const Color& from, const Color& to, float t) {
         const auto channel = [t](unsigned char a, unsigned char b) {
             const float value = std::round(std::lerp(static_cast<float>(a), static_cast<float>(b), t));
+            if (std::isnan(value)) {
+                return static_cast<unsigned char>(0);
+            }
             return static_cast<unsigned char>(std::clamp(value, 0.0f, kColorChannelMax));
         };
         return {channel(from.r, to.r), channel(from.g, to.g), channel(from.b, to.b), channel(from.a, to.a)};
