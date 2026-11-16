@@ -91,12 +91,16 @@ namespace BECore::Tests {
             return CoreManager::GetUIInput().DispatchMouseMotion(MakeMotion(x, y, buttonsHeld));
         }
 
-        bool Press(float x, float y, uint8_t button = SDL_BUTTON_LEFT) {
-            return CoreManager::GetUIInput().DispatchMouseButtonDown(MakeButton(x, y, true, button));
+        bool Press(float x, float y, uint8_t button = SDL_BUTTON_LEFT, uint32_t which = 0) {
+            SDL_MouseButtonEvent event = MakeButton(x, y, true, button);
+            event.which = which;
+            return CoreManager::GetUIInput().DispatchMouseButtonDown(event);
         }
 
-        bool Release(float x, float y) {
-            return CoreManager::GetUIInput().DispatchMouseButtonUp(MakeButton(x, y, false));
+        bool Release(float x, float y, uint8_t button = SDL_BUTTON_LEFT, uint32_t which = 0) {
+            SDL_MouseButtonEvent event = MakeButton(x, y, false, button);
+            event.which = which;
+            return CoreManager::GetUIInput().DispatchMouseButtonUp(event);
         }
 
     }  // namespace
@@ -388,6 +392,35 @@ namespace BECore::Tests {
 
         EXPECT_EQ(recorder.rawUps, 1);
         EXPECT_TRUE(recorder.actions.empty());
+    }
+
+    TEST_F(ClickableComponentTest, AReleaseOfAnotherButtonOfTheGameReachesTheGameWhileTheClickableHoldsItsOwnPress) {
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(ClickableNode("A", "ActA", 200.0f)));
+        Draw();
+        InputRecorder recorder;
+        ASSERT_FALSE(Press(kInside, kInside, SDL_BUTTON_RIGHT));
+        ASSERT_TRUE(Press(200.0f + kInside, kInside, SDL_BUTTON_LEFT));
+
+        EXPECT_FALSE(Release(200.0f + kInside, kInside, SDL_BUTTON_RIGHT));
+        EXPECT_EQ(recorder.rawUps, 1);
+
+        EXPECT_TRUE(Release(200.0f + kInside, kInside, SDL_BUTTON_LEFT));
+        EXPECT_EQ(recorder.rawUps, 1);
+    }
+
+    TEST_F(ClickableComponentTest, AReleaseOfAnotherPointerOfTheGameReachesTheGameWhileTheClickableHoldsItsOwnPress) {
+        constexpr uint32_t kFinger = 7;
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(ClickableNode("A", "ActA", 200.0f)));
+        Draw();
+        InputRecorder recorder;
+        ASSERT_FALSE(Press(kInside, kInside, SDL_BUTTON_LEFT, kFinger));
+        ASSERT_TRUE(Press(200.0f + kInside, kInside));
+
+        EXPECT_FALSE(Release(200.0f + kInside, kInside, SDL_BUTTON_LEFT, kFinger));
+        EXPECT_EQ(recorder.rawUps, 1);
+
+        EXPECT_TRUE(Release(200.0f + kInside, kInside));
+        EXPECT_EQ(recorder.rawUps, 1);
     }
 
 }  // namespace BECore::Tests

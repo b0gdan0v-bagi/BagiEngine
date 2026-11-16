@@ -6,6 +6,7 @@
 #include <BECore/Scene/Components/TransformComponent.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneNode.h>
+#include <EASTL/algorithm.h>
 #include <Events/InputEvents.h>
 #include <Generated/ClickableComponent.gen.hpp>
 
@@ -44,7 +45,7 @@ namespace BECore {
         }
         UIInput& input = CoreManager::GetUIInput();
         input.Unregister(*this);
-        _heldPresses = 0;  // Unregister dropped the captures
+        _heldPresses.clear();  // Unregister dropped the captures
         _inputOrder = order;
         input.Register(*this, _inputOrder);
     }
@@ -67,29 +68,40 @@ namespace BECore {
         return x >= transform->_x && x <= transform->_x + transform->_width && y >= transform->_y && y <= transform->_y + transform->_height;
     }
 
-    bool ClickableComponent::OnMouseButtonDown(const SDL_MouseButtonEvent& /*event*/) {
+    bool ClickableComponent::OnMouseButtonDown(const SDL_MouseButtonEvent& event) {
         const PoolString action = _actionName;  // a copy: a handler of the event may switch the scene and destroy this component
-        ++_heldPresses;
+        if (FindHeldPress(event.which, event.button) == _heldPresses.end() && !_heldPresses.full()) {
+            _heldPresses.push_back(HeldPress{event.which, event.button});
+        }
         InputEvents::ActionEvent::Emit(action);
         return true;
     }
 
-    bool ClickableComponent::OnMouseButtonUp(const SDL_MouseButtonEvent& /*event*/) {
-        // Asked without a held press, the release belongs to a press of the game: it is not ours to take
-        if (_heldPresses == 0) {
+    bool ClickableComponent::OnMouseButtonUp(const SDL_MouseButtonEvent& event) {
+        // Asked for a pair it does not hold, the release belongs to a press of the game (or of another pointer): it is not ours to take
+        const auto held = FindHeldPress(event.which, event.button);
+        if (held == _heldPresses.end()) {
             return false;
         }
-        --_heldPresses;
+        _heldPresses.erase(held);
         return true;
     }
 
     bool ClickableComponent::OnMouseMotion(const SDL_MouseMotionEvent& event) {
-        if (_heldPresses > 0) {
+        if (HoldsPressOf(event.which)) {
             return true;
         }
         // A button is held and this component did not take its press: a drag of the game, which passing over the rect does not interrupt
         const bool gameDrag = event.state != 0;
         return !gameDrag && ContainsPoint(event.x, event.y);
+    }
+
+    ClickableComponent::HeldPresses::iterator ClickableComponent::FindHeldPress(uint32_t which, uint8_t button) {
+        return eastl::find_if(_heldPresses.begin(), _heldPresses.end(), [&](const HeldPress& press) { return press.which == which && press.button == button; });
+    }
+
+    bool ClickableComponent::HoldsPressOf(uint32_t which) const {
+        return eastl::any_of(_heldPresses.begin(), _heldPresses.end(), [&](const HeldPress& press) { return press.which == which; });
     }
 
 }  // namespace BECore
