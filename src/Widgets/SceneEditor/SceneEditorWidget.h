@@ -42,7 +42,7 @@ namespace BECore {
          *
          * Edits the authored `style.rect` of the element, live, and sends UIRectEditEvent for each changed frame. Save writes the rect into the node file the node is an instance of when
          * nothing else in the scene uses that file (UINodeFileSession); otherwise, and for a node written in the scene file, the edit is saved in the scene file (an instance: as an `<elements>`
-         * override). A `.ui.xml` is never edited.
+         * override). A `.ui.xml` is never edited. A drag of the element in the viewport (UIRectDragEvent) is noted for Save the same way, at its Commit (OnUIRectDrag).
          * @return true when an element changed
          */
         bool RenderUIElements(UICanvasComponent& canvas);
