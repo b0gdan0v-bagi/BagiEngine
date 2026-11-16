@@ -7,6 +7,7 @@ The library behind the skill `/qa` (`.claude/skills/qa/SKILL.md`): a charter scr
 | `bagi_qa_checks.py` | `Finding`, `Violation` and the generic checks as pure functions over control answers (no process, no I/O); the loader of a game's invariants module |
 | `bagi_qa.py` | `QaSession`, the session a charter script drives; the command line (`replay`, `shrink`, `report`, `drafts`) |
 | `bagi_qa_repro.py` | replay of a recorded scenario with the checks, the cut of it (`scenario_shrink.shrink`), the written reproduction |
+| `bagi_monkey_moves.py` | the monkey's candidate moves and the weighted `pick`, pure functions over control answers |
 | `bagi_qa_report.py` | the report (`report.md`, `report.json`) and the bug drafts; never calls the todo store |
 | `tests/` | pytest (`.venv/bin/python -m pytest tools/qa/tests`); `qa_fake_game.py` is the game of the session tests (knobs by environment variable, listed in its docstring) |
 
@@ -31,6 +32,7 @@ A Python file whose path is in the game's `.claude/rules/qa-project.md`, loaded 
 
 - `check_state(answer, previous) -> list[Violation]`: `answer` is a full `get_state` result `{game, version, state}`, `previous` the last one or `None`.
 - `check_action(action, result, before, after) -> list[Violation]`: `result` is the answer of the action (`None` when refused), `before` / `after` the `get_state` answers around it.
+- `monkey_moves(answer, moves) -> list[Move]`: the monkey's candidates (`answer` a full `get_state` result, `moves` the generic ones) with what is too slow dropped and the game's own added; `Move(kind, method, params, label)` is importable from `bagi_qa_checks`. `run_monkey_moves` gives back `moves` unchanged for a module that raises or returns anything but a list of `Move`, with the `qa.module_error` finding.
 - `KNOWN_DEVIATIONS`: a set of names that are not bugs. `apply_known(findings, known)` splits them off; the report keeps them under "known".
 
 A `Violation` is `(name, message)` (a plain pair does too); `bagi_qa_checks.Violation` is importable from the module. A module that raises, or returns something else, is a finding of kind `invariant` named `qa.module_error` (the end of the traceback in `details`), not a crash of the session. A module that cannot be loaded at all (missing, a syntax error, a member of the wrong shape) is an `InvariantsError` before the session starts.
