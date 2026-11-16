@@ -8,6 +8,7 @@ Every event type has its own channel of listeners and its own queue (CRTP `Event
 - `Emit` calls the listeners from the **last subscribed to the first**, over the count at its start: a listener subscribed by a handler is called from the next `Emit`. A nested `Emit` is delivered at once.
 - (handler, instance) is a listener's identity: subscribing the pair again moves it to the end, and a connection disconnects by the pair, not by a token. A disconnect moves the **last** listener into the freed slot, so the order of the others changes.
 - `Update()` delivers what was queued when it started, in order; an event that a handler enqueues waits for the next `Update()`.
+- `EventsQueueRegistry::UpdateAll()` runs the updates registered when it started: a type a handler enqueues for the first time registers during the pass and is first updated by the next `UpdateAll()`.
 - The queue registry (`EventsQueueRegistry`) keeps plain function pointers, not a `MoveOnlyFunction`: that header includes the assert macros, which emit events, so `EventBase.h` could not include it. An update is `[]() { Derived::Update(); }` and needs no capture.
 - A disconnect inside a handler does not crash or skip the others (the entry is marked and the list compacted after the outermost dispatch); still avoid it, the order after it is not a contract.
 
