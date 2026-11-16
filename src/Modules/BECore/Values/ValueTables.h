@@ -18,9 +18,7 @@ namespace BECore {
         [[nodiscard]] virtual Optional<Span<const double>> Find(StringView name) const = 0;
 
         /// Adds the names of the tables to @p out, for the error of an unknown name (`did you mean`); a provider that cannot list them leaves it empty
-        virtual void Names(Vector<String>& out) const {
-            static_cast<void>(out);
-        }
+        virtual void Names(Vector<String>&) const {}
     };
 
     /// Tables kept in memory: for tests and for a game whose numbers are code. Fill it before the load: it is read-only while a document loads, so two threads may read one

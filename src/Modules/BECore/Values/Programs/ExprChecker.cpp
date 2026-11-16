@@ -881,6 +881,16 @@ namespace BECore {
                 return Emit(std::move(result));
             }
 
+            /// The index of `at` or `ByLevel`: an `int`, with a hint to convert a number of another type
+            TypedResult CheckTableIndex(ExprNodeId indexSource, const String& subject) {
+                const TypedResult index = Check(indexSource, ProgramType::Int32);
+                if (!index.has_value() || TypeOf(*index) == ProgramType::Int32) {
+                    return index;
+                }
+                const String convert = IsNumberType(TypeOf(*index).program) ? "; convert it with int(x)" : "";
+                return Refuse(_ast[indexSource].column, Format("{} needs an int as its index, but it is {}{}", subject, Typed(TypeOf(*index)), convert));
+            }
+
             /**
              * `at(i, e0, e1, ...)`: an `int` index and at least one entry, every entry of one type. That type is the hint (the operand beside the table, else the type the field
              * expects) or, with none, the one of the first typed entry; a literal entry takes it as a literal does anywhere. Whether an entry is a constant is the lowering's to say.
@@ -896,13 +906,9 @@ namespace BECore {
                     return Refuse(node.column, Format("{} has {} entries, but a table has at most {}", subject, entryCount, kMaxTableEntries));
                 }
                 const ExprNodeId indexSource = _ast.arguments[node.firstArgument];
-                const TypedResult index = Check(indexSource, ProgramType::Int32);
+                const TypedResult index = CheckTableIndex(indexSource, subject);
                 if (!index.has_value()) {
                     return index;
-                }
-                if (TypeOf(*index) != ProgramType::Int32) {
-                    const String convert = IsNumberType(TypeOf(*index).program) ? "; convert it with int(x)" : "";
-                    return Refuse(_ast[indexSource].column, Format("{} needs an int as its index, but it is {}{}", subject, Typed(TypeOf(*index)), convert));
                 }
                 Vector<ExprNodeId> sources;
                 for (size_t i = 0; i < entryCount; ++i) {
@@ -987,13 +993,9 @@ namespace BECore {
                 if (found->size() > kMaxTableEntries) {
                     return Refuse(_ast[nameSource].column, Format("the table '{}' has {} entries, but a table has at most {}", name, found->size(), kMaxTableEntries));
                 }
-                const TypedResult index = Check(indexSource, ProgramType::Int32);
+                const TypedResult index = CheckTableIndex(indexSource, subject);
                 if (!index.has_value()) {
                     return index;
-                }
-                if (TypeOf(*index) != ProgramType::Int32) {
-                    const String convert = IsNumberType(TypeOf(*index).program) ? "; convert it with int(x)" : "";
-                    return Refuse(_ast[indexSource].column, Format("{} needs an int as its index, but it is {}{}", subject, Typed(TypeOf(*index)), convert));
                 }
                 TypedNode table;
                 table.kind = TypedNodeKind::Operation;

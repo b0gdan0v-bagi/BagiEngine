@@ -28,6 +28,13 @@ namespace BECore {
             return run;
         }
 
+        /// Appends the entries of a table node as a run of constants and emits its `LoadTable` of the index in @p indexRegister into @p dst
+        void EmitTable(ProgramBuilder& builder, const TypedNode& node, const Vector<RegisterImage>& images, uint8_t dst, uint8_t indexRegister) {
+            const Vector<RegisterImage> run = EntryImages(node, images);
+            const uint32_t first = builder.AddConstantRun(Span<const RegisterImage>(run.data(), run.size()));
+            builder.EmitLoadTable(dst, indexRegister, first, static_cast<uint32_t>(run.size()));
+        }
+
         /// The register image of what an operation gives: the same kernels as `Run`, so a folded value is what the program would have computed; a table is folded by running its own
         /// instruction over its own run of constants
         std::expected<RegisterImage, ProgramError> Fold(const TypedNode& node, const Vector<RegisterImage>& images) {
@@ -42,9 +49,7 @@ namespace BECore {
                 builder.Emit(Opcode::LoadConst, *reg, 0, 0, 0, builder.AddConstant(images[node.operands[i]]));
             }
             if (node.opcode == Opcode::LoadTable) {
-                const Vector<RegisterImage> run = EntryImages(node, images);
-                const uint32_t first = builder.AddConstantRun(Span<const RegisterImage>(run.data(), run.size()));
-                builder.EmitLoadTable(regs[0], regs[0], first, static_cast<uint32_t>(run.size()));
+                EmitTable(builder, node, images, regs[0], regs[0]);
             } else {
                 builder.Emit(node.opcode, regs[0], regs[0], regs[1], regs[2], node.immediate);
             }
@@ -175,9 +180,7 @@ namespace BECore {
                     }
                 }
                 if (node.opcode == Opcode::LoadTable) {
-                    const Vector<RegisterImage> run = EntryImages(node, _images);
-                    const uint32_t first = _builder.AddConstantRun(Span<const RegisterImage>(run.data(), run.size()));
-                    _builder.EmitLoadTable(dst, regs[0], first, static_cast<uint32_t>(run.size()));
+                    EmitTable(_builder, node, _images, dst, regs[0]);
                 } else {
                     _builder.Emit(node.opcode, dst, regs[0], regs[1], regs[2], node.immediate);
                 }

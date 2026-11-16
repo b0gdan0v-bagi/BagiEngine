@@ -8,11 +8,7 @@
 #include <BECore/Values/Programs/ProgramCompiler.h>
 #include <BECore/Values/Value.h>
 #include <Common/Printers.h>
-#include <algorithm>
-#include <cstdint>
-#include <cstring>
 #include <gtest/gtest.h>
-#include <limits>
 
 namespace BECore::Tests {
 
@@ -154,7 +150,7 @@ namespace BECore::Tests {
             builder.EmitLoadConst(indexReg, 0);
             const uint8_t dst = builder.AcquireRegister().value();
             for (size_t i = 1; i < constants; ++i) {
-                (void)builder.AddConstant(static_cast<int32_t>(i + 100));
+                static_cast<void>(builder.AddConstant(static_cast<int32_t>(i + 100)));
             }
             Instruction table = ins;
             table.dst = dst;
@@ -251,6 +247,42 @@ namespace BECore::Tests {
         ExpectTableFormula<Vec3>("at(cast.level, vec3(1, 0, 0), vec3(0, 1, 0), vec3(0, 0, 1))", {Vec3{1.0f, 0.0f, 0.0f}, Vec3{0.0f, 1.0f, 0.0f}, Vec3{0.0f, 0.0f, 1.0f}});
         ExpectTableFormula<ValueElement>("at(cast.level, Fire, Earth, Water)", {ValueElement::Fire, ValueElement::Earth, ValueElement::Water});
         ExpectTableFormula<PoolString>("at(cast.level, 'low', 'mid', 'high')", {PoolString::Intern("low"), PoolString::Intern("mid"), PoolString::Intern("high")});
+    }
+
+    TEST(ProgramTableTest, ATableWhoseCountIsNotARegisterLoadsAtEverySize) {
+        // The count sits in the fields that name registers elsewhere: 32 and more, a low byte of 0 and a high byte
+        for (const int32_t count : {31, 32, 33, 100, 255, 256, 257, 300, 512}) {
+            Vector<int32_t> entries;
+            for (int32_t i = 0; i < count; ++i) {
+                entries.push_back(i * 7 + 1000);
+            }
+            CheckTable(entries);
+        }
+    }
+
+    TEST(ProgramTableTest, AFormulaTableOfManyEntriesRunsFusedAndUnfused) {
+        constexpr int32_t kEntries = 300;
+        String text = "at(cast.level";
+        Vector<int32_t> entries;
+        for (int32_t i = 0; i < kEntries; ++i) {
+            entries.push_back(i * 3 + 1000);
+            text += Format(", {}", entries.back());
+        }
+        text += ")";
+        ValueWorld world;
+        for (const bool fuse : {true, false}) {
+            CompileOptions options;
+            options.fuse = fuse;
+            const auto compiled = CompileExpression(text, world.declaration, DescribeType<int32_t>(), options);
+            ASSERT_TRUE(compiled.has_value()) << fuse << ": " << compiled.error().message.c_str();
+            ASSERT_EQ(compiled->kind, CompiledKind::Program);
+            const Program& program = ProgramPool::Get(compiled->program);
+            for (const int32_t level : {kInt32Min, -1, 0, 1, 31, 32, 40, 255, 256, 257, kEntries - 1, kEntries, kInt32Max}) {
+                world.cast.level = level;
+                const size_t at = level < 0 ? 0 : std::min<size_t>(static_cast<size_t>(level), kEntries - 1);
+                EXPECT_EQ(Run<int32_t>(program, world.context), entries[at]) << fuse << " level " << level;
+            }
+        }
     }
 
     TEST(ProgramTableTest, TheEntriesTakeTheTypeBesideTheTable) {

@@ -11,13 +11,9 @@
 #include <BECore/Values/ValueTables.h>
 #include <Common/Printers.h>
 #include <Generated/ProgramFusionTest.gen.hpp>
-#include <algorithm>
 #include <bit>
 #include <cmath>
-#include <cstdint>
-#include <cstring>
 #include <gtest/gtest.h>
-#include <limits>
 
 namespace BECore::Tests {
 
@@ -609,6 +605,25 @@ namespace BECore::Tests {
         ExpectSameBits<int64_t>("ByLevel('Damage', a.i32) + 1", Opcode::LoadTableSlot, &tables);
         ExpectSameBits<double>("ByLevel('Rates', a.i32)", Opcode::LoadTableSlot, &tables);
         ExpectSameBits<Vec3>("at(a.i32, vec3(1, 0, 0), vec3(0, 1, 0))", Opcode::LoadTableSlot);
+    }
+
+    TEST(ProgramFusionTest, TableCountsAndConstantIndexesAreNoRegistersInTheFusedFields) {
+        // The count of a table and the constant indexes of a MulAddSlot sit in b and c: values above the 32 registers are valid there
+        String entries;
+        for (int32_t i = 1; i <= 40; ++i) {
+            entries += Format(", {}", i * 10);
+        }
+        ExpectSameBits<int32_t>(Format("at(a.i32{})", entries), Opcode::LoadTableSlot, nullptr, 200);
+        ExpectSameBits<int32_t>(Format("at(a.i32{}) + (b.i32b * 3 + 7)", entries), Opcode::MulAddSlotInt32, nullptr, 200);
+
+        ValueTableSet tables;
+        Vector<double> big;
+        for (int32_t i = 0; i < 100; ++i) {
+            big.push_back(i * 1.5 + 0.25);
+        }
+        tables.Add("Big", big);
+        ExpectSameBits<double>("ByLevel('Big', a.i32)", Opcode::LoadTableSlot, &tables, 200);
+        ExpectSameBits<double>("ByLevel('Big', a.i32) + (b.f64b * 3 + 7)", Opcode::MulAddSlotDouble, &tables, 200);
     }
 
     TEST(ProgramFusionTest, ATableOverASlotClampsTheIndexToTheEnds) {

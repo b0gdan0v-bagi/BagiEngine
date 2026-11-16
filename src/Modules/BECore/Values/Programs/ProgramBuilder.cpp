@@ -61,7 +61,14 @@ namespace BECore {
             if (ins.dst >= _highWater) {
                 return refuse(i, ins, Format("writes r{}, which was never acquired", ins.dst));
             }
-            if (ins.a >= kMaxProgramRegisters || ins.b >= kMaxProgramRegisters || ins.c >= kMaxProgramRegisters) {
+            const bool tableLoad = ins.op == Opcode::LoadTable;
+            const bool slotOnly = IsMulAddSlot(ins.op) || ins.op == Opcode::LoadTableSlot;
+            const bool lerpSlots = IsLerpSlots(ins.op);
+            // The fused and table instructions keep counts, constant indexes and levels in a, b and c: only a field the opcode reads as a register is one
+            const bool aIsRegister = !slotOnly && !lerpSlots;
+            const bool bIsRegister = !slotOnly && !lerpSlots && !tableLoad;
+            const bool cIsRegister = !slotOnly && !tableLoad;
+            if ((aIsRegister && ins.a >= kMaxProgramRegisters) || (bIsRegister && ins.b >= kMaxProgramRegisters) || (cIsRegister && ins.c >= kMaxProgramRegisters)) {
                 return refuse(i, ins, "an operand names a register beyond the last");
             }
             if (ins.op == Opcode::LoadConst && ins.imm >= _constants.size()) {
@@ -92,7 +99,6 @@ namespace BECore {
             if (IsMulAddSlot(ins.op) && (ins.b >= _constants.size() || ins.c >= _constants.size())) {
                 return refuse(i, ins, Format("reads constants {} and {}, but there are {}", ins.b, ins.c, _constants.size()));
             }
-            const bool lerpSlots = IsLerpSlots(ins.op);
             if (lerpSlots || IsMulAddSlot(ins.op) || ins.op == Opcode::LoadTableSlot) {
                 if (ins.a >= kMaxContextLevels || (lerpSlots && ins.b >= kMaxContextLevels)) {
                     return refuse(i, ins, Format("reads a level beyond the {} of a context", kMaxContextLevels));

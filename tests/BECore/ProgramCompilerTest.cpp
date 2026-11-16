@@ -8,10 +8,8 @@
 #include <BECore/Values/Programs/ProgramCompiler.h>
 #include <BECore/Values/Value.h>
 #include <Common/Printers.h>
-#include <algorithm>
 #include <cmath>
 #include <gtest/gtest.h>
-#include <limits>
 
 namespace BECore::Tests {
 
@@ -204,7 +202,7 @@ namespace BECore::Tests {
         const auto identity = CompileExpression("caster.attack * 1 + 0", world.declaration, DescribeType<int32_t>());
         ASSERT_TRUE(identity.has_value());
         EXPECT_EQ(identity->kind, CompiledKind::Program);
-        // `slot * k + b` is one fused instruction now; with `fuse = false` it is the five of the lowering, with nothing removed
+        // `slot * k + b` is one fused instruction; with `fuse = false` it is the five of the lowering, with nothing removed
         EXPECT_EQ(ProgramPool::Get(identity->program).Code().size(), 1U);
         CompileOptions unfused;
         unfused.fuse = false;
