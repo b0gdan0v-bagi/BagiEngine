@@ -11,6 +11,9 @@ namespace BECore {
     namespace ExprLimits {
         inline constexpr size_t kMaxTextBytes = 4096;
         inline constexpr size_t kMaxNesting = 64;
+        /// Levels of nodes under a node (a chain `a + b + c` is as high as it is long, which no parenthesis shows): the checker, the lowering and the printer recurse by it, and
+        /// their frames are the biggest under a sanitizer, so the limit is what keeps them inside the stack of a secondary thread (512 KB of a macOS one)
+        inline constexpr size_t kMaxTreeHeight = 32;
         inline constexpr size_t kMaxNodes = 512;
     }  // namespace ExprLimits
 

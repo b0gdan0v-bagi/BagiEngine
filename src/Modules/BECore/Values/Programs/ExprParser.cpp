@@ -94,11 +94,37 @@ namespace BECore {
                 return std::unexpected(ProgramError{std::move(message), at.column});
             }
 
+            /// The levels of nodes below @p node: a leaf has none. The checker, the lowering and the printer recurse by this height, which the parentheses do not show, so a long
+            /// left-nested chain (`a + b + c + ...`) is bounded here and not only by the node count
+            [[nodiscard]] uint32_t HeightOf(const ExprNode& node) const {
+                switch (node.kind) {
+                    case ExprNodeKind::Unary:
+                    case ExprNodeKind::Member:
+                        return _heights[node.first] + 1;
+                    case ExprNodeKind::Binary:
+                        return std::max(_heights[node.first], _heights[node.second]) + 1;
+                    case ExprNodeKind::Call: {
+                        uint32_t below = 0;
+                        for (uint32_t i = 0; i < node.argumentCount; ++i) {
+                            below = std::max(below, _heights[_ast.arguments[node.firstArgument + i]] + 1);
+                        }
+                        return below;
+                    }
+                    default:
+                        return 0;
+                }
+            }
+
             NodeResult Add(ExprNode node) {
                 if (_ast.nodes.size() >= ExprLimits::kMaxNodes) {
                     return std::unexpected(ProgramError{Format("the formula has more than {} parts", ExprLimits::kMaxNodes), node.column});
                 }
+                const uint32_t height = HeightOf(node);
+                if (height > ExprLimits::kMaxTreeHeight) {
+                    return std::unexpected(ProgramError{Format("the formula is more than {} levels high (a long chain of operators counts)", ExprLimits::kMaxTreeHeight), node.column});
+                }
                 _ast.nodes.push_back(std::move(node));
+                _heights.push_back(height);
                 return static_cast<ExprNodeId>(_ast.nodes.size() - 1);
             }
 
@@ -271,6 +297,8 @@ namespace BECore {
             Vector<ExprToken> _tokens;
             size_t _index = 0;
             size_t _depth = 0;
+            /// `HeightOf` of each node of `_ast`
+            Vector<uint32_t> _heights;
             ExprAst _ast;
         };
 

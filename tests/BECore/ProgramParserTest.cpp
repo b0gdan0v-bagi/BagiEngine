@@ -296,19 +296,44 @@ namespace BECore::Tests {
 
         EXPECT_TRUE(ParseExpression(Repeated("(", ExprLimits::kMaxNesting) + "1" + Repeated(")", ExprLimits::kMaxNesting)).has_value());
         ExpectError(Repeated("(", ExprLimits::kMaxNesting + 1) + "1" + Repeated(")", ExprLimits::kMaxNesting + 1), ExprLimits::kMaxNesting + 2, "nested deeper than 64 levels");
-        EXPECT_TRUE(ParseExpression(Repeated("-", ExprLimits::kMaxNesting) + "1").has_value());
+        EXPECT_TRUE(ParseExpression(Repeated("-", ExprLimits::kMaxTreeHeight) + "1").has_value());
         ExpectError(Repeated("-", ExprLimits::kMaxNesting + 1) + "1", ExprLimits::kMaxNesting + 2, "nested deeper than 64 levels");
         const String calls = Repeated("f(", ExprLimits::kMaxNesting + 1) + "1" + Repeated(")", ExprLimits::kMaxNesting + 1);
         ExpectError(calls, 2 * (ExprLimits::kMaxNesting + 1) + 1, "nested deeper");
 
-        // n numbers and n - 1 operators make 2n - 1 nodes
-        const size_t fits = (ExprLimits::kMaxNodes + 1) / 2;
-        const auto sum = [](size_t count) { return "1" + Repeated(" + 1", count - 1); };
-        EXPECT_EQ(Parse(sum(fits)).nodes.size(), ExprLimits::kMaxNodes - 1);
-        const auto parsed = ParseExpression(sum(fits + 1));
+        // A call of k sums `1 + 1` has 3k + 1 nodes and is two levels high
+        const size_t fits = (ExprLimits::kMaxNodes - 1) / 3;
+        const auto sums = [](size_t count) { return "f(" + Repeated("1 + 1, ", count - 1) + "1 + 1)"; };
+        EXPECT_EQ(Parse(sums(fits)).nodes.size(), ExprLimits::kMaxNodes - 1);
+        const auto parsed = ParseExpression(sums(fits + 1));
         ASSERT_FALSE(parsed.has_value());
         EXPECT_TRUE(Contains(parsed.error().message, "more than 512 parts")) << parsed.error().message.c_str();
         EXPECT_GT(parsed.error().column, 0U);
+    }
+
+    TEST(ProgramParserTest, ATreeHigherThanTheHeightLimitIsRefusedWhateverMakesItHigh) {
+        constexpr size_t kLevels = ExprLimits::kMaxTreeHeight;
+        // A left-nested chain is a loop of the parser but a tree as high as it is long: n operators are n levels
+        const auto chain = [](size_t operators) { return "a" + Repeated(" + a", operators); };
+        EXPECT_TRUE(ParseExpression(chain(kLevels)).has_value());
+        const auto longChain = ParseExpression(chain(kLevels + 1));
+        ASSERT_FALSE(longChain.has_value());
+        EXPECT_TRUE(Contains(longChain.error().message, "more than 32 levels high")) << longChain.error().message.c_str();
+        EXPECT_EQ(longChain.error().column, 4 * (kLevels + 1) - 1);
+
+        const auto members = [](size_t count) { return "(a)" + Repeated(".x", count); };
+        EXPECT_TRUE(ParseExpression(members(kLevels)).has_value());
+        EXPECT_FALSE(ParseExpression(members(kLevels + 1)).has_value());
+
+        // Parentheses add no node, so a chain inside them is as high as outside
+        EXPECT_FALSE(ParseExpression("(" + chain(kLevels) + ") + a").has_value());
+        // The calls, the unary operators and the operators of one expression add up
+        EXPECT_FALSE(ParseExpression("f(" + chain(kLevels) + ")").has_value());
+        EXPECT_FALSE(ParseExpression("-(" + chain(kLevels) + ")").has_value());
+        const auto unary = ParseExpression(Repeated("-", kLevels + 1) + "1");
+        ASSERT_FALSE(unary.has_value());
+        EXPECT_TRUE(Contains(unary.error().message, "more than 32 levels high")) << unary.error().message.c_str();
+        EXPECT_EQ(unary.error().column, 1U);
     }
 
     TEST(ProgramParserTest, AStringIsAnOperandWithItsTextBetweenTheQuotes) {

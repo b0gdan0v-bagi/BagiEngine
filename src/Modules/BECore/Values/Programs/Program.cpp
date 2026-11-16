@@ -56,7 +56,10 @@ namespace BECore {
             }
 
             const Program& Get(ProgramId id) const {
-                ASSERT(id < _count.load(std::memory_order_acquire), "ProgramPool::Get: no program has this id");
+                // The acquire pairs with the release of `Intern` that follows the write of the program: it must run in a Release build too, so `Get` is safe on its own and not only
+                // through whatever synchronization hands the id over
+                [[maybe_unused]] const size_t count = _count.load(std::memory_order_acquire);
+                ASSERT(id < count, "ProgramPool::Get: no program has this id");
                 const Chunk* chunk = _chunks[id / kChunkSize].load(std::memory_order_acquire);
                 return chunk->programs[id % kChunkSize];
             }

@@ -1,11 +1,14 @@
 // The type checker of formulas (Values/Programs/ExprChecker, ExprFunctions): the type rules of the language, the literals, the paths and the errors with
 // their columns. The text is parsed with the real parser; the typed tree is read back node by node.
 
+#include <BECore/Threading/Thread.h>
 #include <BECore/ValueTestTypes.h>
+#include <BECore/Values/Programs/ExprAst.h>
 #include <BECore/Values/Programs/ExprChecker.h>
 #include <BECore/Values/Programs/ExprFunctions.h>
 #include <BECore/Values/Programs/ExprParser.h>
 #include <BECore/Values/Programs/Kernels.h>
+#include <BECore/Values/Programs/ProgramCompiler.h>
 #include <Common/Printers.h>
 #include <cstring>
 #include <gtest/gtest.h>
@@ -1116,6 +1119,79 @@ namespace BECore::Tests {
                     }
                 }
             }
+        }
+    }
+
+    // =========================================================================
+    // The deepest trees the limits allow
+    // =========================================================================
+
+    namespace {
+
+        String Repeated(StringView part, size_t count) {
+            String text;
+            for (size_t i = 0; i < count; ++i) {
+                text.append(part.data(), part.size());
+            }
+            return text;
+        }
+
+        /// What parsing, printing, checking and lowering give for @p text, collected on the thread that ran them: a gtest macro belongs to the test's own thread
+        struct PipelineOutcome {
+            bool parsed = false;
+            bool printed = false;
+            bool checked = false;
+            bool compiled = false;
+        };
+
+        PipelineOutcome RunPipeline(StringView text, const ContextDecl& declaration) {
+            PipelineOutcome outcome;
+            const auto ast = ParseExpression(text);
+            outcome.parsed = ast.has_value();
+            if (!ast.has_value()) {
+                return outcome;
+            }
+            outcome.printed = !PrintExpression(*ast).empty();
+            outcome.checked = CheckExpression(*ast, declaration, DescribeType<int32_t>()).has_value();
+            outcome.compiled = CompileExpression(text, declaration, DescribeType<int32_t>()).has_value();
+            return outcome;
+        }
+
+        /// A thread has the smallest stack the engine runs on (512 KB of a macOS secondary thread); without threads the caller's stack has to do
+        PipelineOutcome RunPipelineOnASmallStack(StringView text, const ContextDecl& declaration) {
+            PipelineOutcome outcome;
+            const auto run = [&] { outcome = RunPipeline(text, declaration); };
+            if constexpr (Thread::kAvailable) {
+                Thread thread("PipelineOnASmallStack", run);
+                thread.join();
+            } else {
+                run();
+            }
+            return outcome;
+        }
+
+    }  // namespace
+
+    /// The checker, the lowering and the printer recurse by the height of the tree, which the parser bounds by `ExprLimits::kMaxTreeHeight` for every shape of it: the highest trees
+    /// that limit allows (a chain of operators, calls over a chain, unary operators over a chain, the deepest parentheses) must fit the stack of a secondary thread
+    TEST(ProgramCheckerTest, TheHighestTreesTheLimitAllowsFitTheStackOfAThread) {
+        constexpr size_t kLevels = ExprLimits::kMaxTreeHeight;
+        const auto chain = [](size_t operators) { return "caster.attack" + Repeated(" + caster.attack", operators); };
+        const String texts[] = {
+            chain(kLevels),
+            Repeated("abs(", kLevels / 2) + chain(kLevels / 2 - 1) + Repeated(")", kLevels / 2),
+            "-(" + chain(kLevels - 1) + ")",
+            Repeated("-", kLevels / 2) + chain(kLevels / 2),
+            Repeated("(", ExprLimits::kMaxNesting) + "caster.attack" + Repeated(")", ExprLimits::kMaxNesting),
+            Repeated("-", kLevels) + "caster.attack",
+        };
+        const CheckerContext context;
+        for (const String& text : texts) {
+            const PipelineOutcome outcome = RunPipelineOnASmallStack(text, context.declaration);
+            EXPECT_TRUE(outcome.parsed) << text.c_str();
+            EXPECT_TRUE(outcome.printed) << text.c_str();
+            EXPECT_TRUE(outcome.checked) << text.c_str();
+            EXPECT_TRUE(outcome.compiled) << text.c_str();
         }
     }
 
