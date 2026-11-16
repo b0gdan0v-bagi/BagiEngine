@@ -173,3 +173,107 @@ def test_stop_cancels_a_run_in_work(game):
     bridge.tick()
     bridge.stop()
     assert seen_cancel.is_set() and not bridge.busy
+
+
+class FakeSetupEditor(FakeEditor):
+    """The editor with the setup side of the contract: one setup action, handed over by a poll, reported by artgen_setup_report."""
+
+    def __init__(self, game_root):
+        super().__init__(game_root)
+        self.setup = None
+        self.setup_cancel = False
+
+    def ask_setup(self, action):
+        self.setup = {"id": (self.setup or {"id": 100})["id"] + 1, "action": action, "state": "Queued", "events": []}
+        self.setup_cancel = False
+
+    def call(self, method, params=None):
+        if method == "artgen_setup_report":
+            self.calls.append((method, params))
+            if not self.setup or params["id"] != self.setup["id"]:
+                return {"stale": True}
+            self.setup["events"].append(params)
+            if params["event"] == "done":
+                self.setup["state"] = "Done" if params["ok"] else "Failed"
+            return {"stale": False}
+        answer = super().call(method, params)
+        if method == "artgen_poll":
+            if self.setup and self.setup["state"] == "Queued":
+                answer["setup"] = {"id": self.setup["id"], "action": self.setup["action"]}
+                self.setup["state"] = "Running"
+            elif self.setup and self.setup["state"] == "Running" and self.setup_cancel:
+                answer["setupCancel"] = self.setup["id"]
+        return answer
+
+
+class FakeSetup:
+    def __init__(self):
+        self.actions = []
+        self.release = threading.Event()
+
+    def run(self, action, emit, cancel=None):
+        self.actions.append(action)
+        emit({"event": "plan", "platform": "windows-nvidia", "root": "D:/ComfyUI", "steps": [], "downloadBytes": 9})
+        if action == "Install":
+            emit({"event": "step", "index": 0, "what": "checkpoints/x"})
+            emit({"event": "progress", "index": 0, "done": 3, "total": 9})
+            while not self.release.is_set():
+                if cancel.is_set():
+                    raise artgen_bridge.artgen_setup.SetupError(artgen_bridge.artgen_setup.CANCELLED)
+                time.sleep(0.01)
+
+
+def test_a_setup_action_is_run_and_reported_and_the_status_is_read_again(game):
+    editor = FakeSetupEditor(game)
+    fake = FakeSetup()
+    fake.release.set()
+    bridge = artgen_bridge.Bridge(editor, FakeGenerator(), setup=fake)
+    bridge.tick()
+    status_reads = len(editor.polls)
+    editor.ask_setup("Plan")
+    run_until(bridge, editor, lambda: editor.setup["state"] != "Running" and editor.setup["state"] != "Queued")
+    assert fake.actions == ["Plan"]
+    assert editor.setup["state"] == "Done"
+    assert [e["event"] for e in editor.setup["events"]] == ["plan", "done"]
+    assert editor.setup["events"][0]["platform"] == "windows-nvidia"
+    assert not bridge.busy and bridge._status_at is None and len(editor.polls) > status_reads
+
+
+def test_a_cancel_stops_an_install_and_its_end_says_why(game):
+    editor = FakeSetupEditor(game)
+    fake = FakeSetup()
+    bridge = artgen_bridge.Bridge(editor, FakeGenerator(), setup=fake)
+    editor.ask_setup("Install")
+    run_until(bridge, editor, lambda: any(e["event"] == "progress" for e in (editor.setup or {}).get("events", [])))
+    assert bridge.busy
+    editor.setup_cancel = True
+    run_until(bridge, editor, lambda: editor.setup["state"] == "Failed")
+    assert editor.setup["events"][-1]["error"].startswith("cancelled")
+    assert not bridge.busy
+
+
+def test_a_bridge_without_a_local_generator_refuses_setup(game):
+    editor = FakeSetupEditor(game)
+    bridge = artgen_bridge.Bridge(editor, FakeGenerator())
+    editor.ask_setup("Start")
+    run_until(bridge, editor, lambda: editor.setup["state"] == "Failed")
+    assert "no local generator" in editor.setup["events"][-1]["error"]
+
+
+def test_a_bridge_started_by_the_editor_gives_up_without_one(monkeypatch):
+    class NoEditor:
+        def __init__(self, host, port):
+            pass
+
+        def connect(self):
+            raise ConnectionRefusedError("no editor")
+
+    now = [0.0]
+
+    def fake_sleep(seconds):
+        now[0] += seconds
+
+    monkeypatch.setattr(artgen_bridge, "BagiControlClient", NoEditor)
+    monkeypatch.setattr(artgen_bridge.time, "sleep", fake_sleep)
+    artgen_bridge.serve("127.0.0.1", 1, FakeGenerator(), log=lambda *_: None, exit_with_editor=True, clock=lambda: now[0])
+    assert now[0] >= artgen_bridge.FIRST_CONNECT_S

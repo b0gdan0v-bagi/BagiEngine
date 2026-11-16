@@ -333,4 +333,100 @@ namespace BECore::Tests {
         EXPECT_EQ(session.FindVariant(1), nullptr);
     }
 
+    TEST_F(ArtGenSessionTest, ASetupActionIsHandedOverOnceAndItsReportsFillIt) {
+        Json asked = Object();
+        asked["action"] = "Plan";
+        const auto id = GetJsonInt(Result(Call("artgen_setup", asked)), "id");
+        ASSERT_TRUE(id.has_value());
+        EXPECT_EQ(session.GetSetup().state, ArtGenSetupState::Queued);
+
+        Json poll = Call("artgen_poll", ReadyPoll());
+        const Json* setup = FindJsonMember(Result(poll), "setup");
+        ASSERT_NE(setup, nullptr);
+        EXPECT_EQ(GetJsonInt(*setup, "id"), id);
+        EXPECT_EQ(GetJsonString(*setup, "action"), Optional<String>("Plan"));
+        EXPECT_EQ(session.GetSetup().state, ArtGenSetupState::Running);
+        EXPECT_EQ(FindJsonMember(Result(Call("artgen_poll", ReadyPoll())), "setup"), nullptr);
+
+        Json plan = Report(static_cast<uint32_t>(*id));
+        plan["event"] = "plan";
+        plan["platform"] = "windows-nvidia";
+        plan["root"] = "D:/ComfyUI";
+        plan["downloadBytes"] = 9000;
+        Json step = Object();
+        step["what"] = "checkpoints/sd_xl_base_1.0.safetensors";
+        step["state"] = "download";
+        step["size"] = 9000;
+        step["licence"] = "OpenRAIL++-M";
+        plan["steps"] = Json::array({step});
+        EXPECT_EQ(GetJsonBool(Result(Call("artgen_setup_report", plan)), "stale"), Optional<bool>(false));
+        Json done = Report(static_cast<uint32_t>(*id));
+        done["event"] = "done";
+        done["ok"] = true;
+        Call("artgen_setup_report", done);
+        EXPECT_EQ(session.GetSetup().state, ArtGenSetupState::Done);
+        ASSERT_EQ(session.GetSetup().plan.size(), 1u);
+        EXPECT_EQ(session.GetSetup().plan[0].size, 9000);
+        EXPECT_EQ(session.GetSetup().platform, "windows-nvidia");
+
+        // The install keeps the plan the owner saw on screen, and reports its progress
+        const uint32_t install = session.RequestSetup(ArtGenSetupAction::Install).value();
+        EXPECT_EQ(session.GetSetup().plan.size(), 1u);
+        Call("artgen_poll", ReadyPoll());
+        Json progress = Report(install);
+        progress["event"] = "progress";
+        progress["done"] = 4500;
+        progress["total"] = 9000;
+        Call("artgen_setup_report", progress);
+        EXPECT_EQ(session.GetSetup().done, 4500);
+        Json failed = Report(install);
+        failed["event"] = "done";
+        failed["ok"] = false;
+        failed["error"] = "the download stopped; run again to resume";
+        Call("artgen_setup_report", failed);
+        EXPECT_EQ(session.GetSetup().state, ArtGenSetupState::Failed);
+        EXPECT_EQ(session.GetSetup().error, "the download stopped; run again to resume");
+    }
+
+    TEST_F(ArtGenSessionTest, ASetupAndARunNeverRunTogether) {
+        const uint32_t setup = session.RequestSetup(ArtGenSetupAction::Start).value();
+        Call("artgen_poll", ReadyPoll());
+        EXPECT_FALSE(session.Request("wood", "a", 1, 1).has_value());
+        EXPECT_FALSE(session.RequestSetup(ArtGenSetupAction::Stop).has_value());
+        Json asked = Object();
+        asked["action"] = "Stop";
+        EXPECT_EQ(ErrorCode(Call("artgen_setup", asked)), "artgen_busy");
+        Json done = Report(setup);
+        done["event"] = "done";
+        done["ok"] = true;
+        Call("artgen_setup_report", done);
+
+        ASSERT_TRUE(session.Request("wood", "a", 1, 1).has_value());
+        EXPECT_FALSE(session.RequestSetup(ArtGenSetupAction::Plan).has_value());
+    }
+
+    TEST_F(ArtGenSessionTest, ACancelOfASetupGoesToTheServiceAndOldReportsAreStale) {
+        const uint32_t first = session.RequestSetup(ArtGenSetupAction::Install).value();
+        Json cancel = Object();
+        cancel["action"] = "cancel";
+        EXPECT_EQ(FindJsonMember(Call("artgen_setup", cancel), "error"), nullptr);
+        EXPECT_EQ(session.GetSetup().state, ArtGenSetupState::Failed);  // queued: the service never saw it
+
+        const uint32_t second = session.RequestSetup(ArtGenSetupAction::Install).value();
+        Call("artgen_poll", ReadyPoll());
+        session.CancelSetup();
+        EXPECT_EQ(GetJsonInt(Result(Call("artgen_poll", ReadyPoll())), "setupCancel"), Optional<int64_t>(second));
+
+        Json old = Report(first);
+        old["event"] = "log";
+        old["text"] = "late";
+        EXPECT_EQ(GetJsonBool(Result(Call("artgen_setup_report", old)), "stale"), Optional<bool>(true));
+        EXPECT_TRUE(session.GetSetup().log.empty());
+
+        Json bad = Object();
+        bad["action"] = "Dance";
+        EXPECT_EQ(ErrorCode(Call("artgen_setup", bad)), "invalid_params");
+        EXPECT_EQ(GetJsonString(*FindJsonMember(Result(Call("artgen_state")), "setup"), "state"), Optional<String>("Running"));
+    }
+
 }  // namespace BECore::Tests

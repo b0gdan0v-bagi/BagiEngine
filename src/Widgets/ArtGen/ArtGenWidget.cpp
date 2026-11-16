@@ -8,6 +8,7 @@
 #include <BECore/Scene/SceneNode.h>
 #include <Generated/ArtGenWidget.gen.hpp>
 #include <Widgets/ArtGen/ArtGenAccept.h>
+#include <Widgets/ArtGen/ArtGenLaunch.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
 #include <Widgets/EditorLayout/EditorControls.h>
 #include <Widgets/Icons/IconsLucide.h>
@@ -28,6 +29,10 @@ namespace BECore {
         constexpr float kDefaultHeight = 700.0f;
         // Squares behind a thumbnail, so a transparent background (a cut-out sprite) shows as transparent
         constexpr float kCheckerCell = 10.0f;
+        // Seconds a started bridge gets to make its first poll before the panel says it did not come
+        constexpr double kBridgeStartSeconds = 15.0;
+        constexpr double kBytesPerGigabyte = 1e9;
+        constexpr double kBytesPerMegabyte = 1e6;
 
         void DrawChecker(ImDrawList* drawList, ImVec2 origin, float size, ImU32 light, ImU32 dark) {
             drawList->AddRectFilled(origin, ImVec2(origin.x + size, origin.y + size), light);
@@ -109,6 +114,7 @@ namespace BECore {
         }
         auto& session = ArtGenSession::GetInstance();
         DrawServiceLine(session);
+        DrawSetup(session);
         ImGui::Separator();
         DrawForm(session);
         ImGui::Separator();
@@ -116,7 +122,19 @@ namespace BECore {
         ImGui::End();
     }
 
-    void ArtGenWidget::DrawServiceLine(const ArtGenSession& session) {
+    void ArtGenWidget::StartBridge(uint16_t port) {
+        _bridgeError.clear();
+        const auto script = FindArtGenBridge(CoreManager::GetFileSystem().GetMountLayers("config"_intern));
+        if (!script) {
+            _bridgeError = Format("no {} under the content roots (a packaged build?)", kArtGenBridgeScript);
+            return;
+        }
+        if (LaunchArtGenBridge(*script, port, _bridgeError)) {
+            _bridgeStartedAt = ImGui::GetTime();
+        }
+    }
+
+    void ArtGenWidget::DrawServiceLine(ArtGenSession& session) {
         const auto& palette = GetImGuiPalette();
         const ControlServerStatus control = CoreManager::GetControlService().GetServerStatus();
         if (!control.listening) {
@@ -125,19 +143,148 @@ namespace BECore {
             return;
         }
         if (!session.IsServiceConnected()) {
+            const bool starting = _bridgeStartedAt >= 0.0 && ImGui::GetTime() - _bridgeStartedAt < kBridgeStartSeconds;
+            if (starting) {
+                ImGui::TextColored(palette.textDisabled, ICON_LC_LOADER " Starting the generation service...");
+                return;
+            }
             ImGui::TextColored(palette.warning, ICON_LC_PLUG " The generation service is not connected");
-            ImGui::TextWrapped("Run: python engine/tools/artgen/artgen_bridge.py --port %u", static_cast<unsigned>(control.port));
+            if (IconTextButton(ICON_LC_POWER, "Start the service", "Run tools/artgen/artgen_bridge.py of the engine for this editor; it stops when the editor closes")) {
+                StartBridge(control.port);
+            }
+            if (_bridgeStartedAt >= 0.0 && _bridgeError.empty()) {
+                ImGui::TextWrapped("It did not connect. Run it by hand to see why: python engine/tools/artgen/artgen_bridge.py --port %u", static_cast<unsigned>(control.port));
+            } else {
+                ImGui::TextWrapped("Or by hand: python engine/tools/artgen/artgen_bridge.py --port %u", static_cast<unsigned>(control.port));
+            }
+            if (!_bridgeError.empty()) {
+                ImGui::TextColored(palette.error, "%s", _bridgeError.c_str());
+            }
             return;
         }
+        _bridgeStartedAt = -1.0;
         const auto& status = session.GetServiceStatus();
         if (status.state == "ready") {
             ImGui::TextColored(palette.success, ICON_LC_PLUG " Service ready (%s)", status.generator.c_str());
+            ImGui::SameLine();
+            ImGui::BeginDisabled(session.IsSetupBusy() || session.IsBusy());
+            if (IconButton(ICON_LC_POWER_OFF, "Stop the generator (only one started from here; frees the GPU)", "##StopGenerator")) {
+                auto requested = session.RequestSetup(ArtGenSetupAction::Stop);
+                _setupError = requested ? String() : requested.error();
+            }
+            ImGui::EndDisabled();
         } else {
             ImGui::TextColored(palette.warning, ICON_LC_CIRCLE_ALERT " Generator %s", status.state.c_str());
             if (!status.reason.empty()) {
                 ImGui::TextWrapped("%s", status.reason.c_str());
             }
         }
+    }
+
+    void ArtGenWidget::DrawSetup(ArtGenSession& session) {
+        if (!session.IsServiceConnected()) {
+            return;
+        }
+        const auto& palette = GetImGuiPalette();
+        const ArtGenSetup& setup = session.GetSetup();
+        const String& state = session.GetServiceStatus().state;
+
+        if (session.IsSetupBusy()) {
+            const char* doing = setup.action == ArtGenSetupAction::Plan      ? "Looking at this machine"
+                                : setup.action == ArtGenSetupAction::Install ? "Installing the generator"
+                                : setup.action == ArtGenSetupAction::Start   ? "Starting the generator (a minute the first time)"
+                                                                             : "Stopping the generator";
+            ImGui::TextColored(palette.textDisabled, ICON_LC_LOADER " %s...", doing);
+            if (!setup.current.empty()) {
+                ImGui::TextWrapped("%s", setup.current.c_str());
+            }
+            if (setup.total > 0) {
+                char overlay[64];
+                std::snprintf(overlay, sizeof(overlay), "%.0f / %.0f MB", static_cast<double>(setup.done) / kBytesPerMegabyte, static_cast<double>(setup.total) / kBytesPerMegabyte);
+                ImGui::ProgressBar(static_cast<float>(static_cast<double>(setup.done) / static_cast<double>(setup.total)), ImVec2(-1.0f, 0.0f), overlay);
+            }
+            if (!setup.log.empty()) {
+                ImGui::TextDisabled("%s", setup.log.c_str());
+            }
+            if (setup.action == ArtGenSetupAction::Install) {
+                ImGui::BeginDisabled(setup.cancelRequested);
+                if (IconTextButton(ICON_LC_X, "Cancel", "Stop the install; what is downloaded stays and the next install resumes")) {
+                    session.CancelSetup();
+                }
+                ImGui::EndDisabled();
+            }
+            return;
+        }
+
+        if (setup.state == ArtGenSetupState::Failed) {
+            ImGui::TextColored(palette.error, ICON_LC_CIRCLE_ALERT " %s", setup.error.c_str());
+        } else if (setup.state == ArtGenSetupState::Done && setup.action != ArtGenSetupAction::Plan && !setup.log.empty()) {
+            // Start and Stop say what they did (a ComfyUI started by hand is left alone, one already running is used)
+            ImGui::TextDisabled("%s", setup.log.c_str());
+        }
+        if (!_setupError.empty()) {
+            ImGui::TextColored(palette.error, "%s", _setupError.c_str());
+        }
+        const bool planShown = setup.action == ArtGenSetupAction::Plan && setup.state == ArtGenSetupState::Done && state == "not_installed";
+        if (planShown) {
+            DrawPlan(session, setup);
+            return;
+        }
+        if (state == "not_installed") {
+            ImGui::BeginDisabled(session.IsBusy());
+            if (IconTextButton(ICON_LC_DOWNLOAD, "Set up...", "See what installing a local generator (ComfyUI and its models) would download, then decide")) {
+                auto requested = session.RequestSetup(ArtGenSetupAction::Plan);
+                _setupError = requested ? String() : requested.error();
+            }
+            ImGui::EndDisabled();
+            ImGui::TextDisabled(ICON_LC_CLOUD " A generator on another machine: not available yet (comfyui-remote-via-todo)");
+        } else if (state == "not_running") {
+            ImGui::BeginDisabled(session.IsBusy());
+            if (IconTextButton(ICON_LC_PLAY, "Start", "Start the local generator in the background (the GPU is busy while it runs)")) {
+                auto requested = session.RequestSetup(ArtGenSetupAction::Start);
+                _setupError = requested ? String() : requested.error();
+            }
+            ImGui::EndDisabled();
+        }
+    }
+
+    void ArtGenWidget::DrawPlan(ArtGenSession& session, const ArtGenSetup& setup) {
+        const auto& palette = GetImGuiPalette();
+        ImGui::TextWrapped(ICON_LC_MONITOR " This machine: %s. %s", setup.platform.c_str(), setup.platformNote.c_str());
+        ImGui::TextWrapped("Into %s:", setup.root.c_str());
+        if (ImGui::BeginTable("##SetupPlan", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
+            for (const auto& step : setup.plan) {
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted(step.what.c_str());
+                if (!step.licence.empty() && ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("Licence: %s\n%s", step.licence.c_str(), step.dest.c_str());
+                }
+                ImGui::TableNextColumn();
+                ImGui::TextDisabled("%s", step.state.c_str());
+                ImGui::TableNextColumn();
+                if (step.size > 0) {
+                    ImGui::Text("%.2f GB", static_cast<double>(step.size) / kBytesPerGigabyte);
+                }
+            }
+            ImGui::EndTable();
+        }
+        const bool fromSource = std::any_of(setup.plan.begin(), setup.plan.end(), [](const ArtGenSetupStep& step) { return step.state == "install"; });
+        if (fromSource) {
+            ImGui::TextWrapped("Plus PyTorch and ComfyUI's requirements from PyPI (a few GB).");
+        }
+        char label[96];
+        std::snprintf(label, sizeof(label), "Download %.1f GB and install", static_cast<double>(setup.downloadBytes) / kBytesPerGigabyte);
+        if (IconTextButton(ICON_LC_DOWNLOAD, label, "Hover a row for its licence and where it goes. The download resumes if it stops")) {
+            auto requested = session.RequestSetup(ArtGenSetupAction::Install);
+            _setupError = requested ? String() : requested.error();
+        }
+        ImGui::SameLine();
+        if (IconTextButton(ICON_LC_X, "Not now", "Download nothing")) {
+            _setupError.clear();
+            session.ClearSetup();
+        }
+        ImGui::TextColored(palette.textDisabled, ICON_LC_CLOUD " Or a generator on another machine: not available yet (comfyui-remote-via-todo)");
     }
 
     void ArtGenWidget::DrawForm(ArtGenSession& session) {
