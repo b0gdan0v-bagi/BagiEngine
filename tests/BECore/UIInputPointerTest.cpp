@@ -719,4 +719,28 @@ namespace BECore::Tests {
         EXPECT_FALSE(_input.HoldsPress(holder, 1));
     }
 
+    TEST_F(UIInputPointerTest, TheLastPressTakerIsTheHandlerThatAnsweredTrueAndNullWhenNobodyDid) {
+        ShapeHandler taker(&_callLog, 1);
+        taker.consumeDown = true;
+        taker.maxX = 10.0f;
+        Register(taker, 0);
+
+        ASSERT_TRUE(_input.DispatchMouseButtonDown(Button(5.0f)));
+        EXPECT_EQ(_input.LastPressTaker(), &taker);
+
+        EXPECT_FALSE(_input.DispatchMouseButtonDown(Button(kFarAway)));
+        EXPECT_EQ(_input.LastPressTaker(), nullptr);
+    }
+
+    TEST_F(UIInputPointerTest, TheLastPressTakerIsKnownEvenWhenItUnregisteredItselfWhileAnswering) {
+        ShapeHandler taker(&_callLog, 1);
+        taker.consumeDown = true;
+        taker.onDown = [&] { _input.Unregister(taker); };
+        Register(taker, 0);
+
+        EXPECT_TRUE(_input.DispatchMouseButtonDown(Button(5.0f)));
+
+        EXPECT_EQ(_input.LastPressTaker(), &taker);
+    }
+
 }  // namespace BECore::Tests

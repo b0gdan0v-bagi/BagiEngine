@@ -91,6 +91,12 @@ namespace BECore {
         /// "the release of my press" from a release that is the game's. A dispatch nested inside the up answers for itself
         [[nodiscard]] bool IsDeliveringCapture(const IUIInputHandler& handler) const;
 
+        /// The handler that answered the last dispatched press with true, null when nobody did. An identity to compare, not
+        /// to call: the handler may have unregistered itself while it answered (a click that switches the scene)
+        [[nodiscard]] const IUIInputHandler* LastPressTaker() const {
+            return _lastPressTaker;
+        }
+
         /// The pointer `which` is gone (a finger was lifted): the handler it was over gets OnPointerLeave once and the hover is
         /// forgotten. A mouse has no such moment; a press the pointer still holds is not touched
         void EndHover(uint32_t which);
@@ -111,6 +117,7 @@ namespace BECore {
         struct Consumption {
             bool consumed = false;
             IUIInputHandler* handler = nullptr;
+            const IUIInputHandler* taker = nullptr;  // who answered true, also when it has unregistered itself since
         };
 
         template <typename SDLEventType>
@@ -126,6 +133,7 @@ namespace BECore {
         Vector<Entry> _registeredDuringDispatch;
         PointerTracker _tracker;
         int _dispatchDepth = 0;
+        const IUIInputHandler* _lastPressTaker = nullptr;
         const IUIInputHandler* _deliveringHolder = nullptr;  // the holder DispatchMouseButtonUp is calling now; compared only, never called
     };
 

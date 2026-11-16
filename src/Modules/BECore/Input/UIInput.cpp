@@ -66,7 +66,7 @@ namespace BECore {
             }
             if ((handler->*handle)(event)) {
                 // It may have unregistered itself while answering; its entry is then empty and it must not be remembered
-                return Consumption{true, _entries[i].handler == handler ? handler : nullptr};
+                return Consumption{true, _entries[i].handler == handler ? handler : nullptr, handler};
             }
         }
         return Consumption{};
@@ -86,6 +86,7 @@ namespace BECore {
     bool UIInput::DispatchMouseButtonDown(const SDL_MouseButtonEvent& event) {
         BeginDispatch();
         const Consumption result = Walk(event, event.x, event.y, &IUIInputHandler::OnMouseButtonDown, nullptr);
+        _lastPressTaker = result.taker;
         if (result.handler != nullptr) {
             _tracker.BeginCapture(event.which, event.button, *result.handler);
         }

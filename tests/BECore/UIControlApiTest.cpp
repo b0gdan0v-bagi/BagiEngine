@@ -1221,6 +1221,8 @@ namespace BECore::Tests {
         EXPECT_TRUE(BoolMember(*Member(clicked, "result"), "consumed"));
         EXPECT_EQ(recorder.Count("UIControlApiPress"), 1);
         EXPECT_EQ(recorder.Count("UIControlApiBack"), 0) << "the target below the canvas shielded by the button took the press";
+        EXPECT_EQ(StringMember(*Member(clicked, "result"), "takenBy"), "element");
+        EXPECT_EQ(StringMember(*Member(clicked, "result"), "action"), "UIControlApiPress");
     }
 
     TEST_F(UIControlApiTest, ASceneTargetAboveAButtonTakesTheClickAsItWouldFromAPerson) {
@@ -1235,6 +1237,9 @@ namespace BECore::Tests {
         EXPECT_EQ(recorder.Count("UIControlApiCovered"), 0) << "the button under the target got the click";
         EXPECT_EQ(recorder.downs, 0) << "the press did not reach the game";
         EXPECT_EQ(recorder.ups, 0);
+        EXPECT_EQ(StringMember(*Member(clicked, "result"), "takenBy"), "target");
+        EXPECT_EQ(StringMember(*Member(clicked, "result"), "action"), "") << "the element emitted nothing, the target did";
+        EXPECT_EQ(StringMember(*Member(clicked, "result"), "value"), "");
     }
 
     TEST_F(UIControlApiTest, AClickAtAPointThatNoTargetCoversStillReachesTheButton) {
@@ -1248,6 +1253,8 @@ namespace BECore::Tests {
         ASSERT_TRUE(IsOk(clicked)) << ErrorMessage(clicked);
         EXPECT_EQ(recorder.Count("UIControlApiCovered"), 1);
         EXPECT_EQ(recorder.Count("UIControlApiFront"), 0);
+        EXPECT_EQ(StringMember(*Member(clicked, "result"), "takenBy"), "element");
+        EXPECT_EQ(StringMember(*Member(clicked, "result"), "action"), "UIControlApiCovered");
     }
 
     TEST_F(UIControlApiTest, AClickOnASegmentAnswersWithTheActionAndTheValueAndTheListenerGetsThem) {
@@ -2017,6 +2024,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(BoolMember(*Member(response, "result"), "consumed"));
         EXPECT_EQ(recorder.Total(), 0u) << "the modal canvas took the click, as it would take a user's";
         EXPECT_EQ(recorder.downs, 0);
+        EXPECT_EQ(StringMember(*Member(response, "result"), "takenBy"), "target") << "a canvas above the element's own is a handler above it";
     }
 
     TEST_F(UIControlApiTest, AnElementThatDoesNotExistIsNotFoundAndItsNameIsNotInterned) {
