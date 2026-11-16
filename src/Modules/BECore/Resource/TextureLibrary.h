@@ -57,6 +57,15 @@ namespace BECore {
         void Remove(PoolString name);
 
         /**
+         * @brief Renames the entry @p from to @p to; it keeps its position and data.
+         * @return false, and nothing changed, when @p from is missing, @p to is empty or @p to names another entry; `from == to` is true.
+         */
+        bool Rename(PoolString from, PoolString to);
+
+        /** @return @p base when no entry has that name, else `base_2`, `base_3`, ... the first free one. */
+        [[nodiscard]] PoolString MakeUniqueName(StringView base) const;
+
+        /**
          * @brief Writes the library back into the config file, leaving the rest of the file as it is.
          * @return false when the config is not loaded or the file cannot be written.
          */
