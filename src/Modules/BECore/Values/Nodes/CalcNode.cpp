@@ -5,7 +5,7 @@
 namespace BECore {
 
     std::unexpected<ProgramError> CalcBuildState::Fail(StringView message) const {
-        return std::unexpected(ProgramError{Format("{}: {}", _path, message), 0});
+        return std::unexpected(ProgramError{Format("{} (at {})", message, _path), 0});
     }
 
     std::expected<ExprNodeId, ProgramError> CalcBuildState::Add(ExprAst& ast, ExprNode node) const {

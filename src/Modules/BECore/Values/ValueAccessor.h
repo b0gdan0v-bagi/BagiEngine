@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Reflection/DataAccessor.h>
+#include <BECore/Values/Nodes/CalcNode.h>
 #include <BECore/Values/Programs/ProgramCompiler.h>
 #include <BECore/Values/Value.h>
 #include <BECore/Values/ValueLinkScope.h>
@@ -13,6 +14,7 @@ namespace BECore::Ser {
         inline constexpr StringView kValueLiteralKey = "value";
         inline constexpr StringView kValueKindKey = "kind";
         inline constexpr StringView kValueExprKey = "expr";
+        inline constexpr StringView kValueTreeKey = "tree";
 
         /// A type whose accessor is one attribute (`damage="12"`), against an object or an opaque type whose accessor is a child element
         template <typename T>
@@ -78,41 +80,59 @@ namespace BECore::Ser {
             return error.column == 0 ? error.message : Format("column {}: {}", error.column, error.message);
         }
 
-        /// The `expr` of an open object scope compiled against the scope of the load; the value stays as it was on an error. The error is the compiler's
-        /// message with its column, and ends with the document's name
+        /// The formula @p text compiled against the scope of the load into @p value, which stays as it was on an error. A report is under @p key and is the compiler's message with
+        /// its column, ending with the document's name. @p printed is a tree's text: the columns are its, so the report carries it
         template <typename T>
-        bool LoadValueProgram(IDeserializer& d, Value<T>& value, ValueForm form) {
-            if (form == ValueForm::Const || form == ValueForm::Slot) {
-                d.ReportError(kValueExprKey, Format("A value of kind {} has {}, not a formula", EnumUtils<ValueForm>::ToString(form), form == ValueForm::Const ? "a literal" : "a path to read"));
-                return false;
-            }
-            String text;
-            if (!d.ReadAttribute(kValueExprKey, text)) {
-                if (!d.HasKey(kValueExprKey)) {
-                    d.ReportError(kValueExprKey, "A value of kind Program needs the formula in 'expr'");
-                }
-                return false;
-            }
-            for (const StringView other : {kValueFromKey, kValueLiteralKey}) {
-                if (d.HasKey(other)) {
-                    d.ReportError(other, "A value is a literal ('value'), a read of the context ('from') or a formula ('expr'): only one of them");
-                    return false;
-                }
-            }
+        bool CompileLoadedFormula(IDeserializer& d, Value<T>& value, StringView key, StringView text, bool printed) {
             const ContextDecl* declaration = ValueLinkScope::Current();
             if (declaration == nullptr) {
-                d.ReportError(kValueExprKey, ValueLinkScope::AtDocument(Format("No context is declared where this value is read, so the formula '{}' names nothing", text)));
+                d.ReportError(key, ValueLinkScope::AtDocument(Format("No context is declared where this value is read, so the formula '{}' names nothing", text)));
                 return false;
             }
             CompileOptions options;
             options.tables = ValueLinkScope::Tables();
             const auto compiled = CompileValue<T>(text, *declaration, options);
             if (!compiled.has_value()) {
-                d.ReportError(kValueExprKey, ValueLinkScope::AtDocument(DescribeProgramError(compiled.error())));
+                String message = DescribeProgramError(compiled.error());
+                if (printed) {
+                    AppendFormat(message, " (the tree prints as '{}')", text);
+                }
+                d.ReportError(key, ValueLinkScope::AtDocument(message));
                 return false;
             }
             value = *compiled;
             return true;
+        }
+
+        /// The formula of an open object scope: the `expr` text, or the `tree` that is built into its canonical text first (`hasTree`). Only one of `expr`, `tree`, `from` and `value` may be
+        /// there, and a tree that cannot be built or read is reported under `tree` before any text is compiled
+        template <typename T>
+        bool LoadValueProgram(IDeserializer& d, Value<T>& value, ValueForm form, bool hasTree) {
+            if (form == ValueForm::Const || form == ValueForm::Slot) {
+                d.ReportError(hasTree ? kValueTreeKey : kValueExprKey,
+                              Format("A value of kind {} has {}, not a formula", EnumUtils<ValueForm>::ToString(form), form == ValueForm::Const ? "a literal" : "a path to read"));
+                return false;
+            }
+            const StringView own = hasTree ? kValueTreeKey : kValueExprKey;
+            String text;
+            if (!hasTree && !d.ReadAttribute(kValueExprKey, text)) {
+                if (!d.HasKey(kValueExprKey)) {
+                    d.ReportError(kValueExprKey, "A value of kind Program needs the formula in 'expr' or a 'tree'");
+                }
+                return false;
+            }
+            for (const StringView other : {kValueExprKey, kValueFromKey, kValueLiteralKey}) {
+                if (other != own && d.HasKey(other)) {
+                    d.ReportError(
+                        other,
+                        Format("A value is a literal ('value'), a read of the context ('from'), a formula ('expr') or a tree ('tree'): only one of them, and '{}' is there beside '{}'", other, own));
+                    return false;
+                }
+            }
+            if (hasTree) {
+                return ReadFormulaTree(d, kValueTreeKey, text) && CompileLoadedFormula(d, value, kValueTreeKey, text, true);
+            }
+            return CompileLoadedFormula(d, value, kValueExprKey, text, false);
         }
 
         /// A literal in the object form `<key value="12"/>`, for the types that are one attribute
@@ -174,9 +194,10 @@ namespace BECore::Ser {
                     d.EndObject();
                     return false;
                 }
-                // Asked first and always, so `expr` is a known key of the strict mode and the diagnostics whatever form the entry has
-                if (d.HasKey(Detail::kValueExprKey) || form == Detail::ValueForm::Program) {
-                    const bool loaded = Detail::LoadValueProgram(d, value, form);
+                // Asked first and always, so `expr` and `tree` are known keys of the strict mode and the diagnostics whatever form the entry has
+                const bool hasTree = d.HasKey(Detail::kValueTreeKey);
+                if (hasTree || d.HasKey(Detail::kValueExprKey) || form == Detail::ValueForm::Program) {
+                    const bool loaded = Detail::LoadValueProgram(d, value, form, hasTree);
                     d.EndObject();
                     return loaded;
                 }

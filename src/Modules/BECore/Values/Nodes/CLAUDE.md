@@ -14,4 +14,8 @@ A leaf prints its text as it is, so the build checks that it lexes as the one to
 
 ## Limits
 
-Enforced while the tree is walked (`CalcBuildState`), so a hostile tree stops at the limit and the recursion never goes past it: `ExprLimits::kMaxNodes` parts and `kMaxTreeHeight` levels (a level of the tree is a level of the AST it builds). The nesting and the bytes of the printed text are the lexer's and the parser's. An error names the node by its path from the root (`tree.left.args`): a missing child is `CalcBinary: 'right' is missing` under the owner's path, and has no column (no text exists yet). A failed build touches no pool.
+Enforced while the tree is walked (`CalcBuildState`), so a hostile tree stops at the limit and the recursion never goes past it: `ExprLimits::kMaxNodes` parts and `kMaxTreeHeight` levels (a level of the tree is a level of the AST it builds). The nesting and the bytes of the printed text are the lexer's and the parser's. An error says what is wrong and ends with the path of the node from the root (`... (at tree.left)`): a missing child is `CalcBinary: 'right' is missing (at tree)`, at the owner's path. It has no column (no text exists yet). A failed build touches no pool.
+
+## Loading
+
+The key `tree` of a `Value` (`ValueAccessor.h`, `ReadFormulaTree`): the node is read as any factory field is, so XML, binary and JSON are one code, and `type` names the class of each node (`<args><node type="...">` for a list: `ELEMENT = node`). `ReadFormulaTree` is not a template, because the generated code that registers the classes lives in `CalcNodes.cpp` and a header full of `Value` fields must not see it. The build's errors are reported under `tree`; the text then goes to the compile of `expr`, whose errors have the columns of that text, so the report carries it.

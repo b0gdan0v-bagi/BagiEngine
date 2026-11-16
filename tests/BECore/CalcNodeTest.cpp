@@ -258,16 +258,16 @@ namespace BECore::Tests {
         auto binary = New<CalcBinary>();
         binary->op = ProgramOperation::Add;
         binary->left = Read("a");
-        EXPECT_TRUE(Contains(ExpectRefused(*binary), "tree: CalcBinary: 'right' is missing"));
+        EXPECT_TRUE(Contains(ExpectRefused(*binary), "CalcBinary: 'right' is missing (at tree)"));
 
         auto call = New<CalcCall>();
         call->function = "min";
         call->args.push_back(Read("a"));
         call->args.push_back(Node());
-        EXPECT_TRUE(Contains(ExpectRefused(*call), "tree: CalcCall: 'args[1]' is missing"));
+        EXPECT_TRUE(Contains(ExpectRefused(*call), "CalcCall: 'args[1]' is missing (at tree)"));
 
         const Node nested = Binary(ProgramOperation::Mul, Read("a"), Call("min", {Read("b"), Node()}));
-        EXPECT_TRUE(Contains(ExpectRefused(*nested), "tree.right: CalcCall: 'args[1]' is missing"));
+        EXPECT_TRUE(Contains(ExpectRefused(*nested), "CalcCall: 'args[1]' is missing (at tree.right)"));
 
         auto unary = New<CalcUnary>();
         EXPECT_TRUE(Contains(ExpectRefused(*unary), "'operand' is missing"));
@@ -317,7 +317,7 @@ namespace BECore::Tests {
         const Node over = DeepChain(ExprLimits::kMaxTreeHeight + 1);
         const String message = ExpectRefused(*over);
         EXPECT_TRUE(Contains(message, "levels high")) << message.c_str();
-        EXPECT_TRUE(Contains(message, "tree.operand.operand")) << message.c_str();
+        EXPECT_TRUE(Contains(message, "(at tree.operand.operand")) << message.c_str();
     }
 
     TEST(CalcNodeTest, AVeryDeepTreeNeverRecursesToItsEnd) {

@@ -2,6 +2,7 @@
 
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/RefCounted/RefCounted.h>
+#include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Values/Programs/ExprAst.h>
@@ -64,5 +65,14 @@ namespace BECore {
      * would read as more than one token. Allocates; for load time.
      */
     [[nodiscard]] std::expected<String, ProgramError> BuildFormulaText(const CalcNode& root);
+
+    /**
+     * @brief Reads the tree under @p key of the open scope and gives its canonical text in @p text (the key `tree` of a `Value`)
+     *
+     * The tree is read as any factory field is (`type` names the class of each node: the same code in XML, binary and JSON), then `BuildFormulaText`. An unknown class, a root with no
+     * `type` and a tree that cannot be built are reported under @p key, with the node path; the result is false after a report. It is not a template: the generated code that registers the
+     * classes is in one `.cpp`, so a header that holds `Value` fields sees none of it.
+     */
+    [[nodiscard]] bool ReadFormulaTree(IDeserializer& d, StringView key, String& text);
 
 }  // namespace BECore

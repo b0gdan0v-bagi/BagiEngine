@@ -2,6 +2,7 @@
 
 #include <BECore/Values/Programs/ExprFunctions.h>
 #include <BECore/Values/Programs/ExprLexer.h>
+#include <BECore/Values/ValueLinkScope.h>
 #include <Generated/CalcNodes.gen.hpp>
 
 namespace BECore {
@@ -237,6 +238,26 @@ namespace BECore {
         ast.arguments.push_back(*tableName);
         ast.arguments.push_back(*entry);
         return state.Add(ast, std::move(node));
+    }
+
+    bool ReadFormulaTree(IDeserializer& d, StringView key, String& text) {
+        IntrusivePtrNonAtomic<CalcNode> root;
+        const size_t reported = d.GetErrors().size();
+        const bool opened = Ser::Load(d, root, key);
+        if (!root) {
+            // The factory reports an unknown class; a root with no `type` (the base is abstract) or one that is no object is silent
+            if (d.GetErrors().size() == reported) {
+                d.ReportError(key, ValueLinkScope::AtDocument(opened ? "A tree needs the class of its root node in 'type'" : "A tree is an element with the class of its root node in 'type'"));
+            }
+            return false;
+        }
+        auto printed = BuildFormulaText(*root);
+        if (!printed.has_value()) {
+            d.ReportError(key, ValueLinkScope::AtDocument(printed.error().message));
+            return false;
+        }
+        text = std::move(*printed);
+        return true;
     }
 
 }  // namespace BECore
