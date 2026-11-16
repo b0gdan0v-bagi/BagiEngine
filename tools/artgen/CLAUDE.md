@@ -2,7 +2,7 @@
 
 ## Overview
 
-The image generator of the games' art is **ComfyUI**, today on the owner's Windows PC (RTX 3070, 8 GB VRAM). This folder installs it on any supported machine, starts it and checks it, and holds the service that turns a game's style preset and a subject into images. The editor and the agent reach the generator only through that service; it talks to ComfyUI over its HTTP API and its WebSocket. Nothing here is built or linked into the engine: ComfyUI (GPL-3.0) is a separate program, and its models stay on that PC, never in git. Python 3.10+, standard library only.
+The image generator of the games' art is **ComfyUI**, today on the owner's Windows PC (RTX 3070, 8 GB VRAM). This folder installs it on any supported machine, starts it and checks it, and holds the service that turns a game's style preset and a subject into images. The editor and the agent (the skill `/artgen`: `.claude/skills/artgen/SKILL.md`) reach the generator only through that service; it talks to ComfyUI over its HTTP API and its WebSocket. Nothing here is built or linked into the engine: ComfyUI (GPL-3.0) is a separate program, and its models stay on that PC, never in git. Python 3.10+, standard library only.
 
 | File | Purpose |
 |------|---------|
