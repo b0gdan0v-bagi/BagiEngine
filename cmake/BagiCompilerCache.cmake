@@ -5,7 +5,8 @@
 # vendored libraries too).
 #
 #   ENGINE_CCACHE           ON   Compile through ccache when `ccache` is on the PATH (no ccache: a plain build, a status line).
-#                                Off for MSVC and the web build (ccache does not wrap cl.exe and emcc the same way).
+#                                Off for MSVC (cl.exe) and the web build (ccache does not wrap cl.exe and emcc the same way); Clang
+#                                on Windows (the windows-clang-* presets) is covered.
 #   ENGINE_CCACHE_BASE_DIR  ""   ccache's base_dir: absolute paths under it are hashed relative to the build folder, so two
 #                                checkouts (the main one and the workers) share hits. The price: the compiler then sees relative
 #                                paths, so __FILE__ (asserts, profiler zones), diagnostics and debug info are relative to the
@@ -21,23 +22,31 @@
 # With either, hash_dir is switched off for our compiles (with -g the working folder is hashed too, and it differs per checkout).
 #
 # The settings that the precompiled header needs are given to ccache with every compile (ccache >= 4.8 takes KEY=VALUE before the
-# compiler, the launcher script below sets them in its environment): pch_defines and time_macros (a PCH is hashed by its content,
+# compiler, the launcher scripts below set them in their environment): pch_defines and time_macros (a PCH is hashed by its content,
 # not its defines and __TIME__), include_file_mtime / include_file_ctime (a header written in the same second as the compile is
 # still cached). Clang writes a timestamp into the PCH unless -fno-pch-timestamp; with it the PCH of a rebuild is byte-equal and
 # every object that includes it is a hit. `ccache -s` shows the hit rate, `ccache -z` zeroes it.
 #
-# Sharing between checkouts with the PCH (Clang on macOS and Linux): the PCH of two checkouts is never byte-equal, because Clang
+# Sharing between checkouts with the PCH (Clang on macOS, Linux and Windows): the PCH of two checkouts is never byte-equal, because Clang
 # writes into it the absolute path of every header it read (the working folder joined with the relative path; no option of Clang 17
 # or Apple clang 17 makes them relative: -fmodule-file-home-is-cwd is for modules only, the debug and file prefix maps do not touch
 # the input files of a PCH), so ccache would hash a different file in each checkout and miss in every object that uses it.
-# cmake/BagiCcacheLauncher.sh is the launcher of such a build: it compiles a PCH without ccache and writes <pch>.sum beside it (a
+# The launcher of such a build is cmake/BagiCcacheLauncher.sh (macOS, Linux) or cmake/BagiCcacheLauncher.py (Windows: no sh there, and
+# a batch file cannot quote every argument; the Python is found by find_program and started as `python -S -E`, the Microsoft Store's
+# stub is skipped; none that runs: no ccache for that configure, never the plain launcher, which would take a PCH of another checkout
+# from the cache). Both follow one rule, which a test holds: the launcher compiles a PCH without ccache and writes <pch>.sum beside it (a
 # constant), and ccache (pch_external_checksum) hashes that file instead of the PCH; the headers are in the manifest of every
 # object anyway, so a changed header is a miss (the residual risk: a definition or include path private to the PCH's own compile that no header shows changes nothing in the constant; clean the cache entry or change a header after such an edit). Two more things make the PCH's own inputs path-free: the PCH header is given as
 # <BECore/pch.h> (CMake writes the argument into cmake_pch.hxx, which ccache hashes: a path there differs per checkout) and the
 # vendored SDL, whose own PCH is an absolute path in CMake's cmake_pch.h that we cannot change, is built without its PCH
 # (BagiEngine.cmake). A PCH is never taken from the cache: it names the files of the checkout that made it and Clang refuses it
 # when they changed ("has been modified since the precompiled header was built"). The probe `tools/ccache/ccache_share.py`
-# measures all of this.
+# measures all of this: `python tools/ccache/ccache_share.py probe --work <short scratch> --preset <preset> --targets BagiEngineTests
+# --expect-hit-rate 0.98` (build-project.md, "Local overrides").
+#
+# Windows: base_dir may be spelled with either slash and either case of the drive letter (it is written with forward slashes here), but
+# a source path is made relative only when its own drive letter has the case Windows gives the folder: configure from a path that
+# does (D:, not d:). Keep the scratch and checkout paths short: SDL's tree is deep.
 include_guard(GLOBAL)
 
 option(ENGINE_CCACHE "Compile through ccache when it is installed" ON)
