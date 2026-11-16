@@ -19,6 +19,37 @@ namespace BECore {
     CORE_ENUM(TypedNodeKind, uint8_t, Constant, Slot, Operation)
 
     /**
+     * @brief The type of a node of a formula: a program type and, for `Enum`, which enum
+     *
+     * The register image of every enum is the index of the enumerator, so the opcodes cannot tell two enums apart; the checker can, and two enum types are equal when their
+     * descriptors are `SameType`. `enumeration` is the descriptor of a field or of the type asked for: static data of the reflection, so a pointer to it stays valid.
+     */
+    struct ExprType {
+        ProgramType program = ProgramType::Int32;
+        /// `Enum` only
+        const TypeDesc* enumeration = nullptr;
+
+        constexpr ExprType() = default;
+        constexpr ExprType(ProgramType type) : program(type) {}
+
+        [[nodiscard]] static ExprType OfEnum(const TypeDesc& descriptor) {
+            ExprType type(ProgramType::Enum);
+            type.enumeration = &descriptor;
+            return type;
+        }
+
+        [[nodiscard]] bool operator==(const ExprType& other) const {
+            if (program != other.program) {
+                return false;
+            }
+            if (program != ProgramType::Enum || enumeration == nullptr || other.enumeration == nullptr) {
+                return program != ProgramType::Enum || enumeration == other.enumeration;
+            }
+            return SameType(*enumeration, *other.enumeration);
+        }
+    };
+
+    /**
      * @brief A node of a checked formula: it has a program type and is one of three things
      *
      * `Constant`: the register image of a literal already of its type. `Slot`: a field of a context object (`slot`, and the path as written). `Operation`: an opcode
@@ -26,13 +57,15 @@ namespace BECore {
      */
     struct TypedNode {
         TypedNodeKind kind = TypedNodeKind::Constant;
-        ProgramType type = ProgramType::Int32;
+        ExprType type;
         Opcode opcode = Opcode::Invalid;
         uint8_t operandCount = 0;
         Array<TypedNodeId, 3> operands{};
         RegisterImage constant{};
         SlotRef slot{};
         String path;
+        /// `Operation`: the immediate of the instruction when the opcode has one (the index of a component for `Extract`)
+        uint32_t immediate = 0;
         uint32_t column = 0;
     };
 
@@ -40,7 +73,7 @@ namespace BECore {
     struct TypedExpr {
         Vector<TypedNode> nodes;
         TypedNodeId root = 0;
-        ProgramType type = ProgramType::Int32;
+        ExprType type;
 
         [[nodiscard]] const TypedNode& operator[](TypedNodeId id) const {
             return nodes[id];
@@ -50,15 +83,17 @@ namespace BECore {
     /**
      * @brief Types a parsed formula against the declared context and the type its field has
      *
-     * Every name path is linked with `LinkSlot` (so its messages, `did you mean` and the list of fields come from there) and must name a field of a program type.
-     * There is no implicit conversion: two operands of two types are an error that says so, and the result must be exactly @p expected. An integer literal takes the
-     * type of the operand beside it, or @p expected (int, int64, float or double); a float literal is float or double and an error where an integer is needed. A
-     * division or a modulo by a literal zero, an operator or a function a type lacks, a member (`.x`: no type has components yet), a wrong number of arguments and an
-     * @p expected outside the program types are errors. An error is `{message, column of the node}`; the one about @p expected has column 0.
+     * Every name path is linked with `LinkSlot` (so its messages, `did you mean` and the list of fields come from there) and must name a field of a program type or of a
+     * reflected enum. There is no implicit conversion: two operands of two types are an error that says so, and the result must be exactly @p expected. An integer literal
+     * takes the type of the operand beside it, or @p expected (int, int64, float or double); a float literal is float or double and an error where an integer is needed. A
+     * bare name that is no level and no function is an enumerator when the type beside it (the other operand, the other value of `select`, @p expected) is an enum; a
+     * `'text'` is a string. A division or a modulo by a literal zero, an operator or a function a type lacks, a member (`.x`: no type has components yet), a wrong number of
+     * arguments and an @p expected outside the program types are errors. An error is `{message, column of the node}`; the one about @p expected has column 0.
      */
     [[nodiscard]] std::expected<TypedExpr, ProgramError> CheckExpression(const ExprAst& ast, const ContextDecl& declaration, const TypeDesc& expected);
 
-    /// The program type a field of the type @p expected has, or the error that lists the types a formula can have: asked before the text is read, so a field no formula can fill says so first
-    [[nodiscard]] std::expected<ProgramType, ProgramError> CheckExpectedType(const TypeDesc& expected);
+    /// The type a field of the type @p expected has in a formula (for an enum, with its descriptor), or the error that lists the types a formula can have: asked before the text is read, so a field no
+    /// formula can fill says so first
+    [[nodiscard]] std::expected<ExprType, ProgramError> CheckExpectedType(const TypeDesc& expected);
 
 }  // namespace BECore

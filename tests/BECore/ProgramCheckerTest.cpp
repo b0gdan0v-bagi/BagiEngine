@@ -27,6 +27,7 @@ namespace BECore::Tests {
                 EXPECT_TRUE(declaration.Add<ValueUnitStats>("caster").has_value());
                 EXPECT_TRUE(declaration.Add<ValueCastInfo>("cast").has_value());
                 EXPECT_TRUE(declaration.Add<ValueBehind>("behind").has_value());
+                EXPECT_TRUE(declaration.Add<ValueEnumWidths>("widths").has_value());
             }
         };
 
@@ -41,7 +42,8 @@ namespace BECore::Tests {
                                      {ProgramType::Float, "caster.speed"},
                                      {ProgramType::Double, "caster.precise"}};
 
-        TypeDesc DescriptorOf(ProgramType type) {
+        /// The descriptor of a program type that is not an enum (a field of the checker context has one of each)
+        const TypeDesc& DescriptorOf(ProgramType type) {
             switch (type) {
                 case ProgramType::Bool:
                     return DescribeType<bool>();
@@ -53,34 +55,61 @@ namespace BECore::Tests {
                     return DescribeType<float>();
                 case ProgramType::Double:
                     return DescribeType<double>();
-                default:
+                case ProgramType::Vec2:
+                    return DescribeType<Vec2>();
+                case ProgramType::Vec3:
+                    return DescribeType<Vec3>();
+                case ProgramType::Vec4:
+                    return DescribeType<Vec4>();
+                case ProgramType::IVec2:
+                    return DescribeType<IVec2>();
+                case ProgramType::Quat:
+                    return DescribeType<Quat>();
+                case ProgramType::Color:
+                    return DescribeType<Color>();
+                case ProgramType::String:
+                    return DescribeType<PoolString>();
+                case ProgramType::Enum:
                     break;
             }
-            return {};
+            return DescribeType<ValueElement>();
         }
 
-        std::expected<TypedExpr, ProgramError> Check(const ContextDecl& declaration, StringView text, ProgramType expected) {
+        std::expected<TypedExpr, ProgramError> Check(const ContextDecl& declaration, StringView text, const TypeDesc& expected) {
             const auto parsed = ParseExpression(text);
             EXPECT_TRUE(parsed.has_value()) << String(text).c_str() << ": " << (parsed.has_value() ? String{} : parsed.error().message).c_str();
             if (!parsed.has_value()) {
                 return std::unexpected(parsed.error());
             }
-            return CheckExpression(*parsed, declaration, DescriptorOf(expected));
+            return CheckExpression(*parsed, declaration, expected);
         }
 
-        TypedExpr Accepted(const ContextDecl& declaration, StringView text, ProgramType expected) {
+        std::expected<TypedExpr, ProgramError> Check(const ContextDecl& declaration, StringView text, ProgramType expected) {
+            return Check(declaration, text, DescriptorOf(expected));
+        }
+
+        /// The formula must check and have the type the field of @p expected has (for an enum, the very enum)
+        TypedExpr AcceptedAs(const ContextDecl& declaration, StringView text, const TypeDesc& expected) {
             auto checked = Check(declaration, text, expected);
             EXPECT_TRUE(checked.has_value()) << String(text).c_str() << ": " << (checked.has_value() ? String{} : checked.error().message).c_str();
             if (!checked.has_value()) {
                 return {};
             }
-            EXPECT_EQ(checked->type, expected) << String(text).c_str();
-            EXPECT_EQ((*checked)[checked->root].type, expected) << String(text).c_str();
+            const auto wanted = CheckExpectedType(expected);
+            EXPECT_TRUE(wanted.has_value());
+            if (wanted.has_value()) {
+                EXPECT_TRUE(checked->type == *wanted) << String(text).c_str();
+                EXPECT_TRUE((*checked)[checked->root].type == *wanted) << String(text).c_str();
+            }
             return std::move(*checked);
         }
 
+        TypedExpr Accepted(const ContextDecl& declaration, StringView text, ProgramType expected) {
+            return AcceptedAs(declaration, text, DescriptorOf(expected));
+        }
+
         /// The message must say every one of @p words and the column is where the text puts it
-        ProgramError Refused(const ContextDecl& declaration, StringView text, ProgramType expected, uint32_t column, std::initializer_list<StringView> words) {
+        ProgramError RefusedAs(const ContextDecl& declaration, StringView text, const TypeDesc& expected, uint32_t column, std::initializer_list<StringView> words) {
             const auto checked = Check(declaration, text, expected);
             EXPECT_FALSE(checked.has_value()) << String(text).c_str();
             if (checked.has_value()) {
@@ -91,6 +120,10 @@ namespace BECore::Tests {
                 EXPECT_TRUE(Contains(checked.error().message, word)) << String(text).c_str() << ": " << checked.error().message.c_str() << " does not say '" << String(word).c_str() << "'";
             }
             return checked.error();
+        }
+
+        ProgramError Refused(const ContextDecl& declaration, StringView text, ProgramType expected, uint32_t column, std::initializer_list<StringView> words) {
+            return RefusedAs(declaration, text, DescriptorOf(expected), column, words);
         }
 
         /// The 1-based column of the first @p part of @p text
@@ -308,7 +341,7 @@ namespace BECore::Tests {
     TEST(ProgramCheckerTest, ARefusedOperatorListsTheTypesThatHaveIt) {
         const CheckerContext context;
         Refused(context.declaration, "caster.speed % 2", ProgramType::Float, 14, {"'%'", "not defined for float", "int or int64"});
-        Refused(context.declaration, "caster.alive + caster.alive", ProgramType::Bool, 14, {"'+'", "not defined for bool", "int, int64, float or double"});
+        Refused(context.declaration, "caster.alive + caster.alive", ProgramType::Bool, 14, {"'+'", "not defined for bool", "int, int64, float, double, vec2, vec3, vec4 or ivec2"});
         Refused(context.declaration, "caster.alive < caster.alive", ProgramType::Bool, 14, {"'<'", "not defined for bool"});
         Refused(context.declaration, "-caster.alive", ProgramType::Bool, 1, {"'-'", "not defined for bool"});
     }
@@ -436,16 +469,31 @@ namespace BECore::Tests {
         const CheckerContext context;
         const auto parsed = ParseExpression("1");
         ASSERT_TRUE(parsed.has_value());
-        const auto vector = CheckExpression(*parsed, context.declaration, DescribeType<Vec3>());
-        ASSERT_FALSE(vector.has_value());
-        EXPECT_EQ(vector.error().column, 0U);
-        EXPECT_TRUE(Contains(vector.error().message, "bool, int, int64, float or double")) << vector.error().message.c_str();
-        EXPECT_TRUE(Contains(vector.error().message, "Vec3")) << vector.error().message.c_str();
+        const auto rect = CheckExpression(*parsed, context.declaration, DescribeType<Rect>());
+        ASSERT_FALSE(rect.has_value());
+        EXPECT_EQ(rect.error().column, 0U);
+        EXPECT_TRUE(Contains(rect.error().message, "bool, int, int64, float, double, vec2, vec3, vec4, ivec2, quat, color, enum or string")) << rect.error().message.c_str();
+        EXPECT_TRUE(Contains(rect.error().message, "Rect")) << rect.error().message.c_str();
         const auto unsignedType = CheckExpression(*parsed, context.declaration, DescribeType<uint32_t>());
         ASSERT_FALSE(unsignedType.has_value());
         EXPECT_TRUE(Contains(unsignedType.error().message, "uint32")) << unsignedType.error().message.c_str();
         EXPECT_FALSE(CheckExpression(*parsed, context.declaration, DescribeType<String>()).has_value());
-        EXPECT_FALSE(CheckExpression(*parsed, context.declaration, DescribeType<ValueElement>()).has_value());
+        EXPECT_FALSE(CheckExpression(*parsed, context.declaration, DescribeType<ValuePoint>()).has_value());
+        EXPECT_FALSE(CheckExpression(*parsed, context.declaration, DescribeType<Vector<int32_t>>()).has_value());
+    }
+
+    TEST(ProgramCheckerTest, EveryProgramTypeAndEveryEnumIsAnExpectedType) {
+        const TypeDesc* const descriptors[] = {&DescribeType<bool>(),  &DescribeType<int32_t>(),    &DescribeType<int64_t>(),      &DescribeType<float>(),        &DescribeType<double>(),
+                                               &DescribeType<Vec2>(),  &DescribeType<Vec3>(),       &DescribeType<Vec4>(),         &DescribeType<IVec2>(),        &DescribeType<Quat>(),
+                                               &DescribeType<Color>(), &DescribeType<PoolString>(), &DescribeType<ValueElement>(), &DescribeType<ValueWideEnum>()};
+        for (const TypeDesc* descriptor : descriptors) {
+            const auto wanted = CheckExpectedType(*descriptor);
+            ASSERT_TRUE(wanted.has_value()) << wanted.error().message.c_str();
+            EXPECT_EQ(wanted->program == ProgramType::Enum, descriptor->kind == TypeKind::Enum);
+        }
+        EXPECT_FALSE(*CheckExpectedType(DescribeType<ValueElement>()) == *CheckExpectedType(DescribeType<ValueWideEnum>())) << "two enums are two types";
+        EXPECT_TRUE(*CheckExpectedType(DescribeType<ValueElement>()) == *CheckExpectedType(DescribeType<ValueElement>()));
+        EXPECT_FALSE(CheckExpectedType(DescribeType<String>()).has_value()) << "a String is not a PoolString";
     }
 
     TEST(ProgramCheckerTest, LogicNeedsBoolsOnBothSides) {
@@ -508,15 +556,188 @@ namespace BECore::Tests {
 
     TEST(ProgramCheckerTest, AFieldOfAnotherTypeIsNamedWithItsTypeAndWhatAFormulaReads) {
         const CheckerContext context;
-        Refused(context.declaration, "caster.count", ProgramType::Int32, 1, {"caster.count", "uint32", "bool, int, int64, float or double"});
+        Refused(context.declaration, "caster.count", ProgramType::Int32, 1, {"caster.count", "uint32", "int, int64, float, double, vec2, vec3, vec4, ivec2, quat, color, enum or string"});
         Refused(context.declaration, "caster.velocity.x + 1", ProgramType::Float, 1, {"caster.velocity.x"});
-        Refused(context.declaration, "caster.velocity", ProgramType::Float, 1, {"caster.velocity", "Vec3", "reads only fields of the types"});
-        Refused(context.declaration, "caster.span", ProgramType::Int32, 1, {"ValueSpan"});
-        Refused(context.declaration, "caster.element", ProgramType::Int32, 1, {"enum"});
-        Refused(context.declaration, "caster.title", ProgramType::Int32, 1, {"caster.title"});
+        Refused(context.declaration, "caster.span", ProgramType::Int32, 1, {"ValueSpan", "reads only fields of the types"});
+        Refused(context.declaration, "caster.bounds", ProgramType::Int32, 1, {"Rect", "reads only fields of the types"});
+        Refused(context.declaration, "caster.spawn", ProgramType::Int32, 1, {"ValuePoint"});
         Refused(context.declaration, "caster.buffs", ProgramType::Int32, 1, {"list"});
         Refused(context.declaration, "behind.table", ProgramType::Int32, 1, {"map"});
-        Refused(context.declaration, "caster.cell", ProgramType::Int32, 1, {"IVec2"});
+    }
+
+    TEST(ProgramCheckerTest, AFieldOfAnyProgramTypeIsASlotTypedWithItAlone) {
+        const CheckerContext context;
+        struct Row {
+            ProgramType type;
+            StringView path;
+        };
+        const Row rows[] = {{ProgramType::Vec2, "caster.position"}, {ProgramType::IVec2, "caster.cell"},  {ProgramType::Vec3, "caster.velocity"},
+                            {ProgramType::Vec4, "caster.plane"},    {ProgramType::Quat, "caster.facing"}, {ProgramType::Color, "caster.tint"},
+                            {ProgramType::String, "caster.title"},  {ProgramType::Vec3, "cast.target"},   {ProgramType::Vec2, "caster.span.offset"}};
+        for (const Row& row : rows) {
+            const TypedExpr expr = Accepted(context.declaration, row.path, row.type);
+            ASSERT_EQ(expr.nodes.size(), 1U) << String(row.path).c_str();
+            EXPECT_EQ(Root(expr).kind, TypedNodeKind::Slot);
+            EXPECT_EQ(Root(expr).path, String(row.path));
+            const auto linked = LinkSlot(context.declaration, row.path, DescriptorOf(row.type));
+            ASSERT_TRUE(linked.has_value()) << String(row.path).c_str();
+            EXPECT_EQ(Root(expr).slot.level, linked->level);
+            EXPECT_EQ(Root(expr).slot.offset, linked->offset);
+
+            // Read as another type it is refused by the type of the field, not by the path
+            const ProgramType other = row.type == ProgramType::Bool ? ProgramType::Int32 : ProgramType::Bool;
+            Refused(context.declaration, row.path, other, 1, {"the formula is", ProgramTypeName(row.type), "is asked for"});
+        }
+    }
+
+    TEST(ProgramCheckerTest, AnEnumFieldIsASlotTypedWithItsOwnEnum) {
+        const CheckerContext context;
+        const TypedExpr element = AcceptedAs(context.declaration, "caster.element", DescribeType<ValueElement>());
+        ASSERT_EQ(element.nodes.size(), 1U);
+        EXPECT_EQ(Root(element).kind, TypedNodeKind::Slot);
+        EXPECT_EQ(Root(element).type.program, ProgramType::Enum);
+        ASSERT_NE(Root(element).type.enumeration, nullptr);
+        EXPECT_EQ(Root(element).type.enumeration->enumBytes, sizeof(ValueElement));
+        const auto linked = LinkSlot(context.declaration, "caster.element", DescribeType<ValueElement>());
+        ASSERT_TRUE(linked.has_value());
+        EXPECT_EQ(Root(element).slot.offset, linked->offset);
+
+        AcceptedAs(context.declaration, "widths.narrow", DescribeType<ValueNarrowEnum>());
+        AcceptedAs(context.declaration, "widths.wide16", DescribeType<ValueShortEnum>());
+        AcceptedAs(context.declaration, "widths.wide32", DescribeType<ValueWideEnum>());
+        RefusedAs(context.declaration, "caster.element", DescribeType<ValueNarrowEnum>(), 1, {"the formula is an enum {Fire, Water, Earth}", "a value of enum {Low, Mid, High}"});
+        Refused(context.declaration, "caster.element", ProgramType::Int32, 1, {"the formula is an enum {Fire, Water, Earth}", "int"});
+    }
+
+    TEST(ProgramCheckerTest, EqualityWorksForEveryTypeAndOrderingAndArithmeticOnlyWhereTheTypeHasThem) {
+        const CheckerContext context;
+        const StringView fields[] = {"caster.position", "caster.cell", "caster.velocity", "caster.plane", "caster.facing", "caster.tint", "caster.title", "caster.element"};
+        for (const StringView field : fields) {
+            for (const StringView op : {"==", "!="}) {
+                const String text = Format("{} {} {}", field, op, field);
+                const TypedExpr expr = AcceptedAs(context.declaration, text, DescribeType<bool>());
+                EXPECT_EQ(Root(expr).operandCount, 2U) << text.c_str();
+            }
+        }
+        const TypedExpr position = Accepted(context.declaration, "caster.position == caster.position", ProgramType::Bool);
+        EXPECT_EQ(Root(position).opcode, Opcode::EqVec2);
+        const TypedExpr title = Accepted(context.declaration, "caster.title != caster.title", ProgramType::Bool);
+        EXPECT_EQ(Root(title).opcode, Opcode::NeString);
+
+        Refused(context.declaration, "caster.position < caster.position", ProgramType::Bool, 17, {"'<'", "not defined for vec2", "int, int64, float or double"});
+        Refused(context.declaration, "caster.velocity >= caster.velocity", ProgramType::Bool, 17, {"'>='", "not defined for vec3"});
+        Refused(context.declaration, "caster.tint + caster.tint", ProgramType::Color, 13, {"'+'", "not defined for color", "vec2, vec3, vec4 or ivec2"});
+        Refused(context.declaration, "caster.element < caster.element", ProgramType::Bool, 16, {"not defined for enum {Fire, Water, Earth}"});
+        Refused(context.declaration, "caster.title + caster.title", ProgramType::String, 14, {"'+'", "not defined for string"});
+        Refused(context.declaration, "caster.alive && caster.title", ProgramType::Bool, 17, {"right one is a string"});
+        // Types that have the row work: no per-type code in the checker
+        EXPECT_EQ(Root(Accepted(context.declaration, "caster.position + caster.position", ProgramType::Vec2)).opcode, Opcode::AddVec2);
+        EXPECT_EQ(Root(Accepted(context.declaration, "-caster.velocity", ProgramType::Vec3)).opcode, Opcode::NegVec3);
+        EXPECT_EQ(Root(Accepted(context.declaration, "caster.facing * caster.facing", ProgramType::Quat)).opcode, Opcode::MulQuat);
+        Refused(context.declaration, "-caster.title", ProgramType::String, 1, {"'-'", "not defined for string"});
+        Refused(context.declaration, "min(caster.position, caster.position)", ProgramType::Vec2, 1, {"'min'", "not defined for vec2"});
+    }
+
+    TEST(ProgramCheckerTest, TwoTypesInOneOperatorAreNamedWithTheTypeOfTheEnumsToo) {
+        const CheckerContext context;
+        Refused(context.declaration, "caster.velocity == caster.position", ProgramType::Bool, 20, {"vec3 and vec2", "no implicit conversion"});
+        Refused(context.declaration, "caster.title == caster.element", ProgramType::Bool, 17, {"string and enum {Fire, Water, Earth}"});
+        // Two enums never mix, though the register image of both is an index
+        const String same = "caster.element == widths.narrow";
+        Refused(context.declaration, same, ProgramType::Bool, ColumnOf(same, "widths.narrow"), {"enum {Fire, Water, Earth} and enum {Low, Mid, High}"});
+        Refused(context.declaration, "widths.narrow == widths.wide32", ProgramType::Bool, 18, {"enum {Low, Mid, High} and enum {Low, Mid, High}"});
+        Accepted(context.declaration, "widths.narrow == widths.narrow", ProgramType::Bool);
+    }
+
+    TEST(ProgramCheckerTest, ANameBesideAnEnumIsItsEnumerator) {
+        const CheckerContext context;
+        for (const StringView text : {"caster.element == Fire", "Fire == caster.element", "caster.element != Earth", "Water != caster.element"}) {
+            const TypedExpr expr = Accepted(context.declaration, text, ProgramType::Bool);
+            ASSERT_EQ(expr.nodes.size(), 3U) << String(text).c_str();
+            const TypedNode& slot = expr[0];
+            const TypedNode& constant = expr[1];
+            EXPECT_EQ(slot.kind, TypedNodeKind::Slot) << "the operand that reads the context is checked first: " << String(text).c_str();
+            ASSERT_EQ(constant.kind, TypedNodeKind::Constant);
+            EXPECT_TRUE(constant.type == slot.type) << "the enumerator has the enum of its neighbour";
+        }
+        EXPECT_EQ(ConstantOf<ProgramEnum>(Accepted(context.declaration, "caster.element == Fire", ProgramType::Bool)[1]).index, 0U);
+        EXPECT_EQ(ConstantOf<ProgramEnum>(Accepted(context.declaration, "caster.element == Water", ProgramType::Bool)[1]).index, 1U);
+        EXPECT_EQ(ConstantOf<ProgramEnum>(Accepted(context.declaration, "Earth == caster.element", ProgramType::Bool)[1]).index, 2U);
+        EXPECT_EQ(ConstantOf<ProgramEnum>(AcceptedAs(context.declaration, "widths.wide32 == High", DescribeType<bool>())[1]).index, 2U) << "the enum of the field decides which names there are";
+
+        // The expected type is a neighbour too
+        const TypedExpr alone = AcceptedAs(context.declaration, "Earth", DescribeType<ValueElement>());
+        ASSERT_EQ(alone.nodes.size(), 1U);
+        EXPECT_EQ(ConstantOf<ProgramEnum>(alone[0]).index, 2U);
+        const TypedExpr chosen = AcceptedAs(context.declaration, "select(caster.alive, Fire, Water)", DescribeType<ValueElement>());
+        EXPECT_EQ(Root(chosen).opcode, Opcode::SelectEnum);
+        EXPECT_EQ(ConstantOf<ProgramEnum>(chosen[1]).index, 0U);
+        EXPECT_EQ(ConstantOf<ProgramEnum>(chosen[2]).index, 1U);
+        const TypedExpr mixed = AcceptedAs(context.declaration, "select(cast.level > 2, Water, caster.element)", DescribeType<ValueElement>());
+        EXPECT_EQ(Root(mixed).opcode, Opcode::SelectEnum);
+        AcceptedAs(context.declaration, "select(caster.alive, Fire, caster.element) == Water", DescribeType<bool>());
+    }
+
+    TEST(ProgramCheckerTest, AnEnumeratorThatIsNotThereListsTheEnumeratorsAndTheNearestName) {
+        const CheckerContext context;
+        const String text = "caster.element == Fyre";
+        Refused(context.declaration, text, ProgramType::Bool, ColumnOf(text, "Fyre"), {"unknown name 'Fyre'", "did you mean 'Fire'", "no enumerator of enum {Fire, Water, Earth}"});
+        Refused(context.declaration, "caster.element == fire", ProgramType::Bool, 19, {"'fire'", "did you mean 'Fire'"});
+        Refused(context.declaration, "caster.element == Low", ProgramType::Bool, 19, {"'Low'", "enum {Fire, Water, Earth}"});
+        RefusedAs(context.declaration, "Cold", DescribeType<ValueElement>(), 1, {"'Cold'", "{Fire, Water, Earth}"});
+    }
+
+    TEST(ProgramCheckerTest, ANameWithNoEnumBesideItKeepsTheUnknownNameErrorAndSaysWhatAnEnumeratorNeeds) {
+        const CheckerContext context;
+        Refused(context.declaration, "Fire == Water", ProgramType::Bool, 1, {"unknown name 'Fire'", "declared levels are: caster, cast, behind, widths", "needs an enum beside it"});
+        Refused(context.declaration, "caster.attack == Fire", ProgramType::Bool, 18, {"unknown name 'Fire'", "needs an enum beside it"});
+        Refused(context.declaration, "Fire", ProgramType::Int32, 1, {"unknown name 'Fire'", "needs an enum beside it"});
+        Refused(context.declaration, "select(caster.alive, Fire, Water)", ProgramType::Int32, 22, {"unknown name 'Fire'"});
+    }
+
+    TEST(ProgramCheckerTest, ALevelOrAFunctionWinsOverAnEnumeratorOfTheSameName) {
+        ContextDecl declaration;
+        ASSERT_TRUE(declaration.Add<ValueUnitStats>("caster").has_value());
+        ASSERT_TRUE(declaration.Add<ValueCastInfo>("Fire").has_value());
+        Refused(declaration, "caster.element == Fire", ProgramType::Bool, 19, {"'Fire' is a level", "level.field"});
+        Accepted(declaration, "caster.element == Water", ProgramType::Bool);
+        Accepted(declaration, "Fire.level > 1", ProgramType::Bool);
+    }
+
+    TEST(ProgramCheckerTest, AStringLiteralIsAStringConstantOfThePool) {
+        const CheckerContext context;
+        const TypedExpr alone = Accepted(context.declaration, "'burn'", ProgramType::String);
+        ASSERT_EQ(alone.nodes.size(), 1U);
+        EXPECT_EQ(ConstantOf<PoolString>(alone[0]), PoolString::Intern("burn"));
+        EXPECT_EQ(ConstantOf<PoolString>(Accepted(context.declaration, "''", ProgramType::String)[0]), PoolString{});
+
+        const TypedExpr compared = Accepted(context.declaration, "caster.title == 'Hero'", ProgramType::Bool);
+        EXPECT_EQ(Root(compared).opcode, Opcode::EqString);
+        EXPECT_EQ(ConstantOf<PoolString>(compared[1]), PoolString::Intern("Hero"));
+        Accepted(context.declaration, "'Hero' != caster.title", ProgramType::Bool);
+        Accepted(context.declaration, "caster.title == 'a b + c'", ProgramType::Bool);
+        Accepted(context.declaration, "'a' == 'a'", ProgramType::Bool);
+        EXPECT_EQ(Root(Accepted(context.declaration, "select(caster.alive, 'burn', 'chill')", ProgramType::String)).opcode, Opcode::SelectString);
+        EXPECT_EQ(Root(Accepted(context.declaration, "select(caster.alive, caster.title, 'chill')", ProgramType::String)).opcode, Opcode::SelectString);
+        Accepted(context.declaration, "select(caster.element == Fire, 'burn', 'chill')", ProgramType::String);
+
+        Refused(context.declaration, "'a' < 'b'", ProgramType::Bool, 5, {"'<'", "not defined for string", "int, int64, float or double"});
+        Refused(context.declaration, "'a' + 'b'", ProgramType::String, 5, {"'+'", "not defined for string"});
+        Refused(context.declaration, "caster.title == 1", ProgramType::Bool, 17, {"string and int"});
+        Refused(context.declaration, "'a' == 1", ProgramType::Bool, 8, {"string and int"});
+        Refused(context.declaration, "'a'", ProgramType::Int32, 1, {"the formula is a string", "int"});
+        Refused(context.declaration, "float('a')", ProgramType::Float, 7, {"'float' converts a number", "a string"});
+    }
+
+    TEST(ProgramCheckerTest, AFloatLiteralOfAFloatIsReadAsAFloatAndNotRoundedTwice) {
+        const CheckerContext context;
+        // Just above the middle of 1.0f and the next float: through a double it lands on the middle and then rounds to even, down
+        const TypedExpr expr = Accepted(context.declaration, "caster.speed + 1.00000005960464477539062501", ProgramType::Float);
+        EXPECT_EQ(ConstantOf<float>(expr[1]), std::nextafter(1.0f, 2.0f));
+        EXPECT_EQ(ConstantOf<float>(Accepted(context.declaration, "caster.speed + 0.1", ProgramType::Float)[1]), 0.1f);
+        EXPECT_EQ(ConstantOf<float>(Accepted(context.declaration, "-0.1", ProgramType::Float)[0]), -0.1f);
+        EXPECT_EQ(ConstantOf<float>(Accepted(context.declaration, "caster.speed + 1e-50", ProgramType::Float)[1]), 0.0f) << "below the smallest float it is the nearest one";
+        EXPECT_EQ(ConstantOf<double>(Accepted(context.declaration, "caster.precise + 1.00000005960464477539062501", ProgramType::Double)[1]), 1.00000005960464477539062501);
     }
 
     TEST(ProgramCheckerTest, ListElementsAndMembersNeverReachTheChecker) {

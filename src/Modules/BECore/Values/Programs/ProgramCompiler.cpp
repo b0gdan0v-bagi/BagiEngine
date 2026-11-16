@@ -34,7 +34,7 @@ namespace BECore {
                 builder.Emit(Opcode::LoadConst, *reg, 0, 0, 0, builder.AddConstant(images[node.operands[i]]));
             }
             builder.Emit(node.opcode, regs[0], regs[0], regs[1], regs[2]);
-            const auto program = builder.Finish(node.type, regs[0]);
+            const auto program = builder.Finish(node.type.program, regs[0]);
             if (!program.has_value()) {
                 return std::unexpected(program.error());
             }
@@ -54,7 +54,7 @@ namespace BECore {
                 }
                 const TypedNode& root = _expr[_expr.root];
                 CompiledExpression result;
-                result.type = root.type;
+                result.type = root.type.program;
                 if (_isConstant[_expr.root]) {
                     result.kind = CompiledKind::Constant;
                     result.constant = _images[_expr.root];
@@ -73,7 +73,7 @@ namespace BECore {
                 if (const auto lowered = Lower(_expr.root, *resultRegister); !lowered.has_value()) {
                     return std::unexpected(lowered.error());
                 }
-                auto program = _builder.Finish(root.type, *resultRegister, PoolString::Intern(_source));
+                auto program = _builder.Finish(root.type.program, *resultRegister, PoolString::Intern(_source));
                 if (!program.has_value()) {
                     return std::unexpected(program.error());
                 }
@@ -121,7 +121,7 @@ namespace BECore {
                     return {};
                 }
                 if (node.kind == TypedNodeKind::Slot) {
-                    _builder.EmitLoadSlot(dst, node.type, node.slot);
+                    _builder.EmitLoadSlot(dst, node.type.program, node.slot, node.type.program == ProgramType::Enum ? static_cast<uint8_t>(node.type.enumeration->enumBytes) : uint8_t{0});
                     return {};
                 }
                 Array<uint8_t, kMaxOperands> regs{};

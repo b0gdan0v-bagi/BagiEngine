@@ -323,13 +323,13 @@ namespace BECore::Tests {
     TEST(ValueProgramLoadTest, ExprOnATypeNoProgramComputesListsTheTypes) {
         ValueFormulaDocument document;
         const ValueLinkScope scope(kDocumentName);
-        const String reports = LoadXml(Format("{}{}", kContext, R"(<aim expr="caster.velocity"/>)"), document);
-        EXPECT_TRUE(HasText(reports, "State.aim.expr")) << reports.c_str();
-        EXPECT_TRUE(HasText(reports, "bool, int, int64, float or double")) << reports.c_str();
-        EXPECT_TRUE(HasText(reports, "Vec3")) << reports.c_str();
+        const String reports = LoadXml(Format("{}{}", kContext, R"(<spot expr="caster.spawn"/>)"), document);
+        EXPECT_TRUE(HasText(reports, "State.spot.expr")) << reports.c_str();
+        EXPECT_TRUE(HasText(reports, "bool, int, int64, float, double, vec2")) << reports.c_str();
+        EXPECT_TRUE(HasText(reports, "ValuePoint")) << reports.c_str();
         EXPECT_TRUE(HasText(reports, "(document 'units/skill.xml')")) << reports.c_str();
-        EXPECT_EQ(document.aim.GetConst(), (Vec3{9.0f, 9.0f, 9.0f}));
-        EXPECT_TRUE(document.aim.IsConst());
+        EXPECT_EQ(document.spot.GetConst(), (ValuePoint{9, 9}));
+        EXPECT_TRUE(document.spot.IsConst());
     }
 
     TEST(ValueProgramLoadTest, NoDeclaredContextIsTheExistingErrorWithTheDocumentName) {

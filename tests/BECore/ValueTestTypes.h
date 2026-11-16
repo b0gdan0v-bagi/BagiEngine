@@ -172,6 +172,7 @@ namespace BECore::ValueTestData {
         BE_REFLECT_FIELD Value<int32_t> damage = 7;
         BE_REFLECT_FIELD Value<float> power = 1.0f;
         BE_REFLECT_FIELD Value<Vec3> aim = Vec3{9.0f, 9.0f, 9.0f};
+        BE_REFLECT_FIELD Value<ValuePoint> spot = ValuePoint{9, 9};
     };
 
     /// The document of a named config (`MakeFromConfig` needs a `RefCounted`): the same fields as `ValueDocument`
@@ -184,7 +185,8 @@ namespace BECore::ValueTestData {
         BE_REFLECT_FIELD Value<Vec3> aim = Vec3{9.0f, 9.0f, 9.0f};
     };
 
-    /// A document whose fields are written as formulas (`expr`): one field of each type a program computes, and a `Vec3` that refuses it in this stage; the defaults are not what the tests load
+    /// A document whose fields are written as formulas (`expr`): one field of each type a program computes up to `Vec3`, and a `ValuePoint` that no program computes; the defaults are not what the
+    /// tests load
     struct ValueFormulaDocument {
         BE_CLASS(ValueFormulaDocument)
 
@@ -195,6 +197,7 @@ namespace BECore::ValueTestData {
         BE_REFLECT_FIELD Value<double> precise = 1.0;
         BE_REFLECT_FIELD Value<bool> ready = false;
         BE_REFLECT_FIELD Value<Vec3> aim = Vec3{9.0f, 9.0f, 9.0f};
+        BE_REFLECT_FIELD Value<ValuePoint> spot = ValuePoint{9, 9};
     };
 
     /// The document of a named config (`MakeFromConfig` needs a `RefCounted`): the same fields as `ValueFormulaDocument`
@@ -208,6 +211,7 @@ namespace BECore::ValueTestData {
         BE_REFLECT_FIELD Value<double> precise = 1.0;
         BE_REFLECT_FIELD Value<bool> ready = false;
         BE_REFLECT_FIELD Value<Vec3> aim = Vec3{9.0f, 9.0f, 9.0f};
+        BE_REFLECT_FIELD Value<ValuePoint> spot = ValuePoint{9, 9};
     };
 
     /// The mistake a document can make: a value is read before the element that declares what it reads
