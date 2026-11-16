@@ -148,3 +148,27 @@ def test_exclude_argument_is_repeatable(tmp_path):
 def test_bad_arguments_exit_two(tmp_path):
     assert includes.main(["--root", str(tmp_path / "missing")]) == 2
     assert includes.main(["--nonsense"]) == 2
+
+
+def test_windows_h_in_a_header_is_found(tmp_path):
+    write(tmp_path, "src/Foo.h", "#define NOMINMAX\n#include <windows.h>\n#  include <WinSock2.h>\n")
+    assert found(tmp_path) == [
+        "src/Foo.h:2: #include <windows.h> in a header: its macros reach every includer, include it in the source",
+        "src/Foo.h:3: #include <WinSock2.h> in a header: its macros reach every includer, include it in the source",
+    ]
+
+
+def test_windows_h_in_a_source_needs_nominmax_before_it(tmp_path):
+    write(tmp_path, "src/A.cpp", "#include <Windows.h>\n")
+    write(tmp_path, "src/B.cpp", "#include <windows.h>\n#define NOMINMAX\n")
+    write(tmp_path, "src/C.cpp", "// #define NOMINMAX\n#include <winsock2.h>\n")
+    assert found(tmp_path) == [
+        "src/A.cpp:1: #include <Windows.h> without #define NOMINMAX before it",
+        "src/B.cpp:1: #include <windows.h> without #define NOMINMAX before it",
+        "src/C.cpp:2: #include <winsock2.h> without #define NOMINMAX before it",
+    ]
+
+
+def test_windows_h_after_nominmax_in_a_source_is_allowed(tmp_path):
+    write(tmp_path, "src/A.cpp", "#ifndef NOMINMAX\n#define NOMINMAX\n#endif\n#include <windows.h>\n#include <windowsx.h>\n")
+    assert found(tmp_path) == []

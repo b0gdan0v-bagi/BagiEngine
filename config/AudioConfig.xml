@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<!-- The defaults of the sound (BECore/Audio/AudioSettings.h). A game's own AudioConfig.xml replaces this file whole.
+     backend: the IAudioBackend to make (empty: SDLAudioBackend); voices: sounds that play at once (1 to 64). -->
+<root voices="16">
+  <master volume="1" muted="false" />
+  <sfx volume="1" muted="false" />
+  <music volume="1" muted="false" />
+  <ui volume="1" muted="false" />
+</root>

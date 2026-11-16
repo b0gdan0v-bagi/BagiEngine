@@ -3,6 +3,7 @@
     "source_dirs": [
       "src/Modules/BECore/Application",
       "src/Modules/BECore/Assert",
+      "src/Modules/BECore/Audio",
       "src/Modules/BECore/Logger",
       "src/Modules/BECore/Tests",
       "src/Modules/BECore/Widgets",
@@ -19,6 +20,7 @@
     "scan_dirs": [
       "src/Modules/BECore/Application",
       "src/Modules/BECore/Assert",
+      "src/Modules/BECore/Audio",
       "src/Modules/BECore/Logger",
       "src/Modules/BECore/Tests",
       "src/Modules/BECore/Widgets",

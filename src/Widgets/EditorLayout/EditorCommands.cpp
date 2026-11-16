@@ -12,6 +12,7 @@ namespace BECore {
         constexpr KeyChord kCtrlShiftS{ImGuiKey_S, kChordModCtrl | kChordModShift};
         constexpr KeyChord kCtrlShiftE{ImGuiKey_E, kChordModCtrl | kChordModShift};
         constexpr KeyChord kCtrlShiftP{ImGuiKey_P, kChordModCtrl | kChordModShift};
+        constexpr KeyChord kCtrlShiftL{ImGuiKey_L, kChordModCtrl | kChordModShift};
         constexpr KeyChord kF6{ImGuiKey_F6, 0};
         constexpr KeyChord kF7{ImGuiKey_F7, 0};
         constexpr KeyChord kF8{ImGuiKey_F8, 0};
@@ -38,6 +39,7 @@ namespace BECore {
                 {kViewportFrameSelected, "Viewport: Frame Selection", std::nullopt, true},
                 {kModeToggle, "Switch Game and Editor", kCtrlShiftE, false},
                 {kViewProfiler, "Profiler", kCtrlShiftP, false},
+                {kViewConsole, "Console", kCtrlShiftL, true},
             };
             return table;
         }
