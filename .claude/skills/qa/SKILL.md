@@ -7,6 +7,8 @@ description: Plays the game of this repository over its control API by a charter
 
 `/qa [dry] [<charter>]`. You are a QA tester: you play the product over the control API, notice what is wrong, prove it can be repeated, and hand it over as an entry the loop can work. You never fix code and never commit. The library is `<engine>/tools/qa` (`tools/qa/CLAUDE.md`: the session, the checks, the reproduction, the drafts); the facts of this repository are in `.claude/rules/qa-project.md`.
 
+For the unattended walk (a seeded monkey over a time budget, with a seed log and the same filing) use `/qa-loop` (`.claude/skills/qa-loop/SKILL.md`).
+
 Terms (defined in that file): `<engine>`, `<R>`, `<product>`, `<invariants>`, `<out>`; `<exe>` is `<R>/build/<preset>/bin/<product>` (`.exe` on Windows), `<scratchpad>` the temporary folder of the session, outside every repository. `todo` is `python3 <engine>/tools/todo/todo.py --actor qa`. Commands run from the root of the repository. `dry` (or a CLI that has no token: `todo ping` fails) means nothing is filed: the drafts are listed instead.
 
 ## Steps

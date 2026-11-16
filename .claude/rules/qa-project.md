@@ -3,11 +3,12 @@ paths:
   - "tools/qa/**/*"
   - "tools/shots/**/*"
   - ".claude/skills/qa/**/*"
+  - ".claude/skills/qa-loop/**/*"
 ---
 
 # QA facts of this repository
 
-Read by the skill `qa` (`.claude/skills/qa/SKILL.md`; the library it drives: `tools/qa/CLAUDE.md`) and by `tools/shots/shots.py` (the `## Screenshots` set below). A game that carries this repository as the submodule `engine/` has a file of the same name with the same headings and fields: this file is its template. A game without the file is not tested by `/qa`. The build facts are in `build-project.md`, the todo areas in `todo-project.md`, not here.
+Read by the skills `qa` (`.claude/skills/qa/SKILL.md`) and `qa-loop` (`.claude/skills/qa-loop/SKILL.md`; the library they drive: `tools/qa/CLAUDE.md`) and by `tools/shots/shots.py` (the `## Screenshots` set below). A game that carries this repository as the submodule `engine/` has a file of the same name with the same headings and fields: this file is its template. A game without the file is not tested by `/qa`. The build facts are in `build-project.md`, the todo areas in `todo-project.md`, not here.
 
 ## Terms
 
@@ -21,19 +22,21 @@ Read by the skill `qa` (`.claude/skills/qa/SKILL.md`; the library it drives: `to
 
 ## Session
 
-Fields the `qa` skill reads. A game fills every row.
+Fields the `qa` and `qa-loop` skills read. A game fills every row.
 
 | Field | Meaning | Engine value |
 |-------|---------|--------------|
 | Product | the executable, built through the `build` skill if `build/<preset>/bin/` has none | `BagiStress` |
 | Preset | the preset of the session, as the `build` skill picks it (`cmake --list-presets=build`) | the Debug preset of this OS (`macos-debug`) |
 | Invariants module | the Python file of `tools/qa/CLAUDE.md` ("A game's invariants module"), relative to `<R>` | `tools/stress/qa/invariants.py` |
+| Loop preset | what the unattended `/qa-loop` builds when the game is too slow in Debug for a long walk | the Debug `Preset` (`monkey_moves` keeps the slow scenes out) |
 | Extra start flags | what `launch(extra=...)` adds to `--headless --manual-clock` | none |
 | First scene | where the game is after `launch` | `sprites` with the default count (`get_state` says it) |
 | Known state | how a session gets back to a start (`QaSession.reset(**params)`, the game's `reset`) | `reset(scene=..., count=...)`: both optional, the rest (the language) goes to its defaults; `scene` is one of `get_state`'s `scenes` |
 | Out folder | where sessions write; outside every repository (`QaSession` refuses a git work tree) | `~/.claude/plans/qa/` |
 | Bug area | the area `todo add --area` takes; in a game its own area, or `engine` when the cause is in the engine (the skill decides by where the cause is) | `engine` |
 | Bug id prefix | the id of an entry is `bug-<short>`, as the drafts name it | `bug-` |
+| Scenario folder | the product's recorded scenarios, relative to `<R>`: the fix of a `bug-*` entry leaves its reproduction here as `<short>.jsonl`, and the ctests of `be_add_game_scenario_tests` glob it | `tools/stress/tests/scenarios/` |
 
 ## Invariants
 
