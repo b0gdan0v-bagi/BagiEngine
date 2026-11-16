@@ -50,7 +50,7 @@ A game starts in Game mode by shipping its own `config/ApplicationConfig.xml` wi
 | # | Stage | Where | Does |
 |---|-------|-------|------|
 | 0 | Clock | `GamePause::BeginFrame` decides the kind; then `Time::Tick` (Running), `Time::Advance(step seconds)` (Stepped, the manual clock) or `Time::Hold` (Held) | Measures or sets the frame time; every value below is fixed for the rest of the frame |
-| 1 | Input | `EventsProviderManager::ProcessEvents`, then `Clipboard::Update` | Window, mouse and keyboard events become `SDLEvents`, the mouse through `UIInput` first; `InputEvents::ActionEvent` comes from components such as `ClickableComponent`; the clipboard answers its reads and emits `PasteEvent` (`Clipboard/CLAUDE.md`) |
+| 1 | Input | `EventsProviderManager::ProcessEvents`, then `Clipboard::Update` | Window, mouse and keyboard events become `SDLEvents`, the mouse through `UIInput` first (`Input/CLAUDE.md`); `InputEvents::ActionEvent` comes from components such as `ClickableComponent`, a target of `UIInput`; the clipboard answers its reads and emits `PasteEvent` (`Clipboard/CLAUDE.md`) |
 | 1b | Commands | `ControlService::Drain` | Requests of the external control API run here, so they see this frame's input (`Control/CLAUDE.md`) |
 | 2 | Tasks | `TaskManager::Update` | Delayed tasks that are due and the tasks queued for the main thread (not in a Held frame, nor the tweens and the logic below) |
 | 2b | Tweens | `TweenManager::Advance(dt)` | Every running tween moves by the frame time and its setters write the values, so the logic below reads them (`Animation/CLAUDE.md`) |
