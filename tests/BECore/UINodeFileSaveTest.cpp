@@ -175,8 +175,10 @@ namespace BECore::Tests {
         }
 
         UINodeFileReport Save(Span<const IntrusivePtr<UIElement>> edited) {
-            const UINodeFileIo io{[&](StringView ref, String& text, String& error) { return Read(ref, text, error); },
-                                  [&](StringView ref, StringView text, String& error) { return Write(ref, text, error); }};
+            // Named: UINodeFileIo holds FunctionRefs, which would dangle on temporaries once this statement ends
+            const auto read = [&](StringView ref, String& text, String& error) { return Read(ref, text, error); };
+            const auto write = [&](StringView ref, StringView text, String& error) { return Write(ref, text, error); };
+            const UINodeFileIo io{read, write};
             return SaveUIRectsToNodeFiles(*_scene, edited, io);
         }
 

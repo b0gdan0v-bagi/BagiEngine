@@ -89,6 +89,10 @@ namespace BECore::Tests {
             CoreManager::GetTime().Advance(Time::kMaxFrameTime);
             EngineEnvironment::UpdateGame(FrameKind::Running);
             CoreManager::GetPause().SetPaused(false);
+            // The tween manager outlives the fixture and its setter writes into it: dropping the handle would leave the tween running into the next test
+            if (_tween) {
+                _tween->Cancel();
+            }
             _tween = nullptr;
             _probe = nullptr;
             EngineEnvironment::UseSceneManager({});
@@ -122,6 +126,8 @@ namespace BECore::Tests {
         float _tweenValue = 0.0f;
         TaskProbe _oneStep;
         TaskProbe _twoSteps;
+        // A member, not a local of the test: an ASSERT that returns early leaves the continuation to TearDown's frame, which writes into it
+        TaskProbe _workerProbe;
     };
 
     TEST_F(GamePauseCycleTest, ARunningGameAdvancesEverything) {
@@ -208,7 +214,7 @@ namespace BECore::Tests {
         if (TaskManager::GetInstance().GetWorkerCount() == 0) {
             GTEST_SKIP() << "needs worker threads";
         }
-        TaskProbe probe;
+        TaskProbe& probe = _workerProbe;
         CoreManager::GetPause().SetPaused(true);
         TaskManager::GetInstance().Run(FinishOnWorker(probe));
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(20);

@@ -391,6 +391,8 @@ namespace BECore::Tests {
         class LogRecorder : public SubscriptionHolder {
         public:
             LogRecorder() {
+                // Lines that earlier tests of this process left in the ring belong to them, not to this recorder
+                LogEvent::Flush();
                 Subscribe<LogEvent, &LogRecorder::OnLog>(this);
             }
 
