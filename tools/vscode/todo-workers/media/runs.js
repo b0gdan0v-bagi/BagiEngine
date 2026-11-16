@@ -80,5 +80,39 @@
             .filter((line) => QUEUE_LINE.test(line) && !/^w\d+: cd /.test(line));
     }
 
-    return { NO_REASON, progressOf, progressText, unlinkedWaitsOf, queueRefusal, startedEntry, queueNotes };
+
+    // Why the panel must not start the next entry of a worker's queue now, or null when it may. `worker.py list`
+    // names one session per worker (the newest of the name todo-w<k>), so a live loop can hide behind a newer session
+    // that ended at once, and a start from the command line is not listed for a few seconds: the session state alone
+    // does not prove the folder free. A checked-out todo/* branch whose entry is not known to be in review means a
+    // loop holds the folder; a session started less than START_GRACE_MS ago may still be claiming; and a worker has to
+    // look free for FREE_SETTLE_MS on end before the start, so one refresh in the middle of a start does not count.
+    const START_GRACE_MS = 3 * 60 * 1000;
+    const FREE_SETTLE_MS = 45 * 1000;
+
+    function heldBranch(w) {
+        for (const repo of [w.head, w.engine]) {
+            const branch = repo && repo.branch;
+            if (typeof branch === "string" && branch.startsWith("todo/")) return branch;
+        }
+        return null;
+    }
+
+    function queueStartBlock(w, now, freeSince) {
+        if (!w.queue || !w.queue.length) return "empty queue";
+        if (w.queuePaused) return "queue paused";
+        if (w.active || w.waiting) return "a session runs";
+        if (w.dirty) return "uncommitted changes";
+        if (w.limited) return "usage limit";
+        if (w.stopped) return "stopped";
+        if (w.entry && w.entry.status !== "review") return `holds ${w.entry.id} (${w.entry.status})`;
+        const branch = heldBranch(w);
+        if (branch && !(w.entry && w.entry.status === "review")) return `holds ${branch}`;
+        const started = w.session && Number(w.session.startedAt);
+        if (started && now - started < START_GRACE_MS) return "a session started moments ago";
+        if (freeSince === undefined || freeSince === null || now - freeSince < FREE_SETTLE_MS) return "settling";
+        return null;
+    }
+
+    return { NO_REASON, progressOf, progressText, unlinkedWaitsOf, queueRefusal, startedEntry, queueNotes, queueStartBlock, START_GRACE_MS, FREE_SETTLE_MS };
 });
