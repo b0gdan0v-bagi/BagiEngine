@@ -111,11 +111,11 @@ namespace BECore {
          *
          * Returns the answer when the nested call has given it. Returns nullopt when the nested call deferred (`step`, `screenshot`, ...): its frames
          * are now those of @p outer, so the handler of @p outer has to return without answering, and when the frames have passed @p onAnswer gets the
-         * answer, with @p outer, which it may answer, defer again or use to run the next nested call. @p onAnswer is called once, never when this
-         * function returns an answer, and not at all when Shutdown() answers @p outer first. What @p onAnswer needs later it holds in its own capture:
-         * the handler of @p outer has returned by then.
+         * answer, with @p outer, which it may answer, defer again or use to run the next nested call. @p onAnswer is moved from only when this function
+         * returns nullopt and is called once then, not at all when Shutdown() answers @p outer first; when an answer is returned the caller still has it. What @p onAnswer needs later it holds in its
+         * own capture: the handler of @p outer has returned by then.
          */
-        [[nodiscard]] Optional<ControlAnswer> RunNested(ControlCall& outer, StringView method, Json params, NestedContinuation onAnswer);
+        [[nodiscard]] Optional<ControlAnswer> RunNested(ControlCall& outer, StringView method, Json params, NestedContinuation&& onAnswer);
 
         /// Runs the queued requests (frame stage 1b)
         void Drain();

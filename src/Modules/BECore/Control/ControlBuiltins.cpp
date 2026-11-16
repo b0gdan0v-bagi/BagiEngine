@@ -149,6 +149,8 @@ namespace BECore {
             call.Reply(std::move(result));
         }
 
+        constexpr StringView kBatchMethod = "batch";
+        constexpr StringView kQuitMethod = "quit";
         constexpr StringView kWarningLevelName = "warning";
         constexpr StringView kErrorLevelName = "error";
 
@@ -296,6 +298,112 @@ namespace BECore {
             }
         }
 
+        /// One call of a `batch`, checked before anything runs
+        struct BatchEntry {
+            String method;
+            Json params;
+        };
+
+        /// The state of a `batch` that is running. It lives in the continuation of the call that waits for frames, not in the handler, which has returned by then
+        struct BatchState {
+            Vector<BatchEntry> entries;
+            bool continueOnError = false;
+            size_t next = 0;
+            Json results = Json::array();
+            Optional<size_t> stopped;
+
+            [[nodiscard]] bool IsFinished() const {
+                return next >= entries.size() || stopped.has_value();
+            }
+
+            void Record(ControlAnswer answer) {
+                Json entry = Json::object();
+                entry["ok"] = answer.has_value();
+                if (answer) {
+                    entry["result"] = std::move(*answer);
+                } else {
+                    Json error = Json::object();
+                    error["code"] = MakeJsonString(answer.error().code);
+                    error["message"] = MakeJsonString(answer.error().message);
+                    entry["error"] = std::move(error);
+                }
+                results.push_back(std::move(entry));
+                if (!answer && !continueOnError) {
+                    stopped = next;
+                }
+                ++next;
+            }
+        };
+
+        /// The calls of a batch as the client sent them, or the error to answer with. Nothing is built from a bad shape
+        std::expected<BatchState, ControlError> ReadBatch(const Json& params) {
+            const Json* calls = FindJsonMember(params, "calls");
+            if (calls == nullptr || !calls->is_array() || calls->empty() || calls->size() > kMaxBatchCalls) {
+                return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, Format("'calls' has to be an array of 1 to {} calls", kMaxBatchCalls)));
+            }
+
+            BatchState state;
+            if (FindJsonMember(params, "continueOnError") != nullptr) {
+                const auto continueOnError = GetJsonBool(params, "continueOnError");
+                if (!continueOnError) {
+                    return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, "'continueOnError' has to be a boolean"));
+                }
+                state.continueOnError = *continueOnError;
+            }
+
+            state.entries.reserve(calls->size());
+            for (const Json& call : *calls) {
+                auto method = GetJsonString(call, "method");
+                if (!call.is_object() || !method || method->empty()) {
+                    return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, "every call of 'calls' has to be an object with a non-empty string 'method'"));
+                }
+                const Json* callParams = FindJsonMember(call, "params");
+                if (callParams != nullptr && !callParams->is_null() && !callParams->is_object()) {
+                    return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, "'params' of a call has to be an object"));
+                }
+                state.entries.push_back(BatchEntry{std::move(*method), callParams != nullptr && callParams->is_object() ? *callParams : Json::object()});
+            }
+            return state;
+        }
+
+        /// Runs the calls from `next` on until one defers (the continuation then carries on after its frames) or the batch is finished and answered
+        void RunBatch(ControlService& service, ControlCall& outer, UniquePtr<BatchState> state) {
+            BatchState* batch = state.get();
+            ControlService::NestedContinuation resume = [&service, state = std::move(state)](ControlCall& again, ControlAnswer answer) mutable {
+                state->Record(std::move(answer));
+                RunBatch(service, again, std::move(state));
+            };
+
+            while (!batch->IsFinished()) {
+                const BatchEntry& entry = batch->entries[batch->next];
+                if (entry.method == kBatchMethod || entry.method == kQuitMethod) {
+                    batch->Record(std::unexpected(MakeControlError(ControlErrors::kInvalidParams, Format("'{}' cannot run inside a batch", entry.method))));
+                    continue;
+                }
+                auto answer = service.RunNested(outer, entry.method, entry.params, std::move(resume));
+                if (!answer) {
+                    return;  // the call waits for frames: `resume` has the state now
+                }
+                batch->Record(std::move(*answer));
+            }
+
+            Json result = Json::object();
+            result["results"] = std::move(batch->results);
+            if (batch->stopped) {
+                result["stopped"] = *batch->stopped;
+            }
+            outer.Reply(std::move(result));
+        }
+
+        void HandleBatch(ControlCall& call, ControlService& service) {
+            auto state = ReadBatch(call.Params());
+            if (!state) {
+                call.Fail(state.error());
+                return;
+            }
+            RunBatch(service, call, MakeUnique<BatchState>(std::move(*state)));
+        }
+
         void HandleQuit(ControlCall& call) {
             // The answer first: it is queued for the transport before the application starts to stop
             call.Reply(Json::object());
@@ -314,6 +422,7 @@ namespace BECore {
         service.RegisterHandler("log_mark", [&service](ControlCall& call) { HandleLogMark(call, service); });
         service.RegisterHandler("log_since", [&service](ControlCall& call) { HandleLogSince(call, service); });
         service.RegisterHandler("log_subscribe", [&service](ControlCall& call) { HandleLogSubscribe(call, service); });
+        service.RegisterHandler("batch", [&service](ControlCall& call) { HandleBatch(call, service); });
         service.RegisterHandler("quit", HandleQuit, /*bypassBarrier=*/true);
         service.SetFrameEndHook("log_push", [&service] { PushLogLines(service); });
         service.Log().Start();
@@ -334,6 +443,13 @@ namespace BECore {
         service.DescribeMethod("log_subscribe",
                                {Format("Turns on or off the push of the event `log`, one per new line, at most {} per frame (off by default, for every client)", ControlLog::kMaxLogPushPerFrame),
                                 {{"enabled", "boolean", true, "Push on or off"}, {"level", "string", false, "\"warning\" (default) or \"error\""}}});
+        service.DescribeMethod(
+            "batch",
+            {Format(
+                 "Runs up to {} calls in order in one request and answers with the answer of each; an error ends it unless continueOnError. A call that waits for frames (step) makes the batch wait",
+                 kMaxBatchCalls),
+             {{"calls", "array", true, "Objects {method, params?}; `batch` and `quit` are refused inside"},
+              {"continueOnError", "boolean", false, "Keep running after a call that fails (default false)"}}});
         service.DescribeMethod("quit", {"Answers, then stops the application at the end of the frame", {}});
     }
 

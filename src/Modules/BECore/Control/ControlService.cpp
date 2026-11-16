@@ -203,7 +203,7 @@ namespace BECore {
         }
     }
 
-    Optional<ControlAnswer> ControlService::RunNested(ControlCall& outer, StringView method, Json params, NestedContinuation onAnswer) {
+    Optional<ControlAnswer> ControlService::RunNested(ControlCall& outer, StringView method, Json params, NestedContinuation&& onAnswer) {
         EXPECT(!outer.IsAnswered() && outer._deferFrames == 0, "ControlService::RunNested: the outer call is already answered or deferred");
 
         const auto entry = _handlers.find(method);

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 namespace BECore {
@@ -8,6 +9,9 @@ namespace BECore {
 
     /// Most frames one `step` may ask for. `quit` still works while a step runs, so a long one can be ended
     inline constexpr uint32_t kMaxStepFrames = 36000;
+
+    /// Most calls one `batch` may hold
+    inline constexpr size_t kMaxBatchCalls = 1000;
 
     /**
      * @brief Registers the methods that need nothing but the core services.
@@ -23,9 +27,13 @@ namespace BECore {
      * | log_mark | none | {"mark","warnings","errors"}; `mark` selects the lines logged from now on |
      * | log_since | {"mark", "level": "warning" (default) or "error"} | {"lines":[{"sequence","level","time","message","category"?}],"warnings","errors","dropped","next","truncated"?} |
      * | log_subscribe | {"enabled", "level"?} | {"enabled","level"}; while on, every new line is pushed as the event `log` at the end of the frame |
+     * | batch | {"calls":[{"method","params"?}] (1 to kMaxBatchCalls), "continueOnError"?} | {"results":[{"ok":true,"result"} or {"ok":false,"error":{"code","message"}}],"stopped"?: index} |
      * | quit   | none | {}; then ApplicationEvents::QuitEvent, so the application stops at the end of the frame. Bypasses the barrier |
      *
      * `status`, `log_mark` and `log_since` flush the log first, so a line logged earlier in the same frame is counted. It also starts `ControlService::Log()`.
+     *
+     * `batch` runs the calls in order inside the one request and an error ends it (`stopped` is its index) unless `continueOnError`; `batch` and `quit` are refused per call, and a call that waits
+     * for frames (`step`) makes the whole batch wait.
      *
      * It also registers the by-name methods (`RegisterReflectionControl`).
      *
