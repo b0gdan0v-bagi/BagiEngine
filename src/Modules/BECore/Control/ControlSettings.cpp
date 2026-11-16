@@ -102,6 +102,16 @@ namespace BECore {
                 portOnCommandLine = true;
             } else if (argument == FlagName(ControlArguments::kControlPortPrefix)) {
                 return std::unexpected(InvalidSetting(Format("'{}' needs a value: {}N", argument, ControlArguments::kControlPortPrefix)));
+            } else if (argument.starts_with(ControlArguments::kReplayPrefix)) {
+                const StringView value = argument.substr(ControlArguments::kReplayPrefix.size());
+                if (value.empty()) {
+                    return std::unexpected(InvalidSetting(Format("'{}' has no file: {}FILE", argument, ControlArguments::kReplayPrefix)));
+                }
+                settings.replayPath = String(value);
+            } else if (argument == FlagName(ControlArguments::kReplayPrefix)) {
+                return std::unexpected(InvalidSetting(Format("'{}' needs a file: {}FILE", argument, ControlArguments::kReplayPrefix)));
+            } else if (argument == ControlArguments::kReplayExit) {
+                settings.replayExit = true;
             } else if (argument.starts_with(ControlArguments::kWindowPrefix)) {
                 settings.windowSize = ParseWindowSize(argument.substr(ControlArguments::kWindowPrefix.size()));
                 if (!settings.windowSize) {
@@ -129,6 +139,15 @@ namespace BECore {
         if (settings.headless && !settings.enabled) {
             return std::unexpected(
                 InvalidSetting(Format("{} needs {}: without the control API nobody could reach a game that has no window", ControlArguments::kHeadless, ControlArguments::kControl)));
+        }
+        if (settings.replayExit && settings.replayPath.empty()) {
+            return std::unexpected(InvalidSetting(Format("{} has no effect without {}FILE", ControlArguments::kReplayExit, ControlArguments::kReplayPrefix)));
+        }
+        if (!settings.replayPath.empty() && !settings.enabled) {
+            return std::unexpected(InvalidSetting(Format("{}FILE needs {}: a replay is a call of the control API", ControlArguments::kReplayPrefix, ControlArguments::kControl)));
+        }
+        if (!settings.replayPath.empty() && !settings.manualClock) {
+            return std::unexpected(InvalidSetting(Format("{}FILE needs {}: the replay passes the game time of the file on it", ControlArguments::kReplayPrefix, ControlArguments::kManualClock)));
         }
 
         if ((settings.windowSize || settings.density) && !settings.headless) {

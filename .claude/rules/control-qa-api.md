@@ -55,3 +55,7 @@ For a run of a QA session: `log_mark` before, act in one `batch`, wait with `run
 ```json
 {"method": "log_since", "params": {"mark": 0, "level": "error"}, "expect": {"equal": {"errors": 0, "dropped": 0}}}
 ```
+
+## The game's recording and the scenario recording
+
+`record_start`, `record_stop` and `replay` (`Games/CLAUDE.md`, "Record and replay") record the **game's** accepted calls in the engine, whoever made them (a client, a person's click), and play them back headless or in a window on the manual clock, checking the outcome of every action; a game has to opt in (`IsReplayable`). The Python recording above is a **client's** session with the expectations the client wrote, replayed by `bagi_play.py` through the API against any game. The two files are not interchangeable. `record_start` and `replay` take any path of the host (a control client can overwrite or read any file the process can), as the loopback API trusts the person at the machine.
