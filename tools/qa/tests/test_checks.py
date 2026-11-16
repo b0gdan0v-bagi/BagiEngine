@@ -165,3 +165,50 @@ def test_unusable_module_is_an_invariants_error(tmp_path, source):
 def test_missing_module_is_an_invariants_error(tmp_path):
     with pytest.raises(InvariantsError, match="cannot read"):
         checks.load_invariants(tmp_path / "nope.py")
+
+
+MOVES = [checks.Move("step", "step", {"frames": 1}, "step 1"), checks.Move("action", "perform_action", {"type": "inc"}, "inc")]
+
+
+def test_a_module_with_monkey_moves_is_loaded_and_its_list_is_used(tmp_path):
+    source = """
+from bagi_qa_checks import Move
+
+def monkey_moves(answer, moves):
+    return [move for move in moves if move.kind != "step"] + [Move("reset", "reset", {"count": answer["state"]["count"]}, "reset")]
+"""
+    module = checks.load_invariants(write_module(tmp_path, source))
+    found, findings = checks.run_monkey_moves(module, {"state": {"count": 4}}, MOVES)
+    assert findings == [] and [move.kind for move in found] == ["action", "reset"] and found[1].params == {"count": 4}
+
+
+def test_a_module_without_monkey_moves_leaves_the_list(tmp_path):
+    module = checks.load_invariants(write_module(tmp_path, "# nothing\n"))
+    assert module.monkey_moves is None
+    assert checks.run_monkey_moves(module, {}, MOVES) == (MOVES, [])
+    assert checks.run_monkey_moves(None, {}, MOVES) == (MOVES, [])
+
+
+def test_monkey_moves_is_given_a_copy_it_may_change(tmp_path):
+    module = checks.load_invariants(write_module(tmp_path, "def monkey_moves(answer, moves):\n    moves.clear()\n    return moves\n"))
+    found, _ = checks.run_monkey_moves(module, {}, MOVES)
+    assert found == [] and len(MOVES) == 2
+
+
+@pytest.mark.parametrize("returned", ["None", "[('step', 'step', {}, '')]", "(Move('a', 'b', {}),)", "[Move('a', 'b', {}), 3]"])
+def test_a_raising_or_wrong_monkey_moves_is_a_module_error_and_the_list_survives(tmp_path, returned):
+    source = f"from bagi_qa_checks import Move\ndef monkey_moves(answer, moves):\n    return {returned}\n"
+    module = checks.load_invariants(write_module(tmp_path, source))
+    found, (finding,) = checks.run_monkey_moves(module, {}, MOVES)
+    assert found == MOVES and (finding.kind, finding.name) == ("invariant", "qa.module_error") and "monkey_moves" in finding.message
+
+
+def test_a_raising_monkey_moves_has_its_traceback(tmp_path):
+    module = checks.load_invariants(write_module(tmp_path, "def monkey_moves(answer, moves):\n    return answer['missing']\n"))
+    found, (finding,) = checks.run_monkey_moves(module, {}, MOVES)
+    assert found == MOVES and "KeyError" in finding.message and finding.details["traceback"]
+
+
+def test_monkey_moves_that_is_not_a_function_is_an_invariants_error(tmp_path):
+    with pytest.raises(InvariantsError, match="monkey_moves"):
+        checks.load_invariants(write_module(tmp_path, "monkey_moves = 3\n"))

@@ -26,9 +26,6 @@ namespace BECore {
 
     private:
         void OnLogEvent(const LogEvent& event);
-
-    private:
-        bool _initialized = false;
     };
 
 }  // namespace BECore

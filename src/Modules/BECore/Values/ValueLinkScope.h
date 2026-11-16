@@ -2,6 +2,7 @@
 
 #include <BECore/Types/Types.h>
 #include <BECore/Values/Context.h>
+#include <BECore/Values/ValueTables.h>
 #include <expected>
 
 namespace BECore {
@@ -13,6 +14,7 @@ namespace BECore {
      * A stack per thread, so two threads loading at once each see their own declaration and never the other's. A scope gets its declaration
      * from code (the constructor that takes one) or from the document itself (`<context>`, `Declare`, which keeps a copy: the object that
      * was read may move). A `from` read where no scope has a declaration is a load error: the document has no context to name a level of.
+     * A scope may also carry the named tables of the game (`UseTables`) for `ByLevel`; like the declaration, they are found in the innermost scope that has them.
      */
     class ValueLinkScope {
     public:
@@ -28,8 +30,16 @@ namespace BECore {
         ValueLinkScope(ValueLinkScope&&) = delete;
         ValueLinkScope& operator=(ValueLinkScope&&) = delete;
 
+        /// Makes @p tables, which outlives the scope, the provider of `ByLevel` for the loads under this scope; it is read while a formula compiles and never kept
+        void UseTables(const IValueTables& tables) {
+            _tables = &tables;
+        }
+
         /// The declaration of the innermost scope that has one, null when none has: an empty scope does not hide the declaration of the scope around it
         [[nodiscard]] static const ContextDecl* Current();
+
+        /// The tables of the innermost scope that has some, null when none has: a scope without tables does not hide the ones around it
+        [[nodiscard]] static const IValueTables* Tables();
 
         /// Gives the innermost scope a copy of @p declaration; the error text when no scope is open or that scope has a declaration already
         [[nodiscard]] static std::expected<void, String> Declare(const ContextDecl& declaration);
@@ -46,6 +56,7 @@ namespace BECore {
         }
 
         const ContextDecl* _external = nullptr;
+        const IValueTables* _tables = nullptr;
         Optional<ContextDecl> _owned;
         String _documentName;
         ValueLinkScope* _previous;

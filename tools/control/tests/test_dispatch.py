@@ -39,6 +39,8 @@ def echo_handler(method: str, params: dict | None):
         return {"width": 2, "height": 1, "png_base64": base64.b64encode(b"\x89PNG-fake").decode("ascii"), "params": params}
     if method == "ui_tree":
         return {"scene": "Fake", "canvases": []}
+    if method == "set_window":
+        return {"width": (params or {}).get("width"), "params": params}
     if method == "ui_click":
         if (params or {}).get("name") == "Nothing":
             raise FakeError("not_found", "no element named 'Nothing'")
@@ -53,6 +55,18 @@ def echo_handler(method: str, params: dict | None):
         raise FakeError("not_recording", "the Chrome trace is not recording")
     if method == "zone_allocs":
         return {"enabled": False, "zones": [], "totals": {"count": 0}, "params": params}
+    if method == "log_mark":
+        return {"mark": 5, "warnings": 1, "errors": 0}
+    if method == "log_since":
+        if (params or {}).get("mark", -1) < 0:
+            raise FakeError("invalid_params", "'mark' has to be an integer, 0 or more")
+        return {"lines": [], "warnings": 0, "errors": 0, "dropped": 0, "next": 5, "params": params}
+    if method == "log_subscribe":
+        return {"enabled": (params or {}).get("enabled"), "level": (params or {}).get("level"), "params": params}
+    if method == "batch":
+        return {"results": [{"ok": True, "result": {}}], "params": params}
+    if method == "run_until":
+        return {"met": False, "frames": (params or {}).get("maxFrames"), "params": params}
     if method == "quit":
         raise QuitServer({"quitting": True})
     raise FakeError("unknown_method", method)
@@ -212,6 +226,34 @@ def test_launch_can_ask_for_a_window_on_the_real_clock(session, fake_game_exe):
     assert session.call("status")["manualClock"] is False
 
 
+def test_launch_starts_the_window_at_a_size_and_a_density(session, fake_game_exe):
+    description = session.launch(str(fake_game_exe), window="390x844", density=3)
+    window = description["status"]["window"]
+    assert (window["width"], window["height"], window["density"]) == (390, 844, 3.0)
+    assert (window["outputWidth"], window["outputHeight"]) == (1170, 2532)
+    assert session.call("get_state")["state"]["flags"] == ["--control", "--headless", "--manual-clock"]
+
+
+def test_launch_without_a_window_flag_leaves_the_size_of_the_game(session, fake_game_exe):
+    window = session.launch(str(fake_game_exe))["status"]["window"]
+    assert window["density"] == 1.0 and window["safeArea"] == {"top": 0.0, "right": 0.0, "bottom": 0.0, "left": 0.0}
+
+
+@pytest.mark.parametrize("window", ["480", "480X480", "480x", "0x0x1", "480 x 480", "-1x5", "480.5x480"])
+def test_launch_refuses_a_window_that_is_not_wxh(session, fake_game_exe, window):
+    with pytest.raises(SessionError, match="WxH"):
+        session.launch(str(fake_game_exe), window=window)
+    assert not session.is_connected
+
+
+def test_launch_refuses_a_window_or_density_without_headless(session, fake_game_exe):
+    with pytest.raises(SessionError, match="headless"):
+        session.launch(str(fake_game_exe), headless=False, window="480x480")
+    with pytest.raises(SessionError, match="headless"):
+        session.launch(str(fake_game_exe), headless=False, density=2)
+    assert not session.is_connected
+
+
 def test_quit_stops_the_launched_game_and_reports_its_exit_code(session, fake_game_exe):
     session.launch(str(fake_game_exe))
     result = session.quit()
@@ -239,9 +281,43 @@ def test_launch_of_a_missing_executable_names_the_path(session, tmp_path):
         session.launch(str(tmp_path / "nothing"))
 
 
+def test_set_window_sends_only_what_it_is_given(session, server):
+    session.connect(port=server.port)
+    session.set_window(480, 480)
+    session.set_window(300, 200, density=2)
+    session.set_window(300, 200, user_scale=1.25)
+    session.set_window(300, 200, density=0.5, safe_area={"top": 40, "right": 0, "bottom": 0, "left": 0})
+    assert requests_of(server, "set_window") == [
+        {"width": 480, "height": 480},
+        {"width": 300, "height": 200, "density": 2},
+        {"width": 300, "height": 200, "userScale": 1.25},
+        {"width": 300, "height": 200, "density": 0.5, "safeArea": {"top": 40, "right": 0, "bottom": 0, "left": 0}},
+    ]
+
+
+def test_a_safe_area_tuple_is_top_right_bottom_left(session, server):
+    session.connect(port=server.port)
+    session.set_window(480, 480, safe_area=(1, 2, 3, 4))
+    session.set_window(480, 480, safe_area=[0, 0, 0, 0])
+    assert [params["safeArea"] for params in requests_of(server, "set_window")] == [{"top": 1, "right": 2, "bottom": 3, "left": 4}, dict.fromkeys(("top", "right", "bottom", "left"), 0)]
+
+
+def test_a_safe_area_of_the_wrong_length_is_refused_before_a_call(session, server):
+    session.connect(port=server.port)
+    with pytest.raises(SessionError, match="top, right, bottom, left"):
+        session.set_window(480, 480, safe_area=(1, 2, 3))
+    assert requests_of(server, "set_window") == []
+
+
+def test_set_window_without_a_game_is_refused(session):
+    with pytest.raises(SessionError, match="launch_game or connect"):
+        session.set_window(480, 480)
+
+
 EXPECTED_TOOLS = {
     "launch_game", "connect", "status", "get_state", "list_actions", "perform_action", "set_state", "reset", "step", "screenshot", "ui_tree", "ui_click", "click_at", "game_log", "quit",
     "frame_stats", "profiler_dump", "zone_allocs", "record_start", "record_stop", "image_diff",
+    "log_mark", "log_since", "log_subscribe", "batch", "run_until", "set_window",
 }
 
 
@@ -278,6 +354,11 @@ def test_the_mcp_server_serves_the_tools_over_stdio(server):
             tree = await client.call_tool("ui_tree", {})
             assert not tree.is_error and "canvases" in tree.content[0].text
 
+            resized = await client.call_tool("set_window", {"width": 390, "height": 844})
+            assert not resized.is_error
+            dense = await client.call_tool("set_window", {"width": 390, "height": 844, "density": 3.0, "user_scale": 1.5, "safe_area": [47, 0, 34, 0]})
+            assert not dense.is_error
+
             clicked = await client.call_tool("ui_click", {"name": "Ok"})
             assert not clicked.is_error and "Ok" in clicked.content[0].text
             within = await client.call_tool("ui_click", {"name": "Ok", "canvas": "Debug"})
@@ -303,6 +384,23 @@ def test_the_mcp_server_serves_the_tools_over_stdio(server):
             zones = await client.call_tool("zone_allocs", {"top": 5, "reset": True})
             assert not zones.is_error and "totals" in zones.content[0].text
 
+            marked = await client.call_tool("log_mark", {})
+            assert not marked.is_error and '"mark": 5' in marked.content[0].text
+            since = await client.call_tool("log_since", {"mark": 5, "level": "error"})
+            assert not since.is_error and "dropped" in since.content[0].text
+            refused_mark = await client.call_tool("log_since", {"mark": -1})
+            assert refused_mark.is_error and "invalid_params" in refused_mark.content[0].text
+            subscribed = await client.call_tool("log_subscribe", {"enabled": True})
+            assert not subscribed.is_error and '"enabled": true' in subscribed.content[0].text
+            ran = await client.call_tool("batch", {"calls": [{"method": "ping"}, {"method": "step", "params": {"frames": 2}}], "continue_on_error": True})
+            assert not ran.is_error and "results" in ran.content[0].text
+            waited = await client.call_tool("run_until", {"pointer": "/state/score", "equals": 3, "max_frames": 7, "dt": 0.5})
+            assert not waited.is_error and '"met": false' in waited.content[0].text
+            moved_version = await client.call_tool("run_until", {"version_moved": True})
+            assert not moved_version.is_error
+            happened = await client.call_tool("run_until", {"event": "state_changed", "event_equal": {"version": 2}, "max_frames": 4})
+            assert not happened.is_error
+
     asyncio.run(scenario())
     assert requests_of(server, "screenshot")[-1] == {"maxSize": 64}
     assert requests_of(server, "step")[-1] == {"frames": 2}
@@ -310,7 +408,39 @@ def test_the_mcp_server_serves_the_tools_over_stdio(server):
     assert requests_of(server, "profiler_dump")[-1] == {"path": "trace.json"}
     assert requests_of(server, "zone_allocs")[-1] == {"top": 5, "reset": True}
     assert requests_of(server, "click_at")[:2] == [{"x": 10, "y": 20}, {"x": 1.5, "y": 2, "space": "scene", "button": "right", "which": 3}]
+    assert requests_of(server, "log_since")[0] == {"mark": 5, "level": "error"}
+    assert requests_of(server, "log_subscribe") == [{"enabled": True, "level": "warning"}]
+    assert requests_of(server, "batch") == [{"calls": [{"method": "ping"}, {"method": "step", "params": {"frames": 2}}], "continueOnError": True}]
+    assert requests_of(server, "run_until") == [
+        {"condition": {"pointer": "/state/score", "equals": 3}, "maxFrames": 7, "dt": 0.5},
+        {"condition": {"versionMoved": True}, "maxFrames": 600},
+        {"condition": {"event": {"name": "state_changed", "equal": {"version": 2}}}, "maxFrames": 4},
+    ]
+    assert requests_of(server, "set_window") == [
+        {"width": 390, "height": 844},
+        {"width": 390, "height": 844, "density": 3.0, "userScale": 1.5, "safeArea": {"top": 47, "right": 0, "bottom": 34, "left": 0}},
+    ]
     assert requests_of(server, "ui_click")[:3] == [{"name": "Ok"}, {"name": "Ok", "canvas": "Debug"}, {"name": "Volume", "at": 0.25}]
+
+
+def test_the_mcp_run_until_refuses_none_or_two_conditions_without_a_call(server):
+    mcp = pytest.importorskip("mcp")
+
+    async def run() -> None:
+        parameters = mcp.StdioServerParameters(command=sys.executable, args=[str(TOOL_DIR / "bagi_mcp.py")])
+        async with mcp.Client(parameters) as client:
+            assert not (await client.call_tool("connect", {"port": server.port})).is_error
+            none = await client.call_tool("run_until", {})
+            assert none.is_error and "exactly one condition" in none.content[0].text and "none" in none.content[0].text
+            two = await client.call_tool("run_until", {"pointer": "/version", "equals": 1, "version_moved": True})
+            assert two.is_error and "pointer, version_moved" in two.content[0].text
+            alone = await client.call_tool("run_until", {"pointer": "/version", "event_equal": {"a": 1}, "version_moved": False, "event": "x"})
+            assert alone.is_error
+            stray = await client.call_tool("run_until", {"version_moved": True, "event_equal": {"a": 1}})
+            assert stray.is_error and "event_equal" in stray.content[0].text
+
+    asyncio.run(run())
+    assert requests_of(server, "run_until") == []
 
 
 def test_the_mcp_image_diff_answers_stats_and_an_image_and_errors_as_text(tmp_path):

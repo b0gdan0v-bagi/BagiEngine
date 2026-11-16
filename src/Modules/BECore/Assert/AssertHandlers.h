@@ -25,7 +25,6 @@ namespace BECore {
 
     private:
         BE_REFLECT_FIELD bool _enabled = true;
-        bool _initialized = false;
     };
 
     class LogHandler : public IAssertHandler {
@@ -37,9 +36,6 @@ namespace BECore {
 
         void Initialize() override;
         void OnAssert(const AssertEvent& event) override;
-
-    private:
-        bool _initialized = false;
     };
 
     class StackTraceHandler : public IAssertHandler {
@@ -51,9 +47,6 @@ namespace BECore {
 
         void Initialize() override;
         void OnAssert(const AssertEvent& event) override;
-
-    private:
-        bool _initialized = false;
     };
 
     class AssertHandlerManager : public RefCountedAtomic {

@@ -13,26 +13,8 @@ namespace BECore {
             std::sort(data.begin(), data.end(), [](const FlagEntry& a, const FlagEntry& b) { return a.name < b.name; });
             return data;
         }
-    }  // namespace
 
-    SDL_WindowFlags SDLUtils::ParseWindowFlags(StringView flagsString) {
-        if (flagsString.empty()) {
-            return 0;
-        }
-
-        const auto& flagNames = BECore::StringUtils::Split(flagsString, '|');
-
-        SDL_WindowFlags result = 0;
-        for (const auto& flagName : flagNames) {
-            SDL_WindowFlags flagValue = GetWindowFlagValue(flagName);
-            result |= flagValue;
-        }
-
-        return result;
-    }
-
-    SDL_WindowFlags SDLUtils::GetWindowFlagValue(StringView flagName) {
-        static constexpr auto flagTable = SortFlagEntryFlags(Array<FlagEntry, 25>{{
+        constexpr auto kFlagTable = SortFlagEntryFlags(Array<FlagEntry, 25>{{
             {.name = "SDL_WINDOW_FULLSCREEN", .value = SDL_WINDOW_FULLSCREEN},
             {.name = "SDL_WINDOW_OPENGL", .value = SDL_WINDOW_OPENGL},
             {.name = "SDL_WINDOW_OCCLUDED", .value = SDL_WINDOW_OCCLUDED},
@@ -59,10 +41,37 @@ namespace BECore {
             {.name = "SDL_WINDOW_TRANSPARENT", .value = SDL_WINDOW_TRANSPARENT},
             {.name = "SDL_WINDOW_NOT_FOCUSABLE", .value = SDL_WINDOW_NOT_FOCUSABLE},
         }});
+    }  // namespace
 
-        auto it = std::ranges::lower_bound(flagTable, flagName, {}, &FlagEntry::name);
+    SDL_WindowFlags SDLUtils::ParseWindowFlags(StringView flagsString) {
+        if (flagsString.empty()) {
+            return 0;
+        }
 
-        if (it != flagTable.end() && it->name == flagName) {
+        const auto& flagNames = BECore::StringUtils::Split(flagsString, '|');
+
+        SDL_WindowFlags result = 0;
+        for (const auto& flagName : flagNames) {
+            SDL_WindowFlags flagValue = GetWindowFlagValue(flagName);
+            result |= flagValue;
+        }
+
+        return result;
+    }
+
+    Vector<String> SDLUtils::GetWindowFlagNames() {
+        Vector<String> names;
+        names.reserve(kFlagTable.size());
+        for (const FlagEntry& entry : kFlagTable) {
+            names.emplace_back(entry.name.data(), entry.name.size());
+        }
+        return names;
+    }
+
+    SDL_WindowFlags SDLUtils::GetWindowFlagValue(StringView flagName) {
+        auto it = std::ranges::lower_bound(kFlagTable, flagName, {}, &FlagEntry::name);
+
+        if (it != kFlagTable.end() && it->name == flagName) {
             return it->value;
         }
 

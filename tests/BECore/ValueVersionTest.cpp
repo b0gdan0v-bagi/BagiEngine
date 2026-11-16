@@ -205,4 +205,105 @@ namespace BECore::Tests {
         EXPECT_NE(context.VersionKey(LevelBit(kCasterLevel)), key);
     }
 
+    TEST(ValueVersionTest, ARebuiltContextOverOtherObjectsRepeatsNoKey) {
+        constexpr size_t kObjects = 64;
+        ContextDecl declaration;
+        ASSERT_TRUE(declaration.Add<ValueUnitStats>("caster").has_value());
+        Vector<ValueUnitStats> objects(kObjects);
+        uint64_t version = 1;
+        HashSet<uint64_t> seen;
+        for (ValueUnitStats& object : objects) {
+            // A fresh context each time: every Set count is 1 and the counter holds the same number
+            Context context(declaration);
+            context.Set(kCasterLevel, object, &version);
+            EXPECT_TRUE(seen.insert(context.VersionKey(LevelBit(kCasterLevel))).second);
+        }
+    }
+
+    TEST(ValueVersionTest, ARebuiltContextOverTheSameObjectsAndCountersGivesTheSameKey) {
+        VersionedWorld world;
+        const LevelMask both = world.ReadsOf(true, true);
+        const uint64_t key = world.context.VersionKey(both);
+        for (int frame = 0; frame < 3; ++frame) {
+            Context rebuilt(world.declaration);
+            rebuilt.Set(kCasterLevel, world.caster, &world.casterVersion);
+            rebuilt.Set(kCastLevel, world.cast, &world.castVersion);
+            EXPECT_EQ(rebuilt.VersionKey(both), key);
+        }
+        Context twice(world.declaration);
+        twice.Set(kCasterLevel, world.caster, &world.casterVersion);
+        twice.Set(kCasterLevel, world.caster, &world.casterVersion);
+        twice.Set(kCastLevel, world.cast, &world.castVersion);
+        EXPECT_NE(twice.VersionKey(both), key) << "the count of Set calls is still part of the key";
+    }
+
+    TEST(ValueVersionTest, AnotherCounterObjectOfTheSameValueMovesTheKeyOfARebuiltContext) {
+        VersionedWorld world;
+        const LevelMask casterOnly = world.ReadsOf(true, false);
+        uint64_t otherCounter = world.casterVersion;
+        Context rebuilt(world.declaration);
+        rebuilt.Set(kCasterLevel, world.caster, &otherCounter);
+        EXPECT_NE(rebuilt.VersionKey(casterOnly), world.context.VersionKey(casterOnly));
+    }
+
+    TEST(ValueVersionTest, ALevelWithNoObjectOrNoCounterFoldsAConstant) {
+        ValueUnitStats caster;
+        uint64_t version = 3;
+        Context none;
+        Context noCounter;
+        noCounter.Set(kCasterLevel, caster);
+        const LevelMask mask = LevelBit(kCasterLevel);
+        EXPECT_EQ(none.VersionKey(mask), Context().VersionKey(mask));
+        EXPECT_NE(none.VersionKey(mask), noCounter.VersionKey(mask)) << "an object at the level is part of the key even with no counter";
+        ++version;
+        Context counterOnly;
+        counterOnly.Set(kCasterLevel, caster, &version);
+        EXPECT_NE(noCounter.VersionKey(mask), counterOnly.VersionKey(mask));
+    }
+
+    TEST(ValueVersionTest, IsVersionedNeedsAnObjectAndACounterAtEveryLevelOfTheMask) {
+        ValueUnitStats caster;
+        ValueCastInfo cast;
+        uint64_t version = 1;
+        Context context;
+        const LevelMask casterBit = LevelBit(kCasterLevel);
+        const LevelMask castBit = LevelBit(kCastLevel);
+
+        EXPECT_TRUE(context.IsVersioned(0));
+        EXPECT_FALSE(context.IsVersioned(casterBit));
+
+        context.Set(kCasterLevel, caster);
+        EXPECT_FALSE(context.IsVersioned(casterBit)) << "an object with no counter";
+        EXPECT_TRUE(context.IsVersioned(0));
+
+        context.Set(kCasterLevel, caster, &version);
+        EXPECT_TRUE(context.IsVersioned(casterBit));
+        EXPECT_FALSE(context.IsVersioned(casterBit | castBit)) << "one level of the mask has nothing";
+        EXPECT_TRUE(context.IsVersioned(0)) << "levels outside the mask do not matter";
+
+        context.Set(kCastLevel, cast, &version);
+        EXPECT_TRUE(context.IsVersioned(casterBit | castBit));
+
+        context.Set(kCasterLevel, caster);
+        EXPECT_FALSE(context.IsVersioned(casterBit | castBit)) << "a Set with no counter drops the counter";
+        EXPECT_TRUE(context.IsVersioned(castBit));
+    }
+
+    TEST(ValueVersionTest, ADerivedObjectAtABaseLevelKeysOnTheBaseSubobject) {
+        ContextDecl declaration;
+        ASSERT_TRUE(declaration.Add<ValueUnitStats>("caster").has_value());
+        ValueHeroStats first;
+        ValueHeroStats second;
+        uint64_t version = 7;
+        Context a(declaration);
+        a.Set(kCasterLevel, first, &version);
+        Context b(declaration);
+        b.Set(kCasterLevel, first, &version);
+        Context c(declaration);
+        c.Set(kCasterLevel, second, &version);
+        EXPECT_TRUE(a.IsVersioned(LevelBit(kCasterLevel)));
+        EXPECT_EQ(a.VersionKey(LevelBit(kCasterLevel)), b.VersionKey(LevelBit(kCasterLevel)));
+        EXPECT_NE(a.VersionKey(LevelBit(kCasterLevel)), c.VersionKey(LevelBit(kCasterLevel)));
+    }
+
 }  // namespace BECore::Tests

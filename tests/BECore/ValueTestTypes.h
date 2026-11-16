@@ -27,6 +27,11 @@ namespace BECore::ValueTestData {
 
     CORE_ENUM(ValueElement, uint8_t, Fire, Water, Earth)
 
+    /// The same three enumerators over each width a program loads an enum field with
+    CORE_ENUM(ValueNarrowEnum, uint8_t, Low, Mid, High)
+    CORE_ENUM(ValueShortEnum, uint16_t, Low, Mid, High)
+    CORE_ENUM(ValueWideEnum, int32_t, Low, Mid, High)
+
     /// A game's own value type: it saves itself and has no `BE_CLASS`, so the reflection sees it as opaque
     struct ValuePoint {
         int32_t column = 0;
@@ -90,6 +95,15 @@ namespace BECore::ValueTestData {
         BE_REFLECT_FIELD ValuePoint spawn{6, 7};
         BE_REFLECT_FIELD ValueSpan span;
         BE_REFLECT_FIELD Vector<int32_t> buffs;
+    };
+
+    /// A context object with an enum field of each underlying width
+    struct ValueEnumWidths {
+        BE_CLASS(ValueEnumWidths)
+
+        BE_REFLECT_FIELD ValueNarrowEnum narrow = ValueNarrowEnum::High;
+        BE_REFLECT_FIELD ValueShortEnum wide16 = ValueShortEnum::Mid;
+        BE_REFLECT_FIELD ValueWideEnum wide32 = ValueWideEnum::High;
     };
 
     /// A derived context object: its parent's fields are its own for a path
@@ -158,6 +172,7 @@ namespace BECore::ValueTestData {
         BE_REFLECT_FIELD Value<int32_t> damage = 7;
         BE_REFLECT_FIELD Value<float> power = 1.0f;
         BE_REFLECT_FIELD Value<Vec3> aim = Vec3{9.0f, 9.0f, 9.0f};
+        BE_REFLECT_FIELD Value<ValuePoint> spot = ValuePoint{9, 9};
     };
 
     /// The document of a named config (`MakeFromConfig` needs a `RefCounted`): the same fields as `ValueDocument`
@@ -168,6 +183,28 @@ namespace BECore::ValueTestData {
         BE_REFLECT_FIELD Value<int32_t> damage = 7;
         BE_REFLECT_FIELD Value<float> power = 1.0f;
         BE_REFLECT_FIELD Value<Vec3> aim = Vec3{9.0f, 9.0f, 9.0f};
+    };
+
+    /// A document whose fields are written as formulas (`expr`): one field of each type a program computes, and a `ValuePoint` that no program computes; the defaults are
+    /// not what the tests load. It is a `RefCounted` so that `MakeFromConfig` makes it as well as a test builds it on the stack
+    struct ValueFormulaDocument : RefCounted {
+        BE_CLASS(ValueFormulaDocument)
+
+        BE_REFLECT_FIELD ContextDecl context;
+        BE_REFLECT_FIELD Value<int32_t> damage = 7;
+        BE_REFLECT_FIELD Value<int64_t> total = 7;
+        BE_REFLECT_FIELD Value<float> power = 1.0f;
+        BE_REFLECT_FIELD Value<double> precise = 1.0;
+        BE_REFLECT_FIELD Value<bool> ready = false;
+        BE_REFLECT_FIELD Value<Vec2> shift = Vec2{9.0f, 9.0f};
+        BE_REFLECT_FIELD Value<Vec3> aim = Vec3{9.0f, 9.0f, 9.0f};
+        BE_REFLECT_FIELD Value<Vec4> plane = Vec4{9.0f, 9.0f, 9.0f, 9.0f};
+        BE_REFLECT_FIELD Value<IVec2> cell = IVec2{9, 9};
+        BE_REFLECT_FIELD Value<Quat> facing = Quat{0.0f, 1.0f, 0.0f, 0.0f};
+        BE_REFLECT_FIELD Value<Color> tint = Color{9, 9, 9, 9};
+        BE_REFLECT_FIELD Value<ValueElement> element = ValueElement::Earth;
+        BE_REFLECT_FIELD Value<PoolString> label;
+        BE_REFLECT_FIELD Value<ValuePoint> spot = ValuePoint{9, 9};
     };
 
     /// The mistake a document can make: a value is read before the element that declares what it reads

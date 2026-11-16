@@ -1,0 +1,103 @@
+#pragma once
+
+#include <BECore/PoolString/PoolString.h>
+#include <BECore/Types/Types.h>
+#include <BECore/Values/Context.h>
+#include <BECore/Values/Programs/Instruction.h>
+#include <BECore/Values/Programs/Opcode.h>
+#include <cstddef>
+#include <cstdint>
+
+namespace BECore {
+
+    /// A refused program or formula: what was expected and found, and where in the text (1-based byte; 0 when no text is involved)
+    struct ProgramError {
+        String message;
+        uint32_t column = 0;
+    };
+
+    /**
+     * @brief A compiled formula: straight-line typed code over registers
+     *
+     * Built by `ProgramBuilder` and kept in the `ProgramPool`; immutable after that. A program is pure and total: it reads the context and writes
+     * nothing, and `Run` allocates nothing (`Interpreter.h`). Two programs with equal code are one program to the pool whatever text they came from.
+     */
+    class Program {
+    public:
+        [[nodiscard]] ProgramType ResultType() const {
+            return _resultType;
+        }
+
+        /// The register that holds the result when the code has run
+        [[nodiscard]] uint8_t ResultRegister() const {
+            return _resultRegister;
+        }
+
+        /// The registers the code uses (the highest one the builder gave out, plus one)
+        [[nodiscard]] uint8_t RegisterCount() const {
+            return _registerCount;
+        }
+
+        /// The levels of the context the code reads (what `Context::VersionKey` is asked about)
+        [[nodiscard]] LevelMask Reads() const {
+            return _reads;
+        }
+
+        [[nodiscard]] Span<const Instruction> Code() const {
+            return Span<const Instruction>(_code.data(), _code.size());
+        }
+
+        [[nodiscard]] Span<const RegisterImage> Constants() const {
+            return Span<const RegisterImage>(_constants.data(), _constants.size());
+        }
+
+        /// The text the program came from, of the first formula the pool saw with this code; empty for a program assembled by hand
+        [[nodiscard]] PoolString Source() const {
+            return _source;
+        }
+
+        /// Whether the code, the constants and the result are the same: the source text is not part of it
+        [[nodiscard]] bool SameCode(const Program& other) const;
+
+        /// A hash of what `SameCode` compares
+        [[nodiscard]] uint64_t CodeHash() const;
+
+        /// One instruction per line with its registers, for a failing test and a debugger
+        [[nodiscard]] String Disassemble() const;
+
+    private:
+        friend class ProgramBuilder;
+
+        ProgramType _resultType = ProgramType::Int32;
+        uint8_t _resultRegister = 0;
+        uint8_t _registerCount = 0;
+        LevelMask _reads = 0;
+        Vector<Instruction> _code;
+        Vector<RegisterImage> _constants;
+        PoolString _source;
+    };
+
+    /// The place of a program in the pool: what a `Value` of the kind `Program` holds
+    using ProgramId = uint32_t;
+
+    /**
+     * @brief The process-wide, append-only table of programs
+     *
+     * Like `PoolString` it never shrinks and an entry never moves, so a `Value` keeps only the id and `Get` is a lookup with no lock. One entry per
+     * distinct program: loading the same content again adds nothing. Thread-safe.
+     */
+    class ProgramPool {
+    public:
+        /// The most programs the pool holds; a hostile content file cannot make it grow without bound
+        static constexpr size_t kMaxPrograms = 1U << 18;
+
+        /// The id of the program in the pool that has the same code as @p program (the pool takes it when it has none); `nullopt` when the pool is full
+        [[nodiscard]] static Optional<ProgramId> Intern(Program program);
+
+        /// The program of an id `Intern` gave out; its address is stable for the life of the process
+        [[nodiscard]] static const Program& Get(ProgramId id);
+
+        [[nodiscard]] static size_t Count();
+    };
+
+}  // namespace BECore

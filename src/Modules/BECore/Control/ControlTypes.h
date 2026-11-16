@@ -1,8 +1,10 @@
 #pragma once
 
+#include <BECore/Control/JsonFwd.h>
 #include <BECore/Time/GamePause.h>  // kDefaultStepSeconds
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/MoveOnlyFunction.h>
+#include <expected>
 
 namespace BECore {
 
@@ -11,6 +13,9 @@ namespace BECore {
         String code;
         String message;
     };
+
+    /// What a call that ran inside another call answered (ControlService::RunNested): the result, or the error
+    using ControlAnswer = std::expected<Json, ControlError>;
 
     /// Receives the serialized JSON text of a response. Called on the main thread, except for a request posted after
     /// ControlService::Shutdown() (answered on the posting thread).

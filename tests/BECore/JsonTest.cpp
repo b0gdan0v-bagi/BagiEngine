@@ -163,4 +163,88 @@ namespace BECore::Tests {
         EXPECT_EQ(text->size(), 3u);
     }
 
+    namespace {
+
+        Json PointerDocument() {
+            auto parsed = ParseJson(R"({"a":{"b":[10,{"c":"deep"},20]},"a/b":1,"m~n":2,"":3,"0":"zero","s":"text","list":[1,2,3]})");
+            return parsed ? std::move(*parsed) : Json();
+        }
+
+        /// The value at @p pointer as JSON text; "absent" or "error" when it is not a value
+        String PointerResult(const Json& document, StringView pointer) {
+            const auto found = FindJsonPointer(document, pointer);
+            if (!found) {
+                return "error";
+            }
+            return *found == nullptr ? String("absent") : DumpJson(**found);
+        }
+
+    }  // namespace
+
+    TEST(JsonTest, PointerFindsTheValuesOfValidPointers) {
+        const Json document = PointerDocument();
+
+        EXPECT_EQ(PointerResult(document, ""), DumpJson(document));
+        EXPECT_EQ(PointerResult(document, "/a/b/0"), "10");
+        EXPECT_EQ(PointerResult(document, "/a/b/1/c"), "\"deep\"");
+        EXPECT_EQ(PointerResult(document, "/a~1b"), "1");
+        EXPECT_EQ(PointerResult(document, "/m~0n"), "2");
+        EXPECT_EQ(PointerResult(document, "/"), "3");
+        EXPECT_EQ(PointerResult(document, "/list/2"), "3");
+    }
+
+    TEST(JsonTest, PointerDigitsAreAKeyOfAnObject) {
+        EXPECT_EQ(PointerResult(PointerDocument(), "/0"), "\"zero\"");
+    }
+
+    TEST(JsonTest, PointerPathsThatLeadNowhereAreAbsent) {
+        const Json document = PointerDocument();
+
+        EXPECT_EQ(PointerResult(document, "/missing"), "absent");
+        EXPECT_EQ(PointerResult(document, "/a/missing/x"), "absent");
+        EXPECT_EQ(PointerResult(document, "/list/3"), "absent");
+        EXPECT_EQ(PointerResult(document, "/list/99999999999999999999999999"), "absent");
+        EXPECT_EQ(PointerResult(document, "/s/x"), "absent");
+        EXPECT_EQ(PointerResult(document, "/list/0/x"), "absent");
+    }
+
+    TEST(JsonTest, PointerSyntaxErrorsAreErrorsAndDoNotAbort) {
+        const Json document = PointerDocument();
+        const Vector<String> bad = {"a", "a/b", "/a~", "/a~2", "~", "/~x", "/list/0x", "/list/01", "/list/-", "/list/", "/list/+1", "/list/1.5", "/list/ 1", "/list/-1"};
+
+        for (const String& pointer : bad) {
+            const auto found = FindJsonPointer(document, View(pointer));
+            ASSERT_FALSE(found.has_value()) << pointer.c_str();
+            EXPECT_EQ(found.error().code, ControlErrors::kInvalidParams) << pointer.c_str();
+        }
+    }
+
+    TEST(JsonTest, PointerEscapesAreCheckedEvenAfterThePathLeftTheDocument) {
+        EXPECT_EQ(PointerResult(PointerDocument(), "/missing/x~"), "error");
+    }
+
+    TEST(JsonTest, PointerOfAnyLengthIsHandled) {
+        const Json document = PointerDocument();
+        String deep;
+        for (int i = 0; i < 100000; ++i) {
+            deep += "/a";
+        }
+        const String longKey = "/" + String(1 << 20, 'k');
+        const String longDigits = "/list/" + String(1 << 16, '9');
+        const String longBad = "/list/" + String(1 << 16, '9') + "x";
+
+        EXPECT_EQ(PointerResult(document, View(deep)), "absent");
+        EXPECT_EQ(PointerResult(document, View(longKey)), "absent");
+        EXPECT_EQ(PointerResult(document, View(longDigits)), "absent");
+        EXPECT_EQ(PointerResult(document, View(longBad)), "error");
+    }
+
+    TEST(JsonTest, PointerFindsTheValueInAnArrayDocument) {
+        const auto parsed = ParseJson("[[1],[2,3]]");
+        ASSERT_TRUE(parsed.has_value());
+
+        EXPECT_EQ(PointerResult(*parsed, "/1/1"), "3");
+        EXPECT_EQ(PointerResult(*parsed, "/2"), "absent");
+    }
+
 }  // namespace BECore::Tests

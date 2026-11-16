@@ -87,10 +87,10 @@ namespace BECore {
          *
          * Checks the registry first, then falls back to heuristics:
          * - "true" / "false" -> Bool
-         * - Contains '|'     -> Flags (options extracted from value)
          * - Parseable as int -> Int
          * - Parseable as float -> Float
-         * - Default          -> String
+         * - Default          -> String (also a value with '|': only a registered field is Flags, since the
+         *   options guessed from one value would hide every other flag)
          *
          * @param configName Config file name (without extension)
          * @param attrPath Path in format "elementName/@attrName"

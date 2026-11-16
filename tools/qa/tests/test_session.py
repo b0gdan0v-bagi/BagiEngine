@@ -231,3 +231,54 @@ def test_a_call_the_game_refuses_is_a_recorded_line(qa_game_exe, out_dir):
     assert session.calls == before + 1
     session.finish()
     assert recorded(session)[-1].method == "nonsense" and len(recorded(session)) == session.calls
+
+
+def test_call_of_an_unknown_method_is_an_outcome_and_no_finding(qa_game_exe, out_dir):
+    session = make(qa_game_exe, out_dir)
+    before = session.calls
+    outcome = session.call("nonsense", {"a": 1})
+    session.finish()
+    assert (outcome.accepted, outcome.error_code) == (False, "unknown_method")
+    assert session.calls == before + 1 and session.findings == []
+
+
+def test_call_of_step_runs_the_checks(qa_game_exe, out_dir, monkeypatch):
+    monkeypatch.setenv("QA_FAKE_WARN_AT", "1")
+    session = make(qa_game_exe, out_dir)
+    session._call("perform_action", INC)  # past the checks of `act`: only the call that follows may show the Warning
+    assert session.findings == []
+    assert session.call("step", {"frames": 1}).accepted
+    session.finish()
+    assert names(session) == ["generic.log_warning"]
+
+
+def test_a_click_on_a_button_reaches_the_game_and_an_unknown_name_is_refused(qa_game_exe, out_dir):
+    session = make(qa_game_exe, out_dir)
+    before = session.state()["state"]["count"]
+    assert session.call("ui_click", {"name": "Plus", "canvas": "Hud"}).accepted
+    assert session.state()["state"]["count"] == before + 1
+    assert session.call("ui_click", {"name": "Nowhere"}).error_code == "not_found"
+    session.finish()
+    assert session.findings == []
+
+
+def test_the_window_method_is_served_only_with_its_knob(qa_game_exe, out_dir, monkeypatch):
+    session = make(qa_game_exe, out_dir)
+    assert session.call("set_window", {"width": 800, "height": 600}).error_code == "unknown_method"
+    session.finish()
+    monkeypatch.setenv("QA_FAKE_WINDOW", "1")
+    session = make(qa_game_exe, out_dir.parent / "windowed")
+    assert session.call("set_window", {"width": 800, "height": 600}).accepted
+    assert session.call("set_window", {"width": 0, "height": 600}).error_code == "invalid_params"
+    assert "set_window" in [method["name"] for method in session._call("list_methods")["methods"]]
+    session.finish()
+    assert session.findings == []
+
+
+def test_a_crashing_game_is_a_session_error(qa_game_exe, out_dir, monkeypatch):
+    monkeypatch.setenv("QA_FAKE_CRASH_AT", "2")
+    session = make(qa_game_exe, out_dir)
+    session.act(INC)
+    with pytest.raises(SessionError):
+        session.act(INC)
+    session.finish()

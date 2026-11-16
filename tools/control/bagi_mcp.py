@@ -18,7 +18,8 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from bagi_control_client import ControlError
 from bagi_image import ImageError, run_image_diff
-from bagi_session import GameSession, SessionError
+from bagi_session import GameSession, SessionError, event_occurs, pointer_equals
+from bagi_session import version_moved as version_moved_condition
 
 INSTRUCTIONS = """\
 Plays and tests a BagiEngine game (any game that implements the control API, e.g. the engine's BagiStress) through its control API.
@@ -30,6 +31,9 @@ follow only after a step, so call step before screenshot when the picture should
 
 Every action comes from list_actions: pass one of them to perform_action as it is. A refused action is an error with a
 code (illegal_action, game_over, ...), the state stays as it was. Call quit when done.
+
+A run of many actions is one batch call, not many calls; wait for something with run_until instead of polling get_state with step. To see whether a run logged
+new warnings or errors, call log_mark before it and log_since with that mark after it.
 
 To compare two pictures (a before and an after, a render and its mockup, two backends) call image_diff: a and b are PNG files or "screen" (the connected game's
 picture now); it answers the numbers and a map of the difference, with no game needed for two files.
@@ -61,7 +65,16 @@ def reports_errors(tool: Callable[..., Any]) -> Callable[..., Any]:
 
 @server.tool()
 @reports_errors
-def launch_game(exe: str = "", headless: bool = True, manual_clock: bool = True, preset: str = "", game: str = "", record: str = "") -> dict[str, Any]:
+def launch_game(
+    exe: str = "",
+    headless: bool = True,
+    manual_clock: bool = True,
+    preset: str = "",
+    game: str = "",
+    record: str = "",
+    window: str = "",
+    density: float | None = None,
+) -> dict[str, Any]:
     """Starts a game executable with the control API and connects to it (a game started earlier by this server is stopped).
 
     exe: path of the built game, relative to where this server runs (the repository root) or absolute.
@@ -69,9 +82,11 @@ def launch_game(exe: str = "", headless: bool = True, manual_clock: bool = True,
     headless: no window, drawn in memory by the software renderer; screenshots work only like this. False opens a real window.
     manual_clock: game time moves only on step (deterministic). False runs it on the real clock.
     record: the path of a scenario file to record the session to, as record_start does (error codes and version steps).
+    window: "WxH" in window units (64 to 4096 each), the start size of the headless window instead of the one in the game's config, e.g. "390x844".
+    density: the start pixel density (0.5 to 4, default 1): the pictures are round(size * density) pixels. Both need headless; set_window changes them later.
     Answers the port, the clock status and the games the executable has.
     """
-    return session.launch(exe, headless=headless, manual_clock=manual_clock, preset=preset, game=game, record=record or None)
+    return session.launch(exe, headless=headless, manual_clock=manual_clock, preset=preset, game=game, record=record or None, window=window or None, density=density)
 
 
 @server.tool()
@@ -87,7 +102,7 @@ def connect(port: int = 8765, host: str = "127.0.0.1", record: str = "") -> dict
 @server.tool()
 @reports_errors
 def status() -> dict[str, Any]:
-    """The frame number, the game time and whether the manual clock is on."""
+    """The frame number, the game time, whether the manual clock is on and `log`: how many warnings and errors the game has logged since its start."""
     return session.call("status")
 
 
@@ -145,6 +160,106 @@ def step(frames: int = 1, dt: float | None = None) -> dict[str, Any]:
     On the real clock it waits for that many frames instead and ignores dt.
     """
     return session.step(frames, dt)
+
+
+@server.tool()
+@reports_errors
+def set_window(
+    width: int,
+    height: int,
+    density: float | None = None,
+    user_scale: float | None = None,
+    safe_area: dict[str, float] | list[float] | None = None,
+) -> dict[str, Any]:
+    """Changes the window of a game launched headless (a phone, a Retina display, a notch) and answers its `window` object after one frame.
+
+    width, height: window units, 64 to 4096 integers. density: the pixel density, 0.5 to 4; the picture and `ui_tree` `outputRect` are round(size * density)
+    pixels, at most 8192 a side. user_scale: the UI scale of the player, 0.5 to 3 (out of range is an error, never clamped). safe_area: {top, right, bottom, left} in
+    window units, or a list of four numbers in that order; all four are required, [0, 0, 0, 0] clears it; the insets are not negative and leave the window a
+    non-empty area. A value left out keeps its current value. Everything is checked first: an error changes nothing.
+    ui_tree and screenshot right after the answer are of the new size (the frame has laid the scene out). A real window (launch_game headless=False, connect)
+    answers not_headless; a value outside the limits is invalid_params and the message names it. The answer, like `status`, has width, height, density,
+    displayScale, safeArea, outputWidth, outputHeight, userScale and headless.
+    """
+    return session.set_window(width, height, density, user_scale, safe_area)
+
+
+@server.tool()
+@reports_errors
+def log_mark() -> dict[str, Any]:
+    """A mark of the game's log now: {mark, warnings, errors} (the totals since the start).
+
+    Call it before a run and pass `mark` to log_since afterwards: that answers exactly what the run logged. Use it to check that nothing went wrong.
+    """
+    return session.log_mark()
+
+
+@server.tool()
+@reports_errors
+def log_since(mark: int, level: str = "warning") -> dict[str, Any]:
+    """The warnings and errors the game logged since a mark of log_mark (0 is the start of the game): {lines, warnings, errors, dropped, next, truncated?}.
+
+    lines: {sequence, level, time, message, category?}, oldest first, at most the newest 200 (`truncated`). level: "warning" (warnings and errors, the default) or
+    "error" (errors only); `warnings` and `errors` count every kept line since the mark whatever the level. `dropped` lines are lost already (a very noisy
+    game), so the counts are then lower bounds. `next` is the mark to use for the next check. A clean run is `errors: 0, dropped: 0`.
+    """
+    return session.log_since(mark, level)
+
+
+@server.tool()
+@reports_errors
+def log_subscribe(enabled: bool, level: str = "warning") -> dict[str, Any]:
+    """Turns on or off the push of the event `log` (one per new warning or error line, at most 16 per frame) for the game; it is off by default.
+
+    level: "warning" (default) or "error". The pushes come in with later calls; they are for a client that reads events, a model usually asks log_since instead.
+    """
+    return session.log_subscribe(enabled, level)
+
+
+@server.tool()
+@reports_errors
+def batch(calls: list[dict[str, Any]], continue_on_error: bool = False) -> dict[str, Any]:
+    """Runs many calls in order in one request: use it for a run of actions, steps and reads instead of one call each.
+
+    calls: 1 to 1000 objects {"method": "perform_action", "params": {...}} (params may be left out; any method of list_methods works, except `batch` and
+    `quit`, which that call's entry refuses). Answers {results, stopped?}: one entry per call run, {"ok": true, "result": ...} or {"ok": false, "error": {code,
+    message}}. An error ends the batch (`stopped` is the index of that call; the calls after it did not run) unless continue_on_error. A step inside
+    waits for its frames and the calls behind it run after them. The answer holds every answer, so a batch of screenshots is large.
+    """
+    return session.batch(calls, continue_on_error)
+
+
+@server.tool()
+@reports_errors
+def run_until(
+    pointer: str | None = None,
+    equals: Any = None,
+    version_moved: bool = False,
+    event: str | None = None,
+    event_equal: dict[str, Any] | None = None,
+    max_frames: int = 600,
+    dt: float | None = None,
+) -> dict[str, Any]:
+    """Runs frames until a condition holds, instead of polling get_state with step: {met, frames, reason?, game?, version?, frame, totalTime, ...}.
+
+    Give exactly one condition. pointer (with equals): the JSON pointer (RFC 6901, "/state/score") into what get_state answers ({game, version, state}) equals
+    `equals` (JSON equality; `equals` left out means null); a missing path is not met. version_moved: the state version differs from the one at the start of
+    the call. event: the name of a push that arrives after the call began ("state_changed"), event_equal the members its data has to carry.
+    The condition is checked before the first frame (`frames: 0`) and after every frame. max_frames (1 to 36000, default 600) and dt (seconds per frame on the
+    manual clock, default 1/60) are as in step. Reaching the limit is not an error: `met: false`, `frames` = max_frames; look at `met`.
+    """
+    chosen = [name for name, given in (("pointer", pointer is not None), ("version_moved", version_moved), ("event", event is not None)) if given]
+    if len(chosen) != 1:
+        raise SessionError(f"give exactly one condition of pointer (with equals), version_moved and event, not {', '.join(chosen) if chosen else 'none'}")
+    if event_equal is not None and event is None:
+        raise SessionError("event_equal belongs to an event: give event too")
+    if pointer is not None:
+        condition = pointer_equals(pointer, equals)
+    elif event is not None:
+        condition = event_occurs(event, event_equal)
+    else:
+        condition = version_moved_condition()
+    return session.run_until(condition, max_frames, dt)
 
 
 @server.tool()

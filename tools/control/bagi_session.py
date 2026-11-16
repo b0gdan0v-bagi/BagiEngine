@@ -19,6 +19,7 @@ the hook is GameSession.call, so the file holds what was called and how the game
 import base64
 import collections
 import copy
+import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -36,6 +37,15 @@ EVENT_BUFFER_SIZE = 256
 EVENT_POLL_SECONDS = 0.05  # the least a take_event waits for a push that is on its way, also with a timeout of 0
 QUIT_METHOD = "quit"
 STEP_METHOD = "step"
+BATCH_METHOD = "batch"
+RUN_UNTIL_METHOD = "run_until"
+DEFAULT_RUN_UNTIL_FRAMES = 600  # the game's default for maxFrames, which the timeout of a run_until counts when none is given
+LOG_LEVEL_WARNING = "warning"
+SET_WINDOW_METHOD = "set_window"
+WINDOW_FLAG = "--window="
+DENSITY_FLAG = "--density="
+WINDOW_SIZE_PATTERN = re.compile(r"\d+x\d+")  # "WxH", the form of the engine's --window flag
+SAFE_AREA_SIDES = ("top", "right", "bottom", "left")
 
 
 @dataclass
@@ -45,6 +55,24 @@ class _Recording:
     header: scenario.Header
     versions: scenario.VersionTracker
     steps: list[scenario.Step]
+
+
+def pointer_equals(pointer: str, equals: Any) -> dict[str, Any]:
+    """A `run_until` condition: the JSON pointer into what get_state answers (`{game, version, state}`, e.g. "/state/score") equals `equals`."""
+    return {"pointer": pointer, "equals": equals}
+
+
+def version_moved() -> dict[str, Any]:
+    """A `run_until` condition: the state version of the active game differs from the one when the call began."""
+    return {"versionMoved": True}
+
+
+def event_occurs(name: str, equal: dict[str, Any] | None = None) -> dict[str, Any]:
+    """A `run_until` condition: a push called `name` whose data has the members of `equal` arrives after the call began."""
+    event: dict[str, Any] = {"name": name}
+    if equal:
+        event["equal"] = equal
+    return {"event": event}
 
 
 class SessionError(Exception):
@@ -82,16 +110,20 @@ class GameSession:
         extra: Sequence[str] = (),
         record: str | None = None,
         record_expect: str = scenario.RECORD_MINIMAL,
+        window: str | None = None,
+        density: float | None = None,
     ) -> dict[str, Any]:
         """Starts a game with the control API on a free port and connects to it. A game that this session started earlier is stopped.
 
         The game is given either as `exe` (a path) or as `preset` + `game` (build/<preset>/bin/<game>, see preset_executable); exactly one of the two.
-        `extra` are more start flags for the game. `record` is the path of a scenario file to record the session to (start_recording).
+        `window` ("WxH" in window units) and `density` are the start size and pixel density of a headless window (`--window=`, `--density=`), which
+        set_window changes later. `extra` are more start flags for the game. `record` is the path of a scenario file to record the session to (start_recording).
         """
         by_path = bool(exe)
         by_preset = bool(preset) or bool(game)
         if by_path == by_preset or (by_preset and not (preset and game)):
             raise SessionError("name the game either by `exe` (the path of the built executable) or by `preset` and `game` together (build/<preset>/bin/<game>), not both and not neither")
+        window_flags = self._window_flags(window, density, headless)
         self.close()
         if record is not None:
             self._check_record_target(Path(record), record_expect)
@@ -101,7 +133,7 @@ class GameSession:
             raise SessionError(f"there is no game executable at {exe_path}{hint}")
 
         port = free_port()
-        process = GameProcess(build_game_command(exe_path, port, headless, manual_clock, tuple(extra)), cwd=exe_path.parent)
+        process = GameProcess(build_game_command(exe_path, port, headless, manual_clock, (*window_flags, *extra)), cwd=exe_path.parent)
         try:
             process.start()
             client = process.connect(port, startup_timeout)
@@ -110,7 +142,7 @@ class GameSession:
             raise SessionError(str(error)) from error
         client.timeout = CALL_TIMEOUT_SECONDS
         self._game, self._client = process, client
-        self._begin_session(["--headless"] * headless + ["--manual-clock"] * manual_clock + list(extra))
+        self._begin_session(["--headless"] * headless + ["--manual-clock"] * manual_clock + window_flags + list(extra))
         description = self._describe(port)
         if record is not None:
             self._start_recording_or_close(record, record_expect, description)
@@ -139,13 +171,14 @@ class GameSession:
         return description
 
     def call(self, method: str, params: dict[str, Any] | None = None, timeout: float | None = None) -> Any:
-        """One control call. `timeout` (seconds) replaces the default for a call that is known to take long; a `step` gets one for its frames.
+        """One control call. `timeout` (seconds) replaces the default for a call that is known to take long; a call that waits for frames
+        (`step`, `run_until`, a `batch` holding them) gets one for the frames it may wait.
 
         While recording, a call the game answered (or refused with a ControlError) becomes a line of the scenario; a SessionError is not recorded.
         """
         sent = copy.deepcopy(params) if self._recording is not None else None  # the caller may reuse its dict
-        if timeout is None and method == STEP_METHOD:
-            timeout = self._step_timeout(params)
+        if timeout is None:
+            timeout = self._wait_timeout(method, params)
         try:
             result = self._call_raw(method, params, timeout)
         except ControlError as error:
@@ -189,6 +222,77 @@ class GameSession:
         if dt is not None:
             params["dt"] = dt
         return self.call(STEP_METHOD, params)
+
+    def set_window(
+        self,
+        width: int,
+        height: int,
+        density: float | None = None,
+        user_scale: float | None = None,
+        safe_area: dict[str, float] | Sequence[float] | None = None,
+    ) -> dict[str, Any]:
+        """Changes the window of a headless game and answers its `window` object (as `status` has it), one frame later.
+
+        `width` and `height` are window units; the picture is `round(size * density)` pixels. A value left out stays as it is. `safe_area` is a dict
+        `{top, right, bottom, left}` or a tuple in that order, all four given (`{0,0,0,0}` clears it). A real window answers `not_headless`; a value
+        outside the engine's limits is `invalid_params` and nothing changes (.claude/rules/control-window-api.md).
+        """
+        params: dict[str, Any] = {"width": width, "height": height}
+        if density is not None:
+            params["density"] = density
+        if user_scale is not None:
+            params["userScale"] = user_scale
+        if safe_area is not None:
+            params["safeArea"] = self._safe_area_object(safe_area)
+        return self.call(SET_WINDOW_METHOD, params)
+
+    def log_counts(self) -> dict[str, int]:
+        """The warnings and errors the game has logged since its start: `{warnings, errors}` (`log` of `status`)."""
+        return self.call("status")["log"]
+
+    def log_mark(self) -> dict[str, Any]:
+        """A mark of the game's log now, `{mark, warnings, errors}`: pass `mark` to log_since later to see only what was logged after it."""
+        return self.call("log_mark")
+
+    def log_since(self, mark: int, level: str = LOG_LEVEL_WARNING) -> dict[str, Any]:
+        """The warnings and errors logged since `mark`: `{lines, warnings, errors, dropped, next, truncated?}`.
+
+        `level` is "warning" (warnings and errors) or "error" (errors only). `dropped` lines fell out of the game's bounded history, so the counts are then lower bounds.
+        """
+        return self.call("log_since", {"mark": mark, "level": level})
+
+    def log_subscribe(self, enabled: bool, level: str = LOG_LEVEL_WARNING) -> dict[str, Any]:
+        """Turns the push of the event `log` on or off for the whole game (every client gets it); read it with take_event."""
+        return self.call("log_subscribe", {"enabled": enabled, "level": level})
+
+    def batch(self, calls: Sequence[tuple[str, dict[str, Any] | None] | dict[str, Any]], continue_on_error: bool = False) -> dict[str, Any]:
+        """Runs `calls` in order in one request and answers `{results, stopped?}` as the game gives it.
+
+        A call is a `(method, params)` pair or a `{"method", "params"}` dict. Each entry of `results` is `{"ok": true, "result"}` or
+        `{"ok": false, "error": {code, message}}`; an error ends the batch (`stopped` is its index) unless `continue_on_error`. A refusal of the whole
+        request (a bad shape) is a ControlError. A recording holds the batch as the one line it is.
+        """
+        entries: list[dict[str, Any]] = []
+        for item in calls:
+            method, params = (item.get("method"), item.get("params")) if isinstance(item, dict) else item
+            entry: dict[str, Any] = {"method": method}
+            if params:
+                entry["params"] = params
+            entries.append(entry)
+        request: dict[str, Any] = {"calls": entries}
+        if continue_on_error:
+            request["continueOnError"] = True
+        return self.call(BATCH_METHOD, request)
+
+    def run_until(self, condition: dict[str, Any], max_frames: int = DEFAULT_RUN_UNTIL_FRAMES, dt: float | None = None) -> dict[str, Any]:
+        """Runs frames until `condition` holds: `{met, frames, reason?, game?, version?, <clock>}`; reaching `max_frames` is `met: false`, not an error.
+
+        `condition` comes from pointer_equals, version_moved or event_occurs. It is checked before the first frame and after every frame.
+        """
+        params: dict[str, Any] = {"condition": condition, "maxFrames": max_frames}
+        if dt is not None:
+            params["dt"] = dt
+        return self.call(RUN_UNTIL_METHOD, params)
 
     def screenshot(self, max_size: int | None = None) -> tuple[bytes, dict[str, int]]:
         """The PNG of the next frame and its size. `max_size` shrinks the longer side of a bigger picture (the game's default is 1024)."""
@@ -311,11 +415,55 @@ class GameSession:
         games = self._call_raw("list_games")
         return {"port": port, "status": self._call_raw("status"), "activeGame": games.get("active"), "games": games.get("games", [])}
 
+    @classmethod
+    def _wait_timeout(cls, method: str, params: dict[str, Any] | None) -> float | None:
+        """The timeout of a call that waits for frames, None for one that does not."""
+        frames = cls._frames_waited(method, params)
+        return None if frames is None else CALL_TIMEOUT_SECONDS + frames * STEP_SECONDS_PER_FRAME
+
+    @classmethod
+    def _frames_waited(cls, method: str, params: dict[str, Any] | None) -> int | None:
+        """The most frames a call may wait for (a batch: the sum over its calls), None when it never waits."""
+        if not isinstance(params, dict):
+            params = {}
+        if method == STEP_METHOD:
+            return max(cls._count(params.get("frames"), 1), 0)
+        if method == RUN_UNTIL_METHOD:
+            return max(cls._count(params.get("maxFrames"), DEFAULT_RUN_UNTIL_FRAMES), 0)
+        if method == BATCH_METHOD:
+            calls = params.get("calls")
+            if not isinstance(calls, list):
+                return None
+            waited = [cls._frames_waited(call.get("method"), call.get("params")) for call in calls if isinstance(call, dict)]
+            frames = [count for count in waited if count is not None]
+            return sum(frames) if frames else None
+        return None
+
     @staticmethod
-    def _step_timeout(params: dict[str, Any] | None) -> float:
-        frames = params.get("frames") if isinstance(params, dict) else None
-        count = frames if isinstance(frames, int) and not isinstance(frames, bool) else 1
-        return CALL_TIMEOUT_SECONDS + max(count, 0) * STEP_SECONDS_PER_FRAME
+    def _window_flags(window: str | None, density: float | None, headless: bool) -> list[str]:
+        """The start flags of a simulated window; both need a headless game, as the engine says at its start-up."""
+        flags: list[str] = []
+        if window is not None:
+            if not WINDOW_SIZE_PATTERN.fullmatch(window):
+                raise SessionError(f"window has to be 'WxH' in window units, e.g. '480x480', not '{window}'")
+            flags.append(WINDOW_FLAG + window)
+        if density is not None:
+            flags.append(f"{DENSITY_FLAG}{density}")
+        if flags and not headless:
+            raise SessionError("window and density simulate a headless window; a real window's size and density belong to the system (leave headless on)")
+        return flags
+
+    @staticmethod
+    def _safe_area_object(safe_area: dict[str, float] | Sequence[float]) -> dict[str, float]:
+        if isinstance(safe_area, dict):
+            return dict(safe_area)
+        if len(safe_area) != len(SAFE_AREA_SIDES):
+            raise SessionError(f"safe_area is a dict or {len(SAFE_AREA_SIDES)} numbers in the order {', '.join(SAFE_AREA_SIDES)}, not {len(safe_area)}")
+        return dict(zip(SAFE_AREA_SIDES, safe_area))
+
+    @staticmethod
+    def _count(value: Any, default: int) -> int:
+        return value if isinstance(value, int) and not isinstance(value, bool) else default
 
     @staticmethod
     def _check_record_target(path: Path, expect: str) -> None:

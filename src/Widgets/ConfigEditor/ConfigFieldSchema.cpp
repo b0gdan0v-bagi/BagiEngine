@@ -24,30 +24,6 @@ namespace BECore {
             return FieldHint{FieldType::Bool};
         }
 
-        if (currentValue.find('|') != StringView::npos) {
-            FieldHint hint;
-            hint.type = FieldType::Flags;
-            StringView remaining = currentValue;
-            while (!remaining.empty()) {
-                const auto pos = remaining.find('|');
-                StringView token = (pos == StringView::npos) ? remaining : remaining.substr(0, pos);
-                while (!token.empty() && token.front() == ' ') {
-                    token.remove_prefix(1);
-                }
-                while (!token.empty() && token.back() == ' ') {
-                    token.remove_suffix(1);
-                }
-                if (!token.empty()) {
-                    hint.options.emplace_back(token.data(), token.size());
-                }
-                if (pos == StringView::npos) {
-                    break;
-                }
-                remaining = remaining.substr(pos + 1);
-            }
-            return hint;
-        }
-
         {
             int result = 0;
             const auto [ptr, ec] = std::from_chars(currentValue.data(), currentValue.data() + currentValue.size(), result);

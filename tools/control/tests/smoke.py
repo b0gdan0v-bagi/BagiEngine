@@ -6,11 +6,12 @@
 
 The game is started twice, once on the real clock and once with --manual-clock (game time moves only on `step`). The default
 scenario is game-neutral: it uses no game rules (the methods `ping`, `list_games`, `status`, `step`, `frame_stats`, `zone_allocs`,
-the answer to garbage and to an unknown method, a screenshot, the UI tree), so it fits any game that implements the control API.
+the answer to garbage and to an unknown method, a screenshot, the UI tree, the log marks, `batch`, `run_until` and `set_window`), so it fits any game that implements the control API.
 A game with rules brings its own script that imports the helpers of this file and calls run_smoke() with its scenarios
 (BagiEngine-Chess has one: tests/control_smoke.py; `be_add_game_control_tests(<exe> SCRIPT <file>)` runs it). The game runs
 --headless (no window, drawn in memory), which also lets the test look at screenshots; --window runs it in a real window instead
-(it needs a display, and a screenshot is not possible on the Vulkan backend, so those checks are left out).
+(it needs a display, and a screenshot is not possible on the Vulkan backend, so those checks are left out; `set_window` is then only `not_headless`,
+and the scenario that starts the game with `--window=` / `--density=` is skipped, as the game refuses them without `--headless`).
 Exit code: 0 passed, 1 failed, 77 skipped (the executable does not exist; ctest reads 77 as "skipped").
 """
 
@@ -41,8 +42,17 @@ DEFAULT_STEP_SECONDS = 1.0 / 60.0
 DEFAULT_SCREENSHOT_SIZE = 1024
 SMALL_SCREENSHOT_SIZE = 200
 MIN_SCREENSHOT_COLORS = 3  # a picture of a game is not flat: a background and at least two more colours
+RUN_UNTIL_FRAMES = 3
 BOARD_COLORS = 5  # for the script of a game that draws a board (tiles, background, frame): at least this many colours
 CLOCK_TOLERANCE = 1e-6
+PIXEL_TOLERANCE = 0.5  # of a length that went through a float scale and back
+WINDOW_SIZE = 480  # window units of the size the window step sets, a width and a height
+HIGH_DENSITY = 2.0
+NOTCH_TOP = 40.0  # window units of the safe-area inset the window step sets at the top
+SCREENSHOT_LIMIT = 4096  # the longest side `screenshot` can be asked for: no shrinking of a picture of the window step
+BAD_USER_SCALE = 100.0
+WINDOW_FLAGS_SCENARIO = ["--manual-clock", f"--window={WINDOW_SIZE}x{WINDOW_SIZE}", f"--density={HIGH_DENSITY:g}"]
+HEADLESS_ONLY_FLAGS = ("--window=", "--density=")  # the game stops at start-up when it gets one without --headless
 
 
 class SmokeFailure(Exception):
@@ -208,6 +218,133 @@ def check_ui_tree(client: BagiControlClient) -> None:
     expect_error("invalid_params", lambda: client.call("click_at", {"x": "left", "y": 1}), "a click at a point that is not a number")
 
 
+def safe_area_of(top: float) -> dict:
+    return {"top": top, "right": 0.0, "bottom": 0.0, "left": 0.0}
+
+
+def check_screen_canvases_follow(client: BagiControlClient, window: dict) -> None:
+    """Every laid-out Screen canvas of `ui_tree` is the output of the window: bounds times scale are its pixels, the safe area keeps the top inset, an element's outputRect is its rect times the scale.
+
+    The elements may overflow a small window (that is the layout of the game, `issues` says so), so the checks are of the canvas and of the units.
+    """
+    width, height, density = window["outputWidth"], window["outputHeight"], window["density"]
+    for canvas in client.call("ui_tree")["canvases"]:
+        if canvas["space"] != "Screen" or not canvas["laidOut"]:
+            continue
+        name, scale, bounds, safe = canvas["node"], canvas["scale"], canvas["bounds"], canvas["safeBounds"]
+        check(abs(bounds["w"] * scale - width) <= PIXEL_TOLERANCE and abs(bounds["h"] * scale - height) <= PIXEL_TOLERANCE,
+              f"the canvas '{name}' is {bounds['w'] * scale}x{bounds['h'] * scale} pixels in a window of {width}x{height}: it did not follow the window")
+        check(abs(safe["y"] * scale - window["safeArea"]["top"] * density) <= PIXEL_TOLERANCE, f"the canvas '{name}' has its safe area at {safe['y'] * scale} pixels, the window's top inset is {window['safeArea']['top'] * density}")
+        check(canvas["contentBounds"] in (bounds, safe), f"the canvas '{name}' lays out in {canvas['contentBounds']}, neither its bounds nor its safe area")
+        stack = list(canvas["elements"])
+        while stack:
+            element = stack.pop()
+            stack.extend(element["children"])
+            rect, output = element.get("rect"), element.get("outputRect")
+            if element["visible"] and rect is not None and output is not None:
+                check(abs(output["w"] - rect["w"] * scale) <= PIXEL_TOLERANCE and abs(output["h"] - rect["h"] * scale) <= PIXEL_TOLERANCE,
+                      f"the element '{element['name']}' of '{name}' is {output['w']}x{output['h']} pixels, its rect {rect['w']}x{rect['h']} at the scale {scale}")
+
+
+def check_window_applied(client: BagiControlClient, request: dict, density: float, top: float) -> None:
+    """`set_window` answers the window object that `status` shows, the picture and the canvases of the next calls are of its size."""
+    answer = client.call("set_window", {**request, "density": density, "safeArea": safe_area_of(top)})
+    width, height = round(request["width"] * density), round(request["height"] * density)
+    check((answer["width"], answer["height"], answer["density"]) == (request["width"], request["height"], density), f"set_window answered {answer}")
+    check((answer["outputWidth"], answer["outputHeight"]) == (width, height), f"set_window answered the output {answer['outputWidth']}x{answer['outputHeight']}, not {width}x{height}")
+    check(answer["safeArea"] == safe_area_of(top) and answer["headless"] is True, f"set_window answered the safe area {answer['safeArea']}")
+    check(client.call("status")["window"] == answer, "status.window is not what set_window answered")
+    shot = take_screenshot(client, {"maxSize": SCREENSHOT_LIMIT})
+    check((shot.width, shot.height) == (width, height), f"the screenshot after set_window is {shot.width}x{shot.height}, not {width}x{height}")
+    check_screen_canvases_follow(client, answer)
+
+
+def check_window_control(client: BagiControlClient, headless: bool) -> None:
+    """`set_window` and `status.window`: a real window refuses; a headless one takes a size, a density and a notch, and goes back to what it was."""
+    original = client.call("status")["window"]
+    check(original["headless"] is headless, f"status.window.headless is {original['headless']} in a run with headless {headless}")
+    if not headless:
+        expect_error("not_headless", lambda: client.call("set_window", {"width": WINDOW_SIZE, "height": WINDOW_SIZE}), "set_window on a real window")
+        check(client.call("status")["window"] == original, "a refused set_window changed the window")
+        return
+
+    square = {"width": WINDOW_SIZE, "height": WINDOW_SIZE}
+    check_window_applied(client, square, 1.0, 0.0)
+    check_window_applied(client, square, HIGH_DENSITY, NOTCH_TOP)
+
+    changed = client.call("status")["window"]
+    for params, description in (
+        ({"width": 0, "height": WINDOW_SIZE}, "a window of no width"),
+        ({**square, "safeArea": safe_area_of(-1.0)}, "a negative inset"),
+        ({**square, "safeArea": {"top": 1.0}}, "a safe area of one side"),
+        ({**square, "userScale": BAD_USER_SCALE}, "a user scale out of range"),
+        ({**square, "density": 0.0}, "a density of 0"),
+    ):
+        expect_error("invalid_params", lambda params=params: client.call("set_window", params), description)
+        check(client.call("status")["window"] == changed, f"{description} changed the window")
+
+    restored = client.call(
+        "set_window",
+        {"width": original["width"], "height": original["height"], "density": original["density"], "userScale": original["userScale"], "safeArea": original["safeArea"]},
+    )
+    check(restored == original, f"the window was {original} and is {restored} after it was set back")
+    check_screen_canvases_follow(client, restored)
+
+
+def check_window_flags(client: BagiControlClient, headless: bool) -> None:
+    """A game started with --window=WxH --density=D has that window at once."""
+    window = client.call("status")["window"]
+    check((window["width"], window["height"], window["density"]) == (WINDOW_SIZE, WINDOW_SIZE, HIGH_DENSITY), f"the start flags gave the window {window}")
+    size = round(WINDOW_SIZE * HIGH_DENSITY)
+    check((window["outputWidth"], window["outputHeight"]) == (size, size), f"the start flags gave the output {window['outputWidth']}x{window['outputHeight']}")
+    shot = take_screenshot(client, {"maxSize": SCREENSHOT_LIMIT})
+    check((shot.width, shot.height) == (size, size), f"the screenshot of the flagged window is {shot.width}x{shot.height}")
+    client.call("step", {"frames": 2})
+    check_screen_canvases_follow(client, window)
+
+
+def check_log_and_batch(client: BagiControlClient) -> None:
+    """The log counts and marks, and `batch` with its stop at the first error: nothing here depends on the game's rules."""
+    counts = client.call("status")["log"]
+    check(all(isinstance(counts.get(name), int) for name in ("warnings", "errors")), f"status.log has no two counts: {counts}")
+
+    mark = client.call("log_mark")
+    since = client.call("log_since", {"mark": mark["mark"]})
+    check(all(line["sequence"] >= mark["mark"] for line in since["lines"]), f"log_since gave a line before the mark {mark['mark']}: {since['lines']}")
+    check(since["next"] >= mark["mark"], f"log_since says next {since['next']} behind the mark {mark['mark']}")
+    expect_error("invalid_params", lambda: client.call("log_since", {"mark": -1}), "log_since of a negative mark")
+    expect_error("invalid_params", lambda: client.call("log_since", {"mark": 0, "level": "info"}), "log_since of the level info")
+
+    calls = [{"method": "ping"}, {"method": "no_such_method"}, {"method": "status"}]
+    stopped = client.call("batch", {"calls": calls})
+    check(stopped.get("stopped") == 1 and len(stopped["results"]) == 2, f"a batch did not stop at the unknown method: {stopped}")
+    check(stopped["results"][0]["ok"] is True and stopped["results"][1]["error"]["code"] == "unknown_method", f"a batch answered {stopped['results']}")
+    carried = client.call("batch", {"calls": calls, "continueOnError": True})
+    check("stopped" not in carried and [entry["ok"] for entry in carried["results"]] == [True, False, True], f"a batch with continueOnError answered {carried}")
+    expect_error("invalid_params", lambda: client.call("batch", {"calls": []}), "a batch of no calls")
+
+
+def check_run_until(client: BagiControlClient, manual_clock: bool) -> None:
+    """`run_until` ends at its limit when nothing moves the state; a game that cannot be read answers what `get_state` does."""
+    games = client.call("list_games")
+    active = next(game for game in games["games"] if game["name"] == games["active"])
+    condition = {"versionMoved": True}
+    if not active["controllable"]:
+        expect_error("not_controllable", lambda: client.call("run_until", {"condition": condition}), "run_until of a game that is not controllable")
+        return
+    expect_error("invalid_params", lambda: client.call("run_until", {"condition": {}}), "run_until without a condition")
+    expect_error("invalid_params", lambda: client.call("run_until", {"condition": condition, "maxFrames": 0}), "run_until of no frames")
+
+    before = client.call("status")["frame"]
+    answer = client.call("run_until", {"condition": condition, "maxFrames": RUN_UNTIL_FRAMES})
+    check(isinstance(answer["met"], bool) and answer["frames"] <= RUN_UNTIL_FRAMES, f"run_until answered {answer}")
+    if manual_clock:
+        check(answer["met"] is False and answer["frames"] == RUN_UNTIL_FRAMES, f"run_until with no action did not end at its limit: {answer}")
+        check(client.call("status")["frame"] == before + RUN_UNTIL_FRAMES, "run_until did not run exactly its frames")
+        batch = client.call("batch", {"calls": [{"method": "step", "params": {"frames": 2}}, {"method": "status"}]})
+        check(batch["results"][1]["result"]["frame"] == before + RUN_UNTIL_FRAMES + 2, f"the call behind a step of a batch ran before its frames: {batch}")
+
+
 def run_real_clock_scenario(client: BagiControlClient, headless: bool) -> None:
     status = client.call("status")
     check(status["frame"] >= 1, f"status reports frame {status['frame']}")
@@ -222,6 +359,10 @@ def run_real_clock_scenario(client: BagiControlClient, headless: bool) -> None:
 
     if headless:
         check_screenshot_basics(client)
+
+    check_log_and_batch(client)
+    check_run_until(client, manual_clock=False)
+    check_window_control(client, headless)
 
 
 def check_frame_stats(client: BagiControlClient) -> None:
@@ -280,11 +421,15 @@ def run_manual_clock_scenario(client: BagiControlClient, headless: bool) -> None
         expect_error("capture_failed", lambda: client.call("screenshot"), "a screenshot on a backend that cannot capture")
 
     check_ui_tree(client)
+    check_log_and_batch(client)
+    check_run_until(client, manual_clock=True)
+    check_window_control(client, headless)
 
 
 SCENARIOS = [
     ("real clock", [], run_real_clock_scenario),
     ("manual clock", ["--manual-clock"], run_manual_clock_scenario),
+    ("window flags", WINDOW_FLAGS_SCENARIO, check_window_flags),
 ]
 
 
@@ -363,6 +508,9 @@ def run_smoke(description: str, scenarios: list[tuple[str, list[str], Callable[[
 
     exe = args.exe.resolve()  # the game runs with its own directory as the working directory
     for name, flags, scenario in scenarios:
+        if args.window and any(flag.startswith(HEADLESS_ONLY_FLAGS) for flag in flags):
+            print(f"{name}: skipped, a real window takes no --window / --density", flush=True)
+            continue
         print(f"{name}: running", flush=True)
         try:
             play_with_retry(exe, flags, scenario, not args.window, args.startup_timeout, args.shutdown_timeout, args.port, name)

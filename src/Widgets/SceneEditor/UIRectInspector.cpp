@@ -156,7 +156,7 @@ namespace BECore {
             return result;
         }
 
-        bool InspectRegion(const UICanvasComponent& canvas, UIRectSpec& spec) {
+        bool InspectRegion(const UICanvasComponent& canvas, const UIElement& element, UIRectSpec& spec) {
             bool changed = false;
             const auto choices = UIRectEdit::RegionChoices(canvas.GetRegions(), spec.region);
             ImGui::SetNextItemWidth(kPairWidth);
@@ -176,11 +176,15 @@ namespace BECore {
                 ImGui::EndCombo();
             }
 
-            // A name typed by hand: applied on Enter or when the field loses focus, so the string pool does not fill with half-typed names
+            // A name typed by hand: applied on Enter or when the field loses focus, so the string pool does not fill with half-typed names.
+            // The buffer and the ImGui id belong to one element: a name typed for A is neither written into B nor shown in B's field.
             static char buffer[kRegionBufferSize] = {};
-            if (!ImGui::IsAnyItemActive()) {
+            static const UIElement* bufferOwner = nullptr;
+            if (bufferOwner != &element || !ImGui::IsAnyItemActive()) {
                 snprintf(buffer, sizeof(buffer), "%s", spec.region.CStr());
+                bufferOwner = &element;
             }
+            ImGui::PushID(&element);
             ImGui::SetNextItemWidth(kPairWidth);
             ImGui::InputText("Name##region_name", buffer, sizeof(buffer), ImGuiInputTextFlags_EnterReturnsTrue);
             if (ImGui::IsItemDeactivatedAfterEdit()) {
@@ -190,6 +194,7 @@ namespace BECore {
                     changed = true;
                 }
             }
+            ImGui::PopID();
             return changed;
         }
 
@@ -354,7 +359,7 @@ namespace BECore {
         }
         ImGui::EndDisabled();
 
-        changed |= InspectRegion(canvas, spec);
+        changed |= InspectRegion(canvas, element, spec);
         if (changed && !anchorsChanged) {
             inexactElement = nullptr;
         }

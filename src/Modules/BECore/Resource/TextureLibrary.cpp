@@ -87,6 +87,30 @@ namespace BECore {
         RebuildIndex();
     }
 
+    bool TextureLibrary::Rename(PoolString from, PoolString to) {
+        auto it = _index.find(from);
+        if (it == _index.end() || to.Empty()) {
+            return false;
+        }
+        if (from == to) {
+            return true;
+        }
+        if (_index.find(to) != _index.end()) {
+            return false;
+        }
+        _entries[it->second].name = to;
+        RebuildIndex();
+        return true;
+    }
+
+    PoolString TextureLibrary::MakeUniqueName(StringView base) const {
+        PoolString candidate = PoolString::Intern(base);
+        for (int suffix = 2; _index.find(candidate) != _index.end(); ++suffix) {
+            candidate = PoolString::Intern(Format("{}_{}", base, suffix));
+        }
+        return candidate;
+    }
+
     bool TextureLibrary::Save() {
         auto& configManager = CoreManager::GetConfigManager();
         auto xmlRoot = configManager.GetConfig("TextureLibrary"_intern);

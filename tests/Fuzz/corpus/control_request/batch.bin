@@ -1,0 +1,1 @@
+{"id":44,"method":"batch","params":{"calls":[{"method":"ping"},{"method":"status","params":{}},{"method":"batch","params":{"calls":[{"method":"ping"}]}},{"method":"quit"}],"continueOnError":true}}

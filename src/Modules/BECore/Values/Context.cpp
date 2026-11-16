@@ -158,8 +158,19 @@ namespace BECore {
             key = MixBits(key ^ level);
             key = MixBits(key ^ Version(level));
             key = MixBits(key ^ _sets[level]);
+            key = MixBits(key ^ reinterpret_cast<uintptr_t>(_objects[level]));
+            key = MixBits(key ^ reinterpret_cast<uintptr_t>(_versions[level]));
         }
         return key;
+    }
+
+    bool Context::IsVersioned(LevelMask levels) const {
+        for (LevelIndex level = 0; level < kMaxContextLevels; ++level) {
+            if ((levels & LevelBit(level)) != 0 && (_objects[level] == nullptr || _versions[level] == nullptr)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     void Context::SetObject(LevelIndex level, const void* object, const ClassMeta& type, const uint64_t* version) {

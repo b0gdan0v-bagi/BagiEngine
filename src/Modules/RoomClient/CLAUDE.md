@@ -78,7 +78,7 @@ Every other close retries, 1013 (server full) and a normal 1000 from the server 
 ## A component in ten lines
 
 ```cpp
-// member: RoomClient _client; eastl::vector<RoomClientEvent> _events;   (one per game, made once)
+// member: RoomClient _client; Vector<RoomClientEvent> _events;   (one per game, made once)
 // per frame, on the main thread:
 _client.Poll();
 _events.clear();

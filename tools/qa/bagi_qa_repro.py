@@ -27,8 +27,8 @@ import bagi_qa_checks as checks  # noqa: E402
 import bagi_qa_report as report  # noqa: E402
 import png_ops  # noqa: E402
 import scenario  # noqa: E402
-from bagi_qa import HEADLESS_FLAG, MANUAL_CLOCK_FLAG, UI_TREE_METHOD, QaSession  # noqa: E402
-from bagi_qa_checks import Finding, Invariants  # noqa: E402
+from bagi_qa import HEADLESS_FLAG, MANUAL_CLOCK_FLAG, QaSession  # noqa: E402
+from bagi_qa_checks import UI_TREE_METHOD, Finding, Invariants  # noqa: E402
 from bagi_session import SessionError  # noqa: E402
 from game_process import PORT_TAKEN_MARKER  # noqa: E402
 from scenario_shrink import shrink  # noqa: E402
@@ -237,10 +237,34 @@ def check_written(exe: str | Path, path: str | Path, finding: Finding) -> str | 
     return None
 
 
+def write_reproduction(
+    exe: str | Path,
+    scenario_path: str | Path,
+    finding_name: str,
+    invariants: Invariants | None,
+    out: str | Path,
+    max_probes: int = DEFAULT_MAX_PROBES,
+    extra: Sequence[str] = (),
+) -> tuple[Shrunk, list[scenario.Step]]:
+    """Cuts the scenario to what the finding needs and writes it to `out` as a scenario that `bagi_play.py` plays; the cut and the calls written.
+
+    The file is played with `bagi_play` before this returns and is removed when it does not fail on its last line. ReproError for any problem
+    (nothing is left at `out`).
+    """
+    shrunk = shrink_finding(exe, scenario_path, finding_name, invariants, max_probes, extra)
+    calls = settle(exe, shrunk.header, with_check_call(shrunk.calls, shrunk.finding), extra)
+    write_repro(out, merged_header(shrunk.header, extra), calls, shrunk.finding)
+    problem = check_written(exe, out, shrunk.finding)
+    if problem is not None:
+        Path(out).unlink(missing_ok=True)
+        raise ReproError(problem)
+    return shrunk, calls
+
+
 def command_replay(args: argparse.Namespace) -> int:
     """`bagi_qa.py replay`: plays the scenario with the checks and says what it found. Exit 0 nothing (known deviations apart), 1 findings, 2 a bad file, 77 no game."""
     try:
-        exe = _executable(args)
+        exe = executable(args)
         if exe is None:
             return EXIT_SKIPPED
         module = load_module(args.invariants)
@@ -268,7 +292,7 @@ def command_shrink(args: argparse.Namespace) -> int:
     does not recur on the whole scenario (nothing written), 77 no game.
     """
     try:
-        exe = _executable(args)
+        exe = executable(args)
         if exe is None:
             return EXIT_SKIPPED
         module = load_module(args.invariants)
@@ -285,13 +309,7 @@ def command_shrink(args: argparse.Namespace) -> int:
         if png_ops.inside_git_work_tree(out.parent.resolve()):
             raise ReproError(f"--out {out} is inside a git work tree: a reproduction is written outside every repository")
         print(f"shrinking '{name}': {len(steps)} calls, up to {args.max_probes} probes", flush=True)
-        shrunk = shrink_finding(exe, args.scenario, name, module, args.max_probes, args.flag)
-        calls = settle(exe, shrunk.header, with_check_call(shrunk.calls, shrunk.finding), args.flag)
-        write_repro(out, merged_header(shrunk.header, args.flag), calls, shrunk.finding)
-        problem = check_written(exe, out, shrunk.finding)
-        if problem is not None:
-            out.unlink(missing_ok=True)
-            raise ReproError(problem)
+        shrunk, calls = write_reproduction(exe, args.scenario, name, module, out, args.max_probes, args.flag)
     except ReproError as error:
         print(f"ERROR {error}")
         return EXIT_USAGE
@@ -304,19 +322,24 @@ def command_shrink(args: argparse.Namespace) -> int:
 def add_arguments(parser: argparse.ArgumentParser, shrinking: bool) -> None:
     """The arguments of `replay` and `shrink` (`bagi_qa.py` builds the parsers)."""
     parser.add_argument("scenario", help="the recorded scenario (the `session.jsonl` of a QA session)")
-    parser.add_argument("--exe", help="the built game executable (or --preset and --game)")
-    parser.add_argument("--preset", help="the CMake preset that built the game: the executable is build/<preset>/bin/<game>")
-    parser.add_argument("--game", help="the executable name for --preset, e.g. BagiMatch3")
-    parser.add_argument("--root", type=Path, help="the repository whose build/ folder --preset means (default: the one holding these tools)")
-    parser.add_argument("--invariants", help="the game's invariants module (.claude/rules/qa-project.md)")
-    parser.add_argument("--flag", action="append", default=[], metavar="FLAG", help="a start flag for the game on top of the scenario's; repeatable")
+    add_game_arguments(parser)
     if shrinking:
         parser.add_argument("--finding", help="the name of the finding to shrink (default: the first one the whole scenario shows)")
         parser.add_argument("--out", metavar="FILE", help="where the reproduction goes (default: repro/<finding name>.jsonl next to the scenario, which `bagi_qa.py drafts` picks up)")
         parser.add_argument("--max-probes", type=int, default=DEFAULT_MAX_PROBES, help="game launches the cut may spend (default %(default)s)")
 
 
-def _executable(args: argparse.Namespace) -> Path | None:
+def add_game_arguments(parser: argparse.ArgumentParser) -> None:
+    """The options that name the game and its checks, as `executable` reads them (also for the monkey, bagi_monkey)."""
+    parser.add_argument("--exe", help="the built game executable (or --preset and --game)")
+    parser.add_argument("--preset", help="the CMake preset that built the game: the executable is build/<preset>/bin/<game>")
+    parser.add_argument("--game", help="the executable name for --preset, e.g. BagiMatch3")
+    parser.add_argument("--root", type=Path, help="the repository whose build/ folder --preset means (default: the one holding these tools)")
+    parser.add_argument("--invariants", help="the game's invariants module (.claude/rules/qa-project.md)")
+    parser.add_argument("--flag", action="append", default=[], metavar="FLAG", help="a start flag for the game on top of the scenario's; repeatable")
+
+
+def executable(args: argparse.Namespace) -> Path | None:
     """The game executable the arguments name, or None (and a line printed) when it does not exist. ReproError for a bad combination of options."""
     by_preset = args.preset is not None or args.game is not None
     if by_preset == (args.exe is not None) or (by_preset and (args.preset is None or args.game is None)):

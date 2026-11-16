@@ -26,6 +26,12 @@ namespace BECore::Tests {
 
             explicit QueuedEvent(int v) : value(v) {}
         };
+
+        struct TriggerEvent : EventBase<TriggerEvent> {};
+        struct TailEvent : EventBase<TailEvent> {};
+
+        template <size_t Index>
+        struct BurstEvent : EventBase<BurstEvent<Index>> {};
     }  // namespace SemanticsEvents
 
     using namespace SemanticsEvents;
@@ -375,6 +381,60 @@ namespace BECore::Tests {
 
         EventsQueueRegistry::UpdateAll();
         EXPECT_EQ(log.size(), 6u);
+    }
+
+    // More new types than any capacity the registry can have at this point, so the registration inside the pass reallocates.
+    constexpr size_t kBurstTypes = 128;
+
+    // Namespace scope: a local class cannot have member templates.
+    struct BurstListener : SubscriptionHolder {
+        using SubscriptionHolder::Subscribe;
+        int trigger = 0;
+        int tail = 0;
+        int delivered = 0;
+
+        void OnTrigger() {
+            ++trigger;
+            EnqueueAll(std::make_index_sequence<kBurstTypes>{});
+        }
+        void OnTail() {
+            ++tail;
+        }
+        void OnBurst() {
+            ++delivered;
+        }
+
+        template <size_t... Indices>
+        void SubscribeAll(std::index_sequence<Indices...>) {
+            (Subscribe<BurstEvent<Indices>, &BurstListener::OnBurst>(this), ...);
+        }
+
+        template <size_t... Indices>
+        static void EnqueueAll(std::index_sequence<Indices...>) {
+            (BurstEvent<Indices>::Enqueue(), ...);
+        }
+    };
+
+    TEST(EventDispatchSemanticsTest, ATypeEnqueuedForTheFirstTimeByAHandlerDuringUpdateAllIsUpdatedByTheNextUpdateAll) {
+        BurstListener burst;
+        burst.Subscribe<TriggerEvent, &BurstListener::OnTrigger>(&burst);
+        burst.Subscribe<TailEvent, &BurstListener::OnTail>(&burst);
+        burst.SubscribeAll(std::make_index_sequence<kBurstTypes>{});
+
+        // The tail registers after the trigger, so the pass goes on past the registration the trigger makes.
+        TriggerEvent::Enqueue();
+        TailEvent::Enqueue();
+
+        EventsQueueRegistry::UpdateAll();
+        EXPECT_EQ(burst.trigger, 1);
+        EXPECT_EQ(burst.tail, 1) << "the pass continues after the handler that registered new types";
+        EXPECT_EQ(burst.delivered, 0) << "the new types were not in the list when the pass started";
+
+        EventsQueueRegistry::UpdateAll();
+        EXPECT_EQ(burst.delivered, static_cast<int>(kBurstTypes));
+
+        EventsQueueRegistry::UpdateAll();
+        EXPECT_EQ(burst.delivered, static_cast<int>(kBurstTypes));
     }
 
     TEST(EventDispatchSemanticsTest, AHolderDestroyedBeforeTheEventStopsReceiving) {

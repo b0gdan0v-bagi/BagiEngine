@@ -2,6 +2,7 @@
 
 #include <EASTL/array.h>
 #include <EASTL/unordered_map.h>
+#include <Widgets/ConfigEditor/FlagValue.h>
 #include <Widgets/ImGuiFonts.h>
 #include <Widgets/ImGuiTheme.h>
 #include <imgui.h>
@@ -110,35 +111,14 @@ namespace BECore {
                 return {};
             }
 
-            auto isActive = [&](const String& flag) {
-                StringView remaining = currentValue;
-                while (!remaining.empty()) {
-                    const auto pos = remaining.find('|');
-                    StringView token = (pos == StringView::npos) ? remaining : remaining.substr(0, pos);
-                    while (!token.empty() && token.front() == ' ') {
-                        token.remove_prefix(1);
-                    }
-                    while (!token.empty() && token.back() == ' ') {
-                        token.remove_suffix(1);
-                    }
-                    if (token == StringView{flag.c_str(), flag.size()}) {
-                        return true;
-                    }
-                    if (pos == StringView::npos) {
-                        break;
-                    }
-                    remaining = remaining.substr(pos + 1);
-                }
-                return false;
-            };
+            // A token that is not an option stays a checked row until the user unchecks it, so saving never drops it silently
+            const Vector<String> tokens = SplitFlagTokens(currentValue);
+            const Vector<String> unknown = UnknownFlagTokens(currentValue, options);
 
             bool anyChanged = false;
             Vector<bool> checked(options.size());
             for (size_t i = 0; i < options.size(); ++i) {
-                checked[i] = isActive(options[i]);
-            }
-
-            for (size_t i = 0; i < options.size(); ++i) {
+                checked[i] = eastl::find(tokens.begin(), tokens.end(), options[i]) != tokens.end();
                 const String checkLabel = Format("{}##flag{}", options[i], widgetId);
                 bool state = checked[i];
                 if (ImGui::Checkbox(checkLabel.c_str(), &state)) {
@@ -147,19 +127,32 @@ namespace BECore {
                 }
             }
 
-            if (anyChanged) {
-                String result;
-                for (size_t i = 0; i < options.size(); ++i) {
-                    if (checked[i]) {
-                        if (!result.empty()) {
-                            result.push_back('|');
-                        }
-                        result.append(options[i]);
-                    }
+            Vector<bool> unknownChecked(unknown.size(), true);
+            for (size_t i = 0; i < unknown.size(); ++i) {
+                const String checkLabel = Format("{} {}##unknownFlag{}{}", unknown[i], k_unknownValueMarker, widgetId, unknown[i]);
+                bool state = true;
+                if (ImGui::Checkbox(checkLabel.c_str(), &state)) {
+                    unknownChecked[i] = state;
+                    anyChanged = true;
                 }
-                return {true, std::move(result)};
             }
-            return {};
+
+            if (!anyChanged) {
+                return {};
+            }
+
+            Vector<String> result;
+            for (size_t i = 0; i < options.size(); ++i) {
+                if (checked[i]) {
+                    result.push_back(options[i]);
+                }
+            }
+            for (size_t i = 0; i < unknown.size(); ++i) {
+                if (unknownChecked[i]) {
+                    result.push_back(unknown[i]);
+                }
+            }
+            return {true, JoinFlagTokens(result)};
         }
 
         InspectorResult RenderString(const String& widgetId, StringView currentValue) {

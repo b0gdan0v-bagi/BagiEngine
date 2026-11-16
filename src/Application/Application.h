@@ -37,8 +37,20 @@ namespace BECore {
         /// Shuts everything down after the last frame (the work that Run() does after the loop). Call it once (checked by an ASSERT)
         void Finish();
 
+        /// The exit code of the process (0 unless something set it): `--replay=` leaves 1 when the replay did not play to its end
+        void SetExitCode(int code) {
+            _exitCode = code;
+        }
+
+        [[nodiscard]] int GetExitCode() const {
+            return _exitCode;
+        }
+
     private:
         void StopApplication();
+
+        /// Posts the control method `replay` for @p path; the answer sets the exit code and, with @p quitWhenDone, stops the application
+        void PostReplay(const String& path, bool quitWhenDone);
 
 #if BE_WITH_EDITOR
         /// Ctrl+Shift+E (IsEditorToggle) asks for the other run mode; the switch itself waits for the end of the frame (RunFrame).
@@ -62,6 +74,7 @@ namespace BECore {
 
         bool _isRunning = false;
         bool _finished = false;  // Finish() has run: it must run once
+        int _exitCode = 0;
         bool _headless = false;  // there is no window to show an editor in: the switch chord is ignored
         // The key of the title last applied: the active game's name and the editor mode
         PoolString _titleGame;

@@ -10,12 +10,8 @@
 namespace BECore {
 
     void DebugBreakHandler::Initialize() {
-        if (_initialized) {
-            return;
-        }
-
+        Disconnect();
         Subscribe<AssertEvent, &DebugBreakHandler::OnAssert>(this);
-        _initialized = true;
     }
 
     void DebugBreakHandler::OnAssert(const AssertEvent& event) {
@@ -29,29 +25,21 @@ namespace BECore {
     }
 
     void LogHandler::Initialize() {
-        if (_initialized) {
-            return;
-        }
-
+        Disconnect();
         Subscribe<AssertEvent, &LogHandler::OnAssert>(this);
-        _initialized = true;
     }
 
     void LogHandler::OnAssert(const AssertEvent& event) {
-        LogLevel level = LogLevel::Error;
         const char* typeStr = "ASSERT";
 
         switch (event.type) {
             case AssertType::Assert:
-                level = LogLevel::Error;
                 typeStr = "ASSERT";
                 break;
             case AssertType::Expect:
-                level = LogLevel::Warning;
                 typeStr = "EXPECT";
                 break;
             case AssertType::FatalError:
-                level = LogLevel::Fatal;
                 typeStr = "FATAL";
                 break;
         }
@@ -74,16 +62,26 @@ namespace BECore {
             }
         }
 
-        LogEvent::Emit(level, message);
+        const LogSite site = MakeLogSite(event.file, event.line);
+
+        // A failed assert may be followed by a trap or an abort, so its line has to reach the sinks first; an Expect is a warning and the frame flush takes it
+        switch (event.type) {
+            case AssertType::Assert:
+                Logger::Error(message, site);
+                Logger::FlushOnMainThread();
+                break;
+            case AssertType::Expect:
+                Logger::Warning(message, site);
+                break;
+            case AssertType::FatalError:
+                Logger::Fatal(message, site);  // flushes on the main thread itself
+                break;
+        }
     }
 
     void StackTraceHandler::Initialize() {
-        if (_initialized) {
-            return;
-        }
-
+        Disconnect();
         Subscribe<AssertEvent, &StackTraceHandler::OnAssert>(this);
-        _initialized = true;
     }
 
     void StackTraceHandler::OnAssert(const AssertEvent& event) {
@@ -116,15 +114,21 @@ namespace BECore {
 
         SortHandlersByPriority();
 
+        // Publish calls the last connected listener first, and a disconnect moves the last entry into the freed slot, so the order the deserializer left
+        // depends on the config. Disconnect every handler first, then connect from the highest priority number to the lowest: the lowest runs first.
         for (const auto& handler : _handlers) {
-            handler->Initialize();
+            handler->Disconnect();
+        }
+        for (size_t pos = _handlers.size(); pos > 0; --pos) {
+            _handlers[pos - 1]->Initialize();
         }
 
         _initialized = true;
     }
 
     void AssertHandlerManager::SortHandlersByPriority() {
-        eastl::sort(_handlers.begin(), _handlers.end(), [](auto&& a, auto&& b) { return a->GetPriority() < b->GetPriority(); });
+        // Insertion sort is stable (handlers of one priority keep the order of the config) and allocates nothing
+        eastl::insertion_sort(_handlers.begin(), _handlers.end(), [](auto&& a, auto&& b) { return a->GetPriority() < b->GetPriority(); });
     }
 
 }  // namespace BECore

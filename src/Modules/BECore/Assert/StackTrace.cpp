@@ -20,6 +20,11 @@ namespace BECore {
 #if defined(PLATFORM_WINDOWS)
 
     void CaptureAndPrintStackTrace(int skipFrames) {
+        // DbgHelp is single-threaded: its init and every Sym* call run under one lock, so two failing threads print one trace at a time. Recursive because a CRT
+        // report raised inside a Sym* call reaches this function again on the same thread (CRTDebugHook).
+        static std::recursive_mutex dbgHelpMutex;                         //-NoStd: DbgHelp is single-threaded; an engine Mutex could assert while reporting an assert
+        const std::lock_guard<std::recursive_mutex> lock(dbgHelpMutex);  //-NoStd: guards the raw DbgHelp mutex above
+
         constexpr int MaxFrames = 62;
         void* stack[MaxFrames];
 

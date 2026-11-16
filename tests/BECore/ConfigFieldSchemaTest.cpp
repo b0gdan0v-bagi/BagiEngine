@@ -5,16 +5,23 @@
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <CoreSDL/SDLUtils.h>
 #include <Widgets/ConfigEditor/ConfigEditorWidget.h>
 #include <Widgets/ConfigEditor/ConfigFieldSchema.h>
+#include <Widgets/ConfigEditor/FlagValue.h>
 
 namespace BECore::Tests {
 
     namespace {
 
         const PoolString kLoggerConfig = "LoggerConfig"_intern;
+        const PoolString kWindowConfig = "SDLWindowConfig"_intern;
+        constexpr StringView kWindowFlagsPath = "window/@windowFlags";
         constexpr StringView kSinkTypePath = "sink/@type";
         constexpr StringView kSinkMinLevelPath = "sink/@minLevel";
+
+        /// The sink types of the engine plus the one LoggerSinkOrderTest registers: every test sink of this executable is in the factory
+        const Vector<String> kOfferedSinkTypes{"ConsoleSink", "FileSink", "LogHistorySink", "OrderSink", "OutputSink"};
 
         bool Contains(const Vector<String>& options, StringView value) {
             return eastl::find(options.begin(), options.end(), value) != options.end();
@@ -53,8 +60,7 @@ namespace BECore::Tests {
         const FieldHint hint = schema.Resolve(kLoggerConfig, kSinkTypePath, "ConsoleSink");
         EXPECT_EQ(hint.type, FieldType::Enum);
 
-        const Vector<String> expected{"ConsoleSink", "FileSink", "LogHistorySink", "OutputSink"};
-        EXPECT_EQ(hint.options, expected);
+        EXPECT_EQ(hint.options, kOfferedSinkTypes);
 
         // The names of the removed hand-written enum are not class names, the loader would drop them
         EXPECT_FALSE(Contains(hint.options, "Console"));
@@ -105,8 +111,7 @@ namespace BECore::Tests {
         const ConfigFieldSchema& schema = ConfigFieldSchema::GetInstance();
         const FieldHint types = schema.Resolve(kLoggerConfig, kSinkTypePath, "ConsoleSink");
         EXPECT_EQ(types.type, FieldType::Enum);
-        const Vector<String> expectedTypes{"ConsoleSink", "FileSink", "LogHistorySink", "OutputSink"};
-        EXPECT_EQ(types.options, expectedTypes);
+        EXPECT_EQ(types.options, kOfferedSinkTypes);
 
         const FieldHint levels = schema.Resolve(kLoggerConfig, kSinkMinLevelPath, "Debug");
         EXPECT_EQ(levels.type, FieldType::Enum);
@@ -130,6 +135,66 @@ namespace BECore::Tests {
         const FieldHint unknown = schema.Resolve(kLoggerConfig, kSinkTypePath, "NoSuchSink");
         EXPECT_EQ(unknown.type, FieldType::Enum);
         EXPECT_FALSE(Contains(unknown.options, "NoSuchSink"));
+    }
+
+    TEST_F(ConfigFieldSchemaTest, SplitFlagTokensTrimsAndSkipsEmpty) {
+        const Vector<String> expected{"A", "B C", "D"};
+        EXPECT_EQ(SplitFlagTokens(" A | B C ||D |"), expected);
+        EXPECT_TRUE(SplitFlagTokens("").empty());
+        EXPECT_TRUE(SplitFlagTokens(" | ").empty());
+    }
+
+    TEST_F(ConfigFieldSchemaTest, UnknownFlagTokensKeepsOrderAndSkipsOptions) {
+        const Vector<String> options{"A", "B"};
+        const Vector<String> expected{"Z", "Y"};
+        EXPECT_EQ(UnknownFlagTokens("Z|A|Y|B|Z", options), expected);
+        EXPECT_TRUE(UnknownFlagTokens("B|A", options).empty());
+        EXPECT_TRUE(UnknownFlagTokens("", options).empty());
+    }
+
+    TEST_F(ConfigFieldSchemaTest, JoinFlagTokensJoinsWithABar) {
+        EXPECT_EQ(JoinFlagTokens({"A", "B", "C"}), "A|B|C");
+        EXPECT_EQ(JoinFlagTokens({"A"}), "A");
+        EXPECT_EQ(JoinFlagTokens({}), "");
+    }
+
+    TEST_F(ConfigFieldSchemaTest, WindowFlagNamesAreAllKnownToTheLoader) {
+        const Vector<String> names = SDLUtils::GetWindowFlagNames();
+        ASSERT_FALSE(names.empty());
+        for (const String& name : names) {
+            EXPECT_NE(SDLUtils::GetWindowFlagValue(StringView{name.c_str(), name.size()}), 0u) << name.c_str();
+        }
+        EXPECT_TRUE(Contains(names, "SDL_WINDOW_MOUSE_RELATIVE_MODE"));
+    }
+
+    TEST_F(ConfigFieldSchemaTest, WindowFlagsFieldOffersEveryLoaderFlag) {
+        XmlDeserializer deserializer;
+        auto widget = New<ConfigEditorWidget>();
+        ASSERT_TRUE(widget->Initialize(deserializer));
+
+        const FieldHint hint = ConfigFieldSchema::GetInstance().Resolve(kWindowConfig, kWindowFlagsPath, "SDL_WINDOW_RESIZABLE");
+        EXPECT_EQ(hint.type, FieldType::Flags);
+        EXPECT_EQ(hint.options, SDLUtils::GetWindowFlagNames());
+    }
+
+    TEST_F(ConfigFieldSchemaTest, UnregisteredValueWithABarIsAString) {
+        const ConfigFieldSchema& schema = ConfigFieldSchema::GetInstance();
+        const FieldHint hint = schema.Resolve("OtherConfig"_intern, "node/@mode", "A|B");
+        EXPECT_EQ(hint.type, FieldType::String);
+        EXPECT_TRUE(hint.options.empty());
+    }
+
+    TEST_F(ConfigFieldSchemaTest, RegisteredFlagsStayFlags) {
+        ConfigFieldSchema& schema = ConfigFieldSchema::GetInstance();
+        const Vector<String> names{"A", "B", "C"};
+        schema.RegisterFlags("OtherConfig"_intern, "node/@mode", names);
+
+        // Whatever the value holds, the options are the registered ones
+        for (const StringView value : {"A|B", "A", "", "Z"}) {
+            const FieldHint hint = schema.Resolve("OtherConfig"_intern, "node/@mode", value);
+            EXPECT_EQ(hint.type, FieldType::Flags);
+            EXPECT_EQ(hint.options, names);
+        }
     }
 
 }  // namespace BECore::Tests

@@ -119,14 +119,21 @@ namespace BECore {
         }
 
         /**
-         * @brief One number for the levels of @p levels: it changes when a counter of one of them moves or one of them is given another object
+         * @brief One number for the levels of @p levels: it changes when a counter of one of them moves or one of them is given another object or counter
          *
-         * A level's own count of `Set` calls is part of the fold, so putting another object (or another counter) at a level that is read
-         * changes the key, while a `Set` of a level that is not in the mask does not. The counters only grow, so a key that differs
-         * after any one of them moved is what a rebuild needs; the fold is a hash, so the number itself means nothing and two keys are
-         * only compared for equality. A level with no counter adds a constant: it never moves the key by itself.
+         * Per level the fold holds the counter's value, the count of `Set` calls of the level, the address of the object and the address
+         * of the counter. A context rebuilt each frame over the same objects and counters therefore gives the same key (its `Set` counts
+         * restart at 1 in each), and another object or another counter object at a level gives another key even when the numbers agree.
+         * A `Set` of a level that is not in the mask does not move the key. The fold is a hash, so the number itself means nothing and
+         * two keys are only compared for equality. A level with no object or no counter adds a constant for it.
+         *
+         * What it cannot see: an object freed and another built at the same address, with a counter at the same address and value. The
+         * owner bumps the counter when it replaces an object.
          */
         [[nodiscard]] uint64_t VersionKey(LevelMask levels) const;
+
+        /// True when every level of @p levels has an object and a counter (`Set` with a version): the key then tells whether a value that reads them changed. The empty mask is true
+        [[nodiscard]] bool IsVersioned(LevelMask levels) const;
 
     private:
         void SetObject(LevelIndex level, const void* object, const ClassMeta& type, const uint64_t* version);

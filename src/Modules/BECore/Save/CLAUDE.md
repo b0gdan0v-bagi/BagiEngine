@@ -76,7 +76,7 @@ The file is input nobody trusts: a player edits it, a disk damages it, an update
 struct MyState {
     BE_CLASS(MyState)
     BE_REFLECT_FIELD int32_t score = 0;
-    BE_REFLECT_FIELD eastl::string board;
+    BE_REFLECT_FIELD String board;
 };
 
 constexpr SaveSchema kSchema{"MyGame", 2, 1};  // writes version 2, reads 1 and 2

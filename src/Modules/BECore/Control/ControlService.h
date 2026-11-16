@@ -11,6 +11,7 @@
 namespace BECore {
 
     class ControlCall;
+    class ControlLog;
     class ControlRoots;
 
     /**
@@ -40,6 +41,11 @@ namespace BECore {
         using Handler = MoveOnlyFunction<void(ControlCall&)>;
         using EventSink = MoveOnlyFunction<void(const String&)>;
         using FrameEndHook = MoveOnlyFunction<void()>;
+        using PublishObserver = MoveOnlyFunction<void(StringView event, const Json& data)>;
+        using PublishObserverId = uint64_t;
+
+        /// What AddPublishObserver() never returns; RemovePublishObserver() of it does nothing
+        static constexpr PublishObserverId kNoPublishObserver = 0;
 
         ControlService();
         ~ControlService();
@@ -68,6 +74,15 @@ namespace BECore {
             return *_roots;
         }
 
+        /// The warnings and errors of the log, counted and kept for the log methods; starts listening when RegisterControlBuiltins runs. Main thread only
+        [[nodiscard]] ControlLog& Log() {
+            return *_log;
+        }
+
+        [[nodiscard]] const ControlLog& Log() const {
+            return *_log;
+        }
+
         /// Says what @p method does and which parameters it reads (for list_methods and the completion of a console). Kept apart from the handler: registering the
         /// method again keeps it, and a description of a name that has no handler is kept but not listed. Main thread
         void DescribeMethod(StringView method, ControlMethodInfo info);
@@ -86,8 +101,51 @@ namespace BECore {
         /// Sends {"event":..,"data":..} to the event sink, if there is one. A sink may replace or clear itself; a Publish from inside the sink sends nothing
         void Publish(StringView event, const Json& data);
 
+        /**
+         * @brief Calls @p observer with the name and the data of every Publish() from now on, whether or not an event sink is set.
+         *
+         * For a module that waits for an event of its own process (`run_until`). Main thread. An observer runs before the sink and may remove itself or add
+         * others (an added one sees the next Publish); a Publish from inside an observer reaches the sink but no observer. Returns the id for RemovePublishObserver().
+         */
+        [[nodiscard]] PublishObserverId AddPublishObserver(PublishObserver observer);
+
+        /// Stops calling the observer of @p id; an unknown or already removed id is ignored. Main thread. A running observer's capture lives until it returns
+        void RemovePublishObserver(PublishObserverId id);
+
+        /// How many observers are registered now (a test checks that a finished wait gave its own back)
+        [[nodiscard]] size_t GetPublishObserverCount() const {
+            return _publishObservers.size();
+        }
+
         /// Runs @p hook at the end of every frame, before a deferred call is completed. A hook of the same @p name is replaced, so registering a module again adds nothing
         void SetFrameEndHook(StringView name, FrameEndHook hook);
+
+        /// What RunNested() calls when a nested call that deferred has its answer, with the outer call (which may defer or answer it) and the answer
+        using NestedContinuation = MoveOnlyFunction<void(ControlCall& outer, ControlAnswer answer)>;
+
+        /**
+         * @brief Runs @p method as part of @p outer, the call a handler is answering, and gives back its answer as a value.
+         *
+         * The nested call runs as a posted one would: the table lookup, the generation handling of the handler, an unknown method or a handler that
+         * answers nothing is an error answer. It does not wait for the barrier: it is part of @p outer, which is the one that is pending. Main thread,
+         * and @p outer must be unanswered and not deferred yet.
+         *
+         * Returns the answer when the nested call has given it. Returns nullopt when the nested call deferred (`step`, `screenshot`, ...): its frames
+         * are now those of @p outer, so the handler of @p outer has to return without answering, and when the frames have passed @p onAnswer gets the
+         * answer, with @p outer, which it may answer, defer again or use to run the next nested call. @p onAnswer is moved from only when this function
+         * returns nullopt and is called once then, not at all when Shutdown() answers @p outer first; when an answer is returned the caller still has it. What @p onAnswer needs later it holds in its
+         * own capture: the handler of @p outer has returned by then.
+         */
+        [[nodiscard]] Optional<ControlAnswer> RunNested(ControlCall& outer, StringView method, Json params, NestedContinuation&& onAnswer);
+
+        /**
+         * @brief Defers @p call by @p frames frames in which the game advances by @p seconds each, on whichever clock runs.
+         *
+         * `DeferFrames` alone waits for frames, which on a paused real clock are held frames that move nothing. This also asks the pause for the steps
+         * there (the manual clock gets its frames when the call is settled), and counts the frame that is running when a handler (frame stage 1b)
+         * calls it, which ends too; a continuation (@p done of an earlier deferral, run by EndFrame) counts none, its frame has ended. Main thread.
+         */
+        void DeferSteppedFrames(ControlCall& call, uint32_t frames, double seconds, MoveOnlyFunction<void(ControlCall&)> done);
 
         /// Runs the queued requests (frame stage 1b)
         void Drain();
@@ -145,6 +203,10 @@ namespace BECore {
             bool bypassBarrier = false;
             uint64_t generation = 0;  // the registration that made this entry; a running handler goes back only if it is still the current one
         };
+        struct ObserverEntry {
+            PublishObserverId id = kNoPublishObserver;  // reset to none by a removal while Publish runs the observers
+            PublishObserver observer;
+        };
         struct HookEntry {
             String name;
             FrameEndHook hook;
@@ -155,7 +217,11 @@ namespace BECore {
 
         [[nodiscard]] bool BypassesBarrier(const Request& request) const;
         void Process(Request& request);
+        void InvokeHandler(HandlerEntry& entry, ControlCall& call);
+        Optional<ControlAnswer> AwaitNested(ControlCall& outer, UniquePtr<ControlCall>& nested, NestedContinuation& onAnswer);
         void Settle(UniquePtr<ControlCall> call);
+        void PrunePublishObservers();
+        void NotifyPublishObservers(StringView event, const Json& data);
 
         Mutex _mutex{BE_LOCK_SITE("Control queue")};
         ConditionVariable _posted;                // notified by Post(); WaitForRequests() waits on it
@@ -166,8 +232,13 @@ namespace BECore {
         eastl::deque<UniquePtr<Request>> _inbox;  // taken from _queue, in order, waiting for the barrier
         HashMap<String, HandlerEntry> _handlers;
         UniquePtr<ControlRoots> _roots;                    // behind a pointer so this header does not pull in the reflection registry
+        UniquePtr<ControlLog> _log;                        // behind a pointer so this header does not pull in the logger
         HashMap<String, ControlMethodInfo> _descriptions;  // beside the handlers, so a handler registered again keeps its description
         uint64_t _methodsVersion = 0;
+        // Before _pending: a deferred call that owns an observer (run_until) removes it when it dies with the service
+        Vector<UniquePtr<ObserverEntry>> _publishObservers;  // entries do not move, so a running observer stays where it is when others are added
+        PublishObserverId _lastPublishObserverId = kNoPublishObserver;
+        bool _notifyingObservers = false;
         UniquePtr<ControlCall> _pending;
         uint32_t _pendingFramesLeft = 0;
         double _pendingSeconds = kDefaultStepSeconds;
@@ -177,6 +248,7 @@ namespace BECore {
         EventSink _eventSink;               // empty while the sink runs (Publish moves it out)
         uint64_t _eventSinkGeneration = 0;  // the registration of the current sink; a running sink goes back only if no other was set
         Vector<HookEntry> _frameEndHooks;
+        bool _inFrameEnd = false;     // EndFrame is running the done function of a deferred call
         uint64_t _registrations = 0;  // counts RegisterHandler, SetFrameEndHook and SetEventSink calls; the source of the generations
     };
 

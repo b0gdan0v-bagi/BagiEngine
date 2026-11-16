@@ -12,8 +12,8 @@ Expert guidance for modern C++23 game engine development with emphasis on perfor
 | Requirement | Details |
 |-------------|---------|
 | **Smart Pointers** | Use `IntrusivePtr<T>` with `BECore::New<T>()`. NEVER use `std::unique_ptr` or `std::shared_ptr` |
-| **Containers** | Use EASTL (`eastl::vector`, `eastl::hash_map`, `eastl::string`) instead of `std::` containers |
-| **Strings** | Use `PoolString` for frequently used strings, `eastl::string` otherwise |
+| **Containers** | Use the `BECore` names (`Vector`, `HashMap`, `String`, `Optional`, `Array`: `BECore/Types/CLAUDE.md`), not `eastl::` or `std::` spelled out |
+| **Strings** | Use `PoolString` for identifiers and keys, `String` / `StringView` otherwise |
 | **Casts** | C-style casts are **FORBIDDEN**. Use `static_cast`, `reinterpret_cast`, `std::bit_cast`. `dynamic_cast` only as last resort |
 | **Type Aliases** | Always `using` aliases, NEVER `typedef` |
 | **Assertions** | Always `BE_ASSERT()`, NEVER `assert()` |
@@ -25,7 +25,7 @@ Expert guidance for modern C++23 game engine development with emphasis on perfor
 
 ### 1. Modern C++23 First
 
-Prefer modern constructs: `IntrusivePtr<T>`, EASTL containers, `PoolString`, deducing this over CRTP, `constexpr`/`consteval`, concepts, `std::expected` for errors.
+Prefer modern constructs: `IntrusivePtr<T>`, the `BECore` containers (`Vector`, `HashMap`), `PoolString`, deducing this over CRTP, `constexpr`/`consteval`, concepts, `std::expected` for errors.
 
 ### 2. Zero-Cost Abstractions
 
@@ -34,7 +34,7 @@ Use deducing this for static polymorphism, concepts for constraints, `constexpr`
 ### 3. Performance by Default
 
 - **Data-oriented design**: Prefer SoA over AoS for cache efficiency
-- **Avoid virtual dispatch** in hot paths (use deducing this, `eastl::variant`)
+- **Avoid virtual dispatch** in hot paths (use deducing this, `Variant`)
 - **Pre-allocate containers**: `reserve()` before loops
 - **Move semantics**: Pass by value and move, or use `&&` explicitly
 - **Avoid heap allocations**: Use stack, arenas, or pool allocators
@@ -53,8 +53,8 @@ class MyObject : public RefCounted { /* ... */ };
 IntrusivePtr<MyObject> obj = BECore::New<MyObject>();  // Single-threaded
 IntrusivePtr<MyObject> atomicObj = BECore::NewAtomic<MyObject>();  // Thread-safe
 
-eastl::vector<IntrusivePtr<Entity>> entities;
-eastl::hash_map<PoolString, IntrusivePtr<Resource>> resources;
+Vector<IntrusivePtr<Entity>> entities;
+HashMap<PoolString, IntrusivePtr<Resource>> resources;
 ```
 
 **NEVER use**: `std::unique_ptr`, `std::shared_ptr`, naked `new`/`delete`, `std::` containers.
@@ -71,7 +71,7 @@ BagiEngine is built **without exceptions** (no-exceptions policy). Use:
 **Exceptions are FORBIDDEN** — use `std::expected`, error codes, or `BE_ASSERT` instead.
 
 ```cpp
-auto LoadTexture(std::string_view path) -> std::expected<Texture, LoadError> {
+auto LoadTexture(StringView path) -> std::expected<Texture, LoadError> {
     if (!FileExists(path)) 
         return std::unexpected(LoadError::FileNotFound);
     return texture;
@@ -102,7 +102,7 @@ public:
         }
     }
 private:
-    eastl::vector<Widget> _children;
+    Vector<Widget> _children;
 };
 ```
 
@@ -141,7 +141,7 @@ Use handle-based resources (avoid raw pointers to GPU objects):
 using TextureHandle = StrongTypedef<uint32_t, struct TextureTag>;
 
 class TextureManager {
-    eastl::hash_map<TextureHandle, IntrusivePtr<Texture>> _textures;
+    HashMap<TextureHandle, IntrusivePtr<Texture>> _textures;
 public:
     TextureHandle Create(const TextureDesc& desc);
     Texture* Get(TextureHandle handle);  // Returns nullptr if invalid
@@ -205,18 +205,18 @@ See `src/Modules/Events/` for implementation details.
 
 **Avoid**: Virtual calls, heap allocations, cache misses, branching in tight loops.
 
-**Prefer**: Inline functions/deducing this, contiguous memory (`eastl::vector`), SIMD, branch-free algorithms.
+**Prefer**: Inline functions/deducing this, contiguous memory (`Vector`), SIMD, branch-free algorithms.
 
 ### Memory Access Patterns
 
-**Bad (AoS)**: `eastl::vector<Entity>` where `Entity` has mixed data types.
+**Bad (AoS)**: `Vector<Entity>` where `Entity` has mixed data types.
 
 **Good (SoA)**: Separate vectors for each component type:
 ```cpp
 struct EntityData {
-    eastl::vector<Vec3> positions;
-    eastl::vector<Quaternion> rotations;
-    eastl::vector<Mesh*> meshes;
+    Vector<Vec3> positions;
+    Vector<Quaternion> rotations;
+    Vector<Mesh*> meshes;
 };
 ```
 
@@ -224,7 +224,7 @@ struct EntityData {
 
 ```cpp
 constexpr auto SinTable = []() {
-    std::array<float, 360> table{};
+    Array<float, 360> table{};
     for (int i = 0; i < 360; ++i)
         table[i] = std::sin(i * std::numbers::pi / 180.0f);
     return table;
@@ -234,7 +234,7 @@ constexpr auto SinTable = []() {
 ## Code Review Checklist
 
 - [ ] **IntrusivePtr**: Using `IntrusivePtr<T>`, not `std::unique_ptr`/`std::shared_ptr`
-- [ ] **EASTL**: Using EASTL containers, not `std::` containers
+- [ ] **BECore types**: Using `Vector`, `HashMap`, `String`, ..., not `eastl::` or `std::` spelled out
 - [ ] **No C-style casts**: Using `static_cast`, `reinterpret_cast`, `std::bit_cast`
 - [ ] **BE_ASSERT**: Using `BE_ASSERT()`, not `assert()`
 - [ ] **using aliases**: No `typedef`, only `using`
@@ -250,7 +250,7 @@ constexpr auto SinTable = []() {
 ### Forbidden Patterns
 
 - `std::unique_ptr`, `std::shared_ptr` → use `IntrusivePtr<T>`
-- `std::vector`, `std::map`, `std::string` → use EASTL equivalents
+- `std::vector`, `std::map`, `std::string` → use `Vector`, `Map`, `String`
 - C-style casts `(Type)value` → use `static_cast<Type>(value)`
 - `typedef` → use `using`
 - `assert()` → use `BE_ASSERT()`

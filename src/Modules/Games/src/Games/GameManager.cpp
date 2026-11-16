@@ -8,6 +8,8 @@
 #include <BECore/Scene/SceneManager.h>
 #include <Games/GameControl.h>
 #include <Games/GamesConfig.h>
+#include <Games/ReplayControl.h>
+#include <Games/SessionRecorder.h>
 
 namespace BECore {
 
@@ -48,9 +50,13 @@ namespace BECore {
         }
 
         SwitchTo(defaultName);
+        StartRecordingFromCommandLine();
     }
 
     void GameManager::Shutdown() {
+        if (SessionRecorder::IsInstanceCreated()) {
+            SessionRecorder::GetInstance().Stop();
+        }
         if (_active) {
             _active->Stop();
             _active.Reset();

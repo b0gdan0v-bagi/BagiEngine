@@ -76,6 +76,31 @@ namespace BECore {
 
     void TextureEditorWidget::Draw() {}
 
+    void TextureEditorWidget::Select(int index) {
+        const auto& entries = CoreManager::GetTextureLibrary().GetAll();
+        const bool valid = index >= 0 && index < static_cast<int>(entries.size());
+        _selectedIndex = index;
+        _nameDirty = false;
+        _renameRefused = PoolString{};
+
+        const StringView name = valid ? entries[static_cast<size_t>(index)].name.ToStringView() : StringView{};
+        const size_t copyLen = eastl::min(sizeof(_nameEditBuffer) - 1, name.size());
+        memcpy(_nameEditBuffer, name.data(), copyLen);
+        _nameEditBuffer[copyLen] = '\0';
+    }
+
+    void TextureEditorWidget::SelectByName(PoolString name) {
+        const auto& entries = CoreManager::GetTextureLibrary().GetAll();
+        int found = -1;
+        for (int i = 0; i < static_cast<int>(entries.size()); ++i) {
+            if (entries[static_cast<size_t>(i)].name == name) {
+                found = i;
+                break;
+            }
+        }
+        Select(found);
+    }
+
     void TextureEditorWidget::RenderLeftPanel() {
         auto& lib = CoreManager::GetTextureLibrary();
         const auto& entries = lib.GetAll();
@@ -83,25 +108,17 @@ namespace BECore {
         for (int i = 0; i < static_cast<int>(entries.size()); ++i) {
             const bool selected = (_selectedIndex == i);
             if (ImGui::Selectable(entries[i].name.CStr(), selected)) {
-                _selectedIndex = i;
-                _nameDirty = false;
-                const size_t copyLen = eastl::min(sizeof(_nameEditBuffer) - 1, strlen(entries[i].name.CStr()));
-                memcpy(_nameEditBuffer, entries[i].name.CStr(), copyLen);
-                _nameEditBuffer[copyLen] = '\0';
+                Select(i);
             }
         }
 
         ImGui::Separator();
         if (IconTextButton(ICON_LC_CIRCLE_PLUS, "Add", "Add a sprite entry to the library", -1.0f)) {
             SpriteEntry newEntry;
-            newEntry.name = PoolString::Intern("new_sprite");
+            newEntry.name = lib.MakeUniqueName("new_sprite");
+            const PoolString addedName = newEntry.name;
             lib.AddOrUpdate(eastl::move(newEntry));
-            _selectedIndex = static_cast<int>(lib.GetAll().size()) - 1;
-            const auto& addedEntry = lib.GetAll()[static_cast<size_t>(_selectedIndex)];
-            const size_t copyLen = eastl::min(sizeof(_nameEditBuffer) - 1, strlen(addedEntry.name.CStr()));
-            memcpy(_nameEditBuffer, addedEntry.name.CStr(), copyLen);
-            _nameEditBuffer[copyLen] = '\0';
-            _nameDirty = false;
+            SelectByName(addedName);
             _isDirty = true;
         }
     }
@@ -122,23 +139,28 @@ namespace BECore {
         ImGui::SetNextItemWidth(200.0f);
         if (ImGui::InputText("##sprite_name", _nameEditBuffer, sizeof(_nameEditBuffer))) {
             _nameDirty = true;
+            _renameRefused = PoolString{};
         }
         if (_nameDirty && ImGui::IsItemDeactivatedAfterEdit()) {
-            PoolString newName = PoolString::Intern(StringView(_nameEditBuffer));
+            const PoolString newName = PoolString::Intern(StringView(_nameEditBuffer));
             if (newName != entry.name) {
-                lib.Remove(entry.name);
-                entry.name = newName;
-                lib.AddOrUpdate(entry);
-                _selectedIndex = static_cast<int>(lib.GetAll().size()) - 1;
-                for (int i = 0; i < static_cast<int>(lib.GetAll().size()); ++i) {
-                    if (lib.GetAll()[static_cast<size_t>(i)].name == newName) {
-                        _selectedIndex = i;
-                        break;
+                if (lib.Rename(entry.name, newName)) {
+                    entry.name = newName;
+                    SelectByName(newName);
+                    _isDirty = true;
+                } else {
+                    // Rename refuses an empty name too; only a taken one is worth a warning
+                    const bool taken = !newName.Empty();
+                    Select(_selectedIndex);
+                    if (taken) {
+                        _renameRefused = newName;
                     }
                 }
-                _isDirty = true;
             }
             _nameDirty = false;
+        }
+        if (!_renameRefused.Empty()) {
+            ImGui::TextColored(GetImGuiPalette().warning, "A sprite named '%s' already exists", _renameRefused.CStr());
         }
 
         ImGui::Separator();
@@ -316,7 +338,7 @@ namespace BECore {
 
         if (IconTextButton(ICON_LC_TRASH_2, "Delete Entry", "Remove this sprite from the library")) {
             lib.Remove(entry.name);
-            _selectedIndex = eastl::min(_selectedIndex, static_cast<int>(lib.GetAll().size()) - 1);
+            Select(eastl::min(_selectedIndex, static_cast<int>(lib.GetAll().size()) - 1));
             _isDirty = true;
         }
     }

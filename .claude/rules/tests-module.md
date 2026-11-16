@@ -73,7 +73,7 @@ Managed by `TestManager`, which fills a `Tests::TestList` from `TestsConfig` wit
 
 1. Create a class in `BECore/Tests/` implementing `ITest`
 2. Add `BE_CLASS(TestName)` inside the class
-3. Implement `bool Run() override` and `eastl::string_view GetName() override`
+3. Implement `bool Run() override` and `StringView GetName() override`
 4. Add `static_assert(ValidTest<TestName>)` after the class
 5. Enable it in `config/TestsConfig.xml`: `<test type="TestName" enabled="true" />`
 6. Re-run `cmake --preset ...` (registration is generated code)
@@ -92,7 +92,8 @@ Managed by `TestManager`, which fills a `Tests::TestList` from `TestsConfig` wit
 **Key points:**
 - Always use `ASSERT` instead of `std::assert`
 - Assertions emit `AssertEvent` through event system
-- Handlers configured via `config/AssertHandlersConfig.xml`
+- Handlers configured via `config/AssertHandlersConfig.xml`; the one with the lowest `priority` runs first, equal ones in file order (`AssertHandlerOrderTest`)
+- A test that fails an engine assertion on purpose holds an `AssertBridge::Capture` (RAII; the bridge hands the events to its callback instead of failing the test)
 - Compiled out when `ENGINE_ENABLE_ASSERTS` / `ENGINE_ENABLE_EXPECTS` is 0 (Release presets)
 
 **Built-in handlers:**

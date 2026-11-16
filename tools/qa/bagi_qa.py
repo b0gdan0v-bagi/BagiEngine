@@ -38,7 +38,7 @@ import bagi_qa_report as report_module  # noqa: E402
 import png_ops  # noqa: E402
 import scenario  # noqa: E402
 from bagi_control_client import ControlError  # noqa: E402
-from bagi_qa_checks import Finding, Invariants  # noqa: E402
+from bagi_qa_checks import PERFORM_ACTION_METHOD, STEP_METHOD, UI_TREE_METHOD, Finding, Invariants  # noqa: E402
 from bagi_session import GameSession, SessionError  # noqa: E402
 
 DEFAULT_UI_EVERY = 10  # `ui_tree` is the dearest check: a step runs it every this many steps
@@ -47,9 +47,6 @@ SHOT_SETTLE_FRAMES = 2  # the picture shows the state only after the frames that
 SHOT_MAX_SIZE = 640
 HEADLESS_FLAG = "--headless"
 MANUAL_CLOCK_FLAG = "--manual-clock"
-PERFORM_ACTION_METHOD = "perform_action"
-STEP_METHOD = "step"
-UI_TREE_METHOD = "ui_tree"
 SCENARIO_FILE = "session.jsonl"
 SHOTS_FOLDER = "shots"
 SHOT_LABEL_UNSAFE = re.compile(r"[^A-Za-z0-9_-]+")
@@ -155,7 +152,7 @@ class QaSession:
         An action the charter invents may be refused on purpose: `expect_refusal=True` skips the listed-action check for it. A refusal is an
         ActOutcome, not an exception.
         """
-        before = self._state if self._state is not None else self.state()
+        before = self.current_state()
         listed = [] if expect_refusal else self.listed_actions()
         outcome = self._perform(action)
         index = self.calls
@@ -168,13 +165,20 @@ class QaSession:
         return outcome
 
     def replay_call(self, method: str, params: dict[str, Any] | None = None) -> ActOutcome:
-        """Sends a recorded call as it was, then checks what it shows (the `ui_tree` after a `step` and from its own answer).
+        """Sends a recorded call as it was, then checks what it shows (for playing a scenario back, bagi_qa_repro).
 
-        For playing a scenario back (bagi_qa_repro): an action goes through `act`, any other call that the game refuses is an outcome, not an exception.
-        The checks add read-only calls (`get_state`, `list_actions`, `ui_tree`), which change nothing in the game.
+        An action goes through `act`, any other call through `call`. The checks add read-only calls (`get_state`, `list_actions`, `ui_tree`),
+        which change nothing in the game.
         """
         if method == PERFORM_ACTION_METHOD:
             return self.act(params or {})
+        return self.call(method, params)
+
+    def call(self, method: str, params: dict[str, Any] | None = None) -> ActOutcome:
+        """Any control call a script or the monkey makes that has no method of its own (`ui_click`, `set_window`, ...): a refusal is an outcome, not an exception.
+
+        The version of the answer is checked, the `ui_tree` too when the call is one, then `check` (with the `ui_tree` after a `step`).
+        """
         try:
             result = self._call(method, params)
         except ControlError as error:
@@ -241,6 +245,14 @@ class QaSession:
         """
         found = Finding("invariant", name, message, details={**(details or {}), checks.FLAGGED_KEY: True}, expect=expect)
         self._add([found], self.calls)
+
+    def add_findings(self, found: Sequence[Finding]) -> None:
+        """Findings a script got from the checks' functions itself (`run_monkey_moves`), kept at the last call like the session's own."""
+        self._add(found, self.calls)
+
+    def current_state(self) -> dict[str, Any]:
+        """The newest `get_state` answer: every action, step and call of the session refreshes it, so this asks the game only before the first one."""
+        return self._state if self._state is not None else self.state()
 
     def note(self, text: str) -> None:
         """What the charter covered, counted into the report."""

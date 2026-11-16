@@ -7,6 +7,8 @@
  * @file AssertMacros.h
  * @brief ASSERT, EXPECT and FATALERROR: a failure emits an AssertEvent that the handlers (log, debug break, stack trace) receive.
  *
+ * Any thread may fail one: AssertEvent serialises the handlers (AssertEvent.h).
+ *
  * The CMake option ENGINE_ENABLE_ASSERTS switches ASSERT and FATALERROR, ENGINE_ENABLE_EXPECTS switches EXPECT; a switched-off macro
  * compiles to nothing, so its arguments are never evaluated and must have no side effects.
  */
