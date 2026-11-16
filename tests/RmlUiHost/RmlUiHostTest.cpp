@@ -131,20 +131,6 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
             }
         };
 
-        /// A handler above the document that takes the motion over a rect when `take` is set
-        class Taker : public IUIInputHandler {
-        public:
-            [[nodiscard]] bool ContainsPoint(float x, float y) const override {
-                return x >= area.x && x <= area.x + area.w && y >= area.y && y <= area.y + area.h;
-            }
-            bool OnMouseMotion(const SDL_MouseMotionEvent&) override {
-                return take;
-            }
-
-            Rect area;
-            bool take = false;
-        };
-
         constexpr const char* kStackedMarkup = R"(<button id="play" data-action="GamePlay">Play</button><button id="far" data-action="GameFar">Far</button>)";
         constexpr const char* kStackedStyle = "#play { position: absolute; left: 100dp; top: 100dp; width: 120dp; height: 40dp; background-color: #112233; pointer-events: auto; }\n"
                                               "#play:hover { background-color: #aabbcc; }\n"
@@ -691,7 +677,7 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
         EXPECT_LT(doc->GetInputOrder(), scene.GetInputOrder(*nodes[2]->GetComponent<ClickableComponent>()));
     }
 
-    TEST_F(RmlUiHostTest, AHandlerAboveTheDocumentTakingThePointerEndsTheHover) {
+    TEST_F(RmlUiHostTest, AClickableAboveTheDocumentTakingThePointerEndsTheHover) {
         auto doc = Doc("Stacked");
         ASSERT_TRUE(doc->SetMarkup(Document(kStackedMarkup, kStackedStyle)));
         Draw("Stacked");
@@ -703,21 +689,16 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
             }
             return Color{};
         };
-        Taker taker;
-        taker.area = Rect{100.0f, 100.0f, 120.0f, 40.0f};
         UIInput& input = CoreManager::GetUIInput();
-        input.Register(taker, doc->GetInputOrder() + 1);
 
         input.DispatchMouseMotion(Motion(150.0f, 120.0f));
         Draw("Stacked");
         ASSERT_EQ(colorOfButton().r, 0xAA);
 
-        taker.take = true;
-        input.DispatchMouseMotion(Motion(150.0f, 120.0f));
+        EXPECT_TRUE(input.DispatchMouseMotion(Motion(580.0f, 370.0f))) << "the clickable drawn above the document takes the motion over its rect";
         Draw("Stacked");
 
         EXPECT_EQ(colorOfButton().r, 0x11) << "the document got the leave";
-        input.Unregister(taker);
     }
 
     TEST_F(RmlUiHostTest, ALeaveKeepsThePressThatTheDocumentTook) {

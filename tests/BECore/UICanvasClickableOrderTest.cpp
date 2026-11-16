@@ -229,22 +229,40 @@ namespace BECore::Tests {
         EXPECT_LT(_canvas->GetInputOrder(), scene.GetInputOrder(*over));
     }
 
-    TEST_F(UICanvasClickableOrderTest, AHandlerAboveTheCanvasTakingThePointerClearsTheHover) {
-        Taker taker;
-        taker.area = Rect{kFreeX - 20.0f, 0.0f, 200.0f, 100.0f};
-        UIInput& input = CoreManager::GetUIInput();
-        input.Register(taker, _canvas->GetInputOrder() + 1);
-        const float x = kFreeX + kInsideSquare;
+    TEST_F(UICanvasClickableOrderTest, AClickableAboveTheCanvasTakesTheMotionAndTheCanvasDoesNotLightUp) {
+        const float x = kCoveredX + kInsideSquare;
         const float y = kSquareY + kInsideSquare;
 
-        input.DispatchMouseMotion(Motion(x, y));
+        EXPECT_TRUE(CoreManager::GetUIInput().DispatchMouseMotion(Motion(x, y)));
+
+        EXPECT_FALSE(_covered->hovered) << "the element under the clickable shows no hover";
+    }
+
+    TEST_F(UICanvasClickableOrderTest, AClickableAboveTheCanvasTakingThePointerClearsTheHover) {
+        UIInput& input = CoreManager::GetUIInput();
+        input.DispatchMouseMotion(Motion(kFreeX + kInsideSquare, kSquareY + kInsideSquare));
         ASSERT_TRUE(_free->hovered);
 
-        taker.take = true;
-        input.DispatchMouseMotion(Motion(x, y));
+        input.DispatchMouseMotion(Motion(kCoveredX + kInsideSquare, kSquareY + kInsideSquare));
 
-        EXPECT_FALSE(_free->hovered) << "the pointer left the canvas";
-        input.Unregister(taker);
+        EXPECT_FALSE(_free->hovered) << "the pointer left the canvas for the clickable drawn above it";
+    }
+
+    TEST_F(UICanvasClickableOrderTest, ACanvasDrawnAboveAClickableTakesTheMotionOverItsElement) {
+        UIInput& input = CoreManager::GetUIInput();
+
+        EXPECT_TRUE(input.DispatchMouseMotion(Motion(kShieldingX + kInsideSquare, kSquareY + kInsideSquare)));
+        EXPECT_TRUE(_shielding->hovered);
+
+        EXPECT_TRUE(input.DispatchMouseMotion(Motion(kUnderOnly, kUnderOnly))) << "the clickable takes it where the canvas has nothing";
+        EXPECT_FALSE(_shielding->hovered);
+    }
+
+    TEST_F(UICanvasClickableOrderTest, ADragOfTheGamePassesOverAClickableAboveTheCanvas) {
+        const bool consumed = CoreManager::GetUIInput().DispatchMouseMotion(Motion(kCoveredX + kInsideSquare, kSquareY + kInsideSquare, SDL_BUTTON_LMASK));
+
+        EXPECT_FALSE(consumed);
+        EXPECT_FALSE(_covered->hovered);
     }
 
     TEST_F(UICanvasClickableOrderTest, ALeaveKeepsAHeldPress) {

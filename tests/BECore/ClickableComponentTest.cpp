@@ -78,6 +78,19 @@ namespace BECore::Tests {
             return event;
         }
 
+        SDL_MouseMotionEvent MakeMotion(float x, float y, SDL_MouseButtonFlags buttonsHeld = 0) {
+            SDL_MouseMotionEvent event{};
+            event.type = SDL_EVENT_MOUSE_MOTION;
+            event.x = x;
+            event.y = y;
+            event.state = buttonsHeld;
+            return event;
+        }
+
+        bool Move(float x, float y, SDL_MouseButtonFlags buttonsHeld = 0) {
+            return CoreManager::GetUIInput().DispatchMouseMotion(MakeMotion(x, y, buttonsHeld));
+        }
+
         bool Press(float x, float y, uint8_t button = SDL_BUTTON_LEFT) {
             return CoreManager::GetUIInput().DispatchMouseButtonDown(MakeButton(x, y, true, button));
         }
@@ -336,6 +349,44 @@ namespace BECore::Tests {
 
         EXPECT_FALSE(Press(kInside, kInside));
 
+        EXPECT_TRUE(recorder.actions.empty());
+    }
+
+    TEST_F(ClickableComponentTest, TheMotionOverTheRectIsTakenAndOutsideItIsNot) {
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(ClickableNode("A", "ActA", 0.0f)));
+        Draw();
+
+        EXPECT_TRUE(Move(kInside, kInside));
+        EXPECT_FALSE(Move(kOutside, kInside));
+    }
+
+    TEST_F(ClickableComponentTest, ADragOfTheGamePassesOverTheRect) {
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(ClickableNode("A", "ActA", 0.0f)));
+        Draw();
+
+        EXPECT_FALSE(Move(kInside, kInside, SDL_BUTTON_LMASK));
+    }
+
+    TEST_F(ClickableComponentTest, APressItTookKeepsTheMotionEvenOutsideTheRectUntilTheRelease) {
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(ClickableNode("A", "ActA", 0.0f)));
+        Draw();
+        ASSERT_TRUE(Press(kInside, kInside));
+
+        EXPECT_TRUE(Move(kOutside, kInside, SDL_BUTTON_LMASK));
+        EXPECT_TRUE(Release(kOutside, kInside));
+        EXPECT_FALSE(Move(kOutside, kInside)) << "nothing is held any more";
+        EXPECT_FALSE(Move(kInside, kInside, SDL_BUTTON_LMASK)) << "a later drag of the game passes over the rect";
+    }
+
+    TEST_F(ClickableComponentTest, AReleaseOfAPressOfTheGameOverTheRectStaysRaw) {
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(ClickableNode("A", "ActA", 200.0f)));
+        Draw();
+        InputRecorder recorder;
+        ASSERT_FALSE(Press(kInside, kInside));
+
+        EXPECT_FALSE(Release(200.0f + kInside, kInside));
+
+        EXPECT_EQ(recorder.rawUps, 1);
         EXPECT_TRUE(recorder.actions.empty());
     }
 
