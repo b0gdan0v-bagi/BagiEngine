@@ -133,8 +133,9 @@ def read_metrics(bench: dict, stdout: str, wall: float) -> dict[str, float]:
 def run_once(bench: dict, root: Path, preset: str) -> dict[str, float]:
     command = expand(bench["command"], root, preset)
     started = time.perf_counter()
+    # The output is the program's own bytes (a test may print binary): a byte that is not UTF-8 is replaced, it never ends the run
     try:
-        done = subprocess.run(command, cwd=root, capture_output=True, text=True, timeout=bench.get("timeoutSeconds", DEFAULT_TIMEOUT_SECONDS))
+        done = subprocess.run(command, cwd=root, capture_output=True, text=True, errors="replace", timeout=bench.get("timeoutSeconds", DEFAULT_TIMEOUT_SECONDS))
     except subprocess.TimeoutExpired as error:
         raise PerfError(f"{bench['name']}: timed out after {error.timeout} s: {' '.join(command)}") from error
     except OSError as error:
@@ -150,7 +151,7 @@ def record_trace(bench: dict, root: Path, preset: str, trace: Path) -> list[str]
     if not bench.get("traceCommand"):
         raise PerfError(f"{bench['name']}: no 'traceCommand' (the program cannot write a trace): use a sampling profiler (perf-investigate)")
     command = expand(bench["traceCommand"], root, preset, str(trace.resolve()))
-    done = subprocess.run(command, cwd=root, capture_output=True, text=True, timeout=bench.get("timeoutSeconds", DEFAULT_TIMEOUT_SECONDS))
+    done = subprocess.run(command, cwd=root, capture_output=True, text=True, errors="replace", timeout=bench.get("timeoutSeconds", DEFAULT_TIMEOUT_SECONDS))
     if done.returncode != 0 or not trace.is_file():
         raise PerfError(f"{bench['name']}: the trace run failed (exit {done.returncode}): {' '.join(command)}\n{(done.stdout + done.stderr)[-2000:]}")
     return command
