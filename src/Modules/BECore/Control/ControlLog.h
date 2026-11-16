@@ -18,6 +18,12 @@ namespace BECore {
         /// Lines of Warning and above kept for log_since
         static constexpr size_t kLogCapacity = 1024;
 
+        /// Most lines one log_since answers with (the newest ones)
+        static constexpr size_t kMaxLogSinceLines = 200;
+
+        /// Most `log` events pushed in one frame
+        static constexpr uint32_t kMaxLogPushPerFrame = 16;
+
         /// What ReadSince() found
         struct Since {
             Vector<const LogRecord*> lines;  ///< oldest first; point into the history, valid until the next line is added
@@ -26,6 +32,13 @@ namespace BECore {
             uint64_t dropped = 0;            ///< lines since the mark that the ring has already lost: their level is unknown, so the two counts are lower bounds
             uint64_t next = 0;               ///< the mark to use afterwards
             bool truncated = false;          ///< `lines` holds only the newest ones that matched
+        };
+
+        /// What `log_subscribe` asked for and how far the `log` push has got; the frame end hook of the builtins reads and advances it
+        struct PushState {
+            bool enabled = false;
+            LogLevel minLevel = LogLevel::Warning;
+            uint64_t cursor = 0;  ///< the sequence of the next line to look at
         };
 
         /// @p capacity is the number of lines kept; a test passes a small one
@@ -54,6 +67,10 @@ namespace BECore {
             return _history;
         }
 
+        [[nodiscard]] PushState& Push() {
+            return _push;
+        }
+
         /// The kept lines with `sequence >= mark` of level @p minLevel or above (at most @p maxLines, the newest) and the counts of all the kept lines since @p mark
         [[nodiscard]] Since ReadSince(uint64_t mark, LogLevel minLevel, size_t maxLines) const;
 
@@ -61,6 +78,7 @@ namespace BECore {
         void OnLogEvent(const LogEvent& event);
 
         LogHistory _history;
+        PushState _push;
         uint64_t _warnings = 0;
         uint64_t _errors = 0;
         bool _started = false;
