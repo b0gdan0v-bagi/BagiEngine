@@ -78,6 +78,10 @@ namespace BECore {
         /// Answers the end of a gizmo drag: a Commit marks the scene as changed (Begin, Change and Cancel leave the nodes as the drag found them or put them back)
         void OnTransformEdit(const NodeTransformEditEvent& event);
 
+        /// Answers a drag of a canvas element in the viewport: a Change is a UIRectEditEvent like the inspector's (an undo stack merges the frames) and tells whether the layout kept the spec exact, a
+        /// Commit notes the element for the Save and marks the scene as changed, a Cancel forgets the inexact mark
+        void OnUIRectDrag(const UIRectDragEvent& event);
+
         /// Brings the selection and HierarchyState::selected back in line after the hierarchy panel or a handler changed one of them: applies the clicked row, drops the nodes
         /// that are no longer in the tree, takes a node that only HierarchyState::selected names (a created, duplicated or revealed one) as the whole selection, and makes the
         /// primary node the selected one
@@ -85,6 +89,9 @@ namespace BECore {
 
         /// Sends SceneNodeSelectedEvent when the primary node (or the scene it belongs to) differs from the last one announced, and SceneSelectionChangedEvent when the set does
         void AnnounceSelection(const Scene* scene);
+
+        /// Sends UIElementSelectedEvent when the (node, element) pair of the "UI elements" selection, or its scene, differs from the last one announced
+        void AnnounceUIElement(const Scene* scene);
 
         /// Takes what the hierarchy panel asked for in the last Draw(): the dirty mark, the forgotten UI selection of a removed subtree, the "Add Node" popup
         void ApplyHierarchyAnswers();
@@ -128,6 +135,11 @@ namespace BECore {
         bool _showAddComponentPopup = false;
         bool _isDirty = false;
         bool _focusRequested = false;  // a reveal was asked for: the window comes to the front on the next Update (never inside the event), so a background dock tab shows the hierarchy
+
+        // What UIElementSelectedEvent last told: compared, never dereferenced
+        const Scene* _announcedUIScene = nullptr;
+        const SceneNode* _announcedUINode = nullptr;
+        const UIElement* _announcedUIElement = nullptr;
     };
 
 }  // namespace BECore

@@ -45,6 +45,7 @@ namespace BECore {
         Subscribe<ViewportEditClickEvent, &SceneEditorWidget::OnViewportClick>(this);
         Subscribe<ViewportBoxSelectEvent, &SceneEditorWidget::OnViewportBoxSelect>(this);
         Subscribe<NodeTransformEditEvent, &SceneEditorWidget::OnTransformEdit>(this);
+        Subscribe<UIRectDragEvent, &SceneEditorWidget::OnUIRectDrag>(this);
         return true;
     }
 
@@ -135,6 +136,36 @@ namespace BECore {
         }
     }
 
+    void SceneEditorWidget::OnUIRectDrag(const UIRectDragEvent& event) {
+        const bool selected = event.element != nullptr && event.element == _selectedUIElement.Get();
+        switch (event.phase) {
+            case UIRectDragPhase::Begin:
+                break;
+            case UIRectDragPhase::Change:
+                UIRectEditEvent::Emit(event.scene, event.node, event.element, event.before, event.after);
+                if (selected) {
+                    _inexactUIElement = event.exact ? IntrusivePtr<UIElement>() : _selectedUIElement;
+                }
+                break;
+            case UIRectDragPhase::Commit: {
+                _isDirty = true;
+                // The node is alive in the active scene for a Commit (the session ends a drag that lost it); the element is found in its canvas by pointer, never dereferenced before
+                Scene* const scene = CoreManager::GetSceneManager().GetActiveScene();
+                SceneNode* const node = scene && scene == event.scene ? HierarchyModel::FindNode(scene->GetRootNode(), event.node) : nullptr;
+                const IntrusivePtr<UICanvasComponent> canvas = node ? node->GetComponent<UICanvasComponent>() : IntrusivePtr<UICanvasComponent>();
+                if (UIElement* const element = canvas ? ScenePick::FindElement(*canvas, event.element) : nullptr) {
+                    _uiFileSession.Note(IntrusivePtr<UIElement>(element));
+                }
+                break;
+            }
+            case UIRectDragPhase::Cancel:
+                if (selected) {
+                    _inexactUIElement = nullptr;
+                }
+                break;
+        }
+    }
+
     void SceneEditorWidget::SyncSelection(Scene& scene) {
         if (_hierarchy.clickedNode != nullptr) {
             ApplyClick(_selection, _hierarchy.clickedNode, _hierarchy.clickModifiers);
@@ -163,6 +194,19 @@ namespace BECore {
         }
     }
 
+    void SceneEditorWidget::AnnounceUIElement(const Scene* scene) {
+        const SceneNode* const node = _hierarchy.selected;
+        // RenderInspector drops a UI selection that belongs to another node only when it draws, so the pair is checked here as well
+        const UIElement* const element = node != nullptr && node == _uiSelectionNode ? _selectedUIElement.Get() : nullptr;
+        if (scene == _announcedUIScene && node == _announcedUINode && element == _announcedUIElement) {
+            return;
+        }
+        _announcedUIScene = scene;
+        _announcedUINode = node;
+        _announcedUIElement = element;
+        UIElementSelectedEvent::Emit(scene, node, element);
+    }
+
     void SceneEditorWidget::Update() {
         ImGui::SetNextWindowSize(ImVec2(1000.0f, 600.0f), ImGuiCond_FirstUseEver);
         if (_focusRequested) {
@@ -189,6 +233,7 @@ namespace BECore {
 
         if (!scene) {
             AnnounceSelection(nullptr);
+            AnnounceUIElement(nullptr);
             EmptyState(ICON_LC_LAYERS, "No active scene");
             ImGui::End();
             return;
@@ -216,6 +261,7 @@ namespace BECore {
         SyncSelection(*scene);
         ApplyHierarchyAnswers();
         AnnounceSelection(scene);
+        AnnounceUIElement(scene);
 
         ImGui::SameLine();
         ImGui::BeginChild("##inspector", ImVec2(0.0f, 0.0f), true);
