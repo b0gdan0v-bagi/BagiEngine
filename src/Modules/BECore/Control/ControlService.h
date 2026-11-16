@@ -99,6 +99,24 @@ namespace BECore {
         /// Runs @p hook at the end of every frame, before a deferred call is completed. A hook of the same @p name is replaced, so registering a module again adds nothing
         void SetFrameEndHook(StringView name, FrameEndHook hook);
 
+        /// What RunNested() calls when a nested call that deferred has its answer, with the outer call (which may defer or answer it) and the answer
+        using NestedContinuation = MoveOnlyFunction<void(ControlCall& outer, ControlAnswer answer)>;
+
+        /**
+         * @brief Runs @p method as part of @p outer, the call a handler is answering, and gives back its answer as a value.
+         *
+         * The nested call runs as a posted one would: the table lookup, the generation handling of the handler, an unknown method or a handler that
+         * answers nothing is an error answer. It does not wait for the barrier: it is part of @p outer, which is the one that is pending. Main thread,
+         * and @p outer must be unanswered and not deferred yet.
+         *
+         * Returns the answer when the nested call has given it. Returns nullopt when the nested call deferred (`step`, `screenshot`, ...): its frames
+         * are now those of @p outer, so the handler of @p outer has to return without answering, and when the frames have passed @p onAnswer gets the
+         * answer, with @p outer, which it may answer, defer again or use to run the next nested call. @p onAnswer is called once, never when this
+         * function returns an answer, and not at all when Shutdown() answers @p outer first. What @p onAnswer needs later it holds in its own capture:
+         * the handler of @p outer has returned by then.
+         */
+        [[nodiscard]] Optional<ControlAnswer> RunNested(ControlCall& outer, StringView method, Json params, NestedContinuation onAnswer);
+
         /// Runs the queued requests (frame stage 1b)
         void Drain();
 
@@ -165,6 +183,8 @@ namespace BECore {
 
         [[nodiscard]] bool BypassesBarrier(const Request& request) const;
         void Process(Request& request);
+        void InvokeHandler(HandlerEntry& entry, ControlCall& call);
+        Optional<ControlAnswer> AwaitNested(ControlCall& outer, UniquePtr<ControlCall>& nested, NestedContinuation& onAnswer);
         void Settle(UniquePtr<ControlCall> call);
 
         Mutex _mutex{BE_LOCK_SITE("Control queue")};
