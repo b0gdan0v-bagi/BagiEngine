@@ -43,6 +43,7 @@ namespace BECore {
         Subscribe<ViewportEditClickEvent, &SceneEditorWidget::OnViewportClick>(this);
         Subscribe<ViewportBoxSelectEvent, &SceneEditorWidget::OnViewportBoxSelect>(this);
         Subscribe<NodeTransformEditEvent, &SceneEditorWidget::OnTransformEdit>(this);
+        Subscribe<SceneEditedEvent, &SceneEditorWidget::OnSceneEdited>(this);
         return true;
     }
 
@@ -112,6 +113,12 @@ namespace BECore {
 
     void SceneEditorWidget::OnTransformEdit(const NodeTransformEditEvent& event) {
         if (event.phase == NodeTransformEditPhase::Commit && !event.edits.empty()) {
+            _isDirty = true;
+        }
+    }
+
+    void SceneEditorWidget::OnSceneEdited(const SceneEditedEvent& event) {
+        if (event.scene != nullptr && event.scene == CoreManager::GetSceneManager().GetActiveScene()) {
             _isDirty = true;
         }
     }

@@ -33,6 +33,10 @@ namespace BECore {
         _cache.Clear();
     }
 
+    bool ResourceManager::Evict(StringView path) {
+        return _cache.Remove(PoolString::Intern(path));
+    }
+
     const ResourceCache& ResourceManager::GetCache() const {
         return _cache;
     }

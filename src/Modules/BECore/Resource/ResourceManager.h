@@ -83,6 +83,14 @@ namespace BECore {
 
         void ClearCache();
 
+        /**
+         * @brief Drops one path from the cache, so the next Load reads the file again (a file rewritten on disk, a texture the editor no longer shows).
+         *
+         * A handle already given out keeps the old resource; whoever holds one loads the path again to see the new file.
+         * @return Whether the path was cached
+         */
+        bool Evict(StringView path);
+
         const ResourceCache& GetCache() const;
 
     private:

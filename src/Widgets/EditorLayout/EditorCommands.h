@@ -64,6 +64,8 @@ namespace BECore {
         inline constexpr auto kViewProfiler = "view.profiler"_intern;
         /// Shows and hides the Console panel (the log). ConsoleWidget owns the action
         inline constexpr auto kViewConsole = "view.console"_intern;
+        /// Shows and hides the Generate panel (art generation). ArtGenWidget owns the action
+        inline constexpr auto kViewGenerate = "view.generate"_intern;
     }  // namespace EditorCommandIds
 
     /// A command was asked for, by the palette, a menu item or a hotkey. Emitted, not enqueued: it runs inside a frame.

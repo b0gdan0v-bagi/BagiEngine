@@ -234,6 +234,7 @@ namespace BECore {
             CommandMenuItem(kViewCommandPalette, "Command Palette...");
             CommandMenuItem(kViewPreferences, "Preferences...");
             CommandMenuItem(kViewConsole, "Console");
+            CommandMenuItem(kViewGenerate, "Generate Art");
             ImGui::Separator();
             DrawLayoutsMenu();
             ImGui::EndMenu();

@@ -40,6 +40,7 @@ namespace BECore {
                 {kModeToggle, "Switch Game and Editor", kCtrlShiftE, false},
                 {kViewProfiler, "Profiler", kCtrlShiftP, false},
                 {kViewConsole, "Console", kCtrlShiftL, true},
+                {kViewGenerate, "Generate Art", std::nullopt, true},
             };
             return table;
         }

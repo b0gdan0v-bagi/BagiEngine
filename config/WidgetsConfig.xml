@@ -31,5 +31,7 @@
       type="ProfilerWidget" />
     <widget
       type="ConsoleWidget" />
+    <widget
+      type="ArtGenWidget" />
   </widgets>
 </root>

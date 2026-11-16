@@ -8,7 +8,7 @@ Loading, caching and lifetime of game assets. Sync and async loading (`Task<T>`)
 
 ```
 ResourceManager (CoreManager::GetResourceManager())
-    ├── ResourceCache        thread-safe (SharedMutex), no eviction
+    ├── ResourceCache        thread-safe (SharedMutex), no automatic eviction (Evict drops one path)
     └── IResourceLoader[]    picked by file extension via CanLoad()
          ├── XmlResourceLoader   (.xml  → XmlResource)
          ├── SDLTextureLoader / VulkanTextureLoader   (images → ITexture)
