@@ -1,6 +1,8 @@
 #include <BECore/Control/ControlBuiltins.h>
+#include <BECore/Control/ControlRoots.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
+#include <Fuzz/FuzzProbeAccess.h>
 #include <Fuzz/FuzzTargets.h>
 #include <Games/GameControl.h>
 
@@ -64,6 +66,12 @@ namespace BECore::Fuzz {
         ControlService service;
         RegisterControlBuiltins(service);
         RegisterGameControl(service);
+
+        // Real data for `get_property`, `set_property` and `call_method`; neither root allows interning, so a request cannot grow the pool
+        ProbeState state = MakeFilledProbe();
+        ProbeCalls calls;
+        service.Roots().Register("state", ControlRoot{[&state] { return MakeProbeRef(state); }});
+        service.Roots().Register("probe", ControlRoot{[&calls] { return MakeProbeRef(calls); }});
 
         Vector<String> replies;
         service.Post(text, [&replies](String reply) { replies.push_back(std::move(reply)); });

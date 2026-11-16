@@ -53,6 +53,19 @@ namespace BECore::Stress {
         return SceneNameOf(_state.GetScene());
     }
 
+    void StressGame::SetObjectCount(uint32_t count) {
+        _state.SetCount(count);
+        SyncStateVersion();
+    }
+
+    String StressGame::Describe() const {
+        return Format("scene={} count={} language={}", ToFlagValue(_state.GetScene()), _state.GetCount(), ToFlagValue(_state.GetLanguage()));
+    }
+
+    void StressGame::SyncStateVersion() {
+        _stateVersion = _state.Version();
+    }
+
     void StressGame::ShowActiveScene() {
         // No scene manager before the start-up and in a test that has none: the scene is shown at the next start then
         if (SceneManager* manager = CoreManager::FindSceneManager()) {

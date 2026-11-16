@@ -127,12 +127,6 @@ namespace BECore {
 
     namespace {
 
-        /// Names are input: both sides of an edit distance are cut to this many bytes, so the work of one suggestion is bounded
-        constexpr size_t kMaxSuggestedNameBytes = 48;
-
-        /// A suggestion is a name at most this many edits away, and the distance must also be under half the length of the unknown name
-        constexpr size_t kMaxSuggestedDistance = 2;
-
         bool Contains(const Vector<String>& names, StringView name) {
             for (const String& known : names) {
                 if (StringView(known) == name) {
@@ -146,30 +140,6 @@ namespace BECore {
             if (!Contains(names, name)) {
                 names.push_back(String(name));
             }
-        }
-
-        char AsciiLower(char c) {
-            return c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c;
-        }
-
-        /// Levenshtein distance of two names cut to kMaxSuggestedNameBytes, with the case of ASCII letters ignored (a case difference alone is no edit)
-        size_t EditDistance(StringView a, StringView b) {
-            a = a.substr(0, kMaxSuggestedNameBytes);
-            b = b.substr(0, kMaxSuggestedNameBytes);
-            Array<size_t, kMaxSuggestedNameBytes + 1> previous{};
-            Array<size_t, kMaxSuggestedNameBytes + 1> current{};
-            for (size_t j = 0; j <= b.size(); ++j) {
-                previous[j] = j;
-            }
-            for (size_t i = 1; i <= a.size(); ++i) {
-                current[0] = i;
-                for (size_t j = 1; j <= b.size(); ++j) {
-                    const size_t substitution = previous[j - 1] + (AsciiLower(a[i - 1]) == AsciiLower(b[j - 1]) ? 0 : 1);
-                    current[j] = std::min({previous[j] + 1, current[j - 1] + 1, substitution});
-                }
-                previous = current;
-            }
-            return previous[b.size()];
         }
 
     }  // namespace
@@ -232,25 +202,9 @@ namespace BECore {
     }
 
     void XmlDeserializer::ReportUnknown(const Scope& scope, StringView kind, StringView name) {
-        const StringView cutName = CutText(name, kMaxSuggestedNameBytes);
-        size_t bestDistance = kMaxSuggestedDistance + 1;
-        StringView best;
-        for (const Vector<String>* asked : {&scope.askedAttributes, &scope.askedElements}) {
-            for (const String& candidate : *asked) {
-                const size_t distance = EditDistance(cutName, candidate);
-                if (distance < bestDistance) {
-                    bestDistance = distance;
-                    best = StringView(candidate);
-                }
-            }
-        }
-
         const StringView shown = CutText(name, ReaderLimits::kMaxQuotedValueBytes);
         const char* const cut = shown.size() < name.size() ? "..." : "";
-        String hint;
-        if (!best.empty() && bestDistance * 2 < cutName.size()) {
-            hint = Format(", did you mean '{}'?", CutText(best, ReaderLimits::kMaxQuotedValueBytes));
-        }
+        const String hint = MakeDidYouMeanHint(name, {&scope.askedAttributes, &scope.askedElements});
         ReportFinding(name, Format("Unknown {} '{}{}'{}", kind, shown, cut, hint));
     }
 
