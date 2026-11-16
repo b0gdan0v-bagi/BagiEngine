@@ -75,16 +75,42 @@ if(ENGINE_CCACHE AND NOT MSVC AND NOT EMSCRIPTEN)
             set(BE_CCACHE_BASE_DIR "")
         endif()
 
+        if(BE_CCACHE_BASE_DIR AND CMAKE_HOST_WIN32)
+            # One spelling with forward slashes: a backslash before the closing quote of the ninja command line would escape it.
+            # ccache itself matches any spelling and either case of the drive letter of the base_dir, but a source path is
+            # relativised only when its own drive letter has the case Windows gives the folder.
+            file(TO_CMAKE_PATH "${BE_CCACHE_BASE_DIR}" BE_CCACHE_BASE_DIR)
+        endif()
+
+        # An empty argument would vanish from the list: "-" says there is no base_dir.
+        if(BE_CCACHE_BASE_DIR)
+            set(BE_CCACHE_BASE_DIR_ARGUMENT "${BE_CCACHE_BASE_DIR}")
+        else()
+            set(BE_CCACHE_BASE_DIR_ARGUMENT "-")
+        endif()
+
         find_program(BE_SH_PROGRAM sh)
         if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND CMAKE_HOST_UNIX AND BE_SH_PROGRAM)
-            # An empty argument would vanish from the list: "-" says there is no base_dir.
-            if(BE_CCACHE_BASE_DIR)
-                set(BE_CCACHE_BASE_DIR_ARGUMENT "${BE_CCACHE_BASE_DIR}")
-            else()
-                set(BE_CCACHE_BASE_DIR_ARGUMENT "-")
-            endif()
             set(BE_CCACHE_LAUNCHER ${BE_SH_PROGRAM} ${CMAKE_CURRENT_LIST_DIR}/BagiCcacheLauncher.sh ${BE_CCACHE_PROGRAM} ${BE_CCACHE_BASE_DIR_ARGUMENT})
             set(BE_CCACHE_PCH_LAUNCHER ON)
+        elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND CMAKE_HOST_WIN32)
+            # No sh on Windows, and the plain ccache launcher would take a PCH of another checkout from the cache. Python only starts
+            # the compiler: the interpreter is found here, not with find_package(Python3), which runs later and may use the venv.
+            find_program(BE_CCACHE_LAUNCHER_PYTHON NAMES python python3)
+            set(BE_CCACHE_LAUNCHER_PYTHON_USABLE OFF)
+            if(BE_CCACHE_LAUNCHER_PYTHON)
+                # The Microsoft Store's python.exe is a stub that exits with an error.
+                execute_process(COMMAND ${BE_CCACHE_LAUNCHER_PYTHON} --version RESULT_VARIABLE BE_CCACHE_LAUNCHER_PYTHON_RESULT OUTPUT_QUIET ERROR_QUIET)
+                if(BE_CCACHE_LAUNCHER_PYTHON_RESULT EQUAL 0)
+                    set(BE_CCACHE_LAUNCHER_PYTHON_USABLE ON)
+                endif()
+            endif()
+            if(BE_CCACHE_LAUNCHER_PYTHON_USABLE)
+                set(BE_CCACHE_LAUNCHER ${BE_CCACHE_LAUNCHER_PYTHON} -S -E ${CMAKE_CURRENT_LIST_DIR}/BagiCcacheLauncher.py ${BE_CCACHE_PROGRAM} ${BE_CCACHE_BASE_DIR_ARGUMENT})
+                set(BE_CCACHE_PCH_LAUNCHER ON)
+            else()
+                set(BE_CCACHE_LAUNCHER "")
+            endif()
         else()
             set(BE_CCACHE_LAUNCHER ${BE_CCACHE_PROGRAM})
             if(BE_CCACHE_VERSION VERSION_GREATER_EQUAL 4.8)
@@ -96,6 +122,11 @@ if(ENGINE_CCACHE AND NOT MSVC AND NOT EMSCRIPTEN)
             else()
                 message(STATUS "ccache ${BE_CCACHE_VERSION} is older than 4.8: the PCH settings must be in ccache.conf (cmake/BagiCompilerCache.cmake)")
             endif()
+        endif()
+
+        if(NOT BE_CCACHE_LAUNCHER)
+            message(STATUS "ccache: no usable Python (python, python3) for the PCH-aware launcher: a build without a compiler cache")
+            return()
         endif()
 
         set(CMAKE_C_COMPILER_LAUNCHER ${BE_CCACHE_LAUNCHER})
