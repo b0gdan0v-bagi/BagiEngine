@@ -30,6 +30,7 @@ A program or a model plays a game through `IControllableGame` (`Games/IControlla
 | `list_actions` | none | `{"game", "version", "actions": [..]}` |
 | `perform_action` | the action object itself, one of `actions` | `{"game", "version", "outcome"}` (`version` is the one after the action) |
 | `set_state` | the game's state (Chess: `{"fen"}`, in BagiEngine-Chess) | `{"game", "version"}` |
+| `run_until` | `{condition, maxFrames?, dt?}`: a state pointer equals a value, the version moved, or an event arrived | `{met, frames, reason?, game?, version?}` and the clock of `step`; the limit is `met: false` (`.claude/rules/control-qa-api.md`) |
 
 `IControllableGame`: `GetState()`, `GetActions()` (a JSON array; every element is accepted by `PerformAction` as is), `PerformAction(action)`, `Reset(options)`, `SetState(state)` (default: `unsupported`), `GetStateVersion()`. Errors are `std::expected<.., ControlError>`; `GameControlErrors` has `no_active_game`, `not_controllable`, `unknown_game`, `no_active_model`, `illegal_action`, `unsupported`, and a bad parameter is `ControlErrors::kInvalidParams`.
 
@@ -62,7 +63,7 @@ Rules of the adapter:
 - `GetStateVersion()` grows with every committed action and with `Start()` and never goes back; the server compares `action.version` with it to refuse a stale action.
 - The outcome of `PerformSeatAction` may be sent to every seat: public information only. The `message` of an error goes back to the one client that sent the action, but keep it free of hidden information too (it may quote what the client itself sent, as the fake game's "seat 0 does not hold 'c3_1'" does, never what the other seats hold).
 - The module that runs rooms of seated games is `Rooms` (`src/Modules/Rooms/CLAUDE.md`: protocol, room logic, hub).
-- `SeatedGameRegistry` is a plain class that the caller owns and fills (no singleton, no static initializer); names are looked up in a hash map of `eastl::string` and never interned into `PoolString`, because they come from a client. `SeatedGameInfo::publicOptions` names the keys of `create_room`'s options every member may see in the lobby before the start (booleans and integers only; the rest stays the game's). `listsStartedRooms` (default false) makes `list_rooms` also list the game's started public rooms that still have a free seat (nobody can join them: `game_started`); a finished room is never listed.
+- `SeatedGameRegistry` is a plain class that the caller owns and fills (no singleton, no static initializer); names are looked up in a `HashMap` of `String` and never interned into `PoolString`, because they come from a client. `SeatedGameInfo::publicOptions` names the keys of `create_room`'s options every member may see in the lobby before the start (booleans and integers only; the rest stays the game's). `listsStartedRooms` (default false) makes `list_rooms` also list the game's started public rooms that still have a free seat (nobody can join them: `game_started`); a finished room is never listed.
 - Tests: `tests/BECore/Rooms/` (`FakeSeatedGame` is a four-seat card game with hidden hands (the `DemoCardGame` of `RoomServer`), `LeakyFakeSeatedGame` its negative control, `ExpectNoLeak` the check that a text does not name a hidden card; `SeatedGameTest.cpp`); the scenario tests over the whole hub are `RoomsScenarioTest.cpp`.
 
 ## GameManager

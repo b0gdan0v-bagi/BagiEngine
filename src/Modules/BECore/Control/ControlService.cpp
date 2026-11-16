@@ -1,6 +1,7 @@
 #include "ControlService.h"
 
 #include <BECore/Control/ControlCall.h>
+#include <BECore/Control/ControlLog.h>
 #include <BECore/Control/ControlRoots.h>
 #include <EASTL/sort.h>
 
@@ -21,7 +22,7 @@ namespace BECore {
         ControlReplyFn reply;
     };
 
-    ControlService::ControlService() : _roots(MakeUnique<ControlRoots>()) {}
+    ControlService::ControlService() : _roots(MakeUnique<ControlRoots>()), _log(MakeUnique<ControlLog>()) {}
     ControlService::~ControlService() = default;
 
     void ControlService::ParseRequest(StringView text, Request& request) {
@@ -118,7 +119,50 @@ namespace BECore {
         _eventSinkGeneration = ++_registrations;
     }
 
+    ControlService::PublishObserverId ControlService::AddPublishObserver(PublishObserver observer) {
+        auto entry = MakeUnique<ObserverEntry>();
+        entry->id = ++_lastPublishObserverId;
+        entry->observer = std::move(observer);
+        _publishObservers.push_back(std::move(entry));
+        return _publishObservers.back()->id;
+    }
+
+    void ControlService::PrunePublishObservers() {
+        eastl::erase_if(_publishObservers, [](const UniquePtr<ObserverEntry>& entry) { return entry->id == kNoPublishObserver; });
+    }
+
+    void ControlService::RemovePublishObserver(PublishObserverId id) {
+        if (id == kNoPublishObserver) {
+            return;
+        }
+        for (UniquePtr<ObserverEntry>& entry : _publishObservers) {
+            if (entry->id == id) {
+                entry->id = kNoPublishObserver;
+                break;
+            }
+        }
+        if (!_notifyingObservers) {
+            PrunePublishObservers();
+        }
+    }
+
+    void ControlService::NotifyPublishObservers(StringView event, const Json& data) {
+        _notifyingObservers = true;
+        const size_t count = _publishObservers.size();  // an observer added by an observer waits for the next Publish
+        for (size_t i = 0; i < count; ++i) {
+            ObserverEntry& entry = *_publishObservers[i];
+            if (entry.id != kNoPublishObserver) {
+                entry.observer(event, data);
+            }
+        }
+        _notifyingObservers = false;
+        PrunePublishObservers();
+    }
+
     void ControlService::Publish(StringView event, const Json& data) {
+        if (!_publishObservers.empty() && !_notifyingObservers) {
+            NotifyPublishObservers(event, data);
+        }
         if (!_eventSink) {
             return;
         }
@@ -185,17 +229,72 @@ namespace BECore {
             return;
         }
 
-        // The running handler is moved out of the table: it may register handlers, which replaces entries (its own too, and its capture dies with the replaced handler)
-        const uint64_t generation = entry->second.generation;
-        Handler handler = std::move(entry->second.handler);
         auto call = MakeUnique<ControlCall>(PassKey<ControlService>{}, std::move(request.method), std::move(request.id), std::move(request.params), std::move(request.reply));
-        handler(*call);
+        InvokeHandler(entry->second, *call);
+        Settle(std::move(call));
+    }
 
-        const auto current = _handlers.find(call->GetMethod());
+    void ControlService::InvokeHandler(HandlerEntry& entry, ControlCall& call) {
+        // The running handler is moved out of the table: it may register handlers, which replaces entries (its own too, and its capture dies with the replaced handler)
+        const uint64_t generation = entry.generation;
+        Handler handler = std::move(entry.handler);
+        handler(call);
+
+        const auto current = _handlers.find(call.GetMethod());
         if (current != _handlers.end() && current->second.generation == generation) {
             current->second.handler = std::move(handler);
         }
-        Settle(std::move(call));
+    }
+
+    Optional<ControlAnswer> ControlService::RunNested(ControlCall& outer, StringView method, Json params, NestedContinuation&& onAnswer) {
+        EXPECT(!outer.IsAnswered() && outer._deferFrames == 0, "ControlService::RunNested: the outer call is already answered or deferred");
+
+        const auto entry = _handlers.find(method);
+        if (entry == _handlers.end()) {
+            const String name(method.substr(0, kMaxEchoedMethodLength));
+            return std::unexpected(MakeControlError(ControlErrors::kUnknownMethod, Format("unknown method '{}'", name)));
+        }
+        if (!entry->second.handler) {
+            // Its handler is the one running (a method that runs itself): the table holds nothing to call
+            return std::unexpected(MakeControlError(ControlErrors::kInternalError, Format("'{}' cannot run inside itself", entry->first)));
+        }
+
+        auto nested = MakeUnique<ControlCall>(PassKey<ControlService>{}, String(method), std::move(params));
+        InvokeHandler(entry->second, *nested);
+        return AwaitNested(outer, nested, onAnswer);
+    }
+
+    Optional<ControlAnswer> ControlService::AwaitNested(ControlCall& outer, UniquePtr<ControlCall>& nested, NestedContinuation& onAnswer) {
+        if (nested->_captured) {
+            return std::move(*nested->_captured);
+        }
+        if (nested->_deferFrames == 0) {
+            LOG_ERROR(Format("[ControlService] the handler of '{}' gave no answer", nested->GetMethod()));
+            return std::unexpected(MakeControlError(ControlErrors::kInternalError, "the handler gave no answer"));
+        }
+
+        // The outer call takes over the frames. Its done runs the nested one and then asks what comes next: an answer goes to onAnswer, a new deferral is taken over again
+        const uint32_t frames = nested->_deferFrames;
+        const double seconds = nested->_deferSeconds;
+        nested->_deferFrames = 0;
+        ControlCall::DoneFn nestedDone = std::move(nested->_done);
+        outer.DeferFrames(frames, seconds, [this, nested = std::move(nested), nestedDone = std::move(nestedDone), onAnswer = std::move(onAnswer)](ControlCall& outerCall) mutable {
+            nestedDone(*nested);
+            if (auto answer = AwaitNested(outerCall, nested, onAnswer)) {
+                onAnswer(outerCall, std::move(*answer));
+            }
+        });
+        return std::nullopt;
+    }
+
+    void ControlService::DeferSteppedFrames(ControlCall& call, uint32_t frames, double seconds, MoveOnlyFunction<void(ControlCall&)> done) {
+        const bool stepsPausedGame = _pause != nullptr && _pause->IsPaused() && !_manualClock;
+        uint32_t countedFrames = frames;
+        if (stepsPausedGame) {
+            _pause->RequestSteps(frames, seconds);
+            countedFrames += _inFrameEnd ? 0 : 1;
+        }
+        call.DeferFrames(countedFrames, seconds, std::move(done));
     }
 
     void ControlService::Settle(UniquePtr<ControlCall> call) {
@@ -254,7 +353,9 @@ namespace BECore {
         UniquePtr<ControlCall> call = std::move(_pending);
         const ControlCall::DoneFn done = std::move(call->_done);
         if (done) {
+            _inFrameEnd = true;
             done(*call);
+            _inFrameEnd = false;
         }
         Settle(std::move(call));  // answered by done, deferred again, or an internal_error
     }

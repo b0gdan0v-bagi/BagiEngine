@@ -44,4 +44,14 @@ namespace BECore {
     /// A boolean member; nullopt when it is absent or not a boolean
     [[nodiscard]] Optional<bool> GetJsonBool(const Json& object, StringView key);
 
+    /**
+     * @brief The value that the JSON pointer @p pointer (RFC 6901) names in @p document.
+     *
+     * Answers the value, nullptr when the path leads nowhere (a missing key, an index past the end, a step through a scalar), or an invalid_params error
+     * when the text is not a pointer: not empty and not starting with `/`, a `~` not followed by `0` or `1`, `-` or an index with a leading zero or a
+     * non-digit where @p document has an array. Never aborts, whatever the text; the pointer is client data, so build no `json_pointer` from it.
+     * The returned pointer is into @p document.
+     */
+    [[nodiscard]] std::expected<const Json*, ControlError> FindJsonPointer(const Json& document, StringView pointer);
+
 }  // namespace BECore

@@ -25,12 +25,18 @@ namespace BECore {
     ControlCall::ControlCall(PassKey<ControlService>, String method, Json id, Json params, ControlReplyFn reply)
         : _method(std::move(method)), _id(std::move(id)), _params(std::move(params)), _reply(std::move(reply)) {}
 
+    ControlCall::ControlCall(PassKey<ControlService>, String method, Json params) : _method(std::move(method)), _params(std::move(params)), _capturing(true) {}
+
     void ControlCall::Reply(Json result) {
         EXPECT(!_answered, "ControlCall: the call is already answered");
         if (_answered) {
             return;
         }
         _answered = true;
+        if (_capturing) {
+            _captured = ControlAnswer(std::move(result));
+            return;
+        }
         _reply(MakeOkResponse(_id, std::move(result)));
     }
 
@@ -44,6 +50,10 @@ namespace BECore {
             return;
         }
         _answered = true;
+        if (_capturing) {
+            _captured = std::unexpected(error);
+            return;
+        }
         _reply(MakeErrorResponse(_id, error));
     }
 

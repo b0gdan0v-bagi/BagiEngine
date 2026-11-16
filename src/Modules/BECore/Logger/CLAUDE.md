@@ -8,7 +8,7 @@ Event-based logging. `Logger` pushes entries into a lock-free ring buffer, `LogE
 
 | Component | Purpose |
 |-----------|---------|
-| `Logger` | Static helper (`Debug` / `Info` / `Warning` / `Error` / `Fatal`), takes one `eastl::string_view` |
+| `Logger` | Static helper (`Debug` / `Info` / `Warning` / `Error` / `Fatal`), takes one `StringView` |
 | `LogEvent` | Event with level, message and site; `Emit` writes to the ring buffer, `Flush` dispatches it |
 | `LogSite` | `file` / `line` of a log call; `file` is the `__FILE__` literal, kept as a pointer through the ring buffer |
 | `LogRingBuffer` | Lock-free MPSC buffer, safe from any thread; entries are dropped when it is full |
@@ -45,7 +45,7 @@ A `type` that is not registered in the factory is logged as an error by `MakeFro
 
 ## The history
 
-`LogHistory` (`LogHistory.h`, plain C++) is a ring of `capacity` records with the level, the `LogSite`, the time text, a category and a copy of the message; it counts the kept records per level and says when it changed (`GetVersion()`). `LogHistorySink` fills it from `LogEvent`, so it lives on the main thread, where `Flush()` delivers lines, and takes no lock; whoever reads or clears it (the panel) is on that thread too. A full history reuses the oldest slot's string, so a line that fits allocates nothing.
+`LogHistory` (`LogHistory.h`, plain C++) is a ring of `capacity` records with the level, the `LogSite`, the time text, a category and a copy of the message; it counts the kept records per level and says when it changed (`GetVersion()`). `LogHistorySink` fills it from `LogEvent` (`FormatLogTimeNow` makes the clock text of a line; `ControlLog` is a second subscriber, with a history of its own for the control API: `.claude/rules/control-qa-api.md`), so it lives on the main thread, where `Flush()` delivers lines, and takes no lock; whoever reads or clears it (the panel) is on that thread too. A full history reuses the oldest slot's string, so a line that fits allocates nothing.
 
 - A line has no category of its own: it is the module folder of the site's file (`LogCategoryOfFile`: after `Modules/`, else after the last `src/`), `General` without one, at most `kMaxLogCategories` kept and the rest `Other`. `sequence` of a record only grows, also across `Clear()`.
 - A game that ships its own `LoggerConfig.xml` replaces the engine's whole file, so it has to add the `LogHistorySink` entry itself; without it `GetSink<LogHistorySink>()` is null and the Console panel has nothing to show (it says so).
@@ -56,7 +56,7 @@ A `type` that is not registered in the factory is logged as an error by `MakeFro
 - Use the macros: `LOG_DEBUG`, `LOG_INFO`, `LOG_WARNING`, `LOG_ERROR`, `LOG_FATAL`. The macros pass the site; a direct `Logger::Info(msg)` or `LogEvent::Emit(level, msg)` has none (`file == nullptr`). `ILogSink::Write(level, message)` does not carry it: a sink that wants it reads it from the `LogEvent`.
 - The macros take one string, so format first: `LOG_ERROR("Failed to load {}"_format(path))` (or `Format(...)`). `LOG_INFO("x {}", v)` does not compile.
 - Pick the level deliberately; `Fatal` is for unrecoverable errors.
-- Sinks receive `eastl::string_view`.
+- Sinks receive `StringView`.
 - The sinks write the time of a line as `{:02}:{:02}:{:02}` of `tm_hour`, `tm_min`, `tm_sec` (`FileSink` also the date), not `{:%H:%M:%S}` of `<fmt/chrono.h>`: the Clang of Emscripten refuses the `FMT_STRING` that header uses inside, and nothing else needs the header. Do not bring it back.
 
 ## Don't

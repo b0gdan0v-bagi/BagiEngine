@@ -885,6 +885,119 @@ namespace BECore::Tests {
         SUCCEED();
     }
 
+    TEST_F(ControlServiceTest, PublishObserverSeesEventsWithoutASink) {
+        Vector<String> seen;
+        const auto id = service.AddPublishObserver([&seen](StringView event, const Json& data) { seen.push_back(Format("{}:{}", event, GetJsonInt(data, "n").value_or(-1))); });
+
+        Json data = Json::object();
+        data["n"] = 4;
+        service.Publish("a", data);
+
+        EXPECT_NE(id, ControlService::kNoPublishObserver);
+        EXPECT_EQ(seen, (Vector<String>{"a:4"}));
+    }
+
+    TEST_F(ControlServiceTest, PublishObserverRunsBesideTheSink) {
+        int sunk = 0;
+        int seen = 0;
+        service.SetEventSink([&sunk](const String&) { ++sunk; });
+        const auto id = service.AddPublishObserver([&seen](StringView, const Json&) { ++seen; });
+
+        service.Publish("a", Json::object());
+        service.RemovePublishObserver(id);
+        service.Publish("b", Json::object());
+
+        EXPECT_EQ(seen, 1);
+        EXPECT_EQ(sunk, 2);
+    }
+
+    TEST_F(ControlServiceTest, PublishObserversAreCalledInTheOrderTheyWereAdded) {
+        (void)service.AddPublishObserver([this](StringView, const Json&) { order.push_back("first"); });
+        (void)service.AddPublishObserver([this](StringView, const Json&) { order.push_back("second"); });
+
+        service.Publish("a", Json::object());
+
+        EXPECT_EQ(order, (Vector<String>{"first", "second"}));
+    }
+
+    TEST_F(ControlServiceTest, PublishObserverMayRemoveItselfAndKeepsItsCaptureUntilItReturns) {
+        int destroyed = 0;
+        int destroyedAfterRemoving = -1;
+        int calls = 0;
+        ControlService::PublishObserverId id = ControlService::kNoPublishObserver;
+        id = service.AddPublishObserver([this, &id, owner = DestroyCounter(destroyed), &destroyed, &destroyedAfterRemoving, &calls](StringView, const Json&) {
+            ++calls;
+            service.RemovePublishObserver(id);
+            destroyedAfterRemoving = destroyed;
+        });
+        (void)service.AddPublishObserver([this](StringView, const Json&) { order.push_back("other"); });
+
+        service.Publish("a", Json::object());
+        service.Publish("b", Json::object());
+
+        EXPECT_EQ(calls, 1);
+        EXPECT_EQ(destroyedAfterRemoving, 0);
+        EXPECT_EQ(destroyed, 1);
+        EXPECT_EQ(order, (Vector<String>{"other", "other"}));
+    }
+
+    TEST_F(ControlServiceTest, PublishObserverMayRemoveAnotherThatHasNotRunYet) {
+        ControlService::PublishObserverId second = ControlService::kNoPublishObserver;
+        (void)service.AddPublishObserver([this, &second](StringView, const Json&) {
+            order.push_back("first");
+            service.RemovePublishObserver(second);
+        });
+        second = service.AddPublishObserver([this](StringView, const Json&) { order.push_back("second"); });
+
+        service.Publish("a", Json::object());
+
+        EXPECT_EQ(order, (Vector<String>{"first"}));
+    }
+
+    TEST_F(ControlServiceTest, PublishObserverAddedByAnObserverSeesTheNextPublish) {
+        bool added = false;
+        (void)service.AddPublishObserver([this, &added](StringView, const Json&) {
+            order.push_back("outer");
+            if (!added) {
+                added = true;
+                (void)service.AddPublishObserver([this](StringView, const Json&) { order.push_back("inner"); });
+            }
+        });
+
+        service.Publish("a", Json::object());
+        service.Publish("b", Json::object());
+
+        EXPECT_EQ(order, (Vector<String>{"outer", "outer", "inner"}));
+    }
+
+    TEST_F(ControlServiceTest, PublishFromInsideAnObserverReachesTheSinkOnly) {
+        int sunk = 0;
+        int seen = 0;
+        service.SetEventSink([&sunk](const String&) { ++sunk; });
+        (void)service.AddPublishObserver([this, &seen](StringView, const Json&) {
+            ++seen;
+            service.Publish("again", Json::object());
+        });
+
+        service.Publish("a", Json::object());
+
+        EXPECT_EQ(seen, 1);
+        EXPECT_EQ(sunk, 2);
+    }
+
+    TEST_F(ControlServiceTest, RemovingAnUnknownPublishObserverIsHarmless) {
+        int seen = 0;
+        const auto id = service.AddPublishObserver([&seen](StringView, const Json&) { ++seen; });
+
+        service.RemovePublishObserver(id + 100);
+        service.RemovePublishObserver(ControlService::kNoPublishObserver);
+        service.RemovePublishObserver(id);
+        service.RemovePublishObserver(id);
+        service.Publish("a", Json::object());
+
+        EXPECT_EQ(seen, 0);
+    }
+
     TEST_F(ControlServiceTest, PingReportsTheProtocolVersion) {
         RegisterControlBuiltins(service);
 

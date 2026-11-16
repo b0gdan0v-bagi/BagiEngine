@@ -28,6 +28,9 @@ namespace BECore {
 
         ControlCall(PassKey<ControlService>, String method, Json id, Json params, ControlReplyFn reply);
 
+        /// A call that runs inside another one: its answer is kept as a value (ControlService::RunNested) instead of being sent
+        ControlCall(PassKey<ControlService>, String method, Json params);
+
         ControlCall(const ControlCall&) = delete;
         ControlCall& operator=(const ControlCall&) = delete;
 
@@ -82,6 +85,8 @@ namespace BECore {
         uint32_t _deferFrames = 0;
         double _deferSeconds = kDefaultStepSeconds;
         bool _answered = false;
+        bool _capturing = false;  // the answer goes to _captured, not to _reply
+        Optional<ControlAnswer> _captured;
     };
 
 }  // namespace BECore
