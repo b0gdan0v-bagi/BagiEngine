@@ -91,6 +91,16 @@ namespace BECore {
         }
 #endif
 
+        // The run mode of this run: a flag beats the file's `mode` (WidgetManager::CreateWidgets reads it the same way)
+        const auto requestedMode = RequestedRunMode(load.config._mode, _arguments);
+        if (!requestedMode) {
+            LOG_ERROR("Run mode: {}"_format(requestedMode.error()));
+            LogEvent::Flush();
+            return false;
+        }
+        ApplicationConfig config = load.config;
+        config._mode = *requestedMode;
+
         // The control fields stopped the start-up above; what is left is every other field (`mode`, `type`, `renderer`, `path`)
         LogDeserializeErrors("ApplicationConfig", load.errors, load.warnings);
 
@@ -106,8 +116,8 @@ namespace BECore {
 
         // The editor draws its viewport into an offscreen target, which the software renderer of a headless run does not have
         // The resolved mode (ResolveRunMode) without its warning: CreateWidgets resolves and warns once
-        if (controlSettings->headless && kEditorBuilt && load.config._mode == RunMode::Editor) {
-            LOG_ERROR("Headless: the Editor run mode cannot run without a window; set mode=\"Game\" in ApplicationConfig.xml");
+        if (controlSettings->headless && kEditorBuilt && config._mode == RunMode::Editor) {
+            LOG_ERROR("Headless: the Editor run mode cannot run without a window; drop --editor or set mode=\"Game\" in ApplicationConfig.xml");
             LogEvent::Flush();
             return false;
         }
@@ -116,7 +126,7 @@ namespace BECore {
 
         ApplicationOptions options;
         options.headless = controlSettings->headless;
-        if (!ApplicationFabric::GetInstance().Create(load.config, options)) {
+        if (!ApplicationFabric::GetInstance().Create(config, options)) {
             // The reason is in the log buffer; there is no frame to deliver it to the sinks
             LogEvent::Flush();
             return false;
