@@ -34,8 +34,8 @@ launcher_config.json
 meta_generator_settings.json
 CMakeUserPresets.json
 
-# ImGui layout (user-specific, generated at runtime)
-config/imgui.ini
+# ImGui layout (user-specific, generated at runtime; config/ of the engine, BagiStress and any game root)
+**/config/imgui.ini
 
 # Environment variables (user-specific)
 .env
