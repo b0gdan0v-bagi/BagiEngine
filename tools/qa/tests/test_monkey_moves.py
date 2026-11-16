@@ -4,7 +4,7 @@ import random
 import pytest
 
 import bagi_monkey_moves as moves_module
-from bagi_monkey_moves import KINDS, SLIDER_POINTS, STEP_FRAMES, WINDOW_MATRIX, candidate_moves, pick
+from bagi_monkey_moves import KINDS, SLIDER_POINTS, STEP_FRAMES, WINDOW_MATRIX, candidate_moves, pick, usable_moves
 from bagi_qa_checks import Move
 
 ALL_METHODS = {"perform_action", "ui_click", "set_window", "reset", "step"}
@@ -111,6 +111,15 @@ def test_a_weight_of_zero_is_never_picked(monkeypatch):
     monkeypatch.setitem(moves_module.WEIGHTS, "step", 0)
     found = candidate_moves(LISTED, tree(MENU), ALL_METHODS, None)
     assert {move.kind for move in draw(1, found, 500)} == {"action", "click", "reset", "window"}
+
+
+def test_usable_moves_drop_what_cannot_be_weighed_or_is_excluded_and_sort_the_rest():
+    odd = Move("dance", "dance", {})
+    nine = Move("step", "step", {"frames": 9})
+    moves = [Move("step", "step", {"frames": 2}), odd, Move("action", "perform_action", {"type": "inc"}), Move("step", "step", {"frames": 2}), nine]
+    assert usable_moves(moves) == [moves[2], moves[0], nine]
+    assert usable_moves(moves, ["step"]) == [moves[0], nine]
+    assert usable_moves([odd]) == [] and usable_moves(reversed(moves)) == usable_moves(moves)
 
 
 def test_pick_covers_every_move_of_a_kind_and_fails_on_nothing():

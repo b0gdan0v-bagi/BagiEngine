@@ -281,3 +281,4 @@ def test_a_crashing_game_is_a_session_error(qa_game_exe, out_dir, monkeypatch):
     session.act(INC)
     with pytest.raises(SessionError):
         session.act(INC)
+    session.finish()

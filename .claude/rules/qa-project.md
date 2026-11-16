@@ -66,7 +66,7 @@ A charter is one sentence; the skill takes the first one when the user names non
 | A count sweep up to the maximum | not a monkey charter: a walk cannot keep a big count and a Debug `ui` scene at it in a minute, so `monkey_moves` caps `set_count` | none |
 | Reset and the manual clock | `{"count": 20}` | `action,reset,step` |
 
-Budget per seed: 200 steps (the runner's default) and 3 minutes (`--minutes 3`), whichever ends first. Engine, `BagiStress`: `monkey_moves` drops a `set_count` above `MONKEY_MAX_COUNT` and adds a `reset` to each scene of `state.scenes` with a small count. A game's file has the same headings: its charters, start parameters and kinds, and what its `monkey_moves` does.
+Budget per seed: the runner's default steps and 3 minutes (`--minutes 3`), whichever ends first. Engine, `BagiStress`: `monkey_moves` drops a `set_count` above `MONKEY_MAX_COUNT` and adds a `reset` to each scene of `state.scenes` with a small count. A game's file has the same headings: its charters, start parameters and kinds, and what its `monkey_moves` does.
 
 ## Known deviations
 

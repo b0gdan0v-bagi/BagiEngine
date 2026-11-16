@@ -117,6 +117,34 @@ def test_kinds_limit_the_walk(qa_game_exe, out_dir):
     assert set(result.per_kind) <= {"action", "step"} and "ui_click" not in methods_of(result)
 
 
+def test_kinds_limit_the_moves_a_module_adds_too(qa_game_exe, out_dir, tmp_path):
+    module = tmp_path / "invariants.py"
+    module.write_text(
+        "from bagi_qa_checks import Move\n\n"
+        "def monkey_moves(answer, moves):\n"
+        "    return moves + [Move('reset', 'reset', {}, 'reset'), Move('click', 'ui_click', {'name': 'Plus', 'canvas': 'Hud'}, 'click Plus')]\n",
+        encoding="utf-8",
+    )
+    result = walk(qa_game_exe, out_dir, steps=25, kinds=["step"], invariants=module)
+    assert set(result.per_kind) == {"step"} and not {"ui_click", "reset", "perform_action"} & set(methods_of(result))
+
+
+def test_a_module_that_returns_only_unknown_kinds_leaves_a_one_frame_step(qa_game_exe, out_dir, tmp_path):
+    module = tmp_path / "invariants.py"
+    module.write_text("from bagi_qa_checks import Move\n\ndef monkey_moves(answer, moves):\n    return [Move('dance', 'dance', {}, 'dance')]\n", encoding="utf-8")
+    result = walk(qa_game_exe, out_dir, steps=5, invariants=module)
+    assert result.stopped == "steps" and result.bugs == [] and result.per_kind == {"step": 5}
+    frames = [step.params for step in scenario.load(result.out / "session.jsonl")[1] if step.method == "step"]
+    assert frames[-5:] == [{"frames": 1}] * 5
+
+
+def test_a_bug_shown_by_the_launch_stops_the_walk_before_the_first_move(qa_game_exe, out_dir, tmp_path):
+    module = tmp_path / "invariants.py"
+    module.write_text("def check_state(answer, previous):\n    return [('never.fine', 'wrong from the start')]\n", encoding="utf-8")
+    result = walk(qa_game_exe, out_dir, steps=20, invariants=module, shrink=False)
+    assert result.stopped == "bug" and result.moves == 0 and [found.name for found in result.bugs] == ["never.fine"]
+
+
 def test_a_missing_executable_is_77(tmp_path, out_dir, capsys):
     assert cli(tmp_path / "NoSuchGame", out_dir) == 77
     assert "SKIPPED" in capsys.readouterr().out

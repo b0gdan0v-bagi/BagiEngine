@@ -72,6 +72,13 @@ def candidate_moves(
     return _sorted_unique(found)
 
 
+def usable_moves(moves: Iterable[Move], kinds: Collection[str] | None = None) -> list[Move]:
+    """The moves of a list the game's `monkey_moves` returned, cut down to what the walk can take: the sorted, unique moves of a kind that `WEIGHTS`
+    weighs above 0 and `kinds` allows (None: all), so a kind the game invents, or one the user excluded, is dropped and a set-built list is repeatable.
+    """
+    return _sorted_unique(move for move in moves if WEIGHTS.get(move.kind, 0) > 0 and (kinds is None or move.kind in kinds))
+
+
 def pick(rng: random.Random, moves: Sequence[Move]) -> Move:
     """One of `moves`: a kind is drawn by `WEIGHTS` (only the kinds present), then a move of it evenly; both from one `rng.random()` and integers.
 

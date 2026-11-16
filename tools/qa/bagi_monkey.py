@@ -177,17 +177,21 @@ def _walk(
     minutes: float | None,
     clock: Callable[[], float],
 ) -> str:
-    """The moves, one after another; why the walk stopped. A game that is gone is flagged as `monkey.game_lost`."""
+    """The moves, one after another; why the walk stopped (a bug already shown by the launch or the start stops it before the first move).
+
+    A game that is gone is flagged as `monkey.game_lost`.
+    """
     began = clock()
     tree: Any = None
     settled = True  # a frame has run since the last change, so the layout of `ui_tree` is current
     last = "(none)"
+    if session.bugs:  # raised by the launch or by `--start`
+        return STOP_BUG
     while True:
         if sum(done.values()) >= steps:
             return STOP_STEPS
         if minutes is not None and clock() - began >= minutes * SECONDS_PER_MINUTE:
             return STOP_MINUTES
-        bugs = len(session.bugs)
         try:
             if settled and _wants_tree(kinds, methods):
                 tree = _tree(session)
@@ -195,6 +199,7 @@ def _walk(
                 session.invariants, session.current_state(), moves_module.candidate_moves(session.listed_actions(), tree, methods, start, kinds)
             )
             session.add_findings(found)
+            moves = moves_module.usable_moves(moves, kinds)
             move = moves_module.pick(rng, moves) if moves else FALLBACK_MOVE
             last = move.label or move.method
             done[move.kind] += 1
@@ -202,7 +207,7 @@ def _walk(
         except SessionError as error:
             session.flag(NAME_GAME_LOST, f"the game is gone after the move '{last}': {error}", {"move": last, "error": str(error)})
             return STOP_LOST
-        if len(session.bugs) > bugs:
+        if session.bugs:
             return STOP_BUG
 
 
