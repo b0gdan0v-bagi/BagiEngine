@@ -302,3 +302,49 @@ def test_the_command_line_asks_before_it_downloads(manifest, tmp_path, monkeypat
     events = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line.startswith("{")]
     assert events[0]["event"] == "plan" and events[0]["platform"] == "windows-nvidia" and events[0]["downloadBytes"] > 0
     assert not root.exists()
+
+
+def test_the_panel_actions_plan_and_install_without_asking(manifest, tmp_path):
+    root = tmp_path / "root"
+    probe = lambda: Probe("win32", "AMD64", ["NVIDIA GeForce RTX 3070"])  # noqa: E731
+    events = []
+    setup = artgen_setup.LocalSetup("http://127.0.0.1:1", root, probe, manifest,
+                                    installer=lambda *a, **k: Installer(*a, unpack=fake_unpack(), **k))
+    setup.run("Plan", events.append)
+    assert events[-1]["event"] == "plan" and events[-1]["downloadBytes"] > 0 and not root.exists()
+    events.clear()
+    setup.run("Install", events.append)
+    assert (root / "ComfyUI" / "main.py").is_file()
+    assert events[0]["event"] == "plan" and any(e["event"] == "step_done" for e in events)
+
+
+def test_a_cancelled_install_stops_and_keeps_what_it_downloaded(manifest, tmp_path):
+    import threading
+    cancel = threading.Event()
+    cancel.set()
+    root = tmp_path / "root"
+    steps = artgen_setup.make_plan(manifest, "windows-nvidia", root)
+    with pytest.raises(SetupError, match="cancelled"):
+        Installer(manifest, "windows-nvidia", root, unpack=fake_unpack(), cancel=cancel).install(steps)
+    assert not root.exists()
+
+
+def test_a_comfyui_that_exits_while_starting_says_why(tmp_path):
+    root = tmp_path / "fakecomfy"
+    (root / "ComfyUI").mkdir(parents=True)
+    (root / "ComfyUI" / "main.py").write_text("import sys\nprint('Another ComfyUI is already using this database')\nsys.exit(1)\n", encoding="utf-8")
+    with pytest.raises(SetupError, match="already using this database"):
+        artgen_setup.start(root, "http://127.0.0.1:9", wait_s=60, python=sys.executable)
+    assert not (root / artgen_setup.PID_FILE).exists()
+
+
+def test_started_here_is_only_a_comfyui_this_tool_started(tmp_path, monkeypatch):
+    root = tmp_path / "root"
+    root.mkdir()
+    setup = artgen_setup.LocalSetup("http://127.0.0.1:1", root)
+    assert not setup.started_here()  # no pid file: started by hand, or not at all
+    (root / artgen_setup.PID_FILE).write_text(json.dumps({"pid": 4242}), encoding="utf-8")
+    asked = []
+    monkeypatch.setattr(artgen_setup, "_ours", lambda r, pid: asked.append(pid) or True)
+    assert setup.started_here() and setup.started_here()
+    assert asked == [4242]  # checked once per pid

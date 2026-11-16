@@ -12,6 +12,7 @@ namespace BECore {
 
     class ArtGenSession;
     struct ArtGenRun;
+    struct ArtGenSetup;
     struct SceneSelectionChangedEvent;
 
     /**
@@ -36,7 +37,10 @@ namespace BECore {
         void OnCommand(const EditorCommandEvent& event);
         void OnSelectionChanged(const SceneSelectionChangedEvent& event);
 
-        void DrawServiceLine(const ArtGenSession& session);
+        void DrawServiceLine(ArtGenSession& session);
+        void DrawSetup(ArtGenSession& session);
+        void DrawPlan(ArtGenSession& session, const ArtGenSetup& setup);
+        void StartBridge(uint16_t port);
         void DrawForm(ArtGenSession& session);
         void DrawRun(ArtGenSession& session);
         void DrawVariants(const ArtGenRun& run);
@@ -63,6 +67,12 @@ namespace BECore {
         bool _useOnSelected = false;
         String _acceptMessage;
         bool _acceptFailed = false;
+
+        // The bridge this panel started: when (ImGui time), so the line says "starting" until it polls; why it could not start
+        double _bridgeStartedAt = -1.0;
+        bool _bridgeWaitsForControl = false;  // Start the service turned the control API on: the bridge starts once it listens
+        String _bridgeError;
+        String _setupError;
     };
 
 }  // namespace BECore

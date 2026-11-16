@@ -17,6 +17,7 @@ namespace BECore {
         constexpr StringView kNoRunCode = "artgen_no_run";
         constexpr StringView kNoVariantCode = "artgen_no_variant";
         constexpr StringView kAcceptFailedCode = "artgen_accept_failed";
+        constexpr StringView kNoSetupCode = "artgen_no_setup";
 
         double SteadySeconds() {
             const auto now = std::chrono::steady_clock::now().time_since_epoch();
@@ -106,6 +107,8 @@ namespace BECore {
         Register<&ArtGenSession::HandleGenerate>(service, *this, "artgen_generate");
         Register<&ArtGenSession::HandleCancel>(service, *this, "artgen_cancel");
         Register<&ArtGenSession::HandleAccept>(service, *this, "artgen_accept");
+        Register<&ArtGenSession::HandleSetupReport>(service, *this, "artgen_setup_report");
+        Register<&ArtGenSession::HandleSetup>(service, *this, "artgen_setup");
         service.RegisterHandler("artgen_state", [this](ControlCall& call) { call.Reply(StateJson()); });
 
         service.DescribeMethod("artgen_generate", ControlMethodInfo{"Asks the art generation service for images of a style preset of the game (the Generate panel's button)",
@@ -119,12 +122,17 @@ namespace BECore {
                                                                    ControlParamInfo{"useOnSelected", "boolean", false, "also put it on the node selected in the scene editor"}}});
         service.DescribeMethod("artgen_cancel", ControlMethodInfo{"Stops the run of the art generation service; the images made stay", {}});
         service.DescribeMethod("artgen_state", ControlMethodInfo{"The art generation service as the editor sees it, and the current run with its images", {}});
+        service.DescribeMethod("artgen_setup", ControlMethodInfo{"Asks the art generation service to plan, install, start or stop its generator (the panel's Set up / Start / Stop)",
+                                                                 {ControlParamInfo{"action", "string", true, "Plan, Install, Start, Stop, or cancel (an install in work)"}}});
         service.DescribeMethod("artgen_poll", ControlMethodInfo{"Called by the art generation service: its status in, the game root and a new request or a cancel out", {}});
     }
 
     std::expected<uint32_t, String> ArtGenSession::Request(StringView preset, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants) {
         if (IsBusy()) {
             return std::unexpected(String("a run is in work; cancel it or wait"));
+        }
+        if (IsSetupBusy()) {
+            return std::unexpected(String("the generator is being set up; wait for it"));
         }
         if (preset.empty()) {
             return std::unexpected(String("no preset"));
@@ -168,6 +176,58 @@ namespace BECore {
         }
     }
 
+    std::expected<uint32_t, String> ArtGenSession::RequestSetup(ArtGenSetupAction action) {
+        if (action == ArtGenSetupAction::None) {
+            return std::unexpected(String("no action"));
+        }
+        if (IsSetupBusy()) {
+            return std::unexpected(String("a setup action is in work; wait for it"));
+        }
+        if (IsBusy()) {
+            return std::unexpected(String("a run is in work; cancel it or wait"));
+        }
+        ArtGenSetup next;
+        if (action == ArtGenSetupAction::Install) {
+            // The plan the owner agreed to stays on screen while the install runs
+            next.platform = std::move(_setup.platform);
+            next.platformNote = std::move(_setup.platformNote);
+            next.root = std::move(_setup.root);
+            next.plan = std::move(_setup.plan);
+            next.downloadBytes = _setup.downloadBytes;
+        }
+        _setup = std::move(next);
+        _setup.id = _nextId++;
+        _setup.action = action;
+        _setup.state = ArtGenSetupState::Queued;
+        ++_version;
+        return _setup.id;
+    }
+
+    void ArtGenSession::RequestServiceStop() {
+        if (IsServiceConnected() && !_stopService) {
+            _stopService = true;
+            ++_version;
+        }
+    }
+
+    void ArtGenSession::ClearSetup() {
+        if (!IsSetupBusy() && _setup.action != ArtGenSetupAction::None) {
+            _setup = ArtGenSetup{};
+            ++_version;
+        }
+    }
+
+    void ArtGenSession::CancelSetup() {
+        if (_setup.state == ArtGenSetupState::Queued) {
+            _setup.state = ArtGenSetupState::Failed;
+            _setup.error = "cancelled";
+            ++_version;
+        } else if (_setup.state == ArtGenSetupState::Running && !_setup.cancelRequested) {
+            _setup.cancelRequested = true;
+            ++_version;
+        }
+    }
+
     bool ArtGenSession::IsServiceConnected() const {
         return _lastPollSeconds >= 0.0 && _clock() - _lastPollSeconds <= kServiceTimeoutSeconds;
     }
@@ -180,6 +240,7 @@ namespace BECore {
         status.state = StringOr(params, "state", "ready");
         status.reason = StringOr(params, "reason");
         status.generator = StringOr(params, "generator");
+        status.startedHere = GetJsonBool(params, "startedHere").value_or(false);
         if (const Json* presets = FindJsonMember(params, "presets"); presets != nullptr && presets->is_array()) {
             for (const Json& item : *presets) {
                 if (!item.is_object()) {
@@ -195,7 +256,7 @@ namespace BECore {
             }
         }
         const bool wasConnected = IsServiceConnected();
-        const bool changed = status.state != _status.state || status.reason != _status.reason || status.presets.size() != _status.presets.size();
+        const bool changed = status.state != _status.state || status.reason != _status.reason || status.presets.size() != _status.presets.size() || status.startedHere != _status.startedHere;
         _status = std::move(status);
         _lastPollSeconds = _clock();
         ++_pollCount;
@@ -205,6 +266,22 @@ namespace BECore {
 
         Json reply = Json::object();
         reply["gameRoot"] = ToJsonString(_gameRoot);
+        if (_stopService) {
+            // The service exits on this answer and reports nothing more: what it was doing ends here, and it is gone at once
+            _stopService = false;
+            reply["shutdown"] = true;
+            if (_run.state == ArtGenRunState::Running) {
+                _run.state = ArtGenRunState::Cancelled;
+                _run.step = 0;
+            }
+            if (_setup.state == ArtGenSetupState::Running) {
+                _setup.state = ArtGenSetupState::Failed;
+                _setup.error = "the service was stopped";
+            }
+            _lastPollSeconds = -1.0;
+            ++_version;
+            return reply;
+        }
         if (_run.state == ArtGenRunState::Queued) {
             Json request = Json::object();
             request["id"] = _run.id;
@@ -217,6 +294,16 @@ namespace BECore {
             ++_version;
         } else if (_run.state == ArtGenRunState::Running && _run.cancelRequested) {
             reply["cancel"] = _run.id;
+        }
+        if (_setup.state == ArtGenSetupState::Queued) {
+            Json setup = Json::object();
+            setup["id"] = _setup.id;
+            setup["action"] = ToStdString(EnumUtils<ArtGenSetupAction>::ToString(_setup.action));
+            reply["setup"] = std::move(setup);
+            _setup.state = ArtGenSetupState::Running;
+            ++_version;
+        } else if (_setup.state == ArtGenSetupState::Running && _setup.cancelRequested) {
+            reply["setupCancel"] = _setup.id;
         }
         return reply;
     }
@@ -330,6 +417,86 @@ namespace BECore {
         return Accept(*seed, *sprite, use != nullptr && use->get<bool>());
     }
 
+    std::expected<Json, ControlError> ArtGenSession::HandleSetupReport(const Json& params) {
+        Json reply = Json::object();
+        const auto id = GetJsonInt(params, "id");
+        const bool current = id && _setup.state == ArtGenSetupState::Running && *id == static_cast<int64_t>(_setup.id);
+        reply["stale"] = !current;
+        if (!current) {
+            return reply;
+        }
+        const String event = StringOr(params, "event");
+        if (event == "plan") {
+            _setup.platform = StringOr(params, "platform");
+            _setup.platformNote = StringOr(params, "note");
+            _setup.root = StringOr(params, "root");
+            _setup.downloadBytes = GetJsonInt(params, "downloadBytes").value_or(0);
+            _setup.plan.clear();
+            if (const Json* steps = FindJsonMember(params, "steps"); steps != nullptr && steps->is_array()) {
+                for (const Json& item : *steps) {
+                    if (!item.is_object()) {
+                        continue;
+                    }
+                    ArtGenSetupStep step;
+                    step.what = StringOr(item, "what");
+                    step.dest = StringOr(item, "dest");
+                    step.state = StringOr(item, "state");
+                    step.licence = StringOr(item, "licence");
+                    step.size = GetJsonInt(item, "size").value_or(0);
+                    _setup.plan.push_back(std::move(step));
+                }
+            }
+        } else if (event == "step") {
+            _setup.current = StringOr(params, "what");
+            _setup.done = 0;
+            _setup.total = 0;
+        } else if (event == "progress") {
+            _setup.done = GetJsonInt(params, "done").value_or(0);
+            _setup.total = GetJsonInt(params, "total").value_or(0);
+        } else if (event == "log") {
+            _setup.log = StringOr(params, "text");
+        } else if (event == "done") {
+            const Json* ok = FindJsonMember(params, "ok");
+            if (ok == nullptr || !ok->is_boolean()) {
+                return std::unexpected(InvalidParams("'ok' (boolean) is required with the event done"));
+            }
+            const bool succeeded = ok->get<bool>();
+            _setup.state = succeeded ? ArtGenSetupState::Done : ArtGenSetupState::Failed;
+            _setup.error = succeeded ? String() : StringOr(params, "error", "the service gave no reason");
+            _setup.current.clear();
+        } else {
+            return std::unexpected(InvalidParams("'event' must be plan, step, progress, log or done"));
+        }
+        ++_version;
+        return reply;
+    }
+
+    std::expected<Json, ControlError> ArtGenSession::HandleSetup(const Json& params) {
+        const auto name = GetJsonString(params, "action");
+        if (!name) {
+            return std::unexpected(InvalidParams("'action' must be a string"));
+        }
+        if (*name == "cancel") {
+            if (!IsSetupBusy()) {
+                return std::unexpected(ControlError{String(kNoSetupCode), String("no setup action in work")});
+            }
+            CancelSetup();
+            return Json::object();
+        }
+        const auto action = EnumUtils<ArtGenSetupAction>::Cast(StringView(name->data(), name->size()));
+        if (!action || *action == ArtGenSetupAction::None) {
+            return std::unexpected(InvalidParams("'action' must be Plan, Install, Start, Stop or cancel"));
+        }
+        auto id = RequestSetup(*action);
+        if (!id) {
+            return std::unexpected(ControlError{String(kBusyCode), id.error()});
+        }
+        Json reply = Json::object();
+        reply["id"] = *id;
+        reply["serviceConnected"] = IsServiceConnected();
+        return reply;
+    }
+
     std::expected<Json, ControlError> ArtGenSession::HandleCancel(const Json& /*params*/) {
         if (!IsBusy()) {
             return std::unexpected(ControlError{String(kNoRunCode), String("no run in work")});
@@ -345,6 +512,7 @@ namespace BECore {
         service["state"] = ToJsonString(_status.state);
         service["reason"] = ToJsonString(_status.reason);
         service["generator"] = ToJsonString(_status.generator);
+        service["startedHere"] = _status.startedHere;
         Json presets = Json::array();
         for (const auto& preset : _status.presets) {
             Json item = Json::object();
@@ -379,9 +547,34 @@ namespace BECore {
         }
         run["variants"] = std::move(variants);
 
+        Json setup = Json::object();
+        setup["id"] = _setup.id;
+        setup["action"] = ToStdString(EnumUtils<ArtGenSetupAction>::ToString(_setup.action));
+        setup["state"] = ToStdString(EnumUtils<ArtGenSetupState>::ToString(_setup.state));
+        setup["platform"] = ToJsonString(_setup.platform);
+        setup["root"] = ToJsonString(_setup.root);
+        setup["downloadBytes"] = _setup.downloadBytes;
+        Json plan = Json::array();
+        for (const auto& step : _setup.plan) {
+            Json item = Json::object();
+            item["what"] = ToJsonString(step.what);
+            item["state"] = ToJsonString(step.state);
+            item["size"] = step.size;
+            item["licence"] = ToJsonString(step.licence);
+            plan.push_back(std::move(item));
+        }
+        setup["plan"] = std::move(plan);
+        setup["current"] = ToJsonString(_setup.current);
+        setup["done"] = _setup.done;
+        setup["total"] = _setup.total;
+        setup["log"] = ToJsonString(_setup.log);
+        setup["error"] = ToJsonString(_setup.error);
+        setup["cancelRequested"] = _setup.cancelRequested;
+
         Json state = Json::object();
         state["service"] = std::move(service);
         state["run"] = std::move(run);
+        state["setup"] = std::move(setup);
         state["gameRoot"] = ToJsonString(_gameRoot);
         return state;
     }

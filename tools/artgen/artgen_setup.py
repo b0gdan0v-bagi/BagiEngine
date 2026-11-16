@@ -50,6 +50,14 @@ class SetupError(Exception):
     """The install cannot go on; the message says what to do."""
 
 
+CANCELLED = "cancelled: what is downloaded stays, the next install resumes"
+
+
+def _check_cancel(cancel):
+    if cancel is not None and cancel.is_set():
+        raise SetupError(CANCELLED)
+
+
 # --- the platform -----------------------------------------------------------------------------------------------------
 
 
@@ -225,7 +233,7 @@ def sha256_of(path, on_bytes=None):
     return digest.hexdigest()
 
 
-def download(url, dest, size, sha256, on_progress=None, clock=time.monotonic):
+def download(url, dest, size, sha256, on_progress=None, clock=time.monotonic, cancel=None):
     """`url` into `dest` through `dest.part` (resumed by a Range request), checked for size and hash before the rename."""
     dest = Path(dest)
     part = dest.with_name(dest.name + ".part")
@@ -240,6 +248,7 @@ def download(url, dest, size, sha256, on_progress=None, clock=time.monotonic):
                 last = 0.0
                 with open(part, "ab" if have else "wb") as file:
                     while chunk := response.read(CHUNK):
+                        _check_cancel(cancel)
                         file.write(chunk)
                         have += len(chunk)
                         if on_progress and clock() - last >= PROGRESS_EVERY_S:
@@ -291,7 +300,8 @@ def venv_python(root):
 class Installer:
     """Carries out a plan. `unpack`, `run` and `git_head` are the outside world; tests replace them."""
 
-    def __init__(self, manifest, key, root, downloads=None, emit=None, unpack=unpack_7z, run=run_checked, git_head=None, python=sys.executable):
+    def __init__(self, manifest, key, root, downloads=None, emit=None, unpack=unpack_7z, run=run_checked, git_head=None, python=sys.executable,
+                 cancel=None, clock=time.monotonic):
         self.manifest = manifest
         self.key = key
         self.root = Path(root)
@@ -301,9 +311,12 @@ class Installer:
         self.run = run
         self.git_head = git_head or (lambda repo: subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True, check=False).stdout.strip())
         self.python = python
+        self.cancel = cancel  # a threading.Event: set, the install stops between chunks and steps
+        self.clock = clock
 
     def install(self, steps, keep_downloads=False):
         for index, step in enumerate(steps):
+            _check_cancel(self.cancel)
             self.emit({"event": "step", "index": index, "what": step.what, "state": step.state})
             if step.kind == "comfyui":
                 if step.state == "download":
@@ -314,7 +327,7 @@ class Installer:
                 self._verify_model(index, step)
             elif step.state == "download":
                 model = self._model(step)
-                download(model["url"], step.dest, model["size"], model["sha256"], self._progress(index))
+                download(model["url"], step.dest, model["size"], model["sha256"], self._progress(index), cancel=self.cancel)
             self.emit({"event": "step_done", "index": index, "what": step.what})
         var = variant(self.manifest, self.key)
         if var["kind"] == "portable" and START_BAT.is_file() and installed_version(self.root):
@@ -322,7 +335,16 @@ class Installer:
         remember_root(self.root)
 
     def _progress(self, index):
-        return lambda done, total: self.emit({"event": "progress", "index": index, "done": done, "total": total})
+        """At most one progress event per PROGRESS_EVERY_S, and the last one: a hash check reads a megabyte at a time."""
+        last = [None]
+
+        def report(done, total):
+            now = self.clock()
+            if done >= total or last[0] is None or now - last[0] >= PROGRESS_EVERY_S:
+                last[0] = now
+                self.emit({"event": "progress", "index": index, "done": done, "total": total})
+
+        return report
 
     def _model(self, step):
         return next(m for m in self.manifest["models"] if str(model_path(self.root, m)) == step.dest)
@@ -331,9 +353,12 @@ class Installer:
         model = self._model(step)
         done = [0]
 
+        progress = self._progress(index)
+
         def on_bytes(n):
+            _check_cancel(self.cancel)
             done[0] += n
-            self._progress(index)(done[0], model["size"])
+            progress(done[0], model["size"])
 
         actual = sha256_of(step.dest, on_bytes)
         if actual != model["sha256"]:
@@ -343,7 +368,7 @@ class Installer:
         var = variant(self.manifest, self.key)
         archive = self.downloads / var["asset"]
         if not archive.is_file():
-            download(var["url"], archive, var["size"], var["sha256"], self._progress(index))
+            download(var["url"], archive, var["size"], var["sha256"], self._progress(index), cancel=self.cancel)
         staging = Path(str(self.root) + ".unpack")
         if staging.exists():
             shutil.rmtree(staging)  # this tool's own staging folder, left by an interrupted unpack
@@ -458,6 +483,15 @@ def _ours(root, pid):
     return "main.py" in line and str(Path(root).name) in line
 
 
+def _log_tail(path, lines=4):
+    """The last lines of ComfyUI's log, which hold its reason for exiting."""
+    try:
+        text = Path(path).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return "no log"
+    return " ".join(line.strip() for line in text.strip().splitlines()[-lines:])
+
+
 def start(root, url, wait_s=180.0, python=None, extra=(), emit=None, clock=time.monotonic, sleep=time.sleep):
     emit = emit or (lambda event: None)
     root = Path(root)
@@ -481,7 +515,7 @@ def start(root, url, wait_s=180.0, python=None, extra=(), emit=None, clock=time.
     while clock() < deadline:
         if process.poll() is not None:
             (root / PID_FILE).unlink(missing_ok=True)
-            raise SetupError(f"ComfyUI exited with {process.returncode} while starting: see {root / LOG_FILE}")
+            raise SetupError(f"ComfyUI exited with {process.returncode} while starting: {_log_tail(root / LOG_FILE)} (log {root / LOG_FILE})")
         if _reachable(url):
             emit({"event": "log", "text": f"ComfyUI answers at {url}"})
             return process.pid
@@ -511,6 +545,59 @@ def stop(root, emit=None, clock=time.monotonic, sleep=time.sleep):
     pid_file.unlink(missing_ok=True)
     emit({"event": "log", "text": f"stopped ComfyUI (pid {pid})"})
     return True
+
+
+class LocalSetup:
+    """The setup actions of the editor's panel on this machine (`Plan`, `Install`, `Start`, `Stop`), for the bridge: each reports through
+    `emit` (the events of `install --json`) and raises SetupError with the reason. Install takes no consent: the panel showed the plan."""
+
+    def __init__(self, url, root=None, probe=probe_machine, manifest=None, installer=Installer):
+        self.url = url
+        self.root = Path(root) if root else None
+        self.probe = probe
+        self.manifest = manifest
+        self.installer = installer
+        self._checked_pid = None
+        self._checked_ours = False
+
+    def started_here(self):
+        """True when the running ComfyUI is the one `start` left (its pid file names a live ComfyUI of the root), so `Stop` can end it;
+        a ComfyUI started by hand is not. Checked once per pid: the bridge asks every few seconds."""
+        root = self._context()[1]
+        try:
+            pid = json.loads((root / PID_FILE).read_text(encoding="utf-8"))["pid"]
+        except (OSError, ValueError, KeyError):
+            return False
+        if pid != self._checked_pid:
+            self._checked_pid = pid
+            self._checked_ours = _ours(root, pid)
+        return self._checked_ours
+
+    def _context(self):
+        manifest = self.manifest or comfyui_check.load_manifest()
+        root = self.root or default_root()
+        return manifest, root
+
+    def _plan(self, emit):
+        manifest, root = self._context()
+        key = detect(self.probe())
+        steps = make_plan(manifest, key, root)
+        emit({"event": "plan", "platform": key, "note": variant(manifest, key).get("note", ""), "root": str(root),
+              "steps": [s.to_json() for s in steps], "downloadBytes": sum(s.size for s in steps)})
+        return manifest, key, root, steps
+
+    def run(self, action, emit, cancel=None):
+        if action == "Plan":
+            self._plan(emit)
+        elif action == "Install":
+            manifest, key, root, steps = self._plan(emit)
+            self.installer(manifest, key, root, emit=emit, cancel=cancel).install(steps)
+        elif action == "Start":
+            start(self._context()[1], self.url, emit=emit)
+        elif action == "Stop":
+            stop(self._context()[1], emit=emit)
+        else:
+            raise SetupError(f"unknown setup action {action}")
 
 
 # --- the command line ---------------------------------------------------------------------------------------------------

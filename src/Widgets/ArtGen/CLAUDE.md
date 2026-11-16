@@ -8,7 +8,8 @@ The editor's **Generate** panel (`ArtGenWidget`, command `view.generate`, View â
 |------|---------|
 | `ArtGenSession.{h,cpp}` | The editor's side of the contract, no ImGui: the service's last status, one run (request, progress, variants, end), the control methods. `Singleton`: it outlives the panel |
 | `ArtGenAccept.{h,cpp}` | Accept, no ImGui: the variant copied into the game's assets, the TextureLibrary entry, the reload of the sprites that use it, Use on a node; `AcceptForControl` is the session's acceptor in the editor |
-| `ArtGenWidget.{h,cpp}` | The ImGui panel over the session: service line, preset, subject, count, seed, keep the variants, Generate / Cancel, progress, the grid of variants (Use this seed), Accept |
+| `ArtGenLaunch.{h,cpp}` | Start the service: finds `tools/artgen/artgen_bridge.py` of the engine checkout among the content roots and starts it with `SDL_CreateProcess` (`$BAGI_PYTHON`, else `python` / `python3`) |
+| `ArtGenWidget.{h,cpp}` | The ImGui panel over the session: service line (Start the service), setup (Set up, the plan, Install, Start, Stop), preset, subject, count, seed, keep the variants, Generate / Cancel, progress, the grid of variants (Use this seed), Accept |
 
 ## The contract
 
@@ -16,17 +17,20 @@ The service **pulls**: a request the panel makes before the service connects is 
 
 | Method | Caller | Params | Answer |
 |--------|--------|--------|--------|
-| `artgen_poll` | service, about every 0.5 s | `state` (`ready` / `not_running` / `not_installed`), `reason`, `generator`, `presets: [{name, title, error?}]` | `gameRoot` (the real path of the game, where `artgen/presets/` is), `request: {id, preset, subject, count, seed\|null}` once, `cancel: id` while a cancel is asked |
+| `artgen_poll` | service, about every 0.5 s | `state` (`ready` / `not_running` / `not_installed`), `reason`, `generator`, `startedHere` (a running generator a setup action started, so Stop can end it), `presets: [{name, title, error?}]` | `gameRoot` (the real path of the game, where `artgen/presets/` is), `request: {id, preset, subject, count, seed\|null}` once, `cancel: id` while a cancel is asked, `setup: {id, action}` once, `setupCancel: id` while a cancel of it is asked, `shutdown: true` once after Disconnect (the service exits; the editor counts it gone at once and ends its run or setup action) |
+| `artgen_setup_report` | service, per event of a setup action | `id, event`: `plan` (`platform, note, root, downloadBytes, steps: [{what, dest, state, size, licence}]`), `step` (`what`), `progress` (`done, total` bytes), `log` (`text`), `done` (`ok`, `error`) | `{stale}` |
 | `artgen_progress` | service | `id, image, count, step, steps, seed` | `{stale}` |
 | `artgen_image` | service, per image | `id, image, count, seed, path, provenance` (real paths of the PNG and its `.artgen.json`) | `{stale}` |
 | `artgen_done` | service, once per run | `id, status` (`ok` / `failed` / `cancelled`), `error` | `{stale}` |
 | `artgen_generate` | an agent, a test | `preset, subject, count?` (1..16, default 4), `seed?` | `{id, serviceConnected}`; `artgen_busy` while a run is in work, `invalid_params` |
 | `artgen_cancel` | an agent, a test | none | `{}`; `artgen_no_run` |
 | `artgen_accept` | an agent, a test | `seed` (a variant of the current run), `sprite`, `useOnSelected?` | `{sprite, texturePath, png, width, height, reloadedSprites, usedOn}`; `artgen_no_variant`, `artgen_accept_failed` (a bad name, no TextureLibrary.xml, no selected node, a node without a SpriteRendererComponent) |
-| `artgen_state` | an agent, a test | none | `{service: {connected, polls, state, reason, generator, presets}, run: {id, state, preset, subject, count, seed, image, step, steps, error, cancelRequested, variants: [{seed, path, provenance}]}, gameRoot}` |
+| `artgen_setup` | an agent, a test | `action`: `Plan`, `Install`, `Start`, `Stop`, or `cancel` | `{id, serviceConnected}`; `artgen_busy` while a setup action or a run is in work, `artgen_no_setup` (cancel with none), `invalid_params` |
+| `artgen_state` | an agent, a test | none | `{service: {connected, polls, state, reason, generator, presets}, run: {id, state, preset, subject, count, seed, image, step, steps, error, cancelRequested, variants: [{seed, path, provenance}]}, setup: {id, action, state, platform, root, downloadBytes, plan, current, done, total, log, error, cancelRequested}, gameRoot}` |
 
 - **One run at a time.** A request is `Queued` until a poll hands it over (`Running`), then `Done`, `Failed` or `Cancelled` by `artgen_done`. A report whose `id` is not the running one is answered `{"stale": true}` and changes nothing (a late message after a new request).
 - **Cancel.** A queued run is cancelled at once (the service never saw it); a running one keeps running until the service answers `artgen_done` with `cancelled` after it saw `cancel` in a poll. The images already made stay.
+- **Setup actions** (`ArtGenSetup`) travel the same way and never beside a run: `RequestSetup` refuses while either is in work, and `Request` while a setup action is. An `Install` keeps the plan of the `Plan` before it on screen; the service plans again and downloads without asking, so the panel offers Install only under the plan it shows. A cancel of a queued action ends it at once, of a running install on the next poll (`Failed`, `cancelled`). `ClearSetup` forgets a plan turned down.
 - The panel and `artgen_generate` go through the same `ArtGenSession::Request`. A preset the service reported broken is refused there. `keepVariants` starts the new run with the variants of the last one (`keptVariants` of them), so more can be made without losing the ones on screen.
 
 ## Lifetime and threads
@@ -35,7 +39,9 @@ The control API cannot drop a handler and the panel is re-created at every switc
 
 ## The panel
 
-- The service line says why nothing can happen: the control API off (`--control`), the service not connected (with the command to start it), or the generator not ready with its reason. A request can still be queued while the service is away.
+- The service line says why nothing can happen: the service not connected, or the generator not ready with its reason. A request can still be queued while the service is away.
+- **Start the service** (not connected) first turns the control API on when it is off (`ApplicationEvents::StartControlServerRequestEvent`: `Application` starts the server on the default port, or a free one; the panel says so when it did not start), then, once it listens, runs the bridge of the engine checkout with `--port <control port> --exit-with-editor --log <editor user folder>/artgen-bridge.log` (`ArtGenLaunch`): in the background, with no standard streams (an editor started from the desktop has none to hand over, and SDL fails duplicating them), through `pythonw` on Windows so no console window opens; it ends with this editor; the line says "starting" until its first poll, then, after `kBridgeStartSeconds` without one, gives the command to run by hand and see why. A build without the engine checkout (no script among the roots) says so.
+- **Set up** (`not_installed`) asks the service for the plan and shows it: the platform, the root, every step with its size (its licence and destination in the tooltip), the total; **Download and install** runs it with the current step, a progress bar and Cancel; Not now forgets it. Next to it the alternative, a generator on another machine (`comfyui-remote-via-todo`, not there yet). **Start** (`not_running`) and the stop button beside "Service ready" start and stop the local generator; **Stop ComfyUI** is there only for a generator started from the panel (`startedHere`), a ComfyUI started by hand gets a line saying to close its window, and the line under it says what an action did. **Disconnect**, beside the service line while the service is connected, stops the service itself (`RequestServiceStop`); Start the service runs it again.
 - Thumbnails are loaded from the paths the service reported with `ResourceManager::Load` (an absolute path resolves as itself) and **evicted** (`ResourceManager::Evict`) when the run is replaced or the panel dies, so the generated textures do not stay in the cache until the editor closes.
 - A thumbnail is drawn over a checkerboard, so a cut-out (RGBA) variant shows its transparency; Accept copies the PNG as it is, alpha included.
 - A click selects a variant (the frame and its seed); the dice button under it puts its seed into the form (random off) for the next Generate. Thumbnails are kept by path, so a run that kept the variants loads only the new ones.
@@ -51,4 +57,4 @@ The control API cannot drop a handler and the panel is re-created at every switc
 
 ## Tests
 
-`tests/BECore/ArtGenSessionTest.cpp` (editor regex of `tests/CMakeLists.txt`): a `ControlService` of its own, the methods called as the service calls them, a clock of the test, a fake acceptor. `ArtGenAcceptTest.cpp`: sprite names, the PNG size, the copy into a temporary assets folder. The service side is `tools/artgen/tests/test_artgen_bridge.py` against a fake editor that answers like the session.
+`tests/BECore/ArtGenSessionTest.cpp` (editor regex of `tests/CMakeLists.txt`): a `ControlService` of its own, the methods called as the service calls them, a clock of the test, a fake acceptor. `ArtGenAcceptTest.cpp`: sprite names, the PNG size, the copy into a temporary assets folder. `ArtGenLaunchTest.cpp`: the bridge found among content roots, its arguments, a real start of a stand-in script in the background (skipped without that Python). The service side is `tools/artgen/tests/test_artgen_bridge.py` against a fake editor that answers like the session.
