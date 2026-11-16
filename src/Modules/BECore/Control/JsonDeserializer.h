@@ -72,6 +72,8 @@ namespace BECore {
         /// NoteKnownKey name a key, so a value that fails to read is no unknown key. A scope is checked once, when it ends or, for the root,
         /// at FinishLoad; an array scope has no members of its own. Set the mode before the load.
         bool HasKey(StringView name) const override;
+        /// A member that is neither an object nor an array: BeginObject refuses it, a loader of both forms reads it as a plain value
+        bool IsScalarMember(StringView name) const override;
         void NoteKnownKey(StringView name) override;
         void FinishLoad() override;
         void SkipScope() override;

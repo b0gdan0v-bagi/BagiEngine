@@ -1,6 +1,9 @@
 // Loading and saving of Value<T> (Values/ValueAccessor.h): the three spellings, the link scope, the errors, XML and binary. The reflected
 // structs are those of ValueTestTypes.h (their generated code is included in ValueContextTest.cpp).
 
+#include <BECore/Control/Json.h>
+#include <BECore/Control/JsonDeserializer.h>
+#include <BECore/Control/JsonSerializer.h>
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/BinarySerializer.h>
 #include <BECore/Reflection/PropertyVisitorDispatch.h>
@@ -96,6 +99,27 @@ namespace BECore::Tests {
             }
             target.Deserialize(reader);
             reader.EndObject();
+            String out;
+            for (const DeserializeError& report : reader.GetErrors()) {
+                AppendFormat(out, "{}: {}\n", report.path.ToStringView(), report.errorMessage.ToStringView());
+            }
+            return out;
+        }
+
+        /// Loads the JSON object @p text into @p target (the load scope is the declaration when given); every error, one per line
+        template <typename Struct>
+        String LoadJson(StringView text, Struct& target, const ContextDecl* declaration) {
+            const auto parsed = ParseJson(text);
+            EXPECT_TRUE(parsed.has_value()) << String(text).c_str();
+            if (!parsed) {
+                return {};
+            }
+            JsonDeserializer reader(*parsed);
+            Optional<ValueLinkScope> scope;
+            if (declaration != nullptr) {
+                scope.emplace(*declaration);
+            }
+            target.Deserialize(reader);
             String out;
             for (const DeserializeError& report : reader.GetErrors()) {
                 AppendFormat(out, "{}: {}\n", report.path.ToStringView(), report.errorMessage.ToStringView());
@@ -418,6 +442,121 @@ namespace BECore::Tests {
         EXPECT_TRUE(HasText(reports, "fro")) << reports.c_str();
         EXPECT_EQ(skill.damage.GetConst(), 3);
         EXPECT_TRUE(skill.scale.IsSlot());
+    }
+
+    // =========================================================================
+    // JSON: a member that is a plain scalar is the literal, as in XML and binary
+    // =========================================================================
+
+    TEST(ValueAccessorTest, JsonReadsAPlainScalarAsTheLiteral) {
+        ValueSkill skill;
+        const String errors = LoadJson(R"({"damage":12,"scale":0.5,"critical":true,"label":"Hero","element":"Fire","aim":{"x":1,"y":2,"z":3}})", skill, nullptr);
+        EXPECT_TRUE(errors.empty()) << errors.c_str();
+        EXPECT_EQ(skill.damage.GetConst(), 12);
+        EXPECT_EQ(skill.scale.GetConst(), 0.5f);
+        EXPECT_TRUE(skill.critical.GetConst());
+        EXPECT_EQ(skill.label.GetConst(), PoolString::Intern("Hero"));
+        EXPECT_EQ(skill.element.GetConst(), ValueElement::Fire);
+        EXPECT_EQ(skill.aim.GetConst(), (Vec3{1.0f, 2.0f, 3.0f}));
+    }
+
+    TEST(ValueAccessorTest, JsonReadsTheObjectFormWithValue) {
+        ValueSkill skill;
+        const String errors = LoadJson(R"({"damage":{"value":12},"scale":{"kind":"Const","value":0.5},"label":{"value":"Hero"},"element":{"value":"Fire"}})", skill, nullptr);
+        EXPECT_TRUE(errors.empty()) << errors.c_str();
+        EXPECT_TRUE(skill.damage.IsConst());
+        EXPECT_EQ(skill.damage.GetConst(), 12);
+        EXPECT_EQ(skill.scale.GetConst(), 0.5f);
+        EXPECT_EQ(skill.label.GetConst(), PoolString::Intern("Hero"));
+        EXPECT_EQ(skill.element.GetConst(), ValueElement::Fire);
+    }
+
+    TEST(ValueAccessorTest, JsonReadsFromAgainstTheScope) {
+        const ValueWorld world;
+        ValueSkill skill;
+        const String errors = LoadJson(R"({"damage":{"from":"caster.attack"},"aim":{"from":"caster.velocity"},"label":{"from":"caster.title"},"scale":0.25})", skill, &world.declaration);
+        EXPECT_TRUE(errors.empty()) << errors.c_str();
+        EXPECT_EQ(&skill.damage.Get(world.context), &world.caster.attack);
+        EXPECT_EQ(&skill.aim.Get(world.context), &world.caster.velocity);
+        EXPECT_EQ(&skill.label.Get(world.context), &world.caster.title);
+        EXPECT_TRUE(skill.scale.IsConst());
+        EXPECT_EQ(skill.scale.GetConst(), 0.25f);
+    }
+
+    TEST(ValueAccessorTest, JsonFromWithoutAScopeIsAnErrorAndKeepsTheField) {
+        ValueSkill skill;
+        const String errors = LoadJson(R"({"damage":{"from":"caster.attack"}})", skill, nullptr);
+        EXPECT_TRUE(HasText(errors, "damage.from")) << errors.c_str();
+        EXPECT_TRUE(HasText(errors, "No context is declared")) << errors.c_str();
+        ExpectDefaultDamage(skill);
+    }
+
+    TEST(ValueAccessorTest, JsonABadShapeIsAnErrorThatKeepsTheField) {
+        // A text for a number, a fraction for an integer, a list and an object that holds neither value nor from
+        for (const StringView member : {R"("damage":"12")", R"("damage":1.5)", R"("damage":[12])", R"("damage":{})", R"("damage":null)"}) {
+            ValueSkill skill;
+            const String errors = LoadJson(Format("{{{}}}", member), skill, nullptr);
+            EXPECT_TRUE(HasText(errors, "damage")) << String(member).c_str() << " -> " << errors.c_str();
+            ExpectDefaultDamage(skill);
+        }
+        ValueSkill skill;
+        const String errors = LoadJson(R"({"aim":5,"scale":"x"})", skill, nullptr);
+        EXPECT_TRUE(HasText(errors, "aim")) << errors.c_str();
+        EXPECT_TRUE(HasText(errors, "scale")) << errors.c_str();
+        EXPECT_EQ(skill.aim.GetConst(), (Vec3{9.0f, 9.0f, 9.0f}));
+        EXPECT_EQ(skill.scale.GetConst(), 1.0f);
+    }
+
+    TEST(ValueAccessorTest, JsonAMissingMemberIsNoError) {
+        ValueSkill skill;
+        const String errors = LoadJson("{}", skill, nullptr);
+        EXPECT_TRUE(errors.empty()) << errors.c_str();
+        ExpectDefaultDamage(skill);
+    }
+
+    TEST(ValueAccessorTest, JsonAWronglyTypedObjectOfAPlainFieldStillReportsAsBefore) {
+        ValuePlainSkill plain;
+        const String errors = LoadJson(R"({"aim":5})", plain, nullptr);
+        EXPECT_EQ(errors, "aim: Invalid object value '5'\n");
+        EXPECT_EQ(plain.aim, (Vec3{9.0f, 9.0f, 9.0f}));
+    }
+
+    TEST(ValueAccessorTest, TheJsonRoundTripOfEveryKindIsEqual) {
+        const ValueWorld world;
+        const ValueSkill skill = MakeMixedSkill(world);
+        JsonSerializer serializer;
+        skill.Serialize(serializer);
+        const Json document = serializer.Take();
+
+        ValueSkill loaded;
+        JsonDeserializer reader(document);
+        {
+            const ValueLinkScope scope(world.declaration);
+            loaded.Deserialize(reader);
+        }
+        EXPECT_FALSE(reader.HasErrors());
+        ExpectSameSkill(loaded, skill);
+    }
+
+    TEST(ValueAccessorTest, JsonDiagnosticsKnowTheValueKeys) {
+        const ValueWorld world;
+        const auto parsed = ParseJson(R"({"damage":12,"scale":{"value":2},"critical":{"from":"caster.alive"},"label":{"value":"x","vlue":"y"}})");
+        ASSERT_TRUE(parsed.has_value());
+        JsonDeserializer reader(*parsed);
+        reader.SetDiagnostics(DiagnosticsMode::Warn);
+        ValueSkill skill;
+        {
+            const ValueLinkScope scope(world.declaration);
+            skill.Deserialize(reader);
+        }
+        reader.FinishLoad();
+        String warnings;
+        for (const DeserializeError& warning : reader.GetWarnings()) {
+            AppendFormat(warnings, "{}: {}\n", warning.path.ToStringView(), warning.errorMessage.ToStringView());
+        }
+        EXPECT_TRUE(HasText(warnings, "vlue")) << warnings.c_str();
+        EXPECT_FALSE(HasText(warnings, "damage")) << warnings.c_str();
+        EXPECT_EQ(reader.GetWarnings().size(), 1u) << warnings.c_str();
     }
 
     // =========================================================================

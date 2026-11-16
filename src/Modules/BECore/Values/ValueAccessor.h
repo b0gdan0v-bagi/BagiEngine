@@ -116,7 +116,8 @@ namespace BECore::Ser {
         }
 
         static bool Load(IDeserializer& d, Value<T>& value, StringView key) {
-            if (d.BeginObject(key)) {
+            // A reader strict about shapes (JSON) refuses an object scope around `"damage": 12`: that member is the plain literal
+            if (!d.IsScalarMember(key) && d.BeginObject(key)) {
                 Detail::ValueForm form = Detail::ValueForm::Unspecified;
                 if (!Detail::ReadValueForm(d, form)) {
                     d.SkipScope();
