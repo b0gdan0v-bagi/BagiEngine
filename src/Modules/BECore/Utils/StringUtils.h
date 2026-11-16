@@ -1,7 +1,9 @@
 #pragma once
 
 #include <BECore/Types/Types.h>
+#include <charconv>
 #include <cstdint>
+#include <type_traits>
 
 namespace BECore {
 
@@ -26,8 +28,17 @@ namespace BECore {
             return hash;
         }
 
-        static constexpr uint64_t GetHash(std::string_view sv) noexcept {  //-NoStd: the callers that hold a std view
-            return GetHash(FromStd(sv));
+        /// The number the whole of @p text spells (`std::from_chars`: no spaces, no leading `+`, decimal); nullopt for anything else
+        /// or a value out of the range of @p T. Never allocates.
+        template <typename T>
+        requires(std::is_arithmetic_v<T> && !std::is_same_v<T, bool>) static Optional<T> ParseNumber(StringView text) noexcept {
+            T value{};
+            const char* const end = text.data() + text.size();
+            const auto [last, error] = std::from_chars(text.data(), end, value);
+            if (error != std::errc{} || last != end || text.empty()) {
+                return std::nullopt;
+            }
+            return value;
         }
 
         static constexpr uint64_t GetEmptyHash() noexcept {

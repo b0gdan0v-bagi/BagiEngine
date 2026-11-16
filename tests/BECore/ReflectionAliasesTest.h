@@ -49,8 +49,8 @@ namespace BECore {
             BE_REFLECT_FIELD eastl::hash_map<eastl::string, int32_t> hashed;
             BE_REFLECT_FIELD eastl::map<eastl::string, int32_t> ordered;
             BE_REFLECT_FIELD eastl::fixed_hash_map<eastl::string, int32_t, 8> fixedHashed;
-            BE_REFLECT_FIELD eastl::optional<int32_t> present;
-            BE_REFLECT_FIELD eastl::optional<int32_t> absent;
+            BE_REFLECT_FIELD std::optional<int32_t> present;  //-NoStd: the spelling `Optional` stands for is the case
+            BE_REFLECT_FIELD std::optional<int32_t> absent;   //-NoStd: the spelling `Optional` stands for is the case
             BE_REFLECT_FIELD eastl::pair<int32_t, eastl::string> entry;
         };
 

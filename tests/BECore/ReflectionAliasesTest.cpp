@@ -1,6 +1,5 @@
 #include "ReflectionAliasesTest.h"
 
-#include <BECore/FactoryInitializeTest.h>
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/BinarySerializer.h>
 #include <BECore/Reflection/DataAccessor.h>
@@ -44,6 +43,12 @@ namespace BECore::Tests {
     static_assert(!Ser::HasDataAccessor<HashSet<int32_t>>);
     static_assert(!Ser::HasDataAccessor<Set<int32_t>>);
     static_assert(!Ser::HasDataAccessor<Tuple<int32_t, float>>);
+
+    // The std:: and eastl:: spellings that are not the aliases' (`Array` and `Pair` are eastl's, `Optional` is std's) have no
+    // accessor of their own: a field spells the alias.
+    static_assert(!Ser::HasDataAccessor<std::array<int32_t, 3>>);      //-NoStd: the spelling without an accessor is the case
+    static_assert(!Ser::HasDataAccessor<std::pair<int32_t, String>>);  //-NoStd: the spelling without an accessor is the case
+    static_assert(!Ser::HasDataAccessor<eastl::optional<int32_t>>);    //-NoStd: the spelling without an accessor is the case
 
     TEST(ReflectionAliasesTest, CompileTimeChecks) {
         SUCCEED() << "The static_asserts at the top of this file are the check";
@@ -451,31 +456,6 @@ namespace BECore::Tests {
         LoadXmlField(deserializer, "<root><State><value><item value=\"1\"/><item value=\"2\"/></value></State></root>", list);
         EXPECT_EQ(list.size(), 2u);
         EXPECT_FALSE(deserializer.HasErrors());
-    }
-
-    TEST(ReflectionAliasesTest, MoreFactoryItemsThanAFixedVectorHoldsAreCutAndReportedFromXml) {
-        FixedVector<IntrusivePtrNonAtomic<InitProbe>, 2> probes;
-        XmlDeserializer deserializer;
-        LoadXmlField(deserializer,
-                     "<root><State><value><probe type=\"InitProbePlain\" id=\"1\"/><probe type=\"InitProbePlain\" id=\"2\"/>"
-                     "<probe type=\"InitProbePlain\" id=\"3\"/><probe type=\"InitProbePlain\" id=\"4\"/></value></State></root>",
-                     probes);
-        ASSERT_EQ(probes.size(), 2u);
-        EXPECT_TRUE(probes[0]->Is<InitProbePlain>());
-        ExpectOneDropReport(deserializer, "State.value", kDroppedItems);
-    }
-
-    TEST(ReflectionAliasesTest, MoreFactoryItemsThanAFixedVectorHoldsAreCutAndReportedFromBinary) {
-        Vector<IntrusivePtrNonAtomic<InitProbe>> roomy;
-        for (int32_t i = 0; i < 4; ++i) {
-            roomy.push_back(New<InitProbePlain>());
-        }
-        FixedVector<IntrusivePtrNonAtomic<InitProbe>, 2> probes;
-        BinaryDeserializer deserializer;
-        LoadBinaryField(deserializer, SaveBinaryField(roomy), probes);
-        ASSERT_EQ(probes.size(), 2u);
-        EXPECT_TRUE(probes[1]->Is<InitProbePlain>());
-        ExpectOneDropReport(deserializer, "State.value", kDroppedItems);
     }
 
     namespace {

@@ -1444,7 +1444,7 @@ namespace BECore {
                         const UICssDeclaration& declaration = _inlineStyles[i][d];
                         matches.push_back({&declaration, declaration.important, true, 0, 0, static_cast<uint32_t>(d)});
                     }
-                    std::stable_sort(matches.begin(), matches.end());
+                    std::sort(matches.begin(), matches.end());
                     for (const Match& match : matches) {
                         list.push_back(match.declaration);
                     }

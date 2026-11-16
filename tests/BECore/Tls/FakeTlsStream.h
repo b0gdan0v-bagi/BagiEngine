@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Types/Types.h>
+#include <BECore/Utils/StringUtils.h>
 #include <Common/Printers.h>
 #include <RemoteControl/Tls/TlsStream.h>
 #include <algorithm>
@@ -192,7 +193,7 @@ namespace BECore::Tests {
             const String rest = line.substr(kHello.size());
             const size_t space = rest.rfind(' ');
             serverName = rest.substr(0, space);
-            anchorCount = space == String::npos ? 0 : static_cast<size_t>(std::stoul(rest.substr(space + 1).c_str()));
+            anchorCount = space == String::npos ? 0 : StringUtils::ParseNumber<size_t>(StringView(rest).substr(space + 1)).value_or(0);
             hello = true;
 
             const String answer = rejectReason.empty() ? "FAKE-OK\n" : "FAKE-REJECT " + rejectReason + "\n";
