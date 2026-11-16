@@ -38,7 +38,7 @@ import bagi_qa_report as report_module  # noqa: E402
 import png_ops  # noqa: E402
 import scenario  # noqa: E402
 from bagi_control_client import ControlError  # noqa: E402
-from bagi_qa_checks import Finding, Invariants  # noqa: E402
+from bagi_qa_checks import PERFORM_ACTION_METHOD, STEP_METHOD, UI_TREE_METHOD, Finding, Invariants  # noqa: E402
 from bagi_session import GameSession, SessionError  # noqa: E402
 
 DEFAULT_UI_EVERY = 10  # `ui_tree` is the dearest check: a step runs it every this many steps
@@ -47,9 +47,6 @@ SHOT_SETTLE_FRAMES = 2  # the picture shows the state only after the frames that
 SHOT_MAX_SIZE = 640
 HEADLESS_FLAG = "--headless"
 MANUAL_CLOCK_FLAG = "--manual-clock"
-PERFORM_ACTION_METHOD = "perform_action"
-STEP_METHOD = "step"
-UI_TREE_METHOD = "ui_tree"
 SCENARIO_FILE = "session.jsonl"
 SHOTS_FOLDER = "shots"
 SHOT_LABEL_UNSAFE = re.compile(r"[^A-Za-z0-9_-]+")

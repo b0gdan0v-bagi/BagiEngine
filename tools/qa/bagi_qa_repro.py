@@ -27,8 +27,8 @@ import bagi_qa_checks as checks  # noqa: E402
 import bagi_qa_report as report  # noqa: E402
 import png_ops  # noqa: E402
 import scenario  # noqa: E402
-from bagi_qa import HEADLESS_FLAG, MANUAL_CLOCK_FLAG, UI_TREE_METHOD, QaSession  # noqa: E402
-from bagi_qa_checks import Finding, Invariants  # noqa: E402
+from bagi_qa import HEADLESS_FLAG, MANUAL_CLOCK_FLAG, QaSession  # noqa: E402
+from bagi_qa_checks import UI_TREE_METHOD, Finding, Invariants  # noqa: E402
 from bagi_session import SessionError  # noqa: E402
 from game_process import PORT_TAKEN_MARKER  # noqa: E402
 from scenario_shrink import shrink  # noqa: E402

@@ -40,6 +40,9 @@ TRACEBACK_LINES = 6  # the end of a module's traceback that a module_error findi
 STATE_CHECK = "check_state"
 ACTION_CHECK = "check_action"
 MONKEY_MOVES = "monkey_moves"
+PERFORM_ACTION_METHOD = "perform_action"  # the control methods every QA module sends or reads the answer of
+STEP_METHOD = "step"
+UI_TREE_METHOD = "ui_tree"
 KNOWN_MEMBER = "KNOWN_DEVIATIONS"
 
 

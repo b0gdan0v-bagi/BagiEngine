@@ -32,8 +32,8 @@ import bagi_play  # noqa: E402
 import bagi_qa_checks as checks  # noqa: E402
 import bagi_qa_repro as repro  # noqa: E402
 import bagi_qa_report as report_module  # noqa: E402
-from bagi_qa import UI_TREE_METHOD, QaSession  # noqa: E402
-from bagi_qa_checks import Finding, Move  # noqa: E402
+from bagi_qa import QaSession  # noqa: E402
+from bagi_qa_checks import UI_TREE_METHOD, Finding, Move  # noqa: E402
 from bagi_session import SessionError  # noqa: E402
 
 EXIT_NOTHING = bagi_play.EXIT_PASSED

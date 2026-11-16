@@ -16,7 +16,7 @@ from typing import Any, Collection, Iterable, Sequence
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from bagi_qa_checks import Move  # noqa: E402
+from bagi_qa_checks import PERFORM_ACTION_METHOD, STEP_METHOD, Move  # noqa: E402
 
 KIND_ACTION = "action"
 KIND_CLICK = "click"
@@ -26,9 +26,7 @@ KIND_WINDOW = "window"
 KINDS = (KIND_ACTION, KIND_CLICK, KIND_STEP, KIND_RESET, KIND_WINDOW)
 WEIGHTS = {KIND_ACTION: 50, KIND_CLICK: 30, KIND_STEP: 15, KIND_RESET: 1, KIND_WINDOW: 1}  # a kind's share of the picks, however many moves it has
 
-PERFORM_ACTION_METHOD = "perform_action"
 UI_CLICK_METHOD = "ui_click"
-STEP_METHOD = "step"
 RESET_METHOD = "reset"
 SET_WINDOW_METHOD = "set_window"
 
@@ -83,7 +81,7 @@ def pick(rng: random.Random, moves: Sequence[Move]) -> Move:
     """One of `moves`: a kind is drawn by `WEIGHTS` (only the kinds present), then a move of it evenly; both from one `rng.random()` and integers.
 
     A kind that `WEIGHTS` does not name, or names with 0, is never picked. ValueError when nothing can be picked. The list is taken in the
-    order given, so the caller sorts it (`candidate_moves` does).
+    order given: the runner sorts the list before it (`candidate_moves` and `usable_moves` do), so a caller that builds its own list sorts it.
     """
     weighted = [(kind, WEIGHTS[kind]) for kind in KINDS if WEIGHTS[kind] > 0 and any(move.kind == kind for move in moves)]
     total = sum(weight for _, weight in weighted)
