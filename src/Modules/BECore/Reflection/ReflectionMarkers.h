@@ -124,7 +124,10 @@ public:
 #define BE_REFLECT_FIELD [[clang::annotate("reflect_field")]]
 
 /**
- * @brief Marks a method for ReflectionTraits<T>::methods (InvokeMethod).
+ * @brief Marks a method for ReflectionTraits<T>::methods: it is listed in the type's schema and, when `MethodDesc::callable`, found
+ * and called by name from outside (`CallMethod`); `InvokeMethod` calls it by name with arguments known at compile time.
+ *
+ * A method nothing outside may call (a lifecycle override the loader calls through its base) is not marked.
  *
  * @example
  *   class MyClass {

@@ -1,6 +1,7 @@
 #include "GameControl.h"
 
 #include <BECore/Control/ControlCall.h>
+#include <BECore/Control/ControlRoots.h>
 #include <BECore/Control/ControlService.h>
 #include <Games/GameManager.h>
 #include <Games/IControllableGame.h>
@@ -213,6 +214,12 @@ namespace BECore {
         service.RegisterHandler("list_actions", HandleListActions);
         service.RegisterHandler("perform_action", HandlePerformAction);
         service.RegisterHandler("set_state", HandleSetState);
+
+        // Resolved on every request: the game that is active now, by its most derived type
+        service.Roots().Register(kGameRootName, ControlRoot{[] {
+                                     IGame* game = GameManager::GetInstance().GetActive();
+                                     return game == nullptr ? TypedRef{} : TypedRef::Of(*game);
+                                 }});
 
         service.DescribeMethod("list_games", {"The registered games and the active one", {}});
         service.DescribeMethod("switch_game", {"Makes another game the active one", {{"name", "string", true, "The name of the game, as list_games gives it"}}});
