@@ -112,6 +112,11 @@ namespace BECore {
         /// Stops calling the observer of @p id; an unknown or already removed id is ignored. Main thread. A running observer's capture lives until it returns
         void RemovePublishObserver(PublishObserverId id);
 
+        /// How many observers are registered now (a test checks that a finished wait gave its own back)
+        [[nodiscard]] size_t GetPublishObserverCount() const {
+            return _publishObservers.size();
+        }
+
         /// Runs @p hook at the end of every frame, before a deferred call is completed. A hook of the same @p name is replaced, so registering a module again adds nothing
         void SetFrameEndHook(StringView name, FrameEndHook hook);
 
@@ -132,6 +137,15 @@ namespace BECore {
          * own capture: the handler of @p outer has returned by then.
          */
         [[nodiscard]] Optional<ControlAnswer> RunNested(ControlCall& outer, StringView method, Json params, NestedContinuation&& onAnswer);
+
+        /**
+         * @brief Defers @p call by @p frames frames in which the game advances by @p seconds each, on whichever clock runs.
+         *
+         * `DeferFrames` alone waits for frames, which on a paused real clock are held frames that move nothing. This also asks the pause for the steps
+         * there (the manual clock gets its frames when the call is settled), and counts the frame that is running when a handler (frame stage 1b)
+         * calls it, which ends too; a continuation (@p done of an earlier deferral, run by EndFrame) counts none, its frame has ended. Main thread.
+         */
+        void DeferSteppedFrames(ControlCall& call, uint32_t frames, double seconds, MoveOnlyFunction<void(ControlCall&)> done);
 
         /// Runs the queued requests (frame stage 1b)
         void Drain();
@@ -221,6 +235,10 @@ namespace BECore {
         UniquePtr<ControlLog> _log;                        // behind a pointer so this header does not pull in the logger
         HashMap<String, ControlMethodInfo> _descriptions;  // beside the handlers, so a handler registered again keeps its description
         uint64_t _methodsVersion = 0;
+        // Before _pending: a deferred call that owns an observer (run_until) removes it when it dies with the service
+        Vector<UniquePtr<ObserverEntry>> _publishObservers;  // entries do not move, so a running observer stays where it is when others are added
+        PublishObserverId _lastPublishObserverId = kNoPublishObserver;
+        bool _notifyingObservers = false;
         UniquePtr<ControlCall> _pending;
         uint32_t _pendingFramesLeft = 0;
         double _pendingSeconds = kDefaultStepSeconds;
@@ -230,9 +248,7 @@ namespace BECore {
         EventSink _eventSink;               // empty while the sink runs (Publish moves it out)
         uint64_t _eventSinkGeneration = 0;  // the registration of the current sink; a running sink goes back only if no other was set
         Vector<HookEntry> _frameEndHooks;
-        Vector<UniquePtr<ObserverEntry>> _publishObservers;  // entries do not move, so a running observer stays where it is when others are added
-        PublishObserverId _lastPublishObserverId = kNoPublishObserver;
-        bool _notifyingObservers = false;
+        bool _inFrameEnd = false;     // EndFrame is running the done function of a deferred call
         uint64_t _registrations = 0;  // counts RegisterHandler, SetFrameEndHook and SetEventSink calls; the source of the generations
     };
 

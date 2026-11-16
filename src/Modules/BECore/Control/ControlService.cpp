@@ -287,6 +287,16 @@ namespace BECore {
         return std::nullopt;
     }
 
+    void ControlService::DeferSteppedFrames(ControlCall& call, uint32_t frames, double seconds, MoveOnlyFunction<void(ControlCall&)> done) {
+        const bool stepsPausedGame = _pause != nullptr && _pause->IsPaused() && !_manualClock;
+        uint32_t countedFrames = frames;
+        if (stepsPausedGame) {
+            _pause->RequestSteps(frames, seconds);
+            countedFrames += _inFrameEnd ? 0 : 1;
+        }
+        call.DeferFrames(countedFrames, seconds, std::move(done));
+    }
+
     void ControlService::Settle(UniquePtr<ControlCall> call) {
         if (call->IsAnswered()) {
             return;
@@ -343,7 +353,9 @@ namespace BECore {
         UniquePtr<ControlCall> call = std::move(_pending);
         const ControlCall::DoneFn done = std::move(call->_done);
         if (done) {
+            _inFrameEnd = true;
             done(*call);
+            _inFrameEnd = false;
         }
         Settle(std::move(call));  // answered by done, deferred again, or an internal_error
     }

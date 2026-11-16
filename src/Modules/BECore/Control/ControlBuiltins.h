@@ -1,7 +1,11 @@
 #pragma once
 
+#include <BECore/Control/ControlTypes.h>
+#include <BECore/Control/JsonFwd.h>
+#include <BECore/Types/Types.h>
 #include <cstddef>
 #include <cstdint>
+#include <expected>
 
 namespace BECore {
 
@@ -12,6 +16,15 @@ namespace BECore {
 
     /// Most calls one `batch` may hold
     inline constexpr size_t kMaxBatchCalls = 1000;
+
+    /// The frame clock as `status` and `step` answer it: {"frame","totalTime","deltaTime","fixedDeltaTime"}
+    [[nodiscard]] Json DescribeControlClock();
+
+    /// The frame count at @p key of @p params, 1 to kMaxStepFrames, @p fallback when absent; invalid_params when it is not an integer in range. Client data
+    [[nodiscard]] std::expected<uint32_t, ControlError> ReadControlFrames(const Json& params, StringView key, uint32_t fallback);
+
+    /// The seconds per frame at `dt` of @p params, 0 to Time::kMaxFrameTime, kDefaultStepSeconds when absent; invalid_params when out of range. Client data
+    [[nodiscard]] std::expected<double, ControlError> ReadControlFrameSeconds(const Json& params);
 
     /**
      * @brief Registers the methods that need nothing but the core services.

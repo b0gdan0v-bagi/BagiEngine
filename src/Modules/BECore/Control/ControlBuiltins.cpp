@@ -11,6 +11,38 @@
 
 namespace BECore {
 
+    Json DescribeControlClock() {
+        const Time& time = CoreManager::GetTime();
+        Json clock = Json::object();
+        clock["frame"] = time.GetFrameCount();
+        clock["totalTime"] = time.GetTotalTime();
+        clock["deltaTime"] = time.GetDeltaTime();
+        clock["fixedDeltaTime"] = time.GetFixedDeltaTime();
+        return clock;
+    }
+
+    std::expected<uint32_t, ControlError> ReadControlFrames(const Json& params, StringView key, uint32_t fallback) {
+        if (FindJsonMember(params, key) == nullptr) {
+            return fallback;
+        }
+        const auto frames = GetJsonInt(params, key);
+        if (!frames || *frames < 1 || *frames > kMaxStepFrames) {
+            return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, Format("'{}' has to be an integer from 1 to {}", key, kMaxStepFrames)));
+        }
+        return static_cast<uint32_t>(*frames);
+    }
+
+    std::expected<double, ControlError> ReadControlFrameSeconds(const Json& params) {
+        if (FindJsonMember(params, "dt") == nullptr) {
+            return kDefaultStepSeconds;
+        }
+        const auto seconds = GetJsonNumber(params, "dt");
+        if (!seconds || !(*seconds >= 0.0 && *seconds <= Time::kMaxFrameTime)) {  // written so that NaN fails too
+            return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, Format("'dt' has to be a number of seconds from 0 to {}", Time::kMaxFrameTime)));
+        }
+        return *seconds;
+    }
+
     namespace {
 
         void HandlePing(ControlCall& call) {
@@ -18,17 +50,6 @@ namespace BECore {
             result["pong"] = true;
             result["protocol"] = ControlService::kProtocolVersion;
             call.Reply(std::move(result));
-        }
-
-        /// The frame clock as the answers of `status` and `step` report it
-        Json DescribeClock() {
-            const Time& time = CoreManager::GetTime();
-            Json clock = Json::object();
-            clock["frame"] = time.GetFrameCount();
-            clock["totalTime"] = time.GetTotalTime();
-            clock["deltaTime"] = time.GetDeltaTime();
-            clock["fixedDeltaTime"] = time.GetFixedDeltaTime();
-            return clock;
         }
 
         Json DescribeLogTotals(const ControlLog& log) {
@@ -41,7 +62,7 @@ namespace BECore {
         void HandleStatus(ControlCall& call, const ControlService& service) {
             // A line logged earlier in this frame is still in the ring buffer: handlers run outside Flush(), on the thread that flushes
             LogEvent::Flush();
-            Json result = DescribeClock();
+            Json result = DescribeControlClock();
             result["log"] = DescribeLogTotals(service.Log());
             result["manualClock"] = service.IsManualClock();
             const GamePause* pause = service.GetPause();
@@ -49,49 +70,18 @@ namespace BECore {
             call.Reply(std::move(result));
         }
 
-        /// The frames that a `step` asks for, or the error to answer with. A member that is absent keeps its default
-        std::expected<uint32_t, ControlError> ReadStepFrames(const Json& params) {
-            if (FindJsonMember(params, "frames") == nullptr) {
-                return 1u;
-            }
-            const auto frames = GetJsonInt(params, "frames");
-            if (!frames || *frames < 1 || *frames > kMaxStepFrames) {
-                return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, Format("'frames' has to be an integer from 1 to {}", kMaxStepFrames)));
-            }
-            return static_cast<uint32_t>(*frames);
-        }
-
-        std::expected<double, ControlError> ReadStepSeconds(const Json& params) {
-            if (FindJsonMember(params, "dt") == nullptr) {
-                return kDefaultStepSeconds;
-            }
-            const auto seconds = GetJsonNumber(params, "dt");
-            if (!seconds || !(*seconds >= 0.0 && *seconds <= Time::kMaxFrameTime)) {  // written so that NaN fails too
-                return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, Format("'dt' has to be a number of seconds from 0 to {}", Time::kMaxFrameTime)));
-            }
-            return *seconds;
-        }
-
-        void HandleStep(ControlCall& call, const ControlService& service) {
-            const auto frames = ReadStepFrames(call.Params());
+        void HandleStep(ControlCall& call, ControlService& service) {
+            const auto frames = ReadControlFrames(call.Params(), "frames", 1);
             if (!frames) {
                 call.Fail(frames.error());
                 return;
             }
-            const auto seconds = ReadStepSeconds(call.Params());
+            const auto seconds = ReadControlFrameSeconds(call.Params());
             if (!seconds) {
                 call.Fail(seconds.error());
                 return;
             }
-            // A paused real clock steps `frames` frames of dt itself; the frame that runs this handler ends too and counts, hence one more.
-            // The manual clock requests its frames when the call is deferred
-            GamePause* pause = service.GetPause();
-            const bool stepsPausedGame = pause != nullptr && pause->IsPaused() && !service.IsManualClock();
-            if (stepsPausedGame) {
-                pause->RequestSteps(*frames, *seconds);
-            }
-            const uint32_t countedFrames = stepsPausedGame ? *frames + 1 : *frames;
-            call.DeferFrames(countedFrames, *seconds, [](ControlCall& done) { done.Reply(DescribeClock()); });
+            service.DeferSteppedFrames(call, *frames, *seconds, [](ControlCall& done) { done.Reply(DescribeControlClock()); });
         }
 
         /// `pause` and `resume`: the pause is the one the editor drives too. The manual clock is a pause that only `step` lifts frames out of, so it is always paused
