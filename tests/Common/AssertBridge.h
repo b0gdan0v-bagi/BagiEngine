@@ -1,6 +1,8 @@
 #pragma once
 
+#include <BECore/Utils/MoveOnlyFunction.h>
 #include <Events/SubscriptionHolder.h>
+#include <atomic>
 
 namespace BECore {
     struct AssertEvent;
@@ -19,9 +21,33 @@ namespace BECore::Tests {
      */
     class AssertBridge : public SubscriptionHolder {
     public:
+        /**
+         * @brief While it lives the bridge hands every AssertEvent to its callback instead of failing the test.
+         *
+         * For a test that fails an engine assertion on purpose. The bridge is subscribed after the engine's handlers, so it runs first and nothing outside it can
+         * stop it from failing the test. One capture at a time. Make it before any thread that emits starts and let it go after they are joined: the callback runs on the
+         * emitting thread.
+         */
+        class Capture {
+        public:
+            using Callback = MoveOnlyFunction<void(const AssertEvent&)>;
+
+            explicit Capture(Callback callback = {});
+            ~Capture();
+            Capture(const Capture&) = delete;
+            Capture& operator=(const Capture&) = delete;
+
+        private:
+            friend class AssertBridge;
+
+            Callback _callback;
+        };
+
         void Install();
 
     private:
+        static std::atomic<Capture*> s_capture;
+
         void OnAssert(const AssertEvent& event);
     };
 

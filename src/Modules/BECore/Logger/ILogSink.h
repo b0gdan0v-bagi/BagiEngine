@@ -14,6 +14,8 @@ namespace BECore {
     public:
         ~ILogSink() override = default;
 
+        /// Connects the sink to LogEvent. Called when the entry is deserialized and again by LoggerManager::Initialize, which fixes the order of delivery by connecting
+        /// again: an override must connect (after UnsubscribeAll()) on every call and keep any one-time setup behind its own flag.
         virtual void Initialize() = 0;
 
         virtual void Write(LogLevel level, StringView message) = 0;
@@ -30,6 +32,7 @@ namespace BECore {
             return static_cast<int>(level) >= static_cast<int>(_minLevel);
         }
 
+        /// Lower receives a line first; sinks of equal priority are served in config order.
         virtual int GetPriority() const {
             return _priority;
         }

@@ -32,13 +32,9 @@ namespace BECore {
     }  // namespace
 
     void ConsoleSink::Initialize() {
-        if (_initialized) {
-            return;
-        }
-
+        UnsubscribeAll();
         Subscribe<LogEvent, &ConsoleSink::OnLogEvent>(this);
         Subscribe<FlushLogsEvent, &ConsoleSink::OnFlushEvent>(this);
-        _initialized = true;
     }
 
     void ConsoleSink::OnLogEvent(const LogEvent& event) {

@@ -10,12 +10,8 @@
 namespace BECore {
 
     void DebugBreakHandler::Initialize() {
-        if (_initialized) {
-            return;
-        }
-
+        UnsubscribeAll();
         Subscribe<AssertEvent, &DebugBreakHandler::OnAssert>(this);
-        _initialized = true;
     }
 
     void DebugBreakHandler::OnAssert(const AssertEvent& event) {
@@ -29,12 +25,8 @@ namespace BECore {
     }
 
     void LogHandler::Initialize() {
-        if (_initialized) {
-            return;
-        }
-
+        UnsubscribeAll();
         Subscribe<AssertEvent, &LogHandler::OnAssert>(this);
-        _initialized = true;
     }
 
     void LogHandler::OnAssert(const AssertEvent& event) {
@@ -78,12 +70,8 @@ namespace BECore {
     }
 
     void StackTraceHandler::Initialize() {
-        if (_initialized) {
-            return;
-        }
-
+        UnsubscribeAll();
         Subscribe<AssertEvent, &StackTraceHandler::OnAssert>(this);
-        _initialized = true;
     }
 
     void StackTraceHandler::OnAssert(const AssertEvent& event) {
@@ -116,15 +104,18 @@ namespace BECore {
 
         SortHandlersByPriority();
 
-        for (const auto& handler : _handlers) {
-            handler->Initialize();
+        // The deserializer has called Initialize() of each handler in config order already. Publish calls the last connected listener first, so
+        // connecting again from the highest priority number to the lowest makes the lowest run first.
+        for (size_t pos = _handlers.size(); pos > 0; --pos) {
+            _handlers[pos - 1]->Initialize();
         }
 
         _initialized = true;
     }
 
     void AssertHandlerManager::SortHandlersByPriority() {
-        eastl::sort(_handlers.begin(), _handlers.end(), [](auto&& a, auto&& b) { return a->GetPriority() < b->GetPriority(); });
+        // Insertion sort is stable (handlers of one priority keep the order of the config) and allocates nothing
+        eastl::insertion_sort(_handlers.begin(), _handlers.end(), [](auto&& a, auto&& b) { return a->GetPriority() < b->GetPriority(); });
     }
 
 }  // namespace BECore

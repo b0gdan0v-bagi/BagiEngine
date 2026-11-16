@@ -12,12 +12,13 @@ namespace BECore {
     }
 
     void FileSink::Initialize() {
+        UnsubscribeAll();
+        Subscribe<LogEvent, &FileSink::OnLogEvent>(this);
+        Subscribe<FlushLogsEvent, &FileSink::OnFlushEvent>(this);
+
         if (_initialized) {
             return;
         }
-
-        Subscribe<LogEvent, &FileSink::OnLogEvent>(this);
-        Subscribe<FlushLogsEvent, &FileSink::OnFlushEvent>(this);
 
         auto mode = std::ios::out;
         if (_append) {

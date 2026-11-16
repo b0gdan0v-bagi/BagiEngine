@@ -14,10 +14,13 @@ namespace BECore {
     public:
         ~IAssertHandler() override = default;
 
+        /// Connects the handler to AssertEvent. Called when the entry is deserialized and again by AssertHandlerManager::Initialize, which fixes the order of
+        /// delivery by connecting again: an override must connect (after UnsubscribeAll()) on every call.
         virtual void Initialize() = 0;
 
         virtual void OnAssert(const AssertEvent& event) = 0;
 
+        /// Lower runs first; handlers of equal priority run in config order.
         virtual int GetPriority() const {
             return _priority;
         }

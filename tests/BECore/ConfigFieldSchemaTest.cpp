@@ -16,6 +16,9 @@ namespace BECore::Tests {
         constexpr StringView kSinkTypePath = "sink/@type";
         constexpr StringView kSinkMinLevelPath = "sink/@minLevel";
 
+        /// The sink types of the engine plus the one LoggerSinkOrderTest registers: every test sink of this executable is in the factory
+        const Vector<String> kOfferedSinkTypes{"ConsoleSink", "FileSink", "LogHistorySink", "OrderSink", "OutputSink"};
+
         bool Contains(const Vector<String>& options, StringView value) {
             return eastl::find(options.begin(), options.end(), value) != options.end();
         }
@@ -53,8 +56,7 @@ namespace BECore::Tests {
         const FieldHint hint = schema.Resolve(kLoggerConfig, kSinkTypePath, "ConsoleSink");
         EXPECT_EQ(hint.type, FieldType::Enum);
 
-        const Vector<String> expected{"ConsoleSink", "FileSink", "LogHistorySink", "OutputSink"};
-        EXPECT_EQ(hint.options, expected);
+        EXPECT_EQ(hint.options, kOfferedSinkTypes);
 
         // The names of the removed hand-written enum are not class names, the loader would drop them
         EXPECT_FALSE(Contains(hint.options, "Console"));
@@ -105,8 +107,7 @@ namespace BECore::Tests {
         const ConfigFieldSchema& schema = ConfigFieldSchema::GetInstance();
         const FieldHint types = schema.Resolve(kLoggerConfig, kSinkTypePath, "ConsoleSink");
         EXPECT_EQ(types.type, FieldType::Enum);
-        const Vector<String> expectedTypes{"ConsoleSink", "FileSink", "LogHistorySink", "OutputSink"};
-        EXPECT_EQ(types.options, expectedTypes);
+        EXPECT_EQ(types.options, kOfferedSinkTypes);
 
         const FieldHint levels = schema.Resolve(kLoggerConfig, kSinkMinLevelPath, "Debug");
         EXPECT_EQ(levels.type, FieldType::Enum);

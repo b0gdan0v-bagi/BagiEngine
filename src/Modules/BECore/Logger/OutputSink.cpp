@@ -17,12 +17,8 @@
 namespace BECore {
 
     void OutputSink::Initialize() {
-        if (_initialized) {
-            return;
-        }
-
+        UnsubscribeAll();
         Subscribe<LogEvent, &OutputSink::OnLogEvent>(this);
-        _initialized = true;
     }
 
     void OutputSink::OnLogEvent(const LogEvent& event) {
