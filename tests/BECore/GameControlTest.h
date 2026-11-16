@@ -2,6 +2,7 @@
 
 #include <Games/IControllableGame.h>
 #include <Games/IGame.h>
+#include <cstdint>
 
 namespace BECore::Tests {
 
@@ -29,6 +30,9 @@ namespace BECore::Tests {
         std::expected<void, ControlError> Reset(const Json& options) override;
         std::expected<void, ControlError> SetState(const Json& state) override;
         uint64_t GetStateVersion() const override;
+
+        /// Adds @p amount to the counter and moves the version: the reflected method the editor's Game panel calls in its test
+        BE_FUNCTION void AddToCounter(int32_t amount);
 
         int counter = 0;
         uint64_t version = 0;

@@ -84,6 +84,11 @@ namespace BECore::Tests {
         return version;
     }
 
+    void FakeControllableGame::AddToCounter(int32_t amount) {
+        counter += amount;
+        ++version;
+    }
+
     PoolString FakePlainGame::GetName() const {
         return "FakePlain"_intern;
     }
