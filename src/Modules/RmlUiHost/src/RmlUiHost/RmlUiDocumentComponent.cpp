@@ -197,19 +197,19 @@ namespace BECore {
 
     void RmlUiDocumentComponent::OnAttached() {
         // The scene attaches its nodes one by one, so this rank may be provisional: RefreshInputOrder() settles it on every draw
-        _inputOrder = GetScene().GetDrawRank(GetNode());
+        _inputOrder = GetScene().GetInputOrder(*this);
         CoreManager::GetUIInput().Register(*this, _inputOrder);
         _registered = true;
     }
 
     void RmlUiDocumentComponent::RefreshInputOrder() {
-        const int rank = GetScene().GetDrawRank(GetNode());
-        if (rank == _inputOrder) {
+        const int order = GetScene().GetInputOrder(*this);
+        if (order == _inputOrder) {
             return;
         }
         UIInput& input = CoreManager::GetUIInput();
         input.Unregister(*this);
-        _inputOrder = rank;
+        _inputOrder = order;
         input.Register(*this, _inputOrder);
     }
 
@@ -379,6 +379,13 @@ namespace BECore {
             return true;
         }
         return over;
+    }
+
+    void RmlUiDocumentComponent::OnPointerLeave(uint32_t /*which*/) {
+        // A held press stays in `_consumedButtons`: its release still comes here
+        if (_context) {
+            _context->ProcessMouseLeave();
+        }
     }
 
     bool RmlUiDocumentComponent::OnMouseWheel(const SDL_MouseWheelEvent& event) {

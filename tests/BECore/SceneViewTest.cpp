@@ -9,7 +9,6 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <Common/RecordingRenderer.h>
-#include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
 #include <Generated/SceneViewTest.gen.hpp>
 #include <gtest/gtest.h>
@@ -78,7 +77,7 @@ namespace BECore::Tests {
             button.down = true;
             button.x = x;
             button.y = y;
-            SDLEvents::MouseButtonDownEvent::Emit(button);
+            CoreManager::GetUIInput().DispatchMouseButtonDown(button);  // the way the window delivers it: a clickable is a target of UIInput
         }
 
     }  // namespace

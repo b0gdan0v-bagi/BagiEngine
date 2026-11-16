@@ -6,6 +6,7 @@
 #include <BECore/Clipboard/ClipboardControl.h>
 #include <BECore/Config/ConfigFactory.h>
 #include <BECore/Control/ControlBuiltins.h>
+#include <BECore/Input/InputControl.h>
 #include <BECore/Logger/LoggerManager.h>
 #include <BECore/Logger/OutputSink.h>
 #include <BECore/MainWindow/IMainWindow.h>
@@ -99,6 +100,7 @@ namespace BECore {
         _controlService.SetPause(&_pause);
         RegisterControlBuiltins(_controlService);
         RegisterUIControl(_controlService);
+        RegisterInputControl(_controlService);
         RegisterProfilerControl(_controlService);
         RegisterClipboardControl(_controlService);
         RegisterAudioControl(_controlService, _audioManager);

@@ -88,6 +88,7 @@ namespace BECore {
         bool OnMouseButtonUp(const SDL_MouseButtonEvent& event) override;
         bool OnMouseMotion(const SDL_MouseMotionEvent& event) override;
         bool OnMouseWheel(const SDL_MouseWheelEvent& event) override;
+        void OnPointerLeave(uint32_t which) override;
 
         /// The layout: the tree (`root`), the variants and the result of the last draw. After editing the tree or the variants call Invalidate()
         [[nodiscard]] UICanvasLayout& GetLayout() {
@@ -132,7 +133,7 @@ namespace BECore {
         /// Lays the canvas out for an output of this size now, as the next draw would. Draw() does it itself; this is for a caller that needs the rects before one
         void UpdateLayout(float outputWidth, float outputHeight);
 
-        /// The place in the input order that this canvas has registered with (see UIInput::Register)
+        /// The place in the input order that this canvas has registered with (Scene::GetInputOrder(), see UIInput::Register)
         [[nodiscard]] int GetInputOrder() const {
             return _inputOrder;
         }

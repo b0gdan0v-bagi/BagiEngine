@@ -20,6 +20,10 @@ namespace BECore {
     }
 
     void UIInput::Unregister(IUIInputHandler& handler) {
+        // At once, even inside a dispatch: the tracker only compares pointers, and a handler that is going away must not be
+        // given a leave or an up afterwards
+        _tracker.Forget(handler);
+
         auto pending = eastl::find_if(_registeredDuringDispatch.begin(), _registeredDuringDispatch.end(), [&](const Entry& entry) { return entry.handler == &handler; });
         if (pending != _registeredDuringDispatch.end()) {
             _registeredDuringDispatch.erase(pending);
@@ -41,41 +45,124 @@ namespace BECore {
         return eastl::any_of(_entries.begin(), _entries.end(), isHandler) || eastl::any_of(_registeredDuringDispatch.begin(), _registeredDuringDispatch.end(), isHandler);
     }
 
-    template <typename GameEvent, typename SDLEventType>
-    bool UIInput::Dispatch(const SDLEventType& event, bool (IUIInputHandler::*handle)(const SDLEventType&)) {
-        bool consumed = false;
+    bool UIInput::HoldsPress(const IUIInputHandler& handler, uint32_t which) const {
+        return _tracker.HoldsPress(handler, which);
+    }
 
-        ++_dispatchDepth;
-        for (size_t i = 0; i < _entries.size() && !consumed; ++i) {
-            if (IUIInputHandler* handler = _entries[i].handler; handler != nullptr) {
-                consumed = (handler->*handle)(event);
+    bool UIInput::IsDeliveringCapture(const IUIInputHandler& handler) const {
+        return _deliveringHolder == &handler;
+    }
+
+    bool UIInput::IsLive(const IUIInputHandler& handler) const {
+        return eastl::any_of(_entries.begin(), _entries.end(), [&](const Entry& entry) { return entry.handler == &handler; });
+    }
+
+    template <typename SDLEventType>
+    UIInput::Consumption UIInput::Walk(const SDLEventType& event, float x, float y, bool (IUIInputHandler::*handle)(const SDLEventType&), const IUIInputHandler* skip) {
+        for (size_t i = 0; i < _entries.size(); ++i) {
+            IUIInputHandler* handler = _entries[i].handler;
+            if (handler == nullptr || handler == skip || !handler->ContainsPoint(x, y)) {
+                continue;
+            }
+            if ((handler->*handle)(event)) {
+                // It may have unregistered itself while answering; its entry is then empty and it must not be remembered
+                return Consumption{true, _entries[i].handler == handler ? handler : nullptr, handler};
             }
         }
-        --_dispatchDepth;
+        return Consumption{};
+    }
 
+    void UIInput::BeginDispatch() {
+        ++_dispatchDepth;
+    }
+
+    void UIInput::EndDispatch() {
+        --_dispatchDepth;
         if (_dispatchDepth == 0) {
             ApplyDeferredChanges();
         }
+    }
+
+    bool UIInput::DispatchMouseButtonDown(const SDL_MouseButtonEvent& event) {
+        BeginDispatch();
+        const Consumption result = Walk(event, event.x, event.y, &IUIInputHandler::OnMouseButtonDown, nullptr);
+        _lastPressTaker = result.taker;
+        if (result.handler != nullptr) {
+            _tracker.BeginCapture(event.which, event.button, *result.handler);
+        }
+        EndDispatch();
+
+        if (!result.consumed) {
+            SDLEvents::MouseButtonDownEvent::Emit(event);
+        }
+        return result.consumed;
+    }
+
+    bool UIInput::DispatchMouseButtonUp(const SDL_MouseButtonEvent& event) {
+        BeginDispatch();
+        bool consumed = false;
+        // A dispatch nested in a handler's up has its own answer to IsDeliveringCapture, so the outer holder is put back after
+        const IUIInputHandler* const outerHolder = _deliveringHolder;
+        if (IUIInputHandler* holder = _tracker.FindCapture(event.which, event.button); holder != nullptr) {
+            // Ended first: the holder's answer does not matter and it may unregister or dispatch again inside the call
+            _tracker.EndCapture(event.which, event.button);
+            _deliveringHolder = holder;
+            holder->OnMouseButtonUp(event);
+            consumed = true;
+        } else {
+            _deliveringHolder = nullptr;
+            consumed = Walk(event, event.x, event.y, &IUIInputHandler::OnMouseButtonUp, nullptr).consumed;
+        }
+        _deliveringHolder = outerHolder;
+        EndDispatch();
+
         if (!consumed) {
-            GameEvent::Emit(event);
+            SDLEvents::MouseButtonUpEvent::Emit(event);
         }
         return consumed;
     }
 
-    bool UIInput::DispatchMouseButtonDown(const SDL_MouseButtonEvent& event) {
-        return Dispatch<SDLEvents::MouseButtonDownEvent>(event, &IUIInputHandler::OnMouseButtonDown);
-    }
-
-    bool UIInput::DispatchMouseButtonUp(const SDL_MouseButtonEvent& event) {
-        return Dispatch<SDLEvents::MouseButtonUpEvent>(event, &IUIInputHandler::OnMouseButtonUp);
-    }
-
     bool UIInput::DispatchMouseMotion(const SDL_MouseMotionEvent& event) {
-        return Dispatch<SDLEvents::MouseMotionEvent>(event, &IUIInputHandler::OnMouseMotion);
+        BeginDispatch();
+
+        Consumption result;
+        IUIInputHandler* holder = _tracker.FindCaptureOfPointer(event.which);
+        if (holder != nullptr && holder->OnMouseMotion(event)) {
+            result = Consumption{true, IsLive(*holder) ? holder : nullptr};
+        } else {
+            result = Walk(event, event.x, event.y, &IUIInputHandler::OnMouseMotion, holder);
+        }
+
+        // The old hover is told after the new one has answered: who consumes is known only from the answer
+        IUIInputHandler* previous = _tracker.SetHover(event.which, result.handler);
+        if (previous != nullptr && previous != result.handler) {
+            previous->OnPointerLeave(event.which);
+        }
+        EndDispatch();
+
+        if (!result.consumed) {
+            SDLEvents::MouseMotionEvent::Emit(event);
+        }
+        return result.consumed;
+    }
+
+    void UIInput::EndHover(uint32_t which) {
+        BeginDispatch();
+        if (IUIInputHandler* previous = _tracker.SetHover(which, nullptr)) {
+            previous->OnPointerLeave(which);
+        }
+        EndDispatch();
     }
 
     bool UIInput::DispatchMouseWheel(const SDL_MouseWheelEvent& event) {
-        return Dispatch<SDLEvents::MouseWheelEvent>(event, &IUIInputHandler::OnMouseWheel);
+        BeginDispatch();
+        const bool consumed = Walk(event, event.mouse_x, event.mouse_y, &IUIInputHandler::OnMouseWheel, nullptr).consumed;
+        EndDispatch();
+
+        if (!consumed) {
+            SDLEvents::MouseWheelEvent::Emit(event);
+        }
+        return consumed;
     }
 
     void UIInput::Insert(const Entry& entry) {

@@ -53,6 +53,8 @@ namespace BECore::Tests {
         //   icon child CRightIcon and a caption child CRightCaption) and CGone (a disabled clicker); Mix (100, 200, 304 x 56, `uiApiMix`) holds a segment with a text and a clicker and one with the
         //   same parts under other names; CLevel (100, 300, 240 x 56, `uiApiCLevel`, action UIControlApiCLevel) is a dropdown of the composed options CEasy, CHard (icon child and caption child) and
         //   CLocked (a disabled clicker); CBelow (500, 500, 80 x 40) is a button the open list does not cover.
+        // "Targets": 800 x 600 in window pixels. A canvas (layer 10) with the buttons Press (100, 100, 80 x 40) and Covered (450, 120, 80 x 40) between two scene targets: Back (layer 5,
+        //   0, 0, 300 x 300) lies below the canvas and Press is on it; Front (layer 15, 480, 100, 200 x 100) lies above the canvas and Covered is under it.
         // "Empty": a scene without canvases.
         constexpr const char* kScenesXml = R"(
 <SceneManager><scenes>
@@ -510,6 +512,32 @@ namespace BECore::Tests {
           </element>
         </elements>
       </component>
+    </components></node>
+  </nodes></scene>
+  <scene type="Scene" name="Targets"><nodes>
+    <node name="Back" layer="5"><components>
+      <component type="TransformComponent" x="0" y="0" width="300" height="300"/>
+      <component type="ClickableComponent" actionName="UIControlApiBack"/>
+    </components></node>
+    <node name="Hud" layer="10"><components>
+      <component type="UICanvasComponent" space="Screen" scaleMode="ConstantPixelSize">
+        <elements>
+          <element type="UIElement" name="Press" x="100" y="100" width="80" height="40" color="40,90,60,255">
+            <components>
+              <component type="UIInputClicker" action="UIControlApiPress"/>
+            </components>
+          </element>
+          <element type="UIElement" name="Covered" x="450" y="120" width="80" height="40" color="40,90,60,255">
+            <components>
+              <component type="UIInputClicker" action="UIControlApiCovered"/>
+            </components>
+          </element>
+        </elements>
+      </component>
+    </components></node>
+    <node name="Front" layer="15"><components>
+      <component type="TransformComponent" x="480" y="100" width="200" height="100"/>
+      <component type="ClickableComponent" actionName="UIControlApiFront"/>
     </components></node>
   </nodes></scene>
   <scene type="Scene" name="Empty"><nodes/></scene>
@@ -1181,6 +1209,52 @@ namespace BECore::Tests {
         EXPECT_TRUE(BoolMember(*FindElement(*group, "Left"), "disabled")) << "a click on it does nothing, which is what the field says";
         EXPECT_TRUE(BoolMember(*FindElement(*group, "Right"), "disabled"));
         EXPECT_FALSE(BoolMember(*FindElement(*FindCanvas(*Member(response, "result"), "Panel"), "Plain"), "disabled"));
+    }
+
+    TEST_F(UIControlApiTest, AButtonAboveASceneTargetTakesTheClickAndTheTargetGetsNothing) {
+        Show("Targets");
+        Recorder recorder;
+
+        const Json clicked = Call("ui_click", Click("Press"));
+
+        ASSERT_TRUE(IsOk(clicked)) << ErrorMessage(clicked);
+        EXPECT_TRUE(BoolMember(*Member(clicked, "result"), "consumed"));
+        EXPECT_EQ(recorder.Count("UIControlApiPress"), 1);
+        EXPECT_EQ(recorder.Count("UIControlApiBack"), 0) << "the target below the canvas shielded by the button took the press";
+        EXPECT_EQ(StringMember(*Member(clicked, "result"), "takenBy"), "element");
+        EXPECT_EQ(StringMember(*Member(clicked, "result"), "action"), "UIControlApiPress");
+    }
+
+    TEST_F(UIControlApiTest, ASceneTargetAboveAButtonTakesTheClickAsItWouldFromAPerson) {
+        Show("Targets");
+        Recorder recorder;
+
+        const Json clicked = Call("ui_click", Click("Covered"));
+
+        ASSERT_TRUE(IsOk(clicked)) << ErrorMessage(clicked);
+        EXPECT_TRUE(BoolMember(*Member(clicked, "result"), "consumed"));
+        EXPECT_EQ(recorder.Count("UIControlApiFront"), 1);
+        EXPECT_EQ(recorder.Count("UIControlApiCovered"), 0) << "the button under the target got the click";
+        EXPECT_EQ(recorder.downs, 0) << "the press did not reach the game";
+        EXPECT_EQ(recorder.ups, 0);
+        EXPECT_EQ(StringMember(*Member(clicked, "result"), "takenBy"), "target");
+        EXPECT_EQ(StringMember(*Member(clicked, "result"), "action"), "") << "the element emitted nothing, the target did";
+        EXPECT_EQ(StringMember(*Member(clicked, "result"), "value"), "");
+    }
+
+    TEST_F(UIControlApiTest, AClickAtAPointThatNoTargetCoversStillReachesTheButton) {
+        Show("Targets");
+        Recorder recorder;
+        Json params = Click("Covered");
+        params["at"] = 0.0;  // the left edge of Covered, which Front does not reach
+
+        const Json clicked = Call("ui_click", params);
+
+        ASSERT_TRUE(IsOk(clicked)) << ErrorMessage(clicked);
+        EXPECT_EQ(recorder.Count("UIControlApiCovered"), 1);
+        EXPECT_EQ(recorder.Count("UIControlApiFront"), 0);
+        EXPECT_EQ(StringMember(*Member(clicked, "result"), "takenBy"), "element");
+        EXPECT_EQ(StringMember(*Member(clicked, "result"), "action"), "UIControlApiCovered");
     }
 
     TEST_F(UIControlApiTest, AClickOnASegmentAnswersWithTheActionAndTheValueAndTheListenerGetsThem) {
@@ -1950,6 +2024,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(BoolMember(*Member(response, "result"), "consumed"));
         EXPECT_EQ(recorder.Total(), 0u) << "the modal canvas took the click, as it would take a user's";
         EXPECT_EQ(recorder.downs, 0);
+        EXPECT_EQ(StringMember(*Member(response, "result"), "takenBy"), "target") << "a canvas above the element's own is a handler above it";
     }
 
     TEST_F(UIControlApiTest, AnElementThatDoesNotExistIsNotFoundAndItsNameIsNotInterned) {

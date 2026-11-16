@@ -1,6 +1,7 @@
 #include "UICanvasComponent.h"
 
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Input/PointerId.h>
 #include <BECore/Input/UIInput.h>
 #include <BECore/MainWindow/IMainWindow.h>
 #include <BECore/Renderer/IRenderer.h>
@@ -24,10 +25,9 @@ namespace BECore {
             return button < 32 ? 1u << button : 0u;
         }
 
-        /// SDL tells a finger by the id of the mouse its events are made for
         template <typename TEvent>
         bool IsTouch(const TEvent& event) {
-            return event.which == SDL_TOUCH_MOUSEID;
+            return IsTouchPointer(event.which);
         }
 
         bool SetVisibleIn(SceneNode& node, PoolString nodeName, bool visible) {
@@ -134,20 +134,20 @@ namespace BECore {
 
     void UICanvasComponent::OnAttached() {
         // The scene attaches its nodes one by one while it fills its tree, so this rank may be provisional: RefreshInputOrder() settles it on every draw
-        _inputOrder = GetScene().GetDrawRank(GetNode());
+        _inputOrder = GetScene().GetInputOrder(*this);
         CoreManager::GetUIInput().Register(*this, _inputOrder);
         _registered = true;
     }
 
     void UICanvasComponent::RefreshInputOrder() {
         // The draw order can change after attaching (a node added, a layer edited): the input order follows it
-        const int rank = GetScene().GetDrawRank(GetNode());
-        if (rank == _inputOrder) {
+        const int order = GetScene().GetInputOrder(*this);
+        if (order == _inputOrder) {
             return;
         }
         UIInput& input = CoreManager::GetUIInput();
         input.Unregister(*this);
-        _inputOrder = rank;
+        _inputOrder = order;
         input.Register(*this, _inputOrder);
     }
 
@@ -557,6 +557,13 @@ namespace BECore {
             return false;
         }
         return hit != nullptr;  // hovering over an element
+    }
+
+    void UICanvasComponent::OnPointerLeave(uint32_t /*which*/) {
+        // What a motion over nothing does, but a held press stays: its element keeps following the pointer until the release
+        SetHovered(nullptr);
+        _tooltip.Reset();
+        _pointerOver.Reset();
     }
 
     bool UICanvasComponent::OnMouseWheel(const SDL_MouseWheelEvent& event) {
