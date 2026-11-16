@@ -22,6 +22,7 @@
 #include <Widgets/SceneEditor/ScenePick.h>
 #include <Widgets/Viewport/ViewportGizmos.h>
 #include <Widgets/Viewport/ViewportUIDebug.h>
+#include <Widgets/Viewport/ViewportUIGizmos.h>
 #include <imgui.h>
 
 namespace BECore {
@@ -143,6 +144,7 @@ namespace BECore {
         if (_gizmos.IsDragging()) {
             _gizmos.AbortDrag(CoreManager::GetSceneManager().GetActiveScene());
         }
+        _uiGizmos.AbortDrag(CoreManager::GetSceneManager().GetActiveScene());
         // The target's destructor waits for the GPU and gives back its ImGui texture. It needs the device and the ImGui context
         // alive: the widgets die last-first (the viewport before ImGuiWidget) and before the renderer's cleanup
         _renderTarget = {};
@@ -152,7 +154,12 @@ namespace BECore {
         Subscribe<EditorPreferencesChangedEvent, &ViewportWidget::OnPreferencesChanged>(this);
         Subscribe<EditorCommandEvent, &ViewportWidget::OnCommand>(this);
         Subscribe<SceneSelectionChangedEvent, &ViewportWidget::OnSelectionChanged>(this);
+        Subscribe<UIElementSelectedEvent, &ViewportWidget::OnUIElementSelected>(this);
         return true;
+    }
+
+    void ViewportWidget::OnUIElementSelected(const UIElementSelectedEvent& event) {
+        _uiGizmos.OnSelected(event);
     }
 
     void ViewportWidget::OnSelectionChanged(const SceneSelectionChangedEvent& event) {
@@ -321,10 +328,14 @@ namespace BECore {
             DrawOverlays(activeScene, frame, size, safeArea, imageHovered);
             DrawSelectionOutlines(activeScene, frame);
 
-            // The gizmo goes before the mouse is forwarded, so a press on a handle is consumed first
+            // The gizmos go before the mouse is forwarded, so a press on a handle is consumed first. The UI element's handles come before the node gizmo, which stays out of a drag of
+            // theirs and of a pointer over one of them
             const bool pointerFree = editing && editorTarget && !_cameraInput.IsPanning();
             const Span<SceneNode* const> selection = activeScene && activeScene == _selectedScene ? Span<SceneNode* const>(_selectedNodes.data(), _selectedNodes.size()) : Span<SceneNode* const>();
-            const bool gizmoTookPress = _gizmos.Update({activeScene, selection, &frame, editing, pointerFree, imageHovered});
+            const SceneNode* const primary = selection.empty() ? nullptr : selection.back();
+            const bool uiTookPress = _uiGizmos.Update({activeScene, primary, &frame, editing, pointerFree && !_gizmos.IsDragging(), imageHovered});
+            const bool nodeGizmoFree = pointerFree && !_uiGizmos.IsDragging() && !_uiGizmos.IsOverHandle();
+            const bool gizmoTookPress = _gizmos.Update({activeScene, selection, &frame, editing, nodeGizmoFree, imageHovered}) || uiTookPress;
             _boxSelect.Update(frame, activeScene, pointerFree, imageHovered, gizmoTookPress);
 
             // Hand the mouse to the scene with target-pixel coordinates, so it can map them to scene units (Scene::ScreenToSceneX/Y) with the fit of its last draw

@@ -388,4 +388,48 @@ namespace BECore::Tests {
         EXPECT_TRUE(_recorder.entries.empty());
     }
 
+    namespace {
+
+        constexpr float kHandleSize = 10.0f;
+        constexpr float kPetalRadius = 6.0f;
+
+        // The anchors of a point at the top left of the box, away from the element's own corners
+        AnchorMark MarkAtTopLeft() {
+            return {{0.0f, 0.0f, 400.0f, 300.0f}, {0.0f, 0.0f, 0.0f, 0.0f}, {200.0f, 150.0f}};
+        }
+
+        constexpr Rect kElementRect{100.0f, 100.0f, 200.0f, 100.0f};
+
+    }  // namespace
+
+    TEST(ViewportUIGizmosGrabTest, APetalWinsOverAHandleItOverlaps) {
+        const AnchorMark mark{{100.0f, 100.0f, 400.0f, 300.0f}, {100.0f, 100.0f, 0.0f, 0.0f}, {200.0f, 150.0f}};
+        // The point anchor sits on the element's top left corner, which is also its top left handle
+        const UIGrab grab = ClassifyUIGrab(kElementRect, mark, {101.0f, 101.0f}, kHandleSize, kPetalRadius, true);
+        ASSERT_TRUE(grab.corner.has_value());
+        EXPECT_EQ(grab.handle, UIDragHandle::None);
+    }
+
+    TEST(ViewportUIGizmosGrabTest, AHandleWinsOverTheBody) {
+        const UIGrab grab = ClassifyUIGrab(kElementRect, MarkAtTopLeft(), {300.0f, 150.0f}, kHandleSize, kPetalRadius, true);
+        EXPECT_FALSE(grab.corner.has_value());
+        EXPECT_EQ(grab.handle, UIDragHandle::Right);
+    }
+
+    TEST(ViewportUIGizmosGrabTest, TheBodyIsGrabbedOnlyWhenAllowed) {
+        const Vec2 inside{200.0f, 150.0f};
+        EXPECT_EQ(ClassifyUIGrab(kElementRect, MarkAtTopLeft(), inside, kHandleSize, kPetalRadius, true).handle, UIDragHandle::Body);
+        EXPECT_TRUE(ClassifyUIGrab(kElementRect, MarkAtTopLeft(), inside, kHandleSize, kPetalRadius, false).IsNone());
+    }
+
+    TEST(ViewportUIGizmosGrabTest, OutsideGrabsNothing) {
+        EXPECT_TRUE(ClassifyUIGrab(kElementRect, MarkAtTopLeft(), {500.0f, 500.0f}, kHandleSize, kPetalRadius, true).IsNone());
+    }
+
+    TEST(ViewportUIGizmosGrabTest, AnElementWithoutAnchorsStillHasHandles) {
+        const UIGrab grab = ClassifyUIGrab(kElementRect, std::nullopt, {100.0f, 100.0f}, kHandleSize, kPetalRadius, false);
+        EXPECT_FALSE(grab.corner.has_value());
+        EXPECT_EQ(grab.handle, UIDragHandle::TopLeft);
+    }
+
 }  // namespace BECore::Tests

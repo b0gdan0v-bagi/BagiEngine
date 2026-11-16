@@ -7,7 +7,9 @@
 #include <BECore/UI/UIElementDrag.h>
 #include <BECore/UI/UIPreviewOverlay.h>
 #include <BECore/UI/UIRectSpec.h>
+#include <Widgets/SceneEditor/SceneSelectionEvents.h>
 #include <Widgets/Viewport/ViewportEvents.h>
+#include <Widgets/Viewport/ViewportGizmos.h>
 
 namespace BECore {
 
@@ -76,6 +78,11 @@ namespace BECore {
             return _element.Get();
         }
 
+        /// The canvas of the drag (held by the session), null when no drag is active
+        [[nodiscard]] UICanvasComponent* GetCanvas() const {
+            return _canvas.Get();
+        }
+
         /// The authored spec of the last frame and whether the layout limits kept it from laying out where the pointer wanted
         [[nodiscard]] const UIRectSpec& Current() const {
             return _current;
@@ -111,6 +118,72 @@ namespace BECore {
         Vec2 _startPointer;  // canvas units
         AnchorMark _mark;    // the anchor widget at the press, for the fraction of the pointer
         UISnapResult _guides;
+    };
+
+    /// What a press at one point of the selected element grabs: a corner of the anchor widget, a handle or the body, never both
+    struct UIGrab {
+        UIDragHandle handle = UIDragHandle::None;
+        Optional<AnchorCorner> corner;
+
+        [[nodiscard]] bool IsNone() const {
+            return handle == UIDragHandle::None && !corner;
+        }
+    };
+
+    /**
+     * @brief What is under @p point (output pixels): an anchor petal wins over a handle, a handle over the body, and the body counts only with @p bodyAllowed.
+     *
+     * The petals sit on the anchors rect, which can lie on the corners of the element, so where they overlap the petal is the one the user aimed at. @p bodyAllowed is the caller's answer to "nothing
+     * else is on top and no selection key is held": the body is the one grab that a press on another element must not take.
+     */
+    [[nodiscard]] UIGrab ClassifyUIGrab(const Rect& outputRect, const Optional<AnchorMark>& anchors, const Vec2& point, float handleSize, float petalRadius, bool bodyAllowed);
+
+    /// What ViewportUIGizmos::Update() needs to know about this frame
+    struct ViewportUIGizmoContext {
+        Scene* scene = nullptr;              ///< the active scene
+        const SceneNode* primary = nullptr;  ///< the primary selected node of the scene editor, compared only
+        const ViewportFrame* frame = nullptr;
+        bool editMode = false;  ///< the input mode is Edit: handles are drawn and a drag in progress ends cleanly when it is not
+        bool enabled = false;   ///< the Edit target owns the pointer, no pan and no node gizmo drag is going: a press may grab
+        bool hovered = false;   ///< the pointer is over the image
+    };
+
+    /**
+     * @brief The handles and the anchor widget of the selected canvas element over the viewport, and the drag that moves, resizes or re-anchors it.
+     *
+     * The maths are UIElementDrag, the writes and the events UIElementEditSession; this is the ImGui layer. The element comes from UIElementSelectedEvent (raw pointers, compared and looked up
+     * in the tree of the active scene every frame, never dereferenced before they are found) and must be the primary selection. Update() runs before the node gizmo, which is
+     * disabled while IsDragging() or IsOverHandle().
+     */
+    class ViewportUIGizmos {
+    public:
+        void OnSelected(const UIElementSelectedEvent& event);
+
+        /// One frame: continues or ends a drag, otherwise draws what the element allows and starts a drag on a press. @return true when the left press of this frame was taken (it is no edit click)
+        bool Update(const ViewportUIGizmoContext& context);
+
+        /// Ends a drag in progress as a Cancel. Safe to call with no drag
+        void AbortDrag(Scene* activeScene);
+
+        [[nodiscard]] bool IsDragging() const {
+            return _session.IsActive();
+        }
+
+        /// The pointer was over a handle or a petal in the last Update(): a press there is this gizmo's, so the node gizmo stays out of it
+        [[nodiscard]] bool IsOverHandle() const {
+            return _overHandle;
+        }
+
+    private:
+        void DrawElement(const ViewportFrame& frame, const UICanvasComponent& canvas, const UIElement& element, const UIGrab& hover) const;
+        void DrawGuides(const ViewportFrame& frame, const UICanvasComponent& canvas, const UIElement& element) const;
+        void DrawReason(const ViewportFrame& frame, CanDragReason reason) const;
+
+        const Scene* _scene = nullptr;        // the last UIElementSelectedEvent: compared only
+        const SceneNode* _node = nullptr;     // compared, then found in the tree of the active scene
+        const UIElement* _element = nullptr;  // compared, then found in the canvas of the node
+        UIElementEditSession _session;
+        bool _overHandle = false;
     };
 
 }  // namespace BECore
