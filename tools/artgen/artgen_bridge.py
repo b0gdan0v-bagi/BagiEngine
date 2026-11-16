@@ -70,6 +70,8 @@ class Bridge:
         status = self.generator.status()
         info = self.generator.info() if status.state == "ready" else {"name": getattr(self.generator, "name", "")}
         self._status = {"state": status.state, "reason": status.reason, "generator": " ".join(str(v) for v in (info.get("name"), info.get("version")) if v)}
+        # Whether the panel's Stop can end it: only a ComfyUI started by the setup actions, never one started by hand
+        self._status["startedHere"] = bool(self.setup is not None and status.state == "ready" and self.setup.started_here())
         self._presets = []
         if self.game_root:
             for name, preset in artgen_preset.find_presets(self.game_root).items():

@@ -429,4 +429,15 @@ namespace BECore::Tests {
         EXPECT_EQ(GetJsonString(*FindJsonMember(Result(Call("artgen_state")), "setup"), "state"), Optional<String>("Running"));
     }
 
+    TEST_F(ArtGenSessionTest, ThePollSaysWhetherTheGeneratorWasStartedHere) {
+        Call("artgen_poll", ReadyPoll());
+        EXPECT_FALSE(session.GetServiceStatus().startedHere);
+        Json poll = ReadyPoll();
+        poll["startedHere"] = true;
+        const uint64_t before = session.Version();
+        Call("artgen_poll", poll);
+        EXPECT_TRUE(session.GetServiceStatus().startedHere);
+        EXPECT_GT(session.Version(), before);
+    }
+
 }  // namespace BECore::Tests

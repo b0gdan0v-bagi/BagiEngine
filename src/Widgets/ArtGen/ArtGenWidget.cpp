@@ -181,8 +181,9 @@ namespace BECore {
         if (status.state == "ready") {
             ImGui::TextColored(palette.success, ICON_LC_PLUG " Service ready (%s)", status.generator.c_str());
             ImGui::SameLine();
-            ImGui::BeginDisabled(session.IsSetupBusy() || session.IsBusy());
-            if (IconButton(ICON_LC_POWER_OFF, "Stop the generator (only one started from here; frees the GPU)", "##StopGenerator")) {
+            ImGui::BeginDisabled(session.IsSetupBusy() || session.IsBusy() || !status.startedHere);
+            const char* stopTip = status.startedHere ? "Stop the generator (frees the GPU)" : "This ComfyUI was started by hand: close its window to stop it (then Start here can run it)";
+            if (IconButton(ICON_LC_POWER_OFF, stopTip, "##StopGenerator")) {
                 auto requested = session.RequestSetup(ArtGenSetupAction::Stop);
                 _setupError = requested ? String() : requested.error();
             }

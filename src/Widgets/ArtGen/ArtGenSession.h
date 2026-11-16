@@ -33,6 +33,7 @@ namespace BECore {
         String reason;
         String generator;
         Vector<ArtGenPreset> presets;
+        bool startedHere = false;  // the running generator was started by a setup action, so Stop can end it
     };
 
     struct ArtGenVariant {

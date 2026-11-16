@@ -557,6 +557,21 @@ class LocalSetup:
         self.probe = probe
         self.manifest = manifest
         self.installer = installer
+        self._checked_pid = None
+        self._checked_ours = False
+
+    def started_here(self):
+        """True when the running ComfyUI is the one `start` left (its pid file names a live ComfyUI of the root), so `Stop` can end it;
+        a ComfyUI started by hand is not. Checked once per pid: the bridge asks every few seconds."""
+        root = self._context()[1]
+        try:
+            pid = json.loads((root / PID_FILE).read_text(encoding="utf-8"))["pid"]
+        except (OSError, ValueError, KeyError):
+            return False
+        if pid != self._checked_pid:
+            self._checked_pid = pid
+            self._checked_ours = _ours(root, pid)
+        return self._checked_ours
 
     def _context(self):
         manifest = self.manifest or comfyui_check.load_manifest()

@@ -233,6 +233,7 @@ namespace BECore {
         status.state = StringOr(params, "state", "ready");
         status.reason = StringOr(params, "reason");
         status.generator = StringOr(params, "generator");
+        status.startedHere = GetJsonBool(params, "startedHere").value_or(false);
         if (const Json* presets = FindJsonMember(params, "presets"); presets != nullptr && presets->is_array()) {
             for (const Json& item : *presets) {
                 if (!item.is_object()) {
@@ -248,7 +249,7 @@ namespace BECore {
             }
         }
         const bool wasConnected = IsServiceConnected();
-        const bool changed = status.state != _status.state || status.reason != _status.reason || status.presets.size() != _status.presets.size();
+        const bool changed = status.state != _status.state || status.reason != _status.reason || status.presets.size() != _status.presets.size() || status.startedHere != _status.startedHere;
         _status = std::move(status);
         _lastPollSeconds = _clock();
         ++_pollCount;
@@ -488,6 +489,7 @@ namespace BECore {
         service["state"] = ToJsonString(_status.state);
         service["reason"] = ToJsonString(_status.reason);
         service["generator"] = ToJsonString(_status.generator);
+        service["startedHere"] = _status.startedHere;
         Json presets = Json::array();
         for (const auto& preset : _status.presets) {
             Json item = Json::object();

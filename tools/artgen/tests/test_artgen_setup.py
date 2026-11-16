@@ -336,3 +336,15 @@ def test_a_comfyui_that_exits_while_starting_says_why(tmp_path):
     with pytest.raises(SetupError, match="already using this database"):
         artgen_setup.start(root, "http://127.0.0.1:9", wait_s=60, python=sys.executable)
     assert not (root / artgen_setup.PID_FILE).exists()
+
+
+def test_started_here_is_only_a_comfyui_this_tool_started(tmp_path, monkeypatch):
+    root = tmp_path / "root"
+    root.mkdir()
+    setup = artgen_setup.LocalSetup("http://127.0.0.1:1", root)
+    assert not setup.started_here()  # no pid file: started by hand, or not at all
+    (root / artgen_setup.PID_FILE).write_text(json.dumps({"pid": 4242}), encoding="utf-8")
+    asked = []
+    monkeypatch.setattr(artgen_setup, "_ours", lambda r, pid: asked.append(pid) or True)
+    assert setup.started_here() and setup.started_here()
+    assert asked == [4242]  # checked once per pid

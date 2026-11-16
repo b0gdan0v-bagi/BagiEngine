@@ -210,6 +210,10 @@ class FakeSetup:
     def __init__(self):
         self.actions = []
         self.release = threading.Event()
+        self.ours = False
+
+    def started_here(self):
+        return self.ours
 
     def run(self, action, emit, cancel=None):
         self.actions.append(action)
@@ -277,3 +281,15 @@ def test_a_bridge_started_by_the_editor_gives_up_without_one(monkeypatch):
     monkeypatch.setattr(artgen_bridge.time, "sleep", fake_sleep)
     artgen_bridge.serve("127.0.0.1", 1, FakeGenerator(), log=lambda *_: None, exit_with_editor=True, clock=lambda: now[0])
     assert now[0] >= artgen_bridge.FIRST_CONNECT_S
+
+
+def test_the_status_says_whether_the_generator_was_started_here(game):
+    editor = FakeSetupEditor(game)
+    fake = FakeSetup()
+    bridge = artgen_bridge.Bridge(editor, FakeGenerator(), setup=fake)
+    bridge.tick()
+    assert editor.polls[-1]["startedHere"] is False
+    fake.ours = True
+    bridge._status_at = None
+    bridge.tick()
+    assert editor.polls[-1]["startedHere"] is True
