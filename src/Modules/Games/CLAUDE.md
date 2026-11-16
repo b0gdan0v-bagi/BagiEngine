@@ -30,6 +30,7 @@ A program or a model plays a game through `IControllableGame` (`Games/IControlla
 | `list_actions` | none | `{"game", "version", "actions": [..]}` |
 | `perform_action` | the action object itself, one of `actions` | `{"game", "version", "outcome"}` (`version` is the one after the action) |
 | `set_state` | the game's state (Chess: `{"fen"}`, in BagiEngine-Chess) | `{"game", "version"}` |
+| `run_until` | `{condition, maxFrames?, dt?}`: a state pointer equals a value, the version moved, or an event arrived | `{met, frames, reason?, game?, version?}` and the clock of `step`; the limit is `met: false` (`.claude/rules/control-qa-api.md`) |
 
 `IControllableGame`: `GetState()`, `GetActions()` (a JSON array; every element is accepted by `PerformAction` as is), `PerformAction(action)`, `Reset(options)`, `SetState(state)` (default: `unsupported`), `GetStateVersion()`. Errors are `std::expected<.., ControlError>`; `GameControlErrors` has `no_active_game`, `not_controllable`, `unknown_game`, `no_active_model`, `illegal_action`, `unsupported`, and a bad parameter is `ControlErrors::kInvalidParams`.
 

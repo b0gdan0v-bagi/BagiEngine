@@ -6,7 +6,7 @@
 
 The game is started twice, once on the real clock and once with --manual-clock (game time moves only on `step`). The default
 scenario is game-neutral: it uses no game rules (the methods `ping`, `list_games`, `status`, `step`, `frame_stats`, `zone_allocs`,
-the answer to garbage and to an unknown method, a screenshot, the UI tree), so it fits any game that implements the control API.
+the answer to garbage and to an unknown method, a screenshot, the UI tree, the log marks, `batch` and `run_until`), so it fits any game that implements the control API.
 A game with rules brings its own script that imports the helpers of this file and calls run_smoke() with its scenarios
 (BagiEngine-Chess has one: tests/control_smoke.py; `be_add_game_control_tests(<exe> SCRIPT <file>)` runs it). The game runs
 --headless (no window, drawn in memory), which also lets the test look at screenshots; --window runs it in a real window instead
@@ -41,6 +41,7 @@ DEFAULT_STEP_SECONDS = 1.0 / 60.0
 DEFAULT_SCREENSHOT_SIZE = 1024
 SMALL_SCREENSHOT_SIZE = 200
 MIN_SCREENSHOT_COLORS = 3  # a picture of a game is not flat: a background and at least two more colours
+RUN_UNTIL_FRAMES = 3
 BOARD_COLORS = 5  # for the script of a game that draws a board (tiles, background, frame): at least this many colours
 CLOCK_TOLERANCE = 1e-6
 
@@ -204,6 +205,48 @@ def check_ui_tree(client: BagiControlClient) -> None:
     expect_error("invalid_params", lambda: client.call("ui_click", {}), "a click without a name")
 
 
+def check_log_and_batch(client: BagiControlClient) -> None:
+    """The log counts and marks, and `batch` with its stop at the first error: nothing here depends on the game's rules."""
+    counts = client.call("status")["log"]
+    check(all(isinstance(counts.get(name), int) for name in ("warnings", "errors")), f"status.log has no two counts: {counts}")
+
+    mark = client.call("log_mark")
+    since = client.call("log_since", {"mark": mark["mark"]})
+    check(all(line["sequence"] >= mark["mark"] for line in since["lines"]), f"log_since gave a line before the mark {mark['mark']}: {since['lines']}")
+    check(since["next"] >= mark["mark"], f"log_since says next {since['next']} behind the mark {mark['mark']}")
+    expect_error("invalid_params", lambda: client.call("log_since", {"mark": -1}), "log_since of a negative mark")
+    expect_error("invalid_params", lambda: client.call("log_since", {"mark": 0, "level": "info"}), "log_since of the level info")
+
+    calls = [{"method": "ping"}, {"method": "no_such_method"}, {"method": "status"}]
+    stopped = client.call("batch", {"calls": calls})
+    check(stopped.get("stopped") == 1 and len(stopped["results"]) == 2, f"a batch did not stop at the unknown method: {stopped}")
+    check(stopped["results"][0]["ok"] is True and stopped["results"][1]["error"]["code"] == "unknown_method", f"a batch answered {stopped['results']}")
+    carried = client.call("batch", {"calls": calls, "continueOnError": True})
+    check("stopped" not in carried and [entry["ok"] for entry in carried["results"]] == [True, False, True], f"a batch with continueOnError answered {carried}")
+    expect_error("invalid_params", lambda: client.call("batch", {"calls": []}), "a batch of no calls")
+
+
+def check_run_until(client: BagiControlClient, manual_clock: bool) -> None:
+    """`run_until` ends at its limit when nothing moves the state; a game that cannot be read answers what `get_state` does."""
+    games = client.call("list_games")
+    active = next(game for game in games["games"] if game["name"] == games["active"])
+    condition = {"versionMoved": True}
+    if not active["controllable"]:
+        expect_error("not_controllable", lambda: client.call("run_until", {"condition": condition}), "run_until of a game that is not controllable")
+        return
+    expect_error("invalid_params", lambda: client.call("run_until", {"condition": {}}), "run_until without a condition")
+    expect_error("invalid_params", lambda: client.call("run_until", {"condition": condition, "maxFrames": 0}), "run_until of no frames")
+
+    before = client.call("status")["frame"]
+    answer = client.call("run_until", {"condition": condition, "maxFrames": RUN_UNTIL_FRAMES})
+    check(isinstance(answer["met"], bool) and answer["frames"] <= RUN_UNTIL_FRAMES, f"run_until answered {answer}")
+    if manual_clock:
+        check(answer["met"] is False and answer["frames"] == RUN_UNTIL_FRAMES, f"run_until with no action did not end at its limit: {answer}")
+        check(client.call("status")["frame"] == before + RUN_UNTIL_FRAMES, "run_until did not run exactly its frames")
+        batch = client.call("batch", {"calls": [{"method": "step", "params": {"frames": 2}}, {"method": "status"}]})
+        check(batch["results"][1]["result"]["frame"] == before + RUN_UNTIL_FRAMES + 2, f"the call behind a step of a batch ran before its frames: {batch}")
+
+
 def run_real_clock_scenario(client: BagiControlClient, headless: bool) -> None:
     status = client.call("status")
     check(status["frame"] >= 1, f"status reports frame {status['frame']}")
@@ -218,6 +261,9 @@ def run_real_clock_scenario(client: BagiControlClient, headless: bool) -> None:
 
     if headless:
         check_screenshot_basics(client)
+
+    check_log_and_batch(client)
+    check_run_until(client, manual_clock=False)
 
 
 def check_frame_stats(client: BagiControlClient) -> None:
@@ -276,6 +322,8 @@ def run_manual_clock_scenario(client: BagiControlClient, headless: bool) -> None
         expect_error("capture_failed", lambda: client.call("screenshot"), "a screenshot on a backend that cannot capture")
 
     check_ui_tree(client)
+    check_log_and_batch(client)
+    check_run_until(client, manual_clock=True)
 
 
 SCENARIOS = [

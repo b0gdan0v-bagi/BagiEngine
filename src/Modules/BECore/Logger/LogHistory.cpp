@@ -1,5 +1,7 @@
 #include "LogHistory.h"
 
+#include <chrono>
+
 namespace BECore {
 
     namespace {
@@ -41,6 +43,22 @@ namespace BECore {
     StringView LogCategoryOfFile(StringView file) {
         const StringView module = FolderAfterLast(file, kModulesFolder);
         return module.empty() ? FolderAfterLast(file, kSourceFolder) : module;
+    }
+
+    StringView FormatLogTimeNow(char (&buffer)[kLogTimeLength]) {
+        const auto now = std::chrono::system_clock::now();
+        const auto time = std::chrono::system_clock::to_time_t(now);
+        const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+
+        std::tm tm_buf;
+#ifdef _WIN32
+        localtime_s(&tm_buf, &time);
+#else
+        localtime_r(&time, &tm_buf);
+#endif
+
+        const FormatResult written = FormatToN(buffer, sizeof(buffer), "{:02}:{:02}:{:02}.{:03d}", tm_buf.tm_hour, tm_buf.tm_min, tm_buf.tm_sec, ms.count());
+        return StringView{buffer, std::min(written.size, sizeof(buffer))};
     }
 
     LogHistory::LogHistory(size_t capacity) : _slots(std::max<size_t>(capacity, 1)) {

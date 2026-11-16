@@ -11,6 +11,10 @@ namespace BECore {
     /// "HH:MM:SS.mmm" and the terminating zero
     inline constexpr size_t kLogTimeLength = 13;
 
+    /// Writes the local time of day as "HH:MM:SS.mmm" into @p buffer, written out like the sinks do (no fmt/chrono.h: the Emscripten build cannot use it);
+    /// the view points into @p buffer.
+    StringView FormatLogTimeNow(char (&buffer)[kLogTimeLength]);
+
     /// The categories a history keeps, "General" and "Other" included: the folders of a project are few, but a path is not an identifier, so the set stays bounded
     inline constexpr uint16_t kMaxLogCategories = 64;
 

@@ -399,6 +399,17 @@ namespace BECore::Fuzz {
             add("status.bin", Request(2, "status"));
             add("step.bin", Request(3, "step", Params({{"frames", 3}, {"dt", 0.016}})));
             add("step-bad-frames.bin", Request(4, "step", Params({{"frames", 1.5}})));
+            add("log-mark.bin", Request(40, "log_mark"));
+            add("log-since.bin", Request(41, "log_since", Params({{"mark", 0}, {"level", "error"}})));
+            add("log-since-bad-mark.bin", Request(42, "log_since", Params({{"mark", -1}, {"level", "info"}})));
+            add("log-subscribe.bin", Request(43, "log_subscribe", Params({{"enabled", true}, {"level", "warning"}})));
+            add("batch.bin",
+                Request(44, "batch",
+                        Params({{"calls", Json::array({Params({{"method", "ping"}}), Params({{"method", "status"}, {"params", Json::object()}}),
+                                                       Params({{"method", "batch"}, {"params", Params({{"calls", Json::array({Params({{"method", "ping"}})})}})}}), Params({{"method", "quit"}})})},
+                                {"continueOnError", true}})));
+            add("batch-step.bin", Request(45, "batch", Params({{"calls", Json::array({Params({{"method", "step"}, {"params", Params({{"frames", 2}})}}), Params({{"method", "get_state"}})})}})));
+            add("batch-bad-entry.bin", Request(46, "batch", Params({{"calls", Json::array({Params({{"method", "ping"}}), "status", Params({{"method", 7}})})}})));
             add("pause.bin", Request(5, "pause"));
             add("resume.bin", Request(6, "resume"));
             add("quit.bin", Request("quit-1", "quit"));

@@ -49,6 +49,18 @@ def echo_handler(method: str, params: dict | None):
         raise FakeError("not_recording", "the Chrome trace is not recording")
     if method == "zone_allocs":
         return {"enabled": False, "zones": [], "totals": {"count": 0}, "params": params}
+    if method == "log_mark":
+        return {"mark": 5, "warnings": 1, "errors": 0}
+    if method == "log_since":
+        if (params or {}).get("mark", -1) < 0:
+            raise FakeError("invalid_params", "'mark' has to be an integer, 0 or more")
+        return {"lines": [], "warnings": 0, "errors": 0, "dropped": 0, "next": 5, "params": params}
+    if method == "log_subscribe":
+        return {"enabled": (params or {}).get("enabled"), "level": (params or {}).get("level"), "params": params}
+    if method == "batch":
+        return {"results": [{"ok": True, "result": {}}], "params": params}
+    if method == "run_until":
+        return {"met": False, "frames": (params or {}).get("maxFrames"), "params": params}
     if method == "quit":
         raise QuitServer({"quitting": True})
     raise FakeError("unknown_method", method)
@@ -238,6 +250,7 @@ def test_launch_of_a_missing_executable_names_the_path(session, tmp_path):
 EXPECTED_TOOLS = {
     "launch_game", "connect", "status", "get_state", "list_actions", "perform_action", "set_state", "reset", "step", "screenshot", "ui_tree", "ui_click", "game_log", "quit",
     "frame_stats", "profiler_dump", "zone_allocs", "record_start", "record_stop", "image_diff",
+    "log_mark", "log_since", "log_subscribe", "batch", "run_until",
 }
 
 
@@ -292,13 +305,58 @@ def test_the_mcp_server_serves_the_tools_over_stdio(server):
             zones = await client.call_tool("zone_allocs", {"top": 5, "reset": True})
             assert not zones.is_error and "totals" in zones.content[0].text
 
+            marked = await client.call_tool("log_mark", {})
+            assert not marked.is_error and '"mark": 5' in marked.content[0].text
+            since = await client.call_tool("log_since", {"mark": 5, "level": "error"})
+            assert not since.is_error and "dropped" in since.content[0].text
+            refused_mark = await client.call_tool("log_since", {"mark": -1})
+            assert refused_mark.is_error and "invalid_params" in refused_mark.content[0].text
+            subscribed = await client.call_tool("log_subscribe", {"enabled": True})
+            assert not subscribed.is_error and '"enabled": true' in subscribed.content[0].text
+            ran = await client.call_tool("batch", {"calls": [{"method": "ping"}, {"method": "step", "params": {"frames": 2}}], "continue_on_error": True})
+            assert not ran.is_error and "results" in ran.content[0].text
+            waited = await client.call_tool("run_until", {"pointer": "/state/score", "equals": 3, "max_frames": 7, "dt": 0.5})
+            assert not waited.is_error and '"met": false' in waited.content[0].text
+            moved_version = await client.call_tool("run_until", {"version_moved": True})
+            assert not moved_version.is_error
+            happened = await client.call_tool("run_until", {"event": "state_changed", "event_equal": {"version": 2}, "max_frames": 4})
+            assert not happened.is_error
+
     asyncio.run(scenario())
     assert requests_of(server, "screenshot")[-1] == {"maxSize": 64}
     assert requests_of(server, "step")[-1] == {"frames": 2}
     assert requests_of(server, "frame_stats")[-1] == {"frames": 3}
     assert requests_of(server, "profiler_dump")[-1] == {"path": "trace.json"}
     assert requests_of(server, "zone_allocs")[-1] == {"top": 5, "reset": True}
+    assert requests_of(server, "log_since")[0] == {"mark": 5, "level": "error"}
+    assert requests_of(server, "log_subscribe") == [{"enabled": True, "level": "warning"}]
+    assert requests_of(server, "batch") == [{"calls": [{"method": "ping"}, {"method": "step", "params": {"frames": 2}}], "continueOnError": True}]
+    assert requests_of(server, "run_until") == [
+        {"condition": {"pointer": "/state/score", "equals": 3}, "maxFrames": 7, "dt": 0.5},
+        {"condition": {"versionMoved": True}, "maxFrames": 600},
+        {"condition": {"event": {"name": "state_changed", "equal": {"version": 2}}}, "maxFrames": 4},
+    ]
     assert requests_of(server, "ui_click")[:3] == [{"name": "Ok"}, {"name": "Ok", "canvas": "Debug"}, {"name": "Volume", "at": 0.25}]
+
+
+def test_the_mcp_run_until_refuses_none_or_two_conditions_without_a_call(server):
+    mcp = pytest.importorskip("mcp")
+
+    async def run() -> None:
+        parameters = mcp.StdioServerParameters(command=sys.executable, args=[str(TOOL_DIR / "bagi_mcp.py")])
+        async with mcp.Client(parameters) as client:
+            assert not (await client.call_tool("connect", {"port": server.port})).is_error
+            none = await client.call_tool("run_until", {})
+            assert none.is_error and "exactly one condition" in none.content[0].text and "none" in none.content[0].text
+            two = await client.call_tool("run_until", {"pointer": "/version", "equals": 1, "version_moved": True})
+            assert two.is_error and "pointer, version_moved" in two.content[0].text
+            alone = await client.call_tool("run_until", {"pointer": "/version", "event_equal": {"a": 1}, "version_moved": False, "event": "x"})
+            assert alone.is_error
+            stray = await client.call_tool("run_until", {"version_moved": True, "event_equal": {"a": 1}})
+            assert stray.is_error and "event_equal" in stray.content[0].text
+
+    asyncio.run(run())
+    assert requests_of(server, "run_until") == []
 
 
 def test_the_mcp_image_diff_answers_stats_and_an_image_and_errors_as_text(tmp_path):
