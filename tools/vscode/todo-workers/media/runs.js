@@ -107,9 +107,13 @@
         if (w.stopped) return "stopped";
         // worker.py start writes a `starting` mark into the queue file before its session shows in `list` (CLI 2026-11-16)
         if (w.starting) return `a start is under way${w.starting.entry ? ` (${w.starting.entry})` : ""}`;
-        if (w.entry && w.entry.status !== "review") return `holds ${w.entry.id} (${w.entry.status})`;
+        // the head of the queue may be the entry the worker holds: the next through slice or a remarks round (worker.py
+        // start allows a held branch of the head itself, start_refusal)
+        const head = w.queue[0];
+        const own = w.entry && w.entry.id === head;
+        if (w.entry && !own && w.entry.status !== "review") return `holds ${w.entry.id} (${w.entry.status})`;
         const branch = heldBranch(w);
-        if (branch && !(w.entry && w.entry.status === "review")) return `holds ${branch}`;
+        if (branch && !own && branch !== `todo/${head}` && !(w.entry && w.entry.status === "review")) return `holds ${branch}`;
         const started = w.session && Number(w.session.startedAt);
         if (started && now - started < START_GRACE_MS) return "a session started moments ago";
         if (freeSince === undefined || freeSince === null || now - freeSince < FREE_SETTLE_MS) return "settling";

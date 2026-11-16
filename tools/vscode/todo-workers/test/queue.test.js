@@ -94,3 +94,10 @@ test("a start the CLI marked as under way holds the queue start", () => {
     assert.strictEqual(Runs.queueStartBlock({ ...FREE, starting }, NOW, SETTLED), "a start is under way (next)");
     assert.strictEqual(Runs.queueStartBlock({ ...FREE, starting: null }, NOW, SETTLED), null);
 });
+
+test("a worker whose queue head is the entry it holds (the next through slice, a remarks round) is free", () => {
+    const entry = { id: "next", status: "in progress" };
+    assert.strictEqual(Runs.queueStartBlock({ ...FREE, entry, head: { branch: "todo/next" } }, NOW, SETTLED), null);
+    assert.strictEqual(Runs.queueStartBlock({ ...FREE, entry: null, engine: { branch: "todo/next" } }, NOW, SETTLED), null);
+    assert.strictEqual(Runs.queueStartBlock({ ...FREE, queue: ["other", "next"], entry, head: { branch: "todo/next" } }, NOW, SETTLED), "holds next (in progress)");
+});
