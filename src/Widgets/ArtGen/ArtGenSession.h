@@ -262,6 +262,13 @@ namespace BECore {
         ArtGenSetEdit CancelSet(StringView set);
         /// Puts the Failed and Cancelled jobs of @p set (or only @p job) back to Pending, with nothing kept of the earlier try
         ArtGenSetEdit RetryJobs(StringView set, StringView job = {});
+        /**
+         * @brief Queues @p count more variants for every Done row of a set that is not active, on one fresh seed (@p seed when given), appended to
+         * the variants the rows have (Sets/CLAUDE.md, "More variants"). @p jobs narrows the rows (empty: all). Kept, failed, cancelled and full rows
+         * are left out and listed in the answer. Everything is checked first and a refusal changes nothing: `artgen_no_set`, `artgen_busy` (the set is
+         * active), `invalid_params` (a bad count or seed, a seed that meets a variant of a row that would run, nothing to run)
+         */
+        std::expected<Json, ControlError> MoreVariants(StringView set, int32_t count, Optional<int64_t> seed = {}, const Vector<String>& jobs = {});
         /// Picks the variant @p seed of a job (saved in the manifest). On a **live** row (accepted, not kept) it switches: the variant is
         /// written into the game under the name the row was accepted as, and only then are the pick and the date changed; a failed write
         /// (also a row that another set replaced, FindNewerOwner) is `WriteFailed` and changes nothing. A kept row takes no other pick
@@ -308,6 +315,7 @@ namespace BECore {
         std::expected<Json, ControlError> HandleRetry(const Json& params);
         std::expected<Json, ControlError> HandleAcceptSet(const Json& params);
         std::expected<Json, ControlError> HandleKeep(const Json& params);
+        std::expected<Json, ControlError> HandleMore(const Json& params);
         [[nodiscard]] Json StateJson() const;
 
     private:

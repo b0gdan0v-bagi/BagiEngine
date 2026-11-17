@@ -19,6 +19,8 @@ namespace BECore {
         constexpr int64_t kSeedRange = int64_t{1} << 32;
         // Default names tried (`-2`, `-3`, ...) before EnqueueSet gives up; a person cannot queue this many sets in one second
         constexpr int32_t kMaxNameAttempts = 100;
+        // Draws of a fresh seed for a more-run before the call gives up; the range is 2^32 wide, so a second draw is already a rarity
+        constexpr int32_t kMaxSeedDraws = 16;
 
         std::filesystem::path RootPath(const String& root) {
             return std::filesystem::path(ToStd(StringView(root)));  //-NoStd: std::filesystem::path takes a std::string_view
@@ -35,8 +37,7 @@ namespace BECore {
         }
 
         void MarkCancelled(ArtGenSetJob& job) {
-            job.state = ArtGenSetJobState::Cancelled;
-            job.error = String(kCancelledReason);
+            EndArtGenJob(job, ArtGenSetJobState::Cancelled, kCancelledReason);
         }
 
         /// What `artgen_set` and `artgen_state` call a set: Active while a job is Pending or Running, else Complete
@@ -402,8 +403,9 @@ namespace BECore {
         _run.preset = set.preset;
         _run.presetData = set.presetData;
         _run.subject = job.subject;
-        _run.count = set.count;
-        _run.seed = set.seed;
+        // A more-run has its own count and fresh seed: the set's are the first run's
+        _run.count = job.more ? job.more->count : set.count;
+        _run.seed = job.more ? job.more->seed : set.seed;
         _run.outDir = OutDirOf(set.name, job.name);
         _run.name = job.name;
         _run.setName = set.name;
@@ -420,16 +422,13 @@ namespace BECore {
         }
         switch (_run.state) {
             case ArtGenRunState::Done:
-                job->state = ArtGenSetJobState::Done;
-                job->error.clear();
+                EndArtGenJob(*job, ArtGenSetJobState::Done, {});
                 break;
             case ArtGenRunState::Failed:
-                job->state = ArtGenSetJobState::Failed;
-                job->error = _run.error;
+                EndArtGenJob(*job, ArtGenSetJobState::Failed, StringView(_run.error));
                 break;
             case ArtGenRunState::Cancelled:
-                job->state = ArtGenSetJobState::Cancelled;
-                job->error = String(cancelReason);
+                EndArtGenJob(*job, ArtGenSetJobState::Cancelled, cancelReason);
                 break;
             default:
                 return;
@@ -535,6 +534,88 @@ namespace BECore {
         return ArtGenSetEdit::Ok;
     }
 
+    std::expected<Json, ControlError> ArtGenSession::MoreVariants(StringView setName, int32_t count, Optional<int64_t> seed, const Vector<String>& jobNames) {
+        ArtGenSet* set = MutableSet(setName);
+        if (set == nullptr) {
+            return std::unexpected(MakeError(kNoSetCode, Format("no set named '{}'", setName)));
+        }
+        if (count < 1 || count > kArtGenSetMaxCount) {
+            return std::unexpected(InvalidParams(Format("count must be 1 to {}", kArtGenSetMaxCount)));
+        }
+        if (seed && *seed < 0) {
+            return std::unexpected(InvalidParams("seed must not be negative"));
+        }
+        for (const String& name : jobNames) {
+            if (FindJob(*set, StringView(name)) == nullptr) {
+                return std::unexpected(MakeError(kNoSetCode, Format("no job '{}' in a set named '{}'", name, setName)));
+            }
+        }
+        if (IsActive(*set)) {
+            return std::unexpected(MakeError(kBusyCode, Format("the set '{}' still has jobs to run; wait for it or cancel them", setName)));
+        }
+
+        Vector<ArtGenSetJob*> rows;
+        Json skipped = Json::array();
+        Vector<String> skippedText;
+        for (ArtGenSetJob& job : set->jobs) {
+            if (!jobNames.empty() && std::none_of(jobNames.begin(), jobNames.end(), [&](const String& name) { return name == job.name; })) {
+                continue;
+            }
+            if (const char* reason = ArtGenMoreSkipReason(job, count)) {
+                Json item = Json::object();
+                item["job"] = ToJsonString(job.name);
+                item["reason"] = reason;
+                skipped.push_back(std::move(item));
+                skippedText.push_back(Format("{} ({})", job.name, reason));
+                continue;
+            }
+            rows.push_back(&job);
+        }
+        if (rows.empty()) {
+            String reason = "nothing to run";
+            AppendNames(reason, "left out", skippedText);
+            return std::unexpected(InvalidParams(reason));
+        }
+
+        // One seed for the rows of the call keeps their look together; the images are on seed + i, which must meet no variant a row has
+        int64_t first = 0;
+        if (seed) {
+            first = *seed;
+            for (const ArtGenSetJob* row : rows) {
+                if (!ArtGenSeedRangeFree(*row, first, count)) {
+                    return std::unexpected(InvalidParams(Format("the {} seeds from {} meet a variant of the job '{}'", count, first, row->name)));
+                }
+            }
+        } else {
+            bool drawn = false;
+            for (int32_t attempt = 0; attempt < kMaxSeedDraws && !drawn; ++attempt) {
+                first = DrawSeed();
+                drawn = std::all_of(rows.begin(), rows.end(), [&](const ArtGenSetJob* row) { return ArtGenSeedRangeFree(*row, first, count); });
+            }
+            if (!drawn) {
+                return std::unexpected(InvalidParams(String("no fresh seed was found; give a 'seed'")));
+            }
+        }
+
+        Json names = Json::array();
+        for (ArtGenSetJob* row : rows) {
+            row->state = ArtGenSetJobState::Pending;
+            row->error.clear();
+            row->more = ArtGenSetMore{first, count};
+            names.push_back(ToJsonString(row->name));
+        }
+        QueueSet(set->name);
+        SaveSet(*set);
+        ++_version;
+        Json reply = Json::object();
+        reply["set"] = ToJsonString(set->name);
+        reply["seed"] = first;
+        reply["count"] = count;
+        reply["jobs"] = std::move(names);
+        reply["skipped"] = std::move(skipped);
+        return reply;
+    }
+
     ArtGenSetEdit ArtGenSession::PickVariant(StringView setName, StringView jobName, int64_t seed, ArtGenSwitch* write) {
         ArtGenSet* set = MutableSet(setName);
         ArtGenSetJob* job = set != nullptr ? FindJob(*set, jobName) : nullptr;
@@ -601,6 +682,7 @@ namespace BECore {
         Register<&ArtGenSession::HandleRetry>(service, *this, "artgen_retry");
         Register<&ArtGenSession::HandleAcceptSet>(service, *this, "artgen_accept_set");
         Register<&ArtGenSession::HandleKeep>(service, *this, "artgen_keep");
+        Register<&ArtGenSession::HandleMore>(service, *this, "artgen_more");
 
         service.DescribeMethod(
             "artgen_enqueue",
@@ -637,6 +719,15 @@ namespace BECore {
                                                  "leave the manifest and switching is refused after. Final: the way back is a new set. Nothing live to keep is invalid_params; a row another set "
                                                  "accepted under the same name later is not kept",
                                                  {ControlParamInfo{"set", "string", true, "the set name"}, ControlParamInfo{"job", "string", false, "only this job"}}});
+        service.DescribeMethod(
+            "artgen_more",
+            ControlMethodInfo{"Makes more variants for every done row of a finished set that is not kept, on one fresh seed, appended to the variants it has (the pick and the game are untouched; "
+                              "the new ones are alternatives). Kept, failed, cancelled and full (64 variants) rows are left out and listed in `skipped`; nothing to run is invalid_params. "
+                              "A new variant bigger than the frame of an accepted set cannot be switched to",
+                              {ControlParamInfo{"set", "string", true, "the set name; refused with artgen_busy while it has jobs to run"},
+                               ControlParamInfo{"count", "integer", false, "variants per row, 1 to 16 (default 1)"},
+                               ControlParamInfo{"seed", "integer", false, "the first seed (default: drawn); its range must meet no variant of a row that runs"},
+                               ControlParamInfo{"jobs", "array", false, "only these rows (names); an unknown name is artgen_no_set"}}});
     }
 
     std::expected<Json, ControlError> ArtGenSession::HandleEnqueue(const Json& params) {
@@ -1031,6 +1122,47 @@ namespace BECore {
         }
         const String job = IsGiven(params, "job") ? *GetJsonString(params, "job") : String();
         return KeepSet(*set, StringView(job));
+    }
+
+    std::expected<Json, ControlError> ArtGenSession::HandleMore(const Json& params) {
+        const auto set = GetJsonString(params, "set");
+        if (!set) {
+            return std::unexpected(InvalidParams("'set' (string) is required"));
+        }
+        int32_t count = 1;
+        if (IsGiven(params, "count")) {
+            const auto given = GetJsonInt(params, "count");
+            if (!given) {
+                return std::unexpected(InvalidParams("'count' must be an integer"));
+            }
+            // Out of the range of int32_t is out of the allowed range too: MoreVariants says so
+            count = *given > kArtGenSetMaxCount || *given < 0 ? 0 : static_cast<int32_t>(*given);
+        }
+        Optional<int64_t> seed;
+        if (IsGiven(params, "seed")) {
+            seed = GetJsonInt(params, "seed");
+            if (!seed) {
+                return std::unexpected(InvalidParams("'seed' must be an integer"));
+            }
+        }
+        Vector<String> jobs;
+        if (IsGiven(params, "jobs")) {
+            const Json* list = FindJsonMember(params, "jobs");
+            if (!list->is_array()) {
+                return std::unexpected(InvalidParams("'jobs' must be a list of job names"));
+            }
+            for (const Json& item : *list) {
+                const Optional<String> name = AsString(item);
+                if (!name) {
+                    return std::unexpected(InvalidParams("'jobs' must be a list of job names"));
+                }
+                jobs.push_back(*name);
+            }
+            if (jobs.empty()) {
+                return std::unexpected(InvalidParams("'jobs' is empty: name the rows or leave it out"));
+            }
+        }
+        return MoreVariants(*set, count, seed, jobs);
     }
 
     std::expected<Json, ControlError> ArtGenSession::HandleAcceptSet(const Json& params) {
