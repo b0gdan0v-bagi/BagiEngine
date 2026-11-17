@@ -109,6 +109,9 @@ namespace BECore {
     /// (1-based, counting the skipped ones): a bad name, a name used by an earlier row, no letter or digit to name a job from, more than kMaxSetJobs jobs
     [[nodiscard]] std::expected<Vector<ArtGenSubject>, String> ArtGenSubjectsFromRows(const Vector<ArtGenSubjectRow>& rows);
 
+    /// Why Queue is off, or null when it is on: no preset, no row with a subject (a queued set clears the rows), a set name that is not a name
+    [[nodiscard]] const char* ArtGenQueueBlocker(bool presetLoaded, const Vector<ArtGenSubjectRow>& rows, bool setNameValid);
+
     /// The checks of a list of subjects that did not come from text (a control call): 1..kMaxSetJobs, valid unique names, a subject each
     [[nodiscard]] std::expected<void, String> CheckArtGenSubjects(const Vector<ArtGenSubject>& subjects);
 

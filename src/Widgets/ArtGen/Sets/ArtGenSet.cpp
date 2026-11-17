@@ -335,7 +335,7 @@ namespace BECore {
     }
 
     void ArtGenRowNameEdited(ArtGenSubjectRow& row) {
-        row.nameEdited = row.name[0] != ' ';
+        row.nameEdited = row.name[0] != '\0';
         if (!row.nameEdited) {
             ArtGenRowSubjectEdited(row);
         }
@@ -374,6 +374,20 @@ namespace BECore {
             return std::unexpected(String("no subjects: fill in a subject"));
         }
         return subjects;
+    }
+
+    const char* ArtGenQueueBlocker(bool presetLoaded, const Vector<ArtGenSubjectRow>& rows, bool setNameValid) {
+        if (!presetLoaded) {
+            return "Pick a preset above";
+        }
+        const bool anySubject = std::any_of(rows.begin(), rows.end(), [](const ArtGenSubjectRow& row) { return !Trim(StringView(row.subject)).empty(); });
+        if (!anySubject) {
+            return "Write a subject in a row above: a queued set clears them";
+        }
+        if (!setNameValid) {
+            return "The set name is 1 to 64 of A-Z a-z 0-9 _ -";
+        }
+        return nullptr;
     }
 
     String ArtGenTimestamp(std::chrono::system_clock::time_point time) {
