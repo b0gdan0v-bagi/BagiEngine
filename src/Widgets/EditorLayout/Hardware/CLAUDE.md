@@ -11,7 +11,8 @@ What the status bar shows besides the frame time: the GPU's temperature, load an
 | `HardwareMonitor.*` | `SampleHardware` (which reader wins) and `HardwareMonitor` (the worker thread, the hand-over to the frame) |
 | `CpuLoad.*` | `CpuLoadTracker` (ticks to a percent) and the pure parsers of the Linux files: `/proc/stat`, `/proc/cpuinfo`, a hwmon temperature and name; every platform |
 | `NvmlReader.*` | `NvmlApi` (the NVML functions as a table), `LoadNvmlApi` and `NvmlReader` (device 0); built everywhere, used on Windows and Linux |
-| `HardwarePlatform.*` | `MakePlatformGpuReader` / `MakePlatformCpuReader` (nullptr where a platform has none) and `MakePlatformHardwareMonitor` |
+| `CpuReaders.h`, `CpuReaderWindows.cpp`, `CpuReaderLinux.cpp` | the CPU readers of Windows and Linux; each file is wrapped whole in its `PLATFORM_*` guard, so every file is globbed everywhere and compiled to nothing elsewhere |
+| `HardwarePlatform.*` | `MakePlatformGpuReader` (NVML on Windows and Linux) / `MakePlatformCpuReader` (nullptr where a platform has none) and `MakePlatformHardwareMonitor` |
 
 No ImGui and no platform code in the first two: they are tested alone (`HardwareTextTest`).
 
@@ -47,3 +48,9 @@ No ImGui and no platform code in the first two: they are tested alone (`Hardware
 - **The reader loads on the worker.** `NvmlReader()` loads the library and calls `nvmlInit_v2` inside its first `Read`, never in the constructor, because both take hundreds of milliseconds. A failed load, init, device count, handle or name is final: the reader remembers it and answers false at once, and nothing is loaded again (a driver installed while the editor runs is seen after a restart).
 - Device 0 only. Temperature, utilization and memory are three queries, and one that fails leaves only its field missing. Memory is rounded to MiB; the memory is the card's own (`unifiedMemory` false). The destructor shuts NVML down (only after a successful init) and unloads the library.
 - `CpuLoadTracker` takes cumulative ticks: the first call, an unchanged total and counters that went back give no value and make the new sample the baseline.
+
+## The CPU readers and where each is compiled
+
+- **Windows:** `GetSystemTimes` into `CpuLoadTracker` (kernel time contains idle time), load only, name empty (the tooltip says `CPU`). **No CPU temperature, on purpose:** Windows gives a normal user no die temperature (WMI `MSAcpi_ThermalZoneTemperature` needs admin and is often a constant, the ACPI thermal-zone counters are empty on many desktops), so nothing is guessed. The first `Read` has no load (a delta needs two samples) and answers false.
+- **Linux:** `/proc/stat`, `/proc/cpuinfo` and `/sys/class/hwmon/hwmon0..15/{name,temp1_input}` read with POSIX `open` / `read` into stack buffers (no stream and no `String` in a steady read; the file layer is for content, not `/proc`). On the first `Read` the first hwmon device named `coretemp`, `k10temp`, `zenpower` or `cpu_thermal` is picked and its `temp1_input` path kept; an ARM board with another sensor name shows load only. Everything that decides (the lines, the numbers, the names) is a pure function of `CpuLoad.h`.
+- **Compiled where:** Windows (`windows-clang-debug`) builds and tests everything, and runs the Windows reader and the real NVML (the tests never load the real library). `CpuReaderLinux.cpp` was written with no Linux machine and has been **compiled nowhere** (only syntax-checked on Windows against a stand-in `unistd.h`): whoever builds on Linux first runs `cmake --preset`, builds `BagiEngineTests` and `ctest -R "Hardware|EditorBars"`, then looks at the bar with a hwmon CPU device. A platform with no reader (macOS until its readers land) makes the monitor read nothing and the bar show nothing.

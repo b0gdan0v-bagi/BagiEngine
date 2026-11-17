@@ -1,5 +1,6 @@
 #include <Common/Printers.h>
 #include <Widgets/EditorLayout/Hardware/CpuLoad.h>
+#include <Widgets/EditorLayout/Hardware/HardwarePlatform.h>
 #include <Widgets/EditorLayout/Hardware/NvmlReader.h>
 #include <cstring>
 
@@ -402,6 +403,27 @@ namespace BECore::Tests {
         // Never read here: that would load the real library of whatever machine runs the test
         NvmlReader reader;
         SUCCEED();
+    }
+
+#if defined(PLATFORM_WINDOWS) || defined(PLATFORM_LINUX)
+    TEST(HardwarePlatformTest, WindowsAndLinuxHaveBothReaders) {
+        EXPECT_NE(MakePlatformGpuReader(), nullptr);
+        EXPECT_NE(MakePlatformCpuReader(), nullptr);
+    }
+#endif
+
+    TEST(HardwarePlatformTest, TheCpuReaderOfThisPlatformAnswersSanely) {
+        const UniquePtr<IHardwareReader> cpu = MakePlatformCpuReader();
+        if (cpu == nullptr) {
+            GTEST_SKIP() << "no CPU reader on this platform";
+        }
+        // Two samples may land in one tick of the system clock, so only what a value may look like is checked, never that there is one
+        for (int i = 0; i < 2; ++i) {
+            HardwareReadings readings;
+            if (cpu->Read(readings) && readings.loadPercent) {
+                EXPECT_LE(*readings.loadPercent, kMaxHardwareLoadPercent);
+            }
+        }
     }
 
 }  // namespace BECore::Tests
