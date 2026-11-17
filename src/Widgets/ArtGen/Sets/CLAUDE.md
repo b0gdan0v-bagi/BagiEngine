@@ -7,6 +7,7 @@ A **set** is one preset applied to a list of subjects: one **job** per subject, 
 | File | Purpose |
 |------|---------|
 | `ArtGenSet.{h,cpp}` | `ArtGenSet`, `ArtGenSetJob`, `ArtGenSetVariant`, `ArtGenSetJobState`; the subject-line rules; the manifest to and from JSON; the counting helpers |
+| `ArtGenSetStore.{h,cpp}` | The sets on disk, no session: the folder layout, `WriteManifest`, `LoadSets`, the manifest's relative paths |
 
 ## Names and subjects
 
@@ -20,7 +21,7 @@ A **set** is one preset applied to a list of subjects: one **job** per subject, 
 
 ## The manifest
 
-`<game root>/artgen/out/<set>/manifest.json`, format `kArtGenManifestFormat` (1). Only `ArtGenSetStore` writes it (the session calls the store); readers use `ArtGenSetFromJson`.
+`<game root>/artgen/out/<set>/manifest.json`, format `kArtGenManifestFormat` (1). Only `WriteManifest` writes it (the session calls it at every change of a job); readers use `ArtGenSetFromJson`.
 
 ```
 {"manifest": 1, "set", "created", "kind" ("image"|"audio"), "preset", "presetData" (a draft's content, else null),
@@ -30,3 +31,11 @@ A **set** is one preset applied to a list of subjects: one **job** per subject, 
 ```
 
 `file` and `provenance` are relative to the set folder with `/`, so the folder can be moved. Reading is checked (`Control/Json.h`): a wrong type, a bad name, an unknown job state, a duplicate job name, a `pick` that is not a seed of the job's variants, or a `manifest` number other than 1 is an error that says where (`jobs[2].variants[0]: 'seed' must be an integer`), never an abort; unknown keys are ignored, so a later format 1 writer can add keys.
+
+## On disk
+
+`<game root>/artgen/out/<set>/<job>/<job>_<seed>.png|flac` (+ `.artgen.json`) and `<set>/manifest.json`; the wire's `outDir` of a job is `<set>/<job>` (`OutDirOf`). The folder is git-ignored in a game and kept for review; nothing deletes a set.
+
+- `WriteManifest` makes the folders and replaces the file atomically (`WriteTextFileAtomically`), so a crash leaves the old manifest or the new one. It refuses a bad set name, so no path leaves `artgen/out/`. `NewSetFolderFree` is false for a name whose folder exists, with or without a manifest: a new set never writes into the files of another, nor over a manifest that did not parse.
+- `LoadSets` reads every `artgen/out/*/manifest.json`, oldest first (`created`, then name). **The folder's name is the set's name** (a moved folder still loads). A job that was `Pending` or `Running` comes back `Cancelled` (`kEditorClosedReason`) in memory; the file is not rewritten until the next change. A manifest that does not read (not JSON, wrong type, another format number) or a folder with an invalid name is skipped with one warning and never touched. A file a variant names that is gone stays in the set: the review shows a gap.
+- `RelativeToSet` turns the real path the service reported into the manifest's form: relative to the set folder, `/` also from a `\` path; a path outside the folder is kept as given (with `/`). `AbsoluteInSet` is the way back: relative joins the set folder, an absolute path stays as it is, a path with `..` is refused (empty), so a hand-edited manifest cannot make Accept all read outside the set by accident.
