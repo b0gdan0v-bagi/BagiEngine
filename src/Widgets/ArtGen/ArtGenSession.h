@@ -225,7 +225,7 @@ namespace BECore {
         /// Picks the variant @p seed of a job (saved in the manifest)
         ArtGenSetEdit PickVariant(StringView set, StringView job, int64_t seed);
         /// Accepts the picked variant of every job of a finished set as its job's name, through the acceptors Accept uses, marking each row in the
-        /// manifest (Sets/CLAUDE.md, "Accept all"). Checks every row first and changes nothing when one cannot be accepted
+        /// manifest (Sets/CLAUDE.md, "Accept all"). The checks come first and a refusal by them changes nothing; a failure halfway leaves the rows before it accepted
         std::expected<Json, ControlError> AcceptSet(StringView name);
         [[nodiscard]] const ArtGenSet* FindSet(StringView name) const;
         [[nodiscard]] const Vector<ArtGenSet>& GetSets() const {
@@ -269,6 +269,8 @@ namespace BECore {
         /// The job of `_run` while it is Running (the run is the work of a set), else null
         [[nodiscard]] ArtGenSetJob* RunningJobOfRun(ArtGenSet*& set);
         void SaveSet(const ArtGenSet& set);
+        /// The kind of the set's preset or draft workflow from the service's catalog; the set's own kind while the catalog does not know it
+        [[nodiscard]] String KindOfSet(const ArtGenSet& set) const;
         void StartJob(ArtGenSet& set, ArtGenSetJob& job);
         /// The run just ended: the job it was the work of takes its state (Done, Failed, Cancelled with @p cancelReason) and the manifest is written
         void EndSetJob(StringView cancelReason);

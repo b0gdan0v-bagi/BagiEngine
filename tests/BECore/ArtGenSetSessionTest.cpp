@@ -1032,4 +1032,47 @@ namespace BECore::Tests {
         EXPECT_TRUE(OnDisk("sounds").jobs[1].accepted.has_value());
     }
 
+    TEST_F(ArtGenSetSessionTest, ASoundSetQueuedBeforeTheFirstPollIsAcceptedAsClips) {
+        ArtGenSetRequest request;
+        request.preset = "knock";
+        request.subjects = ParseArtGenSubjects("knock: a wooden knock\ntap: a soft tap").value();
+        request.count = 2;
+        request.seed = kSetSeed;
+        request.name = "early";
+        ASSERT_TRUE(session.EnqueueSet(request).has_value());
+        EXPECT_EQ(session.FindSet("early")->kind, "image") << "the catalog is empty: only a guess";
+
+        RunAndPickAll("early", "audio");
+        EXPECT_EQ(session.FindSet("early")->kind, "audio") << "the first poll brought the catalog, and the job went out with its kind";
+        EXPECT_EQ(OnDisk("early").kind, "audio");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("early"));
+
+        Json params = Json::object();
+        params["set"] = "early";
+        EXPECT_EQ(ErrorCode(Call("artgen_accept_set", params)), "");
+        ASSERT_EQ(gAccepted.size(), 2u);
+        EXPECT_FALSE(gAccepted[0].image);
+    }
+
+    TEST_F(ArtGenSetSessionTest, TheKindOfASetTheCatalogDoesNotKnowComesFromItsVariants) {
+        ArtGenSetRequest request;
+        request.preset = "not_in_the_catalog";
+        request.subjects = ParseArtGenSubjects("knock: a wooden knock").value();
+        request.count = 2;
+        request.seed = kSetSeed;
+        request.name = "unlisted";
+        ASSERT_TRUE(session.EnqueueSet(request).has_value());
+
+        RunAndPickAll("unlisted", "audio");
+        EXPECT_EQ(session.FindSet("unlisted")->kind, "audio");
+        EXPECT_EQ(OnDisk("unlisted").kind, "audio");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("unlisted"));
+
+        Json params = Json::object();
+        params["set"] = "unlisted";
+        EXPECT_EQ(ErrorCode(Call("artgen_accept_set", params)), "");
+        ASSERT_EQ(gAccepted.size(), 1u);
+        EXPECT_FALSE(gAccepted[0].image);
+    }
+
 }  // namespace BECore::Tests

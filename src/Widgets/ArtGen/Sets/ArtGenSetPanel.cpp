@@ -24,7 +24,6 @@ namespace BECore {
         // A review thumbnail is smaller than the Generate grid's, so a row of four fits the panel
         constexpr float kReviewThumbnailSize = 112.0f;
         constexpr float kSelectedBorder = 3.0f;
-        constexpr StringView kKindAudio = "audio";
 
         const char* IconOfState(ArtGenSetJobState state) {
             switch (state) {

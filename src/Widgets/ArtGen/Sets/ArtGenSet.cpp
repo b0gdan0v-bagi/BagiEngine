@@ -6,8 +6,6 @@ namespace BECore {
 
     namespace {
 
-        constexpr StringView kKindImage = "image";
-        constexpr StringView kKindAudio = "audio";
         constexpr StringView kDefaultSetPrefix = "set";
         // "-yyyymmdd-hhmmss"
         constexpr size_t kSetNameSuffixLength = 16;

@@ -70,13 +70,11 @@ print(json.dumps({"state": run["state"], "error": run["error"], "variants": run[
 client.close()
 ```
 
-A set: one call with the lines, wait for `Complete`, print the rows (then `Read` the files, `artgen_pick`, and accept only when asked):
+A set replaces the `artgen_generate` part of the first script, from `client.call("artgen_generate", ...)` through its final `print` (the connect and the readiness loop stay, and `client.close()` stays last): one call with the subjects, wait for `Complete`, print the rows (then `Read` the files, `artgen_pick`, and accept only when asked):
 
 ```python
-lines = "rook: chess rook
-knight: chess knight
-bishop: chess bishop"
-queued = client.call("artgen_enqueue", {"preset": "sprite", "subjects": lines, "count": 3})
+subjects = ["rook: chess rook", "knight: chess knight", "bishop: chess bishop"]
+queued = client.call("artgen_enqueue", {"preset": "sprite", "subjects": subjects, "count": 3})
 deadline = time.monotonic() + 1800
 while time.monotonic() < deadline:
     row = next(s for s in client.call("artgen_state")["sets"] if s["name"] == queued["set"])

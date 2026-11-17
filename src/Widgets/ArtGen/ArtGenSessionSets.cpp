@@ -12,8 +12,6 @@ namespace BECore {
     namespace {
 
         constexpr StringView kDraftName = "draft";
-        constexpr StringView kKindImage = "image";
-        constexpr StringView kKindAudio = "audio";
         constexpr StringView kCancelledReason = "cancelled";
         constexpr StringView kStateActive = "Active";
         constexpr StringView kStateComplete = "Complete";
@@ -241,13 +239,9 @@ namespace BECore {
         set.presetData = std::move(request.presetData);
         set.count = request.count;
         set.seed = request.seed ? *request.seed : DrawSeed();
+        // The catalog is empty until the service has polled, so this is a guess; StartJob and the first reported variant settle it
         set.kind = String(kKindImage);
-        if (draft) {
-            const ArtGenWorkflow* workflow = FindWorkflow(StringView(GetJsonString(set.presetData, "workflow").value_or(String())));
-            set.kind = workflow != nullptr ? workflow->kind : set.kind;
-        } else if (const ArtGenPreset* known = FindPreset(set.preset); known != nullptr) {
-            set.kind = known->kind;
-        }
+        set.kind = KindOfSet(set);
         for (ArtGenSubject& subject : request.subjects) {
             ArtGenSetJob job;
             job.name = std::move(subject.name);
@@ -262,6 +256,15 @@ namespace BECore {
         _sets.push_back(std::move(set));
         ++_version;
         return name;
+    }
+
+    String ArtGenSession::KindOfSet(const ArtGenSet& set) const {
+        if (!set.presetData.is_null()) {
+            const ArtGenWorkflow* workflow = FindWorkflow(StringView(GetJsonString(set.presetData, "workflow").value_or(String())));
+            return workflow != nullptr ? workflow->kind : set.kind;
+        }
+        const ArtGenPreset* known = FindPreset(set.preset);
+        return known != nullptr ? known->kind : set.kind;
     }
 
     void ArtGenSession::PumpSets() {
@@ -281,6 +284,7 @@ namespace BECore {
     }
 
     void ArtGenSession::StartJob(ArtGenSet& set, ArtGenSetJob& job) {
+        set.kind = KindOfSet(set);
         job.state = ArtGenSetJobState::Running;
         job.error.clear();
         _run = ArtGenRun{};
@@ -330,6 +334,11 @@ namespace BECore {
         ArtGenSetJob* job = RunningJobOfRun(set);
         if (job == nullptr) {
             return;
+        }
+        // What the service made is the truth about the set's kind, whatever the catalog said when the set was queued
+        if (variant.kind != set->kind) {
+            set->kind = variant.kind;
+            ++_version;
         }
         const std::filesystem::path folder = SetFolder(RootPath(_gameRoot), set->name);
         ArtGenSetVariant entry;

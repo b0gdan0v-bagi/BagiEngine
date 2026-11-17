@@ -16,6 +16,9 @@ namespace BECore {
     inline constexpr int32_t kMaxSetJobs = 64;
     inline constexpr int32_t kArtGenSetMaxCount = 16;
     inline constexpr int32_t kArtGenSetDefaultCount = 4;
+    /// The two kinds of what a preset makes, as the service reports them and the manifest keeps them
+    inline constexpr StringView kKindImage = "image";
+    inline constexpr StringView kKindAudio = "audio";
 
     /// One line of the subjects of a set: the job's name (folder, file stem, sprite or clip name) and what to make
     struct ArtGenSubject {
