@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Math/Rect.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/Resource/TextureLibrary.h>
 #include <BECore/Types/Types.h>
@@ -41,6 +42,44 @@ namespace BECore {
 
     [[nodiscard]] AtlasCounts AtlasSummary(const TextureLibrary& library, StringView atlasName);
 
+    /// A member's crop of its source image, in whole pixels
+    struct AtlasCrop {
+        uint32_t x = 0;
+        uint32_t y = 0;
+        uint32_t width = 0;
+        uint32_t height = 0;
+    };
+
+    struct ImageSize {
+        uint32_t width = 0;
+        uint32_t height = 0;
+    };
+
+    /// The size of the image at a virtual path; the error is a line for the status text. `PlanAtlas` asks once per distinct file.
+    using AtlasSizeLookup = FunctionRef<std::expected<ImageSize, String>(PoolString path)>;
+
+    struct PlannedMember {
+        PoolString name;
+        PoolString sourcePath;  // where the pixels come from: the `atlas.source` of a packed member, else its own texture
+        Rect sourceRect;
+        AtlasCrop crop;
+        PackedRect at;
+    };
+
+    struct PlannedAtlas {
+        uint32_t width = 0;
+        uint32_t height = 0;
+        Vector<PlannedMember> members;  // in member order (sorted by name)
+    };
+
+    /**
+     * @brief The layout `BuildAtlas` writes, from the sources' sizes alone: no pixel is read and nothing changes.
+     *
+     * It is the one planning step of Pack and of the editor's preview, so a preview is never another layout than the file. Every error
+     * names the sprite.
+     */
+    [[nodiscard]] std::expected<PlannedAtlas, String> PlanAtlas(const TextureLibrary& library, StringView atlasName, const PackSettings& settings, AtlasSizeLookup sizeOf);
+
     /// Reads the pixels of a virtual path; the error is a line for the status text
     using AtlasImageLoader = FunctionRef<std::expected<RgbaImage, String>(PoolString path)>;
 
@@ -50,7 +89,7 @@ namespace BECore {
     };
 
     /**
-     * @brief Composes the atlas of group @p atlasName in memory and changes nothing.
+     * @brief Composes the atlas of group @p atlasName in memory (the layout of `PlanAtlas`, then the pixels) and changes nothing.
      *
      * A member's pixels come from its `atlas.source` when it is packed, else from its own texture and rect, never from the old atlas,
      * so a repack after a source changed is a plain Pack. Each distinct source file is read once. A rect is cut at its edges rounded

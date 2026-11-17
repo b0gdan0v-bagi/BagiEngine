@@ -18,19 +18,12 @@ namespace BECore {
             Rect rect;
         };
 
-        struct CropRect {
-            uint32_t x = 0;
-            uint32_t y = 0;
-            uint32_t width = 0;
-            uint32_t height = 0;
-        };
-
         bool IsInGroup(const SpriteEntry& entry, StringView atlasName) {
             return !atlasName.empty() && entry.atlas.has_value() && entry.atlas->name.ToStringView() == atlasName;
         }
 
         MemberSource SourceOf(const SpriteEntry& entry) {
-            if (entry.atlas.has_value() && entry.atlas->source.has_value()) {
+            if (IsPackedSprite(entry)) {
                 return {entry.atlas->source->texturePath, entry.atlas->source->rect};
             }
             return {entry.texturePath, entry.srcRect};
@@ -47,7 +40,7 @@ namespace BECore {
             return static_cast<int64_t>(std::floor(value + kHalfPixel));
         }
 
-        std::expected<CropRect, String> CropOf(PoolString spriteName, const Rect& rect, const RgbaImage& image) {
+        std::expected<AtlasCrop, String> CropOf(PoolString spriteName, const Rect& rect, const ImageSize& image) {
             const float imageWidth = static_cast<float>(image.width);
             const float imageHeight = static_cast<float>(image.height);
             if (rect.x < -kRectTolerance || rect.y < -kRectTolerance || rect.x + rect.w > imageWidth + kRectTolerance || rect.y + rect.h > imageHeight + kRectTolerance) {
@@ -61,10 +54,10 @@ namespace BECore {
             const int64_t top = std::clamp<int64_t>(RoundEdge(rect.y), 0, maxY - 1);
             const int64_t right = std::clamp<int64_t>(RoundEdge(rect.x + rect.w), left + 1, maxX);
             const int64_t bottom = std::clamp<int64_t>(RoundEdge(rect.y + rect.h), top + 1, maxY);
-            return CropRect{static_cast<uint32_t>(left), static_cast<uint32_t>(top), static_cast<uint32_t>(right - left), static_cast<uint32_t>(bottom - top)};
+            return AtlasCrop{static_cast<uint32_t>(left), static_cast<uint32_t>(top), static_cast<uint32_t>(right - left), static_cast<uint32_t>(bottom - top)};
         }
 
-        void CopyCrop(const RgbaImage& source, const CropRect& crop, RgbaImage& atlas, const PackedRect& at) {
+        void CopyCrop(const RgbaImage& source, const AtlasCrop& crop, RgbaImage& atlas, const PackedRect& at) {
             const size_t rowBytes = static_cast<size_t>(crop.width) * kBytesPerPixel;
             for (uint32_t row = 0; row < crop.height; ++row) {
                 const size_t from = (static_cast<size_t>(crop.y + row) * source.width + crop.x) * kBytesPerPixel;
@@ -84,7 +77,7 @@ namespace BECore {
         if (found == nullptr) {
             return std::unexpected(Format("there is no sprite '{}'", spriteName.ToStringView()));
         }
-        if (found->atlas.has_value() && found->atlas->source.has_value()) {
+        if (IsPackedSprite(*found)) {
             return std::unexpected(Format("'{}' is packed on '{}': unpack first", spriteName.ToStringView(), found->atlas->name.ToStringView()));
         }
         if (!atlasName.empty()) {
@@ -126,7 +119,7 @@ namespace BECore {
         for (const SpriteEntry& entry : library.GetAll()) {
             if (IsInGroup(entry, atlasName)) {
                 ++counts.members;
-                if (entry.atlas->source.has_value()) {
+                if (IsPackedSprite(entry)) {
                     ++counts.packed;
                 }
             }
@@ -134,26 +127,23 @@ namespace BECore {
         return counts;
     }
 
-    std::expected<BuiltAtlas, String> BuildAtlas(const TextureLibrary& library, StringView atlasName, const PackSettings& settings, AtlasImageLoader loader) {
+    std::expected<PlannedAtlas, String> PlanAtlas(const TextureLibrary& library, StringView atlasName, const PackSettings& settings, AtlasSizeLookup sizeOf) {
         if (auto valid = CheckAtlasName(atlasName); !valid) {
             return std::unexpected(valid.error());
         }
-        const Vector<PoolString> members = AtlasMembers(library, atlasName);
-        if (members.empty()) {
+        const Vector<PoolString> names = AtlasMembers(library, atlasName);
+        if (names.empty()) {
             return std::unexpected(Format("no sprite belongs to the atlas '{}'", atlasName));
         }
 
-        // Each source file is read once, however many members cut from it
-        Vector<RgbaImage> images;
-        UnorderedPoolMap<size_t> imageOf;
-        Vector<CropRect> crops;
-        Vector<size_t> imageIndex;
-        crops.reserve(members.size());
-        imageIndex.reserve(members.size());
+        // Each source file is asked for its size once, however many members cut from it
+        UnorderedPoolMap<ImageSize> sizeOfPath;
+        PlannedAtlas plan;
+        plan.members.reserve(names.size());
         Vector<PackSize> sizes;
-        sizes.reserve(members.size());
+        sizes.reserve(names.size());
 
-        for (const PoolString name : members) {
+        for (const PoolString name : names) {
             const MemberSource source = SourceOf(*library.GetSprite(name));
             if (source.texturePath.Empty()) {
                 return std::unexpected(Format("'{}' has no texture", name.ToStringView()));
@@ -162,49 +152,76 @@ namespace BECore {
                 return std::unexpected(Format("'{}' has an empty rect", name.ToStringView()));
             }
 
-            auto known = imageOf.find(source.texturePath);
-            if (known == imageOf.end()) {
-                auto loaded = loader(source.texturePath);
-                if (!loaded) {
-                    return std::unexpected(Format("'{}': cannot read {}: {}", name.ToStringView(), source.texturePath.ToStringView(), loaded.error()));
+            auto known = sizeOfPath.find(source.texturePath);
+            if (known == sizeOfPath.end()) {
+                auto looked = sizeOf(source.texturePath);
+                if (!looked) {
+                    return std::unexpected(Format("'{}': cannot read {}: {}", name.ToStringView(), source.texturePath.ToStringView(), looked.error()));
                 }
-                imageOf[source.texturePath] = images.size();
-                images.push_back(eastl::move(*loaded));
-                known = imageOf.find(source.texturePath);
+                known = sizeOfPath.emplace(source.texturePath, *looked).first;
             }
 
-            auto crop = CropOf(name, source.rect, images[known->second]);
+            auto crop = CropOf(name, source.rect, known->second);
             if (!crop) {
                 return std::unexpected(crop.error());
             }
             sizes.push_back(PackSize{crop->width, crop->height});
-            crops.push_back(*crop);
-            imageIndex.push_back(known->second);
+            PlannedMember member;
+            member.name = name;
+            member.sourcePath = source.texturePath;
+            member.sourceRect = source.rect;
+            member.crop = *crop;
+            plan.members.push_back(member);
         }
 
         auto layout = PackSizes(sizes, settings);
         if (!layout) {
             return std::unexpected(String(AtlasPackErrorText(layout.error())));
         }
+        plan.width = layout->width;
+        plan.height = layout->height;
+        for (size_t i = 0; i < plan.members.size(); ++i) {
+            plan.members[i].at = layout->placements[i];
+        }
+        return plan;
+    }
+
+    std::expected<BuiltAtlas, String> BuildAtlas(const TextureLibrary& library, StringView atlasName, const PackSettings& settings, AtlasImageLoader loader) {
+        // The plan asks for each distinct file once; the lookup keeps the image for the pixel copy
+        Vector<RgbaImage> images;
+        UnorderedPoolMap<size_t> imageOf;
+        auto sizeOf = [&](PoolString path) -> std::expected<ImageSize, String> {
+            auto loaded = loader(path);
+            if (!loaded) {
+                return std::unexpected(loaded.error());
+            }
+            const ImageSize size{loaded->width, loaded->height};
+            imageOf[path] = images.size();
+            images.push_back(eastl::move(*loaded));
+            return size;
+        };
+        auto plan = PlanAtlas(library, atlasName, settings, sizeOf);
+        if (!plan) {
+            return std::unexpected(plan.error());
+        }
 
         BuiltAtlas built;
-        built.image.width = layout->width;
-        built.image.height = layout->height;
-        built.image.pixels.assign(static_cast<size_t>(layout->width) * layout->height * kBytesPerPixel, 0);
-        built.entries.reserve(members.size());
+        built.image.width = plan->width;
+        built.image.height = plan->height;
+        built.image.pixels.assign(static_cast<size_t>(plan->width) * plan->height * kBytesPerPixel, 0);
+        built.entries.reserve(plan->members.size());
 
         const PoolString atlasPath = AtlasTexturePath(atlasName);
-        for (size_t i = 0; i < members.size(); ++i) {
-            CopyCrop(images[imageIndex[i]], crops[i], built.image, layout->placements[i]);
+        for (const PlannedMember& member : plan->members) {
+            CopyCrop(images[imageOf[member.sourcePath]], member.crop, built.image, member.at);
 
-            SpriteEntry entry = *library.GetSprite(members[i]);
-            const MemberSource source = SourceOf(entry);
+            SpriteEntry entry = *library.GetSprite(member.name);
             SpriteSource kept;
-            kept.texturePath = source.texturePath;
-            kept.rect = source.rect;
+            kept.texturePath = member.sourcePath;
+            kept.rect = member.sourceRect;
             entry.atlas->source = kept;
             entry.texturePath = atlasPath;
-            entry.srcRect = Rect(static_cast<float>(layout->placements[i].x), static_cast<float>(layout->placements[i].y), static_cast<float>(crops[i].width), static_cast<float>(crops[i].height));
+            entry.srcRect = Rect(static_cast<float>(member.at.x), static_cast<float>(member.at.y), static_cast<float>(member.crop.width), static_cast<float>(member.crop.height));
             built.entries.push_back(eastl::move(entry));
         }
         return built;
@@ -245,7 +262,7 @@ namespace BECore {
         AtlasUnpacked result;
         for (const PoolString name : members) {
             SpriteEntry entry = *library.GetSprite(name);
-            if (!entry.atlas->source.has_value()) {
+            if (!IsPackedSprite(entry)) {
                 continue;
             }
             const SpriteSource source = *entry.atlas->source;
