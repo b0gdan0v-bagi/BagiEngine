@@ -1,12 +1,12 @@
 #include <Widgets/EditorLayout/Hardware/MacCoreFoundation.h>
+#include <Widgets/EditorLayout/Hardware/MacIoObject.h>
 #include <Widgets/EditorLayout/Hardware/MacMapping.h>
 #include <Widgets/EditorLayout/Hardware/MacReaders.h>
 
 // Not compiled in the loop that wrote it (no Mac): it only copies numbers out of the IORegistry into MacGpuStats; what they mean is
-// decided by MapMacGpu, which is tested everywhere (Hardware/CLAUDE.md, "Compiled where").
+// decided by MapMacGpu, which is tested everywhere (Hardware/CLAUDE.md, "macOS").
 #ifdef PLATFORM_MACOS
 
-#include <IOKit/IOKitLib.h>
 #include <sys/sysctl.h>
 
 namespace BECore {
@@ -17,29 +17,6 @@ namespace BECore {
         constexpr const char* kInUseSystemMemoryKey = "In use system memory";
         constexpr const char* kVramUsedKey = "vramUsedBytes";
         constexpr const char* kVramFreeKey = "vramFreeBytes";
-
-        /// Owns one io_object_t (an iterator or a registry entry) and gives it back with IOObjectRelease
-        class IoObject {
-        public:
-            explicit IoObject(io_object_t handle) : _handle(handle) {}
-            ~IoObject() {
-                if (_handle != IO_OBJECT_NULL) {
-                    IOObjectRelease(_handle);
-                }
-            }
-            IoObject(const IoObject&) = delete;
-            IoObject& operator=(const IoObject&) = delete;
-
-            [[nodiscard]] io_object_t Get() const {
-                return _handle;
-            }
-            explicit operator bool() const {
-                return _handle != IO_OBJECT_NULL;
-            }
-
-        private:
-            io_object_t _handle;
-        };
 
         Optional<uint64_t> ReadPhysicalMemoryBytes() {
             uint64_t bytes = 0;
@@ -71,7 +48,7 @@ namespace BECore {
 
         class MacGpuReader final : public IHardwareReader {
         public:
-            MacGpuReader() : _physicalMemoryBytes(ReadPhysicalMemoryBytes()) {}
+            explicit MacGpuReader(MacSensorsPtr sensors) : _sensors(std::move(sensors)), _physicalMemoryBytes(ReadPhysicalMemoryBytes()) {}
 
             bool Read(HardwareReadings& out) override {
                 // IOServiceMatching returns +1 and IOServiceGetMatchingServices consumes it whether it succeeds or not
@@ -106,17 +83,20 @@ namespace BECore {
                     return false;
                 }
                 best.physicalMemoryBytes = _physicalMemoryBytes;
-                return MapMacGpu(best, out);
+                const bool mapped = MapMacGpu(best, out);
+                out.temperatureC = _sensors->ReadGpuC();
+                return mapped || out.temperatureC.has_value();
             }
 
         private:
+            MacSensorsPtr _sensors;
             Optional<uint64_t> _physicalMemoryBytes;
         };
 
     }  // namespace
 
-    UniquePtr<IHardwareReader> MakeMacGpuReader() {
-        return MakeUnique<MacGpuReader>();
+    UniquePtr<IHardwareReader> MakeMacGpuReader(MacSensorsPtr sensors) {
+        return MakeUnique<MacGpuReader>(std::move(sensors));
     }
 
 }  // namespace BECore

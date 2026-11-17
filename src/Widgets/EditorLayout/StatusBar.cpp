@@ -135,12 +135,11 @@ namespace BECore {
 
     void StatusBar::StartHardwareMonitor() {
         // A platform with no reader would start a thread that only finds nothing
-        UniquePtr<IHardwareReader> gpu = MakePlatformGpuReader();
-        UniquePtr<IHardwareReader> cpu = MakePlatformCpuReader();
-        if (gpu == nullptr && cpu == nullptr) {
+        UniquePtr<HardwareMonitor> monitor = MakePlatformHardwareMonitor();
+        if (!monitor->HasReaders()) {
             return;
         }
-        _hardware = MakeUnique<HardwareMonitor>(std::move(gpu), std::move(cpu));
+        _hardware = std::move(monitor);
         _hardware->Start();
     }
 

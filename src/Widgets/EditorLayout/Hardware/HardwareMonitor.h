@@ -54,6 +54,11 @@ namespace BECore {
         /// Copies the published readings when they changed since the last true answer. False at once when nothing changed, or when the worker holds the lock.
         [[nodiscard]] bool Fetch(HardwareReadings& out);
 
+        /// False when both readers are missing: a worker would only find nothing
+        [[nodiscard]] bool HasReaders() const {
+            return _gpu != nullptr || _cpu != nullptr;
+        }
+
         /// Moves when a poll found readings that differ from the published ones
         [[nodiscard]] uint32_t Version() const {
             return _version.load(std::memory_order_acquire);

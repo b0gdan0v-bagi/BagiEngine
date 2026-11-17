@@ -10,7 +10,7 @@ namespace BECore {
 #if defined(PLATFORM_WINDOWS) || defined(PLATFORM_LINUX)
         return MakeUnique<NvmlReader>();
 #elif defined(PLATFORM_MACOS)
-        return MakeMacGpuReader();
+        return MakeMacGpuReader(New<MacSensors>());
 #else
         return nullptr;
 #endif
@@ -22,14 +22,20 @@ namespace BECore {
 #elif defined(PLATFORM_LINUX)
         return MakeLinuxCpuReader();
 #elif defined(PLATFORM_MACOS)
-        return MakeMacCpuReader();
+        return MakeMacCpuReader(New<MacSensors>());
 #else
         return nullptr;
 #endif
     }
 
     UniquePtr<HardwareMonitor> MakePlatformHardwareMonitor() {
+#if defined(PLATFORM_MACOS)
+        // The two readers ask the same sensors, which are opened once
+        const MacSensorsPtr sensors = New<MacSensors>();
+        return MakeUnique<HardwareMonitor>(MakeMacGpuReader(sensors), MakeMacCpuReader(sensors));
+#else
         return MakeUnique<HardwareMonitor>(MakePlatformGpuReader(), MakePlatformCpuReader());
+#endif
     }
 
 }  // namespace BECore

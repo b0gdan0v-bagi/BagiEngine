@@ -36,6 +36,23 @@ namespace BECore::Tests {
             return stats;
         }
 
+        MacSensorSample Sample(StringView name, double celsius) {
+            MacSensorSample sample;
+            std::memcpy(sample.name, name.data(), std::min(name.size(), sizeof(sample.name) - 1));
+            sample.celsius = celsius;
+            return sample;
+        }
+
+        Optional<int32_t> Pick(std::initializer_list<MacSensorSample> samples, HardwareKind kind) {
+            const Vector<MacSensorSample> list(samples);
+            return PickAppleSiliconTemperature(Span<const MacSensorSample>(list.data(), list.size()), kind);
+        }
+
+        Optional<int32_t> Decode(const char (&type)[kSmcTypeSize + 1], std::initializer_list<uint8_t> bytes) {
+            const Vector<uint8_t> list(bytes);
+            return DecodeSmcTemperature(type, Span<const uint8_t>(list.data(), list.size()));
+        }
+
     }  // namespace
 
     TEST(HardwareMacMappingTest, AppleSiliconIsUnifiedMemoryOfThePhysicalSize) {
@@ -200,6 +217,103 @@ namespace BECore::Tests {
         EXPECT_FALSE(readings.memUsedMb);
         EXPECT_FALSE(readings.memTotalMb);
         EXPECT_STREQ(readings.name, "");
+    }
+
+    TEST(HardwareMacMappingTest, TheGpuTemperatureIsTheMeanOfTheGpuSensors) {
+        const Optional<int32_t> celsius =
+            Pick({Sample("GPU MTR Temp Sensor1", 50.0), Sample("GPU MTR Temp Sensor2", 52.0), Sample("GPU MTR Temp Sensor3", 57.0), Sample("pACC MTR Temp Sensor1", 90.0)}, HardwareKind::Gpu);
+        EXPECT_EQ(celsius, 53);
+    }
+
+    TEST(HardwareMacMappingTest, TheCpuTemperatureIsTheHighestOfThreeFamilies) {
+        const Optional<int32_t> celsius =
+            Pick({Sample("pACC MTR Temp Sensor1", 61.0), Sample("eACC MTR Temp Sensor4", 48.0), Sample("PMU tdie3", 72.4), Sample("PMU tdie9", 66.0), Sample("GPU MTR Temp Sensor1", 95.0)},
+                 HardwareKind::Cpu);
+        EXPECT_EQ(celsius, 72);
+    }
+
+    TEST(HardwareMacMappingTest, ASensorOfTheNameIsFoundByItsPrefixOnly) {
+        EXPECT_FALSE(Pick({Sample("the GPU MTR Temp Sensor1", 50.0), Sample("NAND CH0 temp", 40.0), Sample("", 40.0)}, HardwareKind::Gpu));
+        EXPECT_FALSE(Pick({Sample("PMU tdev1", 50.0)}, HardwareKind::Cpu));
+    }
+
+    TEST(HardwareMacMappingTest, ANotANumberAndAnAbsurdValueAreSkipped) {
+        const double notANumber = std::numeric_limits<double>::quiet_NaN();
+        EXPECT_EQ(Pick({Sample("pACC MTR Temp Sensor1", notANumber), Sample("pACC MTR Temp Sensor2", 200.0), Sample("pACC MTR Temp Sensor3", -5.0), Sample("pACC MTR Temp Sensor4", 55.0)},
+                       HardwareKind::Cpu),
+                  55);
+        EXPECT_FALSE(Pick({Sample("pACC MTR Temp Sensor1", notANumber), Sample("pACC MTR Temp Sensor2", 150.5)}, HardwareKind::Cpu));
+        // The ends of the range are values
+        EXPECT_EQ(Pick({Sample("GPU MTR Temp Sensor1", 0.0), Sample("GPU MTR Temp Sensor2", 150.0)}, HardwareKind::Gpu), 75);
+    }
+
+    TEST(HardwareMacMappingTest, NoSamplesAndNoKindGiveNothing) {
+        EXPECT_FALSE(Pick({}, HardwareKind::Cpu));
+        EXPECT_FALSE(Pick({Sample("pACC MTR Temp Sensor1", 61.0), Sample("GPU MTR Temp Sensor1", 50.0)}, HardwareKind::None));
+    }
+
+    TEST(HardwareMacMappingTest, ASensorNameLongerThanItsBufferIsCutAndStillMatches) {
+        MacSensorSample sample;
+        std::memset(sample.name, 'x', sizeof(sample.name));
+        std::memcpy(sample.name, "PMU tdie", 8);
+        sample.celsius = 64.0;
+        EXPECT_EQ(PickAppleSiliconTemperature(Span<const MacSensorSample>(&sample, 1), HardwareKind::Cpu), 64);
+
+        // No terminator at all and no prefix: nothing reads past the buffer
+        std::memset(sample.name, 'x', sizeof(sample.name));
+        EXPECT_FALSE(PickAppleSiliconTemperature(Span<const MacSensorSample>(&sample, 1), HardwareKind::Cpu));
+    }
+
+    TEST(HardwareMacMappingTest, Sp78IsSignedEightPointEightBigEndian) {
+        EXPECT_EQ(Decode("sp78", {0x2D, 0x40}), 45);
+        // 45.5 rounds up
+        EXPECT_EQ(Decode("sp78", {0x2D, 0x80}), 46);
+        EXPECT_EQ(Decode("sp78", {0x00, 0x80}), 1);
+        // -1.0, and what an absent key reads as
+        EXPECT_FALSE(Decode("sp78", {0xFF, 0x00}));
+        EXPECT_FALSE(Decode("sp78", {0x00, 0x00}));
+        // 160 is above the range
+        EXPECT_FALSE(Decode("sp78", {0xA0, 0x00}));
+    }
+
+    TEST(HardwareMacMappingTest, FltIsTheLittleEndianFloatOfTheHost) {
+        // 61.5f is 0x42760000
+        EXPECT_EQ(Decode("flt ", {0x00, 0x00, 0x76, 0x42}), 62);
+        // 45.0f is 0x42340000
+        EXPECT_EQ(Decode("flt ", {0x00, 0x00, 0x34, 0x42}), 45);
+        // NaN, and a float below the range
+        EXPECT_FALSE(Decode("flt ", {0x00, 0x00, 0xC0, 0x7F}));
+        EXPECT_FALSE(Decode("flt ", {0x00, 0x00, 0x80, 0xBF}));
+        EXPECT_FALSE(Decode("flt ", {0x00, 0x00, 0x00, 0x00}));
+        EXPECT_FALSE(Decode("flt ", {0x00, 0x00, 0x76}));
+    }
+
+    TEST(HardwareMacMappingTest, Fpe2IsUnsignedFourteenPointTwoBigEndian) {
+        EXPECT_EQ(Decode("fpe2", {0x00, 0xB4}), 45);
+        EXPECT_EQ(Decode("fpe2", {0x00, 0xB6}), 46);
+        EXPECT_FALSE(Decode("fpe2", {0x00, 0x00}));
+        EXPECT_FALSE(Decode("fpe2", {0xFF, 0xFF}));
+    }
+
+    TEST(HardwareMacMappingTest, AnUnknownTypeAndAShortBufferGiveNothing) {
+        EXPECT_FALSE(Decode("ui8 ", {0x2D}));
+        EXPECT_FALSE(Decode("    ", {0x2D, 0x40}));
+        EXPECT_FALSE(Decode("sp78", {0x2D}));
+        EXPECT_FALSE(Decode("sp78", {}));
+        EXPECT_FALSE(Decode("fpe2", {0xB4}));
+        // Only the first four characters of the type are looked at
+        const char longer[] = {'s', 'p', '7', '8', 'x'};
+        const uint8_t bytes[] = {0x2D, 0x40};
+        EXPECT_EQ(DecodeSmcTemperature(longer, Span<const uint8_t>(bytes)), 45);
+    }
+
+    TEST(HardwareMacMappingTest, TheSmcKeysAreFourCharactersEach) {
+        for (const StringView key : kSmcCpuTemperatureKeys) {
+            EXPECT_EQ(key.size(), kSmcTypeSize);
+        }
+        for (const StringView key : kSmcGpuTemperatureKeys) {
+            EXPECT_EQ(key.size(), kSmcTypeSize);
+        }
     }
 
 }  // namespace BECore::Tests
