@@ -3,6 +3,7 @@
 #include <BECore/Audio/AudioManager.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/FileSystem/FileSystem.h>
+#include <BECore/FileSystem/MountPoints.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Renderer/ITexture.h>
 #include <BECore/Resource/ResourceManager.h>
@@ -18,7 +19,6 @@
 #include <Widgets/ImGuiFonts.h>
 #include <Widgets/ImGuiTheme.h>
 #include <Widgets/SceneEditor/SceneSelectionEvents.h>
-#include <algorithm>
 #include <cstdio>
 #include <imgui.h>
 
@@ -171,7 +171,7 @@ namespace BECore {
 
     void ArtGenWidget::StartBridge(uint16_t port) {
         _bridgeError.clear();
-        const auto script = FindArtGenBridge(CoreManager::GetFileSystem().GetMountLayers("config"_intern));
+        const auto script = FindArtGenBridge(CoreManager::GetFileSystem().GetMountLayers(MountPoints::config));
         if (!script) {
             _bridgeError = Format("no {} under the content roots (a packaged build?)", kArtGenBridgeScript);
             return;

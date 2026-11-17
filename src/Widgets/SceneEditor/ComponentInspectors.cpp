@@ -1,6 +1,7 @@
 #include "ComponentInspectors.h"
 
 #include <BECore/FileSystem/FileSystem.h>
+#include <BECore/FileSystem/MountPoints.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Input/ActionsLibrary.h>
 #include <BECore/Reflection/ClassMeta.h>
@@ -73,7 +74,7 @@ namespace BECore {
 
             if (!assetsLoaded) {
                 static const StringView extensions[] = {".png", ".jpg", ".jpeg", ".bmp"};
-                cachedAssets = CoreManager::GetFileSystem().EnumerateFiles("assets"_intern, Span<const StringView>(extensions));
+                cachedAssets = CoreManager::GetFileSystem().EnumerateFiles(MountPoints::assets, Span<const StringView>(extensions));
                 assetsLoaded = true;
             }
 
