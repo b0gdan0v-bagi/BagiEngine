@@ -181,7 +181,9 @@ namespace BECore {
         ImGui::Separator();
 
         if (!entry.texturePath.Empty()) {
-            if (entry.texturePath != _previewLoadedPath) {
+            // A file rewritten on disk is evicted from the cache (the Generate panel's Accept and switch do): the handle held here is the old picture
+            const bool evicted = _previewTexture && !CoreManager::GetResourceManager().GetCache().Holds(_previewLoadedPath, _previewTexture.Get());
+            if (entry.texturePath != _previewLoadedPath || evicted) {
                 _previewTexture = CoreManager::GetResourceManager().Load<ITexture>(entry.texturePath.ToStringView());
                 _previewLoadedPath = entry.texturePath;
                 _isDragging = false;

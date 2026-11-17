@@ -69,6 +69,70 @@ namespace BECore::Tests {
         std::filesystem::path provenance;
     };
 
+    namespace {
+
+        SpriteEntry LibraryEntry(const char* name, const char* path, Rect rect) {
+            SpriteEntry entry;
+            entry.name = PoolString::Intern(name);
+            entry.texturePath = PoolString::Intern(path);
+            entry.srcRect = rect;
+            return entry;
+        }
+
+    }  // namespace
+
+    TEST(ArtGenLibraryEntryTest, ANewEntryIsAddedAndSavedOnce) {
+        TextureLibrary library;
+        int saves = 0;
+        const auto stored = StoreSpriteEntry(library, LibraryEntry("queen", "assets/artgen/queen.png", Rect(0, 0, 64, 64)), [&saves] {
+            ++saves;
+            return true;
+        });
+        ASSERT_TRUE(stored);
+        EXPECT_TRUE(*stored);
+        EXPECT_EQ(saves, 1);
+        EXPECT_NE(library.GetSprite(PoolString::Intern("queen")), nullptr);
+    }
+
+    TEST(ArtGenLibraryEntryTest, AnUnchangedEntryIsNotSavedAgain) {
+        TextureLibrary library;
+        const SpriteEntry entry = LibraryEntry("queen", "assets/artgen/queen.png", Rect(0, 0, 64, 64));
+        library.AddOrUpdate(entry);
+        int saves = 0;
+        const auto stored = StoreSpriteEntry(library, entry, [&saves] {
+            ++saves;
+            return true;
+        });
+        ASSERT_TRUE(stored);
+        EXPECT_FALSE(*stored);
+        EXPECT_EQ(saves, 0);
+    }
+
+    TEST(ArtGenLibraryEntryTest, AnEntryWithAnotherSizeIsSavedAndReplacesTheOld) {
+        TextureLibrary library;
+        library.AddOrUpdate(LibraryEntry("queen", "assets/artgen/queen.png", Rect(0, 0, 64, 64)));
+        int saves = 0;
+        const auto stored = StoreSpriteEntry(library, LibraryEntry("queen", "assets/artgen/queen.png", Rect(0, 0, 128, 64)), [&saves] {
+            ++saves;
+            return true;
+        });
+        ASSERT_TRUE(stored);
+        EXPECT_TRUE(*stored);
+        EXPECT_EQ(saves, 1);
+        EXPECT_EQ(library.GetSprite(PoolString::Intern("queen"))->srcRect.w, 128.0f);
+    }
+
+    TEST(ArtGenLibraryEntryTest, AFailedSaveGivesTheLibraryBack) {
+        TextureLibrary library;
+        library.AddOrUpdate(LibraryEntry("queen", "assets/artgen/queen.png", Rect(0, 0, 64, 64)));
+
+        EXPECT_FALSE(StoreSpriteEntry(library, LibraryEntry("queen", "assets/artgen/queen.png", Rect(0, 0, 128, 64)), [] { return false; }));
+        EXPECT_EQ(library.GetSprite(PoolString::Intern("queen"))->srcRect.w, 64.0f);
+
+        EXPECT_FALSE(StoreSpriteEntry(library, LibraryEntry("king", "assets/artgen/king.png", Rect(0, 0, 8, 8)), [] { return false; }));
+        EXPECT_EQ(library.GetSprite(PoolString::Intern("king")), nullptr);
+    }
+
     TEST(ArtGenSpriteNameTest, OnlyPlainNamesAreSpriteNames) {
         EXPECT_TRUE(IsValidSpriteName("white_knight"));
         EXPECT_TRUE(IsValidSpriteName("Gem-Red-2"));

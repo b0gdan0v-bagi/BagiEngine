@@ -109,6 +109,10 @@ namespace BECore {
             }
         }
 
+        bool IsSameSpriteEntry(const SpriteEntry& a, const SpriteEntry& b) {
+            return a.name == b.name && a.texturePath == b.texturePath && a.srcRect.x == b.srcRect.x && a.srcRect.y == b.srcRect.y && a.srcRect.w == b.srcRect.w && a.srcRect.h == b.srcRect.h;
+        }
+
         void ReloadUnder(SceneNode& node, PoolString sprite, PoolString texturePath, uint32_t& count) {
             if (auto renderer = node.GetComponent<SpriteRendererComponent>()) {
                 if ((!sprite.Empty() && renderer->_spriteId == sprite) || (!texturePath.Empty() && renderer->_texturePath == texturePath)) {
@@ -330,6 +334,27 @@ namespace BECore {
         return count;
     }
 
+    std::expected<bool, String> StoreSpriteEntry(TextureLibrary& library, const SpriteEntry& entry, FunctionRef<bool()> save) {
+        Optional<SpriteEntry> previous;
+        if (const SpriteEntry* existing = library.GetSprite(entry.name)) {
+            if (IsSameSpriteEntry(*existing, entry)) {
+                return false;
+            }
+            previous = *existing;
+        }
+        library.AddOrUpdate(entry);
+        if (save()) {
+            return true;
+        }
+        // Keep the library as it was on disk: the next Save of the Sprite Library panel must not write a half accept
+        if (previous) {
+            library.AddOrUpdate(*previous);
+        } else {
+            library.Remove(entry.name);
+        }
+        return std::unexpected(String("TextureLibrary.xml could not be saved (does the game have one?)"));
+    }
+
     std::expected<ArtGenAccepted, String> AcceptVariant(const ArtGenVariant& variant, StringView sprite) {
         const std::filesystem::path assetsDir = CoreManager::GetFileSystem().GetMountedPath("assets"_intern);
         if (assetsDir.empty()) {
@@ -347,19 +372,9 @@ namespace BECore {
         entry.name = name;
         entry.texturePath = texturePath;
         entry.srcRect = Rect(0.0f, 0.0f, static_cast<float>(copied->width), static_cast<float>(copied->height));
-        Optional<SpriteEntry> previous;
-        if (const SpriteEntry* existing = library.GetSprite(name)) {
-            previous = *existing;
-        }
-        library.AddOrUpdate(entry);
-        if (!library.Save()) {
-            // Keep the library as it was on disk: the next Save of the Sprite Library panel must not write a half accept
-            if (previous) {
-                library.AddOrUpdate(*previous);
-            } else {
-                library.Remove(name);
-            }
-            return std::unexpected(Format("the PNG is in '{}', but TextureLibrary.xml could not be saved (does the game have one?)", copied->pngFile.generic_string()));
+        auto stored = StoreSpriteEntry(library, entry, [&library] { return library.Save(); });
+        if (!stored) {
+            return std::unexpected(Format("the PNG is in '{}', but {}", copied->pngFile.generic_string(), stored.error()));
         }
 
         // The old picture of this path may be cached: drop it so the reload reads the new file

@@ -3,7 +3,9 @@
 #include <BECore/Control/ControlTypes.h>
 #include <BECore/Control/Json.h>
 #include <BECore/PoolString/PoolString.h>
+#include <BECore/Resource/TextureLibrary.h>
 #include <BECore/Types/Types.h>
+#include <BECore/Utils/FunctionRef.h>
 #include <Widgets/ArtGen/ArtGenSound.h>
 #include <cstdint>
 #include <expected>
@@ -44,6 +46,14 @@ namespace BECore {
 
     /// Calls ReloadTexture on every SpriteRendererComponent under @p root that names @p sprite or @p texturePath; returns how many
     uint32_t ReloadSpritesUsing(SceneNode& root, PoolString sprite, PoolString texturePath);
+
+    /**
+     * @brief Puts @p entry into @p library and calls @p save once; an entry the library already holds is left alone and nothing is saved, so a
+     * switch or re-accept of an unchanged sprite does not rewrite TextureLibrary.xml.
+     *
+     * @return Whether it saved. When @p save fails the library goes back to what it was and the answer is the reason.
+     */
+    std::expected<bool, String> StoreSpriteEntry(TextureLibrary& library, const SpriteEntry& entry, FunctionRef<bool()> save);
 
     /// What AcceptVariant did
     struct ArtGenAccepted {
