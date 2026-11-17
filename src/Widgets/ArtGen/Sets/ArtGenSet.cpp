@@ -1,6 +1,7 @@
 #include "ArtGenSet.h"
 
 #include <Widgets/ArtGen/ArtGenAccept.h>
+#include <cstdio>
 
 namespace BECore {
 
@@ -319,6 +320,58 @@ namespace BECore {
         }
         if (subjects.empty()) {
             return std::unexpected(String("no subjects: write one per line"));
+        }
+        return subjects;
+    }
+
+    static_assert(kArtGenRowNameSize == kMaxSpriteNameLength + 1);
+
+    void ArtGenRowSubjectEdited(ArtGenSubjectRow& row) {
+        if (row.nameEdited) {
+            return;
+        }
+        const String suggested = ArtGenNameFromSubject(StringView(row.subject));
+        std::snprintf(row.name, sizeof(row.name), "%s", suggested.c_str());
+    }
+
+    void ArtGenRowNameEdited(ArtGenSubjectRow& row) {
+        row.nameEdited = row.name[0] != ' ';
+        if (!row.nameEdited) {
+            ArtGenRowSubjectEdited(row);
+        }
+    }
+
+    std::expected<Vector<ArtGenSubject>, String> ArtGenSubjectsFromRows(const Vector<ArtGenSubjectRow>& rows) {
+        Vector<ArtGenSubject> subjects;
+        Vector<size_t> rowOf;
+        for (size_t index = 0; index < rows.size(); ++index) {
+            const StringView text = Trim(StringView(rows[index].subject));
+            if (text.empty()) {
+                continue;
+            }
+            ArtGenSubject subject;
+            subject.subject = String(text);
+            const StringView typed = Trim(StringView(rows[index].name));
+            subject.name = typed.empty() ? ArtGenNameFromSubject(text) : String(typed);
+            if (subject.name.empty()) {
+                return std::unexpected(Format("row {}: no letter or digit to name the job from; type a name", index + 1));
+            }
+            if (!IsValidSpriteName(subject.name)) {
+                return std::unexpected(Format("row {}: '{}' is not a valid name (1 to {} of A-Z a-z 0-9 _ -)", index + 1, subject.name, kMaxSpriteNameLength));
+            }
+            for (size_t other = 0; other < subjects.size(); ++other) {
+                if (subjects[other].name == subject.name) {
+                    return std::unexpected(Format("row {}: the name '{}' is already used by row {}", index + 1, subject.name, rowOf[other] + 1));
+                }
+            }
+            if (subjects.size() >= static_cast<size_t>(kMaxSetJobs)) {
+                return std::unexpected(Format("row {}: more than {} subjects", index + 1, kMaxSetJobs));
+            }
+            subjects.push_back(std::move(subject));
+            rowOf.push_back(index);
+        }
+        if (subjects.empty()) {
+            return std::unexpected(String("no subjects: fill in a subject"));
         }
         return subjects;
     }

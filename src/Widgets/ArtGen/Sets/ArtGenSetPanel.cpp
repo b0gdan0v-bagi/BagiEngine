@@ -16,7 +16,9 @@ namespace BECore {
 
     namespace {
 
-        constexpr float kSubjectLines = 6.0f;
+        // The Name field's share of the row, and the least it is given
+        constexpr float kNameWidthShare = 0.3f;
+        constexpr float kNameMinWidth = 120.0f;
         constexpr const char* kSingleRunNote = "A single run is in work on the Generate tab; the set starts after it";
         constexpr const char* kSetDraftNote = "A set is made into artgen/out/<set>/ (drafts, git ignores them). Nothing reaches the game until Accept all on the Review tab.";
         constexpr const char* kReviewDraftNote =
@@ -86,6 +88,15 @@ namespace BECore {
             }
         }
 
+        bool HasSubject(const Vector<ArtGenSubjectRow>& rows) {
+            for (const ArtGenSubjectRow& row : rows) {
+                if (row.subject[0] != '\0') {
+                    return true;
+                }
+            }
+            return false;
+        }
+
     }  // namespace
 
     void DrawArtGenChecker(ImDrawList* drawList, ImVec2 origin, float size, ImU32 light, ImU32 dark) {
@@ -99,12 +110,53 @@ namespace BECore {
         }
     }
 
+    void ArtGenSetPanel::DrawSubjectRows() {
+        if (_subjectRows.empty()) {
+            _subjectRows.emplace_back();
+        }
+        const ImGuiStyle& style = ImGui::GetStyle();
+        const float buttonWidth = ImGui::GetFrameHeight();
+        const float inputs = ImGui::GetContentRegionAvail().x - buttonWidth - style.ItemSpacing.x * 2.0f;
+        const float nameWidth = std::max(kNameMinWidth, inputs * kNameWidthShare);
+        const bool onlyRow = _subjectRows.size() == 1;
+        size_t remove = _subjectRows.size();
+        for (size_t i = 0; i < _subjectRows.size(); ++i) {
+            ArtGenSubjectRow& row = _subjectRows[i];
+            ImGui::PushID(static_cast<int>(i));
+            ImGui::SetNextItemWidth(std::max(inputs - nameWidth, 1.0f));
+            if (ImGui::InputTextWithHint("##subject", "Subject", row.subject, sizeof(row.subject))) {
+                ArtGenRowSubjectEdited(row);
+            }
+            ItemTooltip("What to make. A row with an empty subject is skipped");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(nameWidth);
+            if (ImGui::InputTextWithHint("##name", "Name", row.name, sizeof(row.name))) {
+                ArtGenRowNameEdited(row);
+            }
+            ItemTooltip("The file and sprite name of the job: 1 to 64 of A-Z a-z 0-9 _ -. Follows the subject until you type here; empty it to follow again");
+            ImGui::SameLine();
+            if (IconButton(onlyRow ? ICON_LC_ERASER : ICON_LC_TRASH_2, onlyRow ? "Clear the row" : "Remove the row", "##remove")) {
+                if (onlyRow) {
+                    row = ArtGenSubjectRow();
+                } else {
+                    remove = i;
+                }
+            }
+            ImGui::PopID();
+        }
+        if (remove < _subjectRows.size()) {
+            _subjectRows.erase(_subjectRows.begin() + static_cast<ptrdiff_t>(remove));
+        }
+        ImGui::BeginDisabled(_subjectRows.size() >= static_cast<size_t>(kMaxSetJobs));
+        if (IconTextButton(ICON_LC_PLUS, "Add", "Add a row for one more subject")) {
+            _subjectRows.emplace_back();
+        }
+        ImGui::EndDisabled();
+    }
+
     void ArtGenSetPanel::DrawQueue(ArtGenSession& session, const ArtGenSetPanelForm& form) {
         const auto& palette = GetImGuiPalette();
-        ImGui::PushTextWrapPos(0.0f);
-        ImGui::TextDisabled("One job per line: 'name: subject' (the name is the file and sprite name) or just the subject. Empty lines and lines starting with # are skipped.");
-        ImGui::PopTextWrapPos();
-        ImGui::InputTextMultiline("##setSubjects", _subjects, sizeof(_subjects), ImVec2(-1.0f, ImGui::GetTextLineHeight() * kSubjectLines));
+        DrawSubjectRows();
         ImGui::InputTextWithHint("Set name", "<preset>-<date> when empty", _setName, sizeof(_setName));
         ItemTooltip("The folder under artgen/out/ that keeps the set; 1 to 64 of A-Z a-z 0-9 _ -");
         const bool nameValid = _setName[0] == '\0' || IsValidSpriteName(StringView(_setName));
@@ -127,13 +179,13 @@ namespace BECore {
             _seed = std::max<int64_t>(_seed, 0);
         }
 
-        const bool canQueue = !form.preset.IsEmpty() && _subjects[0] != '\0' && nameValid;
+        const bool canQueue = !form.preset.IsEmpty() && HasSubject(_subjectRows) && nameValid;
         ImGui::BeginDisabled(!canQueue);
         if (IconTextButton(ICON_LC_LIST_PLUS, "Queue",
                            "Make every subject with the preset above and this set's count and seed, one job after another; a set draws one seed for all its jobs when random")) {
             _error.clear();
             _queued.clear();
-            auto subjects = ParseArtGenSubjects(StringView(_subjects));
+            auto subjects = ArtGenSubjectsFromRows(_subjectRows);
             if (subjects) {
                 ArtGenSetRequest request;
                 request.subjects = std::move(*subjects);
@@ -151,7 +203,7 @@ namespace BECore {
                 auto queued = session.EnqueueSet(std::move(request));
                 if (queued) {
                     _queued = Format("Queued '{}': {} job(s)", *queued, jobs);
-                    _subjects[0] = '\0';
+                    _subjectRows.clear();
                     _setName[0] = '\0';
                 } else {
                     _error = queued.error();
@@ -177,7 +229,7 @@ namespace BECore {
 
         const auto& sets = session.GetSets();
         if (sets.empty()) {
-            EmptyState(ICON_LC_LIST_CHECKS, "No sets yet: write the subjects above and press Queue");
+            EmptyState(ICON_LC_LIST_CHECKS, "No sets yet: fill in the subjects above and press Queue");
             return;
         }
         ImGui::BeginChild("##sets");

@@ -35,7 +35,7 @@ namespace BECore {
     };
 
     /**
-     * @brief The Set and Review tabs of the Generate panel: the subjects field, Queue, the sets with their progress, and the review of one set.
+     * @brief The Set and Review tabs of the Generate panel: the subject rows, Queue, the sets with their progress, and the review of one set.
      *
      * ImGui only: every decision (the lines, the queue, the cancel, the retry, the pick and switch, Accept all, Keep) is the session's and is the same call the
      * control API makes (src/Widgets/ArtGen/Sets/CLAUDE.md). Owned by `ArtGenWidget`, which draws the tab bar.
@@ -77,6 +77,8 @@ namespace BECore {
             bool statusValid = false;
         };
 
+        /// The list of subject rows with Add; a row is removed after the loop, never inside it
+        void DrawSubjectRows();
         void DrawSetEntry(ArtGenSession& session, const ArtGenSet& set);
         void DrawJobRows(ArtGenSession& session, const ArtGenSet& set);
         /// Makes the row's "in the game or not, and which file" line again when its status, names or kind changed
@@ -90,7 +92,7 @@ namespace BECore {
         static void EvictThumb(Thumb& thumb);
         static void EvictRow(RowThumbs& row);
 
-        char _subjects[4096] = {};
+        Vector<ArtGenSubjectRow> _subjectRows;  // at least one; grows only on Add
         char _setName[65] = {};
         int32_t _count = kArtGenSetDefaultCount;
         bool _randomSeed = true;

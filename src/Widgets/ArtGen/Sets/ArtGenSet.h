@@ -89,6 +89,26 @@ namespace BECore {
      */
     [[nodiscard]] std::expected<Vector<ArtGenSubject>, String> ParseArtGenSubjects(StringView text);
 
+    inline constexpr size_t kArtGenRowSubjectSize = 512;
+    inline constexpr size_t kArtGenRowNameSize = 65;  // a name of 64 and the terminator
+
+    /// One row of the Set tab: a subject and the job's name. Fixed buffers, so ImGui edits them in place and a steady frame allocates nothing
+    struct ArtGenSubjectRow {
+        char subject[kArtGenRowSubjectSize] = {};
+        char name[kArtGenRowNameSize] = {};
+        bool nameEdited = false;  // a hand-typed name stops following the subject
+    };
+
+    /// The Subject of the row changed: while the name was never typed by hand it becomes the one `ArtGenNameFromSubject` suggests
+    void ArtGenRowSubjectEdited(ArtGenSubjectRow& row);
+
+    /// The Name of the row changed by hand: it stops following the subject, and an emptied name follows again at once
+    void ArtGenRowNameEdited(ArtGenSubjectRow& row);
+
+    /// The jobs of the rows in order: a row with an empty subject is skipped, an empty name is taken from the subject. The error names the row
+    /// (1-based, counting the skipped ones): a bad name, a name used by an earlier row, no letter or digit to name a job from, more than kMaxSetJobs jobs
+    [[nodiscard]] std::expected<Vector<ArtGenSubject>, String> ArtGenSubjectsFromRows(const Vector<ArtGenSubjectRow>& rows);
+
     /// The checks of a list of subjects that did not come from text (a control call): 1..kMaxSetJobs, valid unique names, a subject each
     [[nodiscard]] std::expected<void, String> CheckArtGenSubjects(const Vector<ArtGenSubject>& subjects);
 
