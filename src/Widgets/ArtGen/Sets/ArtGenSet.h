@@ -34,10 +34,12 @@ namespace BECore {
         String kind = "image";  // "image" or "audio"
     };
 
-    /// What Accept all did to a job: the sprite or clip name it was accepted as and when (UTC, `ArtGenTimestamp`)
+    /// What Accept all did to a job: the sprite or clip name it was accepted as and when (UTC, `ArtGenTimestamp`).
+    /// An accepted job that is not `kept` is live: the game holds its pick and the other variants are alternatives to switch to
     struct ArtGenSetAccepted {
         String as;
         String date;
+        bool kept = false;
     };
 
     struct ArtGenSetJob {
@@ -77,8 +79,9 @@ namespace BECore {
     /// The checks of a list of subjects that did not come from text (a control call): 1..kMaxSetJobs, valid unique names, a subject each
     [[nodiscard]] std::expected<void, String> CheckArtGenSubjects(const Vector<ArtGenSubject>& subjects);
 
-    /// `<preset>-<yyyymmdd-hhmmss>` in UTC, the preset name made safe and cut so the whole name stays a valid one
-    [[nodiscard]] String DefaultArtGenSetName(StringView presetName, std::chrono::system_clock::time_point time);
+    /// `<preset>-<yyyymmdd-hhmmss>` in UTC, the preset name made safe and cut so the whole name stays a valid one. The time has a resolution
+    /// of a second, so @p attempt 2, 3, ... adds `-2`, `-3`, ... for a name that is taken (the preset part is cut further to make room)
+    [[nodiscard]] String DefaultArtGenSetName(StringView presetName, std::chrono::system_clock::time_point time, int32_t attempt = 1);
 
     /// `2026-11-17T12:34:56Z`
     [[nodiscard]] String ArtGenTimestamp(std::chrono::system_clock::time_point time);
@@ -96,8 +99,20 @@ namespace BECore {
     /// The jobs that have a pick
     [[nodiscard]] int32_t PickedCount(const ArtGenSet& set);
 
+    /// The jobs the game holds with alternatives still switchable (accepted and not kept)
+    [[nodiscard]] bool IsLive(const ArtGenSetJob& job);
+    [[nodiscard]] int32_t CountLive(const ArtGenSet& set);
+    [[nodiscard]] int32_t CountKept(const ArtGenSet& set);
+    /// The variants of @p job other than its pick (all of them when it has none)
+    [[nodiscard]] int32_t AlternativesOf(const ArtGenSetJob& job);
+
+    [[nodiscard]] ArtGenSetJob* FindJob(ArtGenSet& set, StringView name);
+    [[nodiscard]] const ArtGenSetJob* FindJob(const ArtGenSet& set, StringView name);
     [[nodiscard]] const ArtGenSetVariant* FindVariant(const ArtGenSetJob& job, int64_t seed);
     /// Picks the variant with @p seed; false (nothing changed) when the job has none
     bool PickVariant(ArtGenSetJob& job, int64_t seed);
+    /// Fixes the choice of a live job: `kept`, @p date, and every variant but the picked one dropped from the list (their files stay on disk).
+    /// False and no change when the job is not live
+    bool KeepJob(ArtGenSetJob& job, StringView date);
 
 }  // namespace BECore

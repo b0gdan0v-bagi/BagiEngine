@@ -14,6 +14,9 @@ namespace BECore {
     class ArtGenSession;
     struct ArtGenSet;
 
+    /// The width of the accent frame around the selected variant, in the Generate grid and in the Review
+    inline constexpr float kSelectedBorder = 3.0f;
+
     /// A checkerboard over a square, so an image with a transparent background shows as transparent
     void DrawArtGenChecker(ImDrawList* drawList, ImVec2 origin, float size, ImU32 light, ImU32 dark);
 
@@ -35,7 +38,7 @@ namespace BECore {
     /**
      * @brief The Set and Review tabs of the Generate panel: the subjects field, Queue, the sets with their progress, and the review of one set.
      *
-     * ImGui only: every decision (the lines, the queue, the cancel, the retry, the pick, Accept all) is the session's and is the same call the
+     * ImGui only: every decision (the lines, the queue, the cancel, the retry, the pick and switch, Accept all, Keep) is the session's and is the same call the
      * control API makes (src/Widgets/ArtGen/Sets/CLAUDE.md). Owned by `ArtGenWidget`, which draws the tab bar.
      */
     class ArtGenSetPanel {
@@ -87,7 +90,7 @@ namespace BECore {
         String _reviewSet;  // the set the Review tab shows, by name
         String _loadedSet;  // the set `_rows` belongs to
         bool _openReview = false;
-        String _acceptMessage;
+        String _acceptMessage;  // the last Accept all, switch or Keep: its answer or its error, shown under the rows
         bool _acceptFailed = false;
         Vector<RowThumbs> _rows;  // by job index
         uint64_t _frame = 0;

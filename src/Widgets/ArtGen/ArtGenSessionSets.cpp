@@ -17,6 +17,8 @@ namespace BECore {
         constexpr StringView kStateComplete = "Complete";
         // The range the service draws its own first seed from (tools/artgen/artgen_service.py)
         constexpr int64_t kSeedRange = int64_t{1} << 32;
+        // Default names tried (`-2`, `-3`, ...) before EnqueueSet gives up; a person cannot queue this many sets in one second
+        constexpr int32_t kMaxNameAttempts = 100;
 
         std::filesystem::path RootPath(const String& root) {
             return std::filesystem::path(ToStd(StringView(root)));  //-NoStd: std::filesystem::path takes a std::string_view
@@ -25,11 +27,6 @@ namespace BECore {
         int64_t DrawSeed() {
             std::random_device device;
             return std::uniform_int_distribution<int64_t>(0, kSeedRange - 1)(device);
-        }
-
-        ArtGenSetJob* FindJob(ArtGenSet& set, StringView name) {
-            const auto it = std::find_if(set.jobs.begin(), set.jobs.end(), [&](const ArtGenSetJob& job) { return StringView(job.name) == name; });
-            return it == set.jobs.end() ? nullptr : &*it;
         }
 
         ArtGenSetJob* FirstPending(ArtGenSet& set) {
@@ -73,9 +70,20 @@ namespace BECore {
             text += text.empty() ? Format("{}: {}", label, joined) : Format("; {}: {}", label, joined);
         }
 
-        /// The picked variant of a job of a set about to be accepted, with the real paths of its files; the reason when a row cannot be accepted
-        std::expected<ArtGenVariant, String> PickedVariantOf(const std::filesystem::path& gameRoot, const ArtGenSet& set, const ArtGenSetJob& job) {
-            const ArtGenSetVariant* picked = job.pick ? FindVariant(job, *job.pick) : nullptr;
+        /// The seed Accept all writes for a job: its pick, else for images its first variant; none for a sound with no pick (a person listens)
+        Optional<int64_t> CandidateSeedOf(const ArtGenSet& set, const ArtGenSetJob& job) {
+            if (job.pick) {
+                return job.pick;
+            }
+            if (StringView(set.kind) != kKindAudio && !job.variants.empty()) {
+                return job.variants.front().seed;
+            }
+            return std::nullopt;
+        }
+
+        /// The variant @p seed of a job of a set about to be written into the game, with the real paths of its files; the reason when it cannot be
+        std::expected<ArtGenVariant, String> VariantToWrite(const std::filesystem::path& gameRoot, const ArtGenSet& set, const ArtGenSetJob& job, int64_t seed) {
+            const ArtGenSetVariant* picked = FindVariant(job, seed);
             if (picked == nullptr) {
                 return std::unexpected(String("the pick is not one of its variants"));
             }
@@ -173,6 +181,31 @@ namespace BECore {
         return it == _sets.end() ? nullptr : &*it;
     }
 
+    const ArtGenSet* ArtGenSession::FindNewerOwner(const ArtGenSet& set, const ArtGenSetJob& job) const {
+        if (!job.accepted) {
+            return nullptr;
+        }
+        bool laterInList = false;
+        for (const ArtGenSet& other : _sets) {
+            if (&other == &set) {
+                laterInList = true;
+                continue;
+            }
+            if (other.kind != set.kind) {
+                continue;
+            }
+            for (const ArtGenSetJob& row : other.jobs) {
+                if (!row.accepted || row.accepted->as != job.accepted->as) {
+                    continue;
+                }
+                if (row.accepted->date > job.accepted->date || (row.accepted->date == job.accepted->date && laterInList)) {
+                    return &other;
+                }
+            }
+        }
+        return nullptr;
+    }
+
     ArtGenSetJob* ArtGenSession::RunningJobOfRun(ArtGenSet*& set) {
         set = nullptr;
         if (_run.setName.empty()) {
@@ -227,11 +260,19 @@ namespace BECore {
 
         const auto now = std::chrono::system_clock::now();
         ArtGenSet set;
-        set.name = request.name.empty() ? DefaultArtGenSetName(StringView(request.preset), now) : request.name;
+        const auto taken = [&](const String& name) { return FindSet(name) != nullptr || !NewSetFolderFree(RootPath(_gameRoot), name); };
+        if (request.name.empty()) {
+            // The name has a resolution of a second: a second set of the same preset in it takes the next number
+            for (int32_t attempt = 1; attempt <= kMaxNameAttempts && (attempt == 1 || taken(set.name)); ++attempt) {
+                set.name = DefaultArtGenSetName(StringView(request.preset), now, attempt);
+            }
+        } else {
+            set.name = request.name;
+        }
         if (!IsValidSpriteName(set.name)) {
             return std::unexpected(String("a set name is 1 to 64 of A-Z a-z 0-9 _ -"));
         }
-        if (FindSet(set.name) != nullptr || !NewSetFolderFree(RootPath(_gameRoot), set.name)) {
+        if (taken(set.name)) {
             return std::unexpected(Format("a set named '{}' exists; give it another name", set.name));
         }
         set.created = ArtGenTimestamp(now);
@@ -268,7 +309,8 @@ namespace BECore {
     }
 
     void ArtGenSession::PumpSets() {
-        if (IsRunInWork() || IsSetupBusy() || !IsServiceConnected()) {
+        // A service that polls with its generator down leaves the jobs waiting: a job started then would only fail
+        if (IsRunInWork() || IsSetupBusy() || !IsGeneratorReady()) {
             return;
         }
         for (size_t index = 0; index < _setQueue.size();) {
@@ -426,17 +468,62 @@ namespace BECore {
         return ArtGenSetEdit::Ok;
     }
 
-    ArtGenSetEdit ArtGenSession::PickVariant(StringView setName, StringView jobName, int64_t seed) {
+    ArtGenSetEdit ArtGenSession::PickVariant(StringView setName, StringView jobName, int64_t seed, ArtGenSwitch* write) {
         ArtGenSet* set = MutableSet(setName);
         ArtGenSetJob* job = set != nullptr ? FindJob(*set, jobName) : nullptr;
         if (job == nullptr) {
             return ArtGenSetEdit::NoSet;
         }
-        if (!BECore::PickVariant(*job, seed)) {
+        if (BECore::FindVariant(*job, seed) == nullptr) {
             return ArtGenSetEdit::NoVariant;
         }
+        if (job->accepted && job->accepted->kept) {
+            // A kept row is final; a manifest from before Keep trimmed the variants may still list others
+            return job->pick == seed ? ArtGenSetEdit::Ok : ArtGenSetEdit::NoVariant;
+        }
+        if (!IsLive(*job)) {
+            BECore::PickVariant(*job, seed);
+            SaveSet(*set);
+            ++_version;
+            return ArtGenSetEdit::Ok;
+        }
+        if (job->pick == seed) {
+            return ArtGenSetEdit::Ok;
+        }
+
+        // The game holds the pick of a live row, so the manifest follows only a write that went through
+        const auto fail = [&](String reason) {
+            if (write != nullptr) {
+                write->error = std::move(reason);
+            }
+            return ArtGenSetEdit::WriteFailed;
+        };
+        if (const ArtGenSet* newer = FindNewerOwner(*set, *job)) {
+            return fail(Format("the game's '{}' comes from the set '{}' now, which accepted it later; switch it there", job->accepted->as, newer->name));
+        }
+        const bool sound = StringView(set->kind) == kKindAudio;
+        if (sound ? _soundAcceptor == nullptr : _acceptor == nullptr) {
+            return fail(String("switching is not available here"));
+        }
+        const String name = job->accepted->as;
+        if (!IsValidSpriteName(name)) {
+            return fail(Format("the row was accepted as '{}', which is not a valid sprite or clip name", name));
+        }
+        const auto variant = VariantToWrite(RootPath(_gameRoot), *set, *job, seed);
+        if (!variant) {
+            return fail(Format("the job '{}': {}", job->name, variant.error()));
+        }
+        auto answer = sound ? _soundAcceptor(*variant, ArtGenSoundTarget{name, String()}, ArtGenSoundSettings{}, nullptr) : _acceptor(*variant, name, nullptr);
+        if (!answer) {
+            return fail(Format("the job '{}': {}", job->name, answer.error().message));
+        }
+        job->pick = seed;
+        job->accepted->date = ArtGenTimestamp(std::chrono::system_clock::now());
         SaveSet(*set);
         ++_version;
+        if (write != nullptr) {
+            write->answer = std::move(*answer);
+        }
         return ArtGenSetEdit::Ok;
     }
 
@@ -446,6 +533,7 @@ namespace BECore {
         Register<&ArtGenSession::HandlePick>(service, *this, "artgen_pick");
         Register<&ArtGenSession::HandleRetry>(service, *this, "artgen_retry");
         Register<&ArtGenSession::HandleAcceptSet>(service, *this, "artgen_accept_set");
+        Register<&ArtGenSession::HandleKeep>(service, *this, "artgen_keep");
 
         service.DescribeMethod(
             "artgen_enqueue",
@@ -459,14 +547,25 @@ namespace BECore {
                                ControlParamInfo{"set", "string", false, "the set's name and folder under artgen/out, 1 to 64 of A-Z a-z 0-9 _ - (default <preset>-<date>-<time>)"}}});
         service.DescribeMethod("artgen_set", ControlMethodInfo{"One set as its manifest.json, plus state (Active while a job is pending or running, else Complete)",
                                                                {ControlParamInfo{"set", "string", true, "the set's name"}}});
-        service.DescribeMethod("artgen_pick", ControlMethodInfo{"Picks the variant of a job that Accept all takes (kept in the manifest)",
-                                                                {ControlParamInfo{"set", "string", true, "the set's name"}, ControlParamInfo{"job", "string", true, "the job's name"},
-                                                                 ControlParamInfo{"seed", "integer", true, "the seed of one of the job's variants"}}});
+        service.DescribeMethod("artgen_pick",
+                               ControlMethodInfo{"Picks the variant of a job that Accept all takes (kept in the manifest); on a row already accepted and not kept it switches the game "
+                                                 "to that variant (the same name; `switched` is the acceptor's answer), unless another set accepted that name later; a kept row takes no pick",
+                                                 {ControlParamInfo{"set", "string", true, "the set's name"}, ControlParamInfo{"job", "string", true, "the job's name"},
+                                                  ControlParamInfo{"seed", "integer", true, "the seed of one of the job's variants"}}});
         service.DescribeMethod("artgen_retry", ControlMethodInfo{"Puts the failed and cancelled jobs of a set (or one job) back to pending; what the earlier try made is forgotten",
                                                                  {ControlParamInfo{"set", "string", true, "the set's name"}, ControlParamInfo{"job", "string", false, "only this job"}}});
-        service.DescribeMethod("artgen_accept_set",
-                               ControlMethodInfo{"Accepts the picked variant of every job of a finished set into the game, as the job name (a sprite, or a clip assets/artgen/<name>.wav); repeatable",
-                                                 {ControlParamInfo{"set", "string", true, "the set name; every job must be done and picked"}}});
+        service.DescribeMethod(
+            "artgen_accept_set",
+            ControlMethodInfo{
+                "Accepts the candidate of every job of a finished set into the game, as the job name (a sprite, or a clip assets/artgen/<name>.wav): the pick, else for images the first variant "
+                "(recorded as the pick); a sound needs a pick on every row. The other variants stay switchable with artgen_pick; a kept row, and a row another set accepted under the same name later, "
+                "are skipped; repeatable",
+                {ControlParamInfo{"set", "string", true, "the set name; every job must be done (a sound: and picked)"}}});
+        service.DescribeMethod("artgen_keep",
+                               ControlMethodInfo{"Keeps the choice of the live rows of a set (accepted, not kept), or of one job: the game keeps the picked variant for good, the job's other variants "
+                                                 "leave the manifest and switching is refused after. Final: the way back is a new set. Nothing live to keep is invalid_params; a row another set "
+                                                 "accepted under the same name later is not kept",
+                                                 {ControlParamInfo{"set", "string", true, "the set name"}, ControlParamInfo{"job", "string", false, "only this job"}}});
     }
 
     std::expected<Json, ControlError> ArtGenSession::HandleEnqueue(const Json& params) {
@@ -544,11 +643,20 @@ namespace BECore {
         if (!set || !job || !seed) {
             return std::unexpected(InvalidParams("'set' (string), 'job' (string) and 'seed' (integer) are required"));
         }
-        switch (PickVariant(*set, *job, *seed)) {
+        ArtGenSwitch write;
+        switch (PickVariant(*set, *job, *seed, &write)) {
             case ArtGenSetEdit::NoSet:
                 return std::unexpected(MakeError(kNoSetCode, Format("no job '{}' in a set named '{}'", *job, *set)));
-            case ArtGenSetEdit::NoVariant:
+            case ArtGenSetEdit::NoVariant: {
+                const ArtGenSet* known = FindSet(*set);
+                const ArtGenSetJob* row = known != nullptr ? FindJob(*known, *job) : nullptr;
+                if (row != nullptr && row->accepted && row->accepted->kept) {
+                    return std::unexpected(MakeError(kNoVariantCode, Format("the job '{}' is kept: its choice is final", *job)));
+                }
                 return std::unexpected(MakeError(kNoVariantCode, Format("the job '{}' has no variant of seed {}", *job, *seed)));
+            }
+            case ArtGenSetEdit::WriteFailed:
+                return std::unexpected(MakeError(kAcceptFailedCode, write.error));
             case ArtGenSetEdit::Ok:
                 break;
         }
@@ -556,6 +664,9 @@ namespace BECore {
         reply["set"] = ToJsonString(*set);
         reply["job"] = ToJsonString(*job);
         reply["pick"] = *seed;
+        if (!write.answer.is_null()) {
+            reply["switched"] = std::move(write.answer);
+        }
         return reply;
     }
 
@@ -645,16 +756,25 @@ namespace BECore {
             return std::unexpected(MakeError(kBusyCode, Format("the set '{}' still has jobs to run; wait for it or cancel them", setName)));
         }
 
-        // Nothing is written before every row is known to be ready
+        // Nothing is written before every row is known to be ready; a kept row is final and a row another set accepted later holds the
+        // game's file: both are left as they are
+        Vector<const ArtGenSet*> newer;
+        for (const ArtGenSetJob& job : set->jobs) {
+            newer.push_back(FindNewerOwner(*set, job));
+        }
         Vector<String> notPicked;
         Vector<String> failed;
         Vector<String> cancelled;
-        for (const ArtGenSetJob& job : set->jobs) {
+        for (size_t row = 0; row < set->jobs.size(); ++row) {
+            const ArtGenSetJob& job = set->jobs[row];
+            if ((job.accepted && job.accepted->kept) || newer[row] != nullptr) {
+                continue;
+            }
             if (job.state == ArtGenSetJobState::Failed) {
                 failed.push_back(job.name);
             } else if (job.state == ArtGenSetJobState::Cancelled) {
                 cancelled.push_back(job.name);
-            } else if (!job.pick) {
+            } else if (!CandidateSeedOf(*set, job)) {
                 notPicked.push_back(job.name);
             }
         }
@@ -666,52 +786,158 @@ namespace BECore {
             return std::unexpected(MakeError(kSetIncompleteCode, Format("the set '{}' is not ready to accept: {}", setName, which)));
         }
         const bool sound = StringView(set->kind) == kKindAudio;
-        if (sound ? _soundAcceptor == nullptr : _acceptor == nullptr) {
-            return std::unexpected(MakeError(kAcceptFailedCode, String("accepting is not available here")));
-        }
         const std::filesystem::path root = RootPath(_gameRoot);
-        Vector<ArtGenVariant> variants;
-        for (const ArtGenSetJob& job : set->jobs) {
+        struct Planned {
+            size_t row = 0;
+            int64_t seed = 0;
+            ArtGenVariant variant;
+        };
+        Vector<Planned> planned;
+        for (size_t row = 0; row < set->jobs.size(); ++row) {
+            const ArtGenSetJob& job = set->jobs[row];
+            if ((job.accepted && job.accepted->kept) || newer[row] != nullptr) {
+                continue;
+            }
+            if (planned.empty() && (sound ? _soundAcceptor == nullptr : _acceptor == nullptr)) {
+                return std::unexpected(MakeError(kAcceptFailedCode, String("accepting is not available here")));
+            }
             if (!IsValidSpriteName(job.name)) {
                 return std::unexpected(MakeError(kAcceptFailedCode, Format("the job name '{}' is not a valid sprite or clip name", job.name)));
             }
-            auto variant = PickedVariantOf(root, *set, job);
+            const int64_t seed = *CandidateSeedOf(*set, job);
+            auto variant = VariantToWrite(root, *set, job, seed);
             if (!variant) {
                 return std::unexpected(MakeError(kAcceptFailedCode, Format("the job '{}': {}", job.name, variant.error())));
             }
-            variants.push_back(std::move(*variant));
+            planned.push_back(Planned{row, seed, std::move(*variant)});
         }
 
         // A failure halfway leaves the rows done marked in the manifest; the call can be made again, an accept replaces the same name
         Json accepted = Json::array();
+        Vector<String> done;
+        size_t next = 0;
         for (size_t row = 0; row < set->jobs.size(); ++row) {
             ArtGenSetJob& job = set->jobs[row];
-            auto answer = sound ? _soundAcceptor(variants[row], ArtGenSoundTarget{job.name, String()}, ArtGenSoundSettings{}, nullptr) : _acceptor(variants[row], job.name, nullptr);
-            if (!answer) {
-                String done;
-                for (size_t earlier = 0; earlier < row; ++earlier) {
-                    done += earlier == 0 ? set->jobs[earlier].name : Format(", {}", set->jobs[earlier].name);
-                }
-                return std::unexpected(MakeError(kAcceptFailedCode, Format("the job '{}' (row {} of {}): {}; accepted before it: {}", job.name, row + 1, set->jobs.size(), answer.error().message,
-                                                                           done.empty() ? String("none") : done)));
-            }
-            job.accepted = ArtGenSetAccepted{job.name, ArtGenTimestamp(std::chrono::system_clock::now())};
-            SaveSet(*set);
-            ++_version;
             Json item = Json::object();
             item["job"] = ToJsonString(job.name);
+            if (next >= planned.size() || planned[next].row != row) {
+                if (job.accepted && job.accepted->kept) {
+                    item["kept"] = true;
+                } else {
+                    item["replacedBy"] = ToJsonString(newer[row]->name);
+                }
+                accepted.push_back(std::move(item));
+                continue;
+            }
+            Planned& plan = planned[next++];
+            auto answer = sound ? _soundAcceptor(plan.variant, ArtGenSoundTarget{job.name, String()}, ArtGenSoundSettings{}, nullptr) : _acceptor(plan.variant, job.name, nullptr);
+            if (!answer) {
+                String doneNames;
+                AppendNames(doneNames, "accepted before it", done);
+                return std::unexpected(MakeError(kAcceptFailedCode, Format("the job '{}' (row {} of {}): {}; {}", job.name, row + 1, set->jobs.size(), answer.error().message,
+                                                                           done.empty() ? String("accepted before it: none") : doneNames)));
+            }
+            job.pick = plan.seed;
+            job.accepted = ArtGenSetAccepted{job.name, ArtGenTimestamp(std::chrono::system_clock::now()), false};
+            done.push_back(job.name);
+            SaveSet(*set);
+            ++_version;
             item["as"] = ToJsonString(job.name);
             if (answer->is_object()) {
                 for (const auto& [key, value] : answer->items()) {
                     item[key] = value;
                 }
             }
+            item["seed"] = plan.seed;
+            item["alternatives"] = AlternativesOf(job);
             accepted.push_back(std::move(item));
         }
         Json reply = Json::object();
         reply["set"] = ToJsonString(set->name);
         reply["accepted"] = std::move(accepted);
         return reply;
+    }
+
+    std::expected<Json, ControlError> ArtGenSession::KeepSet(StringView setName, StringView jobName) {
+        ArtGenSet* set = MutableSet(setName);
+        if (set == nullptr) {
+            return std::unexpected(MakeError(kNoSetCode, Format("no set named '{}'", setName)));
+        }
+        if (!jobName.empty() && FindJob(*set, jobName) == nullptr) {
+            return std::unexpected(MakeError(kNoSetCode, Format("no job '{}' in a set named '{}'", jobName, setName)));
+        }
+        Vector<ArtGenSetJob*> rows;
+        Json replaced = Json::array();
+        Vector<String> replacedNames;
+        for (ArtGenSetJob& job : set->jobs) {
+            if (!IsLive(job) || (!jobName.empty() && StringView(job.name) != jobName)) {
+                continue;
+            }
+            // The game's file is another set's variant now: keeping this row would record a seed the game does not hold
+            if (const ArtGenSet* newer = FindNewerOwner(*set, job)) {
+                if (!jobName.empty()) {
+                    return std::unexpected(InvalidParams(Format("the job '{}' is replaced: the set '{}' accepted '{}' later; keep it there", job.name, newer->name, job.accepted->as)));
+                }
+                Json item = Json::object();
+                item["job"] = ToJsonString(job.name);
+                item["by"] = ToJsonString(newer->name);
+                replaced.push_back(std::move(item));
+                replacedNames.push_back(Format("{} (by {})", job.name, newer->name));
+                continue;
+            }
+            rows.push_back(&job);
+        }
+        if (rows.empty()) {
+            String reason = jobName.empty() ? Format("the set '{}' has no live row to keep", setName) : Format("the job '{}' is not live: only an accepted row that is not kept can be kept", jobName);
+            AppendNames(reason, "replaced by a newer set", replacedNames);
+            return std::unexpected(InvalidParams(reason));
+        }
+        for (const ArtGenSetJob* job : rows) {
+            if (!job->pick || BECore::FindVariant(*job, *job->pick) == nullptr) {
+                return std::unexpected(MakeError(kAcceptFailedCode, Format("the job '{}' has no pick to keep", job->name)));
+            }
+        }
+        if (_keeper == nullptr) {
+            return std::unexpected(MakeError(kAcceptFailedCode, String("keeping is not available here")));
+        }
+
+        // The rows kept stay kept when a later one fails: the call can be made again for the rest
+        Vector<String> kept;
+        for (ArtGenSetJob* job : rows) {
+            const String date = ArtGenTimestamp(std::chrono::system_clock::now());
+            if (auto written = _keeper(StringView(set->kind), StringView(job->accepted->as), *job->pick, StringView(date)); !written) {
+                String doneNames;
+                AppendNames(doneNames, "kept before it", kept);
+                return std::unexpected(MakeError(kAcceptFailedCode, Format("the job '{}': {}; {}", job->name, written.error().message, kept.empty() ? String("kept before it: none") : doneNames)));
+            }
+            BECore::KeepJob(*job, StringView(date));
+            kept.push_back(job->name);
+            SaveSet(*set);
+            ++_version;
+        }
+        Json names = Json::array();
+        for (const String& name : kept) {
+            names.push_back(ToJsonString(name));
+        }
+        Json reply = Json::object();
+        reply["set"] = ToJsonString(set->name);
+        reply["kept"] = std::move(names);
+        if (!replaced.empty()) {
+            reply["replaced"] = std::move(replaced);
+        }
+        return reply;
+    }
+
+    std::expected<Json, ControlError> ArtGenSession::HandleKeep(const Json& params) {
+        const auto set = GetJsonString(params, "set");
+        if (!set) {
+            return std::unexpected(InvalidParams("'set' (string) is required"));
+        }
+        if (IsGiven(params, "job") && !GetJsonString(params, "job")) {
+            return std::unexpected(InvalidParams("'job' must be a string"));
+        }
+        const String job = IsGiven(params, "job") ? *GetJsonString(params, "job") : String();
+        return KeepSet(*set, StringView(job));
     }
 
     std::expected<Json, ControlError> ArtGenSession::HandleAcceptSet(const Json& params) {
@@ -741,6 +967,8 @@ namespace BECore {
             item["jobs"] = std::move(jobs);
             item["picked"] = PickedCount(set);
             item["accepted"] = AcceptedCount(set);
+            item["live"] = CountLive(set);
+            item["kept"] = CountKept(set);
             sets.push_back(std::move(item));
         }
         return sets;

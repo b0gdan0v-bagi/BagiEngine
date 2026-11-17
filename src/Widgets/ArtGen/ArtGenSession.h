@@ -24,6 +24,9 @@ namespace BECore {
     CORE_ENUM(ArtGenSetupAction, uint8_t, None, Plan, Install, Start, Stop)
     CORE_ENUM(ArtGenSetupState, uint8_t, Idle, Queued, Running, Done, Failed)
 
+    /// The `state` of a poll that says the generator can make images (the others: `not_running`, `not_installed`)
+    inline constexpr StringView kGeneratorReady = "ready";
+
     /// What the generation service last said about itself in a poll
     struct ArtGenServiceStatus {
         String state;  // "ready", "not_running", "not_installed" (tools/artgen/CLAUDE.md, "Generators")
@@ -104,8 +107,14 @@ namespace BECore {
         String name;             // the set's folder name; empty: DefaultArtGenSetName
     };
 
-    /// What an edit of a set found: the set (or job) unknown, or a pick of a seed the job has not
-    CORE_ENUM(ArtGenSetEdit, uint8_t, Ok, NoSet, NoVariant)
+    /// What an edit of a set found: the set (or job) unknown, a pick of a seed the job has not, or a switch of a live row whose write failed
+    CORE_ENUM(ArtGenSetEdit, uint8_t, Ok, NoSet, NoVariant, WriteFailed)
+
+    /// What the write of a switch of a live row (PickVariant) answered: the acceptor's answer, or why it failed
+    struct ArtGenSwitch {
+        Json answer;  // the acceptor's answer; null when nothing was written (a row that is not live, or the pick it already has)
+        String error;
+    };
 
     /**
      * @brief The editor's side of the art generation contract: the request the Generate panel (or a client) makes, and what the generation
@@ -127,6 +136,8 @@ namespace BECore {
         using Acceptor = std::expected<Json, ControlError> (*)(const ArtGenVariant& variant, StringView sprite, SceneNode* node);
         /// Accepts a sound variant as a clip at @p target, processed by @p settings, and puts it on @p node's AudioSourceComponent when given
         using SoundAcceptor = std::expected<Json, ControlError> (*)(const ArtGenVariant& variant, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, SceneNode* node);
+        /// Writes into the game's provenance file of @p name (a sprite or a clip, by @p kind) that the choice with @p seed was kept on @p date
+        using Keeper = std::expected<void, ControlError> (*)(StringView kind, StringView name, int64_t seed, StringView date);
 
         /// @param clock monotonic seconds; the default is the steady clock (a test passes its own). The editor's one session is GetInstance()
         explicit ArtGenSession(Clock clock = {});
@@ -187,6 +198,10 @@ namespace BECore {
         void SetSoundAcceptor(SoundAcceptor acceptor) {
             _soundAcceptor = acceptor;
         }
+        /// What Keep runs for each row it keeps, before the manifest changes (ArtGenAccept.h in the editor; a fake in the tests)
+        void SetKeeper(Keeper keeper) {
+            _keeper = keeper;
+        }
         /// The node "Use on selected" puts the sprite on (the scene editor's primary selection); null for none. Held, so it is checked alive
         /// in the active scene before use
         void SetSelectedNode(IntrusivePtr<SceneNode> node);
@@ -209,6 +224,12 @@ namespace BECore {
         }
         /// A run is in work or a set has a job to do: an ordinary run, a request and a setup action are refused meanwhile
         [[nodiscard]] bool IsBusy() const;
+        /// A run is Queued or Running (a set that only has Pending jobs is busy, but has no run to cancel)
+        [[nodiscard]] bool IsRunInWork() const {
+            return _run.state == ArtGenRunState::Queued || _run.state == ArtGenRunState::Running;
+        }
+        /// The service polls and says its generator is ready: what a run needs to start
+        [[nodiscard]] bool IsGeneratorReady() const;
 
         /// Queues a set (Sets/CLAUDE.md): validates like Request / RequestDraft, draws the shared seed when none is given, writes the manifest.
         /// The set's name, or why not. Jobs go out one per poll, first in first out
@@ -222,11 +243,23 @@ namespace BECore {
         ArtGenSetEdit CancelSet(StringView set);
         /// Puts the Failed and Cancelled jobs of @p set (or only @p job) back to Pending, with nothing kept of the earlier try
         ArtGenSetEdit RetryJobs(StringView set, StringView job = {});
-        /// Picks the variant @p seed of a job (saved in the manifest)
-        ArtGenSetEdit PickVariant(StringView set, StringView job, int64_t seed);
-        /// Accepts the picked variant of every job of a finished set as its job's name, through the acceptors Accept uses, marking each row in the
-        /// manifest (Sets/CLAUDE.md, "Accept all"). The checks come first and a refusal by them changes nothing; a failure halfway leaves the rows before it accepted
+        /// Picks the variant @p seed of a job (saved in the manifest). On a **live** row (accepted, not kept) it switches: the variant is
+        /// written into the game under the name the row was accepted as, and only then are the pick and the date changed; a failed write
+        /// (also a row that another set replaced, FindNewerOwner) is `WriteFailed` and changes nothing. A kept row takes no other pick
+        /// (`NoVariant`). @p write gets what the write answered
+        ArtGenSetEdit PickVariant(StringView set, StringView job, int64_t seed, ArtGenSwitch* write = nullptr);
+        /// Accepts the candidate of every job of a finished set as its job's name, through the acceptors Accept uses, marking each row in the
+        /// manifest (Sets/CLAUDE.md, "Accept all"): the pick, else for images the first variant. A kept row and a row another set replaced are skipped. The checks come first and a
+        /// refusal by them changes nothing; a failure halfway leaves the rows before it accepted
         std::expected<Json, ControlError> AcceptSet(StringView name);
+        /// Fixes the choice of every live row of a set, or of @p job only: the Keeper writes the kept seed into the game first, then the row is
+        /// kept (its other variants leave the manifest) and the manifest written. Final; nothing live to keep is `invalid_params`, and so is a named
+        /// row that another set replaced (the whole-set call skips such rows and lists them). The answer
+        /// names the rows kept; a failure halfway names the row and the rows done
+        std::expected<Json, ControlError> KeepSet(StringView name, StringView job = {});
+        /// The other set that accepted a row under the same name and kind of @p job later, so the game's file is its variant now (null when
+        /// @p job owns it, or was never accepted). The dates have a resolution of a second: on a tie the set later in the list is the newer
+        [[nodiscard]] const ArtGenSet* FindNewerOwner(const ArtGenSet& set, const ArtGenSetJob& job) const;
         [[nodiscard]] const ArtGenSet* FindSet(StringView name) const;
         [[nodiscard]] const Vector<ArtGenSet>& GetSets() const {
             return _sets;
@@ -255,6 +288,7 @@ namespace BECore {
         std::expected<Json, ControlError> HandlePick(const Json& params);
         std::expected<Json, ControlError> HandleRetry(const Json& params);
         std::expected<Json, ControlError> HandleAcceptSet(const Json& params);
+        std::expected<Json, ControlError> HandleKeep(const Json& params);
         [[nodiscard]] Json StateJson() const;
 
     private:
@@ -262,9 +296,6 @@ namespace BECore {
         ArtGenRun* RunOf(const Json& params);
         std::expected<uint32_t, String> Queue(StringView preset, Json presetData, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants);
         void ReadCatalog(const Json& params);
-        [[nodiscard]] bool IsRunInWork() const {
-            return _run.state == ArtGenRunState::Queued || _run.state == ArtGenRunState::Running;
-        }
         [[nodiscard]] ArtGenSet* MutableSet(StringView name);
         /// The job of `_run` while it is Running (the run is the work of a set), else null
         [[nodiscard]] ArtGenSetJob* RunningJobOfRun(ArtGenSet*& set);
@@ -285,6 +316,7 @@ namespace BECore {
         Clock _clock;
         Acceptor _acceptor = nullptr;
         SoundAcceptor _soundAcceptor = nullptr;
+        Keeper _keeper = nullptr;
         IntrusivePtr<SceneNode> _selectedNode;
         String _gameRoot;
         Vector<ArtGenSet> _sets;

@@ -1,6 +1,7 @@
 #include <BECore/Control/Json.h>
 #include <BECore/Format/Format.h>
 #include <Common/Printers.h>
+#include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/ArtGen/Sets/ArtGenSet.h>
 #include <chrono>
 #include <gtest/gtest.h>
@@ -23,7 +24,7 @@ namespace BECore::Tests {
             first.variants.push_back({4242, "white_knight/white_knight_4242.png", "white_knight/white_knight_4242.artgen.json", "image"});
             first.variants.push_back({4243, "white_knight/white_knight_4243.png", "white_knight/white_knight_4243.artgen.json", "image"});
             first.pick = 4243;
-            first.accepted = ArtGenSetAccepted{"white_knight", "2026-11-17T13:00:00Z"};
+            first.accepted = ArtGenSetAccepted{"white_knight", "2026-11-17T13:00:00Z", false};
             set.jobs.push_back(std::move(first));
             ArtGenSetJob second;
             second.name = "black_knight";
@@ -70,6 +71,37 @@ namespace BECore::Tests {
         EXPECT_EQ(back->jobs[1].error, "the generator is not ready");
         EXPECT_FALSE(back->jobs[1].pick.has_value());
         EXPECT_FALSE(back->jobs[1].accepted.has_value());
+    }
+
+    TEST(ArtGenSetTest, KeptRoundTripsBothWays) {
+        for (const bool kept : {false, true}) {
+            ArtGenSet set = MakeSet();
+            set.jobs[0].accepted->kept = kept;
+            const Json json = ArtGenSetToJson(set);
+            EXPECT_EQ(GetJsonBool((*FindJsonMember(json, "jobs"))[0]["accepted"], "kept"), Optional<bool>(kept));
+            const auto back = ArtGenSetFromJson(json);
+            ASSERT_TRUE(back.has_value()) << back.error();
+            EXPECT_EQ(back->jobs[0].accepted->kept, kept);
+        }
+    }
+
+    TEST(ArtGenSetTest, AManifestWithoutKeptReadsAsKept) {
+        Json json = ArtGenSetToJson(MakeSet());
+        json["jobs"][0]["accepted"].erase("kept");
+        const auto set = ArtGenSetFromJson(json);
+        ASSERT_TRUE(set.has_value()) << set.error();
+        EXPECT_TRUE(set->jobs[0].accepted->kept);
+        EXPECT_FALSE(IsLive(set->jobs[0]));
+    }
+
+    TEST(ArtGenSetTest, KeptOfAWrongTypeNamesTheAcceptedObject) {
+        for (const Json& value : {Json("yes"), Json(1), Json(nullptr)}) {
+            Json json = ArtGenSetToJson(MakeSet());
+            json["jobs"][0]["accepted"]["kept"] = value;
+            const String error = ErrorOf(ArtGenSetFromJson(json));
+            EXPECT_TRUE(Contains(error, "jobs[0].accepted")) << error;
+            EXPECT_TRUE(Contains(error, "'kept'")) << error;
+        }
     }
 
     TEST(ArtGenSetTest, JsonKeepsADraftsPresetData) {
@@ -301,6 +333,20 @@ namespace BECore::Tests {
         EXPECT_EQ(DefaultArtGenSetName("", time), "set-20260102-030000");
     }
 
+    TEST(ArtGenSetTest, ANumberedDefaultNameKeepsTheWholeAValidName) {
+        const std::chrono::system_clock::time_point time = std::chrono::sys_days{std::chrono::year{2026} / std::chrono::January / 2} + std::chrono::hours{3};
+        EXPECT_EQ(DefaultArtGenSetName("wood", time, 1), DefaultArtGenSetName("wood", time));
+        EXPECT_EQ(DefaultArtGenSetName("wood", time, 2), "wood-20260102-030000-2");
+        EXPECT_EQ(DefaultArtGenSetName("wood", time, 13), "wood-20260102-030000-13");
+        const String longName(70, 'p');
+        for (const int32_t attempt : {1, 2, 9, 10, 100}) {
+            const String name = DefaultArtGenSetName(longName, time, attempt);
+            EXPECT_LE(name.size(), static_cast<size_t>(kMaxSpriteNameLength)) << name.c_str();
+            EXPECT_TRUE(IsValidSpriteName(name)) << name.c_str();
+            EXPECT_TRUE(Contains(name, "-20260102-030000")) << name.c_str();
+        }
+    }
+
     TEST(ArtGenSetTest, ActiveCountsAndPicks) {
         ArtGenSet set = MakeSet();
         EXPECT_FALSE(IsActive(set));
@@ -326,6 +372,62 @@ namespace BECore::Tests {
         EXPECT_EQ(job.pick, Optional<int64_t>(4242));
         EXPECT_EQ(FindVariant(job, 4243)->seed, 4243);
         EXPECT_EQ(FindVariant(job, 5), nullptr);
+    }
+
+    TEST(ArtGenSetTest, LiveKeptAndAlternatives) {
+        ArtGenSet set = MakeSet();
+        EXPECT_TRUE(IsLive(set.jobs[0]));
+        EXPECT_FALSE(IsLive(set.jobs[1]));
+        EXPECT_EQ(CountLive(set), 1);
+        EXPECT_EQ(CountKept(set), 0);
+        EXPECT_EQ(AlternativesOf(set.jobs[0]), 1);
+        EXPECT_EQ(AlternativesOf(set.jobs[1]), 0);
+
+        set.jobs[0].accepted->kept = true;
+        EXPECT_FALSE(IsLive(set.jobs[0]));
+        EXPECT_EQ(CountLive(set), 0);
+        EXPECT_EQ(CountKept(set), 1);
+
+        set.jobs[0].pick.reset();
+        EXPECT_EQ(AlternativesOf(set.jobs[0]), 2);
+    }
+
+    TEST(ArtGenSetTest, FindJobByName) {
+        ArtGenSet set = MakeSet();
+        ASSERT_NE(FindJob(set, "black_knight"), nullptr);
+        EXPECT_EQ(FindJob(set, "black_knight")->subject, "a black knight");
+        EXPECT_EQ(FindJob(set, "queen"), nullptr);
+        const ArtGenSet& view = set;
+        EXPECT_EQ(FindJob(view, "white_knight"), &set.jobs[0]);
+    }
+
+    TEST(ArtGenSetTest, KeepJobTrimsTheVariantsToThePick) {
+        ArtGenSet set = MakeSet();
+        ArtGenSetJob& job = set.jobs[0];
+        ASSERT_TRUE(KeepJob(job, "2026-11-18T10:00:00Z"));
+        EXPECT_TRUE(job.accepted->kept);
+        EXPECT_EQ(job.accepted->date, "2026-11-18T10:00:00Z");
+        ASSERT_EQ(job.variants.size(), 1u);
+        EXPECT_EQ(job.variants[0].seed, 4243);
+        EXPECT_EQ(job.pick, Optional<int64_t>(4243));
+
+        const auto back = ArtGenSetFromJson(ArtGenSetToJson(set));
+        ASSERT_TRUE(back.has_value()) << back.error();
+        EXPECT_EQ(back->jobs[0].variants.size(), 1u);
+    }
+
+    TEST(ArtGenSetTest, KeepJobRefusesWhatIsNotLive) {
+        ArtGenSet set = MakeSet();
+        EXPECT_FALSE(KeepJob(set.jobs[1], "d"));
+        EXPECT_EQ(set.jobs[1].variants.size(), 0u);
+        ASSERT_TRUE(KeepJob(set.jobs[0], "d1"));
+        EXPECT_FALSE(KeepJob(set.jobs[0], "d2"));
+        EXPECT_EQ(set.jobs[0].accepted->date, "d1");
+
+        ArtGenSetJob picked = MakeSet().jobs[0];
+        picked.accepted.reset();
+        EXPECT_FALSE(KeepJob(picked, "d"));
+        EXPECT_EQ(picked.variants.size(), 2u);
     }
 
 }  // namespace BECore::Tests
