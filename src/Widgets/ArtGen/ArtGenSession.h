@@ -211,8 +211,12 @@ namespace BECore {
         [[nodiscard]] SceneNode* GetSelectedNodeIfAlive() const;
         /// The variant of the current run with @p seed, or null
         [[nodiscard]] const ArtGenVariant* FindVariant(int64_t seed) const;
-        /// Accepts the variant @p seed as @p sprite, and puts it on the selected node when @p useOnSelected
-        std::expected<Json, ControlError> Accept(int64_t seed, StringView sprite, bool useOnSelected);
+        /// The image settings of the current run's preset: a draft's own `accept` (none: the defaults), else the saved preset's by name;
+        /// a malformed key is the defaults
+        [[nodiscard]] ArtGenImageSettings ImageSettingsOfRun() const;
+        /// Accepts the variant @p seed as @p sprite, and puts it on the selected node when @p useOnSelected. The image is processed by
+        /// @p settings (the panel's form), or by ImageSettingsOfRun() when null; a single image has no frame of a set, so it is trimmed on its own
+        std::expected<Json, ControlError> Accept(int64_t seed, StringView sprite, bool useOnSelected, const ArtGenImageSettings* settings = nullptr);
         /// Accepts the sound variant @p seed as a clip at @p target, processed by @p settings; on the selected node's AudioSourceComponent
         /// when @p useOnSelected
         std::expected<Json, ControlError> AcceptSound(int64_t seed, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, bool useOnSelected);

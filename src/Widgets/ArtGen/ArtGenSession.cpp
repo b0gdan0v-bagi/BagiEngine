@@ -50,7 +50,20 @@ namespace BECore {
         return nullptr;
     }
 
-    std::expected<Json, ControlError> ArtGenSession::Accept(int64_t seed, StringView sprite, bool useOnSelected) {
+    ArtGenImageSettings ArtGenSession::ImageSettingsOfRun() const {
+        const Json* data = &_run.presetData;
+        if (_run.presetData.is_null()) {
+            const ArtGenPreset* saved = FindPreset(_run.preset);
+            data = saved != nullptr ? &saved->data : nullptr;
+        }
+        const Json* accept = data != nullptr ? FindJsonMember(*data, "accept") : nullptr;
+        if (accept == nullptr) {
+            return {};
+        }
+        return ArtGenImageSettingsFromJson(*accept).value_or(ArtGenImageSettings{});
+    }
+
+    std::expected<Json, ControlError> ArtGenSession::Accept(int64_t seed, StringView sprite, bool useOnSelected, const ArtGenImageSettings* settings) {
         const ArtGenVariant* variant = FindVariant(seed);
         if (variant == nullptr) {
             return std::unexpected(ControlError{String(kNoVariantCode), Format("the current run has no image of seed {}", seed)});
@@ -68,7 +81,7 @@ namespace BECore {
                 return std::unexpected(ControlError{String(kAcceptFailedCode), String("no node is selected in the scene editor")});
             }
         }
-        return _acceptor(*variant, sprite, ArtGenImagePlan{}, node);
+        return _acceptor(*variant, sprite, ArtGenImagePlan{settings != nullptr ? *settings : ImageSettingsOfRun(), {}}, node);
     }
 
     std::expected<Json, ControlError> ArtGenSession::AcceptSound(int64_t seed, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, bool useOnSelected) {
@@ -589,7 +602,22 @@ namespace BECore {
         if (!sprite) {
             return std::unexpected(InvalidParams("'sprite' (string) is required for an image"));
         }
-        return Accept(*seed, *sprite, useOnSelected);
+        ArtGenImageSettings settings = ImageSettingsOfRun();
+        if (const Json* image = FindJsonMember(params, "image"); image != nullptr && !image->is_null()) {
+            if (!image->is_object()) {
+                return std::unexpected(InvalidParams("'image' must be an object {trim, padding, maxSize}"));
+            }
+            Json merged = ArtGenImageSettingsToJson(settings);
+            for (const auto& [key, value] : image->items()) {
+                merged[key] = value;
+            }
+            auto parsed = ArtGenImageSettingsFromJson(merged);
+            if (!parsed) {
+                return std::unexpected(InvalidParams(Format("'image': {}", parsed.error())));
+            }
+            settings = *parsed;
+        }
+        return Accept(*seed, *sprite, useOnSelected, &settings);
     }
 
     std::expected<Json, ControlError> ArtGenSession::HandleSetupReport(const Json& params) {
