@@ -27,6 +27,14 @@ namespace BECore {
         return Storage().Intern(str);
     }
 
+    void PoolString::InternBatch(Span<const StringView> texts, Span<PoolString> out) {
+        Storage().InternBatch(texts, out);
+    }
+
+    void PoolString::InternBatch(Span<const StringView> texts, Span<const uint64_t> hashes, Span<PoolString> out) {
+        Storage().InternBatch(texts, hashes, out);
+    }
+
     PoolStringStats PoolString::GetStats() {
         return Storage().GetStats();
     }

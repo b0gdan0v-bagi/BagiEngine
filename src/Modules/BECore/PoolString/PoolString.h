@@ -60,6 +60,20 @@ namespace BECore {
         /// Returns the pooled string equal to `str`, or nullopt when no such string was interned. Never adds to the pool.
         [[nodiscard]] static Optional<PoolString> Find(StringView str);
 
+        /// Interns every text of `texts` and writes the result of `texts[i]` to `out[i]`; the same as `Intern` one by one
+        /// (an empty text gives the empty `PoolString`, a text twice in one batch gives one string), with fewer locks: one
+        /// pass under the shared lock for the texts already in the pool, then, when some are missing, one unique lock, one
+        /// growth of the table and one allocation of memory for all the new strings. A batch of texts that are all in the pool
+        /// takes no unique lock. `out.size()` must equal `texts.size()` (asserted); the views are read during the call only.
+        /// Hashes the texts itself, so it is the form for data that is not trusted.
+        static void InternBatch(Span<const StringView> texts, Span<PoolString> out);
+
+        /// The same with the hashes of the texts given, which saves hashing them again when a cook or a file stored them.
+        /// `hashes[i]` **must** be `StringUtils::GetHash(texts[i])` (checked by `ASSERT` in Debug): a wrong hash puts the text
+        /// where a lookup of it never looks, and a text whose hash belongs to another one can be taken for that one. Never
+        /// pass hashes read from untrusted bytes: use the form above.
+        static void InternBatch(Span<const StringView> texts, Span<const uint64_t> hashes, Span<PoolString> out);
+
         /// Counters of the pool; `Find` is not an `Intern` call. A test compares two snapshots: the pool is shared.
         [[nodiscard]] static PoolStringStats GetStats();
 

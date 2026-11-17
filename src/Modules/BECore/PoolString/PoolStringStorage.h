@@ -17,6 +17,8 @@ namespace BECore::Details {
     /// read-modify-write), and no other counter shares its cache line, so counting a hit adds no shared write to `Intern`.
     struct alignas(64) PoolHitCounter {
         std::atomic<uint64_t> hits{0};
+        std::atomic<uint64_t> batchCalls{0};
+        std::atomic<uint64_t> batchStrings{0};
         const void* owner = nullptr;  ///< Identifies the thread that writes it; only read under the counters' mutex
     };
 
@@ -72,6 +74,12 @@ namespace BECore::Details {
         /// The pooled string equal to `str`, or nullopt; never adds. The empty text is the empty `PoolString`.
         [[nodiscard]] Optional<PoolString> Find(StringView str);
 
+        /// `PoolString::InternBatch`: `out[i]` is the string of `texts[i]`. A hit takes the shared lock only, once for the whole
+        /// batch; the misses take the unique lock once, the table grows once and every new string of the batch is placed in
+        /// one allocation (see `AllocateEntryMemory`). A text twice in a batch is one miss and one hit.
+        void InternBatch(Span<const StringView> texts, Span<PoolString> out);
+        void InternBatch(Span<const StringView> texts, Span<const uint64_t> hashes, Span<PoolString> out);
+
         [[nodiscard]] PoolStringStats GetStats();
 
     private:
@@ -100,12 +108,19 @@ namespace BECore::Details {
 
         PoolHitCounter& RegisterThread();
 
-        void CountHit() {
+        PoolHitCounter& CounterOfThread() {
             if (t_counterCache.storageId != _id) [[unlikely]] {
                 RegisterThread();
             }
-            PoolHitCounter* counter = t_counterCache.counter;
-            counter->hits.store(counter->hits.load(std::memory_order_relaxed) + 1, std::memory_order_relaxed);
+            return *t_counterCache.counter;
+        }
+
+        static void Bump(std::atomic<uint64_t>& counter, uint64_t count) {
+            counter.store(counter.load(std::memory_order_relaxed) + count, std::memory_order_relaxed);
+        }
+
+        void CountHit() {
+            Bump(CounterOfThread().hits, 1);
         }
 
         /// The slow half of `Intern`: takes the unique lock, looks again, inserts
@@ -114,8 +129,15 @@ namespace BECore::Details {
         /// A block of `bytes` (a multiple of 8) from the source, or from the heap when the source has none
         char* TakeBlock(size_t bytes);
 
-        /// Memory for one entry of `bytes` (a multiple of 8). The caller holds the unique lock.
-        char* AllocateEntryMemory(size_t bytes);
+        /// Memory for `entryCount` entries that take `bytes` (a multiple of 8) together; the caller holds the unique lock.
+        /// What fits the rest of the current block goes there. Otherwise a single entry of at most one standard block starts a
+        /// new standard block, which becomes current (the rest of the old one is lost); anything larger, or several entries
+        /// of a batch, gets a block of exactly `bytes` and the current block stays current.
+        char* AllocateEntryMemory(size_t bytes, size_t entryCount);
+
+        /// The slow half of `InternBatch`: re-checks the texts at `missing` under the unique lock and places the new ones.
+        /// Returns how many new strings it added.
+        size_t InternBatchMisses(Span<const StringView> texts, Span<const uint64_t> hashes, Span<PoolString> out, Vector<size_t>& missing);
     };
 
 }  // namespace BECore::Details

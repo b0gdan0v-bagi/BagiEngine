@@ -38,15 +38,6 @@ namespace BECore::Tests {
 
         constexpr size_t kEntryHeaderBytes = offsetof(Details::PoolStringEntry, data);
 
-        /// A text of `length` characters that differs from the texts of other seeds from its first character on
-        String BlockText(size_t length, char seed) {
-            String text(length, seed);
-            for (size_t i = 1; i < length; i += 7) {
-                text[i] = static_cast<char>('a' + (i + static_cast<size_t>(seed)) % 26);
-            }
-            return text;
-        }
-
         void ExpectInternedWholeAndTerminated(const String& text) {
             const PoolString interned = PoolString::Intern(StringView{text});
             ASSERT_EQ(interned.Length(), text.size());
@@ -102,12 +93,6 @@ namespace BECore::Tests {
         constexpr size_t kGrowthNames = 20000;
         constexpr int kTableThreads = 4;
         constexpr auto kTableThreadsLimit = std::chrono::seconds(60);
-
-        String CounterName(StringView prefix, size_t index) {
-            String name(prefix);
-            name += ToString(index);
-            return name;
-        }
 
         size_t InitialSlotOf(StringView text) {
             return static_cast<size_t>(StringUtils::GetHash(text)) & (kInitialTableSlots - 1);
@@ -171,32 +156,15 @@ namespace BECore::Tests {
         }
 
         Vector<Vector<PoolString>> results(kTableThreads, Vector<PoolString>(kGrowthNames));
-        std::atomic<int> ready{0};
-        std::atomic<int> finished{0};
-        Vector<std::thread> threads;
-        for (int t = 0; t < kTableThreads; ++t) {
-            threads.emplace_back([&, t] {
-                ready.fetch_add(1);
-                while (ready.load() < kTableThreads) {
-                    std::this_thread::yield();
-                }
-                // Each thread starts at another name, so the threads insert different names at the same time
-                const size_t start = kGrowthNames / kTableThreads * static_cast<size_t>(t);
-                for (size_t step = 0; step < kGrowthNames; ++step) {
-                    const size_t i = (start + step) % kGrowthNames;
-                    results[static_cast<size_t>(t)][i] = PoolString::Intern(StringView{names[i]});
-                }
-                finished.fetch_add(1);
-            });
-        }
-        const auto deadline = std::chrono::steady_clock::now() + kTableThreadsLimit;
-        while (finished.load() < kTableThreads && std::chrono::steady_clock::now() < deadline) {
-            std::this_thread::yield();
-        }
-        ASSERT_EQ(finished.load(), kTableThreads) << "the threads did not finish in time";
-        for (auto& thread : threads) {
-            thread.join();
-        }
+        const bool inTime = RunThreadsTogether(kTableThreads, kTableThreadsLimit, [&](int t) {
+            // Each thread starts at another name, so the threads insert different names at the same time
+            const size_t start = kGrowthNames / kTableThreads * static_cast<size_t>(t);
+            for (size_t step = 0; step < kGrowthNames; ++step) {
+                const size_t i = (start + step) % kGrowthNames;
+                results[static_cast<size_t>(t)][i] = PoolString::Intern(StringView{names[i]});
+            }
+        });
+        ASSERT_TRUE(inTime) << "the threads did not finish in time";
 
         for (size_t i = 0; i < kGrowthNames; ++i) {
             for (int t = 1; t < kTableThreads; ++t) {
@@ -324,29 +292,12 @@ namespace BECore::Tests {
         }
         const PoolStringStats before = PoolString::GetStats();
 
-        std::atomic<int> ready{0};
-        std::atomic<int> finished{0};
-        Vector<std::thread> threads;
-        for (int t = 0; t < kStatsThreads; ++t) {
-            threads.emplace_back([&] {
-                ready.fetch_add(1);
-                while (ready.load() < kStatsThreads) {
-                    std::this_thread::yield();
-                }
-                for (const String& name : names) {
-                    static_cast<void>(PoolString::Intern(StringView{name}));
-                }
-                finished.fetch_add(1);
-            });
-        }
-        const auto deadline = std::chrono::steady_clock::now() + kTableThreadsLimit;
-        while (finished.load() < kStatsThreads && std::chrono::steady_clock::now() < deadline) {
-            std::this_thread::yield();
-        }
-        ASSERT_EQ(finished.load(), kStatsThreads) << "the threads did not finish in time";
-        for (auto& thread : threads) {
-            thread.join();
-        }
+        const bool inTime = RunThreadsTogether(kStatsThreads, kTableThreadsLimit, [&](int) {
+            for (const String& name : names) {
+                static_cast<void>(PoolString::Intern(StringView{name}));
+            }
+        });
+        ASSERT_TRUE(inTime) << "the threads did not finish in time";
 
         // The threads are gone, their counts stay. Every name is one miss and the other calls are hits, whoever won the race
         const PoolStringStats after = PoolString::GetStats();
@@ -443,24 +394,7 @@ namespace BECore::Tests {
     namespace {
 
         constexpr size_t kBlock = PoolString::kBlockBytes;
-        constexpr size_t kSmallTable = 8;
-
-        /// A storage over a counting source with a small table; the numbers of its statistics are absolute
-        struct IsolatedPool {
-            CountingBlockSource source;
-            Details::PoolStringStorage storage;
-
-            explicit IsolatedPool(size_t sourceLimit = SIZE_MAX, size_t tableCapacity = kSmallTable) : source(sourceLimit), storage(source, tableCapacity) {}
-        };
-
-        /// The smallest power of two that holds `used` entries at half load
-        size_t TableCapacityFor(size_t start, size_t used) {
-            size_t capacity = start;
-            while (used * 2 > capacity) {
-                capacity *= 2;
-            }
-            return capacity;
-        }
+        constexpr size_t kSmallTable = IsolatedPool::kSmallTable;
 
         void ExpectAllFound(Details::PoolStringStorage& storage, const Vector<String>& names, const Vector<PoolString>& interned) {
             for (size_t i = 0; i < names.size(); ++i) {
