@@ -65,6 +65,17 @@ namespace BECore {
             return record;
         }
 
+        /// The record of the first member by name that has one
+        const AtlasPackRecord* FindPackRecord(const TextureLibrary& library, StringView atlasName) {
+            for (const PoolString name : AtlasMembers(library, atlasName)) {
+                const SpriteEntry& entry = *library.GetSprite(name);
+                if (entry.atlas->pack.has_value()) {
+                    return &*entry.atlas->pack;
+                }
+            }
+            return nullptr;
+        }
+
         void CopyCrop(const RgbaImage& source, const AtlasCrop& crop, RgbaImage& atlas, const PackedRect& at) {
             const size_t rowBytes = static_cast<size_t>(crop.width) * kBytesPerPixel;
             for (uint32_t row = 0; row < crop.height; ++row) {
@@ -122,24 +133,24 @@ namespace BECore {
         return members;
     }
 
+    bool HasPackRecord(const TextureLibrary& library, StringView atlasName) {
+        return FindPackRecord(library, atlasName) != nullptr;
+    }
+
     PackSettings PackSettingsOf(const TextureLibrary& library, StringView atlasName) {
         PackSettings settings;
-        for (const PoolString name : AtlasMembers(library, atlasName)) {
-            const SpriteEntry& entry = *library.GetSprite(name);
-            if (!entry.atlas->pack.has_value()) {
-                continue;
-            }
-            const AtlasPackRecord& record = *entry.atlas->pack;
-            if (record.padding >= 0 && record.padding <= kMaxAtlasPadding) {
-                settings.padding = record.padding;
-            }
-            if (const Optional<AtlasSizeMode> mode = EnumUtils<AtlasSizeMode>::Cast(record.sizeMode.ToStringView())) {
-                settings.sizeMode = *mode;
-            }
-            if (record.maxSide >= 1 && record.maxSide <= kMaxSpriteImageSide) {
-                settings.maxSide = record.maxSide;
-            }
-            break;
+        const AtlasPackRecord* record = FindPackRecord(library, atlasName);
+        if (record == nullptr) {
+            return settings;
+        }
+        if (record->padding >= 0 && record->padding <= kMaxAtlasPadding) {
+            settings.padding = record->padding;
+        }
+        if (const Optional<AtlasSizeMode> mode = EnumUtils<AtlasSizeMode>::Cast(record->sizeMode.ToStringView())) {
+            settings.sizeMode = *mode;
+        }
+        if (record->maxSide >= 1 && record->maxSide <= kMaxSpriteImageSide) {
+            settings.maxSide = record->maxSide;
         }
         return settings;
     }

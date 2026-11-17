@@ -47,7 +47,7 @@ namespace BECore {
 
         const PoolString group = GroupOf(entry);
         const bool packed = IsPackedSprite(entry);
-        SyncNameField(entry, group);
+        SyncNameField(library, entry, group);
 
         ImGui::TextUnformatted("Atlas:");
         ImGui::SameLine();
@@ -111,13 +111,18 @@ namespace BECore {
         return changed;
     }
 
-    void SpriteAtlasPanel::SyncNameField(const SpriteEntry& entry, PoolString group) {
+    void SpriteAtlasPanel::SyncNameField(const TextureLibrary& library, const SpriteEntry& entry, PoolString group) {
         if (entry.name == _boundSprite && group == _boundGroup) {
             return;
         }
         if (entry.name != _boundSprite) {
             _status[0] = '\0';
             _hasError = false;
+        }
+        // A repack from here must make the file the group was packed as (and the file Accept makes), so the fields follow the group;
+        // a group nobody packed yet keeps what the person set
+        if (group != _boundGroup && !group.Empty() && HasPackRecord(library, group.ToStringView())) {
+            _settings = PackSettingsOf(library, group.ToStringView());
         }
         _boundSprite = entry.name;
         _boundGroup = group;

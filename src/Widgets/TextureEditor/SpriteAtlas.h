@@ -38,6 +38,9 @@ namespace BECore {
     /// The settings the group was last packed with (the record of its first member by name that has one); the defaults for none or a field out of range
     [[nodiscard]] PackSettings PackSettingsOf(const TextureLibrary& library, StringView atlasName);
 
+    /// Whether some member of the group has a pack record, i.e. `PackSettingsOf` is more than the defaults
+    [[nodiscard]] bool HasPackRecord(const TextureLibrary& library, StringView atlasName);
+
     struct AtlasCounts {
         uint32_t members = 0;
         uint32_t packed = 0;

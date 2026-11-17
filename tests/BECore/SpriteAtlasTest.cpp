@@ -672,6 +672,7 @@ namespace BECore::Tests {
         TextureLibrary library;
         FillLibrary(library);
         EXPECT_TRUE(SameSettings(PackSettingsOf(library, "ui"), PackSettings{}));
+        EXPECT_FALSE(HasPackRecord(library, "ui"));
 
         const PackSettings settings = CustomSettings();
         ASSERT_TRUE(Pack(library, game, settings).has_value());
@@ -686,6 +687,8 @@ namespace BECore::Tests {
             EXPECT_EQ(entry.atlas->pack->maxSide, 2048u);
         }
         EXPECT_TRUE(SameSettings(PackSettingsOf(library, "ui"), settings));
+        EXPECT_TRUE(HasPackRecord(library, "ui"));
+        EXPECT_FALSE(HasPackRecord(library, "other"));
         EXPECT_TRUE(SameSettings(PackSettingsOf(library, "other"), PackSettings{}));
         EXPECT_TRUE(SameSettings(PackSettingsOf(library, ""), PackSettings{}));
     }

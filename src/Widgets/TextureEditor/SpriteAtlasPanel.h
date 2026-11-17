@@ -12,7 +12,8 @@ namespace BECore {
      * group, Pack and Unpack. The rules and the files are SpriteAtlas's; this is the ImGui over them and the refresh of what showed the
      * old pixels (the texture cache and the sprites of the active scene).
      *
-     * The pack settings live only here: a repack with other settings is another file, and nothing but the group name is saved.
+     * The fields are the pack settings; Pack records them in the group's entries and the section loads them back when the selected
+     * sprite's group changes, so a repack here and an Accept of the Generate panel make the same file.
      * Numbers and the summary are formatted by ImGui into its own buffers and the texts are fixed buffers, so a steady frame allocates nothing.
      */
     class SpriteAtlasPanel {
@@ -29,8 +30,8 @@ namespace BECore {
         }
 
     private:
-        /// The sprite and the group the name field was last loaded for: the field is reloaded when either moves
-        void SyncNameField(const SpriteEntry& entry, PoolString group);
+        /// The sprite and the group the name field was last loaded for: the field is reloaded when either moves, the settings when the group does
+        void SyncNameField(const TextureLibrary& library, const SpriteEntry& entry, PoolString group);
         bool ApplyGroupName(TextureLibrary& library, const SpriteEntry& entry);
         bool Pack(TextureLibrary& library, PoolString group);
         bool Unpack(TextureLibrary& library, PoolString group);
