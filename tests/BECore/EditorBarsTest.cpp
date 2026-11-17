@@ -5,6 +5,8 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Widgets/EditorLayout/EditorPlayModel.h>
+#include <Widgets/EditorLayout/Hardware/HardwareMonitor.h>
+#include <Widgets/EditorLayout/Hardware/HardwareText.h>
 #include <Widgets/EditorLayout/MainToolbar.h>
 #include <Widgets/EditorLayout/StatusBar.h>
 #include <Widgets/ImGuiFonts.h>
@@ -22,6 +24,33 @@ namespace BECore::Tests {
         constexpr int kSteadyFrames = 10;
         /// Long enough at the frame time of the fixture for ImGui's key repeat to start and fire
         constexpr int kHoldFrames = 60;
+
+        constexpr int32_t kTestTemperatureC = 64;
+        constexpr uint32_t kTestLoadPercent = 87;
+        constexpr uint32_t kTestMemUsedMb = 9318;
+        constexpr uint32_t kTestMemTotalMb = 12288;
+        constexpr size_t kLineSize = 96;
+
+        /// Answers what the test last set, on the calling thread
+        class SettableReader : public IHardwareReader {
+        public:
+            bool Read(HardwareReadings& out) override {
+                out = readings;
+                return answer;
+            }
+
+            bool answer = true;
+            HardwareReadings readings;
+        };
+
+        HardwareReadings GpuReading(uint32_t load) {
+            HardwareReadings readings;
+            readings.temperatureC = kTestTemperatureC;
+            readings.loadPercent = load;
+            readings.memUsedMb = kTestMemUsedMb;
+            readings.memTotalMb = kTestMemTotalMb;
+            return readings;
+        }
 
         /// A context of its own with no backend: the atlas takes the fonts, nothing rasterizes them, and the bars draw into a host window
         class EditorBarsTest : public ::testing::Test {
@@ -94,6 +123,38 @@ namespace BECore::Tests {
                 RunFrame();
             }
 
+            /// Gives the status bar a monitor over a reader of the test's; the test polls it on its own thread, so no worker runs
+            void InstallReader(bool answer, const HardwareReadings& readings) {
+                auto gpu = MakeUnique<SettableReader>();
+                reader = gpu.get();
+                reader->answer = answer;
+                reader->readings = readings;
+                auto owned = MakeUnique<HardwareMonitor>(std::move(gpu), nullptr);
+                monitor = owned.get();
+                statusBar.SetHardwareMonitor(std::move(owned));
+                monitor->PollOnce();
+            }
+
+            /// The number of vertices the status bar drew in the last frame: more text, more vertices
+            [[nodiscard]] int StatusBarVertexCount() const {
+                const ImGuiContext& context = *ImGui::GetCurrentContext();
+                for (const ImGuiWindow* window : context.Windows) {
+                    if (window->Name && std::strstr(window->Name, "StatusBar") != nullptr) {
+                        return window->DrawList->VtxBuffer.Size;
+                    }
+                }
+                ADD_FAILURE() << "the status bar window was not found";
+                return 0;
+            }
+
+            [[nodiscard]] String HardwareLine() const {
+                char line[kLineSize] = {};
+                FormatHardwareLine(statusBar.GetHardwareText(), line);
+                return String(line);
+            }
+
+            SettableReader* reader = nullptr;    // owned by the monitor
+            HardwareMonitor* monitor = nullptr;  // owned by the status bar
             IntrusivePtrAtomic<SceneManager> sceneManager;
             ImGuiFontBuffers buffers;
             ImGuiFonts fonts;
@@ -169,6 +230,85 @@ namespace BECore::Tests {
 
         EXPECT_GT(stepPresses, 1u);
         EXPECT_EQ(model.GetStepCount(), stepPresses);
+    }
+
+    TEST_F(EditorBarsTest, NoHardwareItemIsDrawnWithoutAMonitorOrWithoutReadings) {
+        RunFrame();
+        const int bare = StatusBarVertexCount();
+        EXPECT_FALSE(statusBar.GetHardwareText().visible);
+
+        InstallReader(false, GpuReading(kTestLoadPercent));
+        RunFrame();
+
+        EXPECT_FALSE(statusBar.GetHardwareText().visible);
+        EXPECT_EQ(StatusBarVertexCount(), bare);
+    }
+
+    TEST_F(EditorBarsTest, AGpuReadingIsShownInTheBar) {
+        RunFrame();
+        const int bare = StatusBarVertexCount();
+
+        InstallReader(true, GpuReading(kTestLoadPercent));
+        RunFrame();
+
+        EXPECT_TRUE(statusBar.GetHardwareText().visible);
+        EXPECT_EQ(HardwareLine(), "GPU 64\xC2\xB0"
+                                  "C 87% 9.1/12 GB");
+        EXPECT_GT(StatusBarVertexCount(), bare);
+    }
+
+    TEST_F(EditorBarsTest, ACpuFallbackIsShownWhenThereIsNoGpuReading) {
+        constexpr uint32_t kCpuLoad = 45;
+        // The reader is the same type as the GPU's one; the slot decides the kind
+        auto cpu = MakeUnique<SettableReader>();
+        cpu->readings.loadPercent = kCpuLoad;
+        auto owned = MakeUnique<HardwareMonitor>(nullptr, std::move(cpu));
+        owned->PollOnce();
+        statusBar.SetHardwareMonitor(std::move(owned));
+        RunFrame();
+
+        EXPECT_EQ(HardwareLine(), "CPU 45%");
+    }
+
+    TEST_F(EditorBarsTest, TheReadoutIsMadeAgainOnlyWhenTheReadingsChanged) {
+        InstallReader(true, GpuReading(kTestLoadPercent));
+        const uint32_t firstVersion = monitor->Version();
+        RunFrame();
+        HardwareReadings sink;
+        // The bar took the published readings: nothing is left to fetch
+        EXPECT_FALSE(monitor->Fetch(sink));
+
+        monitor->PollOnce();
+        EXPECT_EQ(monitor->Version(), firstVersion);
+        RunFrame();
+        EXPECT_EQ(HardwareLine(), "GPU 64\xC2\xB0"
+                                  "C 87% 9.1/12 GB");
+
+        reader->readings = GpuReading(kTestLoadPercent + 1);
+        monitor->PollOnce();
+        EXPECT_NE(monitor->Version(), firstVersion);
+        RunFrame();
+        EXPECT_FALSE(monitor->Fetch(sink));
+        EXPECT_EQ(HardwareLine(), "GPU 64\xC2\xB0"
+                                  "C 88% 9.1/12 GB");
+    }
+
+    TEST_F(EditorBarsTest, ASteadyFrameWithAHardwareReadingAllocatesNothing) {
+        InstallReader(true, GpuReading(kTestLoadPercent));
+        for (int i = 0; i < kWarmUpFrames; ++i) {
+            RunFrame();
+        }
+
+        const AllocTracker::ThreadCounters before = AllocTracker::GetThreadCounters();
+        for (int i = 0; i < kSteadyFrames; ++i) {
+            RunFrame();
+        }
+        const AllocTracker::ThreadCounters after = AllocTracker::GetThreadCounters();
+
+        EXPECT_TRUE(statusBar.GetHardwareText().visible);
+        if constexpr (AllocTracker::kEnabled) {
+            EXPECT_EQ(after.count, before.count);
+        }
     }
 
     TEST_F(EditorBarsTest, ASteadyFrameAllocatesNothing) {

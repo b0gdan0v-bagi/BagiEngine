@@ -52,3 +52,9 @@ endif()
 if(TARGET VulkanModule)
     target_link_libraries(RuntimeModule PUBLIC VulkanModule)
 endif()
+
+# The macOS readings of the editor's status bar (Widgets/EditorLayout/Hardware): IOKit for the IOAccelerator statistics and the SMC,
+# CoreFoundation for what they return. BagiEngineTests and the games get them through RuntimeModule.
+if(APPLE AND BE_EDITOR_ENABLED)
+    target_link_libraries(RuntimeModule PUBLIC "-framework IOKit" "-framework CoreFoundation")
+endif()
