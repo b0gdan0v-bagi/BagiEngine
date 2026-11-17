@@ -1,6 +1,8 @@
+#include <BECore/PoolString/PoolBlock.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/PoolString/PoolStringStorage.h>
 #include <BECore/PoolStringTestSupport.h>
+#include <BECore/Utils/EnumUtils.h>
 #include <Common/Printers.h>
 #include <cstring>
 
@@ -18,6 +20,8 @@ namespace BECore::Tests {
         /// A block of `AllocateBlock` filled the way a cook would lay it out: entries one after another
         struct BuiltBlock {
             PoolBlock block;
+            const char* base = nullptr;  ///< `block.Data()` as given: the token is empty once the block is adopted
+            size_t capacity = 0;
             size_t used = 0;
             Vector<size_t> offsets;
         };
@@ -35,6 +39,8 @@ namespace BECore::Tests {
             BuiltBlock built;
             built.used = BytesOf(texts);
             built.block = storage.AllocateBlock(built.used);
+            built.base = built.block.Data();
+            built.capacity = built.block.Capacity();
             size_t offset = 0;
             for (const String& text : texts) {
                 built.offsets.push_back(offset);
@@ -73,8 +79,8 @@ namespace BECore::Tests {
             EXPECT_EQ(after.stringBytes, before.stringBytes);
         }
 
-        bool InsideBlock(const PoolBlock& block, size_t used, const char* pointer) {
-            return pointer >= block.Data() && pointer < block.Data() + used;
+        bool InsideBlock(const char* base, size_t used, const char* pointer) {
+            return pointer >= base && pointer < base + used;
         }
 
     }  // namespace
@@ -97,7 +103,7 @@ namespace BECore::Tests {
         EXPECT_EQ(stats.adopted.bytes, built.used);
         EXPECT_EQ(stats.stringBytes, built.used);
         EXPECT_EQ(stats.adopted.blocks, 1u);
-        EXPECT_EQ(stats.adopted.blockBytes, built.block.Capacity());
+        EXPECT_EQ(stats.adopted.blockBytes, built.capacity);
         EXPECT_EQ(stats.blockCount, 1u);
         EXPECT_EQ(stats.runtime.strings, 0u);
         EXPECT_EQ(stats.deadStrings, 0u);
@@ -107,10 +113,10 @@ namespace BECore::Tests {
             ASSERT_TRUE(found.has_value());
             EXPECT_EQ(out[i], *found);
             EXPECT_EQ(out[i].ToStringView(), texts[i]);
-            EXPECT_EQ(found->CStr(), built.block.Data() + built.offsets[i] + kEntryHeader);
+            EXPECT_EQ(found->CStr(), built.base + built.offsets[i] + kEntryHeader);
         }
         // The pool answers `Intern` with the adopted entry: a hit, no copy
-        EXPECT_EQ(pool.storage.Intern(texts[7]).CStr(), built.block.Data() + built.offsets[7] + kEntryHeader);
+        EXPECT_EQ(pool.storage.Intern(texts[7]).CStr(), built.base + built.offsets[7] + kEntryHeader);
         EXPECT_EQ(pool.storage.GetStats().misses, 0u);
     }
 
@@ -161,9 +167,9 @@ namespace BECore::Tests {
         EXPECT_EQ(out[0], runtime);
         EXPECT_EQ(out[5], runtime);
         EXPECT_EQ(out[2], staticValue);
-        EXPECT_EQ(out[1].CStr(), built.block.Data() + built.offsets[1] + kEntryHeader);
+        EXPECT_EQ(out[1].CStr(), built.base + built.offsets[1] + kEntryHeader);
         EXPECT_EQ(out[3], out[1]);
-        EXPECT_EQ(out[4].CStr(), built.block.Data() + built.offsets[4] + kEntryHeader);
+        EXPECT_EQ(out[4].CStr(), built.base + built.offsets[4] + kEntryHeader);
 
         const PoolStringStats stats = pool.storage.GetStats();
         EXPECT_EQ(stats.stringCount, before + 2);
@@ -197,9 +203,12 @@ namespace BECore::Tests {
         ASSERT_TRUE(Adopt(pool.storage, built).has_value());
         const PoolStringStats before = pool.storage.GetStats();
 
+        // The token is spent: nothing a caller holds reaches the adopted entries any more
+        EXPECT_TRUE(built.block.Data() == nullptr);
+        EXPECT_EQ(built.block.Capacity(), 0u);
         const auto second = Adopt(pool.storage, built);
         ASSERT_FALSE(second.has_value());
-        EXPECT_EQ(second.error(), PoolAdoptError::AlreadyAdopted);
+        EXPECT_EQ(second.error(), PoolAdoptError::NotOwned);
         const PoolStringStats after = pool.storage.GetStats();
         ExpectUnchanged(before, after);
         EXPECT_EQ(after.writeLocks, before.writeLocks);
@@ -237,6 +246,38 @@ namespace BECore::Tests {
         const auto result = pool.storage.AdoptBlock(moved, built.used, {}, {});
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(result->linkedStrings, 3u);
+    }
+
+    TEST(PoolStringAdoptTest, ATokenMovedToAnotherVariableBeforeTheCallIsTheLiveOneAndIsSpentByIt) {
+        IsolatedPool pool;
+        BuiltBlock built = Build(pool.storage, Names("adopt_moved_", 4));
+        PoolBlock moved = eastl::move(built.block);
+        EXPECT_TRUE(moved.Data() == built.base);
+
+        ASSERT_TRUE(pool.storage.AdoptBlock(moved, built.used, {}, {}).has_value());
+        EXPECT_TRUE(moved.Data() == nullptr);
+        const PoolStringStats before = pool.storage.GetStats();
+
+        // Neither the spent token nor the moved-from one reaches the block again
+        const auto again = pool.storage.AdoptBlock(moved, built.used, {}, {});
+        ASSERT_FALSE(again.has_value());
+        EXPECT_EQ(again.error(), PoolAdoptError::NotOwned);
+        const auto hollow = pool.storage.AdoptBlock(built.block, built.used, {}, {});
+        ASSERT_FALSE(hollow.has_value());
+        EXPECT_EQ(hollow.error(), PoolAdoptError::NotOwned);
+        ExpectUnchanged(before, pool.storage.GetStats());
+    }
+
+    TEST(PoolStringAdoptTest, EveryErrorHasANameForALogLine) {
+        EXPECT_EQ(EnumUtils<PoolAdoptError>::Count(), 7u);
+        EXPECT_EQ(EnumUtils<PoolAdoptError>::ToString(PoolAdoptError::NotOwned), "NotOwned");
+        EXPECT_EQ(EnumUtils<PoolAdoptError>::ToString(PoolAdoptError::UsedBytesTooLarge), "UsedBytesTooLarge");
+        EXPECT_EQ(EnumUtils<PoolAdoptError>::ToString(PoolAdoptError::UsedBytesNotAligned), "UsedBytesNotAligned");
+        EXPECT_EQ(EnumUtils<PoolAdoptError>::ToString(PoolAdoptError::TruncatedEntry), "TruncatedEntry");
+        EXPECT_EQ(EnumUtils<PoolAdoptError>::ToString(PoolAdoptError::MissingNul), "MissingNul");
+        EXPECT_EQ(EnumUtils<PoolAdoptError>::ToString(PoolAdoptError::WrongHash), "WrongHash");
+        EXPECT_EQ(EnumUtils<PoolAdoptError>::ToString(PoolAdoptError::OutSizeMismatch), "OutSizeMismatch");
+        EXPECT_EQ("{}"_format(PoolAdoptError::WrongHash), "WrongHash");
     }
 
     namespace {
@@ -314,6 +355,8 @@ namespace BECore::Tests {
             const auto result = pool.storage.AdoptBlock(block, malformed.usedBytes, {}, {});
             ASSERT_FALSE(result.has_value());
             EXPECT_EQ(result.error(), malformed.error);
+            EXPECT_TRUE(block.Data() != nullptr);
+            EXPECT_EQ(block.Capacity(), malformed.capacity);
             ExpectUnchanged(before, pool.storage.GetStats());
             EXPECT_FALSE(pool.storage.Find("abc").has_value());
         }
@@ -340,11 +383,13 @@ namespace BECore::Tests {
         WriteGoodEntry(block.Data() + kSecond, "adopt_fix_b");
         SetSize(block.Data() + kSecond, 0xFFFFFFFFu);
         ASSERT_FALSE(pool.storage.AdoptBlock(block, kBytes, {}, {}).has_value());
+        ASSERT_TRUE(block.Data() != nullptr);
 
         WriteGoodEntry(block.Data() + kSecond, "adopt_fix_b");
         const auto result = pool.storage.AdoptBlock(block, kBytes, {}, {});
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(result->linkedStrings, 2u);
+        EXPECT_TRUE(block.Data() == nullptr);
     }
 
     TEST(PoolStringAdoptTest, AnOutOfTheWrongSizeIsRefused) {
@@ -462,6 +507,7 @@ namespace BECore::Tests {
         const PoolStringStats before = PoolString::GetStats();
 
         PoolBlock block = PoolString::AllocateBlock(BytesOf(texts));
+        const char* const base = block.Data();
         size_t offset = 0;
         for (const String& text : texts) {
             ConstructPoolEntry(block.Data() + offset, StringUtils::GetHash(text), text);
@@ -475,7 +521,7 @@ namespace BECore::Tests {
         for (size_t i = 0; i < texts.size(); ++i) {
             const PoolString interned = PoolString::Intern(texts[i]);
             EXPECT_EQ(interned, out[i]);
-            EXPECT_TRUE(InsideBlock(block, offset, interned.CStr()));
+            EXPECT_TRUE(InsideBlock(base, offset, interned.CStr()));
             ASSERT_TRUE(PoolString::Find(texts[i]).has_value());
             EXPECT_EQ(*PoolString::Find(texts[i]), out[i]);
         }
@@ -486,7 +532,8 @@ namespace BECore::Tests {
 
         const auto again = PoolString::AdoptBlock(block, offset);
         ASSERT_FALSE(again.has_value());
-        EXPECT_EQ(again.error(), PoolAdoptError::AlreadyAdopted);
+        EXPECT_EQ(again.error(), PoolAdoptError::NotOwned);
+        EXPECT_TRUE(block.Data() == nullptr);
     }
 
 }  // namespace BECore::Tests

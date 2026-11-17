@@ -1,5 +1,6 @@
 #include "PoolString.h"
 
+#include <BECore/PoolString/PoolBlock.h>
 #include <BECore/PoolString/PoolBlockSource.h>
 #include <BECore/PoolString/PoolStringStorage.h>
 #include <new>

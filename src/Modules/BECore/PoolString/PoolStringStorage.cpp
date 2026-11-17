@@ -298,9 +298,8 @@ namespace BECore::Details {
         if (block._storageId != _id || block._index >= _blocks.size() || _blocks[block._index].data != block._data || _blocks[block._index].capacity != block._capacity) {
             return PoolAdoptError::NotOwned;
         }
-        if (_blocks[block._index].adopted) {
-            return PoolAdoptError::AlreadyAdopted;
-        }
+        // A successful adoption empties its token and a token cannot be copied: no live token names an adopted block
+        ASSERT(!_blocks[block._index].adopted);
         return std::nullopt;
     }
 
@@ -359,9 +358,6 @@ namespace BECore::Details {
 
         UniqueLock lock(_mutex);
         ++_writeLocks;
-        if (const Optional<PoolAdoptError> error = CheckToken(block)) {  // another thread may have adopted it meanwhile
-            return std::unexpected(*error);
-        }
         _table.Reserve(_table.Used() + linkable);
         PoolAdoptResult result;
         for (size_t i = 0; i < entries.size(); ++i) {
@@ -393,6 +389,7 @@ namespace BECore::Details {
         _unadoptedBlockBytes -= block._capacity;
         _deadStrings += result.deadStrings;
         _deadBytes += result.deadBytes;
+        block = PoolBlock();
         return result;
     }
 

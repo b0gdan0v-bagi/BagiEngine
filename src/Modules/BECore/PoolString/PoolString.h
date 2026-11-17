@@ -51,73 +51,20 @@ namespace BECore {
 
     class PoolString;
 
-    /// Why `PoolString::AdoptBlock` refused a block. A refusal changes nothing: no entry of the block is linked. A plain
-    /// `enum class`, not `CORE_ENUM`: `EnumUtils.h` needs `PoolString`, so this header cannot include it.
-    enum class PoolAdoptError : uint8_t {
-        NotOwned,             ///< The token is empty, moved from, or was given out by another storage
-        AlreadyAdopted,       ///< The block was adopted before
-        UsedBytesTooLarge,    ///< `usedBytes` is more than the capacity of the block
-        UsedBytesNotAligned,  ///< `usedBytes` is not a multiple of 8, so the entries cannot end at it
-        TruncatedEntry,       ///< A header, or the text and NUL its `size` announces, runs past `usedBytes`
-        MissingNul,           ///< The byte after the text of an entry is not NUL
-        WrongHash,            ///< With `verifyHashes`: the hash of an entry is not the hash of its text
-        OutSizeMismatch,      ///< `out` is not empty and its size is not the number of entries of the block
-    };
+    class PoolBlock;
+    struct PoolAdoptResult;
 
-    /// What an adopted block gave the pool
-    struct PoolAdoptResult {
-        size_t linkedStrings = 0;  ///< Entries that became the entry of their text
-        size_t deadStrings = 0;    ///< Entries whose text was already in the pool (or is empty): left in the block, not linked
-        size_t deadBytes = 0;      ///< Their aligned sizes
-    };
-
+    /// Here and not in `PoolBlock.h`: `AdoptBlock` takes it with a default argument, which needs the complete type
     struct PoolAdoptOptions {
         /// Check `hash == StringUtils::GetHash(text)` of every entry. Turn it off only for bytes that were checked before
         /// (a cook's output the build verified): a wrong hash puts the text where a lookup of it never looks.
         bool verifyHashes = true;
     };
 
-    /// A block of pool memory for a loader to write entries into, then `PoolString::AdoptBlock`. A token, not an owner: the
-    /// pool owns the memory from `AllocateBlock` on and never frees it, so a token may be dropped at any time. Move-only
-    /// because a block is adopted once; the moved-from token is empty and `AdoptBlock` refuses it.
-    class PoolBlock {
-    public:
-        PoolBlock() noexcept = default;
-        PoolBlock(const PoolBlock&) = delete;
-        PoolBlock& operator=(const PoolBlock&) = delete;
-        PoolBlock(PoolBlock&& other) noexcept {
-            *this = eastl::move(other);
-        }
-        PoolBlock& operator=(PoolBlock&& other) noexcept {
-            _data = other._data;
-            _capacity = other._capacity;
-            _storageId = other._storageId;
-            _index = other._index;
-            other._data = nullptr;
-            other._capacity = 0;
-            other._storageId = 0;
-            other._index = 0;
-            return *this;
-        }
-
-        /// The memory: 8-aligned, `Capacity()` bytes, its content unspecified. Null for an empty token.
-        [[nodiscard]] char* Data() const noexcept {
-            return _data;
-        }
-        [[nodiscard]] size_t Capacity() const noexcept {
-            return _capacity;
-        }
-
-    private:
-        friend class Details::PoolStringStorage;
-
-        PoolBlock(char* data, size_t capacity, uint64_t storageId, size_t index) noexcept : _data(data), _capacity(capacity), _storageId(storageId), _index(index) {}
-
-        char* _data = nullptr;
-        size_t _capacity = 0;
-        uint64_t _storageId = 0;  ///< The storage that gave the block out
-        size_t _index = 0;        ///< Its place in that storage's list of blocks
-    };
+    /// Why `PoolString::AdoptBlock` refused a block; the enumerators and `EnumUtils` are in `PoolBlock.h` (a `CORE_ENUM`
+    /// needs `EnumUtils.h`, which includes this header, so only the opaque declaration can be here). A caller of
+    /// `AdoptBlock` includes `PoolBlock.h`.
+    enum class PoolAdoptError : uint8_t;
 
     /// A ready entry for `PoolString::RegisterStatic`, and where to put the `PoolString` of its text
     struct PoolStaticRegistration {
@@ -186,16 +133,19 @@ namespace BECore {
         ///
         /// The block is **checked first, linked after**: the walk reads no byte at or past `usedBytes`, checks that every
         /// entry ends inside it, that the walk ends exactly at it, every NUL and, with `options.verifyHashes`, every hash.
-        /// A refusal links no entry and leaves the pool as it was, and the block stays adoptable. A block that was adopted
-        /// before, an empty token and a token of another storage are refused too.
+        /// A refusal links no entry, leaves the pool as it was and leaves `block` as it was, adoptable. An empty token and a
+        /// token of another storage are refused too (`NotOwned`).
         ///
-        /// A text that is already in the pool (from `Intern`, `RegisterStatic`, or earlier in this block) keeps its older entry
-        /// and the one in the block is **dead**: it stays in its block, unlinked, counted in `deadStrings` / `deadBytes`. An
-        /// entry of an empty text is dead as well. So a caller must take the strings from `out`, never point at its own
-        /// entry: with a non-empty `out` (its size must be the number of entries, else `OutSizeMismatch`) `out[i]` is, for
-        /// the i-th entry in order, the `PoolString` that won: the adopted entry, the older one, or the empty `PoolString`.
+        /// On success **the memory is the pool's and read-only for everyone** from the call on: `block` is emptied (a second
+        /// call with it is `NotOwned`), so write through no pointer taken from it earlier. `out` is how a loader gets its
+        /// strings. A text that is already in the pool (from `Intern`, `RegisterStatic`, or earlier in this block) keeps its
+        /// older entry and the one in the block is **dead**: it stays in its block, unlinked, counted in `deadStrings` /
+        /// `deadBytes`. An entry of an empty text is dead as well. So a caller must take the strings from `out`, never point at
+        /// its own entry: with a non-empty `out` (its size must be the number of entries, else `OutSizeMismatch`) `out[i]` is,
+        /// for the i-th entry in order, the `PoolString` that won: the adopted entry, the older one, or the empty `PoolString`.
         /// Takes the unique lock once, after the checks. The block is the caller's until the call returns: it must not change
-        /// it during the call. With `verifyHashes` off a hash that is not the text's is the caller's contract.
+        /// it during the call. With `verifyHashes` off a hash that is not the text's is the caller's contract. Include
+        /// `PoolBlock.h` to call it.
         static std::expected<PoolAdoptResult, PoolAdoptError> AdoptBlock(PoolBlock& block, size_t usedBytes, Span<PoolString> out = {}, PoolAdoptOptions options = {});
 
         /// Counters of the pool; `Find` is not an `Intern` call. A test compares two snapshots: the pool is shared.

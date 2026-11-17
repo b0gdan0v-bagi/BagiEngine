@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/PoolString/PoolBlock.h>
 #include <BECore/PoolString/PoolBlockSource.h>
 #include <BECore/PoolString/PoolEntryTable.h>
 #include <BECore/PoolString/PoolString.h>
@@ -92,7 +93,7 @@ namespace BECore::Details {
         [[nodiscard]] PoolBlock AllocateBlock(size_t bytes);
 
         /// `PoolString::AdoptBlock`. The checks of the token and of the block's bytes run outside the unique lock (they hash
-        /// every text), so a big block does not stall the interns of other threads; the lock is taken to link.
+        /// every text), so a big block does not stall the interns of other threads; the lock is taken to link. A success empties `block`.
         std::expected<PoolAdoptResult, PoolAdoptError> AdoptBlock(PoolBlock& block, size_t usedBytes, Span<PoolString> out, PoolAdoptOptions options);
 
         [[nodiscard]] PoolStringStats GetStats();
@@ -162,7 +163,7 @@ namespace BECore::Details {
         /// A block for the entries `Intern` and its kin copy: `TakeBlock`, counted in `runtime`
         char* TakeRuntimeBlock(size_t bytes);
 
-        /// The error when `block` is not an unadopted block of this storage; the caller holds either lock
+        /// `NotOwned` when `block` is not a block this storage gave out (an empty or spent token included); the caller holds either lock
         [[nodiscard]] Optional<PoolAdoptError> CheckToken(const PoolBlock& block) const;
 
         /// Memory for `entryCount` entries that take `bytes` (a multiple of 8) together; the caller holds the unique lock.
