@@ -221,7 +221,7 @@ namespace BECore::Tests {
             session.SetGameRoot(root);
         }
 
-        /// Marks a row as kept in the manifest on disk and reads it back, as the owner's Keep will (the session has no Keep of its own yet)
+        /// Marks a row as kept in the manifest on disk, without cutting its variants as Keep does (what a manifest from before Keep holds), and reads it back
         void KeepOnDisk(StringView set, StringView job) {
             ArtGenSet disk = OnDisk(set);
             ArtGenSetJob* row = FindJob(disk, job);
@@ -230,6 +230,25 @@ namespace BECore::Tests {
             row->accepted->kept = true;
             ASSERT_TRUE(WriteManifest(_root, disk).has_value());
             ReloadFromDisk();
+        }
+
+        /// Two finished sets that both make 'a' (the first also 'b'), both accepted, the second after the first: the second holds the game's 'a'
+        void AcceptTwoSetsOfOneName() {
+            ASSERT_TRUE(Enqueue("first", "a\nb").has_value());
+            ASSERT_TRUE(Enqueue("second", "a").has_value());
+            ASSERT_NO_FATAL_FAILURE(RunAndPickAll("first"));
+            ASSERT_EQ(session.PickVariant("second", "a", kSetSeed + 1), ArtGenSetEdit::Ok);
+            ASSERT_NO_FATAL_FAILURE(MakeFiles("first"));
+            ASSERT_NO_FATAL_FAILURE(MakeFiles("second"));
+            ASSERT_EQ(ErrorCode(AcceptAllCall("first")), "");
+            ASSERT_EQ(ErrorCode(AcceptAllCall("second")), "");
+            gAccepted.clear();
+            gKept.clear();
+        }
+
+        static String ErrorMessage(const Json& response) {
+            const Json* error = FindJsonMember(response, "error");
+            return error != nullptr ? GetJsonString(*error, "message").value_or(String()) : String();
         }
 
         Json AcceptAllCall(StringView set) {
@@ -1432,6 +1451,151 @@ namespace BECore::Tests {
         EXPECT_TRUE(session.IsGeneratorReady());
     }
 
+    TEST_F(ArtGenSetSessionTest, ASwitchOfARowAnotherSetAcceptedLaterIsRefusedAndTheNewerSetStillSwitches) {
+        ASSERT_NO_FATAL_FAILURE(AcceptTwoSetsOfOneName());
+        const ArtGenSet before = OnDisk("first");
+
+        ArtGenSwitch write;
+        EXPECT_EQ(session.PickVariant("first", "a", kSetSeed, &write), ArtGenSetEdit::WriteFailed);
+        EXPECT_NE(write.error.find("'second'"), String::npos) << write.error.c_str();
+        Json pick = Json::object();
+        pick["set"] = "first";
+        pick["job"] = "a";
+        pick["seed"] = kSetSeed;
+        const Json refused = Call("artgen_pick", pick);
+        EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
+        EXPECT_NE(ErrorMessage(refused).find("'second'"), String::npos) << ErrorMessage(refused).c_str();
+        EXPECT_TRUE(gAccepted.empty()) << "the game's file was not written";
+        EXPECT_EQ(ArtGenSetToJson(OnDisk("first")), ArtGenSetToJson(before));
+
+        EXPECT_EQ(session.PickVariant("first", "b", kSetSeed), ArtGenSetEdit::Ok) << "a row nobody replaced switches as before";
+        gAccepted.clear();
+        EXPECT_EQ(session.PickVariant("second", "a", kSetSeed), ArtGenSetEdit::Ok);
+        ASSERT_EQ(gAccepted.size(), 1u);
+        EXPECT_EQ(gAccepted[0].name, "a");
+        EXPECT_EQ(OnDisk("second").jobs[0].pick, Optional<int64_t>(kSetSeed));
+    }
+
+    TEST_F(ArtGenSetSessionTest, TheLaterDateOwnsTheNameWhateverTheOrderOfTheSets) {
+        ASSERT_NO_FATAL_FAILURE(AcceptTwoSetsOfOneName());
+        ArtGenSet disk = OnDisk("first");
+        disk.jobs[0].accepted->date = "2999-01-01T00:00:00Z";
+        ASSERT_TRUE(WriteManifest(_root, disk).has_value());
+        ReloadFromDisk();
+
+        EXPECT_EQ(session.PickVariant("second", "a", kSetSeed), ArtGenSetEdit::WriteFailed);
+        EXPECT_TRUE(gAccepted.empty());
+        EXPECT_EQ(session.PickVariant("first", "a", kSetSeed), ArtGenSetEdit::Ok);
+        ASSERT_EQ(gAccepted.size(), 1u);
+    }
+
+    TEST_F(ArtGenSetSessionTest, ASoundAndAnImageOfTheSameNameDoNotReplaceEachOther) {
+        Poll();
+        ASSERT_TRUE(Enqueue("pictures", "knock").has_value());
+        ASSERT_NO_FATAL_FAILURE(RunAll("image"));
+        ArtGenSetRequest request;
+        request.preset = "knock";
+        request.subjects = ParseArtGenSubjects("knock").value();
+        request.count = 2;
+        request.seed = kSetSeed;
+        request.name = "clips";
+        ASSERT_TRUE(session.EnqueueSet(request).has_value());
+        ASSERT_NO_FATAL_FAILURE(RunAll("audio"));
+        ASSERT_EQ(session.PickVariant("pictures", "knock", kSetSeed + 1), ArtGenSetEdit::Ok);
+        ASSERT_EQ(session.PickVariant("clips", "knock", kSetSeed + 1), ArtGenSetEdit::Ok);
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("pictures"));
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("clips"));
+        ASSERT_EQ(ErrorCode(AcceptAllCall("pictures")), "");
+        ASSERT_EQ(ErrorCode(AcceptAllCall("clips")), "");
+        gAccepted.clear();
+
+        EXPECT_EQ(session.PickVariant("pictures", "knock", kSetSeed), ArtGenSetEdit::Ok) << "assets/artgen/knock.png is not knock.wav";
+        EXPECT_EQ(gAccepted.size(), 1u);
+    }
+
+    TEST_F(ArtGenSetSessionTest, KeepOfARowAnotherSetAcceptedLaterIsRefusedAndTheNewerSetKeeps) {
+        ASSERT_NO_FATAL_FAILURE(AcceptTwoSetsOfOneName());
+
+        Json params = Json::object();
+        params["set"] = "first";
+        params["job"] = "a";
+        const Json refused = Call("artgen_keep", params);
+        EXPECT_EQ(ErrorCode(refused), "invalid_params");
+        EXPECT_NE(ErrorMessage(refused).find("'second'"), String::npos) << ErrorMessage(refused).c_str();
+        EXPECT_TRUE(gKept.empty()) << "no false kept seed reached the game's file";
+        EXPECT_TRUE(IsLive(OnDisk("first").jobs[0]));
+
+        // The whole set keeps what it still owns and says what it left
+        params.erase("job");
+        const Json answer = Result(Call("artgen_keep", params));
+        ASSERT_NE(FindJsonMember(answer, "kept"), nullptr) << DumpJson(answer).c_str();
+        ASSERT_EQ(FindJsonMember(answer, "kept")->size(), 1u);
+        EXPECT_EQ((*FindJsonMember(answer, "kept"))[0], "b");
+        const Json* replaced = FindJsonMember(answer, "replaced");
+        ASSERT_NE(replaced, nullptr);
+        ASSERT_EQ(replaced->size(), 1u);
+        EXPECT_EQ(GetJsonString((*replaced)[0], "job"), Optional<String>("a"));
+        EXPECT_EQ(GetJsonString((*replaced)[0], "by"), Optional<String>("second"));
+        ASSERT_EQ(gKept.size(), 1u);
+        EXPECT_EQ(gKept[0].name, "b");
+
+        const Json onlyReplaced = Call("artgen_keep", params);
+        EXPECT_EQ(ErrorCode(onlyReplaced), "invalid_params");
+        EXPECT_NE(ErrorMessage(onlyReplaced).find("second"), String::npos) << ErrorMessage(onlyReplaced).c_str();
+
+        params["set"] = "second";
+        ASSERT_EQ(ErrorCode(Call("artgen_keep", params)), "");
+        ASSERT_EQ(gKept.size(), 2u);
+        EXPECT_EQ(gKept[1].name, "a");
+        EXPECT_EQ(gKept[1].seed, kSetSeed + 1);
+    }
+
+    TEST_F(ArtGenSetSessionTest, AcceptAllOfTheOlderSetLeavesTheRowTheNewerSetHolds) {
+        ASSERT_NO_FATAL_FAILURE(AcceptTwoSetsOfOneName());
+        const ArtGenSet before = OnDisk("first");
+
+        const Json answer = Result(AcceptAllCall("first"));
+        ASSERT_EQ(gAccepted.size(), 1u) << "b is written again, a is not";
+        EXPECT_EQ(gAccepted[0].name, "b");
+        const Json& rows = *FindJsonMember(answer, "accepted");
+        ASSERT_EQ(rows.size(), 2u);
+        EXPECT_EQ(GetJsonString(rows[0], "job"), Optional<String>("a"));
+        EXPECT_EQ(GetJsonString(rows[0], "replacedBy"), Optional<String>("second"));
+        EXPECT_EQ(FindJsonMember(rows[0], "as"), nullptr);
+        EXPECT_EQ(GetJsonString(rows[1], "as"), Optional<String>("b"));
+        EXPECT_EQ(OnDisk("first").jobs[0].accepted->date, before.jobs[0].accepted->date) << "the row's mark did not move";
+
+        // A set whose row of that name was never accepted writes it: it is the newest then
+        ASSERT_TRUE(Enqueue("third", "a").has_value());
+        ASSERT_NO_FATAL_FAILURE(RunAndPickAll("third"));
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("third"));
+        gAccepted.clear();
+        ASSERT_EQ(ErrorCode(AcceptAllCall("third")), "");
+        ASSERT_EQ(gAccepted.size(), 1u);
+        EXPECT_EQ(session.PickVariant("second", "a", kSetSeed), ArtGenSetEdit::WriteFailed) << "the third holds it now";
+    }
+
+    TEST_F(ArtGenSetSessionTest, APickOnAKeptRowIsNoVariantEvenWhenTheManifestStillListsTheOthers) {
+        ASSERT_TRUE(Enqueue("old", "a").has_value());
+        RunAndPickAll("old");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("old"));
+        ASSERT_EQ(ErrorCode(AcceptAllCall("old")), "");
+        ASSERT_NO_FATAL_FAILURE(KeepOnDisk("old", "a"));
+        ASSERT_EQ(session.FindSet("old")->jobs[0].variants.size(), 2u);
+        gAccepted.clear();
+
+        Json pick = Json::object();
+        pick["set"] = "old";
+        pick["job"] = "a";
+        pick["seed"] = kSetSeed;
+        const Json refused = Call("artgen_pick", pick);
+        EXPECT_EQ(ErrorCode(refused), "artgen_no_variant");
+        EXPECT_NE(ErrorMessage(refused).find("kept"), String::npos) << ErrorMessage(refused).c_str();
+        EXPECT_EQ(session.FindSet("old")->jobs[0].pick, Optional<int64_t>(kSetSeed + 1));
+        EXPECT_EQ(session.PickVariant("old", "a", kSetSeed + 1), ArtGenSetEdit::Ok) << "the pick it holds is no change";
+        EXPECT_TRUE(gAccepted.empty());
+    }
+
     TEST_F(ArtGenSetSessionTest, TwoDefaultNamesOfTheSameSecondAreDistinct) {
         Vector<String> names;
         for (int32_t index = 0; index < 3; ++index) {
@@ -1447,11 +1611,11 @@ namespace BECore::Tests {
         }
         EXPECT_EQ(session.GetSets().size(), 3u);
 
-        ArtGenSetRequest long_;
-        long_.preset = String(70, 'p');
-        long_.subjects = ParseArtGenSubjects("a").value();
+        ArtGenSetRequest longPreset;
+        longPreset.preset = String(70, 'p');
+        longPreset.subjects = ParseArtGenSubjects("a").value();
         for (int32_t index = 0; index < 12; ++index) {
-            const auto name = session.EnqueueSet(long_);
+            const auto name = session.EnqueueSet(longPreset);
             ASSERT_TRUE(name.has_value()) << name.error().c_str();
             EXPECT_LE(name->size(), static_cast<size_t>(kMaxSpriteNameLength));
             EXPECT_TRUE(IsValidSpriteName(*name)) << name->c_str();

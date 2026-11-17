@@ -245,16 +245,21 @@ namespace BECore {
         ArtGenSetEdit RetryJobs(StringView set, StringView job = {});
         /// Picks the variant @p seed of a job (saved in the manifest). On a **live** row (accepted, not kept) it switches: the variant is
         /// written into the game under the name the row was accepted as, and only then are the pick and the date changed; a failed write
-        /// is `WriteFailed` and changes nothing. @p write gets what the write answered
+        /// (also a row that another set replaced, FindNewerOwner) is `WriteFailed` and changes nothing. A kept row takes no other pick
+        /// (`NoVariant`). @p write gets what the write answered
         ArtGenSetEdit PickVariant(StringView set, StringView job, int64_t seed, ArtGenSwitch* write = nullptr);
         /// Accepts the candidate of every job of a finished set as its job's name, through the acceptors Accept uses, marking each row in the
-        /// manifest (Sets/CLAUDE.md, "Accept all"): the pick, else for images the first variant. A kept row is skipped. The checks come first and a
+        /// manifest (Sets/CLAUDE.md, "Accept all"): the pick, else for images the first variant. A kept row and a row another set replaced are skipped. The checks come first and a
         /// refusal by them changes nothing; a failure halfway leaves the rows before it accepted
         std::expected<Json, ControlError> AcceptSet(StringView name);
         /// Fixes the choice of every live row of a set, or of @p job only: the Keeper writes the kept seed into the game first, then the row is
-        /// kept (its other variants leave the manifest) and the manifest written. Final; nothing live to keep is `invalid_params`. The answer
+        /// kept (its other variants leave the manifest) and the manifest written. Final; nothing live to keep is `invalid_params`, and so is a named
+        /// row that another set replaced (the whole-set call skips such rows and lists them). The answer
         /// names the rows kept; a failure halfway names the row and the rows done
         std::expected<Json, ControlError> KeepSet(StringView name, StringView job = {});
+        /// The other set that accepted a row under the same name and kind of @p job later, so the game's file is its variant now (null when
+        /// @p job owns it, or was never accepted). The dates have a resolution of a second: on a tie the set later in the list is the newer
+        [[nodiscard]] const ArtGenSet* FindNewerOwner(const ArtGenSet& set, const ArtGenSetJob& job) const;
         [[nodiscard]] const ArtGenSet* FindSet(StringView name) const;
         [[nodiscard]] const Vector<ArtGenSet>& GetSets() const {
             return _sets;

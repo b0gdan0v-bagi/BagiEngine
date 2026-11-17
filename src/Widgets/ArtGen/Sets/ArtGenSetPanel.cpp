@@ -391,8 +391,15 @@ namespace BECore {
         ImGui::TextUnformatted(job.name.c_str());
         ImGui::SameLine();
         ImGui::TextDisabled("%s", job.subject.c_str());
-        const bool live = IsLive(job);
-        if (live) {
+        const ArtGenSet* newer = IsLive(job) ? session.FindNewerOwner(set, job) : nullptr;
+        // A replaced row's variants are alternatives to nothing: the game holds another set's picture under its name
+        const bool live = IsLive(job) && newer == nullptr;
+        if (newer != nullptr) {
+            char badge[kLabelSize];
+            std::snprintf(badge, sizeof(badge), ICON_LC_REPLACE " replaced by %s", newer->name.c_str());
+            ImGui::SameLine();
+            ImGui::TextColored(palette.warning, "%s", badge);
+        } else if (live) {
             char badge[kLabelSize];
             const int32_t alternatives = AlternativesOf(job);
             std::snprintf(badge, sizeof(badge), ICON_LC_CHECK_CHECK " live, %d alternative%s", static_cast<int>(alternatives), alternatives == 1 ? "" : "s");
@@ -400,7 +407,7 @@ namespace BECore {
             ImGui::TextColored(palette.success, "%s", badge);
         } else if (job.accepted) {
             ImGui::SameLine();
-            ImGui::TextColored(job.accepted->kept ? palette.accent : palette.success, ICON_LC_LOCK " %s", job.accepted->kept ? "kept" : "accepted");
+            ImGui::TextColored(palette.accent, ICON_LC_LOCK " kept");
         }
 
         ImGui::AlignTextToFramePadding();
@@ -420,9 +427,12 @@ namespace BECore {
                 ImGui::TextDisabled("Making the images...");
                 break;
             default:
-                ImGui::TextDisabled("%s", job.variants.empty()
-                                              ? "No images"
-                                              : (live ? "Click a variant to show it in the game" : (job.pick ? "Click another variant to change the pick" : "Click a variant to pick it")));
+                ImGui::TextDisabled("%s", job.variants.empty() ? "No images"
+                                          : newer != nullptr   ? "The game's picture comes from the newer set"
+                                          : live               ? "Click a variant to show it in the game"
+                                          : job.accepted       ? "Kept: this variant is final"
+                                          : job.pick           ? "Click another variant to change the pick"
+                                                               : "Click a variant to pick it");
                 if (live) {
                     ImGui::SameLine();
                     if (IconTextButton(ICON_LC_LOCK, "Keep", "Keep this variant for good: the others are dropped from the set and the row can no longer be switched")) {
@@ -457,6 +467,10 @@ namespace BECore {
             // The play button sits over the tile
             ImGui::SetNextItemAllowOverlap();
         }
+        // A kept row is final and a replaced one has nothing to switch: its cells only show the variants
+        const bool kept = job.accepted && job.accepted->kept;
+        const bool replaced = IsLive(job) && session.FindNewerOwner(set, job) != nullptr;
+        ImGui::BeginDisabled(kept || replaced);
         if (ImGui::InvisibleButton("##pick", ImVec2(kReviewThumbnailSize, kReviewThumbnailSize))) {
             ArtGenSwitch write;
             if (session.PickVariant(StringView(set.name), StringView(job.name), variant.seed, &write) == ArtGenSetEdit::WriteFailed) {
@@ -467,7 +481,14 @@ namespace BECore {
                 _acceptMessage.clear();
             }
         }
-        ItemTooltip(missing ? "The file is gone" : (IsLive(job) ? "Show this variant in the game" : "Pick this variant"));
+        ImGui::EndDisabled();
+        const char* tip = IsLive(job) ? "Show this variant in the game" : "Pick this variant";
+        if (kept) {
+            tip = "Kept: this row is final";
+        } else if (replaced) {
+            tip = "A newer set holds this name in the game";
+        }
+        ItemTooltip(missing ? "The file is gone" : tip);
 
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         const ImVec2 corner(origin.x + kReviewThumbnailSize, origin.y + kReviewThumbnailSize);
@@ -519,6 +540,13 @@ namespace BECore {
         const int32_t picked = PickedCount(set);
         const int32_t live = CountLive(set);
         const int32_t kept = CountKept(set);
+        // What Keep all can still keep: the live rows no newer set replaced
+        int32_t keepable = 0;
+        for (const ArtGenSetJob& job : set.jobs) {
+            if (IsLive(job) && session.FindNewerOwner(set, job) == nullptr) {
+                ++keepable;
+            }
+        }
         // What Accept all needs (ArtGenSession::AcceptSet checks it again): the set finished, every job done, and for sounds a pick on every row
         // (an image row without a pick takes its first variant)
         const char* blocker = nullptr;
@@ -550,19 +578,27 @@ namespace BECore {
             _acceptFailed = !result.has_value();
             if (result) {
                 const Json* accepted = FindJsonMember(*result, "accepted");
-                const size_t rows = accepted != nullptr && accepted->is_array() ? accepted->size() : 0;
-                _acceptMessage = Format("Accepted {} row(s) into the game", rows);
+                int32_t written = 0;
+                int32_t replaced = 0;
+                if (accepted != nullptr && accepted->is_array()) {
+                    for (const Json& row : *accepted) {
+                        written += FindJsonMember(row, "as") != nullptr ? 1 : 0;
+                        replaced += FindJsonMember(row, "replacedBy") != nullptr ? 1 : 0;
+                    }
+                }
+                _acceptMessage = replaced > 0 ? Format("Accepted {} row(s) into the game; {} left as they are: a newer set holds their names", written, replaced)
+                                              : Format("Accepted {} row(s) into the game", written);
             } else {
                 _acceptMessage = result.error().message;
             }
         }
         ImGui::EndDisabled();
         ImGui::SameLine();
-        ImGui::BeginDisabled(live == 0);
+        ImGui::BeginDisabled(keepable == 0);
         if (IconTextButton(ICON_LC_LOCK, "Keep all", "Keep the shown variant of every live row for good: the others are dropped from the set and the rows can no longer be switched")) {
             auto result = session.KeepSet(StringView(set.name));
             _acceptFailed = !result.has_value();
-            _acceptMessage = result ? Format("Kept {} row(s)", live) : result.error().message;
+            _acceptMessage = result ? Format("Kept {} row(s)", keepable) : result.error().message;
         }
         ImGui::EndDisabled();
         if (!_acceptMessage.empty()) {
