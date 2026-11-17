@@ -5,7 +5,6 @@
 #include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
 #include <Widgets/EditorLayout/UserFileIo.h>
-#include <filesystem>
 #include <gtest/gtest.h>
 #include <initializer_list>
 
@@ -48,6 +47,8 @@ namespace BECore::Tests {
             int64_t seed = -1;
             String sprite;
             bool withNode = false;
+            ArtGenImageSettings settings;
+            bool hasFrame = false;
             int calls = 0;
         };
         AcceptCall gAccepted;
@@ -71,8 +72,10 @@ namespace BECore::Tests {
             return reply;
         }
 
-        std::expected<Json, ControlError> FakeAcceptor(const ArtGenVariant& variant, StringView sprite, SceneNode* node) {
+        std::expected<Json, ControlError> FakeAcceptor(const ArtGenVariant& variant, StringView sprite, const ArtGenImagePlan& plan, SceneNode* node) {
             gAccepted.seed = variant.seed;
+            gAccepted.settings = plan.settings;
+            gAccepted.hasFrame = plan.frame.has_value();
             gAccepted.sprite = String(sprite);
             gAccepted.withNode = node != nullptr;
             ++gAccepted.calls;
@@ -666,6 +669,95 @@ namespace BECore::Tests {
         params["useOnSelected"] = true;
         EXPECT_EQ(ErrorCode(Call("artgen_accept", params)), "artgen_accept_failed") << "no node is selected";
         EXPECT_EQ(session.AcceptSound(8, ArtGenSoundTarget{"x", ""}, ArtGenSoundSettings{}, false).error().code, "artgen_no_variant");
+    }
+
+    namespace {
+
+        Json ImagePoll(const Json& woodAccept) {
+            Json params = CatalogPoll();
+            Json wood = params["presets"][0];
+            wood["preset"]["accept"] = woodAccept;
+            params["presets"][0] = wood;
+            return params;
+        }
+
+        Json AcceptParams(int64_t seed) {
+            return Json{{"seed", seed}, {"sprite", "icon"}};
+        }
+
+    }  // namespace
+
+    TEST_F(ArtGenSessionTest, ASingleAcceptUsesTheSettingsOfTheSavedPresetOrTheDefaults) {
+        session.SetAcceptor(&FakeAcceptor);
+        RunWithImages({1});
+        Call("artgen_poll", CatalogPoll());
+        ASSERT_TRUE(Call("artgen_accept", AcceptParams(1)).contains("result"));
+        EXPECT_EQ(gAccepted.settings, ArtGenImageSettings{}) << "a preset without the key";
+        EXPECT_FALSE(gAccepted.hasFrame) << "a single image has no frame of a set";
+
+        Call("artgen_poll", ImagePoll(Json{{"trim", false}, {"maxSize", 64}}));
+        EXPECT_EQ(session.ImageSettingsOfRun().maxSize, 64);
+        ASSERT_TRUE(Call("artgen_accept", AcceptParams(1)).contains("result"));
+        EXPECT_FALSE(gAccepted.settings.trim);
+        EXPECT_EQ(gAccepted.settings.maxSize, 64);
+        EXPECT_EQ(gAccepted.settings.padding, ArtGenImageSettings::kDefaultPadding) << "a missing key keeps the default";
+
+        Call("artgen_poll", ImagePoll(Json{{"maxSize", 5}}));
+        ASSERT_TRUE(Call("artgen_accept", AcceptParams(1)).contains("result"));
+        EXPECT_EQ(gAccepted.settings, ArtGenImageSettings{}) << "a malformed key is the defaults";
+    }
+
+    TEST_F(ArtGenSessionTest, ADraftAcceptsWithItsOwnKeyAndNeverTheSavedOnes) {
+        session.SetAcceptor(&FakeAcceptor);
+        Call("artgen_poll", ImagePoll(Json{{"maxSize", 64}}));
+        Json draft = DraftPreset();
+        draft["accept"] = Json{{"padding", 9}};
+        ASSERT_TRUE(session.RequestDraft("wood", draft, "knight", 1, Optional<int64_t>(3)).has_value());
+        Call("artgen_poll", ImagePoll(Json{{"maxSize", 64}}));
+        Json image = Report(session.GetRun().id);
+        image["seed"] = 3;
+        image["path"] = "D:/out/knight_3.png";
+        Call("artgen_image", image);
+        ASSERT_TRUE(Call("artgen_accept", AcceptParams(3)).contains("result"));
+        EXPECT_EQ(gAccepted.settings.padding, 9);
+        EXPECT_EQ(gAccepted.settings.maxSize, ArtGenImageSettings::kDefaultMaxSize);
+    }
+
+    TEST_F(ArtGenSessionTest, TheImageParameterOverridesTheKeysItNames) {
+        session.SetAcceptor(&FakeAcceptor);
+        RunWithImages({1});
+        Call("artgen_poll", ImagePoll(Json{{"padding", 10}, {"maxSize", 64}}));
+        Json params = AcceptParams(1);
+        params["image"] = Json{{"maxSize", 0}};
+        ASSERT_TRUE(Call("artgen_accept", params).contains("result"));
+        EXPECT_EQ(gAccepted.settings.maxSize, 0);
+        EXPECT_EQ(gAccepted.settings.padding, 10) << "the preset's value of a key the call does not name";
+        EXPECT_TRUE(gAccepted.settings.trim);
+        EXPECT_EQ(gAccepted.calls, 1);
+
+        params["image"] = Json{{"trim", false}, {"padding", 0}, {"maxSize", 32}};
+        ASSERT_TRUE(Call("artgen_accept", params).contains("result"));
+        EXPECT_EQ((gAccepted.settings), (ArtGenImageSettings{false, 0, 32}));
+
+        for (const Json& bad : {Json("big"), Json{{"maxSize", 5}}, Json{{"padding", "2"}}, Json{{"trim", 1}}}) {
+            params["image"] = bad;
+            EXPECT_EQ(ErrorCode(Call("artgen_accept", params)), "invalid_params") << DumpJson(bad).c_str();
+        }
+        EXPECT_EQ(gAccepted.calls, 2) << "a bad image changes nothing";
+    }
+
+    TEST_F(ArtGenSessionTest, ASoundIgnoresTheImageParameter) {
+        const uint32_t id = session.Request("wood", "knock", 1, Optional<int64_t>(7)).value();
+        Call("artgen_poll", ReadyPoll());
+        Json sound = Report(id);
+        sound["seed"] = 7;
+        sound["path"] = "D:/out/knock_7.flac";
+        sound["kind"] = "audio";
+        Call("artgen_image", sound);
+        session.SetSoundAcceptor(&FakeSoundAcceptor);
+        Json params = Json{{"seed", 7}, {"name", "knock"}, {"image", "not even an object"}};
+        EXPECT_TRUE(Call("artgen_accept", params).contains("result"));
+        EXPECT_EQ(gSoundAccepted.calls, 1);
     }
 
 }  // namespace BECore::Tests

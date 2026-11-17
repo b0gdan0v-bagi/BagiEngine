@@ -108,6 +108,19 @@ namespace BECore {
             return variant;
         }
 
+        /// How a row of an image set is written: through the set's frame, or (a legacy set, or settings that change nothing) as the PNG is
+        ArtGenImagePlan PlanOf(const Optional<ArtGenSetProcessing>& processing) {
+            ArtGenImagePlan plan;
+            if (processing) {
+                plan.settings = processing->settings;
+                plan.frame = processing->frame;
+            } else {
+                plan.settings.trim = false;
+                plan.settings.maxSize = 0;
+            }
+            return plan;
+        }
+
         /// The subjects of the `subjects` param: one string of lines, or a list of strings (each may be a `name: subject` line) and
         /// `{name?, subject}` objects
         std::expected<Vector<ArtGenSubject>, String> SubjectsOf(const Json& params) {
@@ -165,6 +178,38 @@ namespace BECore {
             _sets = LoadSets(RootPath(_gameRoot));
         }
         ++_version;
+    }
+
+    std::expected<Optional<ArtGenSetProcessing>, String> ArtGenSession::ProcessingOfSet(const ArtGenSet& set, const std::filesystem::path& root) const {
+        // A legacy set's rows are full frames already: a frame now would make the next row differ in scale from the first
+        if (set.processing || IsLegacyAccepted(set)) {
+            return set.processing;
+        }
+        const ArtGenImageSettings settings = ImageSettingsOf(set.presetData, StringView(set.preset));
+        if (settings.IsIdentity()) {
+            return Optional<ArtGenSetProcessing>{};
+        }
+        if (_frameMeasurer == nullptr) {
+            return std::unexpected(String("measuring the frame is not available here"));
+        }
+        // Every variant, not only the picks: a switch to any of them later must fit the frame, and one scale is what keeps the pieces in proportion
+        Vector<String> files;
+        for (const ArtGenSetJob& job : set.jobs) {
+            if (job.state != ArtGenSetJobState::Done) {
+                continue;
+            }
+            for (const ArtGenSetVariant& variant : job.variants) {
+                const std::filesystem::path file = AbsoluteInSet(root, set.name, variant.file);
+                if (variant.kind == kKindImage && FileExists(file)) {
+                    files.push_back(TextOfPath(file));
+                }
+            }
+        }
+        auto frame = _frameMeasurer(files, settings);
+        if (!frame) {
+            return std::unexpected(frame.error());
+        }
+        return Optional<ArtGenSetProcessing>(ArtGenSetProcessing{settings, *frame});
     }
 
     bool ArtGenSession::IsBusy() const {
@@ -257,6 +302,22 @@ namespace BECore {
         if (auto subjects = CheckArtGenSubjects(request.subjects); !subjects) {
             return std::unexpected(subjects.error());
         }
+        // The new set is cut and scaled as the old one is, so its object comes out the size of the row it replaces
+        Optional<ArtGenSetProcessing> inherited;
+        if (!request.frameOf.empty()) {
+            const ArtGenSet* source = FindSet(request.frameOf);
+            if (source == nullptr) {
+                return std::unexpected(Format("'frameOf': no set named '{}'", request.frameOf));
+            }
+            if (source->kind != kKindImage) {
+                return std::unexpected(Format("'frameOf': the set '{}' makes {}s, only an image set has a frame", request.frameOf, source->kind));
+            }
+            if (!source->processing) {
+                return std::unexpected(
+                    Format("'frameOf': the set '{}' has no frame yet: it is fixed at its first Accept all (and a set whose files are not trimmed, full frames, has none)", request.frameOf));
+            }
+            inherited = source->processing;
+        }
 
         const auto now = std::chrono::system_clock::now();
         ArtGenSet set;
@@ -283,6 +344,12 @@ namespace BECore {
         // The catalog is empty until the service has polled, so this is a guess; StartJob and the first reported variant settle it
         set.kind = String(kKindImage);
         set.kind = KindOfSet(set);
+        if (inherited) {
+            if (set.kind != kKindImage) {
+                return std::unexpected(Format("'frameOf': the preset '{}' makes {}s, only an image set takes a frame", request.preset, set.kind));
+            }
+            set.processing = inherited;
+        }
         for (ArtGenSubject& subject : request.subjects) {
             ArtGenSetJob job;
             job.name = std::move(subject.name);
@@ -513,7 +580,7 @@ namespace BECore {
         if (!variant) {
             return fail(Format("the job '{}': {}", job->name, variant.error()));
         }
-        auto answer = sound ? _soundAcceptor(*variant, ArtGenSoundTarget{name, String()}, ArtGenSoundSettings{}, nullptr) : _acceptor(*variant, name, nullptr);
+        auto answer = sound ? _soundAcceptor(*variant, ArtGenSoundTarget{name, String()}, ArtGenSoundSettings{}, nullptr) : _acceptor(*variant, name, PlanOf(set->processing), nullptr);
         if (!answer) {
             return fail(Format("the job '{}': {}", job->name, answer.error().message));
         }
@@ -537,14 +604,18 @@ namespace BECore {
 
         service.DescribeMethod(
             "artgen_enqueue",
-            ControlMethodInfo{"Queues a set: one preset applied to a list of subjects, one job each, run one after the other with the same first seed (so the style matches); answers at once",
-                              {ControlParamInfo{"preset", "string|object", true, "a preset name, or a preset object (a draft)"},
-                               ControlParamInfo{"presetName", "string", false, "with a draft: the name it is shown under"},
-                               ControlParamInfo{"subjects", "string|array", true,
-                                                "one string with a job per line (`name: subject`, `#` comments), or a list of such strings and {name?, subject} objects; at most 64, names unique"},
-                               ControlParamInfo{"count", "integer", false, "images per job, 1 to 16 (default 4)"},
-                               ControlParamInfo{"seed", "integer", false, "the first seed of every job (default: drawn once and recorded in the set)"},
-                               ControlParamInfo{"set", "string", false, "the set's name and folder under artgen/out, 1 to 64 of A-Z a-z 0-9 _ - (default <preset>-<date>-<time>)"}}});
+            ControlMethodInfo{
+                "Queues a set: one preset applied to a list of subjects, one job each, run one after the other with the same first seed (so the style matches); answers at once",
+                {ControlParamInfo{"preset", "string|object", true, "a preset name, or a preset object (a draft)"},
+                 ControlParamInfo{"presetName", "string", false, "with a draft: the name it is shown under"},
+                 ControlParamInfo{"subjects", "string|array", true,
+                                  "one string with a job per line (`name: subject`, `#` comments), or a list of such strings and {name?, subject} objects; at most 64, names unique"},
+                 ControlParamInfo{"count", "integer", false, "images per job, 1 to 16 (default 4)"},
+                 ControlParamInfo{"seed", "integer", false, "the first seed of every job (default: drawn once and recorded in the set)"},
+                 ControlParamInfo{"set", "string", false, "the set's name and folder under artgen/out, 1 to 64 of A-Z a-z 0-9 _ - (default <preset>-<date>-<time>)"},
+                 ControlParamInfo{"frameOf", "string", false,
+                                  "an image set that already has a frame (it is fixed at its first Accept all): this set is cut and scaled by the same frame, so a replacement of one row "
+                                  "comes out the size of the others; refused when the set is unknown, a sound set or has no frame"}}});
         service.DescribeMethod("artgen_set", ControlMethodInfo{"One set as its manifest.json, plus state (Active while a job is pending or running, else Complete)",
                                                                {ControlParamInfo{"set", "string", true, "the set's name"}}});
         service.DescribeMethod("artgen_pick",
@@ -604,6 +675,13 @@ namespace BECore {
                 return std::unexpected(InvalidParams("'set' must be a name of 1 to 64 of A-Z a-z 0-9 _ -"));
             }
             request.name = *name;
+        }
+        if (IsGiven(params, "frameOf")) {
+            const auto frameOf = GetJsonString(params, "frameOf");
+            if (!frameOf || frameOf->empty()) {
+                return std::unexpected(InvalidParams("'frameOf' must be the name of a set"));
+            }
+            request.frameOf = *frameOf;
         }
         auto name = EnqueueSet(std::move(request));
         if (!name) {
@@ -812,6 +890,17 @@ namespace BECore {
             planned.push_back(Planned{row, seed, std::move(*variant)});
         }
 
+        // The frame comes after the cheap checks: it decodes every variant of the set. A refusal changes nothing
+        Optional<ArtGenSetProcessing> processing = set->processing;
+        if (!sound && !planned.empty()) {
+            auto measured = ProcessingOfSet(*set, root);
+            if (!measured) {
+                return std::unexpected(MakeError(kAcceptFailedCode, Format("the set '{}': the frame of its pictures cannot be made: {}", setName, measured.error())));
+            }
+            processing = std::move(*measured);
+        }
+        const ArtGenImagePlan imagePlan = PlanOf(processing);
+
         // A failure halfway leaves the rows done marked in the manifest; the call can be made again, an accept replaces the same name
         Json accepted = Json::array();
         Vector<String> done;
@@ -830,7 +919,7 @@ namespace BECore {
                 continue;
             }
             Planned& plan = planned[next++];
-            auto answer = sound ? _soundAcceptor(plan.variant, ArtGenSoundTarget{job.name, String()}, ArtGenSoundSettings{}, nullptr) : _acceptor(plan.variant, job.name, nullptr);
+            auto answer = sound ? _soundAcceptor(plan.variant, ArtGenSoundTarget{job.name, String()}, ArtGenSoundSettings{}, nullptr) : _acceptor(plan.variant, job.name, imagePlan, nullptr);
             if (!answer) {
                 String doneNames;
                 AppendNames(doneNames, "accepted before it", done);
@@ -839,6 +928,10 @@ namespace BECore {
             }
             job.pick = plan.seed;
             job.accepted = ArtGenSetAccepted{job.name, ArtGenTimestamp(std::chrono::system_clock::now()), false};
+            // The frame is kept with the first row written, so a refusal or a failed first row leaves the set as it was
+            if (!sound && !set->processing) {
+                set->processing = processing;
+            }
             done.push_back(job.name);
             SaveSet(*set);
             ++_version;

@@ -9,7 +9,7 @@ namespace BECore {
 
         constexpr StringView kServiceInputs[] = {"prompt", "negative", "seed", "width", "height", "output"};
         // The keys the form shows, in the order of a written file; any other key of the file follows them
-        constexpr StringView kFileOrder[] = {"preset", "title", "workflow", "prompt", "negative", "size", "params"};
+        constexpr StringView kFileOrder[] = {"preset", "title", "workflow", "prompt", "negative", "size", "params", "accept"};
         constexpr StringView kCopySuffix = "_copy";
 
         void CopyText(char* out, size_t size, StringView text) {
@@ -97,7 +97,23 @@ namespace BECore {
         if (const Json* params = FindJsonMember(preset, "params"); params != nullptr && !params->is_object()) {
             return std::unexpected(String("\"params\" must be an object"));
         }
+        if (const Json* accept = FindJsonMember(preset, "accept"); accept != nullptr) {
+            if (const auto settings = ArtGenImageSettingsFromJson(*accept); !settings) {
+                return std::unexpected(Format("\"accept\": {}", settings.error()));
+            }
+        }
         return {};
+    }
+
+    bool ArtGenPresetForm::ReadAccept(const Json& value) {
+        const auto settings = ArtGenImageSettingsFromJson(value);
+        if (!settings) {
+            return false;
+        }
+        _accept = _acceptLoaded = *settings;
+        _acceptInFile = true;
+        _acceptAsLoaded = value;
+        return true;
     }
 
     void ArtGenPresetForm::FromJson(const Json& data) {
@@ -106,6 +122,10 @@ namespace BECore {
         _workflow.clear();
         _params.clear();
         _extra = Json::object();
+        _accept = {};
+        _acceptInFile = false;
+        _acceptAsLoaded = Json();
+        _acceptLoaded = {};
         if (!data.is_object()) {
             return;
         }
@@ -126,6 +146,8 @@ namespace BECore {
                 for (const auto& [param, paramValue] : value.items()) {
                     SetParam(StringView(param.data(), param.size()), paramValue);
                 }
+            } else if (field == "accept" && value.is_object() && ReadAccept(value)) {
+                continue;
             } else if (field != "preset") {
                 _extra[key] = value;
             }
@@ -152,6 +174,9 @@ namespace BECore {
                 params[ToStdString(param.name)] = param.value;
             }
             data["params"] = std::move(params);
+        }
+        if (HasImageAccept()) {
+            data["accept"] = (_acceptInFile && _accept == _acceptLoaded) ? _acceptAsLoaded : ArtGenImageSettingsToJson(_accept);
         }
         return data;
     }
@@ -199,6 +224,9 @@ namespace BECore {
 
     void ArtGenPresetForm::MarkSaved() {
         _base = ToJson();
+        if (const Json* accept = FindJsonMember(_base, "accept"); accept != nullptr) {
+            ReadAccept(*accept);
+        }
         _baseName = String(name);
         _baseSource = "game";
         Touch();
@@ -222,6 +250,22 @@ namespace BECore {
             }
         }
         Touch();
+    }
+
+    void ArtGenPresetForm::SetImageAccept(const ArtGenImageSettings& settings) {
+        if (settings != _accept) {
+            _accept = settings;
+            Touch();
+        }
+    }
+
+    void ArtGenPresetForm::ClearImageAccept() {
+        if (HasImageAccept()) {
+            _accept = {};
+            _acceptInFile = false;
+            _acceptAsLoaded = Json();
+            Touch();
+        }
     }
 
     const Json* ArtGenPresetForm::FindParam(StringView input) const {

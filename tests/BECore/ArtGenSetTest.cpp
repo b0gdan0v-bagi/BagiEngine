@@ -117,6 +117,44 @@ namespace BECore::Tests {
         EXPECT_TRUE(FindJsonMember(ArtGenSetToJson(MakeSet()), "presetData")->is_null());
     }
 
+    TEST(ArtGenSetTest, ProcessingRoundTripsAndAManifestWithoutItReadsAsNone) {
+        ArtGenSet set = MakeSet();
+        EXPECT_TRUE(FindJsonMember(ArtGenSetToJson(set), "processing")->is_null());
+        const auto without = ArtGenSetFromJson(ArtGenSetToJson(set));
+        ASSERT_TRUE(without.has_value()) << without.error();
+        EXPECT_FALSE(without->processing.has_value());
+        ArtGenSet untouched = MakeSet();
+        untouched.jobs[0].accepted.reset();
+        EXPECT_FALSE(IsLegacyAccepted(untouched)) << "nothing accepted, nothing legacy";
+        EXPECT_TRUE(IsLegacyAccepted(set)) << "a row accepted and no processing: accepted before frames existed";
+
+        set.processing = ArtGenSetProcessing{ArtGenImageSettings{true, 5, 128}, ArtGenImageFrame{10, 20, 300, 400, 96, 128}};
+        EXPECT_FALSE(IsLegacyAccepted(set));
+        const Json json = ArtGenSetToJson(set);
+        EXPECT_EQ(GetJsonInt(*FindJsonMember(*FindJsonMember(json, "processing"), "frame"), "outHeight"), Optional<int64_t>(128));
+        const auto back = ArtGenSetFromJson(json);
+        ASSERT_TRUE(back.has_value()) << back.error();
+        EXPECT_EQ(back->processing, set.processing);
+        EXPECT_EQ(ArtGenSetToJson(*back), json);
+    }
+
+    TEST(ArtGenSetTest, AProcessingOfTheWrongShapeIsAnErrorThatSaysWhere) {
+        struct Case {
+            const char* processing;
+            const char* where;
+        };
+        const Array<Case, 5> cases{Case{R"("yes")", "manifest.processing: must be an object"}, Case{R"({"settings":{}})", "manifest.processing: needs 'settings' and 'frame'"},
+                                   Case{R"({"settings":{"padding":99},"frame":{"x":0,"y":0,"w":10,"h":10,"outWidth":5,"outHeight":5}})", "manifest.processing.settings:"},
+                                   Case{R"({"settings":{},"frame":{"x":0,"y":0,"w":10,"h":10,"outWidth":50,"outHeight":5}})", "manifest.processing.frame:"},
+                                   Case{R"({"settings":{},"frame":{"x":0,"y":0,"w":"wide","h":10,"outWidth":5,"outHeight":5}})", "manifest.processing.frame:"}};
+        for (const Case& item : cases) {
+            Json json = ArtGenSetToJson(MakeSet());
+            json["processing"] = Manifest(item.processing);
+            const String error = ErrorOf(ArtGenSetFromJson(json));
+            EXPECT_TRUE(Contains(error, item.where)) << item.processing << " -> " << error;
+        }
+    }
+
     TEST(ArtGenSetTest, PathsInTheManifestUseForwardSlashes) {
         const Json json = ArtGenSetToJson(MakeSet());
         const Json& variant = (*FindJsonMember(json, "jobs"))[0]["variants"][0];

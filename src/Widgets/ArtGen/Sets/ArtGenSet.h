@@ -3,6 +3,7 @@
 #include <BECore/Control/Json.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
+#include <Widgets/ArtGen/ArtGenImage.h>
 #include <chrono>
 #include <cstdint>
 #include <expected>
@@ -55,6 +56,14 @@ namespace BECore {
         Optional<ArtGenSetAccepted> accepted;
     };
 
+    /// What every image of a set is cut and scaled by, fixed at the first Accept all so the rows keep one scale whatever is switched later
+    struct ArtGenSetProcessing {
+        ArtGenImageSettings settings;
+        ArtGenImageFrame frame;
+
+        [[nodiscard]] bool operator==(const ArtGenSetProcessing&) const = default;
+    };
+
     /// A named batch: one preset applied to a list of subjects, one job per subject, all with the same first seed so the style matches.
     /// Plain data over the manifest; the session runs it, the store keeps it (Sets/CLAUDE.md)
     struct ArtGenSet {
@@ -66,6 +75,7 @@ namespace BECore {
         int32_t count = kArtGenSetDefaultCount;
         int64_t seed = 0;  // the first seed of every job
         Vector<ArtGenSetJob> jobs;
+        Optional<ArtGenSetProcessing> processing;  // an image set: none until the first Accept all (or for good, see IsLegacyAccepted)
     };
 
     /// The set name or job name from a subject: "White Knight!" -> "white_knight". Lowercase letters and digits, one `_` between words,
@@ -101,6 +111,10 @@ namespace BECore {
     [[nodiscard]] int32_t CountJobs(const ArtGenSet& set, ArtGenSetJobState state);
     /// The jobs that have a pick
     [[nodiscard]] int32_t PickedCount(const ArtGenSet& set);
+
+    /// A row was accepted before sets had a frame: its files are full frames, so the set keeps writing unprocessed files and its rows never
+    /// differ in scale
+    [[nodiscard]] bool IsLegacyAccepted(const ArtGenSet& set);
 
     /// The jobs the game holds with alternatives still switchable (accepted and not kept)
     [[nodiscard]] bool IsLive(const ArtGenSetJob& job);
