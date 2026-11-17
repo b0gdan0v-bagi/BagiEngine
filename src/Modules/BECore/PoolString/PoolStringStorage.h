@@ -80,6 +80,13 @@ namespace BECore::Details {
         void InternBatch(Span<const StringView> texts, Span<PoolString> out);
         void InternBatch(Span<const StringView> texts, Span<const uint64_t> hashes, Span<PoolString> out);
 
+        /// `PoolString::RegisterStatic`. Pointers of the entries enter the table: nothing is hashed, copied or allocated for the
+        /// text, and an entry is never written to, so it must outlive the storage. The first entry of a text wins.
+        void RegisterStatic(Span<const PoolStaticRegistration> registrations);
+
+        /// `PoolString::Reserve`
+        void Reserve(size_t strings, size_t bytes);
+
         [[nodiscard]] PoolStringStats GetStats();
 
     private:
@@ -95,7 +102,10 @@ namespace BECore::Details {
         uint64_t _misses = 0;
         uint64_t _writeLocks = 0;
         size_t _heapFallbackBlocks = 0;
+        PoolSourceStats _static;  // blocks stay 0: the entries are in the program image
         PoolSourceStats _runtime;
+        // Counted under either lock (a registration of entries that all lost needs no unique lock), so atomic
+        std::atomic<size_t> _staticDuplicates{0};
         UniquePtr<IPoolBlockSource> _fallback;  // the heap source, made on the first empty answer of `_source`
         char* _current = nullptr;               // the block that small entries go into
         size_t _offset = 0;

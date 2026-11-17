@@ -208,12 +208,71 @@ namespace BECore::Details {
         return fresh.size();
     }
 
+    void PoolStringStorage::RegisterStatic(Span<const PoolStaticRegistration> registrations) {
+        Vector<size_t> pending;  // allocates on the first absent text only
+        size_t duplicates = 0;
+        {
+            SharedLock lock(_mutex);
+            for (size_t i = 0; i < registrations.size(); ++i) {
+                const Entry& entry = *registrations[i].entry;
+                ASSERT(entry.hash == StringUtils::GetHash(entry.ToStringView()) && entry.data[entry.size] == '\0', "RegisterStatic: an entry has a wrong hash or no NUL");
+                if (entry.size == 0) {
+                    *registrations[i].value = PoolString();
+                } else if (const Entry* found = _table.Find(entry.hash, entry.ToStringView())) {
+                    *registrations[i].value = PoolString(found);
+                    duplicates += found != &entry ? 1 : 0;
+                } else {
+                    pending.push_back(i);
+                }
+            }
+        }
+        if (pending.empty()) {
+            if (duplicates != 0) {
+                _staticDuplicates.fetch_add(duplicates, std::memory_order_relaxed);
+            }
+            return;
+        }
+
+        UniqueLock lock(_mutex);
+        ++_writeLocks;
+        _staticDuplicates.fetch_add(duplicates, std::memory_order_relaxed);
+        // The table grows at most once, for every entry still absent (a repeat inside the batch is counted too: the table
+        // may then be one step larger than the insertions need)
+        _table.Reserve(_table.Used() + pending.size());
+        for (const size_t i : pending) {
+            const Entry& entry = *registrations[i].entry;
+            if (const Entry* found = _table.Find(entry.hash, entry.ToStringView())) {
+                *registrations[i].value = PoolString(found);
+                if (found != &entry) {
+                    _staticDuplicates.fetch_add(1, std::memory_order_relaxed);
+                }
+                continue;
+            }
+            _table.Insert(entry.hash, &entry);
+            ++_static.strings;
+            _static.bytes += PoolEntryBytes(entry.size);
+            *registrations[i].value = PoolString(&entry);
+        }
+    }
+
+    void PoolStringStorage::Reserve(size_t strings, size_t bytes) {
+        UniqueLock lock(_mutex);
+        ++_writeLocks;
+        _table.Reserve(_table.Used() + strings);
+        const size_t aligned = (bytes + kPoolEntryAlignment - 1) & ~(kPoolEntryAlignment - 1);
+        if (aligned != 0 && _capacity - _offset < aligned) {
+            _current = TakeBlock(aligned);
+            _capacity = aligned;
+            _offset = 0;
+        }
+    }
+
     PoolStringStats PoolStringStorage::GetStats() {
         PoolStringStats stats;
         {
             SharedLock lock(_mutex);
             stats.stringCount = _table.Used();
-            stats.stringBytes = _runtime.bytes;
+            stats.stringBytes = _runtime.bytes + _static.bytes;
             stats.blockCount = _runtime.blocks;
             stats.blockBytes = _runtime.blockBytes;
             stats.tableCapacity = _table.Capacity();
@@ -221,6 +280,8 @@ namespace BECore::Details {
             stats.longestProbe = _table.LongestProbe();
             stats.misses = _misses;
             stats.runtime = _runtime;
+            stats.staticEntries = _static;
+            stats.staticDuplicates = _staticDuplicates.load(std::memory_order_relaxed);
             stats.writeLocks = _writeLocks;
             stats.heapFallbackBlocks = _heapFallbackBlocks;
         }

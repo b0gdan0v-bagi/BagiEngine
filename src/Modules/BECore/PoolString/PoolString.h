@@ -48,6 +48,14 @@ namespace BECore {
         size_t heapFallbackBlocks = 0;  ///< Blocks the heap gave because the block source returned none
     };
 
+    class PoolString;
+
+    /// A ready entry for `PoolString::RegisterStatic`, and where to put the `PoolString` of its text
+    struct PoolStaticRegistration {
+        const Details::PoolStringEntry* entry = nullptr;
+        PoolString* value = nullptr;
+    };
+
     class PoolString {
     public:
         /// Size of a standard block of the pool; a string whose entry does not fit one gets a block of its own.
@@ -73,6 +81,25 @@ namespace BECore {
         /// where a lookup of it never looks, and a text whose hash belongs to another one can be taken for that one. Never
         /// pass hashes read from untrusted bytes: use the form above.
         static void InternBatch(Span<const StringView> texts, Span<const uint64_t> hashes, Span<PoolString> out);
+
+        /// Makes ready entries, built before the program ran or by a cook, the entries of their texts, so that nothing is copied
+        /// and nothing hashed for them. `entry` is `const`, **lives for the whole process** (the pool keeps its address and never
+        /// writes to it), and has its `hash` right and a NUL after its `size` characters (`ASSERT` in Debug). Per registration
+        /// `*value` is set to the `PoolString` of the text: the entry itself when its text was not in the pool, otherwise the
+        /// entry the pool already had: the first one wins, whether it came from a `Intern`, from another ready entry or from an
+        /// adopted block, and the loser stays unused where it is (`PoolStringStats::staticDuplicates`). So a caller must always use
+        /// `*value`, never its own entry's address. Registering the same entry again changes nothing. An entry of an empty text
+        /// gives the empty `PoolString`. A batch takes the unique lock once, and not at all when every text is in the pool.
+        static void RegisterStatic(Span<const PoolStaticRegistration> registrations);
+
+        /// One entry: the `PoolString` of its text, with the rules of the batch form
+        [[nodiscard]] static PoolString RegisterStatic(const Details::PoolStringEntry& entry);
+
+        /// A hint that about `strings` more strings of `bytes` aligned entry bytes in all will be interned: grows the table once
+        /// for them and, when the current block has less than `bytes` free, takes one block of that size that becomes current
+        /// (what is left of the old one is lost). It never fails and limits nothing: strings beyond the hint take blocks and
+        /// growth as usual. Meant for a loader that knows the size of what it is about to read.
+        static void Reserve(size_t strings, size_t bytes);
 
         /// Counters of the pool; `Find` is not an `Intern` call. A test compares two snapshots: the pool is shared.
         [[nodiscard]] static PoolStringStats GetStats();

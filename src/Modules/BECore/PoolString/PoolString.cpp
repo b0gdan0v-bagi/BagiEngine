@@ -35,6 +35,21 @@ namespace BECore {
         Storage().InternBatch(texts, hashes, out);
     }
 
+    void PoolString::RegisterStatic(Span<const PoolStaticRegistration> registrations) {
+        Storage().RegisterStatic(registrations);
+    }
+
+    PoolString PoolString::RegisterStatic(const Details::PoolStringEntry& entry) {
+        PoolString value;
+        const PoolStaticRegistration registration{&entry, &value};
+        Storage().RegisterStatic(Span<const PoolStaticRegistration>(&registration, 1));
+        return value;
+    }
+
+    void PoolString::Reserve(size_t strings, size_t bytes) {
+        Storage().Reserve(strings, bytes);
+    }
+
     PoolStringStats PoolString::GetStats() {
         return Storage().GetStats();
     }
