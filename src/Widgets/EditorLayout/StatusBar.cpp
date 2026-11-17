@@ -7,6 +7,7 @@
 #include <BECore/Scene/SceneManager.h>
 #include <Games/GameManager.h>
 #include <Widgets/EditorLayout/EditorControls.h>
+#include <Widgets/EditorLayout/Hardware/HardwarePlatform.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/ImGuiFonts.h>
 #include <Widgets/ImGuiTheme.h>
@@ -76,6 +77,42 @@ namespace BECore {
             ItemTooltip(item.tooltip);
         }
 
+        ImVec4 LevelColor(HardwareLevel level, const ImVec4& normal, const ImGuiPalette& palette) {
+            switch (level) {
+                case HardwareLevel::Normal:
+                    return normal;
+                case HardwareLevel::Warning:
+                    return palette.warning;
+                case HardwareLevel::Error:
+                    return palette.error;
+            }
+            return palette.error;
+        }
+
+        /// The device's icon and label, then each segment in the colour of its level, every piece with the tooltip of the device
+        void DrawHardware(const HardwareReadings& readings, const HardwareText& text, const ImVec4& disabled, const ImVec4& normal) {
+            const ImGuiPalette& palette = GetImGuiPalette();
+            const float innerSpacing = ImGui::GetStyle().ItemInnerSpacing.x;
+
+            ImGui::PushStyleColor(ImGuiCol_Text, disabled);
+            ImGui::TextUnformatted(readings.kind == HardwareKind::Cpu ? ICON_LC_CPU : ICON_LC_MICROCHIP);
+            ItemTooltip(text.tooltip);
+            ImGui::SameLine(0.0f, innerSpacing);
+            ImGui::TextUnformatted(text.label);
+            ItemTooltip(text.tooltip);
+            ImGui::PopStyleColor();
+
+            const ScopedMonoFont mono;
+            for (size_t i = 0; i < text.segmentCount; ++i) {
+                const HardwareSegment& segment = text.segments[i];
+                ImGui::SameLine(0.0f, innerSpacing);
+                ImGui::PushStyleColor(ImGuiCol_Text, LevelColor(segment.level, normal, palette));
+                ImGui::TextUnformatted(segment.text);
+                ImGui::PopStyleColor();
+                ItemTooltip(text.tooltip);
+            }
+        }
+
         /// Copies @p name into @p target only when it is not the one seen last, so a steady frame does not touch the heap
         void CopyIfChanged(PoolString name, PoolString& seen, String& target) {
             if (name == seen) {
@@ -96,7 +133,26 @@ namespace BECore {
         _branch.assign(branch.data(), branch.size());
     }
 
+    void StatusBar::StartHardwareMonitor() {
+        // A platform with no reader would start a thread that only finds nothing
+        UniquePtr<IHardwareReader> gpu = MakePlatformGpuReader();
+        UniquePtr<IHardwareReader> cpu = MakePlatformCpuReader();
+        if (gpu == nullptr && cpu == nullptr) {
+            return;
+        }
+        _hardware = MakeUnique<HardwareMonitor>(std::move(gpu), std::move(cpu));
+        _hardware->Start();
+    }
+
+    void StatusBar::SetHardwareMonitor(UniquePtr<HardwareMonitor> monitor) {
+        _hardware = std::move(monitor);
+    }
+
     void StatusBar::Refresh() {
+        if (_hardware != nullptr && _hardware->Fetch(_hardwareReadings)) {
+            FormatHardware(_hardwareReadings, _hardwareText);
+        }
+
         if (const FrameStats* last = CoreManager::GetFrameStats().GetLast()) {
             _meter.Feed(*last);
             _allocCount = last->allocCount;
@@ -150,7 +206,7 @@ namespace BECore {
 
         ImGui::AlignTextToFramePadding();
 
-        // Left: frame rate and time in the colour of their level, then the allocations of the last frame
+        // Left: frame rate and time in the colour of their level, then the allocations of the last frame and the hardware readout
         const ImVec4 levelColor = LevelColor(_meter.GetLevel(), palette);
         const BarItem fps{ICON_LC_ACTIVITY, _fpsText, levelColor, true, kFrameTooltip};
         DrawItem(fps, disabled);
@@ -166,6 +222,10 @@ namespace BECore {
             ImGui::SameLine(0.0f, itemGap);
             const BarItem allocs{ICON_LC_PACKAGE, _allocText, _allocCount == 0 ? disabled : palette.warning, true, kAllocTooltip};
             DrawItem(allocs, disabled);
+        }
+        if (_hardwareText.visible) {
+            ImGui::SameLine(0.0f, itemGap);
+            DrawHardware(_hardwareReadings, _hardwareText, disabled, normal);
         }
 
         // Right: the control API, the game, the scene and the branch (each only when there is one)

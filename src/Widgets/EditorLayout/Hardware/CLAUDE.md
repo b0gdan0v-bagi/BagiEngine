@@ -33,3 +33,8 @@ No ImGui and no platform code in the first two: they are tested alone (`Hardware
 - Memory is MiB shown as GB with one decimal for the used amount; the total is whole when within 0.05 GB of a whole number. The unit follows the total (below 1 GiB: whole MB), without a total the used amount. A zero total is an unknown one. Memory of a `unifiedMemory` reading ends the tooltip with `unified memory, shared with the system`.
 - Thresholds (named constants in `HardwareText.h`): GPU 80 / 90 °C, CPU 85 / 95 °C, memory 90 / 97 % used. Load is never coloured: a saturated GPU is the normal state while the art pipeline works.
 - Everything is formatted into fixed `char` buffers and cut at their size, so a steady frame allocates nothing.
+
+## The bar
+
+- `StatusBar` owns the monitor. `StartHardwareMonitor()` (once, from `EditorLayoutWidget::Initialize`) builds the platform's readers and starts the worker only when at least one exists, so a platform with none costs no thread and shows nothing; `SetHardwareMonitor()` is the tests' way in (not started, driven by `PollOnce`). The monitor is joined when the bar dies: a mode switch or the end of the program.
+- `Refresh()` calls `Fetch()` every frame and formats (`FormatHardware`) only when it answered true. The group sits in the left half after the allocations: the device's icon (`ICON_LC_MICROCHIP` GPU, `ICON_LC_CPU` CPU) and label in the disabled colour, then each segment in the mono font in its level's colour (`Normal` the text colour, `Warning` and `Error` the palette's), every piece with the device's tooltip. Without a visible text nothing is drawn, not even a gap.
