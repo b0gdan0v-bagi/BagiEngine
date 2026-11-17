@@ -188,6 +188,8 @@ namespace BECore::Tests {
 
         /// Interns names until the pool takes a new standard block, so the current block is nearly empty afterwards
         void StartFreshBlock() {
+            // The first copy of a text creates the first block: code constants take none, so a process may have no block yet
+            static_cast<void>(PoolString::Intern("pool_stats_first_block_5c20"));
             const size_t blocksBefore = PoolString::GetStats().blockCount;
             for (size_t i = 0; i < kFillGuard && PoolString::GetStats().blockCount == blocksBefore; ++i) {
                 static_cast<void>(PoolString::Intern(StringView{CounterName("pool_stats_fill_", i)}));
