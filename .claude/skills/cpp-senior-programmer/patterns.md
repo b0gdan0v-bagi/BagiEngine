@@ -1,352 +1,94 @@
-# C++ Design Patterns Reference
+# Idioms of the engine, with the files that use them
 
-Extended patterns and idioms for BagiEngine game engine development.
+Each idiom is a shape that already exists in the code: open the file and copy it rather than the sketch here. Paths are from the engine root.
 
-**Project Requirements**: Use `IntrusivePtr<T>` with `BECore::New<T>()` (or `BECore::NewAtomic<T>()` for thread-safe), EASTL containers, `BE_ASSERT()`, deducing this over CRTP. BagiEngine is built **without exceptions** — use `std::expected<T, E>`, `ASSERT`, or `FATALERROR`. `dynamic_cast` only as last resort.
+## Rebuild only when the key moved
 
-## Patterns Already in Codebase
+`src/Widgets/EditorLayout/StatusBar.cpp` (`StatusBar::Refresh`), `src/Widgets/Console/ConsoleWidget.cpp` (`RefreshMethods`).
 
-These patterns are implemented in the project - see source code for details:
-
-- **Singleton**: `src/Modules/BECore/Utils/Singleton.h` - Use `Singleton<T>` or `SingletonAtomic<T>`
-- **RefCounted + IntrusivePtr**: `src/Modules/BECore/RefCounted/` - Use `RefCounted`/`RefCountedAtomic` with `IntrusivePtr<T>`
-- **PassKey**: `src/Modules/BECore/Utils/PassKey.h` - Restrict method access to specific classes
-- **Event System**: `src/Modules/Events/` - Use `EventBase<T>` with `Subscribe()`, `Emit()`, `Enqueue()`
-
-## Creational Patterns
-
-### Factory with Type Registration
+The source keeps a revision that only grows; the consumer keeps the last one it saw and compares for equality. A frame with nothing new costs the comparison.
 
 ```cpp
-template<typename Base, typename... Args>
-class Factory {
-    using Creator = eastl::function<IntrusivePtr<Base>(Args...)>;
-    eastl::hash_map<PoolString, Creator> _creators;
-    
-public:
-    template<typename Derived>
-    void Register(std::string_view name) {
-        _creators[PoolString(name)] = [](Args... args) {
-            return IntrusivePtr<Derived>(BECore::New<Derived>(std::forward<Args>(args)...));
-        };
-    }
-    
-    IntrusivePtr<Base> Create(std::string_view name, Args... args) {
-        auto it = _creators.find(PoolString(name));
-        return it != _creators.end() ? it->second(std::forward<Args>(args)...) : nullptr;
-    }
-};
+if (_meter.Version() != _shownMeterVersion) {
+    _shownMeterVersion = _meter.Version();
+    FormatFps(_meter.GetFps(), _fpsText);   // char _fpsText[kTextSize]: a member, no heap
+}
+CopyIfChanged(game ? game->GetName() : PoolString(), _seenGame, _game);
 ```
 
-### Object Pool
+A name is copied into its `String` member only when the `PoolString` differs from the one last seen. The key can be anything that moves with the input: a version, the window size, the source strings (`src/Modules/BECore/UI/UITextPainter.cpp`).
+
+## Scratch kept as a member
+
+`src/Modules/BECore/Scene/Components/ParticleEmitterComponent.h` (`_vertices`), `src/Modules/BECore/Audio/AudioManager.h` (`_musicScratch`), `src/Modules/BECore/UI/UIBoxMesh.h` (pure functions that append to lists the caller keeps).
+
+A list a frame needs is a member: `clear()` keeps its capacity, so after the first frames nothing allocates. A function that builds geometry takes the list to append to instead of returning a new one.
+
+## Subscribing
+
+`src/Application/Application.cpp` (a `SubscriptionHolder`), `src/Modules/BECore/Scene/Components/ClickableComponent.cpp` (a component).
 
 ```cpp
-template<typename T, size_t PoolSize = 1024>
-class ObjectPool {
-    std::array<std::aligned_storage_t<sizeof(T), alignof(T)>, PoolSize> _storage;
-    eastl::vector<T*> _available;
-    
-public:
-    ObjectPool() {
-        _available.reserve(PoolSize);
-        for (auto& slot : _storage) {
-            _available.push_back(reinterpret_cast<T*>(&slot));
-        }
-    }
-    
-    template<typename... Args>
-    T* Acquire(Args&&... args) {
-        if (_available.empty()) return nullptr;
-        T* obj = _available.back();
-        _available.pop_back();
-        return new (obj) T(std::forward<Args>(args)...);
-    }
-    
-    void Release(T* obj) {
-        BE_ASSERT(obj != nullptr);
-        obj->~T();
-        _available.push_back(obj);
-    }
-};
+Subscribe<ApplicationEvents::QuitEvent, &Application::StopApplication>(this);                          // Application : SubscriptionHolder
+SubscribeInScene<SDLEvents::MouseButtonDownEvent, &ClickableComponent::OnMouseButtonDown>(this);   // in OnAttached()
 ```
 
-## Structural Patterns
+The holder owns the connections and drops them in its destructor. `IComponent`, `IWidget` and `IRenderer` already derive from it.
 
-### Deducing This (C++23) - Replaces CRTP
+## A task and `co_await`
+
+`src/Modules/BECore/Text/FontLoader.cpp`, `src/Modules/BECore/Audio/AudioClipLoader.cpp`.
 
 ```cpp
-// Static polymorphism with deducing this - zero runtime overhead
-class Cloneable {
-public:
-    template<typename Self>
-    auto Clone(this Self const& self) {
-        return IntrusivePtr<std::remove_cvref_t<Self>>(
-            BECore::New<std::remove_cvref_t<Self>>(self)
-        );
-    }
-};
-
-// Fluent interface pattern
-class Builder {
-public:
-    template<typename Self>
-    auto&& SetName(this Self&& self, PoolString name) {
-        self._name = eastl::move(name);
-        return std::forward<Self>(self);
-    }
-    
-    template<typename Self>
-    auto&& SetSize(this Self&& self, int width, int height) {
-        self._width = width;
-        self._height = height;
-        return std::forward<Self>(self);
-    }
-private:
-    PoolString _name;
-    int _width = 0, _height = 0;
-};
+Task<IntrusivePtr<IResource>> FontLoader::LoadAsync(PoolString path) {
+    co_await SwitchToBackground(TaskPriority::Normal, BE_TASK_LABEL("Load font"));
+    co_return LoadInternal(path);
+}
 ```
 
-### Type Erasure
+The synchronous and the asynchronous load share one function; the coroutine only says on which thread it runs. Back on the main thread with `co_await SwitchToMainThread()` before touching the scene.
+
+## `CORE_ENUM` and `EnumUtils`
+
+`src/Modules/BECore/Save/SaveGame.h`, `src/Modules/BECore/Control/ReflectionControl.cpp`.
 
 ```cpp
-// Runtime polymorphism without inheritance
-class AnyDrawable {
-    struct Concept {
-        virtual ~Concept() = default;
-        virtual void Draw() const = 0;
-        virtual IntrusivePtr<Concept> Clone() const = 0;
-    };
-    
-    template<typename T>
-    struct Model : Concept, RefCounted {
-        T _data;
-        Model(T data) : _data(eastl::move(data)) {}
-        void Draw() const override { _data.Draw(); }
-        IntrusivePtr<Concept> Clone() const override {
-            return IntrusivePtr<Model>(BECore::New<Model>(*this));
-        }
-    };
-    
-    IntrusivePtr<Concept> _impl;
-    
-public:
-    template<typename T>
-    AnyDrawable(T x) : _impl(BECore::New<Model<T>>(eastl::move(x))) {}
-    
-    void Draw() const { _impl->Draw(); }
-};
+CORE_ENUM(SaveErrorKind, uint8_t, NotInitialized, InvalidSlotName, NotFound, WriteFailed, ReadFailed, Corrupt, WrongGame, VersionTooNew, VersionTooOld)
+EnumUtils<PropertyErrorCode>::ToString(code)
 ```
 
-## Behavioral Patterns
+The reflection reads the values, so the enum is written and read by name in content and in the control API.
 
-### Command with Undo
+## An error that changes nothing
+
+`src/Modules/BECore/Save/SaveGame.cpp` (`SaveGameService::Load`).
+
+Every check that can fail (the slot, the envelope, the game, the version) runs and returns `std::unexpected` before `readState` is called, so a refused save leaves the game's state as it was. The error carries a kind (`CORE_ENUM`) and a message made with `Format`.
+
+## Callables
+
+`src/Modules/BECore/Save/SaveGame.h` (`FunctionRef<void(ISerializer&)>`: called only during `Save`), `src/Modules/BECore/Animation/Tween.h` (`FixedFunction<kTweenApplyBytes, void(float)>`: stored per tween, never allocates).
+
+## `PassKey` and `Singleton`
+
+`src/Modules/BECore/Time/Time.h` (`Tick(PassKey<Application>)`), `src/Modules/BECore/Scene/Scene.h` (`SetActive(bool, PassKey<SceneManager>)`): a public method only one class may call. `src/Modules/Games/src/Games/GameManager.h` (`class GameManager : public Singleton<GameManager>` with `friend class Singleton<GameManager>`): a global service.
+
+## A lock with a site
+
+`src/Modules/BECore/PoolString/PoolString.cpp`.
 
 ```cpp
-class Command : public RefCounted {
-public:
-    virtual ~Command() = default;
-    virtual void Execute() = 0;
-    virtual void Undo() = 0;
-};
-
-class CommandHistory {
-    eastl::vector<IntrusivePtr<Command>> _history;
-    size_t _current = 0;
-    
-public:
-    void Execute(IntrusivePtr<Command> cmd) {
-        BE_ASSERT(cmd != nullptr);
-        _history.resize(_current);
-        cmd->Execute();
-        _history.push_back(eastl::move(cmd));
-        ++_current;
-    }
-    
-    void Undo() {
-        if (_current > 0) _history[--_current]->Undo();
-    }
-    
-    void Redo() {
-        if (_current < _history.size()) _history[_current++]->Execute();
-    }
-};
+SharedMutex _mutex{BE_LOCK_SITE("PoolString")};
 ```
 
-### Observer with IntrusivePtr
+The site names the lock in the profiler's lock waits (`Profiler/CLAUDE.md` "Lock waits").
+
+## A lookup by outside text
+
+`src/Modules/BECore/UI/UIControl.cpp`.
 
 ```cpp
-template<typename... Args>
-class Signal {
-    using Slot = eastl::function<void(Args...)>;
-    
-    struct Observer : RefCounted {
-        Slot callback;
-        Observer(Slot cb) : callback(eastl::move(cb)) {}
-    };
-    
-    eastl::vector<IntrusivePtr<Observer>> _observers;
-    
-public:
-    using Handle = IntrusivePtr<Observer>;
-    
-    Handle Connect(Slot callback) {
-        auto observer = IntrusivePtr<Observer>(BECore::New<Observer>(eastl::move(callback)));
-        _observers.push_back(observer);
-        return observer;
-    }
-    
-    void Disconnect(const Handle& handle) {
-        eastl::erase(_observers, handle);
-    }
-    
-    void Emit(Args... args) {
-        for (auto& observer : _observers) {
-            observer->callback(std::forward<Args>(args)...);
-        }
-    }
-};
+const auto name = PoolString::Find(StringView(nameText->c_str(), nameText->size()));
 ```
 
-### State Machine
-
-```cpp
-template<typename StateEnum>
-class StateMachine {
-    StateEnum _current;
-    eastl::hash_map<StateEnum, eastl::function<void()>> _onEnter;
-    eastl::hash_map<StateEnum, eastl::function<void()>> _onExit;
-    eastl::hash_map<StateEnum, eastl::function<void(float)>> _onUpdate;
-    
-public:
-    void SetState(StateEnum newState) {
-        if (auto it = _onExit.find(_current); it != _onExit.end())
-            it->second();
-        _current = newState;
-        if (auto it = _onEnter.find(_current); it != _onEnter.end())
-            it->second();
-    }
-    
-    void Update(float dt) {
-        if (auto it = _onUpdate.find(_current); it != _onUpdate.end())
-            it->second(dt);
-    }
-    
-    void OnEnter(StateEnum state, eastl::function<void()> fn) { 
-        _onEnter[state] = eastl::move(fn); 
-    }
-    void OnExit(StateEnum state, eastl::function<void()> fn) { 
-        _onExit[state] = eastl::move(fn); 
-    }
-    void OnUpdate(StateEnum state, eastl::function<void(float)> fn) { 
-        _onUpdate[state] = eastl::move(fn); 
-    }
-};
-```
-
-## Memory Patterns
-
-### Arena Allocator
-
-```cpp
-class Arena {
-    eastl::vector<std::byte> _buffer;
-    size_t _offset = 0;
-    
-public:
-    explicit Arena(size_t size) : _buffer(size) {}
-    
-    template<typename T, typename... Args>
-    T* Alloc(Args&&... args) {
-        size_t aligned = (_offset + alignof(T) - 1) & ~(alignof(T) - 1);
-        if (aligned + sizeof(T) > _buffer.size()) return nullptr;
-        T* ptr = new (&_buffer[aligned]) T(std::forward<Args>(args)...);
-        _offset = aligned + sizeof(T);
-        return ptr;
-    }
-    
-    void Reset() { _offset = 0; }  // Mass deallocation
-};
-```
-
-## Concurrency Patterns
-
-### Double-Buffering
-
-```cpp
-template<typename T>
-class DoubleBuffer {
-    std::array<T, 2> _buffers;
-    std::atomic<int> _readIndex{0};
-    
-public:
-    T& GetWriteBuffer() { return _buffers[1 - _readIndex.load()]; }
-    const T& GetReadBuffer() const { return _buffers[_readIndex.load()]; }
-    
-    void Swap() {
-        _readIndex.store(1 - _readIndex.load());
-    }
-};
-```
-
-### Lock-Free Ring Buffer
-
-```cpp
-template<typename T, size_t Size>
-class SPSCQueue {  // Single Producer Single Consumer
-    std::array<T, Size> _buffer;
-    std::atomic<size_t> _head{0};
-    std::atomic<size_t> _tail{0};
-    
-public:
-    bool Push(const T& item) {
-        size_t head = _head.load(std::memory_order_relaxed);
-        size_t next = (head + 1) % Size;
-        if (next == _tail.load(std::memory_order_acquire)) return false;
-        _buffer[head] = item;
-        _head.store(next, std::memory_order_release);
-        return true;
-    }
-    
-    bool Pop(T& item) {
-        size_t tail = _tail.load(std::memory_order_relaxed);
-        if (tail == _head.load(std::memory_order_acquire)) return false;
-        item = _buffer[tail];
-        _tail.store((tail + 1) % Size, std::memory_order_release);
-        return true;
-    }
-};
-```
-
-## Deducing This Patterns (C++23)
-
-### Recursive Visitor
-
-```cpp
-class TreeNode : public RefCounted {
-    eastl::vector<IntrusivePtr<TreeNode>> _children;
-    PoolString _name;
-    
-public:
-    template<typename Self, typename Visitor>
-    void Visit(this Self&& self, Visitor&& visitor) {
-        visitor(std::forward<Self>(self));
-        for (auto& child : self._children) {
-            child->Visit(std::forward<Visitor>(visitor));
-        }
-    }
-    
-    template<typename Self, typename Predicate>
-    auto* Find(this Self&& self, Predicate&& pred) 
-        -> std::remove_reference_t<Self>* 
-    {
-        if (pred(self)) return &self;
-        for (auto& child : self._children) {
-            if (auto* found = child->Find(std::forward<Predicate>(pred))) {
-                return found;
-            }
-        }
-        return nullptr;
-    }
-};
-```
+`Find` never adds to the pool; an unknown name is a miss that allocates nothing.
