@@ -11,6 +11,9 @@ namespace BECore {
 
     CORE_ENUM(ArtGenSetJobState, uint8_t, Pending, Running, Done, Failed, Cancelled)
 
+    /// Whether a job's pick is in the game: not accepted, accepted and switchable, accepted and final, or accepted and then taken over by a later set
+    CORE_ENUM(ArtGenRowStatus, uint8_t, NotInGame, Live, Kept, Replaced)
+
     /// The format number of `manifest.json`; a reader refuses any other
     inline constexpr int64_t kArtGenManifestFormat = 1;
     inline constexpr int32_t kMaxSetJobs = 64;
@@ -103,6 +106,8 @@ namespace BECore {
     [[nodiscard]] bool IsLive(const ArtGenSetJob& job);
     [[nodiscard]] int32_t CountLive(const ArtGenSet& set);
     [[nodiscard]] int32_t CountKept(const ArtGenSet& set);
+    /// The row's place in the game; @p replacedByNewer is true when another set accepted the same name later (`ArtGenSession::FindNewerOwner`)
+    [[nodiscard]] ArtGenRowStatus StatusOf(const ArtGenSetJob& job, bool replacedByNewer);
     /// The variants of @p job other than its pick (all of them when it has none)
     [[nodiscard]] int32_t AlternativesOf(const ArtGenSetJob& job);
 

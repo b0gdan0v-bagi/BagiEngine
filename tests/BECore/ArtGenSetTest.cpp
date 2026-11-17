@@ -392,6 +392,19 @@ namespace BECore::Tests {
         EXPECT_EQ(AlternativesOf(set.jobs[0]), 2);
     }
 
+    TEST(ArtGenSetTest, StatusOfARowSaysWhetherTheGameHoldsIt) {
+        ArtGenSet set = MakeSet();
+        ASSERT_TRUE(set.jobs[0].accepted.has_value());
+        EXPECT_EQ(StatusOf(set.jobs[0], false), ArtGenRowStatus::Live);
+        EXPECT_EQ(StatusOf(set.jobs[0], true), ArtGenRowStatus::Replaced);
+        EXPECT_EQ(StatusOf(set.jobs[1], false), ArtGenRowStatus::NotInGame);
+        EXPECT_EQ(StatusOf(set.jobs[1], true), ArtGenRowStatus::NotInGame);
+
+        set.jobs[0].accepted->kept = true;
+        EXPECT_EQ(StatusOf(set.jobs[0], false), ArtGenRowStatus::Kept);
+        EXPECT_EQ(StatusOf(set.jobs[0], true), ArtGenRowStatus::Replaced);
+    }
+
     TEST(ArtGenSetTest, FindJobByName) {
         ArtGenSet set = MakeSet();
         ASSERT_NE(FindJob(set, "black_knight"), nullptr);

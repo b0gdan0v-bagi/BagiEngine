@@ -17,6 +17,21 @@ namespace BECore {
     namespace {
 
         constexpr float kSubjectLines = 6.0f;
+        constexpr const char* kSingleRunNote = "A single run is in work on the Generate tab; the set starts after it";
+        constexpr const char* kSetDraftNote = "A set is made into artgen/out/<set>/ (drafts, git ignores them). Nothing reaches the game until Accept all on the Review tab.";
+        constexpr const char* kReviewDraftNote =
+            "Variants are drafts in artgen/out/<set>/ (git ignores that folder). Accept all, and a click on a live row, write into the game: assets/artgen/ and config/TextureLibrary.xml, "
+            "which are in git.";
+        constexpr const char* kAcceptAllTip =
+            "Put a candidate of every row into the game under the row's name: the pick, else the first variant. It writes assets/artgen/<job>.png (.wav for a sound) with its "
+            ".artgen.json and, for images, the sprite in config/TextureLibrary.xml; these are in git. The other variants stay switchable until Keep";
+        constexpr const char* kKeepTip =
+            "Keep this variant for good: the others are dropped from the set and the row can no longer be switched. Changes only the game's provenance file (\"kept\") and the manifest";
+        constexpr const char* kKeepAllTip = "Keep the shown variant of every live row for good: the others are dropped from the set and the rows can no longer be switched. Changes only the game's "
+                                            "provenance files (\"kept\") and the manifest";
+        constexpr const char* kReplacedExplanation =
+            "The game has one file per name. A set that accepted this name later owns it, so this row is only a draft in artgen/out/: it cannot be switched or kept. Accept a newer set with this name "
+            "to take the file over.";
         constexpr float kJobIndent = 16.0f;
         // Squares behind a thumbnail, so a transparent background (a cut-out sprite) shows as transparent
         constexpr float kCheckerCell = 10.0f;
@@ -96,19 +111,34 @@ namespace BECore {
         if (!nameValid) {
             ImGui::TextColored(palette.warning, "1 to 64 of A-Z a-z 0-9 _ -");
         }
+        {
+            ScopedMonoFont mono;
+            ImGui::InputInt("Count", &_count);
+        }
+        _count = std::clamp(_count, 1, kArtGenSetMaxCount);
+        ItemTooltip("Variants made for every job of this set");
+        ImGui::Checkbox("Random seed", &_randomSeed);
+        ItemTooltip("Off: the same first seed for every job of the set, the one below");
+        if (!_randomSeed) {
+            ImGui::SameLine();
+            ScopedMonoFont mono;
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+            ImGui::InputScalar("##setSeed", ImGuiDataType_S64, &_seed);
+            _seed = std::max<int64_t>(_seed, 0);
+        }
 
         const bool canQueue = !form.preset.IsEmpty() && _subjects[0] != '\0' && nameValid;
         ImGui::BeginDisabled(!canQueue);
         if (IconTextButton(ICON_LC_LIST_PLUS, "Queue",
-                           "Make every subject with the form's preset, count and seed, one job after another; a set draws one seed for all its jobs when the form's is random")) {
+                           "Make every subject with the preset above and this set's count and seed, one job after another; a set draws one seed for all its jobs when random")) {
             _error.clear();
             _queued.clear();
             auto subjects = ParseArtGenSubjects(StringView(_subjects));
             if (subjects) {
                 ArtGenSetRequest request;
                 request.subjects = std::move(*subjects);
-                request.count = form.count;
-                request.seed = form.seed;
+                request.count = _count;
+                request.seed = _randomSeed ? Optional<int64_t>() : Optional<int64_t>(_seed);
                 request.name = String(_setName);
                 // A saved preset goes by name, so its provenance names the file; anything else goes inline as a draft
                 if (form.preset.IsDirty()) {
@@ -131,12 +161,18 @@ namespace BECore {
             }
         }
         ImGui::EndDisabled();
+        if (session.IsSingleRunInWork()) {
+            ImGui::TextDisabled("%s", kSingleRunNote);
+        }
         if (!_error.empty()) {
             ImGui::TextColored(palette.error, "%s", _error.c_str());
         }
         if (!_queued.empty()) {
             ImGui::TextColored(palette.success, "%s", _queued.c_str());
         }
+        ImGui::PushTextWrapPos(0.0f);
+        ImGui::TextDisabled("%s", kSetDraftNote);
+        ImGui::PopTextWrapPos();
         ImGui::Separator();
 
         const auto& sets = session.GetSets();
@@ -345,6 +381,10 @@ namespace BECore {
         ImGui::SameLine();
         ImGui::TextColored(IsActive(*set) ? palette.accent : palette.textDisabled, "%s", IsActive(*set) ? "still running" : "complete");
 
+        ImGui::PushTextWrapPos(0.0f);
+        ImGui::TextDisabled("%s", kReviewDraftNote);
+        ImGui::PopTextWrapPos();
+
         const ImGuiStyle& style = ImGui::GetStyle();
         const float footerHeight = ImGui::GetFrameHeightWithSpacing() + (_acceptMessage.empty() ? 0.0f : ImGui::GetTextLineHeightWithSpacing());
         ImGui::BeginChild("##reviewRows", ImVec2(0.0f, -footerHeight));
@@ -353,7 +393,8 @@ namespace BECore {
         const int32_t columns = std::max(1, static_cast<int32_t>((inner + style.ItemSpacing.x) / (kReviewThumbnailSize + style.ItemSpacing.x)));
         const int32_t thumbRows = (std::max(set->count, 1) + columns - 1) / columns;
         const float cellHeight = kReviewThumbnailSize + style.ItemSpacing.y + ImGui::GetTextLineHeightWithSpacing();
-        const float rowHeight = style.WindowPadding.y * 2.0f + ImGui::GetTextLineHeightWithSpacing() + ImGui::GetFrameHeightWithSpacing() + static_cast<float>(thumbRows) * cellHeight;
+        // The header line and the status line, the hint line with its buttons, then the thumbnails
+        const float rowHeight = style.WindowPadding.y * 2.0f + ImGui::GetTextLineHeightWithSpacing() * 2.0f + ImGui::GetFrameHeightWithSpacing() + static_cast<float>(thumbRows) * cellHeight;
 
         ImGuiListClipper clipper;
         clipper.Begin(static_cast<int>(set->jobs.size()), rowHeight + style.ItemSpacing.y);
@@ -380,6 +421,37 @@ namespace BECore {
         DrawReviewFooter(session, *set);
     }
 
+    void ArtGenSetPanel::RefreshStatusLine(RowThumbs& row, const ArtGenSet& set, const ArtGenSetJob& job, ArtGenRowStatus status, const ArtGenSet* newer) {
+        // The text is made again only when what it says moved, so a steady frame allocates nothing
+        const StringView name = job.accepted ? StringView(job.accepted->as) : StringView(job.name);
+        const StringView newerName = newer != nullptr ? StringView(newer->name) : StringView();
+        if (row.statusValid && row.statusKey == status && StringView(row.statusName) == name && StringView(row.statusNewer) == newerName && StringView(row.statusKind) == StringView(set.kind)) {
+            return;
+        }
+        row.statusValid = true;
+        row.statusKey = status;
+        row.statusName = String(name);
+        row.statusNewer = String(newerName);
+        row.statusKind = set.kind;
+        const String file = ArtGenGameFile(name, set.kind);
+        const bool image = set.kind != kKindAudio;
+        switch (status) {
+            case ArtGenRowStatus::NotInGame:
+                row.statusLine = Format("Not in the game. Accept all writes {}", file);
+                break;
+            case ArtGenRowStatus::Live:
+                row.statusLine = image ? Format("In the game: {} (sprite '{}' in TextureLibrary); the other variants are one click away", file, name)
+                                       : Format("In the game: {}; the other variants are one click away", file);
+                break;
+            case ArtGenRowStatus::Kept:
+                row.statusLine = Format("Kept: {} is final", file);
+                break;
+            case ArtGenRowStatus::Replaced:
+                row.statusLine = Format("Not in the game: set '{}' accepted the name '{}' later and owns {}", newerName, name, file);
+                break;
+        }
+    }
+
     void ArtGenSetPanel::DrawReviewRow(ArtGenSession& session, const ArtGenSet& set, size_t index, int32_t columns, const ArtGenSetPanelSound& sound) {
         const auto& palette = GetImGuiPalette();
         const ArtGenSetJob& job = set.jobs[index];
@@ -391,24 +463,29 @@ namespace BECore {
         ImGui::TextUnformatted(job.name.c_str());
         ImGui::SameLine();
         ImGui::TextDisabled("%s", job.subject.c_str());
-        const ArtGenSet* newer = IsLive(job) ? session.FindNewerOwner(set, job) : nullptr;
+        const ArtGenSet* newer = session.FindNewerOwner(set, job);
+        const ArtGenRowStatus status = StatusOf(job, newer != nullptr);
         // A replaced row's variants are alternatives to nothing: the game holds another set's picture under its name
-        const bool live = IsLive(job) && newer == nullptr;
-        if (newer != nullptr) {
+        const bool live = status == ArtGenRowStatus::Live;
+        if (status == ArtGenRowStatus::Replaced) {
             char badge[kLabelSize];
             std::snprintf(badge, sizeof(badge), ICON_LC_REPLACE " replaced by %s", newer->name.c_str());
             ImGui::SameLine();
             ImGui::TextColored(palette.warning, "%s", badge);
+            ItemTooltip(kReplacedExplanation);
         } else if (live) {
             char badge[kLabelSize];
             const int32_t alternatives = AlternativesOf(job);
             std::snprintf(badge, sizeof(badge), ICON_LC_CHECK_CHECK " live, %d alternative%s", static_cast<int>(alternatives), alternatives == 1 ? "" : "s");
             ImGui::SameLine();
             ImGui::TextColored(palette.success, "%s", badge);
-        } else if (job.accepted) {
+        } else if (status == ArtGenRowStatus::Kept) {
             ImGui::SameLine();
             ImGui::TextColored(palette.accent, ICON_LC_LOCK " kept");
         }
+        RefreshStatusLine(_rows[index], set, job, status, newer);
+        ImGui::TextDisabled("%s", _rows[index].statusLine.c_str());
+        ItemTooltip(status == ArtGenRowStatus::Replaced ? kReplacedExplanation : _rows[index].statusLine.c_str());
 
         ImGui::AlignTextToFramePadding();
         switch (job.state) {
@@ -427,15 +504,17 @@ namespace BECore {
                 ImGui::TextDisabled("Making the images...");
                 break;
             default:
-                ImGui::TextDisabled("%s", job.variants.empty() ? "No images"
-                                          : newer != nullptr   ? "The game's picture comes from the newer set"
-                                          : live               ? "Click a variant to show it in the game"
-                                          : job.accepted       ? "Kept: this variant is final"
-                                          : job.pick           ? "Click another variant to change the pick"
-                                                               : "Click a variant to pick it");
+                // A kept or replaced row's status line above already says what its variants are
+                if (job.variants.empty()) {
+                    ImGui::TextDisabled("No images");
+                } else if (live) {
+                    ImGui::TextDisabled("Click a variant to show it in the game");
+                } else if (!job.accepted) {
+                    ImGui::TextDisabled("%s", job.pick ? "Click another variant to change the pick" : "Click a variant to pick it");
+                }
                 if (live) {
                     ImGui::SameLine();
-                    if (IconTextButton(ICON_LC_LOCK, "Keep", "Keep this variant for good: the others are dropped from the set and the row can no longer be switched")) {
+                    if (IconTextButton(ICON_LC_LOCK, "Keep", kKeepTip)) {
                         const auto kept = session.KeepSet(StringView(set.name), StringView(job.name));
                         _acceptFailed = !kept.has_value();
                         _acceptMessage = kept ? Format("Kept '{}'", job.name) : kept.error().message;
@@ -469,7 +548,7 @@ namespace BECore {
         }
         // A kept row is final and a replaced one has nothing to switch: its cells only show the variants
         const bool kept = job.accepted && job.accepted->kept;
-        const bool replaced = IsLive(job) && session.FindNewerOwner(set, job) != nullptr;
+        const bool replaced = session.FindNewerOwner(set, job) != nullptr;
         ImGui::BeginDisabled(kept || replaced);
         if (ImGui::InvisibleButton("##pick", ImVec2(kReviewThumbnailSize, kReviewThumbnailSize))) {
             ArtGenSwitch write;
@@ -483,10 +562,10 @@ namespace BECore {
         }
         ImGui::EndDisabled();
         const char* tip = IsLive(job) ? "Show this variant in the game" : "Pick this variant";
-        if (kept) {
-            tip = "Kept: this row is final";
-        } else if (replaced) {
+        if (replaced) {
             tip = "A newer set holds this name in the game";
+        } else if (kept) {
+            tip = "Kept: this row is final";
         }
         ItemTooltip(missing ? "The file is gone" : tip);
 
@@ -538,15 +617,18 @@ namespace BECore {
         const auto& palette = GetImGuiPalette();
         const int32_t total = static_cast<int32_t>(set.jobs.size());
         const int32_t picked = PickedCount(set);
-        const int32_t live = CountLive(set);
-        const int32_t kept = CountKept(set);
-        // What Keep all can still keep: the live rows no newer set replaced
-        int32_t keepable = 0;
+        // A row a newer set replaced is neither live nor kept here: the game holds the other set's picture under its name
+        int32_t live = 0;
+        int32_t kept = 0;
+        int32_t replacedRows = 0;
         for (const ArtGenSetJob& job : set.jobs) {
-            if (IsLive(job) && session.FindNewerOwner(set, job) == nullptr) {
-                ++keepable;
-            }
+            const ArtGenRowStatus status = StatusOf(job, session.FindNewerOwner(set, job) != nullptr);
+            live += status == ArtGenRowStatus::Live ? 1 : 0;
+            kept += status == ArtGenRowStatus::Kept ? 1 : 0;
+            replacedRows += status == ArtGenRowStatus::Replaced ? 1 : 0;
         }
+        // What Keep all can still keep
+        const int32_t keepable = live;
         // What Accept all needs (ArtGenSession::AcceptSet checks it again): the set finished, every job done, and for sounds a pick on every row
         // (an image row without a pick takes its first variant)
         const char* blocker = nullptr;
@@ -556,24 +638,22 @@ namespace BECore {
             blocker = "A job failed or was cancelled: retry it first";
         } else if (set.kind == kKindAudio && picked != total) {
             blocker = "Listen and pick a variant of every row first";
-        } else if (kept == total) {
-            blocker = "Every row is kept";
+        } else if (kept + replacedRows == total) {
+            blocker = "Every row is kept or replaced by a newer set";
         }
 
         ImGui::AlignTextToFramePadding();
         {
             ScopedMonoFont mono;
-            if (live + kept > 0) {
-                ImGui::Text("%d live, %d kept", static_cast<int>(live), static_cast<int>(kept));
+            if (live + kept + replacedRows > 0) {
+                ImGui::Text("%d live, %d kept, %d replaced", static_cast<int>(live), static_cast<int>(kept), static_cast<int>(replacedRows));
             } else {
                 ImGui::Text("%d / %d picked", static_cast<int>(picked), static_cast<int>(total));
             }
         }
         ImGui::SameLine();
         ImGui::BeginDisabled(blocker != nullptr);
-        if (IconTextButton(
-                ICON_LC_CHECK_CHECK, "Accept all",
-                blocker != nullptr ? blocker : "Put a candidate of every row into the game under the row's name: the pick, else the first variant. The other variants stay switchable until Keep")) {
+        if (IconTextButton(ICON_LC_CHECK_CHECK, "Accept all", blocker != nullptr ? blocker : kAcceptAllTip)) {
             auto result = session.AcceptSet(StringView(set.name));
             _acceptFailed = !result.has_value();
             if (result) {
@@ -595,7 +675,7 @@ namespace BECore {
         ImGui::EndDisabled();
         ImGui::SameLine();
         ImGui::BeginDisabled(keepable == 0);
-        if (IconTextButton(ICON_LC_LOCK, "Keep all", "Keep the shown variant of every live row for good: the others are dropped from the set and the rows can no longer be switched")) {
+        if (IconTextButton(ICON_LC_LOCK, "Keep all", kKeepAllTip)) {
             auto result = session.KeepSet(StringView(set.name));
             _acceptFailed = !result.has_value();
             _acceptMessage = result ? Format("Kept {} row(s)", keepable) : result.error().message;

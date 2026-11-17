@@ -21,6 +21,12 @@ namespace BECore {
         return _cache.Find(path) != _cache.end();
     }
 
+    bool ResourceCache::Holds(PoolString path, const IResource* resource) const {
+        SharedLock lock(_mutex);
+        const auto it = _cache.Find(path);
+        return it != _cache.end() && it->second.Get() == resource;
+    }
+
     bool ResourceCache::Remove(PoolString path) {
         UniqueLock lock(_mutex);
         auto it = _cache.find(path);

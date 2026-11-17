@@ -5,6 +5,7 @@
 #include <BECore/Resource/ResourceHandle.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/FunctionRef.h>
+#include <Widgets/ArtGen/Sets/ArtGenSet.h>
 #include <cstdint>
 #include <imgui.h>
 
@@ -20,12 +21,10 @@ namespace BECore {
     /// A checkerboard over a square, so an image with a transparent background shows as transparent
     void DrawArtGenChecker(ImDrawList* drawList, ImVec2 origin, float size, ImU32 light, ImU32 dark);
 
-    /// What the Set tab takes from the Generate form: the preset it queues with (by name when saved and unchanged, else as a draft, as Generate
-    /// decides), and the count and seed of the form
+    /// What the Set tab shares with the Generate tab: the preset it queues with (by name when saved and unchanged, else as a draft, as Generate
+    /// decides). The count and seed are the Set tab's own
     struct ArtGenSetPanelForm {
         const ArtGenPresetForm& preset;
-        int32_t count = 0;
-        Optional<int64_t> seed;
     };
 
     /// How the Review tab plays a sound variant: the widget's own player, so one sound plays at a time
@@ -69,10 +68,19 @@ namespace BECore {
         struct RowThumbs {
             uint64_t seenFrame = 0;
             Vector<Thumb> thumbs;
+            // The row's status line and what it was made from
+            String statusLine;
+            String statusName;
+            String statusNewer;
+            String statusKind;
+            ArtGenRowStatus statusKey = ArtGenRowStatus::NotInGame;
+            bool statusValid = false;
         };
 
         void DrawSetEntry(ArtGenSession& session, const ArtGenSet& set);
         void DrawJobRows(ArtGenSession& session, const ArtGenSet& set);
+        /// Makes the row's "in the game or not, and which file" line again when its status, names or kind changed
+        static void RefreshStatusLine(RowThumbs& row, const ArtGenSet& set, const ArtGenSetJob& job, ArtGenRowStatus status, const ArtGenSet* newer);
         void DrawReviewRow(ArtGenSession& session, const ArtGenSet& set, size_t index, int32_t columns, const ArtGenSetPanelSound& sound);
         void DrawVariantCell(ArtGenSession& session, const ArtGenSet& set, size_t jobIndex, size_t variantIndex, const ArtGenSetPanelSound& sound);
         void DrawReviewFooter(ArtGenSession& session, const ArtGenSet& set);
@@ -84,6 +92,9 @@ namespace BECore {
 
         char _subjects[4096] = {};
         char _setName[65] = {};
+        int32_t _count = kArtGenSetDefaultCount;
+        bool _randomSeed = true;
+        int64_t _seed = 0;
         String _error;
         String _queued;
 

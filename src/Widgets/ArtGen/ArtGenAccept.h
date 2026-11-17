@@ -3,7 +3,9 @@
 #include <BECore/Control/ControlTypes.h>
 #include <BECore/Control/Json.h>
 #include <BECore/PoolString/PoolString.h>
+#include <BECore/Resource/TextureLibrary.h>
 #include <BECore/Types/Types.h>
+#include <BECore/Utils/FunctionRef.h>
 #include <Widgets/ArtGen/ArtGenSound.h>
 #include <cstdint>
 #include <expected>
@@ -20,6 +22,9 @@ namespace BECore {
 
     /// A sprite name the panel accepts: 1 to kMaxSpriteNameLength of `A-Z a-z 0-9 _ -` (also the file name, so no path can be smuggled in)
     [[nodiscard]] bool IsValidSpriteName(StringView name);
+
+    /// The virtual path Accept writes for @p name: `assets/artgen/<name>.png` for kind `image`, `.wav` for `audio`. The name is not checked here
+    [[nodiscard]] String ArtGenGameFile(StringView name, StringView kind);
 
     /// The pixel size from the IHDR chunk of a PNG file, or empty when the file is not a PNG
     [[nodiscard]] Optional<Pair<uint32_t, uint32_t>> ReadPngSize(const std::filesystem::path& file);
@@ -41,6 +46,14 @@ namespace BECore {
 
     /// Calls ReloadTexture on every SpriteRendererComponent under @p root that names @p sprite or @p texturePath; returns how many
     uint32_t ReloadSpritesUsing(SceneNode& root, PoolString sprite, PoolString texturePath);
+
+    /**
+     * @brief Puts @p entry into @p library and calls @p save once; an entry the library already holds is left alone and nothing is saved, so a
+     * switch or re-accept of an unchanged sprite does not rewrite TextureLibrary.xml.
+     *
+     * @return Whether it saved. When @p save fails the library goes back to what it was and the answer is the reason.
+     */
+    std::expected<bool, String> StoreSpriteEntry(TextureLibrary& library, const SpriteEntry& entry, FunctionRef<bool()> save);
 
     /// What AcceptVariant did
     struct ArtGenAccepted {

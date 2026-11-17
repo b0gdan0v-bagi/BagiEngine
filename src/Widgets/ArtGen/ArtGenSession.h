@@ -228,6 +228,10 @@ namespace BECore {
         [[nodiscard]] bool IsRunInWork() const {
             return _run.state == ArtGenRunState::Queued || _run.state == ArtGenRunState::Running;
         }
+        /// A run of the Generate tab is in work: not the job of a set (that one is the Set tab's, and its Cancel is there)
+        [[nodiscard]] bool IsSingleRunInWork() const {
+            return IsRunInWork() && _run.setName.empty();
+        }
         /// The service polls and says its generator is ready: what a run needs to start
         [[nodiscard]] bool IsGeneratorReady() const;
 

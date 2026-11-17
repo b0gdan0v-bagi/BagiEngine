@@ -20,7 +20,6 @@
 #include <Widgets/ImGuiFonts.h>
 #include <Widgets/ImGuiTheme.h>
 #include <Widgets/SceneEditor/SceneSelectionEvents.h>
-#include <algorithm>
 #include <cstdio>
 #include <imgui.h>
 
@@ -29,6 +28,10 @@ namespace BECore {
     namespace {
 
         constexpr float kThumbnailSize = 160.0f;
+        constexpr const char* kPresetSectionLabel = "Preset: used by Generate and Set";
+        constexpr const char* kSetRunningNote = "A set is running (see the Set tab); Generate is off until it ends";
+        constexpr const char* kDraftNote = "The variants are drafts in artgen/out/ (git ignores that folder). Accept below copies one into the game.";
+        constexpr const char* kPlaceholderName = "<name>";
         constexpr float kDefaultWidth = 520.0f;
         constexpr float kDefaultHeight = 700.0f;
         // Seconds a started bridge gets to make its first poll before the panel says it did not come
@@ -56,6 +59,19 @@ namespace BECore {
             audio.format = clip.GetFormat();
             audio.samples.assign(clip.GetSamples().begin(), clip.GetSamples().end());
             return audio;
+        }
+
+        /// What Accept of an image writes, named once: the same path the acceptor builds (`ArtGenGameFile`)
+        const char* AcceptImageNote() {
+            static const String note =
+                Format("Copy the image into the game: {} + .artgen.json and the sprite in config/TextureLibrary.xml. Both are in git.", ArtGenGameFile(kPlaceholderName, kKindImage));
+            return note.c_str();
+        }
+
+        const char* AcceptSoundNote() {
+            static const String note =
+                Format("Process the sound and write it into the game as a 16-bit WAV: {} + .artgen.json. Both are in git. Then reload what plays it.", ArtGenGameFile(kPlaceholderName, kKindAudio));
+            return note.c_str();
         }
 
         void DrawWaveform(ImDrawList* drawList, ImVec2 origin, const Vector<float>& waveform, ImU32 background, ImU32 color) {
@@ -142,16 +158,16 @@ namespace BECore {
         auto& session = ArtGenSession::GetInstance();
         DrawServiceLine(session);
         DrawSetup(session);
-        ImGui::Separator();
-        DrawForm(session);
+        DrawPreset(session);
         ImGui::Separator();
         if (ImGui::BeginTabBar("##ArtGenTabs")) {
             if (ImGui::BeginTabItem(ICON_LC_IMAGE " Generate")) {
+                DrawRunForm(session);
                 DrawRun(session);
                 ImGui::EndTabItem();
             }
             if (ImGui::BeginTabItem(ICON_LC_LIST_CHECKS " Set")) {
-                const ArtGenSetPanelForm form{_form, _count, _randomSeed ? Optional<int64_t>() : Optional<int64_t>(_seed)};
+                const ArtGenSetPanelForm form{_form};
                 _setPanel.DrawQueue(session, form);
                 ImGui::EndTabItem();
             }
@@ -357,13 +373,15 @@ namespace BECore {
         ImGui::TextColored(palette.textDisabled, ICON_LC_CLOUD " Or a generator on another machine: not available yet (comfyui-remote-via-todo)");
     }
 
-    void ArtGenWidget::DrawForm(ArtGenSession& session) {
+    void ArtGenWidget::DrawPreset(ArtGenSession& session) {
+        ImGui::SeparatorText(kPresetSectionLabel);
         DrawPresetBar(session);
         if (!_form.IsEmpty()) {
             DrawPresetFields(session);
         }
-        ImGui::Spacing();
+    }
 
+    void ArtGenWidget::DrawRunForm(ArtGenSession& session) {
         ImGui::InputTextWithHint("Subject", "white knight, a red gem, ...", _subject, sizeof(_subject));
         {
             ScopedMonoFont mono;
@@ -392,8 +410,9 @@ namespace BECore {
             _requestError = result ? String() : result.error();
         }
         ImGui::EndDisabled();
-        // A set that only waits has no run to cancel: its Cancel set is on the Set tab
-        if (session.IsRunInWork()) {
+        // The job of a set is no run of this tab: its Cancel is on the Set tab
+        const bool singleRunInWork = session.IsSingleRunInWork();
+        if (singleRunInWork) {
             ImGui::SameLine();
             ImGui::BeginDisabled(session.GetRun().cancelRequested);
             if (IconTextButton(ICON_LC_X, "Cancel", "Stop the run; the images already made stay")) {
@@ -401,9 +420,15 @@ namespace BECore {
             }
             ImGui::EndDisabled();
         }
+        if (busy && !singleRunInWork) {
+            ImGui::TextDisabled("%s", kSetRunningNote);
+        }
         if (!_requestError.empty()) {
             ImGui::TextColored(GetImGuiPalette().error, "%s", _requestError.c_str());
         }
+        ImGui::PushTextWrapPos(0.0f);
+        ImGui::TextDisabled("%s", kDraftNote);
+        ImGui::PopTextWrapPos();
     }
 
     void ArtGenWidget::DrawPresetBar(ArtGenSession& session) {
@@ -460,7 +485,7 @@ namespace BECore {
         ImGui::SameLine();
         const bool savedHere = !dirty && _form.GetBaseSource() == "game";
         ImGui::BeginDisabled(savedHere);
-        if (IconButton(ICON_LC_SAVE, "Save as artgen/presets/<name>.json of the game (an engine starter becomes the game's own copy)", "##SavePreset")) {
+        if (IconButton(ICON_LC_SAVE, "Save as artgen/presets/<name>.json of the game, which is tracked in git (an engine starter becomes the game's own copy)", "##SavePreset")) {
             SaveForm(session, StringView(_form.name));
         }
         ImGui::EndDisabled();
@@ -481,7 +506,7 @@ namespace BECore {
             ImGui::InputTextWithHint("##SaveAsName", "preset_name", _saveAsName, sizeof(_saveAsName));
             const bool valid = IsValidSpriteName(StringView(_saveAsName));
             ImGui::BeginDisabled(!valid);
-            if (IconTextButton(ICON_LC_SAVE, "Save", "Write artgen/presets/<name>.json of the game")) {
+            if (IconTextButton(ICON_LC_SAVE, "Save", "Write artgen/presets/<name>.json of the game (tracked in git)")) {
                 SaveForm(session, StringView(_saveAsName));
                 ImGui::CloseCurrentPopup();
             }
@@ -563,7 +588,7 @@ namespace BECore {
             ImGui::TextColored(palette.warning, "The service does not know the workflow '%s'", _form.GetWorkflow().c_str());
             return;
         }
-        if (ImGui::TreeNodeEx("Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+        if (ImGui::TreeNodeEx("Settings")) {
             if (workflow->HasSize()) {
                 DrawSizeFields(*workflow);
             }
@@ -657,6 +682,12 @@ namespace BECore {
 
     void ArtGenWidget::DrawRun(ArtGenSession& session) {
         const ArtGenRun& run = session.GetRun();
+        if (!run.setName.empty()) {
+            // The last job of a set stays in the run: its variants are the set's drafts, judged and accepted on the Review tab
+            DropThumbnails();
+            ImGui::TextDisabled("job %s of set %s (see the Set and Review tabs)", run.jobName.c_str(), run.setName.c_str());
+            return;
+        }
         SyncThumbnails(run);
         const auto& palette = GetImGuiPalette();
         switch (run.state) {
@@ -964,8 +995,14 @@ namespace BECore {
         ImGui::Checkbox("Use on the selected node", &_useOnSelected);
         ImGui::EndDisabled();
         ItemTooltip(haveNode ? "Put the clip on the AudioSourceComponent of the node selected in the Scene Editor" : "Select a node in the Scene Editor first");
+        char replaceTip[kInputTextSize];
+        const char* acceptTip = AcceptSoundNote();
+        if (_replaceClip) {
+            std::snprintf(replaceTip, sizeof(replaceTip), "Process the sound and write it over the game's clip %s + .artgen.json. Both are in git. Then reload what plays it.", _clipPath);
+            acceptTip = replaceTip;
+        }
         ImGui::BeginDisabled(!valid);
-        if (IconTextButton(ICON_LC_CHECK, "Accept", "Process the sound, write it as a 16-bit WAV with its .artgen.json and reload what plays it")) {
+        if (IconTextButton(ICON_LC_CHECK, "Accept", acceptTip)) {
             if (_playingRow == kPreviewRow) {
                 StopSound();
             }
@@ -1009,7 +1046,7 @@ namespace BECore {
         ItemTooltip(haveNode ? "Put the sprite on the SpriteRendererComponent of the node selected in the Scene Editor" : "Select a node in the Scene Editor first");
 
         ImGui::BeginDisabled(!validName);
-        if (IconTextButton(ICON_LC_CHECK, "Accept", "Copy the image into the game's assets, add or replace the sprite and reload it")) {
+        if (IconTextButton(ICON_LC_CHECK, "Accept", AcceptImageNote())) {
             auto result = session.Accept(*_selectedSeed, StringView(_spriteName), _useOnSelected);
             _acceptFailed = !result.has_value();
             if (result) {
@@ -1025,6 +1062,9 @@ namespace BECore {
             ImGui::SameLine();
             ImGui::TextColored(palette.warning, "1 to 64 of A-Z a-z 0-9 _ -");
         }
+        ImGui::PushTextWrapPos(0.0f);
+        ImGui::TextDisabled("%s", AcceptImageNote());
+        ImGui::PopTextWrapPos();
         if (!_acceptMessage.empty()) {
             ImGui::TextColored(_acceptFailed ? palette.error : palette.success, "%s", _acceptMessage.c_str());
         }

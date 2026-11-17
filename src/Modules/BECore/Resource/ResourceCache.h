@@ -34,6 +34,12 @@ namespace BECore {
 
         bool Contains(PoolString path) const;
 
+        /**
+         * @return Whether the cache holds exactly @p resource under @p path: false after Remove (an Evict) or a load that replaced it, so a
+         * panel that kept a handle knows to load the path again
+         */
+        bool Holds(PoolString path, const IResource* resource) const;
+
         /** @return Whether there was an entry; a handle already given out keeps its resource alive. */
         bool Remove(PoolString path);
 
