@@ -1,6 +1,7 @@
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
+#include <Widgets/TextureEditor/SpriteAtlas.h>
 #include <cstdio>
 #include <gtest/gtest.h>
 
@@ -97,7 +98,132 @@ namespace BECore::Tests {
             return entry;
         }
 
+        constexpr int kTestPadding = 3;
+        constexpr uint32_t kTestMaxSide = 2048;
+
+        AtlasPackRecord PackRecordOf(const char* sizeMode) {
+            AtlasPackRecord record;
+            record.padding = kTestPadding;
+            record.sizeMode = PoolString::Intern(sizeMode);
+            record.maxSide = kTestMaxSide;
+            return record;
+        }
+
+        /// An entry in group @p group, with the pack record `Tight` when @p packRecord; packed, it has the source @p source
+        SpriteEntry GroupedEntry(const char* name, const char* path, Rect rect, const char* group, bool packRecord, const char* source = nullptr, Rect sourceRect = Rect(0, 0, 0, 0)) {
+            SpriteEntry entry = LibraryEntry(name, path, rect);
+            SpriteAtlasLink link;
+            link.name = PoolString::Intern(group);
+            if (packRecord) {
+                link.pack = PackRecordOf("Tight");
+            }
+            if (source != nullptr) {
+                SpriteSource from;
+                from.texturePath = PoolString::Intern(source);
+                from.rect = sourceRect;
+                link.source = from;
+            }
+            entry.atlas = link;
+            return entry;
+        }
+
+        bool SameRectOf(const Rect& a, const Rect& b) {
+            return a.x == b.x && a.y == b.y && a.w == b.w && a.h == b.h;
+        }
+
     }  // namespace
+
+    TEST(ArtGenAcceptedEntryTest, ASpriteWithNoEntryGetsTheWholeImage) {
+        const TextureLibrary library;
+        const SpriteEntry entry = AcceptedSpriteEntry(library, PoolString::Intern("queen"), PoolString::Intern("assets/artgen/queen.png"), 64, 48);
+        EXPECT_EQ(entry.name.ToStringView(), "queen");
+        EXPECT_EQ(entry.texturePath.ToStringView(), "assets/artgen/queen.png");
+        EXPECT_TRUE(SameRectOf(entry.srcRect, Rect(0, 0, 64, 48)));
+        EXPECT_FALSE(entry.atlas.has_value());
+    }
+
+    TEST(ArtGenAcceptedEntryTest, AnEntryWithNoLinkIsReplacedWhole) {
+        TextureLibrary library;
+        library.AddOrUpdate(LibraryEntry("queen", "assets/old.png", Rect(10, 10, 5, 5)));
+        const SpriteEntry entry = AcceptedSpriteEntry(library, PoolString::Intern("queen"), PoolString::Intern("assets/artgen/queen.png"), 64, 48);
+        EXPECT_EQ(entry.texturePath.ToStringView(), "assets/artgen/queen.png");
+        EXPECT_TRUE(SameRectOf(entry.srcRect, Rect(0, 0, 64, 48)));
+        EXPECT_FALSE(entry.atlas.has_value());
+    }
+
+    TEST(ArtGenAcceptedEntryTest, AnUnpackedMemberKeepsItsGroupAndSettings) {
+        TextureLibrary library;
+        library.AddOrUpdate(GroupedEntry("queen", "assets/old.png", Rect(10, 10, 5, 5), "pieces", true));
+        const SpriteEntry entry = AcceptedSpriteEntry(library, PoolString::Intern("queen"), PoolString::Intern("assets/artgen/queen.png"), 64, 48);
+        EXPECT_EQ(entry.texturePath.ToStringView(), "assets/artgen/queen.png");
+        EXPECT_TRUE(SameRectOf(entry.srcRect, Rect(0, 0, 64, 48)));
+        ASSERT_TRUE(entry.atlas.has_value());
+        EXPECT_EQ(entry.atlas->name.ToStringView(), "pieces");
+        EXPECT_FALSE(entry.atlas->source.has_value());
+        ASSERT_TRUE(entry.atlas->pack.has_value());
+        EXPECT_EQ(entry.atlas->pack->padding, kTestPadding);
+        EXPECT_EQ(entry.atlas->pack->sizeMode.ToStringView(), "Tight");
+        EXPECT_EQ(entry.atlas->pack->maxSide, kTestMaxSide);
+    }
+
+    TEST(ArtGenAcceptedEntryTest, APackedMemberKeepsItsPlaceAndTakesTheNewSource) {
+        TextureLibrary library;
+        library.AddOrUpdate(GroupedEntry("queen", "assets/atlases/pieces.png", Rect(8, 16, 20, 30), "pieces", true, "assets/sheet.png", Rect(100, 50, 20, 30)));
+        const SpriteEntry entry = AcceptedSpriteEntry(library, PoolString::Intern("queen"), PoolString::Intern("assets/artgen/queen.png"), 64, 48);
+        EXPECT_EQ(entry.texturePath.ToStringView(), "assets/atlases/pieces.png");
+        EXPECT_TRUE(SameRectOf(entry.srcRect, Rect(8, 16, 20, 30)));
+        ASSERT_TRUE(entry.atlas.has_value());
+        EXPECT_EQ(entry.atlas->name.ToStringView(), "pieces");
+        ASSERT_TRUE(entry.atlas->source.has_value());
+        EXPECT_EQ(entry.atlas->source->texturePath.ToStringView(), "assets/artgen/queen.png");
+        EXPECT_TRUE(SameRectOf(entry.atlas->source->rect, Rect(0, 0, 64, 48)));
+        ASSERT_TRUE(entry.atlas->pack.has_value());
+        EXPECT_EQ(entry.atlas->pack->sizeMode.ToStringView(), "Tight");
+    }
+
+    TEST(ArtGenAcceptedEntryTest, AnotherMembersOfTheSameSheetKeepTheirSource) {
+        TextureLibrary library;
+        library.AddOrUpdate(GroupedEntry("queen", "assets/atlases/pieces.png", Rect(8, 16, 20, 30), "pieces", true, "assets/sheet.png", Rect(100, 50, 20, 30)));
+        library.AddOrUpdate(GroupedEntry("king", "assets/atlases/pieces.png", Rect(40, 16, 20, 30), "pieces", true, "assets/sheet.png", Rect(0, 0, 20, 30)));
+        const SpriteEntry accepted = AcceptedSpriteEntry(library, PoolString::Intern("queen"), PoolString::Intern("assets/artgen/queen.png"), 64, 48);
+        EXPECT_EQ(accepted.atlas->source->texturePath.ToStringView(), "assets/artgen/queen.png");
+        EXPECT_EQ(library.GetSprite(PoolString::Intern("king"))->atlas->source->texturePath.ToStringView(), "assets/sheet.png");
+    }
+
+    TEST(ArtGenLibraryEntryTest, AnotherLinkOfTheSameTextureAndRectIsStored) {
+        const SpriteEntry base = GroupedEntry("queen", "assets/atlases/pieces.png", Rect(8, 16, 20, 30), "pieces", true, "assets/a.png", Rect(0, 0, 20, 30));
+        const Vector<SpriteEntry> others{
+            GroupedEntry("queen", "assets/atlases/pieces.png", Rect(8, 16, 20, 30), "other", true, "assets/a.png", Rect(0, 0, 20, 30)),
+            GroupedEntry("queen", "assets/atlases/pieces.png", Rect(8, 16, 20, 30), "pieces", true, "assets/b.png", Rect(0, 0, 20, 30)),
+            GroupedEntry("queen", "assets/atlases/pieces.png", Rect(8, 16, 20, 30), "pieces", true, "assets/a.png", Rect(0, 0, 21, 30)),
+            GroupedEntry("queen", "assets/atlases/pieces.png", Rect(8, 16, 20, 30), "pieces", false, "assets/a.png", Rect(0, 0, 20, 30)),
+            GroupedEntry("queen", "assets/atlases/pieces.png", Rect(8, 16, 20, 30), "pieces", true),
+            LibraryEntry("queen", "assets/atlases/pieces.png", Rect(8, 16, 20, 30)),
+        };
+        for (const SpriteEntry& other : others) {
+            TextureLibrary library;
+            library.AddOrUpdate(base);
+            int saves = 0;
+            const auto stored = StoreSpriteEntry(library, other, [&saves] {
+                ++saves;
+                return true;
+            });
+            ASSERT_TRUE(stored);
+            EXPECT_TRUE(*stored);
+            EXPECT_EQ(saves, 1);
+        }
+
+        TextureLibrary same;
+        same.AddOrUpdate(base);
+        int saves = 0;
+        const auto stored = StoreSpriteEntry(same, base, [&saves] {
+            ++saves;
+            return true;
+        });
+        ASSERT_TRUE(stored);
+        EXPECT_FALSE(*stored);
+        EXPECT_EQ(saves, 0);
+    }
 
     TEST(ArtGenLibraryEntryTest, ANewEntryIsAddedAndSavedOnce) {
         TextureLibrary library;

@@ -13,6 +13,7 @@
 #include <Widgets/ArtGen/Sets/ArtGenSet.h>
 #include <Widgets/EditorLayout/UserFileIo.h>
 #include <Widgets/SceneEditor/SceneSelectionEvents.h>
+#include <Widgets/TextureEditor/SpriteAtlas.h>
 #include <cstdio>
 #include <system_error>
 
@@ -108,8 +109,32 @@ namespace BECore {
             }
         }
 
+        bool IsSameRect(const Rect& a, const Rect& b) {
+            return a.x == b.x && a.y == b.y && a.w == b.w && a.h == b.h;
+        }
+
+        bool IsSamePackRecord(const Optional<AtlasPackRecord>& a, const Optional<AtlasPackRecord>& b) {
+            if (a.has_value() != b.has_value()) {
+                return false;
+            }
+            return !a.has_value() || (a->padding == b->padding && a->sizeMode == b->sizeMode && a->maxSide == b->maxSide);
+        }
+
+        bool IsSameAtlasLink(const Optional<SpriteAtlasLink>& a, const Optional<SpriteAtlasLink>& b) {
+            if (a.has_value() != b.has_value()) {
+                return false;
+            }
+            if (!a.has_value()) {
+                return true;
+            }
+            if (a->name != b->name || a->source.has_value() != b->source.has_value() || !IsSamePackRecord(a->pack, b->pack)) {
+                return false;
+            }
+            return !a->source.has_value() || (a->source->texturePath == b->source->texturePath && IsSameRect(a->source->rect, b->source->rect));
+        }
+
         bool IsSameSpriteEntry(const SpriteEntry& a, const SpriteEntry& b) {
-            return a.name == b.name && a.texturePath == b.texturePath && a.srcRect.x == b.srcRect.x && a.srcRect.y == b.srcRect.y && a.srcRect.w == b.srcRect.w && a.srcRect.h == b.srcRect.h;
+            return a.name == b.name && a.texturePath == b.texturePath && IsSameRect(a.srcRect, b.srcRect) && IsSameAtlasLink(a.atlas, b.atlas);
         }
 
         void ReloadUnder(SceneNode& node, PoolString sprite, PoolString texturePath, uint32_t& count) {
@@ -434,6 +459,29 @@ namespace BECore {
         return count;
     }
 
+    SpriteEntry AcceptedSpriteEntry(const TextureLibrary& library, PoolString sprite, PoolString texturePath, uint32_t width, uint32_t height) {
+        const Rect whole(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height));
+        SpriteEntry entry;
+        entry.name = sprite;
+        entry.texturePath = texturePath;
+        entry.srcRect = whole;
+        const SpriteEntry* existing = library.GetSprite(sprite);
+        if (existing == nullptr || !existing->atlas.has_value()) {
+            return entry;
+        }
+        entry.atlas = existing->atlas;
+        if (IsPackedSprite(*existing)) {
+            // The sprite stays in its atlas until the repack moves it; only the pixels it is cut from change
+            entry.texturePath = existing->texturePath;
+            entry.srcRect = existing->srcRect;
+            SpriteSource source;
+            source.texturePath = texturePath;
+            source.rect = whole;
+            entry.atlas->source = source;
+        }
+        return entry;
+    }
+
     std::expected<bool, String> StoreSpriteEntry(TextureLibrary& library, const SpriteEntry& entry, FunctionRef<bool()> save) {
         Optional<SpriteEntry> previous;
         if (const SpriteEntry* existing = library.GetSprite(entry.name)) {
@@ -468,10 +516,7 @@ namespace BECore {
 
         const PoolString name = PoolString::Intern(sprite);
         const PoolString texturePath = PoolString::Intern(copied->texturePath);
-        SpriteEntry entry;
-        entry.name = name;
-        entry.texturePath = texturePath;
-        entry.srcRect = Rect(0.0f, 0.0f, static_cast<float>(copied->width), static_cast<float>(copied->height));
+        const SpriteEntry entry = AcceptedSpriteEntry(library, name, texturePath, copied->width, copied->height);
         auto stored = StoreSpriteEntry(library, entry, [&library] { return library.Save(); });
         if (!stored) {
             return std::unexpected(Format("the PNG is in '{}', but {}", copied->pngFile.generic_string(), stored.error()));

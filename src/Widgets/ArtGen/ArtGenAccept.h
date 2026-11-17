@@ -58,6 +58,15 @@ namespace BECore {
     uint32_t ReloadSpritesUsing(SceneNode& root, PoolString sprite, PoolString texturePath);
 
     /**
+     * @brief The entry Accept stores for @p sprite once its picture is the whole PNG at @p texturePath of @p width x @p height.
+     *
+     * A sprite with no entry or no `atlas` link gets the whole image. One in an atlas group keeps its link (group and pack settings):
+     * unpacked, it points to the new file; packed, it keeps its place in the atlas (texture and rect) and only its `atlas.source` becomes
+     * the new file, so the repack cuts the new picture. No files, no services.
+     */
+    [[nodiscard]] SpriteEntry AcceptedSpriteEntry(const TextureLibrary& library, PoolString sprite, PoolString texturePath, uint32_t width, uint32_t height);
+
+    /**
      * @brief Puts @p entry into @p library and calls @p save once; an entry the library already holds is left alone and nothing is saved, so a
      * switch or re-accept of an unchanged sprite does not rewrite TextureLibrary.xml.
      *
