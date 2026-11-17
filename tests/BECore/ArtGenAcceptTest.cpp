@@ -159,6 +159,15 @@ namespace BECore::Tests {
         EXPECT_EQ(GetJsonString(*kept, "date").value_or(String()), "2026-11-17T11:00:00Z");
     }
 
+    TEST_F(ArtGenAcceptTest, TheGameFileIsWhereAcceptWritesIt) {
+        EXPECT_EQ(ArtGenGameFile("queen", "image"), "assets/artgen/queen.png");
+        EXPECT_EQ(ArtGenGameFile("click", "audio"), "assets/artgen/click.wav");
+
+        const auto copied = CopyVariantIntoAssets(png, provenance, folder / "assets", "queen");
+        ASSERT_TRUE(copied.has_value());
+        EXPECT_EQ(copied->texturePath, ArtGenGameFile("queen", "image"));
+    }
+
     TEST_F(ArtGenAcceptTest, KeepingAMissingOrBrokenProvenanceIsAnErrorThatNamesTheFile) {
         const auto missing = folder / "assets" / "nothing.artgen.json";
         const auto result = MarkProvenanceKept(missing, 7, "2026-11-17T10:00:00Z");

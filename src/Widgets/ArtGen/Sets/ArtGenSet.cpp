@@ -473,6 +473,16 @@ namespace BECore {
         return static_cast<int32_t>(std::count_if(set.jobs.begin(), set.jobs.end(), [](const ArtGenSetJob& job) { return job.accepted && job.accepted->kept; }));
     }
 
+    ArtGenRowStatus StatusOf(const ArtGenSetJob& job, bool replacedByNewer) {
+        if (!job.accepted) {
+            return ArtGenRowStatus::NotInGame;
+        }
+        if (replacedByNewer) {
+            return ArtGenRowStatus::Replaced;
+        }
+        return job.accepted->kept ? ArtGenRowStatus::Kept : ArtGenRowStatus::Live;
+    }
+
     int32_t AlternativesOf(const ArtGenSetJob& job) {
         return static_cast<int32_t>(std::count_if(job.variants.begin(), job.variants.end(), [&job](const ArtGenSetVariant& variant) { return !job.pick || variant.seed != *job.pick; }));
     }

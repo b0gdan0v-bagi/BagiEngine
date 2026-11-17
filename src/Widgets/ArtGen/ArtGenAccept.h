@@ -21,6 +21,9 @@ namespace BECore {
     /// A sprite name the panel accepts: 1 to kMaxSpriteNameLength of `A-Z a-z 0-9 _ -` (also the file name, so no path can be smuggled in)
     [[nodiscard]] bool IsValidSpriteName(StringView name);
 
+    /// The virtual path Accept writes for @p name: `assets/artgen/<name>.png` for kind `image`, `.wav` for `audio`. The name is not checked here
+    [[nodiscard]] String ArtGenGameFile(StringView name, StringView kind);
+
     /// The pixel size from the IHDR chunk of a PNG file, or empty when the file is not a PNG
     [[nodiscard]] Optional<Pair<uint32_t, uint32_t>> ReadPngSize(const std::filesystem::path& file);
 

@@ -123,6 +123,10 @@ namespace BECore {
 
     }  // namespace
 
+    String ArtGenGameFile(StringView name, StringView kind) {
+        return Format("assets/{}/{}{}", kArtGenAssetsFolder, name, kind == kKindAudio ? kWavExtension : kPngExtension);
+    }
+
     bool IsValidSpriteName(StringView name) {
         if (name.empty() || name.size() > kMaxSpriteNameLength) {
             return false;
@@ -181,7 +185,7 @@ namespace BECore {
             if (!IsValidSpriteName(StringView(target.name))) {
                 return std::unexpected(Format("'{}' is not a sound name (1 to {} of A-Z a-z 0-9 _ -)", target.name, kMaxSpriteNameLength));
             }
-            clipPath = Format("assets/{}/{}{}", kArtGenAssetsFolder, target.name, kWavExtension);
+            clipPath = ArtGenGameFile(target.name, kKindAudio);
         } else {
             return std::unexpected(String("give a sound name or a clip path, one of them"));
         }
@@ -308,7 +312,7 @@ namespace BECore {
         copied.provenanceFile = ProvenanceFileOf(copied.pngFile);
         copied.width = size->first;
         copied.height = size->second;
-        copied.texturePath = Format("assets/{}/{}{}", kArtGenAssetsFolder, sprite, kPngExtension);
+        copied.texturePath = ArtGenGameFile(sprite, kKindImage);
         if (auto result = CopyOver(png, copied.pngFile); !result) {
             return std::unexpected(result.error());
         }
