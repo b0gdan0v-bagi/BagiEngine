@@ -13,7 +13,6 @@
 #include <Widgets/ArtGen/Sets/ArtGenSet.h>
 #include <Widgets/EditorLayout/UserFileIo.h>
 #include <Widgets/SceneEditor/SceneSelectionEvents.h>
-#include <algorithm>
 #include <cstdio>
 #include <system_error>
 
@@ -297,26 +296,127 @@ namespace BECore {
         return reply;
     }
 
-    std::expected<ArtGenCopied, String> CopyVariantIntoAssets(const std::filesystem::path& png, const std::filesystem::path& provenance, const std::filesystem::path& assetsDir, StringView sprite) {
+    namespace {
+
+        constexpr StringView kFrameOfSprite = "sprite";
+        constexpr StringView kFrameOfSet = "set";
+
+        /// Where the written picture came from, in the provenance and in the answer: `{crop, scale, size, frame}`
+        Json PlacementToJson(const ArtGenCopied& copied) {
+            Json crop = Json::object();
+            crop["x"] = copied.crop.x;
+            crop["y"] = copied.crop.y;
+            crop["w"] = copied.crop.w;
+            crop["h"] = copied.crop.h;
+            Json size = Json::array();
+            size.push_back(copied.width);
+            size.push_back(copied.height);
+            Json json = Json::object();
+            json["crop"] = std::move(crop);
+            json["scale"] = copied.scale;
+            json["size"] = std::move(size);
+            json["frame"] = ToStdString(copied.fromSet ? kFrameOfSet : kFrameOfSprite);
+            return json;
+        }
+
+        /// What `artgen_accept` answers as `processing`: the settings and the placement
+        Json ProcessingToJson(const ArtGenCopied& copied) {
+            Json json = ArtGenImageSettingsToJson(copied.settings);
+            json.update(PlacementToJson(copied));
+            return json;
+        }
+
+        /// The generation's record, and what Accept did to the picture, so the sprite can be made again
+        std::expected<void, String> WriteImageProvenance(const std::filesystem::path& source, const std::filesystem::path& provenance, StringView sprite, const ArtGenCopied& copied) {
+            Json record = Json::object();
+            if (!provenance.empty()) {
+                if (auto text = ReadTextFile(provenance); text) {
+                    if (auto parsed = ParseJson(*text); parsed && parsed->is_object()) {
+                        record = std::move(*parsed);
+                    }
+                }
+            }
+            const Optional<int64_t> seed = GetJsonInt(record, "seed");
+            Json accepted = PlacementToJson(copied);
+            accepted["sprite"] = ToStdString(sprite);
+            accepted["source"] = source.generic_string();
+            accepted["seed"] = seed ? Json(*seed) : Json();
+            accepted["processing"] = ArtGenImageSettingsToJson(copied.settings);
+            record["accepted"] = std::move(accepted);
+            return WriteProvenance(copied.provenanceFile, record);
+        }
+
+    }  // namespace
+
+    std::expected<ArtGenCopied, String> CopyVariantIntoAssets(const std::filesystem::path& png, const std::filesystem::path& provenance, const std::filesystem::path& assetsDir, StringView sprite,
+                                                              const ArtGenImagePlan& plan) {
         if (!IsValidSpriteName(sprite)) {
             return std::unexpected(Format("'{}' is not a sprite name (1 to {} of A-Z a-z 0-9 _ -)", sprite, kMaxSpriteNameLength));
         }
-        const auto size = ReadPngSize(png);
-        if (!size) {
-            return std::unexpected(Format("'{}' is not a PNG file", png.generic_string()));
-        }
         const std::filesystem::path folder = assetsDir / ToStd(kArtGenAssetsFolder);  //-NoStd: std::filesystem::path takes a std::string
+        ArtGenCopied copied;
+        copied.pngFile = folder / PathOf(Format("{}{}", sprite, kPngExtension));
+        copied.provenanceFile = ProvenanceFileOf(copied.pngFile);
+        copied.texturePath = ArtGenGameFile(sprite, kKindImage);
+        copied.settings = plan.settings;
+        copied.fromSet = plan.frame.has_value();
+
+        Optional<ArtGenPixels> processed;
+        if (plan.settings.IsIdentity()) {
+            const auto size = ReadPngSize(png);
+            if (!size) {
+                return std::unexpected(Format("'{}' is not a PNG file", png.generic_string()));
+            }
+            copied.width = size->first;
+            copied.height = size->second;
+            copied.crop = ArtGenIntRect{0, 0, static_cast<int32_t>(size->first), static_cast<int32_t>(size->second)};
+        } else {
+            auto pixels = ReadArtGenPng(png);
+            if (!pixels) {
+                return std::unexpected(pixels.error());
+            }
+            const Optional<ArtGenIntRect> drawn = DrawnBounds(*pixels);
+            if (!drawn) {
+                return std::unexpected(Format("'{}': nothing drawn: the picture is empty", png.generic_string()));
+            }
+            ArtGenImageFrame frame;
+            if (plan.frame) {
+                if (!FrameContains(*plan.frame, *drawn)) {
+                    return std::unexpected(Format("'{}' does not fit the frame of the set: it would be cut", png.generic_string()));
+                }
+                frame = *plan.frame;
+            } else {
+                auto own = MakeArtGenFrame(Span<const ArtGenIntRect>(&*drawn, 1), static_cast<int32_t>(pixels->width), static_cast<int32_t>(pixels->height), plan.settings);
+                if (!own) {
+                    return std::unexpected(own.error());
+                }
+                frame = *own;
+            }
+            auto made = ProcessArtGenImage(*pixels, frame);
+            if (!made) {
+                return std::unexpected(Format("'{}': {}", png.generic_string(), made.error()));
+            }
+            processed = std::move(*made);
+            copied.width = processed->width;
+            copied.height = processed->height;
+            copied.crop = frame.Crop();
+            copied.scale = static_cast<double>(frame.outWidth) / frame.w;
+        }
+
         std::error_code error;
         std::filesystem::create_directories(folder, error);
         if (error) {
             return std::unexpected(Format("cannot create '{}': {}", folder.generic_string(), error.message()));
         }
-        ArtGenCopied copied;
-        copied.pngFile = folder / PathOf(Format("{}{}", sprite, kPngExtension));
-        copied.provenanceFile = ProvenanceFileOf(copied.pngFile);
-        copied.width = size->first;
-        copied.height = size->second;
-        copied.texturePath = ArtGenGameFile(sprite, kKindImage);
+        if (processed) {
+            if (auto result = WriteArtGenPng(copied.pngFile, *processed); !result) {
+                return std::unexpected(result.error());
+            }
+            if (auto result = WriteImageProvenance(png, provenance, sprite, copied); !result) {
+                return std::unexpected(result.error());
+            }
+            return copied;
+        }
         if (auto result = CopyOver(png, copied.pngFile); !result) {
             return std::unexpected(result.error());
         }
@@ -355,13 +455,13 @@ namespace BECore {
         return std::unexpected(String("TextureLibrary.xml could not be saved (does the game have one?)"));
     }
 
-    std::expected<ArtGenAccepted, String> AcceptVariant(const ArtGenVariant& variant, StringView sprite) {
+    std::expected<ArtGenAccepted, String> AcceptVariant(const ArtGenVariant& variant, StringView sprite, const ArtGenImagePlan& plan) {
         const std::filesystem::path assetsDir = CoreManager::GetFileSystem().GetMountedPath("assets"_intern);
         if (assetsDir.empty()) {
             return std::unexpected(String("the game has no assets folder"));
         }
         auto& library = CoreManager::GetTextureLibrary();
-        auto copied = CopyVariantIntoAssets(PathOf(variant.path), PathOf(variant.provenancePath), assetsDir, sprite);
+        auto copied = CopyVariantIntoAssets(PathOf(variant.path), PathOf(variant.provenancePath), assetsDir, sprite, plan);
         if (!copied) {
             return std::unexpected(copied.error());
         }
@@ -418,6 +518,35 @@ namespace BECore {
         return WriteProvenance(file, *parsed);
     }
 
+    std::expected<ArtGenImageFrame, String> MeasureFrameForControl(const Vector<String>& pngFiles, const ArtGenImageSettings& settings) {
+        Vector<ArtGenIntRect> bounds;
+        int32_t width = 0;
+        int32_t height = 0;
+        for (const String& file : pngFiles) {
+            const std::filesystem::path path = PathOf(StringView(file));
+            auto pixels = ReadArtGenPng(path);
+            if (!pixels) {
+                return std::unexpected(pixels.error());
+            }
+            const auto pixelsWidth = static_cast<int32_t>(pixels->width);
+            const auto pixelsHeight = static_cast<int32_t>(pixels->height);
+            if (width == 0) {
+                width = pixelsWidth;
+                height = pixelsHeight;
+            } else if (pixelsWidth != width || pixelsHeight != height) {
+                return std::unexpected(
+                    Format("'{}' is {} x {}, the others are {} x {}: one frame cannot cut pictures of different sizes", path.generic_string(), pixelsWidth, pixelsHeight, width, height));
+            }
+            if (const Optional<ArtGenIntRect> drawn = DrawnBounds(*pixels)) {
+                bounds.push_back(*drawn);
+            }
+        }
+        if (bounds.empty()) {
+            return std::unexpected(String("nothing drawn in any of the pictures: they are empty"));
+        }
+        return MakeArtGenFrame(Span<const ArtGenIntRect>(bounds.data(), bounds.size()), width, height, settings);
+    }
+
     std::expected<void, ControlError> KeepForControl(StringView kind, StringView name, int64_t seed, StringView date) {
         auto fail = [](const String& message) { return std::unexpected(ControlError{String("artgen_accept_failed"), message}); };
         const bool image = kind == kKindImage;
@@ -439,9 +568,9 @@ namespace BECore {
         return {};
     }
 
-    std::expected<Json, ControlError> AcceptForControl(const ArtGenVariant& variant, StringView sprite, SceneNode* node) {
+    std::expected<Json, ControlError> AcceptForControl(const ArtGenVariant& variant, StringView sprite, const ArtGenImagePlan& plan, SceneNode* node) {
         auto fail = [](const String& message) { return std::unexpected(ControlError{String("artgen_accept_failed"), message}); };
-        auto accepted = AcceptVariant(variant, sprite);
+        auto accepted = AcceptVariant(variant, sprite, plan);
         if (!accepted) {
             return fail(accepted.error());
         }
@@ -451,6 +580,7 @@ namespace BECore {
         reply["png"] = accepted->copied.pngFile.generic_string();
         reply["width"] = accepted->copied.width;
         reply["height"] = accepted->copied.height;
+        reply["processing"] = ProcessingToJson(accepted->copied);
         reply["reloadedSprites"] = accepted->reloadedSprites;
         reply["usedOn"] = Json();
         if (node != nullptr) {

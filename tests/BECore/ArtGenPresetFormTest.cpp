@@ -151,6 +151,122 @@ namespace BECore::Tests {
         EXPECT_FALSE(CheckArtGenPresetShape(Json::array()).has_value());
     }
 
+    TEST(ArtGenPresetFormTest, APresetWithoutAcceptHasTheDefaultsAndWritesNoKey) {
+        ArtGenPresetForm form;
+        form.Load(WoodPreset());
+        EXPECT_FALSE(form.HasImageAccept());
+        EXPECT_EQ(form.GetImageAccept(), ArtGenImageSettings{});
+        EXPECT_FALSE(form.ToJson().contains("accept"));
+
+        ArtGenImageSettings changed;
+        changed.maxSize = 128;
+        form.SetImageAccept(changed);
+        EXPECT_TRUE(form.HasImageAccept());
+        EXPECT_TRUE(form.IsDirty());
+        EXPECT_EQ(form.ToJson()["accept"], (Json{{"trim", true}, {"padding", 2}, {"maxSize", 128}}));
+        form.SetImageAccept(ArtGenImageSettings{});
+        EXPECT_FALSE(form.IsDirty()) << "back to the defaults is the file as it was";
+        EXPECT_FALSE(form.ToJson().contains("accept"));
+
+        form.SetImageAccept(changed);
+        form.Revert();
+        EXPECT_FALSE(form.IsDirty());
+        EXPECT_EQ(form.GetImageAccept(), ArtGenImageSettings{});
+    }
+
+    TEST(ArtGenPresetFormTest, AnAcceptKeyOfTheFileIsKeptAsWrittenUntilEdited) {
+        ArtGenPreset preset = WoodPreset();
+        preset.data["accept"] = Json{{"trim", false}};
+        ArtGenPresetForm form;
+        form.Load(preset);
+        EXPECT_TRUE(form.HasImageAccept());
+        EXPECT_FALSE(form.GetImageAccept().trim);
+        EXPECT_EQ(form.GetImageAccept().maxSize, ArtGenImageSettings::kDefaultMaxSize) << "a missing key keeps the default";
+        EXPECT_EQ(form.ToJson(), preset.data) << "the file's own text comes back, not the three keys";
+        EXPECT_FALSE(form.IsDirty());
+
+        ArtGenImageSettings edited = form.GetImageAccept();
+        edited.padding = 10;
+        form.SetImageAccept(edited);
+        EXPECT_TRUE(form.IsDirty());
+        EXPECT_EQ(form.ToJson()["accept"], (Json{{"trim", false}, {"padding", 10}, {"maxSize", 256}}));
+        form.Revert();
+        EXPECT_FALSE(form.IsDirty());
+        EXPECT_EQ(form.GetImageAccept().padding, ArtGenImageSettings::kDefaultPadding);
+
+        form.MarkSaved();
+        EXPECT_FALSE(form.IsDirty());
+    }
+
+    TEST(ArtGenPresetFormTest, ClearingAcceptDropsTheKey) {
+        ArtGenPreset preset = WoodPreset();
+        preset.data["accept"] = Json{{"trim", false}, {"maxSize", 0}};
+        ArtGenPresetForm form;
+        form.Load(preset);
+        form.ClearImageAccept();
+        EXPECT_FALSE(form.HasImageAccept());
+        EXPECT_EQ(form.GetImageAccept(), ArtGenImageSettings{});
+        EXPECT_FALSE(form.ToJson().contains("accept"));
+        EXPECT_TRUE(form.IsDirty());
+        form.Revert();
+        EXPECT_FALSE(form.IsDirty());
+        EXPECT_FALSE(form.GetImageAccept().trim);
+
+        form.MarkSaved();
+        form.ClearImageAccept();
+        form.MarkSaved();
+        EXPECT_FALSE(form.IsDirty());
+        EXPECT_FALSE(form.ToJson().contains("accept"));
+    }
+
+    TEST(ArtGenPresetFormTest, ABadAcceptIsKeptAndRefusedByTheShapeCheck) {
+        ArtGenPreset preset = WoodPreset();
+        preset.data["accept"] = Json{{"maxSize", 5}};
+        ArtGenPresetForm form;
+        form.Load(preset);
+        EXPECT_FALSE(form.HasImageAccept());
+        EXPECT_EQ(form.GetImageAccept(), ArtGenImageSettings{});
+        EXPECT_EQ(form.ToJson(), preset.data) << "nothing of the file is lost";
+        EXPECT_FALSE(form.IsDirty());
+
+        const auto shape = CheckArtGenPresetShape(preset.data);
+        ASSERT_FALSE(shape.has_value());
+        EXPECT_NE(shape.error().find("accept"), String::npos);
+        EXPECT_NE(shape.error().find("maxSize"), String::npos);
+
+        preset.data["accept"] = "no";
+        form.Load(preset);
+        EXPECT_EQ(form.ToJson(), preset.data);
+        EXPECT_FALSE(CheckArtGenPresetShape(preset.data).has_value());
+
+        preset.data["accept"] = Json{{"trim", false}, {"padding", 5}, {"maxSize", 0}};
+        EXPECT_TRUE(CheckArtGenPresetShape(preset.data).has_value());
+    }
+
+    TEST(ArtGenPresetFormTest, AcceptComesAfterParamsInTheFileAndSurvivesNewAndAWorkflowChange) {
+        ArtGenPreset preset = WoodPreset();
+        preset.data["accept"] = Json{{"maxSize", 64}};
+        const String text = FormatArtGenPresetFile(preset.data);
+        const size_t params = text.find("\"params\"");
+        const size_t accept = text.find("\"accept\"");
+        const size_t note = text.find("\"note\"");
+        ASSERT_NE(accept, String::npos);
+        EXPECT_LT(params, accept);
+        EXPECT_LT(accept, note);
+
+        ArtGenPresetForm form;
+        form.Load(preset);
+        const ArtGenWorkflow audio = Workflow("sound", false);
+        form.SetWorkflow("sound", &audio);
+        EXPECT_EQ(form.GetImageAccept().maxSize, 64) << "a sound workflow keeps the key in the file";
+        EXPECT_TRUE(form.ToJson().contains("accept"));
+        form.Duplicate();
+        EXPECT_EQ(form.GetImageAccept().maxSize, 64);
+        form.New("sdxl_cutout");
+        EXPECT_FALSE(form.HasImageAccept());
+        EXPECT_FALSE(form.ToJson().contains("accept"));
+    }
+
     TEST(ArtGenPresetFormTest, TheServiceFillsItsOwnInputs) {
         for (const char* input : {"prompt", "negative", "seed", "width", "height", "output"}) {
             EXPECT_TRUE(IsArtGenServiceInput(input)) << input;

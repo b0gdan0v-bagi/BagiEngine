@@ -81,8 +81,31 @@ namespace BECore::Tests {
             return {};
         }
 
-        std::expected<Json, ControlError> FakeAcceptor(const ArtGenVariant& variant, StringView sprite, SceneNode* node) {
-            return Answer(variant, sprite, true, node != nullptr, true);
+        /// The plan of each call of the fake image acceptor that succeeded, in order, beside gAccepted
+        Vector<ArtGenImagePlan> gPlans;
+
+        std::expected<Json, ControlError> FakeAcceptor(const ArtGenVariant& variant, StringView sprite, const ArtGenImagePlan& plan, SceneNode* node) {
+            auto answer = Answer(variant, sprite, true, node != nullptr, true);
+            if (answer) {
+                gPlans.push_back(plan);
+            }
+            return answer;
+        }
+
+        struct MeasureCall {
+            Vector<String> files;
+            ArtGenImageSettings settings;
+        };
+        Vector<MeasureCall> gMeasures;
+        String gMeasureFail;  // the fake measurer fails with this text when it is not empty
+        constexpr ArtGenImageFrame kFakeFrame{10, 20, 300, 400, 150, 200};
+
+        std::expected<ArtGenImageFrame, String> FakeMeasurer(const Vector<String>& files, const ArtGenImageSettings& settings) {
+            gMeasures.push_back(MeasureCall{files, settings});
+            if (!gMeasureFail.empty()) {
+                return std::unexpected(gMeasureFail);
+            }
+            return kFakeFrame;
         }
 
         std::expected<Json, ControlError> FakeSoundAcceptor(const ArtGenVariant& variant, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, SceneNode* node) {
@@ -104,7 +127,11 @@ namespace BECore::Tests {
             session.SetAcceptor(&FakeAcceptor);
             session.SetSoundAcceptor(&FakeSoundAcceptor);
             session.SetKeeper(&FakeKeeper);
+            session.SetFrameMeasurer(&FakeMeasurer);
             gAccepted.clear();
+            gPlans.clear();
+            gMeasures.clear();
+            gMeasureFail.clear();
             gFailOn.clear();
             gKept.clear();
             gKeepFailOn.clear();
@@ -1698,6 +1725,331 @@ namespace BECore::Tests {
         EXPECT_EQ(ErrorCode(Call("artgen_accept_set", params)), "");
         ASSERT_EQ(gAccepted.size(), 1u);
         EXPECT_FALSE(gAccepted[0].image);
+    }
+
+    // ---- one frame for the whole set (Sets/CLAUDE.md, "Accept all") ----
+
+    TEST_F(ArtGenSetSessionTest, TheFirstAcceptAllMeasuresOnceOverEveryVariantAndStoresTheFrame) {
+        ASSERT_TRUE(Enqueue("framed", "a\nb").has_value());
+        RunAndPickAll("framed");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("framed"));
+        EXPECT_FALSE(session.FindSet("framed")->processing.has_value());
+
+        ASSERT_EQ(ErrorCode(AcceptAllCall("framed")), "");
+
+        ASSERT_EQ(gMeasures.size(), 1u);
+        ASSERT_EQ(gMeasures[0].files.size(), 4u) << "the drafts that were not picked count as much as the picks";
+        for (const char* const job : {"a", "b"}) {
+            for (const int64_t seed : {kSetSeed, kSetSeed + 1}) {
+                const String file = Format("{}/artgen/out/framed/{}/{}_{}.png", PathText(_root), job, job, seed);
+                EXPECT_NE(std::find(gMeasures[0].files.begin(), gMeasures[0].files.end(), file), gMeasures[0].files.end()) << file.c_str();
+            }
+        }
+        EXPECT_EQ(gMeasures[0].settings, ArtGenImageSettings{}) << "a preset with no accept key means the defaults";
+
+        ASSERT_EQ(gPlans.size(), 2u);
+        for (const ArtGenImagePlan& plan : gPlans) {
+            EXPECT_EQ(plan.settings, ArtGenImageSettings{});
+            EXPECT_EQ(plan.frame, Optional<ArtGenImageFrame>(kFakeFrame));
+        }
+        const Optional<ArtGenSetProcessing> expected = ArtGenSetProcessing{ArtGenImageSettings{}, kFakeFrame};
+        EXPECT_EQ(session.FindSet("framed")->processing, expected);
+        EXPECT_EQ(OnDisk("framed").processing, expected);
+
+        Json params = Json::object();
+        params["set"] = "framed";
+        const Json shown = Result(Call("artgen_set", params));
+        const Json* processing = FindJsonMember(shown, "processing");
+        ASSERT_NE(processing, nullptr);
+        EXPECT_EQ(GetJsonInt(*FindJsonMember(*processing, "frame"), "outWidth"), Optional<int64_t>(150));
+    }
+
+    TEST_F(ArtGenSetSessionTest, TheFrameOfAnAcceptAllUsesTheSettingsOfTheSetsDraft) {
+        ArtGenSetRequest request;
+        request.preset = "form";
+        request.presetData = ParseJson(R"({"preset":1,"title":"form","workflow":"txt2img","prompt":"{subject}","accept":{"trim":true,"padding":7,"maxSize":128}})").value();
+        request.subjects = ParseArtGenSubjects("a").value();
+        request.count = 2;
+        request.seed = kSetSeed;
+        request.name = "drafted";
+        ASSERT_TRUE(session.EnqueueSet(request).has_value());
+        RunAndPickAll("drafted");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("drafted"));
+        ASSERT_EQ(ErrorCode(AcceptAllCall("drafted")), "");
+
+        ASSERT_EQ(gMeasures.size(), 1u);
+        EXPECT_EQ(gMeasures[0].settings, (ArtGenImageSettings{true, 7, 128}));
+        EXPECT_EQ(session.FindSet("drafted")->processing->settings, (ArtGenImageSettings{true, 7, 128}));
+    }
+
+    TEST_F(ArtGenSetSessionTest, ASecondAcceptAllAndASwitchKeepTheFrameAndMeasureNothing) {
+        ASSERT_TRUE(Enqueue("framed", "a\nb").has_value());
+        RunAndPickAll("framed");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("framed"));
+        ASSERT_EQ(ErrorCode(AcceptAllCall("framed")), "");
+        const Optional<ArtGenSetProcessing> stored = session.FindSet("framed")->processing;
+        ASSERT_TRUE(stored.has_value());
+        gMeasures.clear();
+        gAccepted.clear();
+        gPlans.clear();
+
+        ASSERT_EQ(ErrorCode(AcceptAllCall("framed")), "");
+        EXPECT_TRUE(gMeasures.empty());
+        ASSERT_EQ(gPlans.size(), 2u);
+        EXPECT_EQ(gPlans[0].frame, Optional<ArtGenImageFrame>(stored->frame));
+        EXPECT_EQ(gPlans[1].frame, Optional<ArtGenImageFrame>(stored->frame));
+
+        gAccepted.clear();
+        gPlans.clear();
+        ASSERT_EQ(session.PickVariant("framed", "a", kSetSeed), ArtGenSetEdit::Ok);
+        ASSERT_EQ(gAccepted.size(), 1u) << "a switch calls the acceptor for its row only";
+        EXPECT_EQ(gAccepted[0].name, "a");
+        EXPECT_EQ(gAccepted[0].seed, kSetSeed);
+        ASSERT_EQ(gPlans.size(), 1u);
+        EXPECT_EQ(gPlans[0].settings, stored->settings);
+        EXPECT_EQ(gPlans[0].frame, Optional<ArtGenImageFrame>(stored->frame));
+        EXPECT_TRUE(gMeasures.empty());
+        EXPECT_EQ(session.FindSet("framed")->processing, stored) << "the frame never moves";
+    }
+
+    TEST_F(ArtGenSetSessionTest, AnEditOfThePresetAfterTheFirstAcceptAllDoesNotReachTheSet) {
+        ASSERT_TRUE(Enqueue("framed", "a").has_value());
+        RunAndPickAll("framed");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("framed"));
+        ASSERT_EQ(ErrorCode(AcceptAllCall("framed")), "");
+
+        Json preset = Json::object();
+        preset["name"] = "wood";
+        preset["title"] = "wood";
+        preset["preset"] = ParseJson(R"({"accept":{"trim":false,"maxSize":0}})").value();
+        Json poll = ReadyPoll();
+        poll["presets"] = Json::array({preset});
+        Call("artgen_poll", poll);
+
+        gPlans.clear();
+        ASSERT_EQ(session.PickVariant("framed", "a", kSetSeed), ArtGenSetEdit::Ok);
+        ASSERT_EQ(gPlans.size(), 1u);
+        EXPECT_FALSE(gPlans[0].settings.IsIdentity());
+        EXPECT_TRUE(gPlans[0].frame.has_value());
+    }
+
+    TEST_F(ArtGenSetSessionTest, TheFrameOutlivesKeepAndAReloadOfTheManifest) {
+        ASSERT_TRUE(Enqueue("framed", "a\nb").has_value());
+        RunAndPickAll("framed");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("framed"));
+        ASSERT_EQ(ErrorCode(AcceptAllCall("framed")), "");
+
+        Json params = Json::object();
+        params["set"] = "framed";
+        params["job"] = "a";
+        ASSERT_EQ(ErrorCode(Call("artgen_keep", params)), "");
+        const Optional<ArtGenSetProcessing> expected = ArtGenSetProcessing{ArtGenImageSettings{}, kFakeFrame};
+        EXPECT_EQ(session.FindSet("framed")->processing, expected) << "Keep cuts a row's variants, the frame is the set's";
+        EXPECT_EQ(OnDisk("framed").processing, expected);
+
+        ReloadFromDisk();
+        ASSERT_NE(session.FindSet("framed"), nullptr);
+        EXPECT_EQ(session.FindSet("framed")->processing, expected);
+
+        // Row b is still live: its switch after the reload goes through the same frame, and nothing is measured again
+        gPlans.clear();
+        gMeasures.clear();
+        ASSERT_EQ(session.PickVariant("framed", "b", kSetSeed), ArtGenSetEdit::Ok);
+        ASSERT_EQ(gPlans.size(), 1u);
+        EXPECT_EQ(gPlans[0].frame, Optional<ArtGenImageFrame>(kFakeFrame));
+        EXPECT_TRUE(gMeasures.empty());
+    }
+
+    TEST_F(ArtGenSetSessionTest, ALegacySetKeepsWritingUnprocessedFilesAndStoresNoFrame) {
+        ASSERT_TRUE(Enqueue("old", "a\nb").has_value());
+        RunAndPickAll("old");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("old"));
+        // A set accepted before frames existed: a row accepted, no processing in the manifest
+        ArtGenSet disk = OnDisk("old");
+        disk.jobs[0].accepted = ArtGenSetAccepted{"a", "2026-11-17T00:00:00Z", false};
+        ASSERT_TRUE(WriteManifest(_root, disk).has_value());
+        ReloadFromDisk();
+        ASSERT_TRUE(IsLegacyAccepted(*session.FindSet("old")));
+
+        ASSERT_EQ(ErrorCode(AcceptAllCall("old")), "");
+        EXPECT_TRUE(gMeasures.empty());
+        ASSERT_EQ(gPlans.size(), 2u);
+        for (const ArtGenImagePlan& plan : gPlans) {
+            EXPECT_TRUE(plan.settings.IsIdentity());
+            EXPECT_FALSE(plan.frame.has_value());
+        }
+        EXPECT_FALSE(session.FindSet("old")->processing.has_value());
+
+        gPlans.clear();
+        ASSERT_EQ(session.PickVariant("old", "a", kSetSeed), ArtGenSetEdit::Ok);
+        ASSERT_EQ(gPlans.size(), 1u);
+        EXPECT_TRUE(gPlans[0].settings.IsIdentity());
+        EXPECT_FALSE(gPlans[0].frame.has_value());
+    }
+
+    TEST_F(ArtGenSetSessionTest, SettingsThatChangeNothingNeedNoFrame) {
+        ArtGenSetRequest request;
+        request.preset = "form";
+        request.presetData = ParseJson(R"({"preset":1,"title":"form","workflow":"txt2img","prompt":"{subject}","accept":{"trim":false,"maxSize":0}})").value();
+        request.subjects = ParseArtGenSubjects("a").value();
+        request.count = 2;
+        request.seed = kSetSeed;
+        request.name = "plain";
+        ASSERT_TRUE(session.EnqueueSet(request).has_value());
+        RunAndPickAll("plain");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("plain"));
+        ASSERT_EQ(ErrorCode(AcceptAllCall("plain")), "");
+
+        EXPECT_TRUE(gMeasures.empty());
+        ASSERT_EQ(gPlans.size(), 1u);
+        EXPECT_TRUE(gPlans[0].settings.IsIdentity());
+        EXPECT_FALSE(session.FindSet("plain")->processing.has_value());
+    }
+
+    TEST_F(ArtGenSetSessionTest, AFrameThatCannotBeMeasuredIsARefusalThatChangesNothing) {
+        ASSERT_TRUE(Enqueue("framed", "a\nb").has_value());
+        RunAndPickAll("framed");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("framed"));
+        gMeasureFail = "nothing drawn in any of the pictures";
+
+        const Json response = AcceptAllCall("framed");
+        EXPECT_EQ(ErrorCode(response), "artgen_accept_failed");
+        EXPECT_NE(ErrorMessage(response).find("nothing drawn in any"), String::npos) << ErrorMessage(response).c_str();
+        EXPECT_TRUE(gAccepted.empty());
+        const ArtGenSet disk = OnDisk("framed");
+        EXPECT_FALSE(disk.processing.has_value());
+        EXPECT_FALSE(disk.jobs[0].accepted.has_value());
+
+        gMeasureFail.clear();
+        EXPECT_EQ(ErrorCode(AcceptAllCall("framed")), "") << "the next call measures again";
+        EXPECT_TRUE(session.FindSet("framed")->processing.has_value());
+    }
+
+    TEST_F(ArtGenSetSessionTest, AFailedFirstRowStoresNoFrame) {
+        ASSERT_TRUE(Enqueue("framed", "a\nb").has_value());
+        RunAndPickAll("framed");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("framed"));
+        gFailOn = "a";
+
+        EXPECT_EQ(ErrorCode(AcceptAllCall("framed")), "artgen_accept_failed");
+        EXPECT_FALSE(session.FindSet("framed")->processing.has_value());
+        EXPECT_FALSE(OnDisk("framed").processing.has_value());
+        EXPECT_FALSE(IsLegacyAccepted(*session.FindSet("framed"))) << "nothing was written, so the set is not legacy";
+
+        gFailOn.clear();
+        ASSERT_EQ(ErrorCode(AcceptAllCall("framed")), "");
+        EXPECT_TRUE(session.FindSet("framed")->processing.has_value());
+        EXPECT_EQ(gMeasures.size(), 2u);
+    }
+
+    // ---- frameOf: a replacement set takes the frame of the set it replaces a row of ----
+
+    /// A finished set `old` with a frame of its own, as its first Accept all would have left it (no row accepted, so it is not a legacy set)
+    static const ArtGenSetProcessing kOldProcessing{ArtGenImageSettings{true, 3, 200}, ArtGenImageFrame{1, 2, 30, 40, 15, 20}};
+
+    TEST_F(ArtGenSetSessionTest, AReplacementSetTakesTheFrameOfTheSetItReplacesARowOf) {
+        ASSERT_TRUE(Enqueue("old", "a\nb").has_value());
+        RunAndPickAll("old");
+        ArtGenSet disk = OnDisk("old");
+        disk.processing = kOldProcessing;
+        ASSERT_TRUE(WriteManifest(_root, disk).has_value());
+        ReloadFromDisk();
+
+        ArtGenSetRequest request;
+        request.preset = "wood";
+        request.subjects = ParseArtGenSubjects("a: a bigger knight").value();
+        request.count = 2;
+        request.seed = kSetSeed;
+        request.name = "fix";
+        request.frameOf = "old";
+        ASSERT_TRUE(session.EnqueueSet(request).has_value());
+        EXPECT_EQ(OnDisk("fix").processing, Optional<ArtGenSetProcessing>(kOldProcessing)) << "the frame is in the manifest before any job runs";
+
+        RunAndPickAll("fix");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("fix"));
+        ASSERT_EQ(ErrorCode(AcceptAllCall("fix")), "");
+        EXPECT_TRUE(gMeasures.empty()) << "a frame that was given is not measured again";
+        ASSERT_EQ(gPlans.size(), 1u);
+        EXPECT_EQ(gPlans[0].frame, Optional<ArtGenImageFrame>(kOldProcessing.frame));
+        EXPECT_EQ(gPlans[0].settings, kOldProcessing.settings);
+        EXPECT_EQ(session.FindSet("fix")->processing, Optional<ArtGenSetProcessing>(kOldProcessing));
+    }
+
+    TEST_F(ArtGenSetSessionTest, FrameOfNeedsAnImageSetThatHasAFrame) {
+        Poll();
+        ASSERT_TRUE(Enqueue("noframe", "a").has_value());
+        ArtGenSetRequest sound;
+        sound.preset = "knock";
+        sound.subjects = ParseArtGenSubjects("click").value();
+        sound.name = "sounds";
+        ASSERT_TRUE(session.EnqueueSet(sound).has_value());
+        ASSERT_TRUE(session.FindSet("sounds")->kind == kKindAudio);
+
+        ArtGenSetRequest good;
+        good.preset = "wood";
+        good.subjects = ParseArtGenSubjects("a").value();
+        good.name = "fix";
+        const size_t setsBefore = session.GetSets().size();
+        const auto refused = [&](StringView frameOf, StringView preset = "wood") {
+            ArtGenSetRequest request = good;
+            request.frameOf = String(frameOf);
+            request.preset = String(preset);
+            const auto result = session.EnqueueSet(request);
+            EXPECT_FALSE(result.has_value()) << String(frameOf).c_str();
+            return result ? String() : result.error();
+        };
+        EXPECT_NE(refused("missing").find("no set named"), String::npos);
+        EXPECT_NE(refused("noframe").find("no frame yet"), String::npos);
+        EXPECT_NE(refused("sounds").find("only an image set"), String::npos);
+
+        ArtGenSet disk = OnDisk("noframe");
+        disk.processing = kOldProcessing;
+        ASSERT_TRUE(WriteManifest(_root, disk).has_value());
+        ReloadFromDisk();
+        Poll();
+        EXPECT_NE(refused("noframe", "knock").find("only an image set"), String::npos) << "a sound set cannot take a frame";
+
+        EXPECT_EQ(session.GetSets().size(), setsBefore) << "a refusal queues nothing";
+        EXPECT_FALSE(std::filesystem::exists(_root / "artgen" / "out" / "fix"));
+    }
+
+    TEST_F(ArtGenSetSessionTest, ArtgenEnqueueReadsFrameOfAndRefusesWhatItCannotTake) {
+        ASSERT_TRUE(Enqueue("old", "a").has_value());
+        ArtGenSet disk = OnDisk("old");
+        disk.processing = kOldProcessing;
+        ASSERT_TRUE(WriteManifest(_root, disk).has_value());
+        ReloadFromDisk();
+
+        Json params = Json::object();
+        params["preset"] = "wood";
+        params["subjects"] = "a";
+        params["set"] = "fix";
+        for (const Json& bad : {Json(3), Json(""), Json("nowhere")}) {
+            params["frameOf"] = bad;
+            EXPECT_EQ(ErrorCode(Call("artgen_enqueue", params)), "invalid_params") << DumpJson(bad).c_str();
+        }
+        EXPECT_EQ(session.FindSet("fix"), nullptr);
+
+        params["frameOf"] = "old";
+        EXPECT_EQ(ErrorCode(Call("artgen_enqueue", params)), "");
+        ASSERT_NE(session.FindSet("fix"), nullptr);
+        EXPECT_EQ(session.FindSet("fix")->processing, Optional<ArtGenSetProcessing>(kOldProcessing));
+    }
+
+    TEST_F(ArtGenSetSessionTest, ASoundSetNeedsNoFrame) {
+        session.SetFrameMeasurer(nullptr);
+        ArtGenSetRequest request;
+        request.preset = "knock";
+        request.subjects = ParseArtGenSubjects("click").value();
+        request.count = 2;
+        request.seed = kSetSeed;
+        request.name = "sounds";
+        ASSERT_TRUE(session.EnqueueSet(request).has_value());
+        RunAndPickAll("sounds", "audio");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("sounds"));
+        EXPECT_EQ(ErrorCode(AcceptAllCall("sounds")), "");
+        EXPECT_TRUE(gMeasures.empty());
+        EXPECT_FALSE(session.FindSet("sounds")->processing.has_value());
     }
 
 }  // namespace BECore::Tests

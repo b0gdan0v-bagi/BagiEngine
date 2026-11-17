@@ -1,6 +1,7 @@
 #include "ArtGenSet.h"
 
 #include <Widgets/ArtGen/ArtGenAccept.h>
+#include <cstdio>
 
 namespace BECore {
 
@@ -206,6 +207,27 @@ namespace BECore {
             return job;
         }
 
+        std::expected<ArtGenSetProcessing, String> ReadProcessing(const Json& item) {
+            const Where where = "manifest.processing";
+            if (!item.is_object()) {
+                return std::unexpected(Format("{}: must be an object or null", where));
+            }
+            const Json* settings = FindJsonMember(item, "settings");
+            const Json* frame = FindJsonMember(item, "frame");
+            if (settings == nullptr || frame == nullptr) {
+                return std::unexpected(Format("{}: needs 'settings' and 'frame'", where));
+            }
+            auto readSettings = ArtGenImageSettingsFromJson(*settings);
+            if (!readSettings) {
+                return std::unexpected(Format("{}.settings: {}", where, readSettings.error()));
+            }
+            auto readFrame = ArtGenImageFrameFromJson(*frame);
+            if (!readFrame) {
+                return std::unexpected(Format("{}.frame: {}", where, readFrame.error()));
+            }
+            return ArtGenSetProcessing{*readSettings, *readFrame};
+        }
+
     }  // namespace
 
     String ArtGenNameFromSubject(StringView subject) {
@@ -302,6 +324,72 @@ namespace BECore {
         return subjects;
     }
 
+    static_assert(kArtGenRowNameSize == kMaxSpriteNameLength + 1);
+
+    void ArtGenRowSubjectEdited(ArtGenSubjectRow& row) {
+        if (row.nameEdited) {
+            return;
+        }
+        const String suggested = ArtGenNameFromSubject(StringView(row.subject));
+        std::snprintf(row.name, sizeof(row.name), "%s", suggested.c_str());
+    }
+
+    void ArtGenRowNameEdited(ArtGenSubjectRow& row) {
+        row.nameEdited = row.name[0] != '\0';
+        if (!row.nameEdited) {
+            ArtGenRowSubjectEdited(row);
+        }
+    }
+
+    std::expected<Vector<ArtGenSubject>, String> ArtGenSubjectsFromRows(const Vector<ArtGenSubjectRow>& rows) {
+        Vector<ArtGenSubject> subjects;
+        Vector<size_t> rowOf;
+        for (size_t index = 0; index < rows.size(); ++index) {
+            const StringView text = Trim(StringView(rows[index].subject));
+            if (text.empty()) {
+                continue;
+            }
+            ArtGenSubject subject;
+            subject.subject = String(text);
+            const StringView typed = Trim(StringView(rows[index].name));
+            subject.name = typed.empty() ? ArtGenNameFromSubject(text) : String(typed);
+            if (subject.name.empty()) {
+                return std::unexpected(Format("row {}: no letter or digit to name the job from; type a name", index + 1));
+            }
+            if (!IsValidSpriteName(subject.name)) {
+                return std::unexpected(Format("row {}: '{}' is not a valid name (1 to {} of A-Z a-z 0-9 _ -)", index + 1, subject.name, kMaxSpriteNameLength));
+            }
+            for (size_t other = 0; other < subjects.size(); ++other) {
+                if (subjects[other].name == subject.name) {
+                    return std::unexpected(Format("row {}: the name '{}' is already used by row {}", index + 1, subject.name, rowOf[other] + 1));
+                }
+            }
+            if (subjects.size() >= static_cast<size_t>(kMaxSetJobs)) {
+                return std::unexpected(Format("row {}: more than {} subjects", index + 1, kMaxSetJobs));
+            }
+            subjects.push_back(std::move(subject));
+            rowOf.push_back(index);
+        }
+        if (subjects.empty()) {
+            return std::unexpected(String("no subjects: fill in a subject"));
+        }
+        return subjects;
+    }
+
+    const char* ArtGenQueueBlocker(bool presetLoaded, const Vector<ArtGenSubjectRow>& rows, bool setNameValid) {
+        if (!presetLoaded) {
+            return "Pick a preset above";
+        }
+        const bool anySubject = std::any_of(rows.begin(), rows.end(), [](const ArtGenSubjectRow& row) { return !Trim(StringView(row.subject)).empty(); });
+        if (!anySubject) {
+            return "Write a subject in a row above: a queued set clears them";
+        }
+        if (!setNameValid) {
+            return "The set name is 1 to 64 of A-Z a-z 0-9 _ -";
+        }
+        return nullptr;
+    }
+
     String ArtGenTimestamp(std::chrono::system_clock::time_point time) {
         const Civil civil = ToCivil(time);
         return Format("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z", civil.year, civil.month, civil.day, civil.hour, civil.minute, civil.second);
@@ -364,6 +452,14 @@ namespace BECore {
             jobs.push_back(std::move(row));
         }
         manifest["jobs"] = std::move(jobs);
+        if (set.processing) {
+            Json processing = Json::object();
+            processing["settings"] = ArtGenImageSettingsToJson(set.processing->settings);
+            processing["frame"] = ArtGenImageFrameToJson(set.processing->frame);
+            manifest["processing"] = std::move(processing);
+        } else {
+            manifest["processing"] = Json(nullptr);
+        }
         return manifest;
     }
 
@@ -446,6 +542,15 @@ namespace BECore {
             }
             set.jobs.push_back(std::move(*job));
         }
+
+        const Json* processing = FindJsonMember(manifest, "processing");
+        if (processing != nullptr && !processing->is_null()) {
+            auto read = ReadProcessing(*processing);
+            if (!read) {
+                return std::unexpected(read.error());
+            }
+            set.processing = *read;
+        }
         return set;
     }
 
@@ -459,6 +564,10 @@ namespace BECore {
 
     int32_t PickedCount(const ArtGenSet& set) {
         return static_cast<int32_t>(std::count_if(set.jobs.begin(), set.jobs.end(), [](const ArtGenSetJob& job) { return job.pick.has_value(); }));
+    }
+
+    bool IsLegacyAccepted(const ArtGenSet& set) {
+        return !set.processing && std::any_of(set.jobs.begin(), set.jobs.end(), [](const ArtGenSetJob& job) { return job.accepted.has_value(); });
     }
 
     bool IsLive(const ArtGenSetJob& job) {

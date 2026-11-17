@@ -50,7 +50,24 @@ namespace BECore {
         return nullptr;
     }
 
-    std::expected<Json, ControlError> ArtGenSession::Accept(int64_t seed, StringView sprite, bool useOnSelected) {
+    ArtGenImageSettings ArtGenSession::ImageSettingsOf(const Json& presetData, StringView preset) const {
+        const Json* data = &presetData;
+        if (presetData.is_null()) {
+            const ArtGenPreset* saved = FindPreset(preset);
+            data = saved != nullptr ? &saved->data : nullptr;
+        }
+        const Json* accept = data != nullptr ? FindJsonMember(*data, "accept") : nullptr;
+        if (accept == nullptr) {
+            return {};
+        }
+        return ArtGenImageSettingsFromJson(*accept).value_or(ArtGenImageSettings{});
+    }
+
+    ArtGenImageSettings ArtGenSession::ImageSettingsOfRun() const {
+        return ImageSettingsOf(_run.presetData, StringView(_run.preset));
+    }
+
+    std::expected<Json, ControlError> ArtGenSession::Accept(int64_t seed, StringView sprite, bool useOnSelected, const ArtGenImageSettings* settings) {
         const ArtGenVariant* variant = FindVariant(seed);
         if (variant == nullptr) {
             return std::unexpected(ControlError{String(kNoVariantCode), Format("the current run has no image of seed {}", seed)});
@@ -68,7 +85,7 @@ namespace BECore {
                 return std::unexpected(ControlError{String(kAcceptFailedCode), String("no node is selected in the scene editor")});
             }
         }
-        return _acceptor(*variant, sprite, node);
+        return _acceptor(*variant, sprite, ArtGenImagePlan{settings != nullptr ? *settings : ImageSettingsOfRun(), {}}, node);
     }
 
     std::expected<Json, ControlError> ArtGenSession::AcceptSound(int64_t seed, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, bool useOnSelected) {
@@ -116,14 +133,19 @@ namespace BECore {
                                                   ControlParamInfo{"subject", "string", true, "what to draw; replaces {subject} in the preset's prompt"},
                                                   ControlParamInfo{"count", "integer", false, "images, 1 to 16 (default 4)"},
                                                   ControlParamInfo{"seed", "integer", false, "the first seed; image i takes seed + i (default random)"}}});
-        service.DescribeMethod("artgen_accept", ControlMethodInfo{"Makes an image of the current run a sprite of the game (PNG into assets/artgen, TextureLibrary entry, reload), "
-                                                                  "or a sound a clip (processed, a WAV into assets/artgen or over a clip path of the game, reload)",
-                                                                  {ControlParamInfo{"seed", "integer", true, "the seed of the image or sound (artgen_state.run.variants)"},
-                                                                   ControlParamInfo{"sprite", "string", false, "an image: the sprite name, 1 to 64 of A-Z a-z 0-9 _ -"},
-                                                                   ControlParamInfo{"name", "string", false, "a sound: the clip assets/artgen/<name>.wav"},
-                                                                   ControlParamInfo{"clip", "string", false, "a sound: instead of name, the game's clip to replace (assets/.../x.wav)"},
-                                                                   ControlParamInfo{"sound", "object", false, "a sound: mono, trimDb, maxSeconds, sampleRate, fadeInMs, fadeOutMs, peakDb (null: off)"},
-                                                                   ControlParamInfo{"useOnSelected", "boolean", false, "also put it on the node selected in the scene editor"}}});
+        service.DescribeMethod(
+            "artgen_accept",
+            ControlMethodInfo{"Makes an image of the current run a sprite of the game (trimmed to what is drawn and downscaled, a PNG into assets/artgen, "
+                              "TextureLibrary entry, reload), or a sound a clip (processed, a WAV into assets/artgen or over a clip path of the game, reload)",
+                              {ControlParamInfo{"seed", "integer", true, "the seed of the image or sound (artgen_state.run.variants)"},
+                               ControlParamInfo{"sprite", "string", false, "an image: the sprite name, 1 to 64 of A-Z a-z 0-9 _ -"},
+                               ControlParamInfo{"image", "object", false,
+                                                "an image: trim, padding (percent, 0 to 25), maxSize (pixels, 0 or 16 to 4096); a missing key keeps the preset's value (its accept key, else the "
+                                                "defaults)"},
+                               ControlParamInfo{"name", "string", false, "a sound: the clip assets/artgen/<name>.wav"},
+                               ControlParamInfo{"clip", "string", false, "a sound: instead of name, the game's clip to replace (assets/.../x.wav)"},
+                               ControlParamInfo{"sound", "object", false, "a sound: mono, trimDb, maxSeconds, sampleRate, fadeInMs, fadeOutMs, peakDb (null: off)"},
+                               ControlParamInfo{"useOnSelected", "boolean", false, "also put it on the node selected in the scene editor"}}});
         service.DescribeMethod(
             "artgen_cancel",
             ControlMethodInfo{"Stops the run of the art generation service (a set's running job; the set goes on); the images made stay. With job or set, cancels that job, or every job of the set",
@@ -589,7 +611,22 @@ namespace BECore {
         if (!sprite) {
             return std::unexpected(InvalidParams("'sprite' (string) is required for an image"));
         }
-        return Accept(*seed, *sprite, useOnSelected);
+        ArtGenImageSettings settings = ImageSettingsOfRun();
+        if (const Json* image = FindJsonMember(params, "image"); image != nullptr && !image->is_null()) {
+            if (!image->is_object()) {
+                return std::unexpected(InvalidParams("'image' must be an object {trim, padding, maxSize}"));
+            }
+            Json merged = ArtGenImageSettingsToJson(settings);
+            for (const auto& [key, value] : image->items()) {
+                merged[key] = value;
+            }
+            auto parsed = ArtGenImageSettingsFromJson(merged);
+            if (!parsed) {
+                return std::unexpected(InvalidParams(Format("'image': {}", parsed.error())));
+            }
+            settings = *parsed;
+        }
+        return Accept(*seed, *sprite, useOnSelected, &settings);
     }
 
     std::expected<Json, ControlError> ArtGenSession::HandleSetupReport(const Json& params) {

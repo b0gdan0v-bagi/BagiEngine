@@ -3,6 +3,7 @@
 #include <BECore/Control/Json.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
+#include <Widgets/ArtGen/ArtGenImage.h>
 #include <chrono>
 #include <cstdint>
 #include <expected>
@@ -55,6 +56,14 @@ namespace BECore {
         Optional<ArtGenSetAccepted> accepted;
     };
 
+    /// What every image of a set is cut and scaled by, fixed at the first Accept all so the rows keep one scale whatever is switched later
+    struct ArtGenSetProcessing {
+        ArtGenImageSettings settings;
+        ArtGenImageFrame frame;
+
+        [[nodiscard]] bool operator==(const ArtGenSetProcessing&) const = default;
+    };
+
     /// A named batch: one preset applied to a list of subjects, one job per subject, all with the same first seed so the style matches.
     /// Plain data over the manifest; the session runs it, the store keeps it (Sets/CLAUDE.md)
     struct ArtGenSet {
@@ -66,6 +75,7 @@ namespace BECore {
         int32_t count = kArtGenSetDefaultCount;
         int64_t seed = 0;  // the first seed of every job
         Vector<ArtGenSetJob> jobs;
+        Optional<ArtGenSetProcessing> processing;  // an image set: none until the first Accept all (or for good, see IsLegacyAccepted)
     };
 
     /// The set name or job name from a subject: "White Knight!" -> "white_knight". Lowercase letters and digits, one `_` between words,
@@ -78,6 +88,29 @@ namespace BECore {
      * (ArtGenNameFromSubject). The error names the line (1-based): a subject with no letter, a name used twice, more than kMaxSetJobs jobs.
      */
     [[nodiscard]] std::expected<Vector<ArtGenSubject>, String> ParseArtGenSubjects(StringView text);
+
+    inline constexpr size_t kArtGenRowSubjectSize = 512;
+    inline constexpr size_t kArtGenRowNameSize = 65;  // a name of 64 and the terminator
+
+    /// One row of the Set tab: a subject and the job's name. Fixed buffers, so ImGui edits them in place and a steady frame allocates nothing
+    struct ArtGenSubjectRow {
+        char subject[kArtGenRowSubjectSize] = {};
+        char name[kArtGenRowNameSize] = {};
+        bool nameEdited = false;  // a hand-typed name stops following the subject
+    };
+
+    /// The Subject of the row changed: while the name was never typed by hand it becomes the one `ArtGenNameFromSubject` suggests
+    void ArtGenRowSubjectEdited(ArtGenSubjectRow& row);
+
+    /// The Name of the row changed by hand: it stops following the subject, and an emptied name follows again at once
+    void ArtGenRowNameEdited(ArtGenSubjectRow& row);
+
+    /// The jobs of the rows in order: a row with an empty subject is skipped, an empty name is taken from the subject. The error names the row
+    /// (1-based, counting the skipped ones): a bad name, a name used by an earlier row, no letter or digit to name a job from, more than kMaxSetJobs jobs
+    [[nodiscard]] std::expected<Vector<ArtGenSubject>, String> ArtGenSubjectsFromRows(const Vector<ArtGenSubjectRow>& rows);
+
+    /// Why Queue is off, or null when it is on: no preset, no row with a subject (a queued set clears the rows), a set name that is not a name
+    [[nodiscard]] const char* ArtGenQueueBlocker(bool presetLoaded, const Vector<ArtGenSubjectRow>& rows, bool setNameValid);
 
     /// The checks of a list of subjects that did not come from text (a control call): 1..kMaxSetJobs, valid unique names, a subject each
     [[nodiscard]] std::expected<void, String> CheckArtGenSubjects(const Vector<ArtGenSubject>& subjects);
@@ -101,6 +134,10 @@ namespace BECore {
     [[nodiscard]] int32_t CountJobs(const ArtGenSet& set, ArtGenSetJobState state);
     /// The jobs that have a pick
     [[nodiscard]] int32_t PickedCount(const ArtGenSet& set);
+
+    /// A row was accepted before sets had a frame: its files are full frames, so the set keeps writing unprocessed files and its rows never
+    /// differ in scale
+    [[nodiscard]] bool IsLegacyAccepted(const ArtGenSet& set);
 
     /// The jobs the game holds with alternatives still switchable (accepted and not kept)
     [[nodiscard]] bool IsLive(const ArtGenSetJob& job);
