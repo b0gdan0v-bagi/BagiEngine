@@ -244,6 +244,10 @@ namespace BECore {
         std::expected<Json, ControlError> HandleSetupReport(const Json& params);
         std::expected<Json, ControlError> HandleSetup(const Json& params);
         std::expected<Json, ControlError> HandleSavePreset(const Json& params);
+        std::expected<Json, ControlError> HandleEnqueue(const Json& params);
+        std::expected<Json, ControlError> HandleSet(const Json& params);
+        std::expected<Json, ControlError> HandlePick(const Json& params);
+        std::expected<Json, ControlError> HandleRetry(const Json& params);
         [[nodiscard]] Json StateJson() const;
 
     private:
@@ -263,6 +267,11 @@ namespace BECore {
         void EndSetJob(StringView cancelReason);
         void RecordSetImage(const ArtGenVariant& variant);
         void QueueSet(StringView name);
+        /// The methods of the sets (ArtGenSessionSets.cpp): the handlers and their descriptions
+        void RegisterSetControl(ControlService& service);
+        /// `artgen_cancel` with `job` or `set`: the one job, or the whole set
+        std::expected<Json, ControlError> CancelFromParams(const Json& params);
+        [[nodiscard]] Json SetsJson() const;
 
         Clock _clock;
         Acceptor _acceptor = nullptr;
