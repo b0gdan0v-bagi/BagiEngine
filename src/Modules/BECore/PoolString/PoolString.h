@@ -36,7 +36,7 @@ namespace BECore {
         uint64_t hits = 0;         ///< `Intern` calls that found the text (the empty text always does)
         uint64_t misses = 0;       ///< `Intern` calls that added a string: a text raced for by two threads is one miss
 
-        PoolSourceStats runtime;        ///< Copied into the pool by `Intern`
+        PoolSourceStats runtime;        ///< Copied into the pool by `Intern` and `InternBatch`
         PoolSourceStats staticEntries;  ///< Ready entries registered by `RegisterStatic`
         PoolSourceStats adopted;        ///< Entries of adopted blocks
 
@@ -167,11 +167,15 @@ namespace BECore {
         /// A hint that about `strings` more strings of `bytes` aligned entry bytes in all will be interned: grows the table once
         /// for them and, when the current block has less than `bytes` free, takes one block of that size that becomes current
         /// (what is left of the old one is lost). It never fails and limits nothing: strings beyond the hint take blocks and
-        /// growth as usual. Meant for a loader that knows the size of what it is about to read.
+        /// growth as usual. Meant for a loader that knows the size of what it is about to read, so the numbers may come from
+        /// a file header and a part that is not sane is **ignored**, not clamped: `strings` when the table would have to hold
+        /// more than `PoolEntryTable::kMaxReservedEntries` (or the sum overflows), `bytes` above `kDefaultReservedBytes`
+        /// (the reservation of the default block source).
         static void Reserve(size_t strings, size_t bytes);
 
         /// Memory for a loader to write ready entries into, `bytes` rounded up to a multiple of 8 (at least 8). Never null: the
-        /// pool takes a heap block when its source has none. The pool owns it from here on. Until it is adopted it counts in
+        /// pool takes a heap block when its source has none, so a size that is out of reach aborts: a loader that takes `bytes` from a
+        /// header must check it first (at most `Details::kPoolEntryMaxTextBytes`, `ASSERT`ed). The pool owns it from here on. Until it is adopted it counts in
         /// `blockCount` and `blockBytes` but not in `PoolStringStats::adopted`. The content is unspecified.
         [[nodiscard]] static PoolBlock AllocateBlock(size_t bytes);
 

@@ -1,8 +1,12 @@
 #include "PoolBlockSource.h"
 
-#if defined(_WIN32)
+#if defined(PLATFORM_WINDOWS)
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <windows.h>
 #elif !defined(__EMSCRIPTEN__)
 #include <sys/mman.h>
@@ -50,7 +54,7 @@ namespace BECore {
             size_t _used = 0;
 
             static void* Reserve(size_t bytes) {
-#if defined(_WIN32)
+#if defined(PLATFORM_WINDOWS)
                 return VirtualAlloc(nullptr, bytes, MEM_RESERVE, PAGE_NOACCESS);
 #else
                 void* address = mmap(nullptr, bytes, PROT_NONE, MAP_PRIVATE | MAP_ANON, -1, 0);
@@ -59,7 +63,7 @@ namespace BECore {
             }
 
             bool Commit(size_t offset, size_t bytes) const {
-#if defined(_WIN32)
+#if defined(PLATFORM_WINDOWS)
                 return VirtualAlloc(_base + offset, bytes, MEM_COMMIT, PAGE_READWRITE) != nullptr;
 #else
                 return mprotect(_base + offset, bytes, PROT_READ | PROT_WRITE) == 0;
@@ -73,7 +77,7 @@ namespace BECore {
             VirtualBlockSource& operator=(const VirtualBlockSource&) = delete;
 
             ~VirtualBlockSource() override {
-#if defined(_WIN32)
+#if defined(PLATFORM_WINDOWS)
                 VirtualFree(_base, 0, MEM_RELEASE);
 #else
                 munmap(_base, _mapped);
@@ -82,7 +86,7 @@ namespace BECore {
 
             /// Null when the address space is refused
             static UniquePtr<IPoolBlockSource> Create(size_t reserveBytes, size_t commitChunkBytes) {
-#if !defined(_WIN32)
+#if !defined(PLATFORM_WINDOWS)
                 ASSERT(kCommitGranularity % static_cast<size_t>(sysconf(_SC_PAGESIZE)) == 0);
 #endif
                 const size_t chunk = AlignUp(commitChunkBytes == 0 ? kCommitGranularity : commitChunkBytes, kCommitGranularity);
@@ -128,10 +132,8 @@ namespace BECore {
         return MakeUnique<HeapBlockSource>();
     }
 
-    UniquePtr<IPoolBlockSource> MakeVirtualBlockSource(size_t reserveBytes, size_t commitChunkBytes) {
+    UniquePtr<IPoolBlockSource> MakeVirtualBlockSource([[maybe_unused]] size_t reserveBytes, [[maybe_unused]] size_t commitChunkBytes) {
 #if defined(__EMSCRIPTEN__)
-        static_cast<void>(reserveBytes);
-        static_cast<void>(commitChunkBytes);
         return nullptr;
 #else
         return VirtualBlockSource::Create(reserveBytes, commitChunkBytes);

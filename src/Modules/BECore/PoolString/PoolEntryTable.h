@@ -58,6 +58,11 @@ namespace BECore {
         }
 
     public:
+        /// The most entries `Reserve` prepares for: at the load limit that is a table of 2^23 slots, 128 MB with 16-byte
+        /// slots. A count above it is a hint that came from a file header or a bug, so it is ignored instead of taking
+        /// that much memory (or wrapping the arithmetic). `Insert` is not limited by it: a real load grows the table as needed.
+        static constexpr size_t kMaxReservedEntries = size_t{1} << 22;
+
         explicit PoolEntryTable(size_t initialCapacity) : _slots(initialCapacity) {
             ASSERT(initialCapacity >= 2 && (initialCapacity & (initialCapacity - 1)) == 0);
         }
@@ -71,9 +76,14 @@ namespace BECore {
             ++_used;
         }
 
-        /// Grows the table once so that `entries` in all fit under the load limit; does nothing when they already do. A
-        /// batch calls it before its inserts, so the table is re-placed once however many entries the batch adds.
+        /// Grows the table once so that `entries` in all fit under the load limit; does nothing when they already do or
+        /// when `entries` is above `kMaxReservedEntries`. A batch calls it before its inserts, so the table is re-placed
+        /// once however many entries the batch adds.
         void Reserve(size_t entries) {
+            if (entries > kMaxReservedEntries) {
+                return;
+            }
+            // `entries * kMaxLoadDivisor` cannot overflow, so the doubling ends
             size_t capacity = _slots.size();
             while (entries * kMaxLoadDivisor > capacity) {
                 capacity *= 2;

@@ -379,6 +379,74 @@ namespace BECore::Tests {
         EXPECT_EQ(pool.storage.GetStats().stringCount, names.size());
     }
 
+    namespace {
+
+        constexpr size_t kMaxReservedStrings = PoolEntryTable<PoolStringEntry>::kMaxReservedEntries;
+
+        /// A pool that holds a few strings, so `Used()` is not 0 when the hint comes
+        void InternSome(IsolatedPool& pool, size_t count) {
+            for (size_t i = 0; i < count; ++i) {
+                static_cast<void>(pool.storage.Intern(StringView{CounterName("reserve_some_", i)}));
+            }
+        }
+
+    }  // namespace
+
+    TEST(PoolStringReserveTest, AStringCountThatCannotBeRightIsIgnored) {
+        IsolatedPool pool(SIZE_MAX, 8);
+        InternSome(pool, 3);
+        const PoolStringStats before = pool.storage.GetStats();
+
+        const size_t hints[] = {SIZE_MAX, SIZE_MAX / 2 + 1, SIZE_MAX / 2, SIZE_MAX - before.tableUsed + 1, SIZE_MAX - before.tableUsed, kMaxReservedStrings + 1, kMaxReservedStrings};
+        for (const size_t strings : hints) {
+            SCOPED_TRACE(strings);
+            pool.storage.Reserve(strings, 0);
+            const PoolStringStats after = pool.storage.GetStats();
+            EXPECT_EQ(after.tableCapacity, before.tableCapacity);
+            EXPECT_EQ(after.blockCount, before.blockCount);
+            EXPECT_EQ(after.stringCount, before.stringCount);
+        }
+        EXPECT_EQ(pool.source.served, 1u);
+    }
+
+    TEST(PoolStringReserveTest, ASumThatPassesTheLimitIsIgnoredEvenWhenEachPartIsSmall) {
+        IsolatedPool pool(SIZE_MAX, 8);
+        InternSome(pool, 3);
+        const size_t capacity = pool.storage.GetStats().tableCapacity;
+        pool.storage.Reserve(kMaxReservedStrings - 2, 0);  // 3 are in the table: one more than the limit
+        EXPECT_EQ(pool.storage.GetStats().tableCapacity, capacity);
+    }
+
+    TEST(PoolStringReserveTest, AByteCountThatCannotBeRightTakesNoBlock) {
+        IsolatedPool pool;
+        const size_t hints[] = {SIZE_MAX, SIZE_MAX - 3, SIZE_MAX - 7, SIZE_MAX - 8, kDefaultReservedBytes + 1, size_t{1} << 40};
+        for (const size_t bytes : hints) {
+            SCOPED_TRACE(bytes);
+            pool.storage.Reserve(0, bytes);
+            const PoolStringStats stats = pool.storage.GetStats();
+            EXPECT_EQ(stats.blockCount, 0u);
+            EXPECT_EQ(stats.blockBytes, 0u);
+            EXPECT_EQ(pool.source.served + pool.source.refused, 0u);
+        }
+    }
+
+    TEST(PoolStringReserveTest, AHintAtTheLimitsStillWorks) {
+        IsolatedPool pool(SIZE_MAX, 8);
+        pool.storage.Reserve(kMaxReservedStrings, kDefaultReservedBytes);
+        const PoolStringStats stats = pool.storage.GetStats();
+        EXPECT_EQ(stats.tableCapacity, TableCapacityFor(8, kMaxReservedStrings));
+        EXPECT_EQ(stats.blockCount, 1u);
+        EXPECT_EQ(stats.blockBytes, kDefaultReservedBytes);
+        EXPECT_EQ(pool.source.served, 1u);
+    }
+
+    TEST(PoolStringReserveTest, AllocateBlockOfANormalSizeIsRoundedAndNeverNull) {
+        IsolatedPool pool;
+        const PoolBlock block = pool.storage.AllocateBlock(4093);
+        EXPECT_TRUE(block.Data() != nullptr);
+        EXPECT_EQ(block.Capacity(), 4096u);
+    }
+
     TEST(PoolStringReserveTest, TheProcessPoolTakesAHint) {
         const PoolStringStats before = PoolString::GetStats();
         PoolString::Reserve(10, 1024);

@@ -2,6 +2,7 @@
 
 #include <BECore/PoolString/PoolBlockSource.h>
 #include <BECore/PoolString/PoolStringStorage.h>
+#include <new>
 
 namespace BECore {
 
@@ -17,7 +18,8 @@ namespace BECore {
         };
 
         Details::PoolStringStorage& Storage() {
-            static ProcessPool* const pool = new ProcessPool();
+            alignas(ProcessPool) static unsigned char storage[sizeof(ProcessPool)];
+            static ProcessPool* const pool = new (storage) ProcessPool();
             return pool->storage;
         }
 

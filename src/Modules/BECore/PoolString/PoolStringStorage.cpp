@@ -263,9 +263,18 @@ namespace BECore::Details {
     void PoolStringStorage::Reserve(size_t strings, size_t bytes) {
         UniqueLock lock(_mutex);
         ++_writeLocks;
-        _table.Reserve(_table.Used() + strings);
+        // Each half of the hint is dropped when it is not sane (it may come from a file header): the sum is checked
+        // against the table's limit before it is formed, and a block larger than the arena's reservation could only come
+        // from the heap fallback, which aborts when it cannot allocate
+        constexpr size_t kMaxStrings = PoolEntryTable<Entry>::kMaxReservedEntries;
+        if (strings <= kMaxStrings && _table.Used() <= kMaxStrings - strings) {
+            _table.Reserve(_table.Used() + strings);
+        }
+        if (bytes == 0 || bytes > kDefaultReservedBytes) {
+            return;
+        }
         const size_t aligned = (bytes + kPoolEntryAlignment - 1) & ~(kPoolEntryAlignment - 1);
-        if (aligned != 0 && _capacity - _offset < aligned) {
+        if (_capacity - _offset < aligned) {
             _current = TakeRuntimeBlock(aligned);
             _capacity = aligned;
             _offset = 0;
@@ -273,6 +282,8 @@ namespace BECore::Details {
     }
 
     PoolBlock PoolStringStorage::AllocateBlock(size_t bytes) {
+        // A size from a file header is validated by the loader before it gets here: the rounding below cannot wrap under this limit
+        ASSERT(bytes <= kPoolEntryMaxTextBytes, "AllocateBlock: the size is not a size of a block");
         const size_t aligned = bytes == 0 ? kPoolEntryAlignment : (bytes + kPoolEntryAlignment - 1) & ~(kPoolEntryAlignment - 1);
         UniqueLock lock(_mutex);
         ++_writeLocks;
