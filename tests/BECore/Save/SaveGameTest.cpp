@@ -35,7 +35,7 @@ namespace BECore::Tests {
             state.speed = 2.25f;
             state.hardcore = true;
             state.title = "Level three";
-            state.hero = PoolString::Intern("Hero");
+            state.hero = "Hero"_intern;
             state.difficulty = Difficulty::Hard;
             state.position.x = -7;
             state.position.y = 42;

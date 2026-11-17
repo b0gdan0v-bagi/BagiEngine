@@ -572,7 +572,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(registry.Create("IComponent"));
         EXPECT_FALSE(registry.Create("NoSuchType"));
         EXPECT_FALSE(registry.Create(*registry.Find("RegInner")));
-        EXPECT_FALSE(PoolString::Find("NoSuchType").has_value());
+        EXPECT_FALSE(PoolString::Find(StringView{"NoSuchType"}).has_value());
     }
 
     TEST(TypeRegistryEngineTest, CreateAsGivesTheBaseOnlyForADerivedType) {

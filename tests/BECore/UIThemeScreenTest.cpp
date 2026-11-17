@@ -414,7 +414,7 @@ namespace BECore::Tests {
     TEST_F(UIThemeScreenTest, ATextColourThatIsThePlatesColourIsCaughtByTheLegibilityCheck) {
         ASSERT_NO_FATAL_FAILURE(LoadScene());
         UIThemes& themes = CoreManager::GetUIThemes();
-        const PoolString washed = PoolString::Intern("washed");
+        const PoolString washed = "washed"_intern;
         for (const char* token : {"panel", "accent", "button", "buttonHover", "buttonText", "track", "note"}) {
             themes.Set(washed, token, *themes.Find(token));
         }

@@ -320,7 +320,7 @@ namespace BECore::Tests {
         unknown["name"] = "client_only_game_7f3a91";
 
         EXPECT_EQ(ErrorCode(Call("switch_game", unknown)), "unknown_game");
-        EXPECT_FALSE(PoolString::Find("client_only_game_7f3a91").has_value());
+        EXPECT_FALSE(PoolString::Find(StringView{"client_only_game_7f3a91"}).has_value());
     }
 
     TEST_F(GameControlTest, GetStateWrapsTheStateOfTheGame) {

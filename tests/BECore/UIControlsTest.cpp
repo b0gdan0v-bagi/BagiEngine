@@ -194,7 +194,7 @@ namespace BECore::Tests {
             ASSERT_FALSE(deserializer.HasErrors());
             _manager->Initialize();
 
-            _canvas = _manager->GetSceneByName(PoolString::Intern("Main"))->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
+            _canvas = _manager->GetSceneByName("Main"_intern)->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
             ASSERT_TRUE(_canvas);
         }
 
@@ -208,7 +208,7 @@ namespace BECore::Tests {
         }
 
         void Draw() {
-            _manager->SetActiveScene(PoolString::Intern("Main"));
+            _manager->SetActiveScene("Main"_intern);
             _renderer->ClearCalls();
             _manager->DrawAll();
         }
@@ -314,7 +314,7 @@ namespace BECore::Tests {
         EXPECT_EQ(title.overflow, TextOverflow::Ellipsis);  // the default
 
         const auto& ok = Clicker("Ok");
-        EXPECT_EQ(ok.action, PoolString::Intern("UIControlsTestOk"));
+        EXPECT_EQ(ok.action, "UIControlsTestOk"_intern);
         EXPECT_TRUE(El("Ok").IsInteractive());
         EXPECT_EQ(Text("Ok").align, TextAlign::Center);
         EXPECT_EQ(Text("Ok").verticalAlign, UIVerticalAlign::Center);
@@ -327,30 +327,30 @@ namespace BECore::Tests {
         EXPECT_FALSE(Get<UIPanel>("Frame").blocksInput);
         EXPECT_EQ(Get<UIStack>("Row").layout, UILayoutKind::Stack);
         EXPECT_EQ(Get<UISegmented>("Choice").layout, UILayoutKind::Stack);
-        EXPECT_EQ(Get<UISegmented>("Choice").bind, PoolString::Intern("choice"));
+        EXPECT_EQ(Get<UISegmented>("Choice").bind, "choice"_intern);
         EXPECT_TRUE(Get<UISegmented>("Choice").disabled);
         const auto* toggle = El("Switch").GetComponent<UIToggleComponent>();
         ASSERT_NE(toggle, nullptr);
-        EXPECT_EQ(toggle->bind, PoolString::Intern("switchOn"));
-        EXPECT_EQ(toggle->onValue, PoolString::Intern("yes"));
-        EXPECT_EQ(toggle->offValue, PoolString::Intern("no"));
+        EXPECT_EQ(toggle->bind, "switchOn"_intern);
+        EXPECT_EQ(toggle->onValue, "yes"_intern);
+        EXPECT_EQ(toggle->offValue, "no"_intern);
         EXPECT_TRUE(Clicker("Switch").disabled);
         EXPECT_TRUE(El("Switch").IsInteractive());
-        EXPECT_EQ(Get<UIProgressBar>("Meter").bind, PoolString::Intern("meter"));
+        EXPECT_EQ(Get<UIProgressBar>("Meter").bind, "meter"_intern);
         EXPECT_FLOAT_EQ(Get<UIProgressBar>("Meter").minValue, 10.0f);
         EXPECT_FLOAT_EQ(Get<UIProgressBar>("Meter").maxValue, 90.0f);
         EXPECT_FALSE(Get<UIProgressBar>("Meter").interactive);
         const auto* level = El("Level").GetComponent<UISliderComponent>();
         ASSERT_NE(level, nullptr);
-        EXPECT_EQ(level->bind, PoolString::Intern("level"));
-        EXPECT_EQ(level->action, PoolString::Intern("UIControlsTestLevel"));
+        EXPECT_EQ(level->bind, "level"_intern);
+        EXPECT_EQ(level->action, "UIControlsTestLevel"_intern);
         EXPECT_FLOAT_EQ(level->minValue, 2.0f);
         EXPECT_FLOAT_EQ(level->maxValue, 12.0f);
         EXPECT_FLOAT_EQ(level->step, 0.5f);
         EXPECT_TRUE(Clicker("Level").disabled);
         EXPECT_TRUE(El("Level").IsInteractive());
-        EXPECT_EQ(Get<UIDropdown>("Pick").bind, PoolString::Intern("pickVar"));
-        EXPECT_EQ(Get<UIDropdown>("Pick").action, PoolString::Intern("UIControlsTestPick"));
+        EXPECT_EQ(Get<UIDropdown>("Pick").bind, "pickVar"_intern);
+        EXPECT_EQ(Get<UIDropdown>("Pick").action, "UIControlsTestPick"_intern);
         ASSERT_NE(Get<UIDropdown>("Pick").GetComponent<UITextComponent>(), nullptr);
         EXPECT_EQ(Get<UIDropdown>("Pick").GetComponent<UITextComponent>()->text, "Pick one");
         EXPECT_FLOAT_EQ(Get<UIDropdown>("Pick").optionHeight, 48.0f);
@@ -407,7 +407,7 @@ namespace BECore::Tests {
             style.rect.aspectMode = UIAspectMode::Fill;
             style.rect.margin = {1.0f, 2.0f, 3.0f, 4.0f};
             style.rect.flex = 2.0f;
-            style.rect.region = PoolString::Intern("table.plate.1");
+            style.rect.region = "table.plate.1"_intern;
             style.stack.direction = UIStackDirection::Horizontal;
             style.stack.spacing = 7.0f;
             style.stack.padding = {8.0f, 9.0f, 10.0f, 11.0f};
@@ -429,17 +429,17 @@ namespace BECore::Tests {
             box.gradientColor = Paint(tokens, Color{75, 76, 77, 78});
             box.gradientDirection = UIGradientDirection::Horizontal;
             box.shadow = {1.0f, 2.0f, 3.0f, 4.0f, tokens ? Color{} : Color{79, 80, 81, 82}};
-            box.shadowColorToken = tokens ? PoolString::Intern("tokShadow") : PoolString{};
+            box.shadowColorToken = tokens ? "tokShadow"_intern : PoolString{};
             box.glow = {-1.0f, -2.0f, 5.0f, -0.5f, tokens ? Color{} : Color{83, 84, 85, 86}};
-            box.glowColorToken = tokens ? PoolString::Intern("tokGlow") : PoolString{};
+            box.glowColorToken = tokens ? "tokGlow"_intern : PoolString{};
             box.highlight = Paint(tokens, Color{87, 88, 89, 90});
         }
 
         /// The text fields of a text component, each set to something other than its default
         void SetEveryTextField(UITextComponent& text, bool tokens) {
             text.text = "Some text";
-            text.font = PoolString::Intern("assets/fonts/Other.ttf");
-            text.fontFamily = PoolString::Intern("Test");
+            text.font = "assets/fonts/Other.ttf"_intern;
+            text.fontFamily = "Test"_intern;
             text.fontWeight = 700;
             text.textColor = Paint(tokens, Color{21, 22, 23, 24});
             text.hoverTextColor = Paint(tokens, Color{101, 102, 103, 104});
@@ -460,31 +460,31 @@ namespace BECore::Tests {
         void SetEveryComponentField(UIElement& element, bool tokens) {
             SetEveryTextField(element.AddComponent<UITextComponent>(), tokens);
             auto& image = element.AddComponent<UIImageComponent>();
-            image.sprite = PoolString::Intern("ImageSprite");
+            image.sprite = "ImageSprite"_intern;
             image.tint = Paint(tokens, Color{5, 6, 7, 8});
             image.hoverTint = Paint(tokens, Color{117, 118, 119, 120});
             image.pressedTint = Paint(tokens, Color{121, 122, 123, 124});
             image.disabledTint = Paint(tokens, Color{125, 126, 127, 128});
             image.stretch = true;
             auto& clicker = element.AddComponent<UIInputClicker>();
-            clicker.action = PoolString::Intern("BusyAction");
-            clicker.value = PoolString::Intern("BusyValue");
+            clicker.action = "BusyAction"_intern;
+            clicker.value = "BusyValue"_intern;
             clicker.disabled = true;
             clicker.stateLook = false;
             element.AddComponent<UITooltipComponent>().text = "Busy {#tip.key} {name}";
             auto& toggle = element.AddComponent<UIToggleComponent>();
-            toggle.bind = PoolString::Intern("busyOn");
-            toggle.action = PoolString::Intern("BusyToggleAction");
-            toggle.onValue = PoolString::Intern("BusyOn");
-            toggle.offValue = PoolString::Intern("BusyOff");
+            toggle.bind = "busyOn"_intern;
+            toggle.action = "BusyToggleAction"_intern;
+            toggle.onValue = "BusyOn"_intern;
+            toggle.offValue = "BusyOff"_intern;
             auto& thumb = element.AddComponent<UISwitchComponent>();
             thumb.trackColor = Paint(tokens, Color{31, 32, 33, 34});
             thumb.fillColor = Paint(tokens, Color{35, 36, 37, 38});
             thumb.thumbColor = Paint(tokens, Color{39, 40, 41, 42});
             thumb.partShape = UIPartShape::Round;
             auto& slider = element.AddComponent<UISliderComponent>();
-            slider.bind = PoolString::Intern("busyLevel");
-            slider.action = PoolString::Intern("BusySliderAction");
+            slider.bind = "busyLevel"_intern;
+            slider.action = "BusySliderAction"_intern;
             slider.minValue = -1.5f;
             slider.maxValue = 7.5f;
             slider.step = 0.25f;
@@ -496,7 +496,7 @@ namespace BECore::Tests {
 
         void SetEveryControlField(UIElement& element, bool tokens) {
             const StringView typeName = element.GetTypeMeta().typeName;
-            element.name = PoolString::Intern("Busy");
+            element.name = "Busy"_intern;
             element.layout = UILayoutKind::Stack;
             element.color = Paint(tokens, Color{1, 2, 3, 4});
             element.blocksInput = true;
@@ -505,26 +505,26 @@ namespace BECore::Tests {
             element.opacity = 0.625f;
             element.stateDuration = 0.25f;
             auto& probe = element.AddComponent<UITestProbe>();  // the list of components rides along with every control
-            probe.tag = PoolString::Intern("BusyProbe");
+            probe.tag = "BusyProbe"_intern;
             probe.mark = Paint(tokens, Color{1, 2, 3, 4});
             probe.takesClicks = true;
-            element.AddComponent<UITestOther>().tag = PoolString::Intern("BusyOther");
+            element.AddComponent<UITestOther>().tag = "BusyOther"_intern;
             if (auto* panel = element.Cast<UIPanel>()) {
-                panel->sprite = PoolString::Intern("PanelSprite");
+                panel->sprite = "PanelSprite"_intern;
                 panel->sliceBorder = {1.0f, 2.0f, 3.0f, 4.0f};
                 panel->spriteTint = Paint(tokens, Color{5, 6, 7, 8});
             } else if (auto* group = element.Cast<UISegmented>()) {
-                group->bind = PoolString::Intern("busyChoice");
+                group->bind = "busyChoice"_intern;
                 group->disabled = true;
             } else if (auto* dropdown = element.Cast<UIDropdown>()) {
-                dropdown->bind = PoolString::Intern("busyPick");
-                dropdown->action = PoolString::Intern("BusyPickAction");
+                dropdown->bind = "busyPick"_intern;
+                dropdown->action = "BusyPickAction"_intern;
                 dropdown->Open();  // runtime state: the saved text of the original and of the copy must still agree
                 dropdown->disabled = true;
                 dropdown->arrowColor = Paint(tokens, Color{63, 64, 65, 66});
                 dropdown->optionHeight = 33.5f;
             } else if (auto* bar = element.Cast<UIProgressBar>()) {
-                bar->bind = PoolString::Intern("busyProgress");
+                bar->bind = "busyProgress"_intern;
                 bar->minValue = -2.5f;
                 bar->maxValue = 12.5f;
                 bar->trackColor = Paint(tokens, Color{43, 44, 45, 46});
@@ -1113,7 +1113,7 @@ namespace BECore::Tests {
         auto& title = El("Title");
         ASSERT_FALSE(GlyphsIn(title).empty());
 
-        EXPECT_TRUE(_canvas->SetElementVisible(PoolString::Intern("Title"), false));
+        EXPECT_TRUE(_canvas->SetElementVisible("Title"_intern, false));
         Draw();
         EXPECT_TRUE(title.rect.IsEmpty());
         EXPECT_TRUE(_renderer->calls.size() > 0);
@@ -1121,11 +1121,11 @@ namespace BECore::Tests {
             EXPECT_FALSE(call.kind == DrawKind::Texture && call.rect.x < 200.0f && call.rect.y < 50.0f) << "the hidden label draws nothing";
         }
 
-        EXPECT_TRUE(_canvas->SetElementVisible(PoolString::Intern("Title"), true));
+        EXPECT_TRUE(_canvas->SetElementVisible("Title"_intern, true));
         Draw();
         EXPECT_FALSE(GlyphsIn(title).empty());
 
-        EXPECT_FALSE(_canvas->SetElementVisible(PoolString::Intern("NoSuchElement"), false));
+        EXPECT_FALSE(_canvas->SetElementVisible("NoSuchElement"_intern, false));
     }
 
     TEST_F(UIControlsTest, AHiddenButtonTakesNoClicks) {
@@ -1134,8 +1134,8 @@ namespace BECore::Tests {
         auto& ok = El("Ok");
         const Rect c = Center(ok);
 
-        Scene& scene = *_manager->GetSceneByName(PoolString::Intern("Main"));
-        EXPECT_TRUE(UICanvasComponent::SetElementVisibleByName(scene, PoolString::Intern("Ok"), false));
+        Scene& scene = *_manager->GetSceneByName("Main"_intern);
+        EXPECT_TRUE(UICanvasComponent::SetElementVisibleByName(scene, "Ok"_intern, false));
         Draw();
 
         CoreManager::GetUIInput().DispatchMouseButtonDown(Button(c.x, c.y, true));
@@ -1143,7 +1143,7 @@ namespace BECore::Tests {
         EXPECT_EQ(actions.Total(), 0u);
         EXPECT_EQ(_canvas->GetLayout().HitTest(c.x, c.y), &Get<UIPanel>("Plate")) << "the click lands on the plate below";
 
-        EXPECT_FALSE(UICanvasComponent::SetElementVisibleByName(scene, PoolString::Intern("NoSuchElement"), true));
+        EXPECT_FALSE(UICanvasComponent::SetElementVisibleByName(scene, "NoSuchElement"_intern, true));
     }
 
     // ---- hit testing ------------------------------------------------------------------------------------------------------
@@ -1244,7 +1244,7 @@ namespace BECore::Tests {
         const float before = GlyphsIn(title)[0].rect.h;
 
         UIElementOverride bigger;
-        bigger.element = PoolString::Intern("Title");
+        bigger.element = "Title"_intern;
         bigger.fontSize = 48.0f;
         UIVariant variant;
         variant.overrides.push_back(bigger);  // no condition: always on
@@ -1499,7 +1499,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(ok.hovered);
         ASSERT_TRUE(ok.pressed);
 
-        EXPECT_TRUE(UICanvasComponent::SetVisibleByName(*_manager->GetSceneByName(PoolString::Intern("Main")), PoolString::Intern("Hud"), false));
+        EXPECT_TRUE(UICanvasComponent::SetVisibleByName(*_manager->GetSceneByName("Main"_intern), "Hud"_intern, false));
         Draw();
 
         EXPECT_FALSE(ok.hovered);
@@ -1517,11 +1517,11 @@ namespace BECore::Tests {
         EXPECT_EQ(actions.Count("UIControlsTestOk"), 1);
         EXPECT_TRUE(actions.LastValue().Empty()) << "a plain button emits an empty value";
 
-        Clicker("Ok").value = PoolString::Intern("computer");
+        Clicker("Ok").value = "computer"_intern;
         ASSERT_TRUE(Press(ok));
         ASSERT_TRUE(Release(c.x, c.y));
         EXPECT_EQ(actions.Count("UIControlsTestOk"), 2);
-        EXPECT_EQ(actions.LastValue(), PoolString::Intern("computer"));
+        EXPECT_EQ(actions.LastValue(), "computer"_intern);
     }
 
     TEST_F(UIControlsTest, AValueAndASelectedColorAreReadFromTheFile) {
@@ -1538,7 +1538,7 @@ namespace BECore::Tests {
         const UIElement& button = *canvas->_elements[0];
         const auto* clicker = button.GetComponent<UIInputClicker>();
         ASSERT_NE(clicker, nullptr);
-        EXPECT_EQ(clicker->value, PoolString::Intern("two"));
+        EXPECT_EQ(clicker->value, "two"_intern);
         EXPECT_EQ(button.selectedColor.g, 2);
         EXPECT_FALSE(button.selected) << "the selection is a runtime state, never read from a file";
         EXPECT_FALSE(button.groupDisabled);

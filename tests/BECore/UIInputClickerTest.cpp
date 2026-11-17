@@ -165,8 +165,8 @@ namespace BECore::Tests {
             _manager->Deserialize(deserializer);
             ASSERT_FALSE(deserializer.HasErrors());
             _manager->Initialize();
-            _manager->SetActiveScene(PoolString::Intern("Main"));
-            _canvas = _manager->GetSceneByName(PoolString::Intern("Main"))->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
+            _manager->SetActiveScene("Main"_intern);
+            _canvas = _manager->GetSceneByName("Main"_intern)->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
             ASSERT_TRUE(_canvas);
 
             const Vector<uint8_t> pixels(static_cast<size_t>(kPictureSide) * kPictureSide * 4, 200);
@@ -275,8 +275,8 @@ namespace BECore::Tests {
     TEST_F(UIInputClickerTest, TheClickerComesFromTheFileWithItsFields) {
         const UIInputClicker* clicker = Get("Box").GetComponent<UIInputClicker>();
         ASSERT_NE(clicker, nullptr);
-        EXPECT_EQ(clicker->action, PoolString::Intern("Boxed"));
-        EXPECT_EQ(clicker->value, PoolString::Intern("v1"));
+        EXPECT_EQ(clicker->action, "Boxed"_intern);
+        EXPECT_EQ(clicker->value, "v1"_intern);
         EXPECT_FALSE(clicker->disabled);
         EXPECT_TRUE(Get("Off").GetComponent<UIInputClicker>()->disabled);
     }
@@ -299,8 +299,8 @@ namespace BECore::Tests {
         Click(Get("Box"));
 
         ASSERT_EQ(actions.Total(), 1u);
-        EXPECT_EQ(actions.All()[0].action, PoolString::Intern("Boxed"));
-        EXPECT_EQ(actions.All()[0].value, PoolString::Intern("v1"));
+        EXPECT_EQ(actions.All()[0].action, "Boxed"_intern);
+        EXPECT_EQ(actions.All()[0].value, "v1"_intern);
     }
 
     TEST_F(UIInputClickerTest, AClickWithNoValueEmitsAnEmptyOne) {
@@ -308,7 +308,7 @@ namespace BECore::Tests {
         Click(Get("Pic"));
 
         ASSERT_EQ(actions.Total(), 1u);
-        EXPECT_EQ(actions.All()[0].action, PoolString::Intern("PicAction"));
+        EXPECT_EQ(actions.All()[0].action, "PicAction"_intern);
         EXPECT_TRUE(actions.All()[0].value.Empty());
     }
 
@@ -345,7 +345,7 @@ namespace BECore::Tests {
         Release(edge, y);
 
         ASSERT_EQ(actions.Total(), 1u);
-        EXPECT_EQ(actions.All()[0].action, PoolString::Intern("PicAction"));
+        EXPECT_EQ(actions.All()[0].action, "PicAction"_intern);
     }
 
     TEST_F(UIInputClickerTest, AClickerWithNoActionEmitsNothingButStillTakesTheClick) {
@@ -397,9 +397,9 @@ namespace BECore::Tests {
 
     TEST_F(UIInputClickerTest, AHiddenElementTakesNoClick) {
         ActionRecorder actions;
-        Scene& scene = *_manager->GetSceneByName(PoolString::Intern("Main"));
+        Scene& scene = *_manager->GetSceneByName("Main"_intern);
         const Vec2 at = CenterOf(Get("Hide"));
-        EXPECT_TRUE(UICanvasComponent::SetElementVisibleByName(scene, PoolString::Intern("Hide"), false));
+        EXPECT_TRUE(UICanvasComponent::SetElementVisibleByName(scene, "Hide"_intern, false));
         Draw();
 
         MoveTo(at.x, at.y);
@@ -497,7 +497,7 @@ namespace BECore::Tests {
         ActionRecorder actions;
         Click(Get("Still"));
         ASSERT_EQ(actions.Total(), 1u);
-        EXPECT_EQ(actions.All()[0].action, PoolString::Intern("StillAction"));
+        EXPECT_EQ(actions.All()[0].action, "StillAction"_intern);
         Click(Get("StillOff"));
         EXPECT_EQ(actions.Total(), 1u);
     }

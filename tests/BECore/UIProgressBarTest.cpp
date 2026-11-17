@@ -147,7 +147,7 @@ namespace BECore::Tests {
             ASSERT_FALSE(deserializer.HasErrors());
             _manager->Initialize();
 
-            _canvas = _manager->GetSceneByName(PoolString::Intern("Main"))->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
+            _canvas = _manager->GetSceneByName("Main"_intern)->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
             ASSERT_TRUE(_canvas);
         }
 
@@ -160,7 +160,7 @@ namespace BECore::Tests {
         }
 
         void Draw() {
-            _manager->SetActiveScene(PoolString::Intern("Main"));
+            _manager->SetActiveScene("Main"_intern);
             _renderer->ClearCalls();
             _manager->DrawAll();
         }
@@ -215,7 +215,7 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(unit.maxValue, 1.0f);
         EXPECT_FALSE(unit.interactive);
         EXPECT_FALSE(unit.blocksInput);
-        EXPECT_EQ(unit.bind, PoolString::Intern("unit"));
+        EXPECT_EQ(unit.bind, "unit"_intern);
         EXPECT_FLOAT_EQ(Bar("Percent").maxValue, 100.0f);
         EXPECT_FLOAT_EQ(Bar("Signed").minValue, -50.0f);
 
@@ -415,16 +415,16 @@ namespace BECore::Tests {
         ASSERT_FALSE(deserializer.HasErrors());
         loaded->Initialize();
 
-        const auto* signedBar = loaded->GetRoot().FindByName(PoolString::Intern("Signed"))->Cast<UIProgressBar>();
+        const auto* signedBar = loaded->GetRoot().FindByName("Signed"_intern)->Cast<UIProgressBar>();
         ASSERT_NE(signedBar, nullptr);
-        EXPECT_EQ(signedBar->bind, PoolString::Intern("signed"));
+        EXPECT_EQ(signedBar->bind, "signed"_intern);
         EXPECT_FLOAT_EQ(signedBar->minValue, -50.0f);
         EXPECT_FLOAT_EQ(signedBar->maxValue, 50.0f);
-        const auto* custom = loaded->GetRoot().FindByName(PoolString::Intern("Custom"))->Cast<UIProgressBar>();
+        const auto* custom = loaded->GetRoot().FindByName("Custom"_intern)->Cast<UIProgressBar>();
         ASSERT_NE(custom, nullptr);
         EXPECT_EQ(custom->trackColor.g, 20);
         EXPECT_EQ(custom->fillColor.g, 50);
-        const auto* unit = loaded->GetRoot().FindByName(PoolString::Intern("Unit"))->Cast<UIProgressBar>();
+        const auto* unit = loaded->GetRoot().FindByName("Unit"_intern)->Cast<UIProgressBar>();
         ASSERT_NE(unit, nullptr);
         EXPECT_FLOAT_EQ(unit->maxValue, 1.0f) << "the defaults come back as the defaults";
         ASSERT_EQ(loaded->_elements.size(), _canvas->_elements.size());
@@ -449,10 +449,10 @@ namespace BECore::Tests {
         ASSERT_FALSE(deserializer.HasErrors());
         loaded->Initialize();
 
-        const auto* custom = loaded->GetRoot().FindByName(PoolString::Intern("Custom"))->Cast<UIProgressBar>();
+        const auto* custom = loaded->GetRoot().FindByName("Custom"_intern)->Cast<UIProgressBar>();
         ASSERT_NE(custom, nullptr);
         EXPECT_EQ(custom->fillColor.b, 60);
-        EXPECT_EQ(loaded->GetRoot().FindByName(PoolString::Intern("Unit"))->Cast<UIProgressBar>()->maxValue, 7.5f);
+        EXPECT_EQ(loaded->GetRoot().FindByName("Unit"_intern)->Cast<UIProgressBar>()->maxValue, 7.5f);
         ASSERT_EQ(loaded->_elements.size(), _canvas->_elements.size());
         for (size_t i = 0; i < loaded->_elements.size(); ++i) {
             EXPECT_STREQ(ElementToXml(*_canvas->_elements[i]).c_str(), ElementToXml(*loaded->_elements[i]).c_str()) << i;
@@ -462,7 +462,7 @@ namespace BECore::Tests {
     // ---- the shape of the parts ----------------------------------------------------------------------------------------------
 
     TEST_F(UIProgressBarTest, TheTrackAndTheFillAreRectanglesByDefault) {
-        CoreManager::GetUIVars().Set(PoolString::Intern("percent"), "50");
+        CoreManager::GetUIVars().Set("percent"_intern, "50");
         Draw();
         const Rect area = Bar("Percent").rect;
         EXPECT_EQ(Bar("Percent").partShape, UIPartShape::Square);
@@ -471,7 +471,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIProgressBarTest, ARoundBarDrawsAPillTrackAndAPillFill) {
-        CoreManager::GetUIVars().Set(PoolString::Intern("percent"), "50");
+        CoreManager::GetUIVars().Set("percent"_intern, "50");
         auto& bar = Bar("Percent");
         bar.partShape = UIPartShape::Round;
         Draw();
@@ -484,7 +484,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIProgressBarTest, AFillShorterThanTheBarIsHighIsASmallerPill) {
-        CoreManager::GetUIVars().Set(PoolString::Intern("percent"), "5");
+        CoreManager::GetUIVars().Set("percent"_intern, "5");
         auto& bar = Bar("Percent");
         bar.partShape = UIPartShape::Round;
         Draw();
@@ -526,8 +526,8 @@ namespace BECore::Tests {
         deserializer.EndObject();
         ASSERT_FALSE(deserializer.HasErrors());
         loaded->Initialize();
-        EXPECT_EQ(loaded->GetRoot().FindByName(PoolString::Intern("Unit"))->Cast<UIProgressBar>()->partShape, UIPartShape::Round);
-        EXPECT_EQ(loaded->GetRoot().FindByName(PoolString::Intern("Percent"))->Cast<UIProgressBar>()->partShape, UIPartShape::Square);
+        EXPECT_EQ(loaded->GetRoot().FindByName("Unit"_intern)->Cast<UIProgressBar>()->partShape, UIPartShape::Round);
+        EXPECT_EQ(loaded->GetRoot().FindByName("Percent"_intern)->Cast<UIProgressBar>()->partShape, UIPartShape::Square);
     }
 
 }  // namespace BECore::Tests

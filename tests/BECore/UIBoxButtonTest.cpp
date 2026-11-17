@@ -225,7 +225,7 @@ namespace BECore::Tests {
 
     TEST_F(UIBoxButtonSegmentedTest, SegmentedStillMarksOneStyledSegmentSelected) {
         auto group = New<UISegmented>();
-        group->bind = PoolString::Intern("boxButtonChoice");
+        group->bind = "boxButtonChoice"_intern;
         Vector<IntrusivePtr<UIElement>> segments;
         for (const char* value : {"one", "two", "three"}) {
             auto segment = MakeElement(State::Normal);

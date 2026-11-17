@@ -7,12 +7,12 @@ namespace BECore::Tests {
 
         Vector<EditorCommand> MakeCommands() {
             return {
-                {PoolString::Intern("file.quit"), "Quit", std::nullopt, true},
-                {PoolString::Intern("view.resetLayout"), "Reset Layout", std::nullopt, true},
-                {PoolString::Intern("view.saveLayout"), "Save Layout As", std::nullopt, true},
-                {PoolString::Intern("scene.save"), "Save Scene", std::nullopt, true},
-                {PoolString::Intern("config.save"), "Save Config", std::nullopt, true},
-                {PoolString::Intern("view.preferences"), "Preferences", std::nullopt, true},
+                {"file.quit"_intern, "Quit", std::nullopt, true},
+                {"view.resetLayout"_intern, "Reset Layout", std::nullopt, true},
+                {"view.saveLayout"_intern, "Save Layout As", std::nullopt, true},
+                {"scene.save"_intern, "Save Scene", std::nullopt, true},
+                {"config.save"_intern, "Save Config", std::nullopt, true},
+                {"view.preferences"_intern, "Preferences", std::nullopt, true},
             };
         }
 
@@ -54,10 +54,10 @@ namespace BECore::Tests {
 
     TEST(CommandFilterTest, PrefixAndWordStartBeatScatteredMatches) {
         const Vector<EditorCommand> commands = {
-            {PoolString::Intern("a.scatter"), "Slow Cardigan Yak", std::nullopt, true},
-            {PoolString::Intern("b.word"), "Open Layout", std::nullopt, true},
-            {PoolString::Intern("c.prefix"), "Layout Reset", std::nullopt, true},
-            {PoolString::Intern("d.inside"), "Play Style", std::nullopt, true},
+            {"a.scatter"_intern, "Slow Cardigan Yak", std::nullopt, true},
+            {"b.word"_intern, "Open Layout", std::nullopt, true},
+            {"c.prefix"_intern, "Layout Reset", std::nullopt, true},
+            {"d.inside"_intern, "Play Style", std::nullopt, true},
         };
         // The two scattered matches tie and keep the order of the table
         EXPECT_EQ(Filter("lay", commands), "Layout Reset|Open Layout|Slow Cardigan Yak|Play Style");
@@ -83,8 +83,8 @@ namespace BECore::Tests {
 
     TEST(CommandFilterTest, TitleMatchBeatsIdMatch) {
         const Vector<EditorCommand> commands = {
-            {PoolString::Intern("save.thing"), "Open", std::nullopt, true},
-            {PoolString::Intern("x.y"), "Save It", std::nullopt, true},
+            {"save.thing"_intern, "Open", std::nullopt, true},
+            {"x.y"_intern, "Save It", std::nullopt, true},
         };
         EXPECT_EQ(Filter("save", commands), "Save It|Open");
     }

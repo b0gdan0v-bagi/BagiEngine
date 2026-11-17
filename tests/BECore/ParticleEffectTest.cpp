@@ -57,8 +57,8 @@ namespace BECore::Tests {
             effect.color.from = Color(255, 200, 50, 255);
             effect.color.to = Color(200, 20, 10, 0);
             effect.color.ease = EaseType::CubicIn;
-            effect.spriteId = PoolString::Intern("Spark");
-            effect.texturePath = PoolString::Intern("assets/spark.png");
+            effect.spriteId = "Spark"_intern;
+            effect.texturePath = "assets/spark.png"_intern;
             effect.flipbook.columns = 4;
             effect.flipbook.rows = 2;
             effect.flipbook.frames = 7;

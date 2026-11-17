@@ -131,7 +131,7 @@ namespace BECore::Tests {
             EXPECT_TRUE(parsed) << parsed.description();
             _manager = LoadSceneManager(XmlNode{_doc.document_element()}, _loader);
             _manager->Initialize();
-            Scene* scene = _manager->GetSceneByName(PoolString::Intern("Main"));
+            Scene* scene = _manager->GetSceneByName("Main"_intern);
             EXPECT_NE(scene, nullptr);
             return *scene;
         }
@@ -162,7 +162,7 @@ namespace BECore::Tests {
         const IntrusivePtr<SceneNode> node = scene.InstantiateNode(Ref(R"(<node ref="nodes/Box"/>)"), _loader);
 
         ASSERT_TRUE(node);
-        EXPECT_EQ(node->GetName(), PoolString::Intern("Box"));
+        EXPECT_EQ(node->GetName(), "Box"_intern);
         EXPECT_EQ(node->GetLayer(), 2);
         EXPECT_EQ(node->GetSourceRef(), PoolString::Intern(kBoxRef));
         EXPECT_EQ(node->GetParent(), &scene.GetRootNode());
@@ -208,7 +208,7 @@ namespace BECore::Tests {
 
         ASSERT_TRUE(node);
         EXPECT_EQ(ChildNames(scene.GetRootNode()), (Vector<String>{"A", "Crate", "C"}));
-        EXPECT_EQ(node->GetName(), PoolString::Intern("Crate"));
+        EXPECT_EQ(node->GetName(), "Crate"_intern);
         EXPECT_EQ(node->GetLayer(), 5);
         EXPECT_EQ(node->GetSourceRef(), expectedSource);
         EXPECT_EQ(ComponentTexts(*node), expectedTexts);
@@ -246,7 +246,7 @@ namespace BECore::Tests {
 
         scene.InstantiateNode(first, _loader, nullptr, Scene::kAppend);
         EXPECT_EQ(scene.GetRootNode().GetChildren().size(), 6u);
-        EXPECT_EQ(scene.GetRootNode().GetChildren().back()->GetName(), PoolString::Intern("M"));
+        EXPECT_EQ(scene.GetRootNode().GetChildren().back()->GetName(), "M"_intern);
     }
 
     TEST_F(SceneInstantiateTest, TwoInstancesOfOneFileDoNotInfluenceEachOther) {
@@ -289,7 +289,7 @@ namespace BECore::Tests {
 
     TEST_F(SceneInstantiateTest, AComponentThatSubscribesInOnAttachedReceivesEvents) {
         Scene& scene = Load(SceneText(kPlainNodes));
-        _manager->SetActiveScene(PoolString::Intern("Main"));
+        _manager->SetActiveScene("Main"_intern);
 
         const auto node = scene.InstantiateNode(Ref(R"(<node ref="nodes/Box"/>)"), _loader);
         ASSERT_TRUE(node);

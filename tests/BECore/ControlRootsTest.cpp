@@ -93,13 +93,13 @@ namespace BECore::Tests {
         const ControlRoots roots;
         EXPECT_EQ(roots.Find("client_only_root_a41c07"), nullptr);
         EXPECT_FALSE(roots.Resolve("client_only_root_a41c07"));
-        EXPECT_FALSE(PoolString::Find("client_only_root_a41c07").has_value());
+        EXPECT_FALSE(PoolString::Find(StringView{"client_only_root_a41c07"}).has_value());
     }
 
     TEST(ControlRootsTest, ARootNameIsNotInterned) {
         ControlRoots roots;
         roots.Register("registered_root_5be913", ControlRoot{});
-        EXPECT_FALSE(PoolString::Find("registered_root_5be913").has_value());
+        EXPECT_FALSE(PoolString::Find(StringView{"registered_root_5be913"}).has_value());
     }
 
     TEST(ControlRootsTest, AServiceOwnsItsRoots) {

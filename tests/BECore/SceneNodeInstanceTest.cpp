@@ -111,7 +111,7 @@ namespace BECore::Tests {
             EXPECT_TRUE(parsed) << parsed.description();
             _manager = LoadSceneManager(XmlNode{_doc.document_element()}, _loader);
             _manager->Initialize();
-            Scene* scene = _manager->GetSceneByName(PoolString::Intern("Main"));
+            Scene* scene = _manager->GetSceneByName("Main"_intern);
             EXPECT_NE(scene, nullptr);
             return *scene->GetRootNode().GetChildren().front();
         }
@@ -180,14 +180,14 @@ namespace BECore::Tests {
         SceneNode& node = LoadNode(R"(<node ref="nodes/Box" name="Crate"/>)");
         node.GetComponent<TransformComponent>()->_x = 7.0f;
         node.GetComponent<TransformComponent>()->_x = 1.0f;
-        node.SetName(PoolString::Intern("Box"));
+        node.SetName("Box"_intern);
 
         ExpectBuilt(node, R"(<node ref="nodes/Box"/>)");
     }
 
     TEST_F(SceneNodeInstanceTest, NameAndLayerAreWrittenWhenTheyDiffer) {
         SceneNode& node = LoadNode(R"(<node ref="nodes/Box"/>)");
-        node.SetName(PoolString::Intern("Crate"));
+        node.SetName("Crate"_intern);
         node.SetLayer(5);
 
         ExpectBuilt(node, R"(<node ref="nodes/Box" name="Crate" layer="5"/>)");
@@ -295,7 +295,7 @@ namespace BECore::Tests {
 
     TEST_F(SceneNodeInstanceTest, ARemovedComponentIsRefused) {
         SceneNode& node = LoadNode(R"(<node ref="nodes/Box"/>)");
-        node.RemoveComponent(PoolString::Intern("QuadRendererComponent"));
+        node.RemoveComponent("QuadRendererComponent"_intern);
 
         String result;
         String reason;
@@ -308,7 +308,7 @@ namespace BECore::Tests {
         SceneNode& node = LoadNode(R"(<node ref="nodes/Box"/>)");
         // Taking the transform out and putting it back puts it behind the quad
         const IntrusivePtr<IComponent> transform = node.GetComponent("TransformComponent");
-        node.RemoveComponent(PoolString::Intern("TransformComponent"));
+        node.RemoveComponent("TransformComponent"_intern);
         node.AddComponent(transform);
         ASSERT_EQ(node.GetComponents().size(), 2u);
 

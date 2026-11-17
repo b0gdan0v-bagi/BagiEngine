@@ -256,7 +256,7 @@ namespace BECore::Tests {
         }
 
         static BECore::Scene& Main(const IntrusivePtrAtomic<SceneManager>& manager) {
-            BECore::Scene* scene = manager->GetSceneByName(PoolString::Intern("Main"));
+            BECore::Scene* scene = manager->GetSceneByName("Main"_intern);
             EXPECT_NE(scene, nullptr);
             return *scene;
         }
@@ -264,7 +264,7 @@ namespace BECore::Tests {
         /// The `ui_tree` answer of the active scene "Main" after a draw, as text
         String UiTree(const IntrusivePtrAtomic<SceneManager>& manager) {
             EngineEnvironment::UseSceneManager(manager);
-            manager->SetActiveScene(PoolString::Intern("Main"));
+            manager->SetActiveScene("Main"_intern);
             _renderer->ClearCalls();
             manager->DrawAll();
 
@@ -314,10 +314,10 @@ namespace BECore::Tests {
 
         const auto& nodes = Main(split).GetRootNode().GetChildren();
         ASSERT_EQ(nodes.size(), 4u);
-        EXPECT_EQ(nodes[0]->GetSourceRef(), PoolString::Intern("nodes/Board"));
+        EXPECT_EQ(nodes[0]->GetSourceRef(), "nodes/Board"_intern);
         EXPECT_TRUE(nodes[1]->GetSourceRef().Empty());
-        EXPECT_EQ(nodes[2]->GetSourceRef(), PoolString::Intern("nodes/Hud"));
-        EXPECT_EQ(nodes[3]->GetSourceRef(), PoolString::Intern("nodes/Menu"));
+        EXPECT_EQ(nodes[2]->GetSourceRef(), "nodes/Hud"_intern);
+        EXPECT_EQ(nodes[3]->GetSourceRef(), "nodes/Menu"_intern);
     }
 
     TEST_F(SceneSplitTest, AnInlineSceneHasNoSourceRefs) {
@@ -417,7 +417,7 @@ namespace BECore::Tests {
 
         ASSERT_TRUE(manager);
         EXPECT_EQ(manager->GetActiveScene(), nullptr);
-        EXPECT_EQ(manager->GetSceneByName(PoolString::Intern("Main")), nullptr);
+        EXPECT_EQ(manager->GetSceneByName("Main"_intern), nullptr);
     }
 
     TEST_F(SceneSplitTest, LoadSceneDocumentOfASplitFileEqualsTheInlineDocument) {
@@ -471,11 +471,11 @@ namespace BECore::Tests {
 
         const auto& nodes = Main(split).GetRootNode().GetChildren();
         ASSERT_EQ(nodes.size(), 4u);
-        EXPECT_EQ(nodes[0]->GetName(), PoolString::Intern("PanelA"));
-        EXPECT_EQ(nodes[0]->GetSourceRef(), PoolString::Intern("nodes/Panel"));
-        EXPECT_EQ(nodes[1]->GetSourceRef(), PoolString::Intern("nodes/Panel"));
+        EXPECT_EQ(nodes[0]->GetName(), "PanelA"_intern);
+        EXPECT_EQ(nodes[0]->GetSourceRef(), "nodes/Panel"_intern);
+        EXPECT_EQ(nodes[1]->GetSourceRef(), "nodes/Panel"_intern);
         EXPECT_TRUE(nodes[2]->GetSourceRef().Empty());
-        EXPECT_EQ(nodes[3]->GetSourceRef(), PoolString::Intern("nodes/Panel"));
+        EXPECT_EQ(nodes[3]->GetSourceRef(), "nodes/Panel"_intern);
     }
 
     /// The mark is on the live node only: the document a tool reads has no `sourceRef`, and the given node is not changed
@@ -576,7 +576,7 @@ namespace BECore::Tests {
         ASSERT_EQ(canvas->_elements.size(), 2u);
         const UIElement* title = canvas->_elements[0].Get();
         ASSERT_NE(title->GetComponent<UITextComponent>(), nullptr);
-        EXPECT_EQ(title->name, PoolString::Intern("Title"));
+        EXPECT_EQ(title->name, "Title"_intern);
         EXPECT_EQ(title->GetComponent<UITextComponent>()->text, "C");
     }
 

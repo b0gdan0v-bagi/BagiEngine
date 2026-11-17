@@ -144,7 +144,7 @@ namespace BECore::Tests {
 
     TEST(HotkeyMapTest, UnknownCommandIsRefused) {
         HotkeyMap map;
-        const PoolString unknown = PoolString::Intern("no.such");
+        const PoolString unknown = "no.such"_intern;
         EXPECT_EQ(map.Assign(unknown, kCtrlK).refusal, AssignRefusal::UnknownCommand);
         EXPECT_EQ(map.ResetOne(unknown).refusal, AssignRefusal::UnknownCommand);
         EXPECT_FALSE(map.Unbind(unknown));

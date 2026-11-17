@@ -104,7 +104,7 @@ namespace BECore::Tests {
     TEST(PropertyAccessTest, ReadGivesTheKindOfTheFieldType) {
         PaScalars scalars;
         scalars.fixedText = "ab";
-        scalars.name = PoolString::Intern("pooled");
+        scalars.name = "pooled"_intern;
         const TypedRef ref = Ref(scalars);
 
         EXPECT_EQ(Read(ref, "flag"), Flag(true));

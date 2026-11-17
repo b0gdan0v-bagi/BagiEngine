@@ -86,7 +86,7 @@ namespace BECore::Tests {
         EXPECT_EQ(constant.GetConst(), 12);
         const Value<int32_t> field = Compiled<int32_t>(world.declaration, "caster.attack");
         ASSERT_EQ(field.Kind(), ValueKind::Slot);
-        EXPECT_EQ(field.Path(), PoolString::Intern("caster.attack"));
+        EXPECT_EQ(field.Path(), "caster.attack"_intern);
         EXPECT_EQ(ProgramPool::Count(), before);
         world.caster.attack = 33;
         EXPECT_EQ(field.Evaluate(world.context), 33);

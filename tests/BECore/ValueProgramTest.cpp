@@ -43,7 +43,7 @@ namespace BECore::Tests {
             builder.EmitLoadConst(two, 2.0f);
             builder.Emit(Opcode::MulFloat, power, power, two);
             const ProgramId id = ProgramPool::Intern(builder.Finish(ProgramType::Float, power).value()).value();
-            return Value<float>::FromProgram(id, PoolString::Intern("cast.power * 2"));
+            return Value<float>::FromProgram(id, "cast.power * 2"_intern);
         }
 
     }  // namespace
@@ -78,7 +78,7 @@ namespace BECore::Tests {
         vector.EmitLoadConst(offset, Vec3{1.0f, 2.0f, 3.0f});
         vector.Emit(Opcode::AddVec3, target, target, offset);
         const ProgramId vectorId = ProgramPool::Intern(vector.Finish(ProgramType::Vec3, target).value()).value();
-        const Value<Vec3> shifted = Value<Vec3>::FromProgram(vectorId, PoolString::Intern("cast.target + vec3(1, 2, 3)"));
+        const Value<Vec3> shifted = Value<Vec3>::FromProgram(vectorId, "cast.target + vec3(1, 2, 3)"_intern);
         EXPECT_EQ(shifted.Evaluate(world.context), world.cast.target + Vec3(1.0f, 2.0f, 3.0f));
 
         // The element of the caster: the register holds the index, the value is the enumerator of its own enum
@@ -86,7 +86,7 @@ namespace BECore::Tests {
         const uint8_t loaded = element.AcquireRegister().value();
         element.EmitLoadSlot(loaded, ProgramType::Enum, Link(world, "caster.element", DescribeType<ValueElement>()), static_cast<uint8_t>(DescribeType<ValueElement>().enumBytes));
         const ProgramId elementId = ProgramPool::Intern(element.Finish(ProgramType::Enum, loaded).value()).value();
-        const Value<ValueElement> chosen = Value<ValueElement>::FromProgram(elementId, PoolString::Intern("caster.element"));
+        const Value<ValueElement> chosen = Value<ValueElement>::FromProgram(elementId, "caster.element"_intern);
         for (const ValueElement value : {ValueElement::Fire, ValueElement::Water, ValueElement::Earth}) {
             world.caster.element = value;
             EXPECT_EQ(chosen.Evaluate(world.context), value);
@@ -97,16 +97,16 @@ namespace BECore::Tests {
         const uint8_t condition = text.AcquireRegister().value();
         text.EmitLoadSlot(condition, ProgramType::Bool, Link(world, "caster.alive", DescribeType<bool>()));
         const uint8_t burn = text.AcquireRegister().value();
-        text.EmitLoadConst(burn, PoolString::Intern("burn"));
+        text.EmitLoadConst(burn, PoolString{"burn"_intern});
         const uint8_t chill = text.AcquireRegister().value();
-        text.EmitLoadConst(chill, PoolString::Intern("chill"));
+        text.EmitLoadConst(chill, PoolString{"chill"_intern});
         text.Emit(Opcode::SelectString, condition, condition, burn, chill);
         const ProgramId textId = ProgramPool::Intern(text.Finish(ProgramType::String, condition).value()).value();
-        const Value<PoolString> label = Value<PoolString>::FromProgram(textId, PoolString::Intern("select(caster.alive, 'burn', 'chill')"));
+        const Value<PoolString> label = Value<PoolString>::FromProgram(textId, "select(caster.alive, 'burn', 'chill')"_intern);
         world.caster.alive = true;
-        EXPECT_EQ(label.Evaluate(world.context), PoolString::Intern("burn"));
+        EXPECT_EQ(label.Evaluate(world.context), "burn"_intern);
         world.caster.alive = false;
-        EXPECT_EQ(label.Evaluate(world.context), PoolString::Intern("chill"));
+        EXPECT_EQ(label.Evaluate(world.context), "chill"_intern);
         EXPECT_EQ(label.Reads(), LevelBit(0));
     }
 
@@ -156,7 +156,7 @@ namespace BECore::Tests {
         Value<int32_t> slot;
         ASSERT_TRUE(slot.Link(world.declaration, "caster.attack").has_value());
         EXPECT_NE(first, slot);
-        EXPECT_NE(Value<int32_t>::FromProgram(first.Id(), PoolString::Intern("x")), first);
+        EXPECT_NE(Value<int32_t>::FromProgram(first.Id(), "x"_intern), first);
     }
 
 }  // namespace BECore::Tests

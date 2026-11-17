@@ -301,7 +301,7 @@ namespace BECore::Tests {
         EXPECT_EQ(element, attribute);
         EXPECT_FALSE(reader.HasErrors());
 
-        const PoolString kept = PoolString::Intern("kept_by_a_refused_read");
+        const PoolString kept = "kept_by_a_refused_read"_intern;
         PoolString refusedAttribute = kept;
         PoolString refusedElement = kept;
         const size_t before = PoolString::GetStats().stringCount;
@@ -350,7 +350,7 @@ namespace BECore::Tests {
         EXPECT_EQ(element, attribute);
         EXPECT_FALSE(reader.HasErrors());
 
-        const PoolString kept = PoolString::Intern("kept_by_a_refused_binary_read");
+        const PoolString kept = "kept_by_a_refused_binary_read"_intern;
         PoolString refusedAttribute = kept;
         PoolString refusedElement = kept;
         const size_t before = PoolString::GetStats().stringCount;

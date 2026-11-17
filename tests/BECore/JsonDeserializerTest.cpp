@@ -124,7 +124,7 @@ namespace BECore::Tests {
             all.precise = 0.1;
             all.text = "t \"q\"";
             all.fixedText = "abc";
-            all.name = PoolString::Intern("n");
+            all.name = "n"_intern;
             all.mode = RegMode::Auto;
             all.inner.value = 5;
             all.inner.label = "in";

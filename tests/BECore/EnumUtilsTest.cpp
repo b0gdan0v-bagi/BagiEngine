@@ -73,9 +73,9 @@ namespace BECore::Tests {
     }
 
     TEST(EnumUtilsTest, FromPoolString) {
-        EXPECT_EQ(ColorUtils::FromPoolString(PoolString::Intern("Red")), TestColor::Red);
-        EXPECT_EQ(ColorUtils::FromPoolString(PoolString::Intern("Green")), TestColor::Green);
-        EXPECT_EQ(ColorUtils::FromPoolString(PoolString::Intern("Blue")), TestColor::Blue);
+        EXPECT_EQ(ColorUtils::FromPoolString("Red"_intern), TestColor::Red);
+        EXPECT_EQ(ColorUtils::FromPoolString("Green"_intern), TestColor::Green);
+        EXPECT_EQ(ColorUtils::FromPoolString("Blue"_intern), TestColor::Blue);
 
         for (auto color : ColorUtils::Values()) {
             PoolString ps = ColorUtils::ToPoolString(color);

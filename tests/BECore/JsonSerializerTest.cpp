@@ -81,7 +81,7 @@ namespace BECore::Tests {
     TEST(JsonSerializerTest, StringsAreJsonStrings) {
         ExpectSaved(String("a \"quoted\" \\ text\n"), R"({"k":"a \"quoted\" \\ text\n"})");
         ExpectSaved(FixedString<8, false>("fixed"), R"({"k":"fixed"})");
-        ExpectSaved(PoolString::Intern("pooled"), R"({"k":"pooled"})");
+        ExpectSaved(PoolString{"pooled"_intern}, R"({"k":"pooled"})");
         ExpectSaved(RegMode::Auto, R"({"k":"Auto"})");
         ExpectSaved(String(), R"({"k":""})");
     }
@@ -100,7 +100,7 @@ namespace BECore::Tests {
 
         serializer.Write("view", kNeverInterned);
         serializer.WriteAttribute("attribute", kNeverInterned);
-        serializer.Write("name", PoolString::Intern("json_serializer_interned_by_the_test"));
+        serializer.Write("name", "json_serializer_interned_by_the_test"_intern);
 
         EXPECT_FALSE(PoolString::Find(kNeverInterned).has_value());
     }
@@ -188,7 +188,7 @@ namespace BECore::Tests {
         all.ratio = 0.1f;
         all.text = "t";
         all.fixedText = "f";
-        all.name = PoolString::Intern("n");
+        all.name = "n"_intern;
         all.mode = RegMode::On;
         all.items = {1};
         all.table["k"] = 2;

@@ -217,7 +217,7 @@ namespace BECore::Tests {
         std::filesystem::remove_all(dir);
         std::filesystem::create_directories(dir);
         std::ofstream(dir / "probe.xml") << "<root/>";  //-NoStd: writes a probe file, as ConfigDeserializerTest does
-        const PoolString mount = PoolString::Intern("BagiConfigDiagnosticsTest");
+        const PoolString mount = "BagiConfigDiagnosticsTest"_intern;
         ASSERT_TRUE(CoreManager::GetFileSystem().Mount(mount, dir));
 
         const auto opened = OpenDeserializer("BagiConfigDiagnosticsTest/probe.xml");

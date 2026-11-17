@@ -179,8 +179,8 @@ namespace BECore::Tests {
             _manager->Deserialize(deserializer);
             ASSERT_FALSE(deserializer.HasErrors());
             _manager->Initialize();
-            _manager->SetActiveScene(PoolString::Intern("Main"));
-            const auto& nodes = _manager->GetSceneByName(PoolString::Intern("Main"))->GetRootNode().GetChildren();
+            _manager->SetActiveScene("Main"_intern);
+            const auto& nodes = _manager->GetSceneByName("Main"_intern)->GetRootNode().GetChildren();
             _hud = nodes[0]->GetComponent<UICanvasComponent>();
             _modal = nodes[1]->GetComponent<UICanvasComponent>();
             ASSERT_TRUE(_hud);

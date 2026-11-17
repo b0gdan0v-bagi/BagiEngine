@@ -120,7 +120,7 @@ namespace BECore::Tests {
             _manager->Deserialize(deserializer);
             ASSERT_FALSE(deserializer.HasErrors());
             _manager->Initialize();
-            _canvas = _manager->GetSceneByName(PoolString::Intern("Main"))->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
+            _canvas = _manager->GetSceneByName("Main"_intern)->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
             ASSERT_TRUE(_canvas);
 
             const Vector<uint8_t> pixels(static_cast<size_t>(kIconPixels) * kIconPixels * 4, 200);
@@ -139,7 +139,7 @@ namespace BECore::Tests {
         }
 
         void Draw() {
-            _manager->SetActiveScene(PoolString::Intern("Main"));
+            _manager->SetActiveScene("Main"_intern);
             _renderer->ClearCalls();
             _manager->DrawAll();
         }

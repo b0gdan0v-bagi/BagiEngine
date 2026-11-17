@@ -135,11 +135,11 @@ namespace BECore::Tests {
 
         private:
             void OnAction(const InputEvents::ActionEvent& event) {
-                fader += event.action == PoolString::Intern("TransitionFader") ? 1 : 0;
-                open += event.action == PoolString::Intern("TransitionOpen") ? 1 : 0;
-                under += event.action == PoolString::Intern("TransitionUnder") ? 1 : 0;
-                dialog += event.action == PoolString::Intern("CanvasDialog") ? 1 : 0;
-                below += event.action == PoolString::Intern("CanvasBelow") ? 1 : 0;
+                fader += event.action == "TransitionFader"_intern ? 1 : 0;
+                open += event.action == "TransitionOpen"_intern ? 1 : 0;
+                under += event.action == "TransitionUnder"_intern ? 1 : 0;
+                dialog += event.action == "CanvasDialog"_intern ? 1 : 0;
+                below += event.action == "CanvasBelow"_intern ? 1 : 0;
             }
         };
 
@@ -189,8 +189,8 @@ namespace BECore::Tests {
             _manager->Deserialize(deserializer);
             ASSERT_FALSE(deserializer.HasErrors());
             _manager->Initialize();
-            _manager->SetActiveScene(PoolString::Intern("Main"));
-            _hud = _manager->GetSceneByName(PoolString::Intern("Main"))->GetRootNode().GetChildren()[0]->GetComponent<UICanvasComponent>();
+            _manager->SetActiveScene("Main"_intern);
+            _hud = _manager->GetSceneByName("Main"_intern)->GetRootNode().GetChildren()[0]->GetComponent<UICanvasComponent>();
             ASSERT_TRUE(_hud);
             Draw();
         }
@@ -472,7 +472,7 @@ namespace BECore::Tests {
         Draw();
         Wait(0.25);
         auto& children = _hud->GetRoot().children;
-        const auto fader = eastl::find_if(children.begin(), children.end(), [](const auto& child) { return child->name == PoolString::Intern("Fader"); });
+        const auto fader = eastl::find_if(children.begin(), children.end(), [](const auto& child) { return child->name == "Fader"_intern; });
         ASSERT_NE(fader, children.end());
         children.erase(fader);
         _hud->Invalidate();
@@ -522,8 +522,8 @@ namespace BECore::Tests {
             _manager->Deserialize(deserializer);
             ASSERT_FALSE(deserializer.HasErrors());
             _manager->Initialize();
-            _manager->SetActiveScene(PoolString::Intern("Main"));
-            _scene = _manager->GetSceneByName(PoolString::Intern("Main"));
+            _manager->SetActiveScene("Main"_intern);
+            _scene = _manager->GetSceneByName("Main"_intern);
             const auto& nodes = _scene->GetRootNode().GetChildren();
             _below = nodes[0]->GetComponent<UICanvasComponent>();
             _dialog = nodes[1]->GetComponent<UICanvasComponent>();
@@ -553,7 +553,7 @@ namespace BECore::Tests {
         }
 
         void SetDialogVisible(bool visible) {
-            ASSERT_TRUE(UICanvasComponent::SetVisibleByName(*_scene, PoolString::Intern("Dialog"), visible));
+            ASSERT_TRUE(UICanvasComponent::SetVisibleByName(*_scene, "Dialog"_intern, visible));
         }
 
         UIElement& Get(UICanvasComponent& canvas, const char* name) const {

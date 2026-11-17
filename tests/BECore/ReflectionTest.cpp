@@ -221,13 +221,13 @@ namespace BECore::Tests {
             TestData::SavedGameState state;
             state.player.health = 64;
             state.player.speed = 2.5f;
-            state.player.name = PoolString::Intern("Rich");
+            state.player.name = "Rich"_intern;
             state.inventory.gold = 900;
             state.inventory.itemCount = 3;
             state.level = 4;
 
             Vector<TestData::Player> players(3);
-            players[0].name = PoolString::Intern("First");
+            players[0].name = "First"_intern;
             players[1].health = 7;
             players[2].isAlive = false;
 
@@ -295,7 +295,7 @@ namespace BECore::Tests {
         TestData::Player player;
         player.health = 42;
         player.speed = 3.14f;
-        player.name = PoolString::Intern("TestPlayer");
+        player.name = "TestPlayer"_intern;
         player.isAlive = false;
 
         int fieldCount = 0;
@@ -308,7 +308,7 @@ namespace BECore::Tests {
         TestData::Player original;
         original.health = 75;
         original.speed = 10.5f;
-        original.name = PoolString::Intern("Hero");
+        original.name = "Hero"_intern;
         original.isAlive = true;
 
         const String xml = SavePlayer(original, false);
@@ -326,7 +326,7 @@ namespace BECore::Tests {
         TestData::Player original;
         original.health = 75;
         original.speed = 10.5f;
-        original.name = PoolString::Intern("Hero");
+        original.name = "Hero"_intern;
         original.isAlive = true;
 
         const ByteBuffer data = SavePlayerBinary(original, false);
@@ -344,7 +344,7 @@ namespace BECore::Tests {
         TestData::SavedGameState original;
         original.player.health = 12;
         original.player.speed = 7.25f;
-        original.player.name = PoolString::Intern("Nested");
+        original.player.name = "Nested"_intern;
         original.player.isAlive = false;
         original.inventory.gold = 1500;
         original.inventory.itemCount = 7;
@@ -391,7 +391,7 @@ namespace BECore::Tests {
         TestData::Player hero;
         hero.health = 75;
         hero.speed = 10.5f;
-        hero.name = PoolString::Intern("Hero");
+        hero.name = "Hero"_intern;
         hero.isAlive = true;
 
         const ByteBuffer heroData = SavePlayerBinary(hero, true);
@@ -405,7 +405,7 @@ namespace BECore::Tests {
         TestData::SavedGameState state;
         state.player.health = 80;
         state.player.speed = 4.5f;
-        state.player.name = PoolString::Intern("Compact");
+        state.player.name = "Compact"_intern;
         state.inventory.gold = 300;
         state.inventory.itemCount = 5;
         state.level = 3;
@@ -486,7 +486,7 @@ namespace BECore::Tests {
         {
             SCOPED_TRACE("eastl::vector<Player>");
             Vector<TestData::Player> original(3);
-            original[0].name = PoolString::Intern("First");
+            original[0].name = "First"_intern;
             original[1].health = 7;
             original[1].speed = 1.5f;
             original[2].isAlive = false;
@@ -508,7 +508,7 @@ namespace BECore::Tests {
             SCOPED_TRACE("eastl::map<string, Player>");
             Map<String, TestData::Player> original;
             original["bob"].health = 10;
-            original["bob"].name = PoolString::Intern("Bob");
+            original["bob"].name = "Bob"_intern;
             original["alice"].health = 20;
             original["alice"].isAlive = false;
 
@@ -574,7 +574,7 @@ namespace BECore::Tests {
         serializer.Write("utf8", StringView("h\xC3\xA9llo w\xC3\xB6rld \xE2\x9C\x93"));
         serializer.Write("embeddedNul", StringView(embeddedNul, sizeof(embeddedNul)));
         serializer.WriteAttribute("long", StringView(longText));
-        serializer.Write("pool", PoolString::Intern("Hero"));
+        serializer.Write("pool", "Hero"_intern);
         serializer.WriteAttribute("emptyPool", PoolString{});
 
         BinaryDeserializer deserializer;
@@ -598,9 +598,9 @@ namespace BECore::Tests {
 
         PoolString pool;
         ASSERT_TRUE(deserializer.ReadAttribute("pool", pool));
-        EXPECT_EQ(pool, PoolString::Intern("Hero"));
+        EXPECT_EQ(pool, "Hero"_intern);
 
-        PoolString emptyPool = PoolString::Intern("stale");
+        PoolString emptyPool = "stale"_intern;
         ASSERT_TRUE(deserializer.Read("emptyPool", emptyPool));
         EXPECT_TRUE(emptyPool.Empty());
 
@@ -1089,7 +1089,7 @@ namespace BECore::Tests {
     TEST(ReflectionTest, BinaryFileRoundTrip) {
         TestData::SavedGameState original;
         original.player.health = 33;
-        original.player.name = PoolString::Intern("Persistent");
+        original.player.name = "Persistent"_intern;
         original.inventory.gold = 12;
         original.level = 5;
 
@@ -1186,7 +1186,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(DefaultChecker<bool>::IsDefault(true));
 
         EXPECT_TRUE(DefaultChecker<PoolString>::IsDefault(PoolString{}));
-        EXPECT_FALSE(DefaultChecker<PoolString>::IsDefault(PoolString::Intern("test")));
+        EXPECT_FALSE(DefaultChecker<PoolString>::IsDefault("test"_intern));
 
         EXPECT_TRUE(DefaultChecker<String>::IsDefault(String{}));
         EXPECT_FALSE(DefaultChecker<String>::IsDefault(String{"hello"}));
@@ -1220,7 +1220,7 @@ namespace BECore::Tests {
         TestData::Player hero;
         hero.health = 75;
         hero.speed = 10.5f;
-        hero.name = PoolString::Intern("Hero");
+        hero.name = "Hero"_intern;
         hero.isAlive = true;
 
         const String heroXml = SavePlayer(hero, true);

@@ -715,12 +715,12 @@ namespace BECore::Tests {
         const CheckerContext context;
         const TypedExpr alone = Accepted(context.declaration, "'burn'", ProgramType::String);
         ASSERT_EQ(alone.nodes.size(), 1U);
-        EXPECT_EQ(ConstantOf<PoolString>(alone[0]), PoolString::Intern("burn"));
+        EXPECT_EQ(ConstantOf<PoolString>(alone[0]), "burn"_intern);
         EXPECT_EQ(ConstantOf<PoolString>(Accepted(context.declaration, "''", ProgramType::String)[0]), PoolString{});
 
         const TypedExpr compared = Accepted(context.declaration, "caster.title == 'Hero'", ProgramType::Bool);
         EXPECT_EQ(Root(compared).opcode, Opcode::EqString);
-        EXPECT_EQ(ConstantOf<PoolString>(compared[1]), PoolString::Intern("Hero"));
+        EXPECT_EQ(ConstantOf<PoolString>(compared[1]), "Hero"_intern);
         Accepted(context.declaration, "'Hero' != caster.title", ProgramType::Bool);
         Accepted(context.declaration, "caster.title == 'a b + c'", ProgramType::Bool);
         Accepted(context.declaration, "'a' == 'a'", ProgramType::Bool);

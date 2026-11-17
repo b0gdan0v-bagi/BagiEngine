@@ -374,7 +374,7 @@ namespace BECore::Tests {
         const size_t told = _recorder.entries.size();
         EXPECT_TRUE(session.CanContinue(&GetScene("Main")));
 
-        Node("Main", "B").RemoveComponent(PoolString::Intern("TransformComponent"));
+        Node("Main", "B").RemoveComponent("TransformComponent"_intern);
         EXPECT_FALSE(session.CanContinue(&GetScene("Main")));
 
         // Were the drag to go on, the write fails as a whole: no Change is told and the recorded result stays the last written one

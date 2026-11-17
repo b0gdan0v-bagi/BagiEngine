@@ -116,7 +116,7 @@ namespace BECore::Tests {
         const EditorCommand* toggle = FindEditorCommand(EditorCommandIds::kModeToggle);
         ASSERT_NE(toggle, nullptr);
         EXPECT_FALSE(toggle->rebindable);
-        EXPECT_EQ(FindEditorCommand(PoolString::Intern("no.such")), nullptr);
+        EXPECT_EQ(FindEditorCommand("no.such"_intern), nullptr);
     }
 
 }  // namespace BECore::Tests

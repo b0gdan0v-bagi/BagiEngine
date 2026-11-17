@@ -89,7 +89,7 @@ namespace BECore::Tests {
             portrait.when.minAspect = 0.5f;
             portrait.when.maxHeight = 2000.0f;
             UIElementOverride move;
-            move.element = PoolString::Intern("Panel");
+            move.element = "Panel"_intern;
             move.x = UILength::Px(0.0f);  // an explicit zero must survive
             move.y = UILength::Percent(-5.0f);
             move.visible = false;
@@ -400,8 +400,8 @@ namespace BECore::Tests {
         }
 
         [[nodiscard]] IntrusivePtr<UICanvasComponent> Canvas() const {
-            for (const auto& node : _manager->GetSceneByName(PoolString::Intern("Main"))->GetRootNode().GetChildren()) {
-                if (node->GetName() == PoolString::Intern("Hud")) {
+            for (const auto& node : _manager->GetSceneByName("Main"_intern)->GetRootNode().GetChildren()) {
+                if (node->GetName() == "Hud"_intern) {
                     return node->GetComponent<UICanvasComponent>();
                 }
             }
@@ -420,7 +420,7 @@ namespace BECore::Tests {
         const UIElement& root = canvas->GetRoot();
         ASSERT_EQ(root.children.size(), 1u);
         const UIElement& panel = *root.children[0];
-        EXPECT_EQ(panel.name, PoolString::Intern("Panel"));
+        EXPECT_EQ(panel.name, "Panel"_intern);
         EXPECT_FLOAT_EQ(panel.style.rect.x.value, 16.0f);
         EXPECT_EQ(panel.style.rect.width, UILength::Px(220.0f));
         EXPECT_EQ(panel.color.a, 160);
@@ -471,12 +471,12 @@ namespace BECore::Tests {
     TEST_F(UIReflectionSceneTest, ElementsAddedInCodeAreNotSavedBack) {
         const auto canvas = Canvas();
         ASSERT_TRUE(canvas);
-        canvas->GetRoot().AddChild(PoolString::Intern("CodeOnly"));
+        canvas->GetRoot().AddChild("CodeOnly"_intern);
         canvas->Invalidate();
 
         const auto loaded = FromXml(ToXml(*canvas, true));
         EXPECT_EQ(loaded->_elements.size(), 1u);
-        EXPECT_EQ(loaded->GetRoot().FindByName(PoolString::Intern("CodeOnly")), nullptr);
+        EXPECT_EQ(loaded->GetRoot().FindByName("CodeOnly"_intern), nullptr);
     }
 
     TEST(UIReflectionTest, ExtendToOutputSavesAndLoadsBackAndIsOffByDefault) {
