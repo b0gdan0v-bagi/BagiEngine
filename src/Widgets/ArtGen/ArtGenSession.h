@@ -9,6 +9,7 @@
 #include <BECore/Utils/Singleton.h>
 #include <Widgets/ArtGen/ArtGenPresetForm.h>
 #include <Widgets/ArtGen/ArtGenSound.h>
+#include <Widgets/ArtGen/Sets/ArtGenSet.h>
 #include <cstdint>
 #include <expected>
 
@@ -80,6 +81,10 @@ namespace BECore {
         String subject;
         int32_t count = 0;
         Optional<int64_t> seed;
+        String outDir;   // a job of a set: where the service writes, under `artgen/out/` (`<set>/<job>`); empty: the service's own folder
+        String name;     // a job of a set: the file stem of its images
+        String setName;  // the set and the job this run is the work of; empty for an ordinary run
+        String jobName;
         int32_t image = 0;  // the image in work, 0-based
         int32_t step = 0;
         int32_t steps = 0;
@@ -88,6 +93,19 @@ namespace BECore {
         int32_t keptVariants = 0;  // the variants of the last run it started with (Request with keepVariants)
         bool cancelRequested = false;
     };
+
+    /// What EnqueueSet takes: one preset applied to a list of subjects
+    struct ArtGenSetRequest {
+        String preset;    // a preset name; with presetData, the name of the form the draft came from
+        Json presetData;  // a draft sent inline; null: the preset by name
+        Vector<ArtGenSubject> subjects;
+        int32_t count = kArtGenSetDefaultCount;
+        Optional<int64_t> seed;  // the first seed of every job; none: one is drawn and recorded, so the style of the set matches
+        String name;             // the set's folder name; empty: DefaultArtGenSetName
+    };
+
+    /// What an edit of a set found: the set (or job) unknown, or a pick of a seed the job has not
+    CORE_ENUM(ArtGenSetEdit, uint8_t, Ok, NoSet, NoVariant)
 
     /**
      * @brief The editor's side of the art generation contract: the request the Generate panel (or a client) makes, and what the generation
@@ -117,10 +135,10 @@ namespace BECore {
         /// Registers the methods on @p service (once per service; a second call with the same service does nothing)
         void RegisterControl(ControlService& service);
 
-        /// The real path of the game the service works for (where its presets are, `artgen/presets/`)
-        void SetGameRoot(StringView root) {
-            _gameRoot = String(root);
-        }
+        /// The real path of the game the service works for (where its presets are, `artgen/presets/`, and its sets, `artgen/out/`). The
+        /// sets of the game are read from disk when the root changes (the panel calls this at every switch of the run mode: the same root
+        /// changes nothing)
+        void SetGameRoot(StringView root);
 
         /// Queues a request; the error says why not (a run in work, a bad count or preset). @p keepVariants starts the new run with the
         /// variants of the last one, so a few more can be made without losing the ones on screen
@@ -186,8 +204,26 @@ namespace BECore {
         [[nodiscard]] const ArtGenRun& GetRun() const {
             return _run;
         }
-        [[nodiscard]] bool IsBusy() const {
-            return _run.state == ArtGenRunState::Queued || _run.state == ArtGenRunState::Running;
+        /// A run is in work or a set has a job to do: an ordinary run, a request and a setup action are refused meanwhile
+        [[nodiscard]] bool IsBusy() const;
+
+        /// Queues a set (Sets/CLAUDE.md): validates like Request / RequestDraft, draws the shared seed when none is given, writes the manifest.
+        /// The set's name, or why not. Jobs go out one per poll, first in first out
+        std::expected<String, String> EnqueueSet(ArtGenSetRequest request);
+        /// Starts the next Pending job as the ordinary run when the service is there and nothing else is in work. The poll and the end of a
+        /// run call it; without a service the jobs wait
+        void PumpSets();
+        /// Cancels a Pending job at once, the running one through the service; any other job is left. NoSet for an unknown set or job
+        ArtGenSetEdit CancelJob(StringView set, StringView job);
+        /// Cancels every Pending job and the running one of @p set
+        ArtGenSetEdit CancelSet(StringView set);
+        /// Puts the Failed and Cancelled jobs of @p set (or only @p job) back to Pending, with nothing kept of the earlier try
+        ArtGenSetEdit RetryJobs(StringView set, StringView job = {});
+        /// Picks the variant @p seed of a job (saved in the manifest)
+        ArtGenSetEdit PickVariant(StringView set, StringView job, int64_t seed);
+        [[nodiscard]] const ArtGenSet* FindSet(StringView name) const;
+        [[nodiscard]] const Vector<ArtGenSet>& GetSets() const {
+            return _sets;
         }
         /// Grows on every change the panel shows (a poll that changed the status, a step, an image, the end)
         [[nodiscard]] uint64_t Version() const {
@@ -215,12 +251,26 @@ namespace BECore {
         ArtGenRun* RunOf(const Json& params);
         std::expected<uint32_t, String> Queue(StringView preset, Json presetData, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants);
         void ReadCatalog(const Json& params);
+        [[nodiscard]] bool IsRunInWork() const {
+            return _run.state == ArtGenRunState::Queued || _run.state == ArtGenRunState::Running;
+        }
+        [[nodiscard]] ArtGenSet* MutableSet(StringView name);
+        /// The job of `_run` while it is Running (the run is the work of a set), else null
+        [[nodiscard]] ArtGenSetJob* RunningJobOfRun(ArtGenSet*& set);
+        void SaveSet(const ArtGenSet& set);
+        void StartJob(ArtGenSet& set, ArtGenSetJob& job);
+        /// The run just ended: the job it was the work of takes its state (Done, Failed, Cancelled with @p cancelReason) and the manifest is written
+        void EndSetJob(StringView cancelReason);
+        void RecordSetImage(const ArtGenVariant& variant);
+        void QueueSet(StringView name);
 
         Clock _clock;
         Acceptor _acceptor = nullptr;
         SoundAcceptor _soundAcceptor = nullptr;
         IntrusivePtr<SceneNode> _selectedNode;
         String _gameRoot;
+        Vector<ArtGenSet> _sets;
+        Vector<String> _setQueue;  // the sets with work, in the order they were queued or retried: the next job comes from the first
         ArtGenServiceStatus _status;
         ArtGenRun _run;
         ArtGenSetup _setup;

@@ -9,9 +9,7 @@
 #include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/EditorLayout/UserFileIo.h>
 #include <Widgets/SceneEditor/HierarchyModel.h>
-#include <algorithm>
 #include <chrono>
-#include <filesystem>
 
 namespace BECore {
 
@@ -220,6 +218,8 @@ namespace BECore {
             // The service never saw it: nothing to stop there
             _run.state = ArtGenRunState::Cancelled;
             ++_version;
+            EndSetJob("cancelled");
+            PumpSets();
         } else if (_run.state == ArtGenRunState::Running && !_run.cancelRequested) {
             _run.cancelRequested = true;
             ++_version;
@@ -374,6 +374,8 @@ namespace BECore {
             if (_run.state == ArtGenRunState::Running) {
                 _run.state = ArtGenRunState::Cancelled;
                 _run.step = 0;
+                // Only the running job ends; the others stay Pending and go on when a service polls again
+                EndSetJob("the service was stopped");
             }
             if (_setup.state == ArtGenSetupState::Running) {
                 _setup.state = ArtGenSetupState::Failed;
@@ -383,6 +385,7 @@ namespace BECore {
             ++_version;
             return reply;
         }
+        PumpSets();
         if (_run.state == ArtGenRunState::Queued) {
             Json request = Json::object();
             request["id"] = _run.id;
@@ -393,6 +396,10 @@ namespace BECore {
             request["subject"] = ToJsonString(_run.subject);
             request["count"] = _run.count;
             request["seed"] = _run.seed ? Json(*_run.seed) : Json();
+            if (!_run.outDir.empty()) {
+                request["outDir"] = ToJsonString(_run.outDir);
+                request["name"] = ToJsonString(_run.name);
+            }
             reply["request"] = std::move(request);
             _run.state = ArtGenRunState::Running;
             ++_version;
@@ -512,6 +519,7 @@ namespace BECore {
         run->variants.push_back(std::move(variant));
         run->image = static_cast<int32_t>(run->variants.size());
         run->step = 0;
+        RecordSetImage(run->variants.back());
         ++_version;
         return reply;
     }
@@ -536,6 +544,8 @@ namespace BECore {
         }
         run->step = 0;
         ++_version;
+        EndSetJob("cancelled");
+        PumpSets();
         return reply;
     }
 
@@ -696,7 +706,7 @@ namespace BECore {
     }
 
     std::expected<Json, ControlError> ArtGenSession::HandleCancel(const Json& /*params*/) {
-        if (!IsBusy()) {
+        if (!IsRunInWork()) {
             return std::unexpected(ControlError{String(kNoRunCode), String("no run in work")});
         }
         Cancel();
