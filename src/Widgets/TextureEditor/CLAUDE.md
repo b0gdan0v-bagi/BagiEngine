@@ -1,6 +1,6 @@
 # Sprite Library panel
 
-`TextureEditorWidget` edits the `TextureLibrary` (the sprite entries: name, texture, `srcRect`, the optional atlas group); Save and the `texture.save` command write the game's `TextureLibrary.xml`. Editor only (`TextureEditor` is one of the editor folders of `src/CMakeLists.txt`).
+`TextureEditorWidget` edits the `TextureLibrary` (the sprite entries: name, texture, `srcRect`, the optional atlas group) and shows it: a list with a thumbnail, the texture and an atlas badge per sprite, and a preview of an atlas; Save and the `texture.save` command write the game's `TextureLibrary.xml`. Editor only (`TextureEditor` is one of the editor folders of `src/CMakeLists.txt`).
 
 ## Slice sheet
 
@@ -24,7 +24,21 @@ The section "Atlas" (`SpriteAtlasPanel`) packs the sprites of one **atlas group*
 
 - **The model is two optional fields of the entry.** `atlas.name` is the group; `atlas.source` (the file and rect the pixels came from) is engaged exactly when the sprite is packed, and then the entry's own `texturePath` and `srcRect` point into the atlas. So a repack reads the sources, never the old atlas (a changed source is a plain Pack), and Unpack is the exact inverse: the float rect comes back as it was and the group name stays, so a later Pack repacks the group.
 - **The packer's order is a contract.** Shelf placement in a fixed sort order with fixed tie rules, padding only between sprites (never at the atlas edge), the width chosen by area then by the smaller width, power of two or tight: the same sprites give the same file, so a repack is not a diff of the asset. Members are taken sorted by name for the same reason, whatever the library's order.
+- **Plan, then pixels.** `PlanAtlas` (sizes in, layout out; no pixel) is the one planning step, and `BuildAtlas` is it plus the pixel copy. The checks, the error texts and the crop below live there, so what the preview shows is never another layout than the file.
 - **Crop.** A rect is cut at its edges rounded to the nearest pixel (a side is at least a pixel), so the fractional rects of a sheet do not take in a neighbour; the float rect is kept in `source`, so the rounding costs nothing on Unpack.
 - **Write order.** The PNG is replaced atomically first, the library changes after: a failure leaves both as they were. Unpack leaves the atlas file on disk (the engine never deletes a game's file) and refuses when no member is packed or a source file is gone.
 - **A packed sprite is read-only** in the panel: its texture combo, source rect fields, drag-to-select and the Slice section are off until Unpack, because editing them would cut the link. The pack settings (padding, size mode) are the panel's and are not saved; a repack with other settings is another file.
 - **Pack and Unpack run on the click**, synchronously (a few hundred sprites at most); the status line is a fixed buffer and the counts are ImGui-formatted, so a steady frame allocates nothing.
+
+## Library list
+
+- **The rules are pure** (`SpriteLibraryView`, tested alone; `SpriteLibraryPanel` draws). The filter works on the group name (`No atlas` is an empty name whatever the state); the state (none, in a group, packed) is a separate badge, because a group member that is not packed is neither.
+- **The list is made again on a key** of names, texture paths, group names and packed flags, never of rects, so a dragged rect rebuilds nothing; a filter whose group vanished falls back to All. The panel owns the filter; the selection stays on the widget, and a selected sprite the filter hides is still the selected one.
+- **Only visible rows load a texture** (a clipper over fixed-height rows). `SpriteTextureCache` loads a path once, loads it again when the resource cache no longer holds the handle (Pack, Unpack and Accept evict), and **remembers a failed load** so a missing file logs once, until `ForgetFailed` (Rescan, Pack, Unpack).
+
+## Atlas preview
+
+- **Two modes.** `Current` draws the packed members on the atlas file as the library has them; `Plan` is what Pack would make with the Atlas section's settings, from the sources, and writes nothing. `Current` is off while nothing is packed.
+- **The plan is `PlanAtlas`**, the step `BuildAtlas` runs, so a preview is never another layout than the file (a test holds it: the plan's rects equal what `WriteAtlas` then does to the entries). `Plan` takes the sizes of the sources from the loaded textures, so an unloaded one is an error line, not a guess.
+- **The fill ratio** is the sum of the rect areas over the atlas area; overlaps are not looked for, the packer makes none. Rects that leave the picture and members of the group not on this file are counted and said.
+- **Made again on `AtlasPreviewKey`** (members' name, texture, rect, packed flag, source), the mode, the settings in `Plan`, or a change in the size of a texture it read (a load, an evict, a rewritten file); a steady frame allocates nothing. The key walks the library in its own order, so it never builds a list.
