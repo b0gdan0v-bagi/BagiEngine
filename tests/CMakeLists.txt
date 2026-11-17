@@ -43,6 +43,11 @@ if(Python3_FOUND)
     # a quoted include is allowed only for a source file's own header; every other include is <...> from an include root
     add_test(NAME BagiIncludeStyle
         COMMAND ${Python3_EXECUTABLE} ${BAGI_ENGINE_DIR}/CI/scripts/check_includes.py --root ${BAGI_ENGINE_DIR})
+    # the constants rules of PoolString/CLAUDE.md, "Constants in code" (no literal in Intern/Find, one place per text, at most two loose
+    # "x"_intern per file, none in a header): CI/scripts/check_pool_strings.py; the allowlist rows each carry a reason and a stale one fails
+    add_test(NAME BagiPoolStrings
+        COMMAND ${Python3_EXECUTABLE} ${BAGI_ENGINE_DIR}/CI/scripts/check_pool_strings.py --root ${BAGI_ENGINE_DIR}
+            --allowlist ${BAGI_ENGINE_DIR}/CI/pool_strings_allowlist.txt)
     # the type rules of BECore/Types/CLAUDE.md as a check (raw std::/eastl:: types, allocating calls: CI/scripts/check_types.py).
     # The engine still holds lines that other entries own (file streams, directory iterators, ...), so the check has a baseline,
     # CI/types_baseline.txt: it only shrinks, a fix removes its lines, and a new hit or a line that is gone fails the test.
