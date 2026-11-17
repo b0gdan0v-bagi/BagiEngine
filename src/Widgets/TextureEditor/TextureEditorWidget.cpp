@@ -371,6 +371,13 @@ namespace BECore {
         }
         ImGui::Separator();
 
+        const PoolString previewClicked = _atlasPreviewPanel.Render(lib, entry, _atlasPanel.Settings(), _textures);
+        if (!previewClicked.Empty()) {
+            SelectByName(previewClicked);
+            return;
+        }
+        ImGui::Separator();
+
         if (IconTextButton(ICON_LC_TRASH_2, "Delete Entry", "Remove this sprite from the library")) {
             lib.Remove(entry.name);
             _selectedIndex = eastl::min(_selectedIndex, static_cast<int>(lib.GetAll().size()) - 1);

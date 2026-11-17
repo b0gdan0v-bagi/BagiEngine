@@ -37,7 +37,8 @@ namespace BECore {
     /// The index of the last rect that holds the point (atlas pixels; the left and top edges are in, the right and bottom out), -1 for none
     [[nodiscard]] int HitTestPreview(const AtlasPreview& preview, float x, float y);
 
-    /// A hash of what the preview of group @p atlasName shows: per member the name, texture, rect, packed flag and source. Another group's change does not move it.
+    /// A hash of what the preview of group @p atlasName shows: per member the name, texture, rect, packed flag and source. Another group's change does not move it. Allocates nothing, so the panel can
+    /// ask every frame.
     [[nodiscard]] uint64_t AtlasPreviewKey(const TextureLibrary& library, StringView atlasName);
 
 }  // namespace BECore

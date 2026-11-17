@@ -23,6 +23,11 @@ namespace BECore {
          */
         bool Render(TextureLibrary& library, const SpriteEntry& entry);
 
+        /// The pack settings of the section, for the preview that shows what Pack would make with them
+        [[nodiscard]] const PackSettings& Settings() const {
+            return _settings;
+        }
+
     private:
         /// The sprite and the group the name field was last loaded for: the field is reloaded when either moves
         void SyncNameField(const SpriteEntry& entry, PoolString group);

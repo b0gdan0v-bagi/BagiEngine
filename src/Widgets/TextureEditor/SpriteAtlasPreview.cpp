@@ -86,11 +86,12 @@ namespace BECore {
 
     uint64_t AtlasPreviewKey(const TextureLibrary& library, StringView atlasName) {
         KeyHasher hasher;
-        const Vector<PoolString> members = AtlasMembers(library, atlasName);
-        hasher.AddNumber(members.size());
-        for (const PoolString name : members) {
-            const SpriteEntry& entry = *library.GetSprite(name);
-            hasher.AddString(name.ToStringView());
+        // Library order, not name order: the panel asks every frame and a sorted list would allocate; a reorder only makes the preview again
+        for (const SpriteEntry& entry : library.GetAll()) {
+            if (atlasName.empty() || !entry.atlas.has_value() || entry.atlas->name.ToStringView() != atlasName) {
+                continue;
+            }
+            hasher.AddString(entry.name.ToStringView());
             hasher.AddString(entry.texturePath.ToStringView());
             hasher.AddRect(entry.srcRect);
             const bool packed = IsPackedSprite(entry);

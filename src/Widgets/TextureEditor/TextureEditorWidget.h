@@ -8,6 +8,7 @@
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/TextureEditor/SpriteAtlasPanel.h>
+#include <Widgets/TextureEditor/SpriteAtlasPreviewPanel.h>
 #include <Widgets/TextureEditor/SpriteLibraryPanel.h>
 #include <Widgets/TextureEditor/SpriteSheetSlicePanel.h>
 #include <Widgets/TextureEditor/SpriteTextureCache.h>
@@ -20,8 +21,8 @@ namespace BECore {
      *
      * Left: the entries, each with a thumbnail, its texture and an atlas badge, filtered by atlas, and [+ Add]. Right: the selected entry (name, texture file, srcRect with a
      * drag-to-select preview), a "Slice sheet" section that cuts the texture into one entry per grid cell or alpha island, an "Atlas"
-     * section that packs a group of sprites into one texture and unpacks it (a packed sprite's texture and rect are read-only), and
-     * [Delete]. [Save] persists the changes to config/TextureLibrary.xml.
+     * section that packs a group of sprites into one texture and unpacks it (a packed sprite's texture and rect are read-only), an "Atlas
+     * preview" of the group's atlas (what is packed, or what Pack would make; a click on a rect selects that sprite), and [Delete]. [Save] persists the changes to config/TextureLibrary.xml.
      */
     class TextureEditorWidget : public IWidget {
         BE_CLASS(TextureEditorWidget)
@@ -70,6 +71,7 @@ namespace BECore {
         SpriteLibraryPanel _libraryPanel;
         SpriteSheetSlicePanel _slicePanel;
         SpriteAtlasPanel _atlasPanel;
+        SpriteAtlasPreviewPanel _atlasPreviewPanel;
     };
 
 }  // namespace BECore
