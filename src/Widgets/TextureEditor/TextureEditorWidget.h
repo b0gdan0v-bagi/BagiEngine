@@ -7,6 +7,7 @@
 #include <BECore/Types/Types.h>
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
+#include <Widgets/TextureEditor/SpriteAtlasPanel.h>
 #include <Widgets/TextureEditor/SpriteSheetSlicePanel.h>
 #include <imgui.h>
 
@@ -16,8 +17,9 @@ namespace BECore {
      * @brief ImGui panel for the TextureLibrary sprite definitions
      *
      * Left: the list of named entries and [+ Add]. Right: the selected entry (name, texture file, srcRect with a
-     * drag-to-select preview), a "Slice sheet" section that cuts the texture into one entry per grid cell, and [Delete]. [Save]
-     * persists the changes to config/TextureLibrary.xml.
+     * drag-to-select preview), a "Slice sheet" section that cuts the texture into one entry per grid cell or alpha island, an "Atlas"
+     * section that packs a group of sprites into one texture and unpacks it (a packed sprite's texture and rect are read-only), and
+     * [Delete]. [Save] persists the changes to config/TextureLibrary.xml.
      */
     class TextureEditorWidget : public IWidget {
         BE_CLASS(TextureEditorWidget)
@@ -61,6 +63,7 @@ namespace BECore {
         float _imageScaleY = 1.0f;
 
         SpriteSheetSlicePanel _slicePanel;
+        SpriteAtlasPanel _atlasPanel;
     };
 
 }  // namespace BECore

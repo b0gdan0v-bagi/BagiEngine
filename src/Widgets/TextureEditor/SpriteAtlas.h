@@ -29,6 +29,11 @@ namespace BECore {
     /// The sprites of group @p atlasName sorted by the bytes of their names, so the same set gives the same atlas whatever the library's order
     [[nodiscard]] Vector<PoolString> AtlasMembers(const TextureLibrary& library, StringView atlasName);
 
+    /// A packed sprite's texture and rect point into its atlas, so they are not edited until Unpack
+    [[nodiscard]] inline bool IsPackedSprite(const SpriteEntry& entry) {
+        return entry.atlas.has_value() && entry.atlas->source.has_value();
+    }
+
     struct AtlasCounts {
         uint32_t members = 0;
         uint32_t packed = 0;
