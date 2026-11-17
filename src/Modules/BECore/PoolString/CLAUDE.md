@@ -6,7 +6,7 @@
 
 - **One pointer** to an entry (`static_assert(sizeof(PoolString) == sizeof(void*))`). Length and hash live in the entry, so `Length()`, `HashValue()` and `ToStringView()` read through the pointer and **equality is a pointer compare**. In a `consteval` context (no pool exists at compile time) equality compares the hashes.
 - **Entry layout** (`Details::PoolStringEntry`): `hash` (8 bytes), `size` (4 bytes), then the text and a NUL at `offsetof(Entry, data) == 12`; the whole entry is padded to a multiple of 8. A `static_assert` pins the offset because the pool lays entries out by it. The empty text is `g_EmptyEntryStore`, built at compile time: `Intern("")` and a default `PoolString` return it, it is not in the table and not in the statistics as a string.
-- **The pool never frees.** An entry lives to the end of the process, so a `PoolString` is valid forever and cheap to copy, and a text put in the pool is a permanent cost. Only **names that come from data** (a content key, a type, a field, an event) go in; never text for display, a message or an error. A path that lets a client choose the text (`allowInterning` of the control API, `Reflection/CLAUDE.md`) is off by default.
+- **The pool never frees.** An entry lives to the end of the process, so a `PoolString` is valid forever and cheap to copy, and a text put in the pool is a permanent cost. Only **names that come from data** (a content key, a type, a field, an event) go in; never text for display, a message or an error. A path that lets a client choose the text (`allowInterning` of the control API, `Reflection/CLAUDE.md`) is off by default. The readers cap one value read into a `PoolString` field (`ReaderLimits::kMaxPoolStringBytes`).
 
 ## Storage (`PoolString.cpp`)
 

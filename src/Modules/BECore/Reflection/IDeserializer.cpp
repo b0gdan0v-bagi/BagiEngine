@@ -84,6 +84,14 @@ namespace BECore {
         errors.push_back(error);
     }
 
+    bool IDeserializer::AcceptPoolStringLength(StringView key, size_t length) {
+        if (length <= ReaderLimits::kMaxPoolStringBytes) {
+            return true;
+        }
+        ReportError(key, Format("PoolString value is {} bytes, over the limit kMaxPoolStringBytes ({})", length, ReaderLimits::kMaxPoolStringBytes));
+        return false;
+    }
+
     String IDeserializer::MakeDidYouMeanHint(StringView unknown, std::initializer_list<const Vector<String>*> askedKeys) {
         const StringView cutName = CutText(unknown, kMaxSuggestedNameBytes);
         size_t bestDistance = kMaxSuggestedDistance + 1;

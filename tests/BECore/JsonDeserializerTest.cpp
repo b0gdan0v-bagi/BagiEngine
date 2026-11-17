@@ -669,6 +669,24 @@ namespace BECore::Tests {
         EXPECT_EQ(reader.GetErrors()[0].errorMessage, "Invalid enum value: 'Aus??:[]}to'");
     }
 
+    TEST(JsonDeserializerTest, APoolStringOverTheCapIsRefusedAndAStringIsNot) {
+        const String overCap(ReaderLimits::kMaxPoolStringBytes + 1, 'j');
+        const Json document = Parse(Format("{{\"k\":\"{}\"}}", overCap));
+        JsonDeserializer reader(document);
+
+        const size_t before = PoolString::GetStats().stringCount;
+        PoolString pooled;
+        EXPECT_FALSE(reader.ReadAttribute("k", pooled));
+        EXPECT_EQ(PoolString::GetStats().stringCount, before);
+        EXPECT_TRUE(pooled.ToStringView().empty());
+        ASSERT_EQ(reader.GetErrors().size(), 1u);
+        EXPECT_NE(reader.GetErrors()[0].errorMessage.find("kMaxPoolStringBytes"), String::npos);
+
+        String plain;
+        EXPECT_TRUE(reader.ReadAttribute("k", plain));
+        EXPECT_EQ(plain, overCap);
+    }
+
     TEST(JsonDeserializerTest, ALookupNeverInterns) {
         constexpr StringView kNeverInterned = "json_deserializer_never_interned_lookup";
         const Json document = Parse(R"({"a":1})");

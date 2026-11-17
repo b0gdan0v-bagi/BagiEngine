@@ -288,6 +288,13 @@ namespace BECore {
         IDeserializer& operator=(IDeserializer&&) = default;
 
         /**
+         * @brief Whether a text of @p length bytes may become a PoolString; when not, reports the limit and the length under @p key
+         *
+         * A reader calls it before PoolString::Intern and leaves the field as it was on false.
+         */
+        bool AcceptPoolStringLength(StringView key, size_t length);
+
+        /**
          * @brief Subclasses call this to register a named path segment
          *        (BeginObject, BeginArray)
          */

@@ -94,26 +94,6 @@ namespace BECore::Tests {
         EXPECT_EQ(huge.ToStringView(), StringView{hugeText});
     }
 
-    TEST(PoolStringBlocksTest, AnXmlAttributeLongerThanABlockLoadsIntoAPoolString) {
-        const String longText = BlockText(PoolString::kBlockBytes + 100, 'x');
-        String document = "<root name=\"";
-        document += longText;
-        document += "\"><child>";
-        document += longText;
-        document += "</child></root>";
-
-        XmlDeserializer reader;
-        ASSERT_TRUE(reader.LoadFromString(document));
-        PoolString attribute;
-        ASSERT_TRUE(reader.ReadAttribute("name", attribute));
-        EXPECT_EQ(attribute.ToStringView(), StringView{longText});
-        EXPECT_EQ(attribute.CStr()[attribute.Length()], '\0');
-        PoolString element;
-        ASSERT_TRUE(reader.Read("child", element));
-        EXPECT_EQ(element, attribute);
-        EXPECT_FALSE(reader.HasErrors());
-    }
-
     namespace {
 
         // The initial table of the pool has 16384 slots and grows at half load; the names below are well past both

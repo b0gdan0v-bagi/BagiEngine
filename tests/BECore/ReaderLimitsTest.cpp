@@ -277,6 +277,99 @@ namespace BECore::Tests {
         EXPECT_LT(PoolString::GetStats().stringCount - before, kBadValues);
     }
 
+    namespace {
+
+        /// Distinct texts of exactly @p length bytes, so that no other test has put them into the pool
+        String PoolStringText(char fill, size_t length) {
+            return String(length, fill);
+        }
+
+    }  // namespace
+
+    TEST(ReaderLimitsTest, XmlPoolStringAtTheCapIsReadAndOneByteOverIsRefused) {
+        const String atCap = PoolStringText('p', ReaderLimits::kMaxPoolStringBytes);
+        const String overCap = PoolStringText('q', ReaderLimits::kMaxPoolStringBytes + 1);
+        const String document = Format("<root attr=\"{0}\" tooLong=\"{1}\"><element>{0}</element><tooLongElement>{1}</tooLongElement></root>", atCap, overCap);
+        XmlDeserializer reader;
+        ASSERT_TRUE(reader.LoadFromString(document));
+
+        PoolString attribute;
+        PoolString element;
+        ASSERT_TRUE(reader.ReadAttribute("attr", attribute));
+        ASSERT_TRUE(reader.Read("element", element));
+        EXPECT_EQ(attribute.ToStringView(), StringView(atCap));
+        EXPECT_EQ(element, attribute);
+        EXPECT_FALSE(reader.HasErrors());
+
+        const PoolString kept = PoolString::Intern("kept_by_a_refused_read");
+        PoolString refusedAttribute = kept;
+        PoolString refusedElement = kept;
+        const size_t before = PoolString::GetStats().stringCount;
+        EXPECT_FALSE(reader.ReadAttribute("tooLong", refusedAttribute));
+        EXPECT_FALSE(reader.Read("tooLongElement", refusedElement));
+        EXPECT_EQ(PoolString::GetStats().stringCount, before);
+        EXPECT_EQ(refusedAttribute, kept);
+        EXPECT_EQ(refusedElement, kept);
+
+        ASSERT_EQ(reader.GetErrors().size(), 2u);
+        EXPECT_EQ(reader.GetErrors()[0].path, "tooLong");
+        EXPECT_NE(reader.GetErrors()[0].errorMessage.find("kMaxPoolStringBytes"), String::npos);
+        EXPECT_NE(reader.GetErrors()[0].errorMessage.find(ToString(overCap.size())), String::npos);
+        EXPECT_EQ(reader.GetErrors()[1].path, "tooLongElement");
+    }
+
+    TEST(ReaderLimitsTest, XmlStringOfAnyLengthIsNotAffectedByThePoolStringCap) {
+        const String longText = PoolStringText('s', 4 * ReaderLimits::kMaxPoolStringBytes);
+        XmlDeserializer reader;
+        ASSERT_TRUE(reader.LoadFromString(Format("<root attr=\"{0}\"><element>{0}</element></root>", longText)));
+        String attribute;
+        String element;
+        EXPECT_TRUE(reader.ReadAttribute("attr", attribute));
+        EXPECT_TRUE(reader.Read("element", element));
+        EXPECT_EQ(attribute, longText);
+        EXPECT_EQ(element, longText);
+        EXPECT_FALSE(reader.HasErrors());
+    }
+
+    TEST(ReaderLimitsTest, BinaryPoolStringAtTheCapIsReadAndOneByteOverIsRefused) {
+        const String atCap = PoolStringText('b', ReaderLimits::kMaxPoolStringBytes);
+        const String overCap = PoolStringText('c', ReaderLimits::kMaxPoolStringBytes + 1);
+        BinarySerializer writer;
+        writer.WriteAttribute("attr", atCap);
+        writer.WriteAttribute("tooLong", overCap);
+        writer.Write("element", atCap);
+        writer.Write("tooLongElement", overCap);
+        BinaryDeserializer reader;
+        ASSERT_TRUE(reader.LoadFromBuffer(writer.GetData()));
+
+        PoolString attribute;
+        PoolString element;
+        ASSERT_TRUE(reader.ReadAttribute("attr", attribute));
+        ASSERT_TRUE(reader.Read("element", element));
+        EXPECT_EQ(attribute.ToStringView(), StringView(atCap));
+        EXPECT_EQ(element, attribute);
+        EXPECT_FALSE(reader.HasErrors());
+
+        const PoolString kept = PoolString::Intern("kept_by_a_refused_binary_read");
+        PoolString refusedAttribute = kept;
+        PoolString refusedElement = kept;
+        const size_t before = PoolString::GetStats().stringCount;
+        EXPECT_FALSE(reader.ReadAttribute("tooLong", refusedAttribute));
+        EXPECT_FALSE(reader.Read("tooLongElement", refusedElement));
+        EXPECT_EQ(PoolString::GetStats().stringCount, before);
+        EXPECT_EQ(refusedAttribute, kept);
+        EXPECT_EQ(refusedElement, kept);
+
+        ASSERT_EQ(reader.GetErrors().size(), 2u);
+        EXPECT_EQ(reader.GetErrors()[0].path, "tooLong");
+        EXPECT_NE(reader.GetErrors()[0].errorMessage.find("kMaxPoolStringBytes"), String::npos);
+        EXPECT_EQ(reader.GetErrors()[1].path, "tooLongElement");
+
+        String text;
+        EXPECT_TRUE(reader.ReadAttribute("tooLong", text));
+        EXPECT_EQ(text, overCap);
+    }
+
     TEST(ReaderLimitsTest, BinaryFileThatIsNotARegularFileOrIsTooBigIsRefusedBeforeItIsRead) {
         BinaryDeserializer folder;
         EXPECT_FALSE(folder.LoadFromFile(std::filesystem::temp_directory_path()));

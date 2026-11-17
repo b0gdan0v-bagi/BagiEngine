@@ -584,8 +584,11 @@ namespace BECore {
             return false;
         }
 
-        const char* text = node.text().as_string();
-        outValue = PoolString::Intern(StringView{text});
+        const StringView text{node.text().as_string()};
+        if (!AcceptPoolStringLength(name, text.size())) {
+            return false;
+        }
+        outValue = PoolString::Intern(text);
         return true;
     }
 
@@ -766,8 +769,11 @@ namespace BECore {
             return false;
         }
 
-        const char* text = attr.as_string();
-        outValue = PoolString::Intern(StringView{text});
+        const StringView text{attr.as_string()};
+        if (!AcceptPoolStringLength(name, text.size())) {
+            return false;
+        }
+        outValue = PoolString::Intern(text);
         return true;
     }
 
