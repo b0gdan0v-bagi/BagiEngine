@@ -17,6 +17,7 @@ namespace BECore {
     namespace {
 
         constexpr float kSubjectLines = 6.0f;
+        constexpr const char* kSingleRunNote = "A single run is in work on the Generate tab; the set starts after it";
         constexpr float kJobIndent = 16.0f;
         // Squares behind a thumbnail, so a transparent background (a cut-out sprite) shows as transparent
         constexpr float kCheckerCell = 10.0f;
@@ -96,19 +97,34 @@ namespace BECore {
         if (!nameValid) {
             ImGui::TextColored(palette.warning, "1 to 64 of A-Z a-z 0-9 _ -");
         }
+        {
+            ScopedMonoFont mono;
+            ImGui::InputInt("Count", &_count);
+        }
+        _count = std::clamp(_count, 1, kArtGenSetMaxCount);
+        ItemTooltip("Variants made for every job of this set");
+        ImGui::Checkbox("Random seed", &_randomSeed);
+        ItemTooltip("Off: the same first seed for every job of the set, the one below");
+        if (!_randomSeed) {
+            ImGui::SameLine();
+            ScopedMonoFont mono;
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+            ImGui::InputScalar("##setSeed", ImGuiDataType_S64, &_seed);
+            _seed = std::max<int64_t>(_seed, 0);
+        }
 
         const bool canQueue = !form.preset.IsEmpty() && _subjects[0] != '\0' && nameValid;
         ImGui::BeginDisabled(!canQueue);
         if (IconTextButton(ICON_LC_LIST_PLUS, "Queue",
-                           "Make every subject with the form's preset, count and seed, one job after another; a set draws one seed for all its jobs when the form's is random")) {
+                           "Make every subject with the preset above and this set's count and seed, one job after another; a set draws one seed for all its jobs when random")) {
             _error.clear();
             _queued.clear();
             auto subjects = ParseArtGenSubjects(StringView(_subjects));
             if (subjects) {
                 ArtGenSetRequest request;
                 request.subjects = std::move(*subjects);
-                request.count = form.count;
-                request.seed = form.seed;
+                request.count = _count;
+                request.seed = _randomSeed ? Optional<int64_t>() : Optional<int64_t>(_seed);
                 request.name = String(_setName);
                 // A saved preset goes by name, so its provenance names the file; anything else goes inline as a draft
                 if (form.preset.IsDirty()) {
@@ -131,6 +147,9 @@ namespace BECore {
             }
         }
         ImGui::EndDisabled();
+        if (session.IsRunInWork() && session.GetRun().setName.empty()) {
+            ImGui::TextDisabled("%s", kSingleRunNote);
+        }
         if (!_error.empty()) {
             ImGui::TextColored(palette.error, "%s", _error.c_str());
         }

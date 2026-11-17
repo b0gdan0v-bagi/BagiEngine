@@ -20,7 +20,6 @@
 #include <Widgets/ImGuiFonts.h>
 #include <Widgets/ImGuiTheme.h>
 #include <Widgets/SceneEditor/SceneSelectionEvents.h>
-#include <algorithm>
 #include <cstdio>
 #include <imgui.h>
 
@@ -29,6 +28,8 @@ namespace BECore {
     namespace {
 
         constexpr float kThumbnailSize = 160.0f;
+        constexpr const char* kPresetSectionLabel = "Preset: used by Generate and Set";
+        constexpr const char* kSetRunningNote = "A set is running (see the Set tab); a single run waits for it";
         constexpr float kDefaultWidth = 520.0f;
         constexpr float kDefaultHeight = 700.0f;
         // Seconds a started bridge gets to make its first poll before the panel says it did not come
@@ -142,16 +143,16 @@ namespace BECore {
         auto& session = ArtGenSession::GetInstance();
         DrawServiceLine(session);
         DrawSetup(session);
-        ImGui::Separator();
-        DrawForm(session);
+        DrawPreset(session);
         ImGui::Separator();
         if (ImGui::BeginTabBar("##ArtGenTabs")) {
             if (ImGui::BeginTabItem(ICON_LC_IMAGE " Generate")) {
+                DrawRunForm(session);
                 DrawRun(session);
                 ImGui::EndTabItem();
             }
             if (ImGui::BeginTabItem(ICON_LC_LIST_CHECKS " Set")) {
-                const ArtGenSetPanelForm form{_form, _count, _randomSeed ? Optional<int64_t>() : Optional<int64_t>(_seed)};
+                const ArtGenSetPanelForm form{_form};
                 _setPanel.DrawQueue(session, form);
                 ImGui::EndTabItem();
             }
@@ -357,13 +358,15 @@ namespace BECore {
         ImGui::TextColored(palette.textDisabled, ICON_LC_CLOUD " Or a generator on another machine: not available yet (comfyui-remote-via-todo)");
     }
 
-    void ArtGenWidget::DrawForm(ArtGenSession& session) {
+    void ArtGenWidget::DrawPreset(ArtGenSession& session) {
+        ImGui::SeparatorText(kPresetSectionLabel);
         DrawPresetBar(session);
         if (!_form.IsEmpty()) {
             DrawPresetFields(session);
         }
-        ImGui::Spacing();
+    }
 
+    void ArtGenWidget::DrawRunForm(ArtGenSession& session) {
         ImGui::InputTextWithHint("Subject", "white knight, a red gem, ...", _subject, sizeof(_subject));
         {
             ScopedMonoFont mono;
@@ -393,6 +396,7 @@ namespace BECore {
         }
         ImGui::EndDisabled();
         // A set that only waits has no run to cancel: its Cancel set is on the Set tab
+        const bool singleRunInWork = session.IsRunInWork() && session.GetRun().setName.empty();
         if (session.IsRunInWork()) {
             ImGui::SameLine();
             ImGui::BeginDisabled(session.GetRun().cancelRequested);
@@ -400,6 +404,9 @@ namespace BECore {
                 session.Cancel();
             }
             ImGui::EndDisabled();
+        }
+        if (busy && !singleRunInWork) {
+            ImGui::TextDisabled("%s", kSetRunningNote);
         }
         if (!_requestError.empty()) {
             ImGui::TextColored(GetImGuiPalette().error, "%s", _requestError.c_str());
@@ -563,7 +570,7 @@ namespace BECore {
             ImGui::TextColored(palette.warning, "The service does not know the workflow '%s'", _form.GetWorkflow().c_str());
             return;
         }
-        if (ImGui::TreeNodeEx("Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+        if (ImGui::TreeNodeEx("Settings")) {
             if (workflow->HasSize()) {
                 DrawSizeFields(*workflow);
             }

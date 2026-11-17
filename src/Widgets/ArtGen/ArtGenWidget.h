@@ -47,7 +47,10 @@ namespace BECore {
         void DrawSetup(ArtGenSession& session);
         void DrawPlan(ArtGenSession& session, const ArtGenSetup& setup);
         void StartBridge(uint16_t port);
-        void DrawForm(ArtGenSession& session);
+        /// The preset section above the tabs: what Generate and Set both use
+        void DrawPreset(ArtGenSession& session);
+        /// Subject, count, seed and Generate: the Generate tab's own controls
+        void DrawRunForm(ArtGenSession& session);
         void DrawPresetBar(ArtGenSession& session);
         void DrawPresetFields(ArtGenSession& session);
         void DrawSizeFields(const ArtGenWorkflow& workflow);
