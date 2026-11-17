@@ -375,7 +375,7 @@ namespace BECore::Tests {
         deserializer.EndObject();
 
         ASSERT_TRUE(deserializer.HasErrors());
-        EXPECT_NE(deserializer.GetErrors()[0].errorMessage.ToStringView().find("NoSuchControl"), StringView::npos);
+        EXPECT_NE(deserializer.GetErrors()[0].errorMessage.find("NoSuchControl"), StringView::npos);
     }
 
     // ---- from a scene file ------------------------------------------------------------------------------------------------

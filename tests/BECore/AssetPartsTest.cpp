@@ -161,7 +161,7 @@ namespace BECore::Tests {
         EXPECT_EQ(PartVisualDerived::constructed, 0);
         ASSERT_EQ((*opened)->GetErrors().size(), 2u);
         // The reader of a whole file stands inside the part element, so the path starts with the part
-        EXPECT_EQ((*opened)->GetErrors()[0].path.ToStringView(), "sim.PartSimHolder.visualPart");
+        EXPECT_EQ((*opened)->GetErrors()[0].path, "sim.PartSimHolder.visualPart");
 
         const auto loaded = Load<PartSimHolder>("gem.asset.xml", AssetPurpose::Sim);
         ASSERT_TRUE(loaded.has_value());

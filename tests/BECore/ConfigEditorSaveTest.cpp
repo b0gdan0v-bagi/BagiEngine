@@ -253,8 +253,8 @@ namespace BECore::Tests {
 
         ASSERT_TRUE(saved.HasErrors());
         ASSERT_EQ(saved.GetErrors().size(), 1u);
-        EXPECT_EQ(saved.GetErrors()[0].path.ToStringView(), "sinks[0].type");
-        EXPECT_EQ(saved.GetErrors()[0].errorMessage.ToStringView(), "Unknown factory type: 'Console'");
+        EXPECT_EQ(saved.GetErrors()[0].path, "sinks[0].type");
+        EXPECT_EQ(saved.GetErrors()[0].errorMessage, "Unknown factory type: 'Console'");
 
         EXPECT_EQ(manager->GetSink<OutputSink>(), nullptr);
         ASSERT_EQ(manager->GetSinks().size(), 1u);

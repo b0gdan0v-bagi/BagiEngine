@@ -131,7 +131,7 @@ namespace BECore::Tests {
         String ErrorsOf(const IDeserializer& reader) {
             String out;
             for (const DeserializeError& report : reader.GetErrors()) {
-                AppendFormat(out, "{}: {}\n", report.path.ToStringView(), report.errorMessage.ToStringView());
+                AppendFormat(out, "{}: {}\n", report.path, report.errorMessage);
             }
             return out;
         }

@@ -316,7 +316,7 @@ namespace BECore::Tests {
         loaded->Deserialize(deserializer);
         deserializer.EndObject();
         ASSERT_TRUE(deserializer.HasErrors());
-        EXPECT_NE(deserializer.GetErrors()[0].errorMessage.ToStringView().find("NoSuchComponent"), StringView::npos);
+        EXPECT_NE(deserializer.GetErrors()[0].errorMessage.find("NoSuchComponent"), StringView::npos);
     }
 
     // ---- one of each type -------------------------------------------------------------------------------------------------

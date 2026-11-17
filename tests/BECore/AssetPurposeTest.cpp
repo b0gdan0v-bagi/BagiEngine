@@ -97,8 +97,8 @@ namespace BECore::Tests {
         template <typename Deserializer>
         void ExpectOneRefusal(const Deserializer& deserializer, StringView path, StringView message) {
             ASSERT_EQ(deserializer.GetErrors().size(), 1u);
-            EXPECT_EQ(deserializer.GetErrors()[0].path.ToStringView(), path);
-            EXPECT_EQ(deserializer.GetErrors()[0].errorMessage.ToStringView(), message);
+            EXPECT_EQ(deserializer.GetErrors()[0].path, path);
+            EXPECT_EQ(deserializer.GetErrors()[0].errorMessage, message);
         }
 
         /// What a loader gets in `holder` when the filter refuses nothing but the visual field and the visual elements
@@ -144,11 +144,11 @@ namespace BECore::Tests {
 
         ExpectSimPartOnly(holder);
         ASSERT_EQ(deserializer.GetErrors().size(), 3u);
-        EXPECT_EQ(deserializer.GetErrors()[0].path.ToStringView(), "visualPart");
-        EXPECT_EQ(deserializer.GetErrors()[0].errorMessage.ToStringView(), "Type 'PurposeVisualProbe' (purpose visual) is not allowed in the sim part");
-        EXPECT_TRUE(Contains(deserializer.GetErrors()[1].path.ToStringView(), "elements")) << deserializer.GetErrors()[1].path.ToStringView().data();
-        EXPECT_EQ(deserializer.GetErrors()[1].errorMessage.ToStringView(), "Type 'PurposeVisualDerived' (purpose visual) is not allowed in the sim part");
-        EXPECT_EQ(deserializer.GetErrors()[2].path.ToStringView(), "single");
+        EXPECT_EQ(deserializer.GetErrors()[0].path, "visualPart");
+        EXPECT_EQ(deserializer.GetErrors()[0].errorMessage, "Type 'PurposeVisualProbe' (purpose visual) is not allowed in the sim part");
+        EXPECT_TRUE(Contains(deserializer.GetErrors()[1].path, "elements")) << deserializer.GetErrors()[1].path.data();
+        EXPECT_EQ(deserializer.GetErrors()[1].errorMessage, "Type 'PurposeVisualDerived' (purpose visual) is not allowed in the sim part");
+        EXPECT_EQ(deserializer.GetErrors()[2].path, "single");
     }
 
     TEST_F(AssetPurposeFilter, WithoutAFilterTheSameDocumentLoadsWholeAsBefore) {
@@ -182,7 +182,7 @@ namespace BECore::Tests {
 
         ExpectSimPartOnly(holder);
         EXPECT_EQ(deserializer.GetErrors().size(), 3u);
-        EXPECT_EQ(deserializer.GetErrors()[0].path.ToStringView(), "visualPart");
+        EXPECT_EQ(deserializer.GetErrors()[0].path, "visualPart");
 
         BinaryDeserializer whole;
         ASSERT_TRUE(whole.LoadFromBuffer(serializer.GetData()));

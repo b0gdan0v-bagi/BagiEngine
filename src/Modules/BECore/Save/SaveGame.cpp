@@ -36,7 +36,7 @@ namespace BECore {
                 return String(fallback);
             }
             const DeserializeError& error = deserializer.GetErrors().front();
-            return Format("{} (at '{}')", error.errorMessage.ToStringView(), error.path.ToStringView());
+            return Format("{} (at '{}')", error.errorMessage, error.path);
         }
 
         /// Leaves @p deserializer inside the object `save`, so Load goes on with `state`

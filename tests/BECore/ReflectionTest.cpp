@@ -145,7 +145,7 @@ namespace BECore::Tests {
         String DescribeErrors(const IDeserializer& deserializer) {
             String text;
             for (const auto& error : deserializer.GetErrors()) {
-                text.append(Format("[{}: {}] ", error.path.CStr(), error.errorMessage.CStr()));
+                text.append(Format("[{}: {}] ", error.path.c_str(), error.errorMessage.c_str()));
             }
             return text;
         }
@@ -790,8 +790,8 @@ namespace BECore::Tests {
 
             ASSERT_TRUE(deserializer.HasErrors());
             ASSERT_EQ(deserializer.GetErrors().size(), 1u);
-            EXPECT_STREQ(deserializer.GetErrors()[0].path.CStr(), "outer.inner.nonExistentField");
-            EXPECT_STREQ(deserializer.GetErrors()[0].errorMessage.CStr(), "Element not found");
+            EXPECT_STREQ(deserializer.GetErrors()[0].path.c_str(), "outer.inner.nonExistentField");
+            EXPECT_STREQ(deserializer.GetErrors()[0].errorMessage.c_str(), "Element not found");
         }
 
         // Array elements show their index in the path
@@ -816,7 +816,7 @@ namespace BECore::Tests {
             deserializer.EndObject();
 
             ASSERT_EQ(deserializer.GetErrors().size(), 1u);
-            EXPECT_STREQ(deserializer.GetErrors()[0].path.CStr(), "outer.items[1].missing");
+            EXPECT_STREQ(deserializer.GetErrors()[0].path.c_str(), "outer.items[1].missing");
         }
 
         // ReadAttribute() and BeginObject() stay silent: the field may be optional
@@ -860,7 +860,7 @@ namespace BECore::Tests {
         // Unlike a missing optional entry, a mismatch means the data is not what the reader expects: always an error
         ASSERT_EQ(deserializer.GetErrors().size(), 4u) << DescribeErrors(deserializer).c_str();
         for (const auto& error : deserializer.GetErrors()) {
-            EXPECT_STREQ(error.errorMessage.CStr(), "Type mismatch");
+            EXPECT_STREQ(error.errorMessage.c_str(), "Type mismatch");
         }
 
         // The entries themselves are intact
@@ -1374,7 +1374,7 @@ namespace BECore::Tests {
 
         const auto& errors = deserializer.GetErrors();
         ASSERT_FALSE(errors.empty());
-        const String pathStr = errors[0].path.CStr();
+        const String pathStr = errors[0].path.c_str();
 
         EXPECT_NE(pathStr.find("player"), String::npos) << "error path '" << pathStr.c_str() << "'";
         EXPECT_NE(pathStr.find("inventory"), String::npos) << "error path '" << pathStr.c_str() << "'";

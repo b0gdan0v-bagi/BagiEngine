@@ -60,7 +60,7 @@ namespace BECore::Tests {
                 String out;
                 for (const Vector<DeserializeError>* list : {&reader.GetErrors(), &reader.GetWarnings()}) {
                     for (const DeserializeError& report : *list) {
-                        AppendFormat(out, "{}: {}\n", report.path.ToStringView(), report.errorMessage.ToStringView());
+                        AppendFormat(out, "{}: {}\n", report.path, report.errorMessage);
                     }
                 }
                 return out;
@@ -101,7 +101,7 @@ namespace BECore::Tests {
             reader.EndObject();
             String out;
             for (const DeserializeError& report : reader.GetErrors()) {
-                AppendFormat(out, "{}: {}\n", report.path.ToStringView(), report.errorMessage.ToStringView());
+                AppendFormat(out, "{}: {}\n", report.path, report.errorMessage);
             }
             return out;
         }
@@ -122,7 +122,7 @@ namespace BECore::Tests {
             target.Deserialize(reader);
             String out;
             for (const DeserializeError& report : reader.GetErrors()) {
-                AppendFormat(out, "{}: {}\n", report.path.ToStringView(), report.errorMessage.ToStringView());
+                AppendFormat(out, "{}: {}\n", report.path, report.errorMessage);
             }
             return out;
         }
@@ -553,7 +553,7 @@ namespace BECore::Tests {
         reader.FinishLoad();
         String warnings;
         for (const DeserializeError& warning : reader.GetWarnings()) {
-            AppendFormat(warnings, "{}: {}\n", warning.path.ToStringView(), warning.errorMessage.ToStringView());
+            AppendFormat(warnings, "{}: {}\n", warning.path, warning.errorMessage);
         }
         EXPECT_TRUE(HasText(warnings, "vlue")) << warnings.c_str();
         EXPECT_FALSE(HasText(warnings, "damage")) << warnings.c_str();

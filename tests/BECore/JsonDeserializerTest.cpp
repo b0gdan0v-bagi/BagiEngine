@@ -41,9 +41,9 @@ namespace BECore::Tests {
         String ErrorsText(const IDeserializer& reader) {
             String text;
             for (const DeserializeError& error : reader.GetErrors()) {
-                text += String(error.path.ToStringView().data(), error.path.ToStringView().size());
+                text += error.path;
                 text += ": ";
-                text += String(error.errorMessage.ToStringView().data(), error.errorMessage.ToStringView().size());
+                text += error.errorMessage;
                 text += '\n';
             }
             return text;
@@ -52,9 +52,9 @@ namespace BECore::Tests {
         String WarningsText(const IDeserializer& reader) {
             String text;
             for (const DeserializeError& warning : reader.GetWarnings()) {
-                text += String(warning.path.ToStringView().data(), warning.path.ToStringView().size());
+                text += warning.path;
                 text += ": ";
-                text += String(warning.errorMessage.ToStringView().data(), warning.errorMessage.ToStringView().size());
+                text += warning.errorMessage;
                 text += '\n';
             }
             return text;
@@ -551,7 +551,7 @@ namespace BECore::Tests {
         reader.FinishLoad();
 
         ASSERT_EQ(reader.GetWarnings().size(), 1u);
-        const StringView message = reader.GetWarnings()[0].errorMessage.ToStringView();
+        const StringView message = reader.GetWarnings()[0].errorMessage;
         EXPECT_LT(message.size(), 100u);
         EXPECT_EQ(message.find('\n'), StringView::npos);
     }
@@ -666,7 +666,7 @@ namespace BECore::Tests {
         DiagnosticsMode mode = DiagnosticsMode::Warn;
         EXPECT_FALSE(Ser::Load(reader, mode, "mode"));
         ASSERT_EQ(reader.GetErrors().size(), 1u);
-        EXPECT_EQ(reader.GetErrors()[0].errorMessage.ToStringView(), "Invalid enum value: 'Aus??:[]}to'");
+        EXPECT_EQ(reader.GetErrors()[0].errorMessage, "Invalid enum value: 'Aus??:[]}to'");
     }
 
     TEST(JsonDeserializerTest, ALookupNeverInterns) {

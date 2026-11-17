@@ -317,8 +317,8 @@ namespace BECore::Tests {
         void ExpectOneDropReport(const IDeserializer& deserializer, StringView field, StringView message) {
             ASSERT_TRUE(deserializer.HasErrors());
             ASSERT_EQ(deserializer.GetErrors().size(), 1u);
-            EXPECT_EQ(deserializer.GetErrors()[0].path.ToStringView(), field);
-            EXPECT_EQ(deserializer.GetErrors()[0].errorMessage.ToStringView(), message);
+            EXPECT_EQ(deserializer.GetErrors()[0].path, field);
+            EXPECT_EQ(deserializer.GetErrors()[0].errorMessage, message);
         }
 
         template <typename Value>

@@ -25,7 +25,7 @@ namespace BECore::ReaderLimits {
     /// Errors one deserializer keeps; the last place of the list says that the rest were dropped
     inline constexpr size_t kMaxRecordedErrors = 64;
 
-    /// Bytes of the path and of the message of one recorded error (both go into the never-freed PoolString table)
+    /// Bytes of the path and of the message of one recorded error (they reach a log and a reply)
     inline constexpr size_t kMaxErrorTextBytes = 256;
 
     /// Bytes of a rejected value that an error message quotes

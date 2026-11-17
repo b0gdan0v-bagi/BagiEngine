@@ -150,8 +150,8 @@ namespace BECore::Tests {
         const auto load = LoadApplicationConfig();
         EXPECT_TRUE(load.errors.empty());
         ASSERT_EQ(load.warnings.size(), 1u);
-        EXPECT_EQ(load.warnings[0].path.ToStringView(), kTypoAttribute);
-        EXPECT_NE(load.warnings[0].errorMessage.ToStringView().find("did you mean 'renderer'?"), StringView::npos);
+        EXPECT_EQ(load.warnings[0].path, kTypoAttribute);
+        EXPECT_NE(load.warnings[0].errorMessage.find("did you mean 'renderer'?"), StringView::npos);
     }
 
     TEST_F(ConfigDiagnosticsTest, ApplicationConfigWithATypoUnderTheStrictFlagIsAnError) {
@@ -161,7 +161,7 @@ namespace BECore::Tests {
         const auto load = LoadApplicationConfig();
         EXPECT_TRUE(load.warnings.empty());
         ASSERT_EQ(load.errors.size(), 1u);
-        EXPECT_EQ(load.errors[0].path.ToStringView(), kTypoAttribute);
+        EXPECT_EQ(load.errors[0].path, kTypoAttribute);
     }
 
     TEST_F(ConfigDiagnosticsTest, TheShippedApplicationConfigHasNoWarnings) {
@@ -171,8 +171,8 @@ namespace BECore::Tests {
     }
 
     TEST_F(ConfigDiagnosticsTest, LogDeserializeErrorsLogsWarningsAsWarnings) {
-        DeserializeError error{PoolString::Intern("a.b"), PoolString::Intern("bad value"), 0};
-        DeserializeError warning{PoolString::Intern("c"), PoolString::Intern("odd key"), 3};
+        DeserializeError error{"a.b", "bad value", 0};
+        DeserializeError warning{"c", "odd key", 3};
 
         LogRecorder recorder;
         LogDeserializeErrors("Probe", Span<const DeserializeError>(&error, 1), Span<const DeserializeError>(&warning, 1));
@@ -203,7 +203,7 @@ namespace BECore::Tests {
 
         EXPECT_TRUE(findings.errors.empty());
         ASSERT_EQ(findings.warnings.size(), 1u);
-        EXPECT_EQ(findings.warnings[0].path.ToStringView(), "scenes[0].nmae");
+        EXPECT_EQ(findings.warnings[0].path, "scenes[0].nmae");
         EXPECT_EQ(recorder.Count(LogLevel::Warning, {"Config 'ProbeScene'", "scenes[0].nmae: Unknown attribute 'nmae'"}), 1u);
 
         doc.document_element().append_attribute("contentVersion") = ToString(kContentVersion).c_str();

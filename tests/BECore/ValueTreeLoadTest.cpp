@@ -41,7 +41,7 @@ namespace BECore::Tests {
             String out;
             for (const Vector<DeserializeError>* list : {&reader.GetErrors(), &reader.GetWarnings()}) {
                 for (const DeserializeError& report : *list) {
-                    AppendFormat(out, "{}: {}\n", report.path.ToStringView(), report.errorMessage.ToStringView());
+                    AppendFormat(out, "{}: {}\n", report.path, report.errorMessage);
                 }
             }
             return out;

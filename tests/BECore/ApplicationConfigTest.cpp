@@ -18,7 +18,7 @@ namespace BECore::Tests {
 
         /// True when exactly one error was reported and it is under @p path
         bool HasOnlyErrorAt(const ApplicationConfigLoad& load, StringView path) {
-            return load.errors.size() == 1 && load.errors[0].path.ToStringView() == path;
+            return load.errors.size() == 1 && load.errors[0].path == path;
         }
 
     }  // namespace
@@ -70,7 +70,7 @@ namespace BECore::Tests {
             const auto load = Load(xml);
             EXPECT_EQ(load.config._mode, RunMode::Editor);
             ASSERT_TRUE(HasOnlyErrorAt(load, "mode"));
-            EXPECT_NE(load.errors[0].errorMessage.ToStringView().find("Invalid enum value"), StringView::npos);
+            EXPECT_NE(load.errors[0].errorMessage.find("Invalid enum value"), StringView::npos);
         }
     }
 
