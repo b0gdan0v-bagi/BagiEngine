@@ -53,6 +53,7 @@ namespace BECore {
         constexpr float kMaxFadeMs = 1000.0f;
         constexpr float kMaxSeconds = 60.0f;
         constexpr Array<uint32_t, 5> kRates{0, 22050, 32000, 44100, 48000};
+        constexpr Array<int32_t, 7> kMaxSizes{0, 64, 128, 256, 512, 1024, 2048};  // 0: no downscale
 
         DecodedAudio DecodedOf(const AudioClip& clip) {
             DecodedAudio audio;
@@ -63,8 +64,8 @@ namespace BECore {
 
         /// What Accept of an image writes, named once: the same path the acceptor builds (`ArtGenGameFile`)
         const char* AcceptImageNote() {
-            static const String note =
-                Format("Copy the image into the game: {} + .artgen.json and the sprite in config/TextureLibrary.xml. Both are in git.", ArtGenGameFile(kPlaceholderName, kKindImage));
+            static const String note = Format("Trim and downscale the image as set above and write it into the game: {} + .artgen.json and the sprite in config/TextureLibrary.xml. Both are in git.",
+                                              ArtGenGameFile(kPlaceholderName, kKindImage));
             return note.c_str();
         }
 
@@ -598,8 +599,96 @@ namespace BECore {
                     DrawInputField(input);
                 }
             }
+            if (workflow->kind != kKindAudio && ImGui::TreeNodeEx("Accept (image)")) {
+                DrawImageAcceptFields("##presetAccept");
+                ImGui::TreePop();
+            }
             ImGui::TreePop();
         }
+    }
+
+    void ArtGenWidget::DrawImageAcceptFields(const char* id) {
+        ImGui::PushID(id);
+        ArtGenImageSettings settings = _form.GetImageAccept();
+        bool changed = ImGui::Checkbox("Trim to the drawn object", &settings.trim);
+        ItemTooltip("Cut the file to the box of what is drawn (alpha above the haze). A set is cut to the box of all its pictures together, so a pawn stays smaller than a king");
+        ImGui::BeginDisabled(!settings.trim);
+        ImGui::SetNextItemWidth(kFieldWidth);
+        {
+            ScopedMonoFont mono;
+            changed |= ImGui::SliderInt("Padding", &settings.padding, ArtGenImageSettings::kMinPadding, ArtGenImageSettings::kMaxPadding, "%d %%", ImGuiSliderFlags_AlwaysClamp);
+        }
+        ImGui::EndDisabled();
+        ItemTooltip("The margin kept around the drawn box, in percent of its longer side");
+        char current[32];
+        if (settings.maxSize == 0) {
+            std::snprintf(current, sizeof(current), "original size");
+        } else {
+            std::snprintf(current, sizeof(current), "%d px", static_cast<int>(settings.maxSize));
+        }
+        ImGui::SetNextItemWidth(kFieldWidth);
+        if (ImGui::BeginCombo("Max size", current)) {
+            for (const int32_t option : kMaxSizes) {
+                char label[32];
+                if (option == 0) {
+                    std::snprintf(label, sizeof(label), "original size");
+                } else {
+                    std::snprintf(label, sizeof(label), "%d px", static_cast<int>(option));
+                }
+                if (ImGui::Selectable(label, option == settings.maxSize)) {
+                    settings.maxSize = option;
+                    changed = true;
+                }
+            }
+            ImGui::EndCombo();
+        }
+        ItemTooltip("The longer side of the file in pixels; a bigger picture is scaled down, a smaller one is never scaled up");
+        if (changed) {
+            _form.SetImageAccept(settings);
+        }
+        if (_form.HasImageAccept()) {
+            ImGui::SameLine();
+            if (IconTextButton(ICON_LC_ROTATE_CCW, "Defaults", "Back to the defaults of Accept; the preset file then has no accept key")) {
+                _form.ClearImageAccept();
+            }
+        }
+        ImGui::PopID();
+    }
+
+    void ArtGenWidget::RefreshAcceptSummary(const ArtGenRun& run, const ArtGenVariant& variant) {
+        if (!_boundsRead || _boundsRun != run.id || _boundsPath != variant.path) {
+            _boundsRead = true;
+            _boundsRun = run.id;
+            _boundsPath = variant.path;
+            _summaryValid = false;
+            _drawn.reset();
+            _summaryText.clear();
+            auto pixels = ReadArtGenPng(std::filesystem::path(variant.path.c_str()));
+            if (pixels) {
+                _imageWidth = static_cast<int32_t>(pixels->width);
+                _imageHeight = static_cast<int32_t>(pixels->height);
+                _drawn = DrawnBounds(*pixels);
+                if (!_drawn) {
+                    _summaryText = "Nothing is drawn: Accept would refuse this picture";
+                    _summaryIsError = true;
+                    _summaryValid = true;
+                }
+            } else {
+                _summaryText = pixels.error();
+                _summaryIsError = true;
+                _summaryValid = true;
+            }
+        }
+        const ArtGenImageSettings& settings = _form.GetImageAccept();
+        if (_summaryValid && (!_drawn || _summarySettings == settings)) {
+            return;
+        }
+        _summarySettings = settings;
+        _summaryValid = true;
+        const ArtGenIntRect bounds = *_drawn;
+        auto frame = MakeArtGenFrame(Span<const ArtGenIntRect>(&bounds, 1), _imageWidth, _imageHeight, settings);
+        _summaryIsError = !frame.has_value();
+        _summaryText = frame ? Format("drawn {} x {}, written {} x {}", bounds.w, bounds.h, frame->outWidth, frame->outHeight) : frame.error();
     }
 
     void ArtGenWidget::DrawSizeFields(const ArtGenWorkflow& workflow) {
@@ -1025,7 +1114,8 @@ namespace BECore {
 
     void ArtGenWidget::DrawAccept(ArtGenSession& session) {
         const auto& palette = GetImGuiPalette();
-        if (!_selectedSeed || session.FindVariant(*_selectedSeed) == nullptr) {
+        const ArtGenVariant* variant = _selectedSeed ? session.FindVariant(*_selectedSeed) : nullptr;
+        if (variant == nullptr) {
             ImGui::TextDisabled("Click an image to accept it into the game");
             return;
         }
@@ -1033,6 +1123,12 @@ namespace BECore {
         {
             ScopedMonoFont mono;
             ImGui::TextDisabled("seed %lld", static_cast<long long>(*_selectedSeed));
+        }
+        RefreshAcceptSummary(session.GetRun(), *variant);
+        DrawImageAcceptFields("##acceptImage");
+        if (!_summaryText.empty()) {
+            ScopedMonoFont mono;
+            ImGui::TextColored(_summaryIsError ? palette.error : palette.textDisabled, "%s", _summaryText.c_str());
         }
         ImGui::InputTextWithHint("Sprite", "white_knight", _spriteName, sizeof(_spriteName));
         ItemTooltip("The TextureLibrary name; the file goes to assets/artgen/<name>.png with its .artgen.json");
@@ -1048,7 +1144,8 @@ namespace BECore {
 
         ImGui::BeginDisabled(!validName);
         if (IconTextButton(ICON_LC_CHECK, "Accept", AcceptImageNote())) {
-            auto result = session.Accept(*_selectedSeed, StringView(_spriteName), _useOnSelected);
+            const ArtGenImageSettings settings = _form.GetImageAccept();
+            auto result = session.Accept(*_selectedSeed, StringView(_spriteName), _useOnSelected, &settings);
             _acceptFailed = !result.has_value();
             if (result) {
                 const auto reloaded = GetJsonInt(*result, "reloadedSprites").value_or(0);

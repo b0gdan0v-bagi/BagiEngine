@@ -681,6 +681,17 @@ namespace BECore {
             _acceptMessage = result ? Format("Kept {} row(s)", keepable) : result.error().message;
         }
         ImGui::EndDisabled();
+        if (set.kind != kKindAudio) {
+            if (set.processing) {
+                const ArtGenImageFrame& frame = set.processing->frame;
+                ImGui::PushTextWrapPos(0.0f);
+                ImGui::TextDisabled("Frame %d x %d from %d x %d, fixed at the first Accept all: every row of the set is cut and scaled the same", static_cast<int>(frame.outWidth),
+                                    static_cast<int>(frame.outHeight), static_cast<int>(frame.w), static_cast<int>(frame.h));
+                ImGui::PopTextWrapPos();
+            } else if (IsLegacyAccepted(set)) {
+                ImGui::TextDisabled("Accepted before trimming: the files are full frames");
+            }
+        }
         if (!_acceptMessage.empty()) {
             ImGui::TextColored(_acceptFailed ? palette.error : palette.success, "%s", _acceptMessage.c_str());
         }
