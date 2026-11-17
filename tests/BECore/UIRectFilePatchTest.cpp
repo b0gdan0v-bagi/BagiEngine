@@ -221,7 +221,7 @@ namespace BECore::Tests {
             }
             rect.flex = random.Chance() ? 0.0f : random.Step(12);
             if (random.Chance()) {
-                rect.region = PoolString::Intern(random.Chance() ? "board" : "side");
+                rect.region = random.Chance() ? "board"_intern.ToPoolString() : "side"_intern.ToPoolString();
             }
             return rect;
         }

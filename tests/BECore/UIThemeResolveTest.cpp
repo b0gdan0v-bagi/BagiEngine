@@ -550,7 +550,7 @@ namespace BECore::Tests {
             ASSERT_FALSE(deserializer.HasErrors()) << where.c_str() << ": " << xml.c_str();
 
             for (const bool second : {false, true}) {
-                ASSERT_TRUE(themes.SetTheme(PoolString::Intern(second ? "second" : "first")));
+                ASSERT_TRUE(themes.SetTheme(second ? "second"_intern.ToPoolString() : "first"_intern.ToPoolString()));
                 element->ResolveTheme(themes);
                 for (size_t i = 0; i < control.fields.size(); ++i) {
                     const Color expected = TableColor(static_cast<int>(i), second);

@@ -225,7 +225,7 @@ namespace BECore::Tests {
                 EXPECT_TRUE(SameBytes(document.facing.Evaluate(world.context), Slerp(caster.facing, Quat{0.0f, 0.0f, 1.0f, 0.0f}, 0.25f)));
                 EXPECT_TRUE(SameBytes(document.tint.Evaluate(world.context), Lerp(caster.tint, Color{0, 0, 0, 255}, 0.5f)));
                 EXPECT_EQ(document.element.Evaluate(world.context), caster.alive ? ValueElement::Fire : caster.element);
-                EXPECT_EQ(document.label.Evaluate(world.context), PoolString::Intern(caster.alive ? "burn" : "chill"));
+                EXPECT_EQ(document.label.Evaluate(world.context), caster.alive ? "burn"_intern.ToPoolString() : "chill"_intern.ToPoolString());
             }
         }
 
