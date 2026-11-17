@@ -20,6 +20,8 @@ namespace BECore {
     inline constexpr int32_t kMaxSetJobs = 64;
     inline constexpr int32_t kArtGenSetMaxCount = 16;
     inline constexpr int32_t kArtGenSetDefaultCount = 4;
+    /// A row never holds more variants than this, so "more variants" cannot grow the Set tab's rows without a bound
+    inline constexpr int32_t kArtGenJobMaxVariants = 64;
     /// The two kinds of what a preset makes, as the service reports them and the manifest keeps them
     inline constexpr StringView kKindImage = "image";
     inline constexpr StringView kKindAudio = "audio";
@@ -46,14 +48,21 @@ namespace BECore {
         bool kept = false;
     };
 
+    /// The extra run a job is queued or in work for: `count` more variants on `seed`, appended to what the job has
+    struct ArtGenSetMore {
+        int64_t seed = 0;
+        int32_t count = 1;
+    };
+
     struct ArtGenSetJob {
         String name;
         String subject;
         ArtGenSetJobState state = ArtGenSetJobState::Pending;
-        String error;  // why a Failed or Cancelled job ended
+        String error;  // why a Failed or Cancelled job ended; on a Done job the note of a more-run that did not finish
         Vector<ArtGenSetVariant> variants;
         Optional<int64_t> pick;  // a seed of `variants`
         Optional<ArtGenSetAccepted> accepted;
+        Optional<ArtGenSetMore> more;  // set while the job is Pending or Running for an extra run
     };
 
     /// What every image of a set is cut and scaled by, fixed at the first Accept all so the rows keep one scale whatever is switched later
@@ -147,6 +156,22 @@ namespace BECore {
     [[nodiscard]] ArtGenRowStatus StatusOf(const ArtGenSetJob& job, bool replacedByNewer);
     /// The variants of @p job other than its pick (all of them when it has none)
     [[nodiscard]] int32_t AlternativesOf(const ArtGenSetJob& job);
+
+    /// Why "more variants" is off for @p set at @p count, or null: the set is active, or no row passes `ArtGenMoreSkipReason`
+    [[nodiscard]] const char* ArtGenMoreBlocker(const ArtGenSet& set, int32_t count);
+    /// Why Keep is off for @p set, or null: the set is active, and a more-run still to come would add variants to a kept row (`ArtGenSession::KeepSet` refuses the same)
+    [[nodiscard]] const char* ArtGenKeepBlocker(const ArtGenSet& set);
+    /// Why a row of a set that is not active does not run @p count more variants (`kept`, `failed`, `cancelled`, `full`), or null.
+    /// Kept rows are final, failed and cancelled ones are for Retry; `running` is only for a row of an active set, which no caller asks about
+    [[nodiscard]] const char* ArtGenMoreSkipReason(const ArtGenSetJob& job, int32_t count);
+    /// True when no variant of @p job has a seed in `[seed, seed + count)`: the service makes image i of a run on `seed + i`
+    [[nodiscard]] bool ArtGenSeedRangeFree(const ArtGenSetJob& job, int64_t seed, int32_t count);
+    /**
+     * @brief The end of a run of @p job, the one place that sets Done, Failed or Cancelled. A Failed or Cancelled end of a more-run leaves the job
+     * Done with @p reason as the note in `error`, because Retry of a failed row drops its earlier variants, pick and accepted. `more` is cleared
+     * by every end; Done clears `error`
+     */
+    void EndArtGenJob(ArtGenSetJob& job, ArtGenSetJobState ended, StringView reason);
 
     [[nodiscard]] ArtGenSetJob* FindJob(ArtGenSet& set, StringView name);
     [[nodiscard]] const ArtGenSetJob* FindJob(const ArtGenSet& set, StringView name);

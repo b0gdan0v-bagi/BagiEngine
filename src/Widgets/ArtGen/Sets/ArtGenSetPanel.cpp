@@ -26,10 +26,9 @@ namespace BECore {
         constexpr float kMinFieldWidth = 1.0f;
         constexpr const char* kQueueTip = "Make every subject with the preset above and this set's count and seed, one job after another; a set draws one seed for all its jobs when random";
         constexpr const char* kSingleRunNote = "A single run is in work on the Generate tab; the set starts after it";
-        constexpr const char* kSetDraftNote = "A set is made into artgen/out/<set>/ (drafts, git ignores them). Nothing reaches the game until Accept all on the Review tab.";
-        constexpr const char* kReviewDraftNote =
-            "Variants are drafts in artgen/out/<set>/ (git ignores that folder). Accept all, and a click on a live row, write into the game: assets/artgen/ and config/TextureLibrary.xml, "
-            "which are in git.";
+        constexpr const char* kSetDraftNote =
+            "A set is made into artgen/out/<set>/ (drafts, git ignores them). Accept all, and a click on a variant of a live row, write into the game: assets/artgen/ and "
+            "config/TextureLibrary.xml, which are in git.";
         constexpr const char* kAcceptAllTip =
             "Put a candidate of every row into the game under the row's name: the pick, else the first variant. It writes assets/artgen/<job>.png (.wav for a sound) with its "
             ".artgen.json and, for images, the sprite in config/TextureLibrary.xml; these are in git. The other variants stay switchable until Keep";
@@ -40,12 +39,18 @@ namespace BECore {
         constexpr const char* kReplacedExplanation =
             "The game has one file per name. A set that accepted this name later owns it, so this row is only a draft in artgen/out/: it cannot be switched or kept. Accept a newer set with this name "
             "to take the file over.";
-        constexpr float kJobIndent = 16.0f;
+        // The list of sets shows this many lines at most, then scrolls
+        constexpr size_t kSetListLines = 5;
+        // The rows of the selected set are never squeezed below this many text lines by a tall form above them: the tab scrolls as a whole then
+        constexpr float kRowsMinLines = 12.0f;
+        // The frame line of an image set under the footer's buttons wraps to about this many lines
+        constexpr float kFrameLineCount = 2.0f;
         // Squares behind a thumbnail, so a transparent background (a cut-out sprite) shows as transparent
         constexpr float kCheckerCell = 10.0f;
         constexpr size_t kLabelSize = 160;
-        // A review thumbnail is smaller than the Generate grid's, so a row of four fits the panel
-        constexpr float kReviewThumbnailSize = 112.0f;
+        constexpr size_t kTipSize = 256;
+        // A row's thumbnail is smaller than the Generate grid's, so a row of four fits the panel
+        constexpr float kThumbnailSize = 112.0f;
 
         const char* IconOfState(ArtGenSetJobState state) {
             switch (state) {
@@ -92,6 +97,52 @@ namespace BECore {
             if (run.cancelRequested) {
                 ImGui::TextDisabled("Cancelling...");
             }
+        }
+
+        /// `Active|Complete  d/t done[, n failed][, n cancelled]`, the state of a set in a line
+        void FormatSetSummary(const ArtGenSet& set, char* out, size_t size) {
+            const int32_t failed = CountJobs(set, ArtGenSetJobState::Failed);
+            const int32_t cancelled = CountJobs(set, ArtGenSetJobState::Cancelled);
+            int length =
+                std::snprintf(out, size, "%s  %d/%d done", IsActive(set) ? "Active" : "Complete", static_cast<int>(CountJobs(set, ArtGenSetJobState::Done)), static_cast<int>(set.jobs.size()));
+            if (failed > 0 && length > 0 && static_cast<size_t>(length) < size) {
+                length += std::snprintf(out + length, size - static_cast<size_t>(length), ", %d failed", static_cast<int>(failed));
+            }
+            if (cancelled > 0 && length > 0 && static_cast<size_t>(length) < size) {
+                std::snprintf(out + length, size - static_cast<size_t>(length), ", %d cancelled", static_cast<int>(cancelled));
+            }
+        }
+
+        /// The line a successful More variants leaves: what was queued, and the rows left out with the reason
+        String DescribeMore(const Json& reply) {
+            const Optional<int64_t> count = GetJsonInt(reply, "count");
+            const Optional<int64_t> seed = GetJsonInt(reply, "seed");
+            String message = Format("Queued {} more per row on seed {}", count ? *count : 0, seed ? *seed : 0);
+            const Json* skipped = FindJsonMember(reply, "skipped");
+            if (skipped == nullptr || !skipped->is_array() || skipped->empty()) {
+                return message;
+            }
+            String left;
+            for (const Json& row : *skipped) {
+                const Optional<String> job = GetJsonString(row, "job");
+                const Optional<String> reason = GetJsonString(row, "reason");
+                if (job && reason) {
+                    left.append(left.empty() ? "" : ", ").append(Format("{} ({})", *job, *reason));
+                }
+            }
+            return Format("{}; left out: {}", message, left);
+        }
+
+        /// The tooltip of an enabled More variants: how many rows run, and that the others are left out
+        void FormatMoreTip(const ArtGenSet& set, int32_t count, char* out, size_t size) {
+            int32_t running = 0;
+            for (const ArtGenSetJob& job : set.jobs) {
+                running += ArtGenMoreSkipReason(job, count) == nullptr ? 1 : 0;
+            }
+            std::snprintf(
+                out, size,
+                "Make %d more variant(s) of each of %d row(s) on a fresh seed and add them to the ones they have. Kept, failed and cancelled rows are left out; the pick and the game stay as they are",
+                static_cast<int>(count), static_cast<int>(running));
         }
 
         /// The width of a field that is followed by @p label on the same line, in the room that is left
@@ -168,7 +219,7 @@ namespace BECore {
         ImGui::EndDisabled();
     }
 
-    void ArtGenSetPanel::DrawQueue(ArtGenSession& session, const ArtGenSetPanelForm& form) {
+    void ArtGenSetPanel::DrawQueueForm(ArtGenSession& session, const ArtGenSetPanelForm& form) {
         const auto& palette = GetImGuiPalette();
         DrawSubjectRows();
         ImGui::SetNextItemWidth(LabelledFieldWidth(kSetNameWidthInEm, "Set name"));
@@ -219,6 +270,7 @@ namespace BECore {
                 auto queued = session.EnqueueSet(std::move(request));
                 if (queued) {
                     _queued = Format("Queued '{}': {} job(s)", *queued, jobs);
+                    _selectedSet = *queued;
                     _subjectRows.clear();
                     _setName[0] = '\0';
                 } else {
@@ -246,44 +298,60 @@ namespace BECore {
         ImGui::TextDisabled("%s", kSetDraftNote);
         ImGui::PopTextWrapPos();
         ImGui::Separator();
+    }
 
-        const auto& sets = session.GetSets();
-        if (sets.empty()) {
-            EmptyState(ICON_LC_LIST_CHECKS, "No sets yet: fill in the subjects above and press Queue");
-            return;
+    void ArtGenSetPanel::ResolveSelection(const ArtGenSession& session) {
+        const ArtGenSet* selected = _selectedSet.empty() ? nullptr : session.FindSet(StringView(_selectedSet));
+        if (selected == nullptr) {
+            selected = &session.GetSets().back();
         }
-        ImGui::BeginChild("##sets");
+        if (StringView(_selectedSet) != StringView(selected->name)) {
+            _selectedSet = selected->name;
+        }
+    }
+
+    void ArtGenSetPanel::DrawSetList(const ArtGenSession& session) {
+        const auto& palette = GetImGuiPalette();
+        const ImGuiStyle& style = ImGui::GetStyle();
+        const auto& sets = session.GetSets();
+        const float lines = static_cast<float>(std::min(sets.size(), kSetListLines));
+        ImGui::BeginChild("##setList", ImVec2(0.0f, ImGui::GetTextLineHeightWithSpacing() * lines + style.WindowPadding.y * 2.0f), ImGuiChildFlags_Borders);
         for (size_t i = sets.size(); i-- > 0;) {
-            DrawSetEntry(session, sets[i]);
+            const ArtGenSet& set = sets[i];
+            ImGui::PushID(set.name.c_str());
+            if (ImGui::Selectable("##select", StringView(set.name) == StringView(_selectedSet))) {
+                _selectedSet = set.name;
+            }
+            // The text is drawn over the item so its id does not change with the progress it shows
+            const ImVec2 min = ImGui::GetItemRectMin();
+            ImDrawList* drawList = ImGui::GetWindowDrawList();
+            drawList->PushClipRect(min, ImGui::GetItemRectMax(), true);
+            ImVec2 at(min.x + style.ItemInnerSpacing.x, min.y);
+            const auto put = [&](const char* text, ImU32 color) {
+                drawList->AddText(at, color, text);
+                at.x += ImGui::CalcTextSize(text).x + style.ItemSpacing.x;
+            };
+            char name[kLabelSize];
+            std::snprintf(name, sizeof(name), "%s %s", set.kind == kKindAudio ? ICON_LC_AUDIO_LINES : ICON_LC_IMAGE, set.name.c_str());
+            put(name, ImGui::GetColorU32(ImGuiCol_Text));
+            put(set.preset.c_str(), ImGui::GetColorU32(palette.textDisabled));
+            char summary[kLabelSize];
+            FormatSetSummary(set, summary, sizeof(summary));
+            const bool failed = CountJobs(set, ArtGenSetJobState::Failed) > 0;
+            put(summary, ImGui::GetColorU32(failed ? palette.error : (IsActive(set) ? palette.accent : palette.success)));
+            drawList->PopClipRect();
+            ImGui::PopID();
         }
         ImGui::EndChild();
     }
 
-    void ArtGenSetPanel::DrawSetEntry(ArtGenSession& session, const ArtGenSet& set) {
-        const auto& palette = GetImGuiPalette();
+    void ArtGenSetPanel::DrawSetHeader(ArtGenSession& session, const ArtGenSet& set) {
         const bool active = IsActive(set);
-        const int32_t total = static_cast<int32_t>(set.jobs.size());
-        const int32_t done = CountJobs(set, ArtGenSetJobState::Done);
-        const int32_t failed = CountJobs(set, ArtGenSetJobState::Failed);
-        const int32_t cancelled = CountJobs(set, ArtGenSetJobState::Cancelled);
+        const int32_t failedOrCancelled = CountJobs(set, ArtGenSetJobState::Failed) + CountJobs(set, ArtGenSetJobState::Cancelled);
 
-        ImGui::PushID(set.name.c_str());
         ImGui::Text("%s %s", set.kind == kKindAudio ? ICON_LC_AUDIO_LINES : ICON_LC_IMAGE, set.name.c_str());
         ImGui::SameLine();
         ImGui::TextDisabled("%s", set.preset.c_str());
-
-        char summary[kLabelSize];
-        int length = std::snprintf(summary, sizeof(summary), "%s  %d/%d done", active ? "Active" : "Complete", static_cast<int>(done), static_cast<int>(total));
-        if (failed > 0 && length > 0 && static_cast<size_t>(length) < sizeof(summary)) {
-            length += std::snprintf(summary + length, sizeof(summary) - static_cast<size_t>(length), ", %d failed", static_cast<int>(failed));
-        }
-        if (cancelled > 0 && length > 0 && static_cast<size_t>(length) < sizeof(summary)) {
-            std::snprintf(summary + length, sizeof(summary) - static_cast<size_t>(length), ", %d cancelled", static_cast<int>(cancelled));
-        }
-        {
-            ScopedMonoFont mono;
-            ImGui::TextColored(failed > 0 ? palette.error : (active ? palette.accent : palette.success), "%s", summary);
-        }
 
         const ArtGenRun& run = session.GetRun();
         if (StringView(run.setName) == StringView(set.name) && (run.state == ArtGenRunState::Queued || run.state == ArtGenRunState::Running)) {
@@ -296,61 +364,37 @@ namespace BECore {
         }
         ImGui::EndDisabled();
         ImGui::SameLine();
-        ImGui::BeginDisabled(failed + cancelled == 0);
+        ImGui::BeginDisabled(failedOrCancelled == 0);
         if (IconTextButton(ICON_LC_ROTATE_CCW, "Retry",
-                           failed + cancelled > 0 ? "Put the failed and cancelled jobs back in the queue; their earlier images are dropped" : "No job of this set failed or was cancelled")) {
+                           failedOrCancelled > 0 ? "Put the failed and cancelled jobs back in the queue; their earlier images are dropped" : "No job of this set failed or was cancelled")) {
             session.RetryJobs(StringView(set.name));
         }
         ImGui::EndDisabled();
         ImGui::SameLine();
-        if (IconTextButton(ICON_LC_EYE, "Review", "Look at the variants of every job, put them into the game and flip between them, then keep the ones you like")) {
-            _reviewSet = set.name;
-            _openReview = true;
-            _acceptMessage.clear();
+        {
+            ScopedMonoFont mono;
+            ImGui::SetNextItemWidth(ArtGenFieldWidth(kCountWidthInEm, ImGui::GetFontSize(), ImGui::GetContentRegionAvail().x));
+            ImGui::InputInt("##moreCount", &_moreCount);
         }
-
-        if (active) {
-            DrawJobRows(session, set);
+        _moreCount = std::clamp(_moreCount, 1, kArtGenSetMaxCount);
+        ItemTooltip("How many more variants each row gets");
+        ImGui::SameLine();
+        const char* blocker = ArtGenMoreBlocker(set, _moreCount);
+        char tip[kTipSize];
+        if (blocker == nullptr) {
+            FormatMoreTip(set, _moreCount, tip, sizeof(tip));
         }
-        ImGui::PopID();
-        ImGui::Separator();
-    }
-
-    void ArtGenSetPanel::DrawJobRows(ArtGenSession& session, const ArtGenSet& set) {
-        const auto& palette = GetImGuiPalette();
-        ImGui::Indent(kJobIndent);
-        for (size_t i = 0; i < set.jobs.size(); ++i) {
-            const ArtGenSetJob& job = set.jobs[i];
-            ImGui::PushID(static_cast<int>(i));
-            const bool open = job.state == ArtGenSetJobState::Pending || job.state == ArtGenSetJobState::Running;
-            if (open) {
-                if (IconButton(ICON_LC_X, "Cancel this job; the others go on", "##cancelJob")) {
-                    session.CancelJob(StringView(set.name), StringView(job.name));
-                }
-                ImGui::SameLine();
-            }
-            ImGui::TextColored(ColorOfState(palette, job.state), "%s", IconOfState(job.state));
-            ImGui::SameLine();
-            ImGui::TextUnformatted(job.name.c_str());
-            ImGui::SameLine();
-            ImGui::TextDisabled("%s", job.subject.c_str());
-            if (job.state == ArtGenSetJobState::Failed) {
-                ImGui::SameLine();
-                ImGui::TextColored(palette.error, "%s", job.error.c_str());
-            }
-            ImGui::PopID();
+        ImGui::BeginDisabled(blocker != nullptr);
+        if (IconTextButton(ICON_LC_COPY_PLUS, "More variants", blocker != nullptr ? blocker : tip)) {
+            auto reply = session.MoreVariants(StringView(set.name), _moreCount);
+            _acceptFailed = !reply.has_value();
+            _acceptMessage = reply ? DescribeMore(*reply) : reply.error().message;
         }
-        ImGui::Unindent(kJobIndent);
+        ImGui::EndDisabled();
     }
 
     ArtGenSetPanel::~ArtGenSetPanel() {
         DropThumbnails();
-    }
-
-    bool ArtGenSetPanel::TakeReviewRequest() {
-        const bool requested = _openReview;
-        _openReview = false;
-        return requested;
     }
 
     const ArtGenSetPanel::Thumb* ArtGenSetPanel::FindThumb(const RowThumbs& row, int64_t seed) {
@@ -359,7 +403,7 @@ namespace BECore {
     }
 
     void ArtGenSetPanel::EvictThumb(Thumb& thumb) {
-        // The pictures of a review are seen a few times: keeping them in the cache would hold every texture of a set until the editor closes
+        // The pictures of a row are seen a few times: keeping them in the cache would hold every texture of a set until the editor closes
         if (!thumb.missing && !thumb.path.empty()) {
             CoreManager::GetResourceManager().Evict(StringView(thumb.path));
         }
@@ -418,64 +462,67 @@ namespace BECore {
         }
     }
 
-    void ArtGenSetPanel::DrawReview(ArtGenSession& session, const ArtGenSetPanelSound& sound) {
-        const auto& palette = GetImGuiPalette();
-        const ArtGenSet* set = _reviewSet.empty() ? nullptr : session.FindSet(StringView(_reviewSet));
-        if (set == nullptr) {
+    void ArtGenSetPanel::DrawSetTab(ArtGenSession& session, const ArtGenSetPanelForm& form, const ArtGenSetPanelSound& sound) {
+        DrawQueueForm(session, form);
+        if (session.GetSets().empty()) {
             if (sound.playing) {
                 sound.stop();
             }
             DropThumbnails();
-            _reviewSet.clear();
-            EmptyState(ICON_LC_EYE, "Press Review on a set of the Set tab to pick the best variant of each subject");
+            _selectedSet.clear();
+            EmptyState(ICON_LC_LIST_CHECKS, "No sets yet: fill in the subjects above and press Queue");
             return;
         }
-        if (StringView(_loadedSet) != StringView(set->name)) {
+        ResolveSelection(session);
+        DrawSetList(session);
+        // A click in the list moved the selection
+        ResolveSelection(session);
+        const ArtGenSet* set = session.FindSet(StringView(_selectedSet));
+        DrawSetHeader(session, *set);
+        DrawSetRows(session, *set, sound);
+        DrawSetFooter(session, *set);
+    }
+
+    void ArtGenSetPanel::DrawSetRows(ArtGenSession& session, const ArtGenSet& set, const ArtGenSetPanelSound& sound) {
+        if (StringView(_loadedSet) != StringView(set.name)) {
             if (sound.playing) {
                 sound.stop();
             }
             DropThumbnails();
-            _loadedSet = set->name;
+            _loadedSet = set.name;
             _acceptMessage.clear();
         }
-        _rows.resize(set->jobs.size());
+        _rows.resize(set.jobs.size());
         ++_frame;
 
-        if (IconButton(ICON_LC_X, "Close the review and free its pictures", "##closeReview")) {
-            if (sound.playing) {
-                sound.stop();
-            }
-            DropThumbnails();
-            _reviewSet.clear();
-            return;
-        }
-        ImGui::SameLine();
-        ImGui::Text("%s %s", set->kind == kKindAudio ? ICON_LC_AUDIO_LINES : ICON_LC_IMAGE, set->name.c_str());
-        ImGui::SameLine();
-        ImGui::TextColored(IsActive(*set) ? palette.accent : palette.textDisabled, "%s", IsActive(*set) ? "still running" : "complete");
-
-        ImGui::PushTextWrapPos(0.0f);
-        ImGui::TextDisabled("%s", kReviewDraftNote);
-        ImGui::PopTextWrapPos();
-
         const ImGuiStyle& style = ImGui::GetStyle();
-        const float footerHeight = ImGui::GetFrameHeightWithSpacing() + (_acceptMessage.empty() ? 0.0f : ImGui::GetTextLineHeightWithSpacing());
-        ImGui::BeginChild("##reviewRows", ImVec2(0.0f, -footerHeight));
+        const float lineHeight = ImGui::GetTextLineHeightWithSpacing();
+        const bool frameLine = set.kind != kKindAudio && (set.processing || IsLegacyAccepted(set));
+        const float footerHeight = ImGui::GetFrameHeightWithSpacing() + (_acceptMessage.empty() ? 0.0f : lineHeight) + (frameLine ? lineHeight * kFrameLineCount : 0.0f);
+        const float rowsHeight = std::max(ImGui::GetContentRegionAvail().y - footerHeight, lineHeight * kRowsMinLines);
+        ImGui::BeginChild("##setRows", ImVec2(0.0f, rowsHeight));
         // Every row has the height of a full one, so the clipper knows where row n is without drawing the rows before it
         const float inner = ImGui::GetContentRegionAvail().x - style.WindowPadding.x * 2.0f;
-        const int32_t columns = std::max(1, static_cast<int32_t>((inner + style.ItemSpacing.x) / (kReviewThumbnailSize + style.ItemSpacing.x)));
-        const int32_t thumbRows = (std::max(set->count, 1) + columns - 1) / columns;
-        const float cellHeight = kReviewThumbnailSize + style.ItemSpacing.y + ImGui::GetTextLineHeightWithSpacing();
-        // The header line and the status line, the hint line with its buttons, then the thumbnails
-        const float rowHeight = style.WindowPadding.y * 2.0f + ImGui::GetTextLineHeightWithSpacing() * 2.0f + ImGui::GetFrameHeightWithSpacing() + static_cast<float>(thumbRows) * cellHeight;
+        const int32_t columns = std::max(1, static_cast<int32_t>((inner + style.ItemSpacing.x) / (kThumbnailSize + style.ItemSpacing.x)));
+        // The most variants any row has, so the rows stay equal after More variants; a Done row's note takes a line
+        size_t mostVariants = 1;
+        bool notes = false;
+        for (const ArtGenSetJob& job : set.jobs) {
+            mostVariants = std::max(mostVariants, job.variants.size());
+            notes = notes || (job.state == ArtGenSetJobState::Done && !job.error.empty());
+        }
+        const int32_t thumbRows = (static_cast<int32_t>(mostVariants) + columns - 1) / columns;
+        const float cellHeight = kThumbnailSize + style.ItemSpacing.y + ImGui::GetTextLineHeightWithSpacing();
+        // The header line (frame height: it can hold the cancel button) and the hint line with its buttons, the status line and the note, then the thumbnails
+        const float rowHeight = style.WindowPadding.y * 2.0f + ImGui::GetFrameHeightWithSpacing() * 2.0f + lineHeight * (notes ? 2.0f : 1.0f) + static_cast<float>(thumbRows) * cellHeight;
 
         ImGuiListClipper clipper;
-        clipper.Begin(static_cast<int>(set->jobs.size()), rowHeight + style.ItemSpacing.y);
+        clipper.Begin(static_cast<int>(set.jobs.size()), rowHeight + style.ItemSpacing.y);
         while (clipper.Step()) {
             for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; ++i) {
                 ImGui::PushID(i);
                 ImGui::BeginChild("##row", ImVec2(0.0f, rowHeight), ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-                DrawReviewRow(session, *set, static_cast<size_t>(i), columns, sound);
+                DrawJobRow(session, set, static_cast<size_t>(i), columns, sound);
                 ImGui::EndChild();
                 ImGui::PopID();
             }
@@ -491,7 +538,6 @@ namespace BECore {
                 EvictRow(_rows[i]);
             }
         }
-        DrawReviewFooter(session, *set);
     }
 
     void ArtGenSetPanel::RefreshStatusLine(RowThumbs& row, const ArtGenSet& set, const ArtGenSetJob& job, ArtGenRowStatus status, const ArtGenSet* newer) {
@@ -525,12 +571,19 @@ namespace BECore {
         }
     }
 
-    void ArtGenSetPanel::DrawReviewRow(ArtGenSession& session, const ArtGenSet& set, size_t index, int32_t columns, const ArtGenSetPanelSound& sound) {
+    void ArtGenSetPanel::DrawJobRow(ArtGenSession& session, const ArtGenSet& set, size_t index, int32_t columns, const ArtGenSetPanelSound& sound) {
         const auto& palette = GetImGuiPalette();
         const ArtGenSetJob& job = set.jobs[index];
         _rows[index].seenFrame = _frame;
         SyncRow(session, set, index);
 
+        ImGui::AlignTextToFramePadding();
+        if (job.state == ArtGenSetJobState::Pending || job.state == ArtGenSetJobState::Running) {
+            if (IconButton(ICON_LC_X, "Cancel this job; the others go on", "##cancelJob")) {
+                session.CancelJob(StringView(set.name), StringView(job.name));
+            }
+            ImGui::SameLine();
+        }
         ImGui::TextColored(ColorOfState(palette, job.state), "%s", IconOfState(job.state));
         ImGui::SameLine();
         ImGui::TextUnformatted(job.name.c_str());
@@ -587,11 +640,18 @@ namespace BECore {
                 }
                 if (live) {
                     ImGui::SameLine();
-                    if (IconTextButton(ICON_LC_LOCK, "Keep", kKeepTip)) {
+                    const char* keepBlocker = ArtGenKeepBlocker(set);
+                    ImGui::BeginDisabled(keepBlocker != nullptr);
+                    if (IconTextButton(ICON_LC_LOCK, "Keep", keepBlocker != nullptr ? keepBlocker : kKeepTip)) {
                         const auto kept = session.KeepSet(StringView(set.name), StringView(job.name));
                         _acceptFailed = !kept.has_value();
                         _acceptMessage = kept ? Format("Kept '{}'", job.name) : kept.error().message;
                     }
+                    ImGui::EndDisabled();
+                }
+                // The note of a more-run that did not finish: the row stays Done with the variants it had
+                if (!job.error.empty()) {
+                    ImGui::TextDisabled("%s", job.error.c_str());
                 }
                 break;
         }
@@ -623,7 +683,7 @@ namespace BECore {
         const bool kept = job.accepted && job.accepted->kept;
         const bool replaced = session.FindNewerOwner(set, job) != nullptr;
         ImGui::BeginDisabled(kept || replaced);
-        if (ImGui::InvisibleButton("##pick", ImVec2(kReviewThumbnailSize, kReviewThumbnailSize))) {
+        if (ImGui::InvisibleButton("##pick", ImVec2(kThumbnailSize, kThumbnailSize))) {
             ArtGenSwitch write;
             if (session.PickVariant(StringView(set.name), StringView(job.name), variant.seed, &write) == ArtGenSetEdit::WriteFailed) {
                 _acceptFailed = true;
@@ -643,17 +703,17 @@ namespace BECore {
         ItemTooltip(missing ? "The file is gone" : tip);
 
         ImDrawList* drawList = ImGui::GetWindowDrawList();
-        const ImVec2 corner(origin.x + kReviewThumbnailSize, origin.y + kReviewThumbnailSize);
+        const ImVec2 corner(origin.x + kThumbnailSize, origin.y + kThumbnailSize);
         const ITexture* texture = thumb != nullptr ? thumb->texture.Get() : nullptr;
         if (texture != nullptr && texture->GetState() == ResourceState::Loaded) {
             const auto id = static_cast<ImTextureID>(reinterpret_cast<std::uintptr_t>(texture->GetNativeHandle()));
-            DrawArtGenChecker(drawList, origin, kReviewThumbnailSize, ImGui::GetColorU32(palette.panelBg), ImGui::GetColorU32(palette.frameBg));
+            DrawArtGenChecker(drawList, origin, kThumbnailSize, ImGui::GetColorU32(palette.panelBg), ImGui::GetColorU32(palette.frameBg));
             drawList->AddImage(id, origin, corner);
         } else {
             drawList->AddRectFilled(origin, corner, ImGui::GetColorU32(palette.frameBg));
             const char* icon = missing ? ICON_LC_IMAGE_OFF : (audio ? ICON_LC_AUDIO_LINES : ICON_LC_LOADER);
             const ImVec2 iconSize = ImGui::CalcTextSize(icon);
-            const ImVec2 at(origin.x + (kReviewThumbnailSize - iconSize.x) * 0.5f, origin.y + (kReviewThumbnailSize - iconSize.y) * 0.5f);
+            const ImVec2 at(origin.x + (kThumbnailSize - iconSize.x) * 0.5f, origin.y + (kThumbnailSize - iconSize.y) * 0.5f);
             drawList->AddText(at, ImGui::GetColorU32(missing ? palette.warning : palette.textDisabled), icon);
         }
         if (job.pick && *job.pick == variant.seed) {
@@ -686,7 +746,7 @@ namespace BECore {
         ImGui::PopID();
     }
 
-    void ArtGenSetPanel::DrawReviewFooter(ArtGenSession& session, const ArtGenSet& set) {
+    void ArtGenSetPanel::DrawSetFooter(ArtGenSession& session, const ArtGenSet& set) {
         const auto& palette = GetImGuiPalette();
         const int32_t total = static_cast<int32_t>(set.jobs.size());
         const int32_t picked = PickedCount(set);
@@ -747,8 +807,9 @@ namespace BECore {
         }
         ImGui::EndDisabled();
         ImGui::SameLine();
-        ImGui::BeginDisabled(keepable == 0);
-        if (IconTextButton(ICON_LC_LOCK, "Keep all", kKeepAllTip)) {
+        const char* keepBlocker = ArtGenKeepBlocker(set);
+        ImGui::BeginDisabled(keepable == 0 || keepBlocker != nullptr);
+        if (IconTextButton(ICON_LC_LOCK, "Keep all", keepBlocker != nullptr ? keepBlocker : kKeepAllTip)) {
             auto result = session.KeepSet(StringView(set.name));
             _acceptFailed = !result.has_value();
             _acceptMessage = result ? Format("Kept {} row(s)", keepable) : result.error().message;

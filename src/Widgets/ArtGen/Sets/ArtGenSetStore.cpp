@@ -31,8 +31,7 @@ namespace BECore {
         void CancelInterrupted(ArtGenSet& set) {
             for (ArtGenSetJob& job : set.jobs) {
                 if (job.state == ArtGenSetJobState::Pending || job.state == ArtGenSetJobState::Running) {
-                    job.state = ArtGenSetJobState::Cancelled;
-                    job.error = String(kEditorClosedReason);
+                    EndArtGenJob(job, ArtGenSetJobState::Cancelled, kEditorClosedReason);
                 }
             }
         }

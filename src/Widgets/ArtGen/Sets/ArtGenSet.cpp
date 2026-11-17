@@ -120,6 +120,33 @@ namespace BECore {
             return variant;
         }
 
+        /// The `more` of a job: absent or null is none
+        std::expected<Optional<ArtGenSetMore>, String> ReadMore(const Json& item, const Where& where) {
+            const Json* member = FindJsonMember(item, "more");
+            if (member == nullptr || member->is_null()) {
+                return Optional<ArtGenSetMore>();
+            }
+            const Where moreWhere = Format("{}.more", where);
+            if (!member->is_object()) {
+                return std::unexpected(Format("{}: must be an object or null", moreWhere));
+            }
+            auto seed = RequireInt(*member, "seed", moreWhere);
+            auto count = RequireInt(*member, "count", moreWhere);
+            if (!seed) {
+                return std::unexpected(seed.error());
+            }
+            if (!count) {
+                return std::unexpected(count.error());
+            }
+            if (*seed < 0) {
+                return std::unexpected(Format("{}: 'seed' must not be negative", moreWhere));
+            }
+            if (*count < 1 || *count > kArtGenSetMaxCount) {
+                return std::unexpected(Format("{}: 'count' must be 1 to {}", moreWhere, kArtGenSetMaxCount));
+            }
+            return Optional<ArtGenSetMore>(ArtGenSetMore{*seed, static_cast<int32_t>(*count)});
+        }
+
         std::expected<ArtGenSetJob, String> ReadJob(const Json& item, const Where& where) {
             if (!item.is_object()) {
                 return std::unexpected(Format("{}: must be an object", where));
@@ -204,6 +231,12 @@ namespace BECore {
                 }
                 job.accepted = ArtGenSetAccepted{std::move(*as), std::move(*date), kept};
             }
+
+            auto more = ReadMore(item, where);
+            if (!more) {
+                return std::unexpected(more.error());
+            }
+            job.more = *more;
             return job;
         }
 
@@ -449,6 +482,14 @@ namespace BECore {
             } else {
                 row["accepted"] = Json(nullptr);
             }
+            if (job.more) {
+                Json more = Json::object();
+                more["seed"] = job.more->seed;
+                more["count"] = job.more->count;
+                row["more"] = std::move(more);
+            } else {
+                row["more"] = Json(nullptr);
+            }
             jobs.push_back(std::move(row));
         }
         manifest["jobs"] = std::move(jobs);
@@ -594,6 +635,55 @@ namespace BECore {
 
     int32_t AlternativesOf(const ArtGenSetJob& job) {
         return static_cast<int32_t>(std::count_if(job.variants.begin(), job.variants.end(), [&job](const ArtGenSetVariant& variant) { return !job.pick || variant.seed != *job.pick; }));
+    }
+
+    const char* ArtGenMoreBlocker(const ArtGenSet& set, int32_t count) {
+        if (IsActive(set)) {
+            return "The set is still running";
+        }
+        const bool anyEligible = std::any_of(set.jobs.begin(), set.jobs.end(), [count](const ArtGenSetJob& job) { return ArtGenMoreSkipReason(job, count) == nullptr; });
+        return anyEligible ? nullptr : "No row can get more variants: kept, failed, cancelled and full rows are left out";
+    }
+
+    const char* ArtGenKeepBlocker(const ArtGenSet& set) {
+        return IsActive(set) ? "The set is still running: a row kept now would get the variants still to come. Wait for it or cancel its jobs" : nullptr;
+    }
+
+    const char* ArtGenMoreSkipReason(const ArtGenSetJob& job, int32_t count) {
+        switch (job.state) {
+            case ArtGenSetJobState::Failed:
+                return "failed";
+            case ArtGenSetJobState::Cancelled:
+                return "cancelled";
+            case ArtGenSetJobState::Pending:
+            case ArtGenSetJobState::Running:
+                return "running";
+            case ArtGenSetJobState::Done:
+                break;
+        }
+        if (job.accepted && job.accepted->kept) {
+            return "kept";
+        }
+        return job.variants.size() + static_cast<size_t>(count) > static_cast<size_t>(kArtGenJobMaxVariants) ? "full" : nullptr;
+    }
+
+    bool ArtGenSeedRangeFree(const ArtGenSetJob& job, int64_t seed, int32_t count) {
+        // The unsigned distance of a seed that is not below `seed` cannot overflow, which `seed + count` could
+        return std::none_of(job.variants.begin(), job.variants.end(), [seed, count](const ArtGenSetVariant& variant) {
+            return variant.seed >= seed && static_cast<uint64_t>(variant.seed) - static_cast<uint64_t>(seed) < static_cast<uint64_t>(count);
+        });
+    }
+
+    void EndArtGenJob(ArtGenSetJob& job, ArtGenSetJobState ended, StringView reason) {
+        const bool lost = ended == ArtGenSetJobState::Failed || ended == ArtGenSetJobState::Cancelled;
+        if (lost && job.more) {
+            job.state = ArtGenSetJobState::Done;
+            job.error = String(reason);
+        } else {
+            job.state = ended;
+            job.error = ended == ArtGenSetJobState::Done ? String() : String(reason);
+        }
+        job.more.reset();
     }
 
     ArtGenSetJob* FindJob(ArtGenSet& set, StringView name) {
