@@ -8,6 +8,8 @@ namespace BECore {
 
     namespace {
 
+        constexpr const char* kReplaceTemporarySuffix = ".tmp";
+
         bool PixelCountMatches(const RgbaImage& image) {
             return image.pixels.size() == static_cast<size_t>(image.width) * image.height * kBytesPerPixel;
         }
@@ -65,6 +67,25 @@ namespace BECore {
         const auto utf8 = file.u8string();  //-NoStd: SDL_image takes the path as UTF-8 chars
         if (!IMG_SavePNG(surface, reinterpret_cast<const char*>(utf8.c_str()))) {
             return std::unexpected(Format("cannot write the PNG: {}", SDL_GetError()));
+        }
+        return {};
+    }
+
+    std::expected<void, String> ReplaceRgbaPng(const std::filesystem::path& file, const RgbaImage& image) {
+        std::filesystem::path temporary = file;
+        temporary += kReplaceTemporarySuffix;
+
+        if (auto saved = SaveRgbaPng(temporary, image); !saved) {
+            std::error_code ignored;
+            std::filesystem::remove(temporary, ignored);
+            return saved;
+        }
+        std::error_code error;
+        std::filesystem::rename(temporary, file, error);
+        if (error) {
+            std::error_code ignored;
+            std::filesystem::remove(temporary, ignored);
+            return std::unexpected(Format("cannot replace the PNG: {}", error.message()));
         }
         return {};
     }

@@ -144,6 +144,39 @@ namespace BECore::Tests {
         EXPECT_FALSE(std::filesystem::exists(file.Path()));
     }
 
+    TEST(SpriteImage, ReplaceOverAnExistingFileGivesTheBytesOfASave) {
+        TempFile target;
+        TempFile reference;
+        ASSERT_TRUE(SaveRgbaPng(target.Path(), MakeImage(2, 2)).has_value());
+        const RgbaImage image = MakeImage(5, 3);
+        ASSERT_TRUE(SaveRgbaPng(reference.Path(), image).has_value());
+
+        const auto replaced = ReplaceRgbaPng(target.Path(), image);
+        ASSERT_TRUE(replaced.has_value()) << replaced.error().c_str();
+        EXPECT_TRUE(ReadBytes(target.Path()) == ReadBytes(reference.Path()));
+
+        std::filesystem::path temporary = target.Path();
+        temporary += ".tmp";
+        EXPECT_FALSE(std::filesystem::exists(temporary));
+    }
+
+    TEST(SpriteImage, ReplaceCreatesTheFileWhenThereIsNone) {
+        TempFile target;
+        ASSERT_TRUE(ReplaceRgbaPng(target.Path(), MakeImage(3, 3)).has_value());
+        const auto loaded = LoadRgbaImage(target.Path());
+        ASSERT_TRUE(loaded.has_value());
+        EXPECT_TRUE(loaded->pixels == MakeImage(3, 3).pixels);
+    }
+
+    TEST(SpriteImage, ReplaceIntoAFolderThatDoesNotExistIsAnError) {
+        TempFile folder(".dir");
+        const std::filesystem::path target = folder.Path() / "atlas.png";
+        const auto replaced = ReplaceRgbaPng(target, MakeImage(2, 2));
+        ASSERT_FALSE(replaced.has_value());
+        EXPECT_FALSE(replaced.error().empty());
+        EXPECT_FALSE(std::filesystem::exists(target));
+    }
+
     TEST(SpriteImage, AnImageOverTheSideLimitIsRefusedByTheLoader) {
         TempFile file;
         RgbaImage tall;
