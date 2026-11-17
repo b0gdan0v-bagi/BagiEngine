@@ -29,7 +29,7 @@ namespace BECore {
 
         constexpr float kThumbnailSize = 160.0f;
         constexpr const char* kPresetSectionLabel = "Preset: used by Generate and Set";
-        constexpr const char* kSetRunningNote = "A set is running (see the Set tab); a single run waits for it";
+        constexpr const char* kSetRunningNote = "A set is running (see the Set tab); Generate is off until it ends";
         constexpr const char* kDraftNote = "The variants are drafts in artgen/out/ (git ignores that folder). Accept below copies one into the game.";
         constexpr const char* kPlaceholderName = "<name>";
         constexpr float kDefaultWidth = 520.0f;
@@ -410,9 +410,9 @@ namespace BECore {
             _requestError = result ? String() : result.error();
         }
         ImGui::EndDisabled();
-        // A set that only waits has no run to cancel: its Cancel set is on the Set tab
-        const bool singleRunInWork = session.IsRunInWork() && session.GetRun().setName.empty();
-        if (session.IsRunInWork()) {
+        // The job of a set is no run of this tab: its Cancel is on the Set tab
+        const bool singleRunInWork = session.IsSingleRunInWork();
+        if (singleRunInWork) {
             ImGui::SameLine();
             ImGui::BeginDisabled(session.GetRun().cancelRequested);
             if (IconTextButton(ICON_LC_X, "Cancel", "Stop the run; the images already made stay")) {
@@ -485,7 +485,7 @@ namespace BECore {
         ImGui::SameLine();
         const bool savedHere = !dirty && _form.GetBaseSource() == "game";
         ImGui::BeginDisabled(savedHere);
-        if (IconButton(ICON_LC_SAVE, "Save as artgen/presets/<name>.json of the game (an engine starter becomes the game's own copy)", "##SavePreset")) {
+        if (IconButton(ICON_LC_SAVE, "Save as artgen/presets/<name>.json of the game, which is tracked in git (an engine starter becomes the game's own copy)", "##SavePreset")) {
             SaveForm(session, StringView(_form.name));
         }
         ImGui::EndDisabled();
@@ -506,7 +506,7 @@ namespace BECore {
             ImGui::InputTextWithHint("##SaveAsName", "preset_name", _saveAsName, sizeof(_saveAsName));
             const bool valid = IsValidSpriteName(StringView(_saveAsName));
             ImGui::BeginDisabled(!valid);
-            if (IconTextButton(ICON_LC_SAVE, "Save", "Write artgen/presets/<name>.json of the game")) {
+            if (IconTextButton(ICON_LC_SAVE, "Save", "Write artgen/presets/<name>.json of the game (tracked in git)")) {
                 SaveForm(session, StringView(_saveAsName));
                 ImGui::CloseCurrentPopup();
             }
@@ -682,6 +682,12 @@ namespace BECore {
 
     void ArtGenWidget::DrawRun(ArtGenSession& session) {
         const ArtGenRun& run = session.GetRun();
+        if (!run.setName.empty()) {
+            // The last job of a set stays in the run: its variants are the set's drafts, judged and accepted on the Review tab
+            DropThumbnails();
+            ImGui::TextDisabled("job %s of set %s (see the Set and Review tabs)", run.jobName.c_str(), run.setName.c_str());
+            return;
+        }
         SyncThumbnails(run);
         const auto& palette = GetImGuiPalette();
         switch (run.state) {

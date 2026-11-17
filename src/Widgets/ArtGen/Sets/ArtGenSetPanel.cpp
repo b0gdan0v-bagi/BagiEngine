@@ -161,7 +161,7 @@ namespace BECore {
             }
         }
         ImGui::EndDisabled();
-        if (session.IsRunInWork() && session.GetRun().setName.empty()) {
+        if (session.IsSingleRunInWork()) {
             ImGui::TextDisabled("%s", kSingleRunNote);
         }
         if (!_error.empty()) {
@@ -446,7 +446,7 @@ namespace BECore {
             case ArtGenRowStatus::Kept:
                 row.statusLine = Format("Kept: {} is final", file);
                 break;
-            default:
+            case ArtGenRowStatus::Replaced:
                 row.statusLine = Format("Not in the game: set '{}' accepted the name '{}' later and owns {}", newerName, name, file);
                 break;
         }
@@ -463,7 +463,7 @@ namespace BECore {
         ImGui::TextUnformatted(job.name.c_str());
         ImGui::SameLine();
         ImGui::TextDisabled("%s", job.subject.c_str());
-        const ArtGenSet* newer = job.accepted ? session.FindNewerOwner(set, job) : nullptr;
+        const ArtGenSet* newer = session.FindNewerOwner(set, job);
         const ArtGenRowStatus status = StatusOf(job, newer != nullptr);
         // A replaced row's variants are alternatives to nothing: the game holds another set's picture under its name
         const bool live = status == ArtGenRowStatus::Live;
@@ -504,12 +504,14 @@ namespace BECore {
                 ImGui::TextDisabled("Making the images...");
                 break;
             default:
-                ImGui::TextDisabled("%s", job.variants.empty() ? "No images"
-                                          : newer != nullptr   ? "The game's picture comes from the newer set"
-                                          : live               ? "Click a variant to show it in the game"
-                                          : job.accepted       ? "Kept: this variant is final"
-                                          : job.pick           ? "Click another variant to change the pick"
-                                                               : "Click a variant to pick it");
+                // A kept or replaced row's status line above already says what its variants are
+                if (job.variants.empty()) {
+                    ImGui::TextDisabled("No images");
+                } else if (live) {
+                    ImGui::TextDisabled("Click a variant to show it in the game");
+                } else if (!job.accepted) {
+                    ImGui::TextDisabled("%s", job.pick ? "Click another variant to change the pick" : "Click a variant to pick it");
+                }
                 if (live) {
                     ImGui::SameLine();
                     if (IconTextButton(ICON_LC_LOCK, "Keep", kKeepTip)) {
@@ -546,7 +548,7 @@ namespace BECore {
         }
         // A kept row is final and a replaced one has nothing to switch: its cells only show the variants
         const bool kept = job.accepted && job.accepted->kept;
-        const bool replaced = IsLive(job) && session.FindNewerOwner(set, job) != nullptr;
+        const bool replaced = session.FindNewerOwner(set, job) != nullptr;
         ImGui::BeginDisabled(kept || replaced);
         if (ImGui::InvisibleButton("##pick", ImVec2(kReviewThumbnailSize, kReviewThumbnailSize))) {
             ArtGenSwitch write;
@@ -560,10 +562,10 @@ namespace BECore {
         }
         ImGui::EndDisabled();
         const char* tip = IsLive(job) ? "Show this variant in the game" : "Pick this variant";
-        if (kept) {
-            tip = "Kept: this row is final";
-        } else if (replaced) {
+        if (replaced) {
             tip = "A newer set holds this name in the game";
+        } else if (kept) {
+            tip = "Kept: this row is final";
         }
         ItemTooltip(missing ? "The file is gone" : tip);
 
@@ -615,15 +617,18 @@ namespace BECore {
         const auto& palette = GetImGuiPalette();
         const int32_t total = static_cast<int32_t>(set.jobs.size());
         const int32_t picked = PickedCount(set);
-        const int32_t live = CountLive(set);
-        const int32_t kept = CountKept(set);
-        // What Keep all can still keep: the live rows no newer set replaced
-        int32_t keepable = 0;
+        // A row a newer set replaced is neither live nor kept here: the game holds the other set's picture under its name
+        int32_t live = 0;
+        int32_t kept = 0;
+        int32_t replacedRows = 0;
         for (const ArtGenSetJob& job : set.jobs) {
-            if (IsLive(job) && session.FindNewerOwner(set, job) == nullptr) {
-                ++keepable;
-            }
+            const ArtGenRowStatus status = StatusOf(job, session.FindNewerOwner(set, job) != nullptr);
+            live += status == ArtGenRowStatus::Live ? 1 : 0;
+            kept += status == ArtGenRowStatus::Kept ? 1 : 0;
+            replacedRows += status == ArtGenRowStatus::Replaced ? 1 : 0;
         }
+        // What Keep all can still keep
+        const int32_t keepable = live;
         // What Accept all needs (ArtGenSession::AcceptSet checks it again): the set finished, every job done, and for sounds a pick on every row
         // (an image row without a pick takes its first variant)
         const char* blocker = nullptr;
@@ -633,15 +638,15 @@ namespace BECore {
             blocker = "A job failed or was cancelled: retry it first";
         } else if (set.kind == kKindAudio && picked != total) {
             blocker = "Listen and pick a variant of every row first";
-        } else if (kept == total) {
-            blocker = "Every row is kept";
+        } else if (kept + replacedRows == total) {
+            blocker = "Every row is kept or replaced by a newer set";
         }
 
         ImGui::AlignTextToFramePadding();
         {
             ScopedMonoFont mono;
-            if (live + kept > 0) {
-                ImGui::Text("%d live, %d kept", static_cast<int>(live), static_cast<int>(kept));
+            if (live + kept + replacedRows > 0) {
+                ImGui::Text("%d live, %d kept, %d replaced", static_cast<int>(live), static_cast<int>(kept), static_cast<int>(replacedRows));
             } else {
                 ImGui::Text("%d / %d picked", static_cast<int>(picked), static_cast<int>(total));
             }
