@@ -132,6 +132,13 @@ namespace BECore {
      */
     std::expected<Json, ControlError> AcceptForControl(const ArtGenVariant& variant, StringView sprite, const ArtGenImagePlan& plan, SceneNode* node);
 
+    /**
+     * @brief The editor's ArtGenSession::FrameMeasurer: decodes each of @p pngFiles one at a time (a 1024 square is about 4 MB, freed before the
+     * next) and makes the frame over the union of their drawn boxes with MakeArtGenFrame. A picture with nothing drawn adds nothing; an error
+     * when none has anything drawn, a file cannot be read or the sizes differ (one frame cannot cut pictures of different sizes).
+     */
+    std::expected<ArtGenImageFrame, String> MeasureFrameForControl(const Vector<String>& pngFiles, const ArtGenImageSettings& settings);
+
     /// The provenance file beside a game's image or clip: the file's name with its extension replaced by `.artgen.json`
     [[nodiscard]] std::filesystem::path ProvenanceFileOf(const std::filesystem::path& mediaFile);
 

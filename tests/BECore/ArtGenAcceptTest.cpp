@@ -382,4 +382,80 @@ namespace BECore::Tests {
         EXPECT_FALSE(std::filesystem::exists(folder / "assets" / "artgen"));
     }
 
+    TEST_F(ArtGenAcceptTest, AMeasuredFrameCutsTheRowsOfASetToOneSizeAndKeepsTheirProportion) {
+        // Two rows of different objects, each with an alternative; the second alternative of the king is the biggest thing drawn
+        struct Picture {
+            const char* name;
+            ArtGenIntRect box;
+        };
+        const Array<Picture, 4> pictures{Picture{"king_1", {200, 100, 100, 300}}, Picture{"king_2", {180, 80, 140, 340}}, Picture{"pawn_1", {200, 300, 100, 100}},
+                                         Picture{"pawn_2", {210, 300, 90, 120}}};
+        Vector<String> files;
+        for (const Picture& picture : pictures) {
+            const auto file = folder / "out" / Format("{}.png", picture.name).c_str();
+            ASSERT_NO_FATAL_FAILURE(WriteRealPng(file, 512, 512, picture.box));
+            const std::string text = file.generic_string();  //-NoStd: the text of a std::filesystem::path
+            files.push_back(String(text.c_str(), text.size()));
+        }
+        const ArtGenImageSettings settings;
+        const auto frame = MeasureFrameForControl(files, settings);
+        ASSERT_TRUE(frame.has_value()) << frame.error().c_str();
+        for (const Picture& picture : pictures) {
+            EXPECT_TRUE(FrameContains(*frame, picture.box)) << picture.name << ": the frame is the union of every variant";
+        }
+        EXPECT_LT(frame->outHeight, frame->h) << "the maxSize of the defaults scales the 512 square's crop down";
+
+        ArtGenImagePlan plan;
+        plan.settings = settings;
+        plan.frame = *frame;
+        Array<ArtGenCopied, 4> written;
+        for (size_t index = 0; index < pictures.size(); ++index) {
+            const auto source = folder / "out" / Format("{}.png", pictures[index].name).c_str();
+            const auto copied = CopyVariantIntoAssets(source, provenance, folder / "assets", pictures[index].name, plan);
+            ASSERT_TRUE(copied.has_value()) << copied.error().c_str();
+            written[index] = *copied;
+            EXPECT_EQ(copied->width, static_cast<uint32_t>(frame->outWidth)) << "an alternative is the same size as the pick";
+            EXPECT_EQ(copied->height, static_cast<uint32_t>(frame->outHeight));
+        }
+
+        const auto king = ReadArtGenPng(written[0].pngFile);
+        const auto pawn = ReadArtGenPng(written[2].pngFile);
+        ASSERT_TRUE(king.has_value());
+        ASSERT_TRUE(pawn.has_value());
+        const Optional<ArtGenIntRect> kingBox = DrawnBounds(*king);
+        const Optional<ArtGenIntRect> pawnBox = DrawnBounds(*pawn);
+        ASSERT_TRUE(kingBox.has_value());
+        ASSERT_TRUE(pawnBox.has_value());
+        const double ratio = static_cast<double>(kingBox->h) / pawnBox->h;
+        EXPECT_NEAR(ratio, 3.0, 0.15) << "the king is three times the pawn in the sources, and in the files";
+    }
+
+    TEST_F(ArtGenAcceptTest, MeasuringSkipsAnEmptyPictureAndRefusesWhatCannotShareAFrame) {
+        const auto drawn = folder / "out" / "drawn.png";
+        const auto empty = folder / "out" / "empty.png";
+        const auto other = folder / "out" / "other.png";
+        ASSERT_NO_FATAL_FAILURE(WriteRealPng(drawn, 128, 128, {32, 32, 64, 64}));
+        ASSERT_NO_FATAL_FAILURE(WriteRealPng(empty, 128, 128, {0, 0, 0, 0}));
+        ASSERT_NO_FATAL_FAILURE(WriteRealPng(other, 64, 64, {0, 0, 32, 32}));
+        const auto text = [](const std::filesystem::path& path) {
+            const std::string generic = path.generic_string();  //-NoStd: the text of a std::filesystem::path
+            return String(generic.c_str(), generic.size());
+        };
+        const ArtGenImageSettings noPadding{true, 0, 0};
+
+        const auto skipped = MeasureFrameForControl(Vector<String>{text(empty), text(drawn)}, noPadding);
+        ASSERT_TRUE(skipped.has_value()) << skipped.error().c_str();
+        EXPECT_EQ(skipped->Crop(), (ArtGenIntRect{32, 32, 64, 64}));
+
+        const auto none = MeasureFrameForControl(Vector<String>{text(empty)}, noPadding);
+        ASSERT_FALSE(none.has_value());
+        EXPECT_NE(none.error().find("nothing drawn"), String::npos);
+
+        const auto mixed = MeasureFrameForControl(Vector<String>{text(drawn), text(other)}, noPadding);
+        ASSERT_FALSE(mixed.has_value());
+        EXPECT_NE(mixed.error().find("different sizes"), String::npos) << mixed.error().c_str();
+
+        EXPECT_FALSE(MeasureFrameForControl(Vector<String>{text(folder / "out" / "gone.png")}, noPadding).has_value());
+    }
+
 }  // namespace BECore::Tests

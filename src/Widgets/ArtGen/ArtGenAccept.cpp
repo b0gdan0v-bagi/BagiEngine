@@ -518,6 +518,35 @@ namespace BECore {
         return WriteProvenance(file, *parsed);
     }
 
+    std::expected<ArtGenImageFrame, String> MeasureFrameForControl(const Vector<String>& pngFiles, const ArtGenImageSettings& settings) {
+        Vector<ArtGenIntRect> bounds;
+        int32_t width = 0;
+        int32_t height = 0;
+        for (const String& file : pngFiles) {
+            const std::filesystem::path path = PathOf(StringView(file));
+            auto pixels = ReadArtGenPng(path);
+            if (!pixels) {
+                return std::unexpected(pixels.error());
+            }
+            const auto pixelsWidth = static_cast<int32_t>(pixels->width);
+            const auto pixelsHeight = static_cast<int32_t>(pixels->height);
+            if (width == 0) {
+                width = pixelsWidth;
+                height = pixelsHeight;
+            } else if (pixelsWidth != width || pixelsHeight != height) {
+                return std::unexpected(
+                    Format("'{}' is {} x {}, the others are {} x {}: one frame cannot cut pictures of different sizes", path.generic_string(), pixelsWidth, pixelsHeight, width, height));
+            }
+            if (const Optional<ArtGenIntRect> drawn = DrawnBounds(*pixels)) {
+                bounds.push_back(*drawn);
+            }
+        }
+        if (bounds.empty()) {
+            return std::unexpected(String("nothing drawn in any of the pictures: they are empty"));
+        }
+        return MakeArtGenFrame(Span<const ArtGenIntRect>(bounds.data(), bounds.size()), width, height, settings);
+    }
+
     std::expected<void, ControlError> KeepForControl(StringView kind, StringView name, int64_t seed, StringView date) {
         auto fail = [](const String& message) { return std::unexpected(ControlError{String("artgen_accept_failed"), message}); };
         const bool image = kind == kKindImage;

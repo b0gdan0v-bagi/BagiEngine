@@ -126,6 +126,7 @@ namespace BECore {
         session.SetAcceptor(&AcceptForControl);
         session.SetSoundAcceptor(&AcceptSoundForControl);
         session.SetKeeper(&KeepForControl);
+        session.SetFrameMeasurer(&MeasureFrameForControl);
         session.RegisterControl(CoreManager::GetControlService());
         return true;
     }

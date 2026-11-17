@@ -13,6 +13,7 @@
 #include <Widgets/ArtGen/Sets/ArtGenSet.h>
 #include <cstdint>
 #include <expected>
+#include <filesystem>
 
 namespace BECore {
 
@@ -138,6 +139,9 @@ namespace BECore {
         using Acceptor = std::expected<Json, ControlError> (*)(const ArtGenVariant& variant, StringView sprite, const ArtGenImagePlan& plan, SceneNode* node);
         /// Accepts a sound variant as a clip at @p target, processed by @p settings, and puts it on @p node's AudioSourceComponent when given
         using SoundAcceptor = std::expected<Json, ControlError> (*)(const ArtGenVariant& variant, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, SceneNode* node);
+        /// The frame every image of a set is cut from: the union of the drawn boxes of the PNG files @p pngFiles (real paths, all of one size)
+        /// grown and scaled by @p settings. Decodes them, so it is injected like the acceptors (a fake in the tests)
+        using FrameMeasurer = std::expected<ArtGenImageFrame, String> (*)(const Vector<String>& pngFiles, const ArtGenImageSettings& settings);
         /// Writes into the game's provenance file of @p name (a sprite or a clip, by @p kind) that the choice with @p seed was kept on @p date
         using Keeper = std::expected<void, ControlError> (*)(StringView kind, StringView name, int64_t seed, StringView date);
 
@@ -203,6 +207,10 @@ namespace BECore {
         /// What Keep runs for each row it keeps, before the manifest changes (ArtGenAccept.h in the editor; a fake in the tests)
         void SetKeeper(Keeper keeper) {
             _keeper = keeper;
+        }
+        /// What the first Accept all of an image set measures its frame with (ArtGenAccept.h in the editor; a fake in the tests)
+        void SetFrameMeasurer(FrameMeasurer measurer) {
+            _frameMeasurer = measurer;
         }
         /// The node "Use on selected" puts the sprite on (the scene editor's primary selection); null for none. Held, so it is checked alive
         /// in the active scene before use
@@ -310,6 +318,11 @@ namespace BECore {
         /// The job of `_run` while it is Running (the run is the work of a set), else null
         [[nodiscard]] ArtGenSetJob* RunningJobOfRun(ArtGenSet*& set);
         void SaveSet(const ArtGenSet& set);
+        /// The image settings a preset (a draft's @p presetData, else the saved one by @p preset) asks for; a malformed `accept` is the defaults
+        [[nodiscard]] ArtGenImageSettings ImageSettingsOf(const Json& presetData, StringView preset) const;
+        /// What the rows of an image set are written with: the set's own processing, else (the first Accept all) one measured now over every
+        /// variant of every Done job; none (the identity plan) for a legacy set or settings that change nothing. Nothing is stored here
+        [[nodiscard]] std::expected<Optional<ArtGenSetProcessing>, String> ProcessingOfSet(const ArtGenSet& set, const std::filesystem::path& root) const;
         /// The kind of the set's preset or draft workflow from the service's catalog; the set's own kind while the catalog does not know it
         [[nodiscard]] String KindOfSet(const ArtGenSet& set) const;
         void StartJob(ArtGenSet& set, ArtGenSetJob& job);
@@ -327,6 +340,7 @@ namespace BECore {
         Acceptor _acceptor = nullptr;
         SoundAcceptor _soundAcceptor = nullptr;
         Keeper _keeper = nullptr;
+        FrameMeasurer _frameMeasurer = nullptr;
         IntrusivePtr<SceneNode> _selectedNode;
         String _gameRoot;
         Vector<ArtGenSet> _sets;

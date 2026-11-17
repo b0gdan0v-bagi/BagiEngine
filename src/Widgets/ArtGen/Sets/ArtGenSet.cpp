@@ -206,6 +206,27 @@ namespace BECore {
             return job;
         }
 
+        std::expected<ArtGenSetProcessing, String> ReadProcessing(const Json& item) {
+            const Where where = "manifest.processing";
+            if (!item.is_object()) {
+                return std::unexpected(Format("{}: must be an object or null", where));
+            }
+            const Json* settings = FindJsonMember(item, "settings");
+            const Json* frame = FindJsonMember(item, "frame");
+            if (settings == nullptr || frame == nullptr) {
+                return std::unexpected(Format("{}: needs 'settings' and 'frame'", where));
+            }
+            auto readSettings = ArtGenImageSettingsFromJson(*settings);
+            if (!readSettings) {
+                return std::unexpected(Format("{}.settings: {}", where, readSettings.error()));
+            }
+            auto readFrame = ArtGenImageFrameFromJson(*frame);
+            if (!readFrame) {
+                return std::unexpected(Format("{}.frame: {}", where, readFrame.error()));
+            }
+            return ArtGenSetProcessing{*readSettings, *readFrame};
+        }
+
     }  // namespace
 
     String ArtGenNameFromSubject(StringView subject) {
@@ -364,6 +385,14 @@ namespace BECore {
             jobs.push_back(std::move(row));
         }
         manifest["jobs"] = std::move(jobs);
+        if (set.processing) {
+            Json processing = Json::object();
+            processing["settings"] = ArtGenImageSettingsToJson(set.processing->settings);
+            processing["frame"] = ArtGenImageFrameToJson(set.processing->frame);
+            manifest["processing"] = std::move(processing);
+        } else {
+            manifest["processing"] = Json(nullptr);
+        }
         return manifest;
     }
 
@@ -446,6 +475,15 @@ namespace BECore {
             }
             set.jobs.push_back(std::move(*job));
         }
+
+        const Json* processing = FindJsonMember(manifest, "processing");
+        if (processing != nullptr && !processing->is_null()) {
+            auto read = ReadProcessing(*processing);
+            if (!read) {
+                return std::unexpected(read.error());
+            }
+            set.processing = *read;
+        }
         return set;
     }
 
@@ -459,6 +497,10 @@ namespace BECore {
 
     int32_t PickedCount(const ArtGenSet& set) {
         return static_cast<int32_t>(std::count_if(set.jobs.begin(), set.jobs.end(), [](const ArtGenSetJob& job) { return job.pick.has_value(); }));
+    }
+
+    bool IsLegacyAccepted(const ArtGenSet& set) {
+        return !set.processing && std::any_of(set.jobs.begin(), set.jobs.end(), [](const ArtGenSetJob& job) { return job.accepted.has_value(); });
     }
 
     bool IsLive(const ArtGenSetJob& job) {

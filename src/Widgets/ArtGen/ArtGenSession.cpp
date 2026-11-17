@@ -50,10 +50,10 @@ namespace BECore {
         return nullptr;
     }
 
-    ArtGenImageSettings ArtGenSession::ImageSettingsOfRun() const {
-        const Json* data = &_run.presetData;
-        if (_run.presetData.is_null()) {
-            const ArtGenPreset* saved = FindPreset(_run.preset);
+    ArtGenImageSettings ArtGenSession::ImageSettingsOf(const Json& presetData, StringView preset) const {
+        const Json* data = &presetData;
+        if (presetData.is_null()) {
+            const ArtGenPreset* saved = FindPreset(preset);
             data = saved != nullptr ? &saved->data : nullptr;
         }
         const Json* accept = data != nullptr ? FindJsonMember(*data, "accept") : nullptr;
@@ -61,6 +61,10 @@ namespace BECore {
             return {};
         }
         return ArtGenImageSettingsFromJson(*accept).value_or(ArtGenImageSettings{});
+    }
+
+    ArtGenImageSettings ArtGenSession::ImageSettingsOfRun() const {
+        return ImageSettingsOf(_run.presetData, StringView(_run.preset));
     }
 
     std::expected<Json, ControlError> ArtGenSession::Accept(int64_t seed, StringView sprite, bool useOnSelected, const ArtGenImageSettings* settings) {
