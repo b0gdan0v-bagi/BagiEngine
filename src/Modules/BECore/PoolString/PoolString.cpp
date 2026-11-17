@@ -27,17 +27,41 @@ namespace BECore {
         }
     };
 
+    /// Interned entries live in blocks that are never freed or moved. Invariant: an entry lies inside one block, so a
+    /// string never runs past the end of the memory it was copied into. A string that does not fit a standard block gets
+    /// a block of exactly its size and the current block keeps its free space for the next small strings.
     class PoolString::Storage {
         SharedMutex _mutex{BE_LOCK_SITE("PoolString")};
         IntrusivePoolTable<Entry, 16384> _table;
 
-        struct Page {
-            static constexpr size_t Size = 128 * 1024;
-            alignas(uint64_t) char data[Size];
-            UniquePtr<Page> prev;
-        };
-        UniquePtr<Page> _currentPage;
+        static constexpr size_t kEntryAlignment = alignof(uint64_t);
+        static constexpr size_t kBlockWords = kBlockBytes / sizeof(uint64_t);
+        static_assert(kBlockBytes % kEntryAlignment == 0);
+
+        // uint64_t words, so every block starts aligned to 8 as the entry header needs
+        Vector<UniquePtr<uint64_t[]>> _blocks;
+        char* _currentBlock = nullptr;
         size_t _offset = 0;
+
+        void AddStandardBlock() {
+            _blocks.push_back(MakeUnique<uint64_t[]>(kBlockWords));
+            _currentBlock = reinterpret_cast<char*>(_blocks.back().get());
+            _offset = 0;
+        }
+
+        /// Memory for one entry of `alignedSize` bytes (a multiple of 8). The caller holds the unique lock.
+        char* AllocateEntryMemory(size_t alignedSize) {
+            if (alignedSize > kBlockBytes) {
+                _blocks.push_back(MakeUnique<uint64_t[]>(alignedSize / sizeof(uint64_t)));
+                return reinterpret_cast<char*>(_blocks.back().get());
+            }
+            if (_offset + alignedSize > kBlockBytes) {
+                AddStandardBlock();
+            }
+            char* memory = _currentBlock + _offset;
+            _offset += alignedSize;
+            return memory;
+        }
 
     public:
         static Storage& Instance() {
@@ -46,7 +70,7 @@ namespace BECore {
         }
 
         Storage() {
-            _currentPage = MakeUnique<Page>();
+            AddStandardBlock();
         }
 
         const Entry* Find(StringView str) {
@@ -80,22 +104,15 @@ namespace BECore {
                 return e;
             }
 
-            const size_t headerSize = offsetof(Entry, data);
-            const size_t totalSize = headerSize + str.size() + 1;
-            const size_t alignedSize = (totalSize + 7) & ~7;
+            // The entry stores the length in 32 bits: a longer string would be copied past its block
+            ASSERT(str.size() <= UINT32_MAX - offsetof(Entry, data) - kEntryAlignment);
+            const size_t totalSize = offsetof(Entry, data) + str.size() + 1;
+            const size_t alignedSize = (totalSize + kEntryAlignment - 1) & ~(kEntryAlignment - 1);
 
-            if (_offset + alignedSize > Page::Size) {
-                auto newPage = MakeUnique<Page>();
-                newPage->prev = eastl::move(_currentPage);
-                _currentPage = eastl::move(newPage);
-                _offset = 0;
-            }
-
-            Entry* entry = new (&_currentPage->data[_offset]) Entry(hash, static_cast<uint32_t>(str.size()));
+            Entry* entry = new (AllocateEntryMemory(alignedSize)) Entry(hash, static_cast<uint32_t>(str.size()));
             std::memcpy(entry->data, str.data(), str.size());
             entry->data[str.size()] = '\0';
 
-            _offset += alignedSize;
             _table.Insert(entry);
             return entry;
         }

@@ -1,4 +1,5 @@
 #include <BECore/PoolString/PoolString.h>
+#include <BECore/Reflection/XmlDeserializer.h>
 #include <Common/Printers.h>
 #include <chrono>
 #include <cstdio>
@@ -30,6 +31,87 @@ namespace BECore::Tests {
         EXPECT_FALSE(PoolString::Find("pool_find_prefix_b6d5x").has_value());
         EXPECT_FALSE(PoolString::Find("pool_find_prefix_b6d").has_value());
         EXPECT_TRUE(PoolString::Find("pool_find_prefix_b6d5").has_value());
+    }
+
+    namespace {
+
+        constexpr size_t kEntryHeaderBytes = offsetof(Details::PoolStringEntry, data);
+
+        /// A text of `length` characters that differs from the texts of other seeds from its first character on
+        String BlockText(size_t length, char seed) {
+            String text(length, seed);
+            for (size_t i = 1; i < length; i += 7) {
+                text[i] = static_cast<char>('a' + (i + static_cast<size_t>(seed)) % 26);
+            }
+            return text;
+        }
+
+        void ExpectInternedWholeAndTerminated(const String& text) {
+            const PoolString interned = PoolString::Intern(StringView{text});
+            ASSERT_EQ(interned.Length(), text.size());
+            EXPECT_EQ(interned.CStr()[interned.Length()], '\0');
+            EXPECT_EQ(std::memcmp(interned.CStr(), text.data(), text.size()), 0);
+            const auto found = PoolString::Find(StringView{text});
+            ASSERT_TRUE(found.has_value());
+            EXPECT_EQ(*found, interned);
+            EXPECT_EQ(PoolString::Intern(StringView{text}), interned);
+        }
+
+    }  // namespace
+
+    TEST(PoolStringBlocksTest, StringsAroundTheBlockSizeAreStoredWhole) {
+        constexpr size_t kLengths[] = {
+            PoolString::kBlockBytes - kEntryHeaderBytes - 1,  // the entry fills a block exactly
+            PoolString::kBlockBytes - kEntryHeaderBytes,      // one character more: a block of its own
+            PoolString::kBlockBytes,
+            3 * PoolString::kBlockBytes + 17,
+        };
+        char seed = 'A';
+        for (const size_t length : kLengths) {
+            SCOPED_TRACE(length);
+            ExpectInternedWholeAndTerminated(BlockText(length, seed++));
+        }
+    }
+
+    TEST(PoolStringBlocksTest, AnEntryThatFitsABlockButNotTheRestOfTheCurrentOneIsStoredWhole) {
+        const PoolString before = PoolString::Intern("pool_block_before_5d02");
+        ExpectInternedWholeAndTerminated(BlockText(PoolString::kBlockBytes - kEntryHeaderBytes - 1, 'q'));
+        EXPECT_EQ(PoolString::Intern("pool_block_before_5d02"), before);
+        EXPECT_EQ(before.ToStringView(), "pool_block_before_5d02");
+    }
+
+    TEST(PoolStringBlocksTest, SmallStringsAroundAHugeOneStayIntact) {
+        const String hugeText = BlockText(2 * PoolString::kBlockBytes + 5, 'h');
+        const PoolString small1 = PoolString::Intern("pool_block_small_first_7e31");
+        const PoolString huge = PoolString::Intern(StringView{hugeText});
+        const PoolString small2 = PoolString::Intern("pool_block_small_second_7e31");
+
+        EXPECT_EQ(small1, PoolString::Intern("pool_block_small_first_7e31"));
+        EXPECT_EQ(small2, PoolString::Intern("pool_block_small_second_7e31"));
+        EXPECT_EQ(small1.ToStringView(), "pool_block_small_first_7e31");
+        EXPECT_EQ(small2.ToStringView(), "pool_block_small_second_7e31");
+        EXPECT_NE(small1, small2);
+        EXPECT_EQ(huge.ToStringView(), StringView{hugeText});
+    }
+
+    TEST(PoolStringBlocksTest, AnXmlAttributeLongerThanABlockLoadsIntoAPoolString) {
+        const String longText = BlockText(PoolString::kBlockBytes + 100, 'x');
+        String document = "<root name=\"";
+        document += longText;
+        document += "\"><child>";
+        document += longText;
+        document += "</child></root>";
+
+        XmlDeserializer reader;
+        ASSERT_TRUE(reader.LoadFromString(document));
+        PoolString attribute;
+        ASSERT_TRUE(reader.ReadAttribute("name", attribute));
+        EXPECT_EQ(attribute.ToStringView(), StringView{longText});
+        EXPECT_EQ(attribute.CStr()[attribute.Length()], '\0');
+        PoolString element;
+        ASSERT_TRUE(reader.Read("child", element));
+        EXPECT_EQ(element, attribute);
+        EXPECT_FALSE(reader.HasErrors());
     }
 
     namespace {

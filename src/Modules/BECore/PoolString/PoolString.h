@@ -36,6 +36,9 @@ namespace BECore {
 
     class PoolString {
     public:
+        /// Size of a standard block of the pool; a string whose entry does not fit one gets a block of its own.
+        static constexpr size_t kBlockBytes = 128 * 1024;
+
         constexpr PoolString() noexcept : _entry(&Details::g_EmptyEntryStore.header) {}
 
         static PoolString Intern(StringView str);
