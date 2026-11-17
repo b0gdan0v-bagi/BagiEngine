@@ -2,6 +2,7 @@
 #include <BECore/Control/Json.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
+#include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
 #include <Widgets/ArtGen/Sets/ArtGenSetStore.h>
 #include <Widgets/EditorLayout/UserFileIo.h>
@@ -18,10 +19,14 @@ namespace BECore::Tests {
             Json preset = Json::object();
             preset["name"] = "wood";
             preset["title"] = "wood";
+            Json knock = Json::object();
+            knock["name"] = "knock";
+            knock["title"] = "knock";
+            knock["kind"] = "audio";
             Json params = Json::object();
             params["state"] = "ready";
             params["generator"] = "fake";
-            params["presets"] = Json::array({preset});
+            params["presets"] = Json::array({preset, knock});
             return params;
         }
 
@@ -36,6 +41,37 @@ namespace BECore::Tests {
             return String(text.c_str(), text.size());
         }
 
+        /// What the fake acceptors were called with, in order (a function pointer cannot capture, so the test reads it here)
+        struct AcceptedRow {
+            int64_t seed = -1;
+            String path;
+            String provenance;
+            String name;
+            bool image = true;
+            bool withNode = false;
+            bool defaultSettings = true;
+        };
+        Vector<AcceptedRow> gAccepted;
+        String gFailOn;  // a row of this name is refused by the fake acceptors
+
+        std::expected<Json, ControlError> Answer(const ArtGenVariant& variant, StringView name, bool image, bool withNode, bool defaultSettings) {
+            if (name == gFailOn) {
+                return std::unexpected(ControlError{String("artgen_accept_failed"), String("the disk is full")});
+            }
+            gAccepted.push_back(AcceptedRow{variant.seed, variant.path, variant.provenancePath, String(name), image, withNode, defaultSettings});
+            Json reply = Json::object();
+            reply[image ? "sprite" : "clip"] = ToStdString(name);
+            return reply;
+        }
+
+        std::expected<Json, ControlError> FakeAcceptor(const ArtGenVariant& variant, StringView sprite, SceneNode* node) {
+            return Answer(variant, sprite, true, node != nullptr, true);
+        }
+
+        std::expected<Json, ControlError> FakeSoundAcceptor(const ArtGenVariant& variant, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, SceneNode* node) {
+            return Answer(variant, target.name, false, node != nullptr, settings == ArtGenSoundSettings{} && target.clip.empty());
+        }
+
     }  // namespace
 
     class ArtGenSetSessionTest : public ::testing::Test {
@@ -48,6 +84,10 @@ namespace BECore::Tests {
             std::filesystem::create_directories(_root);
             session.SetGameRoot(PathText(_root));
             session.RegisterControl(service);
+            session.SetAcceptor(&FakeAcceptor);
+            session.SetSoundAcceptor(&FakeSoundAcceptor);
+            gAccepted.clear();
+            gFailOn.clear();
         }
 
         void TearDown() override {
@@ -99,17 +139,19 @@ namespace BECore::Tests {
         }
 
         /// What the service does for the request it got: an image per seed, then the end
-        void Finish(const Json& request, StringView status, StringView error = {}) {
+        void Finish(const Json& request, StringView status, StringView error = {}, StringView kind = "image") {
             const uint32_t id = static_cast<uint32_t>(GetJsonInt(request, "id").value());
             const int64_t seed = GetJsonInt(request, "seed").value();
             const String outDir = GetJsonString(request, "outDir").value();
             const String name = GetJsonString(request, "name").value();
+            const StringView extension = kind == "audio" ? "flac" : "png";
             if (status == "ok") {
                 const int64_t count = GetJsonInt(request, "count").value();
                 for (int64_t i = 0; i < count; ++i) {
                     Json image = Report(id);
                     image["seed"] = seed + i;
-                    image["path"] = ToStdString(Format("{}/artgen/out/{}/{}_{}.png", PathText(_root), outDir, name, seed + i));
+                    image["kind"] = ToStdString(kind);
+                    image["path"] = ToStdString(Format("{}/artgen/out/{}/{}_{}.{}", PathText(_root), outDir, name, seed + i, extension));
                     image["provenance"] = ToStdString(Format("{}/artgen/out/{}/{}_{}.artgen.json", PathText(_root), outDir, name, seed + i));
                     Call("artgen_image", image);
                 }
@@ -120,6 +162,29 @@ namespace BECore::Tests {
                 done["error"] = ToStdString(error);
             }
             Call("artgen_done", done);
+        }
+
+        /// Runs every job of the set to its end (the service made all the images) and picks the second variant of each
+        void RunAndPickAll(StringView set, StringView kind = "image") {
+            while (const Json* request = RequestOf(pollReply = Poll())) {
+                Finish(*request, "ok", {}, kind);
+            }
+            for (const ArtGenSetJob& job : session.FindSet(set)->jobs) {
+                ASSERT_EQ(session.PickVariant(set, job.name, kSetSeed + 1), ArtGenSetEdit::Ok);
+            }
+        }
+
+        /// Makes the files the manifest names, as the service would have written them (the reports alone leave none)
+        void MakeFiles(StringView set) {
+            for (const ArtGenSetJob& job : session.FindSet(set)->jobs) {
+                for (const ArtGenSetVariant& variant : job.variants) {
+                    for (const String& file : {variant.file, variant.provenance}) {
+                        const std::filesystem::path path = AbsoluteInSet(_root, set, file);
+                        std::filesystem::create_directories(path.parent_path());
+                        ASSERT_TRUE(WriteTextFileAtomically(path, "x").has_value());
+                    }
+                }
+            }
         }
 
         static String ErrorCode(const Json& response) {
@@ -137,6 +202,7 @@ namespace BECore::Tests {
             return set.jobs[job].state;
         }
 
+        Json pollReply;
         double now = 100.0;
         ControlService service;
         ArtGenSession session;
@@ -800,6 +866,170 @@ namespace BECore::Tests {
         Json setup = Json::object();
         setup["action"] = "Plan";
         EXPECT_EQ(ErrorCode(Call("artgen_setup", setup)), "artgen_busy");
+    }
+
+    TEST_F(ArtGenSetSessionTest, AcceptAllTakesThePickedVariantOfEveryJobUnderTheJobName) {
+        ASSERT_TRUE(Enqueue("pieces", "rook: a rook\nknight: a knight\nbishop: a bishop").has_value());
+        RunAndPickAll("pieces");
+        ASSERT_EQ(session.PickVariant("pieces", "knight", kSetSeed), ArtGenSetEdit::Ok);
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("pieces"));
+
+        Json params = Json::object();
+        params["set"] = "pieces";
+        const Json answer = Result(Call("artgen_accept_set", params));
+        EXPECT_EQ(GetJsonString(answer, "set"), Optional<String>("pieces"));
+        const Json* accepted = FindJsonMember(answer, "accepted");
+        ASSERT_NE(accepted, nullptr);
+        ASSERT_EQ(accepted->size(), 3u);
+        EXPECT_EQ(GetJsonString((*accepted)[1], "job"), Optional<String>("knight"));
+        EXPECT_EQ(GetJsonString((*accepted)[1], "as"), Optional<String>("knight"));
+        EXPECT_EQ(GetJsonString((*accepted)[1], "sprite"), Optional<String>("knight")) << "the acceptor's answer is part of the row";
+
+        ASSERT_EQ(gAccepted.size(), 3u);
+        const char* const names[] = {"rook", "knight", "bishop"};
+        const int64_t seeds[] = {kSetSeed + 1, kSetSeed, kSetSeed + 1};
+        for (size_t row = 0; row < 3; ++row) {
+            EXPECT_EQ(gAccepted[row].name, names[row]);
+            EXPECT_EQ(gAccepted[row].seed, seeds[row]);
+            EXPECT_EQ(gAccepted[row].path, Format("{}/artgen/out/pieces/{}/{}_{}.png", PathText(_root), names[row], names[row], seeds[row]));
+            EXPECT_EQ(gAccepted[row].provenance, Format("{}/artgen/out/pieces/{}/{}_{}.artgen.json", PathText(_root), names[row], names[row], seeds[row]));
+            EXPECT_TRUE(gAccepted[row].image);
+            EXPECT_FALSE(gAccepted[row].withNode);
+        }
+
+        const ArtGenSet disk = OnDisk("pieces");
+        for (size_t row = 0; row < 3; ++row) {
+            ASSERT_TRUE(disk.jobs[row].accepted.has_value());
+            EXPECT_EQ(disk.jobs[row].accepted->as, names[row]);
+            EXPECT_FALSE(disk.jobs[row].accepted->date.empty());
+        }
+        const Json state = Result(Call("artgen_state"));
+        EXPECT_EQ(GetJsonInt((*FindJsonMember(state, "sets"))[0], "accepted"), Optional<int64_t>(3));
+    }
+
+    TEST_F(ArtGenSetSessionTest, AcceptAllRefusesASetThatIsNotReadyAndChangesNothing) {
+        ASSERT_TRUE(Enqueue("gaps", "a\nb\nc\nd").has_value());
+        Json params = Json::object();
+        params["set"] = "gaps";
+        EXPECT_EQ(ErrorCode(Call("artgen_accept_set", params)), "artgen_busy") << "the set is still active";
+
+        Finish(*RequestOf(Poll()), "ok");
+        Finish(*RequestOf(Poll()), "ok");
+        Finish(*RequestOf(Poll()), "failed", "boom");
+        session.CancelJob("gaps", "d");
+        ASSERT_EQ(session.PickVariant("gaps", "a", kSetSeed), ArtGenSetEdit::Ok);
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("gaps"));
+
+        const Json refused = Call("artgen_accept_set", params);
+        EXPECT_EQ(ErrorCode(refused), "artgen_set_incomplete");
+        const String message = GetJsonString(*FindJsonMember(refused, "error"), "message").value_or(String());
+        EXPECT_NE(message.find("not picked: b"), String::npos) << message.c_str();
+        EXPECT_NE(message.find("failed: c"), String::npos) << message.c_str();
+        EXPECT_NE(message.find("cancelled: d"), String::npos) << message.c_str();
+        EXPECT_TRUE(gAccepted.empty());
+        EXPECT_EQ(CountJobs(OnDisk("gaps"), ArtGenSetJobState::Done), 2);
+        EXPECT_FALSE(OnDisk("gaps").jobs[0].accepted.has_value());
+
+        params["set"] = "nothing";
+        EXPECT_EQ(ErrorCode(Call("artgen_accept_set", params)), "artgen_no_set");
+        EXPECT_EQ(ErrorCode(Call("artgen_accept_set", Json::object())), "invalid_params");
+    }
+
+    TEST_F(ArtGenSetSessionTest, AcceptAllChecksEveryRowsFilesBeforeTheFirstAccept) {
+        ASSERT_TRUE(Enqueue("files", "a\nb\nc").has_value());
+        RunAndPickAll("files");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("files"));
+        Json params = Json::object();
+        params["set"] = "files";
+
+        // The picked file of the last row is gone: the first two are not accepted either
+        std::filesystem::remove(AbsoluteInSet(_root, "files", "c/c_41.png"));
+        Json refused = Call("artgen_accept_set", params);
+        EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
+        const String message = GetJsonString(*FindJsonMember(refused, "error"), "message").value_or(String());
+        EXPECT_NE(message.find("'c'"), String::npos) << message.c_str();
+        EXPECT_TRUE(gAccepted.empty());
+        EXPECT_FALSE(OnDisk("files").jobs[0].accepted.has_value());
+
+        // The provenance of a row is gone
+        ASSERT_TRUE(WriteTextFileAtomically(AbsoluteInSet(_root, "files", "c/c_41.png"), "x").has_value());
+        std::filesystem::remove(AbsoluteInSet(_root, "files", "a/a_41.artgen.json"));
+        EXPECT_EQ(ErrorCode(Call("artgen_accept_set", params)), "artgen_accept_failed");
+        EXPECT_TRUE(gAccepted.empty());
+
+        // No acceptor here
+        ASSERT_TRUE(WriteTextFileAtomically(AbsoluteInSet(_root, "files", "a/a_41.artgen.json"), "x").has_value());
+        session.SetAcceptor(nullptr);
+        EXPECT_EQ(ErrorCode(Call("artgen_accept_set", params)), "artgen_accept_failed");
+        session.SetAcceptor(&FakeAcceptor);
+
+        // Everything in place: the same call goes through
+        EXPECT_EQ(ErrorCode(Call("artgen_accept_set", params)), "") << "everything is in place now";
+        EXPECT_EQ(gAccepted.size(), 3u);
+    }
+
+    TEST_F(ArtGenSetSessionTest, AFailureHalfwayNamesTheRowAndTheNextCallFinishesTheSet) {
+        ASSERT_TRUE(Enqueue("five", "a\nb\nc\nd\ne").has_value());
+        RunAndPickAll("five");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("five"));
+        Json params = Json::object();
+        params["set"] = "five";
+
+        gFailOn = "c";
+        const Json refused = Call("artgen_accept_set", params);
+        EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
+        const String message = GetJsonString(*FindJsonMember(refused, "error"), "message").value_or(String());
+        EXPECT_NE(message.find("'c'"), String::npos) << message.c_str();
+        EXPECT_NE(message.find("row 3 of 5"), String::npos) << message.c_str();
+        EXPECT_NE(message.find("the disk is full"), String::npos) << message.c_str();
+        EXPECT_NE(message.find("accepted before it: a, b"), String::npos) << message.c_str();
+        ASSERT_EQ(gAccepted.size(), 2u);
+        {
+            const ArtGenSet disk = OnDisk("five");
+            EXPECT_TRUE(disk.jobs[0].accepted.has_value());
+            EXPECT_TRUE(disk.jobs[1].accepted.has_value());
+            EXPECT_FALSE(disk.jobs[2].accepted.has_value());
+            EXPECT_FALSE(disk.jobs[3].accepted.has_value());
+        }
+
+        gFailOn.clear();
+        const Json again = Result(Call("artgen_accept_set", params));
+        ASSERT_NE(FindJsonMember(again, "accepted"), nullptr);
+        EXPECT_EQ(FindJsonMember(again, "accepted")->size(), 5u);
+        ASSERT_EQ(gAccepted.size(), 7u) << "the first two replace themselves";
+        EXPECT_EQ(gAccepted[2].name, "a");
+        EXPECT_EQ(gAccepted[6].name, "e");
+        for (const ArtGenSetJob& job : OnDisk("five").jobs) {
+            EXPECT_TRUE(job.accepted.has_value());
+        }
+    }
+
+    TEST_F(ArtGenSetSessionTest, ASoundSetIsAcceptedAsClipsWithDefaultSettings) {
+        Poll();  // the catalog tells the kind of the preset
+        ArtGenSetRequest request;
+        request.preset = "knock";
+        request.subjects = ParseArtGenSubjects("knock: a wooden knock\ntap: a soft tap").value();
+        request.count = 2;
+        request.seed = kSetSeed;
+        request.name = "sounds";
+        ASSERT_TRUE(session.EnqueueSet(request).has_value());
+        EXPECT_EQ(session.FindSet("sounds")->kind, "audio");
+        RunAndPickAll("sounds", "audio");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("sounds"));
+
+        Json params = Json::object();
+        params["set"] = "sounds";
+        const Json answer = Result(Call("artgen_accept_set", params));
+        ASSERT_NE(FindJsonMember(answer, "accepted"), nullptr);
+        EXPECT_EQ(GetJsonString((*FindJsonMember(answer, "accepted"))[0], "clip"), Optional<String>("knock"));
+        ASSERT_EQ(gAccepted.size(), 2u);
+        for (const AcceptedRow& row : gAccepted) {
+            EXPECT_FALSE(row.image);
+            EXPECT_TRUE(row.defaultSettings) << "the clip is assets/artgen/<name>.wav, processed with the defaults";
+            EXPECT_NE(row.path.find(".flac"), String::npos);
+        }
+        EXPECT_EQ(gAccepted[1].name, "tap");
+        EXPECT_TRUE(OnDisk("sounds").jobs[1].accepted.has_value());
     }
 
 }  // namespace BECore::Tests

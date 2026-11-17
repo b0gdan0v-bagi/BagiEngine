@@ -221,6 +221,9 @@ namespace BECore {
         ArtGenSetEdit RetryJobs(StringView set, StringView job = {});
         /// Picks the variant @p seed of a job (saved in the manifest)
         ArtGenSetEdit PickVariant(StringView set, StringView job, int64_t seed);
+        /// Accepts the picked variant of every job of a finished set as its job's name, through the acceptors Accept uses, marking each row in the
+        /// manifest (Sets/CLAUDE.md, "Accept all"). Checks every row first and changes nothing when one cannot be accepted
+        std::expected<Json, ControlError> AcceptSet(StringView name);
         [[nodiscard]] const ArtGenSet* FindSet(StringView name) const;
         [[nodiscard]] const Vector<ArtGenSet>& GetSets() const {
             return _sets;
@@ -248,6 +251,7 @@ namespace BECore {
         std::expected<Json, ControlError> HandleSet(const Json& params);
         std::expected<Json, ControlError> HandlePick(const Json& params);
         std::expected<Json, ControlError> HandleRetry(const Json& params);
+        std::expected<Json, ControlError> HandleAcceptSet(const Json& params);
         [[nodiscard]] Json StateJson() const;
 
     private:

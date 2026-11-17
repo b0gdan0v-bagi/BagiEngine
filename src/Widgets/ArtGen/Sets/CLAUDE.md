@@ -54,3 +54,11 @@ The session (`ArtGenSessionSets.cpp`) runs the sets through the one run it alrea
 ## Control methods
 
 The table is in `ArtGen/CLAUDE.md`; the handlers are in `ArtGenSessionSets.cpp`. All answer at once and keep nothing on a refusal. `artgen_enqueue` is refused only for what makes a bad set (`invalid_params`: a bad preset, subject, count, seed or name, a taken folder); it never says `artgen_busy`, a second set joins the line. `artgen_cancel` with `job` and no `set` takes the one set that has that job `Pending` or `Running`; two such sets is `invalid_params`, so an agent that did not queue the set cannot cancel it by a name that happens to match without naming it. `artgen_pick` is allowed on any job that has the variant (the Accept all check, not the pick, wants `Done`).
+
+## Accept all
+
+`ArtGenSession::AcceptSet` (`artgen_accept_set`) takes the picked variant of every job into the game under the **job's name**, through the acceptors the single Accept uses (an image as the sprite, a sound as the clip `assets/artgen/<name>.wav` with default settings; no node, a set has one kind), so the two paths cannot drift. It writes the game's assets and `TextureLibrary.xml` once per row, so it is checked as a whole first and nothing is touched by a refusal:
+
+1. The set exists and is not active (`artgen_busy`); every job is `Done` with a pick (`artgen_set_incomplete` names the rows not picked, failed or cancelled: a job cannot be dropped, it is retried first).
+2. Every row: a valid name, the picked file of the set's kind, its provenance when the manifest names one (the file system is asked, the manifest is not trusted), and an acceptor installed (`artgen_accept_failed`).
+3. Then the rows in order; after each one the job is marked `accepted` and the manifest written. A failure halfway returns the row, its position and the rows done, and stops: the marks of the rows done stay, and **calling it again is the repair**, an accept replaces the same name, so nothing is ever half old, half new beyond the one row that failed.
