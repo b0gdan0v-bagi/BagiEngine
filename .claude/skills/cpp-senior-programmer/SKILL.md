@@ -23,7 +23,7 @@ Paths are from the engine root (`engine/` in a game).
 | An enum | `CLAUDE.md` DO (`CORE_ENUM`) | `src/Modules/BECore/Save/SaveGame.h` (`SaveErrorKind`), `src/Modules/BECore/Utils/EnumUtils.h` |
 | A callback (stored, a parameter, never allocating) | `src/Modules/BECore/Utils/CLAUDE.md` "The callable types" | `src/Modules/BECore/Save/SaveGame.h` (`FunctionRef`), `src/Modules/BECore/Animation/Tween.h` (`FixedFunction`) |
 | An event, a subscription | `src/Modules/Events/CLAUDE.md` | `src/Application/Application.cpp` (`Subscribe`), `src/Modules/BECore/Scene/Components/ClickableComponent.cpp` (`SubscribeInScene`) |
-| A component | `src/Modules/BECore/Scene/CLAUDE.md` "Adding a component", "Gotchas" | `src/Modules/BECore/Scene/Components/ClickableComponent.cpp` |
+| A component | `src/Modules/BECore/Scene/CLAUDE.md` "Adding a component", "Gotchas" | `src/Modules/BECore/Scene/Components/ClickableComponent.cpp`; one that rebuilds from a model: [patterns.md](patterns.md) "Rebuild only when the key moved" |
 | Reflection (`BE_CLASS`, `BE_REFLECT_FIELD`, `BE_EVENT`) | `.claude/rules/reflection-module.md`, `src/Modules/BECore/Reflection/CLAUDE.md` | the component above |
 | A background job, a coroutine | `src/Modules/TaskSystem/CLAUDE.md` "Best Practices" | `src/Modules/BECore/Text/FontLoader.cpp` (`Task<>`, `co_await SwitchToBackground`) |
 | Locks and threads | `src/Modules/BECore/Threading/CLAUDE.md` | `src/Modules/BECore/PoolString/PoolString.cpp` (`SharedMutex` + `BE_LOCK_SITE`) |
@@ -45,15 +45,15 @@ Each is written where it lives; these are the ones a change outside that folder 
 - `"x"_intern` / `PoolString::Intern` on text from outside (a client, a file, input) grows a table that never frees: look it up with `PoolString::Find` (`Reflection/CLAUDE.md`).
 - `Format(...)` and `_format` make a `String`, so one per frame breaks the steady frame: format into a member buffer (`FormatToN`, `Format/CLAUDE.md`) and only when the value changed.
 - `MoveOnlyFunction` allocates once its capture is above the inline buffer; a callable that must never allocate is a `FixedFunction`, which rejects what does not fit (`Utils/CLAUDE.md`). A `FunctionRef` is never stored.
-- `ASSERT` / `EXPECT` compile out in Release: nothing with a side effect inside.
-- `co_await` with a lock held, `Wait()` on the main thread, a background loop without `YieldIfNeeded()`: all hang one build or another (`TaskSystem/CLAUDE.md` "DON'T").
-- A new file or a new `BE_CLASS` / `BE_REFLECT_FIELD` needs `cmake --preset` again; a header whose `.gen.hpp` no `.cpp` includes fails to link (`reflection-module.md`).
+- `co_await` with a lock held or `Wait()` on the main thread hangs; a background loop without `YieldIfNeeded()` freezes the single-thread (browser) build until it ends (`TaskSystem/CLAUDE.md` "DON'T").
+- A header with `BE_CLASS` / `BE_EVENT` whose `Generated/<Stem>.gen.hpp` no `.cpp` includes fails to link (`reflection-module.md`).
 - A change to what a content file may say adds a migration step (`CLAUDE.md` "After making changes").
 
 ## Self-check of a diff
 
 - [ ] Every name it uses exists (grep); nothing is copied from memory of another engine
-- [ ] `BECore` aliases, `CORE_ENUM`, the callables, `Mutex` + `BE_LOCK_SITE`, `Format`: the CI checks (`BagiTypesCheck`, `BagiIncludeStyle`, `BagiHeadersStandalone`) pass
+- [ ] The ctests `BagiTypesCheck`, `BagiIncludeStyle`, `BagiHeadersStandalone` pass (aliases, callables, raw locks and threads, `fmt::`, includes)
+- [ ] No `enum class` is left: no check catches it, `CORE_ENUM` is the rule
 - [ ] Subscriptions go through `SubscriptionHolder`; an order that matters is an explicit call, not an event
 - [ ] An operation that fails changes nothing; a choice that changes nothing does nothing
 - [ ] A steady frame allocates nothing: derived things rebuild on a moved key, lists are members, no per-frame `Format`

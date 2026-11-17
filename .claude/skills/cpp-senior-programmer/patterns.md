@@ -63,7 +63,7 @@ The reflection reads the values, so the enum is written and read by name in cont
 
 `src/Modules/BECore/Save/SaveGame.cpp` (`SaveGameService::Load`).
 
-Every check that can fail (the slot, the envelope, the game, the version) runs and returns `std::unexpected` before `readState` is called, so a refused save leaves the game's state as it was. The error carries a kind (`CORE_ENUM`) and a message made with `Format`.
+The checks of the slot, the envelope, the game and the version return `std::unexpected` before `readState` is called; a state that fails to read is refused after it (`Corrupt`). So `readState` fills a temporary, and the game applies it only after a success: a refused save leaves the game as it was (`Save/CLAUDE.md` "What a consumer does with a refused save"). The error carries a kind (`CORE_ENUM`) and a message made with `Format`.
 
 ## Callables
 
