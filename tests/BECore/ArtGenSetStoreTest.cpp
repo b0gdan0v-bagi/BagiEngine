@@ -229,4 +229,24 @@ namespace BECore::Tests {
         EXPECT_EQ(AbsoluteInSet(_root, "knights", absolute), _root / "elsewhere" / "x.png");
     }
 
+    TEST_F(ArtGenSetStoreTest, AnInterruptedMoreRunComesBackDoneWithTheNote) {
+        ArtGenSet set = MakeSet("knights", "2026-11-17T10:00:00Z");
+        set.jobs[0].state = ArtGenSetJobState::Running;
+        set.jobs[0].more = ArtGenSetMore{500, 2};
+        set.jobs[1].state = ArtGenSetJobState::Pending;
+        set.jobs[1].more = ArtGenSetMore{500, 2};
+        ASSERT_TRUE(WriteManifest(_root, set).has_value());
+
+        const Vector<ArtGenSet> loaded = LoadSets(_root);
+        ASSERT_EQ(loaded.size(), 1u);
+        EXPECT_FALSE(IsActive(loaded[0]));
+        for (const ArtGenSetJob& job : loaded[0].jobs) {
+            EXPECT_EQ(job.state, ArtGenSetJobState::Done);
+            EXPECT_EQ(job.error, kEditorClosedReason);
+            EXPECT_FALSE(job.more.has_value());
+            ASSERT_EQ(job.variants.size(), 1u);
+            EXPECT_EQ(job.pick, Optional<int64_t>(100));
+        }
+    }
+
 }  // namespace BECore::Tests

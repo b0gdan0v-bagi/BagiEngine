@@ -77,8 +77,8 @@ namespace BECore {
         void StopSound();
         /// Forgets a sound that ended by itself
         void RefreshPlaying();
-        /// The Review tab is not on screen: stops its sound and gives its pictures back
-        void ReleaseReview();
+        /// The Set tab is not on screen: stops its sound and gives its pictures back
+        void ReleaseSetTab();
 
         bool _open = false;
         ArtGenSetPanel _setPanel;

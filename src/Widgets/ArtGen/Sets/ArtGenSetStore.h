@@ -32,7 +32,7 @@ namespace BECore {
      *
      * The folder's name is the set's name (the folder may have been renamed). A job that was Pending or Running comes back Cancelled with
      * kEditorClosedReason. A manifest that does not read, or a folder whose name is not a valid set name, is skipped with one warning
-     * and never touched. A file a variant names that is gone stays in the set: the review shows a gap, nothing is rewritten at load.
+     * and never touched. A file a variant names that is gone stays in the set: the Set tab shows a gap, nothing is rewritten at load.
      */
     [[nodiscard]] Vector<ArtGenSet> LoadSets(const std::filesystem::path& gameRoot);
 

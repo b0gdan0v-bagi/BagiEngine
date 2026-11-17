@@ -46,7 +46,7 @@ namespace BECore {
         constexpr float kWaveformHeight = 40.0f;
         constexpr size_t kWaveformBuckets = 110;
         constexpr int32_t kPreviewRow = -2;
-        constexpr int32_t kReviewRow = -3;  // the sound of the Review tab
+        constexpr int32_t kSetTabRow = -3;  // the sound of the Set tab
         constexpr float kFieldWidth = 140.0f;
         constexpr float kMinTrimDb = -90.0f;
         constexpr float kMinPeakDb = -24.0f;
@@ -156,13 +156,13 @@ namespace BECore {
 
     void ArtGenWidget::Update() {
         if (!_open) {
-            ReleaseReview();
+            ReleaseSetTab();
             return;
         }
         ImGui::SetNextWindowSize(ImVec2(kDefaultWidth, kDefaultHeight), ImGuiCond_FirstUseEver);
         if (!ImGui::Begin(ICON_LC_WAND_SPARKLES " Generate###Generate", &_open)) {
             ImGui::End();
-            ReleaseReview();
+            ReleaseSetTab();
             return;
         }
         RefreshPlaying();
@@ -179,17 +179,12 @@ namespace BECore {
             }
             if (ImGui::BeginTabItem(ICON_LC_LIST_CHECKS " Set")) {
                 const ArtGenSetPanelForm form{_form};
-                _setPanel.DrawQueue(session, form);
-                ImGui::EndTabItem();
-            }
-            const bool reviewRequested = _setPanel.TakeReviewRequest();
-            if (ImGui::BeginTabItem(ICON_LC_EYE " Review", nullptr, reviewRequested ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None)) {
-                const auto play = [this](const AudioClip& clip) { PlaySound(clip, kReviewRow); };
+                const auto play = [this](const AudioClip& clip) { PlaySound(clip, kSetTabRow); };
                 const auto stop = [this] { StopSound(); };
-                _setPanel.DrawReview(session, ArtGenSetPanelSound{play, stop, _playingRow == kReviewRow});
+                _setPanel.DrawSetTab(session, form, ArtGenSetPanelSound{play, stop, _playingRow == kSetTabRow});
                 ImGui::EndTabItem();
             } else {
-                ReleaseReview();
+                ReleaseSetTab();
             }
             ImGui::EndTabBar();
         }
@@ -774,9 +769,9 @@ namespace BECore {
     void ArtGenWidget::DrawRun(ArtGenSession& session) {
         const ArtGenRun& run = session.GetRun();
         if (!run.setName.empty()) {
-            // The last job of a set stays in the run: its variants are the set's drafts, judged and accepted on the Review tab
+            // The last job of a set stays in the run: its variants are the set's drafts, judged and accepted on the Set tab
             DropThumbnails();
-            ImGui::TextDisabled("job %s of set %s (see the Set and Review tabs)", run.jobName.c_str(), run.setName.c_str());
+            ImGui::TextDisabled("job %s of set %s (see the Set tab)", run.jobName.c_str(), run.setName.c_str());
             return;
         }
         SyncThumbnails(run);
@@ -836,8 +831,8 @@ namespace BECore {
         }
     }
 
-    void ArtGenWidget::ReleaseReview() {
-        if (_playingRow == kReviewRow) {
+    void ArtGenWidget::ReleaseSetTab() {
+        if (_playingRow == kSetTabRow) {
             StopSound();
         }
         _setPanel.DropThumbnails();
