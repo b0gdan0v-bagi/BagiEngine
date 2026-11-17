@@ -29,7 +29,6 @@ namespace BECore {
     namespace {
 
         constexpr float kThumbnailSize = 160.0f;
-        constexpr float kSelectedBorder = 3.0f;
         constexpr float kDefaultWidth = 520.0f;
         constexpr float kDefaultHeight = 700.0f;
         // Seconds a started bridge gets to make its first poll before the panel says it did not come
@@ -393,7 +392,8 @@ namespace BECore {
             _requestError = result ? String() : result.error();
         }
         ImGui::EndDisabled();
-        if (busy) {
+        // A set that only waits has no run to cancel: its Cancel set is on the Set tab
+        if (session.IsRunInWork()) {
             ImGui::SameLine();
             ImGui::BeginDisabled(session.GetRun().cancelRequested);
             if (IconTextButton(ICON_LC_X, "Cancel", "Stop the run; the images already made stay")) {
@@ -428,8 +428,8 @@ namespace BECore {
         if (ImGui::BeginCombo("Preset", preview)) {
             for (const auto& preset : presets) {
                 char label[192];
-                std::snprintf(label, sizeof(label), "%s%s%s  (%s%s)", preset.error.empty() ? "" : ICON_LC_CIRCLE_ALERT " ", preset.kind == "audio" ? ICON_LC_AUDIO_LINES " " : "", preset.title.c_str(),
-                              preset.name.c_str(), preset.source == "engine" ? ", engine" : "");
+                std::snprintf(label, sizeof(label), "%s%s%s  (%s%s)", preset.error.empty() ? "" : ICON_LC_CIRCLE_ALERT " ", StringView(preset.kind) == kKindAudio ? ICON_LC_AUDIO_LINES " " : "",
+                              preset.title.c_str(), preset.name.c_str(), preset.source == "engine" ? ", engine" : "");
                 ImGui::BeginDisabled(!preset.data.is_object());
                 if (ImGui::Selectable(label, preset.name == _form.GetBaseName())) {
                     // Picking another preset drops what the form had unsaved
