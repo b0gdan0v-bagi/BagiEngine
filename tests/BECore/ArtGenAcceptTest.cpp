@@ -622,6 +622,42 @@ namespace BECore::Tests {
         EXPECT_EQ(ReadAllBytes(game.Resolve(kAtlasPng)), afterAccept);
     }
 
+    TEST(ArtGenAtlasReplyTest, NoRepackIsNull) {
+        EXPECT_TRUE(AtlasReplyToJson(Optional<AtlasWritten>{}).is_null());
+    }
+
+    TEST(ArtGenAtlasReplyTest, ARepackNamesTheAtlasItsFileAndSize) {
+        AtlasWritten written;
+        written.name = PoolString::Intern("ui");
+        written.texturePath = PoolString::Intern("assets/atlases/ui.png");
+        written.width = 64;
+        written.height = 32;
+        written.changed = {PoolString::Intern("queen"), PoolString::Intern("rook")};
+
+        const Json reply = AtlasReplyToJson(written);
+
+        ASSERT_TRUE(reply.is_object());
+        EXPECT_EQ(GetJsonString(reply, "name").value_or(String()), "ui");
+        EXPECT_EQ(GetJsonString(reply, "texturePath").value_or(String()), "assets/atlases/ui.png");
+        EXPECT_EQ(GetJsonInt(reply, "width").value_or(0), 64);
+        EXPECT_EQ(GetJsonInt(reply, "height").value_or(0), 32);
+        EXPECT_EQ(GetJsonInt(reply, "members").value_or(0), 2);
+    }
+
+    TEST(ArtGenAcceptIntoLibraryTest, TheWrittenAtlasNamesItsGroup) {
+        const AcceptGame game;
+        TextureLibrary library;
+        FillGroup(library, game, true);
+        const ArtGenCopied copied = game.Copied(MakeSolid(6, 2, 0, kHigh, 0));
+        auto save = [] { return true; };
+
+        const auto stored = AcceptIntoLibrary(library, copied, "queen", game.Io(), save);
+
+        ASSERT_TRUE(stored.has_value() && stored->repacked.has_value());
+        EXPECT_EQ(stored->repacked->name.ToStringView(), "ui");
+        EXPECT_EQ(stored->repacked->changed.size(), 2u);
+    }
+
     TEST(ArtGenSpriteNameTest, OnlyPlainNamesAreSpriteNames) {
         EXPECT_TRUE(IsValidSpriteName("white_knight"));
         EXPECT_TRUE(IsValidSpriteName("Gem-Red-2"));

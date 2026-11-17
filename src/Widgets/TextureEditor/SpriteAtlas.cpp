@@ -288,6 +288,7 @@ namespace BECore {
 
         // The file is on disk: from here the library follows it
         AtlasWritten result;
+        result.name = PoolString::Intern(atlasName);
         result.texturePath = AtlasTexturePath(atlasName);
         result.width = built->image.width;
         result.height = built->image.height;

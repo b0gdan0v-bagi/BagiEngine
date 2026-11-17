@@ -92,18 +92,23 @@ namespace BECore {
      */
     std::expected<AcceptStored, String> AcceptIntoLibrary(TextureLibrary& library, const ArtGenCopied& copied, StringView sprite, const AtlasIo& io, FunctionRef<bool()> save);
 
+    /// What `artgen_accept` answers as `atlas`: `null` when no atlas was written, else `{name, texturePath, width, height, members}`
+    [[nodiscard]] Json AtlasReplyToJson(const Optional<AtlasWritten>& repacked);
+
     /// What AcceptVariant did
     struct ArtGenAccepted {
         ArtGenCopied copied;
         uint32_t reloadedSprites = 0;
+        Optional<AtlasWritten> repacked;  // the atlas of a packed sprite, written again
     };
 
     /**
      * @brief Accept of the Generate panel and of `artgen_accept`: the variant becomes the game's sprite @p sprite.
      *
-     * Copies it into the game's assets (CopyVariantIntoAssets with @p plan), adds or replaces the TextureLibrary entry (the whole written image) and saves the library,
-     * drops the old texture of that path from the resource cache and reloads every sprite of the active scene that uses it, so the new picture shows
-     * at once. Fails without changing the library when the game has no assets folder or no TextureLibrary.xml.
+     * Copies it into the game's assets (CopyVariantIntoAssets with @p plan), adds or replaces the TextureLibrary entry (the whole written image; a
+     * sprite of an atlas group keeps its link, and a packed one has its atlas repacked, see AcceptIntoLibrary) and saves the library, drops the old
+     * textures of the paths from the resource cache and reloads every sprite of the active scene that uses them, so the new picture shows at once. Fails without changing the library when the game has
+     * no assets folder or no TextureLibrary.xml.
      */
     std::expected<ArtGenAccepted, String> AcceptVariant(const ArtGenVariant& variant, StringView sprite, const ArtGenImagePlan& plan);
 
@@ -154,7 +159,7 @@ namespace BECore {
     /**
      * @brief The editor's ArtGenSession::Acceptor: AcceptVariant, then UseSpriteOn @p node when one is given (the scene editor is told the scene changed).
      *
-     * Answers `{sprite, texturePath, png, width, height, processing, reloadedSprites, usedOn}` (the size is the written file's; `processing` is
+     * Answers `{sprite, texturePath, png, width, height, processing, reloadedSprites, atlas, usedOn}` (the size is the written file's; `processing` is
      * `{trim, padding, maxSize, crop, scale, size, frame}`); a failure is `artgen_accept_failed` with the reason.
      */
     std::expected<Json, ControlError> AcceptForControl(const ArtGenVariant& variant, StringView sprite, const ArtGenImagePlan& plan, SceneNode* node);

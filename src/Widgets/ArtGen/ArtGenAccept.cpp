@@ -503,6 +503,19 @@ namespace BECore {
         return std::unexpected(String("TextureLibrary.xml could not be saved (does the game have one?)"));
     }
 
+    Json AtlasReplyToJson(const Optional<AtlasWritten>& repacked) {
+        if (!repacked) {
+            return Json();
+        }
+        Json json = Json::object();
+        json["name"] = ToStdString(repacked->name.ToStringView());
+        json["texturePath"] = ToStdString(repacked->texturePath.ToStringView());
+        json["width"] = repacked->width;
+        json["height"] = repacked->height;
+        json["members"] = repacked->changed.size();
+        return json;
+    }
+
     std::expected<AcceptStored, String> AcceptIntoLibrary(TextureLibrary& library, const ArtGenCopied& copied, StringView sprite, const AtlasIo& io, FunctionRef<bool()> save) {
         const PoolString name = PoolString::Intern(sprite);
         const PoolString texturePath = PoolString::Intern(copied.texturePath);
@@ -557,20 +570,35 @@ namespace BECore {
             return std::unexpected(copied.error());
         }
 
-        const PoolString name = PoolString::Intern(sprite);
-        const PoolString texturePath = PoolString::Intern(copied->texturePath);
-        const SpriteEntry entry = AcceptedSpriteEntry(library, name, texturePath, copied->width, copied->height);
-        auto stored = StoreSpriteEntry(library, entry, [&library] { return library.Save(); });
+        auto& files = CoreManager::GetFileSystem();
+        auto resolve = [&files](StringView path) { return files.ResolvePath(path); };
+        const AtlasIo io{assetsDir, resolve};
+        auto stored = AcceptIntoLibrary(library, *copied, sprite, io, [&library] { return library.Save(); });
         if (!stored) {
-            return std::unexpected(Format("the PNG is in '{}', but {}", copied->pngFile.generic_string(), stored.error()));
+            return std::unexpected(stored.error());
         }
 
-        // The old picture of this path may be cached: drop it so the reload reads the new file
-        CoreManager::GetResourceManager().Evict(copied->texturePath);
+        const PoolString name = PoolString::Intern(sprite);
+        const PoolString texturePath = PoolString::Intern(copied->texturePath);
+        // The old pictures of these paths may be cached: drop them so the reload reads the new files
+        auto& resources = CoreManager::GetResourceManager();
+        resources.Evict(copied->texturePath);
+        if (stored->repacked) {
+            resources.Evict(stored->repacked->texturePath.ToStringView());
+        }
         ArtGenAccepted accepted;
         accepted.copied = std::move(*copied);
+        accepted.repacked = std::move(stored->repacked);
         if (Scene* scene = CoreManager::GetSceneManager().GetActiveScene()) {
             accepted.reloadedSprites = ReloadSpritesUsing(scene->GetRootNode(), name, texturePath);
+            if (accepted.repacked) {
+                // The accepted sprite is reloaded above; its neighbours moved in the atlas too
+                for (const PoolString member : accepted.repacked->changed) {
+                    if (member != name) {
+                        accepted.reloadedSprites += ReloadSpritesUsing(scene->GetRootNode(), member, PoolString{});
+                    }
+                }
+            }
         }
         return accepted;
     }
@@ -670,6 +698,7 @@ namespace BECore {
         reply["height"] = accepted->copied.height;
         reply["processing"] = ProcessingToJson(accepted->copied);
         reply["reloadedSprites"] = accepted->reloadedSprites;
+        reply["atlas"] = AtlasReplyToJson(accepted->repacked);
         reply["usedOn"] = Json();
         if (node != nullptr) {
             if (auto used = UseSpriteOn(*node, PoolString::Intern(sprite)); !used) {
