@@ -1942,6 +1942,100 @@ namespace BECore::Tests {
         EXPECT_EQ(gMeasures.size(), 2u);
     }
 
+    // ---- frameOf: a replacement set takes the frame of the set it replaces a row of ----
+
+    /// A finished set `old` with a frame of its own, as its first Accept all would have left it (no row accepted, so it is not a legacy set)
+    static const ArtGenSetProcessing kOldProcessing{ArtGenImageSettings{true, 3, 200}, ArtGenImageFrame{1, 2, 30, 40, 15, 20}};
+
+    TEST_F(ArtGenSetSessionTest, AReplacementSetTakesTheFrameOfTheSetItReplacesARowOf) {
+        ASSERT_TRUE(Enqueue("old", "a\nb").has_value());
+        RunAndPickAll("old");
+        ArtGenSet disk = OnDisk("old");
+        disk.processing = kOldProcessing;
+        ASSERT_TRUE(WriteManifest(_root, disk).has_value());
+        ReloadFromDisk();
+
+        ArtGenSetRequest request;
+        request.preset = "wood";
+        request.subjects = ParseArtGenSubjects("a: a bigger knight").value();
+        request.count = 2;
+        request.seed = kSetSeed;
+        request.name = "fix";
+        request.frameOf = "old";
+        ASSERT_TRUE(session.EnqueueSet(request).has_value());
+        EXPECT_EQ(OnDisk("fix").processing, Optional<ArtGenSetProcessing>(kOldProcessing)) << "the frame is in the manifest before any job runs";
+
+        RunAndPickAll("fix");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("fix"));
+        ASSERT_EQ(ErrorCode(AcceptAllCall("fix")), "");
+        EXPECT_TRUE(gMeasures.empty()) << "a frame that was given is not measured again";
+        ASSERT_EQ(gPlans.size(), 1u);
+        EXPECT_EQ(gPlans[0].frame, Optional<ArtGenImageFrame>(kOldProcessing.frame));
+        EXPECT_EQ(gPlans[0].settings, kOldProcessing.settings);
+        EXPECT_EQ(session.FindSet("fix")->processing, Optional<ArtGenSetProcessing>(kOldProcessing));
+    }
+
+    TEST_F(ArtGenSetSessionTest, FrameOfNeedsAnImageSetThatHasAFrame) {
+        Poll();
+        ASSERT_TRUE(Enqueue("noframe", "a").has_value());
+        ArtGenSetRequest sound;
+        sound.preset = "knock";
+        sound.subjects = ParseArtGenSubjects("click").value();
+        sound.name = "sounds";
+        ASSERT_TRUE(session.EnqueueSet(sound).has_value());
+        ASSERT_TRUE(session.FindSet("sounds")->kind == kKindAudio);
+
+        ArtGenSetRequest good;
+        good.preset = "wood";
+        good.subjects = ParseArtGenSubjects("a").value();
+        good.name = "fix";
+        const size_t setsBefore = session.GetSets().size();
+        const auto refused = [&](StringView frameOf, StringView preset = "wood") {
+            ArtGenSetRequest request = good;
+            request.frameOf = String(frameOf);
+            request.preset = String(preset);
+            const auto result = session.EnqueueSet(request);
+            EXPECT_FALSE(result.has_value()) << String(frameOf).c_str();
+            return result ? String() : result.error();
+        };
+        EXPECT_NE(refused("missing").find("no set named"), String::npos);
+        EXPECT_NE(refused("noframe").find("no frame yet"), String::npos);
+        EXPECT_NE(refused("sounds").find("only an image set"), String::npos);
+
+        ArtGenSet disk = OnDisk("noframe");
+        disk.processing = kOldProcessing;
+        ASSERT_TRUE(WriteManifest(_root, disk).has_value());
+        ReloadFromDisk();
+        Poll();
+        EXPECT_NE(refused("noframe", "knock").find("only an image set"), String::npos) << "a sound set cannot take a frame";
+
+        EXPECT_EQ(session.GetSets().size(), setsBefore) << "a refusal queues nothing";
+        EXPECT_FALSE(std::filesystem::exists(_root / "artgen" / "out" / "fix"));
+    }
+
+    TEST_F(ArtGenSetSessionTest, ArtgenEnqueueReadsFrameOfAndRefusesWhatItCannotTake) {
+        ASSERT_TRUE(Enqueue("old", "a").has_value());
+        ArtGenSet disk = OnDisk("old");
+        disk.processing = kOldProcessing;
+        ASSERT_TRUE(WriteManifest(_root, disk).has_value());
+        ReloadFromDisk();
+
+        Json params = Json::object();
+        params["preset"] = "wood";
+        params["subjects"] = "a";
+        params["set"] = "fix";
+        for (const Json& bad : {Json(3), Json(""), Json("nowhere")}) {
+            params["frameOf"] = bad;
+            EXPECT_EQ(ErrorCode(Call("artgen_enqueue", params)), "invalid_params") << DumpJson(bad).c_str();
+        }
+        EXPECT_EQ(session.FindSet("fix"), nullptr);
+
+        params["frameOf"] = "old";
+        EXPECT_EQ(ErrorCode(Call("artgen_enqueue", params)), "");
+        ASSERT_NE(session.FindSet("fix"), nullptr);
+        EXPECT_EQ(session.FindSet("fix")->processing, Optional<ArtGenSetProcessing>(kOldProcessing));
+    }
+
     TEST_F(ArtGenSetSessionTest, ASoundSetNeedsNoFrame) {
         session.SetFrameMeasurer(nullptr);
         ArtGenSetRequest request;

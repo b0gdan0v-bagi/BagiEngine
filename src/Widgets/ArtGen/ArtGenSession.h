@@ -107,6 +107,7 @@ namespace BECore {
         int32_t count = kArtGenSetDefaultCount;
         Optional<int64_t> seed;  // the first seed of every job; none: one is drawn and recorded, so the style of the set matches
         String name;             // the set's folder name; empty: DefaultArtGenSetName
+        String frameOf;          // an image set whose frame this set takes over (a replacement of one of its rows); empty: its own frame
     };
 
     /// What an edit of a set found: the set (or job) unknown, a pick of a seed the job has not, or a switch of a live row whose write failed
