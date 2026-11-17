@@ -80,7 +80,7 @@ namespace BECore {
         }
 
         // A second call replaces the mount of the first, so reads never come from the old folder
-        const PoolString mountPoint = PoolString::Intern(kSaveMountPoint);
+        const PoolString mountPoint = SaveMount::point;
         _fileSystem.Unmount(mountPoint);
         _initialized = _fileSystem.Mount(mountPoint, absolute);
         _directory = _initialized ? std::move(absolute) : std::filesystem::path{};
@@ -283,7 +283,7 @@ namespace BECore {
 
         const StringView extensions[] = {kSaveExtension};
         const String prefix = Format("{}/", kSaveMountPoint);
-        const Vector<PoolString> files = _fileSystem.EnumerateFiles(PoolString::Intern(kSaveMountPoint), extensions);
+        const Vector<PoolString> files = _fileSystem.EnumerateFiles(SaveMount::point, extensions);
         Vector<StringView> names;
         names.reserve(files.size());
         for (const PoolString& file : files) {

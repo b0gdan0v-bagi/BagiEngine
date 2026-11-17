@@ -24,6 +24,12 @@ namespace BECore {
         char32_t last = 0;
     };
 
+    /// The font and the family `TextSettings` starts from, before a `TextConfig.xml` changes them
+    struct TextDefaults {
+        static constexpr auto font = "assets/fonts/PT_Sans-Web-Regular.ttf"_intern;
+        static constexpr auto family = "PT Sans"_intern;
+    };
+
     /**
      * @brief Settings of the text system, read from `config/TextConfig.xml`.
      *
@@ -49,8 +55,8 @@ namespace BECore {
      *   warning; of two families with one name the first wins.
      */
     struct TextSettings {
-        PoolString defaultFont = "assets/fonts/PT_Sans-Web-Regular.ttf"_intern;
-        PoolString defaultFamily = "PT Sans"_intern;
+        PoolString defaultFont = TextDefaults::font;
+        PoolString defaultFamily = TextDefaults::family;
         uint32_t pageSize = 1024;
         Vector<GlyphRange> preload;
         Vector<FontFamily> families;

@@ -21,7 +21,7 @@ namespace BECore {
     }
 
     PoolString XmlResource::GetTypeName() const {
-        return PoolString::Intern("XmlResource");
+        return "XmlResource"_intern;
     }
 
     XmlNode XmlResource::GetRoot() const {

@@ -22,7 +22,7 @@ namespace BECore {
     }
 
     PoolString UIDocument::GetTypeName() const {
-        return PoolString::Intern("UIDocument");
+        return "UIDocument"_intern;
     }
 
     bool UIDocument::Instantiate(UIScreenContent& content) const {

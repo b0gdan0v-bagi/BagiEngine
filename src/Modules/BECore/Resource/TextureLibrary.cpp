@@ -10,6 +10,14 @@
 
 namespace BECore {
 
+    namespace {
+
+        struct Ids {
+            static constexpr auto config = "TextureLibrary"_intern;
+        };
+
+    }  // namespace
+
     void TextureLibrary::Load(IDeserializer& deserializer) {
         Clear();
 
@@ -49,7 +57,7 @@ namespace BECore {
         BE_PROFILE_SCOPE("TextureLibrary::Initialize");
         Clear();
 
-        auto deserializer = CoreManager::GetConfigManager().CreateDeserializer("TextureLibrary"_intern);
+        auto deserializer = CoreManager::GetConfigManager().CreateDeserializer(Ids::config);
         if (!deserializer) {
             return;
         }
@@ -113,7 +121,7 @@ namespace BECore {
 
     bool TextureLibrary::Save() {
         auto& configManager = CoreManager::GetConfigManager();
-        auto xmlRoot = configManager.GetConfig("TextureLibrary"_intern);
+        auto xmlRoot = configManager.GetConfig(Ids::config);
         if (!xmlRoot) {
             LOG_ERROR("TextureLibrary::Save: config not loaded");
             return false;
@@ -127,7 +135,7 @@ namespace BECore {
         pugiRoot.remove_child("sprites");
         pugiRoot.append_copy(serializer.GetRootNode().child("sprites"));
 
-        return configManager.SaveConfig("TextureLibrary"_intern);
+        return configManager.SaveConfig(Ids::config);
     }
 
     void TextureLibrary::Clear() {

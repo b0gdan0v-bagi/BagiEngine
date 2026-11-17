@@ -8,9 +8,18 @@
 
 namespace BECore {
 
+    namespace {
+
+        struct Ids {
+            static constexpr auto on = "true"_intern;
+            static constexpr auto off = "false"_intern;
+        };
+
+    }  // namespace
+
     UIToggleComponent::UIToggleComponent() {
-        onValue = PoolString::Intern("true");
-        offValue = PoolString::Intern("false");
+        onValue = Ids::on;
+        offValue = Ids::off;
     }
 
     bool UIToggleComponent::IsOn() const {
