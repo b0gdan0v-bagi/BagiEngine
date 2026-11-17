@@ -104,8 +104,14 @@ namespace BECore {
         String name;             // the set's folder name; empty: DefaultArtGenSetName
     };
 
-    /// What an edit of a set found: the set (or job) unknown, or a pick of a seed the job has not
-    CORE_ENUM(ArtGenSetEdit, uint8_t, Ok, NoSet, NoVariant)
+    /// What an edit of a set found: the set (or job) unknown, a pick of a seed the job has not, or a switch of a live row whose write failed
+    CORE_ENUM(ArtGenSetEdit, uint8_t, Ok, NoSet, NoVariant, WriteFailed)
+
+    /// What the write of a switch of a live row (PickVariant) answered: the acceptor's answer, or why it failed
+    struct ArtGenSwitch {
+        Json answer;  // the acceptor's answer; null when nothing was written (a row that is not live, or the pick it already has)
+        String error;
+    };
 
     /**
      * @brief The editor's side of the art generation contract: the request the Generate panel (or a client) makes, and what the generation
@@ -222,10 +228,13 @@ namespace BECore {
         ArtGenSetEdit CancelSet(StringView set);
         /// Puts the Failed and Cancelled jobs of @p set (or only @p job) back to Pending, with nothing kept of the earlier try
         ArtGenSetEdit RetryJobs(StringView set, StringView job = {});
-        /// Picks the variant @p seed of a job (saved in the manifest)
-        ArtGenSetEdit PickVariant(StringView set, StringView job, int64_t seed);
-        /// Accepts the picked variant of every job of a finished set as its job's name, through the acceptors Accept uses, marking each row in the
-        /// manifest (Sets/CLAUDE.md, "Accept all"). The checks come first and a refusal by them changes nothing; a failure halfway leaves the rows before it accepted
+        /// Picks the variant @p seed of a job (saved in the manifest). On a **live** row (accepted, not kept) it switches: the variant is
+        /// written into the game under the name the row was accepted as, and only then are the pick and the date changed; a failed write
+        /// is `WriteFailed` and changes nothing. @p write gets what the write answered
+        ArtGenSetEdit PickVariant(StringView set, StringView job, int64_t seed, ArtGenSwitch* write = nullptr);
+        /// Accepts the candidate of every job of a finished set as its job's name, through the acceptors Accept uses, marking each row in the
+        /// manifest (Sets/CLAUDE.md, "Accept all"): the pick, else for images the first variant. A kept row is skipped. The checks come first and a
+        /// refusal by them changes nothing; a failure halfway leaves the rows before it accepted
         std::expected<Json, ControlError> AcceptSet(StringView name);
         [[nodiscard]] const ArtGenSet* FindSet(StringView name) const;
         [[nodiscard]] const Vector<ArtGenSet>& GetSets() const {
