@@ -27,11 +27,6 @@ namespace BECore {
             return std::uniform_int_distribution<int64_t>(0, kSeedRange - 1)(device);
         }
 
-        ArtGenSetJob* FindJob(ArtGenSet& set, StringView name) {
-            const auto it = std::find_if(set.jobs.begin(), set.jobs.end(), [&](const ArtGenSetJob& job) { return StringView(job.name) == name; });
-            return it == set.jobs.end() ? nullptr : &*it;
-        }
-
         ArtGenSetJob* FirstPending(ArtGenSet& set) {
             const auto it = std::find_if(set.jobs.begin(), set.jobs.end(), [](const ArtGenSetJob& job) { return job.state == ArtGenSetJobState::Pending; });
             return it == set.jobs.end() ? nullptr : &*it;

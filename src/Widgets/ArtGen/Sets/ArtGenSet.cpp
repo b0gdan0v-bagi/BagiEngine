@@ -56,11 +56,6 @@ namespace BECore {
                          static_cast<int>(clock.seconds().count())};
         }
 
-        const ArtGenSetJob* FindJobByName(const Vector<ArtGenSetJob>& jobs, StringView name) {
-            const auto it = std::find_if(jobs.begin(), jobs.end(), [&](const ArtGenSetJob& job) { return StringView(job.name) == name; });
-            return it == jobs.end() ? nullptr : &*it;
-        }
-
         // ---- manifest reading: every member is checked, the error says where ----
 
         using Where = String;
@@ -197,7 +192,16 @@ namespace BECore {
                 if (!date) {
                     return std::unexpected(date.error());
                 }
-                job.accepted = ArtGenSetAccepted{std::move(*as), std::move(*date)};
+                // A manifest of before Keep existed has no key: its rows were accepted with no alternatives in play, so they read as kept
+                bool kept = true;
+                if (const Json* keptMember = FindJsonMember(*accepted, "kept"); keptMember != nullptr) {
+                    const auto parsed = GetJsonBool(*accepted, "kept");
+                    if (!parsed) {
+                        return std::unexpected(Format("{}: 'kept' must be a boolean", acceptedWhere));
+                    }
+                    kept = *parsed;
+                }
+                job.accepted = ArtGenSetAccepted{std::move(*as), std::move(*date), kept};
             }
             return job;
         }
@@ -351,6 +355,7 @@ namespace BECore {
                 Json accepted = Json::object();
                 accepted["as"] = MakeJsonString(job.accepted->as);
                 accepted["date"] = MakeJsonString(job.accepted->date);
+                accepted["kept"] = job.accepted->kept;
                 row["accepted"] = std::move(accepted);
             } else {
                 row["accepted"] = Json(nullptr);
@@ -435,7 +440,7 @@ namespace BECore {
             if (!job) {
                 return std::unexpected(job.error());
             }
-            if (FindJobByName(set.jobs, job->name) != nullptr) {
+            if (FindJob(set, job->name) != nullptr) {
                 return std::unexpected(Format("jobs[{}]: the name '{}' is used twice", index, job->name));
             }
             set.jobs.push_back(std::move(*job));
@@ -455,6 +460,32 @@ namespace BECore {
         return static_cast<int32_t>(std::count_if(set.jobs.begin(), set.jobs.end(), [](const ArtGenSetJob& job) { return job.pick.has_value(); }));
     }
 
+    bool IsLive(const ArtGenSetJob& job) {
+        return job.accepted.has_value() && !job.accepted->kept;
+    }
+
+    int32_t CountLive(const ArtGenSet& set) {
+        return static_cast<int32_t>(std::count_if(set.jobs.begin(), set.jobs.end(), [](const ArtGenSetJob& job) { return IsLive(job); }));
+    }
+
+    int32_t CountKept(const ArtGenSet& set) {
+        return static_cast<int32_t>(std::count_if(set.jobs.begin(), set.jobs.end(), [](const ArtGenSetJob& job) { return job.accepted && job.accepted->kept; }));
+    }
+
+    int32_t AlternativesOf(const ArtGenSetJob& job) {
+        return static_cast<int32_t>(std::count_if(job.variants.begin(), job.variants.end(), [&job](const ArtGenSetVariant& variant) { return !job.pick || variant.seed != *job.pick; }));
+    }
+
+    ArtGenSetJob* FindJob(ArtGenSet& set, StringView name) {
+        const auto it = std::find_if(set.jobs.begin(), set.jobs.end(), [&](const ArtGenSetJob& job) { return StringView(job.name) == name; });
+        return it == set.jobs.end() ? nullptr : &*it;
+    }
+
+    const ArtGenSetJob* FindJob(const ArtGenSet& set, StringView name) {
+        const auto it = std::find_if(set.jobs.begin(), set.jobs.end(), [&](const ArtGenSetJob& job) { return StringView(job.name) == name; });
+        return it == set.jobs.end() ? nullptr : &*it;
+    }
+
     const ArtGenSetVariant* FindVariant(const ArtGenSetJob& job, int64_t seed) {
         const auto it = std::find_if(job.variants.begin(), job.variants.end(), [seed](const ArtGenSetVariant& variant) { return variant.seed == seed; });
         return it == job.variants.end() ? nullptr : &*it;
@@ -465,6 +496,17 @@ namespace BECore {
             return false;
         }
         job.pick = seed;
+        return true;
+    }
+
+    bool KeepJob(ArtGenSetJob& job, StringView date) {
+        if (!IsLive(job) || !job.pick || FindVariant(job, *job.pick) == nullptr) {
+            return false;
+        }
+        const int64_t pick = *job.pick;
+        job.variants.erase(std::remove_if(job.variants.begin(), job.variants.end(), [pick](const ArtGenSetVariant& variant) { return variant.seed != pick; }), job.variants.end());
+        job.accepted->kept = true;
+        job.accepted->date = String(date);
         return true;
     }
 

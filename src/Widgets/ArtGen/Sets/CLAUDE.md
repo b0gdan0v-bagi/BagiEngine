@@ -6,7 +6,7 @@ A **set** is one preset applied to a list of subjects: one **job** per subject, 
 
 | File | Purpose |
 |------|---------|
-| `ArtGenSet.{h,cpp}` | `ArtGenSet`, `ArtGenSetJob`, `ArtGenSetVariant`, `ArtGenSetJobState`; the subject-line rules; the manifest to and from JSON; the counting helpers |
+| `ArtGenSet.{h,cpp}` | `ArtGenSet`, `ArtGenSetJob`, `ArtGenSetVariant`, `ArtGenSetJobState`; the subject-line rules; the manifest to and from JSON; the counting helpers, `FindJob`, live and kept (`IsLive`, `AlternativesOf`, `KeepJob`) |
 | `ArtGenSetStore.{h,cpp}` | The sets on disk, no session: the folder layout, `WriteManifest`, `LoadSets`, the manifest's relative paths |
 | `ArtGenSetPanel.{h,cpp}` | The Set and Review tabs of the Generate panel, ImGui over the session: subjects, Queue, the sets with progress and buttons; the review of one set |
 
@@ -28,8 +28,10 @@ A **set** is one preset applied to a list of subjects: one **job** per subject, 
 {"manifest": 1, "set", "created", "kind" ("image"|"audio"), "preset", "presetData" (a draft's content, else null),
  "count", "seed" (the first seed of every job),
  "jobs": [{"name", "subject", "state", "error", "variants": [{"seed", "file", "provenance", "kind"}],
-           "pick": seed|null, "accepted": null | {"as", "date"}}]}
+           "pick": seed|null, "accepted": null | {"as", "date", "kept"}}]}
 ```
+
+A job with `accepted` and not `kept` is **live**: the game holds its pick and the other variants are alternatives to switch to. `kept` is written always; a manifest from before it existed has `accepted` without the key and reads as **kept**, so nothing becomes live by itself. `KeepJob` fixes a live job (`kept`, the date, the variants cut to the pick; the files stay on disk).
 
 `file` and `provenance` are relative to the set folder with `/`, so the folder can be moved. Reading is checked (`Control/Json.h`): a wrong type, a bad name, an unknown job state, a duplicate job name, a `pick` that is not a seed of the job's variants, or a `manifest` number other than 1 is an error that says where (`jobs[2].variants[0]: 'seed' must be an integer`), never an abort; unknown keys are ignored, so a later format 1 writer can add keys.
 
