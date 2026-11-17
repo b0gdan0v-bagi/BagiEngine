@@ -398,6 +398,60 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(rect.attribute("h").as_float(), 3.0f);
     }
 
+    TEST(TextureLibraryTest, APackRecordRoundTripsBesideTheSource) {
+        SpriteEntry packed = MakePacked("Packed", "ui", Rect(0, 0, 2, 3), "assets/artgen/a.png", Rect(10, 20, 2, 3));
+        AtlasPackRecord record;
+        record.padding = 3;
+        record.sizeMode = PoolString::Intern("Tight");
+        record.maxSide = 2048;
+        packed.atlas->pack = record;
+        SpriteEntry member = MakeGroupMember("Member", "assets/m.png", Rect(5, 6, 7, 8), "ui");
+        member.atlas->pack = record;
+
+        TextureLibrary library;
+        library.AddOrUpdate(member);
+        library.AddOrUpdate(packed);
+
+        TextureLibrary copy;
+        ASSERT_NO_FATAL_FAILURE(LoadInto(copy, WriteToString(library)));
+
+        const SpriteEntry* readMember = copy.GetSprite(PoolString::Intern("Member"));
+        ASSERT_NE(readMember, nullptr);
+        ASSERT_TRUE(readMember->atlas.has_value());
+        EXPECT_FALSE(readMember->atlas->source.has_value());
+        ASSERT_TRUE(readMember->atlas->pack.has_value());
+        EXPECT_EQ(readMember->atlas->pack->padding, 3);
+        EXPECT_EQ(readMember->atlas->pack->sizeMode.ToStringView(), "Tight");
+        EXPECT_EQ(readMember->atlas->pack->maxSide, 2048u);
+
+        const SpriteEntry* readPacked = copy.GetSprite(PoolString::Intern("Packed"));
+        ASSERT_NE(readPacked, nullptr);
+        EXPECT_EQ(readPacked->atlas->name.ToStringView(), "ui");
+        ASSERT_TRUE(readPacked->atlas->source.has_value());
+        EXPECT_EQ(readPacked->atlas->source->texturePath.ToStringView(), "assets/artgen/a.png");
+        ExpectSameRect(readPacked->atlas->source->rect, Rect(10, 20, 2, 3));
+        ASSERT_TRUE(readPacked->atlas->pack.has_value());
+        EXPECT_EQ(readPacked->atlas->pack->padding, 3);
+        EXPECT_EQ(readPacked->atlas->pack->sizeMode.ToStringView(), "Tight");
+        EXPECT_EQ(readPacked->atlas->pack->maxSide, 2048u);
+    }
+
+    TEST(TextureLibraryTest, AnAtlasWithoutAPackRecordWritesNoPackElement) {
+        TextureLibrary library;
+        library.AddOrUpdate(MakeGroupMember("Member", "assets/m.png", Rect(5, 6, 7, 8), "ui"));
+        library.AddOrUpdate(MakePacked("Packed", "ui", Rect(0, 0, 2, 3), "assets/artgen/a.png", Rect(10, 20, 2, 3)));
+
+        const String written = WriteToString(library);
+        EXPECT_EQ(written.find("pack"), String::npos) << written.c_str();
+
+        TextureLibrary copy;
+        ASSERT_NO_FATAL_FAILURE(LoadInto(copy, written));
+        for (const SpriteEntry& entry : copy.GetAll()) {
+            ASSERT_TRUE(entry.atlas.has_value());
+            EXPECT_FALSE(entry.atlas->pack.has_value());
+        }
+    }
+
     TEST(TextureLibraryTest, ASourceWithoutARectLoadsWithAZeroRect) {
         TextureLibrary library;
         Vector<DeserializeError> errors;
