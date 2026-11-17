@@ -41,9 +41,14 @@ namespace BECore::Details {
             memory = _fallback->Allocate(bytes);
             ++_heapFallbackBlocks;
         }
+        return static_cast<char*>(memory.data);
+    }
+
+    char* PoolStringStorage::TakeRuntimeBlock(size_t bytes) {
+        char* memory = TakeBlock(bytes);
         ++_runtime.blocks;
         _runtime.blockBytes += bytes;
-        return static_cast<char*>(memory.data);
+        return memory;
     }
 
     char* PoolStringStorage::AllocateEntryMemory(size_t bytes, size_t entryCount) {
@@ -53,9 +58,9 @@ namespace BECore::Details {
             return memory;
         }
         if (bytes > PoolString::kBlockBytes || entryCount > 1) {
-            return TakeBlock(bytes);
+            return TakeRuntimeBlock(bytes);
         }
-        _current = TakeBlock(PoolString::kBlockBytes);
+        _current = TakeRuntimeBlock(PoolString::kBlockBytes);
         _capacity = PoolString::kBlockBytes;
         _offset = bytes;
         return _current;
@@ -261,10 +266,123 @@ namespace BECore::Details {
         _table.Reserve(_table.Used() + strings);
         const size_t aligned = (bytes + kPoolEntryAlignment - 1) & ~(kPoolEntryAlignment - 1);
         if (aligned != 0 && _capacity - _offset < aligned) {
-            _current = TakeBlock(aligned);
+            _current = TakeRuntimeBlock(aligned);
             _capacity = aligned;
             _offset = 0;
         }
+    }
+
+    PoolBlock PoolStringStorage::AllocateBlock(size_t bytes) {
+        const size_t aligned = bytes == 0 ? kPoolEntryAlignment : (bytes + kPoolEntryAlignment - 1) & ~(kPoolEntryAlignment - 1);
+        UniqueLock lock(_mutex);
+        ++_writeLocks;
+        char* memory = TakeBlock(aligned);
+        _blocks.push_back({memory, aligned, false});
+        ++_unadoptedBlocks;
+        _unadoptedBlockBytes += aligned;
+        return PoolBlock(memory, aligned, _id, _blocks.size() - 1);
+    }
+
+    Optional<PoolAdoptError> PoolStringStorage::CheckToken(const PoolBlock& block) const {
+        if (block._storageId != _id || block._index >= _blocks.size() || _blocks[block._index].data != block._data || _blocks[block._index].capacity != block._capacity) {
+            return PoolAdoptError::NotOwned;
+        }
+        if (_blocks[block._index].adopted) {
+            return PoolAdoptError::AlreadyAdopted;
+        }
+        return std::nullopt;
+    }
+
+    std::expected<PoolAdoptResult, PoolAdoptError> PoolStringStorage::AdoptBlock(PoolBlock& block, size_t usedBytes, Span<PoolString> out, PoolAdoptOptions options) {
+        {
+            SharedLock lock(_mutex);
+            if (const Optional<PoolAdoptError> error = CheckToken(block)) {
+                return std::unexpected(*error);
+            }
+        }
+        if (usedBytes > block._capacity) {
+            return std::unexpected(PoolAdoptError::UsedBytesTooLarge);
+        }
+        if (usedBytes % kPoolEntryAlignment != 0) {
+            return std::unexpected(PoolAdoptError::UsedBytesNotAligned);
+        }
+
+        // The walk. Every size is compared with what is left before it is added to anything, so a size field of 0xFFFFFFFF
+        // cannot overflow a 32-bit `size_t` or make a read pass `usedBytes`.
+        constexpr size_t kHeaderBytes = offsetof(Entry, data);
+        constexpr size_t kMinEntryBytes = PoolEntryBytes(0);
+        const char* const base = block._data;
+        Vector<const Entry*> entries;
+        size_t linkable = 0;
+        for (size_t offset = 0; offset < usedBytes;) {
+            const size_t remaining = usedBytes - offset;
+            if (remaining < kMinEntryBytes) {
+                return std::unexpected(PoolAdoptError::TruncatedEntry);
+            }
+            uint32_t size = 0;
+            std::memcpy(&size, base + offset + offsetof(Entry, size), sizeof(size));
+            if (size > remaining - kHeaderBytes - 1) {
+                return std::unexpected(PoolAdoptError::TruncatedEntry);
+            }
+            const size_t entryBytes = PoolEntryBytes(size);
+            if (entryBytes > remaining) {
+                return std::unexpected(PoolAdoptError::TruncatedEntry);
+            }
+            if (base[offset + kHeaderBytes + size] != '\0') {
+                return std::unexpected(PoolAdoptError::MissingNul);
+            }
+            if (options.verifyHashes) {
+                uint64_t hash = 0;
+                std::memcpy(&hash, base + offset + offsetof(Entry, hash), sizeof(hash));
+                if (hash != StringUtils::GetHash(StringView(base + offset + kHeaderBytes, size))) {
+                    return std::unexpected(PoolAdoptError::WrongHash);
+                }
+            }
+            entries.push_back(reinterpret_cast<const Entry*>(base + offset));
+            linkable += size != 0 ? 1 : 0;
+            offset += entryBytes;
+        }
+        if (!out.empty() && out.size() != entries.size()) {
+            return std::unexpected(PoolAdoptError::OutSizeMismatch);
+        }
+
+        UniqueLock lock(_mutex);
+        ++_writeLocks;
+        if (const Optional<PoolAdoptError> error = CheckToken(block)) {  // another thread may have adopted it meanwhile
+            return std::unexpected(*error);
+        }
+        _table.Reserve(_table.Used() + linkable);
+        PoolAdoptResult result;
+        for (size_t i = 0; i < entries.size(); ++i) {
+            const Entry* entry = entries[i];
+            PoolString winner;
+            if (entry->size == 0) {
+                ++result.deadStrings;
+                result.deadBytes += PoolEntryBytes(0);
+            } else if (const Entry* older = _table.Find(entry->hash, entry->ToStringView())) {
+                winner = PoolString(older);
+                ++result.deadStrings;
+                result.deadBytes += PoolEntryBytes(entry->size);
+            } else {
+                _table.Insert(entry->hash, entry);
+                winner = PoolString(entry);
+                ++result.linkedStrings;
+                _adopted.bytes += PoolEntryBytes(entry->size);
+            }
+            if (!out.empty()) {
+                out[i] = winner;
+            }
+        }
+
+        _blocks[block._index].adopted = true;
+        _adopted.strings += result.linkedStrings;
+        ++_adopted.blocks;
+        _adopted.blockBytes += block._capacity;
+        --_unadoptedBlocks;
+        _unadoptedBlockBytes -= block._capacity;
+        _deadStrings += result.deadStrings;
+        _deadBytes += result.deadBytes;
+        return result;
     }
 
     PoolStringStats PoolStringStorage::GetStats() {
@@ -272,15 +390,18 @@ namespace BECore::Details {
         {
             SharedLock lock(_mutex);
             stats.stringCount = _table.Used();
-            stats.stringBytes = _runtime.bytes + _static.bytes;
-            stats.blockCount = _runtime.blocks;
-            stats.blockBytes = _runtime.blockBytes;
+            stats.stringBytes = _runtime.bytes + _static.bytes + _adopted.bytes;
+            stats.blockCount = _runtime.blocks + _adopted.blocks + _unadoptedBlocks;
+            stats.blockBytes = _runtime.blockBytes + _adopted.blockBytes + _unadoptedBlockBytes;
             stats.tableCapacity = _table.Capacity();
             stats.tableUsed = _table.Used();
             stats.longestProbe = _table.LongestProbe();
             stats.misses = _misses;
             stats.runtime = _runtime;
             stats.staticEntries = _static;
+            stats.adopted = _adopted;
+            stats.deadStrings = _deadStrings;
+            stats.deadBytes = _deadBytes;
             stats.staticDuplicates = _staticDuplicates.load(std::memory_order_relaxed);
             stats.writeLocks = _writeLocks;
             stats.heapFallbackBlocks = _heapFallbackBlocks;

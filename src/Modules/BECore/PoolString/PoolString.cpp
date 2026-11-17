@@ -50,6 +50,14 @@ namespace BECore {
         Storage().Reserve(strings, bytes);
     }
 
+    PoolBlock PoolString::AllocateBlock(size_t bytes) {
+        return Storage().AllocateBlock(bytes);
+    }
+
+    std::expected<PoolAdoptResult, PoolAdoptError> PoolString::AdoptBlock(PoolBlock& block, size_t usedBytes, Span<PoolString> out, PoolAdoptOptions options) {
+        return Storage().AdoptBlock(block, usedBytes, out, options);
+    }
+
     PoolStringStats PoolString::GetStats() {
         return Storage().GetStats();
     }

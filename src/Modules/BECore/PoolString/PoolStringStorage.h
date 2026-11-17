@@ -10,6 +10,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <expected>
 
 namespace BECore::Details {
 
@@ -87,6 +88,13 @@ namespace BECore::Details {
         /// `PoolString::Reserve`
         void Reserve(size_t strings, size_t bytes);
 
+        /// `PoolString::AllocateBlock`
+        [[nodiscard]] PoolBlock AllocateBlock(size_t bytes);
+
+        /// `PoolString::AdoptBlock`. The checks of the token and of the block's bytes run outside the unique lock (they hash
+        /// every text), so a big block does not stall the interns of other threads; the lock is taken to link.
+        std::expected<PoolAdoptResult, PoolAdoptError> AdoptBlock(PoolBlock& block, size_t usedBytes, Span<PoolString> out, PoolAdoptOptions options);
+
         [[nodiscard]] PoolStringStats GetStats();
 
     private:
@@ -104,6 +112,17 @@ namespace BECore::Details {
         size_t _heapFallbackBlocks = 0;
         PoolSourceStats _static;  // blocks stay 0: the entries are in the program image
         PoolSourceStats _runtime;
+        PoolSourceStats _adopted;
+        size_t _unadoptedBlocks = 0;  // blocks given out by `AllocateBlock` and not adopted yet: held, counted in the totals only
+        size_t _unadoptedBlockBytes = 0;
+        size_t _deadStrings = 0;
+        size_t _deadBytes = 0;
+        struct BlockRecord {
+            char* data;
+            size_t capacity;
+            bool adopted;
+        };
+        Vector<BlockRecord> _blocks;  // every block `AllocateBlock` gave out; a token's `_index` points here
         // Counted under either lock (a registration of entries that all lost needs no unique lock), so atomic
         std::atomic<size_t> _staticDuplicates{0};
         UniquePtr<IPoolBlockSource> _fallback;  // the heap source, made on the first empty answer of `_source`
@@ -136,8 +155,15 @@ namespace BECore::Details {
         /// The slow half of `Intern`: takes the unique lock, looks again, inserts
         PoolString InternMiss(StringView str, uint64_t hash);
 
-        /// A block of `bytes` (a multiple of 8) from the source, or from the heap when the source has none
+        /// A block of `bytes` (a multiple of 8) from the source, or from the heap when the source has none; counts
+        /// `heapFallbackBlocks` and nothing else
         char* TakeBlock(size_t bytes);
+
+        /// A block for the entries `Intern` and its kin copy: `TakeBlock`, counted in `runtime`
+        char* TakeRuntimeBlock(size_t bytes);
+
+        /// The error when `block` is not an unadopted block of this storage; the caller holds either lock
+        [[nodiscard]] Optional<PoolAdoptError> CheckToken(const PoolBlock& block) const;
 
         /// Memory for `entryCount` entries that take `bytes` (a multiple of 8) together; the caller holds the unique lock.
         /// What fits the rest of the current block goes there. Otherwise a single entry of at most one standard block starts a
