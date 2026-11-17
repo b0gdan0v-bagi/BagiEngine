@@ -10,6 +10,7 @@
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Scene/SceneNode.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
+#include <Widgets/ArtGen/Sets/ArtGenSet.h>
 #include <Widgets/EditorLayout/UserFileIo.h>
 #include <Widgets/SceneEditor/SceneSelectionEvents.h>
 #include <algorithm>
@@ -82,6 +83,11 @@ namespace BECore {
                 return std::unexpected(Format("cannot replace '{}': {}", file.generic_string(), error.message()));
             }
             return {};
+        }
+
+        std::expected<void, String> WriteProvenance(const std::filesystem::path& file, const Json& record) {
+            const std::string text = record.dump(kProvenanceIndent, ' ', false, Json::error_handler_t::replace) + "\n";  //-NoStd: nlohmann's dump
+            return WriteTextFileAtomically(file, StringView(text.data(), text.size()));
         }
 
         bool IsClipPart(StringView part) {
@@ -200,7 +206,7 @@ namespace BECore {
         ArtGenSoundWritten written;
         written.clipPath = clipPath;
         written.wavFile = assetsDir / PathOf(StringView(clipPath).substr(kAssetsPrefix.size()));
-        written.provenanceFile = PathOf(Format("{}{}", written.wavFile.generic_string().substr(0, written.wavFile.generic_string().size() - kWavExtension.size()), kProvenanceExtension));
+        written.provenanceFile = ProvenanceFileOf(written.wavFile);
         written.format = processed->format;
         const ArtGenSoundStats stats = MeasureArtGenSound(*processed);
         written.seconds = stats.seconds;
@@ -299,7 +305,7 @@ namespace BECore {
         }
         ArtGenCopied copied;
         copied.pngFile = folder / PathOf(Format("{}{}", sprite, kPngExtension));
-        copied.provenanceFile = folder / PathOf(Format("{}{}", sprite, kProvenanceExtension));
+        copied.provenanceFile = ProvenanceFileOf(copied.pngFile);
         copied.width = size->first;
         copied.height = size->second;
         copied.texturePath = Format("assets/{}/{}{}", kArtGenAssetsFolder, sprite, kPngExtension);
@@ -369,6 +375,48 @@ namespace BECore {
         }
         renderer->_spriteId = sprite;
         renderer->ReloadTexture();
+        return {};
+    }
+
+    std::filesystem::path ProvenanceFileOf(const std::filesystem::path& mediaFile) {
+        std::filesystem::path file = mediaFile;
+        return file.replace_extension(PathOf(kProvenanceExtension));
+    }
+
+    std::expected<void, String> MarkProvenanceKept(const std::filesystem::path& file, int64_t seed, StringView date) {
+        auto text = ReadTextFile(file);
+        if (!text) {
+            return std::unexpected(Format("cannot read '{}': {}", file.generic_string(), text.error()));
+        }
+        auto parsed = ParseJson(StringView(*text));
+        if (!parsed || !parsed->is_object()) {
+            return std::unexpected(Format("'{}' is not a JSON object", file.generic_string()));
+        }
+        Json kept = Json::object();
+        kept["seed"] = seed;
+        kept["date"] = ToStdString(date);
+        (*parsed)["kept"] = std::move(kept);
+        return WriteProvenance(file, *parsed);
+    }
+
+    std::expected<void, ControlError> KeepForControl(StringView kind, StringView name, int64_t seed, StringView date) {
+        auto fail = [](const String& message) { return std::unexpected(ControlError{String("artgen_accept_failed"), message}); };
+        const bool image = kind == kKindImage;
+        if (!image && kind != kKindAudio) {
+            return fail(Format("'{}' is not a kind of art (image or audio)", kind));
+        }
+        if (!IsValidSpriteName(name)) {
+            return fail(Format("'{}' is not a sprite or sound name", name));
+        }
+        const std::filesystem::path assetsDir = CoreManager::GetFileSystem().GetMountedPath("assets"_intern);
+        if (assetsDir.empty()) {
+            return fail(String("the game has no assets folder"));
+        }
+        const std::filesystem::path media =
+            assetsDir / ToStd(kArtGenAssetsFolder) / PathOf(Format("{}{}", name, image ? kPngExtension : kWavExtension));  //-NoStd: std::filesystem::path takes a std::string
+        if (auto marked = MarkProvenanceKept(ProvenanceFileOf(media), seed, date); !marked) {
+            return fail(marked.error());
+        }
         return {};
     }
 

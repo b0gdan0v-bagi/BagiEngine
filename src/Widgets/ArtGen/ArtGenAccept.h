@@ -108,4 +108,17 @@ namespace BECore {
      */
     std::expected<Json, ControlError> AcceptForControl(const ArtGenVariant& variant, StringView sprite, SceneNode* node);
 
+    /// The provenance file beside a game's image or clip: the file's name with its extension replaced by `.artgen.json`
+    [[nodiscard]] std::filesystem::path ProvenanceFileOf(const std::filesystem::path& mediaFile);
+
+    /// Adds `"kept": {"seed", "date"}` to the provenance file @p file (replacing an earlier one), the rest of it as it was, written atomically;
+    /// a missing or unreadable file is an error that names it
+    std::expected<void, String> MarkProvenanceKept(const std::filesystem::path& file, int64_t seed, StringView date);
+
+    /**
+     * @brief The editor's ArtGenSession::Keeper: MarkProvenanceKept on the game's file of the sprite or clip @p name (@p kind `image` or
+     * `audio`) under the top `assets` layer. A failure is `artgen_accept_failed` with the reason.
+     */
+    std::expected<void, ControlError> KeepForControl(StringView kind, StringView name, int64_t seed, StringView date);
+
 }  // namespace BECore

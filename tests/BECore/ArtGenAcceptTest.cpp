@@ -124,4 +124,62 @@ namespace BECore::Tests {
         EXPECT_FALSE(std::filesystem::exists(copied->provenanceFile));
     }
 
+    TEST_F(ArtGenAcceptTest, TheProvenanceFileIsBesideTheMediaFile) {
+        EXPECT_EQ(ProvenanceFileOf("assets/artgen/queen.png").generic_string(), "assets/artgen/queen.artgen.json");
+        EXPECT_EQ(ProvenanceFileOf("assets/sounds/move.wav").generic_string(), "assets/sounds/move.artgen.json");
+    }
+
+    TEST_F(ArtGenAcceptTest, KeptIsAddedToTheCopiedProvenanceAndItsOwnKeysStay) {
+        WriteText(provenance, "{\"seed\": 7, \"preset\": \"gem\"}");
+        const auto copied = CopyVariantIntoAssets(png, provenance, folder / "assets", "queen");
+        ASSERT_TRUE(copied.has_value());
+        ASSERT_TRUE(MarkProvenanceKept(copied->provenanceFile, 7, "2026-11-17T10:00:00Z").has_value());
+
+        const auto record = ParseJson(StringView(ReadText(copied->provenanceFile)));
+        ASSERT_TRUE(record.has_value());
+        EXPECT_EQ(GetJsonInt(*record, "seed").value_or(-1), 7);
+        EXPECT_EQ(GetJsonString(*record, "preset").value_or(String()), "gem");
+        const Json* kept = FindJsonMember(*record, "kept");
+        ASSERT_NE(kept, nullptr);
+        EXPECT_EQ(GetJsonInt(*kept, "seed").value_or(-1), 7);
+        EXPECT_EQ(GetJsonString(*kept, "date").value_or(String()), "2026-11-17T10:00:00Z");
+    }
+
+    TEST_F(ArtGenAcceptTest, ASecondKeptReplacesTheFirst) {
+        const auto copied = CopyVariantIntoAssets(png, provenance, folder / "assets", "queen");
+        ASSERT_TRUE(copied.has_value());
+        ASSERT_TRUE(MarkProvenanceKept(copied->provenanceFile, 7, "2026-11-17T10:00:00Z").has_value());
+        ASSERT_TRUE(MarkProvenanceKept(copied->provenanceFile, 9, "2026-11-17T11:00:00Z").has_value());
+
+        const auto record = ParseJson(StringView(ReadText(copied->provenanceFile)));
+        ASSERT_TRUE(record.has_value());
+        const Json* kept = FindJsonMember(*record, "kept");
+        ASSERT_NE(kept, nullptr);
+        EXPECT_EQ(GetJsonInt(*kept, "seed").value_or(-1), 9);
+        EXPECT_EQ(GetJsonString(*kept, "date").value_or(String()), "2026-11-17T11:00:00Z");
+    }
+
+    TEST_F(ArtGenAcceptTest, KeepingAMissingOrBrokenProvenanceIsAnErrorThatNamesTheFile) {
+        const auto missing = folder / "assets" / "nothing.artgen.json";
+        const auto result = MarkProvenanceKept(missing, 7, "2026-11-17T10:00:00Z");
+        ASSERT_FALSE(result.has_value());
+        EXPECT_NE(result.error().find("nothing.artgen.json"), String::npos);
+        EXPECT_FALSE(std::filesystem::exists(missing));
+
+        WriteText(provenance, "[1, 2]");
+        const auto notObject = MarkProvenanceKept(provenance, 7, "2026-11-17T10:00:00Z");
+        ASSERT_FALSE(notObject.has_value());
+        EXPECT_NE(notObject.error().find("queen_7.artgen.json"), String::npos);
+        EXPECT_EQ(ReadText(provenance), "[1, 2]");
+    }
+
+    TEST_F(ArtGenAcceptTest, ASwitchRewritesTheProvenanceFromTheVariantWithoutKept) {
+        const auto copied = CopyVariantIntoAssets(png, provenance, folder / "assets", "queen");
+        ASSERT_TRUE(copied.has_value());
+        ASSERT_TRUE(MarkProvenanceKept(copied->provenanceFile, 7, "2026-11-17T10:00:00Z").has_value());
+        WriteText(provenance, "{\"seed\": 8}");
+        ASSERT_TRUE(CopyVariantIntoAssets(png, provenance, folder / "assets", "queen").has_value());
+        EXPECT_EQ(ReadText(copied->provenanceFile).find("kept"), String::npos);
+    }
+
 }  // namespace BECore::Tests

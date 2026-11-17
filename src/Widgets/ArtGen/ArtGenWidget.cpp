@@ -110,6 +110,7 @@ namespace BECore {
         session.SetGameRoot(StringView(root.data(), root.size()));
         session.SetAcceptor(&AcceptForControl);
         session.SetSoundAcceptor(&AcceptSoundForControl);
+        session.SetKeeper(&KeepForControl);
         session.RegisterControl(CoreManager::GetControlService());
         return true;
     }
