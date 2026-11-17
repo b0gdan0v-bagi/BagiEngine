@@ -313,7 +313,8 @@ namespace BECore {
                 return std::unexpected(Format("'frameOf': the set '{}' makes {}s, only an image set has a frame", request.frameOf, source->kind));
             }
             if (!source->processing) {
-                return std::unexpected(Format("'frameOf': the set '{}' has no frame yet: it is fixed at its first Accept all (and a set accepted before frames existed has none)", request.frameOf));
+                return std::unexpected(
+                    Format("'frameOf': the set '{}' has no frame yet: it is fixed at its first Accept all (and a set whose files are not trimmed, full frames, has none)", request.frameOf));
             }
             inherited = source->processing;
         }

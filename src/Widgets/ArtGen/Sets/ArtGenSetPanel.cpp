@@ -689,7 +689,7 @@ namespace BECore {
                                     static_cast<int>(frame.outHeight), static_cast<int>(frame.w), static_cast<int>(frame.h));
                 ImGui::PopTextWrapPos();
             } else if (IsLegacyAccepted(set)) {
-                ImGui::TextDisabled("Accepted before trimming: the files are full frames");
+                ImGui::TextDisabled("Not trimmed: the files are full frames");
             }
         }
         if (!_acceptMessage.empty()) {

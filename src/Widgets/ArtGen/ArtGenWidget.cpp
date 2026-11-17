@@ -110,6 +110,15 @@ namespace BECore {
             std::snprintf(out, size, "%s", name.c_str());
         }
 
+        /// The Max size option as shown: 0 is "no downscale"
+        void FormatMaxSize(int32_t maxSize, char* out, size_t size) {
+            if (maxSize == 0) {
+                std::snprintf(out, size, "original size");
+            } else {
+                std::snprintf(out, size, "%d px", static_cast<int>(maxSize));
+            }
+        }
+
     }  // namespace
 
     ArtGenWidget::~ArtGenWidget() {
@@ -621,20 +630,12 @@ namespace BECore {
         ImGui::EndDisabled();
         ItemTooltip("The margin kept around the drawn box, in percent of its longer side");
         char current[32];
-        if (settings.maxSize == 0) {
-            std::snprintf(current, sizeof(current), "original size");
-        } else {
-            std::snprintf(current, sizeof(current), "%d px", static_cast<int>(settings.maxSize));
-        }
+        FormatMaxSize(settings.maxSize, current, sizeof(current));
         ImGui::SetNextItemWidth(kFieldWidth);
         if (ImGui::BeginCombo("Max size", current)) {
             for (const int32_t option : kMaxSizes) {
                 char label[32];
-                if (option == 0) {
-                    std::snprintf(label, sizeof(label), "original size");
-                } else {
-                    std::snprintf(label, sizeof(label), "%d px", static_cast<int>(option));
-                }
+                FormatMaxSize(option, label, sizeof(label));
                 if (ImGui::Selectable(label, option == settings.maxSize)) {
                     settings.maxSize = option;
                     changed = true;

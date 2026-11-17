@@ -254,12 +254,18 @@ namespace BECore {
 
         // Colour is averaged as colour * alpha and divided by the average alpha, so a transparent pixel's own colour never leaks into an edge
         const auto outWidth = static_cast<size_t>(frame.outWidth);
+        Vector<Window> columns;
+        columns.reserve(outWidth);
+        for (int32_t x = 0; x < frame.outWidth; ++x) {
+            columns.emplace_back(frame.w, frame.outWidth, x);
+        }
+        const auto columnShare = static_cast<float>(frame.outWidth) / static_cast<float>(frame.w);
         Vector<float> across(static_cast<size_t>(frame.h) * outWidth * kChannels, 0.0f);
         for (int32_t y = 0; y < frame.h; ++y) {
             const uint8_t* row = origin + static_cast<size_t>(y) * sourceStride;
             float* target = across.data() + static_cast<size_t>(y) * outWidth * kChannels;
             for (int32_t x = 0; x < frame.outWidth; ++x) {
-                const Window window(frame.w, frame.outWidth, x);
+                const Window& window = columns[static_cast<size_t>(x)];
                 float sum[kChannels] = {};
                 for (int32_t source = window.first; source < window.last; ++source) {
                     const uint8_t* pixel = row + static_cast<size_t>(source) * kChannels;
@@ -270,9 +276,8 @@ namespace BECore {
                     sum[2] += weight * static_cast<float>(pixel[2]) * alpha;
                     sum[kAlphaOffset] += weight * alpha;
                 }
-                const auto share = static_cast<float>(frame.outWidth) / static_cast<float>(frame.w);
                 for (size_t channel = 0; channel < kChannels; ++channel) {
-                    target[static_cast<size_t>(x) * kChannels + channel] = sum[channel] * share;
+                    target[static_cast<size_t>(x) * kChannels + channel] = sum[channel] * columnShare;
                 }
             }
         }
