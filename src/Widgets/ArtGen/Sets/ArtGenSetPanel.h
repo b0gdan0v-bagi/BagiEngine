@@ -68,10 +68,19 @@ namespace BECore {
         struct RowThumbs {
             uint64_t seenFrame = 0;
             Vector<Thumb> thumbs;
+            // The row's status line and what it was made from
+            String statusLine;
+            String statusName;
+            String statusNewer;
+            String statusKind;
+            ArtGenRowStatus statusKey = ArtGenRowStatus::NotInGame;
+            bool statusValid = false;
         };
 
         void DrawSetEntry(ArtGenSession& session, const ArtGenSet& set);
         void DrawJobRows(ArtGenSession& session, const ArtGenSet& set);
+        /// Makes the row's "in the game or not, and which file" line again when its status, names or kind changed
+        static void RefreshStatusLine(RowThumbs& row, const ArtGenSet& set, const ArtGenSetJob& job, ArtGenRowStatus status, const ArtGenSet* newer);
         void DrawReviewRow(ArtGenSession& session, const ArtGenSet& set, size_t index, int32_t columns, const ArtGenSetPanelSound& sound);
         void DrawVariantCell(ArtGenSession& session, const ArtGenSet& set, size_t jobIndex, size_t variantIndex, const ArtGenSetPanelSound& sound);
         void DrawReviewFooter(ArtGenSession& session, const ArtGenSet& set);

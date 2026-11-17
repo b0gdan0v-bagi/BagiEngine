@@ -18,6 +18,20 @@ namespace BECore {
 
         constexpr float kSubjectLines = 6.0f;
         constexpr const char* kSingleRunNote = "A single run is in work on the Generate tab; the set starts after it";
+        constexpr const char* kSetDraftNote = "A set is made into artgen/out/<set>/ (drafts, git ignores them). Nothing reaches the game until Accept all on the Review tab.";
+        constexpr const char* kReviewDraftNote =
+            "Variants are drafts in artgen/out/<set>/ (git ignores that folder). Accept all, and a click on a live row, write into the game: assets/artgen/ and config/TextureLibrary.xml, "
+            "which are in git.";
+        constexpr const char* kAcceptAllTip =
+            "Put a candidate of every row into the game under the row's name: the pick, else the first variant. It writes assets/artgen/<job>.png (.wav for a sound) with its "
+            ".artgen.json and, for images, the sprite in config/TextureLibrary.xml; these are in git. The other variants stay switchable until Keep";
+        constexpr const char* kKeepTip =
+            "Keep this variant for good: the others are dropped from the set and the row can no longer be switched. Changes only the game's provenance file (\"kept\") and the manifest";
+        constexpr const char* kKeepAllTip = "Keep the shown variant of every live row for good: the others are dropped from the set and the rows can no longer be switched. Changes only the game's "
+                                            "provenance files (\"kept\") and the manifest";
+        constexpr const char* kReplacedExplanation =
+            "The game has one file per name. A set that accepted this name later owns it, so this row is only a draft in artgen/out/: it cannot be switched or kept. Accept a newer set with this name "
+            "to take the file over.";
         constexpr float kJobIndent = 16.0f;
         // Squares behind a thumbnail, so a transparent background (a cut-out sprite) shows as transparent
         constexpr float kCheckerCell = 10.0f;
@@ -156,6 +170,9 @@ namespace BECore {
         if (!_queued.empty()) {
             ImGui::TextColored(palette.success, "%s", _queued.c_str());
         }
+        ImGui::PushTextWrapPos(0.0f);
+        ImGui::TextDisabled("%s", kSetDraftNote);
+        ImGui::PopTextWrapPos();
         ImGui::Separator();
 
         const auto& sets = session.GetSets();
@@ -364,6 +381,10 @@ namespace BECore {
         ImGui::SameLine();
         ImGui::TextColored(IsActive(*set) ? palette.accent : palette.textDisabled, "%s", IsActive(*set) ? "still running" : "complete");
 
+        ImGui::PushTextWrapPos(0.0f);
+        ImGui::TextDisabled("%s", kReviewDraftNote);
+        ImGui::PopTextWrapPos();
+
         const ImGuiStyle& style = ImGui::GetStyle();
         const float footerHeight = ImGui::GetFrameHeightWithSpacing() + (_acceptMessage.empty() ? 0.0f : ImGui::GetTextLineHeightWithSpacing());
         ImGui::BeginChild("##reviewRows", ImVec2(0.0f, -footerHeight));
@@ -372,7 +393,8 @@ namespace BECore {
         const int32_t columns = std::max(1, static_cast<int32_t>((inner + style.ItemSpacing.x) / (kReviewThumbnailSize + style.ItemSpacing.x)));
         const int32_t thumbRows = (std::max(set->count, 1) + columns - 1) / columns;
         const float cellHeight = kReviewThumbnailSize + style.ItemSpacing.y + ImGui::GetTextLineHeightWithSpacing();
-        const float rowHeight = style.WindowPadding.y * 2.0f + ImGui::GetTextLineHeightWithSpacing() + ImGui::GetFrameHeightWithSpacing() + static_cast<float>(thumbRows) * cellHeight;
+        // The header line and the status line, the hint line with its buttons, then the thumbnails
+        const float rowHeight = style.WindowPadding.y * 2.0f + ImGui::GetTextLineHeightWithSpacing() * 2.0f + ImGui::GetFrameHeightWithSpacing() + static_cast<float>(thumbRows) * cellHeight;
 
         ImGuiListClipper clipper;
         clipper.Begin(static_cast<int>(set->jobs.size()), rowHeight + style.ItemSpacing.y);
@@ -399,6 +421,37 @@ namespace BECore {
         DrawReviewFooter(session, *set);
     }
 
+    void ArtGenSetPanel::RefreshStatusLine(RowThumbs& row, const ArtGenSet& set, const ArtGenSetJob& job, ArtGenRowStatus status, const ArtGenSet* newer) {
+        // The text is made again only when what it says moved, so a steady frame allocates nothing
+        const StringView name = job.accepted ? StringView(job.accepted->as) : StringView(job.name);
+        const StringView newerName = newer != nullptr ? StringView(newer->name) : StringView();
+        if (row.statusValid && row.statusKey == status && StringView(row.statusName) == name && StringView(row.statusNewer) == newerName && StringView(row.statusKind) == StringView(set.kind)) {
+            return;
+        }
+        row.statusValid = true;
+        row.statusKey = status;
+        row.statusName = String(name);
+        row.statusNewer = String(newerName);
+        row.statusKind = set.kind;
+        const String file = ArtGenGameFile(name, set.kind);
+        const bool image = set.kind != kKindAudio;
+        switch (status) {
+            case ArtGenRowStatus::NotInGame:
+                row.statusLine = Format("Not in the game. Accept all writes {}", file);
+                break;
+            case ArtGenRowStatus::Live:
+                row.statusLine = image ? Format("In the game: {} (sprite '{}' in TextureLibrary); the other variants are one click away", file, name)
+                                       : Format("In the game: {}; the other variants are one click away", file);
+                break;
+            case ArtGenRowStatus::Kept:
+                row.statusLine = Format("Kept: {} is final", file);
+                break;
+            default:
+                row.statusLine = Format("Not in the game: set '{}' accepted the name '{}' later and owns {}", newerName, name, file);
+                break;
+        }
+    }
+
     void ArtGenSetPanel::DrawReviewRow(ArtGenSession& session, const ArtGenSet& set, size_t index, int32_t columns, const ArtGenSetPanelSound& sound) {
         const auto& palette = GetImGuiPalette();
         const ArtGenSetJob& job = set.jobs[index];
@@ -410,24 +463,29 @@ namespace BECore {
         ImGui::TextUnformatted(job.name.c_str());
         ImGui::SameLine();
         ImGui::TextDisabled("%s", job.subject.c_str());
-        const ArtGenSet* newer = IsLive(job) ? session.FindNewerOwner(set, job) : nullptr;
+        const ArtGenSet* newer = job.accepted ? session.FindNewerOwner(set, job) : nullptr;
+        const ArtGenRowStatus status = StatusOf(job, newer != nullptr);
         // A replaced row's variants are alternatives to nothing: the game holds another set's picture under its name
-        const bool live = IsLive(job) && newer == nullptr;
-        if (newer != nullptr) {
+        const bool live = status == ArtGenRowStatus::Live;
+        if (status == ArtGenRowStatus::Replaced) {
             char badge[kLabelSize];
             std::snprintf(badge, sizeof(badge), ICON_LC_REPLACE " replaced by %s", newer->name.c_str());
             ImGui::SameLine();
             ImGui::TextColored(palette.warning, "%s", badge);
+            ItemTooltip(kReplacedExplanation);
         } else if (live) {
             char badge[kLabelSize];
             const int32_t alternatives = AlternativesOf(job);
             std::snprintf(badge, sizeof(badge), ICON_LC_CHECK_CHECK " live, %d alternative%s", static_cast<int>(alternatives), alternatives == 1 ? "" : "s");
             ImGui::SameLine();
             ImGui::TextColored(palette.success, "%s", badge);
-        } else if (job.accepted) {
+        } else if (status == ArtGenRowStatus::Kept) {
             ImGui::SameLine();
             ImGui::TextColored(palette.accent, ICON_LC_LOCK " kept");
         }
+        RefreshStatusLine(_rows[index], set, job, status, newer);
+        ImGui::TextDisabled("%s", _rows[index].statusLine.c_str());
+        ItemTooltip(status == ArtGenRowStatus::Replaced ? kReplacedExplanation : _rows[index].statusLine.c_str());
 
         ImGui::AlignTextToFramePadding();
         switch (job.state) {
@@ -454,7 +512,7 @@ namespace BECore {
                                                                : "Click a variant to pick it");
                 if (live) {
                     ImGui::SameLine();
-                    if (IconTextButton(ICON_LC_LOCK, "Keep", "Keep this variant for good: the others are dropped from the set and the row can no longer be switched")) {
+                    if (IconTextButton(ICON_LC_LOCK, "Keep", kKeepTip)) {
                         const auto kept = session.KeepSet(StringView(set.name), StringView(job.name));
                         _acceptFailed = !kept.has_value();
                         _acceptMessage = kept ? Format("Kept '{}'", job.name) : kept.error().message;
@@ -590,9 +648,7 @@ namespace BECore {
         }
         ImGui::SameLine();
         ImGui::BeginDisabled(blocker != nullptr);
-        if (IconTextButton(
-                ICON_LC_CHECK_CHECK, "Accept all",
-                blocker != nullptr ? blocker : "Put a candidate of every row into the game under the row's name: the pick, else the first variant. The other variants stay switchable until Keep")) {
+        if (IconTextButton(ICON_LC_CHECK_CHECK, "Accept all", blocker != nullptr ? blocker : kAcceptAllTip)) {
             auto result = session.AcceptSet(StringView(set.name));
             _acceptFailed = !result.has_value();
             if (result) {
@@ -614,7 +670,7 @@ namespace BECore {
         ImGui::EndDisabled();
         ImGui::SameLine();
         ImGui::BeginDisabled(keepable == 0);
-        if (IconTextButton(ICON_LC_LOCK, "Keep all", "Keep the shown variant of every live row for good: the others are dropped from the set and the rows can no longer be switched")) {
+        if (IconTextButton(ICON_LC_LOCK, "Keep all", kKeepAllTip)) {
             auto result = session.KeepSet(StringView(set.name));
             _acceptFailed = !result.has_value();
             _acceptMessage = result ? Format("Kept {} row(s)", keepable) : result.error().message;

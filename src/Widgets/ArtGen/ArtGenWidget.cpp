@@ -30,6 +30,8 @@ namespace BECore {
         constexpr float kThumbnailSize = 160.0f;
         constexpr const char* kPresetSectionLabel = "Preset: used by Generate and Set";
         constexpr const char* kSetRunningNote = "A set is running (see the Set tab); a single run waits for it";
+        constexpr const char* kDraftNote = "The variants are drafts in artgen/out/ (git ignores that folder). Accept below copies one into the game.";
+        constexpr const char* kPlaceholderName = "<name>";
         constexpr float kDefaultWidth = 520.0f;
         constexpr float kDefaultHeight = 700.0f;
         // Seconds a started bridge gets to make its first poll before the panel says it did not come
@@ -57,6 +59,19 @@ namespace BECore {
             audio.format = clip.GetFormat();
             audio.samples.assign(clip.GetSamples().begin(), clip.GetSamples().end());
             return audio;
+        }
+
+        /// What Accept of an image writes, named once: the same path the acceptor builds (`ArtGenGameFile`)
+        const char* AcceptImageNote() {
+            static const String note =
+                Format("Copy the image into the game: {} + .artgen.json and the sprite in config/TextureLibrary.xml. Both are in git.", ArtGenGameFile(kPlaceholderName, kKindImage));
+            return note.c_str();
+        }
+
+        const char* AcceptSoundNote() {
+            static const String note =
+                Format("Process the sound and write it into the game as a 16-bit WAV: {} + .artgen.json. Both are in git. Then reload what plays it.", ArtGenGameFile(kPlaceholderName, kKindAudio));
+            return note.c_str();
         }
 
         void DrawWaveform(ImDrawList* drawList, ImVec2 origin, const Vector<float>& waveform, ImU32 background, ImU32 color) {
@@ -411,6 +426,9 @@ namespace BECore {
         if (!_requestError.empty()) {
             ImGui::TextColored(GetImGuiPalette().error, "%s", _requestError.c_str());
         }
+        ImGui::PushTextWrapPos(0.0f);
+        ImGui::TextDisabled("%s", kDraftNote);
+        ImGui::PopTextWrapPos();
     }
 
     void ArtGenWidget::DrawPresetBar(ArtGenSession& session) {
@@ -971,8 +989,14 @@ namespace BECore {
         ImGui::Checkbox("Use on the selected node", &_useOnSelected);
         ImGui::EndDisabled();
         ItemTooltip(haveNode ? "Put the clip on the AudioSourceComponent of the node selected in the Scene Editor" : "Select a node in the Scene Editor first");
+        char replaceTip[kInputTextSize];
+        const char* acceptTip = AcceptSoundNote();
+        if (_replaceClip) {
+            std::snprintf(replaceTip, sizeof(replaceTip), "Process the sound and write it over the game's clip %s + .artgen.json. Both are in git. Then reload what plays it.", _clipPath);
+            acceptTip = replaceTip;
+        }
         ImGui::BeginDisabled(!valid);
-        if (IconTextButton(ICON_LC_CHECK, "Accept", "Process the sound, write it as a 16-bit WAV with its .artgen.json and reload what plays it")) {
+        if (IconTextButton(ICON_LC_CHECK, "Accept", acceptTip)) {
             if (_playingRow == kPreviewRow) {
                 StopSound();
             }
@@ -1016,7 +1040,7 @@ namespace BECore {
         ItemTooltip(haveNode ? "Put the sprite on the SpriteRendererComponent of the node selected in the Scene Editor" : "Select a node in the Scene Editor first");
 
         ImGui::BeginDisabled(!validName);
-        if (IconTextButton(ICON_LC_CHECK, "Accept", "Copy the image into the game's assets, add or replace the sprite and reload it")) {
+        if (IconTextButton(ICON_LC_CHECK, "Accept", AcceptImageNote())) {
             auto result = session.Accept(*_selectedSeed, StringView(_spriteName), _useOnSelected);
             _acceptFailed = !result.has_value();
             if (result) {
@@ -1032,6 +1056,9 @@ namespace BECore {
             ImGui::SameLine();
             ImGui::TextColored(palette.warning, "1 to 64 of A-Z a-z 0-9 _ -");
         }
+        ImGui::PushTextWrapPos(0.0f);
+        ImGui::TextDisabled("%s", AcceptImageNote());
+        ImGui::PopTextWrapPos();
         if (!_acceptMessage.empty()) {
             ImGui::TextColored(_acceptFailed ? palette.error : palette.success, "%s", _acceptMessage.c_str());
         }
