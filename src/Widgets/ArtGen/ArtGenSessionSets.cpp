@@ -17,6 +17,8 @@ namespace BECore {
         constexpr StringView kStateComplete = "Complete";
         // The range the service draws its own first seed from (tools/artgen/artgen_service.py)
         constexpr int64_t kSeedRange = int64_t{1} << 32;
+        // Default names tried (`-2`, `-3`, ...) before EnqueueSet gives up; a person cannot queue this many sets in one second
+        constexpr int32_t kMaxNameAttempts = 100;
 
         std::filesystem::path RootPath(const String& root) {
             return std::filesystem::path(ToStd(StringView(root)));  //-NoStd: std::filesystem::path takes a std::string_view
@@ -233,11 +235,19 @@ namespace BECore {
 
         const auto now = std::chrono::system_clock::now();
         ArtGenSet set;
-        set.name = request.name.empty() ? DefaultArtGenSetName(StringView(request.preset), now) : request.name;
+        const auto taken = [&](const String& name) { return FindSet(name) != nullptr || !NewSetFolderFree(RootPath(_gameRoot), name); };
+        if (request.name.empty()) {
+            // The name has a resolution of a second: a second set of the same preset in it takes the next number
+            for (int32_t attempt = 1; attempt <= kMaxNameAttempts && (attempt == 1 || taken(set.name)); ++attempt) {
+                set.name = DefaultArtGenSetName(StringView(request.preset), now, attempt);
+            }
+        } else {
+            set.name = request.name;
+        }
         if (!IsValidSpriteName(set.name)) {
             return std::unexpected(String("a set name is 1 to 64 of A-Z a-z 0-9 _ -"));
         }
-        if (FindSet(set.name) != nullptr || !NewSetFolderFree(RootPath(_gameRoot), set.name)) {
+        if (taken(set.name)) {
             return std::unexpected(Format("a set named '{}' exists; give it another name", set.name));
         }
         set.created = ArtGenTimestamp(now);
@@ -274,7 +284,8 @@ namespace BECore {
     }
 
     void ArtGenSession::PumpSets() {
-        if (IsRunInWork() || IsSetupBusy() || !IsServiceConnected()) {
+        // A service that polls with its generator down leaves the jobs waiting: a job started then would only fail
+        if (IsRunInWork() || IsSetupBusy() || !IsGeneratorReady()) {
             return;
         }
         for (size_t index = 0; index < _setQueue.size();) {
@@ -490,6 +501,7 @@ namespace BECore {
         Register<&ArtGenSession::HandlePick>(service, *this, "artgen_pick");
         Register<&ArtGenSession::HandleRetry>(service, *this, "artgen_retry");
         Register<&ArtGenSession::HandleAcceptSet>(service, *this, "artgen_accept_set");
+        Register<&ArtGenSession::HandleKeep>(service, *this, "artgen_keep");
 
         service.DescribeMethod(
             "artgen_enqueue",
@@ -515,6 +527,10 @@ namespace BECore {
                 "Accepts the candidate of every job of a finished set into the game, as the job name (a sprite, or a clip assets/artgen/<name>.wav): the pick, else for images the first variant "
                 "(recorded as the pick); a sound needs a pick on every row. The other variants stay switchable with artgen_pick; a kept row is skipped; repeatable",
                 {ControlParamInfo{"set", "string", true, "the set name; every job must be done (a sound: and picked)"}}});
+        service.DescribeMethod("artgen_keep",
+                               ControlMethodInfo{"Keeps the choice of the live rows of a set (accepted, not kept), or of one job: the game keeps the picked variant for good, the job's other variants "
+                                                 "leave the manifest and switching is refused after. Final: the way back is a new set. Nothing live to keep is invalid_params",
+                                                 {ControlParamInfo{"set", "string", true, "the set name"}, ControlParamInfo{"job", "string", false, "only this job"}}});
     }
 
     std::expected<Json, ControlError> ArtGenSession::HandleEnqueue(const Json& params) {
@@ -791,6 +807,69 @@ namespace BECore {
         return reply;
     }
 
+    std::expected<Json, ControlError> ArtGenSession::KeepSet(StringView setName, StringView jobName) {
+        ArtGenSet* set = MutableSet(setName);
+        if (set == nullptr) {
+            return std::unexpected(MakeError(kNoSetCode, Format("no set named '{}'", setName)));
+        }
+        if (!jobName.empty() && FindJob(*set, jobName) == nullptr) {
+            return std::unexpected(MakeError(kNoSetCode, Format("no job '{}' in a set named '{}'", jobName, setName)));
+        }
+        Vector<ArtGenSetJob*> rows;
+        for (ArtGenSetJob& job : set->jobs) {
+            if (IsLive(job) && (jobName.empty() || StringView(job.name) == jobName)) {
+                rows.push_back(&job);
+            }
+        }
+        if (rows.empty()) {
+            return std::unexpected(InvalidParams(jobName.empty() ? Format("the set '{}' has no live row to keep", setName)
+                                                                 : Format("the job '{}' is not live: only an accepted row that is not kept can be kept", jobName)));
+        }
+        for (const ArtGenSetJob* job : rows) {
+            if (!job->pick || BECore::FindVariant(*job, *job->pick) == nullptr) {
+                return std::unexpected(MakeError(kAcceptFailedCode, Format("the job '{}' has no pick to keep", job->name)));
+            }
+        }
+        if (_keeper == nullptr) {
+            return std::unexpected(MakeError(kAcceptFailedCode, String("keeping is not available here")));
+        }
+
+        // The rows kept stay kept when a later one fails: the call can be made again for the rest
+        Vector<String> kept;
+        for (ArtGenSetJob* job : rows) {
+            const String date = ArtGenTimestamp(std::chrono::system_clock::now());
+            if (auto written = _keeper(StringView(set->kind), StringView(job->accepted->as), *job->pick, StringView(date)); !written) {
+                String doneNames;
+                AppendNames(doneNames, "kept before it", kept);
+                return std::unexpected(MakeError(kAcceptFailedCode, Format("the job '{}': {}; {}", job->name, written.error().message, kept.empty() ? String("kept before it: none") : doneNames)));
+            }
+            BECore::KeepJob(*job, StringView(date));
+            kept.push_back(job->name);
+            SaveSet(*set);
+            ++_version;
+        }
+        Json names = Json::array();
+        for (const String& name : kept) {
+            names.push_back(ToJsonString(name));
+        }
+        Json reply = Json::object();
+        reply["set"] = ToJsonString(set->name);
+        reply["kept"] = std::move(names);
+        return reply;
+    }
+
+    std::expected<Json, ControlError> ArtGenSession::HandleKeep(const Json& params) {
+        const auto set = GetJsonString(params, "set");
+        if (!set) {
+            return std::unexpected(InvalidParams("'set' (string) is required"));
+        }
+        if (IsGiven(params, "job") && !GetJsonString(params, "job")) {
+            return std::unexpected(InvalidParams("'job' must be a string"));
+        }
+        const String job = IsGiven(params, "job") ? *GetJsonString(params, "job") : String();
+        return KeepSet(*set, StringView(job));
+    }
+
     std::expected<Json, ControlError> ArtGenSession::HandleAcceptSet(const Json& params) {
         const auto set = GetJsonString(params, "set");
         if (!set) {
@@ -818,6 +897,8 @@ namespace BECore {
             item["jobs"] = std::move(jobs);
             item["picked"] = PickedCount(set);
             item["accepted"] = AcceptedCount(set);
+            item["live"] = CountLive(set);
+            item["kept"] = CountKept(set);
             sets.push_back(std::move(item));
         }
         return sets;

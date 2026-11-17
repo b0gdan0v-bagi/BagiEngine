@@ -79,8 +79,9 @@ namespace BECore {
     /// The checks of a list of subjects that did not come from text (a control call): 1..kMaxSetJobs, valid unique names, a subject each
     [[nodiscard]] std::expected<void, String> CheckArtGenSubjects(const Vector<ArtGenSubject>& subjects);
 
-    /// `<preset>-<yyyymmdd-hhmmss>` in UTC, the preset name made safe and cut so the whole name stays a valid one
-    [[nodiscard]] String DefaultArtGenSetName(StringView presetName, std::chrono::system_clock::time_point time);
+    /// `<preset>-<yyyymmdd-hhmmss>` in UTC, the preset name made safe and cut so the whole name stays a valid one. The time has a resolution
+    /// of a second, so @p attempt 2, 3, ... adds `-2`, `-3`, ... for a name that is taken (the preset part is cut further to make room)
+    [[nodiscard]] String DefaultArtGenSetName(StringView presetName, std::chrono::system_clock::time_point time, int32_t attempt = 1);
 
     /// `2026-11-17T12:34:56Z`
     [[nodiscard]] String ArtGenTimestamp(std::chrono::system_clock::time_point time);

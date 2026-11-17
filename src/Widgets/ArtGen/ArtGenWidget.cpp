@@ -223,7 +223,8 @@ namespace BECore {
         }
         _bridgeStartedAt = -1.0;
         const auto& status = session.GetServiceStatus();
-        if (status.state == "ready") {
+        const bool ready = session.IsGeneratorReady();
+        if (ready) {
             ImGui::TextColored(palette.success, ICON_LC_PLUG " Service ready (%s)", status.generator.c_str());
         } else {
             ImGui::TextColored(palette.warning, ICON_LC_CIRCLE_ALERT " Generator %s", status.state.c_str());
@@ -232,7 +233,7 @@ namespace BECore {
         if (IconTextButton(ICON_LC_UNPLUG, "Disconnect", "Stop the generation service (a run or an install in work is cancelled); Start the service runs it again")) {
             session.RequestServiceStop();
         }
-        if (status.state != "ready") {
+        if (!ready) {
             if (!status.reason.empty()) {
                 ImGui::TextWrapped("%s", status.reason.c_str());
             }

@@ -64,6 +64,23 @@ namespace BECore::Tests {
             return reply;
         }
 
+        struct KeptRow {
+            String kind;
+            String name;
+            int64_t seed = -1;
+            String date;
+        };
+        Vector<KeptRow> gKept;
+        String gKeepFailOn;  // a row of this name is refused by the fake keeper
+
+        std::expected<void, ControlError> FakeKeeper(StringView kind, StringView name, int64_t seed, StringView date) {
+            if (name == gKeepFailOn) {
+                return std::unexpected(ControlError{String("artgen_accept_failed"), String("the provenance is read-only")});
+            }
+            gKept.push_back(KeptRow{String(kind), String(name), seed, String(date)});
+            return {};
+        }
+
         std::expected<Json, ControlError> FakeAcceptor(const ArtGenVariant& variant, StringView sprite, SceneNode* node) {
             return Answer(variant, sprite, true, node != nullptr, true);
         }
@@ -86,8 +103,11 @@ namespace BECore::Tests {
             session.RegisterControl(service);
             session.SetAcceptor(&FakeAcceptor);
             session.SetSoundAcceptor(&FakeSoundAcceptor);
+            session.SetKeeper(&FakeKeeper);
             gAccepted.clear();
             gFailOn.clear();
+            gKept.clear();
+            gKeepFailOn.clear();
         }
 
         void TearDown() override {
@@ -1234,6 +1254,215 @@ namespace BECore::Tests {
         EXPECT_FALSE(gAccepted[0].image);
         EXPECT_EQ(gAccepted[0].name, "knock");
         EXPECT_EQ(gAccepted[0].seed, kSetSeed);
+    }
+
+    TEST_F(ArtGenSetSessionTest, KeepFixesALiveRowAndDropsItsAlternatives) {
+        ASSERT_TRUE(Enqueue("keep", "a\nb").has_value());
+        RunAndPickAll("keep");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("keep"));
+        ASSERT_EQ(ErrorCode(AcceptAllCall("keep")), "");
+
+        Json params = Json::object();
+        params["set"] = "keep";
+        params["job"] = "a";
+        const Json answer = Result(Call("artgen_keep", params));
+        const Json* kept = FindJsonMember(answer, "kept");
+        ASSERT_NE(kept, nullptr) << DumpJson(answer).c_str();
+        ASSERT_EQ(kept->size(), 1u);
+        EXPECT_EQ((*kept)[0], "a");
+
+        ASSERT_EQ(gKept.size(), 1u);
+        EXPECT_EQ(gKept[0].kind, "image");
+        EXPECT_EQ(gKept[0].name, "a");
+        EXPECT_EQ(gKept[0].seed, kSetSeed + 1);
+        EXPECT_EQ(gKept[0].date, OnDisk("keep").jobs[0].accepted->date);
+        const ArtGenSet disk = OnDisk("keep");
+        EXPECT_TRUE(disk.jobs[0].accepted->kept);
+        ASSERT_EQ(disk.jobs[0].variants.size(), 1u);
+        EXPECT_EQ(disk.jobs[0].variants[0].seed, kSetSeed + 1);
+        EXPECT_TRUE(IsLive(disk.jobs[1])) << "the other row is untouched";
+        EXPECT_EQ(disk.jobs[1].variants.size(), 2u);
+
+        Json pick = Json::object();
+        pick["set"] = "keep";
+        pick["job"] = "a";
+        pick["seed"] = kSetSeed;
+        gAccepted.clear();
+        EXPECT_EQ(ErrorCode(Call("artgen_pick", pick)), "artgen_no_variant") << "the alternatives are gone";
+        EXPECT_TRUE(gAccepted.empty());
+    }
+
+    TEST_F(ArtGenSetSessionTest, KeepOfARowThatIsNotLiveIsInvalidParams) {
+        ASSERT_TRUE(Enqueue("notlive", "a\nb").has_value());
+        RunAndPickAll("notlive");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("notlive"));
+        Json params = Json::object();
+        params["set"] = "notlive";
+        EXPECT_EQ(ErrorCode(Call("artgen_keep", params)), "invalid_params") << "nothing is accepted yet";
+        params["job"] = "a";
+        EXPECT_EQ(ErrorCode(Call("artgen_keep", params)), "invalid_params");
+
+        ASSERT_EQ(ErrorCode(AcceptAllCall("notlive")), "");
+        ASSERT_EQ(ErrorCode(Call("artgen_keep", params)), "");
+        EXPECT_EQ(ErrorCode(Call("artgen_keep", params)), "invalid_params") << "already kept";
+        params.erase("job");
+        EXPECT_EQ(ErrorCode(Call("artgen_keep", params)), "") << "b is still live";
+        EXPECT_EQ(ErrorCode(Call("artgen_keep", params)), "invalid_params") << "nothing live is left";
+        EXPECT_EQ(gKept.size(), 2u);
+    }
+
+    TEST_F(ArtGenSetSessionTest, KeepOfAWholeSetKeepsEveryLiveRow) {
+        ASSERT_TRUE(Enqueue("all", "a\nb\nc").has_value());
+        RunAndPickAll("all");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("all"));
+        ASSERT_EQ(ErrorCode(AcceptAllCall("all")), "");
+
+        Json params = Json::object();
+        params["set"] = "all";
+        const Json answer = Result(Call("artgen_keep", params));
+        ASSERT_NE(FindJsonMember(answer, "kept"), nullptr);
+        EXPECT_EQ(FindJsonMember(answer, "kept")->size(), 3u);
+        EXPECT_EQ(gKept.size(), 3u);
+        const ArtGenSet disk = OnDisk("all");
+        EXPECT_EQ(CountKept(disk), 3);
+        EXPECT_EQ(CountLive(disk), 0);
+    }
+
+    TEST_F(ArtGenSetSessionTest, KeepNamesWhatIsUnknownAndNeedsAKeeper) {
+        ASSERT_TRUE(Enqueue("unk", "a").has_value());
+        RunAndPickAll("unk");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("unk"));
+        ASSERT_EQ(ErrorCode(AcceptAllCall("unk")), "");
+
+        Json params = Json::object();
+        params["set"] = "nothing";
+        EXPECT_EQ(ErrorCode(Call("artgen_keep", params)), "artgen_no_set");
+        params["set"] = "unk";
+        params["job"] = "zzz";
+        EXPECT_EQ(ErrorCode(Call("artgen_keep", params)), "artgen_no_set");
+        params["job"] = 3;
+        EXPECT_EQ(ErrorCode(Call("artgen_keep", params)), "invalid_params");
+        EXPECT_EQ(ErrorCode(Call("artgen_keep", Json::object())), "invalid_params");
+
+        params.erase("job");
+        session.SetKeeper(nullptr);
+        EXPECT_EQ(ErrorCode(Call("artgen_keep", params)), "artgen_accept_failed");
+        EXPECT_TRUE(IsLive(OnDisk("unk").jobs[0]));
+    }
+
+    TEST_F(ArtGenSetSessionTest, AFailingKeeperChangesNothingForItsRowAndTheRowsBeforeStayKept) {
+        ASSERT_TRUE(Enqueue("kfail", "a\nb\nc").has_value());
+        RunAndPickAll("kfail");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("kfail"));
+        ASSERT_EQ(ErrorCode(AcceptAllCall("kfail")), "");
+
+        Json params = Json::object();
+        params["set"] = "kfail";
+        gKeepFailOn = "b";
+        const Json refused = Call("artgen_keep", params);
+        EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
+        const String message = GetJsonString(*FindJsonMember(refused, "error"), "message").value_or(String());
+        EXPECT_NE(message.find("'b'"), String::npos) << message.c_str();
+        EXPECT_NE(message.find("read-only"), String::npos) << message.c_str();
+        EXPECT_NE(message.find("kept before it: a"), String::npos) << message.c_str();
+
+        const ArtGenSet disk = OnDisk("kfail");
+        EXPECT_TRUE(disk.jobs[0].accepted->kept);
+        EXPECT_TRUE(IsLive(disk.jobs[1]));
+        EXPECT_EQ(disk.jobs[1].variants.size(), 2u) << "the failed row keeps its alternatives";
+        EXPECT_TRUE(IsLive(disk.jobs[2]));
+
+        gKeepFailOn.clear();
+        const Json again = Result(Call("artgen_keep", params));
+        EXPECT_EQ(FindJsonMember(again, "kept")->size(), 2u);
+        EXPECT_EQ(CountKept(OnDisk("kfail")), 3);
+    }
+
+    TEST_F(ArtGenSetSessionTest, AKeptSoundRowAsksTheKeeperForAClip) {
+        Poll();
+        ArtGenSetRequest request;
+        request.preset = "knock";
+        request.subjects = ParseArtGenSubjects("knock: a wooden knock").value();
+        request.count = 2;
+        request.seed = kSetSeed;
+        request.name = "kclips";
+        ASSERT_TRUE(session.EnqueueSet(request).has_value());
+        RunAndPickAll("kclips", "audio");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("kclips"));
+        ASSERT_EQ(ErrorCode(AcceptAllCall("kclips")), "");
+        EXPECT_TRUE(session.KeepSet("kclips").has_value());
+        ASSERT_EQ(gKept.size(), 1u);
+        EXPECT_EQ(gKept[0].kind, "audio");
+        EXPECT_EQ(gKept[0].name, "knock");
+    }
+
+    TEST_F(ArtGenSetSessionTest, ArtgenStateCountsLiveAndKeptRows) {
+        ASSERT_TRUE(Enqueue("counts", "a\nb\nc").has_value());
+        RunAndPickAll("counts");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("counts"));
+        const auto setState = [this] { return (*FindJsonMember(Result(Call("artgen_state")), "sets"))[0]; };
+        EXPECT_EQ(GetJsonInt(setState(), "live"), Optional<int64_t>(0));
+        EXPECT_EQ(GetJsonInt(setState(), "kept"), Optional<int64_t>(0));
+
+        ASSERT_EQ(ErrorCode(AcceptAllCall("counts")), "");
+        EXPECT_EQ(GetJsonInt(setState(), "live"), Optional<int64_t>(3));
+        EXPECT_EQ(GetJsonInt(setState(), "kept"), Optional<int64_t>(0));
+
+        ASSERT_TRUE(session.KeepSet("counts", "b").has_value());
+        EXPECT_EQ(GetJsonInt(setState(), "live"), Optional<int64_t>(2));
+        EXPECT_EQ(GetJsonInt(setState(), "kept"), Optional<int64_t>(1));
+        EXPECT_EQ(GetJsonInt(setState(), "accepted"), Optional<int64_t>(3));
+    }
+
+    TEST_F(ArtGenSetSessionTest, AConnectedServiceWhoseGeneratorIsNotReadyLeavesTheJobsPending) {
+        ASSERT_TRUE(Enqueue("down", "a\nb").has_value());
+        Json notRunning = ReadyPoll();
+        notRunning["state"] = "not_running";
+        notRunning["reason"] = "ComfyUI is not started";
+        const Json first = Result(Call("artgen_poll", notRunning));
+        EXPECT_EQ(RequestOf(first), nullptr);
+        EXPECT_EQ(CountJobs(*session.FindSet("down"), ArtGenSetJobState::Pending), 2);
+        EXPECT_EQ(CountJobs(*session.FindSet("down"), ArtGenSetJobState::Running), 0);
+        EXPECT_FALSE(session.IsGeneratorReady());
+        EXPECT_TRUE(session.IsServiceConnected());
+
+        const Json ready = Poll();
+        ASSERT_NE(RequestOf(ready), nullptr) << "the first poll with a ready generator starts a job";
+        EXPECT_EQ(CountJobs(*session.FindSet("down"), ArtGenSetJobState::Running), 1);
+        EXPECT_TRUE(session.IsGeneratorReady());
+    }
+
+    TEST_F(ArtGenSetSessionTest, TwoDefaultNamesOfTheSameSecondAreDistinct) {
+        Vector<String> names;
+        for (int32_t index = 0; index < 3; ++index) {
+            ArtGenSetRequest request;
+            request.preset = "wood";
+            request.subjects = ParseArtGenSubjects("a").value();
+            request.seed = kSetSeed;
+            const auto name = session.EnqueueSet(request);
+            ASSERT_TRUE(name.has_value()) << name.error().c_str();
+            EXPECT_TRUE(IsValidSpriteName(*name));
+            EXPECT_EQ(std::count(names.begin(), names.end(), *name), 0) << name->c_str();
+            names.push_back(*name);
+        }
+        EXPECT_EQ(session.GetSets().size(), 3u);
+
+        ArtGenSetRequest long_;
+        long_.preset = String(70, 'p');
+        long_.subjects = ParseArtGenSubjects("a").value();
+        for (int32_t index = 0; index < 12; ++index) {
+            const auto name = session.EnqueueSet(long_);
+            ASSERT_TRUE(name.has_value()) << name.error().c_str();
+            EXPECT_LE(name->size(), static_cast<size_t>(kMaxSpriteNameLength));
+            EXPECT_TRUE(IsValidSpriteName(*name)) << name->c_str();
+        }
+
+        ArtGenSetRequest named;
+        named.preset = "wood";
+        named.subjects = ParseArtGenSubjects("a").value();
+        named.name = "mine";
+        ASSERT_TRUE(session.EnqueueSet(named).has_value());
+        EXPECT_FALSE(session.EnqueueSet(named).has_value()) << "a name that was given and is taken stays a refusal";
     }
 
     TEST_F(ArtGenSetSessionTest, ASoundSetIsAcceptedAsClipsWithDefaultSettings) {

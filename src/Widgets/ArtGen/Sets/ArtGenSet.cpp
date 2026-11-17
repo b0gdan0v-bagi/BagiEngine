@@ -307,10 +307,11 @@ namespace BECore {
         return Format("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z", civil.year, civil.month, civil.day, civil.hour, civil.minute, civil.second);
     }
 
-    String DefaultArtGenSetName(StringView presetName, std::chrono::system_clock::time_point time) {
+    String DefaultArtGenSetName(StringView presetName, std::chrono::system_clock::time_point time, int32_t attempt) {
+        const String attemptSuffix = attempt > 1 ? Format("-{}", attempt) : String();
         String prefix;
         for (const char c : presetName) {
-            if (prefix.size() >= kMaxSpriteNameLength - kSetNameSuffixLength) {
+            if (prefix.size() + attemptSuffix.size() >= kMaxSpriteNameLength - kSetNameSuffixLength) {
                 break;
             }
             prefix.push_back(IsNameChar(c) ? c : '_');
@@ -319,7 +320,7 @@ namespace BECore {
             prefix = String(kDefaultSetPrefix);
         }
         const Civil civil = ToCivil(time);
-        return Format("{}-{:04}{:02}{:02}-{:02}{:02}{:02}", prefix, civil.year, civil.month, civil.day, civil.hour, civil.minute, civil.second);
+        return Format("{}-{:04}{:02}{:02}-{:02}{:02}{:02}{}", prefix, civil.year, civil.month, civil.day, civil.hour, civil.minute, civil.second, attemptSuffix);
     }
 
     Json ArtGenSetToJson(const ArtGenSet& set) {

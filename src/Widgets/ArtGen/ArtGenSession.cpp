@@ -318,12 +318,16 @@ namespace BECore {
         return _lastPollSeconds >= 0.0 && _clock() - _lastPollSeconds <= kServiceTimeoutSeconds;
     }
 
+    bool ArtGenSession::IsGeneratorReady() const {
+        return IsServiceConnected() && StringView(_status.state) == kGeneratorReady;
+    }
+
     std::expected<Json, ControlError> ArtGenSession::HandlePoll(const Json& params) {
         if (!params.is_object()) {
             return std::unexpected(InvalidParams("params must be an object"));
         }
         ArtGenServiceStatus status;
-        status.state = StringOr(params, "state", "ready");
+        status.state = StringOr(params, "state", kGeneratorReady);
         status.reason = StringOr(params, "reason");
         status.generator = StringOr(params, "generator");
         status.startedHere = GetJsonBool(params, "startedHere").value_or(false);

@@ -24,6 +24,9 @@ namespace BECore {
     CORE_ENUM(ArtGenSetupAction, uint8_t, None, Plan, Install, Start, Stop)
     CORE_ENUM(ArtGenSetupState, uint8_t, Idle, Queued, Running, Done, Failed)
 
+    /// The `state` of a poll that says the generator can make images (the others: `not_running`, `not_installed`)
+    inline constexpr StringView kGeneratorReady = "ready";
+
     /// What the generation service last said about itself in a poll
     struct ArtGenServiceStatus {
         String state;  // "ready", "not_running", "not_installed" (tools/artgen/CLAUDE.md, "Generators")
@@ -133,6 +136,8 @@ namespace BECore {
         using Acceptor = std::expected<Json, ControlError> (*)(const ArtGenVariant& variant, StringView sprite, SceneNode* node);
         /// Accepts a sound variant as a clip at @p target, processed by @p settings, and puts it on @p node's AudioSourceComponent when given
         using SoundAcceptor = std::expected<Json, ControlError> (*)(const ArtGenVariant& variant, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, SceneNode* node);
+        /// Writes into the game's provenance file of @p name (a sprite or a clip, by @p kind) that the choice with @p seed was kept on @p date
+        using Keeper = std::expected<void, ControlError> (*)(StringView kind, StringView name, int64_t seed, StringView date);
 
         /// @param clock monotonic seconds; the default is the steady clock (a test passes its own). The editor's one session is GetInstance()
         explicit ArtGenSession(Clock clock = {});
@@ -193,6 +198,10 @@ namespace BECore {
         void SetSoundAcceptor(SoundAcceptor acceptor) {
             _soundAcceptor = acceptor;
         }
+        /// What Keep runs for each row it keeps, before the manifest changes (ArtGenAccept.h in the editor; a fake in the tests)
+        void SetKeeper(Keeper keeper) {
+            _keeper = keeper;
+        }
         /// The node "Use on selected" puts the sprite on (the scene editor's primary selection); null for none. Held, so it is checked alive
         /// in the active scene before use
         void SetSelectedNode(IntrusivePtr<SceneNode> node);
@@ -215,6 +224,12 @@ namespace BECore {
         }
         /// A run is in work or a set has a job to do: an ordinary run, a request and a setup action are refused meanwhile
         [[nodiscard]] bool IsBusy() const;
+        /// A run is Queued or Running (a set that only has Pending jobs is busy, but has no run to cancel)
+        [[nodiscard]] bool IsRunInWork() const {
+            return _run.state == ArtGenRunState::Queued || _run.state == ArtGenRunState::Running;
+        }
+        /// The service polls and says its generator is ready: what a run needs to start
+        [[nodiscard]] bool IsGeneratorReady() const;
 
         /// Queues a set (Sets/CLAUDE.md): validates like Request / RequestDraft, draws the shared seed when none is given, writes the manifest.
         /// The set's name, or why not. Jobs go out one per poll, first in first out
@@ -236,6 +251,10 @@ namespace BECore {
         /// manifest (Sets/CLAUDE.md, "Accept all"): the pick, else for images the first variant. A kept row is skipped. The checks come first and a
         /// refusal by them changes nothing; a failure halfway leaves the rows before it accepted
         std::expected<Json, ControlError> AcceptSet(StringView name);
+        /// Fixes the choice of every live row of a set, or of @p job only: the Keeper writes the kept seed into the game first, then the row is
+        /// kept (its other variants leave the manifest) and the manifest written. Final; nothing live to keep is `invalid_params`. The answer
+        /// names the rows kept; a failure halfway names the row and the rows done
+        std::expected<Json, ControlError> KeepSet(StringView name, StringView job = {});
         [[nodiscard]] const ArtGenSet* FindSet(StringView name) const;
         [[nodiscard]] const Vector<ArtGenSet>& GetSets() const {
             return _sets;
@@ -264,6 +283,7 @@ namespace BECore {
         std::expected<Json, ControlError> HandlePick(const Json& params);
         std::expected<Json, ControlError> HandleRetry(const Json& params);
         std::expected<Json, ControlError> HandleAcceptSet(const Json& params);
+        std::expected<Json, ControlError> HandleKeep(const Json& params);
         [[nodiscard]] Json StateJson() const;
 
     private:
@@ -271,9 +291,6 @@ namespace BECore {
         ArtGenRun* RunOf(const Json& params);
         std::expected<uint32_t, String> Queue(StringView preset, Json presetData, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants);
         void ReadCatalog(const Json& params);
-        [[nodiscard]] bool IsRunInWork() const {
-            return _run.state == ArtGenRunState::Queued || _run.state == ArtGenRunState::Running;
-        }
         [[nodiscard]] ArtGenSet* MutableSet(StringView name);
         /// The job of `_run` while it is Running (the run is the work of a set), else null
         [[nodiscard]] ArtGenSetJob* RunningJobOfRun(ArtGenSet*& set);
@@ -294,6 +311,7 @@ namespace BECore {
         Clock _clock;
         Acceptor _acceptor = nullptr;
         SoundAcceptor _soundAcceptor = nullptr;
+        Keeper _keeper = nullptr;
         IntrusivePtr<SceneNode> _selectedNode;
         String _gameRoot;
         Vector<ArtGenSet> _sets;

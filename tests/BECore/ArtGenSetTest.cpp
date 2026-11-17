@@ -1,6 +1,7 @@
 #include <BECore/Control/Json.h>
 #include <BECore/Format/Format.h>
 #include <Common/Printers.h>
+#include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/ArtGen/Sets/ArtGenSet.h>
 #include <chrono>
 #include <gtest/gtest.h>
@@ -330,6 +331,20 @@ namespace BECore::Tests {
         EXPECT_TRUE(Contains(longName, "-20260102-030000"));
         EXPECT_EQ(DefaultArtGenSetName("my preset!", time), "my_preset_-20260102-030000");
         EXPECT_EQ(DefaultArtGenSetName("", time), "set-20260102-030000");
+    }
+
+    TEST(ArtGenSetTest, ANumberedDefaultNameKeepsTheWholeAValidName) {
+        const std::chrono::system_clock::time_point time = std::chrono::sys_days{std::chrono::year{2026} / std::chrono::January / 2} + std::chrono::hours{3};
+        EXPECT_EQ(DefaultArtGenSetName("wood", time, 1), DefaultArtGenSetName("wood", time));
+        EXPECT_EQ(DefaultArtGenSetName("wood", time, 2), "wood-20260102-030000-2");
+        EXPECT_EQ(DefaultArtGenSetName("wood", time, 13), "wood-20260102-030000-13");
+        const String longName(70, 'p');
+        for (const int32_t attempt : {1, 2, 9, 10, 100}) {
+            const String name = DefaultArtGenSetName(longName, time, attempt);
+            EXPECT_LE(name.size(), static_cast<size_t>(kMaxSpriteNameLength)) << name.c_str();
+            EXPECT_TRUE(IsValidSpriteName(name)) << name.c_str();
+            EXPECT_TRUE(Contains(name, "-20260102-030000")) << name.c_str();
+        }
     }
 
     TEST(ArtGenSetTest, ActiveCountsAndPicks) {
