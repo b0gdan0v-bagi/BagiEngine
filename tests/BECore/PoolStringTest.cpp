@@ -116,6 +116,118 @@ namespace BECore::Tests {
 
     namespace {
 
+        // The initial table of the pool has 16384 slots and grows at half load; the names below are well past both
+        constexpr size_t kInitialTableSlots = 16384;
+        constexpr size_t kGrowthNames = 20000;
+        constexpr int kTableThreads = 4;
+        constexpr auto kTableThreadsLimit = std::chrono::seconds(60);
+
+        String CounterName(StringView prefix, size_t index) {
+            String name(prefix);
+            name += ToString(index);
+            return name;
+        }
+
+        size_t InitialSlotOf(StringView text) {
+            return static_cast<size_t>(StringUtils::GetHash(text)) & (kInitialTableSlots - 1);
+        }
+
+    }  // namespace
+
+    TEST(PoolStringTableTest, EveryStringIsFoundAfterTheTableGrows) {
+        Vector<PoolString> interned;
+        interned.reserve(kGrowthNames);
+        for (size_t i = 0; i < kGrowthNames; ++i) {
+            interned.push_back(PoolString::Intern(StringView{CounterName("pool_growth_", i)}));
+        }
+        for (size_t i = 0; i < kGrowthNames; ++i) {
+            const String name = CounterName("pool_growth_", i);
+            const auto found = PoolString::Find(StringView{name});
+            ASSERT_TRUE(found.has_value()) << name.c_str();
+            ASSERT_EQ(*found, interned[i]) << name.c_str();
+            ASSERT_EQ(PoolString::Intern(StringView{name}), interned[i]) << name.c_str();
+            ASSERT_EQ(interned[i].ToStringView(), StringView{name});
+        }
+        EXPECT_FALSE(PoolString::Find("pool_growth_never_interned_61bd").has_value());
+        EXPECT_FALSE(PoolString::Find(StringView{CounterName("pool_growth_", kGrowthNames)}).has_value());
+    }
+
+    TEST(PoolStringTableTest, StringsOfOneSlotAreAllFound) {
+        constexpr size_t kClusterSize = 8;
+        HashMap<size_t, Vector<String>> bySlot;
+        const Vector<String>* cluster = nullptr;
+        for (size_t i = 0; cluster == nullptr; ++i) {
+            Vector<String>& names = bySlot[InitialSlotOf(CounterName("pool_collide_", i))];
+            names.push_back(CounterName("pool_collide_", i));
+            if (names.size() > kClusterSize) {
+                cluster = &names;
+            }
+            ASSERT_LT(i, size_t{2'000'000}) << "no slot got " << kClusterSize + 1 << " names";
+        }
+
+        Vector<PoolString> interned;
+        for (size_t i = 0; i < kClusterSize; ++i) {
+            interned.push_back(PoolString::Intern(StringView{(*cluster)[i]}));
+        }
+        for (size_t i = 0; i < kClusterSize; ++i) {
+            const auto found = PoolString::Find(StringView{(*cluster)[i]});
+            ASSERT_TRUE(found.has_value()) << (*cluster)[i].c_str();
+            EXPECT_EQ(*found, interned[i]);
+            EXPECT_EQ(interned[i].ToStringView(), StringView{(*cluster)[i]});
+            for (size_t other = 0; other < i; ++other) {
+                EXPECT_NE(interned[i], interned[other]);
+            }
+        }
+        // The probe of a text that is not in the pool walks the cluster and ends at an empty slot
+        EXPECT_FALSE(PoolString::Find(StringView{(*cluster)[kClusterSize]}).has_value());
+    }
+
+    TEST(PoolStringTableTest, ThreadsInterningOverlappingNamesWhileTheTableGrowsAgree) {
+        Vector<String> names;
+        names.reserve(kGrowthNames);
+        for (size_t i = 0; i < kGrowthNames; ++i) {
+            names.push_back(CounterName("pool_concurrent_", i));
+        }
+
+        Vector<Vector<PoolString>> results(kTableThreads, Vector<PoolString>(kGrowthNames));
+        std::atomic<int> ready{0};
+        std::atomic<int> finished{0};
+        Vector<std::thread> threads;
+        for (int t = 0; t < kTableThreads; ++t) {
+            threads.emplace_back([&, t] {
+                ready.fetch_add(1);
+                while (ready.load() < kTableThreads) {
+                    std::this_thread::yield();
+                }
+                // Each thread starts at another name, so the threads insert different names at the same time
+                const size_t start = kGrowthNames / kTableThreads * static_cast<size_t>(t);
+                for (size_t step = 0; step < kGrowthNames; ++step) {
+                    const size_t i = (start + step) % kGrowthNames;
+                    results[static_cast<size_t>(t)][i] = PoolString::Intern(StringView{names[i]});
+                }
+                finished.fetch_add(1);
+            });
+        }
+        const auto deadline = std::chrono::steady_clock::now() + kTableThreadsLimit;
+        while (finished.load() < kTableThreads && std::chrono::steady_clock::now() < deadline) {
+            std::this_thread::yield();
+        }
+        ASSERT_EQ(finished.load(), kTableThreads) << "the threads did not finish in time";
+        for (auto& thread : threads) {
+            thread.join();
+        }
+
+        for (size_t i = 0; i < kGrowthNames; ++i) {
+            for (int t = 1; t < kTableThreads; ++t) {
+                ASSERT_EQ(results[static_cast<size_t>(t)][i], results[0][i]) << names[i].c_str();
+            }
+            ASSERT_EQ(results[0][i].ToStringView(), StringView{names[i]});
+            ASSERT_EQ(PoolString::Find(StringView{names[i]}).value_or(PoolString{}), results[0][i]);
+        }
+    }
+
+    namespace {
+
         StringView View(const String& str) {
             return str;
         }

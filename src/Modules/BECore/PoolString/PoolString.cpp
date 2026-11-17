@@ -2,28 +2,71 @@
 
 namespace BECore {
 
-    template <typename T, uint32_t BucketCount>
-    class IntrusivePoolTable {
-        static_assert((BucketCount & (BucketCount - 1)) == 0);
-        T* _buckets[BucketCount]{};
+    /// Open-addressing set of entries: slots of `{hash, entry}`, a power-of-two capacity, linear probing, an empty slot has
+    /// a null entry. The stored hash lets a probe skip a slot without touching its entry. The owner (`Storage`) holds the
+    /// shared lock around `Find` and the unique lock around `Insert`, which also grows the table. Only the slots move on
+    /// growth: entries live in blocks and never move, so a `const T*` taken out of the table stays valid.
+    template <typename T>
+    class PoolEntryTable {
+        struct Slot {
+            uint64_t hash = 0;
+            const T* entry = nullptr;
+        };
 
-    public:
-        void Insert(T* entry) noexcept {
-            const uint32_t idx = static_cast<uint32_t>(entry->hash & (BucketCount - 1));
-            entry->nextEntry = _buckets[idx];
-            _buckets[idx] = entry;
+        /// The table doubles when it would hold more than capacity / kMaxLoadDivisor entries
+        static constexpr size_t kMaxLoadDivisor = 2;
+
+        Vector<Slot> _slots;
+        size_t _used = 0;
+
+        [[nodiscard]] size_t Mask() const noexcept {
+            return _slots.size() - 1;
         }
 
-        T* Find(uint64_t hash, StringView str) const noexcept {
-            const uint32_t idx = static_cast<uint32_t>(hash & (BucketCount - 1));
-            for (T* e = _buckets[idx]; e; e = e->nextEntry) {
-                if (e->hash == hash && e->size == str.size()) {
-                    if (std::memcmp(e->data, str.data(), e->size) == 0) {
-                        return e;
-                    }
+        static void Place(Vector<Slot>& slots, uint64_t hash, const T* entry) noexcept {
+            const size_t mask = slots.size() - 1;
+            size_t idx = static_cast<size_t>(hash) & mask;
+            while (slots[idx].entry != nullptr) {
+                idx = (idx + 1) & mask;
+            }
+            slots[idx] = Slot{hash, entry};
+        }
+
+        void Grow() {
+            Vector<Slot> grown(_slots.size() * 2);
+            for (const Slot& slot : _slots) {
+                if (slot.entry != nullptr) {
+                    Place(grown, slot.hash, slot.entry);
                 }
             }
-            return nullptr;
+            _slots = eastl::move(grown);
+        }
+
+    public:
+        explicit PoolEntryTable(size_t initialCapacity) : _slots(initialCapacity) {
+            ASSERT(initialCapacity >= 2 && (initialCapacity & (initialCapacity - 1)) == 0);
+        }
+
+        /// The entry must not be in the table yet (the caller has just looked it up under the same unique lock)
+        void Insert(uint64_t hash, const T* entry) {
+            if ((_used + 1) * kMaxLoadDivisor > _slots.size()) {
+                Grow();
+            }
+            Place(_slots, hash, entry);
+            ++_used;
+        }
+
+        [[nodiscard]] const T* Find(uint64_t hash, StringView str) const noexcept {
+            const size_t mask = Mask();
+            for (size_t idx = static_cast<size_t>(hash) & mask;; idx = (idx + 1) & mask) {
+                const Slot& slot = _slots[idx];
+                if (slot.entry == nullptr) {
+                    return nullptr;
+                }
+                if (slot.hash == hash && slot.entry->size == str.size() && std::memcmp(slot.entry->data, str.data(), str.size()) == 0) {
+                    return slot.entry;
+                }
+            }
         }
     };
 
@@ -31,8 +74,10 @@ namespace BECore {
     /// string never runs past the end of the memory it was copied into. A string that does not fit a standard block gets
     /// a block of exactly its size and the current block keeps its free space for the next small strings.
     class PoolString::Storage {
+        static constexpr size_t kInitialTableCapacity = 16384;
+
         SharedMutex _mutex{BE_LOCK_SITE("PoolString")};
-        IntrusivePoolTable<Entry, 16384> _table;
+        PoolEntryTable<Entry> _table{kInitialTableCapacity};
 
         static constexpr size_t kEntryAlignment = alignof(uint64_t);
         static constexpr size_t kBlockWords = kBlockBytes / sizeof(uint64_t);
@@ -113,7 +158,7 @@ namespace BECore {
             std::memcpy(entry->data, str.data(), str.size());
             entry->data[str.size()] = '\0';
 
-            _table.Insert(entry);
+            _table.Insert(hash, entry);
             return entry;
         }
     };

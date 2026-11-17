@@ -12,16 +12,18 @@ namespace BECore {
 
         struct PoolStringEntry {
             const uint64_t hash;
-            PoolStringEntry* nextEntry;
             const uint32_t size;
             char data[1];
 
-            constexpr PoolStringEntry(uint64_t h, uint32_t s) : hash(h), nextEntry(nullptr), size(s), data{'\0'} {}
+            constexpr PoolStringEntry(uint64_t h, uint32_t s) : hash(h), size(s), data{'\0'} {}
 
             [[nodiscard]] constexpr StringView ToStringView() const noexcept {
                 return {&data[0], static_cast<size_t>(size)};
             }
         };
+
+        // The text starts right after the 12 header bytes: the pool lays entries out in blocks by this offset
+        static_assert(offsetof(PoolStringEntry, data) == 12);
 
         // The empty entry is a type of its own for MSVC
         struct EmptyEntry {
