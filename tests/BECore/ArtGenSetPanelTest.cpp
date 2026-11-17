@@ -5,6 +5,7 @@
 #include <Widgets/ArtGen/ArtGenSession.h>
 #include <Widgets/ArtGen/Sets/ArtGenSet.h>
 #include <Widgets/ArtGen/Sets/ArtGenSetPanel.h>
+#include <Widgets/ArtGen/Sets/ArtGenSetStore.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/ImGuiFonts.h>
 #include <Widgets/ImGuiTheme.h>
@@ -21,7 +22,7 @@ namespace BECore::Tests {
         constexpr const char* kHostName = "##Host";
         /// How far apart the mouse is moved when a control is looked for on the screen
         constexpr float kSearchStep = 6.0f;
-        constexpr float kSearchHeight = 700.0f;
+        constexpr float kSearchHeight = 890.0f;
         constexpr float kSearchWidth = 900.0f;
 
         String PathText(const std::filesystem::path& path) {
@@ -73,7 +74,9 @@ namespace BECore::Tests {
             ImGui::SetNextWindowSize(kDisplaySize);
             constexpr ImGuiWindowFlags hostFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground;
             ImGui::Begin(kHostName, nullptr, hostFlags);
-            panel.DrawQueue(session, ArtGenSetPanelForm{form});
+            const auto play = [](const AudioClip&) {};
+            const auto stop = [] {};
+            panel.DrawSetTab(session, ArtGenSetPanelForm{form}, ArtGenSetPanelSound{play, stop, false});
             ImGui::End();
             ImGui::Render();
         }
@@ -90,6 +93,65 @@ namespace BECore::Tests {
 
         static ImGuiID QueueId() {
             return ImHashStr(ICON_LC_LIST_PLUS " Queue", 0, HostId());
+        }
+
+        static ImGuiID AcceptAllId() {
+            return ImHashStr(ICON_LC_CHECK_CHECK " Accept all", 0, HostId());
+        }
+
+        static ImGuiID RetryId() {
+            return ImHashStr(ICON_LC_ROTATE_CCW " Retry", 0, HostId());
+        }
+
+        /// A window of the frame whose name has @p part, a child of the host: the list of sets, the rows
+        static const ImGuiWindow* FindChild(const char* part) {
+            for (const ImGuiWindow* window : ImGui::GetCurrentContext()->Windows) {
+                if (window->ParentWindow != nullptr && std::strstr(window->Name, part) != nullptr) {
+                    return window;
+                }
+            }
+            return nullptr;
+        }
+
+        /// The entry of set @p name in the list of sets: the id stack is the list's, the set's name, then the item
+        static ImGuiID SetEntryId(const char* name) {
+            const ImGuiWindow* list = FindChild("##setList");
+            if (list == nullptr) {
+                ADD_FAILURE() << "no list of sets";
+                return 0;
+            }
+            return ImHashStr("##select", 0, ImHashStr(name, 0, list->ID));
+        }
+
+        /// Writes a manifest of @p jobs into a second game root and makes it the session's, as a person who opens another game would
+        void LoadSets(std::initializer_list<ArtGenSet> sets) {
+            const std::filesystem::path second = _root / "second";
+            for (const ArtGenSet& set : sets) {
+                ASSERT_TRUE(WriteManifest(second, set).has_value());
+            }
+            session.SetGameRoot(PathText(second));
+            Frame();
+        }
+
+        static ArtGenSet MakeSet(const char* name, const char* created, ArtGenSetJobState state) {
+            ArtGenSet set;
+            set.name = name;
+            set.created = created;
+            set.preset = "workflow";
+            set.count = 2;
+            ArtGenSetJob job;
+            job.name = "king";
+            job.subject = "king";
+            job.state = state;
+            for (int64_t seed : {5, 6}) {
+                ArtGenSetVariant variant;
+                variant.seed = seed;
+                variant.file = Format("king/king_{}.png", seed);
+                job.variants.push_back(variant);
+            }
+            job.pick = 5;
+            set.jobs.push_back(job);
+            return set;
         }
 
         /// A point of the screen over the control @p id: the mouse is moved over a grid until ImGui says it is over it
@@ -162,6 +224,49 @@ namespace BECore::Tests {
 
         EXPECT_FALSE(PressQueue());
         EXPECT_EQ(session.GetSets().size(), 1u);
+    }
+
+    TEST_F(ArtGenSetPanelTest, ASetOfTheGameIsSelectedAndItsRowsAreDrawnBelowTheQueue) {
+        EXPECT_EQ(FindChild("##setRows"), nullptr) << "no set, no rows";
+
+        ASSERT_NO_FATAL_FAILURE(LoadSets({MakeSet("chess", "2026-11-17T12:00:00Z", ArtGenSetJobState::Done)}));
+        Frame();
+
+        EXPECT_NE(FindChild("##setList"), nullptr);
+        EXPECT_NE(FindChild("##setRows"), nullptr);
+        EXPECT_NE(FindChild("##row"), nullptr) << "the row of the job";
+        const ImVec2 acceptAll = Locate(AcceptAllId());
+        EXPECT_GT(acceptAll.y, 0.0f) << "the footer is under the rows";
+    }
+
+    TEST_F(ArtGenSetPanelTest, TheNewestSetIsSelectedAndAClickOnAnotherSetSelectsIt) {
+        ArtGenSet older = MakeSet("older", "2026-11-17T10:00:00Z", ArtGenSetJobState::Failed);
+        older.jobs[0].error = "boom";
+        ASSERT_NO_FATAL_FAILURE(LoadSets({older, MakeSet("newer", "2026-11-17T11:00:00Z", ArtGenSetJobState::Done)}));
+
+        // Retry belongs to the selected set: the newer one has nothing to retry
+        ClickAt(Locate(RetryId()));
+        ASSERT_NE(session.FindSet("older"), nullptr);
+        EXPECT_EQ(session.FindSet("older")->jobs[0].state, ArtGenSetJobState::Failed);
+
+        ClickAt(Locate(SetEntryId("older")));
+        Frame();
+        ClickAt(Locate(RetryId()));
+        EXPECT_EQ(session.FindSet("older")->jobs[0].state, ArtGenSetJobState::Pending);
+    }
+
+    TEST_F(ArtGenSetPanelTest, AQueuedSetIsSelected) {
+        ASSERT_NO_FATAL_FAILURE(LoadSets({MakeSet("chess", "2026-11-17T12:00:00Z", ArtGenSetJobState::Done)}));
+        TypeSubject("queen");
+        ASSERT_TRUE(PressQueue());
+        ASSERT_EQ(session.GetSets().size(), 2u);
+        const String queued = session.GetSets().back().name;
+        ASSERT_NE(queued, String("chess"));
+        Frame();
+
+        // The new set has a job waiting: its Cancel set is on, the older set's is off
+        ClickAt(Locate(ImHashStr(ICON_LC_X " Cancel set", 0, HostId())));
+        EXPECT_EQ(session.FindSet(StringView(queued))->jobs[0].state, ArtGenSetJobState::Cancelled);
     }
 
     TEST(ArtGenSetPanelLayoutTest, TheFieldsOfARowHaveFixedWidthsInEms) {

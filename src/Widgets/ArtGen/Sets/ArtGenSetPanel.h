@@ -15,7 +15,7 @@ namespace BECore {
     class ArtGenSession;
     struct ArtGenSet;
 
-    /// The width of the accent frame around the selected variant, in the Generate grid and in the Review
+    /// The width of the accent frame around the selected variant, in the Generate grid and in the rows of the Set tab
     inline constexpr float kSelectedBorder = 3.0f;
 
     /// A checkerboard over a square, so an image with a transparent background shows as transparent
@@ -40,15 +40,15 @@ namespace BECore {
         const ArtGenPresetForm& preset;
     };
 
-    /// How the Review tab plays a sound variant: the widget's own player, so one sound plays at a time
+    /// How the Set tab plays a sound variant: the widget's own player, so one sound plays at a time
     struct ArtGenSetPanelSound {
         FunctionRef<void(const AudioClip&)> play;
         FunctionRef<void()> stop;
-        bool playing = false;  // the review's sound is the one that plays now
+        bool playing = false;  // the Set tab's sound is the one that plays now
     };
 
     /**
-     * @brief The Set and Review tabs of the Generate panel: the subject rows, Queue, the sets with their progress, and the review of one set.
+     * @brief The Set tab of the Generate panel: the subject rows, Queue, the list of sets and the rows of the selected one.
      *
      * ImGui only: every decision (the lines, the queue, the cancel, the retry, the pick and switch, Accept all, Keep) is the session's and is the same call the
      * control API makes (src/Widgets/ArtGen/Sets/CLAUDE.md). Owned by `ArtGenWidget`, which draws the tab bar.
@@ -57,14 +57,10 @@ namespace BECore {
     public:
         ~ArtGenSetPanel();
 
-        /// The Set tab
-        void DrawQueue(ArtGenSession& session, const ArtGenSetPanelForm& form);
-        /// The Review tab: one row per job of the set chosen with Review
-        void DrawReview(ArtGenSession& session, const ArtGenSetPanelSound& sound);
+        /// The Set tab: the subject rows and Queue, the list of sets, and one row per job of the selected set
+        void DrawSetTab(ArtGenSession& session, const ArtGenSetPanelForm& form, const ArtGenSetPanelSound& sound);
 
-        /// True once after Review was pressed on a set: the widget shows the Review tab
-        [[nodiscard]] bool TakeReviewRequest();
-        /// Evicts every picture and clip the review loaded (the tab is hidden, the set changed, the panel dies)
+        /// Evicts every picture and clip the rows loaded (the tab is hidden, the set changed, the panel dies)
         void DropThumbnails();
 
     private:
@@ -77,7 +73,7 @@ namespace BECore {
             ResourceHandle<AudioClip> clip;
         };
 
-        /// What the review holds for one job; it lives only while the row is on screen
+        /// What the panel holds for one job; it lives only while the row is on screen
         struct RowThumbs {
             uint64_t seenFrame = 0;
             Vector<Thumb> thumbs;
@@ -92,13 +88,21 @@ namespace BECore {
 
         /// The list of subject rows with Add; a row is removed after the loop, never inside it
         void DrawSubjectRows();
-        void DrawSetEntry(ArtGenSession& session, const ArtGenSet& set);
-        void DrawJobRows(ArtGenSession& session, const ArtGenSet& set);
+        /// The subject rows, the set's fields and Queue
+        void DrawQueueForm(ArtGenSession& session, const ArtGenSetPanelForm& form);
+        /// Keeps `_selectedSet` naming a set that exists: the newest when it names none
+        void ResolveSelection(const ArtGenSession& session);
+        /// The compact list of sets, newest first; a click selects
+        void DrawSetList(const ArtGenSession& session);
+        /// The selected set: its progress and its buttons
+        void DrawSetHeader(ArtGenSession& session, const ArtGenSet& set);
+        /// One row per job of @p set in a child, the clipper showing only the rows on screen
+        void DrawSetRows(ArtGenSession& session, const ArtGenSet& set, const ArtGenSetPanelSound& sound);
         /// Makes the row's "in the game or not, and which file" line again when its status, names or kind changed
         static void RefreshStatusLine(RowThumbs& row, const ArtGenSet& set, const ArtGenSetJob& job, ArtGenRowStatus status, const ArtGenSet* newer);
-        void DrawReviewRow(ArtGenSession& session, const ArtGenSet& set, size_t index, int32_t columns, const ArtGenSetPanelSound& sound);
+        void DrawJobRow(ArtGenSession& session, const ArtGenSet& set, size_t index, int32_t columns, const ArtGenSetPanelSound& sound);
         void DrawVariantCell(ArtGenSession& session, const ArtGenSet& set, size_t jobIndex, size_t variantIndex, const ArtGenSetPanelSound& sound);
-        void DrawReviewFooter(ArtGenSession& session, const ArtGenSet& set);
+        void DrawSetFooter(ArtGenSession& session, const ArtGenSet& set);
         /// Loads what the row's variants need and evicts what a Retry took away
         void SyncRow(const ArtGenSession& session, const ArtGenSet& set, size_t index);
         static const Thumb* FindThumb(const RowThumbs& row, int64_t seed);
@@ -113,9 +117,8 @@ namespace BECore {
         String _error;
         String _queued;
 
-        String _reviewSet;  // the set the Review tab shows, by name
-        String _loadedSet;  // the set `_rows` belongs to
-        bool _openReview = false;
+        String _selectedSet;    // the set the rows show, by name; a name copied only when the selection changes
+        String _loadedSet;      // the set `_rows` belongs to
         String _acceptMessage;  // the last Accept all, switch or Keep: its answer or its error, shown under the rows
         bool _acceptFailed = false;
         Vector<RowThumbs> _rows;  // by job index
