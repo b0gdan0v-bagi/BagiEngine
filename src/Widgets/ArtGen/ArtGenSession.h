@@ -139,6 +139,9 @@ namespace BECore {
         /// sets of the game are read from disk when the root changes (the panel calls this at every switch of the run mode: the same root
         /// changes nothing)
         void SetGameRoot(StringView root);
+        [[nodiscard]] const String& GetGameRoot() const {
+            return _gameRoot;
+        }
 
         /// Queues a request; the error says why not (a run in work, a bad count or preset). @p keepVariants starts the new run with the
         /// variants of the last one, so a few more can be made without losing the ones on screen

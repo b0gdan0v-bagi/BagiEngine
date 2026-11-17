@@ -8,6 +8,7 @@ A **set** is one preset applied to a list of subjects: one **job** per subject, 
 |------|---------|
 | `ArtGenSet.{h,cpp}` | `ArtGenSet`, `ArtGenSetJob`, `ArtGenSetVariant`, `ArtGenSetJobState`; the subject-line rules; the manifest to and from JSON; the counting helpers |
 | `ArtGenSetStore.{h,cpp}` | The sets on disk, no session: the folder layout, `WriteManifest`, `LoadSets`, the manifest's relative paths |
+| `ArtGenSetPanel.{h,cpp}` | The Set tab of the Generate panel, ImGui over the session: subjects, Queue, the sets with progress and buttons |
 
 ## Names and subjects
 
@@ -62,3 +63,9 @@ The table is in `ArtGen/CLAUDE.md`; the handlers are in `ArtGenSessionSets.cpp`.
 1. The set exists and is not active (`artgen_busy`); every job is `Done` with a pick (`artgen_set_incomplete` names the rows not picked, failed or cancelled: a job cannot be dropped, it is retried first).
 2. Every row: a valid name, the picked file of the set's kind, its provenance when the manifest names one (the file system is asked, the manifest is not trusted), and an acceptor installed (`artgen_accept_failed`).
 3. Then the rows in order; after each one the job is marked `accepted` and the manifest written. A failure halfway returns the row, its position and the rows done, and stops: the marks of the rows done stay, and **calling it again is the repair**, an accept replaces the same name, so nothing is ever half old, half new beyond the one row that failed.
+
+## The panel
+
+`ArtGenSetPanel` is a helper `ArtGenWidget` owns; it keeps no state of a set, only the text of its fields and the last message, and calls the session functions the control methods call, so the two cannot differ.
+
+- **Set tab.** A subjects field (the line rules above), an optional set name, **Queue**: the form's preset (by name when saved and unchanged, else a draft, as Generate decides), count and seed (random: the session draws the set's). A refusal is shown under the field and keeps the text; a queued set clears both fields. Below, the sets newest first: state, `done/total`, a progress bar for the job in work, **Cancel set**, **Retry**; the jobs of an active set as rows with their state, the reason of a failure and a cancel button on `Pending` and `Running`.

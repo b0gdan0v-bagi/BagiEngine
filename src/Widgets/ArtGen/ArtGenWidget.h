@@ -10,6 +10,7 @@
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/ArtGen/ArtGenPresetForm.h>
 #include <Widgets/ArtGen/ArtGenSound.h>
+#include <Widgets/ArtGen/Sets/ArtGenSetPanel.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <cstdint>
 
@@ -67,6 +68,7 @@ namespace BECore {
         void StopSound();
 
         bool _open = false;
+        ArtGenSetPanel _setPanel;
 
         // The preset being edited: loaded from the service's list, a new one, or a copy; Generate sends it inline while it is unsaved
         ArtGenPresetForm _form;
