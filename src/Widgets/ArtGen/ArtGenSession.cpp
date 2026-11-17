@@ -133,14 +133,19 @@ namespace BECore {
                                                   ControlParamInfo{"subject", "string", true, "what to draw; replaces {subject} in the preset's prompt"},
                                                   ControlParamInfo{"count", "integer", false, "images, 1 to 16 (default 4)"},
                                                   ControlParamInfo{"seed", "integer", false, "the first seed; image i takes seed + i (default random)"}}});
-        service.DescribeMethod("artgen_accept", ControlMethodInfo{"Makes an image of the current run a sprite of the game (PNG into assets/artgen, TextureLibrary entry, reload), "
-                                                                  "or a sound a clip (processed, a WAV into assets/artgen or over a clip path of the game, reload)",
-                                                                  {ControlParamInfo{"seed", "integer", true, "the seed of the image or sound (artgen_state.run.variants)"},
-                                                                   ControlParamInfo{"sprite", "string", false, "an image: the sprite name, 1 to 64 of A-Z a-z 0-9 _ -"},
-                                                                   ControlParamInfo{"name", "string", false, "a sound: the clip assets/artgen/<name>.wav"},
-                                                                   ControlParamInfo{"clip", "string", false, "a sound: instead of name, the game's clip to replace (assets/.../x.wav)"},
-                                                                   ControlParamInfo{"sound", "object", false, "a sound: mono, trimDb, maxSeconds, sampleRate, fadeInMs, fadeOutMs, peakDb (null: off)"},
-                                                                   ControlParamInfo{"useOnSelected", "boolean", false, "also put it on the node selected in the scene editor"}}});
+        service.DescribeMethod(
+            "artgen_accept",
+            ControlMethodInfo{"Makes an image of the current run a sprite of the game (trimmed to what is drawn and downscaled, a PNG into assets/artgen, "
+                              "TextureLibrary entry, reload), or a sound a clip (processed, a WAV into assets/artgen or over a clip path of the game, reload)",
+                              {ControlParamInfo{"seed", "integer", true, "the seed of the image or sound (artgen_state.run.variants)"},
+                               ControlParamInfo{"sprite", "string", false, "an image: the sprite name, 1 to 64 of A-Z a-z 0-9 _ -"},
+                               ControlParamInfo{"image", "object", false,
+                                                "an image: trim, padding (percent, 0 to 25), maxSize (pixels, 0 or 16 to 4096); a missing key keeps the preset's value (its accept key, else the "
+                                                "defaults)"},
+                               ControlParamInfo{"name", "string", false, "a sound: the clip assets/artgen/<name>.wav"},
+                               ControlParamInfo{"clip", "string", false, "a sound: instead of name, the game's clip to replace (assets/.../x.wav)"},
+                               ControlParamInfo{"sound", "object", false, "a sound: mono, trimDb, maxSeconds, sampleRate, fadeInMs, fadeOutMs, peakDb (null: off)"},
+                               ControlParamInfo{"useOnSelected", "boolean", false, "also put it on the node selected in the scene editor"}}});
         service.DescribeMethod(
             "artgen_cancel",
             ControlMethodInfo{"Stops the run of the art generation service (a set's running job; the set goes on); the images made stay. With job or set, cancels that job, or every job of the set",
