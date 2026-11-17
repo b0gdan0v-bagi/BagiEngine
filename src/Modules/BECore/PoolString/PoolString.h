@@ -79,10 +79,22 @@ namespace BECore {
 
         constexpr PoolString() noexcept : _entry(&Details::g_EmptyEntryStore.header) {}
 
+        /// For names that come from data (a content key, a type, a field): the text is hashed and copied at run time.
         static PoolString Intern(StringView str);
+
+        /// A literal is a constant: write `"text"_intern` (a ready entry, no hashing at run time) instead. A `char` buffer
+        /// whose text is only known at run time passes as `StringView(buffer)`. Only an array argument lands here; a
+        /// `const char*`, a `StringView` and a `String` still call the overload above.
+        template <size_t N>
+        static PoolString Intern(const char (&use_the_intern_literal_or_StringView)[N]) = delete;
 
         /// Returns the pooled string equal to `str`, or nullopt when no such string was interned. Never adds to the pool.
         [[nodiscard]] static Optional<PoolString> Find(StringView str);
+
+        /// For a literal ask `Find(StringView{"text"})`: `"text"_intern` would intern it, which is the opposite of the
+        /// question. A runtime `char` buffer passes as `StringView(buffer)`.
+        template <size_t N>
+        [[nodiscard]] static Optional<PoolString> Find(const char (&use_StringView_for_a_literal_or_a_buffer)[N]) = delete;
 
         /// Interns every text of `texts` and writes the result of `texts[i]` to `out[i]`; the same as `Intern` one by one
         /// (an empty text gives the empty `PoolString`, a text twice in one batch gives one string), with fewer locks: one

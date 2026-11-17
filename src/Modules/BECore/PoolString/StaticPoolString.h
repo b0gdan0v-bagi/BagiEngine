@@ -13,8 +13,9 @@ namespace BECore {
         struct FixedString {
             char data[N]{};
             consteval FixedString(const char (&str)[N]) {
-                for (size_t i = 0; i < N; ++i)
+                for (size_t i = 0; i < N; ++i) {
                     data[i] = str[i];
+                }
             }
             constexpr StringView View() const noexcept {
                 return {data, N - 1};
@@ -31,8 +32,9 @@ namespace BECore {
             char text[N];
 
             constexpr explicit StaticEntryStore(const FixedString<N>& str) : hash(BECore::StringUtils::GetHash(str.View())), size(static_cast<uint32_t>(N - 1)), text{} {
-                for (size_t i = 0; i < N; ++i)
+                for (size_t i = 0; i < N; ++i) {
                     text[i] = str.data[i];
+                }
             }
         };
     }  // namespace Details
@@ -51,7 +53,7 @@ namespace BECore {
 
         /// One per distinct literal (the linker merges the copies of an inline variable), in read-only data: a constant costs
         /// the pool no memory
-        static constexpr inline Store _store{Str};
+        static constexpr Store _store{Str};
 
     public:
         /// The `PoolString` of the literal. The first call registers the entry in the pool; if the text was in it already
@@ -64,8 +66,8 @@ namespace BECore {
         /// The literal's own entry, for registration and tests. It is not necessarily the entry the pool holds for the text
         /// (see `ToPoolString`), so a caller uses the `PoolString`, never this address, as the string.
         static const Details::PoolStringEntry& Entry() noexcept {
-            // `PoolStringEntry.h` makes the layout of an entry a contract that blocks, cooks and this store all follow, so
-            // reading the store through that type is the layout agreement, not a trick around aliasing
+            // The store is read-only constant data whose layout the `static_assert`s above pin to `PoolStringEntry`: the
+            // pool reads entries in its blocks through that type the same way
             return *reinterpret_cast<const Details::PoolStringEntry*>(&_store);
         }
 

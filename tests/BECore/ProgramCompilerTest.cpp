@@ -497,7 +497,8 @@ namespace BECore::Tests {
         ExpectOverVectors<int32_t>("caster.tint.g + caster.tint.a", [](const ValueUnitStats& caster, const ValueCastInfo&) { return int32_t{caster.tint.g} + int32_t{caster.tint.a}; });
         ExpectOverVectors<PoolString>("select(caster.element == Fire, 'burn', 'chill')",
                                       [](const ValueUnitStats& caster, const ValueCastInfo&) { return caster.element == ValueElement::Fire ? PoolString{"burn"_intern} : PoolString{"chill"_intern}; });
-        ExpectOverVectors<PoolString>("select(caster.alive, 'a', 'b')", [](const ValueUnitStats& caster, const ValueCastInfo&) { return PoolString::Intern(caster.alive ? "a" : "b"); });
+        ExpectOverVectors<PoolString>("select(caster.alive, 'a', 'b')",
+                                      [](const ValueUnitStats& caster, const ValueCastInfo&) { return caster.alive ? PoolString{"a"_intern} : PoolString{"b"_intern}; });
         ExpectOverVectors<ValueElement>("select(caster.alive, Fire, caster.element)",
                                         [](const ValueUnitStats& caster, const ValueCastInfo&) { return caster.alive ? ValueElement::Fire : caster.element; });
         ExpectOverVectors<bool>("Earth != caster.element && caster.element == caster.element",

@@ -225,7 +225,7 @@ namespace BECore {
                 ImGui::SameLine();
                 if (IconTextButton(ICON_LC_PLUS, "Add", "Add the name to the actions library")) {
                     if (newActionBuf[0] != '\0') {
-                        ActionsLibrary::GetInstance().Add(PoolString::Intern(newActionBuf));
+                        ActionsLibrary::GetInstance().Add(PoolString::Intern(StringView(newActionBuf)));
                         newActionBuf[0] = '\0';
                     }
                 }
