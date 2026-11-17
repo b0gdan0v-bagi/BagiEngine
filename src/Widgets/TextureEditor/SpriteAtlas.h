@@ -35,6 +35,9 @@ namespace BECore {
         return entry.atlas.has_value() && entry.atlas->source.has_value();
     }
 
+    /// The settings the group was last packed with (the record of its first member by name that has one); the defaults for none or a field out of range
+    [[nodiscard]] PackSettings PackSettingsOf(const TextureLibrary& library, StringView atlasName);
+
     struct AtlasCounts {
         uint32_t members = 0;
         uint32_t packed = 0;

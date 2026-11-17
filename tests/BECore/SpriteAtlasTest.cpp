@@ -639,4 +639,150 @@ namespace BECore::Tests {
         EXPECT_TRUE(ReadBytes(game.Resolve("assets/atlases/ui.png")) == first);
     }
 
+    namespace {
+
+        PackSettings CustomSettings() {
+            PackSettings settings;
+            settings.padding = 3;
+            settings.sizeMode = AtlasSizeMode::Tight;
+            settings.maxSide = 2048;
+            return settings;
+        }
+
+        bool SameSettings(const PackSettings& a, const PackSettings& b) {
+            return a.padding == b.padding && a.sizeMode == b.sizeMode && a.maxSide == b.maxSide;
+        }
+
+        /// Gives every member of "ui" the record, so a case can bend one field of it
+        void SetRecord(TextureLibrary& library, const char* member, int padding, const char* sizeMode, uint32_t maxSide) {
+            SpriteEntry entry = *library.GetSprite(PoolString::Intern(member));
+            AtlasPackRecord record;
+            record.padding = padding;
+            record.sizeMode = PoolString::Intern(sizeMode);
+            record.maxSide = maxSide;
+            entry.atlas->pack = record;
+            library.AddOrUpdate(eastl::move(entry));
+        }
+
+    }  // namespace
+
+    TEST(SpriteAtlas, PackRecordsItsSettingsInEveryMemberAndPackSettingsOfGivesThemBack) {
+        TempGame game;
+        SaveSources(game);
+        TextureLibrary library;
+        FillLibrary(library);
+        EXPECT_TRUE(SameSettings(PackSettingsOf(library, "ui"), PackSettings{}));
+
+        const PackSettings settings = CustomSettings();
+        ASSERT_TRUE(Pack(library, game, settings).has_value());
+
+        for (const SpriteEntry& entry : library.GetAll()) {
+            if (!entry.atlas.has_value()) {
+                continue;
+            }
+            ASSERT_TRUE(entry.atlas->pack.has_value()) << entry.name.ToStringView().data();
+            EXPECT_EQ(entry.atlas->pack->padding, 3);
+            EXPECT_EQ(entry.atlas->pack->sizeMode.ToStringView(), "Tight");
+            EXPECT_EQ(entry.atlas->pack->maxSide, 2048u);
+        }
+        EXPECT_TRUE(SameSettings(PackSettingsOf(library, "ui"), settings));
+        EXPECT_TRUE(SameSettings(PackSettingsOf(library, "other"), PackSettings{}));
+        EXPECT_TRUE(SameSettings(PackSettingsOf(library, ""), PackSettings{}));
+    }
+
+    TEST(SpriteAtlas, APackWithTheSettingsItFoundGivesTheSameFileAndEntries) {
+        TempGame game;
+        SaveSources(game);
+        TextureLibrary library;
+        FillLibrary(library);
+        ASSERT_TRUE(Pack(library, game, CustomSettings()).has_value());
+        const Vector<uint8_t> first = ReadBytes(game.Resolve("assets/atlases/ui.png"));
+        const Vector<SpriteEntry> entries = library.GetAll();
+
+        ASSERT_TRUE(Pack(library, game, PackSettingsOf(library, "ui")).has_value());
+        EXPECT_TRUE(ReadBytes(game.Resolve("assets/atlases/ui.png")) == first);
+        EXPECT_TRUE(SameLibrary(entries, library));
+        EXPECT_TRUE(SameSettings(PackSettingsOf(library, "ui"), CustomSettings()));
+    }
+
+    TEST(SpriteAtlas, UnpackKeepsTheRecordSoPackUnpackPackWithItIsTheSameFile) {
+        TempGame game;
+        SaveSources(game);
+        TextureLibrary library;
+        FillLibrary(library);
+        ASSERT_TRUE(Pack(library, game, CustomSettings()).has_value());
+        const Vector<uint8_t> first = ReadBytes(game.Resolve("assets/atlases/ui.png"));
+
+        auto exists = [&game](PoolString path) { return game.Exists(path); };
+        ASSERT_TRUE(UnpackAtlas(library, "ui", exists).has_value());
+        EXPECT_TRUE(library.GetSprite(PoolString::Intern("Alpha"))->atlas->pack.has_value());
+        EXPECT_TRUE(SameSettings(PackSettingsOf(library, "ui"), CustomSettings()));
+
+        ASSERT_TRUE(Pack(library, game, PackSettingsOf(library, "ui")).has_value());
+        EXPECT_TRUE(ReadBytes(game.Resolve("assets/atlases/ui.png")) == first);
+    }
+
+    TEST(SpriteAtlas, PackSettingsOfTakesTheFirstMemberByNameWithARecord) {
+        TextureLibrary library;
+        FillLibrary(library);
+        SetRecord(library, "Charlie", 5, "Tight", 1024);
+        EXPECT_EQ(PackSettingsOf(library, "ui").padding, 5);
+
+        SetRecord(library, "Bravo", 2, "PowerOfTwo", 512);
+        const PackSettings settings = PackSettingsOf(library, "ui");
+        EXPECT_EQ(settings.padding, 2);
+        EXPECT_EQ(settings.sizeMode, AtlasSizeMode::PowerOfTwo);
+        EXPECT_EQ(settings.maxSide, 512u);
+    }
+
+    TEST(SpriteAtlas, ARecordOutOfRangeGivesTheDefaultOfThatField) {
+        const PackSettings defaults;
+        struct Case {
+            int padding;
+            const char* sizeMode;
+            uint32_t maxSide;
+        };
+        const Case cases[] = {
+            {-1, "Tight", 1024}, {kMaxAtlasPadding + 1, "Tight", 1024}, {2, "Hexagonal", 1024}, {2, "Tight", 0}, {2, "Tight", kMaxSpriteImageSide + 1},
+        };
+        for (const Case& test : cases) {
+            TextureLibrary library;
+            FillLibrary(library);
+            SetRecord(library, "Alpha", test.padding, test.sizeMode, test.maxSide);
+            const PackSettings settings = PackSettingsOf(library, "ui");
+            const bool paddingOk = test.padding >= 0 && test.padding <= kMaxAtlasPadding;
+            const bool modeOk = StringView(test.sizeMode) == "Tight";
+            const bool sideOk = test.maxSide >= 1 && test.maxSide <= kMaxSpriteImageSide;
+            EXPECT_EQ(settings.padding, paddingOk ? test.padding : defaults.padding) << test.padding;
+            EXPECT_EQ(settings.sizeMode, modeOk ? AtlasSizeMode::Tight : defaults.sizeMode) << test.sizeMode;
+            EXPECT_EQ(settings.maxSide, sideOk ? test.maxSide : defaults.maxSide) << test.maxSide;
+        }
+    }
+
+    TEST(SpriteAtlas, AGroupChangeDropsTheRecordAndAFirstGroupLeavesItEmpty) {
+        TempGame game;
+        SaveSources(game);
+        TextureLibrary library;
+        FillLibrary(library);
+        ASSERT_TRUE(Pack(library, game, CustomSettings()).has_value());
+        auto exists = [&game](PoolString path) { return game.Exists(path); };
+        ASSERT_TRUE(UnpackAtlas(library, "ui", exists).has_value());
+
+        const PoolString alpha = PoolString::Intern("Alpha");
+        const auto moved = SetSpriteAtlas(library, alpha, "icons");
+        ASSERT_TRUE(moved.has_value());
+        EXPECT_TRUE(*moved);
+        ASSERT_TRUE(library.GetSprite(alpha)->atlas.has_value());
+        EXPECT_FALSE(library.GetSprite(alpha)->atlas->pack.has_value());
+        EXPECT_TRUE(library.GetSprite(PoolString::Intern("Bravo"))->atlas->pack.has_value());
+
+        const PoolString loner = PoolString::Intern("Loner");
+        ASSERT_TRUE(SetSpriteAtlas(library, loner, "ui").has_value());
+        EXPECT_FALSE(library.GetSprite(loner)->atlas->pack.has_value());
+        EXPECT_TRUE(SameSettings(PackSettingsOf(library, "ui"), CustomSettings()));
+
+        ASSERT_TRUE(SetSpriteAtlas(library, PoolString::Intern("Bravo"), "").has_value());
+        EXPECT_FALSE(library.GetSprite(PoolString::Intern("Bravo"))->atlas.has_value());
+    }
+
 }  // namespace BECore::Tests
