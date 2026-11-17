@@ -293,8 +293,8 @@ namespace BECore::Tests {
         const Vector<StringView> texts{"batch_process_one_8d2f", "batch_process_two_8d2f", "batch_process_one_8d2f", ""};
         Vector<PoolString> out(texts.size());
         PoolString::InternBatch(Span<const StringView>(texts.data(), texts.size()), Span<PoolString>(out.data(), out.size()));
-        EXPECT_EQ(out[0], PoolString::Intern("batch_process_one_8d2f"));
-        EXPECT_EQ(out[1], PoolString::Intern("batch_process_two_8d2f"));
+        EXPECT_EQ(out[0], PoolString::Intern(StringView{"batch_process_one_8d2f"}));
+        EXPECT_EQ(out[1], PoolString::Intern(StringView{"batch_process_two_8d2f"}));
         EXPECT_EQ(out[0], out[2]);
         EXPECT_EQ(out[3], PoolString());
 

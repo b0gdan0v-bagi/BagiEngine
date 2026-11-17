@@ -211,7 +211,7 @@ namespace BECore::Fuzz {
             }
             const size_t children = canvasCase.childCount % (kMaxCanvasChildren + 1);
             for (size_t i = 0; i < children; ++i) {
-                const auto child = canvas.root->AddChild(PoolString::Intern("Child"));
+                const auto child = canvas.root->AddChild("Child"_intern);
                 child->style.rect = canvasCase.children[i].ToSpec();
                 if (i == 0 && (canvasCase.stackBits & 0x01) != 0) {
                     child->layout = UILayoutKind::Stack;
@@ -221,7 +221,7 @@ namespace BECore::Fuzz {
                 }
                 if (i == 0) {
                     for (size_t g = 0; g < canvasCase.grandChildCount % (kMaxGrandChildren + 1); ++g) {
-                        const auto grandChild = child->AddChild(PoolString::Intern("Grandchild"));
+                        const auto grandChild = child->AddChild("Grandchild"_intern);
                         grandChild->style.rect = canvasCase.grandChildren[g].ToSpec();
                     }
                 }

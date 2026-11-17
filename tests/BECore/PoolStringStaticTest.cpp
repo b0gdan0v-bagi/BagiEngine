@@ -24,7 +24,7 @@ namespace BECore::Tests {
 
     TEST(PoolStringStaticTest, ARuntimeInternFirstKeepsItsEntryAndTheLiteralLoses) {
         using Literal = StaticPoolString<"static_runtime_first_41c9">;
-        const PoolString runtime = PoolString::Intern("static_runtime_first_41c9");
+        const PoolString runtime = PoolString::Intern(StringView{"static_runtime_first_41c9"});
         const PoolStringStats before = PoolString::GetStats();
 
         const PoolString literal = Literal::ToPoolString();
@@ -56,11 +56,11 @@ namespace BECore::Tests {
         EXPECT_EQ(registered.misses, before.misses);
         EXPECT_EQ(registered.staticDuplicates, before.staticDuplicates);
 
-        const PoolString interned = PoolString::Intern("static_literal_first_7be2");
+        const PoolString interned = PoolString::Intern(StringView{"static_literal_first_7be2"});
         const StringView texts[] = {"static_literal_first_7be2"};
         PoolString batched[1];
         PoolString::InternBatch(Span<const StringView>(texts, 1), Span<PoolString>(batched, 1));
-        const auto found = PoolString::Find("static_literal_first_7be2");
+        const auto found = PoolString::Find(StringView{"static_literal_first_7be2"});
         ASSERT_TRUE(found.has_value());
 
         EXPECT_EQ(interned, literal);
@@ -143,9 +143,9 @@ namespace BECore::Tests {
 
     TEST(PoolStringStaticTest, ALiteralComparesWithRuntimeStrings) {
         constexpr auto literal = "static_compare_b"_intern;
-        const PoolString same = PoolString::Intern("static_compare_b");
-        const PoolString lower = PoolString::Intern("static_compare_a");
-        const PoolString higher = PoolString::Intern("static_compare_c");
+        const PoolString same = PoolString::Intern(StringView{"static_compare_b"});
+        const PoolString lower = PoolString::Intern(StringView{"static_compare_a"});
+        const PoolString higher = PoolString::Intern(StringView{"static_compare_c"});
 
         EXPECT_TRUE(literal == same);
         EXPECT_TRUE(same == literal);

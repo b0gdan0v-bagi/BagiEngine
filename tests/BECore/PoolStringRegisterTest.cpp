@@ -259,9 +259,9 @@ namespace BECore::Tests {
         const PoolStringEntry& entry = ready.Make("register_process_pool_text_5e1c");
         const PoolString value = PoolString::RegisterStatic(entry);
         EXPECT_TRUE(IsEntry(value, entry));
-        EXPECT_EQ(PoolString::Intern("register_process_pool_text_5e1c"), value);
+        EXPECT_EQ(PoolString::Intern(StringView{"register_process_pool_text_5e1c"}), value);
         EXPECT_EQ(PoolString::RegisterStatic(entry), value);
-        EXPECT_EQ(PoolString::Find("register_process_pool_text_5e1c").value_or(PoolString()), value);
+        EXPECT_EQ(PoolString::Find(StringView{"register_process_pool_text_5e1c"}).value_or(PoolString()), value);
     }
 
     TEST(PoolStringReserveTest, AnExactHintTakesOneBlockAndTheStringsFitIt) {

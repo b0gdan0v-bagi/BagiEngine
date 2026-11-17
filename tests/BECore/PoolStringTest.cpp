@@ -10,28 +10,28 @@
 namespace BECore::Tests {
 
     TEST(PoolStringTest, FindDoesNotAddAString) {
-        EXPECT_FALSE(PoolString::Find("pool_find_never_interned_3c81").has_value());
-        EXPECT_FALSE(PoolString::Find("pool_find_never_interned_3c81").has_value());
+        EXPECT_FALSE(PoolString::Find(StringView{"pool_find_never_interned_3c81"}).has_value());
+        EXPECT_FALSE(PoolString::Find(StringView{"pool_find_never_interned_3c81"}).has_value());
     }
 
     TEST(PoolStringTest, FindReturnsTheInternedString) {
-        const PoolString interned = PoolString::Intern("pool_find_interned_9a47");
-        const auto found = PoolString::Find("pool_find_interned_9a47");
+        const PoolString interned = PoolString::Intern(StringView{"pool_find_interned_9a47"});
+        const auto found = PoolString::Find(StringView{"pool_find_interned_9a47"});
         ASSERT_TRUE(found.has_value());
         EXPECT_EQ(*found, interned);
     }
 
     TEST(PoolStringTest, FindOfAnEmptyStringIsTheEmptyPoolString) {
-        const auto found = PoolString::Find("");
+        const auto found = PoolString::Find(StringView{""});
         ASSERT_TRUE(found.has_value());
         EXPECT_EQ(*found, PoolString());
     }
 
     TEST(PoolStringTest, FindDistinguishesStringsWithTheSamePrefix) {
-        const PoolString interned = PoolString::Intern("pool_find_prefix_b6d5");
-        EXPECT_FALSE(PoolString::Find("pool_find_prefix_b6d5x").has_value());
-        EXPECT_FALSE(PoolString::Find("pool_find_prefix_b6d").has_value());
-        EXPECT_TRUE(PoolString::Find("pool_find_prefix_b6d5").has_value());
+        const PoolString interned = PoolString::Intern(StringView{"pool_find_prefix_b6d5"});
+        EXPECT_FALSE(PoolString::Find(StringView{"pool_find_prefix_b6d5x"}).has_value());
+        EXPECT_FALSE(PoolString::Find(StringView{"pool_find_prefix_b6d"}).has_value());
+        EXPECT_TRUE(PoolString::Find(StringView{"pool_find_prefix_b6d5"}).has_value());
     }
 
     namespace {
@@ -66,20 +66,20 @@ namespace BECore::Tests {
     }
 
     TEST(PoolStringBlocksTest, AnEntryThatFitsABlockButNotTheRestOfTheCurrentOneIsStoredWhole) {
-        const PoolString before = PoolString::Intern("pool_block_before_5d02");
+        const PoolString before = PoolString::Intern(StringView{"pool_block_before_5d02"});
         ExpectInternedWholeAndTerminated(BlockText(PoolString::kBlockBytes - kEntryHeaderBytes - 1, 'q'));
-        EXPECT_EQ(PoolString::Intern("pool_block_before_5d02"), before);
+        EXPECT_EQ(PoolString::Intern(StringView{"pool_block_before_5d02"}), before);
         EXPECT_EQ(before.ToStringView(), "pool_block_before_5d02");
     }
 
     TEST(PoolStringBlocksTest, SmallStringsAroundAHugeOneStayIntact) {
         const String hugeText = BlockText(2 * PoolString::kBlockBytes + 5, 'h');
-        const PoolString small1 = PoolString::Intern("pool_block_small_first_7e31");
+        const PoolString small1 = PoolString::Intern(StringView{"pool_block_small_first_7e31"});
         const PoolString huge = PoolString::Intern(StringView{hugeText});
-        const PoolString small2 = PoolString::Intern("pool_block_small_second_7e31");
+        const PoolString small2 = PoolString::Intern(StringView{"pool_block_small_second_7e31"});
 
-        EXPECT_EQ(small1, PoolString::Intern("pool_block_small_first_7e31"));
-        EXPECT_EQ(small2, PoolString::Intern("pool_block_small_second_7e31"));
+        EXPECT_EQ(small1, PoolString::Intern(StringView{"pool_block_small_first_7e31"}));
+        EXPECT_EQ(small2, PoolString::Intern(StringView{"pool_block_small_second_7e31"}));
         EXPECT_EQ(small1.ToStringView(), "pool_block_small_first_7e31");
         EXPECT_EQ(small2.ToStringView(), "pool_block_small_second_7e31");
         EXPECT_NE(small1, small2);
@@ -114,7 +114,7 @@ namespace BECore::Tests {
             ASSERT_EQ(PoolString::Intern(StringView{name}), interned[i]) << name.c_str();
             ASSERT_EQ(interned[i].ToStringView(), StringView{name});
         }
-        EXPECT_FALSE(PoolString::Find("pool_growth_never_interned_61bd").has_value());
+        EXPECT_FALSE(PoolString::Find(StringView{"pool_growth_never_interned_61bd"}).has_value());
         EXPECT_FALSE(PoolString::Find(StringView{CounterName("pool_growth_", kGrowthNames)}).has_value());
     }
 
@@ -189,7 +189,7 @@ namespace BECore::Tests {
         /// Interns names until the pool takes a new standard block, so the current block is nearly empty afterwards
         void StartFreshBlock() {
             // The first copy of a text creates the first block: code constants take none, so a process may have no block yet
-            static_cast<void>(PoolString::Intern("pool_stats_first_block_5c20"));
+            static_cast<void>(PoolString::Intern(StringView{"pool_stats_first_block_5c20"}));
             const size_t blocksBefore = PoolString::GetStats().blockCount;
             for (size_t i = 0; i < kFillGuard && PoolString::GetStats().blockCount == blocksBefore; ++i) {
                 static_cast<void>(PoolString::Intern(StringView{CounterName("pool_stats_fill_", i)}));
@@ -201,7 +201,7 @@ namespace BECore::Tests {
 
     TEST(PoolStringStatsTest, ANewTextIsAMissAndARepeatIsAHit) {
         const PoolStringStats before = PoolString::GetStats();
-        static_cast<void>(PoolString::Intern("pool_stats_new_text_4b7e"));
+        static_cast<void>(PoolString::Intern(StringView{"pool_stats_new_text_4b7e"}));
         const PoolStringStats afterNew = PoolString::GetStats();
         EXPECT_EQ(afterNew.stringCount, before.stringCount + 1);
         EXPECT_EQ(afterNew.tableUsed, before.tableUsed + 1);
@@ -209,7 +209,7 @@ namespace BECore::Tests {
         EXPECT_EQ(afterNew.hits, before.hits);
         EXPECT_EQ(afterNew.stringBytes, before.stringBytes + EntryBytes(StringView{"pool_stats_new_text_4b7e"}.size()));
 
-        static_cast<void>(PoolString::Intern("pool_stats_new_text_4b7e"));
+        static_cast<void>(PoolString::Intern(StringView{"pool_stats_new_text_4b7e"}));
         const PoolStringStats afterRepeat = PoolString::GetStats();
         EXPECT_EQ(afterRepeat.stringCount, afterNew.stringCount);
         EXPECT_EQ(afterRepeat.misses, afterNew.misses);
@@ -219,7 +219,7 @@ namespace BECore::Tests {
 
     TEST(PoolStringStatsTest, TheEmptyTextIsAHitAndNotAString) {
         const PoolStringStats before = PoolString::GetStats();
-        EXPECT_TRUE(PoolString::Intern("").Empty());
+        EXPECT_TRUE(PoolString::Intern(StringView{""}).Empty());
         const PoolStringStats after = PoolString::GetStats();
         EXPECT_EQ(after.hits, before.hits + 1);
         EXPECT_EQ(after.misses, before.misses);
@@ -228,10 +228,10 @@ namespace BECore::Tests {
     }
 
     TEST(PoolStringStatsTest, FindIsNotAnInternCall) {
-        static_cast<void>(PoolString::Intern("pool_stats_find_target_c2a9"));
+        static_cast<void>(PoolString::Intern(StringView{"pool_stats_find_target_c2a9"}));
         const PoolStringStats before = PoolString::GetStats();
-        EXPECT_TRUE(PoolString::Find("pool_stats_find_target_c2a9").has_value());
-        EXPECT_FALSE(PoolString::Find("pool_stats_find_missing_c2a9").has_value());
+        EXPECT_TRUE(PoolString::Find(StringView{"pool_stats_find_target_c2a9"}).has_value());
+        EXPECT_FALSE(PoolString::Find(StringView{"pool_stats_find_missing_c2a9"}).has_value());
         const PoolStringStats after = PoolString::GetStats();
         EXPECT_EQ(after.internCalls, before.internCalls);
         EXPECT_EQ(after.stringCount, before.stringCount);
@@ -239,7 +239,7 @@ namespace BECore::Tests {
 
     TEST(PoolStringStatsTest, AStringOfItsOwnBlockAddsABlockAndLeavesTheCurrentOne) {
         ASSERT_NO_FATAL_FAILURE(StartFreshBlock());
-        static_cast<void>(PoolString::Intern("pool_stats_before_huge_91d4"));
+        static_cast<void>(PoolString::Intern(StringView{"pool_stats_before_huge_91d4"}));
         const PoolStringStats before = PoolString::GetStats();
 
         const String hugeText = BlockText(2 * PoolString::kBlockBytes + 5, 'g');
@@ -250,7 +250,7 @@ namespace BECore::Tests {
         EXPECT_EQ(afterHuge.stringBytes, before.stringBytes + EntryBytes(hugeText.size()));
 
         // The small string after the huge one goes into the block that was current before it
-        static_cast<void>(PoolString::Intern("pool_stats_after_huge_91d4"));
+        static_cast<void>(PoolString::Intern(StringView{"pool_stats_after_huge_91d4"}));
         const PoolStringStats afterSmall = PoolString::GetStats();
         EXPECT_EQ(afterSmall.blockCount, afterHuge.blockCount);
         EXPECT_EQ(afterSmall.blockBytes, afterHuge.blockBytes);
@@ -629,13 +629,13 @@ namespace BECore::Tests {
         const PoolStringStats processBefore = PoolString::GetStats();
         static_cast<void>(first.storage.Intern("storage_alternate"));
         static_cast<void>(second.storage.Intern("storage_alternate"));
-        static_cast<void>(PoolString::Intern("storage_alternate_process"));
+        static_cast<void>(PoolString::Intern(StringView{"storage_alternate_process"}));
         constexpr size_t kRounds = 10;
         for (size_t i = 0; i < kRounds; ++i) {
             static_cast<void>(first.storage.Intern("storage_alternate"));
             static_cast<void>(second.storage.Intern("storage_alternate"));
             static_cast<void>(second.storage.Intern("storage_alternate"));
-            static_cast<void>(PoolString::Intern("storage_alternate_process"));
+            static_cast<void>(PoolString::Intern(StringView{"storage_alternate_process"}));
         }
         EXPECT_EQ(first.storage.GetStats().hits, kRounds);
         EXPECT_EQ(second.storage.GetStats().hits, 2 * kRounds);

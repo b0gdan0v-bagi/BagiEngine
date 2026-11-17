@@ -14,7 +14,7 @@ namespace BECore::Tests {
     inline TextSettings MakeTestFamilySettings() {
         TextSettings settings = TextSettings::Default();
         FontFamily family;
-        family.name = PoolString::Intern("Test");
+        family.name = "Test"_intern;
         family.faces.push_back({400, PoolString::Intern(kTestRegularPath)});
         family.faces.push_back({700, PoolString::Intern(kTestBoldPath)});
         settings.families.push_back(eastl::move(family));
