@@ -1,6 +1,7 @@
 #include "RmlUiRuntime.h"
 
 #include <BECore/Config/ConfigManager.h>
+#include <BECore/Config/ConfigNames.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Text/TextSettings.h>
 #include <Events/ApplicationEvents.h>
@@ -47,7 +48,7 @@ namespace BECore {
         }
         _isUp = true;
 
-        const TextSettings settings = TextSettings::FromConfig(CoreManager::GetConfigManager().GetConfig("TextConfig"_intern));
+        const TextSettings settings = TextSettings::FromConfig(CoreManager::GetConfigManager().GetConfig(ConfigNames::text));
         const Rml::String fontPath(settings.defaultFont.ToStringView().data(), settings.defaultFont.ToStringView().size());
         if (!Rml::LoadFontFace(fontPath)) {
             LOG_ERROR("RmlUiRuntime: cannot load the font '{}'"_format(settings.defaultFont.ToStringView()));

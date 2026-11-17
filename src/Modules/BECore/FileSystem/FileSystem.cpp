@@ -1,5 +1,6 @@
 #include "FileSystem.h"
 
+#include <BECore/FileSystem/MountPoints.h>
 #include <EASTL/sort.h>
 
 namespace BECore {
@@ -11,7 +12,7 @@ namespace BECore {
 
         // Lowest priority first, so the layer of the game lands above the engine's
         for (const auto& root : _roots) {
-            for (const PoolString name : Array<PoolString, 2>{"config"_intern, "assets"_intern}) {
+            for (const PoolString name : Array<PoolString, 2>{MountPoints::config, MountPoints::assets}) {
                 const auto dirName = name.ToStringView();
                 std::filesystem::path dirPath = root / ToStd(dirName);
                 if (std::filesystem::exists(dirPath) && std::filesystem::is_directory(dirPath)) {

@@ -5,6 +5,7 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/LogEvent.h>
 #include <BECore/MainWindow/IMainWindow.h>
+#include <BECore/Renderer/ITexture.h>
 #include <CoreSDL/SDLEvents.h>
 #include <CoreSDL/SDLMainWindow.h>
 #include <CoreVulkan/VulkanRenderTarget.h>
@@ -580,7 +581,7 @@ namespace BECore {
         if (!rgba || width == 0 || height == 0) {
             return {};
         }
-        auto texture = VulkanTextureUpload::Upload(*this, "<memory>"_intern, rgba, width, height);
+        auto texture = VulkanTextureUpload::Upload(*this, TexturePaths::memory, rgba, width, height);
         if (texture->GetState() != ResourceState::Loaded) {
             return {};
         }

@@ -1,6 +1,7 @@
 #include "ConfigManager.h"
 
 #include <BECore/FileSystem/FileSystem.h>
+#include <BECore/FileSystem/MountPoints.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <EASTL/sort.h>
@@ -20,7 +21,7 @@ namespace BECore {
 
         LOG_INFO("[ConfigManager] Initializing...");
 
-        const auto layers = CoreManager::GetFileSystem().GetMountLayers("config"_intern);
+        const auto layers = CoreManager::GetFileSystem().GetMountLayers(MountPoints::config);
         if (layers.empty()) {
             LOG_WARNING("[ConfigManager] Config directory not found, skipping initialization");
             _initialized.store(true, std::memory_order_release);

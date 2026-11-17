@@ -1,6 +1,7 @@
 #include "EngineSmokeTest.h"
 
 #include <BECore/Config/ConfigManager.h>
+#include <BECore/Config/ConfigNames.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <Generated/EngineSmokeTest.gen.hpp>
 
@@ -16,7 +17,7 @@ namespace BECore::Tests {
             return false;
         };
 
-        return hasConfig("TestsConfig"_intern) && hasConfig("LoggerConfig"_intern) && hasConfig("AssertHandlersConfig"_intern);
+        return hasConfig(ConfigNames::tests) && hasConfig(ConfigNames::logger) && hasConfig(ConfigNames::assertHandlers);
     }
 
 }  // namespace BECore::Tests
