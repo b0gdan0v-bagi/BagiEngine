@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cstdio>
 #include <gtest/gtest.h>
+#include <limits>
 
 namespace BECore::Tests {
 
@@ -560,6 +561,157 @@ namespace BECore::Tests {
         picked.accepted.reset();
         EXPECT_FALSE(KeepJob(picked, "d"));
         EXPECT_EQ(picked.variants.size(), 2u);
+    }
+
+    TEST(ArtGenSetTest, MoreRoundTripsWithAndWithout) {
+        ArtGenSet set = MakeSet();
+        const Json plain = ArtGenSetToJson(set);
+        ASSERT_TRUE(plain["jobs"][0].contains("more"));
+        EXPECT_TRUE(plain["jobs"][0]["more"].is_null());
+        const auto readPlain = ArtGenSetFromJson(plain);
+        ASSERT_TRUE(readPlain.has_value()) << readPlain.error();
+        EXPECT_FALSE(readPlain->jobs[0].more.has_value());
+
+        set.jobs[0].state = ArtGenSetJobState::Pending;
+        set.jobs[0].more = ArtGenSetMore{9000, 5};
+        const Json json = ArtGenSetToJson(set);
+        EXPECT_EQ(GetJsonInt(json["jobs"][0]["more"], "seed"), 9000);
+        EXPECT_EQ(GetJsonInt(json["jobs"][0]["more"], "count"), 5);
+        const auto back = ArtGenSetFromJson(json);
+        ASSERT_TRUE(back.has_value()) << back.error();
+        ASSERT_TRUE(back->jobs[0].more.has_value());
+        EXPECT_EQ(back->jobs[0].more->seed, 9000);
+        EXPECT_EQ(back->jobs[0].more->count, 5);
+        EXPECT_EQ(ArtGenSetToJson(*back), json);
+        EXPECT_FALSE(back->jobs[1].more.has_value());
+    }
+
+    TEST(ArtGenSetTest, AManifestWithoutMoreReadsAsNone) {
+        const auto set = ArtGenSetFromJson(Manifest(kMinimalManifest));
+        ASSERT_TRUE(set.has_value()) << set.error();
+        EXPECT_FALSE(set->jobs[0].more.has_value());
+    }
+
+    TEST(ArtGenSetTest, ABadMoreIsAnErrorThatSaysWhere) {
+        const struct {
+            const char* more;
+            const char* mentions;
+        } cases[] = {
+            {R"("two")", "must be an object or null"},
+            {R"({"seed":5,"count":0})", "'count' must be 1 to 16"},
+            {R"({"seed":5,"count":17})", "'count' must be 1 to 16"},
+            {R"({"seed":-1,"count":2})", "'seed' must not be negative"},
+            {R"({"seed":"x","count":2})", "'seed' must be an integer"},
+            {R"({"seed":5})", "'count' must be an integer"},
+        };
+        for (const auto& item : cases) {
+            Json json = Manifest(kMinimalManifest);
+            json["jobs"][0]["more"] = Manifest(item.more);
+            const String error = ErrorOf(ArtGenSetFromJson(json));
+            EXPECT_TRUE(Contains(error, "jobs[0].more")) << item.more << " -> " << error;
+            EXPECT_TRUE(Contains(error, item.mentions)) << item.more << " -> " << error;
+        }
+    }
+
+    TEST(ArtGenSetTest, MoreBlockerSaysWhyItIsOff) {
+        ArtGenSet set = MakeSet();
+        // MakeSet: a live Done row and a Failed row
+        EXPECT_EQ(ArtGenMoreBlocker(set), nullptr);
+
+        ArtGenSet active = MakeSet();
+        active.jobs[1].state = ArtGenSetJobState::Running;
+        ASSERT_NE(ArtGenMoreBlocker(active), nullptr);
+        EXPECT_TRUE(Contains(String(ArtGenMoreBlocker(active)), "still running"));
+
+        ArtGenSet kept = MakeSet();
+        kept.jobs[0].accepted->kept = true;
+        ASSERT_NE(ArtGenMoreBlocker(kept), nullptr);
+        EXPECT_TRUE(Contains(String(ArtGenMoreBlocker(kept)), "kept"));
+
+        ArtGenSet failedOnly = MakeSet();
+        failedOnly.jobs[0].state = ArtGenSetJobState::Cancelled;
+        EXPECT_NE(ArtGenMoreBlocker(failedOnly), nullptr);
+    }
+
+    TEST(ArtGenSetTest, MoreSkipReasons) {
+        const ArtGenSet set = MakeSet();
+        EXPECT_EQ(ArtGenMoreSkipReason(set.jobs[0], 1), nullptr);
+        EXPECT_STREQ(ArtGenMoreSkipReason(set.jobs[1], 1), "failed");
+
+        ArtGenSetJob job = set.jobs[0];
+        job.state = ArtGenSetJobState::Cancelled;
+        EXPECT_STREQ(ArtGenMoreSkipReason(job, 1), "cancelled");
+        job.state = ArtGenSetJobState::Done;
+        job.accepted->kept = true;
+        EXPECT_STREQ(ArtGenMoreSkipReason(job, 1), "kept");
+
+        job.accepted.reset();
+        job.variants.clear();
+        for (int64_t seed = 0; seed < kArtGenJobMaxVariants - 2; ++seed) {
+            job.variants.push_back({seed, "a.png", "", "image"});
+        }
+        EXPECT_EQ(ArtGenMoreSkipReason(job, 2), nullptr);
+        EXPECT_STREQ(ArtGenMoreSkipReason(job, 3), "full");
+    }
+
+    TEST(ArtGenSetTest, SeedRangeEdges) {
+        ArtGenSetJob job;
+        job.variants.push_back({100, "a.png", "", "image"});
+        EXPECT_TRUE(ArtGenSeedRangeFree(job, 97, 3));    // 97, 98, 99: ends right before 100
+        EXPECT_FALSE(ArtGenSeedRangeFree(job, 98, 3));   // 98, 99, 100: touches it
+        EXPECT_FALSE(ArtGenSeedRangeFree(job, 100, 1));  // exactly the seed
+        EXPECT_TRUE(ArtGenSeedRangeFree(job, 101, 4));   // starts right after it
+        EXPECT_TRUE(ArtGenSeedRangeFree(ArtGenSetJob(), 0, kArtGenSetMaxCount));
+
+        ArtGenSetJob extreme;
+        extreme.variants.push_back({std::numeric_limits<int64_t>::max(), "a.png", "", "image"});
+        EXPECT_TRUE(ArtGenSeedRangeFree(extreme, 0, 16));
+        EXPECT_FALSE(ArtGenSeedRangeFree(extreme, std::numeric_limits<int64_t>::max() - 3, 16));
+        ArtGenSetJob negative;
+        negative.variants.push_back({-5, "a.png", "", "image"});
+        EXPECT_TRUE(ArtGenSeedRangeFree(negative, 0, 16));
+        EXPECT_FALSE(ArtGenSeedRangeFree(negative, -6, 2));
+    }
+
+    TEST(ArtGenSetTest, EndingAPlainJob) {
+        ArtGenSetJob job;
+        job.state = ArtGenSetJobState::Running;
+        EndArtGenJob(job, ArtGenSetJobState::Failed, "boom");
+        EXPECT_EQ(job.state, ArtGenSetJobState::Failed);
+        EXPECT_EQ(job.error, "boom");
+
+        EndArtGenJob(job, ArtGenSetJobState::Cancelled, "stopped");
+        EXPECT_EQ(job.state, ArtGenSetJobState::Cancelled);
+        EXPECT_EQ(job.error, "stopped");
+
+        EndArtGenJob(job, ArtGenSetJobState::Done, "ignored");
+        EXPECT_EQ(job.state, ArtGenSetJobState::Done);
+        EXPECT_TRUE(job.error.empty());
+    }
+
+    TEST(ArtGenSetTest, EndingAMoreRunNeverLosesTheJobsWork) {
+        for (const ArtGenSetJobState ended : {ArtGenSetJobState::Failed, ArtGenSetJobState::Cancelled}) {
+            ArtGenSetJob job = MakeSet().jobs[0];
+            job.state = ArtGenSetJobState::Running;
+            job.more = ArtGenSetMore{900, 2};
+            EndArtGenJob(job, ended, "the service was stopped");
+            EXPECT_EQ(job.state, ArtGenSetJobState::Done);
+            EXPECT_EQ(job.error, "the service was stopped");
+            EXPECT_FALSE(job.more.has_value());
+            EXPECT_EQ(job.variants.size(), 2u);
+            EXPECT_EQ(job.pick, Optional<int64_t>(4243));
+            ASSERT_TRUE(job.accepted.has_value());
+            EXPECT_FALSE(job.accepted->kept);
+        }
+
+        ArtGenSetJob done = MakeSet().jobs[0];
+        done.state = ArtGenSetJobState::Running;
+        done.more = ArtGenSetMore{900, 2};
+        done.error = "an old note";
+        EndArtGenJob(done, ArtGenSetJobState::Done, "");
+        EXPECT_EQ(done.state, ArtGenSetJobState::Done);
+        EXPECT_TRUE(done.error.empty());
+        EXPECT_FALSE(done.more.has_value());
     }
 
 }  // namespace BECore::Tests
