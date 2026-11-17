@@ -22,7 +22,7 @@ namespace BECore {
         int spacing = 0;
     };
 
-    CORE_ENUM(SheetGridError, uint8_t, NoSheet, BadCount, TooManyCells, CellTooSmall, DuplicateName, BadName)
+    CORE_ENUM(SheetGridError, uint8_t, NoSheet, BadCount, TooManyCells, CellTooSmall, DuplicateName, BadName, NoCells)
 
     /// One line for the panel's status
     [[nodiscard]] StringView SheetGridErrorText(SheetGridError error);
@@ -39,7 +39,7 @@ namespace BECore {
     /// Splits @p text at whitespace and commas; empty pieces are dropped
     [[nodiscard]] Vector<String> ParseSheetNames(StringView text);
 
-    /// What the cells are called: cell `k` is `names[k]` when it has one, else `<prefix>_<startIndex + k>` zero-padded to the width of the last index
+    /// What the cells (grid cells or any rect list) are called: cell `k` is `names[k]` when it has one, else `<prefix>_<startIndex + k>` zero-padded to the width of the last index
     struct SheetGridNaming {
         String prefix;
         uint32_t startIndex = 0;
@@ -49,18 +49,27 @@ namespace BECore {
     /// What happens to a name the library already holds
     CORE_ENUM(SheetConflictPolicy, uint8_t, Overwrite, Skip)
 
-    /// What a slice would do; building it changes nothing
+    /// What a slice would do, for a grid or for any rect list; building it changes nothing
     struct GridSlicePlan {
         Vector<SpriteEntry> entries;  // in cell order, without the skipped ones
         Vector<PoolString> replaced;  // names in `entries` that overwrite an entry of the library
         uint32_t skipped = 0;         // cells whose name the library holds, under `Skip`
     };
 
-    /// The plan to cut @p texturePath. Every name is a valid sprite name and none repeats, or the error says which kind of mistake it is
+    /**
+     * @brief The plan to cut @p texturePath into @p cells (the grid's or the alpha islands'), one entry per rect in list order.
+     *
+     * Every name is a valid sprite name and none repeats, or the error says which kind of mistake it is. An empty list is `NoCells`,
+     * more than `kMaxSheetGridCells` rects `TooManyCells`.
+     */
+    [[nodiscard]] std::expected<GridSlicePlan, SheetGridError> PlanRectSlice(const TextureLibrary& library, PoolString texturePath, const Vector<Rect>& cells, const SheetGridNaming& naming,
+                                                                             SheetConflictPolicy policy);
+
+    /// `ComputeGridCells`, then `PlanRectSlice`
     [[nodiscard]] std::expected<GridSlicePlan, SheetGridError> PlanGridSlice(const TextureLibrary& library, PoolString texturePath, int sheetWidth, int sheetHeight, const SheetGridSpec& spec,
                                                                              const SheetGridNaming& naming, SheetConflictPolicy policy);
 
-    /// `AddOrUpdate` of every entry of @p plan: an entry the library holds keeps its place, new ones go to the end in cell order
+    /// `AddOrUpdate` of every entry of @p plan, whatever list it was made from: an entry the library holds keeps its place, new ones go to the end in cell order
     void ApplyGridSlice(TextureLibrary& library, const GridSlicePlan& plan);
 
 }  // namespace BECore

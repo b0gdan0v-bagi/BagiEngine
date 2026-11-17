@@ -42,6 +42,11 @@ namespace BECore::Tests {
             EXPECT_EQ(actual.h, expected.h);
         }
 
+        /// Three rects of island-like, unequal sizes
+        Vector<Rect> Islands() {
+            return {Rect(3.0f, 2.0f, 11.0f, 20.0f), Rect(40.0f, 5.0f, 7.0f, 9.0f), Rect(12.0f, 60.0f, 30.0f, 4.0f)};
+        }
+
         bool Overlap(const Rect& a, const Rect& b) {
             return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
         }
@@ -144,8 +149,8 @@ namespace BECore::Tests {
     }
 
     TEST(SpriteSheetGridTest, EveryErrorHasText) {
-        for (const SheetGridError error :
-             {SheetGridError::NoSheet, SheetGridError::BadCount, SheetGridError::TooManyCells, SheetGridError::CellTooSmall, SheetGridError::DuplicateName, SheetGridError::BadName}) {
+        for (const SheetGridError error : {SheetGridError::NoSheet, SheetGridError::BadCount, SheetGridError::TooManyCells, SheetGridError::CellTooSmall, SheetGridError::DuplicateName,
+                                           SheetGridError::BadName, SheetGridError::NoCells}) {
             EXPECT_FALSE(SheetGridErrorText(error).empty());
         }
     }
@@ -290,6 +295,125 @@ namespace BECore::Tests {
         EXPECT_EQ(all[2].name.ToStringView(), "last");
         EXPECT_EQ(all[3].name.ToStringView(), "p_0");
         EXPECT_EQ(all[4].name.ToStringView(), "p_2");
+    }
+
+    TEST(SpriteSheetGridTest, RectSliceNamesByPrefixInListOrder) {
+        TextureLibrary library;
+        const PoolString sheet = PoolString::Intern("assets/islands.png");
+        const Vector<Rect> cells = Islands();
+        auto plan = PlanRectSlice(library, sheet, cells, Named("isle", 8), SheetConflictPolicy::Overwrite);
+        ASSERT_TRUE(plan.has_value());
+        ASSERT_EQ(plan->entries.size(), 3u);
+        EXPECT_EQ(plan->entries[0].name.ToStringView(), "isle_08");
+        EXPECT_EQ(plan->entries[2].name.ToStringView(), "isle_10");
+        for (size_t i = 0; i < cells.size(); ++i) {
+            EXPECT_EQ(plan->entries[i].texturePath, sheet);
+            ExpectRect(plan->entries[i].srcRect, cells[i]);
+        }
+        EXPECT_TRUE(plan->replaced.empty());
+        EXPECT_EQ(plan->skipped, 0u);
+    }
+
+    TEST(SpriteSheetGridTest, RectSliceExplicitNamesWinOverThePrefix) {
+        TextureLibrary library;
+        SheetGridNaming naming = Named("p");
+        naming.names = ParseSheetNames("king queen");
+        auto plan = PlanRectSlice(library, PoolString::Intern("assets/s.png"), Islands(), naming, SheetConflictPolicy::Overwrite);
+        ASSERT_TRUE(plan.has_value());
+        ASSERT_EQ(plan->entries.size(), 3u);
+        EXPECT_EQ(plan->entries[0].name.ToStringView(), "king");
+        EXPECT_EQ(plan->entries[1].name.ToStringView(), "queen");
+        EXPECT_EQ(plan->entries[2].name.ToStringView(), "p_2");
+    }
+
+    TEST(SpriteSheetGridTest, RectSliceOverwriteListsAndSkipCounts) {
+        TextureLibrary library;
+        library.AddOrUpdate(MakeEntry("p_1", "assets/old.png", Rect(1.0f, 2.0f, 3.0f, 4.0f)));
+        const PoolString sheet = PoolString::Intern("assets/s.png");
+
+        auto overwrite = PlanRectSlice(library, sheet, Islands(), Named("p"), SheetConflictPolicy::Overwrite);
+        ASSERT_TRUE(overwrite.has_value());
+        EXPECT_EQ(overwrite->entries.size(), 3u);
+        ASSERT_EQ(overwrite->replaced.size(), 1u);
+        EXPECT_EQ(overwrite->replaced[0].ToStringView(), "p_1");
+        EXPECT_EQ(overwrite->skipped, 0u);
+
+        auto skip = PlanRectSlice(library, sheet, Islands(), Named("p"), SheetConflictPolicy::Skip);
+        ASSERT_TRUE(skip.has_value());
+        ASSERT_EQ(skip->entries.size(), 2u);
+        EXPECT_EQ(skip->entries[0].name.ToStringView(), "p_0");
+        EXPECT_EQ(skip->entries[1].name.ToStringView(), "p_2");
+        EXPECT_TRUE(skip->replaced.empty());
+        EXPECT_EQ(skip->skipped, 1u);
+    }
+
+    TEST(SpriteSheetGridTest, RectSliceErrors) {
+        TextureLibrary library;
+        const PoolString sheet = PoolString::Intern("assets/s.png");
+        const SheetConflictPolicy policy = SheetConflictPolicy::Overwrite;
+
+        EXPECT_EQ(PlanRectSlice(library, PoolString{}, Islands(), Named("p"), policy).error(), SheetGridError::NoSheet);
+        EXPECT_EQ(PlanRectSlice(library, sheet, Vector<Rect>{}, Named("p"), policy).error(), SheetGridError::NoCells);
+        EXPECT_EQ(PlanRectSlice(library, sheet, Islands(), Named(""), policy).error(), SheetGridError::BadName);
+
+        SheetGridNaming bad = Named("p");
+        bad.names = {String("good"), String("no/slash")};
+        EXPECT_EQ(PlanRectSlice(library, sheet, Islands(), bad, policy).error(), SheetGridError::BadName);
+
+        SheetGridNaming twice = Named("p");
+        twice.names = {String("same"), String("same")};
+        EXPECT_EQ(PlanRectSlice(library, sheet, Islands(), twice, policy).error(), SheetGridError::DuplicateName);
+
+        const Vector<Rect> atLimit(static_cast<size_t>(kMaxSheetGridCells), Rect(0.0f, 0.0f, 1.0f, 1.0f));
+        EXPECT_TRUE(PlanRectSlice(library, sheet, atLimit, Named("p"), policy).has_value());
+        const Vector<Rect> overLimit(static_cast<size_t>(kMaxSheetGridCells) + 1, Rect(0.0f, 0.0f, 1.0f, 1.0f));
+        EXPECT_EQ(PlanRectSlice(library, sheet, overLimit, Named("p"), policy).error(), SheetGridError::TooManyCells);
+    }
+
+    TEST(SpriteSheetGridTest, RectSliceLeavesTheLibraryAloneAndApplyKeepsOrder) {
+        TextureLibrary library;
+        library.AddOrUpdate(MakeEntry("first", "assets/old.png", Rect()));
+        library.AddOrUpdate(MakeEntry("p_1", "assets/old.png", Rect(9.0f, 9.0f, 9.0f, 9.0f)));
+        library.AddOrUpdate(MakeEntry("last", "assets/old.png", Rect()));
+
+        auto plan = PlanRectSlice(library, PoolString::Intern("assets/s.png"), Islands(), Named("p"), SheetConflictPolicy::Overwrite);
+        ASSERT_TRUE(plan.has_value());
+        ASSERT_EQ(library.GetAll().size(), 3u);
+        EXPECT_EQ(library.GetAll()[1].texturePath.ToStringView(), "assets/old.png");
+
+        ApplyGridSlice(library, *plan);
+        const auto& all = library.GetAll();
+        ASSERT_EQ(all.size(), 5u);
+        EXPECT_EQ(all[0].name.ToStringView(), "first");
+        EXPECT_EQ(all[1].name.ToStringView(), "p_1");
+        ExpectRect(all[1].srcRect, Islands()[1]);
+        EXPECT_EQ(all[2].name.ToStringView(), "last");
+        EXPECT_EQ(all[3].name.ToStringView(), "p_0");
+        ExpectRect(all[3].srcRect, Islands()[0]);
+        EXPECT_EQ(all[4].name.ToStringView(), "p_2");
+    }
+
+    TEST(SpriteSheetGridTest, GridPlanEqualsRectPlanOfTheGridCells) {
+        TextureLibrary library;
+        library.AddOrUpdate(MakeEntry("p_3", "assets/old.png", Rect()));
+        const PoolString sheet = PoolString::Intern("assets/s.png");
+        const SheetGridSpec spec = Grid(4, 3, 2, 1);
+
+        auto viaGrid = PlanGridSlice(library, sheet, 200, 100, spec, Named("p"), SheetConflictPolicy::Overwrite);
+        auto cells = ComputeGridCells(200, 100, spec);
+        ASSERT_TRUE(cells.has_value());
+        auto viaRects = PlanRectSlice(library, sheet, *cells, Named("p"), SheetConflictPolicy::Overwrite);
+        ASSERT_TRUE(viaGrid.has_value());
+        ASSERT_TRUE(viaRects.has_value());
+
+        ASSERT_EQ(viaGrid->entries.size(), viaRects->entries.size());
+        for (size_t i = 0; i < viaGrid->entries.size(); ++i) {
+            EXPECT_EQ(viaGrid->entries[i].name, viaRects->entries[i].name);
+            EXPECT_EQ(viaGrid->entries[i].texturePath, viaRects->entries[i].texturePath);
+            ExpectRect(viaGrid->entries[i].srcRect, viaRects->entries[i].srcRect);
+        }
+        EXPECT_EQ(viaGrid->replaced.size(), viaRects->replaced.size());
+        EXPECT_EQ(viaGrid->skipped, viaRects->skipped);
     }
 
 }  // namespace BECore::Tests

@@ -52,6 +52,8 @@ namespace BECore {
                 return "Two cells get the same name";
             case SheetGridError::BadName:
                 return "A name is empty or not 1 to 64 of A-Z a-z 0-9 _ -";
+            case SheetGridError::NoCells:
+                return "No cells to cut";
         }
         return {};
     }
@@ -113,8 +115,22 @@ namespace BECore {
         if (!cells) {
             return std::unexpected(cells.error());
         }
+        return PlanRectSlice(library, texturePath, *cells, naming, policy);
+    }
 
-        const uint32_t count = static_cast<uint32_t>(cells->size());
+    std::expected<GridSlicePlan, SheetGridError> PlanRectSlice(const TextureLibrary& library, PoolString texturePath, const Vector<Rect>& cells, const SheetGridNaming& naming,
+                                                               SheetConflictPolicy policy) {
+        if (texturePath.Empty()) {
+            return std::unexpected(SheetGridError::NoSheet);
+        }
+        if (cells.empty()) {
+            return std::unexpected(SheetGridError::NoCells);
+        }
+        if (cells.size() > static_cast<size_t>(kMaxSheetGridCells)) {
+            return std::unexpected(SheetGridError::TooManyCells);
+        }
+
+        const uint32_t count = static_cast<uint32_t>(cells.size());
         const uint32_t padWidth = DigitCount(naming.startIndex + count - 1);
 
         Vector<String> names;
@@ -154,7 +170,7 @@ namespace BECore {
             SpriteEntry entry;
             entry.name = name;
             entry.texturePath = texturePath;
-            entry.srcRect = (*cells)[k];
+            entry.srcRect = cells[k];
             plan.entries.push_back(eastl::move(entry));
         }
         return plan;
