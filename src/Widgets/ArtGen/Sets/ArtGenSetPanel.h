@@ -117,9 +117,10 @@ namespace BECore {
         String _error;
         String _queued;
 
-        String _selectedSet;    // the set the rows show, by name; a name copied only when the selection changes
-        String _loadedSet;      // the set `_rows` belongs to
-        String _acceptMessage;  // the last Accept all, switch or Keep: its answer or its error, shown under the rows
+        int32_t _moreCount = 1;  // the variants More variants asks of each row
+        String _selectedSet;     // the set the rows show, by name; a name copied only when the selection changes
+        String _loadedSet;       // the set `_rows` belongs to
+        String _acceptMessage;   // the last Accept all, switch or Keep: its answer or its error, shown under the rows
         bool _acceptFailed = false;
         Vector<RowThumbs> _rows;  // by job index
         uint64_t _frame = 0;

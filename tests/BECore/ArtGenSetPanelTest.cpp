@@ -1,4 +1,5 @@
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/TempPath.h>
 #include <Widgets/ArtGen/ArtGenPresetForm.h>
@@ -99,6 +100,15 @@ namespace BECore::Tests {
             return ImHashStr(ICON_LC_CHECK_CHECK " Accept all", 0, HostId());
         }
 
+        static ImGuiID MoreVariantsId() {
+            return ImHashStr(ICON_LC_COPY_PLUS " More variants", 0, HostId());
+        }
+
+        /// The text field of the count: InputInt with its buttons puts the field under an id stack of its label
+        static ImGuiID MoreCountId() {
+            return ImHashStr("", 0, ImHashStr("##moreCount", 0, HostId()));
+        }
+
         static ImGuiID RetryId() {
             return ImHashStr(ICON_LC_ROTATE_CCW " Retry", 0, HostId());
         }
@@ -152,6 +162,22 @@ namespace BECore::Tests {
             job.pick = 5;
             set.jobs.push_back(job);
             return set;
+        }
+
+        /// A finished set of two rows: king (not kept) and queen (kept)
+        static ArtGenSet MakeFinishedSet() {
+            ArtGenSet set = MakeSet("chess", "2026-11-17T12:00:00Z", ArtGenSetJobState::Done);
+            ArtGenSetJob queen = set.jobs[0];
+            queen.name = "queen";
+            queen.subject = "queen";
+            queen.accepted = ArtGenSetAccepted{"queen", "2026-11-17T12:30:00Z", true};
+            queen.variants.resize(1);
+            set.jobs.push_back(queen);
+            return set;
+        }
+
+        const ArtGenSetJob& JobOf(const char* job) {
+            return *FindJob(*session.FindSet("chess"), job);
         }
 
         /// A point of the screen over the control @p id: the mouse is moved over a grid until ImGui says it is over it
@@ -267,6 +293,74 @@ namespace BECore::Tests {
         // The new set has a job waiting: its Cancel set is on, the older set's is off
         ClickAt(Locate(ImHashStr(ICON_LC_X " Cancel set", 0, HostId())));
         EXPECT_EQ(session.FindSet(StringView(queued))->jobs[0].state, ArtGenSetJobState::Cancelled);
+    }
+
+    TEST_F(ArtGenSetPanelTest, MoreVariantsIsOffWhileTheSetRunsAndAClickDoesNothing) {
+        TypeSubject("queen");
+        ASSERT_TRUE(PressQueue());
+        Frame();
+
+        ClickAt(Locate(MoreVariantsId()));
+        EXPECT_FALSE(session.GetSets()[0].jobs[0].more.has_value());
+        EXPECT_EQ(session.GetSets()[0].jobs[0].state, ArtGenSetJobState::Pending);
+    }
+
+    TEST_F(ArtGenSetPanelTest, MoreVariantsIsOffWhenEveryRowIsKept) {
+        ArtGenSet set = MakeFinishedSet();
+        set.jobs.erase(set.jobs.begin());
+        ASSERT_NO_FATAL_FAILURE(LoadSets({set}));
+
+        ClickAt(Locate(MoreVariantsId()));
+        EXPECT_FALSE(FindJob(*session.FindSet("chess"), "queen")->more.has_value());
+        EXPECT_EQ(FindJob(*session.FindSet("chess"), "queen")->state, ArtGenSetJobState::Done);
+    }
+
+    TEST_F(ArtGenSetPanelTest, MoreVariantsOfAFinishedSetQueuesTheRowsThatAreNotKept) {
+        ASSERT_NO_FATAL_FAILURE(LoadSets({MakeFinishedSet()}));
+
+        ClickAt(Locate(MoreVariantsId()));
+
+        const ArtGenSetJob& king = JobOf("king");
+        EXPECT_EQ(king.state, ArtGenSetJobState::Pending);
+        ASSERT_TRUE(king.more.has_value());
+        EXPECT_EQ(king.more->count, 1) << "the field's default";
+        EXPECT_EQ(king.variants.size(), 2u);
+        EXPECT_EQ(king.pick, Optional<int64_t>(5));
+        EXPECT_EQ(JobOf("queen").state, ArtGenSetJobState::Done);
+        EXPECT_FALSE(JobOf("queen").more.has_value());
+    }
+
+    TEST_F(ArtGenSetPanelTest, TheCountFieldSetsHowManyVariantsAreAsked) {
+        ASSERT_NO_FATAL_FAILURE(LoadSets({MakeFinishedSet()}));
+
+        ClickAt(Locate(MoreCountId()));
+        ImGui::GetIO().AddInputCharactersUTF8("2");
+        Frame();
+        Frame();
+        ClickAt(Locate(MoreVariantsId()));
+
+        ASSERT_TRUE(JobOf("king").more.has_value());
+        EXPECT_EQ(JobOf("king").more->count, 2);
+    }
+
+    TEST_F(ArtGenSetPanelTest, ASteadyFrameWithASetSelectedAllocatesNothing) {
+        ASSERT_NO_FATAL_FAILURE(LoadSets({MakeFinishedSet()}));
+        constexpr int kWarmupFrames = 10;
+        constexpr int kSteadyFrames = 5;
+        for (int i = 0; i < kWarmupFrames; ++i) {
+            Frame();
+        }
+
+        const AllocTracker::ThreadCounters before = AllocTracker::GetThreadCounters();
+        for (int i = 0; i < kSteadyFrames; ++i) {
+            Frame();
+        }
+        const AllocTracker::ThreadCounters after = AllocTracker::GetThreadCounters();
+
+        // The counters stay zero without ENGINE_PROFILER_ALLOC, so the check only bites in the profile preset
+        if constexpr (AllocTracker::kEnabled) {
+            EXPECT_EQ(after.count, before.count);
+        }
     }
 
     TEST(ArtGenSetPanelLayoutTest, TheFieldsOfARowHaveFixedWidthsInEms) {

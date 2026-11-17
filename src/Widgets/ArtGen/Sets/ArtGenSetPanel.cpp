@@ -48,6 +48,7 @@ namespace BECore {
         // Squares behind a thumbnail, so a transparent background (a cut-out sprite) shows as transparent
         constexpr float kCheckerCell = 10.0f;
         constexpr size_t kLabelSize = 160;
+        constexpr size_t kTipSize = 256;
         // A row's thumbnail is smaller than the Generate grid's, so a row of four fits the panel
         constexpr float kThumbnailSize = 112.0f;
 
@@ -110,6 +111,38 @@ namespace BECore {
             if (cancelled > 0 && length > 0 && static_cast<size_t>(length) < size) {
                 std::snprintf(out + length, size - static_cast<size_t>(length), ", %d cancelled", static_cast<int>(cancelled));
             }
+        }
+
+        /// The line a successful More variants leaves: what was queued, and the rows left out with the reason
+        String DescribeMore(const Json& reply) {
+            const Optional<int64_t> count = GetJsonInt(reply, "count");
+            const Optional<int64_t> seed = GetJsonInt(reply, "seed");
+            String message = Format("Queued {} more per row on seed {}", count ? *count : 0, seed ? *seed : 0);
+            const Json* skipped = FindJsonMember(reply, "skipped");
+            if (skipped == nullptr || !skipped->is_array() || skipped->empty()) {
+                return message;
+            }
+            String left;
+            for (const Json& row : *skipped) {
+                const Optional<String> job = GetJsonString(row, "job");
+                const Optional<String> reason = GetJsonString(row, "reason");
+                if (job && reason) {
+                    left.append(left.empty() ? "" : ", ").append(Format("{} ({})", *job, *reason));
+                }
+            }
+            return Format("{}; left out: {}", message, left);
+        }
+
+        /// The tooltip of an enabled More variants: how many rows run, and that the others are left out
+        void FormatMoreTip(const ArtGenSet& set, int32_t count, char* out, size_t size) {
+            int32_t running = 0;
+            for (const ArtGenSetJob& job : set.jobs) {
+                running += ArtGenMoreSkipReason(job, count) == nullptr ? 1 : 0;
+            }
+            std::snprintf(
+                out, size,
+                "Make %d more variant(s) of each of %d row(s) on a fresh seed and add them to the ones they have. Kept, failed and cancelled rows are left out; the pick and the game stay as they are",
+                static_cast<int>(count), static_cast<int>(running));
         }
 
         /// The width of a field that is followed by @p label on the same line, in the room that is left
@@ -335,6 +368,27 @@ namespace BECore {
         if (IconTextButton(ICON_LC_ROTATE_CCW, "Retry",
                            failedOrCancelled > 0 ? "Put the failed and cancelled jobs back in the queue; their earlier images are dropped" : "No job of this set failed or was cancelled")) {
             session.RetryJobs(StringView(set.name));
+        }
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        {
+            ScopedMonoFont mono;
+            ImGui::SetNextItemWidth(ArtGenFieldWidth(kCountWidthInEm, ImGui::GetFontSize(), ImGui::GetContentRegionAvail().x));
+            ImGui::InputInt("##moreCount", &_moreCount);
+        }
+        _moreCount = std::clamp(_moreCount, 1, kArtGenSetMaxCount);
+        ItemTooltip("How many more variants each row gets");
+        ImGui::SameLine();
+        const char* blocker = ArtGenMoreBlocker(set);
+        char tip[kTipSize];
+        if (blocker == nullptr) {
+            FormatMoreTip(set, _moreCount, tip, sizeof(tip));
+        }
+        ImGui::BeginDisabled(blocker != nullptr);
+        if (IconTextButton(ICON_LC_COPY_PLUS, "More variants", blocker != nullptr ? blocker : tip)) {
+            auto reply = session.MoreVariants(StringView(set.name), _moreCount);
+            _acceptFailed = !reply.has_value();
+            _acceptMessage = reply ? DescribeMore(*reply) : reply.error().message;
         }
         ImGui::EndDisabled();
     }
