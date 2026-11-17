@@ -7,6 +7,7 @@
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/MoveOnlyFunction.h>
 #include <BECore/Utils/Singleton.h>
+#include <Widgets/ArtGen/ArtGenImage.h>
 #include <Widgets/ArtGen/ArtGenPresetForm.h>
 #include <Widgets/ArtGen/ArtGenSound.h>
 #include <Widgets/ArtGen/Sets/ArtGenSet.h>
@@ -132,8 +133,9 @@ namespace BECore {
         static constexpr int32_t kMaxCount = 16;
 
         using Clock = MoveOnlyFunction<double()>;
-        /// Accepts a variant as the sprite @p sprite and, when @p node is given, puts it on that node; the answer of `artgen_accept`
-        using Acceptor = std::expected<Json, ControlError> (*)(const ArtGenVariant& variant, StringView sprite, SceneNode* node);
+        /// Accepts a variant as the sprite @p sprite, cut and scaled by @p plan, and, when @p node is given, puts it on that node; the answer of
+        /// `artgen_accept`
+        using Acceptor = std::expected<Json, ControlError> (*)(const ArtGenVariant& variant, StringView sprite, const ArtGenImagePlan& plan, SceneNode* node);
         /// Accepts a sound variant as a clip at @p target, processed by @p settings, and puts it on @p node's AudioSourceComponent when given
         using SoundAcceptor = std::expected<Json, ControlError> (*)(const ArtGenVariant& variant, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, SceneNode* node);
         /// Writes into the game's provenance file of @p name (a sprite or a clip, by @p kind) that the choice with @p seed was kept on @p date

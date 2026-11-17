@@ -513,7 +513,7 @@ namespace BECore {
         if (!variant) {
             return fail(Format("the job '{}': {}", job->name, variant.error()));
         }
-        auto answer = sound ? _soundAcceptor(*variant, ArtGenSoundTarget{name, String()}, ArtGenSoundSettings{}, nullptr) : _acceptor(*variant, name, nullptr);
+        auto answer = sound ? _soundAcceptor(*variant, ArtGenSoundTarget{name, String()}, ArtGenSoundSettings{}, nullptr) : _acceptor(*variant, name, ArtGenImagePlan{}, nullptr);
         if (!answer) {
             return fail(Format("the job '{}': {}", job->name, answer.error().message));
         }
@@ -830,7 +830,7 @@ namespace BECore {
                 continue;
             }
             Planned& plan = planned[next++];
-            auto answer = sound ? _soundAcceptor(plan.variant, ArtGenSoundTarget{job.name, String()}, ArtGenSoundSettings{}, nullptr) : _acceptor(plan.variant, job.name, nullptr);
+            auto answer = sound ? _soundAcceptor(plan.variant, ArtGenSoundTarget{job.name, String()}, ArtGenSoundSettings{}, nullptr) : _acceptor(plan.variant, job.name, ArtGenImagePlan{}, nullptr);
             if (!answer) {
                 String doneNames;
                 AppendNames(doneNames, "accepted before it", done);

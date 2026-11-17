@@ -5,7 +5,6 @@
 #include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
 #include <Widgets/EditorLayout/UserFileIo.h>
-#include <filesystem>
 #include <gtest/gtest.h>
 #include <initializer_list>
 
@@ -71,7 +70,7 @@ namespace BECore::Tests {
             return reply;
         }
 
-        std::expected<Json, ControlError> FakeAcceptor(const ArtGenVariant& variant, StringView sprite, SceneNode* node) {
+        std::expected<Json, ControlError> FakeAcceptor(const ArtGenVariant& variant, StringView sprite, const ArtGenImagePlan& /*plan*/, SceneNode* node) {
             gAccepted.seed = variant.seed;
             gAccepted.sprite = String(sprite);
             gAccepted.withNode = node != nullptr;

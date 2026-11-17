@@ -68,7 +68,7 @@ namespace BECore {
                 return std::unexpected(ControlError{String(kAcceptFailedCode), String("no node is selected in the scene editor")});
             }
         }
-        return _acceptor(*variant, sprite, node);
+        return _acceptor(*variant, sprite, ArtGenImagePlan{}, node);
     }
 
     std::expected<Json, ControlError> ArtGenSession::AcceptSound(int64_t seed, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, bool useOnSelected) {

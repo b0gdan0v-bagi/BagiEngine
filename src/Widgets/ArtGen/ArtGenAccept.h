@@ -6,6 +6,7 @@
 #include <BECore/Resource/TextureLibrary.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/FunctionRef.h>
+#include <Widgets/ArtGen/ArtGenImage.h>
 #include <Widgets/ArtGen/ArtGenSound.h>
 #include <cstdint>
 #include <expected>
@@ -34,15 +35,24 @@ namespace BECore {
         String texturePath;  // the virtual path a TextureLibrary entry names: "assets/artgen/<sprite>.png"
         std::filesystem::path pngFile;
         std::filesystem::path provenanceFile;
-        uint32_t width = 0;
+        uint32_t width = 0;  // the written file's size
         uint32_t height = 0;
+        ArtGenIntRect crop;  // the part of the source that was kept
+        double scale = 1.0;  // written size over the crop's
+        ArtGenImageSettings settings;
+        bool fromSet = false;  // the crop came from the frame of a set, not from this image alone
     };
 
     /**
-     * @brief Copies a generated PNG and its provenance file into @p assetsDir (the game's top `assets` layer) as `artgen/<sprite>.png` and
+     * @brief Writes a generated PNG and its provenance file into @p assetsDir (the game's top `assets` layer) as `artgen/<sprite>.png` and
      * `artgen/<sprite>.artgen.json`, replacing an earlier accept of the same name. No services: the caller names the folder.
+     *
+     * With an identity plan both files are copied byte for byte. Otherwise the PNG is cut and scaled by the plan's frame (or, with none, by
+     * the frame over this image's own drawn box), and the provenance is the generation's record plus `accepted`. A picture with nothing drawn,
+     * or one the plan's frame would cut, is an error and nothing is written.
      */
-    std::expected<ArtGenCopied, String> CopyVariantIntoAssets(const std::filesystem::path& png, const std::filesystem::path& provenance, const std::filesystem::path& assetsDir, StringView sprite);
+    std::expected<ArtGenCopied, String> CopyVariantIntoAssets(const std::filesystem::path& png, const std::filesystem::path& provenance, const std::filesystem::path& assetsDir, StringView sprite,
+                                                              const ArtGenImagePlan& plan);
 
     /// Calls ReloadTexture on every SpriteRendererComponent under @p root that names @p sprite or @p texturePath; returns how many
     uint32_t ReloadSpritesUsing(SceneNode& root, PoolString sprite, PoolString texturePath);
@@ -64,11 +74,11 @@ namespace BECore {
     /**
      * @brief Accept of the Generate panel and of `artgen_accept`: the variant becomes the game's sprite @p sprite.
      *
-     * Copies it into the game's assets (CopyVariantIntoAssets), adds or replaces the TextureLibrary entry (the whole image) and saves the library,
+     * Copies it into the game's assets (CopyVariantIntoAssets with @p plan), adds or replaces the TextureLibrary entry (the whole written image) and saves the library,
      * drops the old texture of that path from the resource cache and reloads every sprite of the active scene that uses it, so the new picture shows
      * at once. Fails without changing the library when the game has no assets folder or no TextureLibrary.xml.
      */
-    std::expected<ArtGenAccepted, String> AcceptVariant(const ArtGenVariant& variant, StringView sprite);
+    std::expected<ArtGenAccepted, String> AcceptVariant(const ArtGenVariant& variant, StringView sprite, const ArtGenImagePlan& plan);
 
     /// Puts the sprite on @p node's SpriteRendererComponent and reloads it; fails when the node has none
     std::expected<void, String> UseSpriteOn(SceneNode& node, PoolString sprite);
@@ -117,9 +127,10 @@ namespace BECore {
     /**
      * @brief The editor's ArtGenSession::Acceptor: AcceptVariant, then UseSpriteOn @p node when one is given (the scene editor is told the scene changed).
      *
-     * Answers `{sprite, texturePath, png, width, height, reloadedSprites, usedOn}`; a failure is `artgen_accept_failed` with the reason.
+     * Answers `{sprite, texturePath, png, width, height, processing, reloadedSprites, usedOn}` (the size is the written file's; `processing` is
+     * `{trim, padding, maxSize, crop, scale, size, frame}`); a failure is `artgen_accept_failed` with the reason.
      */
-    std::expected<Json, ControlError> AcceptForControl(const ArtGenVariant& variant, StringView sprite, SceneNode* node);
+    std::expected<Json, ControlError> AcceptForControl(const ArtGenVariant& variant, StringView sprite, const ArtGenImagePlan& plan, SceneNode* node);
 
     /// The provenance file beside a game's image or clip: the file's name with its extension replaced by `.artgen.json`
     [[nodiscard]] std::filesystem::path ProvenanceFileOf(const std::filesystem::path& mediaFile);

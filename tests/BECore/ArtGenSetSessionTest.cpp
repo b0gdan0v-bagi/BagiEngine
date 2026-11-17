@@ -81,7 +81,7 @@ namespace BECore::Tests {
             return {};
         }
 
-        std::expected<Json, ControlError> FakeAcceptor(const ArtGenVariant& variant, StringView sprite, SceneNode* node) {
+        std::expected<Json, ControlError> FakeAcceptor(const ArtGenVariant& variant, StringView sprite, const ArtGenImagePlan& /*plan*/, SceneNode* node) {
             return Answer(variant, sprite, true, node != nullptr, true);
         }
 
