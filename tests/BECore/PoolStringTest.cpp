@@ -1,5 +1,6 @@
 #include <BECore/PoolString/PoolString.h>
-#include <BECore/Reflection/XmlDeserializer.h>
+#include <BECore/PoolString/PoolStringStorage.h>
+#include <BECore/PoolStringTestSupport.h>
 #include <Common/Printers.h>
 #include <chrono>
 #include <cstdio>
@@ -437,6 +438,281 @@ namespace BECore::Tests {
         const double mix4 = BestInternNanoseconds(kLockCostThreads, kLockCostNewEvery);
         std::printf("Intern ns per call, best of %d: 1 thread hit %.1f, 1 thread mix %.1f, %d threads hit %.1f, %d threads mix %.1f\n", kLockCostRepeats, hit1, mix1, kLockCostThreads, hit4,
                     kLockCostThreads, mix4);
+    }
+
+    namespace {
+
+        constexpr size_t kBlock = PoolString::kBlockBytes;
+        constexpr size_t kSmallTable = 8;
+
+        /// A storage over a counting source with a small table; the numbers of its statistics are absolute
+        struct IsolatedPool {
+            CountingBlockSource source;
+            Details::PoolStringStorage storage;
+
+            explicit IsolatedPool(size_t sourceLimit = SIZE_MAX, size_t tableCapacity = kSmallTable) : source(sourceLimit), storage(source, tableCapacity) {}
+        };
+
+        /// The smallest power of two that holds `used` entries at half load
+        size_t TableCapacityFor(size_t start, size_t used) {
+            size_t capacity = start;
+            while (used * 2 > capacity) {
+                capacity *= 2;
+            }
+            return capacity;
+        }
+
+        void ExpectAllFound(Details::PoolStringStorage& storage, const Vector<String>& names, const Vector<PoolString>& interned) {
+            for (size_t i = 0; i < names.size(); ++i) {
+                const auto found = storage.Find(StringView{names[i]});
+                ASSERT_TRUE(found.has_value()) << names[i].c_str();
+                ASSERT_EQ(*found, interned[i]) << names[i].c_str();
+                ASSERT_EQ(interned[i].ToStringView(), StringView{names[i]});
+                ASSERT_EQ(interned[i].CStr()[interned[i].Length()], '\0');
+            }
+        }
+
+    }  // namespace
+
+    TEST(PoolEntryTest, EntryBytesAreTheHeaderTheTextAndTheNulPaddedToEight) {
+        static_assert(Details::PoolEntryBytes(0) == 16);
+        static_assert(Details::PoolEntryBytes(1) == 16);
+        static_assert(Details::PoolEntryBytes(3) == 16);
+        static_assert(Details::PoolEntryBytes(4) == 24);
+        static_assert(Details::PoolEntryBytes(7) == 24);
+        static_assert(Details::PoolEntryBytes(8) == 24);
+        EXPECT_EQ(Details::PoolEntryBytes(4), kEntryHeaderBytes + 4 + 1 + 7);
+    }
+
+    TEST(PoolEntryTest, ConstructPoolEntryWritesTheHeaderTheTextAndTheNul) {
+        alignas(8) char memory[64];
+        std::memset(memory, 0x7f, sizeof(memory));
+        const StringView text = "entry_text";
+        const uint64_t hash = StringUtils::GetHash(text);
+
+        const Details::PoolStringEntry* entry = Details::ConstructPoolEntry(memory, hash, text);
+        EXPECT_EQ(static_cast<const void*>(entry), static_cast<const void*>(memory));
+        EXPECT_EQ(entry->hash, hash);
+        EXPECT_EQ(entry->size, text.size());
+        EXPECT_EQ(entry->ToStringView(), text);
+        EXPECT_EQ(entry->data[text.size()], '\0');
+        EXPECT_LE(Details::PoolEntryBytes(text.size()), sizeof(memory));
+    }
+
+    TEST(PoolStringStorageTest, ASourceThatIsEmptyFromTheFirstCallStillInternsFindsAndGrows) {
+        IsolatedPool pool(0, 4);
+        constexpr size_t kNames = 3000;
+        Vector<String> names;
+        Vector<PoolString> interned;
+        size_t entryBytes = 0;
+        for (size_t i = 0; i < kNames; ++i) {
+            names.push_back(CounterName("storage_fallback_name_with_some_length_", i));
+            interned.push_back(pool.storage.Intern(StringView{names.back()}));
+            entryBytes += Details::PoolEntryBytes(names.back().size());
+        }
+        ASSERT_NO_FATAL_FAILURE(ExpectAllFound(pool.storage, names, interned));
+
+        // About 3000 entries of 64 bytes: two standard blocks, every one of them from the heap
+        const PoolStringStats stats = pool.storage.GetStats();
+        EXPECT_EQ(pool.source.served, 0u);
+        EXPECT_EQ(pool.source.refused, stats.blockCount);
+        EXPECT_EQ(stats.heapFallbackBlocks, stats.blockCount);
+        EXPECT_EQ(stats.blockCount, (entryBytes + kBlock - 1) / kBlock);
+        EXPECT_EQ(stats.blockBytes, stats.blockCount * kBlock);
+        EXPECT_EQ(stats.stringCount, kNames);
+        EXPECT_EQ(stats.stringBytes, entryBytes);
+        EXPECT_EQ(stats.tableCapacity, TableCapacityFor(4, kNames));
+    }
+
+    TEST(PoolStringStorageTest, ASourceThatRunsOutMidwayGivesTheRestFromTheHeap) {
+        IsolatedPool pool(1, kSmallTable);
+        Vector<String> names;
+        Vector<PoolString> interned;
+        // Big strings, so that a few of them take several blocks
+        for (size_t i = 0; i < 6; ++i) {
+            names.push_back(BlockText(kBlock / 2 + 100 + i, static_cast<char>('a' + i)));
+            interned.push_back(pool.storage.Intern(StringView{names.back()}));
+        }
+        ASSERT_NO_FATAL_FAILURE(ExpectAllFound(pool.storage, names, interned));
+        const PoolStringStats stats = pool.storage.GetStats();
+        EXPECT_EQ(stats.blockCount, 6u);
+        EXPECT_EQ(pool.source.served, 1u);
+        EXPECT_EQ(stats.heapFallbackBlocks, 5u);
+        EXPECT_EQ(stats.blockCount, pool.source.served + stats.heapFallbackBlocks);
+    }
+
+    TEST(PoolStringStorageTest, StringsAroundTheBlockSizeTakeTheBlocksTheRuleSays) {
+        // The entry of a text of kBlock - 13 bytes fills a block exactly
+        constexpr size_t kExactText = kBlock - kEntryHeaderBytes - 1;
+        {
+            IsolatedPool pool;
+            static_cast<void>(pool.storage.Intern(StringView{BlockText(kExactText, 'a')}));
+            const PoolStringStats stats = pool.storage.GetStats();
+            EXPECT_EQ(stats.blockCount, 1u);
+            EXPECT_EQ(stats.blockBytes, kBlock);
+        }
+        {
+            // One more byte of text: the entry is larger than a block and gets a block of its own
+            IsolatedPool pool;
+            static_cast<void>(pool.storage.Intern(StringView{BlockText(kExactText + 1, 'b')}));
+            const PoolStringStats stats = pool.storage.GetStats();
+            EXPECT_EQ(stats.blockCount, 1u);
+            EXPECT_EQ(stats.blockBytes, Details::PoolEntryBytes(kExactText + 1));
+            EXPECT_EQ(stats.blockBytes, kBlock + 8);
+        }
+        {
+            IsolatedPool pool;
+            static_cast<void>(pool.storage.Intern(StringView{BlockText(3 * kBlock + 17, 'c')}));
+            const PoolStringStats stats = pool.storage.GetStats();
+            EXPECT_EQ(stats.blockCount, 1u);
+            EXPECT_EQ(stats.blockBytes, Details::PoolEntryBytes(3 * kBlock + 17));
+        }
+    }
+
+    TEST(PoolStringStorageTest, ASmallStringAfterAHugeOneLandsInTheOldBlock) {
+        IsolatedPool pool;
+        static_cast<void>(pool.storage.Intern("storage_small_first"));
+        EXPECT_EQ(pool.storage.GetStats().blockCount, 1u);
+
+        const String huge = BlockText(3 * kBlock + 17, 'h');
+        static_cast<void>(pool.storage.Intern(StringView{huge}));
+        const PoolStringStats afterHuge = pool.storage.GetStats();
+        EXPECT_EQ(afterHuge.blockCount, 2u);
+        EXPECT_EQ(afterHuge.blockBytes, kBlock + Details::PoolEntryBytes(huge.size()));
+
+        static_cast<void>(pool.storage.Intern("storage_small_second"));
+        const PoolStringStats afterSmall = pool.storage.GetStats();
+        EXPECT_EQ(afterSmall.blockCount, 2u);
+        EXPECT_EQ(afterSmall.blockBytes, afterHuge.blockBytes);
+
+        // An entry of a standard block's size does not fit what is left of the current one: a new standard block
+        static_cast<void>(pool.storage.Intern(StringView{BlockText(kBlock - kEntryHeaderBytes - 1, 'k')}));
+        const PoolStringStats afterBig = pool.storage.GetStats();
+        EXPECT_EQ(afterBig.blockCount, 3u);
+        EXPECT_EQ(afterBig.blockBytes, afterHuge.blockBytes + kBlock);
+
+        // What the source was asked for is what the storage counts
+        EXPECT_EQ(pool.source.served, afterBig.blockCount);
+        EXPECT_EQ(pool.source.servedBytes, afterBig.blockBytes);
+        EXPECT_EQ(afterBig.heapFallbackBlocks, 0u);
+    }
+
+    TEST(PoolStringStorageTest, AHugeFirstStringLeavesNoCurrentBlock) {
+        IsolatedPool pool;
+        const String huge = BlockText(2 * kBlock + 5, 'h');
+        static_cast<void>(pool.storage.Intern(StringView{huge}));
+        static_cast<void>(pool.storage.Intern("storage_after_the_first_huge"));
+        const PoolStringStats stats = pool.storage.GetStats();
+        EXPECT_EQ(stats.blockCount, 2u);
+        EXPECT_EQ(stats.blockBytes, Details::PoolEntryBytes(huge.size()) + kBlock);
+    }
+
+    TEST(PoolStringStorageTest, TheTableGrowsFromASmallCapacityAndKeepsEveryString) {
+        for (const size_t start : {size_t{4}, size_t{8}}) {
+            SCOPED_TRACE(start);
+            IsolatedPool pool(SIZE_MAX, start);
+            constexpr size_t kNames = 100;
+            Vector<String> names;
+            Vector<PoolString> interned;
+            for (size_t i = 0; i < kNames; ++i) {
+                names.push_back(CounterName("storage_growth_", i));
+                interned.push_back(pool.storage.Intern(StringView{names.back()}));
+                const PoolStringStats stats = pool.storage.GetStats();
+                ASSERT_EQ(stats.tableCapacity, TableCapacityFor(start, i + 1));
+            }
+            ASSERT_NO_FATAL_FAILURE(ExpectAllFound(pool.storage, names, interned));
+            const PoolStringStats stats = pool.storage.GetStats();
+            EXPECT_EQ(stats.tableCapacity, 256u);
+            EXPECT_EQ(stats.tableUsed, kNames);
+            EXPECT_GT(stats.longestProbe, 0u);
+            EXPECT_FALSE(pool.storage.Find("storage_growth_missing").has_value());
+        }
+    }
+
+    TEST(PoolStringStorageTest, TheEmptyTextIsAHitAndNotAString) {
+        IsolatedPool pool;
+        const PoolString empty = pool.storage.Intern("");
+        EXPECT_TRUE(empty.Empty());
+        EXPECT_EQ(empty, PoolString());
+        const auto found = pool.storage.Find("");
+        ASSERT_TRUE(found.has_value());
+        EXPECT_EQ(*found, PoolString());
+
+        const PoolStringStats stats = pool.storage.GetStats();
+        EXPECT_EQ(stats.hits, 1u);
+        EXPECT_EQ(stats.misses, 0u);
+        EXPECT_EQ(stats.stringCount, 0u);
+        EXPECT_EQ(stats.stringBytes, 0u);
+        EXPECT_EQ(stats.blockCount, 0u);
+        EXPECT_EQ(stats.writeLocks, 0u);
+    }
+
+    TEST(PoolStringStorageTest, EveryMissOfASingleInternTakesTheUniqueLockOnceAndAHitNever) {
+        IsolatedPool pool;
+        constexpr size_t kNames = 50;
+        constexpr size_t kRepeats = 3;
+        size_t entryBytes = 0;
+        for (size_t i = 0; i < kNames; ++i) {
+            const String name = CounterName("storage_locks_", i);
+            entryBytes += Details::PoolEntryBytes(name.size());
+            for (size_t repeat = 0; repeat <= kRepeats; ++repeat) {
+                static_cast<void>(pool.storage.Intern(StringView{name}));
+            }
+        }
+        const PoolStringStats stats = pool.storage.GetStats();
+        EXPECT_EQ(stats.misses, kNames);
+        EXPECT_EQ(stats.hits, kNames * kRepeats);
+        EXPECT_EQ(stats.internCalls, kNames * (kRepeats + 1));
+        EXPECT_EQ(stats.writeLocks, stats.misses);
+        EXPECT_EQ(stats.stringCount, kNames);
+        EXPECT_EQ(stats.runtime.strings, kNames);
+        EXPECT_EQ(stats.runtime.bytes, entryBytes);
+        EXPECT_EQ(stats.stringBytes, entryBytes);
+        EXPECT_EQ(stats.runtime.blocks, stats.blockCount);
+        EXPECT_EQ(stats.runtime.blockBytes, stats.blockBytes);
+        // The other sources have nothing yet
+        EXPECT_EQ(stats.staticEntries.strings, 0u);
+        EXPECT_EQ(stats.adopted.strings, 0u);
+        EXPECT_EQ(stats.deadStrings, 0u);
+        EXPECT_EQ(stats.batchCalls, 0u);
+    }
+
+    TEST(PoolStringStorageTest, FindAddsNothingAndCountsNothing) {
+        IsolatedPool pool;
+        EXPECT_FALSE(pool.storage.Find("storage_find_missing").has_value());
+        const PoolStringStats stats = pool.storage.GetStats();
+        EXPECT_EQ(stats.stringCount, 0u);
+        EXPECT_EQ(stats.internCalls, 0u);
+        EXPECT_EQ(stats.writeLocks, 0u);
+        EXPECT_EQ(stats.blockCount, 0u);
+    }
+
+    TEST(PoolStringStorageTest, AThreadThatUsesTwoStoragesCountsEachOnesHitsInItsOwn) {
+        IsolatedPool first;
+        IsolatedPool second;
+        const PoolStringStats processBefore = PoolString::GetStats();
+        static_cast<void>(first.storage.Intern("storage_alternate"));
+        static_cast<void>(second.storage.Intern("storage_alternate"));
+        static_cast<void>(PoolString::Intern("storage_alternate_process"));
+        constexpr size_t kRounds = 10;
+        for (size_t i = 0; i < kRounds; ++i) {
+            static_cast<void>(first.storage.Intern("storage_alternate"));
+            static_cast<void>(second.storage.Intern("storage_alternate"));
+            static_cast<void>(second.storage.Intern("storage_alternate"));
+            static_cast<void>(PoolString::Intern("storage_alternate_process"));
+        }
+        EXPECT_EQ(first.storage.GetStats().hits, kRounds);
+        EXPECT_EQ(second.storage.GetStats().hits, 2 * kRounds);
+        EXPECT_EQ(PoolString::GetStats().hits - processBefore.hits, kRounds);
+    }
+
+    TEST(PoolStringStorageTest, TheSameTextInTwoStoragesIsTwoEntries) {
+        IsolatedPool first;
+        IsolatedPool second;
+        const PoolString a = first.storage.Intern("storage_two_pools");
+        const PoolString b = second.storage.Intern("storage_two_pools");
+        EXPECT_NE(a, b);
+        EXPECT_EQ(a.ToStringView(), b.ToStringView());
     }
 
 }  // namespace BECore::Tests

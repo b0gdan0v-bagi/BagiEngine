@@ -1,43 +1,28 @@
 #pragma once
 
+#include <BECore/PoolString/PoolStringEntry.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/StringUtils.h>
 #include <cstddef>
 #include <cstdint>
-#include <shared_mutex>
 
 namespace BECore {
 
     namespace Details {
+        class PoolStringStorage;
+    }
 
-        struct PoolStringEntry {
-            const uint64_t hash;
-            const uint32_t size;
-            char data[1];
-
-            constexpr PoolStringEntry(uint64_t h, uint32_t s) : hash(h), size(s), data{'\0'} {}
-
-            [[nodiscard]] constexpr StringView ToStringView() const noexcept {
-                return {&data[0], static_cast<size_t>(size)};
-            }
-        };
-
-        // The text starts right after the 12 header bytes: the pool lays entries out in blocks by this offset
-        static_assert(offsetof(PoolStringEntry, data) == 12);
-
-        // The empty entry is a type of its own for MSVC
-        struct EmptyEntry {
-            PoolStringEntry header;
-            constexpr EmptyEntry() : header(BECore::StringUtils::GetEmptyHash(), 0) {}
-        };
-
-        // Defined here, not inside the class, to avoid MSVC C2131
-        inline constexpr EmptyEntry g_EmptyEntryStore{};
-
-    }  // namespace Details
+    /// What one source of strings put in the pool (see `PoolStringStats`)
+    struct PoolSourceStats {
+        size_t strings = 0;     ///< Distinct strings that came from this source and are in the table
+        size_t bytes = 0;       ///< Their aligned entry sizes
+        size_t blocks = 0;      ///< Blocks of pool memory held for this source; 0 for static entries (program image)
+        size_t blockBytes = 0;  ///< Their total size
+    };
 
     /// A snapshot of the pool for tests, the profiler and tuning. The table fields are read under the shared lock of the
     /// pool, the call counters under none: they need not agree with the table fields or with each other to the last call.
+    /// The totals (`stringCount`, `stringBytes`, `blockCount`, `blockBytes`) add up all the sources.
     struct PoolStringStats {
         size_t stringCount = 0;    ///< Distinct strings in the pool, the empty one not counted
         size_t stringBytes = 0;    ///< Sum of the aligned entry sizes (header, text, NUL)
@@ -49,6 +34,18 @@ namespace BECore {
         uint64_t internCalls = 0;  ///< `hits + misses`
         uint64_t hits = 0;         ///< `Intern` calls that found the text (the empty text always does)
         uint64_t misses = 0;       ///< `Intern` calls that added a string: a text raced for by two threads is one miss
+
+        PoolSourceStats runtime;        ///< Copied into the pool by `Intern`
+        PoolSourceStats staticEntries;  ///< Ready entries registered by `RegisterStatic`
+        PoolSourceStats adopted;        ///< Entries of adopted blocks
+
+        size_t deadStrings = 0;         ///< Adopted entries whose text was already in the pool: kept in their block, not linked
+        size_t deadBytes = 0;           ///< Their aligned sizes
+        size_t staticDuplicates = 0;    ///< Registered static entries that lost to an entry of the same text
+        uint64_t writeLocks = 0;        ///< Calls that took the unique lock of the pool
+        uint64_t batchCalls = 0;        ///< `InternBatch` calls
+        uint64_t batchStrings = 0;      ///< Texts they were given
+        size_t heapFallbackBlocks = 0;  ///< Blocks the heap gave because the block source returned none
     };
 
     class PoolString {
@@ -95,8 +92,7 @@ namespace BECore {
         }
 
     private:
-        class Storage;
-        friend class PoolString::Storage;
+        friend class Details::PoolStringStorage;
 
         using Entry = Details::PoolStringEntry;
         constexpr explicit PoolString(const Entry* entry) noexcept : _entry(entry) {}
