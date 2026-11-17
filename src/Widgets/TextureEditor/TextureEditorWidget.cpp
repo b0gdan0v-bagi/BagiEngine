@@ -17,6 +17,12 @@
 
 namespace BECore {
 
+    namespace {
+
+        constexpr float kLibraryListWidth = 300.0f;
+
+    }  // namespace
+
     bool TextureEditorWidget::Initialize(IDeserializer& /*deserializer*/) {
         Subscribe<EditorCommandEvent, &TextureEditorWidget::OnCommand>(this);
         return true;
@@ -55,8 +61,7 @@ namespace BECore {
 
         ImGui::Separator();
 
-        const float leftWidth = 200.0f;
-        ImGui::BeginChild("##sprite_list", ImVec2(leftWidth, 0.0f), true);
+        ImGui::BeginChild("##sprite_list", ImVec2(kLibraryListWidth, 0.0f), true);
         RenderLeftPanel();
         ImGui::EndChild();
 
@@ -75,29 +80,31 @@ namespace BECore {
         const auto& entries = CoreManager::GetTextureLibrary().GetAll();
         for (int i = 0; i < static_cast<int>(entries.size()); ++i) {
             if (entries[static_cast<size_t>(i)].name == name) {
-                _selectedIndex = i;
-                _nameDirty = false;
-                const size_t copyLen = eastl::min(sizeof(_nameEditBuffer) - 1, strlen(name.CStr()));
-                memcpy(_nameEditBuffer, name.CStr(), copyLen);
-                _nameEditBuffer[copyLen] = '\0';
+                SelectIndex(i);
                 return;
             }
         }
     }
 
+    void TextureEditorWidget::SelectIndex(int index) {
+        const auto& entries = CoreManager::GetTextureLibrary().GetAll();
+        if (index < 0 || index >= static_cast<int>(entries.size())) {
+            return;
+        }
+        _selectedIndex = index;
+        _nameDirty = false;
+        const PoolString name = entries[static_cast<size_t>(index)].name;
+        const size_t copyLen = eastl::min(sizeof(_nameEditBuffer) - 1, strlen(name.CStr()));
+        memcpy(_nameEditBuffer, name.CStr(), copyLen);
+        _nameEditBuffer[copyLen] = '\0';
+    }
+
     void TextureEditorWidget::RenderLeftPanel() {
         auto& lib = CoreManager::GetTextureLibrary();
-        const auto& entries = lib.GetAll();
 
-        for (int i = 0; i < static_cast<int>(entries.size()); ++i) {
-            const bool selected = (_selectedIndex == i);
-            if (ImGui::Selectable(entries[i].name.CStr(), selected)) {
-                _selectedIndex = i;
-                _nameDirty = false;
-                const size_t copyLen = eastl::min(sizeof(_nameEditBuffer) - 1, strlen(entries[i].name.CStr()));
-                memcpy(_nameEditBuffer, entries[i].name.CStr(), copyLen);
-                _nameEditBuffer[copyLen] = '\0';
-            }
+        const int clicked = _libraryPanel.Render(lib, _selectedIndex, _textures);
+        if (clicked >= 0) {
+            SelectIndex(clicked);
         }
 
         ImGui::Separator();
@@ -105,12 +112,8 @@ namespace BECore {
             SpriteEntry newEntry;
             newEntry.name = PoolString::Intern("new_sprite");
             lib.AddOrUpdate(eastl::move(newEntry));
-            _selectedIndex = static_cast<int>(lib.GetAll().size()) - 1;
-            const auto& addedEntry = lib.GetAll()[static_cast<size_t>(_selectedIndex)];
-            const size_t copyLen = eastl::min(sizeof(_nameEditBuffer) - 1, strlen(addedEntry.name.CStr()));
-            memcpy(_nameEditBuffer, addedEntry.name.CStr(), copyLen);
-            _nameEditBuffer[copyLen] = '\0';
-            _nameDirty = false;
+            _libraryPanel.ResetFilter();
+            SelectIndex(static_cast<int>(lib.GetAll().size()) - 1);
             _isDirty = true;
         }
     }
@@ -195,6 +198,7 @@ namespace BECore {
         ImGui::SameLine();
         if (IconButton(ICON_LC_REFRESH_CW, "Rescan the assets folder for textures", "tex_refresh")) {
             _assetsLoaded = false;
+            _textures.ForgetFailed();
         }
         if (packed) {
             ImGui::TextDisabled("Packed into an atlas: Unpack (Atlas section) to change the texture or the rect");
@@ -352,6 +356,7 @@ namespace BECore {
         if (sheetWidth > 0 && sheetHeight > 0 && !packed) {
             const PoolString firstAdded = _slicePanel.Render(lib, entry.texturePath, sheetWidth, sheetHeight);
             if (!firstAdded.Empty()) {
+                _libraryPanel.ResetFilter();
                 SelectByName(firstAdded);
                 _isDirty = true;
                 return;
@@ -360,6 +365,7 @@ namespace BECore {
         }
 
         if (_atlasPanel.Render(lib, entry)) {
+            _textures.ForgetFailed();
             _isDirty = true;
             return;
         }
