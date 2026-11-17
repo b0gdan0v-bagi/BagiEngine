@@ -1,6 +1,6 @@
 # Sprite Library panel
 
-`TextureEditorWidget` edits the `TextureLibrary` (the sprite entries: name, texture, `srcRect`); Save and the `texture.save` command write the game's `TextureLibrary.xml`. Editor only (`TextureEditor` is one of the editor folders of `src/CMakeLists.txt`).
+`TextureEditorWidget` edits the `TextureLibrary` (the sprite entries: name, texture, `srcRect`, the optional atlas group); Save and the `texture.save` command write the game's `TextureLibrary.xml`. Editor only (`TextureEditor` is one of the editor folders of `src/CMakeLists.txt`).
 
 ## Slice sheet
 
@@ -14,6 +14,17 @@ The section "Slice sheet" (`SpriteSheetSlicePanel`) cuts the selected entry's te
 
 ## Alpha islands and the image helper
 
-- **`SpriteImage`** holds pixels on the CPU as straight RGBA (`RgbaImage`) over SDL_image, which the build already has (it decodes with its bundled stb; the engine adds no stb image code of its own). `SaveRgbaPng` writes the same bytes for the same image, so a later packer's output can be compared and a rewrite is not a diff; it is a plain write, a caller that must not lose the old file replaces atomically itself.
+- **`SpriteImage`** holds pixels on the CPU as straight RGBA (`RgbaImage`) over SDL_image, which the build already has (it decodes with its bundled stb; the engine adds no stb image code of its own). `SaveRgbaPng` writes the same bytes for the same image, so the packer's output can be compared and a rewrite is not a diff; it is a plain write, and `ReplaceRgbaPng` is the same bytes through a temp file renamed over the old one, for a caller that must not lose it.
 - **`FindAlphaIslands`** (pure, no SDL or ImGui) rules: a pixel is solid when its alpha is above the threshold; solid pixels are 8-connected; boxes merge by overlap or by a gap before the small ones are dropped, so a dot joins its body instead of vanishing; padding is clamped to the sheet and not resolved against neighbours (rects may overlap); the order is reading order by rows, the topmost island leading a row, because sprite names follow it.
 - **The finder runs on the button, never per frame**: it decodes the file and scans it, which a drag field would repeat every frame. The panel keeps the rects, not the pixels, and clears them when an island field, the texture or its size changes, so the overlay never shows a stale result. The file's size must equal the preview texture's, or the file changed under the editor and the result is refused.
+
+## Atlas
+
+The section "Atlas" (`SpriteAtlasPanel`) packs the sprites of one **atlas group** into one PNG (`assets/atlases/<name>.png`) and unpacks them again. The rules are `SpriteAtlasPacker` (pure placement) and `SpriteAtlas` (the model and the files), tested without ImGui; the panel is the fields, the two buttons, and the refresh of what showed the old pixels (the texture cache, the sprites of the active scene). Nothing reaches `TextureLibrary.xml` until Save.
+
+- **The model is two optional fields of the entry.** `atlas.name` is the group; `atlas.source` (the file and rect the pixels came from) is engaged exactly when the sprite is packed, and then the entry's own `texturePath` and `srcRect` point into the atlas. So a repack reads the sources, never the old atlas (a changed source is a plain Pack), and Unpack is the exact inverse: the float rect comes back as it was and the group name stays, so a later Pack repacks the group.
+- **The packer's order is a contract.** Shelf placement in a fixed sort order with fixed tie rules, padding only between sprites (never at the atlas edge), the width chosen by area then by the smaller width, power of two or tight: the same sprites give the same file, so a repack is not a diff of the asset. Members are taken sorted by name for the same reason, whatever the library's order.
+- **Crop.** A rect is cut at its edges rounded to the nearest pixel (a side is at least a pixel), so the fractional rects of a sheet do not take in a neighbour; the float rect is kept in `source`, so the rounding costs nothing on Unpack.
+- **Write order.** The PNG is replaced atomically first, the library changes after: a failure leaves both as they were. Unpack leaves the atlas file on disk (the engine never deletes a game's file) and refuses when no member is packed or a source file is gone.
+- **A packed sprite is read-only** in the panel: its texture combo, source rect fields, drag-to-select and the Slice section are off until Unpack, because editing them would cut the link. The pack settings (padding, size mode) are the panel's and are not saved; a repack with other settings is another file.
+- **Pack and Unpack run on the click**, synchronously (a few hundred sprites at most); the status line is a fixed buffer and the counts are ImGui-formatted, so a steady frame allocates nothing.
