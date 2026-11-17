@@ -9,6 +9,8 @@ What the status bar shows besides the frame time: the GPU's temperature, load an
 | `HardwareTypes.h` | `HardwareKind`, `HardwareReadings` (plain data), `IHardwareReader`, `NormalizeReadings`, `SetHardwareName` |
 | `HardwareText.*` | thresholds, `ClassifyTemperature`, `ClassifyMemory`, `FormatHardware` (readings to segments, label, tooltip), `FormatHardwareLine` |
 | `HardwareMonitor.*` | `SampleHardware` (which reader wins) and `HardwareMonitor` (the worker thread, the hand-over to the frame) |
+| `CpuLoad.*` | `CpuLoadTracker` (ticks to a percent) and the pure parsers of the Linux files: `/proc/stat`, `/proc/cpuinfo`, a hwmon temperature and name; every platform |
+| `NvmlReader.*` | `NvmlApi` (the NVML functions as a table), `LoadNvmlApi` and `NvmlReader` (device 0); built everywhere, used on Windows and Linux |
 | `HardwarePlatform.*` | `MakePlatformGpuReader` / `MakePlatformCpuReader` (nullptr where a platform has none) and `MakePlatformHardwareMonitor` |
 
 No ImGui and no platform code in the first two: they are tested alone (`HardwareTextTest`).
@@ -38,3 +40,10 @@ No ImGui and no platform code in the first two: they are tested alone (`Hardware
 
 - `StatusBar` owns the monitor. `StartHardwareMonitor()` (once, from `EditorLayoutWidget::Initialize`) builds the platform's readers and starts the worker only when at least one exists, so a platform with none costs no thread and shows nothing; `SetHardwareMonitor()` is the tests' way in (not started, driven by `PollOnce`). The monitor is joined when the bar dies: a mode switch or the end of the program.
 - `Refresh()` calls `Fetch()` every frame and formats (`FormatHardware`) only when it answered true. The group sits in the left half after the allocations: the device's icon (`ICON_LC_MICROCHIP` GPU, `ICON_LC_CPU` CPU) and label in the disabled colour, then each segment in the mono font in its level's colour (`Normal` the text colour, `Warning` and `Error` the palette's), every piece with the device's tooltip. Without a visible text nothing is drawn, not even a gap.
+
+## NVML (the GPU of Windows and Linux)
+
+- **No SDK at build time.** `NvmlApi` declares the signatures of `nvml.h` itself and `LoadNvmlApi` resolves them with `SDL_LoadObject` / `SDL_LoadFunction` (`nvml.dll`, then the `NVSMI` folder, on Windows; `libnvidia-ml.so.1` on Linux). A machine with no NVIDIA driver loads nothing and the reader says false. A test drives `NvmlReader` through a table of fake functions and loads only a bogus library name, so it passes with and without a driver.
+- **The reader loads on the worker.** `NvmlReader()` loads the library and calls `nvmlInit_v2` inside its first `Read`, never in the constructor, because both take hundreds of milliseconds. A failed load, init, device count, handle or name is final: the reader remembers it and answers false at once, and nothing is loaded again (a driver installed while the editor runs is seen after a restart).
+- Device 0 only. Temperature, utilization and memory are three queries, and one that fails leaves only its field missing. Memory is rounded to MiB; the memory is the card's own (`unifiedMemory` false). The destructor shuts NVML down (only after a successful init) and unloads the library.
+- `CpuLoadTracker` takes cumulative ticks: the first call, an unchanged total and counters that went back give no value and make the new sample the baseline.
