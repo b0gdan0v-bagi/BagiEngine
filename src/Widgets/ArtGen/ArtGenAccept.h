@@ -8,6 +8,7 @@
 #include <BECore/Utils/FunctionRef.h>
 #include <Widgets/ArtGen/ArtGenImage.h>
 #include <Widgets/ArtGen/ArtGenSound.h>
+#include <Widgets/TextureEditor/SpriteAtlas.h>
 #include <cstdint>
 #include <expected>
 #include <filesystem>
@@ -73,6 +74,23 @@ namespace BECore {
      * @return Whether it saved. When @p save fails the library goes back to what it was and the answer is the reason.
      */
     std::expected<bool, String> StoreSpriteEntry(TextureLibrary& library, const SpriteEntry& entry, FunctionRef<bool()> save);
+
+    /// What AcceptIntoLibrary did
+    struct AcceptStored {
+        bool saved = false;               // the library was saved (once for the entry, once more when the repack moved members)
+        Optional<AtlasWritten> repacked;  // engaged when the sprite was packed and its group was repacked
+    };
+
+    /**
+     * @brief The library side of Accept of the PNG @p copied as @p sprite: stores `AcceptedSpriteEntry` and, for a packed sprite, repacks its
+     * group with the settings the group was packed with (`PackSettingsOf`) and saves again when the repack moved a member. No services.
+     *
+     * A sprite with no atlas link is only stored, as StoreSpriteEntry does. A repack that fails leaves the new `atlas.source` in the saved
+     * library and the old atlas file as it was (the error says the PNG is in place and Pack in the Sprite Library finishes it). When the
+     * second save fails the members go back to what the library held before the repack; the atlas file is already replaced then, and the
+     * error says so.
+     */
+    std::expected<AcceptStored, String> AcceptIntoLibrary(TextureLibrary& library, const ArtGenCopied& copied, StringView sprite, const AtlasIo& io, FunctionRef<bool()> save);
 
     /// What AcceptVariant did
     struct ArtGenAccepted {
