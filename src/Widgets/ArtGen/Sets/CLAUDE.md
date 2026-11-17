@@ -8,7 +8,7 @@ A **set** is one preset applied to a list of subjects: one **job** per subject, 
 |------|---------|
 | `ArtGenSet.{h,cpp}` | `ArtGenSet`, `ArtGenSetJob`, `ArtGenSetVariant`, `ArtGenSetJobState`; the subject-line rules; the manifest to and from JSON; the counting helpers |
 | `ArtGenSetStore.{h,cpp}` | The sets on disk, no session: the folder layout, `WriteManifest`, `LoadSets`, the manifest's relative paths |
-| `ArtGenSetPanel.{h,cpp}` | The Set tab of the Generate panel, ImGui over the session: subjects, Queue, the sets with progress and buttons |
+| `ArtGenSetPanel.{h,cpp}` | The Set and Review tabs of the Generate panel, ImGui over the session: subjects, Queue, the sets with progress and buttons; the review of one set |
 
 ## Names and subjects
 
@@ -69,3 +69,7 @@ The table is in `ArtGen/CLAUDE.md`; the handlers are in `ArtGenSessionSets.cpp`.
 `ArtGenSetPanel` is a helper `ArtGenWidget` owns; it keeps no state of a set, only the text of its fields and the last message, and calls the session functions the control methods call, so the two cannot differ.
 
 - **Set tab.** A subjects field (the line rules above), an optional set name, **Queue**: the form's preset (by name when saved and unchanged, else a draft, as Generate decides), count and seed (random: the session draws the set's). A refusal is shown under the field and keeps the text; a queued set clears both fields. Below, the sets newest first: state, `done/total`, a progress bar for the job in work, **Cancel set**, **Retry**; the jobs of an active set as rows with their state, the reason of a failure and a cancel button on `Pending` and `Running`.
+
+- **Review tab.** Opened by **Review** on a set (kept by name; the tab can show a set that is still running). One row per job in a child of a fixed height, so the `ImGuiListClipper` knows where row n is: name, subject, state, an accepted badge, a failed or cancelled row's reason with **Retry**, then the variants as thumbnails over the checkerboard with the seed under them. A click picks (`PickVariant`: the accent frame; a click on the pick keeps it); a sound variant is a tile with Play / Stop on the widget's player (one sound at a time, the `Ui` bus). A file the manifest names that is gone draws a gap.
+- **Pictures live with the rows on screen.** A row loads its thumbnails (and clips) when the clipper shows it and evicts them (`ResourceManager::Evict`) in the frame it is not drawn; all are evicted when another set is chosen, the review is closed, the tab or the window is not shown, or the panel dies. A set of twelve with four variants holds a few rows of pictures, not 48 textures.
+- **Footer.** `picked / total`, **Accept all** (`AcceptSet`; disabled with the reason as its tooltip while the set runs, a job is not `Done`, or a row is not picked) and the answer or the error of the last call. The same session function as `artgen_accept_set`, so a failure halfway names the row and pressing it again finishes.

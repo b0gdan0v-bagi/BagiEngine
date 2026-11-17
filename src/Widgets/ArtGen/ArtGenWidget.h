@@ -66,6 +66,10 @@ namespace BECore {
         void DropSounds();
         void PlaySound(const AudioClip& clip, int32_t row);
         void StopSound();
+        /// Forgets a sound that ended by itself
+        void RefreshPlaying();
+        /// The Review tab is not on screen: stops its sound and gives its pictures back
+        void ReleaseReview();
 
         bool _open = false;
         ArtGenSetPanel _setPanel;

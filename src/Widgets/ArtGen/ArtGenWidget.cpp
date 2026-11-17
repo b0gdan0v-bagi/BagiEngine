@@ -44,6 +44,7 @@ namespace BECore {
         constexpr float kWaveformHeight = 40.0f;
         constexpr size_t kWaveformBuckets = 110;
         constexpr int32_t kPreviewRow = -2;
+        constexpr int32_t kReviewRow = -3;  // the sound of the Review tab
         constexpr float kFieldWidth = 140.0f;
         constexpr float kMinTrimDb = -90.0f;
         constexpr float kMinPeakDb = -24.0f;
@@ -128,13 +129,16 @@ namespace BECore {
 
     void ArtGenWidget::Update() {
         if (!_open) {
+            ReleaseReview();
             return;
         }
         ImGui::SetNextWindowSize(ImVec2(kDefaultWidth, kDefaultHeight), ImGuiCond_FirstUseEver);
         if (!ImGui::Begin(ICON_LC_WAND_SPARKLES " Generate###Generate", &_open)) {
             ImGui::End();
+            ReleaseReview();
             return;
         }
+        RefreshPlaying();
         auto& session = ArtGenSession::GetInstance();
         DrawServiceLine(session);
         DrawSetup(session);
@@ -150,6 +154,15 @@ namespace BECore {
                 const ArtGenSetPanelForm form{_form, _count, _randomSeed ? Optional<int64_t>() : Optional<int64_t>(_seed)};
                 _setPanel.DrawQueue(session, form);
                 ImGui::EndTabItem();
+            }
+            const bool reviewRequested = _setPanel.TakeReviewRequest();
+            if (ImGui::BeginTabItem(ICON_LC_EYE " Review", nullptr, reviewRequested ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None)) {
+                const auto play = [this](const AudioClip& clip) { PlaySound(clip, kReviewRow); };
+                const auto stop = [this] { StopSound(); };
+                _setPanel.DrawReview(session, ArtGenSetPanelSound{play, stop, _playingRow == kReviewRow});
+                ImGui::EndTabItem();
+            } else {
+                ReleaseReview();
             }
             ImGui::EndTabBar();
         }
@@ -692,6 +705,20 @@ namespace BECore {
         _playingRow = row;
     }
 
+    void ArtGenWidget::RefreshPlaying() {
+        if (_playing.IsValid() && !CoreManager::GetAudio().IsPlaying(_playing)) {
+            _playing = AudioHandle{};
+            _playingRow = -1;
+        }
+    }
+
+    void ArtGenWidget::ReleaseReview() {
+        if (_playingRow == kReviewRow) {
+            StopSound();
+        }
+        _setPanel.DropThumbnails();
+    }
+
     void ArtGenWidget::StopSound() {
         if (_playing.IsValid()) {
             CoreManager::GetAudio().Stop(_playing);
@@ -726,10 +753,7 @@ namespace BECore {
                 row.measured = true;
             }
         }
-        if (_playing.IsValid() && !CoreManager::GetAudio().IsPlaying(_playing)) {
-            _playing = AudioHandle{};
-            _playingRow = -1;
-        }
+        RefreshPlaying();
     }
 
     void ArtGenWidget::DropSounds() {
