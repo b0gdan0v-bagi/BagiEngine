@@ -1,5 +1,6 @@
 #include "SpriteSheetSlicePanel.h"
 
+#include <BECore/GameManager/CoreManager.h>
 #include <BECore/Math/NumberUtils.h>
 #include <BECore/Resource/TextureLibrary.h>
 #include <Widgets/EditorLayout/EditorControls.h>
@@ -22,6 +23,10 @@ namespace BECore {
         /// A margin or spacing beyond this is a typo: no texture is that big
         constexpr int kMaxInsetPixels = 16384;
         constexpr int kMaxStartIndex = 100000;
+        constexpr int kMaxIslandMinSize = 16384;
+        constexpr int kAlphaStep = 1;
+        constexpr int kAlphaStepFast = 16;
+        const char* const kPressFindIslands = "Press Find islands";
 
         /// Which names the library holds, order included: the plan depends on them, and nothing else in the library
         uint64_t NamesFingerprint(const TextureLibrary& library) {
@@ -54,14 +59,60 @@ namespace BECore {
             return {};
         }
 
+        const PlanKey key{texturePath, sheetWidth, sheetHeight, NamesFingerprint(library)};
+        if (key.texturePath != _key.texturePath || key.width != _key.width || key.height != _key.height) {
+            ClearIslands();
+        }
+
         bool changed = false;
-        changed |= NumberField("Columns", "##slice_columns", _spec.columns, kCountStep, kCountStepFast, 1, kMaxSheetGridAxis);
+        if (ImGui::RadioButton(ICON_LC_GRID_3X2 " Grid##slice_mode", _mode == SheetSliceMode::Grid)) {
+            if (_mode != SheetSliceMode::Grid) {
+                _mode = SheetSliceMode::Grid;
+                ClearIslands();
+                changed = true;
+            }
+        }
+        ItemTooltip("Cut the sheet into equal cells");
         ImGui::SameLine();
-        changed |= NumberField("Rows", "##slice_rows", _spec.rows, kCountStep, kCountStepFast, 1, kMaxSheetGridAxis);
-        changed |= NumberField("Margin", "##slice_margin", _spec.margin, kPixelStep, kPixelStepFast, 0, kMaxInsetPixels);
-        ImGui::SameLine();
-        changed |= NumberField("Spacing", "##slice_spacing", _spec.spacing, kPixelStep, kPixelStepFast, 0, kMaxInsetPixels);
-        ItemTooltip("Pixels between neighbouring cells");
+        if (ImGui::RadioButton(ICON_LC_SCAN " Alpha islands##slice_mode", _mode == SheetSliceMode::Islands)) {
+            if (_mode != SheetSliceMode::Islands) {
+                _mode = SheetSliceMode::Islands;
+                ClearIslands();
+                changed = true;
+            }
+        }
+        ItemTooltip("Cut out what is drawn: each separate opaque shape of the file becomes a sprite");
+
+        if (_mode == SheetSliceMode::Grid) {
+            changed |= NumberField("Columns", "##slice_columns", _spec.columns, kCountStep, kCountStepFast, 1, kMaxSheetGridAxis);
+            ImGui::SameLine();
+            changed |= NumberField("Rows", "##slice_rows", _spec.rows, kCountStep, kCountStepFast, 1, kMaxSheetGridAxis);
+            changed |= NumberField("Margin", "##slice_margin", _spec.margin, kPixelStep, kPixelStepFast, 0, kMaxInsetPixels);
+            ImGui::SameLine();
+            changed |= NumberField("Spacing", "##slice_spacing", _spec.spacing, kPixelStep, kPixelStepFast, 0, kMaxInsetPixels);
+            ItemTooltip("Pixels between neighbouring cells");
+        } else {
+            bool islandsEdited = false;
+            islandsEdited |= NumberField("Alpha above", "##slice_alpha", _island.alphaThreshold, kAlphaStep, kAlphaStepFast, 0, kMaxIslandAlphaThreshold);
+            ItemTooltip("A pixel is part of a shape when its alpha is above this (0 to 254)");
+            ImGui::SameLine();
+            islandsEdited |= NumberField("Min size", "##slice_min_size", _island.minSize, kPixelStep, kPixelStepFast, 1, kMaxIslandMinSize);
+            ItemTooltip("Shapes narrower or lower than this many pixels are dropped as specks");
+            islandsEdited |= NumberField("Padding", "##slice_padding", _island.padding, kPixelStep, kPixelStepFast, 0, kMaxIslandPadding);
+            ItemTooltip("Pixels added around each shape; the boxes of neighbours may overlap");
+            ImGui::SameLine();
+            islandsEdited |= NumberField("Merge gap", "##slice_merge_gap", _island.mergeGap, kPixelStep, kPixelStepFast, 0, kMaxIslandMergeGap);
+            ItemTooltip("Shapes closer than this many pixels become one (the dot of an i)");
+            if (islandsEdited) {
+                ClearIslands();
+                changed = true;
+            }
+
+            if (IconTextButton(ICON_LC_SCAN_SEARCH, "Find islands", "Read the file and find the shapes; they are drawn over the preview")) {
+                FindIslands(texturePath, sheetWidth, sheetHeight);
+                changed = true;
+            }
+        }
 
         ImGui::TextUnformatted("Name prefix");
         ImGui::SameLine();
@@ -69,11 +120,11 @@ namespace BECore {
         changed |= ImGui::InputText("##slice_prefix", _prefix, sizeof(_prefix));
         ImGui::SameLine();
         changed |= NumberField("from", "##slice_start", _startIndex, kCountStep, kCountStepFast, 0, kMaxStartIndex);
-        ItemTooltip("The number of the first cell: <prefix>_<number>");
+        ItemTooltip("The number of the first sprite: <prefix>_<number>");
 
-        ImGui::TextUnformatted("Names (optional, in cell order, separated by spaces or commas)");
+        ImGui::TextUnformatted("Names (optional, in order, separated by spaces or commas)");
         changed |= ImGui::InputTextMultiline("##slice_names", _names, sizeof(_names), ImVec2(-1.0f, kNamesFieldHeight));
-        ItemTooltip("A cell without a name here is called <prefix>_<number>");
+        ItemTooltip("A sprite without a name here is called <prefix>_<number>");
 
         ImGui::TextUnformatted("A name the library already has:");
         ImGui::SameLine();
@@ -87,7 +138,6 @@ namespace BECore {
             changed = true;
         }
 
-        const PlanKey key{texturePath, sheetWidth, sheetHeight, NamesFingerprint(library)};
         if (changed || _inputsChanged || key != _key) {
             _key = key;
             _inputsChanged = false;
@@ -102,7 +152,7 @@ namespace BECore {
 
         PoolString firstAdded;
         ImGui::BeginDisabled(!_hasPlan || _plan.entries.empty());
-        if (IconTextButton(ICON_LC_GRID_2X2_PLUS, "Add sprites", "Add one sprite per cell to the library; Save writes the file")) {
+        if (IconTextButton(ICON_LC_GRID_2X2_PLUS, "Add sprites", "Add one sprite per cell or island to the library; Save writes the file")) {
             firstAdded = _plan.entries.front().name;
             ApplyGridSlice(library, _plan);
             _inputsChanged = true;
@@ -123,33 +173,79 @@ namespace BECore {
         }
     }
 
-    void SpriteSheetSlicePanel::MakePlan(const TextureLibrary& library) {
+    void SpriteSheetSlicePanel::ClearIslands() {
+        if (_mode == SheetSliceMode::Islands) {
+            _cells.clear();
+        }
+        _islandError.clear();
+        _inputsChanged = true;
+    }
+
+    void SpriteSheetSlicePanel::FindIslands(PoolString texturePath, int width, int height) {
         _cells.clear();
+        _islandError.clear();
+
+        const std::filesystem::path file = CoreManager::GetFileSystem().ResolvePath(texturePath.ToStringView());
+        // The pixels live only in this call: the panel keeps the rects, never the image
+        auto image = LoadRgbaImage(file);
+        if (!image) {
+            _islandError = image.error();
+            return;
+        }
+        if (image->width != static_cast<uint32_t>(width) || image->height != static_cast<uint32_t>(height)) {
+            _islandError = "The file changed since it was loaded: its size differs from the preview";
+            return;
+        }
+        auto found = FindAlphaIslands(*image, _island);
+        if (!found) {
+            _islandError = String(SheetIslandErrorText(found.error()));
+            return;
+        }
+        _cells = eastl::move(*found);
+    }
+
+    void SpriteSheetSlicePanel::SetStatus(StringView text, bool isError) {
+        _hasError = isError;
+        snprintf(_summary, sizeof(_summary), "%.*s", static_cast<int>(text.size()), text.data());
+    }
+
+    void SpriteSheetSlicePanel::MakePlan(const TextureLibrary& library) {
         _plan = GridSlicePlan{};
         _hasPlan = false;
         _hasError = false;
+
+        if (_mode == SheetSliceMode::Grid) {
+            _cells.clear();
+            auto cells = ComputeGridCells(_key.width, _key.height, _spec);
+            if (!cells) {
+                SetStatus(SheetGridErrorText(cells.error()), true);
+                return;
+            }
+            _cells = eastl::move(*cells);
+        } else if (!_islandError.empty()) {
+            SetStatus(StringView(_islandError), true);
+            return;
+        } else if (_cells.empty()) {
+            SetStatus(kPressFindIslands, false);
+            return;
+        }
 
         SheetGridNaming naming;
         naming.prefix = String(StringView(_prefix));
         naming.startIndex = static_cast<uint32_t>(_startIndex);
         naming.names = ParseSheetNames(StringView(_names));
 
-        auto cells = ComputeGridCells(_key.width, _key.height, _spec);
-        if (cells) {
-            _cells = eastl::move(*cells);
-        }
-        auto plan = PlanGridSlice(library, _key.texturePath, _key.width, _key.height, _spec, naming, _policy);
+        auto plan = PlanRectSlice(library, _key.texturePath, _cells, naming, _policy);
         if (!plan) {
-            _hasError = true;
-            const StringView text = SheetGridErrorText(plan.error());
-            snprintf(_summary, sizeof(_summary), "%.*s", static_cast<int>(text.size()), text.data());
+            SetStatus(SheetGridErrorText(plan.error()), true);
             return;
         }
 
         _plan = eastl::move(*plan);
         _hasPlan = true;
-        const String summary = Format("{} cells: {} to add, {} to replace, {} skipped", _cells.size(), _plan.entries.size() - _plan.replaced.size(), _plan.replaced.size(), _plan.skipped);
-        snprintf(_summary, sizeof(_summary), "%s", summary.c_str());
+        const char* const noun = _mode == SheetSliceMode::Grid ? "cells" : "islands";
+        const String summary = Format("{} {}: {} to add, {} to replace, {} skipped", _cells.size(), noun, _plan.entries.size() - _plan.replaced.size(), _plan.replaced.size(), _plan.skipped);
+        SetStatus(StringView(summary), false);
     }
 
 }  // namespace BECore
