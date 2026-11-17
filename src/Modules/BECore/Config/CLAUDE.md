@@ -21,7 +21,7 @@ XML configuration: every file under `config/` (the engine's and the game's, see 
 
 **DO**: read configs through the manager.
 ```cpp
-auto rootNode = CoreManager::GetConfigManager().GetConfig("LoggerConfig"_intern);
+auto rootNode = CoreManager::GetConfigManager().GetConfig(ConfigNames::logger);
 ```
 
 **DON'T**: create loaders by hand or call `LoadFromVirtualPath()` directly for engine configs.

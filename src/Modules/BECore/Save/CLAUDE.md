@@ -13,7 +13,7 @@ Two layers in one class:
 
 | File | Holds |
 |------|-------|
-| `SaveGame.h` | `SaveGameService`, `SaveSchema {game, version, minVersion}`, `SaveInfo {game, version}`, `SaveErrorKind` (`CORE_ENUM`), `SaveError {kind, detail}`, the constants `kSaveMountPoint`, `kSaveExtension`, `kSaveTempExtension`, `kMaxSlotNameLength`; the thin templates `Save(slot, schema, const State&)` and `Load(slot, schema, State&)` |
+| `SaveGame.h` | `SaveGameService`, `SaveSchema {game, version, minVersion}`, `SaveInfo {game, version}`, `SaveErrorKind` (`CORE_ENUM`), `SaveError {kind, detail}`, the constants `kSaveMountPoint`, `SaveMount::point` (the `PoolString` the service mounts), `kSaveExtension`, `kSaveTempExtension`, `kMaxSlotNameLength`; the thin templates `Save(slot, schema, const State&)` and `Load(slot, schema, State&)` |
 | `SaveStorage.{h,cpp}` | `kWebSaveDirectory`, `SaveStorageState` (`CORE_ENUM`), `PersistentSaveDirectory()`, `GetSaveStorageState()`, `NotifySaveChanged()`, `SetSaveChangedHandler()` (test seam): the browser's side of the folder, see "In the browser" |
 | `SaveGame.cpp` | the implementation (the non-template `Save` / `Load` / `Peek` take `FunctionRef` callbacks, so the binary serializer stays out of the header) |
 

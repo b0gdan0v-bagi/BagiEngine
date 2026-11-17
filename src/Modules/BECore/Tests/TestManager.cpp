@@ -1,12 +1,13 @@
 #include "TestManager.h"
 
 #include <BECore/Config/ConfigFactory.h>
+#include <BECore/Config/ConfigNames.h>
 #include <BECore/Tests/TestList.h>
 
 namespace BECore {
 
     void TestManager::RunAllTests() {
-        const auto list = MakeFromConfig<Tests::TestList>("TestsConfig");
+        const auto list = MakeFromConfig<Tests::TestList>(ConfigNames::tests.View());
         const auto& tests = list->tests;
 
         if (tests.empty()) {

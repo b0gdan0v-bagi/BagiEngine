@@ -5,6 +5,7 @@
 #include <BECore/Audio/AudioControl.h>
 #include <BECore/Clipboard/ClipboardControl.h>
 #include <BECore/Config/ConfigFactory.h>
+#include <BECore/Config/ConfigNames.h>
 #include <BECore/Control/ControlBuiltins.h>
 #include <BECore/Input/InputControl.h>
 #include <BECore/Logger/LoggerManager.h>
@@ -84,10 +85,10 @@ namespace BECore {
             _configManager.Initialize();
         }
 
-        _loggerManager = MakeFromConfig<LoggerManager>("LoggerConfig");
+        _loggerManager = MakeFromConfig<LoggerManager>(ConfigNames::logger.View());
         _loggerManager->Initialize();
 
-        _assertHandlerManager = MakeFromConfig<AssertHandlerManager>("AssertHandlersConfig");
+        _assertHandlerManager = MakeFromConfig<AssertHandlerManager>(ConfigNames::assertHandlers.View());
         _assertHandlerManager->Initialize();
         _resourceManager.Initialize();
         _textureLibrary.Initialize();
