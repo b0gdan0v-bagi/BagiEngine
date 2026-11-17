@@ -8,7 +8,6 @@
 
 namespace BECore {
 
-    class PoolStringChain;
     namespace Details {
 
         struct PoolStringEntry {
@@ -36,8 +35,6 @@ namespace BECore {
     }  // namespace Details
 
     class PoolString {
-        friend class PoolStringChain;
-
     public:
         constexpr PoolString() noexcept : _entry(&Details::g_EmptyEntryStore.header) {}
 
@@ -83,5 +80,8 @@ namespace BECore {
 
         const Entry* _entry;
     };
+
+    // The length and the hash live in the entry, so a PoolString stays one pointer and equality is a pointer compare.
+    static_assert(sizeof(PoolString) == sizeof(void*));
 
 }  // namespace BECore
