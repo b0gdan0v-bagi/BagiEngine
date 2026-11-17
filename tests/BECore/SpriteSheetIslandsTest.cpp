@@ -7,7 +7,6 @@ namespace BECore::Tests {
 
     namespace {
 
-        constexpr size_t kBytesPerPixel = 4;
         constexpr uint8_t kSolid = 255;
 
         RgbaImage Blank(uint32_t width, uint32_t height) {

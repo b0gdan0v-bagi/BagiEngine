@@ -7,7 +7,6 @@ namespace BECore {
 
     namespace {
 
-        constexpr size_t kBytesPerPixel = 4;
         constexpr size_t kAlphaOffset = 3;
 
         /// Half-open: `right` and `bottom` are the first pixel outside

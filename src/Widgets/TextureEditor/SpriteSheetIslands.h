@@ -22,7 +22,7 @@ namespace BECore {
 
     /// How alpha islands are found. A pixel is solid when its alpha is above `alphaThreshold` (0 to kMaxIslandAlphaThreshold), so a
     /// threshold of 255 would find nothing. `minSize` (at least 1) is the least width and height an island keeps after the merge.
-    /// Boxes closer than `mergeGap` empty pixels on both axes merge; `padding` grows each result by that many pixels per side.
+    /// Boxes at most `mergeGap` empty pixels apart on both axes merge; `padding` grows each result by that many pixels per side.
     struct IslandSpec {
         int alphaThreshold = kDefaultIslandAlphaThreshold;
         int minSize = kDefaultIslandMinSize;

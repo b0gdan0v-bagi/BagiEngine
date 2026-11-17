@@ -8,7 +8,6 @@ namespace BECore::Tests {
 
     namespace {
 
-        constexpr size_t kBytesPerPixel = 4;
         constexpr Array<uint8_t, 8> kPngSignature = {0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
 
         /// Every pixel differs: alpha runs through 255, 128, 1 and one pixel is fully transparent
@@ -19,10 +18,10 @@ namespace BECore::Tests {
             image.pixels.resize(static_cast<size_t>(width) * height * kBytesPerPixel);
             constexpr Array<uint8_t, 3> alphas = {255, 128, 1};
             for (size_t i = 0; i < static_cast<size_t>(width) * height; ++i) {
-                image.pixels[i * 4 + 0] = static_cast<uint8_t>(10 + i * 7);
-                image.pixels[i * 4 + 1] = static_cast<uint8_t>(200 - i * 5);
-                image.pixels[i * 4 + 2] = static_cast<uint8_t>(i * 13 + 1);
-                image.pixels[i * 4 + 3] = alphas[i % alphas.size()];
+                image.pixels[i * kBytesPerPixel + 0] = static_cast<uint8_t>(10 + i * 7);
+                image.pixels[i * kBytesPerPixel + 1] = static_cast<uint8_t>(200 - i * 5);
+                image.pixels[i * kBytesPerPixel + 2] = static_cast<uint8_t>(i * 13 + 1);
+                image.pixels[i * kBytesPerPixel + 3] = alphas[i % alphas.size()];
             }
             if (width * height > 1) {
                 image.pixels[3] = 0;  // the first pixel is transparent

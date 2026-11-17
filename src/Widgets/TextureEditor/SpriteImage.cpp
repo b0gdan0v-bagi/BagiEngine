@@ -8,8 +8,6 @@ namespace BECore {
 
     namespace {
 
-        constexpr size_t kBytesPerPixel = 4;
-
         bool PixelCountMatches(const RgbaImage& image) {
             return image.pixels.size() == static_cast<size_t>(image.width) * image.height * kBytesPerPixel;
         }

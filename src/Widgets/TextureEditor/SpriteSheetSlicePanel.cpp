@@ -102,7 +102,7 @@ namespace BECore {
             ItemTooltip("Pixels added around each shape; the boxes of neighbours may overlap");
             ImGui::SameLine();
             islandsEdited |= NumberField("Merge gap", "##slice_merge_gap", _island.mergeGap, kPixelStep, kPixelStepFast, 0, kMaxIslandMergeGap);
-            ItemTooltip("Shapes closer than this many pixels become one (the dot of an i)");
+            ItemTooltip("Shapes at most this many empty pixels apart become one (the dot of an i)");
             if (islandsEdited) {
                 ClearIslands();
                 changed = true;

@@ -10,7 +10,10 @@ namespace BECore {
     /// The longest side the loader accepts: 8192 x 8192 is 256 MB of pixels
     inline constexpr uint32_t kMaxSpriteImageSide = 8192;
 
-    /// Pixels on the CPU: row-major, 4 bytes (R, G, B, A) per pixel, straight alpha, no row padding, so `pixels.size() == width * height * 4`
+    /// Bytes of one pixel of an RgbaImage: R, G, B, A
+    inline constexpr size_t kBytesPerPixel = 4;
+
+    /// Pixels on the CPU: row-major, `kBytesPerPixel` bytes per pixel, straight alpha, no row padding, so `pixels.size() == width * height * kBytesPerPixel`
     struct RgbaImage {
         uint32_t width = 0;
         uint32_t height = 0;
