@@ -157,10 +157,12 @@ namespace BECore {
     /// The variants of @p job other than its pick (all of them when it has none)
     [[nodiscard]] int32_t AlternativesOf(const ArtGenSetJob& job);
 
-    /// Why "more variants" is off for @p set, or null: the set is active, or no row is Done and not kept
-    [[nodiscard]] const char* ArtGenMoreBlocker(const ArtGenSet& set);
-    /// Why a row of a set that is not active does not run @p count more variants (`kept`, `failed`, `cancelled`, `full`, `running`), or null.
-    /// Kept rows are final, failed and cancelled ones are for Retry
+    /// Why "more variants" is off for @p set at @p count, or null: the set is active, or no row passes `ArtGenMoreSkipReason`
+    [[nodiscard]] const char* ArtGenMoreBlocker(const ArtGenSet& set, int32_t count);
+    /// Why Keep is off for @p set, or null: the set is active, and a more-run still to come would add variants to a kept row (`ArtGenSession::KeepSet` refuses the same)
+    [[nodiscard]] const char* ArtGenKeepBlocker(const ArtGenSet& set);
+    /// Why a row of a set that is not active does not run @p count more variants (`kept`, `failed`, `cancelled`, `full`), or null.
+    /// Kept rows are final, failed and cancelled ones are for Retry; `running` is only for a row of an active set, which no caller asks about
     [[nodiscard]] const char* ArtGenMoreSkipReason(const ArtGenSetJob& job, int32_t count);
     /// True when no variant of @p job has a seed in `[seed, seed + count)`: the service makes image i of a run on `seed + i`
     [[nodiscard]] bool ArtGenSeedRangeFree(const ArtGenSetJob& job, int64_t seed, int32_t count);

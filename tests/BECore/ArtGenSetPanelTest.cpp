@@ -109,6 +109,10 @@ namespace BECore::Tests {
             return ImHashStr("", 0, ImHashStr("##moreCount", 0, HostId()));
         }
 
+        static ImGuiID KeepAllId() {
+            return ImHashStr(ICON_LC_LOCK " Keep all", 0, HostId());
+        }
+
         static ImGuiID RetryId() {
             return ImHashStr(ICON_LC_ROTATE_CCW " Retry", 0, HostId());
         }
@@ -303,6 +307,31 @@ namespace BECore::Tests {
         ClickAt(Locate(MoreVariantsId()));
         EXPECT_FALSE(session.GetSets()[0].jobs[0].more.has_value());
         EXPECT_EQ(session.GetSets()[0].jobs[0].state, ArtGenSetJobState::Pending);
+    }
+
+    TEST_F(ArtGenSetPanelTest, KeepAllIsOffWhileTheSetRunsAndAClickKeepsNothing) {
+        session.SetKeeper([](StringView, StringView, int64_t, StringView) -> std::expected<void, ControlError> { return {}; });
+        ArtGenSet set = MakeFinishedSet();
+        set.jobs.erase(set.jobs.begin() + 1);
+        set.jobs[0].accepted = ArtGenSetAccepted{"king", "2026-11-17T12:30:00Z", false};
+        ArtGenSetJob waiting = set.jobs[0];
+        waiting.name = "rook";
+        waiting.accepted.reset();
+        waiting.state = ArtGenSetJobState::Cancelled;
+        set.jobs.push_back(waiting);
+        ASSERT_NO_FATAL_FAILURE(LoadSets({set}));
+        ASSERT_EQ(session.RetryJobs("chess"), ArtGenSetEdit::Ok);
+        Frame();
+        ASSERT_EQ(JobOf("rook").state, ArtGenSetJobState::Pending);
+
+        ClickAt(Locate(KeepAllId()));
+        EXPECT_FALSE(JobOf("king").accepted->kept);
+        EXPECT_EQ(JobOf("king").variants.size(), 2u);
+
+        session.CancelJob("chess", "rook");
+        Frame();
+        ClickAt(Locate(KeepAllId()));
+        EXPECT_TRUE(JobOf("king").accepted->kept) << "the same click keeps once the set no longer runs";
     }
 
     TEST_F(ArtGenSetPanelTest, MoreVariantsIsOffWhenEveryRowIsKept) {

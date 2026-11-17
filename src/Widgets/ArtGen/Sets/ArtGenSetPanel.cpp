@@ -379,7 +379,7 @@ namespace BECore {
         _moreCount = std::clamp(_moreCount, 1, kArtGenSetMaxCount);
         ItemTooltip("How many more variants each row gets");
         ImGui::SameLine();
-        const char* blocker = ArtGenMoreBlocker(set);
+        const char* blocker = ArtGenMoreBlocker(set, _moreCount);
         char tip[kTipSize];
         if (blocker == nullptr) {
             FormatMoreTip(set, _moreCount, tip, sizeof(tip));
@@ -640,11 +640,14 @@ namespace BECore {
                 }
                 if (live) {
                     ImGui::SameLine();
-                    if (IconTextButton(ICON_LC_LOCK, "Keep", kKeepTip)) {
+                    const char* keepBlocker = ArtGenKeepBlocker(set);
+                    ImGui::BeginDisabled(keepBlocker != nullptr);
+                    if (IconTextButton(ICON_LC_LOCK, "Keep", keepBlocker != nullptr ? keepBlocker : kKeepTip)) {
                         const auto kept = session.KeepSet(StringView(set.name), StringView(job.name));
                         _acceptFailed = !kept.has_value();
                         _acceptMessage = kept ? Format("Kept '{}'", job.name) : kept.error().message;
                     }
+                    ImGui::EndDisabled();
                 }
                 // The note of a more-run that did not finish: the row stays Done with the variants it had
                 if (!job.error.empty()) {
@@ -804,8 +807,9 @@ namespace BECore {
         }
         ImGui::EndDisabled();
         ImGui::SameLine();
-        ImGui::BeginDisabled(keepable == 0);
-        if (IconTextButton(ICON_LC_LOCK, "Keep all", kKeepAllTip)) {
+        const char* keepBlocker = ArtGenKeepBlocker(set);
+        ImGui::BeginDisabled(keepable == 0 || keepBlocker != nullptr);
+        if (IconTextButton(ICON_LC_LOCK, "Keep all", keepBlocker != nullptr ? keepBlocker : kKeepAllTip)) {
             auto result = session.KeepSet(StringView(set.name));
             _acceptFailed = !result.has_value();
             _acceptMessage = result ? Format("Kept {} row(s)", keepable) : result.error().message;

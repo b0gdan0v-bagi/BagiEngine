@@ -717,7 +717,7 @@ namespace BECore {
         service.DescribeMethod("artgen_keep",
                                ControlMethodInfo{"Keeps the choice of the live rows of a set (accepted, not kept), or of one job: the game keeps the picked variant for good, the job's other variants "
                                                  "leave the manifest and switching is refused after. Final: the way back is a new set. Nothing live to keep is invalid_params; a row another set "
-                                                 "accepted under the same name later is not kept",
+                                                 "accepted under the same name later is not kept; refused with artgen_busy while the set has jobs to run",
                                                  {ControlParamInfo{"set", "string", true, "the set name"}, ControlParamInfo{"job", "string", false, "only this job"}}});
         service.DescribeMethod(
             "artgen_more",
@@ -1046,6 +1046,10 @@ namespace BECore {
         ArtGenSet* set = MutableSet(setName);
         if (set == nullptr) {
             return std::unexpected(MakeError(kNoSetCode, Format("no set named '{}'", setName)));
+        }
+        // A more-run still to come would append variants to a row that was just made final
+        if (IsActive(*set)) {
+            return std::unexpected(MakeError(kBusyCode, Format("the set '{}' still has jobs to run; wait for it or cancel them", setName)));
         }
         if (!jobName.empty() && FindJob(*set, jobName) == nullptr) {
             return std::unexpected(MakeError(kNoSetCode, Format("no job '{}' in a set named '{}'", jobName, setName)));

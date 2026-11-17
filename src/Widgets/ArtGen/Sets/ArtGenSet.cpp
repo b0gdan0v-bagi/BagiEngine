@@ -637,12 +637,16 @@ namespace BECore {
         return static_cast<int32_t>(std::count_if(job.variants.begin(), job.variants.end(), [&job](const ArtGenSetVariant& variant) { return !job.pick || variant.seed != *job.pick; }));
     }
 
-    const char* ArtGenMoreBlocker(const ArtGenSet& set) {
+    const char* ArtGenMoreBlocker(const ArtGenSet& set, int32_t count) {
         if (IsActive(set)) {
             return "The set is still running";
         }
-        const bool anyEligible = std::any_of(set.jobs.begin(), set.jobs.end(), [](const ArtGenSetJob& job) { return job.state == ArtGenSetJobState::Done && !(job.accepted && job.accepted->kept); });
-        return anyEligible ? nullptr : "No finished row can get more variants: kept, failed and cancelled rows are left out";
+        const bool anyEligible = std::any_of(set.jobs.begin(), set.jobs.end(), [count](const ArtGenSetJob& job) { return ArtGenMoreSkipReason(job, count) == nullptr; });
+        return anyEligible ? nullptr : "No row can get more variants: kept, failed, cancelled and full rows are left out";
+    }
+
+    const char* ArtGenKeepBlocker(const ArtGenSet& set) {
+        return IsActive(set) ? "The set is still running: a row kept now would get the variants still to come. Wait for it or cancel its jobs" : nullptr;
     }
 
     const char* ArtGenMoreSkipReason(const ArtGenSetJob& job, int32_t count) {

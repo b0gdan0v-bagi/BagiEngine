@@ -616,21 +616,39 @@ namespace BECore::Tests {
     TEST(ArtGenSetTest, MoreBlockerSaysWhyItIsOff) {
         ArtGenSet set = MakeSet();
         // MakeSet: a live Done row and a Failed row
-        EXPECT_EQ(ArtGenMoreBlocker(set), nullptr);
+        EXPECT_EQ(ArtGenMoreBlocker(set, 1), nullptr);
 
         ArtGenSet active = MakeSet();
         active.jobs[1].state = ArtGenSetJobState::Running;
-        ASSERT_NE(ArtGenMoreBlocker(active), nullptr);
-        EXPECT_TRUE(Contains(String(ArtGenMoreBlocker(active)), "still running"));
+        ASSERT_NE(ArtGenMoreBlocker(active, 1), nullptr);
+        EXPECT_TRUE(Contains(String(ArtGenMoreBlocker(active, 1)), "still running"));
 
         ArtGenSet kept = MakeSet();
         kept.jobs[0].accepted->kept = true;
-        ASSERT_NE(ArtGenMoreBlocker(kept), nullptr);
-        EXPECT_TRUE(Contains(String(ArtGenMoreBlocker(kept)), "kept"));
+        ASSERT_NE(ArtGenMoreBlocker(kept, 1), nullptr);
+        EXPECT_TRUE(Contains(String(ArtGenMoreBlocker(kept, 1)), "kept"));
 
         ArtGenSet failedOnly = MakeSet();
         failedOnly.jobs[0].state = ArtGenSetJobState::Cancelled;
-        EXPECT_NE(ArtGenMoreBlocker(failedOnly), nullptr);
+        EXPECT_NE(ArtGenMoreBlocker(failedOnly, 1), nullptr);
+
+        // A row that cannot take the count is not runnable, so the button and the refusal agree
+        ArtGenSet full = MakeSet();
+        full.jobs[0].variants.clear();
+        for (int64_t seed = 0; seed < kArtGenJobMaxVariants - 1; ++seed) {
+            full.jobs[0].variants.push_back({seed, "a.png", "", "image"});
+        }
+        EXPECT_EQ(ArtGenMoreBlocker(full, 1), nullptr);
+        ASSERT_NE(ArtGenMoreBlocker(full, 2), nullptr);
+        EXPECT_TRUE(Contains(String(ArtGenMoreBlocker(full, 2)), "full"));
+    }
+
+    TEST(ArtGenSetTest, KeepBlockerIsOnlyForAnActiveSet) {
+        ArtGenSet set = MakeSet();
+        EXPECT_EQ(ArtGenKeepBlocker(set), nullptr);
+        set.jobs[1].state = ArtGenSetJobState::Pending;
+        ASSERT_NE(ArtGenKeepBlocker(set), nullptr);
+        EXPECT_TRUE(Contains(String(ArtGenKeepBlocker(set)), "still running"));
     }
 
     TEST(ArtGenSetTest, MoreSkipReasons) {

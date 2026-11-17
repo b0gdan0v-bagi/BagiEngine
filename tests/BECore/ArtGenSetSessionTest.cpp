@@ -2215,6 +2215,29 @@ namespace BECore::Tests {
         EXPECT_FALSE(session.IsBusy());
     }
 
+    TEST_F(ArtGenSetSessionTest, KeepWaitsForARunningMoreRunAndNoKeptRowGrows) {
+        ASSERT_NO_FATAL_FAILURE(FinishAndAccept("m", "a\nb"));
+        ASSERT_EQ(ErrorCode(MoreCall("m")), "");
+        const uint64_t before = session.Version();
+
+        EXPECT_EQ(ErrorCode(KeepCall("m")), "artgen_busy");
+        EXPECT_EQ(ErrorCode(KeepCall("m", "a")), "artgen_busy");
+        EXPECT_EQ(session.Version(), before);
+        for (const ArtGenSetJob& job : OnDisk("m").jobs) {
+            EXPECT_FALSE(job.accepted->kept);
+        }
+
+        ASSERT_NO_FATAL_FAILURE(RunAll());
+        for (const ArtGenSetJob& job : session.FindSet("m")->jobs) {
+            EXPECT_EQ(job.variants.size(), 3u);
+            EXPECT_FALSE(job.accepted->kept);
+        }
+        ASSERT_EQ(ErrorCode(KeepCall("m")), "");
+        for (const ArtGenSetJob& job : session.FindSet("m")->jobs) {
+            EXPECT_EQ(job.variants.size(), 1u);
+        }
+    }
+
     TEST_F(ArtGenSetSessionTest, FailedAndCancelledRowsAreLeftOutForRetry) {
         ASSERT_TRUE(Enqueue("m", "a\nb\nc").has_value());
         Finish(*RequestOf(Poll()), "ok");

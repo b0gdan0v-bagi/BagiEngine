@@ -83,7 +83,7 @@ The table is in `ArtGen/CLAUDE.md`; the handlers are in `ArtGenSessionSets.cpp`.
 
 ## Keep
 
-`KeepSet(set, job?)` (`artgen_keep`) makes a live row final: the **Keeper** (injected like the acceptors; the editor's writes `"kept": {"seed", "date"}` into the provenance file of the sprite or clip) runs first, then `KeepJob` (`accepted.kept`, the variants cut to the pick, the files of the others stay in `artgen/out/<set>/`), and the manifest is written after each row. A failure of the Keeper leaves its row live, the rows before it kept, and calling again keeps the rest. Switching is refused after (`artgen_no_variant`); there is no un-keep, the way back is a new set. A row that is not live (not accepted, or already kept) or is replaced by another set is `invalid_params`. An agent never keeps: the person looks at the scene first.
+`KeepSet(set, job?)` (`artgen_keep`) makes a live row final: the **Keeper** (injected like the acceptors; the editor's writes `"kept": {"seed", "date"}` to the provenance file) first, then `KeepJob` (`accepted.kept`, the variants cut to the pick, the other files stay in `artgen/out/<set>/`), the manifest is written after each row. A failed Keeper leaves its row live, the earlier rows kept; call again for the rest. Switching is refused after (`artgen_no_variant`); no un-keep: make a new set. A row not live or replaced by another set is `invalid_params`. **A set that runs is `artgen_busy`** (a more-run would grow a kept row; the panel's Keep is off, `ArtGenKeepBlocker`). An agent never keeps: the person sees the scene first.
 
 ## The panel
 
