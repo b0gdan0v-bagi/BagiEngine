@@ -4,6 +4,7 @@
 #include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/ArtGen/Sets/ArtGenSet.h>
 #include <chrono>
+#include <cstdio>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -268,6 +269,86 @@ namespace BECore::Tests {
         const String longName = ArtGenNameFromSubject(String(100, 'a') + " b");
         EXPECT_EQ(longName.size(), 64u);
         EXPECT_NE(longName.back(), '_');
+    }
+
+    namespace {
+
+        void TypeSubject(ArtGenSubjectRow& row, const char* text) {
+            std::snprintf(row.subject, sizeof(row.subject), "%s", text);
+            ArtGenRowSubjectEdited(row);
+        }
+
+        void TypeName(ArtGenSubjectRow& row, const char* text) {
+            std::snprintf(row.name, sizeof(row.name), "%s", text);
+            ArtGenRowNameEdited(row);
+        }
+
+    }  // namespace
+
+    TEST(ArtGenSetTest, RowNameFollowsTheSubjectUntilTypedByHand) {
+        ArtGenSubjectRow row;
+        TypeSubject(row, "white knight");
+        EXPECT_STREQ(row.name, "white_knight");
+        TypeSubject(row, "White Knight II");
+        EXPECT_STREQ(row.name, "white_knight_ii");
+
+        TypeName(row, "wn");
+        TypeSubject(row, "a different subject");
+        EXPECT_STREQ(row.name, "wn");
+    }
+
+    TEST(ArtGenSetTest, AnEmptiedRowNameFollowsAgain) {
+        ArtGenSubjectRow row;
+        TypeSubject(row, "rook");
+        TypeName(row, "r");
+        TypeName(row, "");
+        EXPECT_STREQ(row.name, "rook");
+        TypeSubject(row, "black rook");
+        EXPECT_STREQ(row.name, "black_rook");
+    }
+
+    TEST(ArtGenSetTest, RowSubjectWithNoLetterSuggestsNothing) {
+        ArtGenSubjectRow row;
+        TypeSubject(row, "white knight");
+        TypeSubject(row, "!!!");
+        EXPECT_STREQ(row.name, "");
+    }
+
+    TEST(ArtGenSetTest, SubjectsFromRowsSkipEmptyAndKeepTheRowNumberInErrors) {
+        Vector<ArtGenSubjectRow> rows(4);
+        TypeSubject(rows[0], "White Knight");
+        TypeSubject(rows[2], "  black rook  ");
+        TypeName(rows[2], "br");
+        const auto subjects = ArtGenSubjectsFromRows(rows);
+        ASSERT_TRUE(subjects.has_value()) << subjects.error();
+        ASSERT_EQ(subjects->size(), 2u);
+        EXPECT_EQ((*subjects)[0].name, "white_knight");
+        EXPECT_EQ((*subjects)[0].subject, "White Knight");
+        EXPECT_EQ((*subjects)[1].name, "br");
+        EXPECT_EQ((*subjects)[1].subject, "black rook");
+
+        TypeSubject(rows[3], "another");
+        TypeName(rows[3], "br");
+        const auto twice = ArtGenSubjectsFromRows(rows);
+        ASSERT_FALSE(twice.has_value());
+        EXPECT_TRUE(Contains(twice.error(), "row 4")) << twice.error();
+        EXPECT_TRUE(Contains(twice.error(), "row 3")) << twice.error();
+    }
+
+    TEST(ArtGenSetTest, SubjectsFromRowsRefuseABadNameAndNoSubjects) {
+        Vector<ArtGenSubjectRow> rows(2);
+        EXPECT_FALSE(ArtGenSubjectsFromRows(rows).has_value());
+        TypeSubject(rows[1], "knight");
+        TypeName(rows[1], "a b");
+        const auto bad = ArtGenSubjectsFromRows(rows);
+        ASSERT_FALSE(bad.has_value());
+        EXPECT_TRUE(Contains(bad.error(), "row 2")) << bad.error();
+
+        TypeSubject(rows[1], "!!!");
+        TypeName(rows[1], "");
+        const auto unnamed = ArtGenSubjectsFromRows(rows);
+        ASSERT_FALSE(unnamed.has_value());
+        EXPECT_TRUE(Contains(unnamed.error(), "no letter or digit")) << unnamed.error();
     }
 
     TEST(ArtGenSetTest, SubjectLines) {

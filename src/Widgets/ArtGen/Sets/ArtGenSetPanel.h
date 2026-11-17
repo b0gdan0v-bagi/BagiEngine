@@ -21,6 +21,19 @@ namespace BECore {
     /// A checkerboard over a square, so an image with a transparent background shows as transparent
     void DrawArtGenChecker(ImDrawList* drawList, ImVec2 origin, float size, ImU32 light, ImU32 dark);
 
+    /// The widths of the Subject and Name fields of a row, in pixels
+    struct ArtGenRowWidths {
+        float subject = 0.0f;
+        float name = 0.0f;
+    };
+
+    /// A field of @p widthInEm ems of a font of @p fontSize, cut to the @p available room and never below one pixel
+    [[nodiscard]] float ArtGenFieldWidth(float widthInEm, float fontSize, float available);
+
+    /// The Subject and Name fields of a row: a fixed number of ems each, both shrunk in proportion when @p available (what is left of the row
+    /// after the remove button) is less than the two
+    [[nodiscard]] ArtGenRowWidths ArtGenRowFieldWidths(float available, float fontSize);
+
     /// What the Set tab shares with the Generate tab: the preset it queues with (by name when saved and unchanged, else as a draft, as Generate
     /// decides). The count and seed are the Set tab's own
     struct ArtGenSetPanelForm {
@@ -35,7 +48,7 @@ namespace BECore {
     };
 
     /**
-     * @brief The Set and Review tabs of the Generate panel: the subjects field, Queue, the sets with their progress, and the review of one set.
+     * @brief The Set and Review tabs of the Generate panel: the subject rows, Queue, the sets with their progress, and the review of one set.
      *
      * ImGui only: every decision (the lines, the queue, the cancel, the retry, the pick and switch, Accept all, Keep) is the session's and is the same call the
      * control API makes (src/Widgets/ArtGen/Sets/CLAUDE.md). Owned by `ArtGenWidget`, which draws the tab bar.
@@ -77,6 +90,8 @@ namespace BECore {
             bool statusValid = false;
         };
 
+        /// The list of subject rows with Add; a row is removed after the loop, never inside it
+        void DrawSubjectRows();
         void DrawSetEntry(ArtGenSession& session, const ArtGenSet& set);
         void DrawJobRows(ArtGenSession& session, const ArtGenSet& set);
         /// Makes the row's "in the game or not, and which file" line again when its status, names or kind changed
@@ -90,7 +105,7 @@ namespace BECore {
         static void EvictThumb(Thumb& thumb);
         static void EvictRow(RowThumbs& row);
 
-        char _subjects[4096] = {};
+        Vector<ArtGenSubjectRow> _subjectRows;  // at least one; grows only on Add
         char _setName[65] = {};
         int32_t _count = kArtGenSetDefaultCount;
         bool _randomSeed = true;
