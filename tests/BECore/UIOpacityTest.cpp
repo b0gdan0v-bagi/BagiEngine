@@ -83,7 +83,7 @@ namespace BECore::Tests {
 
         private:
             void OnAction(const InputEvents::ActionEvent& event) {
-                count += event.action == PoolString::Intern("OpacityZero") ? 1 : 0;
+                count += event.action == "OpacityZero"_intern ? 1 : 0;
             }
         };
 
@@ -129,8 +129,8 @@ namespace BECore::Tests {
             _manager->Deserialize(deserializer);
             ASSERT_FALSE(deserializer.HasErrors());
             _manager->Initialize();
-            _manager->SetActiveScene(PoolString::Intern("Main"));
-            _hud = _manager->GetSceneByName(PoolString::Intern("Main"))->GetRootNode().GetChildren()[0]->GetComponent<UICanvasComponent>();
+            _manager->SetActiveScene("Main"_intern);
+            _hud = _manager->GetSceneByName("Main"_intern)->GetRootNode().GetChildren()[0]->GetComponent<UICanvasComponent>();
             ASSERT_TRUE(_hud);
             Draw();
         }

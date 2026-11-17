@@ -41,7 +41,7 @@ namespace BECore::Tests {
             String out;
             for (const Vector<DeserializeError>* list : {&reader.GetErrors(), &reader.GetWarnings()}) {
                 for (const DeserializeError& report : *list) {
-                    AppendFormat(out, "{}: {}\n", report.path.ToStringView(), report.errorMessage.ToStringView());
+                    AppendFormat(out, "{}: {}\n", report.path, report.errorMessage);
                 }
             }
             return out;
@@ -166,7 +166,7 @@ namespace BECore::Tests {
             EXPECT_TRUE(reports.empty()) << reports.c_str();
         }
         ExpectAttackTimesTwo(document.damage);
-        EXPECT_EQ(document.damage.Path(), PoolString::Intern("caster.attack * 2"));
+        EXPECT_EQ(document.damage.Path(), "caster.attack * 2"_intern);
 
         // The text form of the same formula is that program: no new entry of the pool, and `==`
         const size_t pooled = ProgramPool::Count();
@@ -244,7 +244,7 @@ namespace BECore::Tests {
                                        DiagnosticsMode::Error);
         EXPECT_TRUE(reports.empty()) << reports.c_str();
         ASSERT_EQ(document.damage.Kind(), ValueKind::Program);
-        EXPECT_EQ(document.damage.Path(), PoolString::Intern("ByLevel('FireballDamage', cast.level)"));
+        EXPECT_EQ(document.damage.Path(), "ByLevel('FireballDamage', cast.level)"_intern);
         ValueWorld world;
         for (const auto [level, expected] : {Pair{-3, 10}, Pair{0, 10}, Pair{1, 20}, Pair{2, 30}, Pair{9, 30}}) {
             world.cast.level = level;

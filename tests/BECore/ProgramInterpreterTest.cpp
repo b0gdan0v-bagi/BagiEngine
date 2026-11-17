@@ -122,13 +122,7 @@ namespace BECore::Tests {
 
         template <>
         Vector<PoolString> Edges<PoolString>() {
-            return {PoolString{},
-                    PoolString::Intern(""),
-                    PoolString::Intern("Fire"),
-                    PoolString::Intern("fire"),
-                    PoolString::Intern("Fire "),
-                    PoolString::Intern("Water"),
-                    PoolString::Intern("a longer text that is not a name of anything")};
+            return {PoolString{}, ""_intern, "Fire"_intern, "fire"_intern, "Fire "_intern, "Water"_intern, "a longer text that is not a name of anything"_intern};
         }
 
         /// What a conversion sees besides the edges of its source: the values around the range of each target and the threshold at which a `double` is out of `float`
@@ -1078,7 +1072,7 @@ namespace BECore::Tests {
         world.caster.plane = Vec4{1.0f, 2.0f, 3.0f, -4.0f};
         world.caster.facing = Quat{0.0f, 0.70710678f, 0.0f, 0.70710678f};
         world.caster.tint = Color{1, 2, 3, 250};
-        world.caster.title = PoolString::Intern("Scorch");
+        world.caster.title = "Scorch"_intern;
         world.caster.element = ValueElement::Earth;
 
         const auto load = [&](ProgramType type, StringView path, const TypeDesc& desc, auto expected) {
@@ -1095,7 +1089,7 @@ namespace BECore::Tests {
         load(ProgramType::Vec4, "caster.plane", DescribeType<Vec4>(), Vec4{1.0f, 2.0f, 3.0f, -4.0f});
         load(ProgramType::Quat, "caster.facing", DescribeType<Quat>(), Quat{0.0f, 0.70710678f, 0.0f, 0.70710678f});
         load(ProgramType::Color, "caster.tint", DescribeType<Color>(), Color{1, 2, 3, 250});
-        load(ProgramType::String, "caster.title", DescribeType<PoolString>(), PoolString::Intern("Scorch"));
+        load(ProgramType::String, "caster.title", DescribeType<PoolString>(), PoolString{"Scorch"_intern});
         load(ProgramType::Enum, "caster.element", DescribeType<ValueElement>(), ValueElement::Earth);
         load(ProgramType::Vec2, "caster.span.offset", DescribeType<Vec2>(), world.caster.span.offset);
         load(ProgramType::Vec3, "cast.target", DescribeType<Vec3>(), Vec3{7.0f, 8.0f, 9.0f});
@@ -1187,9 +1181,9 @@ namespace BECore::Tests {
         EXPECT_FALSE(Eval<bool>(Opcode::EqVec3, Vec3{0.0f, 1.0f, 2.0f}, Vec3{0.0f, 1.0f, 2.5f}));
         EXPECT_FALSE(Eval<bool>(Opcode::EqQuat, Quat{0.0f, 0.0f, 0.0f, 1.0f}, Quat{0.0f, 0.0f, 0.0f, -1.0f})) << "q and -q are not equal";
         EXPECT_FALSE(Eval<bool>(Opcode::EqColor, Color{1, 2, 3, 4}, Color{1, 2, 3, 5}));
-        EXPECT_TRUE(Eval<bool>(Opcode::EqString, PoolString::Intern("Fire"), PoolString::Intern("Fire")));
-        EXPECT_FALSE(Eval<bool>(Opcode::EqString, PoolString::Intern("Fire"), PoolString{}));
-        EXPECT_TRUE(Eval<bool>(Opcode::EqString, PoolString{}, PoolString::Intern(""))) << "the empty text is one string";
+        EXPECT_TRUE(Eval<bool>(Opcode::EqString, PoolString{"Fire"_intern}, PoolString{"Fire"_intern}));
+        EXPECT_FALSE(Eval<bool>(Opcode::EqString, PoolString{"Fire"_intern}, PoolString{}));
+        EXPECT_TRUE(Eval<bool>(Opcode::EqString, PoolString{}, PoolString{""_intern})) << "the empty text is one string";
     }
 
     TEST(ProgramInterpreterTest, AnOperationAProgramTypeLacksHasNoRow) {
@@ -1256,11 +1250,11 @@ namespace BECore::Tests {
         }
         EXPECT_EQ(ProgramPool::Intern(constantProgram(Vec3{1.0f, 2.0f, 3.0f})).value(), ProgramPool::Intern(constantProgram(Vec3{1.0f, 2.0f, 3.0f})).value());
         EXPECT_NE(ProgramPool::Intern(constantProgram(Vec3{1.0f, 2.0f, 3.0f})).value(), ProgramPool::Intern(constantProgram(Vec3{1.0f, 2.0f, 4.0f})).value());
-        EXPECT_EQ(ProgramPool::Intern(constantProgram(PoolString::Intern("burn"))).value(), ProgramPool::Intern(constantProgram(PoolString::Intern("burn"))).value());
-        EXPECT_NE(ProgramPool::Intern(constantProgram(PoolString::Intern("burn"))).value(), ProgramPool::Intern(constantProgram(PoolString::Intern("chill"))).value());
+        EXPECT_EQ(ProgramPool::Intern(constantProgram(PoolString{"burn"_intern})).value(), ProgramPool::Intern(constantProgram(PoolString{"burn"_intern})).value());
+        EXPECT_NE(ProgramPool::Intern(constantProgram(PoolString{"burn"_intern})).value(), ProgramPool::Intern(constantProgram(PoolString{"chill"_intern})).value());
         EXPECT_NE(ProgramPool::Intern(constantProgram(ValueElement::Fire)).value(), ProgramPool::Intern(constantProgram(ValueElement::Water)).value());
         EXPECT_EQ(Run<ValueElement>(constantProgram(ValueElement::Earth), Context{}), ValueElement::Earth);
-        EXPECT_EQ(Run<PoolString>(constantProgram(PoolString::Intern("burn")), Context{}), PoolString::Intern("burn"));
+        EXPECT_EQ(Run<PoolString>(constantProgram(PoolString{"burn"_intern}), Context{}), "burn"_intern);
         EXPECT_NE(constantProgram(Vec3{1.0f, 2.0f, 3.0f}).Disassemble().find("Vec3"), String::npos);
     }
 
@@ -1399,10 +1393,10 @@ namespace BECore::Tests {
         ProgramBuilder builder;
         const uint8_t reg = builder.AcquireRegister().value();
         builder.EmitLoadConst(reg, 424242);
-        const ProgramId first = ProgramPool::Intern(builder.Finish(ProgramType::Int32, reg, PoolString::Intern("424242")).value()).value();
-        const ProgramId second = ProgramPool::Intern(builder.Finish(ProgramType::Int32, reg, PoolString::Intern("424241 + 1")).value()).value();
+        const ProgramId first = ProgramPool::Intern(builder.Finish(ProgramType::Int32, reg, "424242"_intern).value()).value();
+        const ProgramId second = ProgramPool::Intern(builder.Finish(ProgramType::Int32, reg, "424241 + 1"_intern).value()).value();
         EXPECT_EQ(first, second);
-        EXPECT_EQ(ProgramPool::Get(first).Source(), PoolString::Intern("424242")) << "the first text stays";
+        EXPECT_EQ(ProgramPool::Get(first).Source(), "424242"_intern) << "the first text stays";
     }
 
     TEST(ProgramInterpreterTest, TheAddressOfAProgramNeverMoves) {

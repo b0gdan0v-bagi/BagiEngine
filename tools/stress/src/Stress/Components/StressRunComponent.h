@@ -7,6 +7,7 @@
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/MoveOnlyFunction.h>
 #include <Stress/RampController.h>
+#include <Stress/StressNames.h>
 #include <Stress/StressRecorder.h>
 #include <cstddef>
 #include <cstdint>
@@ -74,7 +75,7 @@ namespace BECore::Stress {
         void Print(const String& line) const;
         static bool IsManualClock();
 
-        PoolString _counterName = "Stress objects"_intern;
+        PoolString _counterName = StressNames::objectsCounter;
         StressRecorder _recorder;
         Optional<RampController> _ramp;  // made at the first update of a ramp run
         LineSink _sink;

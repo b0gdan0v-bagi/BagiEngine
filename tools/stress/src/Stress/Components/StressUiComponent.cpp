@@ -13,10 +13,12 @@ namespace BECore::Stress {
 
     namespace {
 
-        /// The one name of every label: a name is a PoolString, so a million labels share it
-        PoolString LabelName() {
-            return "Label"_intern;
-        }
+        struct Ids {
+            /// The one name of every label: a name is a PoolString, so a million labels share it
+            static constexpr auto label = "Label"_intern;
+            static constexpr auto count = "count"_intern;
+            static constexpr auto last = "last"_intern;
+        };
 
     }  // namespace
 
@@ -75,7 +77,7 @@ namespace BECore::Stress {
         rootChildren.reserve(rootChildren.size() + (target - _labels.size()));
         while (_labels.size() < target) {
             Label label;
-            label.element = canvas.GetRoot().AddChild(LabelName());
+            label.element = canvas.GetRoot().AddChild(Ids::label);
             label.text = New<UITextComponent>();
             label.text->wrap = false;
             label.text->verticalAlign = UIVerticalAlign::Center;
@@ -94,8 +96,8 @@ namespace BECore::Stress {
         canvas.Invalidate();
 
         // The variables of the `Variable` labels; an equal value changes nothing, so nothing re-expands then
-        CoreManager::GetUIVars().Set("count"_intern, count);
-        CoreManager::GetUIVars().Set("last"_intern, count == 0 ? 0u : count - 1);
+        CoreManager::GetUIVars().Set(Ids::count, count);
+        CoreManager::GetUIVars().Set(Ids::last, count == 0 ? 0u : count - 1);
         _builtCount = count;
     }
 

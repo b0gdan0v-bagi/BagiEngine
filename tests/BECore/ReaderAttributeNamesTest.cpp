@@ -30,7 +30,7 @@ namespace BECore::Tests {
         String Warnings(const IDeserializer& reader) {
             String text;
             for (const DeserializeError& warning : reader.GetWarnings()) {
-                AppendFormat(text, "{}: {}\n", warning.path.ToStringView(), warning.errorMessage.ToStringView());
+                AppendFormat(text, "{}: {}\n", warning.path, warning.errorMessage);
             }
             return text;
         }

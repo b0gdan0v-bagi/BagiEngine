@@ -276,7 +276,7 @@ namespace BECore::Tests {
             ASSERT_FALSE(deserializer.HasErrors());
             _manager->Initialize();
 
-            _canvas = _manager->GetSceneByName(PoolString::Intern("Main"))->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
+            _canvas = _manager->GetSceneByName("Main"_intern)->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
             ASSERT_TRUE(_canvas);
         }
 
@@ -289,7 +289,7 @@ namespace BECore::Tests {
         }
 
         void Draw() {
-            _manager->SetActiveScene(PoolString::Intern("Main"));
+            _manager->SetActiveScene("Main"_intern);
             _renderer->ClearCalls();
             _manager->DrawAll();
         }
@@ -358,7 +358,7 @@ namespace BECore::Tests {
         const auto& mode = Get<UISegmented>("Mode");
         static_assert(std::is_base_of_v<UIStack, UISegmented>);
         EXPECT_EQ(mode.layout, UILayoutKind::Stack);
-        EXPECT_EQ(mode.bind, PoolString::Intern("mode"));
+        EXPECT_EQ(mode.bind, "mode"_intern);
         EXPECT_FALSE(mode.disabled);
         ASSERT_EQ(mode.children.size(), 2u);
         EXPECT_NE(mode.children[0]->GetComponent<UIInputClicker>(), nullptr);
@@ -402,7 +402,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(Selected("Easy"));
         EXPECT_TRUE(Selected("Max"));
 
-        CoreManager::GetUIVars().Remove(PoolString::Intern("level"));
+        CoreManager::GetUIVars().Remove("level"_intern);
         Draw();
         EXPECT_FALSE(Selected("Max")) << "a variable that goes away selects nothing";
     }
@@ -437,7 +437,7 @@ namespace BECore::Tests {
 
         // A variable that is set but empty does not select the segment that has no value either
         auto& unbound = Get<UISegmented>("Unbound");
-        unbound.bind = PoolString::Intern("choice");
+        unbound.bind = "choice"_intern;
         SetVar("choice", "");
         Draw();
         EXPECT_FALSE(Selected("UnboundTwo"));
@@ -548,7 +548,7 @@ namespace BECore::Tests {
         }
         ASSERT_NO_FATAL_FAILURE(Click("Medium"));
         EXPECT_EQ(actions.Total(), 1u);
-        EXPECT_EQ(actions.LastAction(), PoolString::Intern("SegTestLevel"));
+        EXPECT_EQ(actions.LastAction(), "SegTestLevel"_intern);
     }
 
     // ---- the click only reports -------------------------------------------------------------------------------------------
@@ -558,12 +558,12 @@ namespace BECore::Tests {
         Draw();
         ASSERT_NO_FATAL_FAILURE(Click("ModeComputer"));
         EXPECT_EQ(actions.Total(), 1u);
-        EXPECT_EQ(actions.LastAction(), PoolString::Intern("SegTestMode"));
-        EXPECT_EQ(actions.LastValue(), PoolString::Intern("computer"));
+        EXPECT_EQ(actions.LastAction(), "SegTestMode"_intern);
+        EXPECT_EQ(actions.LastValue(), "computer"_intern);
 
         Draw();
         EXPECT_FALSE(Selected("ModeComputer")) << "the game owns the truth: the click did not change the variable";
-        EXPECT_FALSE(CoreManager::GetUIVars().Has(PoolString::Intern("mode")));
+        EXPECT_FALSE(CoreManager::GetUIVars().Has("mode"_intern));
 
         SetVar("mode", "computer");  // the game's answer
         Draw();
@@ -578,7 +578,7 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(Click("Easy"));
         ASSERT_NO_FATAL_FAILURE(Click("Easy"));
         EXPECT_EQ(actions.Total(), 2u) << "the group does not filter: the game decides what a repeated choice means";
-        EXPECT_EQ(actions.LastValue(), PoolString::Intern("easy"));
+        EXPECT_EQ(actions.LastValue(), "easy"_intern);
         EXPECT_TRUE(Selected("Easy"));
     }
 
@@ -590,14 +590,14 @@ namespace BECore::Tests {
         Draw();
         ASSERT_TRUE(Selected("Easy"));
 
-        ASSERT_TRUE(_canvas->SetElementVisible(PoolString::Intern("Level"), false));
+        ASSERT_TRUE(_canvas->SetElementVisible("Level"_intern, false));
         SetVar("level", "hard");
         Draw();
         EXPECT_TRUE(Element("Hard").rect.IsEmpty());
         EXPECT_FALSE(BarDrawn("Hard"));
         EXPECT_FALSE(BarDrawn("Easy"));
 
-        ASSERT_TRUE(_canvas->SetElementVisible(PoolString::Intern("Level"), true));
+        ASSERT_TRUE(_canvas->SetElementVisible("Level"_intern, true));
         Draw();
         EXPECT_FALSE(Selected("Easy"));
         EXPECT_TRUE(Selected("Hard"));
@@ -626,11 +626,11 @@ namespace BECore::Tests {
         ASSERT_FALSE(deserializer.HasErrors());
         loaded->Initialize();
 
-        const auto* again = loaded->GetRoot().FindByName(PoolString::Intern("Level"));
+        const auto* again = loaded->GetRoot().FindByName("Level"_intern);
         ASSERT_NE(again, nullptr);
         const auto* typed = again->Cast<UISegmented>();
         ASSERT_NE(typed, nullptr);
-        EXPECT_EQ(typed->bind, PoolString::Intern("level"));
+        EXPECT_EQ(typed->bind, "level"_intern);
         EXPECT_TRUE(typed->disabled);
         EXPECT_EQ(typed->children.size(), 4u);
         EXPECT_EQ(typed->layout, UILayoutKind::Stack);
@@ -657,12 +657,12 @@ namespace BECore::Tests {
         ASSERT_FALSE(deserializer.HasErrors());
         loaded->Initialize();
 
-        const auto* typed = loaded->GetRoot().FindByName(PoolString::Intern("Mode"))->Cast<UISegmented>();
+        const auto* typed = loaded->GetRoot().FindByName("Mode"_intern)->Cast<UISegmented>();
         ASSERT_NE(typed, nullptr);
-        EXPECT_EQ(typed->bind, PoolString::Intern("mode"));
+        EXPECT_EQ(typed->bind, "mode"_intern);
         EXPECT_TRUE(typed->disabled);
         ASSERT_EQ(typed->children.size(), 2u);
-        EXPECT_EQ(typed->children[1]->GetComponent<UIInputClicker>()->value, PoolString::Intern("computer"));
+        EXPECT_EQ(typed->children[1]->GetComponent<UIInputClicker>()->value, "computer"_intern);
         ASSERT_EQ(loaded->_elements.size(), _canvas->_elements.size());
         for (size_t i = 0; i < loaded->_elements.size(); ++i) {
             EXPECT_STREQ(ElementToXml(*_canvas->_elements[i]).c_str(), ElementToXml(*loaded->_elements[i]).c_str()) << i;
@@ -737,8 +737,8 @@ namespace BECore::Tests {
         Draw();
         ASSERT_NO_FATAL_FAILURE(Click("CompIcon"));
         EXPECT_EQ(actions.Total(), 1u);
-        EXPECT_EQ(actions.LastAction(), PoolString::Intern("SegTestComp"));
-        EXPECT_EQ(actions.LastValue(), PoolString::Intern("icon"));
+        EXPECT_EQ(actions.LastAction(), "SegTestComp"_intern);
+        EXPECT_EQ(actions.LastValue(), "icon"_intern);
 
         Draw();
         EXPECT_FALSE(SelectedElement("CompIcon")) << "the group owns no choice: the click changed nothing";
@@ -769,11 +769,11 @@ namespace BECore::Tests {
 
         ActionLog actions;
         ASSERT_NO_FATAL_FAILURE(Click("FormsComposed"));
-        EXPECT_EQ(actions.LastAction(), PoolString::Intern("SegTestForms"));
-        EXPECT_EQ(actions.LastValue(), PoolString::Intern("icon"));
+        EXPECT_EQ(actions.LastAction(), "SegTestForms"_intern);
+        EXPECT_EQ(actions.LastValue(), "icon"_intern);
         ASSERT_NO_FATAL_FAILURE(Click("FormsButton"));
-        EXPECT_EQ(actions.LastAction(), PoolString::Intern("SegTestForms"));
-        EXPECT_EQ(actions.LastValue(), PoolString::Intern("plain"));
+        EXPECT_EQ(actions.LastAction(), "SegTestForms"_intern);
+        EXPECT_EQ(actions.LastValue(), "plain"_intern);
         EXPECT_EQ(actions.Total(), 2u);
     }
 

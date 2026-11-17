@@ -99,7 +99,7 @@ namespace BECore::Tests {
         EXPECT_EQ(capturedValue, 42);
         EXPECT_FLOAT_EQ(capturedMultiplier, 2.5f);
 
-        PoolString helloStr = PoolString::Intern("Hello");
+        PoolString helloStr = "Hello"_intern;
         TestMessageEvent msgEvent{helloStr, 123};
         int msgCount = 0;
         PoolString capturedMessage;

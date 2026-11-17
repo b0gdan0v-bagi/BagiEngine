@@ -22,7 +22,7 @@ namespace BECore {
     }
 
     PoolString UIDocument::GetTypeName() const {
-        return PoolString::Intern("UIDocument");
+        return "UIDocument"_intern;
     }
 
     bool UIDocument::Instantiate(UIScreenContent& content) const {
@@ -39,7 +39,7 @@ namespace BECore {
         content.Deserialize(deserializer);
 
         for (const auto& error : deserializer.GetErrors()) {
-            LOG_ERROR("UIDocument: '{}' line {}: {} ({})"_format(_path.ToStringView(), error.line, error.errorMessage.ToStringView(), error.path.ToStringView()));
+            LOG_ERROR("UIDocument: '{}' line {}: {} ({})"_format(_path.ToStringView(), error.line, error.errorMessage, error.path));
         }
         return !deserializer.HasErrors();
     }

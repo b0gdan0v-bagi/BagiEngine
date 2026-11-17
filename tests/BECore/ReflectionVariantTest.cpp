@@ -88,7 +88,7 @@ namespace BECore::Tests {
                 Vector<String> out;
                 for (const Vector<DeserializeError>* list : {&reader.GetErrors(), &reader.GetWarnings()}) {
                     for (const DeserializeError& report : *list) {
-                        out.push_back(Format("{}: {}", report.path.ToStringView(), report.errorMessage.ToStringView()));
+                        out.push_back(Format("{}: {}", report.path, report.errorMessage));
                     }
                 }
                 return out;
@@ -314,7 +314,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(Ser::Load(reader, value, kKey));
         reader.EndObject();
         ASSERT_EQ(reader.GetErrors().size(), 1u);
-        EXPECT_EQ(String(reader.GetErrors()[0].path.ToStringView()), "State.choice.index");
+        EXPECT_EQ(String(reader.GetErrors()[0].path), "State.choice.index");
         EXPECT_EQ(value, (Choice{std::in_place_index<1>, 5}));
     }
 

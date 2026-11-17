@@ -246,9 +246,9 @@ namespace BECore::Tests {
             _manager->Deserialize(deserializer);
             ASSERT_FALSE(deserializer.HasErrors());
             _manager->Initialize();
-            _manager->SetActiveScene(PoolString::Intern("Main"));
+            _manager->SetActiveScene("Main"_intern);
 
-            _canvas = _manager->GetSceneByName(PoolString::Intern("Main"))->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
+            _canvas = _manager->GetSceneByName("Main"_intern)->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
             ASSERT_TRUE(_canvas);
             Draw();
         }
@@ -338,20 +338,20 @@ namespace BECore::Tests {
 
     TEST_F(UIToggleComponentTest, ARowBuiltFromAFileHasItsDefaults) {
         const auto& sound = Toggle("Sound");
-        EXPECT_EQ(sound.bind, PoolString::Intern("soundOn"));
-        EXPECT_EQ(sound.onValue, PoolString::Intern("true"));
-        EXPECT_EQ(sound.offValue, PoolString::Intern("false"));
+        EXPECT_EQ(sound.bind, "soundOn"_intern);
+        EXPECT_EQ(sound.onValue, "true"_intern);
+        EXPECT_EQ(sound.offValue, "false"_intern);
 
         const auto made = AbstractFactory<UIComponent>::GetInstance().Create("UIToggleComponent");
         ASSERT_TRUE(made);
         const auto* typed = made->Cast<UIToggleComponent>();
         ASSERT_NE(typed, nullptr);
-        EXPECT_EQ(typed->onValue, PoolString::Intern("true"));
-        EXPECT_EQ(typed->offValue, PoolString::Intern("false"));
+        EXPECT_EQ(typed->onValue, "true"_intern);
+        EXPECT_EQ(typed->offValue, "false"_intern);
 
         const auto& custom = Toggle("Custom");
-        EXPECT_EQ(custom.onValue, PoolString::Intern("1"));
-        EXPECT_EQ(custom.offValue, PoolString::Intern("0"));
+        EXPECT_EQ(custom.onValue, "1"_intern);
+        EXPECT_EQ(custom.offValue, "0"_intern);
     }
 
     TEST_F(UIToggleComponentTest, TheRowIsInteractiveAndTheTouchTargetIsTheWholeRow) {
@@ -417,11 +417,11 @@ namespace BECore::Tests {
         Draw();
         EXPECT_TRUE(ThumbDrawnAtLeft("Sound"));
 
-        CoreManager::GetUIVars().Remove(PoolString::Intern("soundOn"));
+        CoreManager::GetUIVars().Remove("soundOn"_intern);
         SetVar("soundOn", "true");
         Draw();
         EXPECT_TRUE(ThumbDrawnAtRight("Sound"));
-        CoreManager::GetUIVars().Remove(PoolString::Intern("soundOn"));
+        CoreManager::GetUIVars().Remove("soundOn"_intern);
         Draw();
         EXPECT_TRUE(ThumbDrawnAtLeft("Sound")) << "a variable that goes away is off";
     }
@@ -448,11 +448,11 @@ namespace BECore::Tests {
         ActionLog actions;
         Click("Sound");
         ASSERT_EQ(actions.Total(), 1u);
-        EXPECT_EQ(actions.LastAction(), PoolString::Intern("ToggleCompSound"));
-        EXPECT_EQ(actions.LastValue(), PoolString::Intern("true")) << "it was off: the click asks for on";
+        EXPECT_EQ(actions.LastAction(), "ToggleCompSound"_intern);
+        EXPECT_EQ(actions.LastValue(), "true"_intern) << "it was off: the click asks for on";
 
         Draw();
-        EXPECT_FALSE(CoreManager::GetUIVars().Has(PoolString::Intern("soundOn"))) << "the toggle does not set the variable";
+        EXPECT_FALSE(CoreManager::GetUIVars().Has("soundOn"_intern)) << "the toggle does not set the variable";
         EXPECT_FALSE(Toggle("Sound").IsOn());
         EXPECT_TRUE(ThumbDrawnAtLeft("Sound"));
 
@@ -462,7 +462,7 @@ namespace BECore::Tests {
 
         Click("Sound");
         ASSERT_EQ(actions.Total(), 2u);
-        EXPECT_EQ(actions.LastValue(), PoolString::Intern("false")) << "it was on: the click asks for off";
+        EXPECT_EQ(actions.LastValue(), "false"_intern) << "it was on: the click asks for off";
         Draw();
         EXPECT_TRUE(Toggle("Sound").IsOn()) << "still on until the game says otherwise";
 
@@ -492,20 +492,20 @@ namespace BECore::Tests {
     TEST_F(UIToggleComponentTest, CustomValuesAreAskedFor) {
         ActionLog actions;
         Click("Custom");
-        EXPECT_EQ(actions.LastAction(), PoolString::Intern("ToggleCompCustom"));
-        EXPECT_EQ(actions.LastValue(), PoolString::Intern("1"));
+        EXPECT_EQ(actions.LastAction(), "ToggleCompCustom"_intern);
+        EXPECT_EQ(actions.LastValue(), "1"_intern);
 
         SetVar("mode", "1");
         Draw();
         Click("Custom");
-        EXPECT_EQ(actions.LastValue(), PoolString::Intern("0"));
+        EXPECT_EQ(actions.LastValue(), "0"_intern);
         EXPECT_EQ(actions.Total(), 2u);
     }
 
     TEST_F(UIToggleComponentTest, AnUnboundToggleAlwaysAsksForOn) {
         ActionLog actions;
         Click("Unbound");
-        EXPECT_EQ(actions.LastValue(), PoolString::Intern("true"));
+        EXPECT_EQ(actions.LastValue(), "true"_intern);
     }
 
     TEST_F(UIToggleComponentTest, AnEmptyActionEmitsNothing) {
@@ -810,23 +810,23 @@ namespace BECore::Tests {
         ASSERT_FALSE(deserializer.HasErrors());
         loaded->Initialize();
 
-        const auto* custom = loaded->GetRoot().FindByName(PoolString::Intern("Custom"))->GetComponent<UIToggleComponent>();
+        const auto* custom = loaded->GetRoot().FindByName("Custom"_intern)->GetComponent<UIToggleComponent>();
         ASSERT_NE(custom, nullptr);
-        EXPECT_EQ(custom->bind, PoolString::Intern("mode"));
-        EXPECT_EQ(custom->action, PoolString::Intern("ToggleCompCustom"));
-        EXPECT_EQ(custom->onValue, PoolString::Intern("1"));
-        EXPECT_EQ(custom->offValue, PoolString::Intern("0"));
-        const auto* sw = loaded->GetRoot().FindByName(PoolString::Intern("CustomSwitch"))->GetComponent<UISwitchComponent>();
+        EXPECT_EQ(custom->bind, "mode"_intern);
+        EXPECT_EQ(custom->action, "ToggleCompCustom"_intern);
+        EXPECT_EQ(custom->onValue, "1"_intern);
+        EXPECT_EQ(custom->offValue, "0"_intern);
+        const auto* sw = loaded->GetRoot().FindByName("CustomSwitch"_intern)->GetComponent<UISwitchComponent>();
         ASSERT_NE(sw, nullptr);
         EXPECT_TRUE(ColorsEqual(sw->trackColor, kOffTrackAuthored));
         EXPECT_TRUE(ColorsEqual(sw->fillColor, kOnTrackAuthored));
         EXPECT_TRUE(ColorsEqual(sw->thumbColor, kThumbAuthored));
-        EXPECT_EQ(loaded->GetRoot().FindByName(PoolString::Intern("RoundSwitch"))->GetComponent<UISwitchComponent>()->partShape, UIPartShape::Round);
-        EXPECT_TRUE(loaded->GetRoot().FindByName(PoolString::Intern("Off"))->GetComponent<UIInputClicker>()->disabled);
-        const auto* sound = loaded->GetRoot().FindByName(PoolString::Intern("Sound"))->GetComponent<UIToggleComponent>();
+        EXPECT_EQ(loaded->GetRoot().FindByName("RoundSwitch"_intern)->GetComponent<UISwitchComponent>()->partShape, UIPartShape::Round);
+        EXPECT_TRUE(loaded->GetRoot().FindByName("Off"_intern)->GetComponent<UIInputClicker>()->disabled);
+        const auto* sound = loaded->GetRoot().FindByName("Sound"_intern)->GetComponent<UIToggleComponent>();
         ASSERT_NE(sound, nullptr);
-        EXPECT_EQ(sound->onValue, PoolString::Intern("true")) << "the defaults come back as the defaults";
-        EXPECT_EQ(sound->offValue, PoolString::Intern("false"));
+        EXPECT_EQ(sound->onValue, "true"_intern) << "the defaults come back as the defaults";
+        EXPECT_EQ(sound->offValue, "false"_intern);
         ASSERT_EQ(loaded->_elements.size(), _canvas->_elements.size());
         for (size_t i = 0; i < loaded->_elements.size(); ++i) {
             EXPECT_STREQ(ElementToXml(*_canvas->_elements[i]).c_str(), ElementToXml(*loaded->_elements[i]).c_str()) << i;
@@ -834,7 +834,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIToggleComponentTest, TheFieldsSurviveABinaryRoundTrip) {
-        Toggle("Sound").offValue = PoolString::Intern("off");
+        Toggle("Sound").offValue = "off"_intern;
         BinarySerializer serializer;
         ASSERT_TRUE(serializer.BeginObject("component"));
         _canvas->Serialize(serializer);
@@ -849,11 +849,11 @@ namespace BECore::Tests {
         ASSERT_FALSE(deserializer.HasErrors());
         loaded->Initialize();
 
-        const auto* custom = loaded->GetRoot().FindByName(PoolString::Intern("Custom"))->GetComponent<UIToggleComponent>();
+        const auto* custom = loaded->GetRoot().FindByName("Custom"_intern)->GetComponent<UIToggleComponent>();
         ASSERT_NE(custom, nullptr);
-        EXPECT_EQ(custom->onValue, PoolString::Intern("1"));
-        EXPECT_EQ(loaded->GetRoot().FindByName(PoolString::Intern("CustomSwitch"))->GetComponent<UISwitchComponent>()->thumbColor.b, kThumbAuthored.b);
-        EXPECT_EQ(loaded->GetRoot().FindByName(PoolString::Intern("Sound"))->GetComponent<UIToggleComponent>()->offValue, PoolString::Intern("off"));
+        EXPECT_EQ(custom->onValue, "1"_intern);
+        EXPECT_EQ(loaded->GetRoot().FindByName("CustomSwitch"_intern)->GetComponent<UISwitchComponent>()->thumbColor.b, kThumbAuthored.b);
+        EXPECT_EQ(loaded->GetRoot().FindByName("Sound"_intern)->GetComponent<UIToggleComponent>()->offValue, "off"_intern);
         ASSERT_EQ(loaded->_elements.size(), _canvas->_elements.size());
         for (size_t i = 0; i < loaded->_elements.size(); ++i) {
             EXPECT_STREQ(ElementToXml(*_canvas->_elements[i]).c_str(), ElementToXml(*loaded->_elements[i]).c_str()) << i;

@@ -75,13 +75,21 @@ namespace BECore {
 
         DeserializeError error;
         if (errors.size() + 1 == ReaderLimits::kMaxRecordedErrors) {
-            error.errorMessage = PoolString::Intern(kTooManyErrors);
+            error.errorMessage = String(kTooManyErrors);
         } else {
-            error.path = PoolString::Intern(Printable(CutText(path, ReaderLimits::kMaxErrorTextBytes)));
-            error.errorMessage = PoolString::Intern(Printable(CutText(message, ReaderLimits::kMaxErrorTextBytes)));
+            error.path = Printable(CutText(path, ReaderLimits::kMaxErrorTextBytes));
+            error.errorMessage = Printable(CutText(message, ReaderLimits::kMaxErrorTextBytes));
             error.line = line;
         }
         errors.push_back(error);
+    }
+
+    bool IDeserializer::AcceptPoolStringLength(StringView key, size_t length) {
+        if (length <= ReaderLimits::kMaxPoolStringBytes) {
+            return true;
+        }
+        ReportError(key, Format("PoolString value is {} bytes, over the limit kMaxPoolStringBytes ({})", length, ReaderLimits::kMaxPoolStringBytes));
+        return false;
     }
 
     String IDeserializer::MakeDidYouMeanHint(StringView unknown, std::initializer_list<const Vector<String>*> askedKeys) {

@@ -6,6 +6,10 @@ namespace BECore {
 
     namespace {
 
+        struct Ids {
+            static constexpr auto lit = "Lit3D"_intern;
+        };
+
         constexpr uint32_t kLitTextureSlot = 0;
         constexpr uint8_t kWhiteByte = 255;
         constexpr uint32_t kWhitePixelBytes = 4;
@@ -19,7 +23,7 @@ namespace BECore {
 
     PipelineDesc Renderer3D::MakeLitPipelineDesc() {
         PipelineDesc desc;
-        desc.shader = "Lit3D"_intern;
+        desc.shader = Ids::lit;
         desc.vertexLayout = MakeVertex3DLayout();
         desc.cullMode = CullMode::Back;
         desc.depthTest = true;
@@ -29,7 +33,7 @@ namespace BECore {
         desc.depthFormat = DepthFormat::Depth32Float;
         desc.frameConstantsSize = sizeof(FrameConstants);
         desc.drawConstantsSize = sizeof(DrawConstants);
-        desc.debugName = "Lit3D"_intern;
+        desc.debugName = Ids::lit;
         return desc;
     }
 

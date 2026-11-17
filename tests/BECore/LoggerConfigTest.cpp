@@ -36,7 +36,7 @@ namespace BECore::Tests {
 
         ASSERT_TRUE(deserializer.HasErrors());
         ASSERT_EQ(deserializer.GetErrors().size(), 1u);
-        const StringView message = deserializer.GetErrors()[0].errorMessage.ToStringView();
+        const StringView message = deserializer.GetErrors()[0].errorMessage;
         EXPECT_TRUE(Contains(message, "Unknown factory type")) << message.data();
         EXPECT_TRUE(Contains(message, "'Console'")) << message.data();
 

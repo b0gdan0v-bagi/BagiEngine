@@ -37,7 +37,7 @@ namespace BECore::Tests {
         const auto element = MakeClickerElement("hard", "Hard");
 
         EXPECT_TRUE(UIChoice::IsOption(*element));
-        EXPECT_EQ(UIChoice::GetValue(*element), PoolString::Intern("hard"));
+        EXPECT_EQ(UIChoice::GetValue(*element), "hard"_intern);
         EXPECT_EQ(UIChoice::GetText(*element), "Hard");
         EXPECT_EQ(&UIChoice::GetText(*element), &element->GetComponent<UITextComponent>()->text) << "a view of the string, not a copy";
     }

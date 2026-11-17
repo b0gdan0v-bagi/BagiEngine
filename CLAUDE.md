@@ -46,7 +46,7 @@ tools/            Python and helper tools (tools/CLAUDE.md)
 `.clang-format` rules (`clang-format` skill). `PascalCase` types, methods, namespaces, enum values; `camelCase` locals; `_camelCase` private members; `T` / `TName` template parameters; `"Key"_intern` for `PoolString` literals.
 
 **DO:**
-- `BECore` type names (`String`, `StringView`, `Vector`, `HashMap`, `Optional`, `UniquePtr`, ...); `eastl::` / `std::` only in `BECore/Types/` and reflection traits (`Types/CLAUDE.md`). `PoolString` for identifiers and keys.
+- `BECore` type names (`String`, `StringView`, `Vector`, `HashMap`, `Optional`, `UniquePtr`, ...); `eastl::` / `std::` only in `BECore/Types/` and reflection traits (`Types/CLAUDE.md`). `PoolString` for identifiers and keys: a code constant is `"text"_intern` (named in a structure per file, `PoolString/CLAUDE.md`), `Intern(text)` only for names from data; `Intern("literal")` does not compile; ctest `BagiPoolStrings` holds the rest.
 - `IntrusivePtr<T>` (no raw `new` / `delete`), `Singleton<T>` for global services, `PassKey<T>` for access control.
 - `CORE_ENUM` instead of `enum class`, `EnumUtils<E>` to convert.
 - `ASSERT()` / `EXPECT()` / `FATALERROR()` compile out in Release: no side effects inside. `std::expected<T, E>` for recoverable errors.

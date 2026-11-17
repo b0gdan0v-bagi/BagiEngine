@@ -87,7 +87,7 @@ namespace BECore::Tests {
                                               </widgets></root>)");
 
         ASSERT_EQ(deserializer.GetErrors().size(), 1u);
-        const StringView message = deserializer.GetErrors()[0].errorMessage.ToStringView();
+        const StringView message = deserializer.GetErrors()[0].errorMessage;
         EXPECT_TRUE(Contains(message, "Unknown factory type")) << message.data();
         EXPECT_TRUE(Contains(message, "'NoSuchWidget'")) << message.data();
         ASSERT_EQ(list->widgets.size(), 2u);
@@ -131,7 +131,7 @@ namespace BECore::Tests {
                                               </widgets></root>)");
 
         ASSERT_EQ(deserializer.GetErrors().size(), 1u);
-        const StringView message = deserializer.GetErrors()[0].errorMessage.ToStringView();
+        const StringView message = deserializer.GetErrors()[0].errorMessage;
         EXPECT_TRUE(Contains(message, "ProbeWidget")) << message.data();
         EXPECT_TRUE(Contains(message, "failed to initialize")) << message.data();
         ASSERT_EQ(list->widgets.size(), 2u);
@@ -167,9 +167,8 @@ namespace BECore::Tests {
     TEST_F(WidgetListTest, EditorModeConfigListsTheEditorWidgetsInOrder) {
         const auto types = WidgetTypes(GetWidgetsConfigName(RunMode::Editor));
 
-        const Vector<String> expected{"ImGuiWidget",       "EditorLayoutWidget",  "ViewportWidget", "ClearScreenWidget", "ConfigEditorWidget",
-                                      "SceneEditorWidget", "TextureEditorWidget", "ProfilerWidget", "ConsoleWidget",     "GamePanelWidget",
-                                      "ArtGenWidget"};
+        const Vector<String> expected{"ImGuiWidget",         "EditorLayoutWidget", "ViewportWidget", "ClearScreenWidget", "ConfigEditorWidget", "SceneEditorWidget",
+                                      "TextureEditorWidget", "ProfilerWidget",     "ConsoleWidget",  "GamePanelWidget",   "ArtGenWidget"};
         EXPECT_EQ(types, expected);
     }
 
@@ -185,7 +184,7 @@ namespace BECore::Tests {
                                             </tests></root>)");
 
         ASSERT_EQ(deserializer.GetErrors().size(), 1u);
-        const StringView message = deserializer.GetErrors()[0].errorMessage.ToStringView();
+        const StringView message = deserializer.GetErrors()[0].errorMessage;
         EXPECT_TRUE(Contains(message, "Unknown factory type")) << message.data();
         EXPECT_TRUE(Contains(message, "'NoSuchTest'")) << message.data();
         ASSERT_EQ(list->tests.size(), 2u);

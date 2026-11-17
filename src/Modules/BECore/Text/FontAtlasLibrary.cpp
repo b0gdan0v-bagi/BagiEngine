@@ -1,6 +1,7 @@
 #include "FontAtlasLibrary.h"
 
 #include <BECore/Config/ConfigManager.h>
+#include <BECore/Config/ConfigNames.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Text/GlyphOutline.h>
@@ -8,7 +9,7 @@
 namespace BECore {
 
     void FontAtlasLibrary::Initialize() {
-        _settings = TextSettings::FromConfig(CoreManager::GetConfigManager().GetConfig("TextConfig"_intern));
+        _settings = TextSettings::FromConfig(CoreManager::GetConfigManager().GetConfig(ConfigNames::text));
     }
 
     PoolString FontAtlasLibrary::ResolveFontPath(const FontRequest& request, bool* known) const {

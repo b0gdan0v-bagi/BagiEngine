@@ -1,4 +1,5 @@
 #include <Stress/Components/StressSpritesComponent.h>
+#include <Stress/StressNames.h>
 #include <gtest/gtest.h>
 #include <tests/StressSceneFixture.h>
 
@@ -24,7 +25,7 @@ namespace BECore::Stress::Tests {
     protected:
         void StartSprites(const Vector<String>& arguments = {}) {
             StartGame(arguments);
-            ASSERT_EQ(_manager->GetActiveScene()->GetName(), "StressSprites"_intern);
+            ASSERT_EQ(_manager->GetActiveScene()->GetName(), StressNames::sprites);
         }
 
         SceneNode& Field() const {
@@ -178,7 +179,7 @@ namespace BECore::Stress::Tests {
     TEST_F(StressSpritesTest, AnotherActiveSceneDoesNotBuildTheField) {
         StartSprites();
         SetCount(100);
-        _manager->SetActiveScene("StressEntities"_intern);
+        _manager->SetActiveScene(StressNames::entities);
         Update();
         EXPECT_TRUE(Field().GetChildren().empty());
     }

@@ -1,5 +1,6 @@
 #include "FileSystem.h"
 
+#include <BECore/FileSystem/MountPoints.h>
 #include <EASTL/sort.h>
 
 namespace BECore {
@@ -11,7 +12,7 @@ namespace BECore {
 
         // Lowest priority first, so the layer of the game lands above the engine's
         for (const auto& root : _roots) {
-            for (const PoolString name : Array<PoolString, 2>{"config"_intern, "assets"_intern}) {
+            for (const PoolString name : Array<PoolString, 2>{MountPoints::config, MountPoints::assets}) {
                 const auto dirName = name.ToStringView();
                 std::filesystem::path dirPath = root / ToStd(dirName);
                 if (std::filesystem::exists(dirPath) && std::filesystem::is_directory(dirPath)) {
@@ -202,6 +203,8 @@ namespace BECore {
         eastl::sort(files.begin(), files.end());
         files.erase(eastl::unique(files.begin(), files.end()), files.end());
 
+        Vector<String> virtualPaths;
+        virtualPaths.reserve(files.size());
         for (const auto& relativePath : files) {
             String virtualPath(mountPoint.ToStringView().data(), mountPoint.ToStringView().size());
             virtualPath += "/";
@@ -215,8 +218,17 @@ namespace BECore {
                 }
             }
 
-            result.push_back(PoolString::Intern(StringView(virtualPath)));
+            virtualPaths.push_back(eastl::move(virtualPath));
         }
+
+        // One batch: the names come from the disk, so the form that hashes them
+        Vector<StringView> views;
+        views.reserve(virtualPaths.size());
+        for (const String& virtualPath : virtualPaths) {
+            views.push_back(StringView(virtualPath));
+        }
+        result.resize(views.size());
+        PoolString::InternBatch(Span<const StringView>(views.data(), views.size()), Span<PoolString>(result.data(), result.size()));
 
         return result;
     }

@@ -90,7 +90,7 @@ namespace BECore::Tests {
 
         EXPECT_FALSE(themes.Find("never-interned-token-of-uithemestest").has_value());
 
-        EXPECT_FALSE(PoolString::Find("never-interned-token-of-uithemestest").has_value());
+        EXPECT_FALSE(PoolString::Find(StringView{"never-interned-token-of-uithemestest"}).has_value());
     }
 
     TEST_F(UIThemesTest, AThemeWithoutColorsIsRefusedAndTheOldOneKept) {

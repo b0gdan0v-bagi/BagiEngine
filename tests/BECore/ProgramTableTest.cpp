@@ -112,7 +112,7 @@ namespace BECore::Tests {
         CheckTable<Quat>({Quat{0.0f, 0.0f, 0.0f, 1.0f}, Quat{1.0f, 0.0f, 0.0f, 0.0f}, Quat{0.0f, 1.0f, 0.0f, 0.0f}});
         CheckTable<Color>({Color{1, 2, 3, 4}, Color{5, 6, 7, 8}, Color{9, 10, 11, 12}});
         CheckTable<ProgramEnum>({ProgramEnum{2}, ProgramEnum{0}, ProgramEnum{1}});
-        CheckTable<PoolString>({PoolString::Intern("Fire"), PoolString::Intern("Water"), PoolString::Intern("Earth")});
+        CheckTable<PoolString>({"Fire"_intern, "Water"_intern, "Earth"_intern});
     }
 
     TEST(ProgramTableTest, ATableOfOneEntryIsThatEntryForEveryIndex) {
@@ -246,7 +246,7 @@ namespace BECore::Tests {
     TEST(ProgramTableTest, AnInlineTableOfOtherTypesEqualsAnArray) {
         ExpectTableFormula<Vec3>("at(cast.level, vec3(1, 0, 0), vec3(0, 1, 0), vec3(0, 0, 1))", {Vec3{1.0f, 0.0f, 0.0f}, Vec3{0.0f, 1.0f, 0.0f}, Vec3{0.0f, 0.0f, 1.0f}});
         ExpectTableFormula<ValueElement>("at(cast.level, Fire, Earth, Water)", {ValueElement::Fire, ValueElement::Earth, ValueElement::Water});
-        ExpectTableFormula<PoolString>("at(cast.level, 'low', 'mid', 'high')", {PoolString::Intern("low"), PoolString::Intern("mid"), PoolString::Intern("high")});
+        ExpectTableFormula<PoolString>("at(cast.level, 'low', 'mid', 'high')", {"low"_intern, "mid"_intern, "high"_intern});
     }
 
     TEST(ProgramTableTest, ATableWhoseCountIsNotARegisterLoadsAtEverySize) {

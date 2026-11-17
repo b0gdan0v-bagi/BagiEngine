@@ -60,7 +60,7 @@ namespace BECore::Tests {
         EXPECT_EQ(library.GetAll()[1].name.ToStringView(), "WhiteQueen");
         EXPECT_EQ(library.GetAll()[2].name.ToStringView(), "BlackKing");
 
-        const SpriteEntry* king = library.GetSprite(PoolString::Intern("WhiteKing"));
+        const SpriteEntry* king = library.GetSprite("WhiteKing"_intern);
         ASSERT_NE(king, nullptr);
         EXPECT_EQ(king->texturePath.ToStringView(), "assets/chess_test.png");
         EXPECT_FLOAT_EQ(king->srcRect.x, 0.0f);
@@ -68,10 +68,10 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(king->srcRect.w, 116.67f);
         EXPECT_FLOAT_EQ(king->srcRect.h, 190.5f);
 
-        const SpriteEntry* second = library.GetSprite(PoolString::Intern("BlackKing"));
+        const SpriteEntry* second = library.GetSprite("BlackKing"_intern);
         ASSERT_NE(second, nullptr);
         EXPECT_FLOAT_EQ(second->srcRect.y, 190.5f);
-        EXPECT_EQ(library.GetSprite(PoolString::Intern("Nothing")), nullptr);
+        EXPECT_EQ(library.GetSprite("Nothing"_intern), nullptr);
     }
 
     TEST(TextureLibraryTest, MissingPartsAreTheDefault) {
@@ -82,13 +82,13 @@ namespace BECore::Tests {
         </sprites></root>)"));
 
         ASSERT_EQ(library.GetAll().size(), 2u);
-        const SpriteEntry* noRect = library.GetSprite(PoolString::Intern("NoRect"));
+        const SpriteEntry* noRect = library.GetSprite("NoRect"_intern);
         ASSERT_NE(noRect, nullptr);
         EXPECT_EQ(noRect->texturePath.ToStringView(), "a.png");
         EXPECT_TRUE(noRect->srcRect.IsEmpty());
         EXPECT_FLOAT_EQ(noRect->srcRect.x, 0.0f);
 
-        const SpriteEntry* noPath = library.GetSprite(PoolString::Intern("NoPath"));
+        const SpriteEntry* noPath = library.GetSprite("NoPath"_intern);
         ASSERT_NE(noPath, nullptr);
         EXPECT_TRUE(noPath->texturePath.Empty());
         EXPECT_FLOAT_EQ(noPath->srcRect.w, 3.0f);
@@ -139,7 +139,7 @@ namespace BECore::Tests {
         library.AddOrUpdate(MakeEntry("Old", "old.png", Rect(1, 2, 3, 4)));
         ASSERT_NO_FATAL_FAILURE(LoadInto(library, kChessShaped));
         EXPECT_EQ(library.GetAll().size(), 3u);
-        EXPECT_EQ(library.GetSprite(PoolString::Intern("Old")), nullptr);
+        EXPECT_EQ(library.GetSprite("Old"_intern), nullptr);
     }
 
     TEST(TextureLibraryTest, AMalformedNumberIsReadAsZero) {
@@ -148,7 +148,7 @@ namespace BECore::Tests {
             <sprite name="Bad" texturePath="a.png"><srcRect x="abc" y="2" w="3" h="4"/></sprite>
         </sprites></root>)"));
 
-        const SpriteEntry* bad = library.GetSprite(PoolString::Intern("Bad"));
+        const SpriteEntry* bad = library.GetSprite("Bad"_intern);
         ASSERT_NE(bad, nullptr);
         EXPECT_FLOAT_EQ(bad->srcRect.x, 0.0f);
         EXPECT_FLOAT_EQ(bad->srcRect.y, 2.0f);
@@ -246,7 +246,7 @@ namespace BECore::Tests {
         TextureLibrary library;
         library.AddOrUpdate(MakeEntry("Keep", "k.png", Rect(1, 2, 3, 4)));
         library.AddOrUpdate(MakeEntry("Drop", "d.png", Rect(5, 6, 7, 8)));
-        library.Remove(PoolString::Intern("Drop"));
+        library.Remove("Drop"_intern);
 
         XmlSerializer serializer;
         library.Write(serializer);
@@ -263,17 +263,17 @@ namespace BECore::Tests {
         library.AddOrUpdate(MakeEntry("B", "b.png", Rect(5, 6, 7, 8)));
         library.AddOrUpdate(MakeEntry("C", "c.png", Rect(9, 10, 11, 12)));
 
-        EXPECT_TRUE(library.Rename(PoolString::Intern("B"), PoolString::Intern("Renamed")));
+        EXPECT_TRUE(library.Rename("B"_intern, "Renamed"_intern));
 
         ASSERT_EQ(library.GetAll().size(), 3u);
         EXPECT_EQ(library.GetAll()[1].name.ToStringView(), "Renamed");
         EXPECT_EQ(library.GetAll()[1].texturePath.ToStringView(), "b.png");
         EXPECT_FLOAT_EQ(library.GetAll()[1].srcRect.w, 7.0f);
-        EXPECT_EQ(library.GetSprite(PoolString::Intern("B")), nullptr);
-        EXPECT_EQ(library.GetSprite(PoolString::Intern("Renamed")), &library.GetAll()[1]);
-        EXPECT_EQ(library.GetSprite(PoolString::Intern("C")), &library.GetAll()[2]);
+        EXPECT_EQ(library.GetSprite("B"_intern), nullptr);
+        EXPECT_EQ(library.GetSprite("Renamed"_intern), &library.GetAll()[1]);
+        EXPECT_EQ(library.GetSprite("C"_intern), &library.GetAll()[2]);
 
-        EXPECT_TRUE(library.Rename(PoolString::Intern("A"), PoolString::Intern("A")));
+        EXPECT_TRUE(library.Rename("A"_intern, "A"_intern));
         EXPECT_EQ(library.GetAll()[0].name.ToStringView(), "A");
     }
 
@@ -282,27 +282,27 @@ namespace BECore::Tests {
         library.AddOrUpdate(MakeEntry("A", "a.png", Rect(1, 2, 3, 4)));
         library.AddOrUpdate(MakeEntry("B", "b.png", Rect(5, 6, 7, 8)));
 
-        EXPECT_FALSE(library.Rename(PoolString::Intern("A"), PoolString::Intern("B")));
+        EXPECT_FALSE(library.Rename("A"_intern, "B"_intern));
 
         ASSERT_EQ(library.GetAll().size(), 2u);
         EXPECT_EQ(library.GetAll()[0].name.ToStringView(), "A");
         EXPECT_EQ(library.GetAll()[0].texturePath.ToStringView(), "a.png");
         EXPECT_EQ(library.GetAll()[1].name.ToStringView(), "B");
         EXPECT_EQ(library.GetAll()[1].texturePath.ToStringView(), "b.png");
-        EXPECT_EQ(library.GetSprite(PoolString::Intern("A")), &library.GetAll()[0]);
-        EXPECT_EQ(library.GetSprite(PoolString::Intern("B")), &library.GetAll()[1]);
+        EXPECT_EQ(library.GetSprite("A"_intern), &library.GetAll()[0]);
+        EXPECT_EQ(library.GetSprite("B"_intern), &library.GetAll()[1]);
     }
 
     TEST(TextureLibraryTest, RenameRefusesAnEmptyOrMissingName) {
         TextureLibrary library;
         library.AddOrUpdate(MakeEntry("A", "a.png", Rect(1, 2, 3, 4)));
 
-        EXPECT_FALSE(library.Rename(PoolString::Intern("A"), PoolString{}));
-        EXPECT_FALSE(library.Rename(PoolString::Intern("Missing"), PoolString::Intern("Other")));
+        EXPECT_FALSE(library.Rename("A"_intern, PoolString{}));
+        EXPECT_FALSE(library.Rename("Missing"_intern, "Other"_intern));
 
         ASSERT_EQ(library.GetAll().size(), 1u);
         EXPECT_EQ(library.GetAll()[0].name.ToStringView(), "A");
-        EXPECT_EQ(library.GetSprite(PoolString::Intern("Other")), nullptr);
+        EXPECT_EQ(library.GetSprite("Other"_intern), nullptr);
     }
 
     TEST(TextureLibraryTest, MakeUniqueNameSkipsTakenNames) {
@@ -357,7 +357,7 @@ namespace BECore::Tests {
 
         library.Initialize();
         EXPECT_TRUE(library.GetAll().empty());
-        EXPECT_EQ(library.GetSprite(PoolString::Intern("Old")), nullptr);
+        EXPECT_EQ(library.GetSprite("Old"_intern), nullptr);
 
         library.AddOrUpdate(MakeEntry("Added", "assets/a.png", Rect()));
         library.Initialize();

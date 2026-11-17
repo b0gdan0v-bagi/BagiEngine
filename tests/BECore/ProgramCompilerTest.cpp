@@ -185,7 +185,7 @@ namespace BECore::Tests {
         const auto nested = CompileValue<int32_t>("caster.span.low", world.declaration);
         ASSERT_TRUE(nested.has_value());
         EXPECT_TRUE(nested->IsSlot());
-        EXPECT_EQ(nested->Path(), PoolString::Intern("caster.span.low"));
+        EXPECT_EQ(nested->Path(), "caster.span.low"_intern);
     }
 
     TEST(ProgramCompilerTest, ThereIsNoAlgebra) {
@@ -332,7 +332,7 @@ namespace BECore::Tests {
         const auto value = CompileValue<int32_t>("caster.attack  *  2", world.declaration);
         ASSERT_TRUE(value.has_value());
         ASSERT_EQ(value->Kind(), ValueKind::Program);
-        EXPECT_EQ(value->Path(), PoolString::Intern("caster.attack  *  2"));
+        EXPECT_EQ(value->Path(), "caster.attack  *  2"_intern);
         EXPECT_EQ(ProgramPool::Get(value->Id()).ResultType(), ProgramType::Int32);
     }
 
@@ -495,16 +495,15 @@ namespace BECore::Tests {
         ExpectOverVectors<Color>("lerp(caster.tint, color(0, 0, 0, 255), 0.5)", [](const ValueUnitStats& caster, const ValueCastInfo&) { return Lerp(caster.tint, Color{0, 0, 0, 255}, 0.5f); });
         ExpectOverVectors<Color>("color(caster.tint.r, 300, -4, caster.tint.a)", [](const ValueUnitStats& caster, const ValueCastInfo&) { return Color{caster.tint.r, 255, 0, caster.tint.a}; });
         ExpectOverVectors<int32_t>("caster.tint.g + caster.tint.a", [](const ValueUnitStats& caster, const ValueCastInfo&) { return int32_t{caster.tint.g} + int32_t{caster.tint.a}; });
-        ExpectOverVectors<PoolString>("select(caster.element == Fire, 'burn', 'chill')", [](const ValueUnitStats& caster, const ValueCastInfo&) {
-            return caster.element == ValueElement::Fire ? PoolString::Intern("burn") : PoolString::Intern("chill");
-        });
-        ExpectOverVectors<PoolString>("select(caster.alive, 'a', 'b')", [](const ValueUnitStats& caster, const ValueCastInfo&) { return PoolString::Intern(caster.alive ? "a" : "b"); });
+        ExpectOverVectors<PoolString>("select(caster.element == Fire, 'burn', 'chill')",
+                                      [](const ValueUnitStats& caster, const ValueCastInfo&) { return caster.element == ValueElement::Fire ? PoolString{"burn"_intern} : PoolString{"chill"_intern}; });
+        ExpectOverVectors<PoolString>("select(caster.alive, 'a', 'b')",
+                                      [](const ValueUnitStats& caster, const ValueCastInfo&) { return caster.alive ? PoolString{"a"_intern} : PoolString{"b"_intern}; });
         ExpectOverVectors<ValueElement>("select(caster.alive, Fire, caster.element)",
                                         [](const ValueUnitStats& caster, const ValueCastInfo&) { return caster.alive ? ValueElement::Fire : caster.element; });
         ExpectOverVectors<bool>("Earth != caster.element && caster.element == caster.element",
                                 [](const ValueUnitStats& caster, const ValueCastInfo&) { return caster.element != ValueElement::Earth; });
-        ExpectOverVectors<bool>("caster.title == 'x' || caster.title == ''",
-                                [](const ValueUnitStats& caster, const ValueCastInfo&) { return caster.title == PoolString::Intern("x") || caster.title.Empty(); });
+        ExpectOverVectors<bool>("caster.title == 'x' || caster.title == ''", [](const ValueUnitStats& caster, const ValueCastInfo&) { return caster.title == "x"_intern || caster.title.Empty(); });
     }
 
     TEST(ProgramCompilerTest, AFormulaOfConstantsOfAnyNewTypeIsAConstant) {
@@ -528,8 +527,8 @@ namespace BECore::Tests {
         EXPECT_TRUE(SameBytes(constant(Color{}, "lerp(color(0, 0, 0, 255), color(255, 255, 255, 255), 0.5)"), Lerp(Color{0, 0, 0, 255}, Color{255, 255, 255, 255}, 0.5f)));
         EXPECT_EQ(constant(ValueElement{}, "select(1 < 2, Fire, Earth)"), ValueElement::Fire);
         EXPECT_EQ(constant(ValueElement{}, "Earth"), ValueElement::Earth);
-        EXPECT_EQ(constant(PoolString{}, "'chill'"), PoolString::Intern("chill"));
-        EXPECT_EQ(constant(PoolString{}, "select(2 > 1, 'burn', 'chill')"), PoolString::Intern("burn"));
+        EXPECT_EQ(constant(PoolString{}, "'chill'"), "chill"_intern);
+        EXPECT_EQ(constant(PoolString{}, "select(2 > 1, 'burn', 'chill')"), "burn"_intern);
         EXPECT_TRUE(constant(bool{}, "'a' == 'a'"));
         EXPECT_FALSE(constant(bool{}, "'a' == 'b'"));
         EXPECT_EQ(constant(float{}, "vec3(1, 2, 3).y"), 2.0f);
@@ -589,7 +588,7 @@ namespace BECore::Tests {
         EXPECT_EQ(y->Offset(), velocity->offset + offsetof(Vec3, y));
         EXPECT_EQ(z->Offset(), velocity->offset + offsetof(Vec3, z));
         EXPECT_EQ(y->Offset(), x->Offset() + sizeof(float)) << "the next float";
-        EXPECT_EQ(y->Path(), PoolString::Intern("caster.velocity.y"));
+        EXPECT_EQ(y->Path(), "caster.velocity.y"_intern);
         EXPECT_EQ(x->Get(world.context), 1.0f);
         EXPECT_EQ(y->Get(world.context), 2.0f);
         EXPECT_EQ(z->Evaluate(world.context), 3.0f);

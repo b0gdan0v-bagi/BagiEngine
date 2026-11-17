@@ -41,8 +41,8 @@ namespace BECore::Fuzz {
             // The list is capped, and every path and message is cut and free of control characters (they reach a log and a reply)
             FUZZ_CHECK(list.size() <= ReaderLimits::kMaxRecordedErrors);
             for (const DeserializeError& entry : list) {
-                const StringView path = entry.path.ToStringView();
-                const StringView message = entry.errorMessage.ToStringView();
+                const StringView path = entry.path;
+                const StringView message = entry.errorMessage;
                 FUZZ_CHECK(path.size() <= ReaderLimits::kMaxErrorTextBytes);
                 FUZZ_CHECK(message.size() <= ReaderLimits::kMaxErrorTextBytes);
                 FUZZ_CHECK(!HasControlCharacter(path));

@@ -2,6 +2,7 @@
 
 #include <BECore/Control/ControlService.h>
 #include <BECore/FileSystem/FileSystem.h>
+#include <BECore/FileSystem/MountPoints.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Time/GamePause.h>
@@ -24,7 +25,7 @@ namespace BECore {
         /// Where the search for the engine's repository starts: the folder above the lowest layer of the `config` mount (the engine's own
         /// content), else the working directory
         std::filesystem::path BranchSearchStart() {
-            const auto layers = CoreManager::GetFileSystem().GetMountLayers("config"_intern);
+            const auto layers = CoreManager::GetFileSystem().GetMountLayers(MountPoints::config);
             if (!layers.empty() && layers.front().has_parent_path()) {
                 return layers.front().parent_path();
             }

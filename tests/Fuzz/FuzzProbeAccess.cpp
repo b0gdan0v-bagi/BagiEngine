@@ -105,7 +105,7 @@ namespace BECore::Fuzz {
         state.f32 = 1.5f;
         state.f64 = -2.25;
         state.text = "hello";
-        state.name = PoolString::Intern("Hero");
+        state.name = "Hero"_intern;
         state.mode = ProbeMode::On;
         state.leaf.id = 7;
         state.leaf.weight = 0.5f;

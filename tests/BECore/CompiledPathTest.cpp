@@ -77,7 +77,7 @@ namespace BECore::Tests {
         all.precise = -2.25;
         all.text = "text";
         all.fixedText = "fixed";
-        all.name = PoolString::Intern("pooled");
+        all.name = "pooled"_intern;
         all.mode = RegMode::Auto;
         all.inner.value = 8;
         all.inner.label = "inner";

@@ -22,7 +22,7 @@ namespace BECore {
             if (errors.empty()) {
                 return "unknown error";
             }
-            return String(errors.front().errorMessage.ToStringView());
+            return String(errors.front().errorMessage);
         }
 
     }  // namespace
@@ -62,9 +62,9 @@ namespace BECore {
     void LogDeserializeErrors(StringView configName, Span<const DeserializeError> errors, Span<const DeserializeError> warnings) {
         // A document that fails to parse has no path, and the line is 0 where the format has none (binary)
         const auto text = [configName](const DeserializeError& message) {
-            const String path = message.path.ToStringView().empty() ? String{} : Format("{}: ", message.path.ToStringView());
+            const String path = message.path.empty() ? String{} : Format("{}: ", message.path);
             const String line = message.line != 0 ? Format(" (line {})", message.line) : String{};
-            return Format("Config '{}': {}{}{}", configName, path, message.errorMessage.ToStringView(), line);
+            return Format("Config '{}': {}{}{}", configName, path, message.errorMessage, line);
         };
         for (const DeserializeError& error : errors) {
             LOG_ERROR(text(error).c_str());

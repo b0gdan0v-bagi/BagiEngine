@@ -1,5 +1,6 @@
 #include <BECore/Animation/TweenManager.h>
 #include <Stress/Components/StressEntitiesComponent.h>
+#include <Stress/StressNames.h>
 #include <gtest/gtest.h>
 #include <tests/StressSceneFixture.h>
 
@@ -22,7 +23,7 @@ namespace BECore::Stress::Tests {
     protected:
         void StartEntities(uint32_t count = kCount) {
             StartGame({"--stress-scene=entities", Format("--stress-count={}", count).c_str()});
-            ASSERT_EQ(_manager->GetActiveScene()->GetName(), "StressEntities"_intern);
+            ASSERT_EQ(_manager->GetActiveScene()->GetName(), StressNames::entities);
         }
 
         void TearDown() override {
@@ -190,7 +191,7 @@ namespace BECore::Stress::Tests {
 
     TEST_F(StressEntitiesTest, AnotherActiveSceneDoesNotBuildTheField) {
         StartEntities();
-        _manager->SetActiveScene("StressSprites"_intern);
+        _manager->SetActiveScene(StressNames::sprites);
         Update();
 
         EXPECT_TRUE(Field().GetChildren().empty());

@@ -263,6 +263,9 @@ namespace BECore {
         if (!ReadText(name, text)) {
             return false;
         }
+        if (!AcceptPoolStringLength(name, text.size())) {
+            return false;
+        }
         // The one intern of a read: the value is what the field holds
         outValue = PoolString::Intern(StringView(text));
         return true;

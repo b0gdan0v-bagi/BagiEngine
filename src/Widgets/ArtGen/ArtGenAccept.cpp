@@ -2,6 +2,7 @@
 
 #include <BECore/Audio/AudioSourceComponent.h>
 #include <BECore/FileSystem/FileSystem.h>
+#include <BECore/FileSystem/MountPoints.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Resource/ResourceManager.h>
 #include <BECore/Resource/TextureLibrary.h>
@@ -12,7 +13,6 @@
 #include <Widgets/ArtGen/ArtGenSession.h>
 #include <Widgets/EditorLayout/UserFileIo.h>
 #include <Widgets/SceneEditor/SceneSelectionEvents.h>
-#include <algorithm>
 #include <cstdio>
 #include <system_error>
 
@@ -246,7 +246,7 @@ namespace BECore {
 
     std::expected<Json, ControlError> AcceptSoundForControl(const ArtGenVariant& variant, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, SceneNode* node) {
         auto fail = [](const String& message) { return std::unexpected(ControlError{String("artgen_accept_failed"), message}); };
-        const std::filesystem::path assetsDir = CoreManager::GetFileSystem().GetMountedPath("assets"_intern);
+        const std::filesystem::path assetsDir = CoreManager::GetFileSystem().GetMountedPath(MountPoints::assets);
         if (assetsDir.empty()) {
             return fail(String("the game has no assets folder"));
         }
@@ -321,7 +321,7 @@ namespace BECore {
     }
 
     std::expected<ArtGenAccepted, String> AcceptVariant(const ArtGenVariant& variant, StringView sprite) {
-        const std::filesystem::path assetsDir = CoreManager::GetFileSystem().GetMountedPath("assets"_intern);
+        const std::filesystem::path assetsDir = CoreManager::GetFileSystem().GetMountedPath(MountPoints::assets);
         if (assetsDir.empty()) {
             return std::unexpected(String("the game has no assets folder"));
         }

@@ -28,8 +28,8 @@ namespace BECore::Tests {
     namespace ConfigFilesCheckDetail {
 
         inline String Describe(StringView file, const DeserializeError& message) {
-            const StringView path = message.path.ToStringView();
-            return Format("{}: {}{}{}", file, path, path.empty() ? "" : ": ", message.errorMessage.ToStringView());
+            const StringView path = message.path;
+            return Format("{}: {}{}{}", file, path, path.empty() ? "" : ": ", message.errorMessage);
         }
 
         /// Loads `<folder>/<stem>.xml` through @p reader under the mode Error and appends one message per error and per warning.

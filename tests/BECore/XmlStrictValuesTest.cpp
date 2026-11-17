@@ -42,7 +42,7 @@ namespace BECore::Tests {
             T value = static_cast<T>(42);
             const bool read = c.Read(value);
             const auto& errors = c.Get().GetErrors();
-            return !read && value == static_cast<T>(42) && errors.size() == 1 && errors[0].path.ToStringView() == "a";
+            return !read && value == static_cast<T>(42) && errors.size() == 1 && errors[0].path == "a";
         }
 
     }  // namespace
@@ -97,25 +97,25 @@ namespace BECore::Tests {
         bool flag = false;
         EXPECT_FALSE(c.Read(flag));
         ASSERT_EQ(c.Get().GetErrors().size(), 1u);
-        EXPECT_EQ(c.Get().GetErrors()[0].errorMessage.ToStringView(), "Invalid boolean value 'yes'");
+        EXPECT_EQ(c.Get().GetErrors()[0].errorMessage, "Invalid boolean value 'yes'");
 
         AttributeCase number("12abc", true);
         int32_t value = 0;
         EXPECT_FALSE(number.Read(value));
         ASSERT_EQ(number.Get().GetErrors().size(), 1u);
-        EXPECT_EQ(number.Get().GetErrors()[0].errorMessage.ToStringView(), "Invalid integer value '12abc'");
+        EXPECT_EQ(number.Get().GetErrors()[0].errorMessage, "Invalid integer value '12abc'");
 
         AttributeCase range("65536", true);
         uint16_t port = 0;
         EXPECT_FALSE(range.Read(port));
         ASSERT_EQ(range.Get().GetErrors().size(), 1u);
-        EXPECT_EQ(range.Get().GetErrors()[0].errorMessage.ToStringView(), "Invalid integer value '65536' (out of range)");
+        EXPECT_EQ(range.Get().GetErrors()[0].errorMessage, "Invalid integer value '65536' (out of range)");
 
         AttributeCase real("x", true);
         double d = 0;
         EXPECT_FALSE(real.Read(d));
         ASSERT_EQ(real.Get().GetErrors().size(), 1u);
-        EXPECT_EQ(real.Get().GetErrors()[0].errorMessage.ToStringView(), "Invalid number value 'x'");
+        EXPECT_EQ(real.Get().GetErrors()[0].errorMessage, "Invalid number value 'x'");
     }
 
     TEST(XmlStrictValuesTest, Uint16TakesTheWholeRangeAndNothingElse) {
@@ -218,7 +218,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(deserializer.Read("port", port));
         EXPECT_EQ(port, 1);
         ASSERT_EQ(deserializer.GetErrors().size(), 1u);
-        EXPECT_EQ(deserializer.GetErrors()[0].path.ToStringView(), "port");
+        EXPECT_EQ(deserializer.GetErrors()[0].path, "port");
 
         uint16_t ok = 1;
         EXPECT_TRUE(deserializer.Read("ok", ok));
@@ -263,7 +263,7 @@ namespace BECore::Tests {
         deserializer.EndObject();
 
         ASSERT_EQ(deserializer.GetErrors().size(), 1u);
-        EXPECT_EQ(deserializer.GetErrors()[0].path.ToStringView(), "inner.n");
+        EXPECT_EQ(deserializer.GetErrors()[0].path, "inner.n");
         EXPECT_TRUE(deserializer.IsStrictValues());
     }
 

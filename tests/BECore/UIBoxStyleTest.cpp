@@ -308,7 +308,7 @@ namespace BECore::Tests {
         RecordingRenderer renderer;
         const Vector<uint8_t> pixels(16 * 16 * 4, 128);
         panel->GetSprite().SetTexture(renderer.CreateTexture(pixels.data(), 16, 16), Rect{0, 0, 16, 16});
-        panel->sprite = PoolString::Intern("Anything");
+        panel->sprite = "Anything"_intern;
 
         const auto calls = Draw(*panel, renderer);
         ASSERT_EQ(calls.size(), 2u);
@@ -356,7 +356,7 @@ namespace BECore::Tests {
     TEST(UIBoxStyleTest, EveryFieldSurvivesAnXmlRoundTrip) {
         const UIBoxStyle every = EveryField();
         auto original = New<UIPanel>();
-        original->name = PoolString::Intern("A");
+        original->name = "A"_intern;
         original->box = every;
 
         auto canvas = New<UICanvasComponent>();

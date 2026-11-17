@@ -21,7 +21,7 @@ XML configuration: every file under `config/` (the engine's and the game's, see 
 
 **DO**: read configs through the manager.
 ```cpp
-auto rootNode = CoreManager::GetConfigManager().GetConfig("LoggerConfig"_intern);
+auto rootNode = CoreManager::GetConfigManager().GetConfig(ConfigNames::logger);
 ```
 
 **DON'T**: create loaders by hand or call `LoadFromVirtualPath()` directly for engine configs.
@@ -50,7 +50,7 @@ A list of factory objects (widgets, runtime tests, log sinks, assert handlers) i
 ## Adding a config
 
 1. Drop `config/<Name>.xml`; it is picked up by name at the next start.
-2. Consume it with `GetConfig("<Name>"_intern)` or `MakeFromConfig<T>("<Name>")`.
+2. Consume it with `GetConfig("<Name>"_intern)` or `MakeFromConfig<T>("<Name>")`; the names the engine reads from more than one place are `ConfigNames` (`ConfigNames.h`).
 3. If users should edit it in the Config Editor, register enum or flag hints in `ConfigEditorWidget::Initialize` (`src/Widgets/ConfigEditor/`): `RegisterEnum<E>` for an enum, `RegisterFactoryTypes<Base>` for a `type` attribute resolved by `AbstractFactory<Base>`. The options must be the strings the loader accepts (for a factory, the class names), so take them from the factory or the enum, never from a copy.
 
 ## Content version

@@ -68,7 +68,7 @@ namespace BECore::Tests {
 
     TEST(ValueTest, APoolStringLiteralIsReadBackFromAConst) {
         const ValueWorld world;
-        const Value<PoolString> value = PoolString::Intern("Hero");
+        const Value<PoolString> value = PoolString{"Hero"_intern};
         EXPECT_TRUE(value.IsConst());
         EXPECT_EQ(value.Get(world.context), "Hero"_intern);
         EXPECT_EQ(value.GetConst(), "Hero"_intern);

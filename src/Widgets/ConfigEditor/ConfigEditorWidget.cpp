@@ -1,6 +1,7 @@
 #include "ConfigEditorWidget.h"
 
 #include <BECore/Config/ConfigManager.h>
+#include <BECore/Config/ConfigNames.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/ILogSink.h>
 #include <BECore/Reflection/IDeserializer.h>
@@ -23,8 +24,8 @@ namespace BECore {
     bool ConfigEditorWidget::Initialize(IDeserializer& /*deserializer*/) {
         auto& schema = ConfigFieldSchema::GetInstance();
 
-        schema.RegisterFactoryTypes<ILogSink>("LoggerConfig"_intern, "sink/@type");
-        schema.RegisterEnum<LogLevel>("LoggerConfig"_intern, "sink/@minLevel");
+        schema.RegisterFactoryTypes<ILogSink>(ConfigNames::logger, "sink/@type");
+        schema.RegisterEnum<LogLevel>(ConfigNames::logger, "sink/@minLevel");
         schema.RegisterFlags("SDLWindowConfig"_intern, "window/@windowFlags", SDLUtils::GetWindowFlagNames());
 
         Subscribe<EditorCommandEvent, &ConfigEditorWidget::OnCommand>(this);

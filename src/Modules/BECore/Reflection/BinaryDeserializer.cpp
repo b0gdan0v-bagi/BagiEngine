@@ -283,6 +283,9 @@ namespace BECore {
         if (!ReadStringView(name, true, text)) {
             return false;
         }
+        if (!AcceptPoolStringLength(name, text.size())) {
+            return false;
+        }
         outValue = PoolString::Intern(text);
         return true;
     }
@@ -347,6 +350,9 @@ namespace BECore {
     bool BinaryDeserializer::ReadAttribute(StringView name, PoolString& outValue) {
         StringView text;
         if (!ReadStringView(name, false, text)) {
+            return false;
+        }
+        if (!AcceptPoolStringLength(name, text.size())) {
             return false;
         }
         outValue = PoolString::Intern(text);

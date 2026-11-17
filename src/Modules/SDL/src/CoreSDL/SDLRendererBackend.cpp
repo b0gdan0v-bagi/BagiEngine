@@ -3,6 +3,7 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/MainWindow/IMainWindow.h>
 #include <BECore/Renderer/IRenderTarget.h>
+#include <BECore/Renderer/ITexture.h>
 #include <CoreSDL/SDLMainWindow.h>
 #include <CoreSDL/SDLTexture.h>
 #include <Events/ApplicationEvents.h>
@@ -207,7 +208,7 @@ namespace BECore {
         SDL_SetTextureBlendMode(handle, SDL_BLENDMODE_BLEND);
 
         auto texture = New<SDLTexture>();
-        texture->SetLoaded("<memory>"_intern, handle, static_cast<float>(width), static_cast<float>(height));
+        texture->SetLoaded(TexturePaths::memory, handle, static_cast<float>(width), static_cast<float>(height));
         return texture;
     }
 

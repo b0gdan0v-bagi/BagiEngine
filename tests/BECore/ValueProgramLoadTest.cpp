@@ -59,7 +59,7 @@ namespace BECore::Tests {
             String out;
             for (const Vector<DeserializeError>* list : {&reader.GetErrors(), &reader.GetWarnings()}) {
                 for (const DeserializeError& report : *list) {
-                    AppendFormat(out, "{}: {}\n", report.path.ToStringView(), report.errorMessage.ToStringView());
+                    AppendFormat(out, "{}: {}\n", report.path, report.errorMessage);
                 }
             }
             return out;
@@ -225,7 +225,7 @@ namespace BECore::Tests {
                 EXPECT_TRUE(SameBytes(document.facing.Evaluate(world.context), Slerp(caster.facing, Quat{0.0f, 0.0f, 1.0f, 0.0f}, 0.25f)));
                 EXPECT_TRUE(SameBytes(document.tint.Evaluate(world.context), Lerp(caster.tint, Color{0, 0, 0, 255}, 0.5f)));
                 EXPECT_EQ(document.element.Evaluate(world.context), caster.alive ? ValueElement::Fire : caster.element);
-                EXPECT_EQ(document.label.Evaluate(world.context), PoolString::Intern(caster.alive ? "burn" : "chill"));
+                EXPECT_EQ(document.label.Evaluate(world.context), caster.alive ? "burn"_intern.ToPoolString() : "chill"_intern.ToPoolString());
             }
         }
 
@@ -266,7 +266,7 @@ namespace BECore::Tests {
             EXPECT_TRUE(SameBytes(document.facing.GetConst(), Quat{0.0f, 0.0f, 0.0f, 1.0f}));
             EXPECT_TRUE(SameBytes(document.tint.GetConst(), Color{1, 2, 3, 255}));
             EXPECT_EQ(document.element.GetConst(), ValueElement::Fire);
-            EXPECT_EQ(document.label.GetConst(), PoolString::Intern("a"));
+            EXPECT_EQ(document.label.GetConst(), "a"_intern);
         }
 
     }  // namespace
@@ -281,7 +281,7 @@ namespace BECore::Tests {
         const String reports = LoadXml(Format("{}{}", kContext, kFormulas), document);
         EXPECT_TRUE(reports.empty()) << reports.c_str();
         ExpectFormulasEqualPlainCode(document);
-        EXPECT_EQ(document.damage.Path(), PoolString::Intern("caster.attack * (100 + cast.level * 10) / 100"));
+        EXPECT_EQ(document.damage.Path(), "caster.attack * (100 + cast.level * 10) / 100"_intern);
     }
 
     TEST(ValueProgramLoadTest, TheKindProgramMayBesideExpr) {
@@ -389,7 +389,7 @@ namespace BECore::Tests {
         const String reports = LoadXml(Format("{}{}", kContext, kTypedFormulas), document, DiagnosticsMode::Warn, true);
         EXPECT_TRUE(reports.empty()) << reports.c_str();
         ExpectTypedFormulasEqualPlainCode(document);
-        EXPECT_EQ(document.label.Path(), PoolString::Intern("select(caster.alive, 'burn', 'chill')"));
+        EXPECT_EQ(document.label.Path(), "select(caster.alive, 'burn', 'chill')"_intern);
     }
 
     TEST(ValueProgramLoadTest, TheKindProgramBesideExprLoadsEveryType) {

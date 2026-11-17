@@ -3,6 +3,7 @@
 #include <BECore/UI/UIStrings.h>
 #include <BECore/UI/UIVars.h>
 #include <Stress/Components/StressUiComponent.h>
+#include <Stress/StressNames.h>
 #include <gtest/gtest.h>
 #include <tests/StressSceneFixture.h>
 
@@ -59,7 +60,7 @@ namespace BECore::Stress::Tests {
 
         void StartUi(uint32_t count = kCount) {
             StartGame({"--stress-scene=ui", Format("--stress-count={}", count).c_str()});
-            ASSERT_EQ(_manager->GetActiveScene()->GetName(), "StressUi"_intern);
+            ASSERT_EQ(_manager->GetActiveScene()->GetName(), StressNames::ui);
             _renderer->width = kOutputWidth;
             _renderer->height = kOutputHeight;
         }
@@ -273,7 +274,7 @@ namespace BECore::Stress::Tests {
 
     TEST_F(StressUiTest, AnotherActiveSceneDoesNotBuildTheField) {
         StartUi();
-        _manager->SetActiveScene("StressSprites"_intern);
+        _manager->SetActiveScene(StressNames::sprites);
         Update();
 
         EXPECT_TRUE(Root().children.empty());

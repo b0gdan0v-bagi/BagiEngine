@@ -27,6 +27,10 @@
 namespace BECore {
 
     namespace {
+        struct Ids {
+            static constexpr auto sceneConfig = "SceneConfig"_intern;
+        };
+
         constexpr float kUITreeHeight = 160.0f;
         constexpr size_t kComponentLabelSize = 96;
         constexpr float kPopupButtonWidth = 120.0f;
@@ -565,7 +569,7 @@ namespace BECore {
         _uiFileSession.Save(*scene);
 
         auto& configManager = CoreManager::GetConfigManager();
-        auto xmlRoot = configManager.GetConfig("SceneConfig"_intern);
+        auto xmlRoot = configManager.GetConfig(Ids::sceneConfig);
         if (!xmlRoot) {
             return;
         }
@@ -580,7 +584,7 @@ namespace BECore {
             LOG_WARNING(Format("SceneEditor: scene '{}': {}", scene->GetName().CStr(), note.c_str()).c_str());
         }
 
-        if (configManager.SaveConfig("SceneConfig"_intern)) {
+        if (configManager.SaveConfig(Ids::sceneConfig)) {
             _isDirty = false;
         }
     }

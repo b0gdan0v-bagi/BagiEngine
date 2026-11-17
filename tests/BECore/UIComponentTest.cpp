@@ -177,7 +177,7 @@ namespace BECore::Tests {
             _manager->Deserialize(deserializer);
             ASSERT_FALSE(deserializer.HasErrors());
             _manager->Initialize();
-            _canvas = _manager->GetSceneByName(PoolString::Intern("Main"))->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
+            _canvas = _manager->GetSceneByName("Main"_intern)->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
             ASSERT_TRUE(_canvas);
         }
 
@@ -189,7 +189,7 @@ namespace BECore::Tests {
         }
 
         void Draw() {
-            _manager->SetActiveScene(PoolString::Intern("Main"));
+            _manager->SetActiveScene("Main"_intern);
             _renderer->ClearCalls();
             _manager->DrawAll();
         }
@@ -235,9 +235,9 @@ namespace BECore::Tests {
         ASSERT_EQ(host.components.size(), 2u);
         EXPECT_TRUE(host.components[0]->Is<UITestProbe>());
         EXPECT_TRUE(host.components[1]->Is<UITestOther>());
-        EXPECT_EQ(host.components[0]->Cast<UITestProbe>()->tag, PoolString::Intern("first"));
+        EXPECT_EQ(host.components[0]->Cast<UITestProbe>()->tag, "first"_intern);
         EXPECT_TRUE(host.components[0]->Cast<UITestProbe>()->takesClicks);
-        EXPECT_EQ(host.components[1]->Cast<UITestOther>()->tag, PoolString::Intern("second"));
+        EXPECT_EQ(host.components[1]->Cast<UITestOther>()->tag, "second"_intern);
         EXPECT_TRUE(Get("Plain").components.empty());
     }
 
@@ -316,7 +316,7 @@ namespace BECore::Tests {
         loaded->Deserialize(deserializer);
         deserializer.EndObject();
         ASSERT_TRUE(deserializer.HasErrors());
-        EXPECT_NE(deserializer.GetErrors()[0].errorMessage.ToStringView().find("NoSuchComponent"), StringView::npos);
+        EXPECT_NE(deserializer.GetErrors()[0].errorMessage.find("NoSuchComponent"), StringView::npos);
     }
 
     // ---- one of each type -------------------------------------------------------------------------------------------------
@@ -324,9 +324,9 @@ namespace BECore::Tests {
     TEST_F(UIComponentTest, ASecondComponentOfATypeInAFileIsDroppedAndTheFirstKept) {
         const UIElement& twice = Get("Twice");
         ASSERT_EQ(twice.components.size(), 2u);
-        EXPECT_EQ(twice.components[0]->Cast<UITestProbe>()->tag, PoolString::Intern("one"));
-        EXPECT_EQ(twice.components[1]->Cast<UITestOther>()->tag, PoolString::Intern("between"));
-        EXPECT_EQ(twice.GetComponent<UITestProbe>()->tag, PoolString::Intern("one"));
+        EXPECT_EQ(twice.components[0]->Cast<UITestProbe>()->tag, "one"_intern);
+        EXPECT_EQ(twice.components[1]->Cast<UITestOther>()->tag, "between"_intern);
+        EXPECT_EQ(twice.GetComponent<UITestProbe>()->tag, "one"_intern);
     }
 
     TEST_F(UIComponentTest, GetComponentFindsATypeAndAddComponentReturnsTheExistingOne) {
@@ -505,7 +505,7 @@ namespace BECore::Tests {
             }
         }
         ASSERT_EQ(small.size(), 1u) << "Host is 100 x 60, Passive and Plain take no clicks";
-        EXPECT_EQ(small[0], PoolString::Intern("Small"));
+        EXPECT_EQ(small[0], "Small"_intern);
     }
 
     TEST_F(UIComponentTest, ThePreviewMarksTheTouchTargetsOfComposedElements) {
@@ -515,9 +515,9 @@ namespace BECore::Tests {
         for (const TouchMark& mark : marks) {
             names.push_back(mark.name);
         }
-        EXPECT_NE(eastl::find(names.begin(), names.end(), PoolString::Intern("Host")), names.end());
-        EXPECT_NE(eastl::find(names.begin(), names.end(), PoolString::Intern("Small")), names.end());
-        EXPECT_EQ(eastl::find(names.begin(), names.end(), PoolString::Intern("Passive")), names.end());
+        EXPECT_NE(eastl::find(names.begin(), names.end(), "Host"_intern), names.end());
+        EXPECT_NE(eastl::find(names.begin(), names.end(), "Small"_intern), names.end());
+        EXPECT_EQ(eastl::find(names.begin(), names.end(), "Passive"_intern), names.end());
     }
 
     TEST_F(UIComponentTest, ContentIsTheCombinationOfWhatTheComponentsSay) {
@@ -554,7 +554,7 @@ namespace BECore::Tests {
         Draw();
         const auto issues = _canvas->GetLayout().Validate({});
         const bool reported =
-            eastl::any_of(issues.begin(), issues.end(), [](const UILayoutIssue& issue) { return issue.kind == UILayoutIssueKind::TextDoesNotFit && issue.element == PoolString::Intern("Twice"); });
+            eastl::any_of(issues.begin(), issues.end(), [](const UILayoutIssue& issue) { return issue.kind == UILayoutIssueKind::TextDoesNotFit && issue.element == "Twice"_intern; });
         EXPECT_TRUE(reported);
 
         probe.canShrink = true;
@@ -695,7 +695,7 @@ namespace BECore::Tests {
 
     TEST_F(UIImageComponentTest, AnUnknownSpriteDrawsNothing) {
         auto& other = Get("Passive").AddComponent<UIImageComponent>();
-        other.sprite = PoolString::Intern("NoSuchSprite");
+        other.sprite = "NoSuchSprite"_intern;
         _image->tint = UIColor{0, 0, 0, 0};
         Draw();
         EXPECT_FALSE(Picture().has_value());
@@ -764,7 +764,7 @@ namespace BECore::Tests {
 
         const UIImageComponent* image = loaded->GetComponent<UIImageComponent>();
         ASSERT_NE(image, nullptr);
-        EXPECT_EQ(image->sprite, PoolString::Intern("icons.play"));
+        EXPECT_EQ(image->sprite, "icons.play"_intern);
         EXPECT_TRUE(ColorsEqual(image->tint, Color(10, 20, 30, 255)));
         EXPECT_TRUE(ColorsEqual(image->hoverTint, kHoverTint));
         EXPECT_TRUE(ColorsEqual(image->pressedTint, kPressedTint));
@@ -789,10 +789,10 @@ namespace BECore::Tests {
 
         const UIToggleComponent* toggle = loaded->GetComponent<UIToggleComponent>();
         ASSERT_NE(toggle, nullptr);
-        EXPECT_EQ(toggle->bind, PoolString::Intern("mode"));
-        EXPECT_EQ(toggle->action, PoolString::Intern("SetMode"));
-        EXPECT_EQ(toggle->onValue, PoolString::Intern("1"));
-        EXPECT_EQ(toggle->offValue, PoolString::Intern("0"));
+        EXPECT_EQ(toggle->bind, "mode"_intern);
+        EXPECT_EQ(toggle->action, "SetMode"_intern);
+        EXPECT_EQ(toggle->onValue, "1"_intern);
+        EXPECT_EQ(toggle->offValue, "0"_intern);
         const UISwitchComponent* thumb = loaded->children[0]->GetComponent<UISwitchComponent>();
         ASSERT_NE(thumb, nullptr);
         EXPECT_TRUE(ColorsEqual(thumb->trackColor, Color(1, 2, 3, 255)));
@@ -838,8 +838,8 @@ namespace BECore::Tests {
 
         const UISliderComponent* slider = loaded->GetComponent<UISliderComponent>();
         ASSERT_NE(slider, nullptr);
-        EXPECT_EQ(slider->bind, PoolString::Intern("volume"));
-        EXPECT_EQ(slider->action, PoolString::Intern("SetVolume"));
+        EXPECT_EQ(slider->bind, "volume"_intern);
+        EXPECT_EQ(slider->action, "SetVolume"_intern);
         EXPECT_FLOAT_EQ(slider->minValue, -1.0f);
         EXPECT_FLOAT_EQ(slider->maxValue, 3.0f);
         EXPECT_FLOAT_EQ(slider->step, 0.5f);

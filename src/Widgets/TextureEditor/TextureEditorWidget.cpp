@@ -1,6 +1,7 @@
 #include "TextureEditorWidget.h"
 
 #include <BECore/FileSystem/FileSystem.h>
+#include <BECore/FileSystem/MountPoints.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Renderer/ITexture.h>
@@ -345,7 +346,7 @@ namespace BECore {
 
     void TextureEditorWidget::RefreshAssetList() {
         static const StringView kExtensions[] = {".png", ".jpg", ".jpeg", ".bmp"};
-        _cachedAssets = CoreManager::GetFileSystem().EnumerateFiles("assets"_intern, Span<const StringView>(kExtensions));
+        _cachedAssets = CoreManager::GetFileSystem().EnumerateFiles(MountPoints::assets, Span<const StringView>(kExtensions));
         _assetsLoaded = true;
     }
 

@@ -36,7 +36,7 @@ namespace BECore {
                 return String(fallback);
             }
             const DeserializeError& error = deserializer.GetErrors().front();
-            return Format("{} (at '{}')", error.errorMessage.ToStringView(), error.path.ToStringView());
+            return Format("{} (at '{}')", error.errorMessage, error.path);
         }
 
         /// Leaves @p deserializer inside the object `save`, so Load goes on with `state`
@@ -80,7 +80,7 @@ namespace BECore {
         }
 
         // A second call replaces the mount of the first, so reads never come from the old folder
-        const PoolString mountPoint = PoolString::Intern(kSaveMountPoint);
+        const PoolString mountPoint = SaveMount::point;
         _fileSystem.Unmount(mountPoint);
         _initialized = _fileSystem.Mount(mountPoint, absolute);
         _directory = _initialized ? std::move(absolute) : std::filesystem::path{};
@@ -283,7 +283,10 @@ namespace BECore {
 
         const StringView extensions[] = {kSaveExtension};
         const String prefix = Format("{}/", kSaveMountPoint);
-        for (const PoolString& file : _fileSystem.EnumerateFiles(PoolString::Intern(kSaveMountPoint), extensions)) {
+        const Vector<PoolString> files = _fileSystem.EnumerateFiles(SaveMount::point, extensions);
+        Vector<StringView> names;
+        names.reserve(files.size());
+        for (const PoolString& file : files) {
             // "saves/<slot>.save": a file in a subfolder or with a name that is not a slot name is not a save of this service
             StringView name = file.ToStringView();
             if (!name.starts_with(prefix) || !name.ends_with(kSaveExtension)) {
@@ -292,10 +295,13 @@ namespace BECore {
             name.remove_prefix(prefix.size());
             name.remove_suffix(kSaveExtension.size());
             if (IsValidSlotName(name)) {
-                slots.push_back(PoolString::Intern(name));
+                // A view into the text of the file's pool entry, which lives as long as the pool
+                names.push_back(name);
             }
         }
 
+        slots.resize(names.size());
+        PoolString::InternBatch(Span<const StringView>(names.data(), names.size()), Span<PoolString>(slots.data(), slots.size()));
         eastl::sort(slots.begin(), slots.end(), [](const PoolString& a, const PoolString& b) { return a.ToStringView() < b.ToStringView(); });
         return slots;
     }

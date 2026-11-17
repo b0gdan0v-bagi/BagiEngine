@@ -267,7 +267,7 @@ namespace BECore::Tests {
 
         ASSERT_EQ(responses.size(), 1u);
         EXPECT_EQ(ErrorCode(responses[0]), "unknown_method");
-        EXPECT_FALSE(PoolString::Find("client_only_method_5d02e8").has_value());
+        EXPECT_FALSE(PoolString::Find(StringView{"client_only_method_5d02e8"}).has_value());
     }
 
     TEST_F(ControlServiceTest, LongMethodNameIsCutInTheMessage) {
@@ -1224,14 +1224,14 @@ namespace BECore::Tests {
     }
 
     TEST_F(ControlServiceTest, ListingMethodsDoesNotInternTheirNames) {
-        ASSERT_FALSE(PoolString::Find("listed_only_method_7c41b9").has_value());
+        ASSERT_FALSE(PoolString::Find(StringView{"listed_only_method_7c41b9"}).has_value());
         RegisterRecording("listed_only_method_7c41b9");
         service.DescribeMethod("listed_only_method_7c41b9", {"text", {{"listed_only_param_7c41b9", "any", false, ""}}});
 
         EXPECT_EQ(service.GetMethods().size(), 1u);
 
-        EXPECT_FALSE(PoolString::Find("listed_only_method_7c41b9").has_value());
-        EXPECT_FALSE(PoolString::Find("listed_only_param_7c41b9").has_value());
+        EXPECT_FALSE(PoolString::Find(StringView{"listed_only_method_7c41b9"}).has_value());
+        EXPECT_FALSE(PoolString::Find(StringView{"listed_only_param_7c41b9"}).has_value());
     }
 
     namespace {

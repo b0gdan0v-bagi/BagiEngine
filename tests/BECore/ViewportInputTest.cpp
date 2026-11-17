@@ -109,8 +109,8 @@ namespace BECore::Tests {
             _manager->Deserialize(deserializer);
             ASSERT_FALSE(deserializer.HasErrors());
             _manager->Initialize();
-            _manager->SetActiveScene(PoolString::Intern("Main"));
-            ASSERT_TRUE(_manager->GetSceneByName(PoolString::Intern("Main"))->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>());
+            _manager->SetActiveScene("Main"_intern);
+            ASSERT_TRUE(_manager->GetSceneByName("Main"_intern)->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>());
             _renderer->ClearCalls();
             _manager->DrawAll();  // the layout exists after one draw
 

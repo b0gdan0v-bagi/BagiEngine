@@ -108,7 +108,7 @@ namespace BECore::Tests {
             pugi::xml_document doc = Parse(text);
             const XmlNode root{doc.document_element()};
             auto manager = checked ? LoadCheckedSceneManager(root, NoNodeFiles()) : LoadSceneManager(root, NoNodeFiles());
-            return manager->GetSceneByName(PoolString::Intern("Main")) != nullptr;
+            return manager->GetSceneByName("Main"_intern) != nullptr;
         }
     };
 

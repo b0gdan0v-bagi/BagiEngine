@@ -72,8 +72,8 @@ namespace BECore {
     std::expected<ControlSettings, ControlError> ResolveControlSettings(Span<const String> args, const ApplicationConfigLoad& file) {
         // The file first, so that the command line overrides it. A bad value is an error even when the API is off or a flag would override it
         for (const DeserializeError& error : file.errors) {
-            if (IsControlField(error.path.ToStringView())) {
-                return std::unexpected(InvalidSetting(Format("ApplicationConfig: {}: {}", error.path.ToStringView(), error.errorMessage.ToStringView())));
+            if (IsControlField(error.path)) {
+                return std::unexpected(InvalidSetting(Format("ApplicationConfig: {}: {}", error.path, error.errorMessage)));
             }
         }
 

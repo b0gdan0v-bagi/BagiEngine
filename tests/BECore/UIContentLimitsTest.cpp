@@ -286,11 +286,11 @@ namespace BECore::Tests {
             spec.anchor = UIAnchor::Stretch;
             spec.margin.left = extreme;
             spec.aspectRatio = extreme;
-            canvas.root->AddChild(PoolString::Intern("Panel"))->style.rect = spec;
-            const auto stack = canvas.root->AddChild(PoolString::Intern("Rows"));
+            canvas.root->AddChild("Panel"_intern)->style.rect = spec;
+            const auto stack = canvas.root->AddChild("Rows"_intern);
             stack->layout = UILayoutKind::Stack;
             stack->style.stack.spacing = extreme;
-            stack->AddChild(PoolString::Intern("Row"))->style.rect = spec;
+            stack->AddChild("Row"_intern)->style.rect = spec;
             UILayoutContext context;
             context.outputWidth = 1280.0f;
             context.outputHeight = 720.0f;

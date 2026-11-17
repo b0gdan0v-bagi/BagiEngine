@@ -25,8 +25,12 @@ namespace BECore::ReaderLimits {
     /// Errors one deserializer keeps; the last place of the list says that the rest were dropped
     inline constexpr size_t kMaxRecordedErrors = 64;
 
-    /// Bytes of the path and of the message of one recorded error (both go into the never-freed PoolString table)
+    /// Bytes of the path and of the message of one recorded error (they reach a log and a reply)
     inline constexpr size_t kMaxErrorTextBytes = 256;
+
+    /// Bytes of one value read into a PoolString field: a name, an id or a key, never prose. The pool never frees, so the reader
+    /// refuses a longer value with an error before it interns it (a plain String field has no such limit)
+    inline constexpr size_t kMaxPoolStringBytes = 4096;
 
     /// Bytes of a rejected value that an error message quotes
     inline constexpr size_t kMaxQuotedValueBytes = 32;

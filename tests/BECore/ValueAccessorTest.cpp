@@ -60,7 +60,7 @@ namespace BECore::Tests {
                 String out;
                 for (const Vector<DeserializeError>* list : {&reader.GetErrors(), &reader.GetWarnings()}) {
                     for (const DeserializeError& report : *list) {
-                        AppendFormat(out, "{}: {}\n", report.path.ToStringView(), report.errorMessage.ToStringView());
+                        AppendFormat(out, "{}: {}\n", report.path, report.errorMessage);
                     }
                 }
                 return out;
@@ -101,7 +101,7 @@ namespace BECore::Tests {
             reader.EndObject();
             String out;
             for (const DeserializeError& report : reader.GetErrors()) {
-                AppendFormat(out, "{}: {}\n", report.path.ToStringView(), report.errorMessage.ToStringView());
+                AppendFormat(out, "{}: {}\n", report.path, report.errorMessage);
             }
             return out;
         }
@@ -122,7 +122,7 @@ namespace BECore::Tests {
             target.Deserialize(reader);
             String out;
             for (const DeserializeError& report : reader.GetErrors()) {
-                AppendFormat(out, "{}: {}\n", report.path.ToStringView(), report.errorMessage.ToStringView());
+                AppendFormat(out, "{}: {}\n", report.path, report.errorMessage);
             }
             return out;
         }
@@ -163,7 +163,7 @@ namespace BECore::Tests {
             skill.damage = 12;
             EXPECT_TRUE(skill.scale.Link(world.declaration, "caster.speed").has_value());
             skill.critical = true;
-            skill.label = PoolString::Intern("Hero");
+            skill.label = PoolString{"Hero"_intern};
             skill.element = ValueElement::Fire;
             EXPECT_TRUE(skill.aim.Link(world.declaration, "caster.velocity").has_value());
             skill.tint = Color{10, 20, 30, 40};
@@ -216,7 +216,7 @@ namespace BECore::Tests {
         EXPECT_EQ(skill.damage.GetConst(), 12);
         EXPECT_EQ(skill.scale.GetConst(), 0.5f);
         EXPECT_TRUE(skill.critical.GetConst());
-        EXPECT_EQ(skill.label.GetConst(), PoolString::Intern("Hero"));
+        EXPECT_EQ(skill.label.GetConst(), "Hero"_intern);
         EXPECT_EQ(skill.element.GetConst(), ValueElement::Fire);
         // What the file does not say keeps its default
         EXPECT_EQ(skill.aim.GetConst(), (Vec3{9.0f, 9.0f, 9.0f}));
@@ -230,7 +230,7 @@ namespace BECore::Tests {
                      skill, {.declaration = &world.declaration});
         EXPECT_TRUE(load.Reports().empty()) << load.Reports().c_str();
         EXPECT_TRUE(skill.damage.IsSlot());
-        EXPECT_EQ(skill.damage.Path(), PoolString::Intern("caster.attack"));
+        EXPECT_EQ(skill.damage.Path(), "caster.attack"_intern);
         EXPECT_EQ(&skill.damage.Get(world.context), &world.caster.attack);
         EXPECT_EQ(&skill.scale.Get(world.context), &world.caster.speed);
         EXPECT_EQ(&skill.critical.Get(world.context), &world.caster.alive);
@@ -456,7 +456,7 @@ namespace BECore::Tests {
         EXPECT_EQ(skill.damage.GetConst(), 12);
         EXPECT_EQ(skill.scale.GetConst(), 0.5f);
         EXPECT_TRUE(skill.critical.GetConst());
-        EXPECT_EQ(skill.label.GetConst(), PoolString::Intern("Hero"));
+        EXPECT_EQ(skill.label.GetConst(), "Hero"_intern);
         EXPECT_EQ(skill.element.GetConst(), ValueElement::Fire);
         EXPECT_EQ(skill.aim.GetConst(), (Vec3{1.0f, 2.0f, 3.0f}));
     }
@@ -468,7 +468,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(skill.damage.IsConst());
         EXPECT_EQ(skill.damage.GetConst(), 12);
         EXPECT_EQ(skill.scale.GetConst(), 0.5f);
-        EXPECT_EQ(skill.label.GetConst(), PoolString::Intern("Hero"));
+        EXPECT_EQ(skill.label.GetConst(), "Hero"_intern);
         EXPECT_EQ(skill.element.GetConst(), ValueElement::Fire);
     }
 
@@ -553,7 +553,7 @@ namespace BECore::Tests {
         reader.FinishLoad();
         String warnings;
         for (const DeserializeError& warning : reader.GetWarnings()) {
-            AppendFormat(warnings, "{}: {}\n", warning.path.ToStringView(), warning.errorMessage.ToStringView());
+            AppendFormat(warnings, "{}: {}\n", warning.path, warning.errorMessage);
         }
         EXPECT_TRUE(HasText(warnings, "vlue")) << warnings.c_str();
         EXPECT_FALSE(HasText(warnings, "damage")) << warnings.c_str();

@@ -753,7 +753,7 @@ namespace BECore::Tests {
     // ---- ui_tree ----------------------------------------------------------------------------------------------------------
 
     TEST_F(UIControlApiTest, ASceneWithoutCanvasesHasAnEmptyList) {
-        _manager->SetActiveScene(PoolString::Intern("Empty"));
+        _manager->SetActiveScene("Empty"_intern);
 
         const Json response = Call("ui_tree");
 
@@ -781,7 +781,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIControlApiTest, ACanvasThatWasNeverDrawnHasItsStructureAndNoRects) {
-        _manager->SetActiveScene(PoolString::Intern("Main"));
+        _manager->SetActiveScene("Main"_intern);
 
         const Json response = Call("ui_tree");
 
@@ -956,7 +956,7 @@ namespace BECore::Tests {
         strings.Set("de"_intern, "uiApi.title", "Punkte");
         CoreManager::GetUIVars().Set("score"_intern, 42);
         Show("Main");
-        auto* title = _manager->GetSceneByName(PoolString::Intern("Main"))->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>()->GetRoot().FindByName(PoolString::Intern("Title"));
+        auto* title = _manager->GetSceneByName("Main"_intern)->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>()->GetRoot().FindByName("Title"_intern);
         ASSERT_NE(title, nullptr);
         title->GetComponent<UITextComponent>()->text = "{#uiApi.title}: {score}";
 
@@ -1104,7 +1104,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIControlApiTest, TheRegionsOfACanvasThatWasNeverDrawnAreAlreadyListed) {
-        _manager->SetActiveScene(PoolString::Intern("Main"));
+        _manager->SetActiveScene("Main"_intern);
         Canvas("Main", "Hud")->SetRegion("hud.corner"_intern, {1.0f, 2.0f, 3.0f, 4.0f});
 
         const Json response = Call("ui_tree");
@@ -1182,7 +1182,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIControlApiTest, AnUnsetVariableSelectsNothingAndATreeBeforeTheFirstDrawStillSaysSo) {
-        _manager->SetActiveScene(PoolString::Intern("Choice"));
+        _manager->SetActiveScene("Choice"_intern);
 
         const Json response = Call("ui_tree");
 
@@ -2047,7 +2047,7 @@ namespace BECore::Tests {
         const Json response = Call("ui_click", params);
 
         EXPECT_EQ(ErrorCode(response), "not_found");
-        EXPECT_FALSE(PoolString::Find("ui_click_no_such_node_5a90e2").has_value());
+        EXPECT_FALSE(PoolString::Find(StringView{"ui_click_no_such_node_5a90e2"}).has_value());
     }
 
     TEST_F(UIControlApiTest, AnElementThatIsNotInteractiveCannotBeClicked) {
@@ -2095,7 +2095,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIControlApiTest, AButtonBeforeTheFirstDrawAsksForAFrame) {
-        _manager->SetActiveScene(PoolString::Intern("Main"));
+        _manager->SetActiveScene("Main"_intern);
 
         const Json response = Call("ui_click", Click("Ok"));
 
@@ -2127,7 +2127,7 @@ namespace BECore::Tests {
     TEST_F(UIControlApiTest, AComposedButtonTellsItsComponentsAndTheFieldsOfAButton) {
         CoreManager::GetUIVars().Set("user"_intern, "Ann");
         Show("Composed");
-        Canvas("Composed", "Bar")->GetRoot().FindByName(PoolString::Intern("Play"))->selected = true;
+        Canvas("Composed", "Bar")->GetRoot().FindByName("Play"_intern)->selected = true;
 
         const Json response = Call("ui_tree");
 
@@ -2241,7 +2241,7 @@ namespace BECore::Tests {
     TEST_F(UIControlApiTest, AComposedButtonIsDisabledByItsClickerAndByItsGroup) {
         Show("Composed");
         UICanvasComponent& bar = *Canvas("Composed", "Bar");
-        bar.GetRoot().FindByName(PoolString::Intern("Wide"))->groupDisabled = true;
+        bar.GetRoot().FindByName("Wide"_intern)->groupDisabled = true;
 
         const Json response = Call("ui_tree");
 
@@ -2310,7 +2310,7 @@ namespace BECore::Tests {
 
     TEST_F(UIControlApiTest, AComposedButtonOfADisabledGroupEmitsNothingEither) {
         Show("Composed");
-        Canvas("Composed", "Bar")->GetRoot().FindByName(PoolString::Intern("Wide"))->groupDisabled = true;
+        Canvas("Composed", "Bar")->GetRoot().FindByName("Wide"_intern)->groupDisabled = true;
         Recorder recorder;
 
         const Json response = Call("ui_click", Click("Wide"));

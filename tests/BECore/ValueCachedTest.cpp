@@ -62,7 +62,7 @@ namespace BECore::Tests {
             ProgramBuilder builder;
             const uint8_t reg = builder.AcquireRegister().value();
             builder.EmitLoadConst(reg, int32_t{42});
-            const auto program = builder.Finish(ProgramType::Int32, reg, PoolString::Intern("cached test: forty-two"));
+            const auto program = builder.Finish(ProgramType::Int32, reg, "cached test: forty-two"_intern);
             EXPECT_TRUE(program.has_value());
             const Optional<ProgramId> id = ProgramPool::Intern(*program);
             EXPECT_TRUE(id.has_value());

@@ -1,6 +1,7 @@
 #pragma once
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/PoolString/PoolString.h>
+#include <BECore/PoolString/StaticPoolString.h>
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Reflection/ISerializer.h>
 #include <BECore/Types/Types.h>
@@ -14,7 +15,11 @@
 namespace BECore {
 
     /// The virtual mount point of the save folder: a slot is read as `saves/<slot>.save`
-    inline constexpr StringView kSaveMountPoint = "saves";
+    struct SaveMount {
+        static constexpr auto point = "saves"_intern;
+    };
+
+    inline constexpr StringView kSaveMountPoint = SaveMount::point.View();
 
     inline constexpr StringView kSaveExtension = ".save";
 

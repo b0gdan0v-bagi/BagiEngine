@@ -221,7 +221,7 @@ namespace BECore::Tests {
             }
             rect.flex = random.Chance() ? 0.0f : random.Step(12);
             if (random.Chance()) {
-                rect.region = PoolString::Intern(random.Chance() ? "board" : "side");
+                rect.region = random.Chance() ? "board"_intern.ToPoolString() : "side"_intern.ToPoolString();
             }
             return rect;
         }
@@ -348,7 +348,7 @@ namespace BECore::Tests {
         UIElement& top = *canvas->_elements[0];
         String why;
 
-        top.name = PoolString::Intern("Renamed");
+        top.name = "Renamed"_intern;
         EXPECT_FALSE(UIRectFilePatch::FindFileElement(NodeEl(), 0, Vector<uint32_t>{0}, top, why));
         EXPECT_NE(why.find("Renamed"), String::npos);
 
@@ -403,7 +403,7 @@ namespace BECore::Tests {
         live.pivot = Vec2{0.5f, 0.0f};
         live.minWidth = UILength::Percent(10.0f);
         live.margin = {1.0f, 2.0f, 3.0f, 4.0f};
-        live.region = PoolString::Intern("board");
+        live.region = "board"_intern;
         live.aspectRatio = 1.5f;
         live.aspectMode = UIAspectMode::Fill;
         live.flex = 2.0f;

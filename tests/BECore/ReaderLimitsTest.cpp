@@ -54,7 +54,7 @@ namespace BECore::Tests {
 
         bool HasErrorContaining(const IDeserializer& reader, StringView part) {
             for (const DeserializeError& error : reader.GetErrors()) {
-                if (error.errorMessage.ToStringView().find(part) != StringView::npos) {
+                if (StringView(error.errorMessage).find(part) != StringView::npos) {
                     return true;
                 }
             }
@@ -126,7 +126,7 @@ namespace BECore::Tests {
         int32_t missing = 0;
         reader.Read("nothing", missing);
         ASSERT_EQ(reader.GetErrors().size(), 1u);
-        EXPECT_EQ(reader.GetErrors()[0].path.ToStringView(), "a.nothing");
+        EXPECT_EQ(reader.GetErrors()[0].path, "a.nothing");
     }
 
     TEST(ReaderLimitsTest, XmlTextIsUtf8WhateverItStartsWith) {
@@ -221,8 +221,8 @@ namespace BECore::Tests {
 
         const auto& errors = reader.GetErrors();
         ASSERT_EQ(errors.size(), ReaderLimits::kMaxRecordedErrors);
-        EXPECT_EQ(errors.front().path.Length(), ReaderLimits::kMaxErrorTextBytes);
-        EXPECT_EQ(errors.back().errorMessage.ToStringView(), "Too many errors: the rest are not recorded");
+        EXPECT_EQ(errors.front().path.size(), ReaderLimits::kMaxErrorTextBytes);
+        EXPECT_EQ(errors.back().errorMessage, "Too many errors: the rest are not recorded");
 
         // ClearErrors starts the count again
         reader.ClearErrors();
@@ -240,7 +240,7 @@ namespace BECore::Tests {
         int32_t value = 0;
         EXPECT_FALSE(reader.ReadAttribute("a", value));
         ASSERT_EQ(reader.GetErrors().size(), 1u);
-        const StringView message = reader.GetErrors()[0].errorMessage.ToStringView();
+        const StringView message = reader.GetErrors()[0].errorMessage;
         EXPECT_LT(message.size(), 100u);
         EXPECT_NE(message.find("..."), StringView::npos);
     }
@@ -252,7 +252,122 @@ namespace BECore::Tests {
         DiagnosticsMode mode = DiagnosticsMode::Warn;
         EXPECT_FALSE(Ser::Load(reader, mode, "mode"));
         ASSERT_EQ(reader.GetErrors().size(), 1u);
-        EXPECT_EQ(reader.GetErrors()[0].errorMessage.ToStringView(), "Invalid enum value: 'Aus??x'");
+        EXPECT_EQ(reader.GetErrors()[0].errorMessage, "Invalid enum value: 'Aus??x'");
+    }
+
+    TEST(ReaderLimitsTest, ErrorTextsAreNotTakenIntoThePool) {
+        // The value of a bad enum is data, not a name: the pool never frees, so an error text must not stay in it for good
+        constexpr size_t kBadValues = 50;
+        String xml = "<root";
+        for (size_t i = 0; i < kBadValues; ++i) {
+            AppendFormat(xml, " m{}=\"NoSuchMode_{}_x\"", i, i);
+        }
+        xml += "/>";
+        XmlDeserializer reader;
+        ASSERT_TRUE(reader.LoadFromString(xml));
+
+        const size_t before = PoolString::GetStats().stringCount;
+        for (size_t i = 0; i < kBadValues; ++i) {
+            DiagnosticsMode mode = DiagnosticsMode::Warn;
+            EXPECT_FALSE(Ser::Load(reader, mode, Format("m{}", i)));
+        }
+        ASSERT_EQ(reader.GetErrors().size(), kBadValues);
+        EXPECT_NE(reader.GetErrors()[7].errorMessage.find("NoSuchMode_7_x"), String::npos);
+        // The field names "m<i>" are looked up by the test only; the pool may not take the bad values or the 50 messages
+        EXPECT_LT(PoolString::GetStats().stringCount - before, kBadValues);
+    }
+
+    namespace {
+
+        /// Distinct texts of exactly @p length bytes, so that no other test has put them into the pool
+        String PoolStringText(char fill, size_t length) {
+            return String(length, fill);
+        }
+
+    }  // namespace
+
+    TEST(ReaderLimitsTest, XmlPoolStringAtTheCapIsReadAndOneByteOverIsRefused) {
+        const String atCap = PoolStringText('p', ReaderLimits::kMaxPoolStringBytes);
+        const String overCap = PoolStringText('q', ReaderLimits::kMaxPoolStringBytes + 1);
+        const String document = Format("<root attr=\"{0}\" tooLong=\"{1}\"><element>{0}</element><tooLongElement>{1}</tooLongElement></root>", atCap, overCap);
+        XmlDeserializer reader;
+        ASSERT_TRUE(reader.LoadFromString(document));
+
+        PoolString attribute;
+        PoolString element;
+        ASSERT_TRUE(reader.ReadAttribute("attr", attribute));
+        ASSERT_TRUE(reader.Read("element", element));
+        EXPECT_EQ(attribute.ToStringView(), StringView(atCap));
+        EXPECT_EQ(element, attribute);
+        EXPECT_FALSE(reader.HasErrors());
+
+        const PoolString kept = "kept_by_a_refused_read"_intern;
+        PoolString refusedAttribute = kept;
+        PoolString refusedElement = kept;
+        const size_t before = PoolString::GetStats().stringCount;
+        EXPECT_FALSE(reader.ReadAttribute("tooLong", refusedAttribute));
+        EXPECT_FALSE(reader.Read("tooLongElement", refusedElement));
+        EXPECT_EQ(PoolString::GetStats().stringCount, before);
+        EXPECT_EQ(refusedAttribute, kept);
+        EXPECT_EQ(refusedElement, kept);
+
+        ASSERT_EQ(reader.GetErrors().size(), 2u);
+        EXPECT_EQ(reader.GetErrors()[0].path, "tooLong");
+        EXPECT_NE(reader.GetErrors()[0].errorMessage.find("kMaxPoolStringBytes"), String::npos);
+        EXPECT_NE(reader.GetErrors()[0].errorMessage.find(ToString(overCap.size())), String::npos);
+        EXPECT_EQ(reader.GetErrors()[1].path, "tooLongElement");
+    }
+
+    TEST(ReaderLimitsTest, XmlStringOfAnyLengthIsNotAffectedByThePoolStringCap) {
+        const String longText = PoolStringText('s', 4 * ReaderLimits::kMaxPoolStringBytes);
+        XmlDeserializer reader;
+        ASSERT_TRUE(reader.LoadFromString(Format("<root attr=\"{0}\"><element>{0}</element></root>", longText)));
+        String attribute;
+        String element;
+        EXPECT_TRUE(reader.ReadAttribute("attr", attribute));
+        EXPECT_TRUE(reader.Read("element", element));
+        EXPECT_EQ(attribute, longText);
+        EXPECT_EQ(element, longText);
+        EXPECT_FALSE(reader.HasErrors());
+    }
+
+    TEST(ReaderLimitsTest, BinaryPoolStringAtTheCapIsReadAndOneByteOverIsRefused) {
+        const String atCap = PoolStringText('b', ReaderLimits::kMaxPoolStringBytes);
+        const String overCap = PoolStringText('c', ReaderLimits::kMaxPoolStringBytes + 1);
+        BinarySerializer writer;
+        writer.WriteAttribute("attr", atCap);
+        writer.WriteAttribute("tooLong", overCap);
+        writer.Write("element", atCap);
+        writer.Write("tooLongElement", overCap);
+        BinaryDeserializer reader;
+        ASSERT_TRUE(reader.LoadFromBuffer(writer.GetData()));
+
+        PoolString attribute;
+        PoolString element;
+        ASSERT_TRUE(reader.ReadAttribute("attr", attribute));
+        ASSERT_TRUE(reader.Read("element", element));
+        EXPECT_EQ(attribute.ToStringView(), StringView(atCap));
+        EXPECT_EQ(element, attribute);
+        EXPECT_FALSE(reader.HasErrors());
+
+        const PoolString kept = "kept_by_a_refused_binary_read"_intern;
+        PoolString refusedAttribute = kept;
+        PoolString refusedElement = kept;
+        const size_t before = PoolString::GetStats().stringCount;
+        EXPECT_FALSE(reader.ReadAttribute("tooLong", refusedAttribute));
+        EXPECT_FALSE(reader.Read("tooLongElement", refusedElement));
+        EXPECT_EQ(PoolString::GetStats().stringCount, before);
+        EXPECT_EQ(refusedAttribute, kept);
+        EXPECT_EQ(refusedElement, kept);
+
+        ASSERT_EQ(reader.GetErrors().size(), 2u);
+        EXPECT_EQ(reader.GetErrors()[0].path, "tooLong");
+        EXPECT_NE(reader.GetErrors()[0].errorMessage.find("kMaxPoolStringBytes"), String::npos);
+        EXPECT_EQ(reader.GetErrors()[1].path, "tooLongElement");
+
+        String text;
+        EXPECT_TRUE(reader.ReadAttribute("tooLong", text));
+        EXPECT_EQ(text, overCap);
     }
 
     TEST(ReaderLimitsTest, BinaryFileThatIsNotARegularFileOrIsTooBigIsRefusedBeforeItIsRead) {
@@ -296,7 +411,7 @@ namespace BECore::Tests {
         };
 
         BinaryDeserializer atLimit;
-        ASSERT_TRUE(atLimit.LoadFromBuffer(saveArray(ReaderLimits::kMaxArrayElements))) << (atLimit.GetErrors().empty() ? "" : atLimit.GetErrors()[0].errorMessage.CStr());
+        ASSERT_TRUE(atLimit.LoadFromBuffer(saveArray(ReaderLimits::kMaxArrayElements))) << (atLimit.GetErrors().empty() ? "" : atLimit.GetErrors()[0].errorMessage.c_str());
         size_t count = 0;
         EXPECT_TRUE(atLimit.BeginArray("list", "item", count));
         EXPECT_EQ(count, ReaderLimits::kMaxArrayElements);
@@ -317,7 +432,7 @@ namespace BECore::Tests {
             reader.Read("missing", value);
         }
         ASSERT_EQ(reader.GetErrors().size(), ReaderLimits::kMaxRecordedErrors);
-        EXPECT_EQ(reader.GetErrors().back().errorMessage.ToStringView(), "Too many errors: the rest are not recorded");
+        EXPECT_EQ(reader.GetErrors().back().errorMessage, "Too many errors: the rest are not recorded");
     }
 
     TEST(ReaderLimitsTest, BinaryRefusedLoadForgetsTheOpenObjects) {
@@ -336,7 +451,7 @@ namespace BECore::Tests {
         int32_t value = 0;
         reader.Read("nothing", value);
         ASSERT_EQ(reader.GetErrors().size(), 1u);
-        EXPECT_EQ(reader.GetErrors()[0].path.ToStringView(), "nothing");
+        EXPECT_EQ(reader.GetErrors()[0].path, "nothing");
     }
 
 }  // namespace BECore::Tests

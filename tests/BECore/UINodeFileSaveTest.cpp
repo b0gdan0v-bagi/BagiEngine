@@ -154,7 +154,7 @@ namespace BECore::Tests {
             ASSERT_TRUE(parsed) << parsed.description();
             _manager = LoadSceneManager(XmlNode{_doc.document_element()}, _loader);
             _manager->Initialize();
-            _scene = _manager->GetSceneByName(PoolString::Intern("Main"));
+            _scene = _manager->GetSceneByName("Main"_intern);
             ASSERT_NE(_scene, nullptr);
         }
 
@@ -358,7 +358,7 @@ namespace BECore::Tests {
     TEST_F(UINodeFileSaveTest, AnElementAddedInCodeIsSkippedWithANote) {
         LoadScene(R"(<node ref="nodes/Hud"/>)");
         UICanvasComponent& canvas = CanvasOf(NodeAt(0), 0);
-        auto added = canvas.GetRoot().AddChild(PoolString::Intern("Late"));
+        auto added = canvas.GetRoot().AddChild("Late"_intern);
         added->style.rect.x = UILength::Px(3.0f);
 
         const Vector<IntrusivePtr<UIElement>> edited = {added};
@@ -428,7 +428,7 @@ namespace BECore::Tests {
         UICanvasComponent& canvas = CanvasOf(NodeAt(0), 0);
         canvas._elements[1]->style.rect.anchor = UIAnchor::Top;
         canvas._elements[1]->style.rect.y = UILength::Px(30.0f);
-        canvas._elements[1]->style.rect.region = PoolString::Intern("board");
+        canvas._elements[1]->style.rect.region = "board"_intern;
 
         // Without the patch the edit can only be written as an override in the scene file
         EXPECT_NE(BuiltReference(NodeAt(0)).find("<elements>"), String::npos);

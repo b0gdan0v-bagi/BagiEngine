@@ -6,6 +6,7 @@
 #include <Games/GameManager.h>
 #include <Generated/StressGame.gen.hpp>
 #include <Stress/RampController.h>
+#include <Stress/StressNames.h>
 
 namespace BECore::Stress {
 
@@ -15,13 +16,13 @@ namespace BECore::Stress {
         PoolString SceneNameOf(StressScene scene) {
             switch (scene) {
                 case StressScene::Sprites:
-                    return "StressSprites"_intern;
+                    return StressNames::sprites;
                 case StressScene::Entities:
-                    return "StressEntities"_intern;
+                    return StressNames::entities;
                 case StressScene::Ui:
-                    return "StressUi"_intern;
+                    return StressNames::ui;
             }
-            return "StressSprites"_intern;
+            return StressNames::sprites;
         }
 
         /// The settings of the command line; a bad flag is logged once and the defaults stand
@@ -46,7 +47,7 @@ namespace BECore::Stress {
     }
 
     PoolString StressGame::GetName() const {
-        return "Stress"_intern;
+        return StressNames::game;
     }
 
     PoolString StressGame::GetSceneName() const {

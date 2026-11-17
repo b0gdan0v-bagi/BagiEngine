@@ -1779,7 +1779,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
 
         auto* label = compiled->Element("h")->GetComponent<UITextComponent>();
         ASSERT_NE(label, nullptr);
-        EXPECT_EQ(label->fontFamily, PoolString::Intern("Russo One"));
+        EXPECT_EQ(label->fontFamily, "Russo One"_intern);
         EXPECT_EQ(label->fontWeight, 700);
         EXPECT_FLOAT_EQ(label->textEffects.outlineWidth, 2.0f);
         EXPECT_EQ(label->textEffects.shadowColor.a, 160);
@@ -2695,8 +2695,8 @@ button   { width: 124px; height: 48px; font-size: 24px; }
 
         /// Two themes of the tokens the tests below use; the second one leaves `line` to the default theme
         void FillThemes(UIThemes& themes) {
-            const PoolString light = PoolString::Intern("light");
-            const PoolString dark = PoolString::Intern("dark");
+            const PoolString light = "light"_intern;
+            const PoolString dark = "dark"_intern;
             themes.Set(light, "panel", Color{240, 240, 230, 255});
             themes.Set(light, "line", Color{10, 20, 30, 255});
             themes.Set(light, "accent", Color{40, 90, 60, 255});
@@ -2865,11 +2865,11 @@ button:checked { background: var(--panel); }
 
     TEST_F(UIWebTest, TheMenuWrittenWithTokensCompilesToTheMenuWithTokensAndFollowsTheTheme) {
         UIThemes& themes = CoreManager::GetUIThemes();
-        themes.Set(PoolString::Intern("light"), "play", Color{40, 90, 60, 255});
-        themes.Set(PoolString::Intern("light"), "quit", Color{90, 50, 50, 255});
-        themes.Set(PoolString::Intern("dark"), "play", Color{20, 160, 90, 255});
-        themes.Set(PoolString::Intern("dark"), "quit", Color{160, 40, 60, 255});
-        themes.SetDefaultTheme(PoolString::Intern("light"));
+        themes.Set("light"_intern, "play", Color{40, 90, 60, 255});
+        themes.Set("light"_intern, "quit", Color{90, 50, 50, 255});
+        themes.Set("dark"_intern, "play", Color{20, 160, 90, 255});
+        themes.Set("dark"_intern, "quit", Color{160, 40, 60, 255});
+        themes.SetDefaultTheme("light"_intern);
 
         const auto compiled = Compile(kMenuHtml, kTokenMenuCss);
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
@@ -2889,7 +2889,7 @@ button:checked { background: var(--panel); }
         ASSERT_NE(play, nullptr);
         play->ResolveTheme(themes);
         EXPECT_TRUE(ColorsEqual(play->color, Color{40, 90, 60, 255}));
-        ASSERT_TRUE(themes.SetTheme(PoolString::Intern("dark")));
+        ASSERT_TRUE(themes.SetTheme("dark"_intern));
         play->ResolveTheme(themes);
         EXPECT_TRUE(ColorsEqual(play->color, Color{20, 160, 90, 255}));
         EXPECT_EQ(play->color.token.ToStringView(), "play");
@@ -2916,7 +2916,7 @@ button:checked { background: var(--panel); }
             return renderer.calls.empty() ? Color{} : renderer.calls[0].color;
         };
         EXPECT_TRUE(ColorsEqual(drawn(), Color{240, 240, 230, 255}));
-        ASSERT_TRUE(themes.SetTheme(PoolString::Intern("dark")));
+        ASSERT_TRUE(themes.SetTheme("dark"_intern));
         EXPECT_TRUE(ColorsEqual(drawn(), Color{30, 32, 40, 255}));
         EXPECT_TRUE(themes.GetMissing().empty());
 

@@ -57,8 +57,8 @@ namespace BECore {
             String text = String(method.data(), method.size());
             text += ':';
             for (size_t i = 0; i < errors.size() && i < kMaxQuotedErrors; ++i) {
-                const StringView path = errors[i].path.ToStringView();
-                const StringView message = errors[i].errorMessage.ToStringView();
+                const StringView path = errors[i].path;
+                const StringView message = errors[i].errorMessage;
                 text += i == 0 ? " " : "; ";
                 if (message.starts_with(kUnknownKeyPrefix)) {
                     text += Format("Unknown argument {}", message.substr(kUnknownKeyPrefix.size()));

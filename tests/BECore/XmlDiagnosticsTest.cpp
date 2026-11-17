@@ -53,7 +53,7 @@ namespace BECore::Tests {
                 const auto& list = reader.GetDiagnostics() == DiagnosticsMode::Error ? reader.GetErrors() : reader.GetWarnings();
                 Vector<String> out;
                 for (const DeserializeError& finding : list) {
-                    out.push_back(Format("{}: {}", finding.path.ToStringView(), finding.errorMessage.ToStringView()));
+                    out.push_back(Format("{}: {}", finding.path, finding.errorMessage));
                 }
                 return out;
             }
@@ -79,8 +79,8 @@ namespace BECore::Tests {
         d.SetDiagnostics(DiagnosticsMode::Warn);
         ReportDeep(d);
         ASSERT_EQ(d.GetWarnings().size(), 1u);
-        EXPECT_EQ(d.GetWarnings()[0].path.ToStringView(), "b.items[2].key");
-        EXPECT_EQ(d.GetWarnings()[0].errorMessage.ToStringView(), "odd value");
+        EXPECT_EQ(d.GetWarnings()[0].path, "b.items[2].key");
+        EXPECT_EQ(d.GetWarnings()[0].errorMessage, "odd value");
         EXPECT_FALSE(d.HasErrors());
         EXPECT_TRUE(d.GetErrors().empty());
     }
@@ -91,7 +91,7 @@ namespace BECore::Tests {
         ReportDeep(d);
         ASSERT_TRUE(d.HasErrors());
         ASSERT_EQ(d.GetErrors().size(), 1u);
-        EXPECT_EQ(d.GetErrors()[0].path.ToStringView(), "b.items[2].key");
+        EXPECT_EQ(d.GetErrors()[0].path, "b.items[2].key");
         EXPECT_TRUE(d.GetWarnings().empty());
     }
 
@@ -113,7 +113,7 @@ namespace BECore::Tests {
             d.ReportFinding("key", "odd value");
         }
         EXPECT_EQ(d.GetWarnings().size(), ReaderLimits::kMaxRecordedErrors);
-        EXPECT_NE(d.GetWarnings().back().errorMessage.ToStringView().find("Too many errors"), StringView::npos);
+        EXPECT_NE(d.GetWarnings().back().errorMessage.find("Too many errors"), StringView::npos);
     }
 
     TEST(XmlDiagnosticsTest, TheModeSurvivesALoad) {
@@ -183,7 +183,7 @@ namespace BECore::Tests {
         d.ReportFinding("size", "odd value");
         d.EndObject();
         ASSERT_EQ(d.GetWarnings().size(), 1u);
-        EXPECT_EQ(d.GetWarnings()[0].path.ToStringView(), "root.size");
+        EXPECT_EQ(d.GetWarnings()[0].path, "root.size");
         EXPECT_FALSE(d.HasErrors());
     }
 
@@ -195,8 +195,8 @@ namespace BECore::Tests {
             Shapes shapes;
             shapes.Deserialize(d);
             ASSERT_EQ(d.GetErrors().size(), 1u) << static_cast<int>(mode);
-            EXPECT_EQ(d.GetErrors()[0].path.ToStringView(), "kind");
-            EXPECT_NE(d.GetErrors()[0].errorMessage.ToStringView().find("Invalid enum value"), StringView::npos);
+            EXPECT_EQ(d.GetErrors()[0].path, "kind");
+            EXPECT_NE(d.GetErrors()[0].errorMessage.find("Invalid enum value"), StringView::npos);
             EXPECT_EQ(shapes.kind, ProbeKind::Small);
         }
     }
@@ -453,7 +453,7 @@ namespace BECore::Tests {
         value.Deserialize(d);
         d.FinishLoad();
         ASSERT_EQ(d.GetWarnings().size(), 1u);
-        EXPECT_EQ(d.GetWarnings()[0].path.ToStringView(), "tileSise");
+        EXPECT_EQ(d.GetWarnings()[0].path, "tileSise");
     }
 
     TEST(XmlDiagnosticsTest, TheRootIsCheckedByFinishLoadOnceAndOnlyThen) {
@@ -576,9 +576,9 @@ namespace BECore::Tests {
         LoadedDocument<TileConfig> loaded(DiagnosticsMode::Warn, Format("<TileConfig {}=\"1\"/>", longName));
         ASSERT_EQ(loaded.reader.GetWarnings().size(), 1u);
         const DeserializeError& warning = loaded.reader.GetWarnings()[0];
-        EXPECT_LE(warning.path.ToStringView().size(), ReaderLimits::kMaxErrorTextBytes);
-        EXPECT_LE(warning.errorMessage.ToStringView().size(), ReaderLimits::kMaxQuotedValueBytes + 64);
-        EXPECT_EQ(warning.errorMessage.ToStringView().find("did you mean"), StringView::npos);
+        EXPECT_LE(warning.path.size(), ReaderLimits::kMaxErrorTextBytes);
+        EXPECT_LE(warning.errorMessage.size(), ReaderLimits::kMaxQuotedValueBytes + 64);
+        EXPECT_EQ(warning.errorMessage.find("did you mean"), StringView::npos);
     }
 
 }  // namespace BECore::Tests

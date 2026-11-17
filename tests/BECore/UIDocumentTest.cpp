@@ -110,8 +110,8 @@ namespace BECore::Tests {
             _manager->Deserialize(deserializer);
             EXPECT_FALSE(deserializer.HasErrors());
             _manager->Initialize();
-            for (const auto& node : _manager->GetSceneByName(PoolString::Intern("Main"))->GetRootNode().GetChildren()) {
-                if (node->GetName() == PoolString::Intern("Hud")) {
+            for (const auto& node : _manager->GetSceneByName("Main"_intern)->GetRootNode().GetChildren()) {
+                if (node->GetName() == "Hud"_intern) {
                     return node->GetComponent<UICanvasComponent>();
                 }
             }
@@ -212,7 +212,7 @@ namespace BECore::Tests {
 
         ASSERT_TRUE(document);
         EXPECT_EQ(document->GetState(), ResourceState::Loaded);
-        EXPECT_EQ(document->GetTypeName(), PoolString::Intern("UIDocument"));
+        EXPECT_EQ(document->GetTypeName(), "UIDocument"_intern);
         ASSERT_TRUE(plain) << "a plain .xml still goes to XmlResourceLoader";
         EXPECT_EQ(plain->GetState(), ResourceState::Loaded);
     }
@@ -260,8 +260,8 @@ namespace BECore::Tests {
         ASSERT_TRUE(canvas);
 
         ASSERT_EQ(canvas->GetRoot().children.size(), 2u);
-        EXPECT_EQ(canvas->GetRoot().children[0]->name, PoolString::Intern("FromFile"));
-        EXPECT_EQ(canvas->GetRoot().children[1]->name, PoolString::Intern("Inline"));
+        EXPECT_EQ(canvas->GetRoot().children[0]->name, "FromFile"_intern);
+        EXPECT_EQ(canvas->GetRoot().children[1]->name, "Inline"_intern);
         ASSERT_EQ(canvas->GetLayout().variants.size(), 2u);
         EXPECT_FLOAT_EQ((*canvas->GetLayout().variants[1].overrides[0].x).value, 2.0f);  // the later one wins in the portrait shape
         EXPECT_EQ(canvas->_elements.size(), 1u) << "only the inline element is saved back";
@@ -303,7 +303,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(canvas);
 
         ASSERT_EQ(canvas->GetRoot().children.size(), 1u);
-        EXPECT_EQ(canvas->GetRoot().children[0]->name, PoolString::Intern("Inline"));
+        EXPECT_EQ(canvas->GetRoot().children[0]->name, "Inline"_intern);
     }
 
     TEST_F(UIDocumentTest, AMalformedFileIsNotLoaded) {

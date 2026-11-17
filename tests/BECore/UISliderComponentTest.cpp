@@ -233,7 +233,7 @@ namespace BECore::Tests {
             ASSERT_FALSE(deserializer.HasErrors());
             _manager->Initialize();
 
-            _canvas = _manager->GetSceneByName(PoolString::Intern("Main"))->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
+            _canvas = _manager->GetSceneByName("Main"_intern)->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
             ASSERT_TRUE(_canvas);
             Draw();
         }
@@ -247,7 +247,7 @@ namespace BECore::Tests {
         }
 
         void Draw() {
-            _manager->SetActiveScene(PoolString::Intern("Main"));
+            _manager->SetActiveScene("Main"_intern);
             _renderer->ClearCalls();
             _manager->DrawAll();
         }
@@ -315,8 +315,8 @@ namespace BECore::Tests {
 
     TEST_F(UISliderComponentTest, ASliderBuiltFromAFileHasItsFields) {
         const auto& volume = Slider("Volume");
-        EXPECT_EQ(volume.bind, PoolString::Intern("volume"));
-        EXPECT_EQ(volume.action, PoolString::Intern("SliderCompVolume"));
+        EXPECT_EQ(volume.bind, "volume"_intern);
+        EXPECT_EQ(volume.action, "SliderCompVolume"_intern);
         EXPECT_FLOAT_EQ(volume.minValue, 0.0f);
         EXPECT_FLOAT_EQ(volume.maxValue, 1.0f);
         EXPECT_FLOAT_EQ(volume.step, 0.1f);
@@ -479,7 +479,7 @@ namespace BECore::Tests {
         EXPECT_EQ(actions.LastValue(), "0.3");
 
         Draw();
-        EXPECT_FALSE(CoreManager::GetUIVars().Has(PoolString::Intern("volume"))) << "the slider does not set the variable";
+        EXPECT_FALSE(CoreManager::GetUIVars().Has("volume"_intern)) << "the slider does not set the variable";
         EXPECT_FLOAT_EQ(volume.GetFraction(), 0.0f);
         EXPECT_NE(FindRect(UISliderComponent::GetParts(rect, 0.0f).thumb), nullptr) << "no answer: the thumb stays";
         EXPECT_EQ(FindRect(UISliderComponent::GetParts(rect, 0.3f).thumb), nullptr);
@@ -593,7 +593,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(Up(XAt("Volume", 0.40f), y));
         EXPECT_EQ(actions.Values("SliderCompVolume"), "0 0.1 0.2 0.5 0.4");
         EXPECT_EQ(actions.Total(), 5u) << "the release adds nothing";
-        EXPECT_EQ(Slider("Volume").GetLastEmittedValue(), PoolString::Intern("0.4"));
+        EXPECT_EQ(Slider("Volume").GetLastEmittedValue(), "0.4"_intern);
     }
 
     TEST_F(UISliderComponentTest, ADragThatLeavesTheSliderKeepsFollowingAndClamps) {
@@ -719,8 +719,8 @@ namespace BECore::Tests {
         }
         // The 30-unit ones (Short and Round); the 56-unit ones hold the touch size by their height
         ASSERT_EQ(small.size(), 2u);
-        EXPECT_NE(std::find(small.begin(), small.end(), PoolString::Intern("Short")), small.end());
-        EXPECT_NE(std::find(small.begin(), small.end(), PoolString::Intern("Round")), small.end());
+        EXPECT_NE(std::find(small.begin(), small.end(), "Short"_intern), small.end());
+        EXPECT_NE(std::find(small.begin(), small.end(), "Round"_intern), small.end());
     }
 
     // ---- files --------------------------------------------------------------------------------------------------------------------
@@ -741,21 +741,21 @@ namespace BECore::Tests {
         ASSERT_FALSE(deserializer.HasErrors());
         loaded->Initialize();
 
-        const auto* fine = loaded->GetRoot().FindByName(PoolString::Intern("Fine"))->GetComponent<UISliderComponent>();
+        const auto* fine = loaded->GetRoot().FindByName("Fine"_intern)->GetComponent<UISliderComponent>();
         ASSERT_NE(fine, nullptr);
-        EXPECT_EQ(fine->bind, PoolString::Intern("fine"));
-        EXPECT_EQ(fine->action, PoolString::Intern("SliderCompFine"));
+        EXPECT_EQ(fine->bind, "fine"_intern);
+        EXPECT_EQ(fine->action, "SliderCompFine"_intern);
         EXPECT_FLOAT_EQ(fine->maxValue, 100.0f);
         EXPECT_FLOAT_EQ(fine->step, 5.0f);
-        const auto* free = loaded->GetRoot().FindByName(PoolString::Intern("Free"))->GetComponent<UISliderComponent>();
+        const auto* free = loaded->GetRoot().FindByName("Free"_intern)->GetComponent<UISliderComponent>();
         ASSERT_NE(free, nullptr);
         EXPECT_EQ(free->trackColor.g, 20);
         EXPECT_EQ(free->fillColor.g, 50);
         EXPECT_EQ(free->thumbColor.g, 80);
-        EXPECT_FALSE(loaded->GetRoot().FindByName(PoolString::Intern("Free"))->GetComponent<UIInputClicker>()->stateLook);
-        EXPECT_TRUE(loaded->GetRoot().FindByName(PoolString::Intern("Off"))->GetComponent<UIInputClicker>()->disabled);
-        EXPECT_FLOAT_EQ(loaded->GetRoot().FindByName(PoolString::Intern("Reversed"))->GetComponent<UISliderComponent>()->minValue, 1.0f);
-        EXPECT_EQ(loaded->GetRoot().FindByName(PoolString::Intern("Round"))->GetComponent<UISliderComponent>()->partShape, UIPartShape::Round);
+        EXPECT_FALSE(loaded->GetRoot().FindByName("Free"_intern)->GetComponent<UIInputClicker>()->stateLook);
+        EXPECT_TRUE(loaded->GetRoot().FindByName("Off"_intern)->GetComponent<UIInputClicker>()->disabled);
+        EXPECT_FLOAT_EQ(loaded->GetRoot().FindByName("Reversed"_intern)->GetComponent<UISliderComponent>()->minValue, 1.0f);
+        EXPECT_EQ(loaded->GetRoot().FindByName("Round"_intern)->GetComponent<UISliderComponent>()->partShape, UIPartShape::Round);
         ASSERT_EQ(loaded->_elements.size(), _canvas->_elements.size());
         for (size_t i = 0; i < loaded->_elements.size(); ++i) {
             EXPECT_STREQ(ElementToXml(*_canvas->_elements[i]).c_str(), ElementToXml(*loaded->_elements[i]).c_str()) << i;
@@ -778,10 +778,10 @@ namespace BECore::Tests {
         ASSERT_FALSE(deserializer.HasErrors());
         loaded->Initialize();
 
-        const auto* free = loaded->GetRoot().FindByName(PoolString::Intern("Free"))->GetComponent<UISliderComponent>();
+        const auto* free = loaded->GetRoot().FindByName("Free"_intern)->GetComponent<UISliderComponent>();
         ASSERT_NE(free, nullptr);
         EXPECT_EQ(free->thumbColor.b, 90);
-        EXPECT_FLOAT_EQ(loaded->GetRoot().FindByName(PoolString::Intern("Volume"))->GetComponent<UISliderComponent>()->step, 0.05f);
+        EXPECT_FLOAT_EQ(loaded->GetRoot().FindByName("Volume"_intern)->GetComponent<UISliderComponent>()->step, 0.05f);
         ASSERT_EQ(loaded->_elements.size(), _canvas->_elements.size());
         for (size_t i = 0; i < loaded->_elements.size(); ++i) {
             EXPECT_STREQ(ElementToXml(*_canvas->_elements[i]).c_str(), ElementToXml(*loaded->_elements[i]).c_str()) << i;

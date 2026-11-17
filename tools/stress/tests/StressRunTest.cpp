@@ -3,6 +3,7 @@
 #include <Events/ApplicationEvents.h>
 #include <Stress/Components/StressRunComponent.h>
 #include <Stress/RampController.h>
+#include <Stress/StressNames.h>
 #include <gtest/gtest.h>
 #include <tests/StressSceneFixture.h>
 
@@ -261,13 +262,13 @@ namespace BECore::Stress::Tests {
         StartGame({"--stress-scene=entities", Format("--stress-count={}", kCount)});
         Frame(kFastMs);
         Frame(kFastMs);
-        const auto objects = CoreManager::GetFrameStats().GetLast()->FindCounter("Stress objects"_intern);
+        const auto objects = CoreManager::GetFrameStats().GetLast()->FindCounter(StressNames::objectsCounter);
         ASSERT_TRUE(objects.has_value());
         EXPECT_DOUBLE_EQ(*objects, kCount);
 
         SetCount(kCount * 3);
         Frame(kFastMs);
-        EXPECT_DOUBLE_EQ(*CoreManager::GetFrameStats().GetLast()->FindCounter("Stress objects"_intern), kCount * 3);
+        EXPECT_DOUBLE_EQ(*CoreManager::GetFrameStats().GetLast()->FindCounter(StressNames::objectsCounter), kCount * 3);
     }
 
     TEST_F(StressRunTest, AGameThatIsNotActiveRecordsNothing) {

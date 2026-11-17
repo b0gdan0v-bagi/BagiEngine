@@ -1,0 +1,4 @@
+# Allowlist of CI/scripts/check_pool_strings.py. One row per line: <rule> | <target> | <reason>.
+# <rule> is literal, duplicate, loose or header. <target> is a path glob relative to the root (`*` crosses `/`), and for `duplicate`
+# the text itself. Each row says why. The list only shrinks: a row that matches nothing fails the check.
+literal | tests/BECore/PoolString*Test.cpp | the pool's own tests intern a runtime StringView on purpose (the runtime path is what they test)

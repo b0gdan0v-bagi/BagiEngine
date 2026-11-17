@@ -112,7 +112,7 @@ namespace BECore::Tests {
             _manager->Deserialize(deserializer);
             ASSERT_FALSE(deserializer.HasErrors());
             _manager->Initialize();
-            _canvas = _manager->GetSceneByName(PoolString::Intern("Main"))->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
+            _canvas = _manager->GetSceneByName("Main"_intern)->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
             ASSERT_TRUE(_canvas);
         }
 
@@ -158,7 +158,7 @@ namespace BECore::Tests {
         // The same screen with a button of 30 units and no minScale: too small to touch on a small window
         UICanvasLayout layout;
         ASSERT_NO_FATAL_FAILURE(BuildHudLayout(layout));
-        UIElement* reset = layout.root->FindByName(PoolString::Intern("Reset"));
+        UIElement* reset = layout.root->FindByName("Reset"_intern);
         ASSERT_NE(reset, nullptr);
         reset->style.rect.height = UILength::Px(30.0f);
         layout.params.minScale = 0.25f;
@@ -248,7 +248,7 @@ namespace BECore::Tests {
 
     TEST_F(UIScreenTest, TheScoreFollowsTheGameInBothShapes) {
         ASSERT_NO_FATAL_FAILURE(LoadScene());
-        auto* score = _canvas->GetRoot().FindByName(PoolString::Intern("Score"))->GetComponent<UITextComponent>();
+        auto* score = _canvas->GetRoot().FindByName("Score"_intern)->GetComponent<UITextComponent>();
         ASSERT_NE(score, nullptr);
 
         CoreManager::GetUIVars().Set("score"_intern, 0);

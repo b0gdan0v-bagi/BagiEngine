@@ -173,7 +173,7 @@ namespace BECore::Tests {
             _manager->Initialize();
 
             for (const auto& node : _manager->GetActiveScene()->GetRootNode().GetChildren()) {
-                if (node->GetName() == PoolString::Intern("Canvas")) {
+                if (node->GetName() == "Canvas"_intern) {
                     const auto canvas = node->GetComponent<UICanvasComponent>();
                     ASSERT_TRUE(canvas);
                     _probe = New<AllocProbe>();

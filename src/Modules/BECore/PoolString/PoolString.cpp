@@ -1,115 +1,72 @@
 #include "PoolString.h"
 
+#include <BECore/PoolString/PoolBlock.h>
+#include <BECore/PoolString/PoolBlockSource.h>
+#include <BECore/PoolString/PoolStringStorage.h>
+#include <new>
+
 namespace BECore {
 
-    template <typename T, uint32_t BucketCount>
-    class IntrusivePoolTable {
-        static_assert((BucketCount & (BucketCount - 1)) == 0);
-        T* _buckets[BucketCount]{};
+    namespace {
 
-    public:
-        void Insert(T* entry) noexcept {
-            const uint32_t idx = static_cast<uint32_t>(entry->hash & (BucketCount - 1));
-            entry->nextEntry = _buckets[idx];
-            _buckets[idx] = entry;
-        }
+        /// The pool of the process. Never destroyed: a static destructor of another file may still read a `PoolString`
+        /// during exit, and the blocks must stay mapped for it (the pool frees nothing, by contract).
+        struct ProcessPool {
+            static constexpr size_t kInitialTableCapacity = 16384;
 
-        T* Find(uint64_t hash, StringView str) const noexcept {
-            const uint32_t idx = static_cast<uint32_t>(hash & (BucketCount - 1));
-            for (T* e = _buckets[idx]; e; e = e->nextEntry) {
-                if (e->hash == hash && e->size == str.size()) {
-                    if (std::memcmp(e->data, str.data(), e->size) == 0) {
-                        return e;
-                    }
-                }
-            }
-            return nullptr;
-        }
-    };
-
-    class PoolString::Storage {
-        SharedMutex _mutex{BE_LOCK_SITE("PoolString")};
-        IntrusivePoolTable<Entry, 16384> _table;
-
-        struct Page {
-            static constexpr size_t Size = 128 * 1024;
-            alignas(uint64_t) char data[Size];
-            UniquePtr<Page> prev;
+            UniquePtr<IPoolBlockSource> source = MakeDefaultBlockSource();
+            Details::PoolStringStorage storage{*source, kInitialTableCapacity};
         };
-        UniquePtr<Page> _currentPage;
-        size_t _offset = 0;
 
-    public:
-        static Storage& Instance() {
-            static Storage instance;
-            return instance;
+        Details::PoolStringStorage& Storage() {
+            alignas(ProcessPool) static unsigned char storage[sizeof(ProcessPool)];
+            static ProcessPool* const pool = new (storage) ProcessPool();
+            return pool->storage;
         }
 
-        Storage() {
-            _currentPage = MakeUnique<Page>();
-        }
-
-        const Entry* Find(StringView str) {
-            if (str.empty()) {
-                return &Details::g_EmptyEntryStore.header;
-            }
-
-            const uint64_t hash = StringUtils::GetHash(str);
-            SharedLock lock(_mutex);
-            return _table.Find(hash, str);
-        }
-
-        const Entry* GetOrAdd(StringView str) {
-            if (str.empty()) {
-                return &Details::g_EmptyEntryStore.header;
-            }
-
-            const uint64_t hash = StringUtils::GetHash(str);
-
-            {
-                SharedLock lock(_mutex);
-                if (auto e = _table.Find(hash, str)) {
-                    return e;
-                }
-            }
-
-            UniqueLock lock(_mutex);
-
-            // Double-check
-            if (auto e = _table.Find(hash, str)) {
-                return e;
-            }
-
-            const size_t headerSize = offsetof(Entry, data);
-            const size_t totalSize = headerSize + str.size() + 1;
-            const size_t alignedSize = (totalSize + 7) & ~7;
-
-            if (_offset + alignedSize > Page::Size) {
-                auto newPage = MakeUnique<Page>();
-                newPage->prev = eastl::move(_currentPage);
-                _currentPage = eastl::move(newPage);
-                _offset = 0;
-            }
-
-            Entry* entry = new (&_currentPage->data[_offset]) Entry(hash, static_cast<uint32_t>(str.size()));
-            std::memcpy(entry->data, str.data(), str.size());
-            entry->data[str.size()] = '\0';
-
-            _offset += alignedSize;
-            _table.Insert(entry);
-            return entry;
-        }
-    };
+    }  // namespace
 
     PoolString PoolString::Intern(StringView str) {
-        return PoolString(Storage::Instance().GetOrAdd(str));
+        return Storage().Intern(str);
+    }
+
+    void PoolString::InternBatch(Span<const StringView> texts, Span<PoolString> out) {
+        Storage().InternBatch(texts, out);
+    }
+
+    void PoolString::InternBatch(Span<const StringView> texts, Span<const uint64_t> hashes, Span<PoolString> out) {
+        Storage().InternBatch(texts, hashes, out);
+    }
+
+    void PoolString::RegisterStatic(Span<const PoolStaticRegistration> registrations) {
+        Storage().RegisterStatic(registrations);
+    }
+
+    PoolString PoolString::RegisterStatic(const Details::PoolStringEntry& entry) {
+        PoolString value;
+        const PoolStaticRegistration registration{&entry, &value};
+        Storage().RegisterStatic(Span<const PoolStaticRegistration>(&registration, 1));
+        return value;
+    }
+
+    void PoolString::Reserve(size_t strings, size_t bytes) {
+        Storage().Reserve(strings, bytes);
+    }
+
+    PoolBlock PoolString::AllocateBlock(size_t bytes) {
+        return Storage().AllocateBlock(bytes);
+    }
+
+    std::expected<PoolAdoptResult, PoolAdoptError> PoolString::AdoptBlock(PoolBlock& block, size_t usedBytes, Span<PoolString> out, PoolAdoptOptions options) {
+        return Storage().AdoptBlock(block, usedBytes, out, options);
+    }
+
+    PoolStringStats PoolString::GetStats() {
+        return Storage().GetStats();
     }
 
     Optional<PoolString> PoolString::Find(StringView str) {
-        if (const Entry* entry = Storage::Instance().Find(str)) {
-            return PoolString(entry);
-        }
-        return std::nullopt;
+        return Storage().Find(str);
     }
 
 }  // namespace BECore

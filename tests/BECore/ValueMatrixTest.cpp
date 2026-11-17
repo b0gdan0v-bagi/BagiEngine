@@ -54,7 +54,7 @@ namespace BECore::Tests {
         BE_MATRIX_CASE(int64_t, score, attack, 7, 8)
         BE_MATRIX_CASE(float, speed, precise, 0.5f, 0.75f)
         BE_MATRIX_CASE(double, precise, speed, 0.5, 0.75)
-        BE_MATRIX_CASE(PoolString, title, attack, PoolString::Intern("Hero"), PoolString::Intern("Mage"))
+        BE_MATRIX_CASE(PoolString, title, attack, "Hero"_intern, "Mage"_intern)
         BE_MATRIX_CASE(ValueElement, element, attack, ValueElement::Fire, ValueElement::Earth)
         BE_MATRIX_CASE(Vec2, position, cell, (Vec2{7.0f, 8.0f}), (Vec2{8.0f, 7.0f}))
         BE_MATRIX_CASE(IVec2, cell, position, (IVec2{7, 8}), (IVec2{8, 7}))
@@ -131,7 +131,7 @@ namespace BECore::Tests {
         String ErrorsOf(const IDeserializer& reader) {
             String out;
             for (const DeserializeError& report : reader.GetErrors()) {
-                AppendFormat(out, "{}: {}\n", report.path.ToStringView(), report.errorMessage.ToStringView());
+                AppendFormat(out, "{}: {}\n", report.path, report.errorMessage);
             }
             return out;
         }

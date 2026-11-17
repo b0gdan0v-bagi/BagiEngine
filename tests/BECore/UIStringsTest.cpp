@@ -118,7 +118,7 @@ namespace BECore::Tests {
 
         Resolve(strings, "{#never.interned.key.of.uistringstest}");
 
-        EXPECT_FALSE(PoolString::Find("never.interned.key.of.uistringstest").has_value());
+        EXPECT_FALSE(PoolString::Find(StringView{"never.interned.key.of.uistringstest"}).has_value());
     }
 
     TEST(UIStringsTest, ALanguageWithoutStringsIsRefusedAndTheOldOneKept) {

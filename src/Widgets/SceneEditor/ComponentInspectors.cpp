@@ -1,6 +1,7 @@
 #include "ComponentInspectors.h"
 
 #include <BECore/FileSystem/FileSystem.h>
+#include <BECore/FileSystem/MountPoints.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Input/ActionsLibrary.h>
 #include <BECore/Reflection/ClassMeta.h>
@@ -73,7 +74,7 @@ namespace BECore {
 
             if (!assetsLoaded) {
                 static const StringView extensions[] = {".png", ".jpg", ".jpeg", ".bmp"};
-                cachedAssets = CoreManager::GetFileSystem().EnumerateFiles("assets"_intern, Span<const StringView>(extensions));
+                cachedAssets = CoreManager::GetFileSystem().EnumerateFiles(MountPoints::assets, Span<const StringView>(extensions));
                 assetsLoaded = true;
             }
 
@@ -224,7 +225,7 @@ namespace BECore {
                 ImGui::SameLine();
                 if (IconTextButton(ICON_LC_PLUS, "Add", "Add the name to the actions library")) {
                     if (newActionBuf[0] != '\0') {
-                        ActionsLibrary::GetInstance().Add(PoolString::Intern(newActionBuf));
+                        ActionsLibrary::GetInstance().Add(PoolString::Intern(StringView(newActionBuf)));
                         newActionBuf[0] = '\0';
                     }
                 }
