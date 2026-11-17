@@ -36,6 +36,21 @@ namespace BECore {
 
     }  // namespace Details
 
+    /// A snapshot of the pool for tests, the profiler and tuning. The table fields are read under the shared lock of the
+    /// pool, the call counters under none: they need not agree with the table fields or with each other to the last call.
+    struct PoolStringStats {
+        size_t stringCount = 0;    ///< Distinct strings in the pool, the empty one not counted
+        size_t stringBytes = 0;    ///< Sum of the aligned entry sizes (header, text, NUL)
+        size_t blockCount = 0;     ///< Blocks held: the standard ones and the ones of their own
+        size_t blockBytes = 0;     ///< Their total size
+        size_t tableCapacity = 0;  ///< Slots of the table
+        size_t tableUsed = 0;      ///< Slots in use
+        size_t longestProbe = 0;   ///< Largest distance of an entry from its home slot, as of now
+        uint64_t internCalls = 0;  ///< `hits + misses`
+        uint64_t hits = 0;         ///< `Intern` calls that found the text (the empty text always does)
+        uint64_t misses = 0;       ///< `Intern` calls that added a string: a text raced for by two threads is one miss
+    };
+
     class PoolString {
     public:
         /// Size of a standard block of the pool; a string whose entry does not fit one gets a block of its own.
@@ -47,6 +62,9 @@ namespace BECore {
 
         /// Returns the pooled string equal to `str`, or nullopt when no such string was interned. Never adds to the pool.
         [[nodiscard]] static Optional<PoolString> Find(StringView str);
+
+        /// Counters of the pool; `Find` is not an `Intern` call. A test compares two snapshots: the pool is shared.
+        [[nodiscard]] static PoolStringStats GetStats();
 
         [[nodiscard]] constexpr uint64_t HashValue() const noexcept {
             return _entry->hash;

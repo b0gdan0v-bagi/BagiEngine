@@ -1,0 +1,24 @@
+# PoolString: interned identifiers
+
+`PoolString::Intern(text)` returns the one `PoolString` for a text; `Find(text)` returns it only when it was interned before and adds nothing. `StaticPoolString.h` (`"Key"_intern`, `StaticPoolString<"...">`) interns a literal once; `PoolStringMap.h` has the hashers for maps.
+
+## What a PoolString is
+
+- **One pointer** to an entry (`static_assert(sizeof(PoolString) == sizeof(void*))`). Length and hash live in the entry, so `Length()`, `HashValue()` and `ToStringView()` read through the pointer and **equality is a pointer compare**. In a `consteval` context (no pool exists at compile time) equality compares the hashes.
+- **Entry layout** (`Details::PoolStringEntry`): `hash` (8 bytes), `size` (4 bytes), then the text and a NUL at `offsetof(Entry, data) == 12`; the whole entry is padded to a multiple of 8. A `static_assert` pins the offset because the pool lays entries out by it. The empty text is `g_EmptyEntryStore`, built at compile time: `Intern("")` and a default `PoolString` return it, it is not in the table and not in the statistics as a string.
+- **The pool never frees.** An entry lives to the end of the process, so a `PoolString` is valid forever and cheap to copy, and a text put in the pool is a permanent cost. Only **names that come from data** (a content key, a type, a field, an event) go in; never text for display, a message or an error. A path that lets a client choose the text (`allowInterning` of the control API, `Reflection/CLAUDE.md`) is off by default.
+
+## Storage (`PoolString.cpp`)
+
+- **Blocks.** Entries are copied into blocks of `PoolString::kBlockBytes`, aligned to 8, held by the pool and never moved or freed. **An entry never crosses the end of a block.** One that does not fit the rest of the current block starts a new standard block (the rest is lost). One larger than a standard block gets a block of exactly its size and the current block stays current, so one huge string does not waste the space left for the small ones. The length of a text is limited only by the 32-bit `size` (asserted).
+- **Table.** `PoolEntryTable`: open addressing over slots `{hash, entry}`, a power-of-two capacity, linear probing, an empty slot has a null entry; the stored hash lets a probe skip a slot without touching its entry. It doubles when the load would pass one half, re-placing from the stored hashes: text is not hashed again and entries do not move, only the slots do, so an entry pointer taken out of the table stays valid.
+- **Locks.** One `SharedMutex`. `Intern` looks up under the shared lock (the hit path takes nothing else) and on a miss takes the unique lock, looks again (another thread may have inserted the text), then writes the entry and inserts it, growing the table first if needed. `Find` is the shared lookup alone. Growth and block allocation allocate under the unique lock, never on the hit path.
+
+## Statistics
+
+`PoolString::GetStats()` returns a `PoolStringStats`. The pool is shared by the whole process (tests, the other threads), so a test compares two snapshots; absolute values mean nothing.
+
+- `stringCount`, `tableUsed`: distinct strings in the table (the empty text is not one). `stringBytes`: the sum of their aligned entry sizes. `blockCount`, `blockBytes`: blocks held, standard and of their own.
+- `tableCapacity`: slots. `longestProbe`: the largest distance of an entry from its home slot, as of now (growth recomputes it); a lookup of a missing text may walk one slot more.
+- `hits`, `misses`, `internCalls` (`hits + misses`): an `Intern` call is a miss when it inserted, otherwise a hit; the empty text is a hit; two threads racing for one new text are one miss and one hit. `Find` is not counted.
+- **The counters add no shared write to a hit.** A hit is counted in a counter of the calling thread (one cache line each, its owner writes it with a plain load and store; registered once under a mutex on the thread's first call, never freed, so a finished thread's hits stay in the sum). A miss is counted under the unique lock it already holds. `GetStats` sums them: the table fields come under the shared lock, the counters under none, so the snapshot is not one instant (counters can be a call or two off from the table fields while other threads run).

@@ -228,6 +228,155 @@ namespace BECore::Tests {
 
     namespace {
 
+        constexpr int kStatsThreads = 4;
+        constexpr size_t kStatsNamesPerThread = 3000;
+        constexpr size_t kFillGuard = 4'000'000;
+
+        /// The size an entry takes in a block: header, text and NUL, aligned to 8
+        constexpr size_t EntryBytes(size_t length) {
+            return (kEntryHeaderBytes + length + 1 + 7) & ~size_t{7};
+        }
+
+        /// Interns names until the pool takes a new standard block, so the current block is nearly empty afterwards
+        void StartFreshBlock() {
+            const size_t blocksBefore = PoolString::GetStats().blockCount;
+            for (size_t i = 0; i < kFillGuard && PoolString::GetStats().blockCount == blocksBefore; ++i) {
+                static_cast<void>(PoolString::Intern(StringView{CounterName("pool_stats_fill_", i)}));
+            }
+            ASSERT_GT(PoolString::GetStats().blockCount, blocksBefore);
+        }
+
+    }  // namespace
+
+    TEST(PoolStringStatsTest, ANewTextIsAMissAndARepeatIsAHit) {
+        const PoolStringStats before = PoolString::GetStats();
+        static_cast<void>(PoolString::Intern("pool_stats_new_text_4b7e"));
+        const PoolStringStats afterNew = PoolString::GetStats();
+        EXPECT_EQ(afterNew.stringCount, before.stringCount + 1);
+        EXPECT_EQ(afterNew.tableUsed, before.tableUsed + 1);
+        EXPECT_EQ(afterNew.misses, before.misses + 1);
+        EXPECT_EQ(afterNew.hits, before.hits);
+        EXPECT_EQ(afterNew.stringBytes, before.stringBytes + EntryBytes(StringView{"pool_stats_new_text_4b7e"}.size()));
+
+        static_cast<void>(PoolString::Intern("pool_stats_new_text_4b7e"));
+        const PoolStringStats afterRepeat = PoolString::GetStats();
+        EXPECT_EQ(afterRepeat.stringCount, afterNew.stringCount);
+        EXPECT_EQ(afterRepeat.misses, afterNew.misses);
+        EXPECT_EQ(afterRepeat.hits, afterNew.hits + 1);
+        EXPECT_EQ(afterRepeat.internCalls, afterRepeat.hits + afterRepeat.misses);
+    }
+
+    TEST(PoolStringStatsTest, TheEmptyTextIsAHitAndNotAString) {
+        const PoolStringStats before = PoolString::GetStats();
+        EXPECT_TRUE(PoolString::Intern("").Empty());
+        const PoolStringStats after = PoolString::GetStats();
+        EXPECT_EQ(after.hits, before.hits + 1);
+        EXPECT_EQ(after.misses, before.misses);
+        EXPECT_EQ(after.stringCount, before.stringCount);
+        EXPECT_EQ(after.stringBytes, before.stringBytes);
+    }
+
+    TEST(PoolStringStatsTest, FindIsNotAnInternCall) {
+        static_cast<void>(PoolString::Intern("pool_stats_find_target_c2a9"));
+        const PoolStringStats before = PoolString::GetStats();
+        EXPECT_TRUE(PoolString::Find("pool_stats_find_target_c2a9").has_value());
+        EXPECT_FALSE(PoolString::Find("pool_stats_find_missing_c2a9").has_value());
+        const PoolStringStats after = PoolString::GetStats();
+        EXPECT_EQ(after.internCalls, before.internCalls);
+        EXPECT_EQ(after.stringCount, before.stringCount);
+    }
+
+    TEST(PoolStringStatsTest, AStringOfItsOwnBlockAddsABlockAndLeavesTheCurrentOne) {
+        ASSERT_NO_FATAL_FAILURE(StartFreshBlock());
+        static_cast<void>(PoolString::Intern("pool_stats_before_huge_91d4"));
+        const PoolStringStats before = PoolString::GetStats();
+
+        const String hugeText = BlockText(2 * PoolString::kBlockBytes + 5, 'g');
+        static_cast<void>(PoolString::Intern(StringView{hugeText}));
+        const PoolStringStats afterHuge = PoolString::GetStats();
+        EXPECT_EQ(afterHuge.blockCount, before.blockCount + 1);
+        EXPECT_EQ(afterHuge.blockBytes, before.blockBytes + EntryBytes(hugeText.size()));
+        EXPECT_EQ(afterHuge.stringBytes, before.stringBytes + EntryBytes(hugeText.size()));
+
+        // The small string after the huge one goes into the block that was current before it
+        static_cast<void>(PoolString::Intern("pool_stats_after_huge_91d4"));
+        const PoolStringStats afterSmall = PoolString::GetStats();
+        EXPECT_EQ(afterSmall.blockCount, afterHuge.blockCount);
+        EXPECT_EQ(afterSmall.blockBytes, afterHuge.blockBytes);
+    }
+
+    TEST(PoolStringStatsTest, AnEntryThatDoesNotFitTheRestOfTheBlockStartsAStandardBlock) {
+        ASSERT_NO_FATAL_FAILURE(StartFreshBlock());
+        const PoolStringStats before = PoolString::GetStats();
+        // Fits a standard block but not what is left of the current one: a new standard block, not one of its own
+        static_cast<void>(PoolString::Intern(StringView{BlockText(PoolString::kBlockBytes - kEntryHeaderBytes - 1 - 32, 'k')}));
+        const PoolStringStats afterBig = PoolString::GetStats();
+        EXPECT_EQ(afterBig.blockCount, before.blockCount + 1);
+        EXPECT_EQ(afterBig.blockBytes, before.blockBytes + PoolString::kBlockBytes);
+        // Fewer than 100 bytes are left in that block, so the next small string starts another one
+        static_cast<void>(PoolString::Intern(StringView{BlockText(100, 'm')}));
+        const PoolStringStats afterSmall = PoolString::GetStats();
+        EXPECT_EQ(afterSmall.blockCount, before.blockCount + 2);
+        EXPECT_EQ(afterSmall.blockBytes, before.blockBytes + 2 * PoolString::kBlockBytes);
+    }
+
+    TEST(PoolStringStatsTest, TheTableGrowsWhenItsLoadPassesHalf) {
+        const PoolStringStats before = PoolString::GetStats();
+        size_t interned = 0;
+        PoolStringStats current = before;
+        while (current.tableCapacity == before.tableCapacity && interned < kFillGuard) {
+            static_cast<void>(PoolString::Intern(StringView{CounterName("pool_stats_grow_", interned++)}));
+            current = PoolString::GetStats();
+        }
+        EXPECT_EQ(current.tableCapacity, before.tableCapacity * 2);
+        EXPECT_EQ(current.tableUsed, before.tableUsed + interned);
+        EXPECT_EQ(current.stringCount, before.stringCount + interned);
+        EXPECT_LE(current.tableUsed * 2, current.tableCapacity);
+        EXPECT_LT(current.longestProbe, current.tableCapacity);
+        EXPECT_EQ(current.misses, before.misses + interned);
+    }
+
+    TEST(PoolStringStatsTest, CallsOfSeveralThreadsAreAllCounted) {
+        Vector<String> names;
+        for (size_t i = 0; i < kStatsNamesPerThread; ++i) {
+            names.push_back(CounterName("pool_stats_threads_", i));
+        }
+        const PoolStringStats before = PoolString::GetStats();
+
+        std::atomic<int> ready{0};
+        std::atomic<int> finished{0};
+        Vector<std::thread> threads;
+        for (int t = 0; t < kStatsThreads; ++t) {
+            threads.emplace_back([&] {
+                ready.fetch_add(1);
+                while (ready.load() < kStatsThreads) {
+                    std::this_thread::yield();
+                }
+                for (const String& name : names) {
+                    static_cast<void>(PoolString::Intern(StringView{name}));
+                }
+                finished.fetch_add(1);
+            });
+        }
+        const auto deadline = std::chrono::steady_clock::now() + kTableThreadsLimit;
+        while (finished.load() < kStatsThreads && std::chrono::steady_clock::now() < deadline) {
+            std::this_thread::yield();
+        }
+        ASSERT_EQ(finished.load(), kStatsThreads) << "the threads did not finish in time";
+        for (auto& thread : threads) {
+            thread.join();
+        }
+
+        // The threads are gone, their counts stay. Every name is one miss and the other calls are hits, whoever won the race
+        const PoolStringStats after = PoolString::GetStats();
+        EXPECT_EQ(after.misses, before.misses + kStatsNamesPerThread);
+        EXPECT_EQ(after.hits, before.hits + (kStatsThreads - 1) * kStatsNamesPerThread);
+        EXPECT_EQ(after.internCalls - before.internCalls, kStatsThreads * kStatsNamesPerThread);
+        EXPECT_EQ(after.stringCount, before.stringCount + kStatsNamesPerThread);
+    }
+
+    namespace {
+
         StringView View(const String& str) {
             return str;
         }
