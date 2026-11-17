@@ -70,6 +70,20 @@ namespace BECore {
 
     void TextureEditorWidget::Draw() {}
 
+    void TextureEditorWidget::SelectByName(PoolString name) {
+        const auto& entries = CoreManager::GetTextureLibrary().GetAll();
+        for (int i = 0; i < static_cast<int>(entries.size()); ++i) {
+            if (entries[static_cast<size_t>(i)].name == name) {
+                _selectedIndex = i;
+                _nameDirty = false;
+                const size_t copyLen = eastl::min(sizeof(_nameEditBuffer) - 1, strlen(name.CStr()));
+                memcpy(_nameEditBuffer, name.CStr(), copyLen);
+                _nameEditBuffer[copyLen] = '\0';
+                return;
+            }
+        }
+    }
+
     void TextureEditorWidget::RenderLeftPanel() {
         auto& lib = CoreManager::GetTextureLibrary();
         const auto& entries = lib.GetAll();
@@ -180,6 +194,9 @@ namespace BECore {
 
         ImGui::Separator();
 
+        // Pixels of the sheet when its texture is loaded, else 0: the slice section shows only for a loaded texture
+        int sheetWidth = 0;
+        int sheetHeight = 0;
         if (!entry.texturePath.Empty()) {
             // A file rewritten on disk is evicted from the cache (the Generate panel's Accept and switch do): the handle held here is the old picture
             const bool evicted = _previewTexture && !CoreManager::GetResourceManager().GetCache().Holds(_previewLoadedPath, _previewTexture.Get());
@@ -207,6 +224,8 @@ namespace BECore {
                     }
                 }
 
+                sheetWidth = static_cast<int>(texW);
+                sheetHeight = static_cast<int>(texH);
                 _imageScaleX = texW / displayW;
                 _imageScaleY = texH / displayH;
 
@@ -219,6 +238,7 @@ namespace BECore {
                 ImDrawList* drawList = ImGui::GetWindowDrawList();
                 const ImTextureID texId = static_cast<ImTextureID>(reinterpret_cast<std::uintptr_t>(_previewTexture->GetNativeHandle()));
                 drawList->AddImage(texId, _imageOrigin, imageMax, ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
+                _slicePanel.DrawOverlay(drawList, entry.texturePath, _imageOrigin, _imageScaleX, _imageScaleY);
 
                 if (!entry.srcRect.IsEmpty()) {
                     const ImVec2 rectMin(_imageOrigin.x + entry.srcRect.x / _imageScaleX, _imageOrigin.y + entry.srcRect.y / _imageScaleY);
@@ -309,6 +329,16 @@ namespace BECore {
         }
 
         ImGui::Separator();
+
+        if (sheetWidth > 0 && sheetHeight > 0) {
+            const PoolString firstAdded = _slicePanel.Render(lib, entry.texturePath, sheetWidth, sheetHeight);
+            if (!firstAdded.Empty()) {
+                SelectByName(firstAdded);
+                _isDirty = true;
+                return;
+            }
+            ImGui::Separator();
+        }
 
         if (IconTextButton(ICON_LC_TRASH_2, "Delete Entry", "Remove this sprite from the library")) {
             lib.Remove(entry.name);

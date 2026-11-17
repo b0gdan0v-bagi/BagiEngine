@@ -7,6 +7,7 @@
 #include <BECore/Types/Types.h>
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
+#include <Widgets/TextureEditor/SpriteSheetSlicePanel.h>
 #include <imgui.h>
 
 namespace BECore {
@@ -15,7 +16,8 @@ namespace BECore {
      * @brief ImGui panel for the TextureLibrary sprite definitions
      *
      * Left: the list of named entries and [+ Add]. Right: the selected entry (name, texture file, srcRect with a
-     * drag-to-select preview) and [Delete]. [Save] persists the changes to config/TextureLibrary.xml.
+     * drag-to-select preview), a "Slice sheet" section that cuts the texture into one entry per grid cell, and [Delete]. [Save]
+     * persists the changes to config/TextureLibrary.xml.
      */
     class TextureEditorWidget : public IWidget {
         BE_CLASS(TextureEditorWidget)
@@ -36,6 +38,8 @@ namespace BECore {
         void RenderLeftPanel();
         void RenderRightPanel();
         void RefreshAssetList();
+        // Selects the entry called @p name, as a click in the list does; nothing when there is none
+        void SelectByName(PoolString name);
 
         int _selectedIndex = -1;
         bool _isDirty = false;
@@ -55,6 +59,8 @@ namespace BECore {
         ImVec2 _imageOrigin{};
         float _imageScaleX = 1.0f;
         float _imageScaleY = 1.0f;
+
+        SpriteSheetSlicePanel _slicePanel;
     };
 
 }  // namespace BECore
