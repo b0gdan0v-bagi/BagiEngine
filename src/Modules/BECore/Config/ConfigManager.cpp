@@ -202,14 +202,29 @@ namespace BECore {
     }
 
     void ConfigManager::ScanDirectory(const std::filesystem::path& dir, Vector<Pair<std::filesystem::path, PoolString>>& filesToLoad) const {
+        Vector<std::filesystem::path> paths;
+        Vector<String> stems;
         for (const auto& entry : std::filesystem::recursive_directory_iterator(dir)) {
             if (entry.is_regular_file() && entry.path().extension() == ".xml") {
-                auto stemStr = entry.path().stem().string();
-                auto name = PoolString::Intern(StringView(stemStr.c_str(), stemStr.length()));
-                filesToLoad.push_back({entry.path(), name});
+                const auto stemStr = entry.path().stem().string();
+                paths.push_back(entry.path());
+                stems.push_back(String(stemStr.c_str(), stemStr.length()));
 
                 LOG_DEBUG(Format("[ConfigManager] Found config: {} -> {}", stemStr, entry.path().string()).c_str());
             }
+        }
+
+        // One batch for the layer: the names come from the disk, so the form that hashes them
+        Vector<StringView> views;
+        views.reserve(stems.size());
+        for (const String& stem : stems) {
+            views.push_back(StringView(stem));
+        }
+        Vector<PoolString> names(views.size());
+        PoolString::InternBatch(Span<const StringView>(views.data(), views.size()), Span<PoolString>(names.data(), names.size()));
+
+        for (size_t i = 0; i < paths.size(); ++i) {
+            filesToLoad.push_back({eastl::move(paths[i]), names[i]});
         }
     }
 

@@ -1,4 +1,5 @@
 #include <BECore/FileSystem/FileSystem.h>
+#include <BECore/PoolString/PoolString.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
 
@@ -148,6 +149,58 @@ namespace BECore::Tests {
         EXPECT_EQ(files[1].ToStringView(), "assets/b.png");
         EXPECT_EQ(files[2].ToStringView(), "assets/sub/c.PNG");
     }
+
+    TEST_F(FileSystemTest, EnumerateFilesInternsTheWholeListWithOneBatch) {
+        // Names no other test of this process interns: the pool is shared and cannot forget them
+        constexpr size_t kFiles = 40;
+        Vector<String> expected;
+        for (size_t i = 0; i < kFiles; ++i) {
+            const String name = Format("enumbatch_{:03}.png", kFiles - 1 - i);
+            WriteFile(_engine / "assets" / "enumbatch" / ToStd(name));
+            if (i % 2 == 0) {
+                WriteFile(_game / "assets" / "enumbatch" / ToStd(name));
+            }
+        }
+        for (size_t i = 0; i < kFiles; ++i) {
+            expected.push_back(Format("assets/enumbatch/enumbatch_{:03}.png", i));
+        }
+
+        FileSystem fs;
+        fs.AddContentRoot(_engine);
+        fs.AddContentRoot(_game);
+        fs.Initialize();
+        const PoolString assets = "assets"_intern;
+        const StringView extensions[] = {".png"};
+
+        const PoolStringStats before = PoolString::GetStats();
+        const auto files = fs.EnumerateFiles(assets, Span<const StringView>(extensions));
+        const PoolStringStats after = PoolString::GetStats();
+
+        ASSERT_EQ(files.size(), expected.size());
+        for (size_t i = 0; i < files.size(); ++i) {
+            EXPECT_EQ(files[i].ToStringView(), StringView(expected[i])) << i;
+        }
+        EXPECT_EQ(after.batchCalls - before.batchCalls, 1u);
+        EXPECT_EQ(after.batchStrings - before.batchStrings, kFiles);
+        EXPECT_EQ(after.writeLocks - before.writeLocks, 1u);
+    }
+
+#ifndef _WIN32
+    TEST_F(FileSystemTest, EnumerateFilesTurnsABackslashInAFileNameIntoASlash) {
+        // A POSIX file name may hold a backslash; the virtual path has only slashes
+        WriteFile(_engine / "assets" / "back\\slash.png");
+
+        FileSystem fs;
+        fs.AddContentRoot(_engine);
+        fs.Initialize();
+
+        const StringView extensions[] = {".png"};
+        const auto files = fs.EnumerateFiles("assets"_intern, Span<const StringView>(extensions));
+
+        ASSERT_EQ(files.size(), 1u);
+        EXPECT_EQ(files[0].ToStringView(), "assets/back/slash.png");
+    }
+#endif
 
     TEST_F(FileSystemTest, WithoutContentRootsTheProjectRootIsFoundFromTheWorkingDirectory) {
         FileSystem fs;

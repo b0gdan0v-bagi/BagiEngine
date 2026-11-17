@@ -1,3 +1,4 @@
+#include <BECore/PoolString/PoolString.h>
 #include <BECore/Save/SaveGame.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
@@ -160,6 +161,34 @@ namespace BECore::Tests {
 
         const Vector<String> expected = {"Gamma_2", "a-b", "alpha", "beta"};
         EXPECT_EQ(Names(service.List()), expected);
+    }
+
+    TEST_F(SaveGameFilesTest, ListOfNewSlotsInternsThemWithOneBatch) {
+        SaveGameService service(_fileSystem);
+        ASSERT_TRUE(service.Initialize(_saves));
+
+        // Names no other test of this process interns: the pool is shared and cannot forget them
+        constexpr size_t kSlots = 25;
+        Vector<String> expected;
+        for (size_t i = 0; i < kSlots; ++i) {
+            expected.push_back(Format("listbatch_{:02}", i));
+        }
+        for (size_t i = kSlots; i-- > 0;) {
+            ASSERT_TRUE(service.WriteSlot(expected[i], Bytes({1})).has_value());
+        }
+        std::filesystem::copy_file(_saves / "listbatch_00.save", _saves / "listbatch bad.save");
+        const PoolString mountPoint = PoolString::Intern(kSaveMountPoint);
+        ASSERT_FALSE(mountPoint.Empty());
+
+        const PoolStringStats before = PoolString::GetStats();
+        const Vector<PoolString> slots = service.List();
+        const PoolStringStats after = PoolString::GetStats();
+
+        EXPECT_EQ(Names(slots), expected);
+        // One batch for the file listing (virtual paths), one for the slot names
+        EXPECT_EQ(after.batchCalls - before.batchCalls, 2u);
+        EXPECT_EQ(after.batchStrings - before.batchStrings, 2 * kSlots + 1);
+        EXPECT_EQ(after.writeLocks - before.writeLocks, 2u);
     }
 
     TEST_F(SaveGameFilesTest, ReadOfAMissingSlotIsNotFound) {
