@@ -15,6 +15,7 @@ run in work; `--exit-with-editor` (the panel's Start the service) also ends it w
 
 import argparse
 import queue
+import re
 import sys
 import threading
 import time
@@ -38,6 +39,8 @@ RECONNECT_S = 2.0
 FIRST_CONNECT_S = 60.0
 # The editor answers with this while the Generate panel has never been created (Game mode, an editor without the panel)
 UNKNOWN_METHOD = "unknown_method"
+# The name rule of the editor's sets (ArtGenAccept IsValidSpriteName): one segment of a set's folder, a file stem
+NAME_SEGMENT = re.compile(r"[A-Za-z0-9_-]{1,64}")
 
 
 class ShutdownRequested(Exception):
@@ -54,6 +57,25 @@ def load_request_preset(request, game_root):
     if isinstance(preset, str):
         return artgen_preset.find_preset(preset, game_root)
     raise artgen_service.RequestError("the request names no preset")
+
+
+def check_name(value, what):
+    if not isinstance(value, str) or not NAME_SEGMENT.fullmatch(value):
+        raise artgen_service.RequestError(f"{what} {value!r} is not 1 to 64 of A-Z a-z 0-9 _ -")
+    return value
+
+
+def resolve_out_dir(game_root, out_dir):
+    """The folder of a request's `outDir`: a relative, `/`-separated path of names under `<game root>/artgen/out`. Anything else (an
+    absolute path, a drive, `..`, a backslash, an empty segment) is refused, so a request can never write outside the game's out folder."""
+    base = Path(game_root) / "artgen" / "out"
+    if out_dir is None:
+        return base
+    if not isinstance(out_dir, str):
+        raise artgen_service.RequestError(f"outDir {out_dir!r} is not a path")
+    for segment in out_dir.split("/"):
+        check_name(segment, f"a segment of outDir {out_dir!r}:")
+    return base.joinpath(*out_dir.split("/"))
 
 
 class Bridge:
@@ -165,9 +187,12 @@ class Bridge:
         try:
             if not self.game_root:
                 raise artgen_service.RequestError("the editor gave no game root")
+            out_dir = resolve_out_dir(self.game_root, request.get("outDir"))
+            name = request.get("name")
+            name = "" if name is None else check_name(name, "name")
             preset = load_request_preset(request, self.game_root)
             service_request = artgen_service.Request(
-                preset, request.get("subject", ""), int(request.get("count") or 1), request.get("seed"), Path(self.game_root) / "artgen" / "out"
+                preset, request.get("subject", ""), int(request.get("count") or 1), request.get("seed"), out_dir, name
             )
             artgen_service.generate(service_request, self.generator, progress, cancel)
         except Cancelled:

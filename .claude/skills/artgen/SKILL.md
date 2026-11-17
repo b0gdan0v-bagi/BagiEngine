@@ -27,13 +27,17 @@ Terms: `<engine>` is `engine` in a game (`.` in the engine's own repository); `<
 7. **Accept.** It writes the game's files (`assets/artgen/`, `config/TextureLibrary.xml`, a clip), so accept when the request asked for the result to be put into the game; otherwise show the pick and ask.
    - An image: `artgen_accept {seed, sprite}` (a sprite name is 1 to 64 of `A-Z a-z 0-9 _ -`; an existing name is replaced, so check the library first when the person did not name it). `useOnSelected: true` only when the person asked to put it on the selected node.
    - A sound: only the seed the person picked. `artgen_accept {seed, name}` writes `assets/artgen/<name>.wav`; `{seed, clip: "assets/.../x.wav"}` replaces a clip the game plays (find the clip paths in the game's sound docs or config first). `sound` overrides the processing (`maxSeconds`, `peakDb`, fades; the defaults are in "Accept of a sound"). The answer gives the length and the peak written: report them.
-8. **Sets.** Many subjects in one style (the pieces of a set, the sounds of a board): one preset, the same `seed` for every subject, `count` 2 to 4, one run per subject; judge each against the ones already accepted, and remake a subject that does not match with other seeds. Accept the set together, so the game never shows half of an old set and half of a new one.
+8. **Sets.** Many subjects in one style (the pieces of a set, the sounds of a board) are one **set**, not a loop of runs: the editor queues the jobs, runs them one at a time with one shared first seed and keeps them in `<game root>/artgen/out/<set>/` (git-ignored, the person reviews it in the panel's Set tab; "Sets" of `<engine>/src/Widgets/ArtGen/Sets/CLAUDE.md` has the rules).
+   - **Queue.** `artgen_enqueue {preset, subjects, count, set?, seed?}`: `preset` is a name or a draft (as in step 4, with `presetName`); `subjects` is one string of lines, `name: subject text` each (the name is the job's folder, file stem and the sprite or clip name of Accept all; without `name:` it is made from the subject; a `#` line and an empty one are skipped; `a cat: sitting` is one subject, the part before the first `:` is a name only when it has no space), or a list of strings and `{name, subject}`. `count` 2 to 4. **Give no `seed`**: the set draws one shared seed and records it (`artgen_state.sets[].seed`); pass `seed` only when the person asks to reproduce a look. `set` names the folder (default `<preset>-<date-time>`; an existing folder is refused as `invalid_params`). The answer is `{set, jobs, seed, serviceConnected}`. It is never `artgen_busy`: a set queued while a run or another set (the person's too) is in work waits in the line behind it; check `artgen_state` first and ask before queuing behind the person's work. `artgen_generate` is refused while a set is active.
+   - **Wait.** Poll `artgen_state.sets` (the row of your set: `state` `Active` or `Complete`, `jobs: {pending, running, done, failed, cancelled}`) every second or two until `Complete`; `artgen_set {set}` gives the rows (`jobs[].state`, `error`, `variants`). Jobs wait while no service polls: `serviceConnected` false means step 3 is not done. No job moved for several minutes: report it, do not wait for ever.
+   - **Judge** each `Done` row as in step 6: the variants' `file` is relative to the set folder (`<game root>/artgen/out/<set>/<file>`); `Read` the PNGs. `artgen_pick {set, job, seed}` the best per row. A `Failed` or `Cancelled` row: `artgen_retry {set, job}` (it goes back to `Pending` and the set goes on), at most twice. A row that runs but does not fit: queue a new set of that one subject with the old set's `seed`, `count` 4, and a changed subject, pick from it there, and say that the first set's row stays unpicked. Judge each row against the others and the game's accepted sprites, so the set looks like one.
+   - **Accept.** `artgen_accept_set {set}` only when the request asked for the result to go into the game and every row is `Done` and picked (else `artgen_set_incomplete` names the rows); it writes the sprites (name = the job's name) in one go, so the game never shows half of an old set and half of a new one. An `artgen_accept_failed` names the row and the rows done: fix the cause and call it again (it replaces the same names). A set of **sounds** is never picked or accepted without the person (the rule of step 6): leave the rows unpicked, list the seeds per row and say to listen in the Generate panel's Review.
 9. **Finish.** If you started the editor: `quit` over the control API, wait for the process (the bridge exits with it). If you started ComfyUI: `artgen_setup.py stop`, unless the person wants to go on generating. Leave the person's editor, bridge and ComfyUI running.
-10. **Report**, in the person's language, short: what was generated (preset, subject, seeds), what you dropped and why, what was accepted where (paths, the sprite or clip name, for a sound its length and peak), what waits for the person (sounds to listen to, a pick between two), and `git status` of what changed in the game, uncommitted: committing is the person's word.
+10. **Report**, in the person's language, short: what was generated (preset, subject, seeds; for a set its name, folder `artgen/out/<set>/` and shared seed), what you dropped and why, what was accepted where (paths, the sprite or clip name, for a sound its length and peak), what waits for the person (sounds to listen to, a pick between two), and `git status` of what changed in the game, uncommitted: committing is the person's word.
 
 ## The example script
 
-A session in the background while you watch its output; change the request, keep the shape.
+A session in the background while you watch its output; change the request, keep the shape. The first script is one run, the second one a set.
 
 ```python
 """python artgen-<slug>.py <port>: one run over the editor's control API; prints the variants as JSON."""
@@ -66,6 +70,21 @@ print(json.dumps({"state": run["state"], "error": run["error"], "variants": run[
 client.close()
 ```
 
+A set replaces the `artgen_generate` part of the first script, from `client.call("artgen_generate", ...)` through its final `print` (the connect and the readiness loop stay, and `client.close()` stays last): one call with the subjects, wait for `Complete`, print the rows (then `Read` the files, `artgen_pick`, and accept only when asked):
+
+```python
+subjects = ["rook: chess rook", "knight: chess knight", "bishop: chess bishop"]
+queued = client.call("artgen_enqueue", {"preset": "sprite", "subjects": subjects, "count": 3})
+deadline = time.monotonic() + 1800
+while time.monotonic() < deadline:
+    row = next(s for s in client.call("artgen_state")["sets"] if s["name"] == queued["set"])
+    if row["state"] == "Complete":
+        break
+    time.sleep(2.0)
+rows = client.call("artgen_set", {"set": queued["set"]})["jobs"]
+print(json.dumps([{"job": r["name"], "state": r["state"], "error": r["error"], "files": [v["file"] for v in r["variants"]]} for r in rows], indent=1))
+```
+
 ## Forbidden
 
-`artgen_setup.py install` or `artgen_setup {"action": "Install"}` without the owner's yes; reading, printing or writing the Hugging Face token; cancelling or replacing a run you did not start; accepting a sound nobody listened to; saving the scene or changing nodes beyond `useOnSelected`; editing workflows, the manifest or `ApplicationConfig.xml`; `git commit`, `git push`.
+`artgen_setup.py install` or `artgen_setup {"action": "Install"}` without the owner's yes; reading, printing or writing the Hugging Face token; cancelling or replacing a run, a job or a set you did not queue (`artgen_cancel`, a pick or a retry in the person's set); accepting a sound nobody listened to; saving the scene or changing nodes beyond `useOnSelected`; editing workflows, the manifest or `ApplicationConfig.xml`; `git commit`, `git push`.

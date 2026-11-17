@@ -12,6 +12,8 @@
 #include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/ArtGen/ArtGenLaunch.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
+#include <Widgets/ArtGen/Sets/ArtGenSet.h>
+#include <Widgets/ArtGen/Sets/ArtGenSetPanel.h>
 #include <Widgets/EditorLayout/EditorControls.h>
 #include <Widgets/EditorLayout/EditorSettings.h>
 #include <Widgets/Icons/IconsLucide.h>
@@ -30,8 +32,6 @@ namespace BECore {
         constexpr float kSelectedBorder = 3.0f;
         constexpr float kDefaultWidth = 520.0f;
         constexpr float kDefaultHeight = 700.0f;
-        // Squares behind a thumbnail, so a transparent background (a cut-out sprite) shows as transparent
-        constexpr float kCheckerCell = 10.0f;
         // Seconds a started bridge gets to make its first poll before the panel says it did not come
         constexpr double kBridgeStartSeconds = 15.0;
         constexpr double kBytesPerGigabyte = 1e9;
@@ -44,6 +44,7 @@ namespace BECore {
         constexpr float kWaveformHeight = 40.0f;
         constexpr size_t kWaveformBuckets = 110;
         constexpr int32_t kPreviewRow = -2;
+        constexpr int32_t kReviewRow = -3;  // the sound of the Review tab
         constexpr float kFieldWidth = 140.0f;
         constexpr float kMinTrimDb = -90.0f;
         constexpr float kMinPeakDb = -24.0f;
@@ -71,17 +72,6 @@ namespace BECore {
             }
         }
 
-        void DrawChecker(ImDrawList* drawList, ImVec2 origin, float size, ImU32 light, ImU32 dark) {
-            drawList->AddRectFilled(origin, ImVec2(origin.x + size, origin.y + size), light);
-            const int cells = static_cast<int>(size / kCheckerCell);
-            for (int y = 0; y < cells; ++y) {
-                for (int x = (y % 2); x < cells; x += 2) {
-                    const ImVec2 min(origin.x + static_cast<float>(x) * kCheckerCell, origin.y + static_cast<float>(y) * kCheckerCell);
-                    drawList->AddRectFilled(min, ImVec2(min.x + kCheckerCell, min.y + kCheckerCell), dark);
-                }
-            }
-        }
-
         /// A JSON value as the form shows it: a string without quotes, anything else as JSON
         void FormatJsonValue(const Json& value, char* out, size_t size) {
             if (value.is_string()) {
@@ -98,23 +88,10 @@ namespace BECore {
             }
         }
 
-        /// A sprite name from the subject: "White Knight!" -> "white_knight"; the user edits it before Accept
-        void SpriteNameFromSubject(const char* subject, char* out, size_t size) {
-            size_t length = 0;
-            bool underscore = false;
-            for (const char* c = subject; *c != '\0' && length + 1 < size; ++c) {
-                const char lower = (*c >= 'A' && *c <= 'Z') ? static_cast<char>(*c - 'A' + 'a') : *c;
-                if ((lower >= 'a' && lower <= 'z') || (lower >= '0' && lower <= '9')) {
-                    if (underscore && length > 0 && length + 2 < size) {
-                        out[length++] = '_';
-                    }
-                    out[length++] = lower;
-                    underscore = false;
-                } else {
-                    underscore = true;
-                }
-            }
-            out[length] = '\0';
+        /// The Sprite / Name field filled from the subject of the run ("White Knight!" -> "white_knight"); the user edits it before Accept
+        void FillNameFromSubject(const String& subject, char* out, size_t size) {
+            const String name = ArtGenNameFromSubject(StringView(subject));
+            std::snprintf(out, size, "%s", name.c_str());
         }
 
     }  // namespace
@@ -152,20 +129,43 @@ namespace BECore {
 
     void ArtGenWidget::Update() {
         if (!_open) {
+            ReleaseReview();
             return;
         }
         ImGui::SetNextWindowSize(ImVec2(kDefaultWidth, kDefaultHeight), ImGuiCond_FirstUseEver);
         if (!ImGui::Begin(ICON_LC_WAND_SPARKLES " Generate###Generate", &_open)) {
             ImGui::End();
+            ReleaseReview();
             return;
         }
+        RefreshPlaying();
         auto& session = ArtGenSession::GetInstance();
         DrawServiceLine(session);
         DrawSetup(session);
         ImGui::Separator();
         DrawForm(session);
         ImGui::Separator();
-        DrawRun(session);
+        if (ImGui::BeginTabBar("##ArtGenTabs")) {
+            if (ImGui::BeginTabItem(ICON_LC_IMAGE " Generate")) {
+                DrawRun(session);
+                ImGui::EndTabItem();
+            }
+            if (ImGui::BeginTabItem(ICON_LC_LIST_CHECKS " Set")) {
+                const ArtGenSetPanelForm form{_form, _count, _randomSeed ? Optional<int64_t>() : Optional<int64_t>(_seed)};
+                _setPanel.DrawQueue(session, form);
+                ImGui::EndTabItem();
+            }
+            const bool reviewRequested = _setPanel.TakeReviewRequest();
+            if (ImGui::BeginTabItem(ICON_LC_EYE " Review", nullptr, reviewRequested ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None)) {
+                const auto play = [this](const AudioClip& clip) { PlaySound(clip, kReviewRow); };
+                const auto stop = [this] { StopSound(); };
+                _setPanel.DrawReview(session, ArtGenSetPanelSound{play, stop, _playingRow == kReviewRow});
+                ImGui::EndTabItem();
+            } else {
+                ReleaseReview();
+            }
+            ImGui::EndTabBar();
+        }
         ImGui::End();
     }
 
@@ -705,6 +705,20 @@ namespace BECore {
         _playingRow = row;
     }
 
+    void ArtGenWidget::RefreshPlaying() {
+        if (_playing.IsValid() && !CoreManager::GetAudio().IsPlaying(_playing)) {
+            _playing = AudioHandle{};
+            _playingRow = -1;
+        }
+    }
+
+    void ArtGenWidget::ReleaseReview() {
+        if (_playingRow == kReviewRow) {
+            StopSound();
+        }
+        _setPanel.DropThumbnails();
+    }
+
     void ArtGenWidget::StopSound() {
         if (_playing.IsValid()) {
             CoreManager::GetAudio().Stop(_playing);
@@ -739,10 +753,7 @@ namespace BECore {
                 row.measured = true;
             }
         }
-        if (_playing.IsValid() && !CoreManager::GetAudio().IsPlaying(_playing)) {
-            _playing = AudioHandle{};
-            _playingRow = -1;
-        }
+        RefreshPlaying();
     }
 
     void ArtGenWidget::DropSounds() {
@@ -787,7 +798,7 @@ namespace BECore {
                 }
                 _selectedSeed = variant.seed;
                 if (_spriteName[0] == '\0') {
-                    SpriteNameFromSubject(run.subject.c_str(), _spriteName, sizeof(_spriteName));
+                    FillNameFromSubject(run.subject, _spriteName, sizeof(_spriteName));
                 }
             }
             ItemTooltip("Click to pick it for Accept");
@@ -1039,7 +1050,7 @@ namespace BECore {
                 }
                 _selectedSeed = variant.seed;
                 if (_spriteName[0] == '\0') {
-                    SpriteNameFromSubject(run.subject.c_str(), _spriteName, sizeof(_spriteName));
+                    FillNameFromSubject(run.subject, _spriteName, sizeof(_spriteName));
                 }
             }
             ImDrawList* drawList = ImGui::GetWindowDrawList();
@@ -1051,7 +1062,7 @@ namespace BECore {
                 drawList->AddText(ImVec2(origin.x + (kThumbnailSize - iconSize.x) * 0.5f, origin.y + (kThumbnailSize - iconSize.y) * 0.5f), ImGui::GetColorU32(palette.accent), ICON_LC_AUDIO_LINES);
             } else if (texture != nullptr && texture->GetState() == ResourceState::Loaded) {
                 const auto id = static_cast<ImTextureID>(reinterpret_cast<std::uintptr_t>(texture->GetNativeHandle()));
-                DrawChecker(drawList, origin, kThumbnailSize, ImGui::GetColorU32(palette.panelBg), ImGui::GetColorU32(palette.frameBg));
+                DrawArtGenChecker(drawList, origin, kThumbnailSize, ImGui::GetColorU32(palette.panelBg), ImGui::GetColorU32(palette.frameBg));
                 drawList->AddImage(id, origin, corner);
             } else {
                 drawList->AddRectFilled(origin, corner, ImGui::GetColorU32(palette.frameBg));
