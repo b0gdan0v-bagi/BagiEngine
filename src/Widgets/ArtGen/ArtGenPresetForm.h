@@ -26,6 +26,9 @@ namespace BECore {
         [[nodiscard]] const ArtGenWorkflowInput* FindInput(StringView input) const;
         /// The workflow takes `size` (it names both `width` and `height`)
         [[nodiscard]] bool HasSize() const;
+        /// The workflow runs a reference picture (it has the input `reference_image`): a variant the service reaches through a map of its base,
+        /// so a preset names the base and the workflow combo can leave the variant out
+        [[nodiscard]] bool IsReferenceVariant() const;
     };
 
     /// A style preset the service reported: the game's file, an engine starter (`source` "engine"), or a broken file with its error. `data`
@@ -43,11 +46,11 @@ namespace BECore {
     [[nodiscard]] bool IsArtGenServiceInput(StringView input);
 
     /// A preset as the text of its file: the keys in the order of the docs (preset, title, workflow, prompt, negative, size, params, accept,
-    /// then any other), two-space indented, a newline at the end
+    /// then `reference`, then any other), two-space indented, a newline at the end
     [[nodiscard]] String FormatArtGenPresetFile(const Json& preset);
 
     /// Checks the shape the C++ side owns before a save: an object with `preset` 1, `workflow` and `prompt` text, `size` [w, h] of positive
-    /// integers, `params` an object, `accept` image settings in range. Everything else (does the workflow have the input) is the service's to say
+    /// integers, `params` an object, `accept` image settings in range, `reference` the shape of `ReadArtGenReference`. Everything else (does the workflow have the input) is the service's to say
     [[nodiscard]] std::expected<void, String> CheckArtGenPresetShape(const Json& preset);
 
     /**
