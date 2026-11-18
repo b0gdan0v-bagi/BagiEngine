@@ -6,6 +6,7 @@ The art generation service on the command line (tools/artgen/CLAUDE.md). Standar
     python3 tools/artgen/artgen.py presets  --game-root <game repository> [--json]
     python3 tools/artgen/artgen.py generate --game-root <game repository> --preset <name or file> --subject "white knight"
                                             [--count 4] [--seed N] [--out <folder>] [--name <stem>] [--json]
+                                            [--reference-image <path> [--reference-mode init] [--reference-weight 0.4]]
 
 `status` exits 0 when the generator is ready, 1 when it is installed but not running or not ready, 2 when it is not
 installed (the editor offers setup then: entry `artgen-setup-pipelines`). `generate` writes `<stem>_<seed>.png` and its
@@ -29,6 +30,7 @@ EXIT_OK = 0
 EXIT_FAILED = 1
 EXIT_NOT_INSTALLED = 2
 EXIT_CANCELLED = 130
+DEFAULT_REFERENCE_MODE = "init"
 
 
 def cmd_status(args):
@@ -65,10 +67,22 @@ def load_named_preset(game_root, preset):
     return artgen_preset.find_preset(preset, game_root)
 
 
+def reference_of_args(args):
+    """The request's reference from the flags: the image alone means `init`, the weight is left to the mode's default."""
+    if args.reference_image is None:
+        if args.reference_mode or args.reference_weight is not None:
+            raise artgen_service.RequestError("--reference-mode and --reference-weight need --reference-image")
+        return None
+    reference = {"mode": args.reference_mode or DEFAULT_REFERENCE_MODE, "image": args.reference_image}
+    if args.reference_weight is not None:
+        reference["weight"] = args.reference_weight
+    return reference
+
+
 def cmd_generate(args):
     preset = load_named_preset(args.game_root, args.preset)
     out_dir = Path(args.out) if args.out else Path(args.game_root) / "artgen" / "out"
-    request = artgen_service.Request(preset, args.subject, args.count, args.seed, out_dir, args.name)
+    request = artgen_service.Request(preset, args.subject, args.count, args.seed, out_dir, args.name, reference_of_args(args), Path(args.game_root))
     cancel = threading.Event()
 
     def progress(event):
@@ -111,6 +125,9 @@ def main(argv=None):
             p.add_argument("--seed", type=int)
             p.add_argument("--out")
             p.add_argument("--name", default="")
+            p.add_argument("--reference-image", help="a picture to start from: under the game root, or an absolute path")
+            p.add_argument("--reference-mode", help=f"how the picture is used (default {DEFAULT_REFERENCE_MODE})")
+            p.add_argument("--reference-weight", type=float, help="how strongly the picture holds, above 0 and below 1 (higher keeps more)")
     args = parser.parse_args(argv)
     try:
         return {"status": cmd_status, "presets": cmd_presets, "generate": cmd_generate}[args.command](args)

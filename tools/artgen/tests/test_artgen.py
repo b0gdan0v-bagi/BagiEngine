@@ -23,6 +23,7 @@ sys.path.insert(0, str(ARTGEN_DIR))
 import artgen  # noqa: E402
 import artgen_generators  # noqa: E402
 import artgen_preset  # noqa: E402
+import artgen_reference  # noqa: E402
 import artgen_service  # noqa: E402
 import comfyui_check  # noqa: E402
 from artgen_generators import (  # noqa: E402
@@ -259,6 +260,143 @@ def test_cancel_keeps_the_images_already_written(game, tmp_path):
 def test_a_failure_of_the_generator_passes_through(game, tmp_path):
     with pytest.raises(GenerationError, match="boom"):
         artgen_service.generate(artgen_service.Request(preset_of(game), "x", 1, 1, tmp_path), FakeGenerator(fail="boom"))
+
+
+# --- a reference picture
+
+REFERENCE_PNG = tiny_png(4, 4, (10, 200, 10))
+REFERENCE = {"mode": "init", "image": "assets/artgen/rook.png", "weight": 0.25}
+
+
+@pytest.fixture
+def picture(game):
+    path = game / "assets" / "artgen" / "rook.png"
+    path.parent.mkdir(parents=True)
+    path.write_bytes(REFERENCE_PNG)
+    return path
+
+
+def reference_request(game, out, reference=REFERENCE, preset="wood"):
+    return artgen_service.Request(preset_of(game, preset), "rook", 2, 40, out, reference=reference, game_root=game)
+
+
+def test_a_request_with_a_reference_uploads_the_picture_once_and_runs_the_mapped_workflow(game, picture, tmp_path):
+    generator = FakeGenerator()
+    results = artgen_service.generate(reference_request(game, tmp_path / "o"), generator)
+    digest = hashlib.sha256(REFERENCE_PNG).hexdigest()
+    name = f"artgen_ref_{digest[:16]}.png"
+    assert generator.uploads == [(name, REFERENCE_PNG)], "once for the two images"
+    for graph in generator.graphs:
+        assert graph["20"]["inputs"]["image"] == name and graph["3"]["inputs"]["denoise"] == 0.75
+    provenance = json.loads(results[0].provenance_path.read_text(encoding="utf-8"))
+    assert provenance["reference"] == {"mode": "init", "image": "assets/artgen/rook.png", "hash": digest, "weight": 0.25, "workflow": "sdxl_img2img"}
+    assert provenance["workflow"] == "sdxl_img2img" and provenance["workflowHash"] == artgen_preset.load_workflow("sdxl_img2img").hash
+    assert provenance["models"]["ckpt_name"] == ["sd_xl_base_1.0.safetensors"]
+
+
+def test_a_run_without_a_reference_has_no_reference_block(game, tmp_path):
+    results = artgen_service.generate(artgen_service.Request(preset_of(game), "x", 1, 1, tmp_path), FakeGenerator())
+    assert "reference" not in results[0].provenance
+    assert results[0].provenance["workflow"] == "sdxl_basic"
+
+
+def test_the_weight_defaults_and_is_reported_as_used(game, picture, tmp_path):
+    results = artgen_service.generate(reference_request(game, tmp_path, {"mode": "init", "image": "assets/artgen/rook.png"}), FakeGenerator())
+    assert results[0].provenance["reference"]["weight"] == 0.4
+
+
+def test_two_requests_of_the_same_picture_upload_under_one_name(game, picture, tmp_path):
+    generator = FakeGenerator()
+    (game / "assets" / "artgen" / "copy.png").write_bytes(REFERENCE_PNG)
+    artgen_service.generate(reference_request(game, tmp_path / "a"), generator)
+    artgen_service.generate(reference_request(game, tmp_path / "b", {**REFERENCE, "image": "assets/artgen/copy.png"}), generator)
+    assert len(generator.uploads) == 2 and len({name for name, _ in generator.uploads}) == 1
+
+
+def test_a_preset_with_its_own_reference_runs_with_it_and_a_requests_replaces_it(game, picture, tmp_path):
+    write_preset(game, "keeps", {**PRESET, "reference": {"mode": "init", "image": "assets/artgen/rook.png", "weight": 0.7}})
+    generator = FakeGenerator()
+    own = artgen_service.generate(artgen_service.Request(preset_of(game, "keeps"), "x", 1, 1, tmp_path / "a", game_root=game), generator)
+    assert own[0].provenance["reference"]["weight"] == 0.7 and generator.graphs[0]["3"]["inputs"]["denoise"] == pytest.approx(0.3)
+    replacing = {"mode": "init", "image": "assets/artgen/rook.png"}
+    request = artgen_service.Request(preset_of(game, "keeps"), "x", 1, 1, tmp_path / "b", reference=replacing, game_root=game)
+    assert artgen_service.generate(request, generator)[0].provenance["reference"]["weight"] == 0.4, "no key-by-key merge"
+
+
+def oversized_picture(game):
+    path = game / "assets" / "big.png"
+    with path.open("wb") as stream:
+        stream.write(REFERENCE_PNG)
+        stream.truncate(artgen_reference.MAX_REFERENCE_BYTES + 1)
+    return "assets/big.png"
+
+
+@pytest.mark.parametrize("make, error, message", [
+    (lambda game: {**REFERENCE, "image": "../x.png"}, artgen_service.RequestError, "'../x.png'"),
+    (lambda game: {**REFERENCE, "image": "assets/artgen"}, artgen_service.RequestError, "not a file"),
+    (lambda game: {**REFERENCE, "image": "assets/text.png"}, artgen_service.RequestError, "not a PNG, JPEG or WebP"),
+    (lambda game: {**REFERENCE, "image": oversized_picture(game)}, artgen_service.RequestError, "the limit is"),
+    (lambda game: {**REFERENCE, "mode": "warp"}, artgen_preset.PresetError, "reference.mode"),
+    (lambda game: {**REFERENCE, "weight": 0}, artgen_preset.PresetError, "reference.weight"),
+    (lambda game: {**REFERENCE, "weight": 1}, artgen_preset.PresetError, "reference.weight"),
+    (lambda game: ["init"], artgen_preset.PresetError, "must be an object"),
+])
+def test_a_bad_reference_is_refused_before_anything_is_touched(game, picture, tmp_path, make, error, message):
+    (game / "assets" / "text.png").write_text("not a picture", encoding="utf-8")
+    generator = FakeGenerator()
+    out = tmp_path / "o"
+    with pytest.raises(error, match=message):
+        artgen_service.generate(reference_request(game, out, make(game)), generator)
+    assert generator.graphs == [] and generator.uploads == [] and not out.exists()
+
+
+def test_a_workflow_that_cannot_run_the_mode_is_refused_naming_it(game, picture, tmp_path):
+    source = artgen_preset.ENGINE_WORKFLOWS
+    inputs = json.loads((source / "sdxl_basic.inputs.json").read_text(encoding="utf-8"))
+    del inputs["reference"]
+    folder = game / "artgen" / "workflows"
+    folder.mkdir()
+    (folder / "plain.json").write_text((source / "sdxl_basic.json").read_text(encoding="utf-8"), encoding="utf-8")
+    (folder / "plain.inputs.json").write_text(json.dumps(inputs), encoding="utf-8")
+    write_preset(game, "plain", {**PRESET, "workflow": "plain"})
+    generator = FakeGenerator()
+    with pytest.raises(artgen_preset.PresetError, match="workflow 'plain' cannot run the reference mode 'init'"):
+        artgen_service.generate(reference_request(game, tmp_path / "o", preset="plain"), generator)
+    assert generator.uploads == [] and not (tmp_path / "o").exists()
+
+
+def test_a_sound_takes_no_reference(game, picture, tmp_path):
+    write_preset(game, "knock", AUDIO)
+    generator = FakeGenerator()
+    with pytest.raises(artgen_preset.PresetError, match="no reference"):
+        artgen_service.generate(reference_request(game, tmp_path / "o", preset="knock"), generator)
+    assert generator.graphs == [] and generator.uploads == [] and not (tmp_path / "o").exists()
+
+
+def test_a_reference_workflow_with_no_reference_is_refused_before_anything_is_written(game, tmp_path):
+    write_preset(game, "direct", {**PRESET, "workflow": "sdxl_img2img"})
+    out = tmp_path / "o"
+    with pytest.raises(artgen_service.RequestError, match="needs a reference picture"):
+        artgen_service.generate(artgen_service.Request(preset_of(game, "direct"), "x", 1, 1, out, game_root=game), FakeGenerator())
+    assert not out.exists()
+
+
+def test_a_relative_picture_without_a_game_root_is_refused(game, picture, tmp_path):
+    request = reference_request(game, tmp_path / "o")
+    request.game_root = None
+    with pytest.raises(artgen_service.RequestError, match="no game root"):
+        artgen_service.generate(request, FakeGenerator())
+
+
+def test_a_failed_upload_stops_the_run_before_any_image(game, picture, tmp_path):
+    class Refusing(FakeGenerator):
+        def upload_image(self, data, name):
+            raise GenerationError("upload refused")
+
+    generator = Refusing()
+    with pytest.raises(GenerationError, match="upload refused"):
+        artgen_service.generate(reference_request(game, tmp_path / "o"), generator)
+    assert generator.graphs == [] and not (tmp_path / "o").exists()
 
 
 # --- the ComfyUI adapter against a fake ComfyUI
@@ -529,6 +667,22 @@ def test_cli_generate_with_the_fake_generator(game, tmp_path, capsys):
     lines = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
     assert lines[-1]["kind"] == "done" and [i["seed"] for i in lines[-1]["images"]] == [3, 4]
     assert (tmp_path / "o" / "pawn_4.png").is_file()
+
+
+def test_cli_generate_with_a_reference_image_alone_means_init(game, picture, tmp_path, capsys):
+    common = ["generate", "--generator", "fake", "--game-root", str(game), "--preset", "wood", "--subject", "rook", "--count", "1", "--seed", "3",
+              "--out", str(tmp_path / "o")]
+    provenance_path = tmp_path / "o" / "rook_3.artgen.json"
+    assert artgen.main(common + ["--reference-image", "assets/artgen/rook.png"]) == artgen.EXIT_OK
+    reference = json.loads(provenance_path.read_text(encoding="utf-8"))["reference"]
+    assert reference["mode"] == "init" and reference["weight"] == 0.4
+    assert artgen.main(common + ["--reference-image", str(picture), "--reference-weight", "0.6"]) == artgen.EXIT_OK
+    assert json.loads(provenance_path.read_text(encoding="utf-8"))["reference"]["weight"] == 0.6
+    capsys.readouterr()
+    assert artgen.main(common + ["--reference-image", "../x.png"]) == artgen.EXIT_FAILED
+    assert "'../x.png'" in capsys.readouterr().err
+    assert artgen.main(common + ["--reference-weight", "0.5"]) == artgen.EXIT_FAILED
+    assert "need --reference-image" in capsys.readouterr().err
 
 
 def test_cli_presets_and_errors(game, capsys):

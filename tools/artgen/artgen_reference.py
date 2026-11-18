@@ -7,11 +7,24 @@ preset names the plain workflow and never knows which variant serves the referen
 This module and `artgen_preset` use each other only inside functions, so either can be imported first.
 """
 
+import hashlib
 from dataclasses import dataclass
+from pathlib import Path
 
 import artgen_preset
 
 REFERENCE_KEYS = ("mode", "image", "weight")
+MAX_REFERENCE_BYTES = 16 * 1024 * 1024
+# The first bytes that make a file a picture ComfyUI's LoadImage reads, by what it is and not by its name: (offset, bytes, extension)
+IMAGE_MAGIC = (
+    (0, b"\x89PNG\r\n\x1a\n", ".png"),
+    (0, b"\xff\xd8\xff", ".jpg"),
+)
+WEBP_RIFF = b"RIFF"
+WEBP_TAG = b"WEBP"
+WEBP_TAG_OFFSET = 8
+UPLOAD_NAME_PREFIX = "artgen_ref_"
+UPLOAD_HASH_CHARS = 16
 
 
 @dataclass(frozen=True)
@@ -37,6 +50,24 @@ class ReferenceUse:
     weight: float
     image_name: str
     workflow: object
+    image: str = ""  # the path as the request asked it, for the provenance
+    file_hash: str = ""  # sha256 of the picture's bytes
+
+
+class ReferenceImageError(Exception):
+    """A reference picture that cannot be used; the message names the path and the reason."""
+
+
+@dataclass(frozen=True)
+class ResolvedImage:
+    data: bytes
+    sha256: str
+    extension: str
+
+    @property
+    def upload_name(self):
+        """Named by content, so one picture is one file in ComfyUI's input folder however often it is used."""
+        return f"{UPLOAD_NAME_PREFIX}{self.sha256[:UPLOAD_HASH_CHARS]}{self.extension}"
 
 
 def _is_number(value):
@@ -74,6 +105,55 @@ def reference_of(preset, request_reference):
     if reference is not None and preset.kind != artgen_preset.KIND_IMAGE:
         raise artgen_preset.PresetError(f"the preset '{preset.name}' makes a sound, which has no reference")
     return reference
+
+
+def _image_extension(head):
+    for offset, magic, extension in IMAGE_MAGIC:
+        if head[offset:offset + len(magic)] == magic:
+            return extension
+    if head[:len(WEBP_RIFF)] == WEBP_RIFF and head[WEBP_TAG_OFFSET:WEBP_TAG_OFFSET + len(WEBP_TAG)] == WEBP_TAG:
+        return ".webp"
+    return None
+
+
+def _image_path(game_root, image):
+    """The file `image` names. A relative path is read from the game root and may never leave it: a request of the control API
+    chooses it, and what it names is sent to another program. The `..` segments are refused by name, a link out of the root and
+    a drive-relative path by where they end up."""
+    candidate = Path(image)
+    if candidate.is_absolute():
+        return candidate
+    if not game_root:
+        raise ReferenceImageError(f"the reference image '{image}' is relative and there is no game root to read it from")
+    if candidate.drive or candidate.root or "\\" in image or "\0" in image or ".." in image.split("/"):
+        raise ReferenceImageError(f"the reference image '{image}' must be a '/'-separated path under the game root, without '..', or an absolute path")
+    root = Path(game_root).resolve()
+    path = (root / candidate).resolve()
+    if not path.is_relative_to(root):
+        raise ReferenceImageError(f"the reference image '{image}' is outside the game root")
+    return path
+
+
+def resolve_image(game_root, image):
+    """Reads the picture of a reference: its bytes, their sha256 and the extension its first bytes give (PNG, JPEG or WebP, whatever the
+    name says). A refusal names the path and the reason (a ReferenceImageError) and reads no more than it needs to say it."""
+    path = _image_path(game_root, image)
+    try:
+        if not path.is_file():
+            raise ReferenceImageError(f"the reference image '{image}' is not a file")
+        size = path.stat().st_size
+        if size > MAX_REFERENCE_BYTES:
+            raise ReferenceImageError(f"the reference image '{image}' is {size} bytes; the limit is {MAX_REFERENCE_BYTES}")
+        with path.open("rb") as stream:
+            data = stream.read(MAX_REFERENCE_BYTES + 1)
+    except OSError as error:
+        raise ReferenceImageError(f"the reference image '{image}' cannot be read: {error}") from error
+    if len(data) > MAX_REFERENCE_BYTES:
+        raise ReferenceImageError(f"the reference image '{image}' is over {MAX_REFERENCE_BYTES} bytes")
+    extension = _image_extension(data)
+    if extension is None:
+        raise ReferenceImageError(f"the reference image '{image}' is not a PNG, JPEG or WebP picture")
+    return ResolvedImage(data, hashlib.sha256(data).hexdigest(), extension)
 
 
 def modes_of(workflow):

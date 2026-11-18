@@ -2,6 +2,7 @@
 a preset."""
 
 import copy
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -13,6 +14,7 @@ sys.path.insert(0, str(ARTGEN_DIR))
 
 import artgen_preset  # noqa: E402
 import artgen_reference  # noqa: E402
+from artgen_generators import tiny_png  # noqa: E402
 from artgen_reference import ReferenceUse  # noqa: E402
 
 PRESET = {"preset": 1, "title": "Test", "workflow": "sdxl_basic", "prompt": "a {subject}", "size": [512, 768], "params": {"steps": 12}}
@@ -287,3 +289,77 @@ def test_a_game_workflow_with_its_own_map_runs_through_the_mapped_one(game):
     reference = use_of(preset, game_root=game)
     assert reference.workflow.name == "variant" and reference.workflow.source == "game"
     assert artgen_preset.build_graph(preset, "x", 1, reference=reference)["3"]["inputs"]["steps"] == 99
+
+
+# --- the picture
+
+PNG = tiny_png(4, 4, (200, 10, 10))
+JPEG = b"\xff\xd8\xff\xe0" + b"\0" * 16
+WEBP = b"RIFF\x24\0\0\0WEBPVP8 " + b"\0" * 16
+
+
+def put(game, relative, data):
+    path = game / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+    return path
+
+
+def test_a_picture_inside_the_game_root_is_read_with_its_hash_and_a_name_by_content(game):
+    put(game, "assets/artgen/rook.png", PNG)
+    image = artgen_reference.resolve_image(game, "assets/artgen/rook.png")
+    assert image.data == PNG and image.sha256 == hashlib.sha256(PNG).hexdigest() and image.extension == ".png"
+    assert image.upload_name == f"artgen_ref_{image.sha256[:16]}.png"
+    put(game, "other/copy.png", PNG)
+    assert artgen_reference.resolve_image(game, "other/copy.png").upload_name == image.upload_name
+
+
+@pytest.mark.parametrize("data, extension", [(PNG, ".png"), (JPEG, ".jpg"), (WEBP, ".webp")])
+def test_the_extension_comes_from_the_first_bytes_not_from_the_name(game, data, extension):
+    put(game, "assets/x.dat", data)
+    assert artgen_reference.resolve_image(game, "assets/x.dat").extension == extension
+
+
+def test_an_absolute_path_of_any_picture_is_taken(game, tmp_path):
+    path = put(tmp_path / "elsewhere", "pic.png", PNG)
+    assert artgen_reference.resolve_image(game, str(path)).data == PNG
+    assert artgen_reference.resolve_image(None, str(path)).data == PNG, "an absolute path needs no game root"
+
+
+def test_a_relative_path_needs_the_game_root(game):
+    with pytest.raises(artgen_reference.ReferenceImageError, match="no game root"):
+        artgen_reference.resolve_image(None, "assets/x.png")
+
+
+@pytest.mark.parametrize("image", ["../x.png", "a/../x.png", "assets/..", "a\\x.png", "C:x.png", "a/x\0.png"])
+def test_a_relative_path_cannot_leave_the_game_root(game, tmp_path, image):
+    put(tmp_path, "x.png", PNG)
+    put(game, "a/x.png", PNG)
+    with pytest.raises(artgen_reference.ReferenceImageError, match="must be a '/'-separated path|outside|not a file"):
+        artgen_reference.resolve_image(game, image)
+
+
+def test_a_link_out_of_the_game_root_is_refused(game, tmp_path):
+    outside = put(tmp_path / "outside", "secret.png", PNG)
+    try:
+        (game / "assets").mkdir()
+        (game / "assets" / "link.png").symlink_to(outside)
+    except (OSError, NotImplementedError):
+        pytest.skip("no symlinks here")
+    with pytest.raises(artgen_reference.ReferenceImageError, match="outside the game root"):
+        artgen_reference.resolve_image(game, "assets/link.png")
+
+
+@pytest.mark.parametrize("make, message", [
+    (lambda game: (game / "assets").mkdir() or "assets", "not a file"),
+    (lambda game: "missing.png", "not a file"),
+    (lambda game: put(game, "text.png", b"this is not a picture") and "text.png", "not a PNG, JPEG or WebP"),
+    (lambda game: put(game, "empty.png", b"") and "empty.png", "not a PNG, JPEG or WebP"),
+    (lambda game: put(game, "riff.png", b"RIFF\0\0\0\0WAVEfmt ") and "riff.png", "not a PNG, JPEG or WebP"),
+    (lambda game: put(game, "big.png", PNG + b"\0" * artgen_reference.MAX_REFERENCE_BYTES) and "big.png", "the limit is"),
+])
+def test_what_is_no_small_picture_is_refused_naming_the_path(game, make, message):
+    image = make(game)
+    with pytest.raises(artgen_reference.ReferenceImageError, match=message) as refused:
+        artgen_reference.resolve_image(game, image)
+    assert f"'{image}'" in str(refused.value)

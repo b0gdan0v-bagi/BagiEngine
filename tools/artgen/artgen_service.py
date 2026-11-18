@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import artgen_preset
+import artgen_reference
 from artgen_generators import GeneratorState, flac_info
 
 PROVENANCE_FORMAT = 1
@@ -33,6 +34,8 @@ class Request:
     seed: int | None = None  # None: a random one; image i takes seed + i
     out_dir: Path = Path(".")
     name: str = ""  # the file name stem; the subject's slug by default
+    reference: dict | None = None  # {"mode", "image", "weight"?}: replaces the preset's own whole
+    game_root: Path | None = None  # what a relative reference image is read from
 
 
 @dataclass
@@ -55,8 +58,27 @@ def check_request(request):
         raise RequestError("seed must be a non-negative integer below 2**63")
 
 
-def provenance_of(request, seed, graph, generator_info, source_name, now=None, data=b""):
+def prepare_reference(request):
+    """The reference of a request as (reference, picture, workflow that runs it), or (None, None, None). Everything that can be wrong
+    with it is found here, from the files only, before the generator is asked anything and before anything is written."""
+    reference = artgen_reference.reference_of(request.preset, request.reference)
+    workflow = request.preset.workflow
+    if reference is None:
+        if artgen_preset.REFERENCE_IMAGE_INPUT in workflow.inputs:
+            raise RequestError(f"the workflow '{workflow.name}' needs a reference picture and the request has none")
+        return None, None, None
+    try:
+        resolved = artgen_reference.resolve_image(request.game_root, reference["image"])
+    except artgen_reference.ReferenceImageError as error:
+        raise RequestError(str(error)) from error
+    return reference, resolved, artgen_reference.effective_workflow(workflow, reference["mode"], request.game_root)
+
+
+def provenance_of(request, seed, graph, generator_info, source_name, now=None, data=b"", reference=None):
+    """`reference` is the ReferenceUse of the run: the workflow that ran is then the mapped one, so the record names it and a
+    variant can be made again alone."""
     preset = request.preset
+    workflow = reference.workflow if reference else preset.workflow
     record = {
         "provenance": PROVENANCE_FORMAT,
         "preset": preset.name,
@@ -71,12 +93,20 @@ def provenance_of(request, seed, graph, generator_info, source_name, now=None, d
         "size": [preset.width, preset.height] if preset.width else None,
         "params": preset.params,
         "models": artgen_preset.models_of(graph),
-        "workflow": preset.workflow.name,
-        "workflowHash": preset.workflow.hash,
+        "workflow": workflow.name,
+        "workflowHash": workflow.hash,
         "generator": generator_info,
         "generatorFile": source_name,
         "date": (now or datetime.now(timezone.utc)).isoformat(timespec="seconds"),
     }
+    if reference:
+        record["reference"] = {
+            "mode": reference.mode,
+            "image": reference.image,
+            "hash": reference.file_hash,
+            "weight": reference.weight,
+            "workflow": workflow.name,
+        }
     if preset.kind == artgen_preset.KIND_AUDIO:
         # The asked length and what the file holds (FLAC: read from its STREAMINFO)
         record["duration"] = preset.duration
@@ -94,6 +124,7 @@ def generate(request, generator, on_progress=None, cancel=None, rng=random):
     results; `Cancelled` and `GenerationError` of the generator pass through after the images done so far are written.
     """
     check_request(request)
+    reference, resolved, workflow = prepare_reference(request)
     status = generator.status()
     if status.state != GeneratorState.READY:
         raise RequestError(f"the generator is {status.state}: {status.reason}")
@@ -101,6 +132,13 @@ def generate(request, generator, on_progress=None, cancel=None, rng=random):
     if kinds is not None and request.preset.kind not in kinds:
         raise RequestError(f"the generator makes no {request.preset.kind}: its models are missing (artgen_setup.py install --{request.preset.kind})")
     first_seed = request.seed if request.seed is not None else rng.randrange(SEED_RANGE)
+    use = None
+    if reference:
+        # Once per request, whatever the count: the name is the picture's hash, so the same picture is one file in the input folder
+        uploaded = generator.upload_image(resolved.data, resolved.upload_name)
+        use = artgen_reference.ReferenceUse(
+            reference["mode"], reference["weight"], uploaded, workflow, reference["image"], resolved.sha256
+        )
     out_dir = Path(request.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     stem = request.name or slug(request.subject)
@@ -108,7 +146,7 @@ def generate(request, generator, on_progress=None, cancel=None, rng=random):
     results = []
     for index in range(request.count):
         seed = first_seed + index
-        graph = artgen_preset.build_graph(request.preset, request.subject, seed, file_prefix=f"artgen_{stem}")
+        graph = artgen_preset.build_graph(request.preset, request.subject, seed, file_prefix=f"artgen_{stem}", reference=use)
 
         def step(value, steps, index=index, seed=seed):
             if on_progress:
@@ -120,7 +158,7 @@ def generate(request, generator, on_progress=None, cancel=None, rng=random):
         suffix = Path(image.name).suffix.lower() or default_suffix
         path = out_dir / f"{stem}_{seed}{suffix}"
         path.write_bytes(image.data)
-        provenance = provenance_of(request, seed, graph, info, image.name, data=image.data)
+        provenance = provenance_of(request, seed, graph, info, image.name, data=image.data, reference=use)
         provenance_path = path.with_name(path.stem + PROVENANCE_SUFFIX)
         provenance_path.write_text(json.dumps(provenance, indent=2) + "\n", encoding="utf-8")
         results.append(Result(path, provenance_path, seed, provenance))

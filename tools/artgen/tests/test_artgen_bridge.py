@@ -13,7 +13,7 @@ ARTGEN_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ARTGEN_DIR))
 
 import artgen_bridge  # noqa: E402
-from artgen_generators import FakeGenerator, GeneratorState  # noqa: E402
+from artgen_generators import FakeGenerator, GeneratorState, tiny_png  # noqa: E402
 
 WAIT_LIMIT_S = 20.0
 
@@ -40,7 +40,7 @@ class FakeEditor:
             self.polls.append(params)
             answer = {"gameRoot": self.game_root}
             if self.run and self.run["state"] == "Queued":
-                answer["request"] = {k: self.run[k] for k in ("id", "preset", "presetName", "subject", "count", "seed", "outDir", "name") if k in self.run}
+                answer["request"] = {k: self.run[k] for k in ("id", "preset", "presetName", "subject", "count", "seed", "outDir", "name", "reference") if k in self.run}
                 self.run["state"] = "Running"
             elif self.run and self.run["state"] == "Running" and self.cancel_requested:
                 answer["cancel"] = self.run["id"]
@@ -193,6 +193,42 @@ def test_a_bad_request_does_not_stop_the_next_one(game):
     editor.request("wood", "knight", count=1, outDir="..")
     run_until(bridge, editor, lambda: editor.run["state"] == "Failed")
     editor.request("wood", "knight", count=1, outDir="ok/job", name="job")
+    run_until(bridge, editor, lambda: editor.run["state"] == "Done")
+
+
+def test_a_request_with_a_reference_reads_the_picture_from_the_game_root(game):
+    picture = tiny_png(4, 4, (9, 9, 200))
+    (game / "assets").mkdir()
+    (game / "assets" / "rook.png").write_bytes(picture)
+    editor = FakeEditor(game)
+    generator = FakeGenerator()
+    bridge = artgen_bridge.Bridge(editor, generator, log=lambda *a: None)
+    bridge.tick()
+    editor.request("wood", "rook", count=1, seed=4, reference={"mode": "init", "image": "assets/rook.png", "weight": 0.3})
+    run_until(bridge, editor, lambda: editor.run["state"] not in ("Queued", "Running"))
+    assert editor.run["state"] == "Done", editor.run["error"]
+    assert [data for _, data in generator.uploads] == [picture]
+    assert generator.graphs[0]["3"]["inputs"]["denoise"] == pytest.approx(0.7)
+    provenance = json.loads(Path(editor.run["variants"][0]["provenance"]).read_text(encoding="utf-8"))
+    assert provenance["reference"]["image"] == "assets/rook.png" and provenance["reference"]["workflow"] == "sdxl_img2img"
+
+
+@pytest.mark.parametrize("reference, message", [
+    ({"mode": "init", "image": "../outside.png"}, "'../outside.png'"),
+    ({"mode": "init", "image": "assets/missing.png"}, "not a file"),
+    ({"mode": "warp", "image": "assets/rook.png"}, "reference.mode"),
+    ("assets/rook.png", "must be an object"),
+])
+def test_a_bad_reference_fails_the_run_with_the_reason_and_writes_nothing(game, reference, message):
+    editor = FakeEditor(game)
+    generator = FakeGenerator()
+    bridge = artgen_bridge.Bridge(editor, generator, log=lambda *a: None)
+    bridge.tick()
+    editor.request("wood", "rook", count=1, reference=reference)
+    run_until(bridge, editor, lambda: editor.run["state"] == "Failed")
+    assert message in editor.run["error"]
+    assert generator.graphs == [] and generator.uploads == [] and not (game / "artgen" / "out").exists()
+    editor.request("wood", "rook", count=1)
     run_until(bridge, editor, lambda: editor.run["state"] == "Done")
 
 
