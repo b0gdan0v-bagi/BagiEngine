@@ -13,6 +13,7 @@
 #include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/ArtGen/ArtGenLaunch.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
+#include <Widgets/ArtGen/ArtGenVerdict.h>
 #include <Widgets/ArtGen/Reference/ArtGenReference.h>
 #include <Widgets/ArtGen/Sets/ArtGenSet.h>
 #include <Widgets/ArtGen/Sets/ArtGenSetPanel.h>
@@ -1237,6 +1238,9 @@ namespace BECore {
             if (_selectedSeed == variant.seed) {
                 drawList->AddRect(origin, corner, ImGui::GetColorU32(palette.accent), 0.0f, 0, kSelectedBorder);
             }
+            if (!variant.IsAudio() && texture != nullptr && texture->GetState() == ResourceState::Loaded && i < _verdicts.size()) {
+                DrawArtGenVerdictMark(drawList, origin, kThumbnailSize, _verdicts[i]);
+            }
             if (IconButton(ICON_LC_DICES, "Use this seed for the next Generate (with another subject, a close picture)", "##seed")) {
                 _randomSeed = false;
                 _seed = variant.seed;
@@ -1275,6 +1279,8 @@ namespace BECore {
             // A sound has no picture: its slot stays empty and the grid draws a sound tile (playing it is the sound panel's)
             _thumbnails.push_back(variant.IsAudio() ? ResourceHandle<ITexture>() : resources.Load<ITexture>(StringView(variant.path.data(), variant.path.size())));
             _thumbnailPaths.push_back(variant.path);
+            // Read once with the thumbnail: the service's image report carries no verdict, its provenance file does
+            _verdicts.push_back(variant.IsAudio() ? ArtGenVerdict() : ReadArtGenVerdict(std::filesystem::path(variant.provenancePath.c_str())));
         }
     }
 
@@ -1288,6 +1294,7 @@ namespace BECore {
         }
         _thumbnails.clear();
         _thumbnailPaths.clear();
+        _verdicts.clear();
     }
 
 }  // namespace BECore
