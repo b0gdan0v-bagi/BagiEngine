@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+import artgen_checks
 import artgen_preset
 import artgen_reference
 from artgen_generators import GeneratorState, flac_info
@@ -20,6 +21,8 @@ PROVENANCE_SUFFIX = ".artgen.json"
 # ComfyUI takes a seed up to 2**64 - 1; 2**32 keeps the numbers short enough to read and type back.
 SEED_RANGE = 2**32
 MAX_COUNT = 16
+# What of a verdict the progress event carries (the metrics and the thresholds are in the provenance file)
+EVENT_CHECK_KEYS = ("passed", "failed", "error")
 
 
 class RequestError(Exception):
@@ -112,6 +115,11 @@ def provenance_of(request, seed, graph, generator_info, source_name, now=None, d
         record["duration"] = preset.duration
         info = flac_info(data)
         record["sampleRate"], record["channels"], record["seconds"] = info if info else (None, None, None)
+    elif preset.checks is not None:
+        # No alpha channel (an icon) gives no verdict and no key; a picture that cannot be read is a verdict with an error, never a failed run
+        verdict = artgen_checks.check_png(data, preset.checks)
+        if verdict is not None:
+            record["checks"] = verdict
     return record
 
 
@@ -120,7 +128,7 @@ def generate(request, generator, on_progress=None, cancel=None, rng=random):
 
     `on_progress(event)` gets dicts: {"kind": "step", "image": i, "count": n, "step": s, "steps": m, "seed": seed} while an
     image (or a sound) runs and {"kind": "image", "image": i, "count": n, "seed": seed, "path": str, "output": "image" | "audio"} when it
-    is written. Returns the
+    is written, with "checks": {"passed", "failed"} (or "error") when the variant has a verdict. Returns the
     results; `Cancelled` and `GenerationError` of the generator pass through after the images done so far are written.
     """
     check_request(request)
@@ -163,5 +171,8 @@ def generate(request, generator, on_progress=None, cancel=None, rng=random):
         provenance_path.write_text(json.dumps(provenance, indent=2) + "\n", encoding="utf-8")
         results.append(Result(path, provenance_path, seed, provenance))
         if on_progress:
-            on_progress({"kind": "image", "image": index, "count": request.count, "seed": seed, "path": str(path), "output": request.preset.kind})
+            event = {"kind": "image", "image": index, "count": request.count, "seed": seed, "path": str(path), "output": request.preset.kind}
+            if "checks" in provenance:
+                event["checks"] = {key: provenance["checks"][key] for key in EVENT_CHECK_KEYS if key in provenance["checks"]}
+            on_progress(event)
     return results

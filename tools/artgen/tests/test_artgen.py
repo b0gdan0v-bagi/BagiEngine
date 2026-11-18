@@ -21,14 +21,16 @@ ARTGEN_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ARTGEN_DIR))
 
 import artgen  # noqa: E402
+import artgen_checks  # noqa: E402
 import artgen_generators  # noqa: E402
 import artgen_preset  # noqa: E402
 import artgen_reference  # noqa: E402
 import artgen_service  # noqa: E402
 import comfyui_check  # noqa: E402
 from artgen_generators import (  # noqa: E402
-    Cancelled, ComfyUIGenerator, FakeGenerator, GenerationError, GeneratorState, tiny_png,
+    Cancelled, ComfyUIGenerator, FakeGenerator, GenerationError, GeneratorState, Image, tiny_png,
 )
+from test_artgen_checks import disc, draw, png_of  # noqa: E402
 
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 PRESET = {
@@ -773,3 +775,152 @@ def test_the_fake_flac_is_a_real_stream():
     data = artgen_generators.tiny_flac(0.2)
     assert artgen_generators.flac_info(data) == (44100, 2, pytest.approx(0.2))
     assert artgen_generators.flac_info(b"RIFF....") is None
+
+
+# --- the checks of a cut-out
+
+CLEAN_CUTOUT = png_of(draw(200, disc(100, 100, 60)))
+CUT_BY_EDGE = png_of(draw(200, disc(100, 40, 60)))
+
+
+class CutOutGenerator(FakeGenerator):
+    """Answers with RGBA pictures in turn: a clean cut-out for an even seed, one cut by the frame's top edge for an odd one."""
+
+    def run(self, graph, on_progress=None, cancel=None, timeout_s=0):
+        super().run(graph, on_progress, cancel)
+        seed = next(n["inputs"]["seed"] for n in graph.values() if "seed" in n.get("inputs", {}))
+        return [Image(CLEAN_CUTOUT if seed % 2 == 0 else CUT_BY_EDGE, f"fake_{seed}.png")]
+
+
+def generate_cutouts(game, out, generator=None, preset="wood", count=2):
+    events = []
+    request = artgen_service.Request(preset_of(game, preset), "pawn", count, 10, out)
+    results = artgen_service.generate(request, generator or CutOutGenerator(), events.append)
+    return results, [e for e in events if e["kind"] == "image"]
+
+
+def test_a_preset_has_the_default_checks_none_or_the_thresholds_it_names(game):
+    assert preset_of(game).checks == artgen_checks.DEFAULTS
+    write_preset(game, "off", {**PRESET, "checks": False})
+    assert preset_of(game, "off").checks is None
+    write_preset(game, "own", {**PRESET, "checks": {"maxFill": 0.5, "cut": 100}})
+    own = preset_of(game, "own")
+    assert own.checks == {**artgen_checks.DEFAULTS, "maxFill": 0.5, "cut": 100}
+    assert own.data["checks"] == {"maxFill": 0.5, "cut": 100}, "the provenance names what the file says"
+    write_preset(game, "empty", {**PRESET, "checks": {}})
+    assert preset_of(game, "empty").checks == artgen_checks.DEFAULTS
+
+
+@pytest.mark.parametrize("checks, message", [
+    (True, "false or an object"),
+    (None, "false or an object"),
+    ([0.5], "false or an object"),
+    ({"maxFil": 0.5}, "no threshold 'maxFil'"),
+    ({"maxFill": "high"}, "'maxFill' must be a number from 0 to 1"),
+    ({"maxFill": True}, "'maxFill' must be a number from 0 to 1"),
+    ({"maxFill": 1.5}, "'maxFill' must be a number from 0 to 1"),
+    ({"maxOffset": -0.1}, "'maxOffset' must be a number from 0 to 1"),
+    ({"cut": 0}, "'cut' must be an integer from 1 to 255"),
+    ({"cut": 128.5}, "'cut' must be an integer from 1 to 255"),
+    ({"maxPieces": 0}, "'maxPieces' must be an integer 1 or more"),
+])
+def test_a_bad_checks_key_is_refused_naming_the_file(game, checks, message):
+    path = write_preset(game, "wood", {**PRESET, "checks": checks})
+    with pytest.raises(artgen_preset.PresetError, match=message) as error:
+        preset_of(game)
+    assert str(path) in str(error.value) and '"checks"' in str(error.value)
+
+
+def test_a_draft_with_bad_checks_is_named_by_its_form(game):
+    with pytest.raises(artgen_preset.PresetError, match="the draft of 'form'.*no threshold 'x'"):
+        artgen_preset.parse_preset({**PRESET, "checks": {"x": 1}}, "draft", game, label="the draft of 'form'")
+
+
+@pytest.mark.parametrize("checks", [False, {}])
+def test_a_sound_preset_has_no_checks(game, checks):
+    write_preset(game, "knock", {**AUDIO, "checks": checks})
+    with pytest.raises(artgen_preset.PresetError, match='a sound has no "checks"'):
+        preset_of(game, "knock")
+    write_preset(game, "knock", AUDIO)
+    assert preset_of(game, "knock").checks is None
+
+
+def test_the_verdict_of_each_variant_is_in_its_provenance_and_its_event(game, tmp_path):
+    results, events = generate_cutouts(game, tmp_path)
+    passing, failing = results
+    assert passing.provenance["checks"]["passed"] is True and passing.provenance["checks"]["failed"] == []
+    assert failing.provenance["checks"]["passed"] is False and failing.provenance["checks"]["failed"] == ["edge"]
+    assert failing.provenance["checks"]["thresholds"] == artgen_checks.DEFAULTS and "edgeRun" in failing.provenance["checks"]["metrics"]
+    assert json.loads(failing.provenance_path.read_text(encoding="utf-8"))["checks"] == failing.provenance["checks"]
+    assert [e["checks"] for e in events] == [{"passed": True, "failed": []}, {"passed": False, "failed": ["edge"]}]
+
+
+def test_the_thresholds_of_the_preset_decide_the_verdict(game, tmp_path):
+    write_preset(game, "loose", {**PRESET, "checks": {"maxEdgeRun": 0.9}})
+    results, _ = generate_cutouts(game, tmp_path, preset="loose")
+    assert [r.provenance["checks"]["passed"] for r in results] == [True, True]
+    assert results[1].provenance["checks"]["thresholds"]["maxEdgeRun"] == 0.9
+    assert results[1].provenance["presetData"]["checks"] == {"maxEdgeRun": 0.9}
+
+
+def test_no_checks_for_an_opaque_picture_for_checks_false_and_for_a_sound(game, tmp_path):
+    results, events = generate_cutouts(game, tmp_path / "a", FakeGenerator())
+    assert all("checks" not in r.provenance for r in results) and all("checks" not in e for e in events)
+    write_preset(game, "off", {**PRESET, "checks": False})
+    results, events = generate_cutouts(game, tmp_path / "b", preset="off")
+    assert all("checks" not in r.provenance for r in results) and all("checks" not in e for e in events)
+    write_preset(game, "knock", AUDIO)
+    results, events = generate_cutouts(game, tmp_path / "c", FakeGenerator(), preset="knock", count=1)
+    assert "checks" not in results[0].provenance and "checks" not in events[0]
+
+
+def test_a_picture_that_cannot_be_read_is_a_verdict_with_an_error_and_not_a_failed_run(game, tmp_path):
+    class Truncated(FakeGenerator):
+        def run(self, graph, on_progress=None, cancel=None, timeout_s=0):
+            return [Image(CLEAN_CUTOUT[:-40], "fake_1.png")]
+
+    results, events = generate_cutouts(game, tmp_path, Truncated(), count=1)
+    verdict = results[0].provenance["checks"]
+    assert verdict["passed"] is None and "truncated" in verdict["error"]
+    assert events[0]["checks"] == {"passed": None, "error": verdict["error"]}
+
+
+# --- the check command
+
+
+def test_cli_check_exit_codes_and_output(tmp_path, capsys):
+    clean, cut, opaque, broken = (tmp_path / name for name in ("clean.png", "cut.png", "opaque.png", "broken.png"))
+    clean.write_bytes(CLEAN_CUTOUT)
+    cut.write_bytes(CUT_BY_EDGE)
+    opaque.write_bytes(tiny_png(8, 8, (1, 2, 3)))
+    broken.write_bytes(CLEAN_CUTOUT[:-40])
+    assert artgen.main(["check", str(clean), str(opaque)]) == artgen.EXIT_OK
+    assert capsys.readouterr().out.splitlines() == [f"{clean}: passed", f"{opaque}: not applicable (no alpha channel)"]
+    assert artgen.main(["check", str(clean), str(cut)]) == artgen.EXIT_FAILED
+    assert capsys.readouterr().out.splitlines()[-1] == f"{cut}: FAILED edge"
+    assert artgen.main(["check", str(broken)]) == artgen.EXIT_FAILED
+    assert "cannot be read" in capsys.readouterr().out
+
+
+def test_cli_check_json_and_the_thresholds_of_a_preset(game, tmp_path, capsys):
+    cut = tmp_path / "cut.png"
+    cut.write_bytes(CUT_BY_EDGE)
+    write_preset(game, "loose", {**PRESET, "checks": {"maxEdgeRun": 0.9}})
+    assert artgen.main(["check", str(cut), "--preset", "loose", "--game-root", str(game), "--json"]) == artgen.EXIT_OK
+    report = json.loads(capsys.readouterr().out)
+    assert report[0]["path"] == str(cut) and report[0]["checks"]["passed"] is True
+    assert report[0]["checks"]["thresholds"]["maxEdgeRun"] == 0.9
+    write_preset(game, "off", {**PRESET, "checks": False})
+    assert artgen.main(["check", str(cut), "--preset", "off", "--game-root", str(game)]) == artgen.EXIT_FAILED, "off in the preset: the defaults"
+
+
+def test_cli_check_bad_arguments_exit_2(game, tmp_path, capsys):
+    assert artgen.main(["check", str(tmp_path / "nope.png")]) == 2
+    assert "nope.png" in capsys.readouterr().err
+    cut = tmp_path / "cut.png"
+    cut.write_bytes(CUT_BY_EDGE)
+    assert artgen.main(["check", str(cut), "--preset", "missing", "--game-root", str(game)]) == 2
+    assert "no preset 'missing'" in capsys.readouterr().err
+    with pytest.raises(SystemExit) as exit_info:
+        artgen.main(["check"])
+    assert exit_info.value.code == 2

@@ -23,6 +23,18 @@ DEFAULTS = {
     "minCover": 0.10,  # the share of the frame's area the object's bounding box must cover
     "maxOffset": 0.25,  # how far the bounding box's centre may be from the frame's centre, as a fraction of the side
 }
+# The accepted values of each threshold: (type, smallest, largest); a fraction is a number from 0 to 1
+FRACTION = (float, 0, 1)
+RANGES = {
+    "cut": (int, 1, 255),
+    "maxEdgeRun": FRACTION,
+    "maxPieces": (int, 1, None),
+    "minPieceArea": FRACTION,
+    "maxHalo": FRACTION,
+    "maxFill": FRACTION,
+    "minCover": FRACTION,
+    "maxOffset": FRACTION,
+}
 CHECK_NAMES = ("empty", "edge", "pieces", "halo", "background", "small", "offCentre")
 
 MAX_SIDE = 256
@@ -106,6 +118,21 @@ def _bounding_box(mask, width, height):
 
 def _rounded(value):
     return round(value, METRIC_DIGITS)
+
+
+def merge_thresholds(given):
+    """`DEFAULTS` with the thresholds of the object `given` replaced; a ValueError says which name or value is wrong."""
+    if not isinstance(given, dict):
+        raise ValueError("must be false or an object of thresholds")
+    for name, value in given.items():
+        if name not in DEFAULTS:
+            raise ValueError(f"has no threshold '{name}' (it has: {', '.join(DEFAULTS)})")
+        kind, smallest, largest = RANGES[name]
+        numeric = type(value) is int if kind is int else type(value) in (int, float)
+        if not numeric or value < smallest or (largest is not None and value > largest):
+            bound = f"from {smallest} to {largest}" if largest is not None else f"{smallest} or more"
+            raise ValueError(f"threshold '{name}' must be {'an integer' if kind is int else 'a number'} {bound}")
+    return {**DEFAULTS, **given}
 
 
 def check_alpha(alpha, thresholds=None):

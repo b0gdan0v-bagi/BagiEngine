@@ -16,6 +16,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import artgen_checks
 import artgen_reference
 
 ENGINE_WORKFLOWS = Path(__file__).resolve().parent / "workflows"
@@ -37,6 +38,8 @@ KIND_IMAGE = "image"
 KIND_AUDIO = "audio"
 KINDS = (KIND_IMAGE, KIND_AUDIO)
 RESERVED_KEYS = (OUTPUT_INPUT, KIND_KEY, REFERENCE_KEY)
+# A preset's key: false, or the thresholds of artgen_checks.DEFAULTS to change
+CHECKS_KEY = "checks"
 # The length of a sound in seconds: an input of an audio workflow, refused for an image
 DURATION_INPUT = "duration"
 # Inputs whose values are model files: they go into the provenance.
@@ -106,6 +109,7 @@ class Preset:
     data: dict = field(default_factory=dict)  # the preset as written, for the form and the provenance
     kind: str = KIND_IMAGE  # the workflow's: what the preset makes
     reference: dict | None = None  # the checked `reference` of the file (artgen_reference.parse_reference), None when it has none
+    checks: dict | None = None  # the thresholds of the cut-out checks (defaults merged with the file's), None when off or for a sound
 
     @property
     def duration(self):
@@ -256,6 +260,14 @@ def parse_preset(data, name, game_root=None, label=None, path=None, source=SOURC
             artgen_reference.effective_workflow(workflow, reference["mode"], game_root)
         except PresetError as error:
             raise PresetError(f"{label}: {error}") from error
+    checks = None
+    if kind == KIND_IMAGE and data.get(CHECKS_KEY) is not False:
+        try:
+            checks = artgen_checks.merge_thresholds(data.get(CHECKS_KEY, {}))
+        except ValueError as error:
+            raise PresetError(f"{label}: \"{CHECKS_KEY}\" {error}") from error
+    elif kind == KIND_AUDIO and CHECKS_KEY in data:
+        raise PresetError(f"{label}: a sound has no \"{CHECKS_KEY}\"")
     params = data.get("params", {})
     if not isinstance(params, dict):
         raise PresetError(f"{label}: \"params\" must be an object")
@@ -284,6 +296,7 @@ def parse_preset(data, name, game_root=None, label=None, path=None, source=SOURC
         data=data,
         kind=kind,
         reference=reference,
+        checks=checks,
     )
 
 
