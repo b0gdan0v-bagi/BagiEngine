@@ -17,14 +17,13 @@ ResourceManager (CoreManager::GetResourceManager())
          ├── UIDocumentLoader    (.ui.xml → UIDocument; `UI/CLAUDE.md`)
          └── UIWebDocumentLoader (.ui.html → UIDocument, the web-style front-end; `UI/CLAUDE.md`)
 
-IResource (RefCounted, BE_CLASS(IResource, FACTORY_BASE))
+IResource (RefCountedAtomic, BE_CLASS(IResource, FACTORY_BASE))
     ├── XmlResource
-    ├── Font
-    └── SerializedResource<T>   (reflected types; no loader fills it, `LoadSerialized` returns by value)
+    └── Font
 ```
 
 - `ResourceState` (`CORE_ENUM`): `Unloaded` → `Loading` → `Loaded` or `Failed`.
-- `ResourceHandle<T>` wraps `IntrusivePtr<T>`: implicit `bool` for validity, `->` / `*`, last-access time (kept for a future LRU, not used yet).
+- `ResourceHandle<T>` wraps `IntrusivePtr<T>`: explicit `bool` for validity, `->` / `*`.
 - `TextureLibrary` (`CoreManager::GetTextureLibrary()`) maps sprite names to texture path + source rect. It is loaded from `TextureLibrary.xml` (the active game's `config/`, the engine ships none) after `ConfigManager`; a missing file leaves the library empty, and `SpriteRendererComponent` and the texture editor use it. See "TextureLibrary" below.
 
 ## TextureLibrary
@@ -78,7 +77,8 @@ Derive from `IResourceLoader` with `BE_CLASS(MyLoader)`, implement `CanLoad` / `
 ## Thread Safety
 
 - `ResourceCache` takes shared locks for reads and an exclusive lock for `Put()` / `Clear()`.
-- Resources are immutable after loading, so concurrent reads are safe.
+- Resources are immutable after loading, so concurrent reads are safe. The reference count is atomic (`IResource` derives from `RefCountedAtomic`): readers copy the same pointer out of the cache under a shared lock. `New<T>` of a resource gives an `IntrusivePtrAtomic<T>`, which converts to the `IntrusivePtr<T>` that holders use.
+- The `*Async` calls copy the path before they return, so a temporary string is safe as the argument.
 - Async loading runs on the TaskSystem thread pool.
 - Tests that call `LoadAsync` must run it through `CoreManager::GetTaskManager().Run(...)` and wait on the handle (`.claude/rules/tests-module.md`).
 

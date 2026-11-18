@@ -61,6 +61,19 @@ namespace BECore::Tests {
         EXPECT_FALSE(handle->GetRoot().IsEmpty()) << "Empty root node";
     }
 
+    TEST_F(ResourceManagerTest, AsyncLoadReadsThePathAsItWasAtTheCall) {
+        String path(kExistingConfig);
+        auto task = CoreManager::GetResourceManager().LoadAsync<XmlResource>(path);
+        path.assign(path.size(), 'x');
+
+        auto taskHandle = CoreManager::GetTaskManager().Run(std::move(task));
+        auto result = taskHandle->GetResult();
+
+        ASSERT_TRUE(result.has_value());
+        ASSERT_TRUE(*result);
+        EXPECT_EQ((*result)->GetState(), ResourceState::Loaded);
+    }
+
     TEST_F(ResourceManagerTest, AsyncLoading) {
         // The loader parks the coroutine on the thread pool (SwitchToBackground). Task::GetResult() would keep
         // resume()-ing it from this thread meanwhile, so run it through the TaskManager and wait on the handle.

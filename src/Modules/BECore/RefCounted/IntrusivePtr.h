@@ -11,6 +11,9 @@
 namespace BECore {
 
     template <typename T>
+    class IntrusivePtrAtomic;
+
+    template <typename T>
     class IntrusivePtrNonAtomic {
         template <typename U>
         friend class IntrusivePtrNonAtomic;
@@ -44,6 +47,20 @@ namespace BECore {
         template <typename U>
         IntrusivePtrNonAtomic(IntrusivePtrNonAtomic<U>&& other) noexcept : _ptr(other._ptr) {
             static_assert(std::is_base_of_v<T, U>, "U must be derived from T");
+            other._ptr = nullptr;
+        }
+
+        // The counter of the object decides whether a count is atomic, not the pointer, so an object New<T> hands out
+        // as IntrusivePtrAtomic can be held here without losing that.
+        template <typename U>
+        requires std::is_convertible_v<U*, T*> IntrusivePtrNonAtomic(const IntrusivePtrAtomic<U>& other) : _ptr(other.Get()) {
+            if (_ptr != nullptr) {
+                _ptr->AddRef();
+            }
+        }
+
+        template <typename U>
+        requires std::is_convertible_v<U*, T*> IntrusivePtrNonAtomic(IntrusivePtrAtomic<U>&& other) noexcept : _ptr(other._ptr) {
             other._ptr = nullptr;
         }
 
@@ -182,6 +199,8 @@ namespace BECore {
     class IntrusivePtrAtomic {
         template <typename U>
         friend class IntrusivePtrAtomic;
+        template <typename U>
+        friend class IntrusivePtrNonAtomic;
 
     public:
         IntrusivePtrAtomic() = default;
