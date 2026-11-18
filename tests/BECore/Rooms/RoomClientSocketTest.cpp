@@ -32,6 +32,8 @@ namespace BECore::Tests {
             size_t connections = 0;
             /// The `type` of every text the client received, in order
             Vector<String> types;
+            /// While set, every new connection of the client is refused like a server that is down, so a test decides when the client can come back
+            bool refuseConnections = false;
 
             [[nodiscard]] size_t CountType(StringView type) const {
                 return static_cast<size_t>(std::count(types.begin(), types.end(), type));
@@ -56,7 +58,9 @@ namespace BECore::Tests {
             }
 
             std::expected<void, String> Open(StringView url) override {
-                return _inner->Open(url);
+                // An error of Open would end the retries for good: a refused connect opens and then reports Closed
+                _refused = _tap.refuseConnections;
+                return _refused ? std::expected<void, String>{} : _inner->Open(url);
             }
 
             bool SendText(StringView text) override {
@@ -72,6 +76,16 @@ namespace BECore::Tests {
             }
 
             bool PollEvent(RoomTransportEvent& event) override {
+                if (_refused) {
+                    if (_refusalReported) {
+                        return false;
+                    }
+                    _refusalReported = true;
+                    event = RoomTransportEvent{};
+                    event.kind = RoomTransportEventKind::Closed;
+                    event.closeCode = kRoomTransportAbnormalClosure;
+                    return true;
+                }
                 if (!_inner->PollEvent(event)) {
                     return false;
                 }
@@ -85,6 +99,8 @@ namespace BECore::Tests {
         private:
             UniquePtr<IRoomTransport> _inner;
             Tap& _tap;
+            bool _refused = false;
+            bool _refusalReported = false;
         };
 
         void Tap::Sever() {
@@ -330,16 +346,14 @@ namespace BECore::Tests {
         StartServer(std::move(settings));
 
         // Seat 0 moves first, and seat 1 does not play until the test lets it: the hand stalls at seat 1 when the client is cut
-        ASSERT_NO_FATAL_FAILURE(MakeTable("cards", 2, Json::object({{"firstSeat", 0}}), [](RoomClientSettings& settings) {
-            settings.backoffStart = 1500ms;
-            settings.backoffMax = 1500ms;
-        }));
+        ASSERT_NO_FATAL_FAILURE(MakeTable("cards", 2, Json::object({{"firstSeat", 0}})));
         Player& host = *players[0];
         Player& away = *players[1];
         const String token = away.client->GetSession().token;
         away.autoplay = false;
         ASSERT_TRUE(host.client->Start().has_value());
         ASSERT_TRUE(WaitFor([&] { return away.client->HasView(); }));
+        away.tap.refuseConnections = true;
         away.tap.Sever();
 
         // The host is told the guest is away
@@ -357,12 +371,13 @@ namespace BECore::Tests {
         ASSERT_TRUE(WaitFor([&] { return host.PlaysOf(1) > 0; }, kShortLimit)) << "no computer took the seat after the grace";
         EXPECT_EQ(away.Count(Kind::Resumed), 0u);
 
-        // The client returns after its backoff with the same token, finds the hand moved on, and plays the rest
+        // The client returns with the same token, finds the hand moved on, and plays the rest; the view comes after `joined`
+        away.tap.refuseConnections = false;
         ASSERT_TRUE(WaitFor([&] { return away.Count(Kind::Resumed) == 1; }, kShortLimit));
+        ASSERT_TRUE(WaitFor([&] { return away.PlaysOf(1) >= 1; }, kShortLimit)) << "the view after the return does not show the computer's play";
         away.autoplay = true;
         EXPECT_EQ(away.client->GetSeat(), 1);
         EXPECT_EQ(away.client->GetSession().token, token);
-        EXPECT_GE(away.PlaysOf(1), 1);
         ASSERT_TRUE(WaitFor([&] { return EveryoneSeesTheEnd(); }));
         ExpectACleanFinishedHand();
     }
