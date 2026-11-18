@@ -518,6 +518,14 @@
         }
         const load = TodoInsights.machineLine(payload.machine);
         if (load) root.appendChild(load);
+        const service = TodoRuns.agentServiceLine(payload.agentService);
+        if (service) {
+            const line = el("div", service.warn ? "warn soft pointer" : "muted pointer");
+            line.title = service.title;
+            line.appendChild(el("span", "", service.text));
+            line.appendChild(button(service.running ? "Stop" : "Start", { cmd: "agentService", verb: service.verb }, `worker.py agent ${service.verb} (asks first)`));
+            root.appendChild(line);
+        }
         if (!state.sessionsKnown) root.appendChild(el("div", "warn", "claude agents did not answer: set todoWorkers.claude to the full path of claude."));
         if (state.store !== "ok" && state.store !== "off") root.appendChild(el("div", "warn", `todo store: ${state.store}`));
 

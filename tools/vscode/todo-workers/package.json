@@ -2,7 +2,7 @@
     "name": "todo-workers",
     "displayName": "Todo Workers",
     "description": "The parallel todo-loop workers of BagiEngine: their sessions, entries and branches, and the entries waiting for /todo-merge.",
-    "version": "0.29.0",
+    "version": "0.30.0",
     "publisher": "bagiengine",
     "license": "UNLICENSED",
     "private": true,
@@ -148,7 +148,7 @@
                 "todoWorkers.pushUrl": {
                     "type": "string",
                     "default": "",
-                    "description": "A URL that gets a POST with the text of what stops a worker (it waits for you, it hit the usage limit, an entry reached review), the title in the Title header: an ntfy topic (https://ntfy.sh/<your topic>) puts it on a phone. Empty: off. The text names entry ids and worker names."
+                    "description": "A URL that gets a POST with the text of what stops a worker (it waits for you, it hit the usage limit; an entry reaching review is not pushed), the title in the Title header: an ntfy topic (https://ntfy.sh/<your topic>) puts it on a phone. Empty: off. The text names entry ids and worker names."
                 },
                 "todoWorkers.timelineHours": {
                     "type": "number",

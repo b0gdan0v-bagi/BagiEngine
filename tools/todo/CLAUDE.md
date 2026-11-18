@@ -54,9 +54,14 @@ python3 tools/todo/todo.py history <id>
 python3 tools/todo/todo.py dep add|rm|list|graph ...              # <id> waits until each blocker is closed
 python3 tools/todo/todo.py dashboard [--area A]                   # the address of the pages
 python3 tools/todo/todo.py export --out DIR                       # a backup outside git, old file format
+python3 tools/todo/todo.py version get [--counter C]              # the counter and the numbers it gave
+python3 tools/todo/todo.py version next --bump minor|patch --entry <id> [--counter C]  # prints the number alone
+python3 tools/todo/todo.py version set <v> --expected <old|none>  # the owner's token only
 ```
 
 Exit codes: 0, 1 (settings, network, a guard), 2 (the store refused: 404, 409, 422). `--json` works before or after the command.
+
+**The version counter** (`engine-version` by default) numbers the engine over every `games/*` branch, PC and worker, so no two entries share a number. `next` is atomic and keyed by the entry: a repeat with the same bump returns the same number, another bump for that entry is a 409. A number given is never taken back, so `next` is never run to try it out; a forecast reads `get`. `minor` resets PATCH to 0; MAJOR moves only by the owner's `set`. On any non-zero exit there is no number and none is made up locally. `tools/changelog/CLAUDE.md` says how a number reaches the changelog.
 
 ## Workers (worker.py)
 

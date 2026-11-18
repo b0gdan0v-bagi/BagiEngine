@@ -38,4 +38,5 @@ The vendored code: `src/Modules/EABase/`, `EnTT/`, `fmt/`, `imgui/`, `nlohmann/`
 `eligible` is a concrete, bounded piece of engine or tool work. Examples of reasons:
 
 - `owner decision`: an entry that names what is "to be decided with the owner first" (for example the binary form of sound assets, `audio-binarization`), and similar.
+- `owner step`: the work is in Railway, Google, a bank, Telegram, a phone, a check on production or a deploy. When an open entry of the area `owner` is that step, name it: `owner step: <owner id>` (the conductor links the entry to it).
 - Example answer lines: `{"area": "engine", "id": "no-ci", "verdict": "eligible", "size": "M", "reason": "one line"}`, `{"area": "engine", "id": "audio-binarization", "verdict": "skip", "size": null, "reason": "owner decision: the binary form of sound assets is to be decided with the owner"}`.

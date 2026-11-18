@@ -248,3 +248,57 @@ def test_add_and_check_without_the_header_are_errors_of_the_layout(tree, capsys)
     assert "EngineVersion.h" in capsys.readouterr().err
     assert tree.add(draft_text(), "patch") == changelog.EXIT_ERROR
     assert "EngineVersion.h" in capsys.readouterr().err
+
+
+def add_numbered(tree, entry: str, version: str, bump: str = "patch", *extra: str) -> int:
+    return changelog.main(["add", "--root", str(tree.root), "--draft", str(tree.draft(draft_text(entry))), "--bump", bump, "--date", "2026-11-18", "--version", version, *extra])
+
+
+def test_add_takes_the_number_the_store_gave_and_a_gap_is_no_problem(tree):
+    tree.with_baseline()
+    assert add_numbered(tree, "one", "0.1.5") == 0
+    assert tree.header() == (0, 1, 5)
+    assert "- Version: 0.1.5" in tree.fragment_file("one").read_text(encoding="utf-8")
+    assert add_numbered(tree, "two", "0.3.0") == 0
+    assert tree.header() == (0, 3, 0)
+    assert tree.check() == []
+
+
+def test_the_bump_of_a_given_number_is_not_compared_with_this_tree(tree):
+    tree.with_baseline()
+    assert add_numbered(tree, "one", "0.1.9", "minor") == 0
+    assert "- Bump: minor" in tree.fragment_file("one").read_text(encoding="utf-8")
+    assert tree.check() == []
+
+
+@pytest.mark.parametrize("version", ["0.1.0", "0.0.9"])
+def test_add_refuses_a_number_not_above_every_fragment(tree, capsys, version):
+    tree.with_baseline()
+    assert add_numbered(tree, "one", version) == changelog.EXIT_REFUSED
+    assert "not above the highest fragment" in capsys.readouterr().err
+    assert not tree.fragment_file("one").exists() and tree.header() == (0, 1, 0)
+
+
+def test_add_refuses_a_number_that_is_not_a_version(tree, capsys):
+    tree.with_baseline()
+    assert add_numbered(tree, "one", "next") == changelog.EXIT_REFUSED
+    assert "not a version" in capsys.readouterr().err
+    assert not tree.fragment_file("one").exists()
+
+
+def test_a_dry_run_with_a_forecast_writes_nothing(tree, capsys):
+    tree.with_baseline()
+    assert add_numbered(tree, "one", "0.1.4", "patch", "--dry-run") == 0
+    assert "- Version: 0.1.4" in capsys.readouterr().out
+    assert not tree.fragment_file("one").exists() and tree.header() == (0, 1, 0)
+
+
+def test_check_still_refuses_a_repeated_number_and_a_header_below_the_highest(tree):
+    tree.with_baseline()
+    assert add_numbered(tree, "one", "0.1.5") == 0
+    assert add_numbered(tree, "two", "0.1.8") == 0
+    path = tree.fragment_file("two")
+    path.write_text(path.read_text(encoding="utf-8").replace("0.1.8", "0.1.5"), encoding="utf-8")
+    problems = tree.check()
+    assert any("is also the version of" in problem for problem in problems)
+    assert any("the highest fragment is 0.1.5" in problem for problem in problems)

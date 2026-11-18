@@ -3,10 +3,11 @@ Standard library only, Python 3.10+. The contract is `tools/changelog/CLAUDE.md`
 
     python3 <engine>/tools/changelog/changelog.py current   [--root E]
     python3 <engine>/tools/changelog/changelog.py propose   --draft FILE
-    python3 <engine>/tools/changelog/changelog.py add       --draft FILE --bump minor|patch|auto [--date D] [--content-version N] [--dry-run] [--root E]
+    python3 <engine>/tools/changelog/changelog.py add       --draft FILE --bump minor|patch|auto [--version X] [--date D] [--content-version N] [--dry-run] [--root E]
     python3 <engine>/tools/changelog/changelog.py render    [--check] [--root E]
     python3 <engine>/tools/changelog/changelog.py check     [--root E]
     python3 <engine>/tools/changelog/changelog.py breaking  --since <commit|version|pointer> [--repo E] [--json] [--all] [--check]
+    python3 <engine>/tools/changelog/changelog.py renumber  --plan|--apply [--floor V] [--ref R ...] [--root E]
 """
 
 import argparse
@@ -67,6 +68,7 @@ POINTER = "pointer"
 KIND_COMMIT = "commit"
 KIND_VERSION = "version"
 GIT_TIMEOUT_SECONDS = 60
+RENUMBER_FLOOR = "0.1.3"  # the last version every branch shared before each counted on its own
 
 Version = tuple[int, int, int]
 
@@ -330,11 +332,14 @@ def highest_content_version(fragments: list[Fragment]) -> int:
     return max((f.content_version for f in fragments if f.content_version is not None), default=0)
 
 
-def prepare_add(root: Path, draft: Fragment, bump: str, date: str, content_version: int | None = None) -> tuple[Fragment, Version]:
+def prepare_add(root: Path, draft: Fragment, bump: str, date: str, content_version: int | None = None, version: Version | None = None) -> tuple[Fragment, Version]:
     """The fragment `add` would write and the new header version; raises ChangelogError for every refusal.
 
     `content_version` stands for kContentVersion when it is not the one of `root`: the dry run of `todo-merge` runs on the base
-    before the merge, while the draft describes the branch."""
+    before the merge, while the draft describes the branch.
+
+    `version` is the number the store's counter handed out. The bump is not compared with it: this tree may lack the numbers
+    given to other `games/*` branches in between."""
     if draft.version is not None or draft.date:
         raise ChangelogError("the draft must not carry `Version` or `Date` lines: `add` decides them")
     if bump == AUTO:
@@ -363,9 +368,12 @@ def prepare_add(root: Path, draft: Fragment, bump: str, date: str, content_versi
         highest = max(fragment.version for fragment in existing)
         if highest != header:
             raise ChangelogError(f"{VERSION_HEADER} says {version_text(header)} but the highest fragment is {version_text(highest)}: fix that first")
-        new_version = bumped(header, bump)
+        if version is not None and version <= highest:
+            raise ChangelogError(f"--version {version_text(version)} is not above the highest fragment {version_text(highest)}")
+        new_version = bumped(header, bump) if version is None else version
     else:
-        new_version = header  # the first fragment records where the log starts, it does not move the number
+        # the first fragment records where the log starts, it does not move the number
+        new_version = header if version is None else version
     engine_content = read_content_version(root) if content_version is None else content_version
     known_content = highest_content_version(existing)
     if draft.content_version is None:
@@ -381,7 +389,8 @@ def prepare_add(root: Path, draft: Fragment, bump: str, date: str, content_versi
 
 def command_add(root: Path, args: argparse.Namespace) -> int:
     draft = parse_fragment(read_draft(args.draft))
-    fragment, version = prepare_add(root, draft, args.bump, args.date or datetime.date.today().isoformat(), args.content_version)
+    given = parse_version(args.version) if args.version else None
+    fragment, version = prepare_add(root, draft, args.bump, args.date or datetime.date.today().isoformat(), args.content_version, given)
     loaded, _ = load_fragments(root)
     rendered = render_changelog([*(f for _, f in loaded), fragment])
     target = root / FRAGMENT_DIR / f"{fragment.entry}.md"
@@ -558,6 +567,112 @@ def command_breaking(root: Path, args: argparse.Namespace) -> int:
     return EXIT_REFUSED if args.check and report["breaking"] else EXIT_OK
 
 
+@dataclass
+class Renumbered:
+    entry: str
+    date: str
+    added: int
+    bump: str
+    old: dict[str, Version]
+    new: Version | None = None
+
+
+def renumber_refs(repo: Path) -> list[str]:
+    names = git(repo, "for-each-ref", "--format=%(refname:short)", "refs/heads/main", "refs/heads/games").splitlines()
+    if not names:
+        raise ChangelogError(f"{repo}: no branch `main` or `games/*`")
+    return names
+
+
+def fragments_of_ref(repo: Path, ref: str) -> dict[str, Fragment]:
+    names = git(repo, "ls-tree", "--name-only", ref, f"{FRAGMENT_DIR}/").splitlines()
+    fragments = {}
+    for name in (line for line in names if line.endswith(".md")):
+        try:
+            fragment = parse_fragment(git(repo, "show", f"{ref}:{name}"))
+        except ChangelogError as error:
+            raise ChangelogError(f"{ref}:{name}: {error}") from None
+        if fragment.version is None:
+            raise ChangelogError(f"{ref}:{name}: no `- {KEY_VERSION}:` line")
+        fragments[Path(name).stem] = fragment
+    return fragments
+
+
+def first_added(repo: Path, ref: str, entry: str) -> int:
+    """When the fragment first appeared on `ref` (seconds): later rewrites of its lines do not move it, so a plan stays the same after an apply."""
+    times = git(repo, "log", "--diff-filter=A", "--format=%ct", ref, "--", f"{FRAGMENT_DIR}/{entry}.md").split()
+    return min(int(time) for time in times) if times else 0
+
+
+def renumber_plan(repo: Path, refs: list[str], floor: Version) -> list[Renumbered]:
+    """The new sequence above `floor`, oldest merge first. It depends on the dates, the bumps and the ids only, never on the numbers
+    being replaced, so every branch gets the same plan whether or not another branch was already renumbered."""
+    by_entry: dict[str, dict[str, Fragment]] = {}
+    for ref in refs:
+        for entry, fragment in fragments_of_ref(repo, ref).items():
+            by_entry.setdefault(entry, {})[ref] = fragment
+    plan = []
+    for entry, copies in by_entry.items():
+        old = {ref: fragment.version for ref, fragment in copies.items()}
+        if all(version <= floor for version in old.values()):
+            if len(set(old.values())) > 1:
+                raise ChangelogError(f"`{entry}` has different versions at or below {version_text(floor)}: {old}")
+            continue
+        bumps = {fragment.bump for fragment in copies.values()}
+        if len(bumps) != 1 or not bumps <= set(BUMPS):
+            raise ChangelogError(f"`{entry}` has no single bump over the branches: {sorted(bumps)}")
+        date = min(fragment.date for fragment in copies.values())
+        plan.append(Renumbered(entry, date, min(first_added(repo, ref, entry) for ref in copies), bumps.pop(), old))
+    plan.sort(key=lambda item: (item.date, item.added, item.entry))
+    version = floor
+    for item in plan:
+        version = bumped(version, item.bump)
+        item.new = version
+    return plan
+
+
+def apply_renumber(root: Path, plan: list[Renumbered], floor: Version) -> Version:
+    """Rewrites the `Version` lines of this tree, the header and CHANGELOG.md; refuses before writing anything the plan does not cover."""
+    loaded, problems = load_fragments(root)
+    if problems:
+        raise ChangelogError("the log is broken, `check` says how: " + problems[0])
+    new = {item.entry: item.new for item in plan}
+    missing = [fragment.entry for _, fragment in loaded if fragment.entry not in new and fragment.version > floor]
+    if missing:
+        raise ChangelogError(f"not on any branch of the plan: {', '.join(sorted(missing))} (commit them on `main` or a `games/*` branch first)")
+    for path, fragment in loaded:
+        if fragment.entry not in new:
+            continue
+        text = path.read_bytes().decode("utf-8")
+        text, count = re.subn(rf"^- {KEY_VERSION}: [^\r\n]+", f"- {KEY_VERSION}: {version_text(new[fragment.entry])}", text, count=1, flags=re.MULTILINE)
+        if count != 1:
+            raise ChangelogError(f"{path}: no `- {KEY_VERSION}:` line")
+        path.write_bytes(text.encode("utf-8"))
+    reloaded = [fragment for _, fragment in load_fragments(root)[0]]
+    highest = max(fragment.version for fragment in reloaded)
+    write_version_header(root, highest)
+    (root / CHANGELOG_FILE).write_bytes(render_changelog(reloaded).encode("utf-8"))
+    return highest
+
+
+def command_renumber(root: Path, args: argparse.Namespace) -> int:
+    floor = parse_version(args.floor)
+    refs = args.ref or renumber_refs(root)
+    plan = renumber_plan(root, refs, floor)
+    if args.apply:
+        highest = apply_renumber(root, plan, floor)
+        problems = check_tree(root)
+        for problem in problems:
+            print(problem, file=sys.stderr)
+        print(f"renumbered this tree: header {version_text(highest)}")
+        return EXIT_REFUSED if problems else EXIT_OK
+    for item in plan:
+        was = ", ".join(f"{ref} {version_text(version)}" for ref, version in item.old.items())
+        print(f"{version_text(item.new)}  {item.date}  {item.bump:5}  {item.entry}  (was: {was})")
+    print(f"highest: {version_text(plan[-1].new) if plan else version_text(floor)}")
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     commands = parser.add_subparsers(dest="command", required=True)
@@ -573,6 +688,7 @@ def build_parser() -> argparse.ArgumentParser:
     add = command("add", "write the fragment of a draft, bump the header, regenerate CHANGELOG.md")
     add.add_argument("--draft", required=True)
     add.add_argument("--bump", required=True, choices=[MINOR, PATCH, AUTO])
+    add.add_argument("--version", help="the number `todo.py version next` gave this entry (default: the header plus the bump, for a repository without a store)")
     add.add_argument("--date", help="YYYY-MM-DD (default: today)")
     add.add_argument("--content-version", type=int, help="kContentVersion to compare the draft with (default: the one of --root); for the dry run before a merge")
     add.add_argument("--dry-run", action="store_true", help="write nothing, print what would be written")
@@ -585,6 +701,12 @@ def build_parser() -> argparse.ArgumentParser:
     breaking.add_argument("--json", action="store_true")
     breaking.add_argument("--all", action="store_true", help="list every entry, not only those with Breaking or Migration")
     breaking.add_argument("--check", action="store_true", help="exit 1 when a listed entry is Breaking")
+    renumber = command("renumber", "one-off: one sequence of versions over `main` and every `games/*`, by merge date")
+    mode = renumber.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--plan", action="store_true", help="print the new numbers, write nothing")
+    mode.add_argument("--apply", action="store_true", help="rewrite this tree only (the fragments' Version lines, the header, CHANGELOG.md); commits nothing")
+    renumber.add_argument("--floor", default=RENUMBER_FLOOR, help=f"versions at or below it stay (default {RENUMBER_FLOOR})")
+    renumber.add_argument("--ref", action="append", help="a branch to read (repeatable; default: main and every games/*)")
     return parser
 
 
@@ -595,6 +717,7 @@ HANDLERS = {
     "render": command_render,
     "check": command_check,
     "breaking": command_breaking,
+    "renumber": command_renumber,
 }
 
 

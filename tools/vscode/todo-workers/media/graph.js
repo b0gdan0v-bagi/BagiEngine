@@ -182,7 +182,7 @@
             const entry = w.entry;
             if (entry) {
                 // a loop started on this entry that has not claimed it yet (worker.py list: starting)
-                const status = entry.starting ? "starting" : entry.status || "?";
+                const status = entry.starting ? "starting" : entry.status || entry.branch || "?";
                 const over = ["stopped", "done", "waiting", "limited"].includes(sess.kind) ? sess : null;
                 const ebox = box(cx, y, NODE_W, `g-node g-entry g-held st-${slug(status)}${over ? ` over-${over.kind}` : ""}`, true);
                 const sub = [status, over ? over.word : "", Runs.progressText(entry)].filter(Boolean).join(" · ");

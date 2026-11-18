@@ -44,8 +44,8 @@ function attach(ctx) {
         if (previous) {
             for (const entry of state.review) {
                 if (!previous.review.has(entry.id)) {
+                    // never pushed to the phone: up to 50 a day would bury what stops a worker; reviews live in the dashboard
                     addFeed("review", `${entry.id} reached review: ${entry.statusNote || entry.branch}`, { entry: entry.id });
-                    ctx.pushNotify(`Todo: ${entry.id} in review`, entry.statusNote || entry.title || entry.branch);
                 }
                 if (!previous.review.has(entry.id) && config().notify) {
                     vscode.window.showInformationMessage(`Todo: ${entry.id} is in review (${entry.branch})`, "Review", "Review with Claude", "Merge + test", "Return with remarks").then((pick) => {
@@ -70,7 +70,7 @@ function attach(ctx) {
                     addFeed("noclaim", `${worker.name}: the loop took nothing: ${what}`, { entry: worker.noClaim.entry });
                     ctx.pushNotify(`Todo: ${worker.name} took nothing`, what);
                 }
-                if (!tookNothing && previous.active.get(worker.name) && !worker.active && !worker.limited && !worker.stopped) addFeed("ended", `${worker.name}: the loop ended${worker.entry ? ` (${worker.entry.id}, ${worker.entry.status})` : ""}`, { entry: worker.entry ? worker.entry.id : null });
+                if (!tookNothing && previous.active.get(worker.name) && !worker.active && !worker.limited && !worker.stopped) addFeed("ended", `${worker.name}: the loop ended${worker.entry ? ` (${Runs.entryLabel(worker.entry)})` : ""}`, { entry: worker.entry ? worker.entry.id : null });
                 if (!notify) continue;
                 if (worker.waiting && !previous.waiting.has(worker.name)) {
                     const what = worker.asking ? `${worker.asking.tool}: ${worker.asking.text}` : (worker.session && worker.session.waitingFor) || "input needed";

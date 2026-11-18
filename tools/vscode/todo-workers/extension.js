@@ -9,6 +9,7 @@
 //   src/workers.js   sessions, update, fast start, relaunch, queues, start in a free worker, the engine pointer
 //   src/review.js    review, Review with Claude, Quick merge, Merge with Claude, Return with remarks
 //   src/todoList.js  the Todo list tab and the owner's writes to the store
+//   src/agentService.js  the PC's agent service: its line and Start / Stop
 //   src/insights.js  the slower views (busy files, the day, the timeline, review rounds, the doctor's list of unlinked
 //                    waits), the doctor's fixes, the merge train, the end of the day, Dispatch, the push to a phone
 // Both views read again at once when todo.py signals a write (~/.claude/todo/changed.json), besides the timer.
@@ -21,7 +22,7 @@ const path = require("path");
 const { config, findTool, runTool, pageHtml } = require("./src/tools");
 
 const STORE_CHANGE_DEBOUNCE_MS = 700;
-const STICKY_KEYS = ["insights", "machine", "machineHistory", "feed", "lastVerify"]; // a claim and its stub plan are two writes: one refresh
+const STICKY_KEYS = ["insights", "machine", "machineHistory", "feed", "lastVerify", "agentService"]; // a claim and its stub plan are two writes: one refresh
 
 class WorkersView {
     constructor(context, actions) {
@@ -72,7 +73,7 @@ function activate(context) {
     ctx.workerOf = (k) => ctx.state && ctx.state.workers.find((w) => w.k === k);
     const entryOf = (id) => ctx.state && [...ctx.state.review, ...ctx.state.workers.map((w) => w.entry)].find((e) => e && e.id === id);
 
-    for (const name of ["feed", "build", "workers", "review", "todoList", "insights"]) require(`./src/${name}`).attach(ctx);
+    for (const name of ["feed", "build", "workers", "review", "todoList", "insights", "agentService"]) require(`./src/${name}`).attach(ctx);
 
     function act(message) {
         const worker = ctx.workerOf(message.worker);
@@ -109,6 +110,7 @@ function activate(context) {
             case "copyPush": return ctx.copyPush();
             case "dispatch": return ctx.dispatch();
             case "insights": return ctx.readInsights("now");
+            case "agentService": return ctx.controlAgentService(message.verb);
             case "settings": return vscode.commands.executeCommand("workbench.action.openSettings", "todoWorkers");
         }
     }
@@ -139,6 +141,7 @@ function activate(context) {
             // the last steps and the tokens (the usage ledger catches up on the next full read: its counts are totals)
             const full = view.visible ? ["--activity", "--usage"] : [];
             ctx.readMachine(); // beside the list: cheap, and the load history needs it hidden too
+            if (view.visible) ctx.readAgentService();
             const out = await runTool(tool, ["list", "--json", "--store", ...full, "--claude", config().claude], 90000);
             ctx.state = JSON.parse(out);
             // A branch of another checkout or machine (or cut from another base) is not this checkout's to review or
