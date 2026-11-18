@@ -6,11 +6,15 @@ The art generation service on the command line (tools/artgen/CLAUDE.md). Standar
     python3 tools/artgen/artgen.py presets  --game-root <game repository> [--json]
     python3 tools/artgen/artgen.py generate --game-root <game repository> --preset <name or file> --subject "white knight"
                                             [--count 4] [--seed N] [--out <folder>] [--name <stem>] [--json]
+                                            [--min-pass N] [--extra N]
                                             [--reference-image <path> [--reference-mode init] [--reference-weight 0.4]]
     python3 tools/artgen/artgen.py check    <png>... [--preset <name or file> [--game-root <game repository>]] [--json]
 
 `check` runs the cut-out checks (artgen_checks.py) on files already on disk: exit 0 when every file passes or has no alpha
 channel, 1 when one fails or cannot be read, 2 for a file or preset that cannot be opened.
+
+`generate` makes up to `--extra` more images (on the next seeds) while fewer than `--min-pass` pass their checks; both default to
+the preset's `regenerate`, and a run still short at the limit exits 0 (the verdicts are in the provenance).
 
 `status` exits 0 when the generator is ready, 1 when it is installed but not running or not ready, 2 when it is not
 installed (the editor offers setup then: entry `artgen-setup-pipelines`). `generate` writes `<stem>_<seed>.png` and its
@@ -88,14 +92,17 @@ def reference_of_args(args):
 def cmd_generate(args):
     preset = load_named_preset(args.game_root, args.preset)
     out_dir = Path(args.out) if args.out else Path(args.game_root) / "artgen" / "out"
-    request = artgen_service.Request(preset, args.subject, args.count, args.seed, out_dir, args.name, reference_of_args(args), Path(args.game_root))
+    request = artgen_service.Request(
+        preset, args.subject, args.count, args.seed, out_dir, args.name, reference_of_args(args), Path(args.game_root),
+        min_pass=args.min_pass, extra=args.extra,
+    )
     cancel = threading.Event()
 
     def progress(event):
         if args.json:
             print(json.dumps(event), flush=True)
         elif event["kind"] == "image":
-            print(f"[{event['image'] + 1}/{event['count']}] {event['path']}", flush=True)
+            print(f"[{event['image'] + 1}/{event['count']}] {event['path']}" + (" (extra)" if event.get("extra") else ""), flush=True)
         elif event["step"] == event["steps"] or event["step"] == 1:
             print(f"[{event['image'] + 1}/{event['count']}] seed {event['seed']}: step {event['step']}/{event['steps']}", flush=True)
 
@@ -108,8 +115,15 @@ def cmd_generate(args):
     except Cancelled:
         print("cancelled", file=sys.stderr)
         return EXIT_CANCELLED
+    passing = artgen_service.count_passing(results)
     if args.json:
-        print(json.dumps({"kind": "done", "images": [{"path": str(r.path), "provenance": str(r.provenance_path), "seed": r.seed} for r in results]}))
+        images = [{"path": str(r.path), "provenance": str(r.provenance_path), "seed": r.seed, "extra": r.extra,
+                   "passed": r.provenance.get("checks", {}).get("passed")} for r in results]
+        print(json.dumps({"kind": "done", "images": images, "passing": passing}))
+    else:
+        wanted, _ = artgen_service.regeneration_of(request)
+        if passing < wanted:
+            print(f"only {passing} of the {wanted} wanted images pass their checks", flush=True)
     return EXIT_OK
 
 
@@ -161,6 +175,8 @@ def main(argv=None):
             p.add_argument("--seed", type=int)
             p.add_argument("--out")
             p.add_argument("--name", default="")
+            p.add_argument("--min-pass", type=int, help="how many images must pass their checks (default: the preset's regenerate.minPass, else --count)")
+            p.add_argument("--extra", type=int, help="the most extra images made when too few pass (default: the preset's regenerate.extra, else 0)")
             p.add_argument("--reference-image", help="a picture to start from: under the game root, or an absolute path")
             p.add_argument("--reference-mode", help=f"how the picture is used (default {DEFAULT_REFERENCE_MODE})")
             p.add_argument("--reference-weight", type=float, help="how strongly the picture holds, above 0 and below 1 (higher keeps more)")

@@ -1165,3 +1165,59 @@ def test_a_failure_of_the_generator_during_an_extra_passes_through(game, tmp_pat
     with pytest.raises(GenerationError, match="boom"):
         artgen_service.generate(request, FailsOnExtra())
     assert [p.name for p in out.glob("*.png")] == ["pawn_11.png"]
+
+
+def cli_cutouts(game, tmp_path, monkeypatch, generator, *flags):
+    monkeypatch.setattr(artgen, "make_generator", lambda kind, url: generator)
+    return ["generate", "--game-root", str(game), "--preset", "wood", "--subject", "pawn", "--count", "2", "--seed", "11",
+            "--out", str(tmp_path / "o"), *flags]
+
+
+def test_cli_generate_regenerates_with_its_flags_and_marks_the_extra_images(game, tmp_path, monkeypatch, capsys):
+    argv = cli_cutouts(game, tmp_path, monkeypatch, CutOutGenerator(), "--min-pass", "2", "--extra", "3")
+    assert artgen.main(argv) == artgen.EXIT_OK
+    lines = capsys.readouterr().out.splitlines()
+    images = [line for line in lines if line.startswith("[")]
+    assert [line.split("]")[0] for line in images if "seed" not in line] == ["[1/2", "[2/2", "[3/3", "[4/4"]
+    assert [line.endswith("(extra)") for line in images if "seed" not in line] == [False, False, True, True]
+    assert len(lines) == len(images) and not any("wanted" in line for line in lines), "enough pass: no short line"
+
+
+def test_cli_generate_json_lists_extra_and_passed_per_image_and_the_passing_count(game, tmp_path, monkeypatch, capsys):
+    argv = cli_cutouts(game, tmp_path, monkeypatch, CutOutGenerator(), "--min-pass", "2", "--extra", "3", "--json")
+    assert artgen.main(argv) == artgen.EXIT_OK
+    events = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert [e.get("extra", False) for e in events if e["kind"] == "image"] == [False, False, True, True]
+    done = events[-1]
+    assert [(i["seed"], i["extra"], i["passed"]) for i in done["images"]] == [(11, False, False), (12, False, True), (13, True, False), (14, True, True)]
+    assert done["passing"] == 2
+    argv = cli_cutouts(game, tmp_path / "icons", monkeypatch, FakeGenerator(), "--json")
+    assert artgen.main(argv) == artgen.EXIT_OK
+    done = json.loads(capsys.readouterr().out.splitlines()[-1])
+    assert [i["passed"] for i in done["images"]] == [None, None] and done["passing"] == 2, "no verdict is not failing"
+
+
+def test_cli_generate_says_when_the_run_is_short_and_still_exits_0(game, tmp_path, monkeypatch, capsys):
+    argv = cli_cutouts(game, tmp_path, monkeypatch, AlwaysCut(), "--min-pass", "2", "--extra", "1")
+    assert artgen.main(argv) == artgen.EXIT_OK
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[-1] == "only 0 of the 2 wanted images pass their checks"
+    assert [line for line in lines if line.startswith("[3/3] ")][-1].endswith("(extra)")
+    argv = cli_cutouts(game, tmp_path / "again", monkeypatch, CutOutGenerator(), "--min-pass", "2")
+    assert artgen.main(argv) == artgen.EXIT_OK
+    assert capsys.readouterr().out.splitlines()[-1] == "only 1 of the 2 wanted images pass their checks", "no extra asked: short is still said"
+
+
+def test_cli_generate_refuses_a_bad_flag_like_any_request_error(game, tmp_path, monkeypatch, capsys):
+    generator = CutOutGenerator()
+    for flags, message in ((("--extra", "17"), "extra must be 0 to 16"), (("--min-pass", "3"), "min_pass must be 1 to the count"),
+                           (("--extra", "x"), None)):
+        argv = cli_cutouts(game, tmp_path, monkeypatch, generator, *flags)
+        if message is None:
+            with pytest.raises(SystemExit) as exit_info:
+                artgen.main(argv)
+            assert exit_info.value.code == 2
+        else:
+            assert artgen.main(argv) == artgen.EXIT_FAILED
+            assert message in capsys.readouterr().err
+    assert generator.graphs == [] and not (tmp_path / "o").exists()
