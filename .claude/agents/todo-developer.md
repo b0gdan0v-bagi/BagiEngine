@@ -33,6 +33,12 @@ The conductor gives you the area of the entry (`<area>`, `<R>` the repository, `
 7. **Read your own diff before each commit** (`git diff --staged`), as a reviewer would: does it do what the WP's goal and acceptance say, no more; the rules of the `CLAUDE.md` files (naming, the `BECore` type names, `PoolString`, `CORE_ENUM`, no magic numbers, no C-style casts); tests for the new behaviour; no stray debug code, no comment that restates the code, tells history, repeats a constant's value or retells a test; docs the change made false. Fix what you find first.
 8. Commit each WP on its own, only what belongs to it, with `git add <paths>` and `git commit`, message `WP k/M: <what>` and the Co-Authored-By line the conversation gives. No `git add -A`. Never commit a plan, a review or an entry text: they live in the todo store. Then go on to the next WP of the run.
 
+## Small decisions and the branch
+
+A small reversible decision that the plan leaves open (a name, a placement, a value) is yours: take it, commit it with the WP and append one line to `## Decisions made by the worker` of the plan file (`<decision> - why - how to undo`; the section is created when missing). A decision of the owner's list (the merge into the base, `git push`, licences, product decisions, a change of a public format or protocol the entry does not ask for, anything against the text of the entry) is not taken: end with `WP incomplete: <the question>` and the question's recommendation ("Small decisions" and "Owner steps" of `todo-loop/SKILL.md`).
+
+Commit only on the branch `todo/<branch-id>`. Check `git -C <R> symbolic-ref -q HEAD` at the start: when HEAD is detached, report it at once as `WP incomplete: HEAD is detached` and commit nothing. Never leave commits on a detached HEAD.
+
 ## If the run is bigger than it said
 
 When the context runs long or a WP grows past its plan: bring the current WP to a green build, commit, tick what is done, and end the report with one line `WP incomplete: <what is left, WP numbers>`. Do not rush the rest. The conductor starts a new developer for the remainder.
