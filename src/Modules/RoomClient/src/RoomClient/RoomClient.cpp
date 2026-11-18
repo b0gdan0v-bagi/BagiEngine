@@ -7,6 +7,8 @@ namespace BECore {
 
     namespace {
 
+        constexpr size_t kMaxRetiredTransports = 8;
+
         [[nodiscard]] std::unexpected<ControlError> Fail(StringView code, String message) {
             return std::unexpected(MakeControlError(code, std::move(message)));
         }
@@ -81,8 +83,6 @@ namespace BECore {
             _lastError = MakeControlError(RoomClientErrors::kConnectFailed, opened.error());
             return std::unexpected(_lastError);
         }
-        // An older connection that is still closing is not waited for
-        _retired.reset();
         _transport = std::move(transport);
         _url = String(url);
         _firstMessage = std::move(firstMessage);
@@ -192,13 +192,13 @@ namespace BECore {
 
     void RoomClient::Retire() {
         _transport->Close(kRoomTransportNormalClosure, "disconnect");
-        _retired = std::move(_transport);
+        _retired.push_back(std::move(_transport));
         _transport.reset();
     }
 
     void RoomClient::RetireAborted() {
         _transport->Abort();
-        _retired = std::move(_transport);
+        _retired.push_back(std::move(_transport));
         _transport.reset();
     }
 
@@ -208,12 +208,15 @@ namespace BECore {
 
     void RoomClient::Poll(RoomTime now) {
         _now = now;
-        if (_retired) {
-            while (_retired->PollEvent(_polled)) {
-                if (_polled.kind == RoomTransportEventKind::Closed) {
-                    _retired.reset();
-                    break;
-                }
+        for (size_t i = 0; i < _retired.size();) {
+            bool closed = false;
+            while (!closed && _retired[i]->PollEvent(_polled)) {
+                closed = _polled.kind == RoomTransportEventKind::Closed;
+            }
+            if (closed) {
+                _retired.erase(_retired.begin() + static_cast<ptrdiff_t>(i));
+            } else {
+                ++i;
             }
         }
         if (_state == RoomClientState::Reconnecting) {
@@ -444,6 +447,10 @@ namespace BECore {
     }
 
     void RoomClient::StartAttempt() {
+        if (_retired.size() >= kMaxRetiredTransports) {
+            ScheduleRetry();  // the earlier attempts have not ended yet (a name lookup that hangs): no more threads on top of them
+            return;
+        }
         _retryAt.reset();
         if (auto started = StartConnection(_url, MakeResumeMessage(_session.room, _session.token)); !started) {
             // An address or a platform that cannot connect does not get better by waiting

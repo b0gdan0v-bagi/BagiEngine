@@ -36,4 +36,21 @@ namespace BECore {
         inline constexpr StringView kInternalError = "internal_error";
     }  // namespace RoomErrors
 
+    /// Why the hub ended a connection or sent a player out of a room. They are part of the protocol: the close reason on the wire, the `reason` of `left`
+    namespace RoomCloseReasons {
+        inline constexpr StringView kLeft = "left";
+        /// Another device took the seat
+        inline constexpr StringView kReplaced = "replaced";
+        inline constexpr StringView kRoomClosed = "room_closed";
+        inline constexpr StringView kRoomFinished = "room_finished";
+        inline constexpr StringView kLobbyTimeout = "lobby_timeout";
+        /// The client broke its limits (close code 1008): trying again would be the same abuse
+        inline constexpr StringView kRateLimited = RoomErrors::kRateLimited;
+        inline constexpr StringView kTooManyFailedJoins = "too_many_failed_joins";
+        /// The server has no room for the connection (close code 1013)
+        inline constexpr StringView kServerFull = "server_full";
+        /// A connection that stayed out of every room for too long
+        inline constexpr StringView kIdle = "idle";
+    }  // namespace RoomCloseReasons
+
 }  // namespace BECore

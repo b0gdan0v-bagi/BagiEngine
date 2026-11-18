@@ -545,13 +545,18 @@ namespace BECore::Tests {
         EXPECT_EQ(_client->GetState(), RoomClientState::Connecting);
     }
 
-    TEST_F(RoomClientTest, ANewConnectionLetsGoOfAConnectionThatIsStillClosing) {
+    TEST_F(RoomClientTest, ANewConnectionDoesNotFreeAConnectionThatIsStillClosing) {
         FakeLink& link = EnterAsHost();
-        link.closeAnswers = false;
+        link.closeAnswers = false;  // its reader is stuck, in a name lookup that nothing interrupts: freeing it would wait on the game's thread
         _client->Disconnect();
         ASSERT_TRUE(_client->Join(kUrl, "ABCDE", "Bob").has_value());
-        EXPECT_TRUE(link.destroyed);
+        Pump();
+        EXPECT_FALSE(link.destroyed);
         EXPECT_EQ(_transports.Count(), 2u);
+
+        link.PushClosed();
+        Pump();
+        EXPECT_TRUE(link.destroyed);
     }
 
     TEST_F(RoomClientTest, TheClientCanBeDestroyedInEveryState) {

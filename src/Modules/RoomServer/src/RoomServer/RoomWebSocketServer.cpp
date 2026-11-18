@@ -14,10 +14,10 @@ namespace BECore {
 
         /// What the client is told when the hub ends its connection
         uint16_t GetCloseCode(const String& reason) {
-            if (reason == RoomErrors::kRateLimited || reason == "too_many_failed_joins") {
+            if (reason == RoomCloseReasons::kRateLimited || reason == RoomCloseReasons::kTooManyFailedJoins) {
                 return WebSocketCloseCode::kPolicyViolation;
             }
-            if (reason == "server_full") {
+            if (reason == RoomCloseReasons::kServerFull) {
                 return WebSocketCloseCode::kTryAgainLater;
             }
             return WebSocketCloseCode::kNormal;
@@ -31,6 +31,7 @@ namespace BECore {
             listener.maxConnectionsPerAddress = settings.maxConnectionsPerAddress;
             listener.maxMessageBytes = settings.hub.maxMessageBytes;
             listener.maxOutboxBytes = settings.maxOutboxBytes;
+            listener.closeTimeout = std::max(listener.closeTimeout, settings.shutdownGrace);  // Stop() gives its clients the whole grace
             listener.logName = String(kLogName);
             listener.busyMessage = String(kBusyMessage);
             listener.threadName = "Room";

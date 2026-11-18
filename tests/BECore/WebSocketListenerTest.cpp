@@ -458,6 +458,56 @@ namespace BECore::Tests {
         EXPECT_EQ(visited, 1);
     }
 
+    TEST_F(WebSocketListenerTest, AClientThatDoesNotTakeItsCloseFrameIsCutAfterTheCloseTimeout) {
+        constexpr size_t kMoreThanTheSocketBuffersHold = 32 * 1024 * 1024;
+        WebSocketListenerSettings settings;
+        settings.closeTimeout = 200ms;
+        settings.maxOutboxBytes = 2 * kMoreThanTheSocketBuffersHold;
+        const uint16_t port = Start(settings);
+        auto client = Connect(port);
+        ASSERT_TRUE(client.has_value());
+        ASSERT_TRUE(WaitUntil({}, [&] { return recorder.CountPrefix("open:") == 1; }));
+
+        const WebSocketHandler::ConnectionPtr connection = recorder.ConnectionAt(0);
+        ASSERT_TRUE(connection->QueueText(String(kMoreThanTheSocketBuffersHold, 'x')));
+        ASSERT_TRUE(connection->QueueClose(WebSocketCloseCode::kNormal, "bye"));
+
+        EXPECT_TRUE(WaitUntil({}, [&] { return recorder.CountPrefix("closed:") == 1; })) << "the connection keeps its threads and its slot";
+    }
+
+    TEST_F(WebSocketListenerTest, ARefusedClientThatSaysNothingStillGetsItsAnswer) {
+        WebSocketListenerSettings settings;
+        settings.maxConnections = 1;
+        const uint16_t port = Start(settings);
+        auto occupant = Connect(port);
+        ASSERT_TRUE(occupant.has_value());
+
+        auto silent = WebSocketTestClient::Open(port);
+        ASSERT_TRUE(silent.has_value());
+
+        const String refused = silent->ReadHttpResponse();
+        EXPECT_TRUE(StringView(refused).starts_with("HTTP/1.1 503 ")) << refused;
+    }
+
+    TEST_F(WebSocketListenerTest, AFloodOfRefusedClientsLeavesTheServerWorking) {
+        constexpr int kMoreThanTheRefusalsQueued = 64;
+        WebSocketListenerSettings settings;
+        settings.maxConnections = 1;
+        const uint16_t port = Start(settings);
+        auto occupant = Connect(port);
+        ASSERT_TRUE(occupant.has_value());
+
+        Vector<WebSocketTestClient> refused;
+        for (int i = 0; i < kMoreThanTheRefusalsQueued; ++i) {
+            auto client = WebSocketTestClient::Open(port);
+            ASSERT_TRUE(client.has_value());
+            refused.push_back(std::move(*client));
+        }
+        occupant->Drop();
+
+        EXPECT_TRUE(WaitUntil({}, [&] { return StringView(TryHandshake(port)).starts_with("HTTP/1.1 101 "); })) << "the free slot was never given out";
+    }
+
     TEST_F(WebSocketListenerTest, StopEndsOpenAndUnfinishedConnectionsPromptly) {
         WebSocketListenerSettings settings;
         settings.handshakeTimeout = std::chrono::minutes(2);  // longer than any stall of a loaded machine

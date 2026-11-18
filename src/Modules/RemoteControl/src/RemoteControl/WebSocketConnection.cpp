@@ -1,10 +1,11 @@
 #include "WebSocketConnection.h"
 
+#include <RemoteControl/WebSocketHttpHead.h>
+
 namespace BECore {
 
     namespace {
 
-        constexpr StringView kHandshakeHeadEnd = "\r\n\r\n";
         constexpr int kHeaderTooLarge = 431;
         constexpr int kServiceUnavailable = 503;
 
@@ -42,38 +43,19 @@ namespace BECore {
     }
 
     bool WebSocketConnection::Handshake(const HandshakePolicy& policy, std::chrono::milliseconds timeout, Vector<uint8_t>& pendingBytes, Optional<AdmitClientFn> admit) {
-        // One deadline for the whole head: a timeout per Receive() would let a client that sends a byte every few seconds hold the slot for ever
-        const auto deadline = std::chrono::steady_clock::now() + timeout;
-
         Vector<uint8_t> received;
-        Array<uint8_t, 1024> chunk;
-        size_t headSize = 0;
-        for (;;) {
-            // Zero would mean "wait for ever" to the socket, so a deadline that is (nearly) reached ends the handshake
-            const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now());
-            if (left <= std::chrono::milliseconds::zero()) {
-                return false;
-            }
-            _socket.SetReceiveTimeout(left);
-            const auto count = Receive(Span<uint8_t>(chunk.data(), chunk.size()));
-            if (!count) {
-                return false;  // the client is gone or too slow
-            }
-            // Plain pointers: an Array iterator is a pointer in EASTL, and its insert does not take MSVC's class iterator of a std:: container
-            received.insert(received.end(), chunk.data(), chunk.data() + *count);
-
-            const StringView text(reinterpret_cast<const char*>(received.data()), received.size());
-            const size_t end = text.find(kHandshakeHeadEnd);
-            if (end != StringView::npos) {
-                headSize = end + kHandshakeHeadEnd.size();
-                break;
-            }
-            if (received.size() > kMaxHandshakeBytes) {
-                const String response = BuildRejectResponse(HandshakeError{kHeaderTooLarge, "the request head is too long"});
-                (void)_socket.SendAll(AsBytes(response));
-                return false;
-            }
+        const HttpHeadResult read = ReadHttpHead(
+            std::chrono::steady_clock::now() + timeout, [this](std::chrono::milliseconds left) { _socket.SetReceiveTimeout(left); }, [this](Span<uint8_t> buffer) { return Receive(buffer); },
+            received);
+        if (read.outcome == HttpHeadOutcome::TooLong) {
+            const String response = BuildRejectResponse(HandshakeError{kHeaderTooLarge, "the request head is too long"});
+            (void)_socket.SendAll(AsBytes(response));
+            return false;
         }
+        if (read.outcome != HttpHeadOutcome::Complete) {
+            return false;  // the client is gone or too slow
+        }
+        const size_t headSize = read.headSize;
 
         const StringView head(reinterpret_cast<const char*>(received.data()), headSize);
         if (IsHealthCheckRequest(head, policy)) {
@@ -145,6 +127,17 @@ namespace BECore {
         _wake.notify_all();
     }
 
+    void WebSocketConnection::AbortIfCloseIsOverdue(std::chrono::steady_clock::time_point now) {
+        {
+            LockGuard lock(_mutex);
+            if (_aborted || !_closeDeadline || now < *_closeDeadline) {
+                return;
+            }
+        }
+        LOG_WARNING("{}: a client did not take its close frame, the connection is dropped"_format(_settings.logName));
+        Abort();
+    }
+
     bool WebSocketConnection::QueueFrame(Vector<uint8_t> bytes, bool isClose) {
         bool overflow = false;
         {
@@ -157,6 +150,9 @@ namespace BECore {
             } else {
                 _outboxBytes += bytes.size();
                 _closing = isClose;
+                if (isClose) {
+                    _closeDeadline = std::chrono::steady_clock::now() + _settings.closeTimeout;
+                }
                 _outbox.push_back(OutgoingFrame{std::move(bytes), isClose});
             }
         }

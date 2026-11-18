@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Control/ControlTypes.h>
+#include <BECore/Threading/ConditionVariable.h>
 #include <BECore/Threading/Mutex.h>
 #include <BECore/Threading/Thread.h>
 #include <BECore/Types/Types.h>
@@ -45,6 +46,9 @@ namespace BECore {
 
         /// How long a client has to complete the handshake after it connected
         std::chrono::milliseconds handshakeTimeout{5000};
+
+        /// How long a connection may take to send its close frame before it is cut: a client that does not read must not keep its slot
+        std::chrono::milliseconds closeTimeout{10'000};
 
         /// The prefix of the log lines
         String logName = "WebSocket";
@@ -115,6 +119,9 @@ namespace BECore {
         using ConnectionPtr = WebSocketHandler::ConnectionPtr;
 
         void AcceptLoop();
+        void CutOverdueCloses();
+        void QueueRefusal(Socket socket);
+        void RefusalLoop();
         void AddConnection(Socket socket, String peerAddress);
         bool AdmitByClientAddress(WebSocketConnection& connection, const String& clientAddress);
         void ReapFinishedConnections();
@@ -130,10 +137,15 @@ namespace BECore {
         uint16_t _port = 0;
         std::atomic<bool> _stopping{false};
         Thread _acceptThread;
+        Thread _refusalThread;              // answers the clients that are refused, so that a silent one never holds up the accept thread
         WebSocketConnectionId _nextId = 1;  // accept thread only; not reset by Stop(), so an id is never reused
 
         Mutex _connectionsMutex{BE_LOCK_SITE("WebSocket connections")};
         Vector<ConnectionPtr> _connections;  // guarded by _connectionsMutex
+
+        Mutex _refusalsMutex{BE_LOCK_SITE("WebSocket refusals")};
+        ConditionVariable _refusalWake;
+        eastl::deque<Socket> _refusals;  // guarded by _refusalsMutex
     };
 
 }  // namespace BECore

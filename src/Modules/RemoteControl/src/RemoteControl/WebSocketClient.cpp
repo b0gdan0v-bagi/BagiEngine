@@ -1,32 +1,20 @@
 #include "WebSocketClient.h"
 
 #include <RemoteControl/WebSocketHandshake.h>
+#include <RemoteControl/WebSocketHttpHead.h>
 
 namespace BECore {
 
     namespace {
 
-        constexpr StringView kHandshakeHeadEnd = "\r\n\r\n";
         constexpr size_t kReadChunkSize = 16 * 1024;
-        constexpr size_t kHandshakeChunkSize = 1024;
         constexpr size_t kFrameOverheadBytes = 14;  // header and masking key of a frame, for the byte cap of the send queue
-        constexpr size_t kCloseCodeSize = 2;
         constexpr size_t kMaskSize = 4;
         constexpr uint32_t kByteMask = 0xFF;
         constexpr uint32_t kBitsPerByte = 8;
 
         [[nodiscard]] size_t EventBytes(const WebSocketClientEvent& event) {
             return event.text.size() + event.reason.size();
-        }
-
-        /// The payload of a close frame: the code, then the reason cut to fit a control frame
-        [[nodiscard]] Vector<uint8_t> MakeClosePayload(uint16_t code, StringView reason) {
-            Vector<uint8_t> payload;
-            payload.push_back(static_cast<uint8_t>(code >> kBitsPerByte));
-            payload.push_back(static_cast<uint8_t>(code & kByteMask));
-            const size_t reasonSize = std::min(reason.size(), kMaxControlPayload - kCloseCodeSize);
-            payload.insert(payload.end(), reinterpret_cast<const uint8_t*>(reason.data()), reinterpret_cast<const uint8_t*>(reason.data()) + reasonSize);
-            return payload;
         }
 
     }  // namespace
@@ -95,7 +83,7 @@ namespace BECore {
             AbortConnection(code, reason);
         } else {
             const EndOfConnection end{code, reason};
-            QueueFrame(WebSocketOpcode::kClose, MakeClosePayload(code, reason), /*isClose=*/true, &end);
+            QueueFrame(WebSocketOpcode::kClose, EncodeClosePayload(code, reason), /*isClose=*/true, &end);
         }
     }
 
@@ -263,25 +251,32 @@ namespace BECore {
             return false;
         }
 
-        // One deadline for the whole answer, as on the server's side: a timeout per Receive() would let a server that sends a byte now and then hold us.
-        // With TLS it is the deadline of the TLS handshake as well
-        const auto deadline = _handshakeDeadline;
+        // With TLS the deadline is the one of the TLS handshake as well
         Vector<uint8_t> received;
-        Array<uint8_t, kHandshakeChunkSize> chunk;
-        size_t headSize = 0;
-        for (;;) {
-            // Zero would mean "wait for ever" to the socket, so a deadline that is (nearly) reached ends the handshake
-            const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now());
-            if (left <= std::chrono::milliseconds::zero()) {
-                SetEnd(WebSocketCloseCode::kAbnormalClosure, Format("the server did not answer the opening request within {} ms", _settings.handshakeTimeout.count()));
+        const HttpHeadResult read = ReadHttpHead(
+            _handshakeDeadline, [this](std::chrono::milliseconds left) { _stream.SetReceiveTimeout(left); },
+            [this](Span<uint8_t> buffer) {
+                const auto count = _stream.Receive(buffer);
+                if (count) {
+                    _bytesReceived.fetch_add(*count, std::memory_order_relaxed);
+                }
+                return count;
+            },
+            received);
+        const String noAnswer = Format("the server did not answer the opening request within {} ms", _settings.handshakeTimeout.count());
+        switch (read.outcome) {
+            case HttpHeadOutcome::Complete:
+                break;
+            case HttpHeadOutcome::DeadlinePassed:
+                SetEnd(WebSocketCloseCode::kAbnormalClosure, noAnswer);
                 return false;
-            }
-            _stream.SetReceiveTimeout(left);
-            const auto count = _stream.Receive(Span<uint8_t>(chunk.data(), chunk.size()));
-            if (!count) {
-                switch (count.error()) {
+            case HttpHeadOutcome::TooLong:
+                SetEnd(WebSocketCloseCode::kAbnormalClosure, "the server's answer to the opening request is too long");
+                return false;
+            case HttpHeadOutcome::StreamEnded:
+                switch (read.error) {
                     case SocketError::TimedOut:
-                        SetEnd(WebSocketCloseCode::kAbnormalClosure, Format("the server did not answer the opening request within {} ms", _settings.handshakeTimeout.count()));
+                        SetEnd(WebSocketCloseCode::kAbnormalClosure, noAnswer);
                         break;
                     case SocketError::Closed:
                         SetEnd(WebSocketCloseCode::kAbnormalClosure, "the connection was closed during the opening handshake");
@@ -291,22 +286,8 @@ namespace BECore {
                         break;
                 }
                 return false;
-            }
-            _bytesReceived.fetch_add(*count, std::memory_order_relaxed);
-            // Plain pointers: an Array iterator is a pointer in EASTL, and its insert does not take MSVC's class iterator of a std:: container
-            received.insert(received.end(), chunk.data(), chunk.data() + *count);
-
-            const StringView text(reinterpret_cast<const char*>(received.data()), received.size());
-            const size_t end = text.find(kHandshakeHeadEnd);
-            if (end != StringView::npos) {
-                headSize = end + kHandshakeHeadEnd.size();
-                break;
-            }
-            if (received.size() > kMaxHandshakeBytes) {
-                SetEnd(WebSocketCloseCode::kAbnormalClosure, "the server's answer to the opening request is too long");
-                return false;
-            }
         }
+        const size_t headSize = read.headSize;
 
         const auto accepted = CheckServerHandshakeResponse(StringView(reinterpret_cast<const char*>(received.data()), headSize), key);
         if (!accepted) {
@@ -342,7 +323,7 @@ namespace BECore {
                 if (!popped) {
                     LOG_WARNING("{}: the server broke the protocol: {}"_format(_settings.logName, popped.error().reason));
                     SetEnd(popped.error().closeCode, popped.error().reason);
-                    QueueFrame(WebSocketOpcode::kClose, MakeClosePayload(popped.error().closeCode, popped.error().reason), /*isClose=*/true);
+                    QueueFrame(WebSocketOpcode::kClose, EncodeClosePayload(popped.error().closeCode, popped.error().reason), /*isClose=*/true);
                     return;
                 }
                 if (!popped->has_value()) {
@@ -372,7 +353,7 @@ namespace BECore {
             case WebSocketMessageKind::Binary: {
                 constexpr StringView kReason = "binary messages are not supported";
                 SetEnd(WebSocketCloseCode::kUnsupportedData, kReason);
-                QueueFrame(WebSocketOpcode::kClose, MakeClosePayload(WebSocketCloseCode::kUnsupportedData, kReason), /*isClose=*/true);
+                QueueFrame(WebSocketOpcode::kClose, EncodeClosePayload(WebSocketCloseCode::kUnsupportedData, kReason), /*isClose=*/true);
                 return false;
             }
             case WebSocketMessageKind::Ping:
@@ -382,7 +363,7 @@ namespace BECore {
                 return true;
             case WebSocketMessageKind::Close:
                 SetEnd(message.closeCode, message.GetText());
-                QueueFrame(WebSocketOpcode::kClose, MakeClosePayload(message.closeCode == WebSocketCloseCode::kNoStatusReceived ? WebSocketCloseCode::kNormal : message.closeCode, {}),
+                QueueFrame(WebSocketOpcode::kClose, EncodeClosePayload(message.closeCode == WebSocketCloseCode::kNoStatusReceived ? WebSocketCloseCode::kNormal : message.closeCode, {}),
                            /*isClose=*/true);
                 return false;
         }

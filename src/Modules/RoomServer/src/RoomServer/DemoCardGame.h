@@ -56,7 +56,7 @@ namespace BECore {
         uint64_t _version = 0;
     };
 
-    /// The negative control: the same game whose view also carries every hand ("allHands"). A leak check must catch it. Only `--test-games` registers it
+    /// The negative control: the same game whose view also carries every hand ("allHands"). A leak check must catch it. `--test-games` registers it beside `cards`
     class LeakyDemoCardGame : public DemoCardGame {
     public:
         std::expected<Json, ControlError> GetSeatView(int seat) const override;

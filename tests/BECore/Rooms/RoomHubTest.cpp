@@ -1,3 +1,4 @@
+#include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Rooms/TestClient.h>
 #include <Rooms/RoomCode.h>
 
@@ -36,6 +37,27 @@ namespace BECore::Tests {
         }
 
     }  // namespace
+
+    TEST(RoomHubTest, ATickOfARoomInWhichNothingChangedSendsAndAllocatesNothing) {
+        constexpr int kTicks = 64;
+        HubHarness harness;
+        const ConnectionId host = harness.Connect();
+        harness.Create(host, "Ann");
+        harness.Tick();
+        harness.Tick();
+        const size_t received = harness.Client(host).received.size();
+
+        const uint64_t before = AllocTracker::GetThreadCounters().count;
+        for (int i = 0; i < kTicks; ++i) {
+            harness.Tick();
+        }
+        const uint64_t allocations = AllocTracker::GetThreadCounters().count - before;
+
+        EXPECT_EQ(harness.Client(host).received.size(), received);
+        if constexpr (AllocTracker::kEnabled) {
+            EXPECT_EQ(allocations, 0u);
+        }
+    }
 
     TEST(RoomHubTest, CreateThenJoin) {
         HubHarness harness;
