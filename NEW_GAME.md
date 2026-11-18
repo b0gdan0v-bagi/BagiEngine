@@ -20,7 +20,7 @@ Do not guess any of these. Ask, write the answers down and repeat them back befo
 
 ## 1. The engine branch
 
-Each game follows a permanent branch of the engine, `games/<area>` (Chess: `games/chess`), not `main`. It is the base branch of engine work done from the game: `todo-loop` cuts its `todo/<id>` branches from it and `todo-merge` merges them back. Engine work lands there (Mahjong's `games/mahjong` is where most of it is done), and `main` is the showcase: nothing reaches it except through a `games/*` branch, a `todo/<id>` branch is never merged into it or cut from it. The owner carries the branches around (`games/X` -> `main` -> the other `games/*`) when they choose, with the skill `/sync-engine` (`.claude/skills/sync-engine/SKILL.md`), which merges locally, never pushes and prints the `git push` lines.
+Each game follows a permanent branch of the engine, `games/<area>` (Chess: `games/chess`), not `main`. It is the base branch of engine work done from the game: `todo-loop` cuts its `todo/<id>` branches from it and `todo-merge` merges them back. Engine work from a game lands there, and `main` is the tested branch every game ends up with. The owner runs the skill `/sync-engine` (`.claude/skills/sync-engine/SKILL.md`) in the engine's own repository when they choose: it merges the `games/*` branches into `main`, tests `main` and merges it back into every `games/*`, locally, never pushes and prints the `git push` lines. The game then takes its branch into `engine/` as a pointer commit of its own.
 
 ```bash
 git -C <engine checkout> switch -c games/<area> main
@@ -85,7 +85,7 @@ The skills and agents are **one copy, in the engine**. The game links them; it d
 
 ```bash
 mkdir -p .claude/skills .claude/agents .claude/rules
-for s in build clang-format strip-pch-includes todo-loop todo-merge todo-add todo-db sync-engine; do
+for s in build clang-format strip-pch-includes todo-loop todo-merge todo-add todo-db; do
     ln -s ../../engine/.claude/skills/$s .claude/skills/$s
 done
 for a in todo-architect todo-classifier todo-developer todo-reviewer; do
@@ -143,7 +143,7 @@ ctest --preset macos-debug
 
 - Commit in steps, like Chess: the submodule (`Add the engine as the submodule engine/`), the infrastructure (`.claude/`, `CI/`, rules, ignore files), then the game.
 - Before you say the work is done, check `git log --format='%an <%ae>'` in the game **and** in `engine/` (for any engine commit made during the setup). Every line must show the identity the owner gave.
-- The agent never pushes and never creates remote repositories. It does not move `main` or `games/*` of the engine (syncing them is the owner's `/sync-engine`) and does not run `todo.py area set` without the owner.
+- The agent never pushes and never creates remote repositories. It does not move `main` or `games/*` of the engine (syncing them is the owner's `/sync-engine`, run in the engine's own repository) and does not run `todo.py area set` without the owner.
 - Later the pointer of `engine/` moves only as a commit of its own: by `todo-merge` after an engine branch is merged, or by the owner (`git submodule update --remote engine`).
 - Before `Update engine`, with `engine/` on the new commit, `python3 engine/tools/changelog/changelog.py breaking --since pointer --repo engine` lists what the move breaks for the game, each with its `Adapt:` line and migration step (`engine/tools/changelog/CLAUDE.md`).
 
