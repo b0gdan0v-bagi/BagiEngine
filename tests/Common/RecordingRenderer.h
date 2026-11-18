@@ -76,6 +76,9 @@ namespace BECore::Tests {
      *
      * Needs no window or GPU, so layout and draw-order tests can run anywhere. It applies the view transform and the
      * clip like a backend does, which lets a test read the calls in output pixels. Textures it makes keep their pixels.
+     *
+     * An allocation test calls ClearCalls() between frames: it keeps the storage of the calls, so from the second equal frame on the recorder
+     * allocates nothing and the test counts only the code it measures. `calls.clear()` gives the geometry storage up.
      */
     class RecordingRenderer : public IRenderer {
     public:
@@ -128,6 +131,11 @@ namespace BECore::Tests {
                 return;
             }
             DrawCall call;
+            if (!_spareGeometry.empty()) {
+                call.vertices = std::move(_spareGeometry.back().vertices);
+                call.indices = std::move(_spareGeometry.back().indices);
+                _spareGeometry.pop_back();
+            }
             call.kind = DrawKind::Geometry;
             call.texture = texture;
             call.color = ApplyOpacity(vertices[0].color);
@@ -189,6 +197,15 @@ namespace BECore::Tests {
         }
 
         void ClearCalls() {
+            // Last call first: the spare lists are taken from the back, so each draw of an equal frame gets the list that already fits it
+            for (size_t i = calls.size(); i > 0; --i) {
+                DrawCall& call = calls[i - 1];
+                if (call.kind == DrawKind::Geometry) {
+                    call.vertices.clear();
+                    call.indices.clear();
+                    _spareGeometry.push_back(GeometryStorage{std::move(call.vertices), std::move(call.indices)});
+                }
+            }
             calls.clear();
         }
 
@@ -198,7 +215,13 @@ namespace BECore::Tests {
         uint32_t texturesCreated = 0;
 
     private:
+        struct GeometryStorage {
+            Vector<GeometryVertex> vertices;
+            Vector<int> indices;
+        };
+
         IntrusivePtr<IGpuDevice> _gpuDevice;
+        Vector<GeometryStorage> _spareGeometry;
     };
 
 }  // namespace BECore::Tests
