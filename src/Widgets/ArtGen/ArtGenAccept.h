@@ -8,6 +8,7 @@
 #include <BECore/Utils/FunctionRef.h>
 #include <Widgets/ArtGen/ArtGenImage.h>
 #include <Widgets/ArtGen/ArtGenSound.h>
+#include <Widgets/TextureEditor/SpriteAtlas.h>
 #include <cstdint>
 #include <expected>
 #include <filesystem>
@@ -58,6 +59,15 @@ namespace BECore {
     uint32_t ReloadSpritesUsing(SceneNode& root, PoolString sprite, PoolString texturePath);
 
     /**
+     * @brief The entry Accept stores for @p sprite once its picture is the whole PNG at @p texturePath of @p width x @p height.
+     *
+     * A sprite with no entry or no `atlas` link gets the whole image. One in an atlas group keeps its link (group and pack settings):
+     * unpacked, it points to the new file; packed, it keeps its place in the atlas (texture and rect) and only its `atlas.source` becomes
+     * the new file, so the repack cuts the new picture. No files, no services.
+     */
+    [[nodiscard]] SpriteEntry AcceptedSpriteEntry(const TextureLibrary& library, PoolString sprite, PoolString texturePath, uint32_t width, uint32_t height);
+
+    /**
      * @brief Puts @p entry into @p library and calls @p save once; an entry the library already holds is left alone and nothing is saved, so a
      * switch or re-accept of an unchanged sprite does not rewrite TextureLibrary.xml.
      *
@@ -65,18 +75,40 @@ namespace BECore {
      */
     std::expected<bool, String> StoreSpriteEntry(TextureLibrary& library, const SpriteEntry& entry, FunctionRef<bool()> save);
 
+    /// What AcceptIntoLibrary did
+    struct AcceptStored {
+        bool saved = false;               // the library was saved (once for the entry, once more when the repack moved members)
+        Optional<AtlasWritten> repacked;  // engaged when the sprite was packed and its group was repacked
+    };
+
+    /**
+     * @brief The library side of Accept of the PNG @p copied as @p sprite: stores `AcceptedSpriteEntry` and, for a packed sprite, repacks its
+     * group with the settings the group was packed with (`PackSettingsOf`) and saves again when the repack moved a member. No services.
+     *
+     * A sprite with no atlas link is only stored, as StoreSpriteEntry does. A repack that fails leaves the new `atlas.source` in the saved
+     * library and the old atlas file as it was (the error says the PNG is in place and Pack in the Sprite Library finishes it). When the
+     * second save fails the members go back to what the library held before the repack; the atlas file is already replaced then, and the
+     * error says so.
+     */
+    std::expected<AcceptStored, String> AcceptIntoLibrary(TextureLibrary& library, const ArtGenCopied& copied, StringView sprite, const AtlasIo& io, FunctionRef<bool()> save);
+
+    /// What `artgen_accept` answers as `atlas`: `null` when no atlas was written, else `{name, texturePath, width, height, members}`
+    [[nodiscard]] Json AtlasReplyToJson(const Optional<AtlasWritten>& repacked);
+
     /// What AcceptVariant did
     struct ArtGenAccepted {
         ArtGenCopied copied;
         uint32_t reloadedSprites = 0;
+        Optional<AtlasWritten> repacked;  // the atlas of a packed sprite, written again
     };
 
     /**
      * @brief Accept of the Generate panel and of `artgen_accept`: the variant becomes the game's sprite @p sprite.
      *
-     * Copies it into the game's assets (CopyVariantIntoAssets with @p plan), adds or replaces the TextureLibrary entry (the whole written image) and saves the library,
-     * drops the old texture of that path from the resource cache and reloads every sprite of the active scene that uses it, so the new picture shows
-     * at once. Fails without changing the library when the game has no assets folder or no TextureLibrary.xml.
+     * Copies it into the game's assets (CopyVariantIntoAssets with @p plan), adds or replaces the TextureLibrary entry (the whole written image; a
+     * sprite of an atlas group keeps its link, and a packed one has its atlas repacked, see AcceptIntoLibrary) and saves the library, drops the old
+     * textures of the paths from the resource cache and reloads every sprite of the active scene that uses them, so the new picture shows at once. Fails without changing the library when the game has
+     * no assets folder or no TextureLibrary.xml.
      */
     std::expected<ArtGenAccepted, String> AcceptVariant(const ArtGenVariant& variant, StringView sprite, const ArtGenImagePlan& plan);
 
@@ -127,7 +159,7 @@ namespace BECore {
     /**
      * @brief The editor's ArtGenSession::Acceptor: AcceptVariant, then UseSpriteOn @p node when one is given (the scene editor is told the scene changed).
      *
-     * Answers `{sprite, texturePath, png, width, height, processing, reloadedSprites, usedOn}` (the size is the written file's; `processing` is
+     * Answers `{sprite, texturePath, png, width, height, processing, reloadedSprites, atlas, usedOn}` (the size is the written file's; `processing` is
      * `{trim, padding, maxSize, crop, scale, size, frame}`); a failure is `artgen_accept_failed` with the reason.
      */
     std::expected<Json, ControlError> AcceptForControl(const ArtGenVariant& variant, StringView sprite, const ArtGenImagePlan& plan, SceneNode* node);

@@ -1147,6 +1147,10 @@ namespace BECore {
                 const auto reloaded = GetJsonInt(*result, "reloadedSprites").value_or(0);
                 const auto texture = GetJsonString(*result, "texturePath").value_or(String());
                 _acceptMessage = Format("Accepted as '{}' ({}); {} sprite(s) reloaded", StringView(_spriteName), texture, reloaded);
+                if (const Json* atlas = FindJsonMember(*result, "atlas"); atlas != nullptr && atlas->is_object()) {
+                    _acceptMessage +=
+                        Format("; atlas '{}' repacked ({}x{})", GetJsonString(*atlas, "name").value_or(String()), GetJsonInt(*atlas, "width").value_or(0), GetJsonInt(*atlas, "height").value_or(0));
+                }
             } else {
                 _acceptMessage = result.error().message;
             }

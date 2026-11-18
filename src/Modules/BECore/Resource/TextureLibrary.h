@@ -12,14 +12,45 @@ namespace BECore {
     class IDeserializer;
     class ISerializer;
 
+    /// Where the pixels of a packed sprite came from: a file and the rectangle of it.
+    struct SpriteSource {
+        BE_CLASS(SpriteSource)
+
+        BE_REFLECT_FIELD PoolString texturePath;
+        BE_REFLECT_FIELD Rect rect{};
+    };
+
+    /// The settings a group was last packed with, plain data so the library file does not depend on the editor: `sizeMode` is the
+    /// name of the editor's `AtlasSizeMode`. A repack that must give the owner's atlas again reads them back.
+    struct AtlasPackRecord {
+        BE_CLASS(AtlasPackRecord)
+
+        BE_REFLECT_FIELD int padding = 0;
+        BE_REFLECT_FIELD PoolString sizeMode;
+        BE_REFLECT_FIELD uint32_t maxSide = 0;
+    };
+
+    /// The atlas group a sprite belongs to. `source` is engaged exactly when the sprite is packed: the entry's own `texturePath`
+    /// and `srcRect` then point into the atlas file and `source` keeps what Unpack restores. `pack` is engaged once the group was
+    /// packed and is the same for every member.
+    struct SpriteAtlasLink {
+        BE_CLASS(SpriteAtlasLink)
+
+        BE_REFLECT_FIELD PoolString name;
+        BE_REFLECT_FIELD Optional<SpriteSource> source;
+        BE_REFLECT_FIELD Optional<AtlasPackRecord> pack;
+    };
+
     /// One named sprite: a texture and a rectangle of it. Reflected: the fields are the file's attributes (`Resource/CLAUDE.md`,
-    /// "TextureLibrary"). `BE_CLASS` adds a vptr, so it is not an aggregate: default-construct and assign the fields.
+    /// "TextureLibrary"). `BE_CLASS` adds a vptr, so it is not an aggregate: default-construct and assign the fields. An optional
+    /// field is written only when engaged, so a sprite without an atlas writes what it always did.
     struct SpriteEntry {
         BE_CLASS(SpriteEntry)
 
         BE_REFLECT_FIELD PoolString name;
         BE_REFLECT_FIELD PoolString texturePath;
         BE_REFLECT_FIELD Rect srcRect{};
+        BE_REFLECT_FIELD Optional<SpriteAtlasLink> atlas;
     };
 
     /** @brief Named sprites from the active game's TextureLibrary.xml; reached through CoreManager::GetTextureLibrary(). */

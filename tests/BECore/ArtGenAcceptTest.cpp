@@ -1,7 +1,10 @@
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
+#include <Widgets/TextureEditor/SpriteAtlas.h>
+#include <algorithm>
 #include <cstdio>
+#include <fstream>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -97,7 +100,132 @@ namespace BECore::Tests {
             return entry;
         }
 
+        constexpr int kTestPadding = 3;
+        constexpr uint32_t kTestMaxSide = 2048;
+
+        AtlasPackRecord PackRecordOf(const char* sizeMode) {
+            AtlasPackRecord record;
+            record.padding = kTestPadding;
+            record.sizeMode = PoolString::Intern(sizeMode);
+            record.maxSide = kTestMaxSide;
+            return record;
+        }
+
+        /// An entry in group @p group, with the pack record `Tight` when @p packRecord; packed, it has the source @p source
+        SpriteEntry GroupedEntry(const char* name, const char* path, Rect rect, const char* group, bool packRecord, const char* source = nullptr, Rect sourceRect = Rect(0, 0, 0, 0)) {
+            SpriteEntry entry = LibraryEntry(name, path, rect);
+            SpriteAtlasLink link;
+            link.name = PoolString::Intern(group);
+            if (packRecord) {
+                link.pack = PackRecordOf("Tight");
+            }
+            if (source != nullptr) {
+                SpriteSource from;
+                from.texturePath = PoolString::Intern(source);
+                from.rect = sourceRect;
+                link.source = from;
+            }
+            entry.atlas = link;
+            return entry;
+        }
+
+        bool SameRectOf(const Rect& a, const Rect& b) {
+            return a.x == b.x && a.y == b.y && a.w == b.w && a.h == b.h;
+        }
+
     }  // namespace
+
+    TEST(ArtGenAcceptedEntryTest, ASpriteWithNoEntryGetsTheWholeImage) {
+        const TextureLibrary library;
+        const SpriteEntry entry = AcceptedSpriteEntry(library, PoolString::Intern("queen"), PoolString::Intern("assets/artgen/queen.png"), 64, 48);
+        EXPECT_EQ(entry.name.ToStringView(), "queen");
+        EXPECT_EQ(entry.texturePath.ToStringView(), "assets/artgen/queen.png");
+        EXPECT_TRUE(SameRectOf(entry.srcRect, Rect(0, 0, 64, 48)));
+        EXPECT_FALSE(entry.atlas.has_value());
+    }
+
+    TEST(ArtGenAcceptedEntryTest, AnEntryWithNoLinkIsReplacedWhole) {
+        TextureLibrary library;
+        library.AddOrUpdate(LibraryEntry("queen", "assets/old.png", Rect(10, 10, 5, 5)));
+        const SpriteEntry entry = AcceptedSpriteEntry(library, PoolString::Intern("queen"), PoolString::Intern("assets/artgen/queen.png"), 64, 48);
+        EXPECT_EQ(entry.texturePath.ToStringView(), "assets/artgen/queen.png");
+        EXPECT_TRUE(SameRectOf(entry.srcRect, Rect(0, 0, 64, 48)));
+        EXPECT_FALSE(entry.atlas.has_value());
+    }
+
+    TEST(ArtGenAcceptedEntryTest, AnUnpackedMemberKeepsItsGroupAndSettings) {
+        TextureLibrary library;
+        library.AddOrUpdate(GroupedEntry("queen", "assets/old.png", Rect(10, 10, 5, 5), "pieces", true));
+        const SpriteEntry entry = AcceptedSpriteEntry(library, PoolString::Intern("queen"), PoolString::Intern("assets/artgen/queen.png"), 64, 48);
+        EXPECT_EQ(entry.texturePath.ToStringView(), "assets/artgen/queen.png");
+        EXPECT_TRUE(SameRectOf(entry.srcRect, Rect(0, 0, 64, 48)));
+        ASSERT_TRUE(entry.atlas.has_value());
+        EXPECT_EQ(entry.atlas->name.ToStringView(), "pieces");
+        EXPECT_FALSE(entry.atlas->source.has_value());
+        ASSERT_TRUE(entry.atlas->pack.has_value());
+        EXPECT_EQ(entry.atlas->pack->padding, kTestPadding);
+        EXPECT_EQ(entry.atlas->pack->sizeMode.ToStringView(), "Tight");
+        EXPECT_EQ(entry.atlas->pack->maxSide, kTestMaxSide);
+    }
+
+    TEST(ArtGenAcceptedEntryTest, APackedMemberKeepsItsPlaceAndTakesTheNewSource) {
+        TextureLibrary library;
+        library.AddOrUpdate(GroupedEntry("queen", "assets/atlases/pieces.png", Rect(8, 16, 20, 30), "pieces", true, "assets/sheet.png", Rect(100, 50, 20, 30)));
+        const SpriteEntry entry = AcceptedSpriteEntry(library, PoolString::Intern("queen"), PoolString::Intern("assets/artgen/queen.png"), 64, 48);
+        EXPECT_EQ(entry.texturePath.ToStringView(), "assets/atlases/pieces.png");
+        EXPECT_TRUE(SameRectOf(entry.srcRect, Rect(8, 16, 20, 30)));
+        ASSERT_TRUE(entry.atlas.has_value());
+        EXPECT_EQ(entry.atlas->name.ToStringView(), "pieces");
+        ASSERT_TRUE(entry.atlas->source.has_value());
+        EXPECT_EQ(entry.atlas->source->texturePath.ToStringView(), "assets/artgen/queen.png");
+        EXPECT_TRUE(SameRectOf(entry.atlas->source->rect, Rect(0, 0, 64, 48)));
+        ASSERT_TRUE(entry.atlas->pack.has_value());
+        EXPECT_EQ(entry.atlas->pack->sizeMode.ToStringView(), "Tight");
+    }
+
+    TEST(ArtGenAcceptedEntryTest, AnotherMembersOfTheSameSheetKeepTheirSource) {
+        TextureLibrary library;
+        library.AddOrUpdate(GroupedEntry("queen", "assets/atlases/pieces.png", Rect(8, 16, 20, 30), "pieces", true, "assets/sheet.png", Rect(100, 50, 20, 30)));
+        library.AddOrUpdate(GroupedEntry("king", "assets/atlases/pieces.png", Rect(40, 16, 20, 30), "pieces", true, "assets/sheet.png", Rect(0, 0, 20, 30)));
+        const SpriteEntry accepted = AcceptedSpriteEntry(library, PoolString::Intern("queen"), PoolString::Intern("assets/artgen/queen.png"), 64, 48);
+        EXPECT_EQ(accepted.atlas->source->texturePath.ToStringView(), "assets/artgen/queen.png");
+        EXPECT_EQ(library.GetSprite(PoolString::Intern("king"))->atlas->source->texturePath.ToStringView(), "assets/sheet.png");
+    }
+
+    TEST(ArtGenLibraryEntryTest, AnotherLinkOfTheSameTextureAndRectIsStored) {
+        const SpriteEntry base = GroupedEntry("queen", "assets/atlases/pieces.png", Rect(8, 16, 20, 30), "pieces", true, "assets/a.png", Rect(0, 0, 20, 30));
+        const Vector<SpriteEntry> others{
+            GroupedEntry("queen", "assets/atlases/pieces.png", Rect(8, 16, 20, 30), "other", true, "assets/a.png", Rect(0, 0, 20, 30)),
+            GroupedEntry("queen", "assets/atlases/pieces.png", Rect(8, 16, 20, 30), "pieces", true, "assets/b.png", Rect(0, 0, 20, 30)),
+            GroupedEntry("queen", "assets/atlases/pieces.png", Rect(8, 16, 20, 30), "pieces", true, "assets/a.png", Rect(0, 0, 21, 30)),
+            GroupedEntry("queen", "assets/atlases/pieces.png", Rect(8, 16, 20, 30), "pieces", false, "assets/a.png", Rect(0, 0, 20, 30)),
+            GroupedEntry("queen", "assets/atlases/pieces.png", Rect(8, 16, 20, 30), "pieces", true),
+            LibraryEntry("queen", "assets/atlases/pieces.png", Rect(8, 16, 20, 30)),
+        };
+        for (const SpriteEntry& other : others) {
+            TextureLibrary library;
+            library.AddOrUpdate(base);
+            int saves = 0;
+            const auto stored = StoreSpriteEntry(library, other, [&saves] {
+                ++saves;
+                return true;
+            });
+            ASSERT_TRUE(stored);
+            EXPECT_TRUE(*stored);
+            EXPECT_EQ(saves, 1);
+        }
+
+        TextureLibrary same;
+        same.AddOrUpdate(base);
+        int saves = 0;
+        const auto stored = StoreSpriteEntry(same, base, [&saves] {
+            ++saves;
+            return true;
+        });
+        ASSERT_TRUE(stored);
+        EXPECT_FALSE(*stored);
+        EXPECT_EQ(saves, 0);
+    }
 
     TEST(ArtGenLibraryEntryTest, ANewEntryIsAddedAndSavedOnce) {
         TextureLibrary library;
@@ -149,6 +277,385 @@ namespace BECore::Tests {
 
         EXPECT_FALSE(StoreSpriteEntry(library, LibraryEntry("king", "assets/artgen/king.png", Rect(0, 0, 8, 8)), [] { return false; }));
         EXPECT_EQ(library.GetSprite(PoolString::Intern("king")), nullptr);
+    }
+
+    namespace {
+
+        constexpr uint8_t kOpaque = 255;
+
+        RgbaImage MakeSolid(uint32_t width, uint32_t height, uint8_t red, uint8_t green, uint8_t blue) {
+            RgbaImage image;
+            image.width = width;
+            image.height = height;
+            image.pixels.resize(static_cast<size_t>(width) * height * kBytesPerPixel);
+            for (size_t i = 0; i < static_cast<size_t>(width) * height; ++i) {
+                image.pixels[i * kBytesPerPixel + 0] = red;
+                image.pixels[i * kBytesPerPixel + 1] = green;
+                image.pixels[i * kBytesPerPixel + 2] = blue;
+                image.pixels[i * kBytesPerPixel + 3] = kOpaque;
+            }
+            return image;
+        }
+
+        Vector<uint8_t> ReadAllBytes(const std::filesystem::path& file) {
+            std::ifstream stream(file, std::ios::binary | std::ios::ate);  //-NoStd: a test reads the file back
+            Vector<uint8_t> bytes(static_cast<size_t>(std::max<std::streamoff>(stream.tellg(), 0)));
+            stream.seekg(0);
+            stream.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+            return bytes;
+        }
+
+        /// True when every pixel of the rect @p at of @p atlas has the colour of a MakeSolid image
+        bool RectIsSolid(const RgbaImage& atlas, const Rect& at, uint8_t red, uint8_t green, uint8_t blue) {
+            for (uint32_t y = static_cast<uint32_t>(at.y); y < static_cast<uint32_t>(at.y + at.h); ++y) {
+                for (uint32_t x = static_cast<uint32_t>(at.x); x < static_cast<uint32_t>(at.x + at.w); ++x) {
+                    const uint8_t* pixel = atlas.pixels.data() + (static_cast<size_t>(y) * atlas.width + x) * kBytesPerPixel;
+                    if (pixel[0] != red || pixel[1] != green || pixel[2] != blue || pixel[3] != kOpaque) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        constexpr StringView kQueenPng = "assets/artgen/queen.png";
+        constexpr StringView kRookPng = "assets/rook.png";
+        constexpr StringView kAtlasPng = "assets/atlases/ui.png";
+
+        /// A game folder with `assets/` in it, removed with the object; virtual paths resolve into it
+        class AcceptGame {
+        public:
+            AcceptGame() : _root(TestTempDirectory("artgen_accept_atlas")), _resolver{_root} {
+                std::error_code ignored;
+                std::filesystem::remove_all(_root, ignored);
+                std::filesystem::create_directories(_root / "assets" / "artgen", ignored);
+            }
+            ~AcceptGame() {
+                std::error_code ignored;
+                std::filesystem::remove_all(_root, ignored);
+            }
+            AcceptGame(const AcceptGame&) = delete;
+            AcceptGame& operator=(const AcceptGame&) = delete;
+
+            [[nodiscard]] std::filesystem::path Resolve(StringView virtualPath) const {
+                return _resolver(virtualPath);
+            }
+
+            /// The `resolve` of the result is a view of this object, which must outlive the call it is given to
+            [[nodiscard]] AtlasIo Io() const {
+                return AtlasIo{_root / "assets", _resolver};
+            }
+
+            void SavePng(StringView virtualPath, const RgbaImage& image) const {
+                ASSERT_TRUE(SaveRgbaPng(Resolve(virtualPath), image).has_value());
+            }
+
+            /// What CopyVariantIntoAssets would have returned for the picture just saved at the sprite's path
+            [[nodiscard]] ArtGenCopied Copied(const RgbaImage& image) const {
+                SavePng(kQueenPng, image);
+                ArtGenCopied copied;
+                copied.texturePath = String(kQueenPng);
+                copied.pngFile = Resolve(kQueenPng);
+                copied.width = image.width;
+                copied.height = image.height;
+                return copied;
+            }
+
+            [[nodiscard]] bool AtlasExists() const {
+                return std::filesystem::exists(Resolve(kAtlasPng));
+            }
+
+            [[nodiscard]] RgbaImage Atlas() const {
+                auto loaded = LoadRgbaImage(Resolve(kAtlasPng));
+                EXPECT_TRUE(loaded.has_value());
+                return loaded ? std::move(*loaded) : RgbaImage{};
+            }
+
+        private:
+            struct Resolver {
+                std::filesystem::path root;
+
+                std::filesystem::path operator()(StringView virtualPath) const {
+                    return root / ToStd(virtualPath);
+                }
+            };
+
+            std::filesystem::path _root;
+            Resolver _resolver;
+        };
+
+        constexpr uint8_t kLow = 40;
+        constexpr uint8_t kHigh = 200;
+
+        /// Group "ui" of the queen (4x4 blue) and the rook (2x2 red), their sources on disk; both packed when @p pack
+        void FillGroup(TextureLibrary& library, const AcceptGame& game, bool pack, const PackSettings& settings = PackSettings{}) {
+            game.SavePng(kQueenPng, MakeSolid(4, 4, 0, 0, kHigh));
+            game.SavePng(kRookPng, MakeSolid(2, 2, kHigh, 0, 0));
+            library.AddOrUpdate(GroupedEntry("queen", "assets/artgen/queen.png", Rect(0, 0, 4, 4), "ui", false));
+            library.AddOrUpdate(GroupedEntry("rook", "assets/rook.png", Rect(0, 0, 2, 2), "ui", false));
+            if (pack) {
+                ASSERT_TRUE(WriteAtlas(library, "ui", settings, game.Io()).has_value());
+            }
+        }
+
+        const SpriteEntry& Queen(const TextureLibrary& library) {
+            return *library.GetSprite(PoolString::Intern("queen"));
+        }
+
+        const SpriteEntry& Rook(const TextureLibrary& library) {
+            return *library.GetSprite(PoolString::Intern("rook"));
+        }
+
+    }  // namespace
+
+    TEST(ArtGenAcceptIntoLibraryTest, APackedSpriteIsRepackedWithTheNewPicture) {
+        const AcceptGame game;
+        TextureLibrary library;
+        FillGroup(library, game, true);
+        const ArtGenCopied copied = game.Copied(MakeSolid(6, 2, 0, kHigh, 0));
+        int saves = 0;
+        auto save = [&saves] {
+            ++saves;
+            return true;
+        };
+
+        const auto stored = AcceptIntoLibrary(library, copied, "queen", game.Io(), save);
+
+        ASSERT_TRUE(stored.has_value());
+        EXPECT_TRUE(stored->saved);
+        EXPECT_EQ(saves, 2);
+        ASSERT_TRUE(stored->repacked.has_value());
+        EXPECT_EQ(stored->repacked->texturePath.ToStringView(), kAtlasPng);
+        EXPECT_EQ(Queen(library).texturePath.ToStringView(), kAtlasPng);
+        EXPECT_EQ(Queen(library).srcRect.w, 6.0f);
+        EXPECT_EQ(Queen(library).srcRect.h, 2.0f);
+        ASSERT_TRUE(IsPackedSprite(Queen(library)));
+        EXPECT_EQ(Queen(library).atlas->source->texturePath.ToStringView(), kQueenPng);
+        EXPECT_EQ(Queen(library).atlas->source->rect.w, 6.0f);
+
+        const RgbaImage atlas = game.Atlas();
+        EXPECT_TRUE(RectIsSolid(atlas, Queen(library).srcRect, 0, kHigh, 0));
+        EXPECT_TRUE(RectIsSolid(atlas, Rook(library).srcRect, kHigh, 0, 0));
+    }
+
+    TEST(ArtGenAcceptIntoLibraryTest, TheSamePictureAgainChangesNothingAndSavesNothing) {
+        const AcceptGame game;
+        TextureLibrary library;
+        FillGroup(library, game, true);
+        const ArtGenCopied copied = game.Copied(MakeSolid(6, 2, 0, kHigh, 0));
+        int saves = 0;
+        auto save = [&saves] {
+            ++saves;
+            return true;
+        };
+        ASSERT_TRUE(AcceptIntoLibrary(library, copied, "queen", game.Io(), save).has_value());
+        const Vector<SpriteEntry> before{Queen(library), Rook(library)};
+        const Vector<uint8_t> atlasBefore = ReadAllBytes(game.Resolve(kAtlasPng));
+        saves = 0;
+
+        const auto again = AcceptIntoLibrary(library, copied, "queen", game.Io(), save);
+
+        ASSERT_TRUE(again.has_value());
+        EXPECT_FALSE(again->saved);
+        EXPECT_EQ(saves, 0);
+        EXPECT_TRUE(again->repacked.has_value());
+        EXPECT_EQ(Queen(library).srcRect.w, before[0].srcRect.w);
+        EXPECT_EQ(Queen(library).srcRect.x, before[0].srcRect.x);
+        EXPECT_EQ(Rook(library).srcRect.x, before[1].srcRect.x);
+        EXPECT_EQ(ReadAllBytes(game.Resolve(kAtlasPng)), atlasBefore);
+    }
+
+    TEST(ArtGenAcceptIntoLibraryTest, ThePicturesOfOtherMembersStayAsTheyWere) {
+        const AcceptGame game;
+        TextureLibrary library;
+        FillGroup(library, game, true);
+        const ArtGenCopied copied = game.Copied(MakeSolid(3, 3, kLow, kLow, kLow));
+        auto save = [] { return true; };
+
+        ASSERT_TRUE(AcceptIntoLibrary(library, copied, "queen", game.Io(), save).has_value());
+
+        EXPECT_EQ(Rook(library).atlas->source->texturePath.ToStringView(), kRookPng);
+        const RgbaImage atlas = game.Atlas();
+        EXPECT_TRUE(RectIsSolid(atlas, Rook(library).srcRect, kHigh, 0, 0));
+        EXPECT_TRUE(RectIsSolid(atlas, Queen(library).srcRect, kLow, kLow, kLow));
+    }
+
+    TEST(ArtGenAcceptIntoLibraryTest, ARepackThatFailsKeepsTheNewSourceAndTheOldAtlas) {
+        const AcceptGame game;
+        TextureLibrary library;
+        FillGroup(library, game, true);
+        const Vector<uint8_t> atlasBefore = ReadAllBytes(game.Resolve(kAtlasPng));
+        const SpriteEntry rookBefore = Rook(library);
+        std::error_code ignored;
+        std::filesystem::remove(game.Resolve(kRookPng), ignored);
+        const ArtGenCopied copied = game.Copied(MakeSolid(6, 2, 0, kHigh, 0));
+        int saves = 0;
+        auto save = [&saves] {
+            ++saves;
+            return true;
+        };
+
+        const auto stored = AcceptIntoLibrary(library, copied, "queen", game.Io(), save);
+
+        ASSERT_FALSE(stored.has_value());
+        EXPECT_NE(stored.error().find("could not be repacked"), String::npos);
+        EXPECT_NE(stored.error().find("atlas 'ui'"), String::npos);
+        EXPECT_NE(stored.error().find("press Pack in the Sprite Library"), String::npos);
+        EXPECT_NE(stored.error().find("rook"), String::npos);
+        EXPECT_EQ(saves, 1);
+        ASSERT_TRUE(IsPackedSprite(Queen(library)));
+        EXPECT_EQ(Queen(library).atlas->source->texturePath.ToStringView(), kQueenPng);
+        EXPECT_EQ(Queen(library).atlas->source->rect.w, 6.0f);
+        EXPECT_EQ(Queen(library).texturePath.ToStringView(), kAtlasPng);
+        EXPECT_EQ(Rook(library).srcRect.x, rookBefore.srcRect.x);
+        EXPECT_EQ(Rook(library).atlas->source->texturePath.ToStringView(), kRookPng);
+        EXPECT_EQ(ReadAllBytes(game.Resolve(kAtlasPng)), atlasBefore);
+    }
+
+    TEST(ArtGenAcceptIntoLibraryTest, AFailedSecondSaveGivesTheMembersBack) {
+        const AcceptGame game;
+        TextureLibrary library;
+        FillGroup(library, game, true);
+        const ArtGenCopied copied = game.Copied(MakeSolid(6, 2, 0, kHigh, 0));
+        const Rect queenPlace = Queen(library).srcRect;
+        const Rect rookPlace = Rook(library).srcRect;
+        int saves = 0;
+        auto save = [&saves] { return ++saves == 1; };
+
+        const auto stored = AcceptIntoLibrary(library, copied, "queen", game.Io(), save);
+
+        ASSERT_FALSE(stored.has_value());
+        EXPECT_NE(stored.error().find("was rewritten"), String::npos);
+        EXPECT_NE(stored.error().find("press Pack in the Sprite Library"), String::npos);
+        EXPECT_EQ(Queen(library).srcRect.x, queenPlace.x);
+        EXPECT_EQ(Queen(library).srcRect.w, queenPlace.w);
+        EXPECT_EQ(Rook(library).srcRect.x, rookPlace.x);
+        EXPECT_EQ(Rook(library).srcRect.y, rookPlace.y);
+        EXPECT_EQ(Queen(library).atlas->source->texturePath.ToStringView(), kQueenPng);
+        EXPECT_EQ(Queen(library).atlas->source->rect.w, 6.0f);
+    }
+
+    TEST(ArtGenAcceptIntoLibraryTest, AnUnpackedMemberKeepsItsGroupAndNoAtlasIsMade) {
+        const AcceptGame game;
+        TextureLibrary library;
+        FillGroup(library, game, false);
+        const ArtGenCopied copied = game.Copied(MakeSolid(6, 2, 0, kHigh, 0));
+        int saves = 0;
+        auto save = [&saves] {
+            ++saves;
+            return true;
+        };
+
+        const auto stored = AcceptIntoLibrary(library, copied, "queen", game.Io(), save);
+
+        ASSERT_TRUE(stored.has_value());
+        EXPECT_TRUE(stored->saved);
+        EXPECT_FALSE(stored->repacked.has_value());
+        EXPECT_EQ(saves, 1);
+        EXPECT_EQ(Queen(library).texturePath.ToStringView(), kQueenPng);
+        EXPECT_EQ(Queen(library).srcRect.w, 6.0f);
+        ASSERT_TRUE(Queen(library).atlas.has_value());
+        EXPECT_EQ(Queen(library).atlas->name.ToStringView(), "ui");
+        EXPECT_FALSE(Queen(library).atlas->source.has_value());
+        EXPECT_FALSE(game.AtlasExists());
+    }
+
+    TEST(ArtGenAcceptIntoLibraryTest, ASpriteWithNoLinkIsStoredAsBefore) {
+        const AcceptGame game;
+        TextureLibrary library;
+        library.AddOrUpdate(LibraryEntry("queen", "assets/old.png", Rect(1, 1, 3, 3)));
+        const ArtGenCopied copied = game.Copied(MakeSolid(6, 2, 0, kHigh, 0));
+        int saves = 0;
+        auto save = [&saves] {
+            ++saves;
+            return true;
+        };
+
+        const auto stored = AcceptIntoLibrary(library, copied, "queen", game.Io(), save);
+
+        ASSERT_TRUE(stored.has_value());
+        EXPECT_TRUE(stored->saved);
+        EXPECT_FALSE(stored->repacked.has_value());
+        EXPECT_EQ(saves, 1);
+        EXPECT_EQ(Queen(library).texturePath.ToStringView(), kQueenPng);
+        EXPECT_FALSE(Queen(library).atlas.has_value());
+        EXPECT_FALSE(game.AtlasExists());
+
+        TextureLibrary fresh;
+        const auto added = AcceptIntoLibrary(fresh, copied, "queen", game.Io(), save);
+        ASSERT_TRUE(added.has_value());
+        EXPECT_EQ(Queen(fresh).srcRect.h, 2.0f);
+    }
+
+    TEST(ArtGenAcceptIntoLibraryTest, AFailedSaveOfAnUnlinkedSpriteNamesThePng) {
+        const AcceptGame game;
+        TextureLibrary library;
+        const ArtGenCopied copied = game.Copied(MakeSolid(6, 2, 0, kHigh, 0));
+        auto save = [] { return false; };
+
+        const auto stored = AcceptIntoLibrary(library, copied, "queen", game.Io(), save);
+
+        ASSERT_FALSE(stored.has_value());
+        EXPECT_NE(stored.error().find("the PNG is in"), String::npos);
+        EXPECT_EQ(library.GetSprite(PoolString::Intern("queen")), nullptr);
+    }
+
+    TEST(ArtGenAcceptIntoLibraryTest, TheRepackUsesTheGroupsSettingsAndMakesTheFileAPlainPackWould) {
+        const AcceptGame game;
+        TextureLibrary library;
+        PackSettings settings;
+        settings.padding = 3;
+        settings.sizeMode = AtlasSizeMode::Tight;
+        FillGroup(library, game, true, settings);
+        const ArtGenCopied copied = game.Copied(MakeSolid(6, 2, 0, kHigh, 0));
+        auto save = [] { return true; };
+
+        ASSERT_TRUE(AcceptIntoLibrary(library, copied, "queen", game.Io(), save).has_value());
+
+        ASSERT_TRUE(Queen(library).atlas->pack.has_value());
+        EXPECT_EQ(Queen(library).atlas->pack->padding, 3);
+        const PackSettings remembered = PackSettingsOf(library, "ui");
+        EXPECT_EQ(remembered.padding, 3);
+        EXPECT_EQ(remembered.sizeMode, AtlasSizeMode::Tight);
+        const Vector<uint8_t> afterAccept = ReadAllBytes(game.Resolve(kAtlasPng));
+        ASSERT_TRUE(WriteAtlas(library, "ui", remembered, game.Io()).has_value());
+        EXPECT_EQ(ReadAllBytes(game.Resolve(kAtlasPng)), afterAccept);
+    }
+
+    TEST(ArtGenAtlasReplyTest, NoRepackIsNull) {
+        EXPECT_TRUE(AtlasReplyToJson(Optional<AtlasWritten>{}).is_null());
+    }
+
+    TEST(ArtGenAtlasReplyTest, ARepackNamesTheAtlasItsFileAndSize) {
+        AtlasWritten written;
+        written.name = PoolString::Intern("ui");
+        written.texturePath = PoolString::Intern("assets/atlases/ui.png");
+        written.width = 64;
+        written.height = 32;
+        written.changed = {PoolString::Intern("queen"), PoolString::Intern("rook")};
+
+        const Json reply = AtlasReplyToJson(written);
+
+        ASSERT_TRUE(reply.is_object());
+        EXPECT_EQ(GetJsonString(reply, "name").value_or(String()), "ui");
+        EXPECT_EQ(GetJsonString(reply, "texturePath").value_or(String()), "assets/atlases/ui.png");
+        EXPECT_EQ(GetJsonInt(reply, "width").value_or(0), 64);
+        EXPECT_EQ(GetJsonInt(reply, "height").value_or(0), 32);
+        EXPECT_EQ(GetJsonInt(reply, "members").value_or(0), 2);
+    }
+
+    TEST(ArtGenAcceptIntoLibraryTest, TheWrittenAtlasNamesItsGroup) {
+        const AcceptGame game;
+        TextureLibrary library;
+        FillGroup(library, game, true);
+        const ArtGenCopied copied = game.Copied(MakeSolid(6, 2, 0, kHigh, 0));
+        auto save = [] { return true; };
+
+        const auto stored = AcceptIntoLibrary(library, copied, "queen", game.Io(), save);
+
+        ASSERT_TRUE(stored.has_value() && stored->repacked.has_value());
+        EXPECT_EQ(stored->repacked->name.ToStringView(), "ui");
+        EXPECT_EQ(stored->repacked->changed.size(), 2u);
     }
 
     TEST(ArtGenSpriteNameTest, OnlyPlainNamesAreSpriteNames) {
