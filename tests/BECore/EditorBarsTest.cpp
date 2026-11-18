@@ -86,7 +86,12 @@ namespace BECore::Tests {
             void RunFrame() {
                 CoreManager::GetFrameStats().BeginFrame();
                 CoreManager::GetFrameStats().EndFrame({}, {});
+                DrawBars();
+            }
 
+            /// The bars again with no new engine frame: the meter's text comes from the real clock, so only this keeps its length between two
+            /// frames whose vertices a test compares
+            void DrawBars() {
                 ImGui::GetIO().DeltaTime = kFrameSeconds;
                 ImGui::NewFrame();
                 ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f));
@@ -238,7 +243,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(statusBar.GetHardwareText().visible);
 
         InstallReader(false, GpuReading(kTestLoadPercent));
-        RunFrame();
+        DrawBars();
 
         EXPECT_FALSE(statusBar.GetHardwareText().visible);
         EXPECT_EQ(StatusBarVertexCount(), bare);
