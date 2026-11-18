@@ -100,6 +100,22 @@ namespace BECore {
         return {priority, label};
     }
 
+    namespace Detail {
+
+        /// @p seconds as a delay, rounded to the clock's tick: NaN and a non-positive value are zero, a value too large for the clock is its largest
+        [[nodiscard]] inline std::chrono::steady_clock::duration SecondsToDelay(double seconds) {
+            using Duration = std::chrono::steady_clock::duration;
+            constexpr double kMaxSeconds = std::chrono::duration<double>(Duration::max()).count();
+
+            // !(seconds > 0) is true for NaN too
+            if (!(seconds > 0.0)) {
+                return Duration::zero();
+            }
+            return seconds >= kMaxSeconds ? Duration::max() : std::chrono::round<Duration>(std::chrono::duration<double>(seconds));
+        }
+
+    }  // namespace Detail
+
     /** Wall-clock delay; resumes on `threadType` (a pool thread by default). */
     template <typename Rep, typename Period>
     DelayAwaiter Delay(std::chrono::duration<Rep, Period> duration, ThreadType threadType = ThreadType::Background) {
@@ -110,8 +126,9 @@ namespace BECore {
         return Delay(std::chrono::milliseconds(milliseconds), threadType);
     }
 
+    /** Wall-clock delay in seconds: a NaN or non-positive delay does not suspend, a huge one is clamped to the largest Duration. */
     inline DelayAwaiter DelaySec(double seconds, ThreadType threadType = ThreadType::Background) {
-        return Delay(std::chrono::duration<double>(seconds), threadType);
+        return {Detail::SecondsToDelay(seconds), threadType};
     }
 
     /**
@@ -136,15 +153,7 @@ namespace BECore {
      * (e.g. 0.7) may be released one frame later.
      */
     inline DelayAwaiter DelayGameSec(double seconds, ThreadType threadType = ThreadType::MainThread) {
-        using Duration = std::chrono::steady_clock::duration;
-        constexpr double kMaxSeconds = std::chrono::duration<double>(Duration::max()).count();
-
-        // !(seconds > 0) is true for NaN too
-        if (!(seconds > 0.0)) {
-            return {Duration::zero(), threadType, DelayClock::GameTime};
-        }
-        const Duration delay = seconds >= kMaxSeconds ? Duration::max() : std::chrono::round<Duration>(std::chrono::duration<double>(seconds));
-        return {delay, threadType, DelayClock::GameTime};
+        return {Detail::SecondsToDelay(seconds), threadType, DelayClock::GameTime};
     }
 
     inline YieldAwaiter Yield() {

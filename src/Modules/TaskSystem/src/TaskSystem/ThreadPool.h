@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Threading/ConditionVariable.h>
 #include <BECore/Threading/Mutex.h>
 #include <BECore/Threading/Thread.h>
 #include <BECore/Types/Types.h>
@@ -11,7 +12,8 @@
 namespace BECore {
 
     /**
-     * Worker threads with a queue each; a worker with an empty queue steals from the others. Submit is thread-safe.
+     * Worker threads with a queue each; a worker with an empty queue steals from the others, and an idle worker is woken by a job of any
+     * queue, so a job never waits behind a long one while a worker is free. Submit is thread-safe.
      *
      * @example
      * ThreadPool pool(4);
@@ -84,6 +86,8 @@ namespace BECore {
     private:
         void RunInline(TaskQueue::TaskFunc task);
         void WorkerLoop(size_t threadIndex);
+        void AnnounceWork();
+        void WaitForWork(uint64_t seenWork);
         void SetWorkerBusy(size_t threadIndex, bool busy);
         bool TryStealTask(size_t thiefIndex, TaskQueue::TaskFunc& task);
 
@@ -91,6 +95,11 @@ namespace BECore {
         Vector<UniquePtr<TaskQueue>> _queues;
         std::atomic<bool> _stopped{false};
         std::atomic<size_t> _nextQueue{0};
+
+        // Moves after every push, under _idleMutex: a worker that read it before scanning the queues cannot sleep through a job it did not see
+        std::atomic<uint64_t> _workEpoch{0};
+        Mutex _idleMutex{BE_LOCK_SITE("Pool idle")};
+        ConditionVariable _workAvailable;
 
         // One flag per worker (written by that worker, read by GetBusyWorkerCount) and the jobs taken from another worker's queue since the last sample
         UniquePtr<std::atomic<bool>[]> _workerBusy;
