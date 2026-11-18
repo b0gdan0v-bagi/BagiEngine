@@ -80,6 +80,26 @@ namespace BECore::Tests {
             return {};
         }
 
+        pugi::xml_document ParseWithComments(const String& text) {
+            pugi::xml_document doc;
+            const pugi::xml_parse_result result = doc.load_string(text.c_str(), pugi::parse_full);
+            EXPECT_TRUE(result) << result.description();
+            return doc;
+        }
+
+        /// Takes every comment out of the subtree, so an expansion of a commented text can be compared with the plain one
+        void RemoveComments(pugi::xml_node node) {
+            for (pugi::xml_node child = node.first_child(); child;) {
+                const pugi::xml_node next = child.next_sibling();
+                if (child.type() == pugi::node_comment) {
+                    node.remove_child(child);
+                } else {
+                    RemoveComments(child);
+                }
+                child = next;
+            }
+        }
+
         size_t Count(pugi::xml_node node, const char* childName) {
             return static_cast<size_t>(std::distance(node.children(childName).begin(), node.children(childName).end()));
         }
@@ -871,6 +891,49 @@ namespace BECore::Tests {
         EXPECT_STREQ(left.attribute("layer").as_string(), "1");
         EXPECT_STREQ(ComponentOf(left, "TransformComponent").attribute("x").as_string(), "40");
         EXPECT_STREQ(ComponentOf(left.next_sibling("node"), "TransformComponent").attribute("x").as_string(), "1");
+    }
+
+    TEST_F(SceneNodeFilesTest, CommentsBetweenAndAroundTheNodesAreNoNodes) {
+        pugi::xml_document doc = ParseWithComments(SceneConfigWith(R"(<!-- first --><node name="A"/><!-- between --><node ref="nodes/Hud"/><!-- between --><node name="C"/><!-- last -->)"));
+
+        const auto result = ExpandNodeReferences(doc.document_element(), MakeDirectoryNodeLoader(_dir));
+
+        EXPECT_TRUE(result.Ok());
+        EXPECT_EQ(result.expanded, 1u);
+        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (Vector<String>{"A", "Hud", "C"}));
+    }
+
+    TEST_F(SceneNodeFilesTest, CommentsInAReferenceAndItsComponentsChangeNothing) {
+        const String commented = SceneConfigWith(
+            R"(<node ref="nodes/Hud" name="X"><!-- why --><components><!-- first --><component type="TransformComponent" x="40"><!-- inside --></component>)"
+            R"(<!-- between --><component type="QuadRendererComponent"><!-- field --><color r="1" g="2" b="3" a="4"/><!-- after --></component><!-- last --></components><!-- end --></node>)");
+        const String plain = SceneConfigWith(R"(<node ref="nodes/Hud" name="X"><components><component type="TransformComponent" x="40"></component>)"
+                                             R"(<component type="QuadRendererComponent"><color r="1" g="2" b="3" a="4"/></component></components></node>)");
+        pugi::xml_document withComments = ParseWithComments(commented);
+        pugi::xml_document without = ParseWithComments(plain);
+
+        const auto commentedResult = ExpandNodeReferences(withComments.document_element(), MakeDirectoryNodeLoader(_dir));
+        const auto plainResult = ExpandNodeReferences(without.document_element(), MakeDirectoryNodeLoader(_dir));
+
+        EXPECT_TRUE(commentedResult.Ok()) << (commentedResult.errors.empty() ? "" : commentedResult.errors[0].c_str());
+        EXPECT_TRUE(plainResult.Ok());
+        RemoveComments(withComments);
+        EXPECT_EQ(Saved(withComments), Saved(without));
+    }
+
+    TEST_F(SceneNodeFilesTest, ACommentInANodeFileIsNoComponentToOverride) {
+        const NodeFileLoader loader = [](StringView, pugi::xml_document& out, String&) {
+            return static_cast<bool>(
+                out.load_string(R"(<node name="Hud"><!-- file --><components><!-- c --><component type="TransformComponent" x="1"><!-- f --></component></components></node>)", pugi::parse_full));
+        };
+        pugi::xml_document doc = ParseWithComments(SceneConfigWith(R"(<node ref="nodes/Hud"><components><component type="TransformComponent" x="9"/></components></node>)"));
+
+        const auto result = ExpandNodeReferences(doc.document_element(), loader);
+
+        EXPECT_TRUE(result.Ok());
+        const pugi::xml_node hud = FirstNode(doc);
+        EXPECT_STREQ(hud.attribute("name").as_string(), "Hud");
+        EXPECT_STREQ(ComponentOf(hud, "TransformComponent").attribute("x").as_string(), "9");
     }
 
 }  // namespace BECore::Tests

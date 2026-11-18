@@ -583,6 +583,46 @@ namespace BECore::Tests {
     // ---- layering ---------------------------------------------------------------------------------------------------------
 
     /// Two content roots, an engine and a game on top of it, both with config/nodes/Shared.xml; only the engine has Only.xml
+    TEST_F(SceneSplitTest, CommentsInTheConfigAndInTheNodeFilesLoadTheSameScene) {
+        const auto withNote = [](String text, std::initializer_list<const char*> tags) {
+            for (const char* tag : tags) {
+                const String open = tag;
+                const String commented = open + "<!-- note -->";
+                size_t at = 0;
+                while ((at = text.find(open, at)) != String::npos) {
+                    text.replace(at, open.size(), commented);
+                    at += commented.size();
+                }
+            }
+            return text;
+        };
+        WriteFile(_dir / "nodes" / "Board.xml", withNote(kBoardNode, {"<components>"}));
+        WriteFile(_dir / "nodes" / "Hud.xml", withNote(kHudNode, {"<components>", "<elements>", "<children>"}));
+        // The node files are read with their comments, as the DOM of an editor has them
+        const NodeFileLoader loader = [this](StringView ref, pugi::xml_document& out, String&) {
+            return static_cast<bool>(out.load_file((_dir / (std::filesystem::path(ToStd(ref)) += ".xml")).c_str(), pugi::parse_full));
+        };
+        const String plainNodes = "<node ref=\"nodes/Board\" name=\"Board2\"><components><component type=\"TransformComponent\" x=\"9\"/></components></node>"
+                                  "<node ref=\"nodes/Hud\"/><node ref=\"nodes/Menu\"/><node name=\"Inline\"><components><component type=\"TransformComponent\" x=\"1\"/></components></node>";
+        const String commentedNodes =
+            "<!-- first --><node ref=\"nodes/Board\" name=\"Board2\"><!-- in the reference --><components><!-- in the list --><component type=\"TransformComponent\" x=\"9\"/><!-- last in the list "
+            "--></components></node>"
+            "<!-- between --><node ref=\"nodes/Hud\"/><!-- between --><node ref=\"nodes/Menu\"/><!-- before the inline node -->"
+            "<node name=\"Inline\"><!-- in the node --><components><!-- in the list --><component type=\"TransformComponent\" x=\"1\"/><!-- last in the list --></components></node><!-- last -->";
+
+        pugi::xml_document plainDoc;
+        ASSERT_TRUE(plainDoc.load_string(Scene(plainNodes).c_str()));
+        pugi::xml_document commentedDoc;
+        ASSERT_TRUE(commentedDoc.load_string(Scene(commentedNodes).c_str(), pugi::parse_full));
+        const auto plain = LoadSceneManager(XmlNode{plainDoc.document_element()}, MakeDirectoryNodeLoader(_dir));
+        const auto commented = LoadSceneManager(XmlNode{commentedDoc.document_element()}, loader);
+        plain->Initialize();
+        commented->Initialize();
+
+        EXPECT_EQ(NodeNamesOf(Main(commented)), (Vector<String>{"Board2", "Hud", "Menu", "Inline"}));
+        ExpectSameScene(Main(plain), Main(commented));
+    }
+
     TEST(SceneSplitLayerTest, AGameNodeFileReplacesTheEngineOne) {
         const std::filesystem::path base = TestTempDirectory("BagiSceneSplitLayer");
         std::filesystem::remove_all(base);
