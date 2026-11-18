@@ -1,0 +1,18 @@
+{
+  "4": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "sd_xl_base_1.0.safetensors"}},
+  "10": {"class_type": "VAELoader", "inputs": {"vae_name": "sdxl.vae.safetensors"}},
+  "6": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["4", 1], "text": "a carved wooden chess knight piece, studio lighting, plain light grey background, centered, highly detailed"}},
+  "7": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["4", 1], "text": "blurry, low quality, watermark, text"}},
+  "20": {"class_type": "LoadImage", "inputs": {"image": "reference.png"}},
+  "21": {"class_type": "ImageScale", "inputs": {"image": ["20", 0], "upscale_method": "lanczos", "width": 1024, "height": 1024, "crop": "center"}},
+  "22": {"class_type": "InvertMask", "inputs": {"mask": ["20", 1]}},
+  "23": {"class_type": "MaskToImage", "inputs": {"mask": ["22", 0]}},
+  "24": {"class_type": "ImageScale", "inputs": {"image": ["23", 0], "upscale_method": "lanczos", "width": 1024, "height": 1024, "crop": "center"}},
+  "25": {"class_type": "ImageToMask", "inputs": {"image": ["24", 0], "channel": "red"}},
+  "26": {"class_type": "EmptyImage", "inputs": {"width": 1024, "height": 1024, "batch_size": 1, "color": 13882323}},
+  "27": {"class_type": "ImageCompositeMasked", "inputs": {"destination": ["26", 0], "source": ["21", 0], "x": 0, "y": 0, "resize_source": false, "mask": ["25", 0]}},
+  "28": {"class_type": "VAEEncode", "inputs": {"pixels": ["27", 0], "vae": ["10", 0]}},
+  "3": {"class_type": "KSampler", "inputs": {"model": ["4", 0], "positive": ["6", 0], "negative": ["7", 0], "latent_image": ["28", 0], "seed": 42, "steps": 25, "cfg": 7.0, "sampler_name": "dpmpp_2m", "scheduler": "karras", "denoise": 0.6}},
+  "8": {"class_type": "VAEDecode", "inputs": {"samples": ["3", 0], "vae": ["10", 0]}},
+  "9": {"class_type": "SaveImage", "inputs": {"images": ["8", 0], "filename_prefix": "artgen_img2img"}}
+}

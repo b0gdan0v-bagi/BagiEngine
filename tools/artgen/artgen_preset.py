@@ -16,12 +16,18 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import artgen_reference
+
 ENGINE_WORKFLOWS = Path(__file__).resolve().parent / "workflows"
 ENGINE_PRESETS = Path(__file__).resolve().parent / "presets"
 PRESET_FORMAT = 1
 SUBJECT_TOKEN = "{subject}"
+# The reference picture of a run: a preset's key, a workflow's map of modes to the workflows that run them (artgen_reference.py), and
+# the input of such a workflow that takes the picture
+REFERENCE_KEY = "reference"
+REFERENCE_IMAGE_INPUT = "reference_image"
 # Named inputs the service fills itself; a preset sets the rest through "params".
-SERVICE_INPUTS = ("prompt", "negative", "seed", "width", "height")
+SERVICE_INPUTS = ("prompt", "negative", "seed", "width", "height", REFERENCE_IMAGE_INPUT)
 REQUIRED_INPUTS = ("prompt", "seed")
 # The output node is named too: the service sets its file prefix and reads its images (or sounds).
 OUTPUT_INPUT = "output"
@@ -30,7 +36,7 @@ KIND_KEY = "kind"
 KIND_IMAGE = "image"
 KIND_AUDIO = "audio"
 KINDS = (KIND_IMAGE, KIND_AUDIO)
-RESERVED_KEYS = (OUTPUT_INPUT, KIND_KEY)
+RESERVED_KEYS = (OUTPUT_INPUT, KIND_KEY, REFERENCE_KEY)
 # The length of a sound in seconds: an input of an audio workflow, refused for an image
 DURATION_INPUT = "duration"
 # Inputs whose values are model files: they go into the provenance.
@@ -54,6 +60,7 @@ class Workflow:
     inputs: dict  # named input -> [node id, input name], or a list of them when one value goes to several nodes
     source: str = SOURCE_ENGINE
     kind: str = KIND_IMAGE
+    reference: dict = field(default_factory=dict)  # reference mode -> the workflow that runs it
 
     def targets(self, key):
         """Every [node id, input name] the named input sets."""
@@ -98,6 +105,7 @@ class Preset:
     source: str = SOURCE_GAME  # game, engine or draft
     data: dict = field(default_factory=dict)  # the preset as written, for the form and the provenance
     kind: str = KIND_IMAGE  # the workflow's: what the preset makes
+    reference: dict | None = None  # the checked `reference` of the file (artgen_reference.parse_reference), None when it has none
 
     @property
     def duration(self):
@@ -121,7 +129,30 @@ def _folders(game_root, kind, engine_folder):
     return ([(Path(game_root) / "artgen" / kind, SOURCE_GAME)] if game_root else []) + [(engine_folder, SOURCE_ENGINE)]
 
 
-def load_workflow(name, game_root=None):
+def _check_reference_map(base, inputs_path, game_root):
+    """Every workflow the map names must load, make the same kind, take the picture and the mode's weight, and keep every named
+    input of `base`, so a preset's `params` work with or without a reference."""
+    for mode, name in base.reference.items():
+        where = f"{inputs_path}: the workflow '{name}' for the reference mode '{mode}'"
+        try:
+            mapped = load_workflow(name, game_root, mapped=True)
+        except PresetError as error:
+            raise PresetError(f"{inputs_path}: the reference mode '{mode}': {error}") from error
+        if mapped.kind != base.kind:
+            raise PresetError(f"{where} makes {mapped.kind}, not {base.kind}")
+        if mapped.reference:
+            raise PresetError(f"{where} has a reference map of its own")
+        weight_input = artgen_reference.MODES[mode].weight_input
+        for needed in (REFERENCE_IMAGE_INPUT, weight_input):
+            if needed not in mapped.inputs:
+                raise PresetError(f"{where} does not name the input '{needed}'")
+        for key in base.inputs:
+            if key not in RESERVED_KEYS and key not in mapped.inputs:
+                raise PresetError(f"{where} does not name the input '{key}' of '{base.name}'")
+
+
+def load_workflow(name, game_root=None, mapped=False):
+    """`mapped` loads a workflow a reference map names: it is not checked for a map of its own (the caller refuses one)."""
     folders = _folders(game_root, "workflows", ENGINE_WORKFLOWS)
     for folder, source in folders:
         path = folder / f"{name}.json"
@@ -139,8 +170,11 @@ def load_workflow(name, game_root=None):
     kind = inputs.get(KIND_KEY, KIND_IMAGE)
     if kind not in KINDS:
         raise PresetError(f"{inputs_path}: \"kind\" must be one of {', '.join(KINDS)}")
+    reference = inputs.get(REFERENCE_KEY, {})
+    if not isinstance(reference, dict) or not all(m in artgen_reference.MODES and isinstance(n, str) and n for m, n in reference.items()):
+        raise PresetError(f"{inputs_path}: \"{REFERENCE_KEY}\" must map reference modes ({', '.join(artgen_reference.MODES)}) to workflow names")
     for key, target in inputs.items():
-        if key == KIND_KEY:
+        if key in (KIND_KEY, REFERENCE_KEY):
             continue
         if key == OUTPUT_INPUT:
             if target not in graph:
@@ -155,7 +189,10 @@ def load_workflow(name, game_root=None):
     for key in REQUIRED_INPUTS + (OUTPUT_INPUT,):
         if key not in inputs:
             raise PresetError(f"{inputs_path}: the input '{key}' is not named")
-    return Workflow(name=name, path=path, graph=graph, inputs=inputs, source=source, kind=kind)
+    workflow = Workflow(name=name, path=path, graph=graph, inputs=inputs, source=source, kind=kind, reference=dict(reference))
+    if not mapped:
+        _check_reference_map(workflow, inputs_path, game_root)
+    return workflow
 
 
 def find_workflows(game_root=None):
@@ -210,6 +247,15 @@ def parse_preset(data, name, game_root=None, label=None, path=None, source=SOURC
         raise PresetError(f"{label}: the workflow '{workflow.name}' has no width and height inputs for \"size\"")
     if data.get("negative") and "negative" not in workflow.inputs:
         raise PresetError(f"{label}: the workflow '{workflow.name}' has no negative input")
+    reference = None
+    if REFERENCE_KEY in data:
+        if kind != KIND_IMAGE:
+            raise PresetError(f"{label}: a sound has no \"{REFERENCE_KEY}\"")
+        reference = artgen_reference.parse_reference(data[REFERENCE_KEY], label)
+        try:
+            artgen_reference.effective_workflow(workflow, reference["mode"], game_root)
+        except PresetError as error:
+            raise PresetError(f"{label}: {error}") from error
     params = data.get("params", {})
     if not isinstance(params, dict):
         raise PresetError(f"{label}: \"params\" must be an object")
@@ -237,6 +283,7 @@ def parse_preset(data, name, game_root=None, label=None, path=None, source=SOURC
         source=source,
         data=data,
         kind=kind,
+        reference=reference,
     )
 
 
@@ -290,10 +337,21 @@ def final_prompt(preset, subject):
     return f"{subject}, {preset.prompt}" if subject else preset.prompt
 
 
-def build_graph(preset, subject, seed, file_prefix="artgen"):
-    """The graph of one image: a copy of the workflow with the preset's and the request's values in its named inputs."""
-    graph = copy.deepcopy(preset.workflow.graph)
+def build_graph(preset, subject, seed, file_prefix="artgen", reference=None):
+    """The graph of one image: a copy of the workflow with the preset's and the request's values in its named inputs. With a
+    `reference` (artgen_reference.ReferenceUse) it is the graph of the workflow that runs the mode, with the picture and the weight
+    set; a workflow that takes a picture is refused without one."""
+    workflow = reference.workflow if reference else preset.workflow
+    if reference is None and REFERENCE_IMAGE_INPUT in workflow.inputs:
+        raise PresetError(f"the workflow '{workflow.name}' needs a reference picture")
+    graph = copy.deepcopy(workflow.graph)
     values = dict(preset.params)
+    if reference:
+        weight_input = artgen_reference.MODES[reference.mode].weight_input
+        if weight_input in values:
+            raise PresetError(f"\"{weight_input}\" is set by the reference weight, not in \"params\"")
+        values[REFERENCE_IMAGE_INPUT] = reference.image_name
+        values[weight_input] = artgen_reference.weight_value(reference.mode, reference.weight)
     values["prompt"] = final_prompt(preset, subject)
     values["seed"] = seed
     if preset.negative:
@@ -301,9 +359,9 @@ def build_graph(preset, subject, seed, file_prefix="artgen"):
     if preset.width is not None:
         values["width"], values["height"] = preset.width, preset.height
     for key, value in values.items():
-        for node, name in preset.workflow.targets(key):
+        for node, name in workflow.targets(key):
             graph[node]["inputs"][name] = value
-    output = graph[preset.workflow.inputs[OUTPUT_INPUT]]
+    output = graph[workflow.inputs[OUTPUT_INPUT]]
     if "filename_prefix" in output.get("inputs", {}):
         output["inputs"]["filename_prefix"] = file_prefix
     return graph
