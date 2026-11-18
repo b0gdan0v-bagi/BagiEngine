@@ -5,13 +5,19 @@ three-line scripts (todo.py, worker.py) at the paths its skills, rules and tools
     python3 tools/todo/todo.py <args>     ->  <cache>/<version>/todo.py <args>
     python3 tools/todo/worker.py <args>   ->  <cache>/<version>/worker.py <args>
 
-Each run asks the service which version it hands out (GET /api/v1/cli: names and sha256 of the files), downloads a
-version it has not seen into the cache, checks every hash, and runs it with the same arguments; the answer is trusted
-for CHECK_S seconds, so a burst of calls asks once. When the service does not answer, the last version that ran is
+Each run asks the service which version it hands out (GET /api/v1/cli?layout=tree: the relative paths and sha256 of
+the files), downloads a version it has not seen into the cache (each file from /api/v1/cli/<path>?layout=tree, into
+subfolders where the path has them), checks every hash, and runs it with the same arguments; the answer is trusted
+for CHECK_S seconds, so a burst of calls asks once. A path is `[A-Za-z0-9_]+` segments joined by `/`, at most three,
+then `.py`: anything else (`..`, an absolute path, a backslash) is refused before a byte is downloaded or written. An
+answer without `"layout": "tree"` (an old service, a rollback) is taken as flat as it always was: plain names only, the
+files from /api/v1/cli/<name> with no query. When the service does not answer, the last version that ran is
 used, with a line on stderr; with none yet, an error.
 
 A version that is new to this cache is tried before it becomes the current one: every file of it is imported in a
-fresh interpreter (`-I`, SMOKE_S seconds at most; importing runs no command). When that fails, the last version keeps
+fresh interpreter (`-I`, SMOKE_S seconds at most; importing runs no command): a top-level file by its path, a file
+under a package folder by its dotted name (todo_worker/queues.py as `todo_worker.queues`, the version's folder first on
+sys.path, so its relative imports work). When that fails, the last version keeps
 running, one line on stderr names the failure (once per failed version), and the new one is tried again after CHECK_S;
 with no last version a failed one is an error, never run. A version already current is not tried again.
 
@@ -53,7 +59,9 @@ KEEP_DAYS = 14
 CURRENT = "current"  # the file with the version that ran last
 FAILED = "smoke-failed"  # the version whose check failed and was already told about
 VERSION_RE = re.compile(r"[0-9a-f]{8,64}")
-NAME_RE = re.compile(r"[A-Za-z0-9_]+\.py")
+TREE = "tree"  # the layout of the answer that has files in folders
+NAME_RE = re.compile(r"[A-Za-z0-9_]+\.py")  # a flat answer
+PATH_RE = re.compile(r"[A-Za-z0-9_]+(?:/[A-Za-z0-9_]+){0,2}\.py")  # a tree answer: depth 3 at most
 _ENV_LINE_RE = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$")
 
 
@@ -121,9 +129,14 @@ def cache_root() -> Path:
     return root
 
 
+def place(folder: Path, name: str) -> Path:
+    """Where a manifest path lies in a folder (the manifest's separator is `/` on every system)."""
+    return folder.joinpath(*name.split("/"))
+
+
 def complete(folder: Path, hashes: dict[str, str]) -> bool:
     return folder.is_dir() and all(
-        (folder / name).is_file() and hashlib.sha256((folder / name).read_bytes()).hexdigest() == digest
+        place(folder, name).is_file() and hashlib.sha256(place(folder, name).read_bytes()).hexdigest() == digest
         for name, digest in hashes.items()
     )
 
@@ -144,12 +157,16 @@ def set_current(root: Path, version: str) -> None:
 
 
 _SMOKE = """
-import importlib.util, sys
+import importlib, importlib.util, sys
 sys.dont_write_bytecode = True
 folder = sys.argv[1]
 sys.path.insert(0, folder)
 for name in sys.argv[2:]:
     try:
+        if "/" in name:
+            dotted = name[:-3].replace("/", ".")
+            importlib.import_module(dotted[:-9] if dotted.endswith(".__init__") else dotted)
+            continue
         spec = importlib.util.spec_from_file_location("smoke_" + name[:-3], folder + "/" + name)
         spec.loader.exec_module(importlib.util.module_from_spec(spec))
     except BaseException as error:
@@ -188,17 +205,21 @@ def get(url: str, token: str, path: str) -> bytes:
         return response.read()
 
 
-def manifest(url: str, token: str) -> tuple[str, dict[str, str]]:
-    data = json.loads(get(url, token, "/api/v1/cli"))
-    version, hashes = data.get("version"), data.get("files")
+def manifest(url: str, token: str) -> tuple[str, dict[str, str], bool]:
+    """(version, {path: sha256}, whether the answer is a tree). Every path is checked here, before any download."""
+    data = json.loads(get(url, token, f"/api/v1/cli?layout={TREE}"))
+    version, hashes, layout = data.get("version"), data.get("files"), data.get("layout")
     if not (isinstance(version, str) and VERSION_RE.fullmatch(version) and isinstance(hashes, dict) and hashes):
         raise LoaderError("the service's answer about the command line is not a version and its files")
-    if not all(isinstance(n, str) and NAME_RE.fullmatch(n) and isinstance(h, str) for n, h in hashes.items()):
-        raise LoaderError("the service named a file that is not a plain .py name")
-    return version, hashes
+    if layout not in (None, TREE):
+        raise LoaderError("the service handed out a layout of files this loader does not know")
+    tree = layout == TREE
+    if not all(isinstance(n, str) and (PATH_RE if tree else NAME_RE).fullmatch(n) and isinstance(h, str) for n, h in hashes.items()):
+        raise LoaderError("the service named a file that is not a relative .py path" if tree else "the service named a file that is not a plain .py name")
+    return version, hashes, tree
 
 
-def download(url: str, token: str, root: Path, version: str, hashes: dict[str, str]) -> Path:
+def download(url: str, token: str, root: Path, version: str, hashes: dict[str, str], tree: bool = False) -> Path:
     """The version's files into a temporary folder, each hash checked, then renamed into place in one step."""
     target = root / version
     if complete(target, hashes):
@@ -206,10 +227,12 @@ def download(url: str, token: str, root: Path, version: str, hashes: dict[str, s
     staging = Path(tempfile.mkdtemp(dir=root, prefix=f".{version}-"))
     try:
         for name, digest in hashes.items():
-            data = get(url, token, f"/api/v1/cli/{name}")
+            data = get(url, token, f"/api/v1/cli/{name}" + (f"?layout={TREE}" if tree else ""))
             if hashlib.sha256(data).hexdigest() != digest:
                 raise LoaderError(f"{name} of version {version} does not match its hash: not used")
-            (staging / name).write_bytes(data)
+            target_file = place(staging, name)
+            target_file.parent.mkdir(parents=True, exist_ok=True)
+            target_file.write_bytes(data)
         if target.exists():  # an incomplete copy (a run cut short): replaced
             shutil.rmtree(target, ignore_errors=True)
         try:
@@ -232,10 +255,10 @@ def pinned(root: Path, pin: str, argv: list[str], cwd: Path) -> Path:
         try:
             if not (url and token):
                 raise LoaderError(f"{ENV_URL} and {ENV_TOKEN} are not both set (environment, --env-file or .env)")
-            version, hashes = manifest(url, token)
+            version, hashes, tree = manifest(url, token)
             if version != pin:
                 raise LoaderError(f"the service hands out version {version} only")
-            folder = download(url, token, root, version, hashes)
+            folder = download(url, token, root, version, hashes, tree)
         except (LoaderError, urllib.error.URLError, OSError, ValueError) as error:
             reason = f"HTTP {error.code}" if isinstance(error, urllib.error.HTTPError) else str(error)
             raise LoaderError(f"{ENV_PIN}={pin} is not in the cache and could not be downloaded: {reason}") from None
@@ -262,8 +285,8 @@ def resolve(argv: list[str], cwd: Path, now: float | None = None, warn=None) -> 
     try:
         if not (url and token):
             raise LoaderError(f"{ENV_URL} and {ENV_TOKEN} are not both set (environment, --env-file or .env)")
-        version, hashes = manifest(url, token)
-        folder = download(url, token, root, version, hashes)
+        version, hashes, tree = manifest(url, token)
+        folder = download(url, token, root, version, hashes, tree)
     except (LoaderError, urllib.error.URLError, OSError, ValueError) as error:
         reason = f"HTTP {error.code}" if isinstance(error, urllib.error.HTTPError) else str(error)
         if not last:

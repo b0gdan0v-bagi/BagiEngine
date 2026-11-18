@@ -6,13 +6,14 @@ The command line of the **todo store**: the source of truth for the todo entries
 bagitodo_cli.py   the loader (stdlib, Python 3.10+): asks the service for the current version, downloads and checks it, runs it
 todo.py           three lines: bagitodo_cli.run("todo.py")    -- the entries, plans, dependencies, areas
 worker.py         three lines: bagitodo_cli.run("worker.py")  -- the worker folders of parallel todo-loop runs
+buildslots.py     three lines: bagitodo_cli.run("buildslots.py")  -- the machine-wide allocator of C++ build jobs
 ```
 
 The files are copied as they are from the loader of BagiTodo (`loader/` there) and are public code: no address, no token, no private name. Skills, rules, agents and `tools/vscode/todo-workers` call `tools/todo/todo.py` and `tools/todo/worker.py` as scripts only; never import or read anything else of this folder.
 
 ## The loader
 
-Each run asks the service `GET /api/v1/cli` for the version it hands out (the names and sha256 of its files: `todo.py`, `todo_markdown.py`, `worker.py`, `worker_insights.py`), downloads a version it has not seen (`GET /api/v1/cli/<file>`) into the cache, checks every hash, runs a smoke check of the new version (`python -I`, every file imported, 15 s; a failure keeps `current` on the old version with one warning and retries later) and runs the script with the same arguments. `BAGITODO_CLI_PIN=<version>` runs that version from the cache without asking the service (downloaded only when the service hands out exactly that one, else an error). The answer is trusted for a minute, so a burst of calls asks once. When the service does not answer, the last version that ran is used, with a line on stderr; with none yet, it is an error. Versions unused for two weeks are removed. Updating the loader itself is a copy of BagiTodo's `loader/` again.
+Each run asks the service `GET /api/v1/cli?layout=tree` for the version it hands out (the relative paths and sha256 of its files, subfolders included; a path that leaves the version's folder is refused before any download; an answer without the tree layout is taken as a flat list of names), downloads a version it has not seen (`GET /api/v1/cli/<path>?layout=tree`) into the cache, checks every hash, runs a smoke check of the new version (`python -I`, every file imported, a file of a package by its dotted name, 15 s; a failure keeps `current` on the old version with one warning and retries later) and runs the script with the same arguments. `BAGITODO_CLI_PIN=<version>` runs that version from the cache without asking the service (downloaded only when the service hands out exactly that one, else an error). The answer is trusted for a minute, so a burst of calls asks once. When the service does not answer, the last version that ran is used, with a line on stderr; with none yet, it is an error. Versions unused for two weeks are removed. Updating the loader itself is a copy of BagiTodo's `loader/` again.
 
 ## Settings
 
