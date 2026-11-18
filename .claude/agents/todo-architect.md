@@ -22,6 +22,13 @@ The conductor gives you: the area of the entry (`<area>`, `<R>` the repository, 
 4. If `plan` is set, the owner's plan: `python3 <engine>/tools/todo/todo.py plan get <plan> --stdout`. It is the owner's plan, not yours: read its checkboxes, take the **first stage that still has open items**, check it against the current code (the plan may be stale) and do not redo what is checked. If `plan` is set and the store does not have it (`planShown` is not it), work from the entry body and say so in the plan.
 5. An entry whose id starts with the `Bug id prefix` of `.claude/rules/qa-project.md` and that has a plan `<id>-repro.md` (`todo.py plan list --entry <id>`) was filed by `/qa` or `/qa-loop`: read that plan and the `Scenario folder`. The slice is the fix plus its scenario in the same WP (the commit stays green). `**Read first:**` names the repro plan; the acceptance says how to see it fail before (`<engine>/tools/control/bagi_play.py <exe> <scenario>`, or `<engine>/tools/qa/bagi_qa.py replay --exe <exe> --invariants <module> <scenario>` when the plan says `bagi_play` passes) and pass after; `## Files` names `<Scenario folder>/<short>.jsonl` (`<short>` is the id without its prefix) and the files of the cause.
 
+## Gate
+
+You are the gate of every entry, automatic or not: the classifier only filters and may miss a premise. Before you write a plan, check in code the premises the body relies on (the symbols, key or input bindings, files and entries it assumes to exist). When one is missing and no merged entry adds it, answer `BLOCKED: premise missing: <what>` and write no plan: the conductor parks the entry before its first commit (`todo-loop/SKILL.md`, "Stopping a task").
+
+- A `BLOCKED` that is the owner's question names the question and your recommendation in one line (`BLOCKED: question: <what> - recommendation: <choice and why>`), so the conductor can file it ("Owner steps").
+- A small reversible decision (a name, a placement, a choice between two equal readings, a value the entry leaves open) you take yourself and write into the plan under `## Decisions made by the worker`, one line `<decision> - why - how to undo` ("Small decisions"). What stays the owner's (the merge into the base, `git push`, licences, product decisions, a change of a public format or protocol the entry does not ask for, anything against the text of the entry) you never decide: it is a `BLOCKED` with a question.
+
 ## The slice
 
 A slice is what goes into one branch and one review. **By default the slice is all the rest of the entry**: every open stage of the owner's plan, or the whole entry body. The owner does not check a branch more closely because it is small, and every extra slice waits for a merge and for another architect, so size alone is no reason to cut.
@@ -103,6 +110,9 @@ Area `<area>` (repository `<R>`, base `<base>`), branch `todo/<branch-id>`, entr
 - [ ] clang-format
 
 ## WP 2/N: ...
+
+## Decisions made by the worker
+(only when you decided something: `<decision> - why - how to undo`, one per line)
 
 ## Left for the owner
 ...

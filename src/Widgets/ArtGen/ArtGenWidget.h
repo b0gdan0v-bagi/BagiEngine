@@ -11,6 +11,7 @@
 #include <Widgets/ArtGen/ArtGenImage.h>
 #include <Widgets/ArtGen/ArtGenPresetForm.h>
 #include <Widgets/ArtGen/ArtGenSound.h>
+#include <Widgets/ArtGen/ArtGenVerdict.h>
 #include <Widgets/ArtGen/Reference/ArtGenReferencePanel.h>
 #include <Widgets/ArtGen/Sets/ArtGenSetPanel.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
@@ -102,6 +103,7 @@ namespace BECore {
         // One thumbnail per variant of the run, in its order; a path that leaves the run is evicted
         Vector<ResourceHandle<ITexture>> _thumbnails;
         Vector<String> _thumbnailPaths;
+        Vector<ArtGenVerdict> _verdicts;
         Optional<int64_t> _selectedSeed;
 
         /// One sound variant: its clip (loaded from the FLAC the service wrote), and once loaded its waveform and numbers

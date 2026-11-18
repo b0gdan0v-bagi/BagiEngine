@@ -14,6 +14,7 @@ sys.path.insert(0, str(ARTGEN_DIR))
 
 import artgen_bridge  # noqa: E402
 from artgen_generators import FakeGenerator, GeneratorState, tiny_png  # noqa: E402
+from test_artgen import AlwaysCut, CutOutGenerator  # noqa: E402
 
 WAIT_LIMIT_S = 20.0
 
@@ -40,7 +41,7 @@ class FakeEditor:
             self.polls.append(params)
             answer = {"gameRoot": self.game_root}
             if self.run and self.run["state"] == "Queued":
-                answer["request"] = {k: self.run[k] for k in ("id", "preset", "presetName", "subject", "count", "seed", "outDir", "name", "reference") if k in self.run}
+                answer["request"] = {k: self.run[k] for k in ("id", "preset", "presetName", "subject", "count", "seed", "outDir", "name", "reference", "minPass", "extra") if k in self.run}
                 self.run["state"] = "Running"
             elif self.run and self.run["state"] == "Running" and self.cancel_requested:
                 answer["cancel"] = self.run["id"]
@@ -244,6 +245,58 @@ def test_a_style_run_on_a_generator_without_the_style_kind_fails_with_the_instal
     run_until(bridge, editor, lambda: editor.run["state"] == "Failed")
     assert "install --style" in editor.run["error"]
     assert generator.graphs == [] and generator.uploads == [] and not (game / "artgen" / "out").exists()
+
+
+def test_a_request_with_min_pass_and_extra_regenerates_and_the_editor_sees_the_extra_images(game):
+    editor = FakeEditor(game)
+    generator = CutOutGenerator()
+    bridge = artgen_bridge.Bridge(editor, generator, log=lambda *a: None)
+    bridge.tick()
+    editor.request("wood", "knight", count=2, seed=5, minPass=2, extra=3)
+    run_until(bridge, editor, lambda: editor.run["state"] not in ("Queued", "Running"))
+    assert editor.run["state"] == "Done", editor.run["error"]
+    assert [v["seed"] for v in editor.run["variants"]] == [5, 6, 7, 8], "5 and 7 are cut, 6 and 8 pass"
+    assert [v["count"] for v in editor.run["variants"]] == [2, 2, 3, 4], "the label never reads past its total"
+    assert all(Path(v["path"]).is_file() for v in editor.run["variants"])
+    assert (3, 1, 3) in editor.run["steps"]
+
+
+def test_a_request_without_the_keys_makes_what_it_asked_for_and_the_preset_may_say_the_rest(game):
+    editor = FakeEditor(game)
+    bridge = artgen_bridge.Bridge(editor, AlwaysCut(), log=lambda *a: None)
+    bridge.tick()
+    editor.request("wood", "knight", count=2, seed=5)
+    run_until(bridge, editor, lambda: editor.run["state"] == "Done")
+    assert [v["seed"] for v in editor.run["variants"]] == [5, 6]
+    draft = {"preset": 1, "workflow": "sdxl_basic", "prompt": "a {subject}", "regenerate": {"extra": 2}}
+    editor.request(draft, "rook", count=1, seed=9)
+    run_until(bridge, editor, lambda: editor.run["state"] == "Done")
+    assert [v["seed"] for v in editor.run["variants"]] == [9, 10, 11], "the draft's own regenerate"
+    editor.request(draft, "bishop", count=1, seed=9, extra=0)
+    run_until(bridge, editor, lambda: editor.run["state"] == "Done")
+    assert [v["seed"] for v in editor.run["variants"]] == [9], "the request's extra 0 wins"
+
+
+@pytest.mark.parametrize("keys, message", [
+    ({"extra": True}, "extra True is not an integer"),
+    ({"extra": "3"}, "extra '3' is not an integer"),
+    ({"extra": 2.5}, "extra 2.5 is not an integer"),
+    ({"minPass": True}, "minPass True is not an integer"),
+    ({"minPass": 1.0}, "minPass 1.0 is not an integer"),
+    ({"extra": 17}, "extra must be 0 to 16"),
+    ({"minPass": 3}, "min_pass must be 1 to the count"),
+])
+def test_a_bad_min_pass_or_extra_fails_the_run_and_the_next_request_still_runs(game, keys, message):
+    editor = FakeEditor(game)
+    generator = CutOutGenerator()
+    bridge = artgen_bridge.Bridge(editor, generator, log=lambda *a: None)
+    bridge.tick()
+    editor.request("wood", "knight", count=2, **keys)
+    run_until(bridge, editor, lambda: editor.run["state"] == "Failed")
+    assert message in editor.run["error"]
+    assert generator.graphs == [] and not (game / "artgen" / "out").exists()
+    editor.request("wood", "knight", count=1)
+    run_until(bridge, editor, lambda: editor.run["state"] == "Done")
 
 
 def test_a_cancel_from_the_editor_stops_the_generator(game):
