@@ -626,6 +626,10 @@ namespace BECore {
                 DrawImageAcceptFields("##presetAccept");
                 ImGui::TreePop();
             }
+            if (workflow->kind != kKindAudio && ImGui::TreeNodeEx("Reference")) {
+                ArtGenReferencePanel::DrawPresetReference(session, _form);
+                ImGui::TreePop();
+            }
             ImGui::TreePop();
         }
     }

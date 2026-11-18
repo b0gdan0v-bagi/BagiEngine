@@ -6,6 +6,7 @@
 
 namespace BECore {
 
+    class ArtGenPresetForm;
     class ArtGenSession;
 
     /// The tooltip of every Use as reference button: one text for the Generate tab and the Set tab
@@ -26,6 +27,10 @@ namespace BECore {
 
         /// The section: the picture, mode and weight of the slot with Clear, or the line that says the slot is empty
         void Draw(ArtGenSession& session);
+
+        /// The "Reference" subsection of a preset's settings: edits the reference the preset file carries (mode, image path, weight), takes
+        /// the slot into it or removes it. A static function: it keeps nothing, the form is the state
+        static void DrawPresetReference(ArtGenSession& session, ArtGenPresetForm& form);
 
         /// Evicts the loaded picture (the section is hidden, the slot is empty, the panel dies)
         void DropThumbnail();
