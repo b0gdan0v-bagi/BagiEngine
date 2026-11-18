@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-The health check of the ComfyUI that art generation uses (tools/artgen/CLAUDE.md). Standard library only.
+The health check of the ComfyUI that art generation uses (tools/artgen/comfyui/CLAUDE.md, "The health check"). Standard library only.
 
     python3 tools/artgen/comfyui_check.py [--url http://127.0.0.1:8188] [--json] [--generate [image|audio]] [--timeout 300]
 

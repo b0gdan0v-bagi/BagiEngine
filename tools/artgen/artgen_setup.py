@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sets up, starts and stops a local ComfyUI on any supported machine (tools/artgen/CLAUDE.md, "Setup").
+"""Sets up, starts and stops a local ComfyUI on any supported machine (tools/artgen/comfyui/CLAUDE.md, "Setup").
 
 One pipeline for every platform: it detects the platform and the GPU, picks that platform's variant of
 `comfyui/manifest.json` (a pinned portable release on Windows, a pinned git commit and a venv on macOS and Linux), says what

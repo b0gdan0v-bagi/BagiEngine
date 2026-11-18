@@ -7,7 +7,7 @@ description: Generates a game's art or sounds with the engine's art pipeline (Co
 
 `/artgen <what to make>` ("a rook in the style of the game's pieces", "the sound of a capture", "all twelve pieces"). You make the art through the same path the person uses: the editor's Generate panel and its control API (`artgen_*`), never ComfyUI directly, so every result has its provenance and lands in the game the way an Accept by hand does. You never commit and never push.
 
-Read first: `<engine>/src/Widgets/ArtGen/CLAUDE.md` ("The contract": every `artgen_*` method, its params and answer; "Accept", "Accept of a sound") and `<engine>/tools/artgen/CLAUDE.md` (setup, presets, the bridge).
+Read first: `<engine>/src/Widgets/ArtGen/CLAUDE.md` ("The contract": every `artgen_*` method, its params and answer; "Accept", "Accept of a sound") and `<engine>/tools/artgen/CLAUDE.md` (presets, the service, the bridge) and `<engine>/tools/artgen/comfyui/CLAUDE.md` (setup, models, the health check).
 
 Terms: `<engine>` is `engine` in a game (`.` in the engine's own repository); `<product>` is the field `Product` of `.claude/rules/build-project.md`, `<exe>` is `build/<preset>/bin/<product>` (`.exe` on Windows) with the Debug preset of that file; `<port>` is the control port (8765 is the default of `--control`); `<scratchpad>` the session's temporary folder. Commands run from the root of the repository; on Windows `python`, elsewhere `python3` (`.venv/bin/python` on macOS).
 
