@@ -27,6 +27,8 @@ class FakeComfy:
         self.models = {}
         for m in MANIFEST["models"]:
             self.models.setdefault(m["folder"], []).append(m["name"])
+        self.nodes = {name for node in MANIFEST["customNodes"] for name in node["nodes"]}
+        self.missing_folders = set()  # answer 404, as ComfyUI does for a folder only a custom node registers
         self.history_polls_before_done = 1
         self.fail_generation = False
         self.prompts = []
@@ -37,7 +39,13 @@ class FakeComfy:
             return 200, {"system": {"comfyui_version": self.version},
                          "devices": [{"name": "fake gpu", "type": self.device_type, "vram_total": 8 << 30, "vram_free": 7 << 30}]}
         if method == "GET" and path.startswith("/models/"):
-            return 200, self.models.get(path[len("/models/"):], [])
+            folder = path[len("/models/"):]
+            if folder in self.missing_folders:
+                return 404, {"error": path}
+            return 200, self.models.get(folder, [])
+        if method == "GET" and path.startswith("/object_info/"):
+            node_class = path[len("/object_info/"):]
+            return 200, {node_class: {"input": {}}} if node_class in self.nodes else {}
         if method == "POST" and path == "/prompt":
             self.prompts.append(body["prompt"])
             return 200, {"prompt_id": "p1", "number": 0}
@@ -220,10 +228,57 @@ def test_missing_audio_models_only_warn_and_say_what_it_makes(fake):
     report = comfyui_check.check(fake.url, MANIFEST)
     assert report["ready"] and report["kinds"] == ["image", "style"]
     assert any("install --audio" in w for w in report["warnings"])
+    assert not any("install --style" in w for w in report["warnings"])
 
 
 def test_with_every_model_it_makes_images_and_sounds(fake):
     assert comfyui_check.check(fake.url, MANIFEST)["kinds"] == ["audio", "image", "style"]
+
+
+def style_parts():
+    return [m for m in MANIFEST["models"] if m.get("kind") == "style"], [n for n in MANIFEST["customNodes"] if n.get("kind") == "style"]
+
+
+def test_a_missing_style_model_only_warns_and_takes_the_style_kind_away(fake):
+    models, _ = style_parts()
+    fake.models[models[0]["folder"]].remove(models[0]["name"])
+    report = comfyui_check.check(fake.url, MANIFEST)
+    assert report["ready"] and report["problems"] == [] and report["kinds"] == ["audio", "image"]
+    assert any(w.startswith(f"style model {models[0]['folder']}/{models[0]['name']} is missing") and "install --style" in w
+               for w in report["warnings"])
+
+
+def test_a_missing_style_node_only_warns_and_takes_the_style_kind_away(fake):
+    _, nodes = style_parts()
+    fake.nodes.clear()
+    report = comfyui_check.check(fake.url, MANIFEST)
+    assert report["ready"] and report["problems"] == [] and report["kinds"] == ["audio", "image"]
+    assert report["customNodes"] == [{"name": nodes[0]["name"], "kind": "style", "present": False}]
+    assert any(w.startswith(f"style custom node {nodes[0]['name']} is missing") and "install --style" in w for w in report["warnings"])
+    assert all(m["present"] for m in report["models"])
+    fake.nodes.update(nodes[0]["nodes"][:1])  # one class of two is not the node
+    assert "style" not in comfyui_check.check(fake.url, MANIFEST)["kinds"]
+
+
+def test_a_folder_that_answers_404_is_a_problem_for_an_image_model_only(fake):
+    models, _ = style_parts()
+    fake.missing_folders.add(models[0]["folder"])  # `ipadapter` exists in ComfyUI only once the node is loaded
+    fake.nodes.clear()
+    report = comfyui_check.check(fake.url, MANIFEST)
+    assert report["ready"] and report["problems"] == [] and "style" not in report["kinds"]
+    assert any("install --style" in w for w in report["warnings"])
+    fake.missing_folders = {"vae"}
+    broken = comfyui_check.check(fake.url, MANIFEST)
+    assert not broken["ready"] and any("/models/vae" in p for p in broken["problems"]) and broken["kinds"] == []
+
+
+def test_the_report_lists_the_custom_nodes_and_prints_them(fake, capsys):
+    report = comfyui_check.check(fake.url, MANIFEST)
+    assert [(n["name"], n["kind"], n["present"]) for n in report["customNodes"]] == [(n["name"], "style", True) for n in MANIFEST["customNodes"]]
+    fake.nodes.clear()
+    comfyui_check.print_report(comfyui_check.check(fake.url, MANIFEST))
+    out = capsys.readouterr().out
+    assert f"MISSING custom node {MANIFEST['customNodes'][0]['name']} (style)" in out and "makes: audio, image" in out
 
 
 def test_the_sound_workflow_is_a_valid_graph():

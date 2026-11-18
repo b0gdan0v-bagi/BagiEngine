@@ -6,7 +6,7 @@ The image generator of the games' art is **ComfyUI**, today on the owner's Windo
 
 | File | Purpose |
 |------|---------|
-| `comfyui/manifest.json` | What is installed: the pinned ComfyUI, a variant per platform and every model and custom node with its pin (URL or commit), size, SHA256, licence and source. The one place to change a version or add a model |
+| `comfyui/manifest.json` | What is installed: the pinned ComfyUI, a variant per platform and every model and custom node with its pin, size, SHA256, licence and source. The one place to change a version or add a model |
 | `artgen_setup.py` | The setup pipeline: `detect`, `install` (plan, consent, hash-checked downloads; idempotent), `start` / `stop`, `status` (`comfyui/CLAUDE.md`) |
 | `comfyui/start-local.bat` | Starts a portable ComfyUI on `127.0.0.1:8188` by hand, in a window; the installer copies it into the root. Extra arguments go to ComfyUI (`--lowvram`) |
 | `comfyui_check.py` | The health check: reachable, version, devices, every manifest model present; `--generate` makes one image; `--json` for the service and the editor panel |
@@ -23,7 +23,7 @@ The image generator of the games' art is **ComfyUI**, today on the owner's Windo
 
 ## Setup and models
 
-`artgen_setup.py install` plans, asks and installs the pinned ComfyUI and the manifest's models (hash-checked, idempotent). `comfyui_check.py` says what the running ComfyUI can make (`kinds`). The commands, platforms, consent, pin, model kinds, health check and the panel's setup actions are in `tools/artgen/comfyui/CLAUDE.md`.
+`artgen_setup.py install` plans, asks and installs the pinned ComfyUI and the manifest's models (hash-checked). `comfyui_check.py` says what the running ComfyUI can make (`kinds`). The commands, platforms, consent, pin, model kinds, health check and the panel's setup actions are in `tools/artgen/comfyui/CLAUDE.md`.
 
 ## Presets
 

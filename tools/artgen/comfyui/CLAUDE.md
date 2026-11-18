@@ -33,7 +33,7 @@ Only models whose licence lets the generated assets ship in a commercial game, e
 
 ## The health check
 
-`comfyui_check.py` reads the address from `--url`, else `COMFYUI_URL`, else `comfyuiUrl` of the git-ignored `tools/artgen/local.json`, else `http://127.0.0.1:8188`. Exit 0 ready, 1 reachable but not ready (an image model missing, the generation failed), 2 unreachable. A missing audio model is a warning; `kinds` says what it can make (the service refuses a sound without it). `--generate audio` makes one sound with `sao_sfx`. Another ComfyUI version or only a CPU is a warning. `--generate` puts a fresh seed into every sampler: ComfyUI caches node results, and a repeated graph would return at once without touching the GPU.
+`comfyui_check.py` reads the address from `--url`, else `COMFYUI_URL`, else `comfyuiUrl` of the git-ignored `tools/artgen/local.json`, else `http://127.0.0.1:8188`. Exit 0 ready, 1 reachable but not ready (an image model missing, the generation failed), 2 unreachable. A missing audio or style part is a warning that names `install --audio` / `--style`; `kinds` says what it can make (the service refuses a sound without it): `style` only when both style models are present and every class of the custom node answers in `/object_info/<class>` (`customNodes` of the report; an empty `{}` is absent). A model folder that answers an HTTP error is a problem only for the image kind: `ipadapter` is 404 until the node is loaded. `--generate audio` makes one sound with `sao_sfx`. Another ComfyUI version or only a CPU is a warning. `--generate` puts a fresh seed into every sampler: ComfyUI caches node results, and a repeated graph would return at once without touching the GPU.
 
 ## Setup from the editor
 
