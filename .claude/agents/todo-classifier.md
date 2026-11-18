@@ -46,6 +46,16 @@ Also a **`level`** for each eligible entry, by the same words as the architect's
 
 Do not guess when the entry is vague: `skip` with `needs detail`. Do not read source code beyond a quick `grep` to confirm that the place named in `**Where:**` exists.
 
+### Check the premise
+
+An entry that relies on something the code must already have (an engine facility, a key or input binding, a file, a class, a function the body names or assumes) is checked before it is `eligible`: one `grep` or `ls` confirms that the thing exists. When it does not, and no merged entry and no eligible candidate of your list adds it, the verdict is `skip`: `needs engine change` for a game entry whose missing part is in the engine, `needs detail` otherwise. Never `eligible` on faith: an unattended loop takes the entry on your word.
+
+### Cases to hold to
+
+- `chess-escape-key-closes-panels` (2026-11-18): called `eligible`, but the engine had no binding of a key to an action; the architect answered `BLOCKED` before the first commit. The right verdict was `skip: needs engine change`.
+
+Your verdict is a filter, not the gate: the architect checks the premises again in code and may still answer `BLOCKED` (`todo-loop/SKILL.md`, "Automatic picking"). The allowlist of automatic picking is the conductor's: you never read the `Automatic picking` section of the rules file and decide nothing by it.
+
 ## Answer
 
 Only a JSON object, no text around it:
