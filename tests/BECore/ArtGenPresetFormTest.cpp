@@ -268,10 +268,71 @@ namespace BECore::Tests {
     }
 
     TEST(ArtGenPresetFormTest, TheServiceFillsItsOwnInputs) {
-        for (const char* input : {"prompt", "negative", "seed", "width", "height", "output"}) {
+        for (const char* input : {"prompt", "negative", "seed", "width", "height", "output", "reference_image"}) {
             EXPECT_TRUE(IsArtGenServiceInput(input)) << input;
         }
         EXPECT_FALSE(IsArtGenServiceInput("steps"));
+    }
+
+    TEST(ArtGenPresetFormTest, AReferenceKeyOfTheFileRoundTripsByteForByte) {
+        ArtGenPreset preset = WoodPreset();
+        preset.data["reference"] = Json{{"mode", "init"}, {"image", "assets/artgen/rook.png"}, {"weight", 0.35}};
+        const String fileText = FormatArtGenPresetFile(preset.data);
+
+        ArtGenPresetForm form;
+        form.Load(preset);
+        EXPECT_FALSE(form.IsDirty());
+        EXPECT_EQ(form.ToJson(), preset.data);
+        EXPECT_EQ(FormatArtGenPresetFile(form.ToJson()), fileText);
+
+        form.Duplicate();
+        EXPECT_EQ(*FindJsonMember(form.ToJson(), "reference"), preset.data["reference"]) << "a copy keeps it";
+        form.Load(preset);
+        std::strcpy(form.prompt, "changed");
+        form.Touch();
+        form.Revert();
+        EXPECT_EQ(form.ToJson(), preset.data);
+        form.New("sdxl_basic");
+        EXPECT_FALSE(form.ToJson().contains("reference")) << "a new preset has none";
+    }
+
+    TEST(ArtGenPresetFormTest, TheReferenceComesAfterAcceptAndBeforeTheOtherKeys) {
+        ArtGenPreset preset = WoodPreset();
+        preset.data["accept"] = Json{{"maxSize", 64}};
+        preset.data["reference"] = Json{{"mode", "init"}, {"image", "a.png"}};
+        const String text = FormatArtGenPresetFile(preset.data);
+        const size_t accept = text.find("\"accept\"");
+        const size_t reference = text.find("\"reference\"");
+        const size_t note = text.find("\"note\"");
+        ASSERT_NE(reference, String::npos);
+        EXPECT_LT(accept, reference);
+        EXPECT_LT(reference, note);
+    }
+
+    TEST(ArtGenPresetFormTest, AMalformedReferenceIsKeptAndRefusedBeforeASave) {
+        ArtGenPreset preset = WoodPreset();
+        preset.data["reference"] = Json{{"mode", "init"}, {"image", "a.png"}, {"weight", "heavy"}};
+        ArtGenPresetForm form;
+        form.Load(preset);
+        EXPECT_EQ(form.ToJson(), preset.data) << "nothing of the file is lost";
+
+        const auto shape = CheckArtGenPresetShape(preset.data);
+        ASSERT_FALSE(shape.has_value());
+        EXPECT_NE(shape.error().find("reference.weight"), String::npos);
+        for (const Json& bad : {Json("a.png"), Json::array(), Json::object(), Json{{"mode", "init"}, {"image", ""}}}) {
+            preset.data["reference"] = bad;
+            EXPECT_FALSE(CheckArtGenPresetShape(preset.data).has_value()) << DumpJson(bad).c_str();
+        }
+        preset.data["reference"] = Json{{"mode", "init"}, {"image", "a.png"}};
+        EXPECT_TRUE(CheckArtGenPresetShape(preset.data).has_value());
+    }
+
+    TEST(ArtGenPresetFormTest, AWorkflowWithTheReferenceImageInputIsAReferenceVariant) {
+        ArtGenWorkflow plain = Workflow("sdxl_basic", true);
+        EXPECT_FALSE(plain.IsReferenceVariant());
+        ArtGenWorkflow variant = Workflow("sdxl_img2img", true);
+        variant.inputs.push_back(ArtGenWorkflowInput{"reference_image", Json("example.png"), Json()});
+        EXPECT_TRUE(variant.IsReferenceVariant());
     }
 
 }  // namespace BECore::Tests

@@ -10,6 +10,7 @@
 #include <Widgets/ArtGen/ArtGenImage.h>
 #include <Widgets/ArtGen/ArtGenPresetForm.h>
 #include <Widgets/ArtGen/ArtGenSound.h>
+#include <Widgets/ArtGen/Reference/ArtGenReference.h>
 #include <Widgets/ArtGen/Sets/ArtGenSet.h>
 #include <cstdint>
 #include <expected>
@@ -95,7 +96,8 @@ namespace BECore {
         int32_t steps = 0;
         String error;
         Vector<ArtGenVariant> variants;
-        int32_t keptVariants = 0;  // the variants of the last run it started with (Request with keepVariants)
+        int32_t keptVariants = 0;             // the variants of the last run it started with (Request with keepVariants)
+        Optional<ArtGenReference> reference;  // the picture the run starts from, sent in the request; a job of a set has none
         bool cancelRequested = false;
     };
 
@@ -163,10 +165,20 @@ namespace BECore {
 
         /// Queues a request; the error says why not (a run in work, a bad count or preset). @p keepVariants starts the new run with the
         /// variants of the last one, so a few more can be made without losing the ones on screen
-        std::expected<uint32_t, String> Request(StringView preset, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants = false);
+        /// @p reference is the picture the images start from (it replaces the preset's own `reference` whole); the service checks it and fails the run with the reason
+        std::expected<uint32_t, String> Request(StringView preset, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants = false, Optional<ArtGenReference> reference = {});
         /// The same with the preset's content inline (the panel's form, saved or not): the service checks it as it checks a file, and the
         /// provenance names it `draft`. @p name is the form's, for the messages
-        std::expected<uint32_t, String> RequestDraft(StringView name, const Json& preset, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants = false);
+        std::expected<uint32_t, String> RequestDraft(StringView name, const Json& preset, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants = false,
+                                                     Optional<ArtGenReference> reference = {});
+
+        /// The panel's reference slot: one picture for the next single run, shared by the Generate and the Set tab and kept across a switch of the
+        /// run mode (the session outlives the panel). A run takes it only when the panel passes it to Request; a set's job never carries it
+        [[nodiscard]] const Optional<ArtGenReference>& GetReferenceSlot() const {
+            return _referenceSlot;
+        }
+        void SetReferenceSlot(ArtGenReference reference);
+        void ClearReferenceSlot();
 
         /// Writes @p preset as `<game root>/artgen/presets/<name>.json` (an engine starter saved under its name becomes the game's own) and
         /// shows it at once; the service checks it at its next look (asked for in the next poll). The path, or why not: a bad name, a shape
@@ -321,7 +333,7 @@ namespace BECore {
     private:
         /// The run a report of the service is about, or null when it is about an older one (a late message after a new request)
         ArtGenRun* RunOf(const Json& params);
-        std::expected<uint32_t, String> Queue(StringView preset, Json presetData, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants);
+        std::expected<uint32_t, String> Queue(StringView preset, Json presetData, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants, Optional<ArtGenReference> reference);
         void ReadCatalog(const Json& params);
         [[nodiscard]] ArtGenSet* MutableSet(StringView name);
         /// The job of `_run` while it is Running (the run is the work of a set), else null
@@ -356,6 +368,7 @@ namespace BECore {
         Vector<String> _setQueue;  // the sets with work, in the order they were queued or retried: the next job comes from the first
         ArtGenServiceStatus _status;
         ArtGenRun _run;
+        Optional<ArtGenReference> _referenceSlot;
         ArtGenSetup _setup;
         uint32_t _nextId = 1;
         bool _stopService = false;

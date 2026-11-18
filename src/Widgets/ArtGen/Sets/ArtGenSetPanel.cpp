@@ -5,6 +5,8 @@
 #include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/ArtGen/ArtGenPresetForm.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
+#include <Widgets/ArtGen/Reference/ArtGenReference.h>
+#include <Widgets/ArtGen/Reference/ArtGenReferencePanel.h>
 #include <Widgets/ArtGen/Sets/ArtGenSetStore.h>
 #include <Widgets/EditorLayout/EditorControls.h>
 #include <Widgets/Icons/IconsLucide.h>
@@ -649,6 +651,13 @@ namespace BECore {
                     }
                     ImGui::EndDisabled();
                 }
+                // The sprite in the game under the row's name, not the draft: a replaced row's name belongs to another set
+                if (set.kind != kKindAudio && job.accepted && status != ArtGenRowStatus::Replaced) {
+                    ImGui::SameLine();
+                    if (IconButton(ICON_LC_IMAGE_PLUS, kArtGenUseAsReferenceTip, "##referenceSprite")) {
+                        session.SetReferenceSlot(ArtGenReferenceOfSprite(StringView(job.accepted->as)));
+                    }
+                }
                 // The note of a more-run that did not finish: the row stays Done with the variants it had
                 if (!job.error.empty()) {
                     ImGui::TextDisabled("%s", job.error.c_str());
@@ -675,8 +684,9 @@ namespace BECore {
         ImGui::PushID(static_cast<int>(variantIndex));
         ImGui::BeginGroup();
         const ImVec2 origin = ImGui::GetCursorScreenPos();
-        if (audio) {
-            // The play button sits over the tile
+        // A picture that is on disk can be a reference; its button sits over the tile, like the sound's play button
+        const bool offerReference = !audio && thumb != nullptr && !thumb->missing && !thumb->path.empty();
+        if (audio || offerReference) {
             ImGui::SetNextItemAllowOverlap();
         }
         // A kept row is final and a replaced one has nothing to switch: its cells only show the variants
@@ -720,6 +730,16 @@ namespace BECore {
             drawList->AddRect(origin, corner, ImGui::GetColorU32(palette.accent), 0.0f, 0, kSelectedBorder);
         }
 
+        if (offerReference && ImGui::IsMouseHoveringRect(origin, corner)) {
+            const float inset = ImGui::GetStyle().ItemInnerSpacing.x;
+            ImGui::SetCursorScreenPos(ImVec2(origin.x + inset, origin.y + inset));
+            if (IconButton(ICON_LC_IMAGE_PLUS, kArtGenUseAsReferenceTip, "##reference")) {
+                if (auto reference = ArtGenReferenceOfVariant(StringView(session.GetGameRoot()), StringView(variant.kind), StringView(thumb->path))) {
+                    session.SetReferenceSlot(std::move(*reference));
+                }
+            }
+            ImGui::SetCursorScreenPos(ImVec2(origin.x, corner.y + ImGui::GetStyle().ItemSpacing.y));
+        }
         if (audio) {
             const bool loaded = thumb != nullptr && thumb->clip && thumb->clip->GetState() == ResourceState::Loaded;
             const bool playing = sound.playing && _playingJob == static_cast<int32_t>(jobIndex) && _playingSeed == variant.seed;

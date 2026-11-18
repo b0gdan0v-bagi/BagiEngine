@@ -192,7 +192,8 @@ class Bridge:
             name = "" if name is None else check_name(name, "name")
             preset = load_request_preset(request, self.game_root)
             service_request = artgen_service.Request(
-                preset, request.get("subject", ""), int(request.get("count") or 1), request.get("seed"), out_dir, name
+                preset, request.get("subject", ""), int(request.get("count") or 1), request.get("seed"), out_dir, name,
+                request.get("reference"), Path(self.game_root),
             )
             artgen_service.generate(service_request, self.generator, progress, cancel)
         except Cancelled:

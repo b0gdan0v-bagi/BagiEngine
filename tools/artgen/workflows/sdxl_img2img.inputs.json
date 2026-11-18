@@ -1,0 +1,16 @@
+{
+  "prompt": ["6", "text"],
+  "negative": ["7", "text"],
+  "seed": ["3", "seed"],
+  "width": [["21", "width"], ["24", "width"], ["26", "width"]],
+  "height": [["21", "height"], ["24", "height"], ["26", "height"]],
+  "steps": ["3", "steps"],
+  "cfg": ["3", "cfg"],
+  "sampler": ["3", "sampler_name"],
+  "scheduler": ["3", "scheduler"],
+  "checkpoint": ["4", "ckpt_name"],
+  "vae": ["10", "vae_name"],
+  "reference_image": ["20", "image"],
+  "denoise": ["3", "denoise"],
+  "output": "9"
+}

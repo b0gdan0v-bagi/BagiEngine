@@ -10,5 +10,6 @@
   "scheduler": ["3", "scheduler"],
   "checkpoint": ["4", "ckpt_name"],
   "vae": ["10", "vae_name"],
-  "output": "9"
+  "output": "9",
+  "reference": {"init": "sdxl_img2img"}
 }

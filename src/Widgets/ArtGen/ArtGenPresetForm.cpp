@@ -1,5 +1,6 @@
 #include "ArtGenPresetForm.h"
 
+#include <Widgets/ArtGen/Reference/ArtGenReference.h>
 #include <algorithm>
 #include <cstring>
 
@@ -7,9 +8,10 @@ namespace BECore {
 
     namespace {
 
-        constexpr StringView kServiceInputs[] = {"prompt", "negative", "seed", "width", "height", "output"};
-        // The keys the form shows, in the order of a written file; any other key of the file follows them
-        constexpr StringView kFileOrder[] = {"preset", "title", "workflow", "prompt", "negative", "size", "params", "accept"};
+        constexpr StringView kReferenceImageInput = "reference_image";
+        constexpr StringView kServiceInputs[] = {"prompt", "negative", "seed", "width", "height", "output", kReferenceImageInput};
+        // The keys of a written file in order, `reference` last: the form keeps it as the file has it and does not edit it; any other key follows them
+        constexpr StringView kFileOrder[] = {"preset", "title", "workflow", "prompt", "negative", "size", "params", "accept", "reference"};
         constexpr StringView kCopySuffix = "_copy";
 
         void CopyText(char* out, size_t size, StringView text) {
@@ -43,6 +45,10 @@ namespace BECore {
 
     bool ArtGenWorkflow::HasSize() const {
         return FindInput("width") != nullptr && FindInput("height") != nullptr;
+    }
+
+    bool ArtGenWorkflow::IsReferenceVariant() const {
+        return FindInput(kReferenceImageInput) != nullptr;
     }
 
     bool IsArtGenServiceInput(StringView input) {
@@ -100,6 +106,11 @@ namespace BECore {
         if (const Json* accept = FindJsonMember(preset, "accept"); accept != nullptr) {
             if (const auto settings = ArtGenImageSettingsFromJson(*accept); !settings) {
                 return std::unexpected(Format("\"accept\": {}", settings.error()));
+            }
+        }
+        if (const Json* reference = FindJsonMember(preset, "reference"); reference != nullptr) {
+            if (const auto read = ReadArtGenReference(*reference); !read) {
+                return std::unexpected(read.error());
             }
         }
         return {};

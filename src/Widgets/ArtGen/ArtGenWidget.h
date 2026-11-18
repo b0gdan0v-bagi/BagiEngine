@@ -11,6 +11,7 @@
 #include <Widgets/ArtGen/ArtGenImage.h>
 #include <Widgets/ArtGen/ArtGenPresetForm.h>
 #include <Widgets/ArtGen/ArtGenSound.h>
+#include <Widgets/ArtGen/Reference/ArtGenReferencePanel.h>
 #include <Widgets/ArtGen/Sets/ArtGenSetPanel.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <cstdint>
@@ -53,6 +54,8 @@ namespace BECore {
         void DrawPreset(ArtGenSession& session);
         /// Subject, count, seed and Generate: the Generate tab's own controls
         void DrawRunForm(ArtGenSession& session);
+        /// The reference slot goes with an image preset only: a sound has none
+        [[nodiscard]] bool PresetMakesImages(const ArtGenSession& session) const;
         void DrawPresetBar(ArtGenSession& session);
         void DrawPresetFields(ArtGenSession& session);
         void DrawSizeFields(const ArtGenWorkflow& workflow);
@@ -60,7 +63,7 @@ namespace BECore {
         void DrawResetButton(bool overridden, const char* id, FunctionRef<void()> reset);
         void SaveForm(ArtGenSession& session, StringView name);
         void DrawRun(ArtGenSession& session);
-        void DrawVariants(const ArtGenRun& run);
+        void DrawVariants(ArtGenSession& session, const ArtGenRun& run);
         void DrawAccept(ArtGenSession& session);
         /// Trim, padding and max size of the form's `accept`: one drawing for the preset's Settings and the Accept section (@p id keeps the two apart)
         void DrawImageAcceptFields(const char* id);
@@ -82,6 +85,7 @@ namespace BECore {
 
         bool _open = false;
         ArtGenSetPanel _setPanel;
+        ArtGenReferencePanel _referencePanel;
 
         // The preset being edited: loaded from the service's list, a new one, or a copy; Generate sends it inline while it is unsaved
         ArtGenPresetForm _form;
@@ -121,6 +125,7 @@ namespace BECore {
         bool _useOnSelected = false;
         String _acceptMessage;
         bool _acceptFailed = false;
+        String _acceptedSprite;  // the sprite the last successful Accept wrote: Use as reference takes it
 
         // What Accept would make of the selected image. The file is decoded once per selection (a slider drag must not decode it per frame),
         // the line is made again only when the box or a setting changes

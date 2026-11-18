@@ -132,7 +132,10 @@ namespace BECore {
                                                   ControlParamInfo{"presetName", "string", false, "with a draft: the name it is shown under"},
                                                   ControlParamInfo{"subject", "string", true, "what to draw; replaces {subject} in the preset's prompt"},
                                                   ControlParamInfo{"count", "integer", false, "images, 1 to 16 (default 4)"},
-                                                  ControlParamInfo{"seed", "integer", false, "the first seed; image i takes seed + i (default random)"}}});
+                                                  ControlParamInfo{"seed", "integer", false, "the first seed; image i takes seed + i (default random)"},
+                                                  ControlParamInfo{"reference", "object", false,
+                                                                   "a picture the images start from: {mode (init), image (a path relative to the game root, or absolute), weight (0 to 1, how "
+                                                                   "strongly the picture holds; the mode's default when missing)}; replaces the preset's own reference"}}});
         service.DescribeMethod(
             "artgen_accept",
             ControlMethodInfo{"Makes an image of the current run a sprite of the game (trimmed to what is drawn and downscaled, a PNG into assets/artgen, "
@@ -163,23 +166,40 @@ namespace BECore {
                                ControlMethodInfo{"Called by the art generation service: its status in, the game root and a new request (with outDir and name for a job of a set) or a cancel out", {}});
     }
 
-    std::expected<uint32_t, String> ArtGenSession::Request(StringView preset, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants) {
+    std::expected<uint32_t, String> ArtGenSession::Request(StringView preset, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants, Optional<ArtGenReference> reference) {
         for (const auto& known : _status.presets) {
             if (StringView(known.name) == preset && !known.error.empty()) {
                 return std::unexpected(Format("the preset '{}' is broken: {}", preset, known.error));
             }
         }
-        return Queue(preset, Json(), subject, count, seed, keepVariants);
+        return Queue(preset, Json(), subject, count, seed, keepVariants, std::move(reference));
     }
 
-    std::expected<uint32_t, String> ArtGenSession::RequestDraft(StringView name, const Json& preset, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants) {
+    std::expected<uint32_t, String> ArtGenSession::RequestDraft(StringView name, const Json& preset, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants,
+                                                                Optional<ArtGenReference> reference) {
         if (auto shape = CheckArtGenPresetShape(preset); !shape) {
             return std::unexpected(Format("the draft is not a preset: {}", shape.error()));
         }
-        return Queue(name.empty() ? StringView("draft") : name, preset, subject, count, seed, keepVariants);
+        return Queue(name.empty() ? StringView("draft") : name, preset, subject, count, seed, keepVariants, std::move(reference));
     }
 
-    std::expected<uint32_t, String> ArtGenSession::Queue(StringView preset, Json presetData, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants) {
+    void ArtGenSession::SetReferenceSlot(ArtGenReference reference) {
+        if (_referenceSlot && *_referenceSlot == reference) {
+            return;
+        }
+        _referenceSlot = std::move(reference);
+        ++_version;
+    }
+
+    void ArtGenSession::ClearReferenceSlot() {
+        if (_referenceSlot) {
+            _referenceSlot.reset();
+            ++_version;
+        }
+    }
+
+    std::expected<uint32_t, String> ArtGenSession::Queue(StringView preset, Json presetData, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants,
+                                                         Optional<ArtGenReference> reference) {
         if (IsBusy()) {
             return std::unexpected(String("a run is in work; cancel it or wait"));
         }
@@ -209,6 +229,7 @@ namespace BECore {
         _run.subject = String(subject);
         _run.count = count;
         _run.seed = seed;
+        _run.reference = std::move(reference);
         ++_version;
         return _run.id;
     }
@@ -400,6 +421,9 @@ namespace BECore {
             request["subject"] = ToJsonString(_run.subject);
             request["count"] = _run.count;
             request["seed"] = _run.seed ? Json(*_run.seed) : Json();
+            if (_run.reference) {
+                request["reference"] = ArtGenReferenceToJson(*_run.reference);
+            }
             if (!_run.outDir.empty()) {
                 request["outDir"] = ToJsonString(_run.outDir);
                 request["name"] = ToJsonString(_run.name);
@@ -573,8 +597,17 @@ namespace BECore {
                 return std::unexpected(InvalidParams("'seed' must be an integer"));
             }
         }
+        Optional<ArtGenReference> reference;
+        if (IsGiven(params, "reference")) {
+            auto read = ReadArtGenReference(*FindJsonMember(params, "reference"));
+            if (!read) {
+                return std::unexpected(InvalidParams(read.error()));
+            }
+            reference = std::move(*read);
+        }
         const int32_t clamped = *count > kMaxCount || *count < 0 ? 0 : static_cast<int32_t>(*count);
-        auto id = draft ? RequestDraft(GetJsonString(params, "presetName").value_or(String()), *presetJson, *subject, clamped, seed) : Request(*preset, *subject, clamped, seed);
+        auto id = draft ? RequestDraft(GetJsonString(params, "presetName").value_or(String()), *presetJson, *subject, clamped, seed, false, std::move(reference))
+                        : Request(*preset, *subject, clamped, seed, false, std::move(reference));
         if (!id) {
             const StringView code = IsBusy() ? kBusyCode : ControlErrors::kInvalidParams;
             return std::unexpected(ControlError{String(code), id.error()});
@@ -777,6 +810,7 @@ namespace BECore {
         run["subject"] = ToJsonString(_run.subject);
         run["count"] = _run.count;
         run["seed"] = _run.seed ? Json(*_run.seed) : Json();
+        run["reference"] = _run.reference ? ArtGenReferenceToJson(*_run.reference) : Json();
         run["image"] = _run.image;
         run["step"] = _run.step;
         run["steps"] = _run.steps;

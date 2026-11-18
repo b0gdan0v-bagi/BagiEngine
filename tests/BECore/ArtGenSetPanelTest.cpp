@@ -2,6 +2,7 @@
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/TempPath.h>
+#include <Widgets/ArtGen/ArtGenImage.h>
 #include <Widgets/ArtGen/ArtGenPresetForm.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
 #include <Widgets/ArtGen/Sets/ArtGenSet.h>
@@ -115,6 +116,22 @@ namespace BECore::Tests {
 
         static ImGuiID RetryId() {
             return ImHashStr(ICON_LC_ROTATE_CCW " Retry", 0, HostId());
+        }
+
+        /// The row @p index of the rows' child (by its place on the screen): an id inside a row is hashed from its id
+        static ImGuiID RowId(size_t index) {
+            Vector<const ImGuiWindow*> rows;
+            for (const ImGuiWindow* window : ImGui::GetCurrentContext()->Windows) {
+                if (window->ParentWindow != nullptr && std::strstr(window->Name, "/##row_") != nullptr) {
+                    rows.push_back(window);
+                }
+            }
+            std::sort(rows.begin(), rows.end(), [](const ImGuiWindow* left, const ImGuiWindow* right) { return left->Pos.y < right->Pos.y; });
+            if (index >= rows.size()) {
+                ADD_FAILURE() << "no row " << index;
+                return 0;
+            }
+            return rows[index]->ID;
         }
 
         /// A window of the frame whose name has @p part, a child of the host: the list of sets, the rows
@@ -233,6 +250,10 @@ namespace BECore::Tests {
         ArtGenSetPanel panel;
         ImGuiFontBuffers buffers;
         ImGuiFonts fonts;
+
+        std::filesystem::path Root() const {
+            return _root;
+        }
 
     private:
         std::filesystem::path _root;
@@ -370,6 +391,36 @@ namespace BECore::Tests {
 
         ASSERT_TRUE(JobOf("king").more.has_value());
         EXPECT_EQ(JobOf("king").more->count, 2);
+    }
+
+    TEST_F(ArtGenSetPanelTest, UseAsReferenceOnAVariantFillsTheSlotWithItsFile) {
+        const std::filesystem::path folder = Root() / "second" / "artgen" / "out" / "chess" / "king";
+        std::filesystem::create_directories(folder);
+        ArtGenPixels pixels;
+        pixels.width = 2;
+        pixels.height = 2;
+        pixels.rgba.assign(2 * 2 * 4, 255);
+        ASSERT_TRUE(WriteArtGenPng(folder / "king_5.png", pixels).has_value());
+        ASSERT_NO_FATAL_FAILURE(LoadSets({MakeFinishedSet()}));
+        constexpr int32_t kFirstVariant = 0;
+        const ImGuiID button = ImHashStr(ICON_LC_IMAGE_PLUS "####reference", 0, ImHashData(&kFirstVariant, sizeof(kFirstVariant), RowId(0)));
+        ASSERT_FALSE(session.GetReferenceSlot().has_value());
+
+        ClickAt(Locate(button));
+
+        ASSERT_TRUE(session.GetReferenceSlot().has_value());
+        EXPECT_EQ(session.GetReferenceSlot()->mode, "init");
+        EXPECT_EQ(session.GetReferenceSlot()->image, "artgen/out/chess/king/king_5.png");
+    }
+
+    TEST_F(ArtGenSetPanelTest, UseAsReferenceOnAnAcceptedRowFillsTheSlotWithItsSprite) {
+        ASSERT_NO_FATAL_FAILURE(LoadSets({MakeFinishedSet()}));
+        const ImGuiID button = ImHashStr(ICON_LC_IMAGE_PLUS "####referenceSprite", 0, RowId(1));
+
+        ClickAt(Locate(button));
+
+        ASSERT_TRUE(session.GetReferenceSlot().has_value());
+        EXPECT_EQ(session.GetReferenceSlot()->image, "assets/artgen/queen.png");
     }
 
     TEST_F(ArtGenSetPanelTest, ASteadyFrameWithASetSelectedAllocatesNothing) {
